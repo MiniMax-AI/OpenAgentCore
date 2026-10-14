@@ -12,7 +12,7 @@ Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/en
 
 - Environment 文件适用于 `openai_hosted` 和 `self_hosted` Environment。`none` Environment 返回 503 `execution_unavailable`。
 - 公开路径从 `/workspace` 开始，代表 Environment 在机器上实际位置的工作区目录。
-- 首先在调用方 Project 查找 Environment；不存在或属于其他范围的 ID 返回 404。
+- 首先在调用方项目查找 Environment；不存在或属于其他范围的 ID 返回 404。
 - 仍为 `pending` 的 `openai_hosted` Environment，两种操作均返回 400 `the hosted environment is still provisioning; wait until it is connected before accessing files`。此检查在请求验证之后、任何源 File 查询之前执行。其他状态继续处理，Runtime 不可达时返回 503。
 - 文件操作在现有请求期限内等待 Environment 初始化完成；`connected` 本身不表示已就绪，初始化失败或执行容量耗尽仍返回 503。
 - 列表和写入不启动 Turn，也不向模型发送输入。
@@ -56,7 +56,7 @@ Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/en
 {"type": "file_id", "file_id": "file-…", "path": "/workspace/data/input.csv"}
 ```
 
-空 inline `data` 有效，会创建空文件。返回 201 和四个 EnvironmentFile 字段。`file_id` 指定同一 Project 的 [File](source-files.md)；Core 联系 Runtime 之前读取字节。
+空 inline `data` 有效，会创建空文件。返回 201 和四个 EnvironmentFile 字段。`file_id` 指定同一项目的 [File](source-files.md)；Core 联系 Runtime 之前读取字节。
 
 | 情况 | 结果 |
 | --- | --- |

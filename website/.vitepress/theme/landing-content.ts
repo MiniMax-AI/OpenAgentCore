@@ -224,8 +224,8 @@ const zh: LandingCopy = {
     lede: 'Core 编排，原生 Harness 在沙箱内执行；计算与持久工作区存储由独立 adapter 管理。',
     tabs: [
       { id: 'ecosystem', label: '生态', alt: '应用通过 Agents API 接入 Core；原生 Harness 在沙箱内运行并调用模型，计算与持久工作区存储由独立 adapter 管理。' },
-      { id: 'protocols', label: '组件', alt: 'Core 之上是 Agents API 与 Core API；Sandbox Provider、Runtime、Harness、Model Provider 通过协议连接。' },
-      { id: 'surfaces', label: 'API 命名空间', alt: '三个命名空间、三种凭证：应用用 Agents API，管理员用 Core API，节点用 Machine API。' },
+      { id: 'protocols', label: '组件', alt: 'Core 之上是 Agents API 与 Core API；沙箱提供商、Runtime、Harness、模型提供商通过协议连接。' },
+      { id: 'surfaces', label: 'API 命名空间', alt: '三个命名空间、三种凭据：应用用 Agents API，管理员用 Core API，节点用 Machine API。' },
     ],
     more: '阅读架构文档',
   },
@@ -254,7 +254,7 @@ const zh: LandingCopy = {
     title: '运行情况，看得见。', titleAccent: '看得见。',
     lede: 'Session 状态 · 计算资源 · 用量',
     tabs: [
-      { id: 'overview', label: '部署概览', alt: 'Web 控制台概览：服务状态、运行中的 Session、沙箱容量、节点与 Project。' },
+      { id: 'overview', label: '部署概览', alt: 'Web 控制台概览：服务状态、运行中的 Session、沙箱容量、节点与项目。' },
       { id: 'metrics', label: 'Agent 监控', alt: 'Web 控制台 Agent 监控：请求、错误、耗时、Token 与工具调用。' },
     ],
     caption: '截图数值仅用于展示界面。用量可见性取决于原生 Harness 提供的数据。',

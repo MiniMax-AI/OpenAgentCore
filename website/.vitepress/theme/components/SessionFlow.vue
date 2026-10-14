@@ -9,7 +9,7 @@ const props = defineProps<{ lang: Lang }>()
 const copy = computed(() => props.lang === 'zh' ? {
   stages: ['原生 Agent', '统一执行', '自由组合'],
   captions: ['Runtime 准备环境，原生 Harness 运行模型与工具循环。', '应用通过 Agents API 创建 Session，Core 管理执行与持久状态。', '不同 Session 使用不同 Harness 与模型；此示例中的托管 Session 共用 microsandbox 部署，独立工作区可跨计算生命周期保留。'],
-  app: '你的应用', api: 'OpenAI SDK · Agents API', state: 'Session 与 Turn', orchestration: '调度 · 取消 · 交互', events: '事件 · 结果 · 持久状态', workspace: '挂载工作区 · Shell · 工具', loop: '原生 Agent 循环', runtime: '环境准备 · 执行管理', model: '模型服务', provider: 'Sandbox Provider', compute: '创建与回收计算资源', next: '下一步', back: '上一步', play: '播放', pause: '暂停', label: 'Session 架构演示', step: '演示阶段',
+  app: '你的应用', api: 'OpenAI SDK · Agents API', state: 'Session 与 Turn', orchestration: '调度 · 取消 · 交互', events: '事件 · 结果 · 持久状态', workspace: '挂载工作区 · Shell · 工具', loop: '原生 Agent 循环', runtime: '环境准备 · 执行管理', model: '模型提供商', provider: '沙箱提供商', compute: '创建与回收计算资源', next: '下一步', back: '上一步', play: '播放', pause: '暂停', label: 'Session 架构演示', step: '演示阶段',
 } : {
   stages: ['Native agent', 'Managed execution', 'Many combinations'],
   captions: ['Runtime prepares the environment. The native harness owns the model and tool loop.', 'Your app creates a Session through the Agents API. Core manages execution and durable state.', 'Sessions use different Harnesses and models. Managed Sessions here share one microsandbox deployment; independent workspaces outlive compute.'],

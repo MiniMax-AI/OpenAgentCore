@@ -4,7 +4,7 @@ source: contracts/agents-api/admin-api.md
 source_hash: 9c83e8b192408ea96e8614dfa5ffe4bdd65931954bc0359928c1985291b97962
 ---
 
-Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密钥、Project 资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
+Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
 
 应用程序绝不调用 `/core/v1`。它没有任何用于创建或编辑 Agents、Sessions、模板、Files、Skills 或 Vaults，启动或取消工作，读取 Source File 内容或流式传输事件的操作；应用程序通过 [Agents API](../../../docs/zh/api/public-agent-api.md)完成这些操作。
 
@@ -13,9 +13,9 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 每个 `/core/v1` 请求，包括针对未知路径的请求，都必须发送 `Authorization: Bearer <Core key>`。缺少该请求头时，Core 会返回 401 `invalid_admin_key` 和 `WWW-Authenticate: Bearer`；只有在身份验证通过后，未知路径才会返回 404 `not_found`。
 
 - Core 将 bearer 凭据的 SHA-256 与启动时从 `generated/core-key-digests.json` 读取的 Core 密钥摘要进行比较；该摘要由 `oac apply` 根据 `secrets/core.key` 派生（[Core 密钥](../../../docs/zh/getting-started/operations.md#core-key)）。轮换 Core 密钥后，需要重启 Core 才会生效。未配置任何摘要时，Core 不提供 `/core/v1` 路由。
-- Core 密钥仅用于 `/core/v1` 身份验证。Project API 密钥和机器凭据在此处会收到 401，而 Core 密钥在 `/v1` 和 `/api/v1` 上会收到 401（[API 命名空间和凭据](../../../docs/zh/api/index.md)）。
+- Core 密钥仅用于 `/core/v1` 身份验证。项目 API 密钥和机器凭据在此处会收到 401，而 Core 密钥在 `/v1` 和 `/api/v1` 上会收到 401（[API 命名空间和凭据](../../../docs/zh/api/index.md)）。
 - `X-Core-Console-Actor` 是由调用方声明的标签。Core 会将其记录为审计 `actor_label`，但不会验证。控制台服务器发送 `console`；脚本通常不发送该值，因此会记录空标签。切勿将其用于授权或作为来源证明。
-- 路径中的 `{project_id}` 用于选择目标 Project，包括已归档的 Project；它不会授予任何权限。
+- 路径中的 `{project_id}` 用于选择目标项目，包括已归档的项目；它不会授予任何权限。
 
 ## 路由 {#routes}
 
@@ -25,7 +25,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 | --- | --- | --- |
 | `installation` | 公共 URL、API 基础 URL、源代码提交、安装器的进程设置，以及绑定到公共 URL 的内容 | [安装信息](#installation-facts) |
 | `workspace-storage` | 读取或选择独立工作区文件系统配置 | [工作区存储](#workspace-storage) |
-| `projects`、`projects/{project_id}`、`projects/{project_id}/archive`、`projects/{project_id}/keys[/{key_id}]` | Project 及其 API 密钥 | [Project 与密钥](#projects-and-keys) |
+| `projects`、`projects/{project_id}`、`projects/{project_id}/archive`、`projects/{project_id}/keys[/{key_id}]` | 项目及其 API 密钥 | [项目与密钥](#projects-and-keys) |
 | `projects/{project_id}/{agents,environment-templates,skills,files,vaults,sessions}/**` | 资源读取和删除、Session 历史及 Artifact | [资源读取和删除](#resource-reads-and-deletion) |
 | `projects/{project_id}/sessions/{session_id}/archive` | 归档一个托管 Session | [Session 归档](#session-archive) |
 | `projects/{project_id}/sessions/{session_id}/execution-configuration` | Session 创建时冻结的模型、Harness 和提供商选择 | [执行配置](#execution-configuration) |
@@ -38,14 +38,14 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 | `harnesses`、`harnesses/{harness}/model-configuration` | 已启用的 Harness 及各 Harness 的部署默认模型 | [部署默认值](model-execution.md#deployment-defaults) |
 | `sandbox/deployment`、`sandbox/deployment/reset`、`sandbox/providers/{provider}/discovery` | 沙箱提供商、资源和 Runtime、空闲挂起策略、重置，以及提供商配置发现，例如 E2B 模板 | [沙箱部署](sandbox-deployment.md#routes) |
 | `sandbox/enrollment-tokens`、`sandbox/nodes[/{node_id}[/allocations]]` | 节点注册令牌、节点及其分配和主机历史 | [节点指南](../../../docs/zh/getting-started/nodes.md)、[沙箱部署](sandbox-deployment.md)、[节点主机历史](runtime-observability-api.md#node-host-observations-and-history) |
-| `summary` | 按 Project、Agent 或密钥统计的 Session 数量和使用情况 | [汇总](#summary) |
+| `summary` | 按项目、Agent 或密钥统计的 Session 数量和使用情况 | [汇总](#summary) |
 | `metrics` | Core 自身的进程、执行、数据库和作业指标 | [Core 指标](core-metrics.md) |
 | `request-logs` | 近期应用或管理 HTTP 请求及其响应元数据 | [请求日志](#request-log) |
 | `audit-log` | 管理员写入 | [审计日志](#audit-log) |
 
 ## 请求日志 {#request-log}
 
-`GET /core/v1/request-logs` 是仅供 Core 密钥调用的诊断读取，由 Web 的 **Request log** 和运维脚本使用。它观察到达 Core `/v1` 与 `/core/v1` API 的 HTTP 请求，包括认证拒绝和失败响应。日志读取本身、健康检查与文档端点、到达 Core 前的 Web 登录或代理失败、机器传输和后台执行不在此视图中。它不是审计档案或分布式执行追踪。
+`GET /core/v1/request-logs` 是仅供 Core 密钥调用的诊断读取，由 Web 的 **请求日志** 和运维脚本使用。它观察到达 Core `/v1` 与 `/core/v1` API 的 HTTP 请求，包括认证拒绝和失败响应。日志读取本身、健康检查与文档端点、到达 Core 前的 Web 登录或代理失败、机器传输和后台执行不在此视图中。它不是审计档案或分布式执行追踪。
 
 每个 API 实例按入口分别保留最近开始的 1,000 个请求：`public` 对应 `/v1`，`admin` 对应 `/core/v1`。管理页面轮询不会挤掉应用请求。各自容量用尽后覆盖较旧条目，包括长连接请求；重启清空记录。`instance_id` 和 `instance_started_at` 标识提供响应的 API 实例；负载均衡可能返回另一个实例的窗口。Core 同时通过现有结构化日志输出请求结束时的元数据，其保留由运维日志系统负责，不属于本端点。
 
@@ -57,31 +57,31 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 
 ## 工作区存储 {#workspace-storage}
 
-**Settings → Workspace storage** 和运维脚本使用 Core 密钥 调用 `GET /core/v1/workspace-storage` 和 `PUT /core/v1/workspace-storage`。成功响应为选择结果：`{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...},"tenant_capacity_mib":<integer>}`。请求包含相同的必需字段，以及可选的只写 `credential` 对象。`parameters` 和 `credential` 是适配器定义的 JSON 对象，由所选适配器验证。未知顶层字段会被拒绝。
+**设置 → 工作区存储** 和运维脚本使用 Core 密钥调用 `GET /core/v1/workspace-storage` 和 `PUT /core/v1/workspace-storage`。成功响应为选择结果：`{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...},"tenant_capacity_mib":<integer>}`。请求包含相同的必需字段，以及可选的只写 `credential` 对象。`parameters` 和 `credential` 是适配器定义的 JSON 对象，由所选适配器验证。未知顶层字段会被拒绝。
 
 GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspace_storage_not_found`。它绝不返回凭据。PUT 验证并选择不可变配置，同时设置 [`tenant_capacity_mib`](../../../docs/zh/configuration.md#tenant-capacity)，以 200 返回选择结果。正的 `tenant_capacity_mib` 要求实施容量配额的配置，此类配置也要求正值；否则 PUT 返回 400 `workspace_operation_unsupported`。Core 加密凭据，绝不返回、记录日志或审计凭据。复用 ID 要求适配器、参数和凭据完全一致；省略 `credential` 会保留已存储的凭据，显式 `null` 无效。更改其含义或与保留归属冲突会返回 409 `workspace_storage_conflict`。配置更改与工作区归属变更串行执行，成功变更携带与其他部署设置相同的管理员审计来源。[工作区文件系统协议](../../../docs/zh/workspace-provider.md) 规定标识、挂载、准入和保留语义。
 
-无效配置返回 400 `invalid_workspace_configuration`；不支持的适配器或组合返回 400 `workspace_operation_unsupported`。存储不可用或操作尚未确认返回 503 `workspace_storage_unavailable`。错误消息不暴露原生路径或适配器错误文本。此端点独立于 Sandbox Provider 选择配置存储，不创建或删除 Session 工作区。
+无效配置返回 400 `invalid_workspace_configuration`；不支持的适配器或组合返回 400 `workspace_operation_unsupported`。存储不可用或操作尚未确认返回 503 `workspace_storage_unavailable`。错误消息不暴露原生路径或适配器错误文本。此端点独立于沙箱提供商选择配置存储，不创建或删除 Session 工作区。
 
-## Project 与密钥 {#projects-and-keys}
+## 项目与密钥 {#projects-and-keys}
 
-每个 Project 拥有一个执行租户；其密钥共享该租户的主体和资产（[Project 拥有资产](../../../docs/zh/concepts.md#projects-own-assets)）。Web 的 **Projects and keys** 页面使用这些路由。
+每个项目拥有一个执行租户；其密钥共享该租户的主体和资产（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)）。Web 的 **项目与密钥** 页面使用这些路由。
 
 | 操作 | 路由 | 结果 |
 | --- | --- | --- |
-| 列出 Project | `GET /projects` | `{data, has_more}` |
-| 创建 Project | `POST /projects`，请求体为 `{name}` | 201 和 Project |
-| 重命名 Project | `POST /projects/{project_id}`，请求体为 `{name}` | Project |
-| 归档 Project | `POST /projects/{project_id}/archive` | Project |
+| 列出项目 | `GET /projects` | `{data, has_more}` |
+| 创建项目 | `POST /projects`，请求体为 `{name}` | 201 和项目 |
+| 重命名项目 | `POST /projects/{project_id}`，请求体为 `{name}` | 项目 |
+| 归档项目 | `POST /projects/{project_id}/archive` | 项目 |
 | 列出密钥 | `GET /projects/{project_id}/keys` | `{data, has_more}` |
 | 签发密钥 | `POST /projects/{project_id}/keys`，请求体为 `{name}` | 201、密钥元数据和明文 `key` |
 | 吊销密钥 | `DELETE /projects/{project_id}/keys/{key_id}` | `{id, deleted: true}` |
 
-- Project 包含 `id`、`name`、`created_at`、可为 null 的 `archived_at` 和 `active_key_count`。密钥包含 `id`、`project_id`、`name`、`prefix`、`created_at` 和可为 null 的 `revoked_at`。ID 是服务器生成的 UUID。
-- Project 名称长度为 1–128 个字符，密钥名称长度为 1–80 个字符；名称仅作为标签，可以重复，控制字符会被拒绝。
+- 项目包含 `id`、`name`、`created_at`、可为 null 的 `archived_at` 和 `active_key_count`。密钥包含 `id`、`project_id`、`name`、`prefix`、`created_at` 和可为 null 的 `revoked_at`。ID 是服务器生成的 UUID。
+- 项目名称长度为 1–128 个字符，密钥名称长度为 1–80 个字符；名称仅作为标签，可以重复，控制字符会被拒绝。
 - 列表按 ID 排序，可使用 `order=asc|desc`（默认 `desc`）、`limit=1..100`（默认 20）和 `after`。
 - 只有签发响应会通过 `key` 包含密钥明文；Core 仅存储其摘要。密钥只应显示一次，且绝不能缓存。如果签发响应不确定，请列出密钥，吊销所有无法使用的密钥，然后再签发新密钥。
-- 归档操作会在一个事务中将 Project 标记为已归档、吊销其所有密钥并写入审计条目。在已归档的 Project 中签发密钥会返回 409 `project_archived`。不支持删除 Project、取消归档或重置密钥。
+- 归档操作会在一个事务中将项目标记为已归档、吊销其所有密钥并写入审计条目。在已归档的项目中签发密钥会返回 409 `project_archived`。不支持删除项目、取消归档或重置密钥。
 
 [`/v1` 身份验证规则](wire-semantics.md#authentication)定义了密钥查找、吊销可见性、作用域标头和身份验证错误。
 
@@ -92,7 +92,7 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
 | 资源 | 读取 | 删除 |
 | --- | --- | --- |
 | Agents | `/agents`、`/agents/{agent_id}` | `/agents/{agent_id}` |
-| Environment Templates | `/environment-templates`、`/environment-templates/{environment_template_id}` | 单项路由 |
+| Environment 模板 | `/environment-templates`、`/environment-templates/{environment_template_id}` | 单项路由 |
 | Skills | `/skills`、`/skills/{skill_id}`、`/skills/{skill_id}/content`、`/skills/{skill_id}/versions`、`/skills/{skill_id}/versions/{version}` 及其 `/content` | Skill 和版本单项路由 |
 | Files | `/files`、`/files/{file_id}` | 单项路由 |
 | Vaults | `/vaults`、`/vaults/{vault_id}`、`/vaults/{vault_id}/credentials`、`/vaults/{vault_id}/credentials/{credential_id}` | Vault 和 Credential 单项路由 |
@@ -111,7 +111,7 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
 | --- | --- |
 | 代次过期 | 409 `sandbox_generation_stale` |
 | Environment 类型不是 `openai_hosted` | 400 |
-| Session 不存在或属于另一个 Project | 404 |
+| Session 不存在或属于另一个项目 | 404 |
 
 一个事务会将 Environment 标记为过期（已失败的 Environment 仍保持失败状态）、请求取消正在运行的工作、吊销 Runtime 的权限并写入审计条目。沙箱及其快照随后通过正常生命周期完成清理；如果资源是否已释放尚不确定，在提供商确认之前，该资源仍归 Core 所有。Session 不会被删除：其历史以及已持久化的 Files 和 Artifacts 仍可读取，未持久化的工作区内容会丢失，并且该 Session 无法恢复运行。
 
@@ -147,7 +147,7 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
 | `redacted` | 记录了部署选择，但没有安全视图 | null |
 | `unavailable` | Core 没有关于该提供商的可靠记录（来源 `unknown`）。执行仍可能已成功 | null |
 
-Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent 编辑或删除、部署默认模型更改、重启以及使用同一密钥重试创建都不会改变该记录。没有该记录的 Session 会报告其已存储的模型和 Harness，来源均为 `unknown`；未存储任何值时对应字段为 null；提供商为 `unavailable`。Session 不存在和 Session 属于另一个 Project 时返回相同的 404。响应绝不会包含密钥、密文、机密引用、原生标头或查询参数。
+Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent 编辑或删除、部署默认模型更改、重启以及使用同一密钥重试创建都不会改变该记录。没有该记录的 Session 会报告其已存储的模型和 Harness，来源均为 `unknown`；未存储任何值时对应字段为 null；提供商为 `unavailable`。Session 不存在和 Session 属于另一个项目时返回相同的 404。响应绝不会包含密钥、密文、机密引用、原生标头或查询参数。
 
 ## 安装信息 {#installation-facts}
 
@@ -158,7 +158,7 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 | `object` | `core.installation` |
 | `installation_id` | `OAC_INSTALLATION_ID_FILE` 中的安装 ID（[Compose 安装](../../../docs/zh/configuration.md#compose-installations)） |
 | `public_url` | `public_url` 设置（[设置](../../../docs/zh/configuration.md#settings)）：应用程序、节点、沙箱和自托管执行器使用的源地址 |
-| `api_base_url` | 在 `public_url` 后附加 `/v1`，即 Project API 密钥使用的 `OPENAI_BASE_URL` |
+| `api_base_url` | 在 `public_url` 后附加 `/v1`，即项目 API 密钥使用的 `OPENAI_BASE_URL` |
 | `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
 | `source_commit` | Core 构建所依据的完整源代码提交；开发构建为 null |
 | `configuration` | Core 从环境加载的进程设置，位于 `settings` 中 |
@@ -177,7 +177,7 @@ Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent �
 
 ## 写入溯源 {#write-provenance}
 
-Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入；该记录与写入在同一事务中完成，如果记录失败，写入也会失败。读取、被拒绝的请求以及 Core 自身的维护操作（例如 OAuth 令牌刷新和清理）不会被记录。
+Core 会记录是哪个项目 API 密钥完成了每次成功的公共写入；该记录与写入在同一事务中完成，如果记录失败，写入也会失败。读取、被拒绝的请求以及 Core 自身的维护操作（例如 OAuth 令牌刷新和清理）不会被记录。
 
 - 写入在提交时才会被记录。Session 输入一经接纳即记录一次，包括为仍在准备中的 Environment 预留的输入；后续执行失败或响应丢失不会删除该记录。显式提交的空输入批次以及重复的创建或删除操作也会被记录，但不会改变所有权。
 - Environment 文件上传会在 Runtime 确认写入时被记录。Core 会在发送文件前保存密钥、请求和追踪信息，并且只记录已确认的上传。
@@ -192,14 +192,14 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 | Session 事件 | `send_events` | `session` |
 | Artifact 删除 | `delete` | `artifact`（`session`） |
 | Environment 文件上传 | `upload_file` | `environment`（`session`） |
-| Environment Template 创建、更新、删除 | `create`、`update`、`delete` | `environment_template` |
+| Environment 模板创建、更新、删除 | `create`、`update`、`delete` | `environment_template` |
 | Skill 创建、默认版本更改、删除 | `create`、`update_default_version`、`delete` | `skill` |
 | Skill 版本上传、删除 | `upload_version`、`delete` | `skill_version`（`skill`） |
 | Source File 上传、删除 | `create`、`delete` | `file` |
 | Vault 创建、删除 | `create`、`delete` | `vault` |
 | Credential 创建、替换、删除（静态和 OAuth） | `create`、`update`、`delete` | `credential`（`vault`） |
 
-上述两条路由仅接受列出的参数；未知、重复或空参数会返回 400，Project 不存在则返回 404。
+上述两条路由仅接受列出的参数；未知、重复或空参数会返回 400，项目不存在则返回 404。
 
 `GET /projects/{project_id}/resource-owners?resource_type=agent&resource_ids=id1,id2` 按请求顺序返回同一类型下 1–100 个资源的创建密钥。`resource_type` 可以是 `agent`、`session`、`environment`、`environment_template`、`skill`、`skill_version`、`file`、`vault`、`credential` 或 `artifact`。
 
@@ -210,7 +210,7 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 ]}
 ```
 
-当 Core 没有创建记录时，`api_key` 为 null，这包括另一个 Project 中的资源。
+当 Core 没有创建记录时，`api_key` 为 null，这包括另一个项目中的资源。
 
 `GET /projects/{project_id}/write-operations` 按 `(created_at, id)` 从新到旧列出写入记录。过滤条件包括：`key_id`、`resource_type`、`resource_id`、包含起始时间的 `created_after` 和不包含结束时间的 `created_before`（RFC 3339）。`limit` 为 1–100，默认值为 50。在过滤条件不变的情况下，将上一个 `next_cursor` 作为 `after` 传入。响应为 `{data, has_more, next_cursor}`；每个条目包含 `id`、`created_at`、`api_key`、`action`、`resource_type`、`resource_id`、`parent_id`（不存在时为空）、`request_id` 和 `trace_id`。
 
@@ -222,16 +222,16 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 
 | 参数 | 含义 |
 | --- | --- |
-| `project_id` | 一个 Project；`group_by=agent` 时必填 |
+| `project_id` | 一个项目；`group_by=agent` 时必填 |
 | `group_by` | `project`（默认）、`agent` 或 `key` |
 | `created_after`、`created_before` | Session 创建时间的 RFC 3339 下限（含）和上限（不含） |
-| `after`、`limit`、`order` | 对 Project 进行分页 |
+| `after`、`limit`、`order` | 对项目进行分页 |
 
 响应为 `{data, has_more, next_cursor}`。每一行包含 `project_id`、可为 null 的 `agent_id` 和 `key_id`、当前 `assets` 计数（Agent 分组和密钥分组为 null）、`sessions` 计数（`total`、`idle`、`in_progress`、`requires_action`、`failed`）、汇总 `usage`、`coverage`（`measured_sessions`、`total_sessions`、可为 null 的 `ratio`）以及可为 null 的 Unix `last_active_at`。
 
 - 在密钥分组中，每个 Session 都计入创建它的密钥，即使之后由另一个密钥发送输入也是如此。没有记录创建者的 Session 会组成一个 `key_id` 为 null 的分组。
 - 公共用量为 null 的 Session 不会增加 token 数量，但仍会计入覆盖率分母。
-- 每个 Project 都在单个数据库快照中读取；一页数据并不是整个部署的单一快照。总计属于运营计数，不是计费记录。
+- 每个项目都在单个数据库快照中读取；一页数据并不是整个部署的单一快照。总计属于运营计数，不是计费记录。
 
 ## Runtime 观测 {#runtime-observations}
 
@@ -245,7 +245,7 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 
 | `resource_type` | `action` | `resource_id` |
 | --- | --- | --- |
-| `project` | `create`、`rename`、`archive` | Project ID |
+| `project` | `create`、`rename`、`archive` | 项目 ID |
 | `api_key` | `create`、`revoke` | 密钥 ID |
 | `executor_credential` | `issue`、`rotate`、`revoke` | 密钥 ID |
 | `session` | `archive` | Session ID |
@@ -253,4 +253,4 @@ Core 会记录是哪个 Project API 密钥完成了每次成功的公共写入�
 | `deployment_model_provider`（部署范围） | `set`、`delete` | Harness |
 | `sandbox_deployment`（部署范围） | `change`、`replace_credential`（提交了提供商凭据，即使提交的是同一个凭据）、`reset_start`、`reset_force`、`reset_deadline`、`reset_cancel`、`reset_complete` | 安装 ID |
 
-管理员写入及其审计条目会在一个事务中提交；如果条目写入失败，写入也会失败。重置在后台执行的归档操作及其 `reset_deadline` 和 `reset_complete` 条目会携带请求方的凭据、操作者标签、请求和追踪信息，并且每个归档操作都会保留其 Session 的 Project。取消重置不会撤销已经提交的归档。被拒绝的提供商验证和无效更新不会写入条目。条目绝不会包含凭据值、请求正文或提供商响应文本，并且会在其资源被删除和密钥被吊销后继续保留。
+管理员写入及其审计条目会在一个事务中提交；如果条目写入失败，写入也会失败。重置在后台执行的归档操作及其 `reset_deadline` 和 `reset_complete` 条目会携带请求方的凭据、操作者标签、请求和追踪信息，并且每个归档操作都会保留其 Session 的项目。取消重置不会撤销已经提交的归档。被拒绝的提供商验证和无效更新不会写入条目。条目绝不会包含凭据值、请求正文或提供商响应文本，并且会在其资源被删除和密钥被吊销后继续保留。

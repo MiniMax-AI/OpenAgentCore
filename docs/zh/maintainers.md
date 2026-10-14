@@ -10,7 +10,7 @@ source_hash: 402a990e859cb3fb0155e2b4e60421cd841de88f84a49b678eb918450b253114
 
 分发包是从同一个提交构建的一组相互匹配的发布资源：控制归档（安装器、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装器。
 
-Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。宿主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
+Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
 
 
 请在 Linux x86_64 上构建，所需环境包括与 Debian 12 兼容的 glibc、Docker、`go.mod` 中指定的 Go 版本、C 编译器（microsandbox 辅助程序使用 CGO 构建）、Node、pnpm、Python 3.9 或更高版本、curl、tar、pigz 和 sha256sum。源代码必须保持干净并已提交。请先准备固定版本的 Codex 包和 MiniMax Code 配套程序，然后执行构建：

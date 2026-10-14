@@ -20,11 +20,11 @@ source_hash: d26140f4fdaa6d0c68dbeff52a2318ed213799966b224302eb04b9ec718f5fc3
 - 创建 Session 时，Core 在处理已保存 Agent 的覆盖值后解析该选择，验证 Harness 配置文件，并将结果存储为 Session 的引擎。当生效的 Agent 包含该扩展时，Session 读取结果会报告它；其他 Session 保持官方 Agent 结构。读取操作从不查询当前 Agent 或部署默认值。
 - 使用显式选择器重试创建时会保留调用方意图；在已有 Idempotency-Key 下更改选择器会产生冲突。
 
-Session 的 `environment` 和 Environment Templates 用于选择准备流程，而不是 Harness 或提供商。该扩展仅在 `contracts/agents-api/v1` 中定义一次；校验器从目录派生，任何处理程序或 schema 都不会维护自己的名称列表。
+Session 的 `environment` 和 Environment 模板用于选择准备流程，而不是 Harness 或提供商。该扩展仅在 `contracts/agents-api/v1` 中定义一次；校验器从目录派生，任何处理程序或 schema 都不会维护自己的名称列表。
 
 ## 已保存默认值与优先级 {#saved-defaults-and-precedence}
 
-已保存 Agent 是可编辑配置，而不是绑定的运行时。创建或更新时，应提供 `model`、可选的 `x_agents_core.harness` 以及可选但完整的 `x_agents_core.model_provider`。响应仅返回安全的提供商字段和只读输出标志 `api_key_configured`，绝不返回 `api_key`、密文或可复用的凭据引用。Agent JSON 仅存储安全视图；密钥配置包拥有自己加密后的数据库行，使用独立的加密用途绑定到 Project 和 Agent，并与 Agent 在同一事务中写入。仅编辑模型时不需要密钥。
+已保存 Agent 是可编辑配置，而不是绑定的运行时。创建或更新时，应提供 `model`、可选的 `x_agents_core.harness` 以及可选但完整的 `x_agents_core.model_provider`。响应仅返回安全的提供商字段和只读输出标志 `api_key_configured`，绝不返回 `api_key`、密文或可复用的凭据引用。Agent JSON 仅存储安全视图；密钥配置包拥有自己加密后的数据库行，使用独立的加密用途绑定到项目和 Agent，并与 Agent 在同一事务中写入。仅编辑模型时不需要密钥。
 
 创建 Session 时，Core 会先解析每个显式的模型或 Harness 覆盖值，再应用已保存默认值；未选择 Harness 时，应用部署默认值。已保存 Agent 必须指定模型。内联 `openai_hosted` 或 `none` Session 可以省略模型，以使用解析后 Harness 的部署模型；`self_hosted` 绝不会使用部署模型设置。Core 绝不会根据模型名称推断模型。
 
@@ -90,7 +90,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 不受支持的协议、Harness 或 Environment 组合会在创建 Session 前被拒绝。提供商可用性在执行期间检查，而不是通过探测检查。
 
-解析后的提供商配置会在 Session 创建事务中被冻结并加密，使用自己的加密用途，并绑定到 Project 和 Session。创建重试会将其纳入请求哈希，因此使用相同 Idempotency-Key 时，更改密钥或端点会产生冲突；密钥进入任何存储哈希时，只会表现为由部署凭据密钥加键控的指纹。任何公开的 Session、Agent、Environment、事件或常规配置均不包含该密钥。顶层扩展仅可写入，无法更新。
+解析后的提供商配置会在 Session 创建事务中被冻结并加密，使用自己的加密用途，并绑定到项目和 Session。创建重试会将其纳入请求哈希，因此使用相同 Idempotency-Key 时，更改密钥或端点会产生冲突；密钥进入任何存储哈希时，只会表现为由部署凭据密钥加键控的指纹。任何公开的 Session、Agent、Environment、事件或常规配置均不包含该密钥。顶层扩展仅可写入，无法更新。
 
 在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器会原生应用该配置并直接连接提供商。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。执行器主机将该配置包存放在其原生 Harness home 中，与托管 Runtime 的做法相同。原生工具以启动账户的权限运行，并且可以读取该账户有权读取的内容；吊销凭据不会擦除已经交付的配置包。
 

@@ -10,11 +10,11 @@ source_hash: 47121442f49eb3b7d6590fa0769d1531fc49fc397169cdc219f9bf9eb05f80f2
 
 ## 所有权与连接 {#ownership-and-connection}
 
-Core 拥有持久化的 Session、Turn、input 和 Environment 记录、调度与协调。Runtime 拥有原生 Executor、活动 Turn、传输状态和清理责任，直到完成结算。Sandbox Provider 拥有执行位置与外围计算资源。释放执行准入或关闭 Executor 不会删除、暂停或回收沙箱。daemon 不是隔离边界；参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)。
+Core 拥有持久化的 Session、Turn、input 和 Environment 记录、调度与协调。Runtime 拥有原生 Executor、活动 Turn、传输状态和清理责任，直到完成结算。沙箱提供商拥有执行位置与外围计算资源。释放执行准入或关闭 Executor 不会删除、暂停或回收沙箱。daemon 不是隔离边界；参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)。
 
 Runtime 按以下顺序连接：
 
-1. 获取 daemon 凭据和 device ID。[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型；Project API 密钥 和 Core 密钥 都不是 Runtime 凭据。
+1. 获取 daemon 凭据和 device ID。[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型；项目 API 密钥和 Core 密钥都不是 Runtime 凭据。
 2. 调用 `POST /api/v1/agent-daemon/bootstrap`，通过 Bearer header 提供凭据，并提供 device ID。使用返回的连接 URL。
 3. 连接 `/api/v1/agent-daemon/ws` 的 WebSocket，传入 `device_id`、`version` 查询参数和 Bearer header。凭据不得出现在 URL、payload 日志或 trace 中。
 4. 立即发送 heartbeat，之后按 bootstrap 返回的间隔发送。每个 heartbeat 声明 `supported_agent_kinds`、其可用性和[能力](#capability-declarations)。第一个 heartbeat 之前能力未知；heartbeat 中缺失的 kind 视为未声明。两者都不允许推断。
@@ -62,7 +62,7 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 
 | 字段 | Core 设置方式 |
 | --- | --- |
-| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了 model provider 时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
+| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
 | `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
 | `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
@@ -129,7 +129,7 @@ preparation 和 start 在 receive loop 与 router lock 之外运行。admission 
 Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并发限制独立。关闭时 Runtime 关闭活动和空闲 Executor，保留关闭失败的目标，并允许稍后串行重试。普通断连会关闭失败的 transport 并保留原 router，直到 shutdown 成功；等待超时或清理失败不授权重连，进程 shutdown 继续等待，不丢弃自己拥有的原生资源。对于 Runtime 初始化，shutdown 会等待同步 apply 操作和回执发送结束后才释放连接；`unknown` 结果仍是不确定结果，并阻止该 Router 上的后续准备，但本地变更停止后不再阻止重连。Core 保留失败的初始化状态，绝不重放初始化。工作区操作在跨 Turn 和 Executor 关闭后仍保留绑定与结算规则。
 
 
-挂起先关闭准入、排空已接纳工作与回执，同时保留已结算的空闲 Executor，随后才确认 `environment_quiesced`。活动、准备中、失效或其他未结算的所有者会阻止挂起。整个挂起期间停止空闲到期计时并隔离其回调；精确匹配且已认证的 `environment_resume` 为同一批所有者恢复一个新的空闲计时间隔。只有这种计划性重连跨 socket 保留 Router 与原生所有者；普通断连、shutdown 和连接生命周期取消仍要求确认清理完成。排空失败后，准入保持关闭直到 shutdown。恢复后的准备仍检查相同的原生身份与不可变配置，包括凭据冲突；绝不静默替换配置冲突的驻留 Executor。Sandbox Provider 仍负责其 checkpoint 实现的文件系统刷新和计算停止保证；Runtime 静止本身既不证明这些保证，也不证明原生 RAM 或外部网络连接已恢复。
+挂起先关闭准入、排空已接纳工作与回执，同时保留已结算的空闲 Executor，随后才确认 `environment_quiesced`。活动、准备中、失效或其他未结算的所有者会阻止挂起。整个挂起期间停止空闲到期计时并隔离其回调；精确匹配且已认证的 `environment_resume` 为同一批所有者恢复一个新的空闲计时间隔。只有这种计划性重连跨 socket 保留 Router 与原生所有者；普通断连、shutdown 和连接生命周期取消仍要求确认清理完成。排空失败后，准入保持关闭直到 shutdown。恢复后的准备仍检查相同的原生身份与不可变配置，包括凭据冲突；绝不静默替换配置冲突的驻留 Executor。沙箱提供商仍负责其 checkpoint 实现的文件系统刷新和计算停止保证；Runtime 静止本身既不证明这些保证，也不证明原生 RAM 或外部网络连接已恢复。
 
 ## 活动输入回执 {#active-input-receipts}
 
@@ -177,7 +177,7 @@ transport 与 execution 结果分开。Core 唯一 Run 订阅入口是 `Subscrib
 | 清理失败 | 保留资源所有权，报告清理未确认；等待方超时不使资源可复用 |
 | 取消回执丢失 | 取消可能已经发生；缺失回执既不证明成功，也不授权另一次执行 |
 
-仅重试其自身契约规定可安全重试的操作。已退出使用的 preparation request ID 最终可能分配新 handle，因此 request ID 不是持久化 idempotency key。恢复原生 Session 是带有已验证身份的显式操作，不是 socket 故障的响应。临时连接错误允许重连；认证或版本拒绝需要运维纠正。Executor 清理与 Sandbox Provider 已确认的计算资源回收独立。
+仅重试其自身契约规定可安全重试的操作。已退出使用的 preparation request ID 最终可能分配新 handle，因此 request ID 不是持久化 idempotency key。恢复原生 Session 是带有已验证身份的显式操作，不是 socket 故障的响应。临时连接错误允许重连；认证或版本拒绝需要运维纠正。Executor 清理与沙箱提供商已确认的计算资源回收独立。
 
 ## 原生故障分类 {#native-failure-classification}
 
@@ -185,7 +185,7 @@ adapter 可以给 Run 的 `error` frame 添加 `code` 和 `http_status`。它们
 
 接受的 code 为 `authentication_error`、`rate_limit_exceeded`、`usage_limit_exceeded`、`server_overloaded`、`server_error`、`invalid_request`、`resource_not_found`、`request_timeout`、`context_length_exceeded`、`cyber_policy` 和 `connection_failed`（[`engine_failure.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/engine_failure.go)）。仅 `connection_failed` 保留 `http_status`，且只能是 100 到 599 的整数；其他 status 都丢弃。值缺失、格式错误或未知时保持未分类错误，不丢弃 Usage 或 `done`。
 
-Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engine_http_status`。分类从属于终结状态和 Core 的 `error_code`：不能将已完成或已取消 Turn 变成失败、隐藏不完整事件流，或覆盖持久化或取消回执失败。正常 delivery 和 terminal journal draining 使用同一提取逻辑。[Session 诊断](../../contracts/agents-api/zh/session-diagnostics.md)仅为 Core error 为 `engine_failed` 的失败 Turn 暴露类别。[Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) 和 [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) adapter 指南给出各 Harness 的映射。adapter 只依据结构化错误数据分类：Harness 自身的错误类型或状态，或 Harness 原样转交的模型服务 JSON 错误 body，其 `error.code` 或 `error.type` 可以给出接受的 code。adapter 不依据错误文字分类。
+Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engine_http_status`。分类从属于终结状态和 Core 的 `error_code`：不能将已完成或已取消 Turn 变成失败、隐藏不完整事件流，或覆盖持久化或取消回执失败。正常 delivery 和 terminal journal draining 使用同一提取逻辑。[Session 诊断](../../contracts/agents-api/zh/session-diagnostics.md)仅为 Core error 为 `engine_failed` 的失败 Turn 暴露类别。[Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) 和 [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) adapter 指南给出各 Harness 的映射。adapter 只依据结构化错误数据分类：Harness 自身的错误类型或状态，或 Harness 原样转交的模型提供商 JSON 错误 body，其 `error.code` 或 `error.type` 可以给出接受的 code。adapter 不依据错误文字分类。
 
 ## 工作区操作 {#workspace-operations}
 
@@ -211,4 +211,4 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 
 套件覆盖不兼容版本、preparation 失败、取消结算、连接丢失而不虚构终结事件、重连而不重放、陈旧或重复 handle 与回执、清理失败、有界 transfer 验证，以及超时后的资源所有权。详细故障注入测试放在所测 gateway 和 dispatcher 代码旁。
 
-其他 Runtime 对接脚本化 Core 重放同一组 scenario，再对每个声明的能力运行原生验收。受控 adapter 测试证明 transport 契约，不证明原生 Harness 行为、操作系统支持、provider 认证或沙箱隔离。共享类型、本文和契约检查应一起修改。Harness adapter 还需运行 [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)中描述的共享文本断言。
+其他 Runtime 对接脚本化 Core 重放同一组 scenario，再对每个声明的能力运行原生验收。受控 adapter 测试证明 transport 契约，不证明原生 Harness 行为、操作系统支持、提供商认证或沙箱隔离。共享类型、本文和契约检查应一起修改。Harness adapter 还需运行 [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)中描述的共享文本断言。

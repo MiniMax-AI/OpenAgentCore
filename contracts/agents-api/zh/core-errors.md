@@ -57,7 +57,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 | 代码 | Param | 详细信息 | 含义 |
 | --- | --- | --- | --- |
-| `invalid_name` | `name` | `max_length`：Projects 和节点为 128，Project 键为 80 | 名称未通过相应资源的验证器 |
+| `invalid_name` | `name` | `max_length`：项目和节点为 128，项目 API 密钥为 80 | 名称未通过相应资源的验证器 |
 | `invalid_node_capacity` | `max_active` 或 `max_retained` | `min`：1，`max`：1000000 | 容量无效；保留容量还必须至少等于活动容量 |
 | `invalid_model_provider` | null | 省略 | 必须提供完整的模型提供商配置包 |
 | `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS，且不得包含凭据、查询或片段 |
@@ -69,9 +69,9 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `invalid_sandbox_configuration` | `resources.cpus` | `min`：1，`max`：255 | CPU 数量超出支持范围 |
 | `invalid_sandbox_configuration` | `resources.memory_mib` | `min`：512，`max`：1048576 | 内存超出支持范围 |
 | `invalid_sandbox_configuration` | `resources.root_disk_mib` 或 `resources.environment_disk_mib` | `min`：microsandbox 为 1024；Docker 和 E2B 的 `min`：0，`max`：0 | 磁盘容量缺失或提供商不支持 |
-| `invalid_sandbox_configuration` | `runtime` | 省略 | Runtime release 缺失、可变、无效或 E2B 不允许 |
+| `invalid_sandbox_configuration` | `runtime` | 省略 | Runtime 版本缺失、可变、无效或 E2B 不允许 |
 
-这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；Project 名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、常规限制、Harness 协议，然后是 Harness 的必需限制；沙箱资源依次为 CPU、内存、磁盘，然后是 Runtime。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
+这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；项目名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、常规限制、Harness 协议，然后是 Harness 的必需限制；沙箱资源依次为 CPU、内存、磁盘，然后是 Runtime。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
 
 ## 其他管理错误 {#other-administration-errors}
 
@@ -86,9 +86,9 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 503 | `workspace_storage_unavailable` | 工作区存储不可用或操作尚未确认 |
 | 400 | `sandbox_operation_unsupported` | 所选沙箱提供商不支持该操作 |
 | 401 | `invalid_admin_key` | Bearer 凭据不是有效的 Core 密钥 |
-| 404 | `not_found` | 操作不存在、Harness 未知，或该 Harness 没有部署默认模型服务 |
-| 409 | `project_archived` | 目标 Project 已归档 |
-| 409 | `project_exists` | 该 Project ID 已存在 |
+| 404 | `not_found` | 操作不存在、Harness 未知，或该 Harness 没有部署默认模型提供商 |
+| 409 | `project_archived` | 目标项目已归档 |
+| 409 | `project_exists` | 该项目 ID 已存在 |
 | 409 | `project_api_key_exists` | 该 API 密钥 ID 已存在 |
 | 409 | `executor_credential_exists` | 该执行器凭据 ID 已存在；要替换密钥，请轮换它 |
 | 409 | `sandbox_not_configured` | 沙箱部署尚未配置 |
@@ -97,7 +97,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 409 | `sandbox_deployment_conflict` | 沙箱部署在当前状态下无法更改 |
 | 409 | `sandbox_specification_mismatch` | 已保存的部署规格对其提供商不再有效 |
 | 409 | `runtime_node_in_use` | 节点仍有资源分配、快照、预留资源或待清理项 |
-| 409 | `environment_unavailable` | Session 的环境已不可用，例如托管环境创建失败 |
+| 409 | `environment_unavailable` | Session 的 Environment 已不可用，例如托管 Environment 创建失败 |
 | 409 | `runtime_history_unsupported` | 该 Session 不支持 Runtime 历史 |
 | 500 | `internal_error` | Core 未能完成操作 |
 | 503 | `runtime_node_unavailable` | 没有可用或有剩余容量的沙箱节点 |
@@ -135,7 +135,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `core_storage_failed` | `event_persistence_failed`、`artifact_capture_failed` |
 | `internal_error` | 结果未知或格式错误；不返回原始值 |
 | `environment_connection_timeout` | 初始输入连接截止时间已过 |
-| `environment_unavailable` | 初始输入所需环境不可用 |
+| `environment_unavailable` | 初始输入所需 Environment 不可用 |
 | `environment_provisioning_failed` | 托管预置失败；params 包含来自已清理回执的可空 `step`、`index`、`exit_code` |
 
 数据库故障属于错误，绝不会产生空快照或健康快照。绝不会解析预置原因或原生消息以确定类别或参数。

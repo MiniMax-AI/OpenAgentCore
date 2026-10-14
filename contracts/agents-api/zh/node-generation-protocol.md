@@ -4,7 +4,7 @@ source: contracts/agents-api/node-generation-protocol.md
 source_hash: fb446e91c3df3c9e397e5e9abb794245b0ae11d81176879207718680e8ab4173
 ---
 
-沙箱节点在其主机上运行 Docker 或 microsandbox Provider，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送 Provider 操作；节点针对本地 Provider 执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
+沙箱节点在其主机上运行 Docker 或 microsandbox 提供商，并通过一个 WebSocket 与 Core 相连。Core 通过该连接发送提供商操作；节点针对本地提供商执行这些操作，并报告就绪状态、主机测量值及其持有的部署代次。Core 始终是唯一的生命周期所有者：节点绝不重试变更操作或调度工作。帧和校验器位于 [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`）；节点用于注册和读取配置的 HTTP 路由位于[机器连接 API](machine-api.md#node-routes)。
 
 ## 帧与版本 {#frames-and-version}
 
@@ -17,11 +17,11 @@ source_hash: fb446e91c3df3c9e397e5e9abb794245b0ae11d81176879207718680e8ab4173
 3. Core 记录节点的存在状态，然后回复 `welcome`，其中包含新的 `connection_id` 和当前 `owner_epoch`；对于支持代次管理的节点，还包含 `deployment`：目标 `generation`、其 `specification_digest` 和可空的 `serving_generation`。节点保存更高的所有者 epoch，并拒绝更低的值。
 4. 节点每 10 秒发送一次 `heartbeat`，其中包含 `connection_id`、`owner_epoch` 和健康状态。对于每次心跳，Core 都会再次认证节点凭据并检查所有者 epoch，记录健康状态并回复 `heartbeat_ack`；对于支持代次管理的节点，回复中还包含 `deployment`。任一端连续 35 秒未收到任何帧时都会关闭连接。
 
-只要节点在当前所有者 epoch 下保持连接，并且最近一次心跳距今不足 45 秒，Core 就会将该节点计为在线。心跳会确立 Provider 的就绪状态和最近的主机测量值，但绝不表示 Session 活动。
+只要节点在当前所有者 epoch 下保持连接，并且最近一次心跳距今不足 45 秒，Core 就会将该节点计为在线。心跳会确立提供商的就绪状态和最近的主机测量值，但绝不表示 Session 活动。
 
-健康报告包含 `provider_ready`、可选的固定 `diagnostic`、`observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。未启用代次管理的节点每次报告时都会探测其 Provider；未就绪的 Provider 会报告其首个失败检查所属的、与 Provider 无关的就绪类别，该类别取自探测所包装的类别错误；探测文本、厂商细节和主机路径保留在节点上。节点或代次健康状态中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。支持代次管理的节点则按下文所述按代次报告就绪状态。
+健康报告包含 `provider_ready`、可选的固定 `diagnostic`、`observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。未启用代次管理的节点每次报告时都会探测其提供商；未就绪的提供商会报告其首个失败检查所属的、与提供商无关的就绪类别，该类别取自探测所包装的类别错误；探测文本、厂商细节和主机路径保留在节点上。节点或代次健康状态中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。支持代次管理的节点则按下文所述按代次报告就绪状态。
 
-## Provider 请求 {#provider-requests}
+## 提供商请求 {#provider-requests}
 
 Core 发送包含以下内容的 `request` 帧：
 
@@ -37,7 +37,7 @@ Core 发送包含以下内容的 `request` 帧：
 
 每个操作都携带自己的参数，并在成功时返回以下结果：
 
-| `operation` | Provider 方法 | 参数 | 成功结果 |
+| `operation` | 提供商方法 | 参数 | 成功结果 |
 | --- | --- | --- | --- |
 | `create` | `Create` | `bootstrap` | `info` |
 | `info` | `GetInfo` | 无 | `info` |
@@ -55,7 +55,7 @@ Core 发送包含以下内容的 `request` 帧：
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | 无 |
 
-只要 `connection_id`、`owner_epoch` 或 `sequence` 中任一值不匹配，请求就会关闭连接。格式错误的请求会得到 `invalid` 响应。未启用代次管理的节点仅接受其登记的 `deployment_generation`；支持代次管理的节点在对应代次的 Provider 上运行请求，无法运行时回复 `unconfirmed`。Core 仅向节点上已就绪的代次发送 `create` 和非 observe-only 的 `resume`，并且每条连接最多保留 32 个待处理请求。
+只要 `connection_id`、`owner_epoch` 或 `sequence` 中任一值不匹配，请求就会关闭连接。格式错误的请求会得到 `invalid` 响应。未启用代次管理的节点仅接受其登记的 `deployment_generation`；支持代次管理的节点在对应代次的提供商上运行请求，无法运行时回复 `unconfirmed`。Core 仅向节点上已就绪的代次发送 `create` 和非 observe-only 的 `resume`，并且每条连接最多保留 32 个待处理请求。
 
 预算采用相对计时：节点收到请求时以自己的时钟为基准锚定 `timeout_ms`，并在请求排队等待期间持续消耗该预算，因此各主机的时钟无需保持一致。Core 仍会限制自身等待时长。节点队列已满时会关闭连接。
 
@@ -69,27 +69,27 @@ Core 发送包含以下内容的 `request` 帧：
 | `unsupported` | 该操作被声明为不支持；见下文 |
 | `unconfirmed` 或任何其他值 | 结果未知 |
 
-失败响应不携带结果，唯一的例外是作为精确引用 `CreateSettled` 回执的 `info` 结果：即便已确认的原生 Create 在后续检查中失败，仍可证明该尝试已有确定结果。超时、响应丢失或断连属于不可用或不确定情况，绝不能证明资源不存在；发生这些情况后，Core 绝不重放变更操作，而是改为观察原始操作。[Sandbox Provider 指南](../../../docs/zh/sandbox-provider.md#operation-outcomes-and-retries) 定义了每种结果。
+失败响应不携带结果，唯一的例外是作为精确引用 `CreateSettled` 回执的 `info` 结果：即便已确认的原生 Create 在后续检查中失败，仍可证明该尝试已有确定结果。超时、响应丢失或断连属于不可用或不确定情况，绝不能证明资源不存在；发生这些情况后，Core 绝不重放变更操作，而是改为观察原始操作。[沙箱提供商指南](../../../docs/zh/sandbox-provider.md#operation-outcomes-and-retries) 定义了每种结果。
 
-节点启动和代次加载会在接受工作前验证完整的 Provider 操作声明，Core 代理使用同一份已注册声明，因此不支持的操作会在节点解析或原生 I/O 之前被拒绝。操作清单由[操作契约](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)维护。`unsupported` 响应包含一个 `unsupported` 对象，其中有精确的方法 `operation` 和经作者编写且安全的 `reason`；代理会将两者与请求进行核对。证据缺失、格式错误或不匹配会得到 `unconfirmed` 结果，而绝不会证明变更操作被拒绝。`unsupported` 始终不同于观察不可用，也不同于计算或命令结果未知；它既不确定资源所有权，也不授权重放。
+节点启动和代次加载会在接受工作前验证完整的提供商操作声明，Core 代理使用同一份已注册声明，因此不支持的操作会在节点解析或原生 I/O 之前被拒绝。操作清单由[操作契约](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)维护。`unsupported` 响应包含一个 `unsupported` 对象，其中有精确的方法 `operation` 和经作者编写且安全的 `reason`；代理会将两者与请求进行核对。证据缺失、格式错误或不匹配会得到 `unconfirmed` 结果，而绝不会证明变更操作被拒绝。`unsupported` 始终不同于观察不可用，也不同于计算或命令结果未知；它既不确定资源所有权，也不授权重放。
 
 ## 代次控制 {#generation-control}
 
-未启用代次管理的节点只服务其登记的代次，配置固定，并且不会收到准备或保留帧。它可以在 `Health.Generations` 报告该精确代次；支持检查点的 Provider 必须报告，并包含已验证的检查点资格。`provider_ready` 必须与报告的状态一致。支持代次管理的节点会准备 Core 在 `welcome` 和 `heartbeat_ack` 中通告的目标代次，并在此期间继续服务其持久化的服务代次；目标代次的准备独立于服务 Provider 的就绪状态。
+未启用代次管理的节点只服务其登记的代次，配置固定，并且不会收到准备或保留帧。它可以在 `Health.Generations` 报告该精确代次；支持检查点的提供商必须报告，并包含已验证的检查点资格。`provider_ready` 必须与报告的状态一致。支持代次管理的节点会准备 Core 在 `welcome` 和 `heartbeat_ack` 中通告的目标代次，并在此期间继续服务其持久化的服务代次；目标代次的准备独立于服务提供商的就绪状态。
 
-节点的 `hello` 和心跳最多携带八条代次观察记录。每条记录指定一个正值的有符号 64 位代次编号、其小写 SHA-256 规范摘要、`ready`、`preparing` 或 `failed` 状态，以及可选的固定诊断信息。目标代次和服务代次的记录排在前面，其余记录公平轮换。八条记录限制的是单条消息，而不是节点可保留的代次数量。省略某条观察记录绝不会授权删除，也不会暗示不存在。 支持检查点的 ready 代次携带 `checkpoint`，包含非空且不透明的 `artifact_domain` 和 `execution_class` token，各最多 256 字节。不支持的 Provider 省略该字段；preparing 或 failed 代次不声明它。Core 将声明与已认证连接和代次一起持久化，仅在当前在线连接的该代次仍 ready 时使用。[Provider 契约](../../../docs/zh/sandbox-provider.md#checkpoint-transfer) 定义归档与执行兼容性。
+节点的 `hello` 和心跳最多携带八条代次观察记录。每条记录指定一个正值的有符号 64 位代次编号、其小写 SHA-256 规范摘要、`ready`、`preparing` 或 `failed` 状态，以及可选的固定诊断信息。目标代次和服务代次的记录排在前面，其余记录公平轮换。八条记录限制的是单条消息，而不是节点可保留的代次数量。省略某条观察记录绝不会授权删除，也不会暗示不存在。 支持检查点的 ready 代次携带 `checkpoint`，包含非空且不透明的 `artifact_domain` 和 `execution_class` token，各最多 256 字节。不支持的提供商省略该字段；preparing 或 failed 代次不声明它。Core 将声明与已认证连接和代次一起持久化，仅在当前在线连接的该代次仍 ready 时使用。[提供商契约](../../../docs/zh/sandbox-provider.md#checkpoint-transfer) 定义归档与执行兼容性。
 
-保留使用独立且有界的交换。`retention` 请求最多指定八个本地 `(generation, specification_digest)` 引用、一个 UUID、一个每次递增 1 的 `sequence`、当前 `connection_id` 和所有者 epoch。`retention_ack` 必须与完整的待处理请求匹配，包括条目顺序和身份信息，并为每个条目给出显式布尔值 `keep`。每条连接只能有一个交换处于待处理状态，断连会将其丢弃。任何未经请求、重放、过期、不完整或混合的确认都不会删除任何内容。保留流量从不使用 Provider 请求队列。
+保留使用独立且有界的交换。`retention` 请求最多指定八个本地 `(generation, specification_digest)` 引用、一个 UUID、一个每次递增 1 的 `sequence`、当前 `connection_id` 和所有者 epoch。`retention_ack` 必须与完整的待处理请求匹配，包括条目顺序和身份信息，并为每个条目给出显式布尔值 `keep`。每条连接只能有一个交换处于待处理状态，断连会将其丢弃。任何未经请求、重放、过期、不完整或混合的确认都不会删除任何内容。保留流量从不使用提供商请求队列。
 
 ## 本地保留与辅助程序生命周期 {#local-retention-and-helper-lifetime}
 
-Core 的丢弃授权是回收的必要条件，但并非充分条件。排队和运行中的 Provider 调用、准备过程、本地目标代次以及服务固定引用都会保留引用；回收会再次检查这些引用，并拒绝在已取消的连接上执行。取消 Provider 调用方并不能证明其原生辅助程序已经停止；节点会将该辅助程序计为存活，直到其实际 `Wait` 返回。
+Core 的丢弃授权是回收的必要条件，但并非充分条件。排队和运行中的提供商调用、准备过程、本地目标代次以及服务固定引用都会保留引用；回收会再次检查这些引用，并拒绝在已取消的连接上执行。取消提供商调用方并不能证明其原生辅助程序已经停止；节点会将该辅助程序计为存活，直到其实际 `Wait` 返回。
 
-每个代次都拥有一个永久私有租约文件 `state/node/generations/<generation>.lease`。在启动原生辅助程序之前，节点先在该文件上获取共享 flock，在持有该锁时验证持久化租约身份，并要求最终 Provider 配置已经发布且不存在 preparing、collecting 或 dropped 日志。辅助程序继承该描述符；节点仅在 `Wait` 返回后关闭自己的副本，且绝不显式解锁该共享打开文件描述，因此取消调用方或节点退出都不会释放仍在运行的辅助程序所持的引用。原生辅助程序在调用 SDK 前会设置描述符的 close-on-exec 标志，因此 VM 和守护进程后代不会继承它。
+每个代次都拥有一个永久私有租约文件 `state/node/generations/<generation>.lease`。在启动原生辅助程序之前，节点先在该文件上获取共享 flock，在持有该锁时验证持久化租约身份，并要求最终提供商配置已经发布且不存在 preparing、collecting 或 dropped 日志。辅助程序继承该描述符；节点仅在 `Wait` 返回后关闭自己的副本，且绝不显式解锁该共享打开文件描述，因此取消调用方或节点退出都不会释放仍在运行的辅助程序所持的引用。原生辅助程序在调用 SDK 前会设置描述符的 close-on-exec 标志，因此 VM 和守护进程后代不会继承它。
 
 回收在检查引用、删除共享镜像或版本文件或发布 dropped 标记之前，先获取独占非阻塞 flock，并在这些变更期间持续持有该锁。租约文件属于稳定的节点状态，回收期间绝不删除或替换；符号链接、多重硬链接文件、外来所有权、不安全权限以及被替换的锁定路径都会被拒绝。在第一个辅助程序能够启动之前，安装器先独占创建租约并对其执行 fsync，随后以原子方式持久化私有 `.lease-identity` 记录，并对该记录及其目录执行 fsync。该记录绑定安装、代次、规范摘要、设备号和 inode。Python 回收器和 Go 辅助程序打开器在每次打开时都会验证同一记录，包括重启后；身份记录缺失时，两者都不会进行接管，也不会替换其 inode 或在回收后将其擦除。若安装在身份记录持久化前中断，则会拒绝重新接管，并保留该安装以供检查。身份记录被移除或租约被替换时，即使当前元数据一致，也会拒绝重新接管。
 
-已丢弃代次绝不能再次准备或使用。辅助程序退出只能证明本地文件方面的状态，不能证明远程变更操作或结果不确定的 Provider 回执已释放；Core 对分配和放置的持久保留仍保持独立。
+已丢弃代次绝不能再次准备或使用。辅助程序退出只能证明本地文件方面的状态，不能证明远程变更操作或结果不确定的提供商回执已释放；Core 对分配和放置的持久保留仍保持独立。
 
 ## 完全匹配的新安装 {#matched-fresh-installation}
 
@@ -101,28 +101,28 @@ Core 的丢弃授权是回收的必要条件，但并非充分条件。排队和
 
 ## 重启恢复 {#restart-recovery}
 
-Runtime 字节缺失时，绝不将固定的放置实例迁移到当前 Runtime。节点将原始代次和规范摘要保留为未就绪状态，并在恢复前通过 Core 的经认证配置路由请求该精确代次。缺少 seccomp 字节可能留下未就绪的 Provider 占位项；Provider 探测发现镜像或原生制品缺失时，会将修复排队，但不会通告就绪状态。
+Runtime 字节缺失时，绝不将固定的放置实例迁移到当前 Runtime。节点将原始代次和规范摘要保留为未就绪状态，并在恢复前通过 Core 的经认证配置路由请求该精确代次。缺少 seccomp 字节可能留下未就绪的提供商占位项；提供商探测发现镜像或原生制品缺失时，会将修复排队，但不会通告就绪状态。
 
-准备和修复串行执行。目标代次和服务代次优先，其余代次则以有界方式推进。每次尝试的截止时间为 30 分钟；失败后依次退避 1、2、5 和 10 分钟，此后最多退避 30 分钟。在连接提供部署信息之前，不准备任何内容。修复保留现有配置和路径，验证所选版本及每个现有同级文件的校验和，并且只下载缺失的不可变文件。字节冲突或保留规范不同都会拒绝修复；如果缺少 Provider 配置且没有精确的准备计划，也会拒绝，而不是重建该配置。
+准备和修复串行执行。目标代次和服务代次优先，其余代次则以有界方式推进。每次尝试的截止时间为 30 分钟；失败后依次退避 1、2、5 和 10 分钟，此后最多退避 30 分钟。在连接提供部署信息之前，不准备任何内容。修复保留现有配置和路径，验证所选版本及每个现有同级文件的校验和，并且只下载缺失的不可变文件。字节冲突或保留规范不同都会拒绝修复；如果缺少提供商配置且没有精确的准备计划，也会拒绝，而不是重建该配置。
 
-修复与回收使用相同的独占代次租约和安装锁，因此正在运行的辅助程序或回收器会保持所有权，修复稍后重试。字节恢复后，节点仍会运行 Provider 的就绪探测；文件存在和具备可执行能力永远不能证明就绪。
+修复与回收使用相同的独占代次租约和安装锁，因此正在运行的辅助程序或回收器会保持所有权，修复稍后重试。字节恢复后，节点仍会运行提供商的就绪探测；文件存在和具备可执行能力永远不能证明就绪。
 
 ## 准备与回收记录 {#preparation-and-collection-records}
 
-新的准备过程会写入两条不同的记录。下载前，`.preparing` 保存安装、代次和规范身份、私有 Provider 路径以及 `import_started: false`；它是恢复和回收计划，而不是 Provider。导入器运行前，计划会记录 `import_started: true`。Python 保留发现流程和 Go 重启恢复流程都能识别仅有待处理状态的计划，但绝不会据此构建、探测或获取 Provider；恢复或回收仍需要当前连接上的授权。
+新的准备过程会写入两条不同的记录。下载前，`.preparing` 保存安装、代次和规范身份、私有提供商路径以及 `import_started: false`；它是恢复和回收计划，而不是提供商。导入器运行前，计划会记录 `import_started: true`。Python 保留发现流程和 Go 重启恢复流程都能识别仅有待处理状态的计划，但绝不会据此构建、探测或获取提供商；恢复或回收仍需要当前连接上的授权。
 
-只有准备成功才会发布最终 `.json` Provider 配置，该配置只写入一次。Docker 记录其解析器返回的不可变本地镜像 ID；对于同一规范，构建器的配置身份或清单身份均可有效。准备日志清除之前，发布结果必须已经持久化。两者之间发生中断时，会重新验证同一计划和最终身份；计划、规范或路径发生漂移时会拒绝。已取消或失败的导入仍会向 Core 的保留交换保持可见，但不会成为服务代次。
+只有准备成功才会发布最终 `.json` 提供商配置，该配置只写入一次。Docker 记录其解析器返回的不可变本地镜像 ID；对于同一规范，构建器的配置身份或清单身份均可有效。准备日志清除之前，发布结果必须已经持久化。两者之间发生中断时，会重新验证同一计划和最终身份；计划、规范或路径发生漂移时会拒绝。已取消或失败的导入仍会向 Core 的保留交换保持可见，但不会成为服务代次。
 
 在删除任何原生层对象或版本文件之前，节点都会持久化一份私有回收日志，并将其绑定到安装、代次和规范摘要。重启后，未完成的日志仅是保留交换的候选项：它不能准备、探测、获取或通告该代次，必须重新获取一份与之关联的新 Core 丢弃授权后才能继续。在删除版本文件之前先持久化原生清理完成状态，因此重试可以完成部分删除的版本，而不会运行已经删除的辅助程序。完成持久化文件清理后，再写入与摘要绑定的 dropped 标记，以防重新接管；这些小型的配置和所有权日志会保留为本地身份记录。
 
 对于仅属于该安装的 microsandbox 存储，成功且完整的原生镜像清单可以区分“不存在”和“CLI 失败”；查询失败、清单格式错误、原生层因正在使用而拒绝或所有权不明时，都会保留这些字节。共享 microsandbox 镜像和私有版本会一直保留到最后一个本地引用消失。Docker 镜像属于主机的共享守护进程：自动回收绝不删除或修剪这些镜像，只有主机管理员在确认主机上没有安装需要它们后才能删除。
 
-全新安装还会另行记录其 Runtime 文件的已验证校验和，与主机程序分开保存。回收原始代次时，只删除未被任何保留配置引用的确切私有 Runtime 辅助程序、可执行文件、固件、seccomp 和导入缓存文件。第一次删除前会检查每个剩余文件；哈希未知、字节发生变化、存在链接或缺少所有权元数据时，都会拒绝清理。节点可执行文件、准备器、身份、基础 Provider 配置和清单会保留，因此重启后的节点仍可读取其登记身份并构建较新的保留 Provider。删除共享原生路径前，会先在所有保留配置之间对这些路径进行比较。
+全新安装还会另行记录其 Runtime 文件的已验证校验和，与主机程序分开保存。回收原始代次时，只删除未被任何保留配置引用的确切私有 Runtime 辅助程序、可执行文件、固件、seccomp 和导入缓存文件。第一次删除前会检查每个剩余文件；哈希未知、字节发生变化、存在链接或缺少所有权元数据时，都会拒绝清理。节点可执行文件、准备器、身份、基础提供商配置和清单会保留，因此重启后的节点仍可读取其登记身份并构建较新的保留提供商。删除共享原生路径前，会先在所有保留配置之间对这些路径进行比较。
 
 下载中断后，只会修复原始路径中缺失的字节。如果在任何导入尝试之前执行回收，准备日志会证明该代次没有已导入的原生镜像。如果某代次的原生可执行文件缺失，且导入可能已经开始，该代次仍会保留：文件缺失永远不能证明原生制品不存在，而空的原生清单也永远不能抹除回执或存储历史。
 
 就绪类别编写于 `services/core/internal/sandbox/node_diagnostic.go`，每个类别对应一个导出错误和一个代码。共享的 `services/core/internal/sandbox/testdata/node-diagnostics.json` 测试夹具检查 Go 映射、OpenAPI 源注释和生成的枚举，以及 TypeScript 客户端声明。Web 使用客户端规范化器，并检查每个已声明代码的本地化消息。代码变更时要同步更新这些投影；客户端将未知代码读作 `provider_unavailable`。
 
-准备诊断使用固定的类型化原因。只有制品传输、校验和或版本来源验证失败才会报告 `runtime_download_failed`；私有准备器通过退出类别指示这一类失败，Core 和节点都不解析 stderr。Provider 故障、所有权故障、取消和未分类故障保留其类型化代码，或使用 `provider_unavailable`。协议中不会传输任何 Provider 原始文本。
+准备诊断使用固定的类型化原因。只有制品传输、校验和或版本来源验证失败才会报告 `runtime_download_failed`；私有准备器通过退出类别指示这一类失败，Core 和节点都不解析 stderr。提供商故障、所有权故障、取消和未分类故障保留其类型化代码，或使用 `provider_unavailable`。协议中不会传输任何提供商原始文本。
 
 当前线协议版本为 5。Create 引导和 Resume 请求可携带可选的工作区文件系统绑定。节点在转发前校验其租户及 Environment 与分配引用一致、ObjectID 不可变且有效，以及挂载配置 ID 与所传配置一致。文件系统解析器负责适配器原生所有权校验。未提供绑定时选择自有存储；已提供绑定时不得回退。错误响应仅可保留原生 ID 非空且名称、代次、快照来源均匹配请求的 Resume 目标；这仅为清理证据，不代表恢复成功。

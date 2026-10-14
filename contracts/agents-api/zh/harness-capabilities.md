@@ -27,7 +27,7 @@ source_hash: a88b7238811707dd7fecae6ee8e509572677b49958e36ddabf8b783e97382c13
 | 非 `medium` 的 `text.verbosity` | 已准入；由原生模型决定 | 已拒绝 | 已拒绝 |
 | [公开 token 用量](sessions-events.md) | 测量计数器 | Null | Null |
 
-各 Harness 原生模型参数及提供方协议见[模型执行](model-execution.md)。
+各 Harness 原生模型参数及提供商协议见[模型执行](model-execution.md)。
 
 ## 工具 {#tools}
 
@@ -62,4 +62,4 @@ Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，匿名或 HTTPS bearer | 已验证：自托管；已准入：托管；匿名或 HTTPS bearer |
 
-外部工作区存储还要求所选 Harness profile 和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[Workspace Provider 指南](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。
+外部工作区存储还要求所选 Harness profile 和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区提供商指南](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。

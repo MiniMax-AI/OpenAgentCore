@@ -1,5 +1,5 @@
 ---
-title: "运行时可观测性"
+title: "Runtime 可观测性"
 source: contracts/agents-api/runtime-observability.md
 source_hash: de7eefac37eb9cc5935c28e2425efc323f1555771e48758ce9412455e891b52c
 ---
@@ -10,7 +10,7 @@ source_hash: de7eefac37eb9cc5935c28e2425efc323f1555771e48758ce9412455e891b52c
 
 ## 身份与源选择 {#identity-and-source-selection}
 
-在读取 provider 之前，Core 会先把每次观测归属到持久化的 Core 身份：
+在读取提供商之前，Core 会先把每次观测归属到持久化的 Core 身份：
 
 ```text
 managed:     tenant_id -> session_id -> environment_id -> runtime_allocation_id
@@ -22,27 +22,27 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 托管 Docker、microsandbox 和 E2B 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
 
-每个托管分配都通过部署所选的 Sandbox Provider 读取；该 Provider 在返回数值前会验证分配的 installation（`provider_key`）以及分配标签或等效所有权数据。在读取任何 provider 之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`。provider 读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
+每个托管分配都通过部署所选的沙箱提供商读取；该提供商在返回数值前会验证分配的 installation（`provider_key`）以及分配标签或等效所有权数据。在读取任何提供商之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`。提供商读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
 
-`Observe` 属于 [Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md)；`services/core/internal/runtimeobs/source.go` 负责观测类型以及 Provider 的 `Source` 视图。Core 每页只加载一次所选 Provider 及其注册 kind，并在该页的每次读取中使用同一不可变 Provider，用 `Observe` 读取每个运行中的目标。没有选择时，加载返回类型化的 `ErrUnavailable`，从而生成不含 provider 类型的 `sample_unavailable`。其他加载错误遵循上述 provider 读取错误规则。
+`Observe` 属于 [沙箱提供商协议](../../../docs/zh/sandbox-provider.md)；`services/core/internal/runtimeobs/source.go` 负责观测类型以及提供商的 `Source` 视图。Core 每页只加载一次所选提供商及其注册 kind，并在该页的每次读取中使用同一不可变提供商，用 `Observe` 读取每个运行中的目标。没有选择时，加载返回类型化的 `ErrUnavailable`，从而生成不含提供商类型的 `sample_unavailable`。其他加载错误遵循上述提供商读取错误规则。
 
-观测的 provider 类型即该注册 kind：`docker`、`microsandbox` 或 `e2b`。重新配置会影响后续页面，但无法更改正在处理页面所选定的 provider 类型或 Provider。Generation 路由器仍会通过每个分配记录的部署代次解析该分配。
+观测的提供商类型即该注册 kind：`docker`、`microsandbox` 或 `e2b`。重新配置会影响后续页面，但无法更改正在处理页面所选定的提供商类型或提供商。Generation 路由器仍会通过每个分配记录的部署代次解析该分配。
 
 ## 采样语义 {#sample-semantics}
 
 一个采样包含：
 
-- `observed_at`，即 provider 的观测时间；以及 `started_at`，即当前计算实例启动周期的开始时间；
+- `observed_at`，即提供商的观测时间；以及 `started_at`，即当前计算实例启动周期的开始时间；
 - 累计 CPU 秒数，以及以核心数计的已配置 CPU 容量；
-- provider 报告的 CPU 利用率比率，仅适用于不提供累计 CPU 时间的 provider（E2B）；
+- 提供商报告的 CPU 利用率比率，仅适用于不提供累计 CPU 时间的提供商（E2B）；
 - 当前内存使用量，以及以字节计的内存限制；
-- 当前磁盘使用量和容量，以字节计，且仅在 provider 报告这些值时提供（E2B）。
+- 当前磁盘使用量和容量，以字节计，且仅在提供商报告这些值时提供（E2B）。
 
 每项测量都是可选的。存在的零值表示观测到零；缺失值表示不可用，绝不会显示或聚合为零。Core 会拒绝以下采样：`observed_at` 晚于 Core 自身时钟，`started_at` 晚于 `observed_at`，或任一值为负数、非有限值、容量或限制值为零，或超出 JSON 安全整数范围。
 
 `lifecycle_state` 根据 Core 记录中的分配状态和计算阶段派生，绝不会从采样派生：没有分配或状态为 `creating` 时为 `pending`；状态为 `running` 且计算阶段为 `running` 或 `disabled` 时为 `active`；`suspended` 为 `sleeping`；`quiescing`、`suspending`、`restoring` 或 `waking` 为 `transitioning`；`cleanup_pending` 和 `released` 为 `stopped`。
 
-## Provider 映射 {#provider-mapping}
+## 提供商映射 {#provider-mapping}
 
 ### Docker {#docker}
 
@@ -69,7 +69,7 @@ E2B 不报告累计 CPU 时间，因此 CPU 秒数保持为 null。`observed_at`
 
 ## 读取预算 {#read-budgets}
 
-当前列表读取处理一页最多 100 个 Session（默认 20 个），provider 读取并发数最多为 8。每次 provider 读取的时限为 2 秒，整个列表请求为 10 秒；超过这些时限时，列表返回 503。单 Session 读取的时限为 2 秒。一次请求内不会重试任何 provider 调用，Core 也不保留观测缓存。
+当前列表读取处理一页最多 100 个 Session（默认 20 个），提供商读取并发数最多为 8。每次提供商读取的时限为 2 秒，整个列表请求为 10 秒；超过这些时限时，列表返回 503。单 Session 读取的时限为 2 秒。一次请求内不会重试任何提供商调用，Core 也不保留观测缓存。
 
 ## 时长 {#durations}
 
@@ -93,9 +93,9 @@ CPU 静默状态、心跳时龄和连接状态都不是空闲时间。
 
 ### 存储的历史记录 {#stored-history}
 
-PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读取无法虚增覆盖率。每条记录都会写入一行 `runtime_history_samples`，以租户、Session、Environment 和解析时间为键，包括分配信息、provider 类型、状态、观测时间与启动时间、CPU 秒数、容量和利用率比率、内存使用量和限制，以及实测 token 计数器。磁盘数据不存储。缺少 `started_at` 的采样仍计入覆盖范围，但会丢弃资源值，因为这些值无法关联到某次计算实例启动周期。
+PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读取无法虚增覆盖率。每条记录都会写入一行 `runtime_history_samples`，以租户、Session、Environment 和解析时间为键，包括分配信息、提供商类型、状态、观测时间与启动时间、CPU 秒数、容量和利用率比率、内存使用量和限制，以及实测 token 计数器。磁盘数据不存储。缺少 `started_at` 的采样仍计入覆盖范围，但会丢弃资源值，因为这些值无法关联到某次计算实例启动周期。
 
-历史服务在查询前解析 Project、Session 和 Environment；查询始终携带该作用域和有界时间范围，但绝不携带 provider 身份。存储保留 7 天。单次读取最多覆盖 24 小时，最多读取 20,000 条原始采样，并从范围起点之前两个采样间隔处开始读取，以查找 CPU 基线；每个数组最多返回 1,000 个桶，最多返回 64 个序列，总点数最多 10,000 个。结果超出请求的作用域、时间范围或限制时，读取失败。API 的 [Series](runtime-observability-api.md#series) 部分说明了聚合方式。
+历史服务在查询前解析项目、Session 和 Environment；查询始终携带该作用域和有界时间范围，但绝不携带提供商身份。存储保留 7 天。单次读取最多覆盖 24 小时，最多读取 20,000 条原始采样，并从范围起点之前两个采样间隔处开始读取，以查找 CPU 基线；每个数组最多返回 1,000 个桶，最多返回 64 个序列，总点数最多 10,000 个。结果超出请求的作用域、时间范围或限制时，读取失败。API 的 [Series](runtime-observability-api.md#series) 部分说明了聚合方式。
 
 `runtimehistory.Capabilities` 声明采样间隔、7 天保留期、最小桶宽度（30 秒或采样间隔，取较长者）、24 小时范围和点数限制；这些值无效时 Core 不会启动。
 
@@ -107,7 +107,7 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 
 ### token 使用量 {#token-usage}
 
-每次观测都携带来自 `MeasuredSessionUsage` 的 Session 实测使用量，即所有已记录根 Turn 快照之和，其中包含活跃 Turn。这不是公开的 Session 使用量规则，并且 Core 绝不会从 provider 计数器、上下文占用量或成本推导令牌数。
+每次观测都携带来自 `MeasuredSessionUsage` 的 Session 实测使用量，即所有已记录根 Turn 快照之和，其中包含活跃 Turn。这不是公开的 Session 使用量规则，并且 Core 绝不会从提供商计数器、上下文占用量或成本推导令牌数。
 
 ### OTLP 导出 {#otlp-export}
 
@@ -117,14 +117,14 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 | --- | --- | --- |
 | `agents.runtime.cpu.usage` | 单调累积和，秒 | 累计 CPU 计数器 |
 | `agents.runtime.cpu.capacity` | Gauge，核心数 | 已配置的 CPU 容量 |
-| `agents.runtime.cpu.utilization` | Gauge，比率 | Provider 报告的 CPU 占比（E2B） |
+| `agents.runtime.cpu.utilization` | Gauge，比率 | 提供商报告的 CPU 占比（E2B） |
 | `agents.runtime.memory.usage` | Gauge，字节 | 内存使用量 |
 | `agents.runtime.memory.limit` | Gauge，字节 | 内存限制 |
 | `agents.session.tokens.input` | Gauge，token | 实测 Session 输入 token |
 | `agents.session.tokens.output` | Gauge，token | 实测 Session 输出 token |
 | `agents.runtime.sample` | 单调差值和 | 每个经验证的结果一条，包括 unavailable 和 unsupported |
-| `agents.runtime.sample.duration` | Delta 直方图，秒 | Provider 读取时长 |
+| `agents.runtime.sample.duration` | Delta 直方图，秒 | 提供商读取时长 |
 
-仅当采样包含 `started_at` 时才导出 CPU 和内存数据点；缺少测量值不会产生数据点。属性包括 `agents.tenant.id`、`agents.session.id`、`agents.environment.id`、`agents.runtime.allocation.id`、`agents.runtime.mode`、`agents.runtime.provider.type`、`agents.runtime.status`、`agents.runtime.reason`、`agents.runtime.collection.source`，以及以纳秒为单位的 `agents.runtime.resolved_at_unix_nano`、`agents.runtime.observed_at_unix_nano` 和 `agents.runtime.compute.started_at_unix_nano`。这些纳秒时间使记录在后端以较低精度存储事件时间时仍可关联。Provider key、回执、原生标识符、原始错误、路径和凭据绝不会作为属性。
+仅当采样包含 `started_at` 时才导出 CPU 和内存数据点；缺少测量值不会产生数据点。属性包括 `agents.tenant.id`、`agents.session.id`、`agents.environment.id`、`agents.runtime.allocation.id`、`agents.runtime.mode`、`agents.runtime.provider.type`、`agents.runtime.status`、`agents.runtime.reason`、`agents.runtime.collection.source`，以及以纳秒为单位的 `agents.runtime.resolved_at_unix_nano`、`agents.runtime.observed_at_unix_nano` 和 `agents.runtime.compute.started_at_unix_nano`。这些纳秒时间使记录在后端以较低精度存储事件时间时仍可关联。提供商 key、回执、原生标识符、原始错误、路径和凭据绝不会作为属性。
 
 Web 仅通过 Core 读取历史记录；其图表不需要 Collector 或其他指标存储。

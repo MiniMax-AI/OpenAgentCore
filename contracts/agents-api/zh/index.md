@@ -40,9 +40,9 @@ Go 输入投影排除 `packages.system`，保留下方记录的明确拒绝行�
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
 | Subagents | retrieve, list; Items; Turns retrieve and list; Turn Items | 部分实现：只读子级工作；不支持实时子级进度或可选原生操作 | [Subagents](subagents.md) |
-| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[Project 拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
+| Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
-| Environment Templates | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment Templates](environments.md#templates) |
+| Environment 模板 | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment 模板](environments.md#templates) |
 | Vaults | create, retrieve, list, delete | 已实现；没有归档操作 | [Vaults and Credentials](vaults.md) |
 | Vault Credentials | create, retrieve, update, list, delete | 已支持 `static_bearer` 和 `mcp_oauth` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
@@ -126,7 +126,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
 - 图像必须是内嵌的 PNG 或 JPEG data URI；远程 URL、`file_id` 和 `detail` 会被拒绝。
 
-**Environments 和 Templates**
+**Environments 和模板**
 
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - Runtime 不会实施 `disabled` 或 `restricted` 网络，因此需要这些网络的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
@@ -158,7 +158,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - npm、initial-file 和 Skill 安装的失败原因没有官方样本。
 - Codex 对文本旁的空文本部分、失败函数结果中的图像或远程引用图像的行为；Claude 对混合消息中仅含空白或空文本块的行为。
 - 在 Core 返回 405 的路由上，官方服务的 `HEAD` 行为。
-- 精确主机名之外的 Environment Template 主机名形式，以及 `disabled` 与域结合使用的情况。
+- 精确主机名之外的 Environment 模板主机名形式，以及 `disabled` 与域结合使用的情况。
 - Files 发生变化时的 purpose 筛选和分页；官方 Skill 上传限制和错误时机。
 - Environment file 列表的默认值（limit 为 20、默认路径为工作区根目录、不递归、page-token 失效）、50 MiB 的 `file_id` 复制上限，以及创建时的检查顺序。
 - Artifact 对硬链接、特殊文件和链接形式的 `outputs` 目录的捕获，内容字节变化后的重新发布，以及内容标头和范围。

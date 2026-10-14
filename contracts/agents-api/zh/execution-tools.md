@@ -27,7 +27,7 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 | 调用方 Session 内未知调用或其他 Turn 的调用 | 400 `invalid_request_error`；待执行操作不变 |
 | Session 不存在或属于其他范围 | 404 |
 
-[Session 输入冲突](sessions-events.md#input-errors)记录准确消息。无效或不支持的内容不能消耗待处理调用。准入与应用结果分离：只有匹配的原生工具结果出现在实时根 Turn 中，适配器才确认结果（[回执契约](message-content.md#function-results)）。传输写入本身不确认任何事实，确认也不代表提供方已消费结果或外部副作用恰好发生一次。Core 不自动重放结果。
+[Session 输入冲突](sessions-events.md#input-errors)记录准确消息。无效或不支持的内容不能消耗待处理调用。准入与应用结果分离：只有匹配的原生工具结果出现在实时根 Turn 中，适配器才确认结果（[回执契约](message-content.md#function-results)）。传输写入本身不确认任何事实，确认也不代表提供商已消费结果或外部副作用恰好发生一次。Core 不自动重放结果。
 
 ### 待执行操作与恢复 {#required-actions-and-recovery}
 
@@ -49,7 +49,7 @@ Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `Str
 
 `tool_search` 工具仅包含 `type`；仅适用于 Responses 的执行字段被拒绝。函数 `defer_loading` 标记延迟加载的定义。发现要求两者同时存在：没有延迟函数的 `tool_search`，或没有 `tool_search` 的延迟函数均被拒绝。已保存 Agent 的工具联合类型保留 `tool_search`；固定版本 Session 响应联合类型省略它，因此 Session 与 SSE 资源投影移除它，冻结配置仍保留它。固定版本 Item 联合类型没有 tool-search Item，Core 不自行创建。
 
-Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求配置通过资格验证、Runtime 具备 `tool_search` 能力。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并启用原生 ToolSearch；函数配置仅允许所声明回调、ToolSearch 与选定的工作区工具。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型与提供方策略；已知冲突模式和 beta 设置在适配器中拒绝，不透明策略改变后，SDK 不提供可靠的输入前信号来确认延迟加载是否生效。
+Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求配置通过资格验证、Runtime 具备 `tool_search` 能力。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并启用原生 ToolSearch；函数配置仅允许所声明回调、ToolSearch 与选定的工作区工具。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型与提供商策略；已知冲突模式和 beta 设置在适配器中拒绝，不透明策略改变后，SDK 不提供可靠的输入前信号来确认延迟加载是否生效。
 
 ## Web 搜索与程序化工具调用 {#web-search-and-programmatic-tool-calling}
 

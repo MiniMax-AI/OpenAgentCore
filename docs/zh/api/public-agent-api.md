@@ -10,7 +10,7 @@ Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-r
 
 ## 准备开始 {#before-you-start}
 
-**基础 URL 和密钥。** 管理员会为你提供 API 基础 URL，例如 `https://core.example/v1`，以及 Project API 密钥。
+**基础 URL 和密钥。** 管理员会为你提供 API 基础 URL，例如 `https://core.example/v1`，以及项目 API 密钥。
 
 ```sh
 export OPENAI_BASE_URL=https://core.example/v1
@@ -54,7 +54,7 @@ oac /agents
 | [Turns 和 Items](#turns-and-items) | `/agents/sessions/{id}/turns`、`/items` | 持久化历史 |
 | [Files](#files) | `/files`、`/agents/environments/{id}/files`、`/agents/sessions/{id}/artifacts` | 上传内容、工作区文件和输出 |
 | [Skills](#skills) | `/skills` | 带版本的能力捆绑包 |
-| [Environment Templates](#environment-templates) | `/agents/environments/templates` | 可复用的工作区设置 |
+| [Environment 模板](#environment-templates) | `/agents/environments/templates` | 可复用的工作区设置 |
 | [Vaults](#vaults) | `/vaults` | MCP 服务器的只写凭据 |
 | Subagents | `/agents/sessions/{id}/subagents` | 只读的子任务；请参阅 [subagents](../../../contracts/agents-api/zh/subagents.md) |
 
@@ -68,7 +68,7 @@ Core 的路由与固定版本 SDK 中的路由完全一致，完整列表见 [up
 | 实时查看输出 | [流式传输事件](#stream-events) |
 | 停止当前 Turn，或在响应丢失后恢复 | [取消](#cancel)、[幂等性](#idempotency) |
 | 从 Agent 调用你自己的代码 | [函数工具](#function-tools) |
-| 为 Agent 提供 Skills、软件包、文件和设置命令 | [Skills](#skills)、[Environment Templates](#environment-templates) |
+| 为 Agent 提供 Skills、软件包、文件和设置命令 | [Skills](#skills)、[Environment 模板](#environment-templates) |
 | 连接需要凭据的 MCP 服务器 | [Vaults](#vaults) 和 [execution tools](../../../contracts/agents-api/zh/execution-tools.md) |
 | 在自己的计算机上使用 Skill 或 Plugin 目录 | [本地能力目录](../getting-started/self-hosted.md#local-capability-directories) |
 | 将文件放入工作区，或下载 Agent 生成的内容 | [Files](#files) |
@@ -130,7 +130,7 @@ client.beta.agents.sessions.create(environment=..., extra_headers={"Idempotency-
 | --- | --- | --- |
 | 400 | `invalid_request_error`、`invalid_beta`、`model_provider_required`、`unsupported_or_invalid_configuration` | 修正请求。`invalid_beta` 表示 `OpenAI-Beta` 请求头缺失或错误 |
 | 401 | `invalid_api_key` 或无代码 | 密钥错误或缺失，或者使用了其他命名空间中的密钥 |
-| 404 | Beta 路由返回 `not_found_error` | 对象不存在，或属于其他 Project。这两种情况看起来完全相同 |
+| 404 | Beta 路由返回 `not_found_error` | 对象不存在，或属于其他项目。这两种情况看起来完全相同 |
 | 405 | `unsupported_operation` | Core 不支持此操作 |
 | 409 | `conflict_error`、`idempotency_conflict` | 状态冲突，例如删除正在繁忙运行的 Session |
 | 413 | `request_too_large` | 正文过大 |
@@ -162,7 +162,7 @@ Harness 是运行 Session 的 Agent 程序：Codex（`codex`）、Claude Code（
 
 并非每种 Harness、部署位置和操作组合都受支持；[Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 列出了受支持的组合。
 
-## Agents（智能体） {#agents}
+## Agents {#agents}
 
 Agent 是保存的配置。Session 启动时会复制该配置，因此编辑 Agent 只会影响新的 Session。
 
@@ -204,7 +204,7 @@ oac "/agents" -d '{
 - **删除**不会影响现有 Session。
 - **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及设置了 `mode: "disabled"` 的 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [execution tools](../../../contracts/agents-api/zh/execution-tools.md)。
 
-## Sessions（会话） {#sessions}
+## Sessions {#sessions}
 
 Session 是一次使用固定配置并拥有独立 Environment 的对话。
 
@@ -351,9 +351,9 @@ data: {"type": "agent.session.turn.output_text.delta", "item_id": "item_...", "d
 
 **流式传输创建过程本身：**在 `sessions.create` 中传入 `stream=True`。你会先收到 `agent.session.created`，流会在首次出现 `idle` 或 `failed` 时结束。
 
-**重新连接：**重新订阅，然后读取 Items，并按 ID 丢弃已经拥有的 Item。当流所属的 Project 密钥被吊销或 Project 被归档时，打开的流会关闭。详细信息请参阅[恢复模型](../../../contracts/agents-api/zh/sessions-events.md#recovery-model)。
+**重新连接：**重新订阅，然后读取 Items，并按 ID 丢弃已经拥有的 Item。当流所属的项目 API 密钥被吊销或项目被归档时，打开的流会关闭。详细信息请参阅[恢复模型](../../../contracts/agents-api/zh/sessions-events.md#recovery-model)。
 
-## Turns 和 Items（轮次和条目） {#turns-and-items}
+## Turns 和 Items {#turns-and-items}
 
 Turn 是由输入启动的一项工作。Items 是其中记录的内容：消息、推理、工具调用及其结果。两者都是持久化的；你可以读取它们来检查结果或在断连后恢复。
 
@@ -419,7 +419,7 @@ oac "/agents/sessions/$SESSION_ID/events" -d '{
 
 重新发送相同结果是安全的。为同一次调用发送不同结果，或在取消后发送结果，都会失败并返回 409。MiniMax Code 不支持公共函数。
 
-## Files（文件） {#files}
+## Files {#files}
 
 三种文件具有不同用途：
 
@@ -427,7 +427,7 @@ oac "/agents/sessions/$SESSION_ID/events" -d '{
 | --- | --- | --- |
 | [源文件](#source-files) | 一次性上传字节，并通过 ID 引用 | `/files` |
 | [工作区文件](#workspace-files) | 将文件放入正在运行的 Session 工作区，或列出其中的文件 | `/agents/environments/{id}/files` |
-| [Artifacts（产物）](#artifacts) | 下载 Agent 生成的内容 | `/agents/sessions/{id}/artifacts` |
+| [Artifacts](#artifacts) | 下载 Agent 生成的内容 | `/agents/sessions/{id}/artifacts` |
 
 ### 源文件 {#source-files}
 
@@ -461,7 +461,7 @@ oac "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "fil
 - 系统会创建父目录。已有文件绝不会被覆盖（400）。
 - 列表显示单个目录中的普通文件，不会递归列出内容。列表使用 `page` 令牌分页，并返回 `next`。
 
-### Artifacts（产物） {#artifacts}
+### Artifacts {#artifacts}
 
 Turn 完成时，Core 会捕获工作区 `outputs/` 目录下的普通文件。即使 Environment 消失，Artifacts 仍可读取。
 
@@ -478,7 +478,7 @@ oac "/agents/sessions/$SESSION_ID/artifacts/$ARTIFACT_ID/content" -o report.md
 
 每个 Artifact 都有 `path`、`size_bytes`、`turn_id` 和 `environment_id`。删除 Artifact 不会删除工作区文件。
 
-## Skills（技能） {#skills}
+## Skills {#skills}
 
 Skill 是 Agent 可使用的、包含指令和文件的带版本捆绑包。可以上传目录或 ZIP；每次上传都会创建一个版本。
 
@@ -497,7 +497,7 @@ client.skills.versions.create(skill.id, files=[...], default=True)
 
 详细信息请参阅 [Files and Skills](../../../contracts/agents-api/zh/source-files.md)。Session 会在准备期间一次性安装其 Skills、Plugins 和软件包；之后编辑源文件不会影响正在运行的 Session。准备错误会在任何工作开始前导致 Session 失败：请修复原因，而不是在新 Session 中重试。
 
-## Environment Templates（环境模板） {#environment-templates}
+## Environment 模板 {#environment-templates}
 
 模板用于保存工作区设置以供复用。`openai_hosted` Session 在 `environment` 中引用模板；`self_hosted` Session 则在 `x_agents_core.environment` 中引用：
 
@@ -516,9 +516,9 @@ template = client.beta.agents.environments.templates.create(
 | `setup_commands`、`env` | 在准备期间运行和设置。读取时从不返回 |
 | `files`、`skills`、`plugins` | 初始内容。最多 50 个文件，内联数据总计最多 10 MiB |
 
-Session 启动时会冻结模板。详细信息请参阅 [Environment Templates](../../../contracts/agents-api/zh/environments.md#templates)。
+Session 启动时会冻结模板。详细信息请参阅 [Environment 模板](../../../contracts/agents-api/zh/environments.md#templates)。
 
-## Vaults（凭据库） {#vaults}
+## Vaults {#vaults}
 
 Vaults 保存 HTTP MCP 服务器的凭据：`static_bearer` 令牌，或支持可选刷新的 `mcp_oauth` 令牌。令牌为只写字段。
 

@@ -22,7 +22,7 @@ source_hash: 13d033e194fe4316dfaeced837907b594e4c95d93ebbf9ef9078f47b42cbec92
 | `/v1` 下的未知子路由，包括带尾斜杠的情况 | 在 Beta 和身份验证检查后返回 404、代码 `unsupported_operation`。 |
 | `OPTIONS` 和 CORS | 不处理 CORS。 |
 
-创建 Agent、Vault、Credential、Environment Template、Environment 文件或 Session 均返回 201，流式 Session 创建也是如此。对 Agent 或 Environment Template 发送空更新正文会推进 `updated_at`，但不会更改其他内容；时间戳精确到秒。
+创建 Agent、Vault、Credential、Environment 模板、Environment 文件或 Session 均返回 201，流式 Session 创建也是如此。对 Agent 或 Environment 模板发送空更新正文会推进 `updated_at`，但不会更改其他内容；时间戳精确到秒。
 
 ### 标头 {#headers}
 
@@ -40,23 +40,23 @@ Beta 路由要求 `OpenAI-Beta` 标头中恰好有一个值，且该值必须等
 
 ### 身份验证 {#authentication}
 
-`/v1` 仅接受 Project API 密钥，形式为 `Authorization: Bearer <key>`。同一 Project 的所有密钥都视为同一调用方：它们共享该 Project 的资源和 Session 创建重试。Core 在每次请求时都在数据库中解析密钥及其 Project，不缓存凭据，超时时间为五秒。撤销密钥或归档其 Project 会在下一次请求时生效。Project 的所有密钥都使用主体 `service_account/project:<Project ID>`。[Projects and keys](admin-api.md#projects-and-keys) 介绍了密钥管理。
+`/v1` 仅接受项目 API 密钥，形式为 `Authorization: Bearer <key>`。同一项目的所有密钥都视为同一调用方：它们共享该项目的资源和 Session 创建重试。Core 在每次请求时都在数据库中解析密钥及其项目，不缓存凭据，超时时间为五秒。撤销密钥或归档其项目会在下一次请求时生效。项目的所有密钥都使用主体 `service_account/project:<Project ID>`。[项目与密钥](admin-api.md#projects-and-keys) 介绍了密钥管理。
 
 可选的 `OpenAI-Organization` 和 `OpenAI-Project` 标头在发送时必须各出现一次，并分别等于 `core` 和 `proj_<Project ID>`；任何其他值都会导致密钥被拒绝。
 
 | 失败情况 | 响应 |
 | --- | --- |
-| 未提供密钥、使用其他方案、`Authorization` 标头为空或重复、密钥未知或已撤销、密钥属于已归档的 Project、使用 Core 密钥，或作用域标头不匹配 | 401，`type` 为 `invalid_request_error`，消息为 "A valid Agents API bearer key is required."，`WWW-Authenticate: Bearer`。在 Beta 路由上，`code` 为 null。在 Files and Skills 上，当发送且被拒绝的 Bearer 凭据恰好只有一个时，`code` 为 `invalid_api_key`；其他情况下为 null。 |
+| 未提供密钥、使用其他方案、`Authorization` 标头为空或重复、密钥未知或已撤销、密钥属于已归档的项目、使用 Core 密钥，或作用域标头不匹配 | 401，`type` 为 `invalid_request_error`，消息为 "A valid Agents API bearer key is required."，`WWW-Authenticate: Bearer`。在 Beta 路由上，`code` 为 null。在 Files and Skills 上，当发送且被拒绝的 Bearer 凭据恰好只有一个时，`code` 为 `invalid_api_key`；其他情况下为 null。 |
 | 密钥查找失败，例如数据库不可用 | 503，`type` 为 `server_error`，`code` 为 `authentication_unavailable` |
 
 ### 请求正文 {#request-bodies}
 
-每个 `/v1` JSON 路由在路由解码、验证或查找之前都会经过一个正文门禁：Agent 创建和更新、Vault 创建、Credential 创建和更新、Environment Template 创建和更新、Environment 文件创建、Session 创建和更新，以及 Session 事件。DELETE 路由、multipart Files 和 Skills 上传以及 Skill 更新使用各自的读取器。除下述 413 大小错误外，门禁错误均返回 400，`type` 和 `code` 为 `invalid_request_error`，param 为 null。
+每个 `/v1` JSON 路由在路由解码、验证或查找之前都会经过一个正文门禁：Agent 创建和更新、Vault 创建、Credential 创建和更新、Environment 模板创建和更新、Environment 文件创建、Session 创建和更新，以及 Session 事件。DELETE 路由、multipart Files 和 Skills 上传以及 Skill 更新使用各自的读取器。除下述 413 大小错误外，门禁错误均返回 400，`type` 和 `code` 为 `invalid_request_error`，param 为 null。
 
 | 顺序 | 情况 | 响应 |
 | --- | --- | --- |
 | 1 | `Content-Type` 缺失、不是 JSON 或格式错误，包括无正文的 `POST`。`application/json` 和 `application/*+json` 不区分大小写，并允许附带参数 | "expected request with Content-Type: application/json" |
-| 2 | 正文超过路由限制：Session 创建和 Environment Templates 为 16 MiB，文件创建采用 [Environment file](environment-files.md) 的限制，其他路由为 1 MiB | 413，代码 `request_too_large` |
+| 2 | 正文超过路由限制：Session 创建和 Environment 模板为 16 MiB，文件创建采用 [Environment file](environment-files.md) 的限制，其他路由为 1 MiB | 413，代码 `request_too_large` |
 | 3 | 无效 UTF-8 | "Invalid body: encountered a unicode decode error when parsing this JSON value. Please check the value to ensure it is valid unicode." |
 | 4 | JSON 格式错误、尾随数据、两个值、字节顺序标记、仅含空白字符的正文，或形成孤立 UTF-16 代理项的转义 | "Invalid body: failed to parse JSON value. Please check the value to ensure it is valid JSON. (Common errors include trailing commas, missing closing brackets, missing quotation marks, etc.)" |
 | 5 | 一个对象内任意深度出现重复键 | `"Invalid body: duplicate JSON key '<key>' at '<path>'. Duplicate JSON keys are not supported."` 路径使用 `.` 连接对象键并省略数组索引，例如 `metadata.k` 或 `tools.type`。键在反转义后按大小写敏感方式比较。报告文档顺序中首次出现的重复键。 |
@@ -95,7 +95,7 @@ Beta 路由要求 `OpenAI-Beta` 标头中恰好有一个值，且该值必须等
 | Agent `name` 超过 128 个字符 | Param 为 `name`。允许使用空名称和未去除首尾空白的名称。 |
 | metadata 键或值中包含 U+0000 | Param 为 `metadata.<key>` |
 | 其他任何存储字符串或查询筛选条件中包含 U+0000 或无效 UTF-8 | Param 为 null，消息为 "Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8."。不会写入任何内容。PostgreSQL 无法存储 U+0000，而官方服务允许存储。 |
-| Environment Template 或 Session 内联网络配置被拒绝：通配符、端口、方案、IPv6、空主机、没有域名的 `restricted` 策略、超过 100 个域名，或域名使用其他访问模式 | Param 为 null，并使用 Core 的消息 |
+| Environment 模板或 Session 内联网络配置被拒绝：通配符、端口、方案、IPv6、空主机、没有域名的 `restricted` 策略、超过 100 个域名，或域名使用其他访问模式 | Param 为 null，并使用 Core 的消息 |
 | Session 更新正文为空 | "At least one update field is required" |
 
 ## 列表 {#lists}
@@ -118,7 +118,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 | 列表 | 默认值 | 接受范围 | 其他值 |
 | --- | --- | --- | --- |
-| Agents、Sessions、Items、Environment Templates、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
+| Agents、Sessions、Items、Environment 模板、Subagent Items、Subagent Turn Items | 20 | 1–100 | 0 变为 1；大于 100 的值变为 100 |
 | Vaults、Credentials | 20 | 1–100 | 0、负数和更大的整数，包括溢出值，都会限制在 1–100 范围内 |
 | Turns、Subagents、Subagent Turns、Artifacts | 20 | 1–100 | 400 `invalid_request_error`，"limit must be between 1 and 100" |
 | Skills、Skill 版本 | 20 | 0–100 | 0 返回空页面，其 `has_more` 表示游标后是否还有资源。负数：400 `integer_below_min_value`，param 为 `limit`。大于 100：400 `integer_above_max_value`，param 为 `limit` |
@@ -132,7 +132,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 | 列表 | 响应 |
 | --- | --- |
-| Agents、Sessions、Turns、Environment Templates、Vaults、Credentials | 404，`type` 和 `code` 均为 `not_found_error`，"Resource not found." |
+| Agents、Sessions、Turns、Environment 模板、Vaults、Credentials | 404，`type` 和 `code` 均为 `not_found_error`，"Resource not found." |
 | Session Items、Subagent Items、Subagent Turn Items | 400 `invalid_request_error`，param 为 null，"Invalid session item ID in `after`" |
 | Subagents、Subagent Turns | 400 `invalid_request_error`，param 为 null，"Invalid resource ID in `after`" |
 | Session Artifacts | 400 `invalid_request_error`，param 为 null，"after is not a valid artifact ID" |
@@ -213,7 +213,7 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 
 `stream` 默认为 false。`stream` 和 `agent_id` 不能为 null。省略或 null 的 `metadata` 为 `{}`。
 
-创建过程会在查找创建重试之前，验证正文和 metadata 类型、请求字段及初始输入，以及放置和流式输入要求。对于新工作，Core 会解析 Template、已保存的 Agent 和模型配置，绑定 Vault Credential，然后验证所选 Harness 和执行配置，再执行写入。依赖项查找失败时会重新检查重试标识，以确保已经提交的创建仍可恢复。
+创建过程会在查找创建重试之前，验证正文和 metadata 类型、请求字段及初始输入，以及放置和流式输入要求。对于新工作，Core 会解析模板、已保存的 Agent 和模型配置，绑定 Vault Credential，然后验证所选 Harness 和执行配置，再执行写入。依赖项查找失败时会重新检查重试标识，以确保已经提交的创建仍可恢复。
 
 ### 创建重试 {#creation-retries}
 
@@ -221,11 +221,11 @@ Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `
 
 | 情况 | 响应 |
 | --- | --- |
-| 键、请求和 Project 均相同 | 返回 201以及 Session 的当前状态。不会再次接纳任何输入。`stream=true` 的重试返回 201，不含任何事件并关闭连接。 |
+| 键、请求和项目均相同 | 返回 201以及 Session 的当前状态。不会再次接纳任何输入。`stream=true` 的重试返回 201，不含任何事件并关闭连接。 |
 | 键相同但请求不同 | 409 `idempotency_conflict` |
 | 删除 Session 后使用相同键 | 409 `idempotency_conflict` |
 
-键的作用域限定为 Project；该 Project 的任何键，包括轮换后签发的键，都可以用于重试。如果请求包含缺少 `model` 的内联 Agent，或者指定了已保存的 Agent、Template、初始文件或准备配置、`vault_ids` 或凭据引用、`x_agents_core`，或者 `openai_hosted` 环境，则会在读取上述任何来源之前按发送内容进行比较：即使 Agent、Template、Credential 或 deployment 默认值已更改或删除，匹配的重试仍会返回原有 Session。其他请求则按解析后的配置进行比较。模型提供商密钥仅以指纹形式参与比较。
+键的作用域限定为项目；该项目的任何键，包括轮换后签发的键，都可以用于重试。如果请求包含缺少 `model` 的内联 Agent，或者指定了已保存的 Agent、模板、初始文件或准备配置、`vault_ids` 或凭据引用、`x_agents_core`，或者 `openai_hosted` 环境，则会在读取上述任何来源之前按发送内容进行比较：即使 Agent、模板、Credential 或 deployment 默认值已更改或删除，匹配的重试仍会返回原有 Session。其他请求则按解析后的配置进行比较。模型提供商密钥仅以指纹形式参与比较。
 
 ### 更新和列表 {#update-and-list}
 

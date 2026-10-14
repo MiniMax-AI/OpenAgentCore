@@ -4,21 +4,21 @@ source: contracts/agents-api/source-files.md
 source_hash: 320216a4e7ac0d1e3e2455dfe622e0f91576ea1d0aa00d11911683b0e98387f1
 ---
 
-Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的 Project 资源，不依赖 Session。File 保存上传字节，Environment 通过 ID 复制它们。Skill 保存不可变、版本化的包，由 Template 和 Session 引用。Project 的所有 API 密钥共享这些资源。
+Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的项目资源，不依赖 Session。File 保存上传字节，Environment 通过 ID 复制它们。Skill 保存不可变、版本化的包，由模板和 Session 引用。项目的所有 API 密钥共享这些资源。
 
-这些路由遵循 [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) 中固定版本 SDK：[Files 资源](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/files.py)、[创建参数](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_create_params.py)、[FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_object.py) 和 [Skills 资源](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/skills)。要求 Project API 密钥，不要求 `OpenAI-Beta` 头。不存在 ID 与其他 Project 的 ID 返回相同的 404。
+这些路由遵循 [upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json) 中固定版本 SDK：[Files 资源](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/files.py)、[创建参数](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_create_params.py)、[FileObject](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/file_object.py) 和 [Skills 资源](https://github.com/openai/openai-python/tree/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/skills)。要求项目 API 密钥，不要求 `OpenAI-Beta` 头。不存在 ID 与其他项目的 ID 返回相同的 404。
 
 ## 文件 {#files}
 
 | 操作 | 行为 |
 | --- | --- |
 | `POST /files` | Multipart 上传，包含一个 `file` 部分和 `purpose=user_data`，顺序不限。返回 200 和 File |
-| `GET /files` | 列出 Project 的 File，不读取字节 |
+| `GET /files` | 列出项目的 File，不读取字节 |
 | `GET /files/{file_id}` | 返回 File |
 | `GET /files/{file_id}/content` | 400 `Not allowed to download files of purpose: user_data`，code 与 param 为 null。先检查 ID，因此 File 不存在时返回 404 |
 | `DELETE /files/{file_id}` | 删除 File 及其字节；返回 `{"id": …, "object": "file", "deleted": true}` |
 
-将 File ID 传给 [Environment 文件](environment-files.md#create-a-file)，或 Template、Session 的初始 `files`（[Environment](environments.md)）来使用文件。复制在内部读取字节；公开下载仍被拒绝。
+将 File ID 传给 [Environment 文件](environment-files.md#create-a-file)，或模板、Session 的初始 `files`（[Environment](environments.md)）来使用文件。复制在内部读取字节；公开下载仍被拒绝。
 
 ### 上传 {#upload}
 
@@ -44,7 +44,7 @@ Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的
 | 参数 | 规则 |
 | --- | --- |
 | `order` | `desc`（默认）或 `asc`，按创建时间再按 ID 排序 |
-| `after` | 此 Project 可见的 File ID |
+| `after` | 此项目可见的 File ID |
 | `purpose` | `user_data`、`assistants`、`batch`、`fine-tune`、`vision`、`evals`、`assistants_output`、`batch_output`、`fine-tune-results` 之一。其他值（包括不同大小写）在解析游标前返回 400，`param: "purpose"`。非 `user_data` 值返回空页。空值表示不筛选 |
 
 响应为 `{"object": "list", "data": [...], "first_id", "last_id", "has_more"}`；空页的 ID 为 null。`limit`、查询解析及其错误遵循共享[列表规则](wire-semantics.md#lists)。
@@ -91,16 +91,16 @@ curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F fil
 - 条目为普通文件或目录，使用规范相对路径。链接、特殊文件、绝对路径、`..` 组件和重复项被拒绝。
 - 限制：压缩后 5 MiB，展开后 20 MiB，500 个文件，以及含目录在内的 1,000 个 ZIP 条目。
 
-Core 将每个版本的包加密并绑定到 Project、Skill 与版本。ZIP 上传保留可执行位；目录上传以 mode 0644 存储文件。
+Core 将每个版本的包加密并绑定到项目、Skill 与版本。ZIP 上传保留可执行位；目录上传以 mode 0644 存储文件。
 
 ### 版本与元数据 {#versions-and-metadata}
 
-- 版本号从 1 开始，每次上传加一，即使最新版本删除也不复用。Template 和 Session 选择器按数字指定版本，复用数字可能使保存的选择器指向不同字节。
+- 版本号从 1 开始，每次上传加一，即使最新版本删除也不复用。模板和 Session 选择器按数字指定版本，复用数字可能使保存的选择器指向不同字节。
 - Skill 的 `name` 和 `description` 来自默认版本。通过 `POST /skills/{skill_id}` 或 `default=true` 上传修改默认版本时，指针和两个字段一起更新；`id` 和 `created_at` 不变。
 - `latest_version` 是剩余版本中的最大版本号。
 - 同一 Skill 的上传与删除串行执行，删除不会移除已确认上传的版本。
 
-Template 和 Session 如何选择版本（默认、`latest` 或数字）并冻结字节，见 [Environment](environments.md#skills-plugins-and-environment-mcp)。
+模板和 Session 如何选择版本（默认、`latest` 或数字）并冻结字节，见 [Environment](environments.md#skills-plugins-and-environment-mcp)。
 
 ### 删除版本 {#delete-a-version}
 
@@ -111,4 +111,4 @@ Template 和 Session 如何选择版本（默认、`latest` 或数字）并冻�
 | 其他版本 | 200，响应体相同。若为最新版本，`latest_version` 回退到剩余最大版本号 |
 | 不存在或属于其他范围的 Skill 或版本 | 404 |
 
-删除 Skill 或版本不改变已安装它的 Session；Template 保留所存储引用。
+删除 Skill 或版本不改变已安装它的 Session；模板保留所存储引用。

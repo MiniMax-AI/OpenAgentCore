@@ -17,7 +17,7 @@ git worktree add ../openagentcore-change -b codex/my-change main
 cd ../openagentcore-change
 ```
 
-安装 [go.mod](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/go.mod) 中指定版本的 Go、Node 22.13 或更高版本、[package.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/package.json) 中指定版本的 pnpm，以及 Python 3.9 或更高版本。完整检查在 Linux 上运行，需要专用 PostgreSQL 数据库、microsandbox helper 使用的 OpenSSL 开发库、发行包压缩使用的 pigz 和 Playwright 浏览器。Provider 和 Runtime 构建的其他前提条件见各组件指南。
+安装 [go.mod](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/go.mod) 中指定版本的 Go、Node 22.13 或更高版本、[package.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/package.json) 中指定版本的 pnpm，以及 Python 3.9 或更高版本。完整检查在 Linux 上运行，需要专用 PostgreSQL 数据库、microsandbox helper 使用的 OpenSSL 开发库、发行包压缩使用的 pigz 和 Playwright 浏览器。提供商和 Runtime 构建的其他前提条件见各组件指南。
 
 ```sh
 make node-deps
@@ -76,7 +76,7 @@ python3 "$bundle/install.py" \
 
 构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`。可将其复制到另一台 Linux amd64 Docker 主机，解压后执行其中的 `install.py`；目标主机只需要 Python 3.9+ 和 Docker，无需源码、Go、Node 或 pnpm。安装完成前保留解压目录；安装后的服务和节点下载不再依赖它的原始位置。
 
-在 Web 中配置模型提供方，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装器目录](maintainers.md#native-installers)，否则可选的自托管原生安装器不可用，不会生成占位目录。
+在 Web 中配置模型提供商，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装器目录](maintainers.md#native-installers)，否则可选的自托管原生安装器不可用，不会生成占位目录。
 
 启动失败或安装已停止时，使用保存的配置，而不是重新安装：
 
@@ -115,10 +115,10 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | `services/core/internal/execution` | 持久化 Turn 分发与调度 | [Runtime 协议](runtime-protocol.md) |
 | `services/core/internal/engine` | 对 Harness 操作与执行位置进行纯资格验证 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire 类型与验证器 | [Runtime 协议](runtime-protocol.md) |
-| `internal/runtimebootstrap` | Provider 到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
+| `internal/runtimebootstrap` | 提供商到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
 | `apps/daemon/internal/dispatch` | Runtime 准备、Executor 复用、Turn 和清理所有权 | [Harness 生命周期](../../contracts/agents-api/zh/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | 原生 Harness adapter | [原生参考](../../contracts/agents-api/zh/harness-onboarding.md#native-references) |
-| `services/core/internal/sandbox` | Provider 接口与托管计算资源生命周期 | [Provider 接入](sandbox-provider.md) |
+| `services/core/internal/sandbox` | 提供商接口与托管计算资源生命周期 | [提供商接入](sandbox-provider.md) |
 | `services/web` | 控制台登录与服务端管理代理 | [控制台服务端](web/console-server.md) |
 | `apps/web` 和 `packages/agents-client` | 控制台 UI 与类型化 client | [Web 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md) |
 | `deploy` 和 `scripts` | 发行、安装和验证工具 | [维护者指南](maintainers.md) |
@@ -126,7 +126,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 
 ## 选择扩展边界 {#choose-an-extension-boundary}
 
-通过[协议地图](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary)找到新增 Harness、Sandbox Provider、model provider、API 操作或 Runtime 消息所需的代码与指南。指南负责注册、支持的操作和实现资格验证所需检查。工作区能力（如 Skill、Plugin、MCP 和系统包）从 [Environment](../../contracts/agents-api/zh/environments.md) 开始。
+通过[协议地图](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary)找到新增 Harness、沙箱提供商、模型提供商、API 操作或 Runtime 消息所需的代码与指南。指南负责注册、支持的操作和实现资格验证所需检查。工作区能力（如 Skill、Plugin、MCP 和系统包）从 [Environment](../../contracts/agents-api/zh/environments.md) 开始。
 
 ## 验证修改 {#validate-a-change}
 
@@ -138,13 +138,13 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | SQL 查询 | `make sqlc-generate`，检查生成文件，再运行 `make check-sqlc` |
 | 公共 schema、Core 扩展或内部处理函数注解 | `make openapi`、`make check-openapi`；检查生成类型和三个命名空间的 schema |
 | 共享 Runtime 协议 | `make check-runtime-contract` |
-| Provider 集成 | `make check-sandbox-provider-contract` 和 provider 的原生检查 |
+| 提供商集成 | `make check-sandbox-provider-contract` 和提供商的原生检查 |
 | Claude SDK bridge 与产物 | `make check-claude-sdk` |
 | Web UI 与 client | `make check-web` |
 | 发行或安装器 | `make check-distribution` |
 | 文档 | `make check-names`；`make check-distribution` 验证 Markdown 链接与打包文档 |
 
-Fixture 浏览器验收使用 loopback 端口 18092 和 4174。并行验证时通过 `AGENTS_FIXTURE_PORT` 和 `AGENTS_WEB_PORT` 选择空闲端口。验证 worker 之间使用独立数据库、端口和容器。编译、fixture 成功和真实模型/provider 验收分别证明不同事实；应明确报告跳过或不可用的检查。验证后遵循[独立盲审工作流](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
+Fixture 浏览器验收使用 loopback 端口 18092 和 4174。并行验证时通过 `AGENTS_FIXTURE_PORT` 和 `AGENTS_WEB_PORT` 选择空闲端口。验证 worker 之间使用独立数据库、端口和容器。编译、fixture 成功和真实模型/提供商验收分别证明不同事实；应明确报告跳过或不可用的检查。验证后遵循[独立盲审工作流](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
 
 ## 修改文档 {#change-documentation}
 

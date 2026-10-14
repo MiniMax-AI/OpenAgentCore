@@ -96,12 +96,12 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 - **生命周期。** 流会跨 Turn 保持打开，并在 Turn 失败后继续存在。流会在 Session 被删除时，或在 [Environment 初始化失败](#environment-initialization-failure)产生终止 `agent.session.failed` 后结束；在该失败之后打开的流会保持打开。每 15 秒发送一次 keepalive 注释。
 - **缓冲区。** Core 为每个 Session 最多保留 256 个事件和 64 MiB 事件，必要时还会额外容纳一个更大的事件。读取方落后于缓冲区时，会收到一个 `error` 事件，其 type 为 `server_error`、code 为 `stream_interrupted`，随后流会关闭。套接字写入阻塞五秒也会关闭流。执行过程绝不会等待读取方。
-- **密钥重新检查。** 打开的流在空闲期间以及发送输出前，每秒最多重新检查一次原始 Project 密钥。撤销密钥或归档 Project 会关闭流，身份验证失败也会关闭流。重新检查使用正常的五秒身份验证超时，并且等待期间不会发送任何 Session 数据。已经发送的字节无法收回。
+- **密钥重新检查。** 打开的流在空闲期间以及发送输出前，每秒最多重新检查一次原始项目 API 密钥。撤销密钥或归档项目会关闭流，身份验证失败也会关闭流。重新检查使用正常的五秒身份验证超时，并且等待期间不会发送任何 Session 数据。已经发送的字节无法收回。
 - **仅根工作。** 子 Turn 和子 Item 不发布 Session 事件；`agent.session.subagent.*` 事件和根协调 Item 会发布。请通过 [Subagent 资源](subagents.md)读取子工作。
 
 ### 事件规则 {#event-rules}
 
-- Session 事件携带 `event_id`、`type`，以及该次状态转换时的 `session` 快照。Turn 事件携带 `session_id` 和 `turn_id`；环境（Environment）事件携带 `session_id` 和值为 null 的 `turn_id`。不存在 Turn `waiting` 事件。
+- Session 事件携带 `event_id`、`type`，以及该次状态转换时的 `session` 快照。Turn 事件携带 `session_id` 和 `turn_id`；Environment 事件携带 `session_id` 和值为 null 的 `turn_id`。不存在 Turn `waiting` 事件。
 - 新 Turn 会在一个事务中依次发布 `agent.session.turn.created`、用户 Item 的 `item.added`、`agent.session.in_progress`，然后发布 `agent.session.turn.in_progress`。当一个批次包含多条消息时，后续消息对应的Item 事件会排在 Session 活动之后。
 - Turn 终止事件（`completed`、`failed`、`cancelled`）携带顶层的 `usage`，其值复制自当时的 Turn 快照；未知时为 null。其他事件省略此字段。
 - `item.added` 和 `item.done` 始终携带 `output_index`；输入 Item 的该值为 null。函数结果只发出 `item.added`；`item.done` 用于代理输出。
@@ -127,7 +127,7 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 | `web_search_call` | 支持的操作字段（`search`、`open_page`、`find_in_page`、`other`） |
 | `reasoning`、`agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态；reasoning 状态可以为 null |
 
-工具失败不会导致其 Turn 失败。Session 的 Project 可以读取工具输出，其中可能包含该工具自己的诊断文本。
+工具失败不会导致其 Turn 失败。Session 的项目可以读取工具输出，其中可能包含该工具自己的诊断文本。
 
 ## 使用量 {#usage}
 

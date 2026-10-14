@@ -4,7 +4,7 @@ source: contracts/agents-api/machine-api.md
 source_hash: e9a16774d2924db9dde18385be315d3a0317c616b029b419165e442fa34fb08d
 ---
 
-机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或 Project API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
+机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
 
 ## 路由 {#routes}
 
@@ -30,7 +30,7 @@ source_hash: e9a16774d2924db9dde18385be315d3a0317c616b029b419165e442fa34fb08d
 
 | 凭据 | 签发方 | 接受位置 |
 | --- | --- | --- |
-| 登记 token | `POST /core/v1/sandbox/enrollment-tokens`（Web **Add node**），带节点批准容量。使用一次；在响应 `expires_at` 过期 | 无节点 ID 的 `sandbox-node/configuration`、`sandbox-node/enroll` |
+| 登记 token | `POST /core/v1/sandbox/enrollment-tokens`（Web **添加节点**），带节点批准容量。使用一次；在响应 `expires_at` 过期 | 无节点 ID 的 `sandbox-node/configuration`、`sandbox-node/enroll` |
 | 节点凭据 | 节点自身：生成 32 至 256 个无空白字符的密钥，在登记时注册 | 带 `X-OAC-Node-ID` 的 `sandbox-node/configuration`、`sandbox-node/identity`、`sandbox-node/connect` |
 | 安装授权 | `self_hosted` Session 的 `x_agents_core.installation` 命令；短期有效 | `agent-daemon/installation` 及其 `claim` |
 | 执行器凭据 | 安装领取，或 Core 密钥[执行器凭据路由](environment-executor-credentials.md) | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为绑定设备的 daemon 凭据 |
@@ -50,7 +50,7 @@ OAC_DATABASE_URL=... oac-core-device --tenant <tenant-uuid> --name 'engine host'
 oac-daemon connect --profile default
 ```
 
-`--tenant` 为 Project 执行租户 UUID，`--url` 为不带路径的 Core origin。命令打印配置一次：`server_url`（origin 加 `/api/v1`）、`runtime_id`（设备 ID）、`runner_credential` 和 `device_name`。使用新配置，不覆盖其他设备文件；私密复制到远程主机相同路径。`oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` 撤销设备：立即拒绝新连接，已有连接在下一次心跳关闭。Worker 将每个 `none` Session 绑定到其租户内声明所需能力的已连接设备，重试和重启保留绑定；自托管 Session 不使用此路径。
+`--tenant` 为项目执行租户 UUID，`--url` 为不带路径的 Core origin。命令打印配置一次：`server_url`（origin 加 `/api/v1`）、`runtime_id`（设备 ID）、`runner_credential` 和 `device_name`。使用新配置，不覆盖其他设备文件；私密复制到远程主机相同路径。`oac-core-device --tenant <tenant-uuid> --revoke <device-uuid>` 撤销设备：立即拒绝新连接，已有连接在下一次心跳关闭。Worker 将每个 `none` Session 绑定到其租户内声明所需能力的已连接设备，重试和重启保留绑定；自托管 Session 不使用此路径。
 
 ## 节点路由 {#node-routes}
 
@@ -61,7 +61,7 @@ oac-daemon connect --profile default
 - 新节点发送登记 token，不带 `X-OAC-Node-ID`。token 必须有效、未过期、未消费且由此安装签发。活动重置拒绝该读取。
 - 已注册节点发送节点凭据，并在 `X-OAC-Node-ID` 放其 UUID。无查询时读取当前目标。`?generation=N` 仅读取此节点仍可能需要的代际：当前目标、服务 pin，或其上未释放分配或 placement 持有的代际；其他代际被拒绝。重置期间仍可读取，以恢复已有归属资源。
 
-响应包含 `installation_id`、`provider`、`core_url`（安装公开 URL）、`generation`、`specification`、`specification_digest`、`max_active` 和 `max_retained`。不包含管理员、Project 或 E2B 凭据，仅适用于节点型提供方。[沙箱部署契约](sandbox-deployment.md#canonical-node-specification)定义 specification 与摘要。
+响应包含 `installation_id`、`provider`、`core_url`（安装公开 URL）、`generation`、`specification`、`specification_digest`、`max_active` 和 `max_retained`。不包含管理员、项目或 E2B 凭据，仅适用于节点型提供商。[沙箱部署契约](sandbox-deployment.md#canonical-node-specification)定义 specification 与摘要。
 
 ### 登记节点 {#enroll-a-node}
 
@@ -72,7 +72,7 @@ oac-daemon connect --profile default
 | `node_id` | 节点选定的规范 UUID |
 | `credential` | 节点密钥，32 至 256 个无空白字符 |
 | `name` | 显示名称 |
-| `provider` | 部署提供方 |
+| `provider` | 部署提供商 |
 | `backend_fingerprint` | 节点后端命名空间摘要 |
 | `deployment_generation`, `specification_digest` | 节点读取的配置 |
 | `core_url` | 节点存储并连接的 Core origin |
@@ -88,7 +88,7 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 | HTTP | 代码 | 时机 |
 | --- | --- | --- |
 | 400 | `invalid_request_error`, `param: "core_url"` | 登记未提供 `core_url` |
-| 400 | `invalid_request` | 正文、节点 ID 或代际格式错误，或提供方与部署不同 |
+| 400 | `invalid_request` | 正文、节点 ID 或代际格式错误，或提供商与部署不同 |
 | 401 | `invalid_node_credential` | token 或节点凭据缺失、无效、过期、已消费或属于其他安装 |
 | 409 | `sandbox_specification_mismatch` | 节点代际或摘要不匹配 |
 | 409 | `sandbox_node_address_mismatch` | `core_url` 不是安装公开 URL；token 保持未使用 |

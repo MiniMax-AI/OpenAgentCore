@@ -38,7 +38,7 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | Environment 连接 | Runtime 传输已连接 |
 | 已完成的 Turn 及结果 | 任务已记录的结果 |
 
-服务健康状态不表示 Harness 或模型可用。执行情况使用 Session、Turn、Items 和 Usage 读取，节点连接、就绪和分配使用 Web 的 **Nodes** 页面。本地诊断使用安装自身的 Compose 文件：
+服务健康状态不表示 Harness 或模型可用。执行情况使用 Session、Turn、Items 和 Usage 读取，节点连接、就绪和分配使用 Web 的 **节点** 页面。本地诊断使用安装自身的 Compose 文件：
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
@@ -52,7 +52,7 @@ docker compose -f "$HOME/.oac/core/compose.yaml" logs --timestamps init
 
 ## 请求诊断 {#request-diagnosis}
 
-打开 **Monitor → Request log** 查看近期请求，并复制请求 ID 与 Core 服务日志关联。[请求日志](../../../contracts/agents-api/zh/admin-api.md#request-log)定义范围、隐私及有限的内存保留方式。请求接受了异步 Turn 时，请到 **Session log** 查看执行结果；HTTP 接受不等于任务成功。跨重启或 Core 实例的留存使用已有日志采集系统。
+打开 **监控 → 请求日志** 查看近期请求，并复制请求 ID 与 Core 服务日志关联。[请求日志](../../../contracts/agents-api/zh/admin-api.md#request-log)定义范围、隐私及有限的内存保留方式。请求接受了异步 Turn 时，请到 **Session 日志** 查看执行结果；HTTP 接受不等于任务成功。跨重启或 Core 实例的留存使用已有日志采集系统。
 
 ## 停止与重启 {#stop-and-restart}
 
@@ -73,7 +73,7 @@ Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退
 
 - 用于登录 Web。浏览器获得 HttpOnly 会话 cookie，不持有密钥；
 - 通过 `Authorization: Bearer <Core key>` 授权 Core API（`/core/v1`）请求；
-- 不授权 Agents API（`/v1`）。应用使用 Project API 密钥，后者也不能调用 `/core/v1`。
+- 不授权 Agents API（`/v1`）。应用使用项目 API 密钥，后者也不能调用 `/core/v1`。
 
 请保密。Web 读取 `secrets/web/core.key`。Core 只读取 `secrets/core/core-key-digests.json` 中的 SHA-256。Core 密钥至少 32 字符且不含空白。Web 限制失败登录。
 
@@ -92,11 +92,11 @@ core() (  # core METHOD PATH [JSON body]
 
 | 任务 | 命令 |
 | --- | --- |
-| 列出 Project | `core GET /projects` |
-| 创建 Project | `core POST /projects '{"name": "billing-bot"}'` |
+| 列出项目 | `core GET /projects` |
+| 创建项目 | `core POST /projects '{"name": "billing-bot"}'` |
 | 签发 API 密钥（仅显示一次，字段为 `key`） | `core POST /projects/$PROJECT_ID/keys '{"name": "prod"}'` |
 | 撤销密钥 | `core DELETE /projects/$PROJECT_ID/keys/$KEY_ID` |
-| 归档 Project（撤销全部密钥） | `core POST /projects/$PROJECT_ID/archive` |
+| 归档项目（撤销全部密钥） | `core POST /projects/$PROJECT_ID/archive` |
 | 查看 Harness 及默认模型 | `core GET /harnesses` |
 | 设置 Codex 默认模型 | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
 | 安装信息，包括 API 基础 URL | `core GET /installation` |
@@ -111,17 +111,17 @@ core() (  # core METHOD PATH [JSON body]
 
 它在初始化容器中更新数据卷内的 `secrets/web/core.key` 和 `secrets/core/core-key-digests.json`，然后重启 Core 与 Web。Core 重启后旧密钥立即失效，控制台会话也会结束；请重新登录并更新脚本。
 
-## Project 和 API 密钥 {#projects-and-api-keys}
+## 项目和 API 密钥 {#projects-and-api-keys}
 
-在 Web 的 **Projects and keys**，或通过 [Core API](#script-the-core-api)创建 Project、签发密钥。Project 和密钥行为见 [Project 拥有资产](../concepts.md#projects-own-assets)。
+在 Web 的 **项目与密钥**，或通过 [Core API](#script-the-core-api)创建项目、签发密钥。项目和密钥行为见 [项目拥有资产](../concepts.md#projects-own-assets)。
 
 轮换应用密钥：
 
-1. 在同一 Project 签发新密钥。
+1. 在同一项目签发新密钥。
 2. 更新应用以使用它。
-3. **Revoke** 旧密钥。
+3. **撤销** 旧密钥。
 
-**Archive** 禁用 Project 的所有密钥并保留资产。
+**归档** 禁用项目的所有密钥并保留资产。
 
 Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`OAC_WRITE_AUDIT_RETENTION`](../configuration.md#settings)。
 
@@ -131,11 +131,11 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 ### 备份内容 {#backup-contents}
 
-- Docker 卷 `<project>_data`，包括 `database/`、`secrets/` 和 `state/`。其中保存 Project、密钥摘要、节点、默认模型、加密凭据和执行历史（含大对象）。`secrets/core/credential.key` 必须与匹配的数据库一起保留，否则存储的凭据无法解密。
+- Docker 卷 `<project>_data`，包括 `database/`、`secrets/` 和 `state/`。其中保存项目、密钥摘要、节点、默认模型、加密凭据和执行历史（含大对象）。`secrets/core/credential.key` 必须与匹配的数据库一起保留，否则存储的凭据无法解密。
 - 安装目录，包括 `.env`、`compose.yaml`、Compose 覆盖文件和管理命令。
 - 当前或保留对象所使用的每个独立工作区命名空间，即使其位于安装卷之外。备份整个根目录，包括 `.oac-storage-root`、对象标识、staging、live 数据、trash 和删除标记。保留数值所有者、权限、链接及扩展属性，包括全部 `user.*` 属性。仅复制 `live/data` 会丢失生命周期证据，并可能使已删除标识复活。[工作区存储](../workspace-provider.md#kernel-nfs-adapter)负责定义布局与所有权要求。
 - 对于[配额模式](../workspace-provider.md#quota-mode)命名空间，将承载导出的整个 XFS 文件系统作为一份块级副本备份：存储或 LVM 快照，或已冻结或已卸载设备的镜像。只有这样的副本能保持 project ID、配额限制、inode 标识、文件系统 UUID 和 `oac-workspace-quota` 日志库的一致。文件级复制、`tar`、`rsync` 或 `xfsdump` 会丢失这些信息；此时该命令会拒绝恢复后的对象，而不是在无上限状态下提供它们。
-- 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其 Provider 存储：Docker 卷或 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
+- 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其提供商存储：Docker 卷或 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
 
 - 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、归档、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。它独立于原生 SDK store 和工作区 namespace。保留其身份和私有所有权；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其生命周期。
 
@@ -143,8 +143,8 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 1. 在安装入口阻止新应用 input、实时文件访问和管理变更。等待活动执行、初始化、文件操作和原生清理完成。停止其他能够写入同一文件系统的应用或主机进程。
 2. 保持 Core 和节点可用，确认每个所属写入方均已停止，且所有 Create、Kill、快照清理及文件系统变更均已结算。节点离线、超时、实例缺失或服务停止均不足以证明这一点。确认挂起会停止源计算资源，但保留的检查点也必须纳入备份。最简单的冷恢复基线是等待符合条件的保留 Session 完成检查点到期清理、allocation 已释放，再按[冷替换契约](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)保留文件系统对象及原生历史。
-3. 停止 Core 和 Web，再停止节点控制服务，以防止新的生命周期操作。重新核实精确的原生资源，保持所有写入方停止，直到备份各部分全部完成。**停止 Core 或节点服务不会停止其沙箱。** 节点服务使用 `KillMode=process`；microVM 及其他由 Provider 管理的计算资源可能继续独立运行。
-4. 使用存储平台支持的流程将已停止写入的文件系统中的待写数据落盘，并创建其快照或导出。对于配额模式，在复制其设备期间使用 `xfs_freeze -f` 冻结 XFS 文件系统或将其卸载，完成后解冻。在同一窗口内导出 Core 数据卷、安装目录及所需的节点状态和 Provider 存储。复制 PostgreSQL 的 `database/` 文件前必须停止 PostgreSQL。一起记录版本、备份时间、组成清单和校验值，并将备份保存在被备份安装之外。
+3. 停止 Core 和 Web，再停止节点控制服务，以防止新的生命周期操作。重新核实精确的原生资源，保持所有写入方停止，直到备份各部分全部完成。**停止 Core 或节点服务不会停止其沙箱。** 节点服务使用 `KillMode=process`；microVM 及其他由提供商管理的计算资源可能继续独立运行。
+4. 使用存储平台支持的流程将已停止写入的文件系统中的待写数据落盘，并创建其快照或导出。对于配额模式，在复制其设备期间使用 `xfs_freeze -f` 冻结 XFS 文件系统或将其卸载，完成后解冻。在同一窗口内导出 Core 数据卷、安装目录及所需的节点状态和提供商存储。复制 PostgreSQL 的 `database/` 文件前必须停止 PostgreSQL。一起记录版本、备份时间、组成清单和校验值，并将备份保存在被备份安装之外。
 5. 所有复制完成后才恢复服务。先恢复存储，再启动 Core 和节点，验证就绪后开放入口。不要通过重放不确定的原生操作来让备份通过。
 
 当前没有一条命令即可完成且无损的维护排空流程。归档和部署重置会改变 Session 生命周期状态，不能替代保持续接能力的备份暂停。任何写入方或变更仍然未知时，应将备份保留为未完成状态，先解决相应归属。
@@ -162,9 +162,9 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 
 恢复期间保持应用入口及 Core/节点服务关闭。暴露恢复后的文件系统前，必须隔离或关闭每一个旧写入方；旧主机不可达不代表已隔离。演练必须使用隔离的安装和存储副本，不能连接原节点，也不能共享其可写命名空间。
 
-启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和 Provider 存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[独立工作区存储](../configuration.md#independent-workspace-storage)负责定义部署设置。
+启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和提供商存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[独立工作区存储](../configuration.md#independent-workspace-storage)负责定义部署设置。
 
-已释放计算资源的冷恢复基线仅在新计算资源准入后续接具备资格的原生历史。包含保留检查点的备份还依赖匹配的原生 Runtime、节点标识、Provider 存储和外部文件系统标识。文件级恢复可能改变 inode 标识，即使文件字节一致，也可能阻止严格检查点恢复。此流程不承诺可移植内存快照，也不承诺恢复到任意替代节点；应保留未解决的归属，而不是替换为新沙箱。
+已释放计算资源的冷恢复基线仅在新计算资源准入后续接具备资格的原生历史。包含保留检查点的备份还依赖匹配的原生 Runtime、节点标识、提供商存储和外部文件系统标识。文件级恢复可能改变 inode 标识，即使文件字节一致，也可能阻止严格检查点恢复。此流程不承诺可移植内存快照，也不承诺恢复到任意替代节点；应保留未解决的归属，而不是替换为新沙箱。
 
 恢复依赖全部完整后才启动 database、Core 和节点服务；检查期间保持入口受限。在隔离演练中，验证保留 Session 的文件和具备资格时在新计算资源上的原生续接，确认已删除对象无法重新打开，并检查旧写入方均无法访问恢复后的命名空间。在依赖备份进行恢复前记录结果。
 
@@ -178,7 +178,7 @@ cd && rm -rf ~/.oac/core
 
 `down --volumes` 会删除安装数据卷。之后删除安装目录；Windows 使用 `Remove-Item -Recurse "$HOME/.oac/core"`。
 
-全部数据随之删除：Project 和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
+全部数据随之删除：项目和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
 
 卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成；命令展示 Core 正在使用的沙箱数量。
 
@@ -206,7 +206,7 @@ cd && rm -rf ~/.oac/core
 | Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
 | 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |
-| Add node 不展示命令 | 参阅[添加节点前](nodes.md#before-you-add-a-node) |
+| **添加节点** 不展示命令 | 参阅[添加节点前](nodes.md#before-you-add-a-node) |
 | 节点未就绪 | 参阅[节点问题排查](nodes.md#troubleshooting) |
 
 ## 对外暴露与网络策略 {#exposure-and-network-policy}

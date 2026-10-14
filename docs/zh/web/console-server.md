@@ -91,7 +91,7 @@ flowchart LR
 | 字段 | 含义 |
 | --- | --- |
 | `node_installer` | 控制台是否提供节点安装文件 |
-| `node_installer_sha256` | 文件中 `node-install.pyz` 的 SHA-256；Add node 命令执行安装程序前验证它 |
+| `node_installer_sha256` | 文件中 `node-install.pyz` 的 SHA-256；**添加节点** 命令执行安装程序前验证它 |
 | `node_artifacts` | 文件中包含节点资产的提供商（`docker`、`microsandbox`），资产在本地或通过固定发行下载提供。每次请求都读取，因此重新运行安装程序新增的资产无需重启即可出现 |
 
 ## 节点安装文件 {#node-installation-payload}
@@ -108,7 +108,7 @@ flowchart LR
 
 1. 控制台与 Core 的 `GET /healthz`。各自只证明进程响应。
 2. 登录后在浏览器读取 `GET /core/v1/projects`。这证明浏览器到控制台、控制台到 Core 的路径和控制台 Core 密钥有效。
-3. Project API 密钥在 `/v1` 有效，在 `/core/v1` 失败。Core 密钥在 `/v1` 失败；发给控制台的 `/v1` 返回 404。
+3. 项目 API 密钥在 `/v1` 有效，在 `/core/v1` 失败。Core 密钥在 `/v1` 失败；发给控制台的 `/v1` 返回 404。
 4. 跨来源控制台写入被拒绝，伪造 `X-Core-Console-Actor` 请求头不会改变审计标签。
 5. 登录成功或读取沙箱部署（`GET /core/v1/sandbox/deployment`）均不能证明模型或沙箱就绪。Runtime 观察与历史独立报告执行情况。
 

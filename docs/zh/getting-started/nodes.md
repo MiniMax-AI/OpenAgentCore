@@ -4,15 +4,15 @@ source: docs/getting-started/nodes.md
 source_hash: 56719d358e65d838d05bfb60b902a8d8f0803f833048be4a7c56c4731776ed0a
 ---
 
-节点是一台 Linux 主机，在沙箱后端为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
+节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
 
 添加节点的方法是在 Web 生成命令并在主机上执行。[沙箱部署协议](../../../contracts/agents-api/zh/sandbox-deployment.md)定义沙箱设置及其变更规则，[节点协议](../../../contracts/agents-api/zh/node-generation-protocol.md)定义节点如何准备和保留 Runtime 代次。
 
 ## 添加节点前 {#before-you-add-a-node}
 
-- **Core 已有主机及沙箱可访问的公开 URL。** 节点从 Core 控制台下载文件，并通过 `public_url` 连接 Core。设置前，Add node 显示 *Set a public address other machines can reach before adding nodes*；参阅[配置公开地址](install.md#configure-the-domain-and-https)。
-- **沙箱配置已保存。** 打开 **Settings** → **Sandbox and scheduling**，选择 **Own machines**、后端和沙箱规格，最后选择 **Save configuration**。要更改后端，先选择 **Reset deployment**。同一安装的所有节点使用同一后端。
-- **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，Add node 显示 *This console has no node files for …*。
+- **Core 已有主机及沙箱可访问的公开 URL。** 节点从 Core 控制台下载文件，并通过 `public_url` 连接 Core。设置前，**添加节点** 显示 *添加节点前，请先设置其他机器能访问的公开地址。*参阅[配置公开地址](install.md#configure-the-domain-and-https)。
+- **沙箱配置已保存。** 打开 **设置** → **沙箱与调度**，选择 **自有机器**、沙箱提供商和沙箱规格，最后选择 **保存配置**。要更改沙箱提供商，先选择 **重置部署**。同一安装的所有节点使用同一沙箱提供商。
+- **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，**添加节点** 显示 *这个控制台没有 … 的节点文件。*
 
 Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添加为节点。
 
@@ -24,9 +24,9 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 
 ## 添加节点 {#add-a-node}
 
-1. 在 Web 打开 **Nodes**，选择 **Add node**。
-2. 设置 **Sandboxes at once**，使用 microsandbox 时还设置 **Retained sandboxes**，即节点[容量](../configuration.md#node-capacity)。之后可以通过 **Edit node** 修改。
-3. 选择 **Generate command** 并复制命令。命令仅注册一个节点、只能使用一次，且必须在 10 分钟内执行；Web 显示倒计时，过期后提供 **Generate new command**。
+1. 在 Web 打开 **节点**，选择 **添加节点**。
+2. 设置 **同时运行的沙箱**，使用 microsandbox 时还设置 **保留的沙箱**，即节点[容量](../configuration.md#node-capacity)。之后可以通过 **编辑节点** 修改。
+3. 选择 **生成命令** 并复制命令。命令仅注册一个节点、只能使用一次，且必须在 10 分钟内执行；Web 显示倒计时，过期后提供 **生成新命令**。
 4. 在主机上执行。Web 跟踪节点从注册、连接到就绪的过程。
 
 命令从你的控制台下载节点安装程序、检查 SHA-256，并使用一次性注册令牌运行它。安装程序下载节点文件并逐一对照发行清单验证、导入 Runtime 镜像、注册节点、启动服务，并等待 Core 报告节点已连接且就绪。程序不安装软件；前置条件缺失时，会在修改任何内容之前停止并输出一行提示。
@@ -35,7 +35,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 
 ### 命令 {#the-command}
 
-从 **Nodes → Add node** 复制当前命令，其中已填入本安装的地址、校验和与注册令牌。命令先检查 Linux amd64、Python 3.9+ 和必要工具，再下载文件；临时网络故障最多尝试三次。校验失败时，从 Web 复制新命令重试。
+从 **节点 → 添加节点** 复制当前命令，其中已填入本安装的地址、校验和与注册令牌。命令先检查 Linux amd64、Python 3.9+ 和必要工具，再下载文件；临时网络故障最多尝试三次。校验失败时，从 Web 复制新命令重试。
 
 - 下载到当前账号的私有 `~/.oac/node-bootstrap` 目录，检查 SHA-256，再通过 `sudo` 执行；root shell 中则直接执行。每次持锁清理下载残片后重试，已验证的 `<sha256>.pyz` 保留供安装程序使用。
 - 令牌通过标准输入传给安装程序，不出现在进程参数、环境变量或 sudo 日志中。
@@ -93,24 +93,24 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 ## 日志 {#logs}
 
-安装结束时输出节点日志命令（`Logs: …`）。节点报告问题，或注册约一分钟后仍未连接且就绪时，Add node 对话框也会展示它。
+安装结束时输出节点日志命令（`Logs: …`）。节点报告问题，或注册约一分钟后仍未连接且就绪时，**添加节点** 对话框也会展示它。
 
-运行 `sudo journalctl -u oac-node-<installation-id>.service`。root shell 中省略 `sudo`。安装 ID 位于命令的 `--installation-id` 参数，以及 **Settings → Service and deployment** 页面的 **Installation details** 中。
+运行 `sudo journalctl -u oac-node-<installation-id>.service`。root shell 中省略 `sudo`。安装 ID 位于命令的 `--installation-id` 参数，以及 **设置 → 服务与部署** 页面的 **安装详情** 中。
 
 ## 修改沙箱配置 {#change-the-sandbox-configuration}
 
 沙箱设置适用于整个安装，节点跟随这些设置。
 
-- **规格、Runtime 版本、E2B 密钥或模板构建。** 打开 **Settings** → **Sandbox and scheduling** → **Change resources**，修改并保存。已有沙箱保持其配置。每个节点继续服务旧配置，同时准备新配置；**Nodes** 展示进度：**Preparing target**、**Ready for target**，或带[原因](#readiness-codes)的 **Preparation failed**。Core 优先在已准备好新配置的节点上放置新 Session；这些节点没有容量时，会使用仍服务旧配置的节点。E2B 变更立即生效。
-- **容量与空闲挂起。** 在 **Nodes** 中通过 **Edit node** 修改节点的活跃和保留上限。在 **Settings** → **Sandbox and scheduling** 中，通过 **Automatic suspension** → **Idle before suspension (seconds)** → **Save** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
-- **后端。** 同一页面选择 **Reset deployment**。自动重置立即归档空闲托管 Session，并让运行中的工作在设定截止时间前完成；强制重置立即取消工作。离线节点必须恢复连接，让 Core 确认清理。重置完成时，Core 已撤销所有节点和未使用命令：配置新后端后重新添加节点。**Cancel reset** 停止剩余工作；已归档 Session 仍保持归档。
+- **规格、Runtime 版本、E2B 密钥或模板构建。** 打开 **设置** → **沙箱与调度** → **修改资源**，修改并保存。已有沙箱保持其配置。每个节点继续服务旧配置，同时准备新配置；**节点** 展示进度：**正在准备目标配置**、**目标配置已就绪**，或带[原因](#readiness-codes)的 **目标配置准备失败**。Core 优先在已准备好新配置的节点上放置新 Session；这些节点没有容量时，会使用仍服务旧配置的节点。E2B 变更立即生效。
+- **容量与空闲挂起。** 在 **节点** 中通过 **编辑节点** 修改节点的活跃和保留上限。在 **设置** → **沙箱与调度** 中，通过 **自动挂起** → **空闲多久后挂起（秒）** → **保存** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
+- **沙箱提供商。** 同一页面选择 **重置部署**。自动重置立即归档空闲托管 Session，并让运行中的工作在设定截止时间前完成；强制重置立即取消工作。离线节点必须恢复连接，让 Core 确认清理。重置完成时，Core 已撤销所有节点和未使用命令：配置新的沙箱提供商后重新添加节点。**取消重置** 停止剩余工作；已归档 Session 仍保持归档。
 
 [重置协议](../../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout)描述重置会归档和保留哪些内容。归档单个托管 Session 时，使用 [Core API](../../../contracts/agents-api/zh/admin-api.md#session-archive)。
 
 ## 移除节点 {#remove-a-node}
 
-1. 在 Web 打开 **Nodes**，在节点页面选择 **Remove node**，或在列表行选择 **Remove**，再选择 **Confirm removal**。节点仍持有沙箱、快照或待清理资源时，Core 拒绝操作；等待完成或归档对应 Session。移除是永久的：主机只能作为新节点重新加入。移除所有节点仍保留沙箱配置。
-2. Web 随后展示 **Clean up the host** 和卸载命令。在主机执行：
+1. 在 Web 打开 **节点**，在节点页面选择 **移除节点**，或在列表行选择 **移除**，再选择 **确认移除**。节点仍持有沙箱、快照或待清理资源时，Core 拒绝操作；等待完成或归档对应 Session。移除是永久的：主机只能作为新节点重新加入。移除所有节点仍保留沙箱配置。
+2. Web 随后展示 **清理主机** 和卸载命令。在主机执行：
 
    ```sh
     (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
@@ -121,16 +121,16 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
    $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
 
-卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **Old Core address gone?**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 Nodes 页面移除节点。不使用对话框时，从 `https://core.example/node-install/SHA256SUMS` 的 `node-install.pyz` 行获取安装程序 SHA-256。卸载停止并移除服务、节点状态、记录和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。
+卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **旧 Core 地址已失效？**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 **节点** 页面移除节点。不使用对话框时，从 `https://core.example/node-install/SHA256SUMS` 的 `node-install.pyz` 行获取安装程序 SHA-256。卸载停止并移除服务、节点状态、记录和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。
 
 程序不删除沙箱、卷或镜像。保留 Runtime 镜像并输出 `docker image rm` 命令。microsandbox 保留 `/var/lib/oac-node/.oac/m/` 存储，并输出删除方法（`sudo -u oac-node rm -rf <store>`）；存储删除前保留所创建的账号，之后重新卸载。使用 `--force` 时 microVM 可能仍使用存储，请先检查 `pgrep -u oac-node`。可以重复卸载直到完成。
 
 ## 手动注册节点 {#register-a-node-manually}
 
-如果自行管理节点文件和服务，而不执行 Web 命令，请使用手动注册。手动注册的节点只服务注册时的配置：规格或 Runtime 修改后，**Nodes** 显示 **Node software incompatible**；它继续服务旧配置，直到移除节点并重新注册主机。
+如果自行管理节点文件和服务，而不执行 Web 命令，请使用手动注册。手动注册的节点只服务注册时的配置：规格或 Runtime 修改后，**节点** 显示 **节点程序不兼容**；它继续服务旧配置，直到移除节点并重新注册主机。
 
 1. 使用与 Core 同一发行版本的 `oac-node`。
-2. 获取注册令牌：使用 **Add node** 命令中的令牌，或通过 Core 密钥调用 `POST /core/v1/sandbox/enrollment-tokens`。令牌一次性使用，包含批准的节点容量；响应的 `expires_at` 给出过期时间。在主机上存入权限为 `0600` 的文件。
+2. 获取注册令牌：使用 **添加节点** 命令中的令牌，或通过 Core 密钥调用 `POST /core/v1/sandbox/enrollment-tokens`。令牌一次性使用，包含批准的节点容量；响应的 `expires_at` 给出过期时间。在主机上存入权限为 `0600` 的文件。
 3. 使用令牌读取节点配置，不会消耗令牌：`GET /api/v1/sandbox-node/configuration`，带 `Authorization: Bearer <token>`。
 4. 写入私有提供商文件。从响应复制 `provider`、`installation_id`、`core_url`、`generation` 和 `specification`，并添加 `native` 对象，写入该提供商的主机设置。适配器从 `specification` 读取沙箱规格、Runtime 镜像和产物哈希：
    - Docker：[Docker 节点配置](../configuration.md#docker-node-configuration)中的字段，其中 `host` 是显式 Unix 套接字，`image` 是导入的 Runtime 镜像的本地 ID，`seccomp_file` 是绝对路径。
@@ -156,29 +156,29 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 ## 节点主机故障时 {#when-a-node-host-fails}
 
-重启节点服务会保留身份并重新发现已有沙箱。Core 不会仅因节点不可达或沙箱缺失就接管活动或未确认的 writer：所有权未结清时，这些资源显示 **Node disconnected** 或 **Sandbox resource missing**。主机崩溃或挂起时，应重启主机而不是移除其节点：节点重新连接后，节点确认已不存在的运行中沙箱会按[已确认的计算资源丢失](../sandbox-provider.md#confirmed-compute-loss)规则释放，Session 的下一个 input 在新计算资源上续接；其他缺失的沙箱保持 **Sandbox resource missing**。主机始终未恢复时，其 Session 的计算资源归属保持不变。已结清的保留检查点可以遵循[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)，确认释放后可以按条件进行[冷替换](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)。丢失节点状态目录属于恢复事件：从[备份](operations.md#back-up)恢复，并同时恢复数据库和提供商存储；不要在已有资源上重新注册主机。
+重启节点服务会保留身份并重新发现已有沙箱。Core 不会仅因节点不可达或沙箱缺失就接管活动或未确认的 writer：所有权未结清时，这些资源显示 **节点已断开** 或 **沙箱资源缺失**。主机崩溃或挂起时，应重启主机而不是移除其节点：节点重新连接后，节点确认已不存在的运行中沙箱会按[已确认的计算资源丢失](../sandbox-provider.md#confirmed-compute-loss)规则释放，Session 的下一个 input 在新计算资源上续接；其他缺失的沙箱保持 **沙箱资源缺失**。主机始终未恢复时，其 Session 的计算资源归属保持不变。已结清的保留检查点可以遵循[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)，确认释放后可以按条件进行[冷替换](../sandbox-provider.md#cold-replacement-after-checkpoint-retention)。丢失节点状态目录属于恢复事件：从[备份](operations.md#back-up)恢复，并同时恢复数据库和提供商存储；不要在已有资源上重新注册主机。
 
 ## 问题排查 {#troubleshooting}
 
 ### 就绪状态码 {#readiness-codes}
 
-节点在线但沙箱提供商未就绪时，**Nodes** 和 **Overview** 显示 **Provider not ready**。原因展示位置取决于节点添加方式：
+节点在线但沙箱提供商未就绪时，**节点** 和 **概览** 显示 **沙箱提供商未就绪**。原因展示位置取决于节点添加方式：
 
-- **使用 Web 命令添加的节点**：当前沙箱配置检查失败时，在目标状态显示 **Preparation failed**，帮助提示中给出原因（`GET /core/v1/sandbox/nodes` 的 `rollout.diagnostic`）。**Provider not ready** 旁的提示仅显示 *Sandbox provider unavailable*。
-- **手动注册的节点**：在 **Provider not ready** 旁的帮助提示展示原因（`diagnostic`）。
+- **使用 Web 命令添加的节点**：当前沙箱配置检查失败时，在目标状态显示 **目标配置准备失败**，帮助提示中给出原因（`GET /core/v1/sandbox/nodes` 的 `rollout.diagnostic`）。**沙箱提供商未就绪** 旁的提示仅显示 *沙箱提供商不可用*。
+- **手动注册的节点**：在 **沙箱提供商未就绪** 旁的帮助提示展示原因（`diagnostic`）。
 
-每个状态码都是与 Provider 无关的类别；其背后的本地错误留在节点上。手动注册的节点会把它写入日志。对于使用 Web 命令添加的节点，请在主机上重新运行该命令：安装程序会先检查主机要求，并指出需要修复的问题（[安装程序消息](#installer-messages)）。
+每个状态码都是与提供商无关的类别；其背后的本地错误留在节点上。手动注册的节点会把它写入日志。对于使用 Web 命令添加的节点，请在主机上重新运行该命令：安装程序会先检查主机要求，并指出需要修复的问题（[安装程序消息](#installer-messages)）。
 
 节点按如下顺序仅报告首个失败检查：Docker 守护进程或 KVM、Docker 限制支持、主机容量、已安装的 Runtime 文件。因此无法访问 Docker 守护进程时，会隐藏镜像缺失问题。修复后约十秒的下一次心跳会清除或替换状态码。离线节点保留最后状态码，Web 在节点重连前隐藏它。
 
 | 状态码 | 帮助提示 | 原因 | 解决方法 |
 | --- | --- | --- | --- |
-| `provider_unavailable` | Sandbox provider unavailable | 提供商的服务不可达或请求失败（例如 Docker 守护进程已停止），或失败没有类别 | 重新运行节点的命令，或阅读手动注册节点的日志 |
-| `host_unsupported` | Host unsupported | 主机缺少提供商所需的能力，例如 Docker 的 CPU 与内存限制（cgroup v2）或对 `/dev/kvm` 的读写权限 | 重新运行节点的命令，或阅读手动注册节点的日志 |
-| `capacity_insufficient` | Host too small | 主机 CPU 或内存不足以运行一个沙箱 | 使用更大主机或修改沙箱规格 |
-| `runtime_image_unavailable` | Runtime image missing | 提供商中没有固定版本的 Runtime 镜像 | Web 命令添加的节点自动重新下载；其他节点加载匹配发行版镜像 |
-| `artifacts_unavailable` | Provider files missing | 固定版本的提供商文件（例如 microsandbox 的 Runtime、固件或辅助程序）缺失或 SHA-256 检查失败 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
-| `runtime_download_failed` | Runtime download failed | 准备新配置时无法下载或验证 Runtime 文件 | 检查节点到控制台和发行下载地址的 HTTPS 访问。节点以递增间隔重试，最长间隔 30 分钟 |
+| `provider_unavailable` | 沙箱提供商不可用 | 提供商的服务不可达或请求失败（例如 Docker 守护进程已停止），或失败没有类别 | 重新运行节点的命令，或阅读手动注册节点的日志 |
+| `host_unsupported` | 主机不满足要求 | 主机缺少提供商所需的能力，例如 Docker 的 CPU 与内存限制（cgroup v2）或对 `/dev/kvm` 的读写权限 | 重新运行节点的命令，或阅读手动注册节点的日志 |
+| `capacity_insufficient` | 主机资源不足 | 主机 CPU 或内存不足以运行一个沙箱 | 使用更大主机或修改沙箱规格 |
+| `runtime_image_unavailable` | 缺少 Runtime 镜像 | 提供商中没有固定版本的 Runtime 镜像 | Web 命令添加的节点自动重新下载；其他节点加载匹配发行版镜像 |
+| `artifacts_unavailable` | 沙箱提供商文件缺失 | 固定版本的提供商文件（例如 microsandbox 的 Runtime、固件或辅助程序）缺失或 SHA-256 检查失败 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
+| `runtime_download_failed` | Runtime 下载失败 | 准备新配置时无法下载或验证 Runtime 文件 | 检查节点到控制台和发行下载地址的 HTTPS 访问。节点以递增间隔重试，最长间隔 30 分钟 |
 
 新用户组成员关系仅对新进程生效。重启节点服务：`sudo systemctl restart oac-node-<installation-id>.service`。已注册但从未连接的节点通常无法通过公开 URL 访问 Core，或 `/api/v1` WebSocket 无法通过反向代理。
 

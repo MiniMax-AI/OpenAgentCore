@@ -4,10 +4,10 @@ source: docs/getting-started/quickstart.md
 source_hash: 36731629434acafda8c48640aba3eda4967622525ed1b9dbf49ba40769513bc3
 ---
 
-本教程从 Project API 密钥开始，让 Agent 创建一个文件并汇报结果。你需要：
+本教程从项目 API 密钥开始，让 Agent 创建一个文件并汇报结果。你需要：
 
-- 管理员提供的 Project API 密钥和 API 基础 URL（[签发 Project API 密钥](install.md#issue-a-project-api-key)）；
-- 已就绪的节点或 E2B 后端，让 Core 能运行 Agent（[节点](nodes.md)）；
+- 管理员提供的项目 API 密钥和 API 基础 URL（[签发项目 API 密钥](install.md#issue-a-project-api-key)）；
+- 已就绪的节点或 E2B 沙箱提供商，让 Core 能运行 Agent（[节点](nodes.md)）；
 - Python 3.9 或更高版本；
 - 一个模型：安装的默认模型，或你自己的提供商的模型 ID、基础 URL 和 API 密钥。[模型执行](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明 Session 使用哪个模型，以及每个 Harness 支持哪些协议。
 
@@ -19,8 +19,8 @@ Core 提供 OpenAI Agents API，因此无需修改官方 OpenAI SDK。SDK 读取
 
 | 变量 | 值 |
 | --- | --- |
-| `OPENAI_BASE_URL` | API 基础 URL：公开 URL 加 `/v1`，例如 `https://core.example/v1`。Web 的 **Settings → Service and deployment** 页面会显示它 |
-| `OPENAI_API_KEY` | 你的 Project API 密钥 |
+| `OPENAI_BASE_URL` | API 基础 URL：公开 URL 加 `/v1`，例如 `https://core.example/v1`。Web 的 **设置 → 服务与部署** 页面会显示它 |
+| `OPENAI_API_KEY` | 你的项目 API 密钥 |
 
 ```sh
 python3 -m venv .venv

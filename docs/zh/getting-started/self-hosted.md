@@ -6,7 +6,7 @@ source_hash: c42a64b5e59406594143866c503817525c55ea844d858f25119c8fa54993134c
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
 
-**守护进程不是沙箱。** 工具以启动守护进程的账号权限运行，能访问该账号可访问的所有资源。需要隔离时，请使用容器或虚拟机；参阅 [Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)。守护进程不限制网络访问，因此要求网络策略的 Template 会被自托管 Session 拒绝。
+**守护进程不是沙箱。** 工具以启动守护进程的账号权限运行，能访问该账号可访问的所有资源。需要隔离时，请使用容器或虚拟机；参阅 [Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)。守护进程不限制网络访问，因此要求网络策略的模板会被自托管 Session 拒绝。
 
 Session 自带模型提供商；安装默认模型不适用（[原因](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)）。机器获得的执行器凭据仅适用于这一个 Environment。
 
@@ -31,7 +31,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 
 ## 连接机器 {#connect-a-machine}
 
-1. 在目标机器上选择绝对工作区路径。使用该路径和应用的 Project API 密钥创建 Session：
+1. 在目标机器上选择绝对工作区路径。使用该路径和应用的项目 API 密钥创建 Session：
 
    ```python
    import os
@@ -59,7 +59,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 2. 在目标机器上，以应运行工具的账号执行命令。命令下载与 Core 匹配的安装程序、验证校验和、询问要安装哪些 Harness 以及安装位置、完成安装、按需创建工作区、启动守护进程并检查连接。
 3. 发送一个 Turn。机器已连接只证明认证成功；第一个 Turn 才会检查 Harness 和模型。
 
-在 Web 中打开 Session，复制 **Connect a host** 下的命令。
+在 Web 中打开 Session，复制 **连接主机** 下的命令。
 
 请保密该命令：它包含短期[安装授权](../../../contracts/agents-api/zh/environment-executor-credentials.md#installation-grant)，用于领取机器凭据。过期后重新读取 Session，或从 Web 复制新命令。
 
@@ -103,7 +103,7 @@ environment = {
 
 路径使用机器自身语法的绝对路径（Unix、Windows 驱动器或 UNC）；由守护进程而非 Core 检查。守护进程连接前，先准备这些目录。它们是守护进程可见的普通路径；指定路径不会挂载它或创建沙箱。
 
-使用 `x_agents_core.environment` 提供与托管 Session 相同的 Project 所属 Skills、Plugin 归档、文件、软件包、设置命令或 Template：
+使用 `x_agents_core.environment` 提供与托管 Session 相同的项目所属 Skills、Plugin 归档、文件、软件包、设置命令或模板：
 
 ```python
 session = client.beta.agents.sessions.create(
@@ -131,7 +131,7 @@ session = client.beta.agents.sessions.create(
 | `oac-daemon logs -n 100`、`oac-daemon logs -f` | 输出或持续跟踪守护进程日志 |
 | `oac-daemon stop` | 停止守护进程 |
 
-设置了 `OAC_RUNTIME_HOME` 时，每个命令都使用同一值。在 Web 的 Session 页面 **Host connection** 下检查连接，或使用[连接状态](../../../contracts/agents-api/zh/environment-executor-credentials.md#connection-status)。
+设置了 `OAC_RUNTIME_HOME` 时，每个命令都使用同一值。在 Web 的 Session 页面 **主机连接** 下检查连接，或使用[连接状态](../../../contracts/agents-api/zh/environment-executor-credentials.md#connection-status)。
 
 添加 Harness 时，以同一安装目录重新执行安装命令，并指定要添加的 Harness（命令过期时从 Web 复制新的）。安装程序检查已有内容、只添加缺失组件，并保留已安装的 Harness。之后重启正在运行的守护进程，让它发现新的 Harness。
 
@@ -139,16 +139,16 @@ session = client.beta.agents.sessions.create(
 
 ## 轮换或撤销 {#rotate-or-revoke}
 
-在 Web 中，Session 的 **Executor credentials** 列出机器凭据：
+在 Web 中，Session 的 **执行器凭据** 列出机器凭据：
 
 | 操作 | 效果 |
 | --- | --- |
-| **Rotate** | 凭据获得新密钥；旧密钥立即失效。已撤销凭据的操作为 **Restore** |
-| **Revoke** | 凭据立即失效 |
+| **轮换** | 凭据获得新密钥；旧密钥立即失效。已撤销凭据的操作为 **恢复** |
+| **撤销** | 凭据立即失效 |
 
 轮换后重新连接时，通过 `oac-daemon stop` 停止守护进程，用新凭据替换已配置的凭据文件路径中的 JSON，然后运行 `oac-daemon start`。不要再次对已有安装运行 `install`；轮换现有凭据，而非签发第二个凭据，后者[无法连接](../../../contracts/agents-api/zh/environment-executor-credentials.md#revoked-or-rotated-credential)。
 
-已归档 Project 无法签发或轮换凭据，仍可撤销。运维人员可以使用 Core 密钥管理凭据；参阅[凭据协议](../../../contracts/agents-api/zh/environment-executor-credentials.md#core-key-routes)。
+已归档项目无法签发或轮换凭据，仍可撤销。运维人员可以使用 Core 密钥管理凭据；参阅[凭据协议](../../../contracts/agents-api/zh/environment-executor-credentials.md#core-key-routes)。
 
 ## 从已解压的发行包安装 {#install-from-an-extracted-distribution}
 

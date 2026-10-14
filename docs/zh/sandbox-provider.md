@@ -1,33 +1,33 @@
 ---
-title: "添加 Sandbox Provider"
+title: "添加沙箱提供商"
 source: docs/sandbox-provider.md
 source_hash: ade105e47436ca60735ba9f084c370d047403ba2f867f38ff55d798d305ae196
 ---
 
-**Sandbox Provider** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加 Provider，并作为 Core 驱动 Provider 的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
+**沙箱提供商** 为 Core 管理的 Environment 提供 Runtime daemon 运行所需的外层计算资源，以及启动 daemon 的有界引导流程。本指南说明如何添加提供商，并作为 Core 驱动提供商的参考。接口为 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)。
 
 | 术语 | 含义 |
 | --- | --- |
 | Environment | Core 拥有的持久执行场所；参见 [Environment](../../contracts/agents-api/zh/environments.md) |
 | Allocation | Core 为 Environment 拥有的一份计算资源租约，由 `Reference` 标识 |
 | Runtime | Environment 内的 daemon；准备能力并执行 Turn |
-| Deployment | 整个部署唯一的 provider 选择；参见[沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md) |
+| Deployment | 整个部署唯一的提供商选择；参见[沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md) |
 
-Core 拥有持久 Environment、allocation、placement 和 cleanup 状态；Provider 仅负责计算资源与引导。Runtime 通过 [Core–Runtime 协议](runtime-protocol.md)准备能力并运行 Turn，provider 通过 [Runtime 引导](runtime-bootstrap.md)文件交付身份。provider 不运行 Environment 初始化、Skill、Plugin、MCP 设置、初始文件、execution 或 Files；这些操作使用 Runtime。隔离属于 provider 基础设施，不属于 daemon；参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)。使用薄 adapter 封装厂商维护的 SDK。
+Core 拥有持久 Environment、allocation、placement 和 cleanup 状态；提供商仅负责计算资源与引导。Runtime 通过 [Core–Runtime 协议](runtime-protocol.md)准备能力并运行 Turn，提供商通过 [Runtime 引导](runtime-bootstrap.md)文件交付身份。提供商不运行 Environment 初始化、Skill、Plugin、MCP 设置、初始文件、execution 或 Files；这些操作使用 Runtime。隔离属于提供商基础设施，不属于 daemon；参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)。使用薄 adapter 封装厂商维护的 SDK。
 
 ## 步骤 {#steps}
 
 1. **阅读契约。** 实现每个方法，支持必需操作，并按[实现接口](#implement-the-interface)对其余每项操作声明决定。
 2. **编写 adapter 包**，放在 `services/core/internal/sandbox/<kind>`：包括原生 SDK 调用、所有权检查、身份转换、私有配置，以及 node adapter 的 node-local 构造。声明 `var _ sandbox.SandboxProvider = (*YourAdapter)(nil)`。进程外 helper 放在 `services/core/tools/<kind>-provider`。
-3. **注册 kind** 一次，遵循[注册 provider kind](#register-the-provider-kind)。注册是明确构造，不是 init 时 plugin registry。
-4. **标记所属资源**，使用 [Runtime 名称](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#openagentcore-runtime-names)表中的 provider ownership label，不接受旧 label 名称作为回退。
+3. **注册 kind** 一次，遵循[注册提供商 kind](#register-the-provider-kind)。注册是明确构造，不是 init 时 plugin registry。
+4. **标记所属资源**，使用 [Runtime 名称](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#openagentcore-runtime-names)表中的提供商 ownership label，不接受旧 label 名称作为回退。
 5. **运行契约套件** `make check-sandbox-provider-contract`；参见[验证集成](#validate-the-integration)。
 6. **对真实计算资源运行原生验收**，再运行 `make check`。
 7. **在 adapter 旁编写文档**，参考[参考 adapter](#reference-adapters)。
 
 ## 实现接口 {#implement-the-interface}
 
-`sandbox_provider.go` 包含 Core–Sandbox Provider 协议：负责 allocation、checkpoint 和观测的 `SandboxProvider` 接口及其请求与结果类型，以及 setup 阶段的 `ConfigurationAdapter` 及其类型化错误。Core 在此边界之外也使用的值类型，例如 `DeploymentSpec` 和 `CallFence`，位于同一 package 的独立文件中。每个方法在编译期都必须实现，`ProviderOperations()` 声明 Provider 支持哪些方法。以下五项操作始终支持：
+`sandbox_provider.go` 包含 Core–沙箱提供商协议：负责 allocation、checkpoint 和观测的 `SandboxProvider` 接口及其请求与结果类型，以及 setup 阶段的 `ConfigurationAdapter` 及其类型化错误。Core 在此边界之外也使用的值类型，例如 `DeploymentSpec` 和 `CallFence`，位于同一 package 的独立文件中。每个方法在编译期都必须实现，`ProviderOperations()` 声明提供商支持哪些方法。以下五项操作始终支持：
 
 | 操作 | 用途 |
 | --- | --- |
@@ -41,7 +41,7 @@ Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expir
 
 ### 明确的操作契约 {#explicit-operation-contracts}
 
-每个 provider 返回完整的 `ProviderOperations()` 声明，`SandboxProvider` 中除 `ProviderOperations` 本身外的每个方法各占一项。接口的方法集就是操作清单，`sandbox.ValidateOperations` 根据它检查声明。下表中的分组是协议文件中的列表，由测试保证它们与该方法集一致，因此新增方法必须加入其中一组。
+每个提供商返回完整的 `ProviderOperations()` 声明，`SandboxProvider` 中除 `ProviderOperations` 本身外的每个方法各占一项。接口的方法集就是操作清单，`sandbox.ValidateOperations` 根据它检查声明。下表中的分组是协议文件中的列表，由测试保证它们与该方法集一致，因此新增方法必须加入其中一组。
 
 | 操作 | 要求 | 职责 |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expir
 
 不支持的方法在任何原生 I/O 前返回 `providercontract.UnsupportedError`。错误指明精确操作和安全 code，不包含原生消息、资源身份、endpoint 或凭据。空结果、nil error、`Unavailable` 或未知 mutation 结果都不能代替 unsupported，五项必需方法不能返回 unsupported。
 
-每个 adapter 拥有一个 `Operations()` 函数，由实例和注册共享。`providers.ValidateBinding` 根据接口并相互对照检查两者，Runtime admission 与 node generation 加载也拒绝不完整 provider。调用方在调用操作前用 `providercontract.Require` 检查声明，从不使用 type assertion。
+每个 adapter 拥有一个 `Operations()` 函数，由实例和注册共享。`providers.ValidateBinding` 根据接口并相互对照检查两者，Runtime admission 与 node generation 加载也拒绝不完整提供商。调用方在调用操作前用 `providercontract.Require` 检查声明，从不使用 type assertion。
 
 `Observe` 读取一个 allocation，不续期、启动、准备或停止计算资源；参见[观测契约](../../contracts/agents-api/zh/runtime-observability.md)。
 
@@ -85,50 +85,50 @@ Microsandbox 在返回创建不存在回执前永久关闭初始 Create 准入�
 | --- | --- | --- | --- |
 | `Create` | 匹配计算资源与 bootstrap 证据；执行仍需要 Runtime preparation | 无效或外来配置被拒绝；重复返回 `ErrExists`；transport 失败可能隐藏已创建资源 | 观察原 `Reference`。不重放 `Create`，即使使用新凭据。保留部分资源用于所属清理 |
 | `GetInfo` | 不修改的当前计算资源观测 | `ErrNotFound` 仅表示缺少观测；error 不是不存在的证明 | 重复有界读取；不将其变成 create、start 或 renew |
-| `Renew` | 原生租约已延长，或无租约 provider 的观测 | 超时可能隐藏延期；停止或缺失计算资源仍保持原样 | 先观察，再由 reconciler 续期同一 allocation。不复活计算资源或虚构 lease expiry |
+| `Renew` | 原生租约已延长，或无租约提供商的观测 | 超时可能隐藏延期；停止或缺失计算资源仍保持原样 | 先观察，再由 reconciler 续期同一 allocation。不复活计算资源或虚构 lease expiry |
 | `Kill` | 所属计算资源与保留存储已移除；重复已确认不存在时成功 | error 保留所有权与清理意图；所有权不匹配不删除外来资源 | 未决创建或 mutation 已隔离后重试同一 `Reference` 的清理；不提前释放 owner |
 | `RunCommand`, `RunCommandCompute` | 收集到输出和实际 exit code；非零退出是已结算命令失败 | 缺失原生完成为 `ErrCommandUnconfirmed`；部分输出不是成功 | 不重放。无法证明完成时保留 owner，并在复用前回收 |
 
-`ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound`、`ErrComputeUnconfirmed` 和 `ErrCommandUnconfirmed` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将 provider diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
+`ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound`、`ErrComputeUnconfirmed` 和 `ErrCommandUnconfirmed` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将提供商 diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
 
-Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`；原样持久化 operation ID 与 provider snapshot provenance。suspend 或 resume 的 `ObserveOnly` 仅观察上次尝试，不启动另一 capture 或 restore。`ResumeCompute` 仅解冻保留源，不冷启动已停止源。清理针对精确 compute incarnation 和 snapshot，不针对当前同名实例。只有所属节点已验证精确 incarnation 不再存在时，`GetCompute` 才返回 `ErrNotFound`；同名但 native ID 不同的实例为 `ErrOwnership`，节点或后端不可达属于未知结果。`ComputeState.Status` 为 `stopped` 或 `crashed` 表示 adapter 已验证该精确 incarnation 的进程不再存在；其记录或磁盘可保留到 `KillCompute` 将其移除。`paused`、没有 Runtime 连接的 `running` 和未知状态均不证明进程已终止。声明 checkpoint 支持前阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
+Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`；原样持久化 operation ID 与提供商 snapshot provenance。suspend 或 resume 的 `ObserveOnly` 仅观察上次尝试，不启动另一 capture 或 restore。`ResumeCompute` 仅解冻保留源，不冷启动已停止源。清理针对精确 compute incarnation 和 snapshot，不针对当前同名实例。只有所属节点已验证精确 incarnation 不再存在时，`GetCompute` 才返回 `ErrNotFound`；同名但 native ID 不同的实例为 `ErrOwnership`，节点或提供商不可达属于未知结果。`ComputeState.Status` 为 `stopped` 或 `crashed` 表示 adapter 已验证该精确 incarnation 的进程不再存在；其记录或磁盘可保留到 `KillCompute` 将其移除。`paused`、没有 Runtime 连接的 `running` 和未知状态均不证明进程已终止。声明 checkpoint 支持前阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
 
 ### 四个独立就绪事实 {#four-distinct-readiness-facts}
 
 | 事实 | 证据 | 不证明 |
 | --- | --- | --- |
-| 计算资源可用 | Provider 对所属 allocation 的观测 | 已认证 Runtime 连接或已准备能力 |
+| 计算资源可用 | 提供商对所属 allocation 的观测 | 已认证 Runtime 连接或已准备能力 |
 | Runtime 已连接 | Gateway 认证和精确 Environment、device 绑定 | preparation 已完成或 Harness 可用 |
 | 能力已准备 | 使用固定配置完成公共 Runtime preparation | Turn 已接受或完成 |
 | 执行已准入 | 已验证 Harness 能力及 executor、Turn 接受路径 | 输入已完成、取消已完成或计算资源已回收 |
 
-托管和自托管 Environment 使用相同 Runtime preparation；provider 不实现另一套竞争流程。
+托管和自托管 Environment 使用相同 Runtime preparation；提供商不实现另一套竞争流程。
 
-## 注册 provider kind {#register-the-provider-kind}
+## 注册提供商 kind {#register-the-provider-kind}
 
 `sandbox/providers/registry.go` 是唯一注册表。每项绑定 adapter 的 specification 与 resource validator、`sandbox.ConfigurationAdapter`、部署模式（`nodes` 或 `direct`）、`sandbox.DeploymentPolicy`（磁盘限制、Runtime 输入，以及 setup 推荐的默认大小）、operation 声明，以及 node-local（`BuildLocal`）或 direct（`BuildDirect`）constructor。`providers.Build` 和 `providers.BuildDirect` 构造 adapter，不分配计算资源。没有 init 时注册或 plugin 加载。
 
-新 provider 执行以下步骤：
+新提供商执行以下步骤：
 
 1. 在 adapter 包中实现 operation 契约，并编写原生契约测试。
 2. 添加 specification 和 resource validator。
-3. 基于类型化原生配置实现 `sandbox.ConfigurationAdapter`。`DecodeInput` 严格解析请求中独立的公开 `configuration` 与只写 `credential` 对象。`Encode` 生成白名单公开 selector、只读观测和独立 secret bytes，不透传请求 JSON。`Decode` 恢复已存储 selector 并保留对所属资源的访问，不做远程 admission 或新模板验证。`Normalize` 修改前复制输入。`ResolveChange`、`Equal` 和 `WithCredential` 负责继承、身份与凭据组合。`Requirements` 声明是否需要凭据和公开 Core origin，以及支持哪些 setup 操作：`Discovery` 对应 `DiscoverConfiguration`，`SelectionDiscovery` 对应 `DiscoverSelection`，`CredentialVerification` 对应 `VerifyCredential`。`DiscoverConfiguration` 验证 query 并返回安全 catalog，不做 mutation 或 admission decision；Core 保留授权、输入限制与 deadline。`DiscoverSelection` 在提交前解析候选项省略的原生值，`VerifyCredential` 验证凭据对所属资源的访问，不修改资源。两者都接收候选项的 `sandbox.DirectConfig`，原生 client 只为该次调用构造。node provider 仅接受空公开对象，拒绝凭据，对每项 setup 操作和 credential replacement 返回 Unsupported。
-4. node adapter 从自己的包中导出 `BuildLocal` constructor、它解码的类型化 `native` 对象，以及它在共享 node artifact 之外添加的原生文件。node-local 设置（如主机路径）只存放在该对象中；resources 和 Runtime release 从 node 配置的 `specification` 读取。
-5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即 provider kind，也用于标记该 Provider 的观测；checkpoint 支持读取此项。生成的投影组合每个已注册的部署模式和 deployment policy 与 `sandbox/deployment_contract.go` 中的共享 field bound：installer 从 `deploy/node/node_spec.py` 读取，TypeScript 客户端和 Web 从 `packages/agents-client/src/deployment-contract.ts` 读取，因此 Web 读取这些声明，而不比较 provider kind。通过 `go run ./services/core/cmd/specification-contract -write` 重新生成两者。
-6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约向运维人员提供 provider。
+3. 基于类型化原生配置实现 `sandbox.ConfigurationAdapter`。`DecodeInput` 严格解析请求中独立的公开 `configuration` 与只写 `credential` 对象。`Encode` 生成白名单公开 selector、只读观测和独立 secret bytes，不透传请求 JSON。`Decode` 恢复已存储 selector 并保留对所属资源的访问，不做远程 admission 或新模板验证。`Normalize` 修改前复制输入。`ResolveChange`、`Equal` 和 `WithCredential` 负责继承、身份与凭据组合。`Requirements` 声明是否需要凭据和公开 Core origin，以及支持哪些 setup 操作：`Discovery` 对应 `DiscoverConfiguration`，`SelectionDiscovery` 对应 `DiscoverSelection`，`CredentialVerification` 对应 `VerifyCredential`。`DiscoverConfiguration` 验证 query 并返回安全 catalog，不做 mutation 或 admission decision；Core 保留授权、输入限制与 deadline。`DiscoverSelection` 在提交前解析候选项省略的原生值，`VerifyCredential` 验证凭据对所属资源的访问，不修改资源。两者都接收候选项的 `sandbox.DirectConfig`，原生 client 只为该次调用构造。node 提供商仅接受空公开对象，拒绝凭据，对每项 setup 操作和 credential replacement 返回 Unsupported。
+4. node adapter 从自己的包中导出 `BuildLocal` constructor、它解码的类型化 `native` 对象，以及它在共享 node artifact 之外添加的原生文件。node-local 设置（如主机路径）只存放在该对象中；resources 和 Runtime 版本从 node 配置的 `specification` 读取。
+5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即提供商 kind，也用于标记该提供商的观测；checkpoint 支持读取此项。生成的投影组合每个已注册的部署模式和 deployment policy 与 `sandbox/deployment_contract.go` 中的共享 field bound：installer 从 `deploy/node/node_spec.py` 读取，TypeScript 客户端和 Web 从 `packages/agents-client/src/deployment-contract.ts` 读取，因此 Web 读取这些声明，而不比较提供商 kind。通过 `go run ./services/core/cmd/specification-contract -write` 重新生成两者。
+6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约向运维人员提供提供商。
 
-**已知设计缺口：** Web 仍在 setup 向导的后端选择、Docker 确认，以及所有显示或解析 E2B 配置字段的地方（带服务预设的 setup 步骤、部署摘要和客户端的部署投影）中指名 provider，因为协议尚未声明配置字段。通过该界面提供另一 provider 目前需要修改共享的 Web。此耦合不符合[复杂性留在 adapter 内](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter)；新集成必须通过协议表达配置，把厂商专有行为留在 adapter。不得添加 Session 或 Turn 调度路径、厂商专有 column 或 API field，或 store 中的厂商 switch。
+**已知设计缺口：** Web 仍在 setup 向导的提供商选择、Docker 确认，以及所有显示或解析 E2B 配置字段的地方（带服务预设的 setup 步骤、部署摘要和客户端的部署投影）中指名提供商，因为协议尚未声明配置字段。通过该界面提供另一提供商目前需要修改共享的 Web。此耦合不符合[复杂性留在 adapter 内](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter)；新集成必须通过协议表达配置，把厂商专有行为留在 adapter。不得添加 Session 或 Turn 调度路径、厂商专有 column 或 API field，或 store 中的厂商 switch。
 
-node 配置 `sandbox.NodeConfig` 包含 `provider`、`generation`、`installation_id`、`core_url`、`specification`，以及 adapter 的不透明 `native` 对象。`providers.Build` 验证 `provider`、`generation`、`installation_id` 和 `specification`，并将配置与临时 `sandbox.LocalOptions` 传给 `BuildLocal`，由它严格解码 `native`。调用方通过 `Standalone` 明确选择独立注册或单 provider 执行，或通过 `GenerationStateDirectory` 中的规范绝对 node state directory 选择 generation 拥有的执行。context 缺失或混合时拒绝。adapter 负责 generation 特有的原生 preparation 和 readiness 检查。Microsandbox 将 helper lease 绑定到安装实例、generation 和 specification digest，然后在平台、容量和 artifact readiness 后检查固定 image。
+node 配置 `sandbox.NodeConfig` 包含 `provider`、`generation`、`installation_id`、`core_url`、`specification`，以及 adapter 的不透明 `native` 对象。`providers.Build` 验证 `provider`、`generation`、`installation_id` 和 `specification`，并将配置与临时 `sandbox.LocalOptions` 传给 `BuildLocal`，由它严格解码 `native`。调用方通过 `Standalone` 明确选择独立注册或单提供商执行，或通过 `GenerationStateDirectory` 中的规范绝对 node state directory 选择 generation 拥有的执行。context 缺失或混合时拒绝。adapter 负责 generation 特有的原生 preparation 和 readiness 检查。Microsandbox 将 helper lease 绑定到安装实例、generation 和 specification digest，然后在平台、容量和 artifact readiness 后检查固定 image。
 
 ### 注册验证 {#registration-validation}
 
-`providers.ValidateRegistration` 是唯一 wiring 检查。lookup、constructor binding 和生成的投影在任何 configuration callback 或 constructor 前运行它。未知 provider name 保持为无效输入；格式错误的注册返回安全 `providercontract.ErrContract`，不包含提交的配置或原生诊断。
+`providers.ValidateRegistration` 是唯一 wiring 检查。lookup、constructor binding 和生成的投影在任何 configuration callback 或 constructor 前运行它。未知提供商 name 保持为无效输入；格式错误的注册返回安全 `providercontract.ErrContract`，不包含提交的配置或原生诊断。
 
 - `nodes` 注册仅有 `BuildLocal`，`direct` 注册仅有 `BuildDirect`；缺失、混合或未知 mode 被拒绝。
 - specification 和 resource validator、configuration adapter 与完整 operation 声明都是必需项，因此不完整注册不能发布部分投影。声明的默认大小必须通过 adapter 的 resource validator。
 - Runtime input policy 要么接受固定 Runtime，要么给出 adapter 拒绝它的固定原因，不能两者兼有。
-- Checkpoint 仅准入 `nodes` 注册，因为公共 lifecycle 只暂停 node allocation；声明 checkpoint 的 `direct` Provider 会被注册拒绝。注册不携带 suspension 数值：Core 对每个声明 checkpoint 支持的 Provider 应用同一个 [suspension policy](#suspension)。
+- Checkpoint 仅准入 `nodes` 注册，因为公共 lifecycle 只暂停 node allocation；声明 checkpoint 的 `direct` 提供商会被注册拒绝。注册不携带 suspension 数值：Core 对每个声明 checkpoint 支持的提供商应用同一个 [suspension policy](#suspension)。
 
 configuration adapter 必须非 nil，包括其具体值。每个 `ConfigurationRequirements` 字段都需要明确有效的决定：`Credential` 和 `PublicOrigin` 为 `Required` 或 `NotRequired`，`Discovery`、`SelectionDiscovery` 和 `CredentialVerification` 使用共享 supported 或 unsupported 声明并携带安全 reason。新增 requirement field 需要明确更新验证，不继承已有决定。要求凭据不承诺支持 `VerifyCredential` 操作。这些检查证明注册完整，不证明原生 SDK 行为正确；constructor 和 adapter 契约测试仍然适用。
 
@@ -138,65 +138,65 @@ configuration adapter 必须非 nil，包括其具体值。每个 `Configuration
 
 具有凭据的 direct adapter 在替换 key 前验证全部保留 generation 与 allocation reference。公共 `sandbox.CallFence` 排除原生调用并等待 helper 完成，包括调用方已超时的调用；execution 调用已准备的 verification 和 fencing callback，不按厂商分支。
 
-厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回 provider、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过 provider name。
+厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回提供商、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过提供商 name。
 
 backend fingerprint 标识原生资源命名空间，不表示容量。Core 保留部署 generation，使所属 allocation 继续解析到原 backend；不要将保留 allocation 重新指向替代 backend。
 
 ### 发行产物与进程路径 {#distribution-artifacts-and-process-paths}
 
-每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime`、`policy` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 Web catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包、Web availability 和 node 安装读取此投影；添加 provider payload 不在这些消费者中增加 provider-name 分支。
+每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime`、`policy` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 Web catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包、Web availability 和 node 安装读取此投影；添加提供商 payload 不在这些消费者中增加按提供商名称的分支。
 
-launcher 从[派生进程环境](configuration.md)提供 `sandbox.ProcessPaths`。Core 读取这些路径一次，并传给 direct construction 和 setup 操作。它们是固定发行属性，不是部署设置或用户可选 helper 路径。每个 adapter 解析自己的相对 helper 和 state 位置；E2B 使用 `e2b/oac-e2b-provider` 和 `e2b/`。root 缺失或不是绝对路径时，在执行 helper 前失败。Provider 构造与发现不读取进程环境变量。
+launcher 从[派生进程环境](configuration.md)提供 `sandbox.ProcessPaths`。Core 读取这些路径一次，并传给 direct construction 和 setup 操作。它们是固定发行属性，不是部署设置或用户可选 helper 路径。每个 adapter 解析自己的相对 helper 和 state 位置；E2B 使用 `e2b/oac-e2b-provider` 和 `e2b/`。root 缺失或不是绝对路径时，在执行 helper 前失败。提供商构造与发现不读取进程环境变量。
 
 ## 托管生命周期 {#managed-lifecycle}
 
-这是 Core 对每个 provider 执行的公共流程。Adapter 不实现这些流程，但依赖它们。
+这是 Core 对每个提供商执行的公共流程。Adapter 不实现这些流程，但依赖它们。
 
 ### 部署发布 {#deployment-publication}
 
-启动时 Core 在选择 provider 前领取稳定 installation identity 和新的 owner epoch。runtime manager 保留了解 generation 的 provider facade。初始 setup 与 replacement 在任何数据库写入前准备并验证 candidate；candidate 被拒绝时不改变活动配置或 worker。backend replacement 使用 deployment mutation gate：暂停 manager admission，排空旧调用与循环，再在 commit transaction 中重复 resource 与 generation guard；新选择、其 generation、旧 node 和未使用 enrollment token 的退役一起提交。提交后，Core 在 manager mutex 下发布预验证配置和共享 observation、bootstrap cache，没有进一步外部工作或可失败步骤，因此提交后取消的请求不能丢弃配置。中断的 drain 保留为重试 barrier。Provider I/O 和 drain 不持有数据库事务或 manager map mutex。
+启动时 Core 在选择提供商前领取稳定 installation identity 和新的 owner epoch。runtime manager 保留了解 generation 的提供商 facade。初始 setup 与 replacement 在任何数据库写入前准备并验证 candidate；candidate 被拒绝时不改变活动配置或 worker。backend replacement 使用 deployment mutation gate：暂停 manager admission，排空旧调用与循环，再在 commit transaction 中重复 resource 与 generation guard；新选择、其 generation、旧 node 和未使用 enrollment token 的退役一起提交。提交后，Core 在 manager mutex 下发布预验证配置和共享 observation、bootstrap cache，没有进一步外部工作或可失败步骤，因此提交后取消的请求不能丢弃配置。中断的 drain 保留为重试 barrier。提供商 I/O 和 drain 不持有数据库事务或 manager map mutex。
 
-本地 provider 依赖不可用时，现有 scan 等待修复，hosted admission 保持关闭；管理员恢复仍可使用，重启后也如此。数据库和所有权错误仍是失败。未配置的部署以 503 `execution_unavailable` 拒绝 hosted admission，且不创建 Session 状态。Core 从 installation public URL 派生 Runtime bootstrap 和 daemon WebSocket 地址，不使用请求 header；从数据库读取当前选择，不使用 startup file。
+本地提供商依赖不可用时，现有 scan 等待修复，hosted admission 保持关闭；管理员恢复仍可使用，重启后也如此。数据库和所有权错误仍是失败。未配置的部署以 503 `execution_unavailable` 拒绝 hosted admission，且不创建 Session 状态。Core 从 installation public URL 派生 Runtime bootstrap 和 daemon WebSocket 地址，不使用请求 header；从数据库读取当前选择，不使用 startup file。
 
 Node readiness 绑定到精确 generation、当前连接和 owner epoch。持久 serving pin 仅在部署串行化下为当时目标的 readiness 提升，因此已被替代目标的延迟报告不获得 pin。
 
 ### Allocation 生命周期 {#allocation-lifecycle}
 
-allocation、专用 daemon credential digest 和精确 Session binding 在 `Create` 前、execution lease 与 Session lock 下原子提交。只有新 allocation receipt 允许 `Create`；重试和 Core 重启观察同一 reference，不重放或轮换凭据。allocation 是私有计算资源所有权，与公开 Environment connection 和原生 readiness 独立；adapter 验证 bootstrap completion，Core 不从 engine 或 provider name 推断。
+allocation、专用 daemon credential digest 和精确 Session binding 在 `Create` 前、execution lease 与 Session lock 下原子提交。只有新 allocation receipt 允许 `Create`；重试和 Core 重启观察同一 reference，不重放或轮换凭据。allocation 是私有计算资源所有权，与公开 Environment connection 和原生 readiness 独立；adapter 验证 bootstrap completion，Core 不从 engine 或提供商 name 推断。
 
-配置 provider 后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。同一 scan 在验证精确 Session、device binding 和已结算 bootstrap 后，发布带持久 generation 的认证连接观测。
+配置提供商后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。同一 scan 在验证精确 Session、device binding 和已结算 bootstrap 后，发布带持久 generation 的认证连接观测。
 
-Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 正在运行的 allocation；该检查不做任何修改，也不复活 cleanup 请求。正在运行的计算资源不会到期：显式生命周期清理、快照保留策略和[已确认的计算资源丢失](#confirmed-compute-loss)管理资源回收。不可达的 container，以及未经该确认的停止或缺失 container，不授权丢弃保留工作区或历史，也不授权选择替代计算资源。禁用 provider 停止新 hosted admission 与 bootstrap，但不阻止现有 Session 的取消、function result 或 input retry outcome。
+Core 在 Turn 之间检查已连接且已观察的计算资源仍是其 Session 正在运行的 allocation；该检查不做任何修改，也不复活 cleanup 请求。正在运行的计算资源不会到期：显式生命周期清理、快照保留策略和[已确认的计算资源丢失](#confirmed-compute-loss)管理资源回收。不可达的 container，以及未经该确认的停止或缺失 container，不授权丢弃保留工作区或历史，也不授权选择替代计算资源。禁用提供商停止新 hosted admission 与 bootstrap，但不阻止现有 Session 的取消、function result 或 input retry outcome。
 
-终结清理原子撤销 device authority、记录 Environment 失败或到期、结算 pending input 并请求取消，然后才调用 `Kill`；原 input deadline 与 retry outcome 保留。临时 provider outage、未知 Create result 和停止的计算资源不证明永久失败。公开 Session 删除后 Core 保留 allocation，仅在所属 compute 与 volume 清理完成且原 Create 已结算的证明成立后标记 released；未知创建即使观察到不存在也保留 cleanup ownership，有界 scan 继续捕捉延迟资源，不再调用 `Create`。
+终结清理原子撤销 device authority、记录 Environment 失败或到期、结算 pending input 并请求取消，然后才调用 `Kill`；原 input deadline 与 retry outcome 保留。临时提供商 outage、未知 Create result 和停止的计算资源不证明永久失败。公开 Session 删除后 Core 保留 allocation，仅在所属 compute 与 volume 清理完成且原 Create 已结算的证明成立后标记 released；未知创建即使观察到不存在也保留 cleanup ownership，有界 scan 继续捕捉延迟资源，不再调用 `Create`。
 
 ### 每节点生命周期 worker {#per-node-lifecycle-workers}
 
-每个注册 node 有一个串行 lifecycle worker，负责 gate、allocation 与 pending cursor、connection 和 wake hint；E2B allocation 共享一个没有 node 的串行 lifecycle。薄 coordinator 发现 node 并关闭 worker，数据库、provider 或等待操作期间不持有 map mutex。worker 独立推进，因此一个在线 node 的 provider 卡住不会阻塞其他 node：lifecycle 并发为每 node 一项操作，随 node 数量增长。离线 worker 保留，因此其保留资源在重连后仍可观察。
+每个注册 node 有一个串行 lifecycle worker，负责 gate、allocation 与 pending cursor、connection 和 wake hint；E2B allocation 共享一个没有 node 的串行 lifecycle。薄 coordinator 发现 node 并关闭 worker，数据库、提供商或等待操作期间不持有 map mutex。worker 独立推进，因此一个在线 node 的提供商卡住不会阻塞其他 node：lifecycle 并发为每 node 一项操作，随 node 数量增长。离线 worker 保留，因此其保留资源在重连后仍可观察。
 
 allocation scan 在应用 32 行分页限制前按 node 过滤，pending scan join 尚未释放的已提交 placement。每个 node 推进自己的 cursor，包括越过失败观测，并在末尾回绕一次。direct provisioning 在进入该 node gate 前解析 tenant 范围内 placement，活动 allocation 必须与其一致。只有确认释放后才能建立新的 placement；断连不会迁移活动 allocation。
 
-释放 execution lease 前，coordinator 停止接受工作，取消并排空每个 node worker 和 direct caller。lease 丢失影响全部；普通 provider failure 限于所属 node。计划 deployment drain 或 node retirement 通过五秒有界 lease gate，在 leased operation 之间同步取消 lifecycle context，包括活动 manual reconcile，不仅为了改变配置就取消进行中的 leased query。失败的 cancellation fence 关闭 manager admission 并报告 owner failure。失败的 retirement 保留原 lifecycle identity 和 gate，直到 owner shutdown，drain barrier 保持关闭。Session lock、deployment capacity transaction 和 revision-checked receipt 仍是权威依据，外部操作不持有数据库锁。
+释放 execution lease 前，coordinator 停止接受工作，取消并排空每个 node worker 和 direct caller。lease 丢失影响全部；普通提供商 failure 限于所属 node。计划 deployment drain 或 node retirement 通过五秒有界 lease gate，在 leased operation 之间同步取消 lifecycle context，包括活动 manual reconcile，不仅为了改变配置就取消进行中的 leased query。失败的 cancellation fence 关闭 manager admission 并报告 owner failure。失败的 retirement 保留原 lifecycle identity 和 gate，直到 owner shutdown，drain barrier 保持关闭。Session lock、deployment capacity transaction 和 revision-checked receipt 仍是权威依据，外部操作不持有数据库锁。
 
 ### Placement 与容量 {#placement-and-capacity}
 
-placement 自动完成：Session 创建提交持久的 pending 工作，共同调度器在 allocation 之前预留兼容节点。[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout) 定义等待、排序与代次选择。调用方不能选择 node；活动 allocation 即使在 node 离线时也保留原 node。确认 allocation 释放后，符合条件的保留 Session 可以重新预约兼容容量，包括其他 node。Node capacity 计入 pending reservation 和未决资源，新 placement 与 suspended-to-restoring 转移共享数据库锁。未知操作保留预约，source teardown 必须确认后才能释放 active capacity，确认 cleanup 后释放 placement capacity。保留所有权需要精确 provider evidence：socket path、缺失 instance 或空列表都不证明 cleanup，也不授权 replacement。
+placement 自动完成：Session 创建提交持久的 pending 工作，共同调度器在 allocation 之前预留兼容节点。[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout) 定义等待、排序与代次选择。调用方不能选择 node；活动 allocation 即使在 node 离线时也保留原 node。确认 allocation 释放后，符合条件的保留 Session 可以重新预约兼容容量，包括其他 node。Node capacity 计入 pending reservation 和未决资源，新 placement 与 suspended-to-restoring 转移共享数据库锁。未知操作保留预约，source teardown 必须确认后才能释放 active capacity，确认 cleanup 后释放 placement capacity。保留所有权需要精确提供商 evidence：socket path、缺失 instance 或空列表都不证明 cleanup，也不授权 replacement。
 
 部署的 CPU、memory、disk 设置、`max_active`、`max_retained` 和 snapshot retention 限制每个 node。确认释放后的冷替换不提供 node-level drain、不可达写入方的故障转移、并发写入方、multi-active Core、autoscaling 或 snapshot replication。node 持有 allocation、snapshot、reservation、unknown result 或 cleanup 时拒绝移除 node，离线 ownership 保留。
 
 ### 暂停 {#suspension}
 
-Core 用同一个共享 policy 暂停每个声明 checkpoint 支持的 provider 的空闲工作：[可配置的空闲时长](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)默认为 5 分钟（300 秒），snapshot 保留 24 小时（86400 秒）。部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 报告这两个值。Core 在 initialization 完成、没有 root 或 Subagent Turn 排队、进行中或等待、没有 pending input 或 file operation，且真实 activity 已空闲达到该时间后暂停。Session 无需已运行过 Turn。idle clock 不早于 allocation 进入 running compute phase 的时刻开始，包括 wake 后重新进入该 phase。对于 node allocation，Core 在同一事务中用数据库时钟记录首个 root 或 child terminal transition。candidate filter 和 Session-locked recheck 比较数据库已过时间与 idle duration，初始 snapshot retention deadline 也锚定同一数据库观测，因此 Core 与数据库主机时钟无需一致。原生 completion timestamp 在公开历史中保持不变，但不驱动 idle admission，heartbeat 不重置 activity。确认计划暂停前，daemon 关闭 admission 并排空 native cleanup、output receipt 和 file work。
+Core 用同一个共享 policy 暂停每个声明 checkpoint 支持的提供商的空闲工作：[可配置的空闲时长](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)默认为 5 分钟（300 秒），snapshot 保留 24 小时（86400 秒）。部署的 [`suspension`](../../contracts/agents-api/zh/sandbox-deployment.md#safe-response) 报告这两个值。Core 在 initialization 完成、没有 root 或 Subagent Turn 排队、进行中或等待、没有 pending input 或 file operation，且真实 activity 已空闲达到该时间后暂停。Session 无需已运行过 Turn。idle clock 不早于 allocation 进入 running compute phase 的时刻开始，包括 wake 后重新进入该 phase。对于 node allocation，Core 在同一事务中用数据库时钟记录首个 root 或 child terminal transition。candidate filter 和 Session-locked recheck 比较数据库已过时间与 idle duration，初始 snapshot retention deadline 也锚定同一数据库观测，因此 Core 与数据库主机时钟无需一致。原生 completion timestamp 在公开历史中保持不变，但不驱动 idle admission，heartbeat 不重置 activity。确认计划暂停前，daemon 关闭 admission 并排空 native cleanup、output receipt 和 file work。
 
 容量压力可以让已经空闲的 node allocation 在通常超时之前暂停，但仍需经过 15 秒无活动宽限期。Session 锁内的决策重新检查 pending work、wake request 和 activity，再获取共享 deployment 容量锁并确认兼容的等待需求。它不会中断活动 Turn，也不会在普通 quiesce、capture 和 source-stop 证明完成前释放容量。压力触发的回收采用保守策略：只有进行中回收所属的节点当前有资格服务同一需求时，它才会推迟另一次回收。不可用或不兼容的节点保留其 ownership receipt，但不会阻挡健康节点的容量。如果暂停无法使容量可用，等待请求仍保留原始期限。
 
-Worker lease、Session lock 与 per-node gate 对每个 provider 负责 suspension。新 Turn claim、file-write intent 和 capture admission 在 Session lock 下串行化，共享一个 compute-phase 检查；新 pending work 取消 capture 并唤醒同一 source。正常 preparation 在经过认证的 resume handshake 后等待 compute phase 为 running；pending input 的 promotion 与 lifecycle transition 冲突时保持 pending。compute phase 和 revision-checked receipt 位于 allocation。Core 在 effect 前持久化 quiesce、capture 和 restore intent，仅新 receipt 执行 capture 或 restore，恢复观察精确 attempt，不重试未知 creation、capture 或 restore。已消费 snapshot 不让 running generation 回滚。删除、撤销和 retention expiry 优先于 wake，一直持续到最终数据库 compare-and-swap；未知 cleanup identity 保留，直到确认所属资源不存在。已消费 artifact 和旧 compute 被删除，因此暂停循环不累积可写磁盘链。
+Worker lease、Session lock 与 per-node gate 对每个提供商负责 suspension。新 Turn claim、file-write intent 和 capture admission 在 Session lock 下串行化，共享一个 compute-phase 检查；新 pending work 取消 capture 并唤醒同一 source。正常 preparation 在经过认证的 resume handshake 后等待 compute phase 为 running；pending input 的 promotion 与 lifecycle transition 冲突时保持 pending。compute phase 和 revision-checked receipt 位于 allocation。Core 在 effect 前持久化 quiesce、capture 和 restore intent，仅新 receipt 执行 capture 或 restore，恢复观察精确 attempt，不重试未知 creation、capture 或 restore。已消费 snapshot 不让 running generation 回滚。删除、撤销和 retention expiry 优先于 wake，一直持续到最终数据库 compare-and-swap；未知 cleanup identity 保留，直到确认所属资源不存在。已消费 artifact 和旧 compute 被删除，因此暂停循环不累积可写磁盘链。
 
 排队工作和实时 Environment file access 唤醒 suspended Environment；history 和已发布 Artifact read 不唤醒。实时文件请求在进入文件工作队列前，等待当前 Runtime 通过 credential 授权的连接及 Harness 声明；compute Create 完成并不代表 Runtime 已就绪。计划暂停在 daemon 连接上使用 Environment 和 suspension token。受 PID 与 start-time fencing 的本地 control signal（`RunCommandCompute`）唤醒 parked daemon，daemon 在准入工作前重新认证。确认前临时断连通过有界 attempt 和 backoff 重试同一已 armed suspension；永久认证或协议拒绝则关闭。保留的检查点在原 node 仍具资格时优先恢复，也可以按以下检查点转移规则在其他符合条件的 node 恢复。Core 负责 snapshot retention deadline，daemon 没有相应 timer。quiesce 确认丢失时可以通过明确 rollback 解冻同一 source，但不授权 capture。
 
 ### 检查点转移 {#checkpoint-transfer}
 
-支持检查点的 generation 报告 `CheckpointCompatibility`，包含不透明的 `ArtifactDomain` 与 `ExecutionClass` token。每个已验证 `SnapshotIdentity` 携带同样的资格。Core 只比较这些值，不解释 CPU 特性、文件系统路径或存储实现。恢复目标必须在线、对 allocation 的不可变 deployment generation 已就绪、两个 token 均匹配，并有 active 容量；跨 node 时还需 retained slot。allocation、Device 和 Session 身份保持不变。Session 与 deployment 事务先提交目标路由、placement 和精确 restore intent，再执行目标侧原生操作。没有容量或兼容目标时，保留快照的所有权一直持续到配置期限。目标必须已持有该精确 generation；Core 不会在新节点自动准备历史 generation。升级期间应保留符合条件的节点及其 generation provider，直到检查点保留义务结束。
+支持检查点的 generation 报告 `CheckpointCompatibility`，包含不透明的 `ArtifactDomain` 与 `ExecutionClass` token。每个已验证 `SnapshotIdentity` 携带同样的资格。Core 只比较这些值，不解释 CPU 特性、文件系统路径或存储实现。恢复目标必须在线、对 allocation 的不可变 deployment generation 已就绪、两个 token 均匹配，并有 active 容量；跨 node 时还需 retained slot。allocation、Device 和 Session 身份保持不变。Session 与 deployment 事务先提交目标路由、placement 和精确 restore intent，再执行目标侧原生操作。没有容量或兼容目标时，保留快照的所有权一直持续到配置期限。目标必须已持有该精确 generation；Core 不会在新节点自动准备历史 generation。升级期间应保留符合条件的节点及其 generation 提供商，直到检查点保留义务结束。
 
 `Suspend` 只有在持久发布已验证的完整归档、停止精确 source compute，并结清 source 本地 capture 与 cleanup 义务后，才能报告 `SourceStopped`。Core 先持久化快照，再标记 suspended；仅原生资源不存在并不足够。`Suspend.ObserveOnly` 可以为同一 operation 已验证的快照完成归档发布和源清理，但不能重新捕获快照，也不能停止已经恢复 running 的源。此前已发布的归档缺失或损坏时，`ObserveOnly` 可以返回其精确持久 ownership receipt，标记 `Status: unknown` 和 `SourceStopped: false`，供清理使用；该 receipt 不证明归档当前可用，也不证明源不存在。`Resume` 仍在执行前验证归档。完成源结清屏障后，source node 不可用不再阻止恢复。删除和正常到期可以将空闲 suspended allocation 的清理路由转给同一 artifact domain 内的在线 node；删除不要求 execution class 匹配。清理目标必须已提供同一不可变 generation，且有 retained 容量。没有这样的 node 时，清理保持 pending，不释放所有权；运维需恢复符合条件的 node 或其容量。未知 running 或 restoring writer 不会仅因 node 不可达而迁移。
 
@@ -224,13 +224,13 @@ Core 在释放 allocation 和 placement 归属前，确认原始创建已结算�
 
 [reset](../../contracts/agents-api/zh/sandbox-deployment.md#reset) 是 runtime manager 在计数工作之外推进的持久 execution state。start、escalation、cancellation、setup、update 和 finalization 通过 mutation gate 串行化。空闲状态先在 Session lock 再在 deployment lock 下复查，finalization 时不反向加锁。工作使用 keyset paging，绑定 reset request time 和 generation，并持久化 absolute deadline 与已验证 audit provenance。
 
-一个 snapshot 和 timestamp 对持有资源分区。离线 ownership 来自 allocation 或 active placement 的 node，与 online presence 使用同一 45 秒 connection 和 owner-epoch predicate，独立于 provider readiness；cleanup failure、offline state 或空 read 都不授权合成 release。held resource 为零时，Core 在数据库事务外 drain，在 deployment lock 下复查，并在一个事务中清空 deployment，再发布携带 generation 的空 provider，没有可失败工作。最终 write 或 drain 失败时，在释放 mutation gate 前使用有界 owner context 恢复已提交 provider；恢复失败时 admission 保持 fenced，owner 停止。
+一个 snapshot 和 timestamp 对持有资源分区。离线 ownership 来自 allocation 或 active placement 的 node，与 online presence 使用同一 45 秒 connection 和 owner-epoch predicate，独立于提供商 readiness；cleanup failure、offline state 或空 read 都不授权合成 release。held resource 为零时，Core 在数据库事务外 drain，在 deployment lock 下复查，并在一个事务中清空 deployment，再发布携带 generation 的空提供商，没有可失败工作。最终 write 或 drain 失败时，在释放 mutation gate 前使用有界 owner context 恢复已提交提供商；恢复失败时 admission 保持 fenced，owner 停止。
 
-管理员 [Session archive](../../contracts/agents-api/zh/admin-api.md#session-archive) 在 Session-first transaction 中保留 Project scope 与 hosted eligibility 检查，并一起处理 Environment expiry、cancellation、Runtime authority revocation 和 audit；reset 的后台 archive 从可信记录重建实际 Project scope，保留请求方 provenance。普通 provider lifecycle 释放 compute 和 snapshot。archive cancellation 在 terminal commit 前保留健康 receipt path：仅首次撤销 device 的 archive 记录精确 `archive_cancel_turn_id`（普通 revocation 清空它，重复 cleanup 保留它），现有已认证 delivery 可从 Turn 原 `cancel_requested_at` 起最多 20 秒排空该 cancellation。Core 独立于 subscription removal，通过 `done`、cancellation acknowledgement 和 terminal commit 跟踪 delivery，不授予新 connection、input、file 或 MCP authority，也不续期 lease。事务或 lifecycle gate 不等待 receipt，peer 丢失、到期或重启回到普通 failure 与 cleanup，不虚构 cancelled outcome。
+管理员 [Session archive](../../contracts/agents-api/zh/admin-api.md#session-archive) 在 Session-first transaction 中保留项目 scope 与 hosted eligibility 检查，并一起处理 Environment expiry、cancellation、Runtime authority revocation 和 audit；reset 的后台 archive 从可信记录重建实际项目 scope，保留请求方 provenance。普通提供商 lifecycle 释放 compute 和 snapshot。archive cancellation 在 terminal commit 前保留健康 receipt path：仅首次撤销 device 的 archive 记录精确 `archive_cancel_turn_id`（普通 revocation 清空它，重复 cleanup 保留它），现有已认证 delivery 可从 Turn 原 `cancel_requested_at` 起最多 20 秒排空该 cancellation。Core 独立于 subscription removal，通过 `done`、cancellation acknowledgement 和 terminal commit 跟踪 delivery，不授予新 connection、input、file 或 MCP authority，也不续期 lease。事务或 lifecycle gate 不等待 receipt，peer 丢失、到期或重启回到普通 failure 与 cleanup，不虚构 cancelled outcome。
 
 ## 验证集成 {#validate-the-integration}
 
-installer 与 Go adapter 的 E2B template 和 endpoint validator 消费共享 [selector fixture](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/e2b/testdata/configuration-selectors.json)。任何验证修改都扩展这些 case，使两处入口接受相同 selector。
+installer 与 Go adapter 的 E2B 模板和 endpoint validator 消费共享 [selector fixture](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/e2b/testdata/configuration-selectors.json)。任何验证修改都扩展这些 case，使两处入口接受相同 selector。
 
 开发时运行 `make check-sandbox-provider-contract`。它通过真实 adapter 边界和受控原生失败运行共享 [`contracttest`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/contracttest) 套件，以及 adapter 和 node transport 测试；`make check` 包含相同 package。使用 native-side fixture 调用公开 failure runner，不使用假的 `SandboxProvider`，保留外来 ownership、未知 mutation result、cancellation、不自动 replay、failed cleanup 和 reference-bound settlement 测试。
 
@@ -248,7 +248,7 @@ node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 
 
 ## Docker adapter {#docker-adapter}
 
-Docker Sandbox Provider（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker)）对所有 Runtime image 使用相同 container setting，无论服务哪个 Harness（[`container_options.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/container_options.go)）：
+Docker 沙箱提供商（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker)）对所有 Runtime image 使用相同 container setting，无论服务哪个 Harness（[`container_options.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/container_options.go)）：
 
 - user 1000:1000、只读 root filesystem、移除全部 capability、`no-new-privileges`、[seccomp profile](#seccomp-profile) 和 AppArmor `unconfined`；
 - node 配置的 network 和 extra host（[node 配置](configuration.md#docker-node-configuration)）；
@@ -258,7 +258,7 @@ Docker Sandbox Provider（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenA
 
 Create 拒绝复用没有 container 的保留 volume。它将 [Runtime 引导](runtime-bootstrap.md)文件复制到 `/home/runtime/runtime-bootstrap.json`（mode 0600、UID 1000），并将 `/environment` workspace、staging、initialization 和 package directory 放入 container，然后启动 `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json`。创建的 container 不具备配置的 CPU、memory 和精确 image 时，Create 返回 error 和 `CreateSettled`。Docker 没有 lease，因此 Renew 仅读取 container state。Kill 在删除前检查 container 和两个 volume 的 ownership label，再确认三者都已不存在。
 
-node 使用 [provider 配置](configuration.md#docker-node-configuration)中的明确 Unix socket，忽略 `DOCKER_HOST`。不将 Docker socket、host home 或 Core credential 挂载进 Runtime。
+node 使用 [提供商配置](configuration.md#docker-node-configuration)中的明确 Unix socket，忽略 `DOCKER_HOST`。不将 Docker socket、host home 或 Core credential 挂载进 Runtime。
 
 ### Seccomp profile {#seccomp-profile}
 
@@ -266,7 +266,7 @@ node 使用 [provider 配置](configuration.md#docker-node-configuration)中的�
 
 ## 独立工作区挂载 {#independent-workspace-attachment}
 
-`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 可携带[工作区文件系统绑定](workspace-provider.md)。未提供时使用 Provider 自有的 Environment 磁盘；提供时选择精确的外部对象，不得回退到自有磁盘。Provider 在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；Sandbox Provider 不解释文件系统适配器参数或原生回执。
+`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 可携带[工作区文件系统绑定](workspace-provider.md)。未提供时使用提供商自有的 Environment 磁盘；提供时选择精确的外部对象，不得回退到自有磁盘。提供商在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；沙箱提供商不解释文件系统适配器参数或原生回执。
 
 `DeploymentPolicy.Workspace` 声明挂载要求；未声明表示不支持外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执选择代次的模式和能力；[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)不会将文件系统配置复制进代次。Microsandbox 要求 `host_directory` 和 `user_xattr`；Docker 和 E2B 拒绝外部挂载。`ValidateWorkspacePolicy` 使用文件系统协议的组合校验器：不强制容量配额的外部文件系统拒绝正值 `EnvironmentDiskMiB`，零表示不请求配额。根磁盘容量仍为必需。未提供外部声明时，继续使用自有磁盘的容量边界。
 

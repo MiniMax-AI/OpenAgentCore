@@ -4,7 +4,7 @@ source: contracts/agents-api/session-diagnostics.md
 source_hash: d84a678de2a21f66e2090afff19aea5cff5d3f11d5c32306ebd4387b015cb416
 ---
 
-这些只读路由要求 Core 密钥。Project ID 选择目标 Project，不用于认证。两者都返回 `Cache-Control: no-store`：
+这些只读路由要求 Core 密钥。项目 ID 选择目标项目，不用于认证。两者都返回 `Cache-Control: no-store`：
 
 - `GET /core/v1/projects/{project_id}/sessions/{session_id}/diagnostics`
 - `GET /core/v1/projects/{project_id}/sessions/{session_id}/turns/{turn_id}/diagnostics`
@@ -23,7 +23,7 @@ source_hash: d84a678de2a21f66e2090afff19aea5cff5d3f11d5c32306ebd4387b015cb416
 | `params` | 包含固定安全值的对象；无参数的分类使用 `{}` |
 | `failed_at` | RFC 3339 时间戳；时间未知时为 null |
 
-托管配置失败优先于输入活动，输入活动优先于最新根 Turn；公开 Session 响应使用相同优先级。不会包含私有结果文本、原生消息、提供方响应体、命令文本、路径或凭据。未知结果代码变为 `internal_error`；不使用前缀匹配或原因文本解析。
+托管配置失败优先于输入活动，输入活动优先于最新根 Turn；公开 Session 响应使用相同优先级。不会包含私有结果文本、原生消息、提供商响应体、命令文本、路径或凭据。未知结果代码变为 `internal_error`；不使用前缀匹配或原因文本解析。
 
 配置参数来自已确认的结构化回执，在结算 Environment 及其输入并记录事件的失败事务中持久化。`step` 为 `setup`、`python`、`npm`、`system`、`file`、`skill` 或 null。`index` 仅对 setup 为 JSON 安全的非负整数，其他情况为 null。`exit_code` 对脚本步骤为 1 至 255，其他情况为 null。未记录的详情保持 null。这些私有字段不会改变公开失败原因或 SSE。
 

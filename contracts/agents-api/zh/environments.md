@@ -1,16 +1,16 @@
 ---
-title: "环境与模板"
+title: "Environment 与模板"
 source: contracts/agents-api/environments.md
 source_hash: 9007be1099cf50f5ba376d2de4a060d039b6ee0b1c13c78a94665c28c2fc3fc6
 ---
 
-Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment Template 是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
+Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
 
 相关职责归属：
 
 - [Environment files](environment-files.md)：实时工作区上的 Files API。
-- [Executor credentials](environment-executor-credentials.md)：`self_hosted` 机器的注册、安装授权和连接状态。
-- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的 Sandbox Provider（E2B、Docker 或 microsandbox）。
+- [执行器凭据](environment-executor-credentials.md)：`self_hosted` 机器的注册、安装授权和连接状态。
+- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（E2B、Docker 或 microsandbox）。
 - [Core–Runtime protocol](../../../docs/zh/runtime-protocol.md)：`runtime_prepare` 传输及所有其他线上消息。
 - [Runtime and outer isolation](../../../docs/zh/concepts.md#runtime-and-outer-isolation)：daemon 使用启动用户的权限运行工具；隔离由外层 Environment 提供。
 
@@ -21,16 +21,16 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 | 资源 | 操作 | 规则 |
 | --- | --- | --- |
 | [Environment](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/environments.py) | `GET /agents/environments/{id}` | 通过 Session 配置创建。返回 `id`、`type`、`status`，以及 Session 创建时记录的 `files`、`plugins` 和 `skills`。 |
-| [Template](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/templates.py) | `POST`、`GET /agents/environments/templates`；`GET`、`POST`、`DELETE /agents/environments/templates/{id}` | 请参阅 [Templates](#templates)。 |
+| [模板](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/templates.py) | `POST`、`GET /agents/environments/templates`；`GET`、`POST`、`DELETE /agents/environments/templates/{id}` | 请参阅 [模板](#templates)。 |
 | [Files](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/resources/beta/agents/environments/files.py) | `POST`、`GET /agents/environments/{id}/files` | 请参阅 [Environment files](environment-files.md)。 |
 
-读取 Environment 时，Core 会在调用方的 Project 范围内与其实时所属的 Session 联查，并返回持久化的连接状态。它不需要活跃的 Runtime，不会启动任何原生工作，也不会改变连接状态。对于两种放置方式，安装项数组都会列出由 API 管理的文件、Plugins 和 Skills：文件使用 `{id, type, path, file_id, size_bytes}` 且不含内容，Skills 使用 `{type, name, description, skill_id, version}`，Plugins 使用 `{type, name, description}`。在本地能力目录中发现的 Capabilities 不会列出。
+读取 Environment 时，Core 会在调用方的项目范围内与其实时所属的 Session 联查，并返回持久化的连接状态。它不需要活跃的 Runtime，不会启动任何原生工作，也不会改变连接状态。对于两种放置方式，安装项数组都会列出由 API 管理的文件、Plugins 和 Skills：文件使用 `{id, type, path, file_id, size_bytes}` 且不含内容，Skills 使用 `{type, name, description, skill_id, version}`，Plugins 使用 `{type, name, description}`。在本地能力目录中发现的 Capabilities 不会列出。
 
 [Session environment input](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/environment_param.py) 与 [output](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/environment.py) 的结构不同：
 
 - `none` 不选择任何 Environment。
 - `self_hosted` 输入要求提供 `workspace_directory`；可空的 `capability_directories` 默认为空列表。输出会增加 Environment ID 和仅输出字段 `remote_url`。输出中 `/workspace` 的默认值不会使输入字段变为可选。
-- `openai_hosted` 可以引用 Template，并提供 `capability_directories`、`network`、`packages`、`files`、`plugins`、`skills`、`env` 和 `setup_commands`。
+- `openai_hosted` 可以引用模板，并提供 `capability_directories`、`network`、`packages`、`files`、`plugins`、`skills`、`env` 和 `setup_commands`。
 
 | 投影 | 状态 |
 | --- | --- |
@@ -39,7 +39,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 这两套词汇彼此独立；绝不要将其中一套转换为另一套。Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
-Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其 Project 和不可变配置。其首个状态为 `pending`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
+Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
 
 托管的外层 Environment 必须排除权限范围更广的应用程序凭据和其他租户的机密。
 
@@ -50,30 +50,30 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 | 对象 | 责任 |
 | --- | --- |
 | Session 与 Environment | 持久所有权、配置、待处理交互和连接观察（Core） |
-| Provider 分配 | 计算资源和文件系统的生命周期：`openai_hosted` 使用 Core 的 Sandbox Provider，`self_hosted` 使用应用程序 |
+| 提供商分配 | 计算资源和文件系统的生命周期：`openai_hosted` 使用 Core 的沙箱提供商，`self_hosted` 使用应用程序 |
 | 设备与 daemon 连接 | 经认证的 Runtime 身份和可替换的分派传输 |
 | Harness 进程与原生会话 | 原生模型和工具循环、其执行状态及原生历史 |
-| 注册 | `self_hosted` 机器的 Environment、设备和 executor key 的精确绑定 |
+| 注册 | `self_hosted` 机器的 Environment、设备和执行器凭据的精确绑定 |
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
-部署中配置的 Sandbox Provider（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
+部署中配置的沙箱提供商（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
 
-- Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行 Provider 的 Create。
+- Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行提供商的 Create。
 - 置备无需调用方执行任何操作；在 Turn 启动之前，Session 会保持空闲。
 - 省略或传入 null 的 `network` 表示启用；`disabled` 和 `restricted` 会在 Session 创建前被拒绝（[restricted network](#restricted-network)）。
 - Core 重启会保留分配、工作区和原生身份，并且绝不重播结果不确定的工作。
-- 终止清理会先在一个事务中撤销权限并结算待处理输入，然后 Provider 才会回收计算资源。向处于终止状态的 Environment 提交新输入会被拒绝。
-- 删除 Session 会回收其 Environment；删除 Template 则不会。
+- 终止清理会先在一个事务中撤销权限并结算待处理输入，然后提供商才会回收计算资源。向处于终止状态的 Environment 提交新输入会被拒绝。
+- 删除 Session 会回收其 Environment；删除模板则不会。
 
 ### 自托管（`self_hosted`） {#self-hosted-self-hosted}
 
-应用程序拥有机器。它使用干净的绝对路径 `workspace_directory` 和可选的绝对本地 `capability_directories` 创建 Session。Core 会返回 Environment ID、`remote_url` 以及 `x_agents_core.installation` 中的一条安装命令；在该机器上运行此命令会安装 daemon 并为其注册（[self-hosted guide](../../../docs/zh/getting-started/self-hosted.md)、[executor credentials](environment-executor-credentials.md)）。
+应用程序拥有机器。它使用干净的绝对路径 `workspace_directory` 和可选的绝对本地 `capability_directories` 创建 Session。Core 会返回 Environment ID、`remote_url` 以及 `x_agents_core.installation` 中的一条安装命令；在该机器上运行此命令会安装 daemon 并为其注册（[自托管指南](../../../docs/zh/getting-started/self-hosted.md)、[执行器凭据](environment-executor-credentials.md)）。
 
 - `remote_url` 是根据 Core 的公共 URL 推导出的 daemon WebSocket URL，绝不根据请求头或 daemon 地址生成。它指定 Core 的私有 daemon 传输通道。
-- 注册会将精确的 Session、Environment、设备和 executor key 绑定在一起。它不会创建任何分配，也无法将 Session 迁移到另一台设备。
+- 注册会将精确的 Session、Environment、设备和执行器凭据绑定在一起。它不会创建任何分配，也无法将 Session 迁移到另一台设备。
 - Session 的工作区必须等于 `/workspace` 别名，或等于 Runtime 绑定到的精确规范目录。指定某个路径并不会授予对它的访问权限。
-- Session 携带自己的模型提供方；部署默认值绝不适用（[model execution](model-execution.md#saved-defaults-and-precedence)）。
+- Session 携带自己的模型提供商；部署默认值绝不适用（[model execution](model-execution.md#saved-defaults-and-precedence)）。
 - Session 读取、列表和事件会返回带有 Environment ID、工作区及能力目录的 `self_hosted` 输出，但绝不返回私有配置。`capability_directories` 列出调用方选择的内容；Runtime 的安装位置保持私有。
 - 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问，但不会停止原生进程；机器所有者负责停止和清理。
 - 工作区和原生历史必须能在 daemon 重启后继续存在。丢失它们绝不授权进行静默替换或重播。
@@ -82,8 +82,8 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ### 所有权规则 {#ownership-rules}
 
-- 将 Environment 身份、所有权、配置和生命周期保留在 Core 中，并使其与 Provider 计算资源、设备身份、daemon 套接字和原生会话相分离。将可变连接状态排除在不可变配置之外；替换后的所有者会使过期观察值失效。
-- 调用方、设备和 Environment 连接使用彼此不同的凭据。daemon gateway 会对已注册的 executor key 和精确设备进行认证。连接观察保留 generation 和 revision 栅栏。注册和连接都不表示已就绪。
+- 将 Environment 身份、所有权、配置和生命周期保留在 Core 中，并使其与提供商计算资源、设备身份、daemon 套接字和原生会话相分离。将可变连接状态排除在不可变配置之外；替换后的所有者会使过期观察值失效。
+- 调用方、设备和 Environment 连接使用彼此不同的凭据。daemon gateway 会对已注册的执行器凭据和精确设备进行认证。连接观察保留 generation 和 revision 栅栏。注册和连接都不表示已就绪。
 - 轮换、撤销、Session 删除和所有权丧失都会拒绝后续访问；但它们不保证原生效果会立即停止。
 - 原生历史保留在绑定的 Runtime 上。替换计算资源时必须保留或以可证明的方式恢复原生历史；绝不能静默移动已绑定的 Session 或重播未知工作。
 - 持久元数据读取不需要活跃的 Runtime。实时文件读取需要获得对精确工作区的授权视图和有界操作所有权。写入、替换或撤销工作区所有者的操作也适用变更栅栏。
@@ -160,7 +160,7 @@ Worker 在每个 tick 中最多处理 32 个到期预留，处理顺序是在检
 
 ### 所有权与生命周期 {#ownership-and-lifetimes}
 
-资源管理负责 Provider 放置、容量和分配，以及 Environment 的创建、续期和回收。经认证的 Runtime 连接承载初始化、能力准备和 executor 操作；它绝不分配或销毁计算资源。Provider 绝不运行 Core 初始化命令。
+资源管理负责提供商放置、容量和分配，以及 Environment 的创建、续期和回收。经认证的 Runtime 连接承载初始化、能力准备和 executor 操作；它绝不分配或销毁计算资源。提供商绝不运行 Core 初始化命令。
 
 关闭 Executor、取消 Turn 或传输丢失都会保留已安装的快照、工作区和分配。回收是与活动工作协调的显式操作；断开的套接字不能证明原生效果已经停止。[Harness onboarding](harness-onboarding.md#executor-and-turn-lifetimes) 负责 Executor 和 Turn 的生命周期。
 
@@ -173,9 +173,9 @@ Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后
 3. npm 和 Python 软件包，然后按顺序运行设置命令；
 4. 能力目录快照。
 
-运行器仅使用中立的 Environment 和 Session 身份以及一个 Runtime 对端，不包含 Provider、部署或操作系统分支。Harness 差异保留在适配器中。
+运行器仅使用中立的 Environment 和 Session 身份以及一个 Runtime 对端，不包含提供商、部署或操作系统分支。Harness 差异保留在适配器中。
 
-**可移植的准备输入。** `self_hosted` 输入仅携带 `workspace_directory` 和 `capability_directories`。无论 Session 采用哪种工作区放置方式，还可以发送 `x_agents_core.environment`，这是 Core 扩展，包含 `environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins` 和 `capability_directories`。它使用与 `openai_hosted` 输入相同的解析器和继承规则。若同一字段同时在 `x_agents_core.environment` 和顶层 `environment` 中提供，则会被拒绝，包括显式 null。`self_hosted` Session 只能通过此扩展指定 Template，并且不能使用 network 不是 `enabled` 的 Template（400，param `x_agents_core.environment.environment_template_id`）。机器位置、规格大小和网络策略不是此扩展的字段。
+**可移植的准备输入。** `self_hosted` 输入仅携带 `workspace_directory` 和 `capability_directories`。无论 Session 采用哪种工作区放置方式，还可以发送 `x_agents_core.environment`，这是 Core 扩展，包含 `environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins` 和 `capability_directories`。它使用与 `openai_hosted` 输入相同的解析器和继承规则。若同一字段同时在 `x_agents_core.environment` 和顶层 `environment` 中提供，则会被拒绝，包括显式 null。`self_hosted` Session 只能通过此扩展指定模板，并且不能使用 network 不是 `enabled` 的模板（400，param `x_agents_core.environment.environment_template_id`）。机器位置、规格大小和网络策略不是此扩展的字段。
 
 ```json
 {
@@ -185,7 +185,7 @@ Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后
 }
 ```
 
-将 `environment` 改为 `{"type":"openai_hosted"}` 会复用相同的准备输入。资源解析、Project 授权、具体 Skill 版本、加密文件内容和机密工具变量都会在 Session 创建时冻结。重试和重连会复用这些快照；新 Session 会解析新版本。`self_hosted` Environment 从不需要分配记录。
+将 `environment` 改为 `{"type":"openai_hosted"}` 会复用相同的准备输入。资源解析、项目授权、具体 Skill 版本、加密文件内容和机密工具变量都会在 Session 创建时冻结。重试和重连会复用这些快照；新 Session 会解析新版本。`self_hosted` Environment 从不需要分配记录。
 
 **就绪性。** 传输 `connected` 是一种连接观察，而不代表就绪。执行和实时文件访问都要等待初始化；随后，原生准备所有者会在接纳 Turn 前验证已安装的快照和 Harness。文件读取保留自身的就绪性和授权，不要求能力或原生就绪。部署模型凭据绝不发送到应用程序所有的机器。
 
@@ -210,7 +210,7 @@ Executor 接纳仅验证已冻结的描述符。准备所有者会在调用原�
 daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。准备过程中只会安装用户目录中的依赖项。
 
 - 系统依赖必须预先安装在托管镜像中，或由自托管机器的所有者安装。缺少可执行文件或库时，需要该依赖的操作会失败。
-- Templates 和内联配置都会拒绝 `packages.system`，包括 null 或空列表（400，param `packages.system`）。软件包响应仍会包含官方要求的 `system: []`。
+- 模板和内联配置都会拒绝 `packages.system`，包括 null 或空列表（400，param `packages.system`）。软件包响应仍会包含官方要求的 `system: []`。
 - npm 会安装到本地 prefix，Python/pip 会安装到 Runtime 软件包目录下的本地 target；Node/npm 和 Python/pip 必须已经安装。其依赖项可被每个工作目录中的原生工具看到。
 - 设置命令使用 Bash 运行；在 Windows 上必须使用 Git Bash，且不能由其他 shell 替代。默认工作目录为 `/workspace`。
 - 在 Windows 上，npm 安装以及名为 `npm` 或 `npx` 的 stdio MCP 命令（包括其 `.cmd` shim）会通过 Node 调用 npm 的 JavaScript 入口点运行，而不经过额外的 shell。
@@ -219,7 +219,7 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 
 每条命令都使用启动用户的权限和主机网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
 
-使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[Sandbox Provider 生命周期](../../../docs/zh/sandbox-provider.md#suspension)定义何时可以替换计算。
+使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[沙箱提供商生命周期](../../../docs/zh/sandbox-provider.md#suspension)定义何时可以替换计算。
 
 ### 显式本地工具环境 {#explicit-local-tool-environment}
 
@@ -229,7 +229,7 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 
 Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed`，且独立于任何分配、身份验证和连接发布。
 
-- Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于 Provider 维护。
+- Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于提供商维护。
 - 缺少套接字不会消耗一次 pending 尝试。Harness 不可用时，会在安装前失败。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
 - 每个文件、Skill 或 Plugin 传输的暂存预算为两分钟。configure、软件包安装、设置命令和快照最终确定共享整个初始化过程的 30 分钟预算，Core 在每项操作中携带剩余时长，由 Runtime 执行。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
@@ -249,9 +249,9 @@ Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed
 
 每个初始化操作都会返回有类型的 `rejected`、`failed` 或 `unknown` 结果，并且 daemon 会先确认进程退出和 I/O 结算完成。Core 使用固定标签和整数组成原因，因此命令、env 值、软件包名称、路径和进程输出绝不会进入原因、事件、日志或响应。失败步骤不会重试，后续步骤也不会运行。机密 env 和设置快照会与普通元数据分开加密。初始文件在所有平台上都使用原子替换写入器和工作区锚定路径；Files API 创建则保留其自己的不覆盖规则。
 
-## Templates {#templates}
+## 模板 {#templates}
 
-Template 是由 Project 拥有、供 `openai_hosted` Session 和 `x_agents_core.environment` 使用的配置。它不包含运行中的工作区，也与 E2B templates 等 Provider 镜像无关。每个引用它的 Session 都会通过与内联配置相同的准备过程获得自己的 Environment。Template 解析、存储和解析过程绝不会选择 Harness 或 Provider，也不会依赖原生工具名称或 Harness 私有路径，因此新的 Harness 或 Provider 无需修改 Template。
+模板是由项目拥有、供 `openai_hosted` Session 和 `x_agents_core.environment` 使用的配置。它不包含运行中的工作区，也与 E2B 模板等提供商镜像无关。每个引用它的 Session 都会通过与内联配置相同的准备过程获得自己的 Environment。模板解析、存储和解析过程绝不会选择 Harness 或提供商，也不会依赖原生工具名称或 Harness 私有路径，因此新的 Harness 或提供商无需修改模板。
 
 ```python
 from openai import OpenAI
@@ -271,35 +271,35 @@ session = client.beta.agents.sessions.create(
 
 ### 操作 {#operations}
 
-- 每个操作都需要 Project API 密钥 和 `OpenAI-Beta: agents=v1`。Template 操作无需执行部署，也不会分配计算资源。
+- 每个操作都需要项目 API 密钥和 `OpenAI-Beta: agents=v1`。模板操作无需执行部署，也不会分配计算资源。
 - `name` 可选且可为 null，会逐字保留，长度为 1–256 个 Unicode 字符。
 - `network.access` 为 `enabled`、`disabled` 或 `restricted`；省略或传入 null 表示启用。请参阅 [Restricted network](#restricted-network)。
 - 响应会携带安全元数据，绝不会包含 `env`、`setup_commands` 正文或内联文件数据。
-- 列表操作使用 `after`、`limit`（默认 20；0 按 1 处理，超过 100 的值按 100 处理）和 `order`（默认 `desc`），并按创建时间和 ID 排序。不存在和属于外部 Project 的 Template ID 及游标都会返回相同的 404。
+- 列表操作使用 `after`、`limit`（默认 20；0 按 1 处理，超过 100 的值按 100 处理）和 `order`（默认 `desc`），并按创建时间和 ID 排序。不存在和属于外部项目的模板 ID 及游标都会返回相同的 404。
 - 更新时，省略字段会保留原值，提供字段则会替换原值。Null 会清除 `name` 和每个列表，并将 `network` 重置为启用。
 - 封装或解封机密内容（文件、env、设置命令、Skills、Plugins）的写入操作和 Session 解析需要 Core 的 [credential key](../../../docs/zh/configuration.md#compose-installations)；元数据读取则不需要。
-- Session 会在创建时于其 Project 内解析一次 `environment_template_id`，冻结有效配置，并且绝不将 Template ID 传递给 Provider 或 Runtime。更新或删除 Template 绝不会改变现有 Session。创建重试会在读取 Template 之前恢复已记录的调用方意图，即使 Template 已删除也是如此；意图发生变化时会产生冲突。
+- Session 会在创建时于其项目内解析一次 `environment_template_id`，冻结有效配置，并且绝不将模板 ID 传递给提供商或 Runtime。更新或删除模板绝不会改变现有 Session。创建重试会在读取模板之前恢复已记录的调用方意图，即使模板已删除也是如此；意图发生变化时会产生冲突。
 
 ### 继承 {#inheritance}
 
-Session 会先应用 Template，然后应用自身字段。组合仅在加密 Session 快照写入前执行一次，并使用常规验证器重新验证结果。调用方意图（省略、null 或显式提供）会单独保留，用于重试策略。
+Session 会先应用模板，然后应用自身字段。组合仅在加密 Session 快照写入前执行一次，并使用常规验证器重新验证结果。调用方意图（省略、null 或显式提供）会单独保留，用于重试策略。
 
 | 字段 | Session 中省略或为 null | Session 中提供 |
 | --- | --- | --- |
-| `network` | 继承整个 Template 策略 | 必须收窄策略：enabled 可以变为 restricted 或 disabled；restricted 可以变为其主机的子集或 disabled；disabled 不能放宽 |
-| `env` | 继承 Template 键 | 按键叠加；Session 值优先；`{}` 会保留所有 Template 键 |
+| `network` | 继承整个模板策略 | 必须收窄策略：enabled 可以变为 restricted 或 disabled；restricted 可以变为其主机的子集或 disabled；disabled 不能放宽 |
+| `env` | 继承模板键 | 按键叠加；Session 值优先；`{}` 会保留所有模板键 |
 | `setup_commands` | 继承该序列 | 替换该序列；`[]` 会清除 |
 | `files` | 继承文件集 | 替换整个文件集；`[]` 会清除 |
 | `packages` | 继承两个管理器 | 分别解析 `python` 和 `npm`：省略或为 null 的管理器会被继承，列表会替换原值，`[]` 会清除；`system` 会被拒绝 |
 | `skills`、`plugins`、`capability_directories` | 继承列表 | 替换列表；`[]` 会清除 |
 
-作为比较，不带 Template 的内联 `openai_hosted` Session 会将省略或为 null 的 `network` 视为启用。
+作为比较，不带模板的内联 `openai_hosted` Session 会将省略或为 null 的 `network` 视为启用。
 
 ### 受限网络 {#restricted-network}
 
 `restricted` 要求在 `allowed_domains` 中提供 1–100 个精确 ASCII 主机名；子域名和重定向目标需要各自的条目。通配符、URL 或端口语法、IP 字面量、Unicode 和尾随点都会被拒绝。读取操作会返回提供的拼写、顺序和重复项；比较操作使用单独的小写去重副本。
 
-Runtime 不会强制执行 `disabled` 或 `restricted`，也没有 Provider 代为强制执行。因此，Core 会在 Templates 中存储这些策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
+Runtime 不会强制执行 `disabled` 或 `restricted`，也没有提供商代为强制执行。因此，Core 会在模板中存储这些策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
 
 ### Env 与设置命令 {#env-and-setup-commands}
 
@@ -307,7 +307,7 @@ Agent 代码可以读取 env 值，但它们绝不会出现在公开元数据或
 
 ### 初始文件 {#initial-files}
 
-`files` 条目会将文件放置在 `/workspace` 内的绝对目标路径，来源可以是内联标准 Base64 `data`，也可以是 Project 所有的已上传 `file_id`。
+`files` 条目会将文件放置在 `/workspace` 内的绝对目标路径，来源可以是内联标准 Base64 `data`，也可以是项目所有的已上传 `file_id`。
 
 | 限制 | 值 |
 | --- | --- |
@@ -315,13 +315,13 @@ Agent 代码可以读取 env 值，但它们绝不会出现在公开元数据或
 | 内联文件 | 5 MiB |
 | 所有内联内容 | 10 MiB |
 | 引用文件 | 50 MiB |
-| Session 或 Template 请求正文 | 16 MiB |
+| Session 或模板请求正文 | 16 MiB |
 
-路径必须规范、互不相同且位于逻辑工作区内部；Runtime 会将每次写入锚定到其绑定的工作区。这是 API 路径范围，不是对以同一用户身份运行的原生工具的限制。Template 元数据会将内联文件显示为 type、path 和 size，将引用显示为 type、path 和 `file_id`；无论内联文件还是引用，每个 Session 都会获得全新的文件 ID 和大小。文件数据不会出现在普通配置、响应、事件或命令参数中。Template 会保留引用；每个 Session 会授权并冻结自己的加密源字节，因此之后删除源文件无法改变这些字节。
+路径必须规范、互不相同且位于逻辑工作区内部；Runtime 会将每次写入锚定到其绑定的工作区。这是 API 路径范围，不是对以同一用户身份运行的原生工具的限制。模板元数据会将内联文件显示为 type、path 和 size，将引用显示为 type、path 和 `file_id`；无论内联文件还是引用，每个 Session 都会获得全新的文件 ID 和大小。文件数据不会出现在普通配置、响应、事件或命令参数中。模板会保留引用；每个 Session 会授权并冻结自己的加密源字节，因此之后删除源文件无法改变这些字节。
 
 ### Skills {#skills}
 
-Templates 和内联配置都接受 Project 所有的 Skill 引用及内联 Skill ZIP。通过固定版本 SDK 上传目录，然后引用其默认版本：
+模板和内联配置都接受项目所有的 Skill 引用及内联 Skill ZIP。通过固定版本 SDK 上传目录，然后引用其默认版本：
 
 ```python
 skill = client.skills.create(files=[
@@ -332,9 +332,9 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-固定版本的 `/v1/skills` 资源、版本及内容路由使用 Project API 密钥，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。固定版本 SDK 3.13.0 在多部分内容提取过程中会丢弃单文件 tuple，因此应使用原始 HTTP 上传单个 ZIP。一次上传最多包含 500 个常规文件，并且必须恰好包含一个 `SKILL.md`；压缩后为 5 MiB，展开后为 20 MiB。[File resource semantics](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
+固定版本的 `/v1/skills` 资源、版本及内容路由使用项目 API 密钥，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。固定版本 SDK 3.13.0 在多部分内容提取过程中会丢弃单文件 tuple，因此应使用原始 HTTP 上传单个 ZIP。一次上传最多包含 500 个常规文件，并且必须恰好包含一个 `SKILL.md`；压缩后为 5 MiB，展开后为 20 MiB。[File resource semantics](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
 
-省略或传入 null 版本的引用会在 Session 创建时选择默认版本，`"latest"` 会选择最新版本，正版本号字符串则选择该版本。Template 响应会保留未解析的选择器（默认版本为 `version: null`）；Session 元数据会显示 `{type, skill_id, version, name, description}`，其中版本为具体值。Session 会在其创建事务中冻结所选版本的字节和元数据；之后默认版本发生变化、源被删除或 Template 被更新，都无法改变这些内容。
+省略或传入 null 版本的引用会在 Session 创建时选择默认版本，`"latest"` 会选择最新版本，正版本号字符串则选择该版本。模板响应会保留未解析的选择器（默认版本为 `version: null`）；Session 元数据会显示 `{type, skill_id, version, name, description}`，其中版本为具体值。Session 会在其创建事务中冻结所选版本的字节和元数据；之后默认版本发生变化、源被删除或模板被更新，都无法改变这些内容。
 
 内联 Skill 携带 `name`、`description` 和 Base64 ZIP `source`（`media_type` 为 `application/zip`）。归档包含一个顶层文件夹，其中有 `SKILL.md` 和可选的支持文件；清单中的 name 和 description 必须与请求一致。Frontmatter 可以包含 `name`、`description`、`license`、`compatibility` 和字符串 `metadata`；原生 hooks、权限控制和 subagent 指令都会被拒绝。只允许常规文件：路径遍历、链接、重复目标位置、特殊文件和无效清单都会被拒绝。内容在安装期间保持惰性，并保留可执行位。内联元数据只显示 type、name 和 description。
 
@@ -342,7 +342,7 @@ template = client.beta.agents.environments.templates.create(
 
 Plugin 是带有 type、name 和 description 的内联 ZIP，其单个归档根目录包含 `.codex-plugin/plugin.json`。清单中的 `skills` 指定 Skill 目录；整个包布局都会保留。公开 Plugin 元数据只显示 type、name 和 description。
 
-`openai_hosted` 和 Template 的 `capability_directories` 接受 `/workspace` 内的干净绝对路径，初始文件和设置命令可以填充这些路径。`self_hosted` 能力目录是机器上的绝对本地路径。通过目录发现的 Skills 绝不会显示为 `skills` 或 `plugins` 条目。目录缺失、Skill 名称重复、清单不受支持以及存在非常规文件时，初始化会失败。
+`openai_hosted` 和模板的 `capability_directories` 接受 `/workspace` 内的干净绝对路径，初始文件和设置命令可以填充这些路径。`self_hosted` 能力目录是机器上的绝对本地路径。通过目录发现的 Skills 绝不会显示为 `skills` 或 `plugins` 条目。目录缺失、Skill 名称重复、清单不受支持以及存在非常规文件时，初始化会失败。
 
 | 归档与安装限制 | 值 |
 | --- | --- |
@@ -353,11 +353,11 @@ Plugin 是带有 type、name 和 description 的内联 ZIP，其单个归档根�
 
 ## Skills、Plugins 与 Environment MCP {#skills-plugins-and-environment-mcp}
 
-Skills 及其不可变版本是 Project 资源，独立于 Session 和原生安装。
+Skills 及其不可变版本是项目资源，独立于 Session 和原生安装。
 
 - 版本分配和指针变更会在所属 Skill 行上串行化。顶层 name 和 description 在同一事务中跟随默认版本；非默认上传不会更改它们。在并发上传和删除过程中，版本身份始终唯一。
-- Bundle 使用服务密码进行加密，并绑定到 Project、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
-- 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的 Template 意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
+- Bundle 使用服务密码进行加密，并绑定到项目、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
+- 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的模板意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
 
 内联和引用的 Skills 使用相同的机密快照与安装器。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则为每个包使用一个受控封装，其中包含实际目录和不可变硬链接。自动原生 MCP 发现保持禁用。Codex 的嵌套 `SKILL.md` 发现、`agents/openai.yaml` 依赖项配置以及 Claude 内联 shell 预处理都会导致适配器准备失败。原生 Harness 配置绝不会整体透传。
 
@@ -386,10 +386,10 @@ Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#http-mcp)）具有 
 | `service` | Core 的服务端执行主机 | 仅 `none` |
 | `environment` | Environment 的工作区 | `openai_hosted` 和启用网络的 `self_hosted` |
 
-Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与放置方式以及 Runtime 公布的 HTTP、bearer 和必需初始化能力进行核对，Runtime 会在调用适配器之前再次验证来源。不存在按 Harness 名称或 Provider 分支选择不同路径的逻辑。
+Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与放置方式以及 Runtime 公布的 HTTP、bearer 和必需初始化能力进行核对，Runtime 会在调用适配器之前再次验证来源。不存在按 Harness 名称或提供商分支选择不同路径的逻辑。
 
 [Harness capabilities](harness-capabilities.md#tools) 负责每个 Harness 的来源支持和策略限制。
 
-两种来源都支持匿名 HTTP 和 HTTPS bearer 凭据。所附加 Vault 的选择会冻结凭据身份，包括唯一的隐式 URL 匹配或匿名选择。只有该凭据经 Project 授权后，才会进入瞬时 Runtime 请求；绝不会搜索 Core 默认值或无关 Vault。解密失败或凭据缺失时，执行会失败且不会回退到匿名。公开 Environment MCP 保留 `project_vault` 权限，Plugin 凭据保留 `environment_configuration` 权限；两者都不会覆盖重复的服务器标签。Bearer 令牌绝不会进入持久化的原生配置或进程参数。
+两种来源都支持匿名 HTTP 和 HTTPS bearer 凭据。所附加 Vault 的选择会冻结凭据身份，包括唯一的隐式 URL 匹配或匿名选择。只有该凭据经项目授权后，才会进入瞬时 Runtime 请求；绝不会搜索 Core 默认值或无关 Vault。解密失败或凭据缺失时，执行会失败且不会回退到匿名。公开 Environment MCP 保留 `project_vault` 权限，Plugin 凭据保留 `environment_configuration` 权限；两者都不会覆盖重复的服务器标签。Bearer 令牌绝不会进入持久化的原生配置或进程参数。
 
 工具允许列表和必需初始化遵循 [HTTP MCP contract](execution-tools.md#http-mcp)。

@@ -4,9 +4,9 @@ source: contracts/agents-api/vaults.md
 source_hash: b27509949dca26f064cda765ea97229e3325dee3ff650b17fa332a756409cf34
 ---
 
-Vault 是 Project 所有的 Credential 容器。Credential 保存一个 HTTPS MCP server 的秘密：`static_bearer` token 或 `mcp_oauth` grant。Session 在 `vault_ids` 中关联 Vault；Core 在创建 Session 时为每个 HTTP MCP server 选择一个 Credential，只在分派工作时将解密 token 交给 Runtime。秘密只能写入：任何读取都不返回 token、refresh token、client secret 或密文。
+Vault 是项目所有的 Credential 容器。Credential 保存一个 HTTPS MCP server 的秘密：`static_bearer` token 或 `mcp_oauth` grant。Session 在 `vault_ids` 中关联 Vault；Core 在创建 Session 时为每个 HTTP MCP server 选择一个 Credential，只在分派工作时将解密 token 交给 Runtime。秘密只能写入：任何读取都不返回 token、refresh token、client secret 或密文。
 
-应用负责 OAuth 授权与同意、服务方撤销以及审批策略。Core 不提供授权重定向、回调、撤销或公开刷新端点；创建或替换 Credential 不联系 MCP server 或 OAuth provider。
+应用负责 OAuth 授权与同意、服务方撤销以及审批策略。Core 不提供授权重定向、回调、撤销或公开刷新端点；创建或替换 Credential 不联系 MCP server 或 OAuth 提供商。
 
 ## 存储并使用凭据 {#store-and-use-a-credential}
 
@@ -40,7 +40,7 @@ MCP tool 可以通过 `credential_id` 指定 Credential；未指定时，Core �
 
 ## 路由 {#routes}
 
-所有路由位于 `/v1`，使用 Project API 密钥，要求 `OpenAI-Beta: agents=v1`。Project 的 key 共享其 Vault；其他 Project 的 Vault 或 Credential 与不存在的资源一样返回 404。
+所有路由位于 `/v1`，使用项目 API 密钥，要求 `OpenAI-Beta: agents=v1`。项目的所有密钥共享其 Vault；其他项目的 Vault 或 Credential 与不存在的资源一样返回 404。
 
 | 操作 | 路由 | 结果 |
 | --- | --- | --- |
@@ -54,7 +54,7 @@ MCP tool 可以通过 `credential_id` 指定 Credential；未指定时，Core �
 | 替换秘密 | `POST /vaults/{vault_id}/credentials/{credential_id}` | Credential |
 | 删除 Credential | `DELETE /vaults/{vault_id}/credentials/{credential_id}` | `{id, object: "vault.credential.deleted", deleted: true}` |
 
-格式错误、缺失或其他 Project 的 ID 返回 404 `not_found_error`；通过非所属 Vault 访问 Credential 也一样。两个列表按创建时间、再按 ID 排序，按 `status`（`active`、`archived` 或二者）筛选；[列表规则](wire-semantics.md#lists)说明分页和筛选细节。Core 私有保存 status，默认 `active`，没有归档 Vault 或 Credential 的操作。Credential 的 status 独立于 Vault。
+格式错误、缺失或其他项目的 ID 返回 404 `not_found_error`；通过非所属 Vault 访问 Credential 也一样。两个列表按创建时间、再按 ID 排序，按 `status`（`active`、`archived` 或二者）筛选；[列表规则](wire-semantics.md#lists)说明分页和筛选细节。Core 私有保存 status，默认 `active`，没有归档 Vault 或 Credential 的操作。Credential 的 status 独立于 Vault。
 
 ## Vault {#vaults}
 
@@ -106,7 +106,7 @@ Credential 读取包含 `id`、`vault_id`、`name`、`object: "vault.credential"
 
 ## Session 中的凭据选择 {#credential-selection-in-a-session}
 
-创建 Session 时，`vault_ids` 列出 Session 可以使用凭据的 Vault。省略、`null` 和 `[]` 均不关联任何 Vault；条目为 `null` 无效；每个 Vault 必须属于 Project，否则创建返回 404 `not_found_error`。Agent 上保存 `credential_id` 不提供授权；只有 Session 的关联提供授权。
+创建 Session 时，`vault_ids` 列出 Session 可以使用凭据的 Vault。省略、`null` 和 `[]` 均不关联任何 Vault；条目为 `null` 无效；每个 Vault 必须属于项目，否则创建返回 404 `not_found_error`。Agent 上保存 `credential_id` 不提供授权；只有 Session 的关联提供授权。
 
 创建 Session 时，Core 为每个 HTTP MCP tool 从已关联 Vault 中选择 Credential：
 
@@ -118,16 +118,16 @@ Credential 读取包含 `id`、`vault_id`、`name`、`object: "vault.credential"
 | 情况 | 响应 |
 | --- | --- |
 | `credential_id` 没有关联 Vault | 400 `invalid_request_error`: `MCP credential_id requires an attached vault` |
-| `credential_id` 缺失、格式错误、属于其他 Project 或未关联 Vault | 400 `invalid_request_error`: `MCP credential_id <id> was not found in an attached vault` |
+| `credential_id` 缺失、格式错误、属于其他项目或未关联 Vault | 400 `invalid_request_error`: `MCP credential_id <id> was not found in an attached vault` |
 | Credential 在已关联 Vault 内，但 URL 不同 | 400 `invalid_request_error`: `MCP credential_id <id> does not match server_url <url>` |
 | 未指定 `credential_id` 时匹配多个 Credential | 409 `conflict_error`: `multiple attached vault credentials match MCP server_url <url>; specify credential_id` |
-| `vault_ids` 中的 Vault 未知或属于其他 Project | 404 `not_found_error` |
+| `vault_ids` 中的 Vault 未知或属于其他项目 | 404 `not_found_error` |
 
 `<id>` 和 `<url>` 仅在请求值不超过 256 字节且为可打印 UTF-8 时原样返回，否则消息省略它们。缺失、其他范围、未关联和格式错误的情况，对同一 ID 给出逐字节相同响应，因此引用不泄露调用方未关联 Vault 的信息。URL 不匹配消息中的 URL 来自 tool。
 
 Session 固定其关联和每次选择，包括匿名选择。后续 Vault 变化不会重新选择：相同的创建重试返回原 Session 和选择。Session 查询、列表和事件快照在 tool 的 `credential_id` 中显示隐式选择的 Credential ID，即使该 Credential 已删除；匿名 tool 显示 `null`，显式 ID 按提交值读取。存储请求保留调用方值，因此重试比较原请求。
 
-每次分派时，Core 重新检查 Project、已关联 Vault、选中 Credential、type 和确切 URL，然后只在 Runtime 执行请求中解密 token。Session、配置和历史的读取从不包含 token。选中 Credential 的 server 只能运行在声明 `mcp_http_bearer_auth` 的 Runtime 上。Credential 缺失、解密失败或刷新失败会使工作失败；Core 不退回其他 Credential 或匿名连接。
+每次分派时，Core 重新检查项目、已关联 Vault、选中 Credential、type 和确切 URL，然后只在 Runtime 执行请求中解密 token。Session、配置和历史的读取从不包含 token。选中 Credential 的 server 只能运行在声明 `mcp_http_bearer_auth` 的 Runtime 上。Credential 缺失、解密失败或刷新失败会使工作失败；Core 不退回其他 Credential 或匿名连接。
 
 ## OAuth 刷新 {#oauth-refresh}
 
@@ -139,9 +139,9 @@ Token endpoint 必须为 HTTPS。Core 解析主机，拒绝回环、私有、链
 
 ## 存储密钥 {#storage-key}
 
-Core 使用安装的 [`secrets/core/credential.key`](../../../docs/zh/configuration.md#compose-installations)，以 AES-256-GCM 加密每个 token、refresh token 和 client secret，绑定 Project、Vault、Credential、auth type 和 `mcp_server_url`。错误密钥、修改的行或移动到其他绑定的行均无法解密。名称是不参与绑定的元数据。key 和明文 token 存在于可信服务内存中；加密保护存储的秘密，不保护已被攻破的服务主机。
+Core 使用安装的 [`secrets/core/credential.key`](../../../docs/zh/configuration.md#compose-installations)，以 AES-256-GCM 加密每个 token、refresh token 和 client secret，绑定项目、Vault、Credential、auth type 和 `mcp_server_url`。错误密钥、修改的行或移动到其他绑定的行均无法解密。名称是不参与绑定的元数据。key 和明文 token 存在于可信服务内存中；加密保护存储的秘密，不保护已被攻破的服务主机。
 
-key 文件不可读或格式错误会使 Core 启动失败。丢失或替换 key 使全部已存储秘密无法使用。读取、列表、删除、Vault 操作、新建 Credential 和替换 `static_bearer` token 仍可用；`mcp_oauth` 更新返回 500 `internal_error`，需要旧秘密的派发会失败。已保存的 E2B 密钥同样失效：托管 Session 返回 503 `execution_unavailable`，直到你打开 **Settings** → **Sandbox and scheduling**，选择 **Reset deployment**（必要时选择 **Force — cancel remaining work now**）并重新配置后端；遗留的沙箱按其 E2B 超时过期。Core 只支持一个 key，不支持轮换或重新加密。
+key 文件不可读或格式错误会使 Core 启动失败。丢失或替换 key 使全部已存储秘密无法使用。读取、列表、删除、Vault 操作、新建 Credential 和替换 `static_bearer` token 仍可用；`mcp_oauth` 更新返回 500 `internal_error`，需要旧秘密的派发会失败。已保存的 E2B 密钥同样失效：托管 Session 返回 503 `execution_unavailable`，直到你打开 **设置** → **沙箱与调度**，选择 **重置部署**（必要时选择 **强制 — 立即取消剩余任务**）并重新配置沙箱提供商；遗留的沙箱按其 E2B 超时过期。Core 只支持一个 key，不支持轮换或重新加密。
 
 ## 删除 {#deletion}
 

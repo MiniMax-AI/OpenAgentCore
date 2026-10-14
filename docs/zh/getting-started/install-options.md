@@ -33,7 +33,7 @@ docker compose exec web oac-web core-key
 
 ### Dokploy {#dokploy}
 
-创建一个 Docker Compose 应用并粘贴 `compose.yaml`。将 `OAC_PUBLIC_URL` 设置为公共 HTTPS 源地址，启用隔离部署，并为 `web` 服务添加域名和端口 `8080`。部署前，为此域名启用 **HTTPS**，并选择 **Let's Encrypt** 等证书提供程序。部署前移除 `web` 服务的 `ports` 块，让 Dokploy 路由到容器端口，而不发布宿主机端口。将此 Compose 文件打包到 Dokploy 模板目录时，[模板元数据](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/dokploy.toml)会提供生成的域名和环境；导入后仍需启用 HTTPS 及其证书提供程序。
+创建一个 Docker Compose 应用并粘贴 `compose.yaml`。将 `OAC_PUBLIC_URL` 设置为公共 HTTPS 源地址，启用隔离部署，并为 `web` 服务添加域名和端口 `8080`。部署前，为此域名启用 **HTTPS**，并选择 **Let's Encrypt** 等证书提供程序。部署前移除 `web` 服务的 `ports` 块，让 Dokploy 路由到容器端口，而不发布主机端口。将此 Compose 文件打包到 Dokploy 模板目录时，[模板元数据](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/dokploy.toml)会提供生成的域名和环境；导入后仍需启用 HTTPS 及其证书提供程序。
 
 ### Coolify {#coolify}
 
@@ -41,7 +41,7 @@ docker compose exec web oac-web core-key
 
 在这两个平台上，打开服务器终端并运行 `docker compose ls`，查找已部署的项目名称和 Compose 文件。使用这些完全一致的值以及该部署的 `OAC_PUBLIC_URL`，运行 `docker compose -p <project-name> -f <compose-file> exec web oac-web core-key`，然后在已配置的源地址登录。[Dokploy 域名指南](https://docs.dokploy.com/docs/core/docker-compose/domains)和[Coolify Compose 指南](https://coolify.io/docs/services/configuration/docker-compose)介绍了各自的域和服务控制项。这些都是可导入的部署文件；本仓库不发布托管市场条目。
 
-登录后，使用 [Nodes](nodes.md)选择沙箱后端并添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
+登录后，使用 [Nodes](nodes.md)选择沙箱提供商并添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
 
 使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，备份数据卷。请遵循[安装版本策略](operations.md#installation-version-policy)：使用不同发布版本时，需要创建新的 Compose 项目并使用全新的数据卷。
 
@@ -66,9 +66,9 @@ docker compose exec web oac-web core-key
 
 只要使用不同的安装目录和端口，多个安装就可以共用一台机器。需要更多安装时，请使用不同的 IP 地址或共享反向代理。每个安装都有自己的数据库、Core 密钥和节点。
 
-## 沙箱后端 {#sandbox-backend}
+## 沙箱提供商 {#sandbox-backend}
 
-安装程序不保存沙箱后端。登录后，打开 **Settings** → **Sandbox and scheduling**，选择 Docker、microsandbox 或 E2B；Web 会把 [Provider 声明的默认大小](../sandbox-provider.md#register-the-provider-kind)推荐为 Standard 尺寸。该选择保存在 Core 的数据库中。以后要更改，请[重置部署](nodes.md#change-the-sandbox-configuration)。Docker 沙箱与每个节点共用该节点的内核，其节点服务账户[等效于 root](nodes.md#what-the-installer-sets-up)。E2B 需要一个非回环的公共 HTTPS URL，因为 E2B 沙箱会从 E2B 云端调用 Core。按照 [E2B 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)准备模板。
+安装程序不保存沙箱提供商。登录后，打开 **设置** → **沙箱与调度**，选择 Docker、microsandbox 或 E2B；Web 会把 [提供商声明的默认大小](../sandbox-provider.md#register-the-provider-kind)推荐为 Standard 尺寸。该选择保存在 Core 的数据库中。以后要更改，请[重置部署](nodes.md#change-the-sandbox-configuration)。Docker 沙箱与每个节点共用该节点的内核，其节点服务账户[等效于 root](nodes.md#what-the-installer-sets-up)。E2B 需要一个非回环的公共 HTTPS URL，因为 E2B 沙箱会从 E2B 云端调用 Core。按照 [E2B 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md)准备模板。
 
 ## 监听器与访问 {#listeners-and-access}
 

@@ -1,10 +1,10 @@
 ---
-title: 工作区文件系统 Provider
+title: 工作区文件系统提供商
 source: docs/workspace-provider.md
 source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
 ---
 
-独立工作区文件系统边界由 [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) 定义。本文规定必需的集成契约，并不表示所有 Sandbox Provider 或执行位置均已实现。文件系统适配器拥有存储对象与原生挂载解析职责；[Sandbox Provider](sandbox-provider.md) 拥有计算资源职责。Core 在分配任一资源前选择并验证二者的组合。
+独立工作区文件系统边界由 [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) 定义。本文规定必需的集成契约，并不表示所有沙箱提供商或执行位置均已实现。文件系统适配器拥有存储对象与原生挂载解析职责；[沙箱提供商](sandbox-provider.md) 拥有计算资源职责。Core 在分配任一资源前选择并验证二者的组合。
 
 ## 标识与配置 {#identity-and-configuration}
 
@@ -41,7 +41,7 @@ source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
 
 `Requirements` 声明计算位置的挂载类型及 `user_xattr` 需求。`Declaration` 报告文件系统适配器的挂载类型、`UserXAttr` 支持和 `CapacityQuota` 强制执行能力。`ValidateCombination` 是共享的分配前准入检查。当前挂载类型为 `host_directory`；未知类型会被拒绝。用户扩展属性能力表示挂载后的文件系统支持 Environment 准备流程使用的用户扩展属性。
 
-请求容量为零表示未请求配额。以 MiB 为单位的正容量仅在适配器实际强制执行该限制时获准；报告可用空间或接受未经检查的数字均不足够。`CapacityQuota` 表示适配器为每个以正容量创建的对象设定上限：限制对象已分配的字节（包括目录和元数据块）及其 inode 数量，而非文件的逻辑大小。超出上限的写入在 write 或 fsync 时报错，不会截断任何内容。适配器不能仅根据 Sandbox Provider 的计算磁盘大小声明配额支持。容量上限不提供任何 I/O 公平性。
+请求容量为零表示未请求配额。以 MiB 为单位的正容量仅在适配器实际强制执行该限制时获准；报告可用空间或接受未经检查的数字均不足够。`CapacityQuota` 表示适配器为每个以正容量创建的对象设定上限：限制对象已分配的字节（包括目录和元数据块）及其 inode 数量，而非文件的逻辑大小。超出上限的写入在 write 或 fsync 时报错，不会截断任何内容。适配器不能仅根据沙箱提供商的计算磁盘大小声明配额支持。容量上限不提供任何 I/O 公平性。
 
 容量按对象准入。对于新绑定，Core 在绑定前根据部署请求验证所选配置的能力声明；随后若其他配置在此期间被选中，绑定事务以可重试的冲突拒绝。Core 将获准容量与引用一同持久化，并原样传给每次 `Create`。保留的绑定按其自身配置和获准容量验证，因此更改部署请求或选择不会调整现有存储的大小，也不会重新绑定。
 
@@ -75,7 +75,7 @@ source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
 
 该命令在存储服务器上以 root 运行。它持有一把锁，以不跟随链接的方式相对配置的导出打开 `objects/<ObjectID>/staging`，验证服务 UID、私有权限、设备及完整标识，拒绝已删除对象，并拒绝 `objects/` 或对象目录上的 project。同一 XFS 文件系统上、导出之外的本地 SQLite 日志库记录每个对象的引用、配置、容量、inode 上限、staging inode 及其 generation，以及从运维人员预留范围分配且永不复用的 project ID。分配先于任何变更提交；随后一次 `FS_IOC_FSSETXATTR` 在仍为空的 staging 目录上同时设置 project ID 和继承标志，服务器设置字节和 inode 硬限制（软限制为零）并回读验证。Stage 继承该 project；`live` 和退役的 trash 在重命名后保持该 project。标识、删除标记、对象目录和 `trash/` 父目录不属于该 project，因此已满的对象仍可标记删除并移除。移除会释放数据占用；保留的 `staging/` inode 仍计入该 project。属于其他文件系统或命名空间的日志库、未启用强制执行、范围耗尽、已有用户数据、外来或继承的 project、被替换的 staging inode、变更的引用、配置或容量，以及就绪对象上被修改或丢失的限制，均被拒绝而非修复。没有 dquot 的 project 读作零限制，绝不视为未使用的 ID。
 
-`Create` 成功时上限即具权威性；`Resolve` 不重新证明，因此恢复就绪工作区不依赖存储服务器的 SSH 服务。存储管理员事后禁用配额或清除限制会使强制执行失效，直至按支持的流程恢复。Project ID 和限制保存在 XFS 文件系统中，因此配额模式需要为其描述的[块级备份](getting-started/operations.md#back-up)。
+`Create` 成功时上限即具权威性；`Resolve` 不重新证明，因此恢复就绪工作区不依赖存储服务器的 SSH 服务。存储管理员事后禁用配额或清除限制会使强制执行失效，直至按支持的流程恢复。项目 ID 和限制保存在 XFS 文件系统中，因此配额模式需要为其描述的[块级备份](getting-started/operations.md#back-up)。
 
 每个对象拥有 `objects/<ObjectID>/identity`、`staging/`、`live/`、`trash/`，以及删除开始后的 `deleted-marker`。永久标识绑定租户、Environment 和对象 UUID。Create 先准备并同步唯一的私有 staging 封装目录，再原子发布其非空目录为 `live`；重放不会覆盖现有 live 数据。Delete 先持久记录对象本地的终态标记，将 live 数据退役到唯一的对象本地 trash，再先删除数据、后删除其所有权标记。并发删除者收敛。最少量的标识和删除元数据会有意保留；删除不代表所有元数据文件均消失。Create 和 Resolve 拒绝已退役标识。迟到的在途 Create 可能留下空的受控元数据，需要在其系统调用完成后重复 Delete；它不能授权新写入者或复用对象标识。清理只查看该对象的 staging 和 trash，不全量扫描命名空间，也不使用后台服务。
 

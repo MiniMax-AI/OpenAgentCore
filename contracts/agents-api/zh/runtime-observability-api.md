@@ -6,11 +6,11 @@ source_hash: 4a9c00d1eed9fe51f9e8f2f08e00f1709ddc55eb1c650ed3a5380f44a5b71e1c
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
 
-每个路由都要求以 Core 密钥作为 Bearer 凭据；缺少或无效的密钥会返回 401 `invalid_admin_key`。路径中的 Project ID 用于选择目标 Project，不承担身份验证作用。响应带有 `Cache-Control: no-store`，采用 Core 错误封装格式，且绝不包含提供方响应、原生标识符、路径或凭据。
+每个路由都要求以 Core 密钥作为 Bearer 凭据；缺少或无效的密钥会返回 401 `invalid_admin_key`。路径中的项目 ID 用于选择目标项目，不承担身份验证作用。响应带有 `Cache-Control: no-store`，采用 Core 错误封装格式，且绝不包含提供商响应、原生标识符、路径或凭据。
 
 ## 当前 Runtime 观测值 {#current-runtime-observations}
 
-### 列出所有 Project 的观测值 {#list-observations-of-every-project}
+### 列出所有项目的观测值 {#list-observations-of-every-project}
 
 ```http
 GET /core/v1/sandbox/runtime-observations?after={session_id}&limit=20&order=desc
@@ -23,7 +23,7 @@ Authorization: Bearer <Core key>
 | `limit` | 1 到 100，默认 20。 |
 | `order` | 按 Session 创建时间采用 `asc` 或 `desc`，默认 `desc`。 |
 
-列表中，每个未删除 Project 下的每个 Session 都有一行，包括模式为 `none`、`self_hosted` 的 Session 以及已释放的托管 Session。每行都包含所属 `project_id` 和一个 `observation`：[`RuntimeObservation`](#runtimeobservation) 与 [`disk`](#disk)。分页采用 Session 列表的创建时间与 ID 键集。观测 ID 就是 Session ID，因此即使 Session 背后的 Runtime 发生变化，分页边界也不会移动。页面不是原子快照：每行都有自己的 `resolved_at`，并在进行了采样时拥有 `observed_at`。未知的查询键会被忽略。
+列表中，每个未删除项目下的每个 Session 都有一行，包括模式为 `none`、`self_hosted` 的 Session 以及已释放的托管 Session。每行都包含所属 `project_id` 和一个 `observation`：[`RuntimeObservation`](#runtimeobservation) 与 [`disk`](#disk)。分页采用 Session 列表的创建时间与 ID 键集。观测 ID 就是 Session ID，因此即使 Session 背后的 Runtime 发生变化，分页边界也不会移动。页面不是原子快照：每行都有自己的 `resolved_at`，并在进行了采样时拥有 `observed_at`。未知的查询键会被忽略。
 
 ```json
 {
@@ -89,14 +89,14 @@ Authorization: Bearer <Core key>
 | `session_id` | string | 对应的 Session。 |
 | `environment_id` | string 或 null | 仅当 mode 为 `none` 时为 null。 |
 | `mode` | enum | `none`、`self_hosted` 或 `openai_hosted`。 |
-| `provider_type` | string 或 null | 来源类型，例如 `docker`、`microsandbox` 或 `e2b`；未读取任何提供方数据时为 null。未知值应视为新类型，而不是错误。 |
+| `provider_type` | string 或 null | 来源类型，例如 `docker`、`microsandbox` 或 `e2b`；未读取任何提供商数据时为 null。未知值应视为新类型，而不是错误。 |
 | `instance` | object | 当前计算资源标识；请参阅 [`RuntimeInstance`](#runtimeinstance)。 |
 | `lifecycle_state` | enum 或 null | Core 自身对托管分配的生命周期视图；对于 `none` 和 `self_hosted` 为 null。请参阅下文。 |
 | `status` | enum | `observed`、`unsupported` 或 `unavailable`。 |
 | `reason` | enum 或 null | 该行没有样本的原因；请参阅 [Status and reason](#status-and-reason)。 |
 | `allocation_created_at` | integer 或 null | 创建托管分配时的 Unix 秒数。 |
 | `resolved_at` | integer | Core 解析此行时的 Unix 秒数。 |
-| `observed_at` | integer 或 null | 提供方样本的 Unix 秒数；无样本时为 null。 |
+| `observed_at` | integer 或 null | 提供商样本的 Unix 秒数；无样本时为 null。 |
 | `started_at` | integer 或 null | 当前计算实例代次启动时的 Unix 秒数。 |
 | `cpu` | object 或 null | 未观测到 CPU 值时为 null。 |
 | `memory` | object 或 null | 未观测到内存值时为 null。 |
@@ -129,7 +129,7 @@ Authorization: Bearer <Core key>
 | `usage_seconds_total` | 当前计算实例代次的累计 CPU 秒数（Docker、microsandbox）。 |
 | `capacity_cores` | 已配置的 CPU 容量，大于零。 |
 | `usage_cores` | 始终为 null。 |
-| `utilization_ratio` | 提供方报告的 `capacity_cores` 占比（E2B），不进行钳制；对于报告累计 CPU 时间的提供方为 null。 |
+| `utilization_ratio` | 提供商报告的 `capacity_cores` 占比（E2B），不进行钳制；对于报告累计 CPU 时间的提供商为 null。 |
 
 ### `memory` {#memory}
 
@@ -143,14 +143,14 @@ Authorization: Bearer <Core key>
 
 | 状态 | 原因 | 适用情况 |
 | --- | --- | --- |
-| `observed` | null | 提供方返回了样本。 |
+| `observed` | null | 提供商返回了样本。 |
 | `unsupported` | `runtime_mode_not_observable` | `none` 和 `self_hosted` Session。 |
 | `unavailable` | `allocation_pending` | 托管分配尚不存在或正在创建。 |
-| `unavailable` | `runtime_not_running` | 分配正在清理或已释放，或者提供方报告 Runtime 不存在、已停止或已暂停。 |
-| `unavailable` | `sample_timeout` | 提供方读取超过其截止时间。 |
-| `unavailable` | `sample_unavailable` | 提供方无法生成当前样本。 |
+| `unavailable` | `runtime_not_running` | 分配正在清理或已释放，或者提供商报告 Runtime 不存在、已停止或已暂停。 |
+| `unavailable` | `sample_timeout` | 提供商读取超过其截止时间。 |
+| `unavailable` | `sample_unavailable` | 提供商无法生成当前样本。 |
 
-所有权不匹配、格式错误的持久身份或无效的提供方证据会使请求失败，而不会转换为 `unavailable` 行。生成的 `core.openapi.yaml` 会记录每个字段的类型、可空性和枚举，但无法表达 status、mode 与字段之间哪些组合有效；上表和上述字段规则具有规范效力。
+所有权不匹配、格式错误的持久身份或无效的提供商证据会使请求失败，而不会转换为 `unavailable` 行。生成的 `core.openapi.yaml` 会记录每个字段的类型、可空性和枚举，但无法表达 status、mode 与字段之间哪些组合有效；上表和上述字段规则具有规范效力。
 
 ### 错误 {#errors}
 
@@ -158,8 +158,8 @@ Authorization: Bearer <Core key>
 | --- | --- | --- |
 | 400 | `invalid_request_error` | 列表：重复提供 `after`、`limit` 或 `order`，或者 `limit` 或 `order` 无效。 |
 | 400 | `unsupported_parameter` | 单项读取：提供任何查询参数。 |
-| 404 | `not_found_error` | Project 不存在；Session 或列表游标不存在、格式错误或属于其他 Project。 |
-| 500 | `internal_error` | 标识不一致或提供方证据无效。 |
+| 404 | `not_found_error` | 项目不存在；Session 或列表游标不存在、格式错误或属于其他项目。 |
+| 500 | `internal_error` | 标识不一致或提供商证据无效。 |
 | 503 | `execution_unavailable` | 列表读取超过其采集预算。 |
 
 ### 客户端 {#client}
@@ -175,7 +175,7 @@ Authorization: Bearer <Core key>
 
 `range` 可以是 `1h`（默认值）、`6h` 或 `24h`，并且是唯一的参数。请求不携带任何时间：Core 按自己的时钟，将范围的结束点定在最近一个桶边界上，桶边界从 Unix 纪元起按整桶计算。因此调用方的时钟无法使读取被拒绝或发生偏移，同一个桶内的多次读取会得到相同的范围。`requested_range` 以 Unix 秒报告该范围；`start` 包含在内，`end` 不包含在内。桶宽是范围除以 120，向上取整为整数秒，并取 30 秒或采样间隔中的较长者作为最小值。桶从 `requested_range.start` 开始；最后一个桶在 `requested_range.end` 结束。
 
-Core 先解析 Project，然后解析 Session 及其 Environment，之后才读取存储；分配和提供方标识都是结果，绝不能作为查询输入。只有 `openai_hosted` Session 存在历史记录。
+Core 先解析项目，然后解析 Session 及其 Environment，之后才读取存储；分配和提供商标识都是结果，绝不能作为查询输入。只有 `openai_hosted` Session 存在历史记录。
 
 ```json
 {
@@ -206,7 +206,7 @@ Core 先解析 Project，然后解析 Session 及其 Environment，之后才读�
 
 ### 数据系列 {#series}
 
-每个托管分配都有一条以 `allocation_id` 为键的 series，因此，即使提供方在同一分配下暂停、恢复或替换计算资源，也只会保留一条 series。`environment_id` 和 `provider_type` 用于标识其来源。`started_at` 是该分配的计算资源在保留范围内最早的 start，以 JSON 安全的 `{seconds, nanoseconds}` 表示，其中纳秒值为 0 到 999,999,999；它不是各个桶的开始时间，而且计算运行时长只能来自当前观测值。
+每个托管分配都有一条以 `allocation_id` 为键的 series，因此，即使提供商在同一分配下暂停、恢复或替换计算资源，也只会保留一条 series。`environment_id` 和 `provider_type` 用于标识其来源。`started_at` 是该分配的计算资源在保留范围内最早的 start，以 JSON 安全的 `{seconds, nanoseconds}` 表示，其中纳秒值为 0 到 999,999,999；它不是各个桶的开始时间，而且计算运行时长只能来自当前观测值。
 
 每个点都包含该桶的边界、该分配样本的覆盖范围计数，以及可空的 `cpu` 和 `memory` 对象；其 `contributor_count` 至少为 1：
 
@@ -224,7 +224,7 @@ Core 先解析 Project，然后解析 Session 及其 Environment，之后才读�
 | HTTP | 代码 | 适用情况 |
 | --- | --- | --- |
 | 400 | `invalid_request` | 提供了 `range` 以外的参数、重复的 `range`，或 `range` 不是 `1h`、`6h` 或 `24h`。 |
-| 404 | `not_found_error` | Project 不存在，或 Session 不属于该 Project。 |
+| 404 | `not_found_error` | 项目不存在，或 Session 不属于该项目。 |
 | 409 | `runtime_history_unsupported` | Session 不是 `openai_hosted`。 |
 | 500 | `internal_error` | 已存储的标识不一致。 |
 | 503 | `runtime_history_unavailable` | 读取失败、超时或产生了超出界限的结果。 |
@@ -273,7 +273,7 @@ Authorization: Bearer <Core key>
 - `total_memory_bytes` 和 `available_memory_bytes` 分别对应 `MemTotal` 和 `MemAvailable`。
 - `available_disk_bytes` 是节点状态文件系统的可用空间，而不是沙箱配额。
 
-节点会测量其命名空间能够看到的内容，因此应让节点运行在其所报告的宿主机上。
+节点会测量其命名空间能够看到的内容，因此应让节点运行在其所报告的主机上。
 
 `history` 按完整的 UTC 桶覆盖指定范围：`1h` 使用 60 秒，`6h` 使用 300 秒，`24h` 使用 900 秒。范围内的每个桶都会存在，但正在进行中的桶除外。`cpu_utilization_max` 和 `memory_used_bytes_max` 是已记录观测值的最大值，其中已用内存按同一观测值中的总内存减去可用内存计算；`available_disk_bytes_min` 是最小值。对于没有记录值的桶，包括离线时段，每个指标均为 null。Core 绝不进行插值或回填。
 
