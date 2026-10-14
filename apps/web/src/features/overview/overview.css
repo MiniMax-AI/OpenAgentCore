@@ -263,7 +263,7 @@
   border-top: 1px solid var(--line-soft);
   cursor: pointer;
 }
-.fleet-row:hover, .fleet-row[data-popup-open] { background: var(--hover); }
+.fleet-row:hover { background: var(--hover); }
 .fleet-row > svg { flex-shrink: 0; }
 .fleet-row-info { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
 .fleet-row-info strong { overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }

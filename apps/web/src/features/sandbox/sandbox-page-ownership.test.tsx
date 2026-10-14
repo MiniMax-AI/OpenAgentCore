@@ -42,13 +42,13 @@ describe("sandbox page ownership", () => {
     expect(configuration).not.toContain("node-enrollment");
   });
 
-  it("keeps Nodes as a node page for both cloud and host deployments", () => {
+  it("keeps Nodes as the node page, with Add node, for both cloud and host deployments", () => {
     const cloud = render(<SandboxManagerView />, cache("e2b"));
     expect(cloud).toContain("Nodes</h1>");
     expect(cloud).toContain("There are no nodes to manage.");
     expect(cloud).not.toContain("Change resources");
     const hosts = render(<SandboxManagerView />, cache("docker"));
-    expect(hosts).not.toContain("node-enrollment");
+    expect(hosts).toContain("node-enrollment");
     expect(hosts).toContain("Add your first node");
     expect(hosts).not.toContain("Reset deployment");
   });
@@ -59,6 +59,7 @@ describe("sandbox page ownership", () => {
     expect(configuration).toContain("Change resources");
     expect(configuration).toContain("Reset deployment");
     expect(configuration).not.toContain("setup-flow");
+    expect(configuration).not.toContain("node-enrollment");
     const system = render(<SystemPage />, client);
     expect(system).toContain("Service and deployment");
     expect(system).not.toContain("Change resources");

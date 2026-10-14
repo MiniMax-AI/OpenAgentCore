@@ -27,7 +27,7 @@ import { formatClock, formatCompact, formatInteger, formatPercent, formatRelativ
 import { ProjectName, useProjects } from "../../lib/projects";
 import { sessionTitle } from "../../lib/session-title";
 import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-model";
-import { FleetReadNotice, fleetObservationStale } from "../fleet/FleetReadNotice";
+import { FleetReadNotice } from "../fleet/FleetReadNotice";
 import { SandboxResetNotice } from "../fleet/SandboxResetNotice";
 import { fleetSnapshot, useSandboxFleet, type FleetSnapshot, type FleetState } from "../fleet/use-sandbox-fleet";
 import { type InProject } from "../metrics/project-sessions";
@@ -335,7 +335,7 @@ function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
   return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending, template: fleet.deployment.configuration?.template || null };
 }
 
-/** Core and its sandbox nodes (or E2B's cloud) as an inventory; each opens a popover with the way onward. */
+/** Core and its sandbox nodes (or E2B's cloud) as an inventory; each row opens its page. */
 function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; core: CoreStatus; localOnly: boolean }) {
   const { t } = useTranslation("overview");
   const { navigate } = useConsoleNavigation();
@@ -356,21 +356,18 @@ function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; co
             ? <button className="button outline" type="button" onClick={() => navigate("settings", { id: "sandbox" })}>{t("fleet.setUp")}</button>
             : cloud || hosts.length
               ? <button className="button outline" type="button" onClick={() => cloud ? navigate("settings", { id: "sandbox" }) : navigate("nodes")}>{cloud ? t("fleet.cloud.openBackend") : t("fleet.manageNodes")}</button>
-              : <button className="button outline" type="button" onClick={() => localOnly ? navigate("nodes") : navigate("settings", { id: "sandbox" }, "add-node")}>{t(localOnly ? "fleet.manageNodes" : "fleet.addNode")}</button>
+              : <button className="button outline" type="button" onClick={() => navigate("nodes", {}, localOnly ? undefined : "add-node")}>{t(localOnly ? "fleet.manageNodes" : "fleet.addNode")}</button>
         ) : null}
       </header>
       <div className="overview-card-body fleet-body">
         <FleetOverview
           nodes={hosts}
           cloud={cloud}
-          suspends={Boolean(fleet?.deployment.suspension)}
-          onOpenBackend={() => navigate("settings", { id: "sandbox" })}
           coreLabel={t(`coreStatus.${core}`)}
           coreTone={coreTone[core]}
-          stale={fleetObservationStale(fleetState)}
           onOpenNode={(node) => navigate("nodes", { id: node.id })}
-          onOpenSandboxMetrics={() => navigate("sandbox-metrics")}
-          onOpenCoreMetrics={() => navigate("core-metrics")}
+          onOpenCloud={() => navigate("sandbox-metrics")}
+          onOpenCore={() => navigate("core-metrics")}
         />
         {hidden ? <button className="text-action fleet-more" type="button" onClick={() => navigate("nodes")}>{t("fleet.more", { count: hidden })}</button> : null}
         <FleetFooter state={fleetState} empty={fleet && !cloud ? hosts.length === 0 : false} unset={fleet ? !fleet.deployment.provider : false} />

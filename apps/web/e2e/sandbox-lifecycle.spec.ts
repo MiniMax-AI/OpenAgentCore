@@ -3,7 +3,7 @@ import { openConsole, expectManagementBoundary, setDeployment, writes } from "./
 
 test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
-test("shows automatic suspension policy, retained capacity and elapsed phase time without inventing expiry", async ({ page, request }, testInfo) => {
+test("shows each node's retained limit and elapsed phase time without inventing expiry", async ({ page, request }, testInfo) => {
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
     const response = await route.fetch();
     const deployment = await response.json();
@@ -15,9 +15,9 @@ test("shows automatic suspension policy, retained capacity and elapsed phase tim
     await route.fulfill({ response, json: { data: data.map((node: Record<string, unknown>) => ({ ...node, provider: "microsandbox", retained: Number(node.active) + 2 })) } });
   });
   await openConsole(page, request, "nodes");
-  await expect(page.getByRole("heading", { name: "Automatic suspension" })).toBeVisible();
-  await expect(page.getByText("5 minutes", { exact: true })).toBeVisible();
-  await expect(page.getByRole("region", { name: "Automatic suspension" }).getByRole("columnheader", { name: "Retained / limit" })).toBeVisible();
+  // Nodes shows each node's limits; the deployment's idle policy lives in Settings.
+  await expect(page.getByRole("table", { name: "Sandbox nodes" }).getByRole("columnheader", { name: "Retained / limit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Automatic suspension" })).toHaveCount(0);
   await page.screenshot({ path: testInfo.outputPath("nodes-en.png"), fullPage: true });
   await page.getByRole("button", { name: "Open core-01", exact: true }).click();
   const allocations = page.getByRole("table", { name: "Sandbox allocations" });
@@ -30,25 +30,23 @@ test("shows automatic suspension policy, retained capacity and elapsed phase tim
   await page.screenshot({ path: testInfo.outputPath("sandbox-metrics-en.png"), fullPage: true });
   await page.getByRole("button", { name: "Language and appearance" }).click();
   await page.getByRole("menuitemradio", { name: "简体中文" }).click();
-  await expect(page.getByRole("heading", { name: "自动挂起" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "记录的计算状态" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("sandbox-metrics-zh.png"), fullPage: true });
 });
 
-test("hides suspension policy when the provider declares no suspension support", async ({ page, request }) => {
+test("hides the retained limit when the provider declares no suspension support", async ({ page, request }) => {
   await openConsole(page, request, "nodes");
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Automatic suspension" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Retained / limit" })).toHaveCount(0);
 });
 
 
-test("edits deployment idle time beside node limits without changing generation", async ({ page, request }) => {
+test("edits deployment idle time without changing generation", async ({ page, request }) => {
   await openConsole(page, request, "settings?id=sandbox");
   const deployment = await setDeployment(request, { suspension: { idle_seconds: 300, retention_seconds: 86400 } });
   await setDeployment(request, { provider: "microsandbox", specification: { ...deployment.specification!, resources: { ...deployment.specification!.resources, root_disk_mib: 8192, environment_disk_mib: 8192 } } });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
-  const area = page.getByRole("region", { name: "Capacity and suspension" });
+  const area = page.getByRole("region", { name: "Automatic suspension" });
   const idle = area.getByLabel("Idle before suspension (seconds)");
   await expect(idle).toHaveValue("300");
   await idle.fill("29");

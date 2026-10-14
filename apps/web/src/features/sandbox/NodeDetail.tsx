@@ -9,6 +9,7 @@ import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "../../lib/sand
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 import { NodeRolloutStatus } from "./NodeRolloutStatus";
+import { NodeHost } from "./NodeHost";
 import { phaseTiming } from "./allocation-phase";
 import { nodeState, NodeStatus, OldAddressHint } from "./NodeList";
 
@@ -77,17 +78,19 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
         <div><dt>{t("Added")}</dt><dd>{formatDateTime(epochSeconds(node.created_at), locale)}</dd></div>
       </dl>
 
-      {/* Cleanup and host resources are on Sandbox metrics; the node's limit is here as well, beside Edit node that sets it. */}
       <Section headingId="node-capacity-heading" title={t("Capacity")}>
         <KpiStrip label={t("Capacity")}>
           <Kpi label={t("Active / limit")} help={t("Sandboxes Core has placed on this node, against the most it places here at once.")} value={`${count(node.active)} / ${count(node.max_active)}`} />
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
           {suspends ? <Kpi label={t("Suspended")} help={t("Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
-          {suspends ? <Kpi label={t("Retained / limit")} help={t("Sandboxes this node holds, active and suspended, against its retained limit.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
+          {suspends ? <Kpi label={t("Retained / limit")} help={t("The most sandboxes this node keeps, running and suspended together. A suspended one resumes here on its next Turn.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
           {suspends ? <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} /> : null}
           <Kpi label={t("Reserved")} value={count(node.reserved)} />
+          <Kpi label={t("Cleanup pending")} help={t("Sandboxes released on this node that it has not removed yet.")} tone={node.cleanup_pending > 0 ? "warning" : undefined} value={count(node.cleanup_pending)} />
         </KpiStrip>
       </Section>
+
+      <NodeHost node={node} reporting={reporting} />
 
       <Section
         headingId="node-allocations-heading"

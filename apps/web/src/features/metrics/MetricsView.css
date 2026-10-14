@@ -83,3 +83,16 @@
 }
 
 .metrics-node-status { display: grid; gap: 4px; }
+
+/* Core process internals stay collapsed below the operator's figures. */
+.core-diagnostics > summary {
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  cursor: pointer;
+}
+
+.core-diagnostics > * + * {
+  margin-top: 12px;
+}

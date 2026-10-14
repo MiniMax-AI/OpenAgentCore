@@ -9,8 +9,6 @@ import type { ConsoleView } from "./console-routes";
 export interface RouteParams {
   /** The project a page is filtered to, or a secondary page belongs to. */
   project?: string;
-  /** Node capacity form within Settings. */
-  node?: string;
   /** The resource opened by a secondary page or focused in a list. */
   id?: string;
 }
@@ -22,14 +20,13 @@ export function routeParamsFromHash(hash: string): RouteParams {
     const value = params.get(name);
     return value && /^[A-Za-z0-9_.:-]{1,128}$/.test(value) ? value : undefined;
   };
-  return { project: read("project"), id: read("id"), node: read("node") };
+  return { project: read("project"), id: read("id") };
 }
 
 export function hashWithParams(base: string, params: RouteParams = {}): string {
   const query = new URLSearchParams();
   if (params.project) query.set("project", params.project);
   if (params.id) query.set("id", params.id);
-  if (params.node) query.set("node", params.node);
   const suffix = query.toString();
   if (!suffix) return base;
   return `${base || "#overview"}?${suffix}`;

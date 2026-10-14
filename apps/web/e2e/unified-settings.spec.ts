@@ -102,22 +102,16 @@ test("capacity editor refuses to select an old configuration after observing a r
   expect(saves[1].id).toBe(selected.id);
 });
 
-test("settings content width does not constrain reset and node dialog backdrops", async ({ page, request }) => {
+test("settings content width does not constrain the reset dialog backdrop", async ({ page, request }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await openConsole(page, request, "settings?id=sandbox");
-  for (const action of ["Reset deployment", "Edit node"]) {
-    await page.getByRole("button", { name: action, exact: true }).first().click();
-    const dialog = page.getByRole("dialog");
-    await expect(dialog).toBeVisible();
-    const backdrop = page.locator(".modal-backdrop:not(.closing)");
-    const bounds = await backdrop.boundingBox();
-    expect(bounds?.x).toBe(0);
-    expect(bounds?.y).toBe(0);
-    expect(bounds?.width).toBe(1440);
-    expect(bounds?.height).toBe(1000);
-    await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
-  }
+  await page.getByRole("button", { name: "Reset deployment", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  const bounds = await page.locator(".modal-backdrop").boundingBox();
+  expect(bounds).toEqual({ x: 0, y: 0, width: 1440, height: 1000 });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
 });
 
 

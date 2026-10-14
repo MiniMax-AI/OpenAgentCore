@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 17ec9dbffb34ae89966259c3e32ea168a20289de42bae1f50d3ceec1ded1c956
+source_hash: 1e5c6491ca2db026042091d5510db1277e2abf9519fda9adf9f89e83ac507251
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -18,10 +18,10 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 
 | 分组 | 页面 | 用途 |
 | --- | --- | --- |
-| Monitor | Overview | 服务状态、运行中的 Session、沙箱槽位和待处理工作；24 小时 Session 活动；以拓扑展示 Core 与节点，各自提供弹出概览；需要处理：过去 24 小时内活跃的失败或等待调用方的 Session，每行附一行原因；按 Project 统计的用量 |
-| Monitor | Core metrics | Core 进程：CPU 与常驻内存及其限制、执行槽位与 Turn 队列、已连接守护进程、数据库延迟与连接池、后台任务 |
+| Monitor | Overview | 服务状态、运行中的 Session、沙箱槽位和待处理工作；24 小时 Session 活动；以拓扑展示 Core 与节点，各自打开对应页面；需要处理：过去 24 小时内活跃的失败或等待调用方的 Session，每行附一行原因；按 Project 统计的用量 |
+| Monitor | Core metrics | Core 能否运行 Turn：执行槽位、Turn 队列及其 p95 等待时间、被中断的 Turn、已连接守护进程、数据库延迟、CPU 与常驻内存及其限制、后台任务；Go 堆、goroutine 和数据库连接池位于 **Diagnostics** |
 | Monitor | Agent metrics | 1 小时、6 小时、24 小时或 7 天的请求、错误、耗时、token、模型、工具、Agent 和 API 密钥 |
-| Monitor | Sandbox metrics | 节点容量；支持时显示 **Automatic suspension**；**Recorded compute** 生命周期状态与各 Project 的托管 Runtime CPU、内存观测分开展示 |
+| Monitor | Sandbox metrics | 各 Project 托管 Runtime 随时间的变化，显示运行中数量与总数及其 CPU、内存观测；支持时另行显示 **Recorded compute** 生命周期状态；E2B 部署还显示 Core 在 E2B 云中持有的沙箱 |
 | Monitor | Request log | 到达 Core 的近期 HTTP 请求、状态、耗时和安全错误码；[范围及保留方式](../../../contracts/agents-api/zh/admin-api.md#request-log) |
 | Monitor | Session log | 全部 Session；各 Session 的只读对话、跟踪、Turn、失败分类原因及下一步操作；自托管 Session 页面还管理执行器凭据并提供主机连接命令 |
 | Resources | Agents、Environment templates、Skills、Files、Vaults | 检查和允许的删除操作，显示各资源所属 Project 及创建密钥 |
@@ -37,7 +37,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | --- | --- |
 | 为安装设置 HTTPS 地址 | 设置 `OAC_PUBLIC_URL`，并把反向代理指向 Web；参阅[使 Core 可访问](../getting-started/install.md#configure-the-domain-and-https) |
 | 选择沙箱后端（microsandbox、E2B 或 Docker）、规格和 Runtime，或重置后端 | **Settings → Sandbox and scheduling**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
-| 添加或移除执行节点 | **Settings → Sandbox and scheduling → Add node**；移除仍在 **Nodes**；参阅[节点指南](../getting-started/nodes.md) |
+| 添加、调整或移除执行节点 | **Nodes**：**Add node**、**Edit node** 和移除；参阅[节点指南](../getting-started/nodes.md) |
 | 设置 Harness 默认模型 | **Settings → Models and credentials**；参阅[默认模型](../configuration.md#default-models) |
 | 创建 Project 并签发 API 密钥 | **Projects and keys**；参阅 [Project 和 API 密钥](../getting-started/operations.md#projects-and-api-keys) |
 | 签发、轮换或撤销自托管执行器凭据，或复制安装命令 | **Session log** 中的 Session 页面；参阅[自托管执行器](../getting-started/self-hosted.md) |

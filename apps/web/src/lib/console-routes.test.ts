@@ -34,7 +34,6 @@ describe("console routes", () => {
 
   it("carries only well-formed project and resource parameters", () => {
     expect(routeParamsFromHash("#session?project=proj_1&id=s-1")).toEqual({ project: "proj_1", id: "s-1" });
-    expect(routeParamsFromHash("#settings?id=sandbox&node=node-1")).toEqual({ project: undefined, id: "sandbox", node: "node-1" });
     expect(routeParamsFromHash("#session?project=bad%20id")).toEqual({ project: undefined, id: undefined });
     expect(hashWithParams("#session", { project: "proj_1", id: "s1" })).toBe("#session?project=proj_1&id=s1");
     expect(hashWithParams("#files")).toBe("#files");

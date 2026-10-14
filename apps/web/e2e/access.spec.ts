@@ -163,7 +163,7 @@ test("opens Add node from Getting started when no node has joined", async ({ pag
   const step = page.getByRole("region", { name: "Getting started" }).getByRole("listitem").filter({ hasText: "Get sandboxes ready" });
   await expect(step).toContainText("To do");
   await step.getByRole("button", { name: "Add node" }).click();
-  await expect(page.getByRole("heading", { name: "Sandbox and scheduling", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Add node" })).toBeVisible();
 });
 

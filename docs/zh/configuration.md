@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: daafd004cd471e75afc4ceecad8d0ef43e7937715f38e82d23328235205c9234
+source_hash: 72de9b828d70f6f96e20de6bf1173c8a1232924517c50b308ed8ed74d6668255
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -98,8 +98,8 @@ Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` �
 | --- | --- | --- | --- |
 | 沙箱后端：Docker、microsandbox 或 E2B | **Settings** → **Sandbox and scheduling**：设置向导，最后点击 **Save configuration** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个后端，在首次登录后选择。要改用其他后端，必须先执行 **Reset deployment**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
 | 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **Settings** → **Sandbox and scheduling** → **Change resources** | `/core/v1/sandbox/deployment` | Web 会推荐 [Provider 声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
-| 节点及其容量 | **Settings → Sandbox and scheduling**：**Add node**；**Sandbox nodes** → **Edit node**。移除操作仍在节点页面 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
-| 空闲挂起 | **Settings** → **Sandbox and scheduling** → **Capacity and suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
+| 节点及其容量 | **Nodes**：**Add node**、**Edit node** 和移除 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
+| 空闲挂起 | **Settings** → **Sandbox and scheduling** → **Automatic suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
 | 独立工作区存储和租户容量 | **Settings → Workspace storage** | `/core/v1/workspace-storage` | 参阅[独立工作区存储](#independent-workspace-storage)；现有工作区保留自身配置 |
 | 项目和 API 密钥 | **Projects and keys**：**Create project**、**Rename**、**Issue key**、**Revoke**、**Archive** | `/core/v1/projects` | 密钥只显示一次；Core 存储其摘要 |
 | 每个 Harness 的默认模型 | **Settings** → **Models and credentials**：**Set** | `/core/v1/harnesses/{harness}/model-configuration` | 请参阅[默认模型](#default-models) |
@@ -148,7 +148,7 @@ services:
 
 存储表单接受 adapter 标识、JSON 对象形式的参数和可选的只写凭据 JSON 对象。Core 验证这些由 adapter 定义的值；Web 不定义 Provider 专属存储字段。**Edit tenant capacity** 保留已选的不可变配置。选择另一份配置需要新的 ID，不会迁移现有工作区。
 
-选择文件系统和部署后，通过 **Settings → Sandbox and scheduling → Add node** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
+选择文件系统和部署后，通过 **Nodes → Add node** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
 
 #### 配额模式存储服务器 {#quota-mode-storage-server}
 
@@ -200,7 +200,7 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 
 ### 节点容量 {#node-capacity}
 
-生成 **Add node** 命令时，Core 会批准节点容量：**Sandboxes at once**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **Retained sandboxes**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **Settings → Sandbox and scheduling → Sandbox nodes** 使用 **Edit node** 修改这些值。预留和尚未确认的清理操作都会占用容量；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
+生成 **Add node** 命令时，Core 会批准节点容量：**Sandboxes at once**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **Retained sandboxes**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **Nodes** 使用 **Edit node** 修改这些值。预留和尚未确认的清理操作都会占用容量；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
 
 `OAC_EXECUTION_CONCURRENCY` 与此无关：它限制 Core 中并发执行的工作量。
 

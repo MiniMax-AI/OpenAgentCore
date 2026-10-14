@@ -123,7 +123,7 @@ export function GettingStarted({ fleet, sessions, localOnly, sandboxReset, onRet
     : sandbox.action === "setup"
     ? { label: t("gettingStarted.sandboxes.setup"), run: () => navigate("settings", { id: "sandbox" }) }
     : sandbox.action === "add-node"
-      ? { label: t("gettingStarted.sandboxes.addNode"), run: () => navigate("settings", { id: "sandbox" }, "add-node") }
+      ? { label: t("gettingStarted.sandboxes.addNode"), run: () => navigate("nodes", {}, "add-node") }
       : { label: t(sandbox.cloud ? "gettingStarted.sandboxes.backend" : "gettingStarted.sandboxes.nodes"), run: () => sandbox.cloud ? navigate("settings", { id: "sandbox" }) : navigate("nodes") };
   const keyProject = steps.key.project;
   const keyAction = keyProject

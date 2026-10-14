@@ -14,7 +14,3 @@ export function FleetReadNotice({ state, onRetry }: { state: FleetState; onRetry
       : null}
   </>;
 }
-
-export function fleetObservationStale(state: FleetState): boolean {
-  return state.status === "ready" && (state.error !== null || state.targetGeneration !== state.snapshot.deployment.generation);
-}

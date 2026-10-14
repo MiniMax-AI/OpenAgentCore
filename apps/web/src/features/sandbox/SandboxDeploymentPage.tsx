@@ -19,7 +19,7 @@ import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 import { SandboxResetControls } from "./SandboxResetControls";
 import "./SandboxManagerView.css";
 import { SettingsTabs } from "../settings/SettingsTabs";
-import { SandboxCapacitySettings } from "./SandboxCapacitySettings";
+import { SuspensionSettings } from "./SuspensionSettings";
 
 function DeploymentHeader({ actions }: { actions?: ReactNode }) {
   const { t } = useTranslation("sandboxNavigation");
@@ -32,7 +32,7 @@ function DeploymentHeader({ actions }: { actions?: ReactNode }) {
   </header>;
 }
 
-/** Settings owns deployment changes, lifecycle policy and node capacity. */
+/** Settings owns deployment changes and the idle policy; Nodes owns the nodes and their capacity. */
 export function SandboxDeploymentPage() {
   const { i18n } = useTranslation("sandbox");
   return <section className="page-section console-page sandbox-manager sandbox-manager-page" lang={i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en"}>
@@ -81,7 +81,7 @@ function DeploymentConfiguration() {
     return false;
   }
   async function initialize(input: InitializeSandboxDeployment) {
-    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && deploymentContract.providers[input.provider].mode === "nodes" && !installation.data?.local_only) navigate("settings", { id: "sandbox" }, "add-node");
+    if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && deploymentContract.providers[input.provider].mode === "nodes" && !installation.data?.local_only) navigate("nodes", {}, "add-node");
   }
   async function update(input: UpdateSandboxDeployment) {
     return changeDeployment((signal) => sandboxAdmin.updateDeployment({ ...input, expected_generation: snapshot!.deployment.generation }, { signal }), true, true);
@@ -97,7 +97,7 @@ function DeploymentConfiguration() {
   const reset = configured ? <SandboxResetControls key={`reset:${configurationKey}`} deployment={configured} disabled={disabled} stale={!confirmed} onStart={startReset} onCancel={cancelReset} /> : null;
   const sections = [
     configured ? <SandboxDeploymentSettings key={configurationKey} deployment={configured} fresh={confirmed} disabled={disabled} onUpdate={update} onRefresh={refreshByUser} refreshing={loading} pending={busy} writeFailure={writeFailure?.editing ? unknownWrite : null} /> : null,
-    <SandboxCapacitySettings key="capacity" />,
+    <SuspensionSettings key="suspension" />,
   ];
 
   return <>

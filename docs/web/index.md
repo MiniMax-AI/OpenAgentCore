@@ -16,15 +16,15 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 
 | Group | Page | Purpose |
 | --- | --- | --- |
-| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each with a popover glance; Needs attention: failed Sessions and Sessions waiting for their caller, active in the last 24 hours, each with its one-line reason; usage by Project |
-| Monitor | Core metrics | The Core process: CPU and resident memory against their limits, execution slots and the Turn queue, connected daemons, database latency and pool, background jobs |
+| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each opening its page; Needs attention: failed Sessions and Sessions waiting for their caller, active in the last 24 hours, each with its one-line reason; usage by Project |
+| Monitor | Core metrics | Whether Core can run Turns: execution slots, the Turn queue and its p95 wait, interrupted Turns, connected daemons, database latency, CPU and resident memory against their limits, background jobs; Go heap, goroutines and the database pool under **Diagnostics** |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
-| Monitor | Sandbox metrics | Node capacity; **Automatic suspension** when supported; **Recorded compute** lifecycle state shown separately from hosted Runtime CPU and memory observations across Projects |
+| Monitor | Sandbox metrics | Hosted Runtimes across Projects over time, running against total, with their CPU and memory observations and, when supported, **Recorded compute** lifecycle state shown separately; an E2B deployment adds the sandboxes Core holds in E2B's cloud |
 | Monitor | Request log | Recent HTTP requests to Core, their status, elapsed time and safe error codes; [scope and retention](../../contracts/agents-api/admin-api.md#request-log) |
 | Monitor | Session log | Every Session, and each Session's read-only conversation, trace and Turns with the classified reason of a failure and its next step; a self-hosted Session's page also manages its executor credentials and gives the command that connects a host |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
 | Platform | Projects and keys | Create, rename and archive Projects; issue and revoke keys; each Project's usage, write history and how to call the API |
-| Platform | Nodes | Inspect and remove microsandbox or Docker nodes; each node's readiness, capacity and allocations, with the automatic suspension policy when supported, active and retained slots, and elapsed time in each compute phase |
+| Platform | Nodes | Add, edit and remove microsandbox or Docker nodes; each node's readiness, active and retained limits, host CPU and memory with their history, free disk, and allocations with elapsed time in each compute phase |
 | Platform | Settings | **Sandbox and scheduling**, **Workspace storage**, **Models and credentials**, and **Service and deployment**; see [configuration](../configuration.md#runtime-settings-web) |
 
 Missing data is shown as missing (—), never as zero. [Console API usage](./console-api-usage.md) lists what each page reads and how its figures are bounded.
@@ -35,7 +35,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 | --- | --- |
 | Give the installation an HTTPS address | Set `OAC_PUBLIC_URL` and point a reverse proxy at Web; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
 | Choose the sandbox backend (microsandbox, E2B or Docker), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
-| Add or remove execution nodes | **Settings → Sandbox and scheduling → Add node**; removal remains in **Nodes**; see the [nodes guide](../getting-started/nodes.md) |
+| Add, resize or remove execution nodes | **Nodes**: **Add node**, **Edit node** and removal; see the [nodes guide](../getting-started/nodes.md) |
 | Set the default model of a harness | **Settings → Models and credentials**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |
 | Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [self-hosted executors](../getting-started/self-hosted.md) |

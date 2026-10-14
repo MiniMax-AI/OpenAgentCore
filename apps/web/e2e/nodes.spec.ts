@@ -112,7 +112,7 @@ test("issues no command before the installation is read, for a loopback public U
     await held;
     await route.fulfill({ status: 500, json: { error: { message: "Unavailable.", type: "server_error", code: null, param: null } } });
   });
-  await openConsole(page, request, "settings?id=sandbox", { installation: "local" });
+  await openConsole(page, request, "nodes", { installation: "local" });
   await page.getByRole("button", { name: "Add node" }).click();
   const add = page.getByRole("dialog", { name: "Add node" });
   await expect(add.getByRole("status")).toHaveText("Checking this installation's public URL…");
@@ -351,7 +351,7 @@ test("keeps the page usable when Core refuses a sandbox change, and shows a safe
 
 test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {
   await openConsole(page, request, "nodes");
-  // Nodes links to the sole capacity editor in Settings.
+  // Nodes owns each node's limits and their editor.
   const capacity = page.getByRole("table", { name: "Sandbox nodes" });
   await expect(capacity).toContainText("Active / limit");
   await expect(capacity).toContainText("5 / 8");
@@ -361,23 +361,7 @@ test("renames a node and sets how many sandboxes run on it at once", async ({ pa
   await edit.getByLabel("Sandboxes at once").fill("6");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(edit).toBeHidden();
-  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("core-01-large");
-  await expect(page.getByRole("region", { name: "Sandbox nodes", exact: true })).toContainText("5 / 6");
+  await expect(capacity).toContainText("core-01-large");
+  await expect(capacity).toContainText("5 / 6");
 });
 
-
-test("node settings history follows the selected node URL", async ({ page, request }) => {
-  await openConsole(page, request, "nodes");
-  await page.getByRole("row").filter({ hasText: "core-01" }).getByRole("button", { name: "Edit node", exact: true }).click();
-  const editor = page.getByRole("dialog", { name: "Edit node", exact: true });
-  await expect(editor).toBeVisible();
-  await expect(page).toHaveURL(/#settings\?id=sandbox&node=/);
-  await editor.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(editor).toBeHidden();
-  await page.goBack();
-  await expect(editor).toBeVisible();
-  await page.goForward();
-  await expect(page).toHaveURL(/#settings\?id=sandbox$/);
-  await expect(editor).toBeHidden();
-  expect(await writes(request)).toEqual([]);
-});

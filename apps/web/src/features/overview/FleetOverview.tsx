@@ -1,17 +1,10 @@
 import type { SandboxNode } from "@oac/agents-client";
-import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Cloud, Network, Server } from "lucide-react";
-import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { ConsolePopover } from "../../components/console-popover";
-import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
-import { epochSeconds, formatBytes, formatDateTime, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
-import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
-import { DiagnosticTip } from "../fleet/DiagnosticTip";
-import { nodeHealth, suspendedSandboxes, type NodeHealth } from "../fleet/fleet-model";
-import { coreMetricsQuery } from "../metrics/metrics-queries";
-import { NodeRolloutStatus } from "../sandbox/NodeRolloutStatus";
+import { StatusDot, type Tone } from "../../components/console-ui";
+import { formatInteger } from "../../lib/format";
+import { nodeHealth, type NodeHealth } from "../fleet/fleet-model";
 
 /** Nodes shown in the overview; the rest are counted and listed on the Nodes page. */
 export const FLEET_LIMIT = 4;
@@ -36,66 +29,33 @@ export interface CloudHost {
   template: string | null;
 }
 
-/** A compact fleet inventory with on-demand operational details. */
-export function FleetOverview({ nodes, cloud, suspends, coreLabel, coreTone, stale, onOpenNode, onOpenBackend, onOpenSandboxMetrics, onOpenCoreMetrics }: {
+/** A compact fleet inventory: Core, then E2B's cloud or the nodes; each row opens its page. */
+export function FleetOverview({ nodes, cloud, coreLabel, coreTone, onOpenNode, onOpenCloud, onOpenCore }: {
   nodes: readonly SandboxNode[];
   /** A direct deployment: Core links to the Provider's cloud instead of to machines. */
   cloud?: CloudHost | null;
-  /** Whether the deployment's Provider suspends sandboxes, which its suspension policy declares. */
-  suspends: boolean;
-  onOpenBackend?: () => void;
   coreLabel: string;
   coreTone: Tone;
-  /** Older generation or failed refresh: retain observations without implying live traffic. */
-  stale: boolean;
   onOpenNode: (node: SandboxNode) => void;
-  onOpenSandboxMetrics: () => void;
-  onOpenCoreMetrics: () => void;
+  onOpenCloud: () => void;
+  onOpenCore: () => void;
 }) {
   const { t, i18n } = useTranslation("overview");
   const locale = i18n.resolvedLanguage;
   const shown = cloud ? [] : overviewNodes(nodes);
   return (
     <div className="fleet-inventory">
-      <ConsolePopover
-        trigger={(
-          <button type="button" className="fleet-row fleet-core-row" aria-label={`${t("fleet.core")}, ${coreLabel}`}>
-            <Network size={18} strokeWidth={1.75} aria-hidden="true" />
-            <span className="fleet-row-info"><strong>{t("fleet.core")}</strong><StatusDot tone={coreTone} label={coreLabel} /></span>
-            <ChevronRight size={14} aria-hidden="true" />
-          </button>
-        )}
-        title={t("fleet.core")}
-        actions={<button className="text-action" type="button" onClick={onOpenCoreMetrics}>{t("fleet.openCoreMetrics")}</button>}
-      >
-        <CoreGlance label={coreLabel} tone={coreTone} />
-      </ConsolePopover>
+      <button type="button" className="fleet-row fleet-core-row" aria-label={`${t("fleet.core")}, ${coreLabel}`} onClick={onOpenCore}>
+        <Network size={18} strokeWidth={1.75} aria-hidden="true" />
+        <span className="fleet-row-info"><strong>{t("fleet.core")}</strong><StatusDot tone={coreTone} label={coreLabel} /></span>
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
       {cloud ? (
-        <ConsolePopover
-          side="left"
-          trigger={(
-            <button
-              type="button"
-              className="fleet-row"
-              aria-label={t("fleet.cloud.open", { running: formatInteger(cloud.running, locale) })}
-            >
-              <Cloud size={18} strokeWidth={1.75} aria-hidden="true" />
-              <span className="fleet-row-info"><strong>{t("fleet.cloud.name")}</strong><StatusDot tone="ok" label={t("fleet.cloud.running", { count: cloud.running })} /></span>
-              <ChevronRight size={14} aria-hidden="true" />
-            </button>
-          )}
-          title={t("fleet.cloud.name")}
-          actions={<>
-            <button className="text-action" type="button" onClick={onOpenSandboxMetrics}>{t("fleet.openSandboxMetrics")}</button>
-            {onOpenBackend ? <button className="text-action" type="button" onClick={onOpenBackend}>{t("fleet.cloud.openBackend")}</button> : null}
-          </>}
-        >
-          <Facts>
-            <Fact label={t("fleet.cloud.runningLabel")}>{formatInteger(cloud.running, locale)}</Fact>
-            <Fact label={t("fleet.cloud.pending")}>{formatInteger(cloud.pending, locale)}</Fact>
-            <Fact label={t("fleet.cloud.template")}>{cloud.template ? <code>{cloud.template}</code> : MISSING}</Fact>
-          </Facts>
-        </ConsolePopover>
+        <button type="button" className="fleet-row" aria-label={t("fleet.cloud.open", { running: formatInteger(cloud.running, locale) })} onClick={onOpenCloud}>
+          <Cloud size={18} strokeWidth={1.75} aria-hidden="true" />
+          <span className="fleet-row-info"><strong>{t("fleet.cloud.name")}</strong><StatusDot tone="ok" label={t("fleet.cloud.running", { count: cloud.running })} /></span>
+          <ChevronRight size={14} aria-hidden="true" />
+        </button>
       ) : null}
       {shown.map((node) => {
         const health = nodeHealth(node);
@@ -103,97 +63,14 @@ export function FleetOverview({ nodes, cloud, suspends, coreLabel, coreTone, sta
         const state = t(`nodeHealth.${health}`);
         const slots = `${formatInteger(node.active, locale)} / ${formatInteger(node.max_active, locale)}`;
         return (
-          <ConsolePopover
-            key={node.id}
-            side="left"
-            trigger={(
-              <button
-                type="button"
-                className="fleet-row fleet-node-row"
-                aria-label={t("fleet.open", { name, state, slots })}
-              >
-                <Server size={18} strokeWidth={1.75} aria-hidden="true" />
-                <span className="fleet-row-info"><strong>{name}</strong><StatusDot tone={healthTone[health]} label={state} /></span>
-                <span className="fleet-node-slots">{slots}</span>
-                <ChevronRight size={14} aria-hidden="true" />
-              </button>
-            )}
-            title={name}
-            meta={node.name ? <code>{node.id}</code> : undefined}
-            actions={<>
-              <button className="text-action" type="button" onClick={onOpenSandboxMetrics}>{t("fleet.openSandboxMetrics")}</button>
-              <button className="text-action" type="button" onClick={() => onOpenNode(node)}>{t("fleet.openNode")}</button>
-            </>}
-          >
-            <NodeGlance node={node} health={health} stale={stale} suspends={suspends} />
-          </ConsolePopover>
+          <button key={node.id} type="button" className="fleet-row fleet-node-row" aria-label={t("fleet.open", { name, state, slots })} onClick={() => onOpenNode(node)}>
+            <Server size={18} strokeWidth={1.75} aria-hidden="true" />
+            <span className="fleet-row-info"><strong>{name}</strong><StatusDot tone={healthTone[health]} label={state} /></span>
+            <span className="fleet-node-slots">{slots}</span>
+            <ChevronRight size={14} aria-hidden="true" />
+          </button>
         );
       })}
     </div>
-  );
-}
-
-function Facts({ children }: { children: ReactNode }) {
-  return <dl className="console-popover-facts">{children}</dl>;
-}
-
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return <div><dt>{label}</dt><dd>{children}</dd></div>;
-}
-
-/** A node at a glance: reachability (with the reason a degraded provider is not ready), sandbox slots and what the node has left. */
-function NodeGlance({ node, health, stale, suspends }: { node: SandboxNode; health: NodeHealth; stale: boolean; suspends: boolean }) {
-  const { t, i18n } = useTranslation("overview");
-  const locale = i18n.resolvedLanguage;
-  const now = Math.floor(Date.now() / 1000);
-  const seen = epochSeconds(node.last_seen_at);
-  const count = (value: number) => formatInteger(value, locale);
-  const diagnostic = health === "degraded" ? nodeProviderDiagnostic(node) : "";
-  return (
-    <Facts>
-      <Fact label={t("fleet.facts.status")}>
-        <span className="status-with-help">
-          <StatusDot tone={healthTone[health]} label={t(`nodeHealth.${health}`)} />
-          {diagnostic ? <DiagnosticTip code={diagnostic} /> : null}
-        </span>
-      </Fact>
-      <Fact label={t("fleet.targetPreparation")}><NodeRolloutStatus node={node} stale={stale} /></Fact>
-      <Fact label={t("fleet.servingGeneration")}><span className="status-with-help">{node.rollout.ready_generation ?? MISSING}<HelpTip>{t("fleet.servingGenerationHelp")}</HelpTip></span></Fact>
-      <Fact label={t("fleet.facts.lastSeen")}><span title={seen === null ? undefined : formatDateTime(seen, locale)}>{seen === null ? t("fleet.facts.never") : formatRelative(seen, now, locale)}</span></Fact>
-      <Fact label={t("fleet.facts.active")}>{count(node.active)}<span className="kpi-unit">/ {count(node.max_active)}</span></Fact>
-      {suspends ? <Fact label={t("fleet.facts.suspended")}>{count(suspendedSandboxes(node))}</Fact> : null}
-      <Fact label={t("fleet.facts.cpu")}>{node.cpu_count === null ? MISSING : t("fleet.facts.cores", { count: node.cpu_count })}</Fact>
-      <Fact label={t("fleet.facts.memory")}>{formatBytes(node.available_memory_bytes)}</Fact>
-      <Fact label={t("fleet.facts.disk")}>{formatBytes(node.available_disk_bytes)}</Fact>
-    </Facts>
-  );
-}
-
-/**
- * Core at a glance: its status, and — once Core reports its own metrics — its
- * uptime, execution slots, Turn queue, connected daemons and database latency.
- */
-function CoreGlance({ label, tone }: { label: string; tone: Tone }) {
-  const { t, i18n } = useTranslation("overview");
-  const locale = i18n.resolvedLanguage;
-  const query = useQuery({ ...coreMetricsQuery("1h"), retry: false });
-  const metrics = query.data ?? null;
-  const count = (value: number | null) => (value === null ? MISSING : formatInteger(value, locale));
-  const started = epochSeconds(metrics?.service.started_at ?? null);
-  const now = Math.floor(Date.now() / 1000);
-  return (
-    <Facts>
-      <Fact label={t("fleet.facts.status")}><StatusDot tone={tone} label={label} /></Fact>
-      {metrics ? <>
-        <Fact label={t("fleet.facts.uptime")}>{started === null ? MISSING : formatDuration(Math.max(0, now - started))}</Fact>
-        <Fact label={t("fleet.facts.slots")}>
-          {count(metrics.execution.slots_in_use)}
-          <span className="kpi-unit">/ {count(metrics.execution.slots_total)}</span>
-        </Fact>
-        <Fact label={t("fleet.facts.queued")}>{count(metrics.execution.queued_turns)}</Fact>
-        <Fact label={t("fleet.facts.daemons")}>{count(metrics.execution.connected_daemons)}</Fact>
-        <Fact label={t("fleet.facts.database")}>{metrics.database.ping_ms.p95 === null ? MISSING : formatDuration(metrics.database.ping_ms.p95 / 1000)}</Fact>
-      </> : null}
-    </Facts>
   );
 }

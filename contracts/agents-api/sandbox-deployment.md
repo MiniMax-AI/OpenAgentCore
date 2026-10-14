@@ -10,7 +10,7 @@ This contract owns the Core API routes below and their semantics. The [nodes gui
 
 `PATCH /core/v1/sandbox/deployment` accepts `{"idle_seconds": 300}`. `idle_seconds` is a required integer from 30 to 86400 seconds, defaulting to 300, stored in Core's database. Only configured Providers declaring checkpoint support accept this change; unconfigured, unsupported or resetting deployments reject it. Success returns the deployment view with the saved `suspension.idle_seconds`.
 
-Changes apply to existing and new running allocations on the next lifecycle pass, without a Core restart, generation change or node rollout. Suspension already in progress is not cancelled; existing snapshots and the 24-hour retention period are unchanged. [Capacity-pressure reclamation](../../docs/sandbox-provider.md#suspension) can still suspend after 15 seconds of inactivity. Web manages this deployment-wide policy in **Settings** → **Sandbox and scheduling** → **Capacity and suspension**. The adjacent **Sandbox nodes** section owns per-node capacity editing; the policy belongs to the deployment and capacity limits remain node-owned.
+Changes apply to existing and new running allocations on the next lifecycle pass, without a Core restart, generation change or node rollout. Suspension already in progress is not cancelled; existing snapshots and the 24-hour retention period are unchanged. [Capacity-pressure reclamation](../../docs/sandbox-provider.md#suspension) can still suspend after 15 seconds of inactivity. Web manages this deployment-wide policy in **Settings** → **Sandbox and scheduling** → **Automatic suspension**; each node's capacity limits stay node-owned and are edited on **Nodes** with **Edit node**.
 
 ## Routes
 

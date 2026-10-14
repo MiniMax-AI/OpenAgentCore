@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 74cbd391bcc6aed0df2aa3b6272689eb75874f88f0c0cf6bc45e22a9b708b905
+source_hash: bfed9ea629660a7018b7993445122e99158bd7b6319f08b0ee6a468f23310bde
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -12,7 +12,7 @@ source_hash: 74cbd391bcc6aed0df2aa3b6272689eb75874f88f0c0cf6bc45e22a9b708b905
 | --- | --- | --- | --- |
 | Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；Add node 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置的发行版 Runtime release。参见 [console server](console-server.md) |
 | Administrator API | `/core/v1/**`，不包括 `/core/v1/sandbox` | Core 密钥，由控制台服务器添加 | 项目、密钥、资源读取和删除、诊断、执行器凭据和安装命令、来源信息、汇总、Core 指标、安装信息、默认模型 |
-| Sandbox administration | `/core/v1/sandbox/**` | Core 密钥，由控制台服务器添加 | Sandbox 配置；Overview 和 Sandbox metrics 中的 Nodes、机群与容量数据；每个项目的 Runtime observations |
+| Sandbox administration | `/core/v1/sandbox/**` | Core 密钥，由控制台服务器添加 | Sandbox 配置；Nodes；Overview 上的机群与容量摘要；Sandbox metrics 中每个项目的 Runtime observations |
 | Agents API | `/v1/**` | 项目 API 密钥 | 不使用。控制台会向开发者说明如何调用它（参见 [Provenance and monitoring](#provenance-and-monitoring)） |
 
 浏览器请求均为同源请求，并且仅携带控制台会话 Cookie。浏览器只在登录请求体中发送一次 Core 密钥，且绝不存储该密钥；它既不持有也不发送 API 密钥或 `OpenAI-Beta` 标头。控制台通过 [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md) 中的 `AdminClient`、`SandboxAdminClient` 和 `CoreMetricsClient` 执行读取，这些客户端会验证每个响应：格式错误的值会被报告为失败，或按下文说明标记为无法识别，绝不会用猜测值或零值替代。
@@ -75,7 +75,7 @@ source_hash: 74cbd391bcc6aed0df2aa3b6272689eb75874f88f0c0cf6bc45e22a9b708b905
 | 写入操作 | `GET /core/v1/projects/{project_id}/write-operations` | 项目的写入历史，按最新优先，可按密钥和资源类型筛选，每页 50 条 |
 | 汇总 | `GET /core/v1/summary` | Overview（按项目）、Agents 列表（`group_by=agent`）、项目页面（按项目并使用 `group_by=key`）、Agent 指标（跳过空闲项目，并统计从范围开始以来按创建密钥划分的使用量）、Projects 列表（最近活动） |
 | 安装 | `GET /core/v1/installation` | Settings → Service and deployment 的 Installation 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 Startup 设置（`configuration.settings`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）。如果敏感设置包含值，或存在未知成员，读取会失败 |
-| Core 指标 | `GET /core/v1/metrics?range=` | Core 指标页面；Overview 上的 Core 弹出内容。不存在该路由的 Core（404）会显示为未报告数据，此时弹出内容仅显示 Core 状态。[Core metrics contract](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
+| Core 指标 | `GET /core/v1/metrics?range=` | Core 指标页面。不存在该路由的 Core（404）会显示为未报告数据。[Core metrics contract](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
 
 如果为 `local_only`，或者没有 `public_url`，Add node 将无法签发命令，Clean up the host 也无法提供命令。随后 Overview、Nodes 和 Settings 会显示醒目警告，并通过 Review the public address 前往 Settings → Service and deployment。Nodes 会禁用 Add node 并显示明确原因，Getting started 则将 sandbox 步骤保留为待办项。
 
@@ -105,11 +105,11 @@ source_hash: 74cbd391bcc6aed0df2aa3b6272689eb75874f88f0c0cf6bc45e22a9b708b905
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 Managed in Settings 前往 Settings → Service and deployment，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 Settings → Sandbox and scheduling 和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 Settings → Sandbox and scheduling 和 Nodes 摘要中 |
+| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 Managed in Settings 前往 Settings → Service and deployment，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 Settings → Sandbox and scheduling 和 Sandbox metrics 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 Settings → Sandbox and scheduling 中 |
 | E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
-| Nodes | `GET /core/v1/sandbox/nodes` | Nodes 页面；Overview 上的机群；Sandbox metrics 中的节点容量。在线节点的 `diagnostic`（一个[就绪状态码](../getting-started/nodes.md#readiness-codes)；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在上述每个页面及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，Nodes 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 Old address，而不是健康状态。**Add node** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
-| 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Sandbox metrics 节点对话框：主机自最近一次心跳以来的 CPU 忙碌占比和内存使用量，以及页面所选范围内二者的历史记录。**Edit node** 读取 `host.effective_cpu_cores` 和 `host.total_memory_bytes`，用于在每个 Sandbox 大小旁显示主机容量，以及最多可容纳多少个该大小的 Sandbox |
+| Nodes | `GET /core/v1/sandbox/nodes` | Nodes 页面；Overview 上的机群；Sandbox metrics 中每个托管 Runtime 所在的节点。在线节点的 `diagnostic`（一个[就绪状态码](../getting-started/nodes.md#readiness-codes)；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在 Nodes 列表及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，Nodes 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 Old address，而不是健康状态。**Add node** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
+| 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | Nodes 中的节点页面：主机最近一次心跳报告的 CPU 忙碌占比、内存使用量和可用磁盘，以及 1 小时、6 小时或 24 小时内 CPU 与内存的历史记录；页面可见时每 30 秒刷新一次。**Edit node** 读取 `host.effective_cpu_cores` 和 `host.total_memory_bytes`，用于在每个 Sandbox 大小旁显示主机容量，以及最多可容纳多少个该大小的 Sandbox |
 | 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | Nodes 页面；Sandbox metrics。节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间；时间为 null 时显示短横线。它不会根据阶段时间或部署的 `suspension.retention_seconds` 推算快照到期时间 |
 | 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **Add node**：管理员先设置节点的 Sandbox 限制（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
 | 更新节点 | `PATCH /core/v1/sandbox/nodes/{node_id}` | **Edit node**：同时修改名称和 Sandbox 限制（保留数量限制仅适用于 microsandbox；在 Docker 下，Core 会将其设为活动数量限制） |

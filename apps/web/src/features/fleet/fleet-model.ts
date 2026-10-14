@@ -25,10 +25,6 @@ export interface CapacitySummary {
   active: number;
   /** Active-sandbox limit across online nodes. */
   maxActive: number;
-  retained: number;
-  maxRetained: number;
-  reserved: number;
-  cleanupPending: number;
   /** Sandboxes held suspended (where the Provider declares checkpoint support): placed, but not counted as active. */
   suspended: number;
 }
@@ -52,10 +48,6 @@ export function capacitySummary(nodes: readonly SandboxNode[]): CapacitySummary 
     available: nodes.filter((node) => nodeHealth(node) === "available").length,
     active: online.reduce((sum, node) => sum + node.active, 0),
     maxActive: online.reduce((sum, node) => sum + node.max_active, 0),
-    retained: online.reduce((sum, node) => sum + node.retained, 0),
-    maxRetained: online.reduce((sum, node) => sum + node.max_retained, 0),
-    reserved: nodes.reduce((sum, node) => sum + node.reserved, 0),
-    cleanupPending: nodes.reduce((sum, node) => sum + node.cleanup_pending, 0),
     suspended: nodes.reduce((sum, node) => sum + suspendedSandboxes(node), 0),
   };
 }
