@@ -1,4 +1,4 @@
-import { AgentCoreError, type EnvironmentTemplateResource, type SavedAgent, type Skill, type Vault, type VaultCredential } from "@oac/agents-client";
+import { type EnvironmentTemplateResource, type SavedAgent, type Skill, type Vault, type VaultCredential } from "@oac/agents-client";
 import { queryOptions, useQuery, useQueryClient, type QueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
 import { useCallback } from "react";
 
@@ -16,12 +16,6 @@ type SkillVersionsPage = Awaited<ReturnType<typeof readSkillVersionsPage>>;
  * show.
  */
 
-/** A definite 4xx answer (a missing resource above all) does not change on a retry. */
-export function retryTransient(failureCount: number, error: unknown): boolean {
-  if (error instanceof AgentCoreError && error.status >= 400 && error.status < 500) return false;
-  return failureCount < 1;
-}
-
 /** The row the project's cached list holds for `id`, if the list was read. */
 function listedRow<T extends { id: string }>(spec: CollectionSpec<T>, projectId: string, id: string): T | undefined {
   return queryClient.getQueryData(collectionQuery(spec, projectId).queryKey)?.find((row) => row.id === id);
@@ -38,7 +32,6 @@ export function agentQuery(projectId: string, agentId: string) {
     queryKey: ["agent", projectId, agentId],
     queryFn: () => projectClient(projectId).retrieveAgent(agentId),
     placeholderData: () => listedRow(collections.agents, projectId, agentId),
-    retry: retryTransient,
   });
 }
 
@@ -47,7 +40,6 @@ export function templateQuery(projectId: string, templateId: string) {
     queryKey: ["template", projectId, templateId],
     queryFn: ({ signal }) => projectClient(projectId).retrieveEnvironmentTemplate(templateId, { signal }),
     placeholderData: () => listedRow(collections.templates, projectId, templateId),
-    retry: retryTransient,
   });
 }
 
@@ -56,7 +48,6 @@ export function vaultQuery(projectId: string, vaultId: string) {
     queryKey: ["vault", projectId, vaultId],
     queryFn: ({ signal }) => projectClient(projectId).retrieveVault(vaultId, { signal }),
     placeholderData: () => listedRow(collections.vaults, projectId, vaultId),
-    retry: retryTransient,
   });
 }
 
@@ -67,7 +58,6 @@ export function vaultCredentialsQuery(projectId: string, vaultId: string) {
       const client = projectClient(projectId);
       return readAllPages((after) => client.listVaultCredentials(vaultId, { after, limit: 100, signal }));
     },
-    retry: retryTransient,
   });
 }
 
@@ -79,7 +69,6 @@ export function skillQuery(projectId: string, skillId: string, core: SkillReader
     queryKey: ["skill", projectId, skillId],
     queryFn: ({ signal }) => core.retrieveSkill(skillId, { signal }),
     placeholderData: () => seed ?? listedRow(collections.skills, projectId, skillId),
-    retry: retryTransient,
   });
 }
 
@@ -88,7 +77,6 @@ export function skillVersionsQuery(projectId: string, skillId: string, core: Ski
   return queryOptions<SkillVersionsPage>({
     queryKey: ["skill", projectId, skillId, "versions"],
     queryFn: ({ signal }) => readSkillVersionsPage(core, skillId, [], undefined, signal),
-    retry: retryTransient,
   });
 }
 

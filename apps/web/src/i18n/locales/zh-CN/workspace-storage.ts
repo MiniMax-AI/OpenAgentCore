@@ -24,7 +24,8 @@ export const workspaceStorage = {
   credentialHelp: "仅在适配器要求时填写凭据对象。已有凭据无法读取或复制到新配置。只修改租户容量时保留当前凭据。",
   invalid: "请填写适配器标识、有效的 JSON 对象，以及 0 至 4294967295 MiB 之间的整数容量。",
   uncertain: "无法确认保存结果。请刷新当前选择后再重试。重试保留此配置 ID；选择新配置不会撤销之前的保存。",
-  readFailed: "无法刷新工作区存储。之前显示的配置可能已过期。",
+  readFailed: "无法读取工作区存储。",
+  refreshFailed: "无法刷新工作区存储。之前显示的配置可能已过期。",
   save: "保存",
   saving: "正在保存…",
 } as const;

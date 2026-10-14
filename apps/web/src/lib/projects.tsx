@@ -8,7 +8,7 @@ import { QueryClientProvider, useQueries, useQuery, useQueryClient } from "@tans
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import { readError } from "./read-error";
+import { coreError } from "./core-error";
 import { ConsoleSelect } from "../components/console-select";
 import { HelpTip } from "../components/console-ui";
 import { admin, listCreators } from "./admin-view";
@@ -55,12 +55,12 @@ function ProjectsState({ children }: { children: ReactNode }) {
   const state: ProjectsState = query.isPending
     ? { status: "loading", projects, error: null }
     : query.isError && !query.data
-      ? { status: "failed", projects, error: readError(query.error, t) }
+      ? { status: "failed", projects, error: coreError(query.error, t) }
       : { status: query.isFetching ? "loading" : "ready", projects, error: null };
   const { refetch } = query;
   const refresh = useCallback(() => { void refetch(); }, [refetch]);
   const byId = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
-  const refreshError = query.isError && query.data ? (readError(query.error, t)) : null;
+  const refreshError = query.isError && query.data ? (coreError(query.error, t)) : null;
   const failure = query.isError ? query.error : null;
   const value = useMemo(() => ({ state, refresh, byId, refreshError, failure }), [state.status, state.error, projects, refresh, byId, refreshError, failure]); // eslint-disable-line react-hooks/exhaustive-deps
   return <ProjectsContext.Provider value={value}>{children}</ProjectsContext.Provider>;
@@ -211,6 +211,7 @@ export function projectClient(projectId: string): ProjectClient {
  * name; the others still show.
  */
 export function useProjectCollection<T>(spec: CollectionSpec<T>, filter: ProjectFilterValue): ProjectCollection<T> {
+  const { t } = useTranslation("common");
   const { state } = useProjects();
   const queryClient = useQueryClient();
   const targets = useMemo(() => state.projects.filter((project) => !filter || project.id === filter), [filter, state.projects]);
@@ -234,7 +235,7 @@ export function useProjectCollection<T>(spec: CollectionSpec<T>, filter: Project
   let pending = !projectsKnown;
   results.forEach((result, index) => {
     const project = targets[index]!;
-    if (result.isError) failures.push({ project, message: result.error instanceof Error ? result.error.message : String(result.error) });
+    if (result.isError) failures.push({ project, message: coreError(result.error, t) });
     if (result.isFetching || result.isPending) pending = true;
   });
   const specKey = JSON.stringify(spec.key);

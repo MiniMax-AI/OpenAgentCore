@@ -7,7 +7,7 @@ import { failedLast, useFailureToast } from "../../components/Toast";
 import { DashboardSkeleton } from "../../components/Skeleton";
 import { Kpi, KpiStrip, Section, SegmentedControl, type Tone } from "../../components/console-ui";
 import { formatBytes, formatCores, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
-import { readError } from "../../lib/read-error";
+import { coreError } from "../../lib/core-error";
 import { RuntimeCharts } from "../metrics/RuntimeCharts";
 import type { RuntimeTrendSample } from "../dashboard/runtime-trends";
 
@@ -76,7 +76,7 @@ export function SessionRuntimeSection({
   const history: { state: "loading" | "ready" | "unavailable" | "failed"; value: SessionRuntimeHistory | null; error: string | null } = {
     state: historyRead.isError ? "failed" : historyRead.data === undefined ? "loading" : historyRead.data === null ? "unavailable" : "ready",
     value: historyRead.data ?? null,
-    error: historyRead.isError ? readError(historyRead.error, tCommon) : null,
+    error: historyRead.isError ? coreError(historyRead.error, tCommon) : null,
   };
   // Both reads repeat while the Session runs; a failure is reported once while it lasts.
   useFailureToast(failedLast(observationRead), t("runtime.observationFailed", { reason: observationError ?? "" }), "session-runtime-observation");

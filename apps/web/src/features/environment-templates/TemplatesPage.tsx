@@ -59,6 +59,13 @@ function TemplatesList() {
   // Projects that could not be read are reported in a toast; the list shows the rest.
   const failedNames = collection.failures.map((failure) => failure.project.name).join(", ");
   useFailureToast(collection.items.length > 0 && collection.failures.length > 0, tCommon("project.partial", { names: failedNames }), "templates-partial");
+  // A selected project keeps its filter in view, even when it holds nothing.
+  const toolbar = collection.items.length || filter ? (
+    <ListToolbar label={t("filterLabel")} summary={collection.items.length ? listSummary(tCommon, rows.length, collection.items.length, { locale }) : undefined}>
+      <ProjectFilter value={filter} onChange={setFilter} />
+      <SearchField value={query} onChange={setQuery} placeholder={t("filterPlaceholder")} label={t("filterLabel")} />
+    </ListToolbar>
+  ) : null;
   let body;
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("loading")} columns={6} />;
@@ -69,10 +76,6 @@ function TemplatesList() {
   } else {
     body = (
       <>
-        <ListToolbar label={t("filterLabel")} summary={listSummary(tCommon, rows.length, collection.items.length, { locale })}>
-          <ProjectFilter value={filter} onChange={setFilter} />
-          <SearchField value={query} onChange={setQuery} placeholder={t("filterPlaceholder")} label={t("filterLabel")} />
-        </ListToolbar>
         {rows.length ? (
           <div className="table-frame">
             <table className="data-table templates-table" aria-label={t("listLabel")}>
@@ -152,7 +155,7 @@ function TemplatesList() {
         help={<>{tPages("templates.subtitle")} {t("boundary")}</>}
         actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} />}
       />
-      <PageBody>{body}</PageBody>
+      <PageBody>{toolbar}{body}</PageBody>
       <ConfirmDialog
         open={remove.target !== null}
         title={t("modal.delete")}

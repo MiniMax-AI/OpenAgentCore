@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import i18n from "../../i18n";
 import { diagnosticFailure } from "../../lib/diagnostic-failure";
-import { DiagnosticScope, SessionFailure, TurnFailure, sessionDiagnosticsQuery, turnDiagnosticsQuery } from "./session-diagnostics";
+import { DiagnosticScope, SessionFailure, SessionFailureDetails, TurnFailure, sessionDiagnosticsQuery, turnDiagnosticsQuery } from "./session-diagnostics";
 import { ItemReceiptTiming } from "./trace/ItemReceiptTiming";
 
 const scope = { projectId: "project", sessionId: "session" };
@@ -23,7 +23,7 @@ function render(kind: "session" | "turn", data: SessionDiagnostics | TurnDiagnos
   client.setQueryData(key, data);
   if (error) client.getQueryCache().find({ queryKey: key })!.setState({ status: "error", error: new Error("PRIVATE_READ_SENTINEL") });
   const html = renderToStaticMarkup(<QueryClientProvider client={client}><DiagnosticScope.Provider value={scope}>
-    {kind === "session" ? <SessionFailure projectId={scope.projectId} session={session} truncate={truncate} /> : <TurnFailure turn={turn} />}
+    {kind === "turn" ? <TurnFailure turn={turn} /> : truncate ? <SessionFailure projectId={scope.projectId} session={session} /> : <SessionFailureDetails projectId={scope.projectId} session={session} />}
   </DiagnosticScope.Provider></QueryClientProvider>);
   client.clear();
   return html;
@@ -36,6 +36,10 @@ describe("Core diagnostics in the console", () => {
     await i18n.changeLanguage("zh-CN");
     expect(render("session", sessionData)).toContain("模型提供商认证失败");
     expect(render("turn", turnData)).not.toContain("PRIVATE_NATIVE_SENTINEL");
+  });
+
+  it("gives the Session page the reason, then its next step, in one block", () => {
+    expect(render("session", sessionData)).toContain('<p class="session-failure-reason">The model provider rejected authentication.</p><p>Check the API key');
   });
 
   it("withholds old causes after a failed read or mismatched status", () => {

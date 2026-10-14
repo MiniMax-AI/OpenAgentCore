@@ -22,7 +22,7 @@ test("reads classified failures and separate Item receipts without execution wri
   await page.getByRole("radio", { name: /^Failed/ }).click();
   const row = page.getByRole("row").filter({ hasText: "The model provider rejected authentication" }).first();
   await row.getByRole("button", { name: /^Open Session / }).click();
-  await expect(page.getByLabel("Session facts")).toContainText("Check the API key of the Session's model provider");
+  await expect(page.getByRole("region", { name: "Failure details" })).toContainText("Check the API key of the Session's model provider");
   await page.getByRole("radio", { name: "Trace", exact: true }).click();
   await page.locator(".trace-ledger-row-tools").first().click();
   await page.getByRole("tab", { name: "Timing", exact: true }).click();
@@ -49,12 +49,13 @@ test("shows diagnostics failure honestly and can retry in Chinese", async ({ pag
   await row.getByRole("button", { name: /^Open Session / }).click();
   await page.getByRole("button", { name: "Language and appearance" }).click();
   await page.getByRole("menuitemradio", { name: "简体中文" }).click();
-  await expect(page.getByLabel("Session 信息")).toContainText("失败详情不可用");
+  const failure = page.getByRole("region", { name: "失败详情" });
+  await expect(failure).toContainText("失败详情不可用");
   await expect(page.locator("body")).not.toContainText("RAW_SENTINEL");
   failed = false;
-  await page.getByLabel("Session 信息").getByRole("button", { name: "失败详情", exact: true }).click();
-  await page.getByLabel("Session 信息").getByRole("button", { name: "重试诊断读取", exact: true }).click();
-  await expect(page.getByLabel("Session 信息")).toContainText("模型提供商认证失败");
+  await failure.getByRole("button", { name: "失败详情", exact: true }).click();
+  await failure.getByRole("button", { name: "重试诊断读取", exact: true }).click();
+  await expect(failure).toContainText("模型提供商认证失败");
   expect(await writes(request)).toEqual([]);
 });
 

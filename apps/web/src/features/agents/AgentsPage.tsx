@@ -67,6 +67,13 @@ function AgentsList() {
   // Projects that could not be read are reported in a toast; the list shows the rest.
   const failedNames = collection.failures.map((failure) => failure.project.name).join(", ");
   useFailureToast(collection.items.length > 0 && collection.failures.length > 0, tCommon("project.partial", { names: failedNames }), "agents-partial");
+  // A selected project keeps its filter in view, even when it holds nothing.
+  const toolbar = collection.items.length || filter ? (
+    <ListToolbar label={t("view.filterLabel")} summary={collection.items.length ? listSummary(tCommon, rows.length, collection.items.length, { locale }) : undefined}>
+      <ProjectFilter value={filter} onChange={setFilter} />
+      <SearchField value={query} onChange={setQuery} placeholder={t("view.searchPlaceholder")} label={t("view.filterLabel")} />
+    </ListToolbar>
+  ) : null;
   let body;
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("loading", { defaultValue: "…" })} columns={8} />;
@@ -77,10 +84,6 @@ function AgentsList() {
   } else {
     body = (
       <>
-        <ListToolbar label={t("view.filterLabel")} summary={listSummary(tCommon, rows.length, collection.items.length, { locale })}>
-          <ProjectFilter value={filter} onChange={setFilter} />
-          <SearchField value={query} onChange={setQuery} placeholder={t("view.searchPlaceholder")} label={t("view.filterLabel")} />
-        </ListToolbar>
         {rows.length ? (
           <div className="table-frame agent-table-frame">
             <table className="data-table agent-table" aria-label={t("catalog.listLabel")}>
@@ -141,7 +144,7 @@ function AgentsList() {
         help={<>{tPages("agents.subtitle")} {t("view.usageHelp")}</>}
         actions={<RefreshButton onClick={refresh} refreshing={collection.status === "loading"} label={t("refreshLabel")} />}
       />
-      <PageBody>{body}</PageBody>
+      <PageBody>{toolbar}{body}</PageBody>
       <ConfirmDialog
         open={remove.target !== null}
         title={t("view.deleteTitle")}

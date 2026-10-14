@@ -25,7 +25,7 @@ import { ListToolbar, listSummary, NameCell, SearchField } from "../../component
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatPercent, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
-import { readError } from "../../lib/read-error";
+import { coreError } from "../../lib/core-error";
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, RuntimeDurableHistoryIncompleteError, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
@@ -197,7 +197,7 @@ function useRuntimeHistory(snapshot: RuntimeDashboardSnapshot | null, range: Run
 
 /** Core's typed errors and Web's own read bound, in the console's language. */
 function historyFailure(error: unknown, t: TFunction<"metrics">, tCommon: TFunction<"common">): string {
-  if (!(error instanceof RuntimeDurableHistoryIncompleteError)) return readError(error, tCommon);
+  if (!(error instanceof RuntimeDurableHistoryIncompleteError)) return coreError(error, tCommon);
   return error.limit === null ? t("sandbox.charts.historyMixed") : t("sandbox.charts.historyBudget", { limit: error.limit });
 }
 
@@ -293,9 +293,9 @@ function RuntimeTable({ rows, showProject, showNode, showCompute, onOpen }: { ro
           <thead>
             <tr>
               <th scope="col">{t("sandbox.session")}</th>
+              <th scope="col">{t("sandbox.status")}</th>
               {showProject ? <th scope="col">{tCommon("project.column")}</th> : null}
               {showNode ? <th scope="col">{t("sandbox.node")}</th> : null}
-              <th scope="col">{t("sandbox.status")}</th>
               {showCompute ? <th scope="col"><span className="column-help">{t("sandbox.recordedCompute")}<HelpTip>{t("sandbox.recordedComputeHelp")}</HelpTip></span></th> : null}
               <th scope="col">{t("sandbox.cpu")}</th>
               <th scope="col">{t("sandbox.memory")}</th>
@@ -315,9 +315,9 @@ function RuntimeTable({ rows, showProject, showNode, showCompute, onOpen }: { ro
                   <th scope="row">
                     <NameCell name={sessionTitle(session)} id={observation.session_id} fallback={tCommon("untitledSession")} onOpen={open} openLabel={t("sandbox.runtimeDialog.openLabel", { name: sessionTitle(session) ?? observation.session_id })} />
                   </th>
+                  <td><StatusDot tone={lifecycleTone(row)} label={lifecycleLabel(row, t)} /></td>
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
                   {showNode ? <td><NodeLink node={row.node} /></td> : null}
-                  <td><StatusDot tone={lifecycleTone(row)} label={lifecycleLabel(row, t)} /></td>
                   {showCompute ? <td>{row.allocation ? sandboxStateLabel(row.allocation.compute_phase, locale?.startsWith("zh") ? "zh-CN" : "en") : MISSING}</td> : null}
                   <td>
                     {cpu?.usage_cores != null ? (

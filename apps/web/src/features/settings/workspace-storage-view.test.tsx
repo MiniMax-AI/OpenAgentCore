@@ -6,9 +6,11 @@ import { WorkspaceStorageSettings } from "./WorkspaceStorageSettings";
 import { workspaceStorageQuery } from "./workspace-storage";
 
 const selection = { id: "11111111-1111-4111-8111-111111111111", adapter: "independent-adapter", parameters: { root: "/srv/workspaces" }, tenant_capacity_mib: 4096 };
-function render(value: typeof selection | null) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-  client.setQueryData(workspaceStorageQuery.queryKey, value);
+function render(value: typeof selection | null | undefined, failed = false) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, staleTime: Infinity } } });
+  if (value === undefined) client.getQueryCache().build(client, { queryKey: workspaceStorageQuery.queryKey });
+  else client.setQueryData(workspaceStorageQuery.queryKey, value);
+  if (failed) client.getQueryCache().find({ queryKey: workspaceStorageQuery.queryKey })!.setState({ status: "error", error: new Error("unavailable") });
   const result = renderToStaticMarkup(<QueryClientProvider client={client}><WorkspaceStorageSettings /></QueryClientProvider>);
   client.clear();
   return result;
@@ -28,6 +30,10 @@ describe("workspace storage settings", () => {
     expect(html).toContain("Independent workspace storage is not configured.");
     expect(html).toContain("Select new configuration");
     expect(html).not.toContain("Edit tenant capacity");
+  });
+  it("mentions earlier settings only when a refresh fails after a read", () => {
+    expect(render(undefined, true)).toContain("Workspace storage could not be read.");
+    expect(render(selection, true)).toContain("Previously displayed settings may be out of date.");
   });
   it("renders the same actions in Chinese", async () => {
     await i18n.changeLanguage("zh-CN");

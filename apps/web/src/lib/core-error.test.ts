@@ -5,7 +5,6 @@ import catalog from "../../../../services/core/internal/api/testdata/core-errors
 import { coreErrors as english } from "../i18n/locales/en/core-errors";
 import { coreErrors as chinese } from "../i18n/locales/zh-CN/core-errors";
 import { coreError, coreFieldError, knownCoreError } from "./core-error";
-import { readError } from "./read-error";
 
 const en = i18n.getFixedT("en", "common");
 const zh = i18n.getFixedT("zh-CN", "common");
@@ -50,10 +49,17 @@ describe("Core error catalog localization", () => {
     expect(coreFieldError(new Error("invalid_name name"), "name", en)).toBeNull();
   });
 
-  it("retains unknown-code messages without parsing them", () => {
+  it("keeps Core's message for an uncatalogued code in English and names the code in Chinese", () => {
     const error = failure("future_error", undefined, { max_length: 999 });
-    expect(coreError(error, zh)).toBe(error.message);
-    expect(readError(error, zh)).toBe(error.message);
-    expect(coreError(new Error("private transport data"), zh)).not.toContain("private");
+    expect(coreError(error, en)).toBe(error.message);
+    expect(coreError(error, zh)).toBe("Core 请求失败（future_error）。");
+    expect(coreFieldError(failure("future_error", "name"), "name", zh)).toBe("Core 请求失败（future_error）。");
+  });
+
+  it("names the HTTP status of a failure without a code and never shows other errors' text", () => {
+    const error = new AgentCoreError("An intermediary's arbitrary text", 502);
+    expect(coreError(error, en)).toBe("Core request failed (502).");
+    expect(coreError(error, zh)).toBe("Core 请求失败（502）。");
+    expect(coreError(new TypeError("private transport data"), zh)).toBe("无法从 Core 读取数据，请重试更新。");
   });
 });

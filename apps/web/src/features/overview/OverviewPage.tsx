@@ -7,7 +7,7 @@ import type { TFunction } from "i18next";
 import { InstallationNotice } from "../../components/InstallationNotice";
 import { installationQuery } from "../../lib/installation";
 import { ReadFailure } from "../../components/ReadFailure";
-import { readError } from "../../lib/read-error";
+import { coreError } from "../../lib/core-error";
 import { failedLast, useFailureToast } from "../../components/Toast";
 import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
@@ -169,7 +169,7 @@ export function OverviewPage() {
 
   // Each failed read is its own toast, shown once while it lasts.
   useFailureToast(failure !== null, tCommon("readFailure.unknown"), "overview-load");
-  useFailureToast(summaryError !== null, t("errors.summary", { reason: summaryError === null ? "" : readError(summaryError, tCommon) }), "overview-summary");
+  useFailureToast(summaryError !== null, t("errors.summary", { reason: summaryError === null ? "" : coreError(summaryError, tCommon) }), "overview-summary");
   useFailureToast(readFailures.length > 0, tCommon("project.partial", { names: readFailures.map((entry) => entry.project.name).join(", ") }), "overview-partial");
   useFailureToast(projectsFailed, t("errors.projects", { reason: projectsState.state.status === "failed" ? projectsState.state.error : projectsState.refreshError ?? "" }), "overview-projects");
 
@@ -488,8 +488,8 @@ function AttentionTable({ sessions, older, unreadNames, truncatedNames, now, onO
         <thead>
           <tr>
             <th scope="col">{t("attention.session")}</th>
-            <th scope="col">{tCommon("project.column")}</th>
             <th scope="col">{t("attention.status")}</th>
+            <th scope="col">{tCommon("project.column")}</th>
             <th scope="col" className="numeric">{t("attention.lastActive")}</th>
           </tr>
         </thead>
@@ -503,11 +503,11 @@ function AttentionTable({ sessions, older, unreadNames, truncatedNames, now, onO
                 <th scope="row">
                   <NameCell name={sessionTitle(session)} id={session.id} fallback={tCommon("untitledSession")} onOpen={() => onOpen(entry)} />
                 </th>
-                <td><ProjectName project={entry.project} /></td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <StatusDot tone={failed ? "danger" : "neutral"} label={t(`sessions.${failed ? "failed" : "requires_action"}`)} />
-                  <div className="overview-attention-reason" title={waiting ?? undefined}>{failed ? <SessionFailure projectId={entry.project.id} session={session} truncate /> : waiting}</div>
+                  <div className="overview-attention-reason" title={waiting ?? undefined}>{failed ? <SessionFailure projectId={entry.project.id} session={session} /> : waiting}</div>
                 </td>
+                <td><ProjectName project={entry.project} /></td>
                 <td className="numeric">{formatRelative(session.last_active_at, now, locale)}</td>
               </tr>
             );

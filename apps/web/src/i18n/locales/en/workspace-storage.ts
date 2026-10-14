@@ -24,7 +24,8 @@ export const workspaceStorage = {
   credentialHelp: "Enter the adapter's credential object only if required. Existing credentials cannot be read or copied into a new configuration. Changing only tenant capacity retains the current credential.",
   invalid: "Enter an adapter identifier, valid JSON objects, and a whole capacity from 0 to 4294967295 MiB.",
   uncertain: "The save could not be confirmed. Refresh the current selection before retrying. Keep this configuration ID for a retry; a new selection does not undo a previous save.",
-  readFailed: "Workspace storage could not be refreshed. Previously displayed settings may be out of date.",
+  readFailed: "Workspace storage could not be read.",
+  refreshFailed: "Workspace storage could not be refreshed. Previously displayed settings may be out of date.",
   save: "Save",
   saving: "Saving…",
 } as const;

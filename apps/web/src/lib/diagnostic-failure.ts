@@ -16,9 +16,14 @@ export function diagnosticReason(failure: DiagnosticFailure, t: TFunction<"diagn
   return message;
 }
 
+/** The catalog's next step for the reason; empty when it has none. */
+export function diagnosticNext(failure: DiagnosticFailure, t: TFunction<"diagnostics">): string {
+  return t(`next.${failure.code}`, { defaultValue: "" });
+}
+
 /** The classified reason, then its next step when the catalog has one. */
 export function diagnosticFailure(failure: DiagnosticFailure, t: TFunction<"diagnostics">): string {
   const reason = diagnosticReason(failure, t);
-  const next: string = t(`next.${failure.code}`, { defaultValue: "" });
+  const next = diagnosticNext(failure, t);
   return next ? reason + t("sentenceGap") + next : reason;
 }

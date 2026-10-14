@@ -1,9 +1,15 @@
 import { QueryClient, queryOptions } from "@tanstack/react-query";
-import type { AgentSession, EnvironmentTemplateResource, SavedAgent, Skill, SourceFileListEntry, Vault } from "@oac/agents-client";
+import { AgentCoreError, type AgentSession, type EnvironmentTemplateResource, type SavedAgent, type Skill, type SourceFileListEntry, type Vault } from "@oac/agents-client";
 
 import { readSessionLog } from "../features/sessions/session-log";
 import { listAllProjects } from "./admin-view";
 import { projectClient, readAllPages, type ProjectClient } from "./projects";
+
+/** Only a transient failure, a 5xx answer or a failed fetch, is read again, once; a 4xx answer would not change. */
+export function retryTransient(failureCount: number, error: unknown): boolean {
+  const transient = error instanceof AgentCoreError ? error.status >= 500 : error instanceof TypeError;
+  return transient && failureCount < 1;
+}
 
 /**
  * One cache for every Web API read. A page the administrator has seen opens
@@ -15,7 +21,7 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 30_000,
       gcTime: 15 * 60_000,
-      retry: 1,
+      retry: retryTransient,
       refetchOnWindowFocus: false,
     },
   },

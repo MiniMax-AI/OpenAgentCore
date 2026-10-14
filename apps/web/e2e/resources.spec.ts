@@ -27,6 +27,15 @@ test("goes back to the page a resource was opened from", async ({ page, request 
   await expect(page.getByRole("heading", { name: "Report builder", level: 1 })).toBeVisible();
 });
 
+test("keeps the project filter on a list whose selected project holds nothing", async ({ page, request }) => {
+  // The archived Legacy project holds no Skills.
+  await openConsole(page, request, "skills?project=proj_0b533e99");
+  await expect(page.getByText("No Skills yet")).toBeVisible();
+  await page.getByRole("combobox", { name: "Project", exact: true }).click();
+  await page.getByRole("option", { name: "All projects" }).click();
+  await expect(page.getByRole("button", { name: /^Open / }).first()).toBeVisible();
+});
+
 test("reads an Agent saved with a model provider and no harness, without its key", async ({ page, request }) => {
   // Production holds Spec drafter, saved with only an x_agents_core.model_provider.
   await openConsole(page, request, "agents?project=proj_7f3a91c2");

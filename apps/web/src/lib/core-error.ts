@@ -31,12 +31,19 @@ export function knownCoreError(error: unknown, t: TFunction<"common">, nameUnit:
   return t(`coreErrors.${error.code as keyof typeof coreErrors}`);
 }
 
+/**
+ * Catalogued codes read in the console's language. Core's message for any
+ * other code is English, so only English shows it; other languages name the
+ * code. A failure without a code names its HTTP status.
+ */
 export function coreError(error: unknown, t: TFunction<"common">): string {
-  return knownCoreError(error, t) ?? (error instanceof AgentCoreError && error.message ? error.message : t("readFailure.unknown"));
+  if (!(error instanceof AgentCoreError)) return t("readFailure.unknown");
+  if (!error.code) return t("readFailure.request", { status: error.status });
+  return knownCoreError(error, t) ?? t("readFailure.code", { code: error.code, message: error.message || error.code });
 }
 
 /** Exact field paths only; timeouts and unknown write outcomes are form-level errors. */
 export function coreFieldError(error: unknown, param: string, t: TFunction<"common">, nameUnit: "characters" | "bytes" = "characters"): string | null {
   if (!(error instanceof AgentCoreError) || error.status < 400 || error.status >= 500 || error.status === 408 || error.param !== param) return null;
-  return knownCoreError(error, t, nameUnit) ?? error.message;
+  return knownCoreError(error, t, nameUnit) ?? coreError(error, t);
 }

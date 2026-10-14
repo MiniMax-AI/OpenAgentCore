@@ -81,7 +81,7 @@ export function WorkspaceStorageSettings() {
   const current = query.data;
   const blocked = query.isError || query.isFetching;
   return <Section headingId="workspace-storage-heading" title={t("title")} help={t("help")} actions={current !== undefined ? <button className="button outline" disabled={blocked} onClick={() => setEditor("configuration")}>{t("configure")}</button> : undefined}>
-    {query.isError ? <ErrorState title={t("readFailed")} onRetry={() => void query.refetch()} /> : null}
+    {query.isError ? <ErrorState title={t(current === undefined ? "readFailed" : "refreshFailed")} onRetry={() => void query.refetch()} /> : null}
     {current === undefined && !query.isError ? <TableSkeleton rows={4} columns={2} /> : null}
     {current ? <div className="settings-rows">
       <Fact label={t("adapter")}>{current.adapter}</Fact>

@@ -5,6 +5,7 @@ import { HelpTip } from "../../components/console-ui";
 import { ConsoleSelect } from "../../components/console-select";
 import { useCopy } from "../api-keys/IssuedKey";
 import { useQuery } from "@tanstack/react-query";
+import { docsUrl } from "../../lib/docs";
 import { admin } from "../../lib/projects";
 import type { ExecutorInstall, HostShell } from "./executor-install";
 
@@ -25,7 +26,7 @@ export function useExecutorInstall(projectId: string, environmentId: string, arc
 
 /** One home for native installation instructions; issuing a credential does not establish a connection. */
 export function ExecutorInstallPanel({ install, archived, connected = false }: { install: ExecutorInstall; archived: boolean; connected?: boolean }) {
-  const { t } = useTranslation("sessions");
+  const { t, i18n } = useTranslation("sessions");
   const headingId = useId();
   const [shell, setShell] = useState<HostShell>("posix");
   return <section className="executor-install" aria-labelledby={headingId}>
@@ -38,7 +39,7 @@ export function ExecutorInstallPanel({ install, archived, connected = false }: {
       </span>
     </div>
     <p className="executor-install-note">{t(archived ? "executor.install.archived" : "executor.install.steps")}</p>
-    <a className="text-action" href="https://github.com/MiniMax-AI/OpenAgentCore/blob/main/docs/getting-started/self-hosted.md" target="_blank" rel="noreferrer">{t("executor.install.guide")}</a>
+    <a className="text-action" href={docsUrl("docs/getting-started/self-hosted", i18n.resolvedLanguage)} target="_blank" rel="noreferrer">{t("executor.install.guide")}</a>
     {install.kind === "ready" ? <>
       <ConsoleSelect label={t("executor.install.platform")} value={shell} options={[{ value: "posix", label: "Linux / macOS" }, { value: "powershell", label: "Windows · PowerShell" }]} onChange={(value) => { if (value === "posix" || value === "powershell") setShell(value); }} />
       <InstallCommand value={install.commands[shell]} />

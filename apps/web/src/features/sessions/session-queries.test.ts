@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AgentCoreError, type AgentSession, type AgentTurn, type ListPage, type SessionItem } from "@oac/agents-client";
 
-import { retryTransient } from "../resources/detail-queries";
+import { queryClient, retryTransient } from "../../lib/queries";
 import { SESSION_POLL_MS } from "./session-history";
 import { requestFullHistoryRead, sessionHistoryQuery, sessionPollInterval, type SessionHistoryRead } from "./session-queries";
 
@@ -99,8 +99,9 @@ describe("Session history cache", () => {
   });
 });
 
-describe("Detail read retries", () => {
-  it("does not retry a definite 4xx answer and retries anything else once", () => {
+describe("Read retries", () => {
+  it("retries every read once after a 5xx answer or a failed fetch, never after a 4xx answer", () => {
+    expect(queryClient.getDefaultOptions().queries?.retry).toBe(retryTransient);
     expect(retryTransient(0, new AgentCoreError("missing", 404))).toBe(false);
     expect(retryTransient(0, new AgentCoreError("down", 503))).toBe(true);
     expect(retryTransient(1, new AgentCoreError("down", 503))).toBe(false);

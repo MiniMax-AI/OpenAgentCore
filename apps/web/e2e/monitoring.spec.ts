@@ -72,7 +72,9 @@ test("keeps a failed Session's reason in sight in the Session log and on its pag
   // The reason never widens the table: its last column, Delete, stays in view without scrolling sideways.
   await expect(row.getByRole("button", { name: /^Delete Session / })).toBeInViewport();
   await row.getByRole("button", { name: /^Open Session / }).click();
-  await expect(page.getByLabel("Session facts")).toContainText(reason);
+  // The Status fact stays short; the reason reads under the facts.
+  await expect(page.getByLabel("Session facts")).not.toContainText(reason);
+  await expect(page.getByRole("region", { name: "Failure details" })).toContainText(reason);
   await page.getByRole("button", { name: /^Jump to (the|a) failed Turn/ }).click();
   await expect(page.locator("li.chat-turn:focus")).toContainText("Failed");
 });
@@ -107,7 +109,7 @@ test("shows a self-hosted Session's install command, issues its credential once,
   // Web displays Core-provided commands with short-lived installation authority.
   const install = section.getByRole("region", { name: "Connect a host" });
   await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText("bash fixture-bootstrap --authorization fixture-short-lived");
-  await expect(install.getByRole("link")).toHaveAttribute("href", /docs\/getting-started\/self-hosted.md$/);
+  await expect(install.getByRole("link")).toHaveAttribute("href", "https://openagentcore.dev/docs/getting-started/self-hosted");
   await install.getByRole("combobox", { name: "Host platform" }).click();
   await page.getByRole("option", { name: "Windows · PowerShell" }).click();
   await expect(install.locator("pre")).toContainText("fixture-bootstrap.ps1 -Authorization fixture-short-lived");

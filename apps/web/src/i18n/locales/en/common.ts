@@ -7,6 +7,8 @@ export const common = {
     title: "Could not read the data",
     partial: "Some reads failed. Any figures and rows shown cover only data already read; they may be incomplete or out of date.",
     request: "Core request failed ({{status}}).",
+    /** Core's own English message for a code the console has no copy for. */
+    code: "{{message}}",
     unknown: "Could not read from Core. Retry to update the data.",
   },
   apiEmpty: {

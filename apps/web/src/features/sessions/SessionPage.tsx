@@ -15,7 +15,7 @@ import { sessionTitle } from "../../lib/session-title";
 import { forgetDeleted } from "../resources/detail-queries";
 import { ExecutorCredentialsSection } from "./ExecutorCredentialsSection";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
-import { DiagnosticScope } from "./session-diagnostics";
+import { DiagnosticScope, SessionFailureDetails } from "./session-diagnostics";
 import { sessionKey } from "./session-queries";
 import { isSessionActive, turnAnchorId } from "./session-history";
 import { environmentKind, isDeletable } from "./session-log";
@@ -161,6 +161,7 @@ export function SessionPage() {
             </div>
           ) : null}
         </dl>
+        {session.status === "failed" ? <SessionFailureDetails projectId={projectId} session={session} /> : null}
         <KpiStrip label={t("kpi.label")}>
           <Kpi label={t("kpi.turns")} value={history.history?.turnsError && !turns.length ? MISSING : formatInteger(turns.length, locale)} />
           <Kpi label={t("kpi.input")} value={formatInteger(usage?.input_tokens, locale)} help={t("kpi.help")} />

@@ -557,9 +557,9 @@
   margin-right: 8px;
 }
 
-/* A failed Session's reason, as Core sent it, under its status: in full on the
-   Session page, its line breaks kept; one truncated line in the Session log,
-   with the full text in its tooltip. */
+/* A failure's reason under its status: in full under a failed Turn, its line
+   breaks kept; one truncated line in the Session log, with the full text in
+   its tooltip. */
 .session-status {
   display: inline-flex;
   max-width: 100%;
@@ -593,6 +593,29 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
   line-clamp: 1;
+}
+
+/* The Session page's failure, under its facts: the reason, then its next step,
+   at reading width. */
+.session-failure {
+  display: grid;
+  gap: 4px;
+  max-width: 880px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 20px;
+  background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 22%, var(--line));
+  border-radius: var(--frame-radius);
+}
+
+.session-failure p {
+  margin: 0;
+}
+
+.session-failure-reason {
+  color: var(--danger);
+  font-weight: 500;
 }
 
 /* A jump to a failed Turn focuses it; only keyboard focus draws a ring. */

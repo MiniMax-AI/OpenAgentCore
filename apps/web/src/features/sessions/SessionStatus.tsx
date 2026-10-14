@@ -16,26 +16,28 @@ export function useWaitingFor() {
 }
 
 /**
- * Failures stay visible under the status, truncated only in lists. Required
- * actions appear here in lists and in their own facts on the Session page.
+ * Lists add one truncated line under the status: a failure's reason or what
+ * the Session waits for. The Session page shows the status alone; its failure
+ * reads under the facts and its required actions in their own fact.
  */
-export function SessionStatus({ session, truncate = false, projectId }: { session: AgentSession; truncate?: boolean; projectId?: string }) {
+export function SessionStatus({ session, truncate = false, projectId }: { session: AgentSession; truncate?: boolean; projectId: string }) {
   const { t } = useTranslation("sessions");
   const waitingFor = useWaitingFor()(session);
   const key = statusKey(session.status);
-  const reason = session.status === "failed" ? session.error : session.status === "requires_action" && truncate ? waitingFor.join(" · ") : null;
   const status = (
     <span className="status-with-help">
       <StatusDot tone={sessionStatusTone[session.status] ?? "neutral"} label={t(`sessionStatus.${key}`)} />
       {truncate && session.required_actions.some((action) => action.type === "function_call") ? <HelpTip label={t("log.waitingLabel")}>{t("detail.applicationAction")}</HelpTip> : null}
     </span>
   );
-  if (session.status === "failed" && projectId) return <span className={truncate ? "session-status session-status-truncated" : "session-status"}>{status}<SessionFailure projectId={projectId} session={session} truncate={truncate} /></span>;
+  if (!truncate) return status;
+  if (session.status === "failed") return <span className="session-status session-status-truncated">{status}<SessionFailure projectId={projectId} session={session} /></span>;
+  const reason = session.status === "requires_action" ? waitingFor.join(" · ") : "";
   if (!reason) return status;
   return (
-    <span className={truncate ? "session-status session-status-truncated" : "session-status"}>
+    <span className="session-status session-status-truncated">
       {status}
-      <span className="session-status-reason" title={truncate ? reason : undefined}>{reason}</span>
+      <span className="session-status-reason" title={reason}>{reason}</span>
     </span>
   );
 }
