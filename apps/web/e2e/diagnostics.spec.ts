@@ -54,7 +54,7 @@ test("shows diagnostics failure honestly and can retry in Chinese", async ({ pag
   failed = false;
   await page.getByLabel("Session 信息").getByRole("button", { name: "失败详情", exact: true }).click();
   await page.getByLabel("Session 信息").getByRole("button", { name: "重试诊断读取", exact: true }).click();
-  await expect(page.getByLabel("Session 信息")).toContainText("模型服务认证失败");
+  await expect(page.getByLabel("Session 信息")).toContainText("模型提供商认证失败");
   expect(await writes(request)).toEqual([]);
 });
 

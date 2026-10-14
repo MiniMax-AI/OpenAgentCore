@@ -4,10 +4,10 @@ export const templates: TranslationShape<typeof english> = {
   boundary: "模板由应用使用项目 API 密钥通过 Agents API 创建和修改；控制台只查看和删除。",
   refreshFailed: "无法刷新目录。请检查连接后重试。",
   created: "模板已创建，未分配 Runtime。", updated: "模板已更新。现有 Session 会保留原配置。", deleted: "模板已删除。",
-  loading: "正在加载环境模板…",
-  loadFailedTitle: "无法加载环境模板",
+  loading: "正在加载 Environment 模板…",
+  loadFailedTitle: "无法加载 Environment 模板",
   filterLabel: "筛选模板", filterPlaceholder: "按名称或 ID 筛选", count: "显示 {{visible}} / {{total}} 个模板",
-  emptyTitle: "还没有环境模板", noMatch: "没有匹配的模板", clearFilter: "清除筛选", listLabel: "环境模板",
+  emptyTitle: "还没有 Environment 模板", noMatch: "没有匹配的模板", clearFilter: "清除筛选", listLabel: "Environment 模板",
   columns: { name: "名称", network: "网络", packages: "依赖包", files: "文件", skills: "Skill", plugins: "Plugin", updated: "更新时间", actions: "操作" },
   access: { enabled: "已启用", disabled: "已禁用", restricted: "受限" },
   accessHelp: {

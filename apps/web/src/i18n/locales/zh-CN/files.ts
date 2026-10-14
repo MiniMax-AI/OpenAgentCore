@@ -4,7 +4,7 @@ type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : Tran
 
 export const files: TranslationShape<typeof english> = {
   title: "文件",
-  help: "通过 Files API 上传到本项目的文件，包括 API 调用方上传的文件。在环境模板中引用 File ID，即可把文件复制到每个新 Session 的工作区。用户数据（user_data）文件不能下载：Core 会拒绝读取其内容。",
+  help: "通过 Files API 上传到本项目的文件，包括 API 调用方上传的文件。在 Environment 模板中引用 File ID，即可把文件复制到每个新 Session 的工作区。用户数据（user_data）文件不能下载：Core 会拒绝读取其内容。",
   limits: "每次上传一个文件，最大 512 MiB，文件名 1–1024 字节；允许空文件。",
   actions: {
     upload: "上传文件",
@@ -47,7 +47,7 @@ export const files: TranslationShape<typeof english> = {
   },
   delete: {
     prompt: "删除 {{name}}？",
-    consequences: "已复制到 Session 工作区的副本不受影响，已创建的 Session 也不受影响。通过 File ID 引用此文件的环境模板，之后再新建 Session 会失败。",
+    consequences: "已复制到 Session 工作区的副本不受影响，已创建的 Session 也不受影响。通过 File ID 引用此文件的 Environment 模板，之后再新建 Session 会失败。",
     deleted: "已删除 {{name}}",
     rejected: "Core 拒绝删除：{{reason}}",
     uncertain: "未能确认 {{name}} 是否已删除。请先刷新列表确认，再决定是否重试。",

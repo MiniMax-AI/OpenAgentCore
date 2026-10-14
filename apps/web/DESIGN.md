@@ -290,7 +290,7 @@ A restrained neutral ledger with one indigo voice, three signal colours and a se
 
 **The Honest Figure Rule.** Missing data renders as "—", a gap in the line, "Unavailable" or "Unknown"; never as 0. Compact numbers keep two decimals only when the integer part is a single digit ("1.04M"), otherwise one ("415.7万"); values under 10,000 print whole. Durations read "850 ms / 12.4 s / 4m 12s / 3h 5m".
 
-**The Plain Vocabulary Rule.** zh-CN copy uses one term per concept: 项目 (project), 沙箱 (sandbox), 沙箱后端 (sandbox provider), 模型服务 (model provider), 提供方 (the MCP provider behind a Credential), 凭据 (any other credential), 执行器 (executor), 主机 (host), 密钥 (key: Core 密钥, 项目 API 密钥), 创建者 (creator), 已上报 (reported), 活跃 (active). API terms stay in English (Agent, Session, Turn, Item, Runtime, Harness, Skill, Vault, Credential), and usage counts are "token". Time ranges read "1 小时 / 6 小时 / 24 小时 / 7 天" (English "1h / 6h / 24h / 7d"), always in the one segmented control style.
+**The Plain Vocabulary Rule.** zh-CN copy and the zh docs use one term per concept: 项目 (project), 沙箱 (sandbox), 提供商 (provider: 沙箱提供商 for the sandbox provider, 模型提供商 for the model provider, and the MCP provider behind a Credential), 凭据 (any other credential), 执行器 (executor), 主机 (host), 模板 (template), 密钥 (key: Core 密钥, 项目 API 密钥), 创建者 (creator), 已上报 (reported), 活跃 (active). API terms stay in English (Agent, Session, Turn, Item, Runtime, Environment, Harness, Skill, Vault, Credential), and usage counts are "token". Time ranges read "1 小时 / 6 小时 / 24 小时 / 7 天" (English "1h / 6h / 24h / 7d"), always in the one segmented control style.
 
 ## Layout
 

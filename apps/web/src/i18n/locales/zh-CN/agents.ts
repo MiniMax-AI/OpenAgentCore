@@ -28,8 +28,8 @@ export const agents: TranslationShape<typeof english> = {
     verbosity: "详细程度",
     serviceTier: "服务层级",
     provider: {
-      title: "模型服务",
-      help: "保存在此 Agent 上。它的 Session 使用这里的模型服务，除非请求中另外指定。Core 从不返回 API 密钥。",
+      title: "模型提供商",
+      help: "保存在此 Agent 上。它的 Session 使用这里的模型提供商，除非请求中另外指定。Core 从不返回 API 密钥。",
       protocol: "协议",
       baseUrl: "Base URL",
       apiKey: "API 密钥",

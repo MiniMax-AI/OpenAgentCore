@@ -739,7 +739,7 @@
       },
       {
         "name": "The Plain Vocabulary Rule",
-        "body": "zh-CN copy uses one term per concept: 项目 (project), 沙箱 (sandbox), 运行时 (runtime), 创建者 (creator), 已上报 (reported), 活跃 (active), 提供方 (provider). API terms stay in English (Agent, Session, Turn, Skill, Vault, Credential, API key). Time ranges read \"1 小时 / 6 小时 / 24 小时 / 7 天\" (English \"1h / 6h / 24h / 7d\"), always in the one segmented control style.",
+        "body": "zh-CN copy and the zh docs use one term per concept: 项目 (project), 沙箱 (sandbox), 提供商 (provider: 沙箱提供商 for the sandbox provider, 模型提供商 for the model provider, and the MCP provider behind a Credential), 凭据 (any other credential), 执行器 (executor), 主机 (host), 模板 (template), 密钥 (key: Core 密钥, 项目 API 密钥), 创建者 (creator), 已上报 (reported), 活跃 (active). API terms stay in English (Agent, Session, Turn, Item, Runtime, Environment, Harness, Skill, Vault, Credential), and usage counts are \"token\". Time ranges read \"1 小时 / 6 小时 / 24 小时 / 7 天\" (English \"1h / 6h / 24h / 7d\"), always in the one segmented control style.",
         "section": "typography"
       },
       {

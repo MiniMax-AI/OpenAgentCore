@@ -3,7 +3,7 @@ export const overview = {
     title: "沙箱重置进行中",
     auto: "等待 Session 结束和资源清理",
     force: "强制重置 · 正在清理资源",
-    body: "Core 正在清空托管沙箱后端。重置结束前无法启动新的托管 Session，自托管 Session 不受影响。",
+    body: "Core 正在清理托管沙箱提供商。重置结束前无法启动新的托管 Session，自托管 Session 不受影响。",
     view: "查看重置",
   },
   title: "概览",
@@ -29,11 +29,11 @@ export const overview = {
       setup: "设置沙箱",
       addNode: "添加节点",
       nodes: "打开节点",
-      backend: "打开沙箱后端",
+      backend: "打开沙箱提供商",
     },
     model: {
       title: "设置默认模型配置",
-      body: "为默认 Harness 设置模型服务地址和 API 密钥，让 Agent 可以调用模型。应用也可以在请求或 Agent 上指定其他模型服务。",
+      body: "为默认 Harness 设置模型提供商地址和 API 密钥，让 Agent 可以调用模型。应用也可以在请求或 Agent 上指定其他模型提供商。",
       open: "打开设置",
     },
     key: {
@@ -110,7 +110,7 @@ export const overview = {
   },
   nodeHealth: {
     available: "可用",
-    degraded: "沙箱后端未就绪",
+    degraded: "沙箱提供商未就绪",
     offline: "离线",
   },
   fleet: {
@@ -135,7 +135,7 @@ export const overview = {
       name: "E2B 云端",
       open: "E2B 云端，{{running}} 个运行中的沙箱",
       running: "{{count}} 个运行中",
-      openBackend: "沙箱后端",
+      openBackend: "沙箱提供商",
     },
   },
   projects: {

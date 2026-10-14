@@ -1,7 +1,7 @@
 export const onboarding = {
   stage: {
     login: { title: "一个 Core，承载所有 Agent。", body: "连接你的机器，运行你的 Agent，在一个控制台里看清每一个 Session。" },
-    orbit: "Core 和它管理的一切：Agent、Session、Skills、Vault、文件、环境模板和机器",
+    orbit: "Core 和它管理的一切：Agent、Session、Skills、Vault、文件、Environment 模板和机器",
   },
   tour: {
     label: "认识控制台",
@@ -25,7 +25,7 @@ export const onboarding = {
         name: "资源",
         title: "应用创建的一切，都在这里。",
         points: [
-          "Agent、环境模板和 Skills，每一项都记录由谁创建。",
+          "Agent、Environment 模板和 Skills，每一项都记录由谁创建。",
           "文件和 Vault；凭据只写入、不回显。",
           "查看任意资产，或安全地删除。",
         ],

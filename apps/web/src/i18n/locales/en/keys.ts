@@ -152,7 +152,7 @@ export const keys = {
     keysLabel: "Keys of {{name}}",
     keysLoading: "Loading keys…",
     keysFailed: "Keys could not be loaded.",
-    noKeys: "This project has no keys yet",
+    noKeys: "No keys yet",
     copyKeyId: "Copy key ID",
     keyStatus: {
       active: "Active",

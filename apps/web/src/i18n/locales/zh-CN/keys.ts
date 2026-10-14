@@ -3,7 +3,7 @@ type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : Tran
 export const keys: TranslationShape<typeof english> = {
   page: {
     title: "项目与密钥",
-    help: "项目拥有一组资产：Agent、Session、Skill、环境模板、文件和 Vault。同一个项目的所有 API 密钥看到和使用的是同一批资产，项目之间互相隔离。归档项目会撤销它的全部密钥，资产保留。应用用这些项目 API 密钥调用 Agents API（/v1）；登录控制台用的 Core 密钥与它们无关，也不在这里列出。",
+    help: "项目拥有一组资产：Agent、Session、Skill、Environment 模板、文件和 Vault。同一个项目的所有 API 密钥看到和使用的是同一批资产，项目之间互相隔离。归档项目会撤销它的全部密钥，资产保留。应用用这些项目 API 密钥调用 Agents API（/v1）；登录控制台用的 Core 密钥与它们无关，也不在这里列出。",
     create: "创建项目",
     refresh: "刷新项目",
     loading: "正在加载项目…",
@@ -111,7 +111,7 @@ export const keys: TranslationShape<typeof english> = {
     loading: "正在读取 API 地址",
     failed: "无法读取 API 地址。",
     localOnly: "从其他机器调用前，请先把 OAC_PUBLIC_URL 设为它们能访问的地址。",
-    model: "把 {{model}} 换成模型服务提供的模型名；也可以删掉 model 字段，使用本部署的默认模型配置。运行 Agent 需要模型服务：在每个请求里传入、保存在 Agent 上，或使用部署默认值。自托管 Session 不使用部署默认值。",
+    model: "把 {{model}} 换成模型提供商提供的模型名；也可以删掉 model 字段，使用本部署的默认模型配置。运行 Agent 需要模型提供商：在每个请求里传入、保存在 Agent 上，或使用部署默认值。自托管 Session 不使用部署默认值。",
     keyPlaceholder: "<项目 API 密钥>",
     projectKey: "把 OPENAI_API_KEY 设为这个项目签发的 API 密钥。密钥只在签发时显示一次；丢失后请签发新密钥。",
     projectHelp: "应用用这个项目的 API 密钥调用 Agents API 的示例。控制台不会发送这些请求。",
@@ -130,7 +130,7 @@ export const keys: TranslationShape<typeof english> = {
     assetsHelp: "来自 Core 对这个项目的汇总。点击数字查看对应资产。",
     assetTypes: {
       agents: "Agent",
-      environment_templates: "环境模板",
+      environment_templates: "Environment 模板",
       skills: "Skills",
       files: "文件",
       vaults: "Vault",
@@ -154,7 +154,7 @@ export const keys: TranslationShape<typeof english> = {
     keysLabel: "{{name}} 的密钥",
     keysLoading: "正在加载密钥…",
     keysFailed: "无法加载密钥。",
-    noKeys: "这个项目还没有密钥",
+    noKeys: "还没有密钥",
     copyKeyId: "复制密钥 ID",
     keyStatus: {
       active: "有效",
@@ -204,8 +204,8 @@ export const keys: TranslationShape<typeof english> = {
     types: {
       agent: "Agent",
       session: "Session",
-      environment: "环境",
-      environment_template: "环境模板",
+      environment: "Environment",
+      environment_template: "Environment 模板",
       skill: "Skill",
       skill_version: "Skill 版本",
       file: "文件",

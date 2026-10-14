@@ -12,7 +12,7 @@ export const common = {
   apiEmpty: {
     agents: "应用通过 Agents API 创建 Agent。",
     sessions: "应用通过 Agents API 启动 Session。",
-    "environment-templates": "应用通过 Agents API 创建环境模板。",
+    "environment-templates": "应用通过 Agents API 创建 Environment 模板。",
     skills: "应用通过 Agents API 上传 Skill。",
     "source-files": "应用通过 Agents API 上传文件。",
     vaults: "应用通过 Agents API 创建 Vault。",

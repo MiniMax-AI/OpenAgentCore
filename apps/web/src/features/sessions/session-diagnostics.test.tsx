@@ -34,7 +34,7 @@ describe("Core diagnostics in the console", () => {
     expect(render("session", sessionData)).toContain("Check the API key of the Session&#x27;s model provider.");
     expect(render("turn", turnData)).toContain("Check the API key of the Session&#x27;s model provider.");
     await i18n.changeLanguage("zh-CN");
-    expect(render("session", sessionData)).toContain("模型服务认证失败");
+    expect(render("session", sessionData)).toContain("模型提供商认证失败");
     expect(render("turn", turnData)).not.toContain("PRIVATE_NATIVE_SENTINEL");
   });
 
@@ -68,7 +68,7 @@ describe("Core diagnostics in the console", () => {
     expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 502 }, failed_at: null }, t)).toContain("HTTP 502. Check the Base URL of the Session's model provider.");
     expect(diagnosticFailure({ code: "runtime_unavailable", params: {}, failed_at: null }, t)).toBe("The Runtime is unavailable. Retry later. For a self-hosted Session, check Host connection on the Session page; for a hosted sandbox Session, check Settings → Sandbox and scheduling.");
     expect(diagnosticFailure({ code: "harness_error", params: {}, failed_at: null }, t)).toContain("Core does not show the Harness's own message");
-    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, i18n.getFixedT("zh-CN", "diagnostics"))).toBe("模型服务拒绝了请求。请检查模型和参数，先看 Session 页显示的模型。Session 及其保存的 Agent 都未设置模型服务时，托管沙箱 Session 使用“设置 → 模型与凭据”中的默认配置。");
+    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, i18n.getFixedT("zh-CN", "diagnostics"))).toBe("模型提供商拒绝了请求。请检查模型和参数，先看 Session 页显示的模型。Session 及其保存的 Agent 都未设置模型提供商时，托管沙箱 Session 使用“设置 → 模型与凭据”中的默认配置。");
     // Lists show the reason alone; the next step stays in the title.
     const row = render("session", { ...sessionData, failure: { ...sessionData.failure!, code: "invalid_request" } }, false, true);
     expect(row).toContain(">The model provider rejected the request.<");

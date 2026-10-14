@@ -13,7 +13,7 @@ export const coreErrors = {
   "invalid_node_capacity": "请输入有效的整数容量；保留容量不能小于运行容量。",
   "model_configuration_model_invalid": "请输入模型 ID，最多 1024 个 UTF-8 字节，且不能包含控制字符。",
   "harness_config_invalid": "请检查支持的原生字段及其取值。JSON 对象不能超过 16 KiB，也不能重复定义 Core 管理的设置。",
-  "invalid_model_provider": "请填写完整的模型服务配置。",
+  "invalid_model_provider": "请填写完整的模型提供商配置。",
   "model_provider_base_url_invalid": "请使用 HTTPS 地址，不要包含凭据、查询参数或片段。",
   "model_provider_protocol_unsupported": "此 Harness 不支持该协议。",
   "model_provider_api_key_invalid": "请输入有效的 API 密钥，不要包含控制字符。",
@@ -38,8 +38,8 @@ export const coreErrors = {
   "sandbox_configuration_error": "E2B 沙箱需要可从互联网访问的 HTTPS 地址，请把 OAC_PUBLIC_URL 设为一个 HTTPS 源地址。",
   "sandbox_deployment_conflict": "沙箱部署在当前状态下无法更改。请刷新并检查重置和资源状态。",
   "sandbox_specification_mismatch": "已保存的沙箱规格与部署不一致。请刷新检查配置。",
-  "sandbox_operation_unsupported": "所选沙箱后端不支持此操作。",
-  "environment_unavailable": "此 Session 的环境已不可用。",
+  "sandbox_operation_unsupported": "所选沙箱提供商不支持此操作。",
+  "environment_unavailable": "此 Session 的 Environment 已不可用。",
   "execution_unavailable": "执行暂时不可用，请稍后重试。",
   "runtime_history_unavailable": "Runtime 历史暂时不可用，请稍后重试。",
   "runtime_history_unsupported": "此 Session 不支持 Runtime 历史。",
@@ -56,5 +56,5 @@ export const coreErrorDetails = {
   "keyLimit": "请输入有效的 API 密钥，长度最多 {{max}} 个字符。",
   "resourceRange": "请输入 {{min}} 到 {{max}} 的整数。",
   "resourceMin": "请输入不小于 {{min}} 的整数。",
-  "runtime": "请使用适用于此后端的有效不可变 Runtime 版本。"
+  "runtime": "请使用适用于此沙箱提供商的有效不可变 Runtime 版本。"
 } as const;

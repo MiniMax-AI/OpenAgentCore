@@ -1,6 +1,6 @@
 export const skills = {
   title: "Skills",
-  help: "Skill 是一个包含 SKILL.md 的文件夹，Agent 可以在托管环境中使用它。每次上传都会生成一个不可变的版本。新建 Session 引用 Skill 时如果没有指定版本，会使用默认版本；已有的 Session 保持创建时的内容。",
+  help: "Skill 是一个包含 SKILL.md 的文件夹，Agent 可以在托管 Environment 中使用它。每次上传都会生成一个不可变的版本。新建 Session 引用 Skill 时如果没有指定版本，会使用默认版本；已有的 Session 保持创建时的内容。",
   limits: "Core 没有 Skill 搜索接口，筛选只作用于本页已加载的 Skill。Core 不记录上传者。浏览器中的检查只是辅助，最终以 Core 的校验为准。",
   version: "v{{version}}",
   actions: {
@@ -89,7 +89,7 @@ export const skills = {
     title: "删除 {{name}}？",
     allVersions: "这个 Skill 的所有版本都会被删除。",
     existingSessions: "已有的 Session 不受影响。",
-    templates: "引用了这个 Skill 的环境模板，之后再用来创建 Session 会失败。",
+    templates: "引用了这个 Skill 的 Environment 模板，之后再用来创建 Session 会失败。",
     typeName: "输入 {{name}} 以确认",
     confirm: "删除 Skill",
     deleting: "删除中…",
