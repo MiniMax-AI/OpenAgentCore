@@ -155,6 +155,13 @@ export function OverviewPage() {
   // Core's summary counts every Session needing attention; the rest of them are older than the window.
   const attentionOlder = attention && totals ? Math.max(0, attentionCount(totals) - attention.length) : null;
   const truncated = data?.sessions.truncated ?? [];
+  const unreadNames = readFailures.map((failure) => failure.project.name).join(", ");
+  const truncatedNames = truncated.map((project) => project.name).join(", ");
+  // Attention comes from the browser's Session reads, so an unread or capped project leaves it partial.
+  const attentionPartialHelp = [
+    readFailures.length ? t("activity.unreadHelp", { names: unreadNames }) : null,
+    truncated.length ? t("attention.partialHelp", { names: truncatedNames }) : null,
+  ].filter(Boolean).join(" ");
   // Whether any Session exists: Core's summary counts them all; without it, any Session read counts.
   const sessionCount = totals ? totals.total
     : sessions?.length ? sessions.length
@@ -218,6 +225,7 @@ export function OverviewPage() {
           <MetricTile
             label={t("kpi.attention")}
             help={t("attention.subtitle")}
+            note={attention && attentionPartialHelp ? <PartialChip>{attentionPartialHelp}</PartialChip> : null}
             value={<LiveNumber value={attention ? attention.length : null} />}
             sub={attention && attentionFailed !== null ? t("tiles.attentionSplit", { failed: attentionFailed, waiting: attention.length - attentionFailed }) : sessionReadsFailed ? t("kpi.readsFailed") : null}
           />
@@ -232,14 +240,9 @@ export function OverviewPage() {
                 <HelpTip>{t("activity.help")}</HelpTip>
               </div>
               {truncated.length || readFailures.length ? (
-                <span className="partial-chip">
-                  <StatusDot tone="warning" label={t("activity.partial")} />
-                  <HelpTip>
-                    {readFailures.length ? t("activity.unreadHelp", { names: readFailures.map((failure) => failure.project.name).join(", ") }) : null}
-                    {readFailures.length && truncated.length ? " " : null}
-                    {truncated.length ? t("activity.partialHelp", { names: truncated.map((project) => project.name).join(", ") }) : null}
-                  </HelpTip>
-                </span>
+                <PartialChip>
+                  {[readFailures.length ? t("activity.unreadHelp", { names: unreadNames }) : null, truncated.length ? t("activity.partialHelp", { names: truncatedNames }) : null].filter(Boolean).join(" ")}
+                </PartialChip>
               ) : null}
             </header>
             {sessionReadsFailed ? <ReadFailure onRetry={refreshAll} partial={activity !== null} /> : null}
@@ -277,12 +280,12 @@ export function OverviewPage() {
                   <HelpTip>{t("attention.limitHelp", { count: ATTENTION_LIMIT })}</HelpTip>
                 </>
               ) : null}
-              {attention?.length && truncated.length ? <HelpTip>{t("attention.partialHelp")}</HelpTip> : null}
+              {attention?.length && attentionPartialHelp ? <PartialChip>{attentionPartialHelp}</PartialChip> : null}
             </div>
             <button className="button outline" type="button" onClick={() => navigate("sessions")}>{t("attention.viewLog")}</button>
           </header>
           {sessionReadsFailed || summaryError !== null ? <ReadFailure onRetry={refreshAll} partial={Boolean(attention?.length)} /> : null}
-          {attention?.length || (!sessionReadsFailed && summaryError === null) ? <AttentionTable sessions={attention?.slice(0, ATTENTION_LIMIT) ?? null} older={attentionOlder} unread={readFailures.map((failure) => failure.project.name)} partial={truncated.length > 0 || summaryError !== null} now={now} onOpen={openSession} /> : null}
+          {attention?.length || (!sessionReadsFailed && summaryError === null) ? <AttentionTable sessions={attention?.slice(0, ATTENTION_LIMIT) ?? null} older={attentionOlder} unreadNames={unreadNames} truncatedNames={truncatedNames} now={now} onOpen={openSession} /> : null}
         </section>
 
         <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
@@ -301,13 +304,24 @@ export function OverviewPage() {
   );
 }
 
-function MetricTile({ label, help, value, sub }: { label: string; help?: ReactNode; value: ReactNode; sub?: ReactNode }) {
+function MetricTile({ label, help, note, value, sub }: { label: string; help?: ReactNode; note?: ReactNode; value: ReactNode; sub?: ReactNode }) {
   return (
     <article className="metric-tile">
-      <header className="console-section-title"><span className="metric-tile-label">{label}</span>{help ? <HelpTip label={label}>{help}</HelpTip> : null}</header>
+      <header className="console-section-title"><span className="metric-tile-label">{label}</span>{help ? <HelpTip label={label}>{help}</HelpTip> : null}{note}</header>
       <div className="metric-tile-value kpi-value">{value}</div>
       {sub ? <p className="metric-tile-sub">{sub}</p> : null}
     </article>
+  );
+}
+
+/** Marks figures read from only part of the Session lists; the help says which. */
+function PartialChip({ children }: { children: ReactNode }) {
+  const { t } = useTranslation("overview");
+  return (
+    <span className="partial-chip">
+      <StatusDot tone="warning" label={t("activity.partial")} />
+      <HelpTip>{children}</HelpTip>
+    </span>
   );
 }
 
@@ -445,14 +459,14 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
  * is claimed only when every Session list was read in full; otherwise the
  * empty table says the Sessions could not be listed.
  */
-function AttentionTable({ sessions, older, unread, partial, now, onOpen }: {
+function AttentionTable({ sessions, older, unreadNames, truncatedNames, now, onOpen }: {
   sessions: InProject<AgentSession>[] | null;
   /** Sessions needing attention before the window, when Core's summary was read. */
   older: number | null;
   /** Projects whose Session list could not be read. */
-  unread: string[];
-  /** A read stopped at its cap, or no summary bounded it, so some Sessions may be missing. */
-  partial: boolean;
+  unreadNames: string;
+  /** Projects whose Session read stopped at its cap, so some Sessions may be missing. */
+  truncatedNames: string;
   now: number;
   onOpen: (entry: InProject<AgentSession>) => void;
 }) {
@@ -462,9 +476,9 @@ function AttentionTable({ sessions, older, unread, partial, now, onOpen }: {
   const waitingFor = useWaitingFor();
   if (sessions === null) return <TableSkeleton label={t("attention.loading")} rows={4} columns={5} />;
   if (!sessions.length) {
-    const description = unread.length
-      ? t("attention.unreadDescription", { names: unread.join(", ") })
-      : partial ? t("attention.partialHelp") : null;
+    const description = unreadNames
+      ? t("attention.unreadDescription", { names: unreadNames })
+      : truncatedNames ? t("attention.partialHelp", { names: truncatedNames }) : null;
     return (
       <div className="overview-card-body">
         {description ? <EmptyState title={t("attention.unlistedTitle")} description={description} /> : <EmptyState title={t("attention.emptyTitle")} description={older ? t("attention.emptyOlder", { count: older }) : t("attention.emptyDescription")} />}

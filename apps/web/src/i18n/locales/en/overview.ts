@@ -199,7 +199,7 @@ export const overview = {
     viewLog: "Session log",
     shown: "{{shown}} of {{total}}",
     limitHelp: "The {{count}} most recently active are shown. The Session log lists the rest.",
-    partialHelp: "Only the newest Sessions of each project were read, so some Sessions that need attention are not listed. The Session log lists them all.",
+    partialHelp: "Only the newest Sessions of {{names}} were read, so some Sessions that need attention may not be listed. The Session log lists them all.",
     loading: "Loading Sessions…",
     emptyTitle: "Nothing needs attention",
     emptyDescription: "No Session active in the last 24 hours failed or is waiting for its caller.",

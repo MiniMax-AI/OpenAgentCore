@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HelpTip, StatusDot } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
-import { diagnosticFailure } from "../../lib/diagnostic-failure";
+import { diagnosticReason } from "../../lib/diagnostic-failure";
 import { formatDateTime } from "../../lib/format";
 import { Fact } from "./Fact";
 
@@ -27,7 +27,7 @@ export function ProviderObservations({ provider, name, stale }: { provider: Harn
       <div className="settings-rows">
         <Fact label={t("providerLastUsed")} help={t("providerHelp")}>{date(provider.last_used_at)}</Fact>
         <Fact label={t("providerLastError")}>
-          {activeError && provider.last_error_code ? <>{diagnosticFailure({ code: provider.last_error_code, params: {}, failed_at: provider.last_error_at }, t)} <HelpTip>{date(provider.last_error_at)}</HelpTip></> : t("providerNoError")}
+          {activeError && provider.last_error_code ? <>{diagnosticReason({ code: provider.last_error_code, params: {}, failed_at: provider.last_error_at }, t)} <HelpTip>{date(provider.last_error_at)}</HelpTip></> : t("providerNoError")}
         </Fact>
       </div>
       {stale ? <p role="status">{t("providerStaleHelp")}</p> : null}

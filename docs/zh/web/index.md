@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 69608c288990ae3bf383510b253ef344810bee095ff574464cd3fd6a6ca04669
+source_hash: 17ec9dbffb34ae89966259c3e32ea168a20289de42bae1f50d3ceec1ded1c956
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -18,7 +18,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 
 | 分组 | 页面 | 用途 |
 | --- | --- | --- |
-| Monitor | Overview | 服务状态、运行中的 Session、沙箱槽位和待处理工作；24 小时 Session 活动；以拓扑展示 Core 与节点，各自提供弹出概览；过去 24 小时内需要处理的 Session，每行附一行原因；按 Project 统计的用量 |
+| Monitor | Overview | 服务状态、运行中的 Session、沙箱槽位和待处理工作；24 小时 Session 活动；以拓扑展示 Core 与节点，各自提供弹出概览；需要处理：过去 24 小时内活跃的失败或等待调用方的 Session，每行附一行原因；按 Project 统计的用量 |
 | Monitor | Core metrics | Core 进程：CPU 与常驻内存及其限制、执行槽位与 Turn 队列、已连接守护进程、数据库延迟与连接池、后台任务 |
 | Monitor | Agent metrics | 1 小时、6 小时、24 小时或 7 天的请求、错误、耗时、token、模型、工具、Agent 和 API 密钥 |
 | Monitor | Sandbox metrics | 节点容量；支持时显示 **Automatic suspension**；**Recorded compute** 生命周期状态与各 Project 的托管 Runtime CPU、内存观测分开展示 |

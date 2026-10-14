@@ -199,7 +199,7 @@ export const overview = {
     viewLog: "Session 日志",
     shown: "{{shown}} / {{total}}",
     limitHelp: "只显示最近活跃的 {{count}} 个，其余请在 Session 日志中查看。",
-    partialHelp: "每个项目只读取了最近创建的 Session，部分需要处理的 Session 没有列出。Session 日志中可以看到全部。",
+    partialHelp: "{{names}} 只读取了最近创建的 Session，部分需要处理的 Session 可能没有列出。Session 日志中可以看到全部。",
     loading: "正在加载 Session…",
     emptyTitle: "没有需要处理的 Session",
     emptyDescription: "过去 24 小时内活跃的 Session 都没有失败或等待调用方。",

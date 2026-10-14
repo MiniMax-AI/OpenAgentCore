@@ -22,7 +22,7 @@ test("reads classified failures and separate Item receipts without execution wri
   await page.getByRole("radio", { name: /^Failed/ }).click();
   const row = page.getByRole("row").filter({ hasText: "The model provider rejected authentication" }).first();
   await row.getByRole("button", { name: /^Open Session / }).click();
-  await expect(page.getByLabel("Session facts")).toContainText("Check the model service's API key");
+  await expect(page.getByLabel("Session facts")).toContainText("Check the API key of the Session's model provider");
   await page.getByRole("radio", { name: "Trace", exact: true }).click();
   await page.locator(".trace-ledger-row-tools").first().click();
   await page.getByRole("tab", { name: "Timing", exact: true }).click();

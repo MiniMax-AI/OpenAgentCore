@@ -16,7 +16,7 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 
 | Group | Page | Purpose |
 | --- | --- | --- |
-| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each with a popover glance; Sessions needing attention in the last 24 hours, each with its one-line reason; usage by Project |
+| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each with a popover glance; Needs attention: failed Sessions and Sessions waiting for their caller, active in the last 24 hours, each with its one-line reason; usage by Project |
 | Monitor | Core metrics | The Core process: CPU and resident memory against their limits, execution slots and the Turn queue, connected daemons, database latency and pool, background jobs |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
 | Monitor | Sandbox metrics | Node capacity; **Automatic suspension** when supported; **Recorded compute** lifecycle state shown separately from hosted Runtime CPU and memory observations across Projects |

@@ -124,6 +124,9 @@ test("Overview preserves partial activity and visibly qualifies a failed project
   const activity = page.getByRole("region", { name: "Session activity", exact: true });
   await expect(activity.locator(".ts-chart-plot")).toBeVisible();
   await expect(activity).toContainText("may be incomplete or out of date");
+  // Needs attention counts from the same Session reads, so its tile and section are qualified too.
+  await expect(page.locator(".metric-tile").filter({ hasText: "Needs attention" })).toContainText("Partial");
+  await expect(page.getByRole("region", { name: "Needs attention", exact: true })).toContainText("Partial");
   await page.unroute(sessionLists);
   await activity.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(activity.locator(".error-state")).toHaveCount(0);

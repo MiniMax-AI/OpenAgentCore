@@ -50,7 +50,7 @@ Resource-specific rules:
 - **Files.** The list is read 100 per page, newest or oldest first. The administrator API has no File content route, so the console offers no download.
 - **Vaults.** Credential tokens are never returned. The console shows each Credential's name, MCP server URL, authentication type and update time.
 - **Sessions.** A malformed Session fails the read of its project instead of being skipped.
-- **Diagnostics.** The console translates Core's classified reason and never infers a cause from raw logs. The Session page adds the reason's next step, such as checking the model ID on the Agent or in Settings → Models and credentials; lists show the reason alone, with the next step in its tooltip. Core returns no Harness or provider message, so an unclassified failure says so. An unavailable or mismatched diagnostic offers an explicit read retry; a retry never replays execution.
+- **Diagnostics.** The console translates Core's classified reason and never infers a cause from raw logs. The Session page adds the reason's next step, such as checking the model shown on the Session page and the Session's model provider; lists show the reason alone, with the next step in its tooltip. Core returns no Harness or provider message, so an unclassified failure says so. An unavailable or mismatched diagnostic offers an explicit read retry; a retry never replays execution.
 
 ## Executor credentials and host connection
 
@@ -132,7 +132,7 @@ The console assembles several figures in the browser from bounded reads of each 
 | Resource lists | Every page of the selected project, or of every project in parallel | 10,000 entries per project; a failed project is named and the rest still show |
 | Session log | Every Session page of the selected projects, newest first | 10,000 per project; refreshed on request |
 | Session page | Session, Items and Turns | 10,000 Items and Turns; polled every 5 s while the Session is in progress or waiting, backing off to 60 s on failures |
-| Overview | Summary; Session lists for the 24-hour activity and the Sessions needing attention that were active in the same 24 hours | 1,000 Sessions per project; projects idle for the whole window are skipped; refreshed every 30 s while visible. Failed project or Session reads show Retry instead of a synthesized empty result; any retained or partial data is visibly qualified |
+| Overview | Summary; Session lists for the 24-hour activity and Needs attention, which lists Sessions active in the same 24 hours | 1,000 Sessions per project; projects idle for the whole window are skipped; refreshed every 30 s while visible. Failed project or Session reads show Retry instead of a synthesized empty result; any retained or partial data is visibly qualified |
 | Agent metrics | Summary; Session lists; Turns and Items of the most recently active Sessions | 2,000 Sessions listed per project; 200 Sessions read per load, 10 Turn and 5 Item pages each, 15 s per Session and 45 s per load |
 | Sandbox metrics | Nodes and allocations; Runtime observations; hosted Sessions by ID; Runtime history | 100 hosted Sessions read per refresh; history for at most 24; refreshed every 30 s while visible |
 

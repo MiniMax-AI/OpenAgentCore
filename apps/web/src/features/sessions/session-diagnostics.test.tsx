@@ -31,8 +31,8 @@ function render(kind: "session" | "turn", data: SessionDiagnostics | TurnDiagnos
 
 describe("Core diagnostics in the console", () => {
   it("renders safe classified Session and root Turn failures in both languages", async () => {
-    expect(render("session", sessionData)).toContain("API key in Settings → Models and credentials");
-    expect(render("turn", turnData)).toContain("API key in Settings → Models and credentials");
+    expect(render("session", sessionData)).toContain("Check the API key of the Session&#x27;s model provider.");
+    expect(render("turn", turnData)).toContain("Check the API key of the Session&#x27;s model provider.");
     await i18n.changeLanguage("zh-CN");
     expect(render("session", sessionData)).toContain("模型服务认证失败");
     expect(render("turn", turnData)).not.toContain("PRIVATE_NATIVE_SENTINEL");
@@ -61,16 +61,18 @@ describe("Core diagnostics in the console", () => {
     expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 429 }, failed_at: null }, t)).toContain("HTTP 429");
   });
 
-  it("names a model rejection with its next step, and keeps the unclassified cause for unclassified failures", async () => {
+  it("gives each classified failure a next step that holds for every Session kind", () => {
     const t = i18n.getFixedT("en", "diagnostics");
-    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, t)).toBe("The model provider rejected the request. Check the model ID on the Agent or in Settings → Models and credentials.");
-    expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 502 }, failed_at: null }, t)).toBe("The connection to the model provider failed. HTTP 502. Check the base URL in Settings → Models and credentials.");
+    const providerDefault = "Without a model provider set on the Session or its saved Agent, a hosted sandbox Session uses the default in Settings → Models and credentials.";
+    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, t)).toBe(`The model provider rejected the request. Check the model and parameters, starting with the model on the Session page. ${providerDefault}`);
+    expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 502 }, failed_at: null }, t)).toContain("HTTP 502. Check the Base URL of the Session's model provider.");
+    expect(diagnosticFailure({ code: "runtime_unavailable", params: {}, failed_at: null }, t)).toBe("The Runtime is unavailable. Retry later. For a self-hosted Session, check Host connection on the Session page; for a hosted sandbox Session, check Settings → Sandbox and scheduling.");
     expect(diagnosticFailure({ code: "harness_error", params: {}, failed_at: null }, t)).toContain("Core does not show the Harness's own message");
-    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, i18n.getFixedT("zh-CN", "diagnostics"))).toBe("模型服务拒绝了请求。请检查 Agent 或“设置 → 模型与凭据”中的模型 ID。");
+    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, i18n.getFixedT("zh-CN", "diagnostics"))).toBe("模型服务拒绝了请求。请检查模型和参数，先看 Session 页显示的模型。Session 及其保存的 Agent 都未设置模型服务时，托管沙箱 Session 使用“设置 → 模型与凭据”中的默认配置。");
     // Lists show the reason alone; the next step stays in the title.
     const row = render("session", { ...sessionData, failure: { ...sessionData.failure!, code: "invalid_request" } }, false, true);
     expect(row).toContain(">The model provider rejected the request.<");
-    expect(row).toContain('title="The model provider rejected the request. Check the model ID');
+    expect(row).toContain('title="The model provider rejected the request. Check the model and parameters');
   });
 
   it("keeps call/result receipt intervals distinct and historical settlement missing", () => {
