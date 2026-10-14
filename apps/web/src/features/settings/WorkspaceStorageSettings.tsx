@@ -35,7 +35,7 @@ function StorageEditor({ current, replacement, onClose }: { current: WorkspaceSt
     try {
       const latest = await client.fetchQuery({ ...workspaceStorageQuery, staleTime: 0 });
       setObserved(latest ? `${latest.id} · ${latest.tenant_capacity_mib.toLocaleString()} MiB` : t("notConfigured"));
-    } catch { setError(t("readFailed")); }
+    } catch { setError(t("refreshFailed")); }
   };
   const close = () => { if (!writing.current) { setCredential(""); onClose(); } };
   const save = async () => {
