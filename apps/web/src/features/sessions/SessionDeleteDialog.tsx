@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { useToast } from "../../components/Toast";
+import { coreError } from "../../lib/core-error";
 import { projectClient } from "../../lib/projects";
 import { shortId } from "../../lib/format";
 
@@ -17,7 +18,7 @@ export type SessionDeleteOutcome =
   | { kind: "missing" }
   /** Core refused: the Session has work in flight. */
   | { kind: "not-idle" }
-  | { kind: "rejected"; reason: string }
+  | { kind: "rejected"; cause: AgentCoreError }
   /** No answer from Core; the Session may or may not be gone. Never retried automatically. */
   | { kind: "uncertain" };
 
@@ -34,7 +35,7 @@ export async function deleteSession(target: SessionDeleteTarget): Promise<Sessio
 export function classifyDeleteError(error: unknown): SessionDeleteOutcome {
   if (isSessionDeletionConflict(error)) return { kind: "not-idle" };
   if (error instanceof AgentCoreError && error.status === 404) return { kind: "missing" };
-  if (error instanceof AgentCoreError && error.status >= 400 && error.status < 500) return { kind: "rejected", reason: error.message };
+  if (error instanceof AgentCoreError && error.status >= 400 && error.status < 500) return { kind: "rejected", cause: error };
   return { kind: "uncertain" };
 }
 
@@ -56,6 +57,7 @@ export function SessionDeleteDialog({
   onUncertain: () => void;
 }) {
   const { t } = useTranslation("sessions");
+  const { t: tCommon } = useTranslation("common");
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -78,7 +80,7 @@ export function SessionDeleteDialog({
       return;
     }
     if (outcome.kind === "uncertain") onUncertain();
-    setProblem(outcome.kind === "not-idle" ? t("delete.notIdle") : outcome.kind === "rejected" ? t("delete.rejected", { reason: outcome.reason }) : t("delete.uncertain"));
+    setProblem(outcome.kind === "not-idle" ? t("delete.notIdle") : outcome.kind === "rejected" ? t("delete.rejected", { reason: coreError(outcome.cause, tCommon) }) : t("delete.uncertain"));
   };
 
   return (

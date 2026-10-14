@@ -23,6 +23,7 @@ import {
 import { DashboardSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
+import { coreError } from "../../lib/core-error";
 import { formatClock, formatCompact, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { ProjectFilter, ProjectName, useProjectCollection, useProjects, type ProjectFilterValue } from "../../lib/projects";
 import { collections } from "../../lib/queries";
@@ -58,10 +59,6 @@ type KeyUsageState =
   | { status: "ready"; rows: KeyUsageRow[] }
   | { status: "failed"; error: string };
 
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function bucketLabel(seconds: number, t: TFunction<"metrics">): string {
   return seconds >= 3_600 ? t("bucket.hours", { count: seconds / 3_600 }) : t("bucket.minutes", { count: seconds / 60 });
 }
@@ -71,18 +68,19 @@ function bucketLabel(seconds: number, t: TFunction<"metrics">): string {
  * filter or range keeps the last figures on screen until the new ones arrive.
  */
 function useAgentMetricsData(projects: readonly AdminProject[], projectsReady: boolean, filter: ProjectFilterValue, range: AgentMetricsRange) {
+  const { t } = useTranslation("common");
   const targets = useMemo(() => projects.filter((project) => !filter || project.id === filter), [filter, projects]);
   const metricsQuery = useQuery({ ...agentMetricsQuery(targets, filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
   const keyQuery = useQuery({ ...keyUsageQuery(filter, range), enabled: projectsReady, placeholderData: keepPreviousData });
 
   const loaded = metricsQuery.data ?? null;
   let state: LoadState;
-  if (metricsQuery.isError && !metricsQuery.isFetching) state = { status: "failed", error: errorText(metricsQuery.error), previous: loaded };
+  if (metricsQuery.isError && !metricsQuery.isFetching) state = { status: "failed", error: coreError(metricsQuery.error, t), previous: loaded };
   else if (loaded && !metricsQuery.isFetching) state = { status: "ready", loaded };
   else state = { status: "loading", previous: loaded };
 
   let keyUsage: KeyUsageState;
-  if (keyQuery.isError && !keyQuery.isFetching) keyUsage = { status: "failed", error: errorText(keyQuery.error) };
+  if (keyQuery.isError && !keyQuery.isFetching) keyUsage = { status: "failed", error: coreError(keyQuery.error, t) };
   else if (keyQuery.data) keyUsage = { status: "ready", rows: keyQuery.data };
   else keyUsage = { status: "loading" };
 

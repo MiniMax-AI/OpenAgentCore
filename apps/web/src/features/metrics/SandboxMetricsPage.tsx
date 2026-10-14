@@ -56,6 +56,7 @@ type RuntimeState =
 
 /** Hosted Runtimes through the query cache, polled while the page is visible; a refresh keeps the last load on screen. */
 function useHostedRuntimes() {
+  const { t } = useTranslation("common");
   const query = useQuery({
     ...hostedRuntimesQuery,
     refetchInterval: RUNTIME_SNAPSHOT_REFRESH_MS,
@@ -63,7 +64,7 @@ function useHostedRuntimes() {
   });
   const load = query.data ?? null;
   let state: RuntimeState;
-  const error = query.isError ? (query.error instanceof Error ? query.error.message : String(query.error)) : null;
+  const error = query.isError ? coreError(query.error, t) : null;
   if (error !== null && !query.isFetching) state = { status: "failed", load, error };
   else if (load && !query.isFetching) state = { status: "ready", load };
   else state = { status: "loading", load };

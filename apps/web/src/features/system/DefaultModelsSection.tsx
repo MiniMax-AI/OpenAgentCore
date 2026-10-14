@@ -8,6 +8,7 @@ import { EmptyState, revealInPageBody, Section } from "../../components/console-
 import { ErrorState } from "../../components/ErrorState";
 import { TableSkeleton } from "../../components/Skeleton";
 import { failedLast, useFailureToast, useToast } from "../../components/Toast";
+import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { useConsoleIntent } from "../../lib/console-navigation";
 import { harnessNames } from "../../lib/harness-labels";
@@ -15,10 +16,6 @@ import { admin } from "../../lib/projects";
 import { ModelProviderDialog } from "./ModelProviderDialog";
 import { HarnessCard } from "./HarnessCard";
 import { harnessesQuery } from "./harness-queries";
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error ?? "");
-}
 
 /**
  * Settings owns each harness's deployment default model configuration.
@@ -33,12 +30,13 @@ function message(error: unknown): string {
  */
 export function DefaultModelsSection() {
   const { t } = useTranslation("system");
+  const { t: tCommon } = useTranslation("common");
   const toast = useToast();
   const queryClient = useQueryClient();
   const query = useQuery(harnessesQuery);
   const harnesses = query.data?.data ?? null;
   const reread = useCallback(() => { void queryClient.invalidateQueries({ queryKey: harnessesQuery.queryKey }); }, [queryClient]);
-  useFailureToast(harnesses && failedLast(query) ? message(query.error) : null, t("models.refreshFailed"), "harnesses-read");
+  useFailureToast(harnesses && failedLast(query) ? coreError(query.error, tCommon) : null, t("models.refreshFailed"), "harnesses-read");
   // From Getting started: bring the default harness's Set or Replace into view and focus.
   useConsoleIntent("default-model", harnesses ? "ready" : query.isError ? "unavailable" : "wait", () => {
     window.requestAnimationFrame(() => {
@@ -63,7 +61,7 @@ export function DefaultModelsSection() {
   let body: ReactNode;
   if (!harnesses) {
     body = query.isError && !query.isFetching
-      ? <ErrorState title={t("models.loadFailed")} description={message(query.error)} onRetry={() => { void query.refetch(); }} />
+      ? <ErrorState title={t("models.loadFailed")} description={coreError(query.error, tCommon)} onRetry={() => { void query.refetch(); }} />
       : <TableSkeleton rows={3} columns={3} />;
   } else if (!harnesses.length) {
     body = <EmptyState title={t("models.none")} />;

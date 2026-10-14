@@ -1,6 +1,6 @@
 import { AgentCoreError, sandboxConfigurationUnconfirmed, type SandboxProvider } from "@oac/agents-client";
 import i18n, { type SupportedLanguage } from "../i18n";
-import { knownCoreError } from "./core-error";
+import { coreError, knownCoreError } from "./core-error";
 import type { ParseKeys } from "i18next";
 
 const states: Record<string, ParseKeys<"sandbox">> = {
@@ -11,18 +11,17 @@ const states: Record<string, ParseKeys<"sandbox">> = {
 export function sandboxStateLabel(state: string, locale: SupportedLanguage): string {
   return i18n.getFixedT(locale, "sandbox")(Object.hasOwn(states, state) ? states[state]! : "Unknown state");
 }
-/** Localized catalog errors first; unknown refusals retain Core’s message. */
+/** Localized catalog errors first; other refusals follow coreError. */
 export function sandboxRequestError(error: unknown, locale: SupportedLanguage): string {
-  const known = knownCoreError(error, i18n.getFixedT(locale, "common"), "bytes");
+  const common = i18n.getFixedT(locale, "common");
+  const known = knownCoreError(error, common, "bytes");
   if (known) return known;
   let key: ParseKeys<"sandbox"> = "The sandbox request failed. Refresh to check the current state before trying again.";
   if (error instanceof AgentCoreError) {
     const refused = !sandboxWriteUncertain(error);
     if (error.code === sandboxConfigurationUnconfirmed) { if (refused) key = "Core rejected the sandbox configuration."; else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state."; }
-    else if (refused) {
-      if (error.message) return error.message;
-      key = "The sandbox request was rejected. Refresh to check the current state.";
-    } else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state.";
+    else if (refused) return coreError(error, common);
+    else if (error.status >= 500) key = "The sandbox service is unavailable. Refresh to check the current state.";
   } else if (error instanceof Error && error.message === "removal_unconfirmed") key = "Core did not confirm node removal. Refresh to check its state.";
   return i18n.getFixedT(locale, "sandbox")(key);
 }
@@ -40,16 +39,12 @@ export function sandboxWriteUncertain(error: unknown): boolean {
 }
 
 /**
- * Core's own reason when it rejects a deployment configuration it cannot serve,
- * such as E2B with a loopback public_url; null for any other failure. Nothing
- * was saved, so the administrator corrects the cause and saves again.
+ * The reason for a refused deployment configuration whose code the console
+ * explains, such as E2B with a loopback public_url; null for any other failure.
+ * Nothing was saved, so the administrator corrects the cause and saves again.
  */
 export function sandboxConfigurationRejection(error: unknown, locale: SupportedLanguage = "en"): string | null {
-  if (error instanceof AgentCoreError && !sandboxWriteUncertain(error) && error.code) {
-    const known = knownCoreError(error, i18n.getFixedT(locale, "common"));
-    if (known) return known;
-  }
-  return error instanceof AgentCoreError && error.status === 409 && error.code === "sandbox_configuration_error" && error.message ? error.message : null;
+  return sandboxWriteUncertain(error) ? null : knownCoreError(error, i18n.getFixedT(locale, "common"));
 }
 
 export function sandboxProviderLabel(provider: SandboxProvider | "", locale: SupportedLanguage): string {

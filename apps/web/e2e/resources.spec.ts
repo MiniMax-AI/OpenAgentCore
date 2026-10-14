@@ -6,7 +6,7 @@ test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
 test("keeps Core's reason when it refuses a deletion, then deletes on confirmation", async ({ page, request }) => {
   await openConsole(page, request, "agents");
-  await failNext(request, { method: "DELETE", path: "/agents/", status: 409, message: "The Agent has Sessions in progress." });
+  await failNext(request, { method: "DELETE", path: "/agents/", status: 409, code: "conflict_error", message: "The Agent has Sessions in progress." });
   await page.getByRole("button", { name: "Delete Code reviewer?" }).click();
   const dialog = page.getByRole("dialog", { name: "Delete Agent?" });
   await dialog.getByRole("button", { name: "Delete Agent" }).click();

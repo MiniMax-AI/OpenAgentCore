@@ -32,6 +32,6 @@ describe("readProjectsSessions", () => {
       () => ({ maxSessions: 100 }),
     );
     expect(reads.map((read) => [read.project.id, read.sessions.length])).toEqual([["ok", 3]]);
-    expect(failures.map((failure) => [failure.project.id, failure.message])).toEqual([["down", "HTTP 503"]]);
+    expect(failures.map((failure) => failure.project.id)).toEqual(["down"]);
   });
 });

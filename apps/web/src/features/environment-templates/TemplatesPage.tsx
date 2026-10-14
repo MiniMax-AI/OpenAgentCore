@@ -8,6 +8,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiEmptyState, EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, StatusDot } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
+import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, MISSING } from "../../lib/format";
 import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
@@ -183,7 +184,7 @@ function TemplateDetailRoute({ projectId, templateId }: { projectId: string; tem
   const back = useCallback(() => goBack("templates", { project: projectId }), [goBack, projectId]);
   const creators = useCreators("environment_template", useMemo(() => [{ projectId, id: templateId }], [projectId, templateId]));
   const refresh = () => { forgetCreators(); void read.refetch(); };
-  const failure = read.isError ? (read.error instanceof Error ? read.error.message : String(read.error)) : null;
+  const failure = read.isError ? coreError(read.error, tCommon) : null;
   // Detail reads are not polled: each failed read was asked for and is reported.
   useFailureToast(read.data ? failure : null, t("refreshFailed"), "template-refresh", read.errorUpdatedAt);
 

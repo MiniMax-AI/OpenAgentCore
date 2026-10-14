@@ -24,19 +24,6 @@ export function classifySkillsError(error: unknown): Exclude<SkillsSupport, "sup
   return "error";
 }
 
-
-export function coreErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error);
-}
-
-export type SkillUploadFailure =
-  | { kind: "invalid"; message: string }
-  | { kind: "too-large" }
-  | { kind: "interrupted"; cancelled: boolean }
-  | { kind: "other"; message: string };
-
-
 /** Core rejects deleting the default while other versions remain (400 invalid_value on `version`). */
 export function isDefaultVersionConflict(error: unknown): boolean {
   return error instanceof AgentCoreError && error.status === 400 && error.code === "invalid_value" && error.param === "version";

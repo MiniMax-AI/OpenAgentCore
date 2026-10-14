@@ -23,10 +23,6 @@ function sampleSpacing(samples: readonly RuntimeTrendSample[]): number {
 
 const HISTORY_REFRESH_MS = 30_000;
 
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /** Runs `action` whenever `value` changes after the first render. */
 function useOnChange(value: unknown, action: () => void) {
   const seen = useRef(value);
@@ -66,7 +62,7 @@ export function SessionRuntimeSection({
   const observationRead = useQuery(sessionObservationQuery(projectId, session.id));
   useOnChange(revision, observationRead.refetch);
   const observation = observationRead.data ?? null;
-  const observationError = observationRead.isError ? message(observationRead.error) : null;
+  const observationError = observationRead.isError ? coreError(observationRead.error, tCommon) : null;
 
   // The Session object changes on every poll; its ID and the range decide what to read.
   const historyRead = useQuery({

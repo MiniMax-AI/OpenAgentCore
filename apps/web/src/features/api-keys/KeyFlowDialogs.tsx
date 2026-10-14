@@ -13,7 +13,7 @@ export function FlowErrorMessage({ error, name }: { error: FlowError | null; nam
   const { t } = useTranslation("keys");
   const { t: tCommon } = useTranslation("common");
   if (!error || (name !== undefined && error.kind === "rejected" && coreFieldError(error.cause, "name", tCommon))) return null;
-  const text = error.kind === "uncertain" ? t("errors.uncertain") : t("errors.rejected", { message: error.cause ? coreError(error.cause, tCommon) : error.message });
+  const text = error.kind === "uncertain" ? t("errors.uncertain") : t("errors.rejected", { message: coreError(error.cause, tCommon) });
   return <p className="key-flow-error" role="alert">{text}</p>;
 }
 

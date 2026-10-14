@@ -11,6 +11,7 @@ import { CopyableId, RowActions } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
 import { TableSkeleton } from "../../components/Skeleton";
 import { failedLast, useFailureToast, useToast } from "../../components/Toast";
+import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { epochSeconds, formatDateTime, shortId } from "../../lib/format";
 import { admin, useProjects } from "../../lib/projects";
@@ -34,20 +35,14 @@ function newKeyId(): string {
 }
 
 /**
- * A write either failed before Core acted ("rejected", with Core's reason) or
+ * A write either failed before Core acted ("rejected", with Core's error) or
  * has an unknown outcome: no answer, a timeout, a 5xx or an unreadable reply.
  */
-type WriteFailure = { kind: "rejected"; message: string; code: string | null } | { kind: "uncertain" };
+type WriteFailure = { kind: "rejected"; cause: AgentCoreError } | { kind: "uncertain" };
 
 function writeFailure(error: unknown): WriteFailure {
-  if (error instanceof AgentCoreError && error.status >= 400 && error.status < 500 && error.status !== 408) {
-    return { kind: "rejected", message: error.message, code: error.code ?? null };
-  }
+  if (error instanceof AgentCoreError && error.status >= 400 && error.status < 500 && error.status !== 408) return { kind: "rejected", cause: error };
   return { kind: "uncertain" };
-}
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error ?? "");
 }
 
 function sameKey(a: string, b: string): boolean {
@@ -71,6 +66,7 @@ function sameKey(a: string, b: string): boolean {
  */
 export function ExecutorCredentialsSection({ projectId, sessionId, environmentId }: { projectId: string; sessionId: string; environmentId: string; remoteUrl: string; workspaceDirectory?: string }) {
   const { t, i18n } = useTranslation("sessions");
+  const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const toast = useToast();
   const { byId, refresh: refreshProjects } = useProjects();
@@ -83,7 +79,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   const boundCredential = boundExecutorCredential(query.data);
   const { refetch } = query;
   const reread = () => { void refetch(); };
-  useFailureToast(credentials && failedLast(query) ? message(query.error) : null, t("executor.refreshFailed"), "executor-credentials-read");
+  useFailureToast(credentials && failedLast(query) ? coreError(query.error, tCommon) : null, t("executor.refreshFailed"), "executor-credentials-read");
 
   // The key ID of an issuance in flight or with an unknown outcome; the next Issue sends it again unless it is listed.
   const [kept, setKept] = useState<string | null>(null);
@@ -154,20 +150,20 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
         return;
       }
       setKept(null);
-      if (failure.code === "executor_credential_exists") {
+      if (failure.cause.code === "executor_credential_exists") {
         // An earlier attempt with this key ID may have been issued after all, its secret lost.
         const found = await findListed(keyId);
         if (!found || !recoverLost(found)) {
-          toast.show(t("executor.issueRejected"), { tone: "error", detail: found?.revoked_at ? t("executor.existsRevoked", { id: shortId(keyId) }) : failure.message });
+          toast.show(t("executor.issueRejected"), { tone: "error", detail: found?.revoked_at ? t("executor.existsRevoked", { id: shortId(keyId) }) : coreError(failure.cause, tCommon) });
         }
         return;
       }
-      if (failure.code === "project_archived") {
+      if (failure.cause.code === "project_archived") {
         // Archived meanwhile: read the project again so issuing and rotating disappear.
         toast.show(t("executor.issueRejected"), { tone: "error", detail: t("executor.archived") });
         refreshProjects();
       } else {
-        toast.show(t("executor.issueRejected"), { tone: "error", detail: failure.message });
+        toast.show(t("executor.issueRejected"), { tone: "error", detail: coreError(failure.cause, tCommon) });
       }
       reread();
     } finally {
@@ -198,11 +194,11 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
       setShown({ credential, open: true, done: false });
     } catch (error) {
       const failure = writeFailure(error);
-      if (failure.kind === "rejected" && failure.code === "project_archived") {
+      if (failure.kind === "rejected" && failure.cause.code === "project_archived") {
         setRotationError(t("executor.archived"));
         refreshProjects();
       } else {
-        setRotationError(failure.kind === "uncertain" ? t("executor.rotateDialog.uncertain") : t("executor.rotateDialog.rejected", { reason: failure.message }));
+        setRotationError(failure.kind === "uncertain" ? t("executor.rotateDialog.uncertain") : t("executor.rotateDialog.rejected", { reason: coreError(failure.cause, tCommon) }));
       }
     } finally {
       setRotating(false);
@@ -219,7 +215,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   let body;
   if (!credentials) {
     body = query.isError
-      ? <EmptyState title={t("executor.loadFailed")} description={message(query.error)} />
+      ? <EmptyState title={t("executor.loadFailed")} description={coreError(query.error, tCommon)} />
       : <TableSkeleton label={t("executor.loading")} rows={2} columns={4} />;
   } else if (!credentials.length) {
     body = <EmptyState title={t("executor.empty")} />;

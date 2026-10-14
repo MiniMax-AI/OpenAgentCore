@@ -1,4 +1,4 @@
-import type { ExecutorCredentialList } from "@oac/agents-client";
+import { AgentCoreError, type ExecutorCredentialList } from "@oac/agents-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -32,7 +32,7 @@ function render(value: ExecutorCredentialList | null, failed = false) {
   const options = executorConnectionQuery("project", "session", "environment");
   if (value) client.setQueryData(options.queryKey, value);
   else client.getQueryCache().build(client, { queryKey: options.queryKey });
-  if (failed) client.getQueryCache().find({ queryKey: options.queryKey })!.setState({ status: "error", error: new Error("unavailable"), errorUpdatedAt: Date.now() + 1_000 });
+  if (failed) client.getQueryCache().find({ queryKey: options.queryKey })!.setState({ status: "error", error: new AgentCoreError("Credential store unavailable.", 503, "credential_store_unavailable"), errorUpdatedAt: Date.now() + 1_000 });
   const html = renderToStaticMarkup(<QueryClientProvider client={client}><ExecutorCredentialsSection projectId="project" sessionId="session" environmentId="environment" remoteUrl="wss://core.example" /></QueryClientProvider>);
   client.clear();
   return html;
@@ -80,5 +80,9 @@ describe("executor credential display ownership", () => {
     expect(html.match(/aria-label="轮换以恢复"/g)).toHaveLength(1);
     expect(html).toContain("刷新 · 主机连接");
     expect(html).toContain('data-host-connected="false"');
+    // Core's messages are English: a failed read names its code instead.
+    const failed = render(null, true);
+    expect(failed).toContain("Core 请求失败（credential_store_unavailable）。");
+    expect(failed).not.toContain("Credential store unavailable.");
   });
 });

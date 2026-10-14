@@ -1,4 +1,4 @@
-import type { AdminProject, AgentSession } from "@oac/agents-client";
+import { AgentCoreError, type AdminProject, type AgentSession } from "@oac/agents-client";
 
 import type { CapacitySummary } from "../fleet/fleet-model";
 import type { InProject } from "../metrics/project-sessions";
@@ -80,10 +80,9 @@ export function overviewReadDone(sessions: readonly AgentSession[], since: numbe
 
 /** A failure where the Web API itself did not answer: a gateway status or a network error. */
 export function isGatewayOrNetworkFailure(error: unknown): boolean {
-  const status = typeof error === "object" && error !== null && "status" in error ? (error as { status: unknown }).status : undefined;
-  if (typeof status === "number") return status === 502 || status === 503 || status === 504;
-  const message = typeof error === "string" ? error : error instanceof Error ? error.message : "";
-  return /HTTP 50[234]\b|\(50[234]\)|failed to fetch|networkerror|load failed|network request failed/i.test(message);
+  if (error instanceof AgentCoreError) return error.status === 502 || error.status === 503 || error.status === 504;
+  // fetch rejects with a TypeError when no response arrives; each browser words it differently.
+  return error instanceof TypeError && /failed to fetch|networkerror|load failed|network request failed/i.test(error.message);
 }
 
 export type ReadOutcome = { status: "pending" } | { status: "ready" } | { status: "failed"; error: unknown };

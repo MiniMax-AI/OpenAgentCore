@@ -68,7 +68,7 @@ describe("loadOverview", () => {
     }, NOW, new AbortController().signal);
     expect(data.summary.status).toBe("failed");
     expect(data.sessions.sessions).toHaveLength(30);
-    expect(data.sessions.failures.map((failure) => [failure.project.id, failure.message])).toEqual([["broken", "boom"]]);
+    expect(data.sessions.failures.map((failure) => failure.project.id)).toEqual(["broken"]);
   });
 
   it("propagates an abort", async () => {

@@ -13,10 +13,10 @@ import { EmptyState, PageBody, PageHeader, RefreshButton, Section, StatusDot } f
 import { Modal } from "../../components/Modal";
 import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast, useToast } from "../../components/Toast";
+import { coreError } from "../../lib/core-error";
 import { formatDateTime, MISSING } from "../../lib/format";
 import { CopyableId, LatestVersion } from "./skill-parts";
 import {
-  coreErrorMessage,
   downloadSkillArchive,
   isDefaultVersionConflict,
   readSkillVersionsPage,
@@ -287,7 +287,7 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
   const skill = skillRead.data ?? null;
   const skillError = skillRead.isError ? skillRead.error : null;
   const status: SkillLoadStatus = isNotFound(skillError) ? "missing" : skillError ? "failed" : skill ? "ready" : "loading";
-  const error = skillError ? coreErrorMessage(skillError) : null;
+  const error = skillError ? coreError(skillError, tCommon) : null;
 
   const freshSkill = skillRead.isPlaceholderData ? undefined : skillRead.data;
   useEffect(() => {
@@ -299,7 +299,7 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
     status: !versionsData && versionsRead.isFetching ? "loading" : versionsRead.isError ? "failed" : versionsData ? "ready" : "loading",
     items: versionsData?.values ?? [],
     nextAfter: versionsData?.nextAfter ?? null,
-    error: versionsRead.isError ? coreErrorMessage(versionsRead.error) : null,
+    error: versionsRead.isError ? coreError(versionsRead.error, tCommon) : null,
     loadingMore: more.loading,
     moreError: more.error,
   };
@@ -333,7 +333,7 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
       setMore({ loading: false, error: null });
     } catch (reason) {
       if (!mounted.current) return;
-      setMore({ loading: false, error: coreErrorMessage(reason) });
+      setMore({ loading: false, error: coreError(reason, tCommon) });
     }
   };
 
@@ -343,7 +343,7 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
     try {
       await downloadSkillArchive(core, skill, version);
     } catch (reason) {
-      if (mounted.current) toast.show(t("detail.downloadFailed", { reason: coreErrorMessage(reason) }), { tone: "error" });
+      if (mounted.current) toast.show(t("detail.downloadFailed", { reason: coreError(reason, tCommon) }), { tone: "error" });
     } finally {
       if (mounted.current) setDownloading(null);
     }
@@ -380,7 +380,7 @@ export function SkillDetail({ core, projectId, skillId, initialSkill, onBack, on
         listChanged();
         load();
       } else {
-        setDialogError(t("detail.actionFailed", { reason: coreErrorMessage(reason) }));
+        setDialogError(t("detail.actionFailed", { reason: coreError(reason, tCommon) }));
       }
     } finally {
       dialogBusyRef.current = false;

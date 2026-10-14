@@ -49,7 +49,6 @@ export interface ProjectSessionRead extends SessionRead {
 
 export interface ProjectReadFailure {
   project: AdminProject;
-  message: string;
 }
 
 /** Reads several projects in parallel; a failing project is reported by name and the others still count. */
@@ -63,7 +62,7 @@ export async function readProjectsSessions(
   const failures: ProjectReadFailure[] = [];
   results.forEach((result, index) => {
     if (result.status === "fulfilled") reads.push(result.value);
-    else failures.push({ project: projects[index]!, message: result.reason instanceof Error ? result.reason.message : String(result.reason) });
+    else failures.push({ project: projects[index]! });
   });
   return { reads, failures };
 }

@@ -1,5 +1,8 @@
 import { AgentCoreError } from "@oac/agents-client";
 import { useCallback, useState } from "react";
+import { useTranslation } from "react-i18next";
+
+import { coreError } from "./core-error";
 
 export interface DeleteFlow<T> {
   target: T | null;
@@ -12,7 +15,7 @@ export interface DeleteFlow<T> {
 
 /**
  * Confirmed deletion through the Web API. A definite rejection keeps the dialog
- * open with Core's reason. An unconfirmed outcome is never retried silently: the
+ * open with Core's reason in the console's language. An unconfirmed outcome is never retried silently: the
  * dialog stays open with the uncertain message while the view is re-read
  * (`messages.reread`, or `onSettled` where settling only refreshes a list), so a
  * detail page does not navigate away as if the deletion had succeeded.
@@ -22,6 +25,7 @@ export function useDeleteFlow<T>(
   onSettled: () => void,
   messages: { uncertain: string; reread?: () => void },
 ): DeleteFlow<T> {
+  const { t } = useTranslation("common");
   const [target, setTarget] = useState<T | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +43,7 @@ export function useDeleteFlow<T>(
         setTarget(null);
         onSettled();
       } else if (caught instanceof AgentCoreError && caught.status >= 400 && caught.status < 500) {
-        setError(caught.message);
+        setError(coreError(caught, t));
       } else {
         setError(messages.uncertain);
         (messages.reread ?? onSettled)();
@@ -47,7 +51,7 @@ export function useDeleteFlow<T>(
     } finally {
       setBusy(false);
     }
-  }, [busy, messages, onSettled, run, target]);
+  }, [busy, messages, onSettled, run, t, target]);
   return {
     target,
     busy,

@@ -1,13 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, type SourceFile, type SourceFileListEntry } from "@oac/agents-client";
+import type { SourceFile, SourceFileListEntry } from "@oac/agents-client";
 
-import i18n from "../../i18n";
 import {
-  classifyFilesListError,
-  filesErrorReason,
   filterFiles,
-  isDefiniteRejection,
   maxFileUploadBytes,
   readFilesPage,
   uploadPrecheck,
@@ -23,7 +19,6 @@ function file(id: string, filename: string, created = 1_790_208_000): SourceFile
 const notes = file("file-16e1f26e-8cf6-4272-9c31-d470b08d31af", "notes.txt");
 const input = file("file-2b7c9d10-4e5f-4a6b-8c7d-9e0f1a2b3c4d", "Input.CSV");
 const unknown: SourceFileListEntry = { id: "file-3c8d0e21-5f60-4b7c-9d8e-0f1a2b3c4d5e", object: "file", unrecognized: true };
-const t = (key: string) => i18n.t(key as never, { ns: "files" }) as string;
 
 describe("upload precheck", () => {
   it("accepts an empty file and the 512 MiB bound", () => {
@@ -40,32 +35,6 @@ describe("upload precheck", () => {
     expect(uploadPrecheck({ name: "a\0b", size: 1 })).toBe("bad-name");
     expect(uploadPrecheck({ name: "é".repeat(512), size: 1 })).toBeNull();
     expect(uploadPrecheck({ name: "é".repeat(513), size: 1 })).toBe("bad-name");
-  });
-});
-
-describe("error mapping", () => {
-  it("treats only 4xx answers as definite rejections", () => {
-    expect(isDefiniteRejection(new AgentCoreError("bad", 400))).toBe(true);
-    expect(isDefiniteRejection(new AgentCoreError("gone", 404))).toBe(true);
-    // A lost response, a server error or an unrecognized success body may have stored the file.
-    expect(isDefiniteRejection(new TypeError("Failed to fetch"))).toBe(false);
-    expect(isDefiniteRejection(new AgentCoreError("down", 503))).toBe(false);
-    expect(isDefiniteRejection(new AgentCoreError("bad body", 502, "invalid_source_file"))).toBe(false);
-  });
-
-  it("classifies a failed first list read", () => {
-    expect(classifyFilesListError(new AgentCoreError("missing", 404))).toBe("unsupported");
-    expect(classifyFilesListError(new AgentCoreError("method", 405))).toBe("unsupported");
-    expect(classifyFilesListError(new AgentCoreError("busy", 503))).toBe("failed");
-    expect(classifyFilesListError(new TypeError("Failed to fetch"))).toBe("failed");
-  });
-
-  it("gives a short reason without transport details", () => {
-    expect(filesErrorReason(new AgentCoreError("Invalid purpose.", 400, null, "purpose"), t)).toBe("Invalid purpose.");
-    expect(filesErrorReason(new AgentCoreError("no", 401), t)).toBe("Core rejected the connection credentials.");
-    expect(filesErrorReason(new AgentCoreError("big", 413, "request_too_large"), t)).toBe("The file is larger than Core accepts.");
-    expect(filesErrorReason(new AgentCoreError("x", 502, "invalid_source_file_list"), t)).toBe("Core returned a response this console does not recognize.");
-    expect(filesErrorReason(new TypeError("Failed to fetch http://10.0.0.1"), t)).toBe("The request did not reach Core or its response was lost.");
   });
 });
 

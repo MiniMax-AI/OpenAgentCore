@@ -35,7 +35,6 @@ import { FleetOverview, FLEET_LIMIT, type CloudHost } from "./FleetOverview";
 import { SessionFailure } from "../sessions/session-diagnostics";
 import { useWaitingFor } from "../sessions/SessionStatus";
 import { GettingStarted } from "./GettingStarted";
-import { type OverviewData } from "./overview-loader";
 import { overviewQuery } from "./overview-queries";
 import {
   activityStart,
@@ -59,15 +58,6 @@ const ATTENTION_LIMIT = 8;
 const serviceTone: Record<ServiceHealth, Tone> = { healthy: "ok", degraded: "warning", down: "danger", unknown: "pending" };
 const coreTone: Record<CoreStatus, Tone> = { checking: "pending", running: "ok", unreachable: "danger" };
 
-type LoadState =
-  | { status: "loading"; data: OverviewData | null }
-  | { status: "ready"; data: OverviewData }
-  | { status: "failed"; data: OverviewData | null; error: string };
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 /**
  * The Overview's reads through the query cache: a revisit opens from the cache,
  * a refresh retains figures within the same project scope, and the
@@ -80,16 +70,10 @@ function useOverviewData(projects: readonly AdminProject[], projectsReady: boole
     refetchInterval: OVERVIEW_REFRESH_MS,
     refetchIntervalInBackground: false,
   });
-  const data = query.data ?? null;
-  let state: LoadState;
-  if (query.isError && !query.isFetching) state = { status: "failed", data, error: errorText(query.error) };
-  else if (data && !query.isFetching) state = { status: "ready", data };
-  else state = { status: "loading", data };
-
   const { refetch } = query;
   const refresh = useCallback(() => { void refetch(); }, [refetch]);
   // The failure lasts through the polls that retry it, so its toast shows once.
-  return { state, refresh, refreshing: query.isFetching, failure: failedLast(query) ? errorText(query.error) : null };
+  return { data: query.data ?? null, refresh, refreshing: query.isFetching, failed: failedLast(query) };
 }
 
 export function OverviewPage() {
@@ -102,12 +86,12 @@ export function OverviewPage() {
   const projectsReady = projectsState.state.status === "ready" || projects.length > 0;
   const projectsFailed = projectsState.state.status === "failed" || projectsState.refreshError !== null;
   const installation = useQuery(installationQuery);
-  const { state, refresh, refreshing, failure } = useOverviewData(projects, projectsReady);
+  const { data: loaded, refresh, refreshing, failed } = useOverviewData(projects, projectsReady);
   const { state: fleetState, refresh: refreshFleet, deployment } = useSandboxFleet();
   const fleet = fleetSnapshot(fleetState);
-  const data = projectsReady ? state.data : null;
+  const data = projectsReady ? loaded : null;
   const refreshAll = () => { projectsState.refresh(); if (projectsReady) refresh(); refreshFleet(); void installation.refetch(); };
-  const readFailed = projectsFailed || failure !== null;
+  const readFailed = projectsFailed || failed;
   const sessionReadsFailed = readFailed || Boolean(data?.sessions.failures.length);
   const now = Math.floor((data?.loadedAt ?? Date.now()) / 1000);
 
@@ -168,7 +152,7 @@ export function OverviewPage() {
     : summaryError !== null || sessionReadsFailed ? "failed" : null;
 
   // Each failed read is its own toast, shown once while it lasts.
-  useFailureToast(failure !== null, tCommon("readFailure.unknown"), "overview-load");
+  useFailureToast(failed, tCommon("readFailure.unknown"), "overview-load");
   useFailureToast(summaryError !== null, t("errors.summary", { reason: summaryError === null ? "" : coreError(summaryError, tCommon) }), "overview-summary");
   useFailureToast(readFailures.length > 0, tCommon("project.partial", { names: readFailures.map((entry) => entry.project.name).join(", ") }), "overview-partial");
   useFailureToast(projectsFailed, t("errors.projects", { reason: projectsState.state.status === "failed" ? projectsState.state.error : projectsState.refreshError ?? "" }), "overview-projects");

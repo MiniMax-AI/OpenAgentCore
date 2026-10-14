@@ -77,8 +77,6 @@ describe("service health", () => {
     expect(isGatewayOrNetworkFailure(new AgentCoreError("Core returned HTTP 502.", 502))).toBe(true);
     expect(isGatewayOrNetworkFailure(new AgentCoreError("Not found.", 404))).toBe(false);
     expect(isGatewayOrNetworkFailure(new TypeError("Failed to fetch"))).toBe(true);
-    expect(isGatewayOrNetworkFailure("Core returned HTTP 503.")).toBe(true);
-    expect(isGatewayOrNetworkFailure("Core returned HTTP 500.")).toBe(false);
   });
 
   it("decides reachability from any settled read", () => {

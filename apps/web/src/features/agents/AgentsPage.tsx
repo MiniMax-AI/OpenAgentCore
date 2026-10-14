@@ -8,6 +8,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiEmptyState, EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
+import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatCompact, formatDateTime, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { harnessNames, protocolNames } from "../../lib/harness-labels";
@@ -193,7 +194,7 @@ function AgentDetail({ projectId, agentId }: { projectId: string; agentId: strin
   );
 
   const agent = read.data ?? null;
-  const failure = read.isError ? (read.error instanceof Error ? read.error.message : String(read.error)) : null;
+  const failure = read.isError ? coreError(read.error, tCommon) : null;
   // Detail reads are not polled: each failed read was asked for and is reported.
   useFailureToast(agent !== null ? failure : null, t("refreshFailed"), "agent-refresh", read.errorUpdatedAt);
   const name = agent ? agent.name || t("catalog.untitled") : agentId;

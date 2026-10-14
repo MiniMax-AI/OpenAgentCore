@@ -20,12 +20,13 @@ describe("sandbox localization", () => {
     }
     expect(sandboxDiagnosticMessage("", "zh-CN")).toBeNull();
   });
-  it("shows Core's reason for a refusal and keeps other failures to the console's words", () => {
+  it("shows a refusal in the console's language and keeps other failures to the console's words", () => {
     // A code with one exact meaning keeps the console's localized words.
     expect(sandboxRequestError(new AgentCoreError("Node node-edge still has allocations.", 409, "runtime_node_in_use"), "zh-CN")).toBe("节点仍有活跃分配或保留资源。请先清理资源分配、快照、预留资源和待清理项，再移除节点。");
-    // A refusal is Core's to explain: one code, such as a 409 conflict, covers several reasons.
-    expect(sandboxRequestError(new AgentCoreError("This console is read-only.", 403), "zh-CN")).toBe("This console is read-only.");
-    expect(sandboxRequestError(new AgentCoreError("The session is busy.", 409, "conflict_error"), "zh-CN")).toBe("The session is busy.");
+    // Core's messages are English: Chinese names the code or the status instead.
+    expect(sandboxRequestError(new AgentCoreError("This console is read-only.", 403), "zh-CN")).toBe("Core 请求失败（403）。");
+    expect(sandboxRequestError(new AgentCoreError("The session is busy.", 409, "conflict_error"), "zh-CN")).toBe("Core 请求失败（conflict_error）。");
+    expect(sandboxRequestError(new AgentCoreError("The session is busy.", 409, "conflict_error"), "en")).toBe("The session is busy.");
     // A sandbox refusal whose reason the client withheld is named without it.
     expect(sandboxRequestError(new AgentCoreError("withheld", 400, "sandbox_configuration_unconfirmed"), "zh-CN")).toBe("Core 拒绝了这个沙箱配置。");
     expect(sandboxRequestError(new AgentCoreError("raw secret", 502), "zh-CN")).not.toContain("raw secret");

@@ -52,10 +52,4 @@ export const files: TranslationShape<typeof english> = {
     rejected: "Core 拒绝删除：{{reason}}",
     uncertain: "未能确认 {{name}} 是否已删除。请先刷新列表确认，再决定是否重试。",
   },
-  errors: {
-    transport: "请求未到达 Core，或响应已丢失。",
-    unauthorized: "Core 拒绝了当前连接凭据。",
-    tooLarge: "文件超过 Core 的大小上限。",
-    invalidResponse: "Core 返回了控制台无法识别的响应。",
-  },
 };

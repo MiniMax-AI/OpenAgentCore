@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { Section, SegmentedControl } from "../../components/console-ui";
 import { TableSkeleton } from "../../components/Skeleton";
+import { coreError } from "../../lib/core-error";
 import { formatBucket, formatBytes, formatInteger, MISSING } from "../../lib/format";
 import { nodeDetailQuery } from "../fleet/fleet-queries";
 
@@ -25,6 +26,7 @@ function formatShare(value: number, locale?: string): string {
  */
 export function NodeHost({ node, reporting }: { node: SandboxNode; reporting: boolean }) {
   const { t, i18n } = useTranslation("sandbox");
+  const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const [range, setRange] = useState<SandboxNodeHistoryRange>("1h");
   const detail = useQuery({ ...nodeDetailQuery(node.id, range), placeholderData: keepPreviousData, refetchInterval: 30_000, refetchIntervalInBackground: false });
@@ -51,7 +53,7 @@ export function NodeHost({ node, reporting }: { node: SandboxNode; reporting: bo
         <div><dt>{t("Free disk")}</dt><dd>{reporting ? formatBytes(node.available_disk_bytes) : MISSING}</dd></div>
       </dl>
       {current ? <NodeHostCharts detail={current} />
-        : detail.isError ? <p className="page-status" role="alert">{t("Host history could not be read. {{reason}}", { reason: detail.error instanceof Error ? detail.error.message : "" })}</p>
+        : detail.isError ? <p className="page-status" role="alert">{t("Host history could not be read. {{reason}}", { reason: coreError(detail.error, tCommon) })}</p>
           : <TableSkeleton label={t("Loading host history…")} rows={3} columns={4} />}
     </Section>
   );

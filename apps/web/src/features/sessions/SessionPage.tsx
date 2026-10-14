@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useFailureToast } from "../../components/Toast";
+import { coreError } from "../../lib/core-error";
 import { DetailSkeleton } from "../../components/Skeleton";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, revealInPageBody, Section, SegmentedControl } from "../../components/console-ui";
 import { CopyableId } from "../../components/list-ui";
@@ -29,10 +30,6 @@ import { isNotFound, useSessionHistory } from "./use-session-history";
 import "./sessions.css";
 
 type HistoryView = "conversation" | "trace" | "turns";
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error ?? "");
-}
 
 /**
  * Monitor › Session log › one Session: its facts, usage, conversation, trace,
@@ -86,10 +83,10 @@ export function SessionPage() {
     if (projectId && sessionId) void queryClient.invalidateQueries({ queryKey: [...sessionKey(projectId, sessionId), "executor-credentials"] });
   };
   const time = loadedAt ? formatClock(loadedAt, locale) : MISSING;
-  const itemsError = session ? history.history?.itemsError ?? null : null;
-  const turnsError = session ? history.history?.turnsError ?? null : null;
+  const itemsError = session && history.history?.itemsError ? coreError(history.history.itemsError, tCommon) : null;
+  const turnsError = session && history.history?.turnsError ? coreError(history.history.turnsError, tCommon) : null;
   // Failed reads that leave the last history on screen are reported in toasts.
-  useFailureToast(session !== null && !history.gone && history.error ? errorText(history.error) : null, t("detail.stale"), "session-refresh");
+  useFailureToast(session !== null && !history.gone && history.error ? coreError(history.error, tCommon) : null, t("detail.stale"), "session-refresh");
   useFailureToast(Boolean(itemsError), t("history.itemsFailed", { reason: itemsError ?? "" }), "session-items");
   useFailureToast(Boolean(turnsError), t("history.turnsFailed", { reason: turnsError ?? "" }), "session-turns");
 
@@ -101,7 +98,7 @@ export function SessionPage() {
   } else if (!session) {
     if (history.phase === "loading") body = <DetailSkeleton label={t("detail.loading")} />;
     else if (isNotFound(history.error)) body = <EmptyState title={t("detail.notFound")} hint={t("detail.notFoundDescription")} action={<button className="button outline" type="button" onClick={back}>{t("detail.back")}</button>} />;
-    else body = <EmptyState title={t("detail.loadFailed")} description={errorText(history.error)} action={<button className="button outline" type="button" onClick={refresh}>{t("detail.retry")}</button>} />;
+    else body = <EmptyState title={t("detail.loadFailed")} description={coreError(history.error, tCommon)} action={<button className="button outline" type="button" onClick={refresh}>{t("detail.retry")}</button>} />;
   } else {
     const items = history.history?.items ?? [];
     const turns = history.history?.turns ?? [];

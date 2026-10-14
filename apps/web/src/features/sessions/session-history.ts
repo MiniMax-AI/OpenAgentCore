@@ -83,16 +83,12 @@ export interface SessionHistory {
   turns: AgentTurn[];
   /** Why the Session itself could not be read; earlier data stays shown. */
   sessionError: unknown;
-  itemsError: string | null;
-  turnsError: string | null;
+  itemsError: unknown;
+  turnsError: unknown;
   loadedAt: number;
 }
 
 type HistoryReader = Pick<ProjectClient, "retrieveSession" | "listItems" | "listTurns">;
-
-function message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * Reads the Session, its Items and its Turns in parallel. With `incremental`
@@ -117,8 +113,8 @@ export async function loadSessionHistory(
     items: items.status === "fulfilled" ? items.value : previous?.items ?? [],
     turns: turns.status === "fulfilled" ? turns.value : previous?.turns ?? [],
     sessionError: session.status === "rejected" ? session.reason : null,
-    itemsError: items.status === "rejected" ? message(items.reason) : null,
-    turnsError: turns.status === "rejected" ? message(turns.reason) : null,
+    itemsError: items.status === "rejected" ? items.reason : null,
+    turnsError: turns.status === "rejected" ? turns.reason : null,
     loadedAt: Date.now(),
   };
 }

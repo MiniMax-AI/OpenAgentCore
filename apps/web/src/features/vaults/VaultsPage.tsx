@@ -8,6 +8,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { ApiEmptyState, EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
+import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime } from "../../lib/format";
 import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
@@ -15,10 +16,6 @@ import "./vaults.css";
 import { collections } from "../../lib/queries";
 import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
 import { useVaultDetail } from "../resources/detail-queries";
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 /**
  * Resources › Vault: every project's Vaults and their Credential metadata.
@@ -177,8 +174,8 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   );
 
   const vault = read.data ?? null;
-  const failure = read.isError ? errorText(read.error) : null;
-  const credentialsFailure = credentialsRead.isError ? errorText(credentialsRead.error) : null;
+  const failure = read.isError ? coreError(read.error, tCommon) : null;
+  const credentialsFailure = credentialsRead.isError ? coreError(credentialsRead.error, tCommon) : null;
   // Detail reads are not polled: each failed read was asked for and is reported.
   useFailureToast(vault !== null ? failure : null, t("refreshFailed"), "vault-refresh", read.errorUpdatedAt);
   useFailureToast(credentialsRead.data ? credentialsFailure : null, t("refreshFailed"), "vault-credentials-refresh", credentialsRead.errorUpdatedAt);

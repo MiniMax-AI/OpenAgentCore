@@ -9,6 +9,7 @@ import { TimeSeriesChart } from "../../components/charts/TimeSeriesChart";
 import { DashboardSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
+import { coreError } from "../../lib/core-error";
 import { epochSeconds, formatBucket, formatBytes, formatClock, formatDuration, formatInteger, formatRelative, MISSING } from "../../lib/format";
 import { coreMetricsQuery } from "./metrics-queries";
 import "./MetricsView.css";
@@ -49,12 +50,13 @@ function Figure({ value, unit }: { value: ReactNode; unit?: ReactNode }) {
  */
 export function CoreMetricsPage() {
   const { t, i18n } = useTranslation("metrics");
+  const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const [range, setRange] = useState<CoreMetricsRange>("1h");
   const query = useQuery({ ...coreMetricsQuery(range), placeholderData: keepPreviousData, refetchInterval: REFRESH_MS, refetchIntervalInBackground: false });
   const metrics = query.data ?? null;
   const missing = query.error instanceof AgentCoreError && (query.error.status === 404 || query.error.status === 501);
-  const error = query.error instanceof Error ? query.error.message : query.error ? String(query.error) : "";
+  const error = query.isError ? coreError(query.error, tCommon) : "";
   useFailureToast(metrics !== null && query.isError, t("core.stale", { reason: error }), "core-metrics-refresh");
 
   let body: ReactNode;

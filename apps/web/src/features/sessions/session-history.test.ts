@@ -83,7 +83,7 @@ describe("Incremental history reads", () => {
     const history = await loadSessionHistory(client, "session", previous, { incremental: true });
     expect(history.session?.status).toBe("idle");
     expect(history.items).toBe(previous.items);
-    expect(history.itemsError).toBe("Items unavailable");
+    expect(history.itemsError).toBeInstanceOf(AgentCoreError);
     expect(history.turns.map((value) => value.status)).toEqual(["completed"]);
     expect(history.sessionError).toBeNull();
   });
@@ -120,7 +120,8 @@ describe("Session deletion and runtime answers", () => {
   it("tells a busy Session, a missing one, a refusal and an unconfirmed deletion apart", () => {
     expect(classifyDeleteError(new AgentCoreError("busy", 409, "conflict_error"))).toEqual({ kind: "not-idle" });
     expect(classifyDeleteError(new AgentCoreError("missing", 404))).toEqual({ kind: "missing" });
-    expect(classifyDeleteError(new AgentCoreError("nope", 403))).toEqual({ kind: "rejected", reason: "nope" });
+    const refusal = new AgentCoreError("nope", 403);
+    expect(classifyDeleteError(refusal)).toEqual({ kind: "rejected", cause: refusal });
     expect(classifyDeleteError(new AgentCoreError("down", 503))).toEqual({ kind: "uncertain" });
     expect(classifyDeleteError(new TypeError("Failed to fetch"))).toEqual({ kind: "uncertain" });
   });

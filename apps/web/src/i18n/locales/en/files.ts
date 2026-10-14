@@ -48,10 +48,4 @@ export const files = {
     rejected: "Core rejected the deletion: {{reason}}",
     uncertain: "The deletion of {{name}} was not confirmed. Refresh the list to check before trying again.",
   },
-  errors: {
-    transport: "The request did not reach Core or its response was lost.",
-    unauthorized: "Core rejected the connection credentials.",
-    tooLarge: "The file is larger than Core accepts.",
-    invalidResponse: "Core returned a response this console does not recognize.",
-  },
 } as const;
