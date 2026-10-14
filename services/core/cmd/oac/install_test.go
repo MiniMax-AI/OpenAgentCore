@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"net"
 	"os"
 	"os/exec"
@@ -19,6 +20,12 @@ type installFixture struct {
 	calls   []string
 	failure string
 	cached  bool
+}
+
+// installedRevision reads the release the installation directory starts.
+func (f *installFixture) installedRevision() string {
+	raw, _ := os.ReadFile(filepath.Join(f.options.dir, "compose.yaml"))
+	return composeRevision(raw)
 }
 
 func newInstallFixture(t *testing.T) *installFixture {
@@ -39,21 +46,42 @@ func newInstallFixture(t *testing.T) *installFixture {
 	}
 	f := &installFixture{options: installOptions{dir: filepath.Join(root, "installation with spaces"), version: "latest", host: "127.0.0.1", port: port}}
 	f.executable = exe
-	compose := []byte("services: {}\n")
-	f.download = func(_ context.Context, address, path string) error {
+	// The release served for download is always the running installer's.
+	f.download = func(_ context.Context, address string) ([]byte, error) {
 		if f.failure == "download" {
-			return os.ErrPermission
+			return nil, os.ErrPermission
 		}
-		raw := compose
+		compose := []byte("services:\n  init:\n    environment:\n      OAC_REVISION: " + buildRevision + "\n")
 		if strings.HasSuffix(address, "sums.txt") {
-			raw = []byte(fmt.Sprintf("%x  compose.yaml\n", sha256.Sum256(compose)))
+			return []byte(fmt.Sprintf("%x  compose.yaml\n", sha256.Sum256(compose))), nil
 		}
-		return os.WriteFile(path, raw, 0o600)
+		return compose, nil
 	}
+	// Calls against the staged release are recorded with a "staged " prefix and without their file arguments.
 	f.docker = func(_ context.Context, dir string, args ...string) ([]byte, error) {
-		command := strings.Join(args, " ")
-		f.calls = append(f.calls, command)
-		if f.failure != "" && strings.HasPrefix(command, f.failure) {
+		if _, err := os.Stat(dir); dir != "" && err != nil {
+			t.Fatalf("docker %v ran in a missing directory", args)
+		}
+		var words []string
+		staged := false
+		for i := 0; i < len(args); i++ {
+			if args[i] == "-f" || args[i] == "--project-directory" {
+				staged = staged || strings.HasPrefix(args[i+1], f.options.dir+".staging")
+				i++
+				continue
+			}
+			words = append(words, args[i])
+		}
+		command := strings.Join(words, " ")
+		if staged {
+			if f.installedRevision() == buildRevision {
+				t.Fatal("release published before its checks")
+			}
+			f.calls = append(f.calls, "staged "+command)
+		} else {
+			f.calls = append(f.calls, command)
+		}
+		if f.failure != "" && strings.HasPrefix(f.calls[len(f.calls)-1], f.failure) {
 			return nil, os.ErrPermission
 		}
 		switch command {
@@ -72,7 +100,7 @@ func newInstallFixture(t *testing.T) *installFixture {
 			return nil, os.ErrNotExist
 		}
 		if strings.HasPrefix(command, "compose up") {
-			if _, err := os.Stat(filepath.Join(f.options.dir, ".env")); err != nil {
+			if _, err := os.Stat(filepath.Join(f.options.dir, ".env")); err != nil || f.installedRevision() != buildRevision {
 				t.Fatal("services started before configuration publication")
 			}
 		}
@@ -103,6 +131,7 @@ func TestInstallFailureBeforePublicationAndRetry(t *testing.T) {
 	}
 }
 func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
+	// The same release resumes with or without --upgrade.
 	f := newInstallFixture(t)
 	f.failure = "compose up"
 	if err := f.run(); err == nil {
@@ -115,11 +144,12 @@ func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
 	f.failure = ""
 	f.cached = true
 	f.calls = nil
-	f.download = func(context.Context, string, string) error {
+	f.download = func(context.Context, string) ([]byte, error) {
 		t.Fatal("resume downloaded replacement release")
-		return nil
+		return nil, nil
 	}
 	f.options.publicURL = "https://replacement.invalid"
+	f.options.upgrade = true
 	if err := f.run(); err != nil {
 		t.Fatal(err)
 	}
@@ -128,12 +158,97 @@ func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
 		t.Fatal("saved configuration replaced")
 	}
 	for _, call := range f.calls {
-		if strings.HasPrefix(call, "pull") || strings.Contains(call, "down") {
+		if strings.HasPrefix(call, "pull") || strings.Contains(call, "down") || strings.Contains(call, "init") {
 			t.Fatal(call)
 		}
 	}
-	if !strings.Contains(strings.Join(f.calls, "\n"), "--pull never --no-recreate") {
-		t.Fatal(f.calls)
+	assertCallsInOrder(t, f.calls, "compose "+strings.Join(checkConfig, " "), "compose "+strings.Join(startServices, " "))
+}
+
+func TestInstallUpgradesAnotherReleaseOnlyWhenRequested(t *testing.T) {
+	f := newInstallFixture(t)
+	setBuildRevision(t, "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0")
+	if err := f.run(); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(f.options.dir, "compose-sha256sums.txt"), []byte("previous release"), 0o600)
+	before := installationFiles(t, f.options.dir)
+	setBuildRevision(t, "development")
+	os.WriteFile(f.executable, []byte("upgraded binary"), 0o700)
+
+	f.calls = nil
+	err := f.run()
+	if err == nil || err.Error() != "This installation runs release a1b2c3d4e5f6; this installer is development. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade." {
+		t.Fatal(err)
+	}
+	if len(f.calls) != 3 {
+		t.Fatalf("refusal ran Docker beyond its checks: %v", f.calls)
+	}
+
+	f.options.upgrade = true
+	f.failure = "staged compose run --rm --no-deps init"
+	if err := f.run(); err == nil || !strings.HasPrefix(err.Error(), "Upgrade refused; the installation is unchanged") {
+		t.Fatal(err)
+	}
+	if after := installationFiles(t, f.options.dir); !maps.Equal(before, after) {
+		t.Fatal("refused upgrade changed the installation directory")
+	}
+	if _, err := os.Stat(f.options.dir + ".staging"); !os.IsNotExist(err) {
+		t.Fatal("refused upgrade left its stage")
+	}
+
+	f.failure = ""
+	f.calls = nil
+	if err := f.run(); err != nil {
+		t.Fatal(err)
+	}
+	assertCallsInOrder(t, f.calls,
+		"pull example/core:latest",
+		"staged compose "+strings.Join(checkConfig, " "),
+		"staged compose run --rm --no-deps init",
+		"compose up -d --wait --wait-timeout 180 --pull never --remove-orphans")
+	after := installationFiles(t, f.options.dir)
+	if after["oac"] != "upgraded binary" || after[".env"] != before[".env"] || f.installedRevision() != "development" {
+		t.Fatal("upgrade did not publish the release with the saved settings")
+	}
+	if _, ok := after["compose-sha256sums.txt"]; ok {
+		t.Fatal("upgrade kept the previous release checksum")
+	}
+}
+
+func setBuildRevision(t *testing.T, revision string) {
+	previous := buildRevision
+	buildRevision = revision
+	t.Cleanup(func() { buildRevision = previous })
+}
+
+func installationFiles(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{}
+	for _, entry := range entries {
+		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[entry.Name()] = string(raw)
+	}
+	return files
+}
+
+func assertCallsInOrder(t *testing.T, calls []string, want ...string) {
+	t.Helper()
+	next := 0
+	for _, call := range calls {
+		if next < len(want) && call == want[next] {
+			next++
+		}
+	}
+	if next != len(want) {
+		t.Fatalf("missing %q in order in %v", want[next], calls)
 	}
 }
 func TestInstallRecoversRecognizedStageAndPreservesUnknownData(t *testing.T) {
@@ -187,22 +302,6 @@ func TestInstallRejectsBusyPortAndLock(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
-	}
-}
-func TestInstallRefusesModifiedCompose(t *testing.T) {
-	f := newInstallFixture(t)
-	if err := f.run(); err != nil {
-		t.Fatal(err)
-	}
-	os.WriteFile(filepath.Join(f.options.dir, "compose.yaml"), []byte("changed"), 0o600)
-	f.calls = nil
-	if err := f.run(); err == nil {
-		t.Fatal("changed compose accepted")
-	}
-	for _, call := range f.calls {
-		if strings.HasPrefix(call, "compose up") {
-			t.Fatal("started modified compose")
-		}
 	}
 }
 func TestInstallerInterruptedProcess(t *testing.T) {

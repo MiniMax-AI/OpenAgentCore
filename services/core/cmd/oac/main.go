@@ -112,11 +112,18 @@ func withLock(root string, fn func() error) error {
 	return fn()
 }
 
+var (
+	checkConfig = []string{"run", "--rm", "--no-deps", "--entrypoint", "/usr/local/bin/oac-core", "core", "check-config"}
+	// Starting recreates changed services, so a resumed upgrade leaves no container on the previous release.
+	startServices = []string{"up", "-d", "--wait", "--wait-timeout", "180", "--pull", "never", "--remove-orphans"}
+)
+
+// apply is the start shared by oac apply and a resumed installation.
 func apply(ctx context.Context, runner Runner) error {
-	if err := runner.Run(ctx, "run", "--rm", "--no-deps", "--entrypoint", "/usr/local/bin/oac-core", "core", "check-config"); err != nil {
-		return errors.New("configuration check failed; no service was changed")
+	if err := runner.Run(ctx, checkConfig...); err != nil {
+		return fmt.Errorf("configuration check failed; no service was changed: %w", err)
 	}
-	return runner.Run(ctx, "up", "-d", "--wait")
+	return runner.Run(ctx, startServices...)
 }
 
 func coreKeyCommand(ctx context.Context, runner Runner, args []string) error {

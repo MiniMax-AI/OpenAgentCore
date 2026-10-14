@@ -25,10 +25,11 @@ import (
 type installOptions struct {
 	dir, version, publicURL, host string
 	port                          int
+	upgrade                       bool
 }
 type installer struct {
 	docker     func(context.Context, string, ...string) ([]byte, error)
-	download   func(context.Context, string, string) error
+	download   func(context.Context, string) ([]byte, error)
 	executable string
 }
 
@@ -44,6 +45,7 @@ func installCommand(ctx context.Context, args []string) error {
 	flags.StringVar(&o.publicURL, "public-url", "", "URL reachable by browsers and nodes")
 	flags.StringVar(&o.host, "host", "0.0.0.0", "Web bind address")
 	flags.IntVar(&o.port, "web-port", 8080, "Web port")
+	flags.BoolVar(&o.upgrade, "upgrade", false, "upgrade an existing installation to this release")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -68,7 +70,7 @@ func dockerOutput(ctx context.Context, dir string, args ...string) ([]byte, erro
 	return output, nil
 }
 
-func downloadAsset(ctx context.Context, address, path string) error {
+func downloadAsset(ctx context.Context, address string) ([]byte, error) {
 	client := &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if req.URL.Scheme != "https" || len(via) >= 10 {
 			return errors.New("invalid release redirect")
@@ -77,24 +79,24 @@ func downloadAsset(ctx context.Context, address, path string) error {
 	}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	res, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("download %s: HTTP %d", address, res.StatusCode)
+		return nil, fmt.Errorf("download %s: HTTP %d", address, res.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(raw) > 1<<20 {
-		return errors.New("release configuration exceeds size limit")
+		return nil, errors.New("release configuration exceeds size limit")
 	}
-	return os.WriteFile(path, raw, 0o600)
+	return raw, nil
 }
 
 func (i installer) install(ctx context.Context, o installOptions) error {
@@ -179,14 +181,36 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	resume := len(entries) > 0
-	working := o.dir
-	if !resume {
-		listener, err := net.Listen("tcp", net.JoinHostPort(o.host, strconv.Itoa(o.port)))
-		if err != nil {
-			return fmt.Errorf("Web port unavailable; choose --web-port: %w", err)
+	fresh := len(entries) == 0
+	installed := buildRevision
+	if !fresh {
+		for _, name := range []string{"compose.yaml", ".env", cliName()} {
+			info, err := os.Lstat(filepath.Join(o.dir, name))
+			if err != nil || !info.Mode().IsRegular() {
+				return fmt.Errorf("incomplete installation: preserve %s and choose another directory", o.dir)
+			}
 		}
-		listener.Close()
+		raw, err := os.ReadFile(filepath.Join(o.dir, "compose.yaml"))
+		if err != nil {
+			return err
+		}
+		if installed = composeRevision(raw); installed == "" {
+			return fmt.Errorf("incomplete installation: preserve %s and choose another directory", o.dir)
+		}
+	}
+	upgrade := installed != buildRevision
+	if upgrade && !o.upgrade {
+		return fmt.Errorf("This installation runs release %s; this installer is %s. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.", short(installed), short(buildRevision))
+	}
+	compose := installCompose{docker: i.docker, dir: o.dir}
+	if fresh || upgrade {
+		if fresh {
+			listener, err := net.Listen("tcp", net.JoinHostPort(o.host, strconv.Itoa(o.port)))
+			if err != nil {
+				return fmt.Errorf("Web port unavailable; choose --web-port: %w", err)
+			}
+			listener.Close()
+		}
 		if err := os.Mkdir(stage, 0o700); err != nil {
 			return err
 		}
@@ -195,76 +219,68 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		if err := os.Mkdir(filepath.Join(stage, stageMarker(o.dir)), 0o700); err != nil {
 			return err
 		}
-		working = stage
-		repository := os.Getenv("OAC_REPOSITORY")
-		if repository == "" {
-			repository = "MiniMax-AI/OpenAgentCore"
+		release, err := i.releaseCompose(ctx, o.version)
+		if err != nil {
+			return err
 		}
-		base := "https://github.com/" + repository + "/releases/latest/download/"
-		if o.version != "latest" {
-			base = "https://github.com/" + repository + "/releases/download/" + url.PathEscape(o.version) + "/"
+		if err := os.WriteFile(filepath.Join(stage, "compose.yaml"), release, 0o600); err != nil {
+			return err
 		}
-		fmt.Println("Downloading release configuration...")
-		for _, name := range []string{"compose-sha256sums.txt", "compose.yaml"} {
-			if err := i.download(ctx, base+name, filepath.Join(stage, name)); err != nil {
+		if fresh {
+			contents := fmt.Sprintf("COMPOSE_PROJECT_NAME=oac-%s\nOAC_HOST='%s'\nOAC_WEB_PORT='%d'\nOAC_PUBLIC_URL='%s'\n", randomHex(5), o.host, o.port, o.publicURL)
+			if err := os.WriteFile(filepath.Join(stage, ".env"), []byte(contents), 0o600); err != nil {
 				return err
 			}
+			compose.dir = stage
+		} else {
+			// The staged release runs with the installation's settings, project name and override.
+			compose.files = []string{"-f", filepath.Join(stage, "compose.yaml")}
+			if _, err := os.Stat(filepath.Join(o.dir, "compose.override.yaml")); err == nil {
+				compose.files = append(compose.files, "-f", filepath.Join(o.dir, "compose.override.yaml"))
+			}
+			compose.files = append(compose.files, "--project-directory", o.dir)
 		}
-		contents := fmt.Sprintf("COMPOSE_PROJECT_NAME=oac-%s\nOAC_HOST='%s'\nOAC_WEB_PORT='%d'\nOAC_PUBLIC_URL='%s'\n", randomHex(5), o.host, o.port, o.publicURL)
-		if err := os.WriteFile(filepath.Join(stage, ".env"), []byte(contents), 0o600); err != nil {
+		if err := copyExecutable(i.executable, filepath.Join(stage, cliName())); err != nil {
 			return err
-		}
-		source, err := os.Open(i.executable)
-		if err != nil {
-			return err
-		}
-		defer source.Close()
-		target, err := os.OpenFile(filepath.Join(stage, cliName()), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
-		if err != nil {
-			return err
-		}
-		_, copyErr := io.Copy(target, source)
-		closeErr := target.Close()
-		if copyErr != nil {
-			return copyErr
-		}
-		if closeErr != nil {
-			return closeErr
 		}
 	} else {
 		fmt.Println("Using saved settings and retaining existing data.")
 	}
-	for _, name := range []string{"compose.yaml", "compose-sha256sums.txt", ".env", cliName()} {
-		info, err := os.Lstat(filepath.Join(working, name))
-		if err != nil || !info.Mode().IsRegular() {
-			return fmt.Errorf("incomplete installation: preserve %s and choose another directory", o.dir)
-		}
-	}
-	if err := verifyCompose(working); err != nil {
+	if err := compose.Run(ctx, "config", "--quiet"); err != nil {
 		return err
 	}
-	compose := func(args ...string) ([]byte, error) {
-		return i.docker(ctx, working, append([]string{"compose"}, args...)...)
-	}
-	if _, err := compose("config", "--quiet"); err != nil {
-		return err
-	}
-	images, err := compose("config", "--images")
+	images, err := compose.Output(ctx, "config", "--images")
 	if err != nil {
 		return err
 	}
 	fmt.Println("Checking and downloading images...")
 	for _, image := range strings.Fields(string(images)) {
-		if resume {
-			if _, err := i.docker(ctx, working, "image", "inspect", image); err == nil {
+		if !fresh && !upgrade {
+			if _, err := i.docker(ctx, "", "image", "inspect", image); err == nil {
 				continue
 			}
 		}
-		if _, err := i.docker(ctx, working, "pull", image); err != nil {
+		if _, err := i.docker(ctx, "", "pull", image); err != nil {
 			return err
 		}
 	}
-	if !resume {
+	if upgrade {
+		// Init upgrades the data volume or refuses; until then the running release is untouched.
+		fmt.Println("Checking the upgrade...")
+		for _, check := range [][]string{checkConfig, {"run", "--rm", "--no-deps", "init"}} {
+			if err := compose.Run(ctx, check...); err != nil {
+				return fmt.Errorf("Upgrade refused; the installation is unchanged: %w", err)
+			}
+		}
+		for _, name := range []string{cliName(), "compose.yaml"} {
+			if err := os.Rename(filepath.Join(stage, name), filepath.Join(o.dir, name)); err != nil {
+				return err
+			}
+		}
+		// Installations from earlier releases kept a checksum that no longer describes compose.yaml.
+		_ = os.Remove(filepath.Join(o.dir, "compose-sha256sums.txt"))
+	}
+	if fresh {
 		if _, err := os.Stat(o.dir); err == nil {
 			if err := os.Remove(o.dir); err != nil {
 				return err
@@ -273,18 +289,23 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		if err := os.Rename(stage, o.dir); err != nil {
 			return err
 		}
-		working = o.dir
 		_ = os.Remove(filepath.Join(o.dir, stageMarker(o.dir)))
 	}
+	compose = installCompose{docker: i.docker, dir: o.dir}
 	fmt.Println("Starting services...")
-	if _, err := compose("up", "-d", "--wait", "--wait-timeout", "180", "--pull", "never", "--no-recreate"); err != nil {
+	if fresh || upgrade {
+		err = compose.Run(ctx, startServices...)
+	} else {
+		err = apply(ctx, compose)
+	}
+	if err != nil {
 		return fmt.Errorf("startup failed; data retained, rerun the installer: %w", err)
 	}
-	key, err := compose("exec", "-T", "web", "/usr/local/bin/oac-web", "core-key")
+	key, err := compose.Output(ctx, "exec", "-T", "web", "/usr/local/bin/oac-web", "core-key")
 	if err != nil {
 		return err
 	}
-	environment, err := compose("config", "--environment")
+	environment, err := compose.Output(ctx, "config", "--environment")
 	if err != nil {
 		return err
 	}
@@ -294,10 +315,94 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		}
 	}
 	fmt.Printf("\nOpenAgentCore is running.\n\nConsole: %s\nCore key: %s\nCommand: %s\n", o.publicURL, strings.TrimSpace(string(key)), filepath.Join(o.dir, cliName()))
+	if upgrade {
+		fmt.Printf("Upgraded from %s to %s. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.\n", short(installed), short(buildRevision))
+	}
 	if u, _ := url.Parse(o.publicURL); u != nil && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1") {
 		fmt.Println("For remote access, set OAC_PUBLIC_URL in .env to a reachable origin and run oac apply.")
 	}
 	return nil
+}
+
+// releaseCompose downloads the requested release's compose.yaml, verifies its published checksum and requires it to start this installer's release.
+func (i installer) releaseCompose(ctx context.Context, version string) ([]byte, error) {
+	repository := os.Getenv("OAC_REPOSITORY")
+	if repository == "" {
+		repository = "MiniMax-AI/OpenAgentCore"
+	}
+	base := "https://github.com/" + repository + "/releases/latest/download/"
+	if version != "latest" {
+		base = "https://github.com/" + repository + "/releases/download/" + url.PathEscape(version) + "/"
+	}
+	fmt.Println("Downloading release configuration...")
+	sums, err := i.download(ctx, base+"compose-sha256sums.txt")
+	if err != nil {
+		return nil, err
+	}
+	compose, err := i.download(ctx, base+"compose.yaml")
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(compose)
+	if strings.TrimSpace(string(sums)) != hex.EncodeToString(digest[:])+"  compose.yaml" {
+		return nil, errors.New("Compose checksum mismatch; rerun the installer")
+	}
+	// A moving latest release can differ from the release that published this installer.
+	if revision := composeRevision(compose); revision != buildRevision {
+		return nil, fmt.Errorf("release configuration %s does not match this installer %s; rerun the installer", short(revision), short(buildRevision))
+	}
+	return compose, nil
+}
+
+// composeRevision returns the release a Compose file starts, from init's OAC_REVISION.
+func composeRevision(compose []byte) string {
+	for _, line := range strings.Split(string(compose), "\n") {
+		if value, ok := strings.CutPrefix(strings.TrimSpace(line), "OAC_REVISION:"); ok {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func short(revision string) string {
+	if len(revision) > 12 {
+		return revision[:12]
+	}
+	return revision
+}
+
+func copyExecutable(from, to string) error {
+	source, err := os.Open(from)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+	target, err := os.OpenFile(to, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
+	if err != nil {
+		return err
+	}
+	_, copyErr := io.Copy(target, source)
+	closeErr := target.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+// installCompose runs Docker Compose through the installer's Docker command, so installation shares oac apply's start.
+type installCompose struct {
+	docker func(context.Context, string, ...string) ([]byte, error)
+	dir    string
+	files  []string
+}
+
+func (c installCompose) Output(ctx context.Context, args ...string) ([]byte, error) {
+	return c.docker(ctx, c.dir, append(append([]string{"compose"}, c.files...), args...)...)
+}
+
+func (c installCompose) Run(ctx context.Context, args ...string) error {
+	_, err := c.Output(ctx, args...)
+	return err
 }
 
 func cliName() string {
@@ -335,22 +440,6 @@ func cleanStage(stage, owner string) error {
 
 	}
 	return os.RemoveAll(stage)
-}
-
-func verifyCompose(dir string) error {
-	raw, err := os.ReadFile(filepath.Join(dir, "compose.yaml"))
-	if err != nil {
-		return err
-	}
-	sums, err := os.ReadFile(filepath.Join(dir, "compose-sha256sums.txt"))
-	if err != nil {
-		return err
-	}
-	digest := sha256.Sum256(raw)
-	if strings.TrimSpace(string(sums)) != hex.EncodeToString(digest[:])+"  compose.yaml" {
-		return errors.New("Compose checksum mismatch; restore the matching release configuration")
-	}
-	return nil
 }
 
 func stageMarker(owner string) string {

@@ -39,9 +39,20 @@ class SourceInstallTest(unittest.TestCase):
     def write_sums(self):
         (self.bundle / 'SHA256SUMS').write_text(hashlib.sha256((self.bundle / 'manifest.json').read_bytes()).hexdigest() + '  manifest.json\n')
 
-    def install(self):
-        with patch('distribution.ensure_docker_image', return_value='sha256:' + '1' * 64), patch.object(installer, 'run', side_effect=lambda *a, **k: self.calls.append((a, k))):
-            installer.install(self.bundle, self.destination, '127.0.0.1', 19873, 'http://127.0.0.1:19873')
+    def install(self, upgrade=False, image='sha256:' + '1' * 64, failure=None):
+        def run(*args, **kwargs):
+            self.calls.append((args, kwargs))
+            if failure and failure in args:
+                raise subprocess.CalledProcessError(1, args)
+        with patch('distribution.ensure_docker_image', return_value=image), patch.object(installer, 'run', side_effect=run):
+            installer.install(self.bundle, self.destination, '127.0.0.1', 19873, None if upgrade else 'http://127.0.0.1:19873', upgrade)
+
+    def commands(self):
+        """Compose subcommands, without the staged file arguments."""
+        return [args[args.index('--project-directory') + 2:] if '--project-directory' in args else args[2:] for args, _ in self.calls]
+
+    def snapshot(self):
+        return {name: (self.destination / name).read_bytes() for name in ('compose.yaml', 'compose.override.yaml', '.env', 'oac', 'node-payload/active.json')}
 
     def test_complete_compose_preserves_secrets_and_serves_whole_payload(self):
         self.install()
@@ -66,10 +77,42 @@ class SourceInstallTest(unittest.TestCase):
     def test_existing_installation_is_not_replaced(self):
         self.destination.mkdir()
         (self.destination / 'keep').write_text('existing')
-        with self.assertRaisesRegex(ValueError, 'not empty'):
+        with self.assertRaisesRegex(ValueError, 'rerun with --upgrade'):
             self.install()
         self.assertEqual((self.destination / 'keep').read_text(), 'existing')
         self.assertEqual(self.calls, [])
+
+    def test_upgrade_checks_the_new_release_before_replacing_it_and_keeps_operator_entries(self):
+        self.install()
+        override = json.loads((self.destination / 'compose.override.yaml').read_text())
+        nfs = {'type': 'bind', 'source': '/srv/workspaces', 'target': '/srv/workspaces'}
+        override['services']['core']['volumes'] = [nfs]
+        (self.destination / 'compose.override.yaml').write_text(json.dumps(override))
+        before = self.snapshot()
+        upgraded = 'b' * 40
+        self.manifest['source_commit'] = upgraded
+        (self.bundle / 'manifest.json').write_text(json.dumps(self.manifest))
+        self.write_sums()
+        (self.bundle / 'oac').write_bytes(b'upgraded operator')
+
+        self.calls = []
+        with self.assertRaisesRegex(ValueError, 'Upgrade refused; the installation is unchanged'):
+            self.install(upgrade=True, image='sha256:' + '2' * 64, failure='init')
+        self.assertEqual(self.snapshot(), before)
+
+        self.calls = []
+        self.install(upgrade=True, image='sha256:' + '2' * 64)
+        self.assertEqual([command[-1] for command in self.commands()], ['check-config', 'init', '--remove-orphans', 'core-key'])
+        services = json.loads((self.destination / 'compose.override.yaml').read_text())['services']
+        self.assertEqual(services['core']['volumes'], [nfs])
+        self.assertEqual({services[name]['image'] for name in ('core', 'web', 'init', 'database')}, {'sha256:' + '2' * 64})
+        self.assertEqual([volume['target'] for volume in services['web']['volumes']], ['/node-payload'])
+        self.assertIn('OAC_REVISION: ' + upgraded, (self.destination / 'compose.yaml').read_text())
+        self.assertEqual((self.destination / 'oac').read_bytes(), b'upgraded operator')
+        self.assertEqual((self.destination / '.env').read_bytes(), before['.env'])
+        payload = self.destination / 'node-payload'
+        self.assertEqual(json.loads((payload / 'active.json').read_text()), {'source_commit': upgraded})
+        self.assertEqual(sorted(path.name for path in (payload / 'releases').iterdir()), [self.revision, upgraded])
 
     def test_thin_bundle_rejected_before_creating_installation(self):
         self.manifest['artifacts'] = {'native/bin/node': {'filename': 'missing'}}

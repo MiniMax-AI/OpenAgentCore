@@ -135,8 +135,20 @@ class GenerationReviewRegressions(unittest.TestCase):
         files = {'node-install.pyz': b'node', 'SHA256SUMS': b'fixture', 'runtime/seccomp.json': b'{}', 'manifest.json': json.dumps({'source_commit': source, 'artifacts': entries}).encode()}
         for name, raw in files.items():
             path = bundle / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(raw)
-        node_payload.prepare_node_payload(root, {'mode': 'all'}, bundle)
+        node_payload.publish(root / 'node-payload', bundle)
         return root, bundle, root / 'node-payload/releases' / source, entries
+
+    def test_publish_keeps_releases_and_activate_swaps_the_pointer(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, bundle, old, _ = self.payload_fixture(Path(temp))
+            payload = root / 'node-payload'
+            node_payload.activate(payload, old.name)
+            (bundle / 'manifest.json').write_text(json.dumps({'source_commit': 'b' * 40, 'artifacts': {}}))
+            self.assertEqual(node_payload.publish(payload, bundle), 'b' * 40)
+            self.assertEqual(json.loads((payload / 'active.json').read_text()), {'source_commit': old.name})
+            node_payload.activate(payload, 'b' * 40)
+            self.assertEqual(json.loads((payload / 'active.json').read_text()), {'source_commit': 'b' * 40})
+            self.assertEqual(sorted(path.name for path in (payload / 'releases').iterdir()), [old.name, 'b' * 40])
 
     def test_thin_release_adds_and_repairs_verified_missing_artifact(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -145,11 +157,11 @@ class GenerationReviewRegressions(unittest.TestCase):
             for name, entry in entries.items():
                 (bundle / 'artifacts' / entry['filename']).write_bytes((name + ' verified artifact').encode())
             original = (release / 'manifest.json').read_bytes()
-            node_payload.prepare_node_payload(root, {'mode': 'all'}, bundle)
+            node_payload.publish(root / 'node-payload', bundle)
             artifact = release / 'artifacts' / entries['node']['filename']
             self.assertEqual(artifact.read_bytes(), b'node verified artifact')
             artifact.unlink()
-            node_payload.prepare_node_payload(root, {'mode': 'all'}, bundle)
+            node_payload.publish(root / 'node-payload', bundle)
             self.assertEqual(artifact.read_bytes(), b'node verified artifact')
             self.assertEqual((release / 'manifest.json').read_bytes(), original)
             self.assertEqual(artifact.stat().st_nlink, 1)
@@ -162,7 +174,7 @@ class GenerationReviewRegressions(unittest.TestCase):
             (bundle / 'artifacts' / node).write_bytes(b'node verified artifact')
             (release / 'artifacts' / helper).write_bytes(b'changed')
             with self.assertRaises(node_payload.PayloadError):
-                node_payload.prepare_node_payload(root, {'mode': 'all'}, bundle)
+                node_payload.publish(root / 'node-payload', bundle)
             self.assertFalse((release / 'artifacts' / node).exists())
             self.assertEqual((release / 'artifacts' / helper).read_bytes(), b'changed')
 
