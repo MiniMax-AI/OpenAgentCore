@@ -105,7 +105,7 @@ test("settings content width does not constrain reset and node dialog backdrops"
     await page.getByRole("button", { name: action, exact: true }).first().click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    const backdrop = page.locator(".modal-backdrop");
+    const backdrop = page.locator(".modal-backdrop:not(.closing)");
     const bounds = await backdrop.boundingBox();
     expect(bounds?.x).toBe(0);
     expect(bounds?.y).toBe(0);
