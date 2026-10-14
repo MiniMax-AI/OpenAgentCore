@@ -157,7 +157,8 @@
 }
 
 .settings-table .data-table tbody tr:last-child > * { border-bottom: 0; }
-.settings-table .data-table tbody th { font-weight: 500; text-align: left; }
+/* Setting names wrap after an underscore, so they need no minimum width and a phone keeps every column. */
+.settings-table .data-table tbody th { min-width: 0; font-weight: 500; text-align: left; }
 
 /* The irreversible operation closes the page, apart from the settings above it. */
 .settings-danger {

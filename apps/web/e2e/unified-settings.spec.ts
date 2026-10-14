@@ -136,12 +136,18 @@ test("reset progress actions stay inside settings on narrow screens", async ({ p
   }
 });
 
-test("a phone keeps the Session log status and every Settings tab on screen", async ({ page, request }) => {
+test("a phone scrolls wide tables inside their frames and keeps every Settings tab and column on screen", async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  const pageScrollsSideways = () => page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   await openConsole(page, request, "sessions");
-  await expect(page.getByRole("table", { name: "Session log" }).getByRole("columnheader", { name: "Status", exact: true })).toBeInViewport({ ratio: 1 });
-  await page.goto("/#settings?id=models");
+  const log = page.getByRole("table", { name: "Session log" });
+  await expect(log.getByRole("columnheader", { name: "Status", exact: true })).toBeInViewport({ ratio: 1 });
+  expect(await page.locator(".table-frame").filter({ has: log }).evaluate((frame) => { frame.scrollLeft = 100; return frame.scrollLeft > 0; })).toBe(true);
+  expect(await pageScrollsSideways()).toBe(false);
+  await page.goto("/#settings?id=service");
   const tabs = page.getByRole("navigation", { name: "Settings" }).getByRole("button");
   await expect(tabs).toHaveCount(4);
   for (const tab of await tabs.all()) await expect(tab).toBeInViewport({ ratio: 1 });
+  await expect(page.getByRole("table", { name: "Startup settings" }).getByRole("columnheader", { name: "Restarts", exact: true })).toBeInViewport({ ratio: 1 });
+  expect(await pageScrollsSideways()).toBe(false);
 });
