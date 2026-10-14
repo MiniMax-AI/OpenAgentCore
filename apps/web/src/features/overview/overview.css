@@ -286,7 +286,9 @@
   color: var(--danger);
 }
 
-.overview-attention-reason { max-width: 32ch; margin-top: 4px; color: var(--ink-2); font-size: 12px; line-height: 18px; white-space: normal; overflow-wrap: anywhere; }
+/* One line per row; the full reason and next step are in the title and on the Session page. */
+.overview-attention-reason { max-width: 56ch; margin-top: 4px; overflow: hidden; color: var(--ink-2); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.overview-attention-reason .session-status-reason { padding-left: 0; white-space: nowrap; }
 
 /* Tables inside cards ----------------------------------------------------- */
 

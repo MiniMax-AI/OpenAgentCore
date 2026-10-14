@@ -53,6 +53,7 @@ export const common = {
     partial: "Could not load {{names}}. Other projects are shown.",
     failed: "Could not load {{names}}.",
   },
+  untitledSession: "Untitled Session",
   creator: {
     column: "Creator",
     help: "The API key that created this asset, as recorded by Core for every write.",

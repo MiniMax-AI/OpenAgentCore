@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: e96e3146dd30a88416e920f66b4071d217baedf3471e3d6f9334085645191587
+source_hash: f4fb9af958ffb16a4bff1f8d9c369c5df0bcf68c2e4a7072a0cead694b882307
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -52,7 +52,7 @@ source_hash: e96e3146dd30a88416e920f66b4071d217baedf3471e3d6f9334085645191587
 - **Files.** 列表每页读取 100 条，可按最新或最早顺序排列。管理员 API 没有 File 内容路由，因此控制台不提供下载。
 - **Vaults.** Credential 令牌绝不返回。控制台显示每个 Credential 的名称、MCP 服务器 URL、身份验证类型和更新时间。
 - **Sessions.** 如果某个 Session 格式错误，其所属项目的读取会失败，而不会跳过该 Session。
-- **Diagnostics.** 控制台会翻译 Core 分类的原因，绝不从原始日志推断原因。诊断信息不可用或不匹配时，会提供显式的读取重试；重试绝不会重新执行操作。
+- **Diagnostics.** 控制台会翻译 Core 分类的原因，绝不从原始日志推断原因。Session 页面会补充该原因的下一步操作，例如检查 Agent 或“设置 → 模型与凭据”中的模型 ID；列表只显示原因，下一步操作放在悬停提示中。Core 不返回 Harness 或模型服务的原始消息，因此无法分类的失败会如实说明。诊断信息不可用或不匹配时，会提供显式的读取重试；重试绝不会重新执行操作。
 
 ## 执行器凭据和主机连接 {#executor-credentials-and-host-connection}
 
@@ -134,7 +134,7 @@ E2B 部署没有节点；其 API 密钥为只写。Overview 和 Sandbox metrics 
 | 资源列表 | 所选项目的所有页面，或并行读取所有项目的所有页面 | 每个项目最多 10,000 个条目；读取失败的项目会被指明，其他项目仍会显示 |
 | Session log | 所选项目的所有 Session 页面，按最新优先 | 每个项目最多 10,000 个；按请求刷新 |
 | Session 页面 | Session、Items 和 Turns | 最多 10,000 个 Items 和 Turns；Session 进行中或等待时每 5 秒轮询一次，失败后退避至 60 秒 |
-| Overview | 汇总；24 小时活动和需要关注的 Sessions 所对应的 Session 列表 | 每个项目最多 1,000 个 Sessions；跳过空闲项目；可见时每 30 秒刷新一次。项目或 Session 读取失败时显示 Retry，而不是合成空结果；任何保留的数据或不完整数据都会附带明确的限定说明 |
+| Overview | 汇总；24 小时活动及同一 24 小时内活跃且需要处理的 Sessions 所对应的 Session 列表 | 每个项目最多 1,000 个 Sessions；跳过整个时段内都空闲的项目；可见时每 30 秒刷新一次。项目或 Session 读取失败时显示 Retry，而不是合成空结果；任何保留的数据或不完整数据都会附带明确的限定说明 |
 | Agent 指标 | 汇总；Session 列表；最近活动的 Sessions 的 Turns 和 Items | 每个项目列出最多 2,000 个 Sessions；每次加载读取 200 个 Sessions，每个 Session 读取 10 个 Turn 页面和 5 个 Item 页面；每个 Session 为 15 秒，每次加载为 45 秒 |
 | Sandbox metrics | Nodes 和 allocations；Runtime observations；按 ID 标识的托管 Sessions；Runtime 历史记录 | 每次刷新读取 100 个托管 Sessions；最多读取 24 个 Session 的历史记录；可见时每 30 秒刷新一次 |
 

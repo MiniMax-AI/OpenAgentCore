@@ -284,7 +284,6 @@ export const metrics = {
     uptime: "Uptime",
     tokens: "Tokens",
     tokenSplit: "Input {{input}} · output {{output}}",
-    untitled: "Untitled Session",
     recordedCompute: "Recorded compute",
     recordedComputeHelp: "Core’s recorded compute phase, read separately from the Runtime observation. Refreshes can briefly differ.",
     lifecycle: {

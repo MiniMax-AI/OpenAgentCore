@@ -284,7 +284,6 @@ export const metrics = {
     uptime: "运行时长",
     tokens: "Token",
     tokenSplit: "输入 {{input}} · 输出 {{output}}",
-    untitled: "未命名 Session",
     recordedCompute: "记录的计算状态",
     recordedComputeHelp: "Core 记录的计算阶段，与 Runtime 观测分别读取，刷新时可能短暂不同。",
     lifecycle: {

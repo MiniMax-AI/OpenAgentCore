@@ -36,15 +36,14 @@ export interface OverviewSource {
 
 /**
  * Whether a project's Sessions must be read at all. The summary already
- * counts every Session; the list is read only for Sessions created in the
- * activity window and for those needing attention. A project whose last
- * activity precedes the window and that has nothing needing attention is
+ * counts every Session; the list is read only for Sessions active in the
+ * activity window. A project whose last activity precedes the window is
  * skipped.
  */
 export function needsSessionRead(row: ProjectSummary | undefined, since: number): boolean {
   if (!row) return true;
   if (row.sessions.total === 0) return false;
-  return attentionCount(row.sessions) > 0 || (row.last_active_at ?? Number.POSITIVE_INFINITY) >= since;
+  return (row.last_active_at ?? Number.POSITIVE_INFINITY) >= since;
 }
 
 export async function loadOverview(

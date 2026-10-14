@@ -1,4 +1,3 @@
-import type { AgentSession } from "@oac/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +11,7 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatDateTime, formatInteger, MISSING } from "../../lib/format";
 import { CreatorCell, ProjectName, useCreators, useProjects } from "../../lib/projects";
 import { collectionQuery, collections } from "../../lib/queries";
+import { sessionTitle } from "../../lib/session-title";
 import { forgetDeleted } from "../resources/detail-queries";
 import { ExecutorCredentialsSection } from "./ExecutorCredentialsSection";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
@@ -30,10 +30,6 @@ import "./sessions.css";
 
 type HistoryView = "conversation" | "trace" | "turns";
 
-function sessionTitle(session: AgentSession, fallback: string): string {
-  return session.metadata.title?.trim() || session.agent.name?.trim() || fallback;
-}
-
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error ?? "");
 }
@@ -46,6 +42,7 @@ function errorText(error: unknown): string {
  */
 export function SessionPage() {
   const { t, i18n } = useTranslation("sessions");
+  const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const { params, navigate, back: goBack } = useConsoleNavigation();
   const projectId = params.project;
@@ -232,7 +229,7 @@ export function SessionPage() {
     );
   }
 
-  const title = session ? sessionTitle(session, t("common.untitledAgent")) : t("common.session");
+  const title = session ? sessionTitle(session) ?? tCommon("untitledSession") : t("common.session");
   return (
     <section className="page-section console-page session-detail-page" aria-labelledby="session-detail-heading">
       <PageHeader

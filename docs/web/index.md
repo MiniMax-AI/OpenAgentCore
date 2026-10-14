@@ -16,12 +16,12 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 
 | Group | Page | Purpose |
 | --- | --- | --- |
-| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each with a popover glance; Sessions needing attention; usage by Project |
+| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each with a popover glance; Sessions needing attention in the last 24 hours, each with its one-line reason; usage by Project |
 | Monitor | Core metrics | The Core process: CPU and resident memory against their limits, execution slots and the Turn queue, connected daemons, database latency and pool, background jobs |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
 | Monitor | Sandbox metrics | Node capacity; **Automatic suspension** when supported; **Recorded compute** lifecycle state shown separately from hosted Runtime CPU and memory observations across Projects |
 | Monitor | Request log | Recent HTTP requests to Core, their status, elapsed time and safe error codes; [scope and retention](../../contracts/agents-api/admin-api.md#request-log) |
-| Monitor | Session log | Every Session, and each Session's read-only conversation, trace and Turns with the classified reason of a failure; a self-hosted Session's page also manages its executor credentials and gives the command that connects a host |
+| Monitor | Session log | Every Session, and each Session's read-only conversation, trace and Turns with the classified reason of a failure and its next step; a self-hosted Session's page also manages its executor credentials and gives the command that connects a host |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
 | Platform | Projects and keys | Create, rename and archive Projects; issue and revoke keys; each Project's usage, write history and how to call the API |
 | Platform | Nodes | Inspect and remove microsandbox or Docker nodes; each node's readiness, capacity and allocations, with the automatic suspension policy when supported, active and retained slots, and elapsed time in each compute phase |

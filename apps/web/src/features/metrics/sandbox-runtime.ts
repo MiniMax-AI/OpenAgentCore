@@ -1,6 +1,7 @@
 import type { AgentSession, SandboxAllocation, SandboxNode } from "@oac/agents-client";
 
 import type { ProjectClient } from "../../lib/projects";
+import { sessionTitle } from "../../lib/session-title";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { type OwnedRuntimeObservation } from "../../lib/admin-view";
 
@@ -161,13 +162,6 @@ export function hostedRuntimeRows(
           : null,
       };
     });
-}
-
-export function sessionTitle(session: AgentSession | null): string | null {
-  if (!session) return null;
-  const title = session.metadata?.title;
-  if (typeof title === "string" && title.trim()) return title;
-  return session.agent?.name?.trim() ? session.agent.name : null;
 }
 
 /** Local search over a Runtime row's Session, Agent, host and IDs. */

@@ -17,13 +17,13 @@ const turnData: TurnDiagnostics = { object: "core.turn_diagnostics", session_id:
 
 afterEach(() => { void i18n.changeLanguage("en"); });
 
-function render(kind: "session" | "turn", data: SessionDiagnostics | TurnDiagnostics, error = false) {
+function render(kind: "session" | "turn", data: SessionDiagnostics | TurnDiagnostics, error = false, truncate = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const key = kind === "session" ? sessionDiagnosticsQuery(scope.projectId, session).queryKey : turnDiagnosticsQuery(scope, turn).queryKey;
   client.setQueryData(key, data);
   if (error) client.getQueryCache().find({ queryKey: key })!.setState({ status: "error", error: new Error("PRIVATE_READ_SENTINEL") });
   const html = renderToStaticMarkup(<QueryClientProvider client={client}><DiagnosticScope.Provider value={scope}>
-    {kind === "session" ? <SessionFailure projectId={scope.projectId} session={session} truncate={false} /> : <TurnFailure turn={turn} />}
+    {kind === "session" ? <SessionFailure projectId={scope.projectId} session={session} truncate={truncate} /> : <TurnFailure turn={turn} />}
   </DiagnosticScope.Provider></QueryClientProvider>);
   client.clear();
   return html;
@@ -31,8 +31,8 @@ function render(kind: "session" | "turn", data: SessionDiagnostics | TurnDiagnos
 
 describe("Core diagnostics in the console", () => {
   it("renders safe classified Session and root Turn failures in both languages", async () => {
-    expect(render("session", sessionData)).toContain("Check its API key");
-    expect(render("turn", turnData)).toContain("Check its API key");
+    expect(render("session", sessionData)).toContain("API key in Settings → Models and credentials");
+    expect(render("turn", turnData)).toContain("API key in Settings → Models and credentials");
     await i18n.changeLanguage("zh-CN");
     expect(render("session", sessionData)).toContain("模型服务认证失败");
     expect(render("turn", turnData)).not.toContain("PRIVATE_NATIVE_SENTINEL");
@@ -40,7 +40,7 @@ describe("Core diagnostics in the console", () => {
 
   it("withholds old causes after a failed read or mismatched status", () => {
     expect(render("session", sessionData, true)).toContain("Failure details unavailable");
-    expect(render("turn", { ...turnData, status: "completed", failure: null })).not.toContain("Check its API key");
+    expect(render("turn", { ...turnData, status: "completed", failure: null })).not.toContain("rejected authentication");
     expect(render("turn", turnData, true)).not.toContain("PRIVATE_READ_SENTINEL");
   });
 
@@ -59,6 +59,18 @@ describe("Core diagnostics in the console", () => {
     expect(text).toContain("Exit code 7");
     expect(diagnosticFailure({ code: "harness_error", params: {}, failed_at: null }, t)).not.toContain("timed out");
     expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 429 }, failed_at: null }, t)).toContain("HTTP 429");
+  });
+
+  it("names a model rejection with its next step, and keeps the unclassified cause for unclassified failures", async () => {
+    const t = i18n.getFixedT("en", "diagnostics");
+    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, t)).toBe("The model provider rejected the request. Check the model ID on the Agent or in Settings → Models and credentials.");
+    expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 502 }, failed_at: null }, t)).toBe("The connection to the model provider failed. HTTP 502. Check the base URL in Settings → Models and credentials.");
+    expect(diagnosticFailure({ code: "harness_error", params: {}, failed_at: null }, t)).toContain("Core does not show the Harness's own message");
+    expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, i18n.getFixedT("zh-CN", "diagnostics"))).toBe("模型服务拒绝了请求。请检查 Agent 或“设置 → 模型与凭据”中的模型 ID。");
+    // Lists show the reason alone; the next step stays in the title.
+    const row = render("session", { ...sessionData, failure: { ...sessionData.failure!, code: "invalid_request" } }, false, true);
+    expect(row).toContain(">The model provider rejected the request.<");
+    expect(row).toContain('title="The model provider rejected the request. Check the model ID');
   });
 
   it("keeps call/result receipt intervals distinct and historical settlement missing", () => {

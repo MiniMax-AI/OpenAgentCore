@@ -55,12 +55,15 @@ function needsAttention(session: AgentSession): boolean {
   return session.status === "failed" || session.status === "requires_action";
 }
 
-/** Sessions that need an operator (failed or waiting for a required action), newest activity first. */
-export function attentionSessions(sessions: readonly InProject<AgentSession>[], limit = 8): InProject<AgentSession>[] {
+/**
+ * Sessions that need an operator (failed or waiting for a required action) and
+ * were active since `since`, newest activity first. Older ones stay in the
+ * Session log.
+ */
+export function attentionSessions(sessions: readonly InProject<AgentSession>[], since: number): InProject<AgentSession>[] {
   return sessions
-    .filter((entry) => needsAttention(entry.value))
-    .sort((a, b) => b.value.last_active_at - a.value.last_active_at || a.value.id.localeCompare(b.value.id))
-    .slice(0, limit);
+    .filter((entry) => needsAttention(entry.value) && entry.value.last_active_at >= since)
+    .sort((a, b) => b.value.last_active_at - a.value.last_active_at || a.value.id.localeCompare(b.value.id));
 }
 
 /**

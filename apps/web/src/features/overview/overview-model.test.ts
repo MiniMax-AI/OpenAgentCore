@@ -46,14 +46,15 @@ describe("project usage rows", () => {
 });
 
 describe("Sessions needing attention", () => {
-  it("lists failed and waiting Sessions of every project by recent activity", () => {
+  it("lists failed and waiting Sessions of every project active in the window, by recent activity", () => {
     const a = project("a");
     const b = project("b");
     const listed = attentionSessions([
       { project: a, value: session("s1", { status: "failed", last_active_at: 300 }) },
       { project: b, value: session("s2", { status: "requires_action", last_active_at: 400 }) },
       { project: b, value: session("s3", { status: "in_progress", last_active_at: 500 }) },
-    ]);
+      { project: a, value: session("old", { status: "failed", created_at: 10, last_active_at: 299 }) },
+    ], 300);
     expect(listed.map((entry) => [entry.project.id, entry.value.id])).toEqual([["b", "s2"], ["a", "s1"]]);
   });
 

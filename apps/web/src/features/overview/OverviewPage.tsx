@@ -25,6 +25,7 @@ import { NameCell } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatClock, formatCompact, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { ProjectName, useProjects } from "../../lib/projects";
+import { sessionTitle } from "../../lib/session-title";
 import { capacitySummary, coreStatus, type CoreStatus } from "../fleet/fleet-model";
 import { FleetReadNotice, fleetObservationStale } from "../fleet/FleetReadNotice";
 import { SandboxResetNotice } from "../fleet/SandboxResetNotice";
@@ -37,6 +38,7 @@ import { GettingStarted } from "./GettingStarted";
 import { type OverviewData } from "./overview-loader";
 import { overviewQuery } from "./overview-queries";
 import {
+  activityStart,
   attentionCount,
   attentionSessions,
   projectUsageRows,
@@ -114,7 +116,7 @@ export function OverviewPage() {
   const usageRows = useMemo(() => (summaryRows ? projectUsageRows(projects, summaryRows) : null), [projects, summaryRows]);
   const sessions = data && (data.sessions.sessions.length || !sessionReadsFailed) ? data.sessions.sessions : null;
   const activity = useMemo(() => (sessions ? sessionActivity(sessions.map((entry) => entry.value), now) : null), [now, sessions]);
-  const attention = useMemo(() => (sessions ? attentionSessions(sessions, ATTENTION_LIMIT) : null), [sessions]);
+  const attention = useMemo(() => (sessions ? attentionSessions(sessions, activityStart(now)) : null), [now, sessions]);
   const capacity = fleet ? capacitySummary(fleet.nodes) : null;
   // An E2B deployment has no machines: capacity is what Core holds in E2B's cloud.
   const cloud = cloudHost(fleet);
@@ -149,7 +151,9 @@ export function OverviewPage() {
 
   const loading = refreshing || projectsState.state.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = data?.loadedAt ?? fleet?.loadedAt ?? null;
-  const attentionTotal = totals ? attentionCount(totals) : null;
+  const attentionFailed = attention ? attention.filter((entry) => entry.value.status === "failed").length : null;
+  // Core's summary counts every Session needing attention; the rest of them are older than the window.
+  const attentionOlder = attention && totals ? Math.max(0, attentionCount(totals) - attention.length) : null;
   const truncated = data?.sessions.truncated ?? [];
   // Whether any Session exists: Core's summary counts them all; without it, any Session read counts.
   const sessionCount = totals ? totals.total
@@ -214,8 +218,8 @@ export function OverviewPage() {
           <MetricTile
             label={t("kpi.attention")}
             help={t("attention.subtitle")}
-            value={<LiveNumber value={attentionTotal} />}
-            sub={totals ? t("tiles.attentionSplit", { failed: totals.failed, waiting: totals.requires_action }) : t("kpi.summaryUnavailable")}
+            value={<LiveNumber value={attention ? attention.length : null} />}
+            sub={attention && attentionFailed !== null ? t("tiles.attentionSplit", { failed: attentionFailed, waiting: attention.length - attentionFailed }) : sessionReadsFailed ? t("kpi.readsFailed") : null}
           />
         </div>
 
@@ -267,17 +271,18 @@ export function OverviewPage() {
             <div className="console-section-title">
               <h2 id="attention-heading">{t("attention.title")}</h2>
               <HelpTip>{t("attention.subtitle")}</HelpTip>
-              {attention && attentionTotal !== null && attention.length < attentionTotal ? (
+              {attention && attention.length > ATTENTION_LIMIT ? (
                 <>
-                  <span className="overview-card-meta">{t("attention.shown", { shown: formatInteger(attention.length, locale), total: formatInteger(attentionTotal, locale) })}</span>
-                  <HelpTip>{attention.length < Math.min(attentionTotal, ATTENTION_LIMIT) ? t("attention.partialHelp") : t("attention.limitHelp", { count: ATTENTION_LIMIT })}</HelpTip>
+                  <span className="overview-card-meta">{t("attention.shown", { shown: formatInteger(ATTENTION_LIMIT, locale), total: formatInteger(attention.length, locale) })}</span>
+                  <HelpTip>{t("attention.limitHelp", { count: ATTENTION_LIMIT })}</HelpTip>
                 </>
               ) : null}
+              {attention?.length && truncated.length ? <HelpTip>{t("attention.partialHelp")}</HelpTip> : null}
             </div>
             <button className="button outline" type="button" onClick={() => navigate("sessions")}>{t("attention.viewLog")}</button>
           </header>
           {sessionReadsFailed || summaryError !== null ? <ReadFailure onRetry={refreshAll} partial={Boolean(attention?.length)} /> : null}
-          {attention?.length || (!sessionReadsFailed && summaryError === null) ? <AttentionTable sessions={attention} expected={attentionTotal} unread={readFailures.map((failure) => failure.project.name)} truncated={truncated.length > 0} now={now} onOpen={openSession} /> : null}
+          {attention?.length || (!sessionReadsFailed && summaryError === null) ? <AttentionTable sessions={attention?.slice(0, ATTENTION_LIMIT) ?? null} older={attentionOlder} unread={readFailures.map((failure) => failure.project.name)} partial={truncated.length > 0 || summaryError !== null} now={now} onOpen={openSession} /> : null}
         </section>
 
         <section className="overview-card overview-table-card" aria-labelledby="projects-heading">
@@ -435,24 +440,19 @@ function ProjectUsageTable({ rows, failed, now, onOpen }: { rows: ProjectUsageRo
   );
 }
 
-function sessionTitle(session: AgentSession): string | null {
-  const title = session.metadata?.title;
-  if (typeof title === "string" && title.trim()) return title;
-  return session.agent?.name?.trim() ? session.agent.name : null;
-}
-
 /**
- * Sessions needing attention. "Nothing needs attention" is claimed only when
- * every Session list was read and Core's summary agrees; otherwise the empty
- * table says the Sessions could not be listed.
+ * Sessions needing attention in the activity window. "Nothing needs attention"
+ * is claimed only when every Session list was read in full; otherwise the
+ * empty table says the Sessions could not be listed.
  */
-function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: {
+function AttentionTable({ sessions, older, unread, partial, now, onOpen }: {
   sessions: InProject<AgentSession>[] | null;
-  /** Sessions needing attention by Core's summary, when it was read. */
-  expected: number | null;
+  /** Sessions needing attention before the window, when Core's summary was read. */
+  older: number | null;
   /** Projects whose Session list could not be read. */
   unread: string[];
-  truncated: boolean;
+  /** A read stopped at its cap, or no summary bounded it, so some Sessions may be missing. */
+  partial: boolean;
   now: number;
   onOpen: (entry: InProject<AgentSession>) => void;
 }) {
@@ -464,12 +464,10 @@ function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: 
   if (!sessions.length) {
     const description = unread.length
       ? t("attention.unreadDescription", { names: unread.join(", ") })
-      : expected
-        ? t("attention.unlistedDescription", { count: expected })
-        : truncated || expected === null ? t("attention.partialHelp") : null;
+      : partial ? t("attention.partialHelp") : null;
     return (
       <div className="overview-card-body">
-        {description ? <EmptyState title={t("attention.unlistedTitle")} description={description} /> : <EmptyState title={t("attention.emptyTitle")} hint={t("attention.emptyDescription")} />}
+        {description ? <EmptyState title={t("attention.unlistedTitle")} description={description} /> : <EmptyState title={t("attention.emptyTitle")} description={older ? t("attention.emptyOlder", { count: older }) : t("attention.emptyDescription")} />}
       </div>
     );
   }
@@ -488,15 +486,16 @@ function AttentionTable({ sessions, expected, unread, truncated, now, onOpen }: 
           {sessions.map((entry) => {
             const session = entry.value;
             const failed = session.status === "failed";
+            const waiting = failed ? null : waitingFor(session).join(" · ");
             return (
               <tr key={`${entry.project.id}:${session.id}`} className="clickable-row" onClick={() => onOpen(entry)}>
                 <th scope="row">
-                  <NameCell name={sessionTitle(session)} id={session.id} fallback={t("attention.untitled")} onOpen={() => onOpen(entry)} />
+                  <NameCell name={sessionTitle(session)} id={session.id} fallback={tCommon("untitledSession")} onOpen={() => onOpen(entry)} />
                 </th>
                 <td><ProjectName project={entry.project} /></td>
                 <td onClick={(event) => event.stopPropagation()}>
                   <StatusDot tone={failed ? "danger" : "neutral"} label={t(`sessions.${failed ? "failed" : "requires_action"}`)} />
-                  <div className="overview-attention-reason">{failed ? <SessionFailure projectId={entry.project.id} session={session} truncate={false} /> : waitingFor(session).join(" · ")}</div>
+                  <div className="overview-attention-reason" title={waiting ?? undefined}>{failed ? <SessionFailure projectId={entry.project.id} session={session} truncate /> : waiting}</div>
                 </td>
                 <td className="numeric">{formatRelative(session.last_active_at, now, locale)}</td>
               </tr>

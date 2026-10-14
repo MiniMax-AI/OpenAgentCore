@@ -53,6 +53,7 @@ export const common = {
     partial: "无法加载 {{names}} 的数据，其余项目照常显示。",
     failed: "无法加载 {{names}} 的数据。",
   },
+  untitledSession: "未命名 Session",
   creator: {
     column: "创建者",
     help: "创建这个资产的 API 密钥，由 Core 在每次写入时记录。",

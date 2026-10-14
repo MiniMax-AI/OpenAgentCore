@@ -47,7 +47,6 @@ import {
   matchesRuntime,
   runtimeSnapshot,
   runtimeSnapshotWhere,
-  sessionTitle,
   type HostedRuntimeLoad,
   type HostedRuntimeRow,
 } from "./sandbox-runtime";
@@ -55,6 +54,7 @@ import "./MetricsView.css";
 import { RuntimeCharts } from "./RuntimeCharts";
 import { hostedRuntimesQuery } from "./metrics-queries";
 import { SessionRuntimeSection } from "../sessions/SessionRuntimeSection";
+import { sessionTitle } from "../../lib/session-title";
 import type { SandboxDeployment, SandboxNode } from "@oac/agents-client";
 
 const healthTone: Record<NodeHealth, Tone> = { available: "ok", degraded: "warning", offline: "danger" };
@@ -410,7 +410,7 @@ function RuntimeTable({ rows, showProject, showNode, showCompute, onOpen }: { ro
               return (
                 <tr key={`${observation.project_id}:${observation.session_id}`} className="clickable-row" onClick={open}>
                   <th scope="row">
-                    <NameCell name={sessionTitle(session)} id={observation.session_id} fallback={t("sandbox.untitled")} onOpen={open} openLabel={t("sandbox.runtimeDialog.openLabel", { name: sessionTitle(session) ?? observation.session_id })} />
+                    <NameCell name={sessionTitle(session)} id={observation.session_id} fallback={tCommon("untitledSession")} onOpen={open} openLabel={t("sandbox.runtimeDialog.openLabel", { name: sessionTitle(session) ?? observation.session_id })} />
                   </th>
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
                   {showNode ? <td>{row.node ? row.node.name || row.node.id : <span className="table-muted">{MISSING}</span>}</td> : null}
