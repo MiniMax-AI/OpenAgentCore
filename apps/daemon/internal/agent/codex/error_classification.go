@@ -33,9 +33,7 @@ func classifyTurnError(failure *TurnError) proto.ErrorPayload {
 		case "cyberPolicy":
 			code = "cyber_policy"
 		case "other":
-			if isProviderErrorBody(failure.Message) {
-				code = "invalid_request"
-			}
+			code = providerRejectionCode(failure.Message)
 		}
 		return proto.ErrorPayload{Code: code}
 	}
@@ -63,14 +61,28 @@ func classifyTurnError(failure *TurnError) proto.ErrorPayload {
 	return proto.ErrorPayload{}
 }
 
-// Codex reports an HTTP 400 from the model provider as "other" and forwards the
-// response body verbatim; other "other" failures carry Codex's own text. A body
-// that is a JSON object with an object "error" member is the provider's
-// rejection. A plain-text 400 body stays unclassified.
-func isProviderErrorBody(message string) bool {
+// Codex 0.153.4 reports a provider HTTP 400 as "other" and forwards the
+// response body verbatim; its own "other" failures are prose. A JSON object with
+// an object "error" member is the provider's rejection: a declared code in its
+// own error.code or error.type wins, otherwise it is invalid_request. Prose, such
+// as a plain-text 400 body, stays unclassified.
+func providerRejectionCode(message string) string {
 	var body struct {
-		Error json.RawMessage `json:"error"`
+		Error *struct {
+			Code json.RawMessage `json:"code"`
+			Type json.RawMessage `json:"type"`
+		} `json:"error"`
 	}
-	var object map[string]json.RawMessage
-	return json.Unmarshal([]byte(message), &body) == nil && json.Unmarshal(body.Error, &object) == nil && object != nil
+	if json.Unmarshal([]byte(message), &body) != nil || body.Error == nil {
+		return ""
+	}
+	for _, raw := range []json.RawMessage{body.Error.Code, body.Error.Type} {
+		var name string
+		if json.Unmarshal(raw, &name) == nil {
+			if code, _ := proto.NormalizeEngineFailure(name, nil); code != "" {
+				return code
+			}
+		}
+	}
+	return "invalid_request"
 }
