@@ -208,7 +208,7 @@ func TestInstallUpgradesAnotherReleaseOnlyWhenRequested(t *testing.T) {
 		"staged compose run --rm --no-deps init",
 		"compose up -d --wait --wait-timeout 180 --pull never --remove-orphans")
 	after := installationFiles(t, f.options.dir)
-	if after["oac"] != "upgraded binary" || after[".env"] != before[".env"] || f.installedRevision() != "development" {
+	if after[cliName()] != "upgraded binary" || after[".env"] != before[".env"] || f.installedRevision() != "development" {
 		t.Fatal("upgrade did not publish the release with the saved settings")
 	}
 	if _, ok := after["compose-sha256sums.txt"]; ok {
