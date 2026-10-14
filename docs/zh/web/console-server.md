@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 2cc4b562301d95640d2b653ec522a5407a70a98e1f4e3c1fe89bd246ffd1199e
+source_hash: 993473f539d1c78c5cfbccb112f3594d570b2898a1e324f8b14010ae6be338be
 ---
 
 控制台服务器（`services/web`、`oac-web` 进程）提供构建后的控制台，使用 Core 密钥认证管理员，并将已登录浏览器的 `/core/v1` 请求携带该密钥转发到 Core。浏览器不持有 Core 密钥或任何 API 密钥。应用、节点和自托管执行器经控制台到达 Core，控制台原样转发 `/v1`、`/api/v1` 和 `/docs`。
@@ -64,7 +64,7 @@ flowchart LR
 
 返回时移除 `Set-Cookie`、`WWW-Authenticate`、`Location`、`Refresh` 和所有 `Access-Control-*` 响应头。Core 的重定向或连接失败转换为 502 `core_unreachable`。
 
-控制台不重试请求。浏览器代码通过 [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md) 的类型化客户端调用 `/core/v1`；[控制台 API 使用](console-api-usage.md)列出各页面读写内容。
+控制台服务器不重试请求。浏览器代码通过 [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md) 的类型化客户端调用 `/core/v1`；[控制台 API 使用](console-api-usage.md)列出各页面读写内容。
 
 ## 登录 {#sign-in}
 

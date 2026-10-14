@@ -62,7 +62,7 @@ On the way to Core, the console:
 
 On the way back, it removes `Set-Cookie`, `WWW-Authenticate`, `Location`, `Refresh` and every `Access-Control-*` header. A redirect from Core, or a failed connection to Core, becomes 502 `core_unreachable`.
 
-The console never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md); [console API usage](./console-api-usage.md) lists what each page reads and writes.
+The console server never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md); [console API usage](./console-api-usage.md) lists what each page reads and writes.
 
 ## Sign-in
 
