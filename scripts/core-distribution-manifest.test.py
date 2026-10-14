@@ -21,6 +21,7 @@ spec.loader.exec_module(distribution)
 
 REVISION = "a" * 40
 TREE = "b" * 40
+SOURCE_TIME = "1760000000"
 RELEASE_BASE = "https://example.com/releases/" + REVISION
 
 
@@ -112,7 +113,7 @@ class DistributionTests(unittest.TestCase):
         self.runtime_bytes = (self.bundle / "images/runtime.tar").read_bytes()
 
     def manifest(self, base=RELEASE_BASE, offline="0"):
-        distribution.node_payload(self.bundle, self.stage, REVISION, TREE, base, offline)
+        distribution.node_payload(self.bundle, self.stage, REVISION, TREE, SOURCE_TIME, base, offline)
         distribution.manifest(self.bundle, self.stage)
 
     def write_inspection(self):
@@ -128,8 +129,9 @@ class DistributionTests(unittest.TestCase):
             self.assertEqual(distribution.sha256(payload / name), checksum)
         bundled = json.loads((payload / "manifest.json").read_text())
         full = json.loads((self.bundle / "manifest.json").read_text())
-        for name in ("source_commit", "platform", "artifacts", "runtime_ref", "microsandbox"):
+        for name in ("source_commit", "source_time", "platform", "artifacts", "runtime_ref", "microsandbox"):
             self.assertEqual(bundled[name], full[name])
+        self.assertEqual(bundled["source_time"], 1760000000)
         self.assertEqual(list(bundled["images"]), ["runtime"])
 
     def test_oci_manifest_identity_is_distinct_from_docker_config_identity(self):

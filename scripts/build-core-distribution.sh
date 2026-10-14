@@ -222,7 +222,7 @@ msb=(docker run --rm --network none --user "$(id -u):$(id -g)" \
   --entrypoint /opt/microsandbox/msb "$core_image")
 "${msb[@]}" image load --input /runtime.tar --tag oac-runtime:distribution --quiet
 "${msb[@]}" image inspect oac-runtime:distribution --format json > "$stage/runtime-inspect.json"
-python3 scripts/core-distribution-manifest.py node-payload "$bundle" "$stage" "$revision" "$source_tree" "$release_base_url" "$offline"
+python3 scripts/core-distribution-manifest.py node-payload "$bundle" "$stage" "$revision" "$source_tree" "$source_epoch" "$release_base_url" "$offline"
 mkdir -p "$stage/ingress"
 cp deploy/distribution/Ingress.Dockerfile "$stage/ingress/Dockerfile"
 cp "$stage/core/bin/oac" "$stage/ingress/oac"

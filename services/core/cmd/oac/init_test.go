@@ -25,13 +25,23 @@ func initFixture(t *testing.T) (string, releaseIdentity, map[string][]byte) {
 	previous := chown
 	chown = func(string, int, int) error { return nil }
 	t.Cleanup(func() { chown = previous })
-	release := releaseIdentity{strings.Repeat("d", 40)}
+	release, files := releaseFixture(strings.Repeat("d", 40), 1760000000)
+	return t.TempDir(), release, files
+}
+
+// releaseFixture returns one release's metadata. A zero sourceTime omits
+// source_time, as v0.0.10 and v0.0.11 manifests do.
+func releaseFixture(revision string, sourceTime int64) (releaseIdentity, map[string][]byte) {
 	files := map[string][]byte{}
 	for _, name := range releaseMembers {
-		files[name] = []byte("fixture")
+		files[name] = []byte("fixture " + revision)
 	}
-	files["manifest.json"], _ = json.Marshal(map[string]string{"source_commit": release.revision, "platform": "linux/amd64"})
-	return t.TempDir(), release, files
+	manifest := map[string]any{"source_commit": revision, "platform": "linux/amd64"}
+	if sourceTime != 0 {
+		manifest["source_time"] = sourceTime
+	}
+	files["manifest.json"], _ = json.Marshal(manifest)
+	return releaseIdentity{revision}, files
 }
 
 func snapshot(t *testing.T, root string) map[string]string {
@@ -110,7 +120,7 @@ func TestInitializeRefusesDataWithoutItsInstallationFiles(t *testing.T) {
 	}
 }
 
-func TestInitializeRefusesChangedMissingOrForeignFiles(t *testing.T) {
+func TestInitializeRefusesChangedOrMissingFiles(t *testing.T) {
 	root, release, files := initFixture(t)
 	if err := initialize(root, release, fixed(files)); err != nil {
 		t.Fatal(err)
@@ -126,9 +136,93 @@ func TestInitializeRefusesChangedMissingOrForeignFiles(t *testing.T) {
 		t.Fatalf("missing: %v", err)
 	}
 	_ = os.WriteFile(path, original, 0o600)
-	release.revision = strings.Repeat("f", 40)
-	if err := initialize(root, release, fixed(files)); err == nil || !strings.Contains(err.Error(), "another release") {
-		t.Fatalf("foreign: %v", err)
+	if err := initialize(root, release, refuseDownload(t)); err != nil {
+		t.Fatalf("restored: %v", err)
+	}
+}
+
+func readReceipt(t *testing.T, root string) installReceipt {
+	t.Helper()
+	var receipt installReceipt
+	raw, err := os.ReadFile(filepath.Join(root, "installation.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	return receipt
+}
+
+func TestInitializeUpgradesAnOlderInstallationInPlace(t *testing.T) {
+	root, release, files := initFixture(t)
+	old, oldFiles := releaseFixture(strings.Repeat("c", 40), 0)
+	if err := initialize(root, old, fixed(oldFiles)); err != nil {
+		t.Fatal(err)
+	}
+	// Receipts written by v0.0.10 and v0.0.11 also pin the release pointer.
+	receipt := readReceipt(t, root)
+	pointer := filepath.Join(root, "node-payload", "active.json")
+	receipt.Files["node-payload/active.json"], _ = fileDigest(pointer)
+	raw, _ := json.Marshal(receipt)
+	if err := os.WriteFile(filepath.Join(root, "installation.json"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshot(t, root)
+
+	if err := initialize(root, release, fixed(files)); err != nil {
+		t.Fatal(err)
+	}
+	after := snapshot(t, root)
+	for name, data := range before {
+		if (strings.HasPrefix(name, "secrets/") || strings.HasPrefix(name, "node-payload/releases/")) && after[name] != data {
+			t.Fatalf("upgrade changed %s", name)
+		}
+	}
+	receipt = readReceipt(t, root)
+	if receipt.SourceCommit != release.revision {
+		t.Fatalf("receipt release = %s", receipt.SourceCommit)
+	}
+	for _, revision := range []string{old.revision, release.revision} {
+		for _, name := range releaseMembers {
+			if receipt.Files["node-payload/releases/"+revision+"/"+name] == "" {
+				t.Fatalf("receipt lacks %s of %s", name, revision)
+			}
+		}
+	}
+	if _, pinned := receipt.Files["node-payload/active.json"]; pinned {
+		t.Fatal("receipt still pins the release pointer")
+	}
+	want := `{"source_commit":"` + release.revision + `"}`
+	if after["node-payload/active.json"] != want {
+		t.Fatalf("pointer = %s", after["node-payload/active.json"])
+	}
+
+	// A crash between the receipt and the pointer heals on the next start.
+	if err := os.WriteFile(pointer, []byte(before["node-payload/active.json"]), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := initialize(root, release, refuseDownload(t)); err != nil {
+		t.Fatal(err)
+	}
+	if healed, _ := os.ReadFile(pointer); string(healed) != want {
+		t.Fatalf("pointer = %s", healed)
+	}
+}
+
+func TestInitializeRefusesAnOlderRelease(t *testing.T) {
+	root, release, files := initFixture(t)
+	if err := initialize(root, release, fixed(files)); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshot(t, root)
+	older, olderFiles := releaseFixture(strings.Repeat("e", 40), 1700000000)
+	want := "This installation was upgraded to a newer release (dddddddddddd, 2025-10-09 08:53 UTC) than this one (eeeeeeeeeeee, 2023-11-14 22:13 UTC). Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade."
+	if err := initialize(root, older, fixed(olderFiles)); err == nil || err.Error() != want {
+		t.Fatalf("err = %v", err)
+	}
+	if !maps.Equal(before, snapshot(t, root)) {
+		t.Fatal("a refused downgrade changed installation files")
 	}
 }
 

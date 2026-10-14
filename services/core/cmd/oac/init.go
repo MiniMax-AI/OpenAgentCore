@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -30,6 +31,14 @@ var chown = os.Chown
 
 type releaseIdentity struct {
 	revision string
+}
+
+// releaseManifest holds the node manifest fields initialization reads.
+// source_time, the commit time in Unix seconds, orders releases.
+type releaseManifest struct {
+	SourceCommit string `json:"source_commit"`
+	SourceTime   int64  `json:"source_time"`
+	Platform     string `json:"platform"`
 }
 
 func initCommand() error {
@@ -83,10 +92,7 @@ func readRelease(root string, release releaseIdentity) (map[string][]byte, error
 			return nil, errors.New("release metadata checksum mismatch")
 		}
 	}
-	var manifest struct {
-		SourceCommit string `json:"source_commit"`
-		Platform     string `json:"platform"`
-	}
+	var manifest releaseManifest
 	if err := json.Unmarshal(files["manifest.json"], &manifest); err != nil {
 		return nil, err
 	}
@@ -175,15 +181,27 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 
 		nextStep("verify_existing_installation")
 		marker := filepath.Join(root, "installation.json")
-		if raw, err := os.ReadFile(marker); err == nil {
-			var receipt installReceipt
-			if err := json.Unmarshal(raw, &receipt); err != nil {
+		var previous installReceipt
+		raw, err := os.ReadFile(marker)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			nextStep("verify_empty_data")
+			for _, name := range []string{"database", "state"} {
+				entries, err := os.ReadDir(filepath.Join(root, name))
+				if err != nil {
+					return err
+				}
+				if len(entries) > 0 {
+					return errors.New("existing data requires its original installation files")
+				}
+			}
+		case err != nil:
+			return err
+		default:
+			if err := json.Unmarshal(raw, &previous); err != nil {
 				return err
 			}
-			if receipt.SourceCommit != release.revision {
-				return errors.New("this data directory belongs to another release; create a new installation")
-			}
-			for name, checksum := range receipt.Files {
+			for name, checksum := range previous.Files {
 				actual, err := fileDigest(filepath.Join(root, name))
 				if err != nil {
 					return err
@@ -192,22 +210,16 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 					return errors.New("installation files changed; restore the matching data directory")
 				}
 			}
-			if err := syncCoreKeyDigest(root); err != nil {
-				return err
-			}
-			logger.InfoContext(ctx, "Existing installation verified", "file_count", len(receipt.Files))
-			return nil
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		nextStep("verify_empty_data")
-		for _, name := range []string{"database", "state"} {
-			entries, err := os.ReadDir(filepath.Join(root, name))
-			if err != nil {
-				return err
-			}
-			if len(entries) > 0 {
-				return errors.New("existing data requires its original installation files")
+			if previous.SourceCommit == release.revision {
+				// The pointer follows the receipt, so a crash between the two heals here.
+				if err := writePointer(root, release); err != nil {
+					return err
+				}
+				if err := syncCoreKeyDigest(root); err != nil {
+					return err
+				}
+				logger.InfoContext(ctx, "Existing installation verified", "file_count", len(previous.Files))
+				return nil
 			}
 		}
 		nextStep("verify_bundled_metadata")
@@ -216,19 +228,29 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 		logger.InfoContext(ctx, "Bundled node installation metadata verified", "file_count", len(files))
+		if previous.SourceCommit != "" {
+			nextStep("verify_release_order")
+			if err := requireNewer(root, previous.SourceCommit, release, files["manifest.json"]); err != nil {
+				return err
+			}
+			logger.InfoContext(ctx, "Upgrading installation", "from_revision", previous.SourceCommit)
+		}
 		nextStep("publish_node_metadata")
-		prefix := "node-payload/releases/" + release.revision + "/"
+		// The receipt keeps every retained release authenticated; old releases stay
+		// for the nodes that still run them.
 		names := []string{}
+		for name := range previous.Files {
+			if strings.HasPrefix(name, "node-payload/releases/") {
+				names = append(names, name)
+			}
+		}
+		prefix := "node-payload/releases/" + release.revision + "/"
 		for _, name := range releaseMembers {
 			if err := writeOwned(filepath.Join(root, prefix+name), files[name]); err != nil {
 				return err
 			}
 			logger.InfoContext(ctx, "Node metadata file copied", "file", name)
 			names = append(names, prefix+name)
-		}
-		active, _ := json.Marshal(map[string]string{"source_commit": release.revision})
-		if err := writeOwned(filepath.Join(root, "node-payload", "active.json"), active); err != nil {
-			return err
 		}
 		if err := filepath.WalkDir(filepath.Join(root, "node-payload"), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil || !entry.IsDir() {
@@ -277,7 +299,6 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 
-		names = append(names, "node-payload/active.json")
 		nextStep("write_installation_receipt")
 		receipt := installReceipt{SourceCommit: release.revision, Files: map[string]string{}}
 		for _, name := range names {
@@ -287,13 +308,45 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			}
 			receipt.Files[name] = checksum
 		}
-		raw, _ := json.Marshal(receipt)
+		raw, _ = json.Marshal(receipt)
+		// The receipt is the commit point; the pointer follows it.
 		if err := writeOwned(marker, raw); err != nil {
+			return err
+		}
+		if err := writePointer(root, release); err != nil {
 			return err
 		}
 		logger.InfoContext(ctx, "Installation initialized", "sign_in_key_command", "docker compose exec web oac-web core-key")
 		return nil
 	})
+}
+
+// writePointer selects the installation's release for Web and node installs.
+func writePointer(root string, release releaseIdentity) error {
+	active, _ := json.Marshal(map[string]string{"source_commit": release.revision})
+	return writeOwned(filepath.Join(root, "node-payload", "active.json"), active)
+}
+
+// requireNewer refuses a release that is not newer than the installed one by
+// commit time. A manifest without source_time reads as 0, the oldest.
+func requireNewer(root, installed string, release releaseIdentity, manifest []byte) error {
+	raw, err := os.ReadFile(filepath.Join(root, "node-payload", "releases", installed, "manifest.json"))
+	if err != nil {
+		return err
+	}
+	var current, next releaseManifest
+	if err := json.Unmarshal(raw, &current); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(manifest, &next); err != nil {
+		return err
+	}
+	if next.SourceTime > current.SourceTime {
+		return nil
+	}
+	date := func(seconds int64) string { return time.Unix(seconds, 0).UTC().Format("2006-01-02 15:04 UTC") }
+	return fmt.Errorf("This installation was upgraded to a newer release (%.12s, %s) than this one (%.12s, %s). Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade.",
+		installed, date(current.SourceTime), release.revision, date(next.SourceTime))
 }
 
 func randomBytes(n int) []byte {

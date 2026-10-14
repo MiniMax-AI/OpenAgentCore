@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http/httptest"
 	"net/url"
@@ -169,6 +171,13 @@ func TestRetainedPayloadsRemainHTTPReachableAfterPublication(t *testing.T) {
 		write("active.json", `{"source_commit":"`+revision+`"}`)
 		if code, body := request("node-install.pyz"); code != 200 || body != "installer-"+revision {
 			t.Fatal("active release not served", code, body)
+		}
+		// Add node commands verify the active release's installer without a Web restart.
+		config := httptest.NewRecorder()
+		h.serveConsoleConfiguration(config, httptest.NewRequest("GET", "/console/config", nil))
+		digest := sha256.Sum256([]byte("installer-" + revision))
+		if !strings.Contains(config.Body.String(), `"node_installer_sha256":"`+hex.EncodeToString(digest[:])+`"`) {
+			t.Fatal("installer digest does not follow the active release", config.Body.String())
 		}
 		if code, body := request("releases/" + a + "/artifacts/node"); code != 200 || body != "binary-"+a {
 			t.Fatal("retained release unreachable", code, body)

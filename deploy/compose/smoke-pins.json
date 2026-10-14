@@ -1,5 +1,4 @@
 {
-  "revision": "cc7e1aad3bde47598d161d6372e2e211bb61d9cd",
-  "release_base": "https://github.com/MiniMax-AI/OpenAgentCore/releases/download/v0.0.3/",
-  "archive_checksum": "579d2d43accfc45a0a8567db5bc33b407c48b05b0d731bea3fed73e6ade558ae"
+  "tag": "v0.0.11",
+  "compose_sha256": "0368e256f8f1830017e5440820cbdb0f148a613fa5e50abdf3a459e20fd72a5e"
 }

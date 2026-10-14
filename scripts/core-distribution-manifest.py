@@ -320,7 +320,7 @@ def bootstraps(bundle, epoch, revision):
         zipapp.create_archive(directory, bundle / "node-install.pyz", compressed=True)
 
 
-def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", offline="0"):
+def node_payload(bundle, stage, revision, source_tree, source_time, artifact_base_url="", offline="0"):
     bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
     artifact_base_url = release_base(artifact_base_url)
     if not artifact_base_url and offline != "1":
@@ -339,6 +339,8 @@ def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", off
     metadata = {
         "source_commit": revision,
         "source_tree": source_tree,
+        # The commit time orders releases: initialization refuses an older one.
+        "source_time": int(source_time),
         "platform": "linux/amd64",
         "artifact_base_url": artifact_base_url,
         "artifacts": package_artifacts(bundle, stage, revision),

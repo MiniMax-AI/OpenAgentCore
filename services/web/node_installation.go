@@ -181,11 +181,17 @@ func (h *console) nodeArtifacts() []string {
 	return available
 }
 
+// serveConsoleConfiguration reads the active release on every request, so an
+// upgrade that moves the pointer needs no Web restart.
 func (h *console) serveConsoleConfiguration(w http.ResponseWriter, _ *http.Request) {
+	digest := ""
+	if h.nodePayload != nil {
+		digest, _ = installerDigest(h.nodePayload, "node-install.pyz")
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
 		NodeInstaller       bool     `json:"node_installer"`
 		NodeInstallerSHA256 string   `json:"node_installer_sha256"`
 		NodeArtifacts       []string `json:"node_artifacts"`
-	}{h.nodePayload != nil, h.nodeInstallerDigest, h.nodeArtifacts()})
+	}{digest != "", digest, h.nodeArtifacts()})
 }
