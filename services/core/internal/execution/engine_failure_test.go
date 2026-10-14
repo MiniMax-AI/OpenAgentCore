@@ -40,9 +40,17 @@ func TestEngineClassificationSurvivesDrainWithoutChangingSettlement(t *testing.T
 		if json.Unmarshal(raw, &persisted) != nil || persisted.EngineErrorCode != result.EngineErrorCode {
 			t.Fatal(string(raw))
 		}
+		// A later frame without an accepted code, like the Runtime's settlement failure, keeps the classification.
 		unknown := proto.Envelope{Type: proto.TypeError, Payload: json.RawMessage(`{"error":"new","code":{"arbitrary":"value"},"http_status":"secret"}`)}
-		if err := result.mergeObservation(unknown); err != nil || result.EngineErrorCode != "" || result.ErrorCode != prior || result.Done.Usage.InputTokens != 9 {
-			t.Fatal(err, result)
+		settlement, _ := proto.NewEnvelope(proto.TypeError, "run", proto.ErrorPayload{Error: "executor Turn settlement failed"})
+		for _, later := range []proto.Envelope{unknown, settlement} {
+			if err := result.mergeObservation(later); err != nil || result.EngineErrorCode != "authentication_error" || result.ErrorCode != prior || result.Done.Usage.InputTokens != 9 {
+				t.Fatal(err, result)
+			}
+		}
+		var fresh Result
+		if err := fresh.mergeObservation(unknown); err != nil || fresh.EngineErrorCode != "" || fresh.EngineHTTPStatus != nil {
+			t.Fatal(err, fresh)
 		}
 	}
 }
