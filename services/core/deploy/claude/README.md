@@ -20,7 +20,7 @@ Recovery uses the SDK's history APIs ([`recovery.ts`](../../../../packages/claud
 
 ## Native failure classification
 
-The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/native_failure.ts)) classifies a failure only from root assistant messages (no parent tool use) of the same native Session that answer Core-submitted inputs not yet completed; replayed and synthetic messages are ignored. A classification is committed only when the matching native result is an error; a successful result clears it. The [Runtime protocol](../../../../docs/runtime-protocol.md#native-failure-classification) defines the codes.
+The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/native_failure.ts)) classifies a failure only from root assistant messages (no parent tool use) of the same native Session that answer Core-submitted inputs not yet completed, and from the `api_retry` message right before one; replayed and synthetic messages are ignored. A classification is committed only when the matching native result is an error; a successful result clears it. The [Runtime protocol](../../../../docs/runtime-protocol.md#native-failure-classification) defines the codes.
 
 | SDK assistant error | Code |
 | --- | --- |
@@ -30,10 +30,10 @@ The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/na
 | `overloaded` | `server_overloaded` |
 | `invalid_request` | `invalid_request` |
 | `model_not_found` | `resource_not_found` |
-| `server_error` with an HTTP status in the result's `api_error_status` | `server_error` |
-| `server_error` whose result has no `api_error_status`: no HTTP response, such as a failed DNS lookup, a refused or reset connection or a timeout | `connection_failed` |
+| `server_error` right after an `api_retry` whose `error_status` is null, with no model output between them | `connection_failed` |
+| any other `server_error` | `server_error` |
 
-Claude Code `2.1.269` retries a failed model request up to 10 times, with backoff that grows to about 35 seconds, so a model host that does not resolve or refuses connections fails the Turn after about three minutes. The adapter leaves that bound as it is.
+Claude Code `2.1.269` reports both a request that got no HTTP response, such as a failed DNS lookup, a refused connection or a timeout, and a server error in a response that already started streaming as `server_error` without a status. Only the first comes right after an `api_retry` whose `error_status` is null, with no model output in between. Claude Code retries such a request up to 10 times, with backoff that grows to about 35 seconds, so a model host that does not resolve or refuses connections fails the Turn after about three minutes. The adapter leaves that bound as it is.
 
 `unknown`, `max_output_tokens` and other results stay unclassified. The bridge drops the classification when any other error ends the Turn, when cleanup fails or when no native process ran. The Go adapter keeps it only for the reported failed result of the same native Session, and only after it received the Turn settlement ([`executor_turn.go`](../../../../apps/daemon/internal/agent/claudesdk/executor_turn.go)).
 

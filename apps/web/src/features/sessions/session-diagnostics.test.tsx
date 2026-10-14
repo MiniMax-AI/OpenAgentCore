@@ -70,6 +70,9 @@ describe("Core diagnostics in the console", () => {
     const providerDefault = "Without a model provider set on the Session or its saved Agent, a hosted sandbox Session uses the default in Settings → Models and credentials.";
     expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, t)).toBe(`The model provider rejected the request. Check the model and parameters, starting with the model on the Session page. ${providerDefault}`);
     expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 502 }, failed_at: null }, t)).toContain("HTTP 502. Check the Base URL of the Session's model provider.");
+    // Only a failure without any HTTP response points at name resolution and reachability.
+    expect(diagnosticFailure({ code: "connection_failed", params: { http_status: 502 }, failed_at: null }, t)).not.toContain("resolves");
+    expect(diagnosticFailure({ code: "connection_failed", params: { http_status: null }, failed_at: null }, t)).toContain("Then check that the URL's host resolves and is reachable");
     expect(diagnosticFailure({ code: "runtime_unavailable", params: {}, failed_at: null }, t)).toBe("The Runtime is unavailable. Retry later. For a self-hosted Session, check Host connection on the Session page; for a hosted sandbox Session, check Settings → Sandbox and scheduling.");
     expect(diagnosticFailure({ code: "harness_error", params: {}, failed_at: null }, t)).toContain("Core does not show the Harness's own message");
     expect(diagnosticFailure({ code: "invalid_request", params: {}, failed_at: null }, i18n.getFixedT("zh-CN", "diagnostics"))).toBe("模型提供商拒绝了请求。请检查模型和参数，先看 Session 页显示的模型。Session 及其保存的 Agent 都未设置模型提供商时，托管沙箱 Session 使用“设置 → 模型与凭据”中的默认配置。");
