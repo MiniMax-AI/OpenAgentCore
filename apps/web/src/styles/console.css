@@ -551,6 +551,7 @@ html[data-theme="dark"] {
 
 .list-toolbar-controls {
   display: flex;
+  min-width: 0;
   flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
@@ -1212,6 +1213,23 @@ html[data-theme="dark"] {
   /* Six figures wrap evenly (3 + 3) at the narrowest supported widths. */
   .kpi-strip {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Phones: two figures per row with whole labels, and a list's filters wrap
+   inside the page instead of widening it. */
+@media (max-width: 640px) {
+  .kpi-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi dt > span:first-child,
+  .kpi-value {
+    white-space: normal;
+  }
+
+  .list-toolbar .segmented {
+    flex-wrap: wrap;
   }
 }
 

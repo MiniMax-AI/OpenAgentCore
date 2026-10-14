@@ -128,8 +128,8 @@ export function SessionLogPage() {
             <thead>
               <tr>
                 <th scope="col">{t("log.session")}</th>
-                {allProjects ? <th scope="col">{tCommon("project.column")}</th> : null}
                 <th scope="col">{t("log.status")}</th>
+                {allProjects ? <th scope="col">{tCommon("project.column")}</th> : null}
                 <th scope="col">{t("log.model")}</th>
                 <th scope="col">{t("log.environment")}</th>
                 <th scope="col" className="numeric">{t("log.tokens")}</th>
@@ -250,8 +250,8 @@ function SessionLogRow({
       <th scope="row">
         <NameCell name={sessionTitle(session)} id={session.id} fallback={tCommon("untitledSession")} onOpen={open} openLabel={t("log.open", { id: session.id })} />
       </th>
-      {projectCell}
       <td onClick={(event) => event.stopPropagation()}><SessionStatus projectId={row.project.id} session={session} truncate /></td>
+      {projectCell}
       <td><code>{session.agent.model || MISSING}</code></td>
       <td className="session-nowrap">{t(`environment.${environmentKind(session)}`)}</td>
       <td className="numeric" title={session.usage ? t("log.exactTokens", { tokens: session.usage.total_tokens.toLocaleString(locale) }) : undefined}>

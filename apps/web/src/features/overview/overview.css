@@ -358,6 +358,7 @@
   .overview-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 0; }
   .metric-tile:nth-child(3) { padding-left: 0; border-left: 0; }
   .metric-tile { padding-right: 12px; }
+  .metric-tile-sub { white-space: normal; }
 }
 @media (prefers-reduced-motion: reduce) {
   .getting-started, .overview-activity, .overview-fleet, .overview-table-card { animation: none; }

@@ -182,7 +182,7 @@
 .settings-danger .button { flex: none; }
 
 @media (max-width: 640px) {
-  .settings-tabs { gap: 20px; padding: 0 16px; }
+  .settings-tabs { flex-wrap: wrap; gap: 0 12px; padding: 0 16px; }
   .settings-row { grid-template-columns: minmax(0, 1fr); padding: 8px 12px; }
   .settings-row > dt,
   .settings-row > .settings-row-label { min-height: 24px; }

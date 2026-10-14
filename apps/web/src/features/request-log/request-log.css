@@ -1,5 +1,7 @@
-.request-log-search { display: flex; align-items: center; gap: 8px; }
-.request-log-table { table-layout: fixed; }
+.request-log-search { display: flex; max-width: 100%; align-items: center; gap: 8px; }
+.request-log-search .search-control { min-width: 0; }
+/* Fixed columns need room for the request ID; a phone scrolls the table instead. */
+.request-log-table { min-width: 640px; table-layout: fixed; }
 .request-log-table th:first-child { width: 110px; }
 .request-log-table th:nth-child(3) { width: 125px; }
 .request-log-table th:last-child { width: 100px; }

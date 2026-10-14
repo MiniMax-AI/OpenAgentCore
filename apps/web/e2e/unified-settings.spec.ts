@@ -135,3 +135,13 @@ test("reset progress actions stay inside settings on narrow screens", async ({ p
     await expect(dialog).toBeHidden();
   }
 });
+
+test("a phone keeps the Session log status and every Settings tab on screen", async ({ page, request }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openConsole(page, request, "sessions");
+  await expect(page.getByRole("table", { name: "Session log" }).getByRole("columnheader", { name: "Status", exact: true })).toBeInViewport({ ratio: 1 });
+  await page.goto("/#settings?id=models");
+  const tabs = page.getByRole("navigation", { name: "Settings" }).getByRole("button");
+  await expect(tabs).toHaveCount(4);
+  for (const tab of await tabs.all()) await expect(tab).toBeInViewport({ ratio: 1 });
+});
