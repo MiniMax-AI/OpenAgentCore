@@ -7,6 +7,11 @@
   overflow-wrap: anywhere;
 }
 
+/* Startup setting names break only at the <wbr> after each underscore. */
+.system-setting-key {
+  overflow-wrap: normal;
+}
+
 .system-muted {
   color: var(--ink-3);
 }

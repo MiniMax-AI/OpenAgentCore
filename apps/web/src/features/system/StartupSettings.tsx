@@ -47,7 +47,7 @@ export function StartupSettings({ configuration }: { configuration: CoreInstalla
             {configuration.settings.filter((setting) => setting.key !== "OAC_PUBLIC_URL").map((setting) => (
               <tr key={setting.key}>
                 {/* Narrow screens wrap a name after an underscore, never inside a word. */}
-                <th scope="row"><code className="system-code">{setting.key.split("_").map((part, index, parts) => index < parts.length - 1 ? [`${part}_`, <wbr key={index} />] : part)}</code></th>
+                <th scope="row"><code className="system-code system-setting-key">{setting.key.split("_").map((part, index, parts) => index < parts.length - 1 ? [`${part}_`, <wbr key={index} />] : part)}</code></th>
                 <td>
                   <span className="system-setting-value">
                     {value(setting)}
