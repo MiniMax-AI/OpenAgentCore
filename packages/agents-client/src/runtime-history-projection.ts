@@ -5,11 +5,15 @@ import {
   type RuntimeHistoryTokenUsagePoint,
 } from "./generated/core-api";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord, sameResourceId, type FieldNames } from "./response-projection";
-import type { RuntimeHistory, RuntimeHistoryQuery } from "./types";
+import type { RuntimeHistory, RuntimeHistoryRange } from "./types";
 
 type InvalidRuntimeHistory = (message?: string) => never;
 
 const providerTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
+/** The length of each named range; Core's clock ends it. */
+export const runtimeHistoryRangeSeconds: Readonly<Record<RuntimeHistoryRange, number>> = { "1h": 3_600, "6h": 21_600, "24h": 86_400 };
+/** Core reads at most this many buckets per array. */
+const maximumPoints = 120;
 const maximumSeries = 1_000;
 const maximumTotalPoints = 100_000;
 
@@ -174,14 +178,14 @@ function projectSeries(
 export function projectRuntimeHistory(
   value: unknown,
   expectedSessionId: string,
-  requested: RuntimeHistoryQuery,
+  range: RuntimeHistoryRange,
   invalid: InvalidRuntimeHistory,
 ): RuntimeHistory {
   if (
     !isRecord(value) || !exactFields(value, runtimeHistoryFields) || value.object !== "agent.runtime_history" || value.source !== "durable" ||
     typeof value.session_id !== "string" || !sameResourceId(value.session_id, expectedSessionId) ||
     !isRecord(value.requested_range) || !exactFields(value.requested_range, runtimeHistoryRangeFields) ||
-    value.requested_range.start !== requested.start || value.requested_range.end !== requested.end ||
+    !isNonnegativeInteger(value.requested_range.start) || value.requested_range.end !== value.requested_range.start + runtimeHistoryRangeSeconds[range] ||
     !positiveInteger(value.resolution_seconds) || !isNonnegativeInteger(value.generated_at) ||
     !isRecord(value.coverage) || !exactFields(value.coverage, runtimeHistoryCoverageFields) || !Array.isArray(value.coverage.buckets) ||
     !Array.isArray(value.series) || !Array.isArray(value.token_usage)
@@ -189,7 +193,8 @@ export function projectRuntimeHistory(
   const sessionId = canonicalUuid(value.session_id);
   if (sessionId === null) return invalid();
   const generatedAt = value.generated_at as number;
-  const maximumPoints = requested.maxPoints ?? 120;
+  // Core chose the range on its own clock; every bound below follows it.
+  const requested = { start: value.requested_range.start, end: value.requested_range.end as number };
   if (value.coverage.buckets.length > maximumPoints || value.series.length > maximumSeries) return invalid();
   const retainedStart = value.coverage.retained_start;
   const firstSample = nullableNonnegativeInteger(value.coverage.first_sample_at, invalid);

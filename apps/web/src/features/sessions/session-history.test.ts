@@ -127,9 +127,9 @@ describe("Session deletion and runtime answers", () => {
 
   it("treats a Session without retained runtime history as no history, not an error", async () => {
     const client = { retrieveRuntimeHistory: async () => { throw new AgentCoreError("No hosted runtime.", 404); } };
-    await expect(loadSessionRuntimeHistory(client, session, 3_600_000)).resolves.toBeNull();
+    await expect(loadSessionRuntimeHistory(client, session, "1h")).resolves.toBeNull();
     const failing = { retrieveRuntimeHistory: async () => { throw new AgentCoreError("down", 503); } };
-    await expect(loadSessionRuntimeHistory(failing, session, 3_600_000)).rejects.toThrow("down");
+    await expect(loadSessionRuntimeHistory(failing, session, "1h")).rejects.toThrow("down");
   });
 });
 

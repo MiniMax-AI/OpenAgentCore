@@ -24,14 +24,10 @@ type Metrics interface {
 // @Failure 400,401,503 {object} CoreErrorResponse
 // @Router /core/v1/metrics [get]
 func (h *Handler) getCoreMetrics(w http.ResponseWriter, r *http.Request) {
-	values, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil || len(values) > 1 || (len(values) == 1 && len(values["range"]) != 1) {
+	name, ok := rangeName(r)
+	if !ok {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Only one supported range parameter is allowed.")
 		return
-	}
-	name := "1h"
-	if v, ok := values["range"]; ok {
-		name = v[0]
 	}
 	switch name {
 	case "1h", "6h", "24h", "7d":
@@ -45,6 +41,19 @@ func (h *Handler) getCoreMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, value)
+}
+
+// rangeName reads the one query parameter a metrics read accepts: a range,
+// 1h when absent. Core's clock ends the range, so a caller needs no clock.
+func rangeName(r *http.Request) (string, bool) {
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil || len(values) > 1 || len(values) == 1 && len(values["range"]) != 1 {
+		return "", false
+	}
+	if v, ok := values["range"]; ok {
+		return v[0], true
+	}
+	return "1h", true
 }
 
 func (h *Handler) responseHeaders(next http.Handler) http.Handler {

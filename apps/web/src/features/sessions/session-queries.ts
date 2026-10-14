@@ -92,7 +92,7 @@ export function sessionObservationQuery(projectId: string, sessionId: string) {
   });
 }
 
-/** Retained runtime samples for the range ending now; null when Core keeps none. */
+/** Retained runtime samples for the range Core's clock ends; null when Core keeps none. */
 export function sessionRuntimeHistoryQuery(projectId: string, session: AgentSession, range: SessionRuntimeRange) {
   return queryOptions<SessionRuntimeHistory | null>({
     queryKey: [...sessionKey(projectId, session.id), "runtime", "history", range],

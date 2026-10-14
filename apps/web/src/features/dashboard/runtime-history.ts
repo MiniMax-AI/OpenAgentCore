@@ -1,33 +1,27 @@
-import { AgentCoreError, type AgentSession, type RuntimeHistory } from "@oac/agents-client";
+import { AgentCoreError, type AgentSession, type RuntimeHistory, type RuntimeHistoryRange } from "@oac/agents-client";
 
 import type { ProjectClient } from "../../lib/projects";
 import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
 import { deriveTokenThroughput, type RuntimeTrendSample, type RuntimeTrendTarget } from "./runtime-trends";
 
 export const RUNTIME_DURABLE_TARGET_LIMIT = 24;
-export const RUNTIME_DURABLE_MAX_POINTS = 120;
-export const RUNTIME_DURABLE_RANGES = [
-  { label: "1h", milliseconds: 60 * 60 * 1_000 },
-  { label: "6h", milliseconds: 6 * 60 * 60 * 1_000 },
-  { label: "24h", milliseconds: 24 * 60 * 60 * 1_000 },
-] as const;
+/** Ranges Core ends on its own clock, so the browser's clock never enters a read. */
+export const RUNTIME_DURABLE_RANGES = ["1h", "6h", "24h"] as const satisfies readonly RuntimeHistoryRange[];
 
-export type RuntimeDurableRange = typeof RUNTIME_DURABLE_RANGES[number]["milliseconds"];
+export type RuntimeDurableRange = typeof RUNTIME_DURABLE_RANGES[number];
 
 export interface RuntimeDurableSnapshot {
   samples: RuntimeTrendSample[];
-  rangeStart: number;
-  rangeEnd: number;
   resolutionSeconds: number;
   targetCount: number;
   sampleCount: number;
   expectedSampleCount: number;
-  loadedAt: number;
 }
 
+/** Web's own read bound: more Sessions than `limit`, or, when it is null, histories of different bucket widths. */
 export class RuntimeDurableHistoryIncompleteError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(readonly limit: number | null) {
+    super(limit === null ? "Durable Runtime histories returned inconsistent resolutions." : `Durable Runtime history exceeds the ${limit} target Web query budget.`);
     this.name = "RuntimeDurableHistoryIncompleteError";
   }
 }
@@ -138,7 +132,11 @@ export function runtimeDurableTrendSamples(
     }
   }
 
-  const samples = [...buckets.values()].sort((left, right) => left.sampledAt - right.sampledAt).map((value) => {
+  // Core ends each range at its last complete bucket, so reads on either side of
+  // a bucket boundary differ by one bucket: keep the buckets every history covers.
+  const from = Math.max(...histories.map((history) => history.requested_range.start)) * 1_000;
+  const to = Math.min(...histories.map((history) => history.requested_range.end)) * 1_000;
+  const samples = [...buckets.values()].filter((value) => value.sampledAt > from && value.sampledAt <= to).sort((left, right) => left.sampledAt - right.sampledAt).map((value) => {
     const observedMemory = [...value.memory.values()];
     return {
       sampledAt: value.sampledAt,
@@ -178,27 +176,17 @@ export async function loadRuntimeDurableSnapshot(
   snapshot: RuntimeDashboardSnapshot,
   range: RuntimeDurableRange,
   signal?: AbortSignal,
-  now: () => number = Date.now,
   targetLimit = RUNTIME_DURABLE_TARGET_LIMIT,
 ): Promise<RuntimeDurableSnapshot | null> {
   const targets = durableTargets(snapshot);
   if (targets.length > targetLimit) {
-    throw new RuntimeDurableHistoryIncompleteError(
-      `Durable Runtime history exceeds the ${targetLimit} target Web query budget.`,
-    );
+    throw new RuntimeDurableHistoryIncompleteError(targetLimit);
   }
-  const rangeEndSeconds = Math.floor(now() / 1_000);
-  const rangeStartSeconds = rangeEndSeconds - range / 1_000;
   const results = await mapBounded(targets, 4, async (session): Promise<RuntimeHistory | null> => {
     const reader = readerFor(session.id);
     if (!reader) return null;
     try {
-      return await reader.retrieveRuntimeHistory(session.id, {
-        start: rangeStartSeconds,
-        end: rangeEndSeconds,
-        maxPoints: RUNTIME_DURABLE_MAX_POINTS,
-        signal,
-      });
+      return await reader.retrieveRuntimeHistory(session.id, range, { signal });
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
@@ -210,16 +198,13 @@ export async function loadRuntimeDurableSnapshot(
   const covered = targets.filter((_, index) => results[index] !== null);
   const resolutions = new Set(histories.map((history) => history.resolution_seconds));
   if (resolutions.size > 1) {
-    throw new RuntimeDurableHistoryIncompleteError("Durable Runtime histories returned inconsistent resolutions.");
+    throw new RuntimeDurableHistoryIncompleteError(null);
   }
   return {
     samples: runtimeDurableTrendSamples(covered, histories),
-    rangeStart: rangeStartSeconds * 1_000,
-    rangeEnd: rangeEndSeconds * 1_000,
     resolutionSeconds: histories[0]?.resolution_seconds ?? 30,
     targetCount: covered.length,
     sampleCount: histories.reduce((total, history) => total + history.coverage.sample_count, 0),
     expectedSampleCount: histories.reduce((total, history) => total + history.coverage.expected_sample_count, 0),
-    loadedAt: now(),
   };
 }

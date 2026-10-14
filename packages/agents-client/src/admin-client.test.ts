@@ -70,7 +70,7 @@ const routeCases: Array<[string, string, (client: AdminClient) => Promise<unknow
   ["GET", `/projects/${projectId}/sessions/${sessionId}/artifacts/a/content`, (client) => client.downloadArtifact(projectId, sessionId, "a")],
   ["GET", `/projects/${projectId}/sessions/${sessionId}/execution-configuration`, (client) => client.retrieveSessionExecutionConfiguration(projectId, sessionId)],
   ["GET", `/projects/${projectId}/sessions/${sessionId}/runtime-observation`, (client) => client.retrieveRuntimeObservation(projectId, sessionId)],
-  ["GET", `/projects/${projectId}/sessions/${sessionId}/runtime-history?start=1&end=2`, (client) => client.retrieveRuntimeHistory(projectId, sessionId, { start: 1, end: 2 })],
+  ["GET", `/projects/${projectId}/sessions/${sessionId}/runtime-history?range=1h`, (client) => client.retrieveRuntimeHistory(projectId, sessionId, "1h")],
   ["GET", `/projects/${projectId}/resource-owners?resource_type=agent&resource_ids=a`, (client) => client.retrieveResourceOwners(projectId, "agent", ["a"])],
   ["GET", `/projects/${projectId}/write-operations`, (client) => client.listWriteOperations(projectId)],
   ["GET", `/projects/${projectId}/environments/${resourceId}/executor-credentials`, (client) => client.listExecutorCredentials(projectId, resourceId)],

@@ -304,6 +304,8 @@ export const metrics = {
       memoryLimit: "Configured limit",
       historyUnavailable: "Runtime history is not available.",
       historyFailed: "Runtime history could not be read. {{reason}}",
+      historyBudget: "Charts cover at most {{limit}} Sessions.",
+      historyMixed: "Sessions returned different bucket widths.",
     },
     runtimeMeta: "{{n}} · CPU {{cpu}} · memory {{memory}}",
     runtimeMetaSuspended: "{{n}} · {{sleeping}} suspended · CPU {{cpu}} · memory {{memory}}",

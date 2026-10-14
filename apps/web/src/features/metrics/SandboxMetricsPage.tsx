@@ -25,9 +25,10 @@ import { ListToolbar, listSummary, NameCell, SearchField } from "../../component
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { formatBytes, formatClock, formatCompact, formatCores, formatDateTime, formatDuration, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
+import { readError } from "../../lib/read-error";
 import { sandboxStateLabel } from "../../lib/sandbox-labels";
 import { nodeProviderDiagnostic } from "../../lib/sandbox-diagnostic";
-import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, type RuntimeDurableRange } from "../dashboard/runtime-history";
+import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, RuntimeDurableHistoryIncompleteError, type RuntimeDurableRange } from "../dashboard/runtime-history";
 import type { RuntimeDashboardSnapshot } from "../dashboard/runtime-snapshot";
 import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
@@ -104,7 +105,7 @@ export function SandboxMetricsPage() {
   const refreshing = runtimeState.status === "loading" || (fleetState.status === "ready" && fleetState.refreshing);
   const updatedAt = runtimeState.load?.loadedAt ?? fleet?.loadedAt ?? null;
   const message = fleetMessage(fleetState, t);
-  const [range, setRange] = useState<RuntimeDurableRange>(RUNTIME_DURABLE_RANGES[0].milliseconds);
+  const [range, setRange] = useState<RuntimeDurableRange>(RUNTIME_DURABLE_RANGES[0]);
   // A node or a sandbox opens in a dialog with its own figures, instead of leaving the page.
   const [openNode, setOpenNode] = useState<string | null>(null);
   const [openRuntime, setOpenRuntime] = useState<string | null>(null);
@@ -123,9 +124,9 @@ export function SandboxMetricsPage() {
         actions={<>
           <SegmentedControl
             label={t("range.label")}
-            value={String(range)}
-            options={RUNTIME_DURABLE_RANGES.map((entry) => ({ value: String(entry.milliseconds), label: t(`range.${entry.label}`) }))}
-            onChange={(value) => setRange(Number(value) as RuntimeDurableRange)}
+            value={range}
+            options={RUNTIME_DURABLE_RANGES.map((entry) => ({ value: entry, label: t(`range.${entry}`) }))}
+            onChange={setRange}
           />
           <RefreshButton refreshing={refreshing} updatedAt={updatedAt ? formatClock(updatedAt, locale) : null} onClick={() => { refreshRuntime(); refreshFleet(); }} />
         </>}
@@ -286,11 +287,21 @@ function useRuntimeHistory(snapshot: RuntimeDashboardSnapshot | null, range: Run
     placeholderData: keepPreviousData,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
+    // One read per Session per poll: the 30-second poll is the retry, and a
+    // retry here would read every Session again.
+    retry: false,
   });
+}
+
+/** Core's typed errors and Web's own read bound, in the console's language. */
+function historyFailure(error: unknown, t: TFunction<"metrics">, tCommon: TFunction<"common">): string {
+  if (!(error instanceof RuntimeDurableHistoryIncompleteError)) return readError(error, tCommon);
+  return error.limit === null ? t("sandbox.charts.historyMixed") : t("sandbox.charts.historyBudget", { limit: error.limit });
 }
 
 function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: RuntimeState; stale: string | null; fleet: ReturnType<typeof fleetSnapshot>; range: RuntimeDurableRange; onOpen: (sessionId: string) => void }) {
   const { t, i18n } = useTranslation("metrics");
+  const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const load = state.load;
   const usage = useMemo(() => (load ? hostedRuntimeUsage(load.observations) : null), [load]);
@@ -311,7 +322,7 @@ function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: R
     body = (
       <>
         {durable ? <RuntimeCharts samples={durable.samples} resolutionSeconds={durable.resolutionSeconds} />
-          : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
+          : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: historyFailure(history.error, t, tCommon) })}</p>
             : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p> : null}
         <RuntimeTable rows={hostedRuntimeRows(load, "", fleet)} showProject showNode={fleet?.deployment.mode !== "direct"} showCompute={Boolean(fleet?.deployment.suspension)} onOpen={onOpen} />
       </>
@@ -464,6 +475,7 @@ function NodeDialog({ node, rows, load, range, stale, suspends, onClose }: {
   onClose: () => void;
 }) {
   const { t, i18n } = useTranslation("metrics");
+  const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
   const { navigate } = useConsoleNavigation();
   const shown = useLast(node);
@@ -474,9 +486,8 @@ function NodeDialog({ node, rows, load, range, stale, suspends, onClose }: {
   );
   const history = useRuntimeHistory(snapshot, range);
   // The machine itself: its last heartbeat and host history over the page's range.
-  const hostRange = RUNTIME_DURABLE_RANGES.find((entry) => entry.milliseconds === range)?.label ?? "1h";
   const detail = useQuery({
-    ...nodeDetailQuery(shown?.id ?? "", hostRange),
+    ...nodeDetailQuery(shown?.id ?? "", range),
     enabled: node !== null,
     placeholderData: keepPreviousData,
     refetchInterval: RUNTIME_SNAPSHOT_REFRESH_MS,
@@ -530,7 +541,7 @@ function NodeDialog({ node, rows, load, range, stale, suspends, onClose }: {
           >
             {!sessionIds.size ? <EmptyState title={t("sandbox.nodeDialog.noRuntimes")} />
               : history.data ? <RuntimeCharts samples={history.data.samples} resolutionSeconds={history.data.resolutionSeconds} height={150} />
-                : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: history.error instanceof Error ? history.error.message : "" })}</p>
+                : history.isError ? <p className="page-status" role="alert">{t("sandbox.charts.historyFailed", { reason: historyFailure(history.error, t, tCommon) })}</p>
                   : history.isFetched ? <p className="page-status">{t("sandbox.charts.historyUnavailable")}</p>
                     : <TableSkeleton label={t("sandbox.runtimeLoading")} rows={3} columns={4} />}
           </Section>

@@ -1,6 +1,6 @@
 import type {
   AdminKeyProvenance, AdminProject, AdminResourceType, AgentDeleted, AgentSession, AgentTurn, EnvironmentTemplateDeleted, EnvironmentTemplateList,
-  EnvironmentTemplateResource, ListPage, PageOptions, ReadOptions, RuntimeHistory, RuntimeHistoryQuery, RuntimeObservation, SavedAgent, SessionDeleted,
+  EnvironmentTemplateResource, ListPage, PageOptions, ReadOptions, RuntimeHistory, RuntimeHistoryRange, RuntimeObservation, SavedAgent, SessionDeleted,
   SessionItem, SessionListOptions, Skill, SkillContent, SkillDeleted, SkillList, SkillListOptions, SkillVersionDeleted, SkillVersionList, SourceFileDeleted,
   SourceFileList, SourceFileListOptions, Vault, VaultCredentialDeleted, VaultCredentialList, VaultDeleted, VaultList, VaultListOptions,
 } from "@oac/agents-client";
@@ -148,7 +148,7 @@ export interface ProjectClient {
   listTurns(sessionId: string, options?: PageOptions): Promise<ListPage<AgentTurn>>;
   listItems(sessionId: string, options?: PageOptions): Promise<ListPage<SessionItem>>;
   retrieveRuntimeObservation(sessionId: string, options?: ReadOptions): Promise<RuntimeObservation>;
-  retrieveRuntimeHistory(sessionId: string, query: RuntimeHistoryQuery): Promise<RuntimeHistory>;
+  retrieveRuntimeHistory(sessionId: string, range: RuntimeHistoryRange, options?: ReadOptions): Promise<RuntimeHistory>;
 }
 
 async function content(result: Promise<{ blob: Blob; contentType: string | null; contentDisposition: string | null }>) {
@@ -192,7 +192,7 @@ function createProjectClient(projectId: string): ProjectClient {
     listTurns: (sessionId, options) => admin.listTurns(projectId, sessionId, options),
     listItems: (sessionId, options) => admin.listItems(projectId, sessionId, options),
     retrieveRuntimeObservation: (sessionId, options) => admin.retrieveRuntimeObservation(projectId, sessionId, options),
-    retrieveRuntimeHistory: (sessionId, query) => admin.retrieveRuntimeHistory(projectId, sessionId, query),
+    retrieveRuntimeHistory: (sessionId, range, options) => admin.retrieveRuntimeHistory(projectId, sessionId, range, options),
   };
 }
 

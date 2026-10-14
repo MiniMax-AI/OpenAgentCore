@@ -49,9 +49,9 @@ function history(overrides: Record<string, unknown> = {}): Record<string, unknow
     object: "agent.runtime_history",
     source: "durable",
     session_id: sessionId,
-    requested_range: { start: 1000, end: 1120 },
+    requested_range: { start: 1000, end: 4600 },
     resolution_seconds: 60,
-    generated_at: 1120,
+    generated_at: 4600,
     coverage: {
       retained_start: 1000,
       first_sample_at: 1010,
@@ -84,14 +84,9 @@ describe("Runtime history client", () => {
     const calls: FetchCall[] = [];
     const controller = new AbortController();
     const response = history();
-    const value = await clientFor(response, calls).retrieveRuntimeHistory(projectId, sessionId, {
-      start: 1000,
-      end: 1120,
-      maxPoints: 60,
-      signal: controller.signal,
-    });
+    const value = await clientFor(response, calls).retrieveRuntimeHistory(projectId, sessionId, "1h", { signal: controller.signal });
     expect(String(calls[0]?.input)).toBe(
-      `https://core.example/core/v1/projects/${projectId}/sessions/${sessionId}/runtime-history?start=1000&end=1120&max_points=60`,
+      `https://core.example/core/v1/projects/${projectId}/sessions/${sessionId}/runtime-history?range=1h`,
     );
     expect(calls[0]?.init?.signal).toBe(controller.signal);
     expect(value.series[0]?.points[0]?.cpu?.utilization_ratio).toBe(0);
@@ -104,14 +99,8 @@ describe("Runtime history client", () => {
   it("rejects invalid requests before fetch", async () => {
     const calls: FetchCall[] = [];
     const client = clientFor(history(), calls);
-    for (const [id, query] of [
-      ["not-a-session", { start: 1000, end: 1120 }],
-      [sessionId, { start: 1120, end: 1000 }],
-      [sessionId, { start: -1, end: 1000 }],
-      [sessionId, { start: 1000, end: 1120, maxPoints: 1 }],
-      [sessionId, { start: 1000, end: 1120, maxPoints: 10001 }],
-    ] as const) {
-      await expect(client.retrieveRuntimeHistory(projectId, id, query)).rejects.toThrow(TypeError);
+    for (const [id, range] of [["not-a-session", "1h"], [sessionId, "2h"], [sessionId, "constructor"]] as const) {
+      await expect(client.retrieveRuntimeHistory(projectId, id, range as "1h")).rejects.toThrow(TypeError);
     }
     expect(calls).toHaveLength(0);
   });
@@ -119,7 +108,7 @@ describe("Runtime history client", () => {
   for (const [name, mutate] of [
     ["unknown field", (value: Record<string, unknown>) => { value.tokens = 10; }],
     ["foreign Session", (value: Record<string, unknown>) => { value.session_id = "55555555-5555-4555-8555-555555555555"; }],
-    ["mismatched range", (value: Record<string, unknown>) => { value.requested_range = { start: 999, end: 1120 }; }],
+    ["range of another length", (value: Record<string, unknown>) => { value.requested_range = { start: 999, end: 4600 }; }],
     ["empty result generated before the requested range", (value: Record<string, unknown>) => {
       value.generated_at = 999;
       value.coverage = {
@@ -221,11 +210,8 @@ describe("Runtime history client", () => {
     it(`rejects ${name} in history`, async () => {
       const value = history();
       mutate(value);
-      await expect(clientFor(value).retrieveRuntimeHistory(projectId, sessionId, {
-        start: 1000,
-        end: 1120,
-        maxPoints: 60,
-      })).rejects.toMatchObject({ status: 502, code: "invalid_admin_response" });
+      await expect(clientFor(value).retrieveRuntimeHistory(projectId, sessionId, "1h"))
+        .rejects.toMatchObject({ status: 502, code: "invalid_admin_response" });
     });
   }
 });

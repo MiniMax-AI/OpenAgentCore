@@ -167,17 +167,11 @@ An ownership mismatch, malformed durable identity or invalid provider evidence f
 ## Session Runtime history
 
 ```http
-GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history?start=1789951200&end=1789954800&max_points=120
+GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history?range=1h
 Authorization: Bearer <Core key>
 ```
 
-| Parameter | Rules |
-| --- | --- |
-| `start` | Required. Inclusive Unix second, 0 or more. |
-| `end` | Required. Exclusive Unix second, after `start`, at most 24 hours after it and at most one second in the future. |
-| `max_points` | Optional. Buckets per array, 2 to 1000; default 120. |
-
-Each parameter may appear once. Core chooses the bucket width: the range divided by `max_points`, rounded up to whole seconds, and at least 30 seconds or the sampling interval, whichever is longer. Buckets start at `start`; the last one ends at `end`.
+`range` is `1h` (the default), `6h` or `24h`, and is the only parameter. The request carries no time: Core ends the range at the last bucket boundary on its own clock, counted in whole buckets from the Unix epoch, so a caller's clock cannot reject or shift the read, and reads within one bucket return the same range. `requested_range` reports the range in Unix seconds; `start` is inclusive and `end` exclusive. The bucket width is the range divided by 120, rounded up to whole seconds, and at least 30 seconds or the sampling interval, whichever is longer. Buckets start at `requested_range.start`; the last one ends at `requested_range.end`.
 
 Core resolves the Project, then the Session and its Environment, before it reads storage; allocation and provider identities are results, never query inputs. History exists only for `openai_hosted` Sessions.
 
@@ -187,7 +181,7 @@ Core resolves the Project, then the Session and its Environment, before it reads
   "source": "durable",
   "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
   "requested_range": { "start": 1789951200, "end": 1789954800 },
-  "resolution_seconds": 60,
+  "resolution_seconds": 30,
   "generated_at": 1789954801,
   "coverage": {
     "retained_start": 1789951200,
@@ -206,7 +200,7 @@ Core resolves the Project, then the Session and its Environment, before it reads
 
 ### Coverage
 
-`coverage` counts every stored sample of the Session in the range, including unavailable ones that belong to no allocation. `retained_start` is the later of `start` and seven days before `generated_at`. `expected_sample_count` is the number of sampling intervals between `retained_start` and `end`, rounded up. Each bucket has `start`, `end`, `first_observed_at`, `last_observed_at`, `observation_count`, `observed_count` and `unavailable_count`.
+`coverage` counts every stored sample of the Session in the range, including unavailable ones that belong to no allocation. `retained_start` is the later of `requested_range.start` and seven days before `generated_at`. `expected_sample_count` is the number of sampling intervals between `retained_start` and `requested_range.end`, rounded up. Each bucket has `start`, `end`, `first_observed_at`, `last_observed_at`, `observation_count`, `observed_count` and `unavailable_count`.
 
 ### Series
 
@@ -227,18 +221,17 @@ Disk is not kept in history.
 
 | HTTP | Code | When |
 | --- | --- | --- |
-| 400 | `unsupported_parameter` | A parameter other than `start`, `end` and `max_points`, or one supplied twice. |
-| 400 | `invalid_request` | An invalid range or `max_points`. |
+| 400 | `invalid_request` | A parameter other than `range`, a repeated `range`, or a `range` other than `1h`, `6h` and `24h`. |
 | 404 | `not_found_error` | A missing Project, or a Session missing from it. |
 | 409 | `runtime_history_unsupported` | The Session is not `openai_hosted`. |
 | 500 | `internal_error` | Inconsistent stored identity. |
 | 503 | `runtime_history_unavailable` | The read failed, timed out or produced a result outside the bounds. |
 
-A response holds at most `max_points` buckets per array, 64 series and 10,000 coverage and series points in total. Storage error text is neither returned nor logged.
+A response holds at most 120 buckets per array, 64 series and 10,000 coverage and series points in total. Storage error text is neither returned nor logged.
 
 ### Client
 
-`AdminClient.retrieveRuntimeHistory(projectId, sessionId, {start, end, maxPoints, signal})` validates the query before sending it. It then checks the exact fields, the echoed range and Session, bucket order within the range, coverage totals, allocation identity, contributor counts, token usage order, nullability, numbers and response size. Any violation rejects the whole response with a 502 `invalid_admin_response` error.
+`AdminClient.retrieveRuntimeHistory(projectId, sessionId, range, {signal})` validates the Session ID and `range` before sending them. It then checks the exact fields, the echoed range's length and Session, bucket order within the range, coverage totals, allocation identity, contributor counts, token usage order, nullability, numbers and response size. Any violation rejects the whole response with a 502 `invalid_admin_response` error.
 
 ## Node host observations and history
 

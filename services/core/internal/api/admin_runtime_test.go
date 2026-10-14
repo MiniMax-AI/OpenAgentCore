@@ -52,7 +52,7 @@ func TestAdminRuntimeRoutesRejectHead(t *testing.T) {
 		return runtimeobs.Observation{}, errors.New("sampled")
 	})
 	handler, _ := adminRuntimeFixture(t, nil, nil, service)
-	for _, path := range []string{adminRuntimeObservationsPath, adminSessionsPath + uuid.NewString() + "/runtime-observation", adminSessionsPath + uuid.NewString() + "/runtime-history?start=1&end=2"} {
+	for _, path := range []string{adminRuntimeObservationsPath, adminSessionsPath + uuid.NewString() + "/runtime-observation", adminSessionsPath + uuid.NewString() + "/runtime-history"} {
 		response := serve(handler, http.MethodHead, path, "", withHeaders([]string{"Authorization", "Bearer admin"}))
 		if response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != "GET" || response.Header().Get("Content-Type") != "application/json" {
 			t.Errorf("HEAD %s = %d %q", path, response.Code, response.Header().Get("Allow"))

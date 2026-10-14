@@ -7,6 +7,7 @@ import { failedLast, useFailureToast } from "../../components/Toast";
 import { DashboardSkeleton } from "../../components/Skeleton";
 import { Kpi, KpiStrip, Section, SegmentedControl, type Tone } from "../../components/console-ui";
 import { formatBytes, formatCores, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
+import { readError } from "../../lib/read-error";
 import { RuntimeCharts } from "../metrics/RuntimeCharts";
 import type { RuntimeTrendSample } from "../dashboard/runtime-trends";
 
@@ -20,7 +21,6 @@ function sampleSpacing(samples: readonly RuntimeTrendSample[]): number {
 }
 
 const HISTORY_REFRESH_MS = 30_000;
-type RangeLabel = (typeof SESSION_RUNTIME_RANGES)[number]["label"];
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -57,9 +57,9 @@ export function SessionRuntimeSection({
   refreshToken: number;
 }) {
   const { t, i18n } = useTranslation("sessions");
+  const { t: tCommon } = useTranslation("common");
   const locale = i18n.resolvedLanguage;
-  const [rangeLabel, setRangeLabel] = useState<RangeLabel>(SESSION_RUNTIME_RANGES[0].label);
-  const range = SESSION_RUNTIME_RANGES.find((entry) => entry.label === rangeLabel)!.milliseconds as SessionRuntimeRange;
+  const [range, setRange] = useState<SessionRuntimeRange>(SESSION_RUNTIME_RANGES[0]);
 
   const observationRead = useQuery(sessionObservationQuery(projectId, session.id));
   useOnChange(revision, observationRead.refetch);
@@ -76,7 +76,7 @@ export function SessionRuntimeSection({
   const history: { state: "loading" | "ready" | "unavailable" | "failed"; value: SessionRuntimeHistory | null; error: string | null } = {
     state: historyRead.isError ? "failed" : historyRead.data === undefined ? "loading" : historyRead.data === null ? "unavailable" : "ready",
     value: historyRead.data ?? null,
-    error: historyRead.isError ? message(historyRead.error) : null,
+    error: historyRead.isError ? readError(historyRead.error, tCommon) : null,
   };
   // Both reads repeat while the Session runs; a failure is reported once while it lasts.
   useFailureToast(failedLast(observationRead), t("runtime.observationFailed", { reason: observationError ?? "" }), "session-runtime-observation");
@@ -104,9 +104,9 @@ export function SessionRuntimeSection({
       actions={(
         <SegmentedControl
           label={t("runtime.range")}
-          value={rangeLabel}
-          options={SESSION_RUNTIME_RANGES.map((entry) => ({ value: entry.label, label: t(`runtime.ranges.${entry.label}`) }))}
-          onChange={setRangeLabel}
+          value={range}
+          options={SESSION_RUNTIME_RANGES.map((entry) => ({ value: entry, label: t(`runtime.ranges.${entry}`) }))}
+          onChange={setRange}
         />
       )}
     >

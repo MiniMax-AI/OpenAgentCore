@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -21,14 +20,10 @@ import (
 // @Failure 400,401,404,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/nodes/{node_id} [get]
 func (h *Handler) sandboxNodeDetail(w http.ResponseWriter, r *http.Request) {
-	values, err := url.ParseQuery(r.URL.RawQuery)
-	if err != nil || len(values) > 1 || len(values) == 1 && len(values["range"]) != 1 {
+	name, ok := rangeName(r)
+	if !ok {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
-	}
-	name := "1h"
-	if v, ok := values["range"]; ok {
-		name = v[0]
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()

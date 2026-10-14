@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -17,6 +16,8 @@ const (
 	defaultRuntimeHistoryPoints = 120
 	runtimeHistoryRequestBudget = 15 * time.Second
 )
+
+var runtimeHistoryRanges = map[string]time.Duration{"1h": time.Hour, "6h": 6 * time.Hour, "24h": 24 * time.Hour}
 
 // RuntimeHistory queries the durable Runtime history Core samples
 // periodically.
@@ -39,8 +40,6 @@ func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 	value, err := h.RuntimeHistory.QuerySession(ctx, expectedTenantID, expectedSessionID, requested)
 	if err != nil {
 		switch {
-		case errors.Is(err, runtimehistory.ErrInvalidRange):
-			writeError(w, http.StatusBadRequest, "invalid_request", "Runtime history range is invalid.")
 		case errors.Is(err, runtimehistory.ErrUnsupported):
 			writeError(w, http.StatusConflict, "runtime_history_unsupported", "Runtime history is not supported for this Session.")
 		case errors.Is(err, runtimehistory.ErrUnavailable), errors.Is(err, runtimehistory.ErrInvalidResult), errors.Is(err, context.DeadlineExceeded):
@@ -61,32 +60,17 @@ func (h *Handler) getRuntimeHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func readRuntimeHistoryRange(w http.ResponseWriter, r *http.Request, capabilities runtimehistory.Capabilities, now time.Time) (runtimehistory.Range, bool) {
-	query := r.URL.Query()
-	for key, values := range query {
-		if key != "start" && key != "end" && key != "max_points" || len(values) != 1 {
-			writeError(w, http.StatusBadRequest, "unsupported_parameter", "Runtime history accepts one start, end and optional max_points value.")
-			return runtimehistory.Range{}, false
-		}
-	}
-	start, startErr := strconv.ParseInt(query.Get("start"), 10, 64)
-	end, endErr := strconv.ParseInt(query.Get("end"), 10, 64)
-	points := defaultRuntimeHistoryPoints
-	if capabilities.MaximumPoints < points {
-		points = capabilities.MaximumPoints
-	}
-	if raw := query.Get("max_points"); raw != "" {
-		var err error
-		points, err = strconv.Atoi(raw)
-		if err != nil || points < 2 || points > capabilities.MaximumPoints {
-			writeError(w, http.StatusBadRequest, "invalid_request", "Runtime history range is invalid.")
-			return runtimehistory.Range{}, false
-		}
-	}
-	if startErr != nil || endErr != nil || start < 0 || end <= start || end > now.Unix()+1 || end-start > int64(capabilities.MaximumRange/time.Second) {
-		writeError(w, http.StatusBadRequest, "invalid_request", "Runtime history range is invalid.")
+	name, ok := rangeName(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_request", "Only one supported range parameter is allowed.")
 		return runtimehistory.Range{}, false
 	}
-	return runtimehistory.Range{Start: time.Unix(start, 0).UTC(), End: time.Unix(end, 0).UTC(), MaxPoints: points}, true
+	duration, ok := runtimeHistoryRanges[name]
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid_request", "range must be 1h, 6h or 24h.")
+		return runtimehistory.Range{}, false
+	}
+	return capabilities.Window(now, duration, min(defaultRuntimeHistoryPoints, capabilities.MaximumPoints)), true
 }
 
 func runtimeHistoryResponse(value runtimehistory.Response, expectedTenantID, expectedSessionID string, expectedRange runtimehistory.Range) (v1.RuntimeHistory, error) {

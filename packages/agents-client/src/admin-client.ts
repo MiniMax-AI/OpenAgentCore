@@ -9,7 +9,7 @@ import {
 } from "./client";
 import { projectExecutionConfiguration } from "./execution-configuration-projection";
 import { projectAgentTurn, projectSessionItem, projectHistoryPage } from "./history-projection";
-import { projectRuntimeHistory } from "./runtime-history-projection";
+import { projectRuntimeHistory, runtimeHistoryRangeSeconds } from "./runtime-history-projection";
 import { canonicalUuid, exactFields, isNonnegativeInteger, isRecord } from "./response-projection";
 import { CoreRequester } from "./core-request";
 import { projectSkill, projectSkillDeleted, projectSkillVersion, projectSkillVersionDeleted } from "./skill-projection";
@@ -20,7 +20,7 @@ import {
   projectExecutorCredentials, projectIssuedExecutorCredential, projectCoreHarnessList, projectHarnessModelConfiguration, projectInstallation,
 } from "./admin-projection";
 import type {
-  CoreHarness, CoreHarnessKind, HarnessModelConfiguration, ModelConfigurationInput, PageOptions, ReadOptions, RuntimeHistoryQuery, SkillList, SkillVersionDeleted,
+  CoreHarness, CoreHarnessKind, HarnessModelConfiguration, ModelConfigurationInput, PageOptions, ReadOptions, RuntimeHistoryRange, SkillList, SkillVersionDeleted,
   SkillVersionList, SourceFileList, VaultListOptions,
 } from "./types";
 import type {
@@ -260,13 +260,10 @@ export class AdminClient {
   async retrieveRuntimeObservation(projectId: string, sessionId: string, options?: ReadOptions) {
     return projectRuntimeObservation(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/runtime-observation`, options), sessionId);
   }
-  async retrieveRuntimeHistory(projectId: string, sessionId: string, query: RuntimeHistoryQuery) {
-    if (canonicalUuid(sessionId) === null || !isNonnegativeInteger(query.start) || !isNonnegativeInteger(query.end) || query.end <= query.start ||
-      (query.maxPoints !== undefined && (!Number.isSafeInteger(query.maxPoints) || query.maxPoints < 2 || query.maxPoints > 10_000))) throw new TypeError("Runtime history query is invalid.");
-    const path = pageQuery(`${scope(projectId)}/sessions/${segment(sessionId)}/runtime-history`, undefined, {
-      start: String(query.start), end: String(query.end), max_points: query.maxPoints === undefined ? undefined : String(query.maxPoints),
-    });
-    return projectRuntimeHistory(await this.#json(path, query), sessionId, query, invalidAdminResponse);
+  /** History over the named range, which Core's clock ends; the caller needs no clock. */
+  async retrieveRuntimeHistory(projectId: string, sessionId: string, range: RuntimeHistoryRange, options?: ReadOptions) {
+    if (canonicalUuid(sessionId) === null || !Object.hasOwn(runtimeHistoryRangeSeconds, range)) throw new TypeError("Runtime history query is invalid.");
+    return projectRuntimeHistory(await this.#json(`${scope(projectId)}/sessions/${segment(sessionId)}/runtime-history?range=${range}`, options), sessionId, range, invalidAdminResponse);
   }
 
   async retrieveResourceOwners(projectId: string, resourceType: AdminResourceType, resourceIds: string[], options?: ReadOptions): Promise<{ data: AdminResourceOwner[] }> {

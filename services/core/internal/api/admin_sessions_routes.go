@@ -188,16 +188,14 @@ func (h *Handler) adminGetRuntimeObservation(w http.ResponseWriter, r *http.Requ
 }
 
 // @Summary Retrieve Session Runtime history in a Project
-// @Description Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session. End is exclusive; the server selects a bounded resolution. Responses contain at most 1,000 series, 10,000 points per coverage/series array, and 100,000 total coverage plus series points. It never reads or changes live compute.
+// @Description Core key only; the Project ID selects the target space and does not authenticate. Returns stored Runtime observations for one Session over the range ending at the last complete bucket on Core's clock; requested_range reports it. The server selects the resolution. Responses contain at most 120 buckets per array, 64 series and 10,000 coverage plus series points in total. It never reads or changes live compute.
 // @Tags Runtime history
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param session_id path string true "Session ID"
-// @Param start query integer true "Inclusive Unix-second start" minimum(0) maximum(9007199254740991)
-// @Param end query integer true "Exclusive Unix-second end" minimum(1) maximum(9007199254740991)
-// @Param max_points query integer false "Maximum points per series; defaults to the lower of 120 and the advertised service maximum" minimum(2) maximum(10000)
+// @Param range query string false "Time range (default 1h)" Enums(1h,6h,24h)
 // @Success 200 {object} v1.RuntimeHistory
-// @Failure 400,401,404,409,503 {object} CoreErrorResponse
+// @Failure 400,401,404,409,500,503 {object} CoreErrorResponse
 // @Param project_id path string true "Project ID"
 // @Router /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history [get]
 func (h *Handler) adminGetRuntimeHistory(w http.ResponseWriter, r *http.Request) {

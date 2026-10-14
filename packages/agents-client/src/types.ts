@@ -878,14 +878,8 @@ export type RuntimeObservation =
   | RuntimeNoneObservation
   | RuntimeSelfHostedObservation;
 
-export interface RuntimeHistoryQuery extends ReadOptions {
-  /** Inclusive Unix-second boundary. */
-  start: number;
-  /** Exclusive Unix-second boundary. */
-  end: number;
-  /** Requested maximum buckets per series. Core selects the effective resolution. */
-  maxPoints?: number;
-}
+/** A Runtime history window that ends at Core's last complete bucket. */
+export type RuntimeHistoryRange = "1h" | "6h" | "24h";
 
 export type { CoreHarnessKind, ModelProviderProtocol } from "./harness-catalog";
 

@@ -106,6 +106,15 @@ type Range struct {
 	MaxPoints  int
 }
 
+// Window is the range of duration that ends at the last whole multiple of the
+// bucket width, in Unix seconds, at or before now on Core's clock, so reads
+// within one bucket share their bounds.
+func (c Capabilities) Window(now time.Time, duration time.Duration, maxPoints int) Range {
+	step := int64(resolution(duration, maxPoints, c.MinimumStep) / time.Second)
+	end := time.Unix(now.Unix()/step*step, 0).UTC()
+	return Range{Start: end.Add(-duration), End: end, MaxPoints: maxPoints}
+}
+
 type Query struct {
 	Scope
 	Start, End                        time.Time

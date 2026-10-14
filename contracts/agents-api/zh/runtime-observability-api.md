@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: 05ee25e01c2a8e9ce0f85c325a4a0e0e2f11eb76861e54740efa8975d9c5a999
+source_hash: 4a9c00d1eed9fe51f9e8f2f08e00f1709ddc55eb1c650ed3a5380f44a5b71e1c
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -169,17 +169,11 @@ Authorization: Bearer <Core key>
 ## Session Runtime 历史记录 {#session-runtime-history}
 
 ```http
-GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history?start=1789951200&end=1789954800&max_points=120
+GET /core/v1/projects/{project_id}/sessions/{session_id}/runtime-history?range=1h
 Authorization: Bearer <Core key>
 ```
 
-| 参数 | 规则 |
-| --- | --- |
-| `start` | 必填。包含端点的 Unix 秒值，必须大于或等于 0。 |
-| `end` | 必填。排除端点的 Unix 秒值，必须晚于 `start`，最多比 `start` 晚 24 小时，并且最多只能比当前时间晚 1 秒。 |
-| `max_points` | 可选。每个数组的桶数，2 到 1000；默认 120。 |
-
-每个参数最多只能出现一次。Core 会选择桶宽：将范围除以 `max_points`，向上取整为整数秒，并取 30 秒或采样间隔中的较长者作为最小值。桶从 `start` 开始；最后一个桶在 `end` 结束。
+`range` 可以是 `1h`（默认值）、`6h` 或 `24h`，并且是唯一的参数。请求不携带任何时间：Core 按自己的时钟，将范围的结束点定在最近一个桶边界上，桶边界从 Unix 纪元起按整桶计算。因此调用方的时钟无法使读取被拒绝或发生偏移，同一个桶内的多次读取会得到相同的范围。`requested_range` 以 Unix 秒报告该范围；`start` 包含在内，`end` 不包含在内。桶宽是范围除以 120，向上取整为整数秒，并取 30 秒或采样间隔中的较长者作为最小值。桶从 `requested_range.start` 开始；最后一个桶在 `requested_range.end` 结束。
 
 Core 先解析 Project，然后解析 Session 及其 Environment，之后才读取存储；分配和提供方标识都是结果，绝不能作为查询输入。只有 `openai_hosted` Session 存在历史记录。
 
@@ -189,7 +183,7 @@ Core 先解析 Project，然后解析 Session 及其 Environment，之后才读�
   "source": "durable",
   "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
   "requested_range": { "start": 1789951200, "end": 1789954800 },
-  "resolution_seconds": 60,
+  "resolution_seconds": 30,
   "generated_at": 1789954801,
   "coverage": {
     "retained_start": 1789951200,
@@ -208,7 +202,7 @@ Core 先解析 Project，然后解析 Session 及其 Environment，之后才读�
 
 ### 覆盖范围 {#coverage}
 
-`coverage` 会对范围内 Session 的每个已存储样本进行计数，包括不属于任何分配的不可用样本。`retained_start` 是 `start` 与 `generated_at` 前七天两者中较晚的时间。`expected_sample_count` 是 `retained_start` 与 `end` 之间的采样间隔数，并向上取整。每个桶都包含 `start`、`end`、`first_observed_at`、`last_observed_at`、`observation_count`、`observed_count` 和 `unavailable_count`。
+`coverage` 会对范围内 Session 的每个已存储样本进行计数，包括不属于任何分配的不可用样本。`retained_start` 是 `requested_range.start` 与 `generated_at` 前七天两者中较晚的时间。`expected_sample_count` 是 `retained_start` 与 `requested_range.end` 之间的采样间隔数，并向上取整。每个桶都包含 `start`、`end`、`first_observed_at`、`last_observed_at`、`observation_count`、`observed_count` 和 `unavailable_count`。
 
 ### 数据系列 {#series}
 
@@ -229,18 +223,17 @@ Core 先解析 Project，然后解析 Session 及其 Environment，之后才读�
 
 | HTTP | 代码 | 适用情况 |
 | --- | --- | --- |
-| 400 | `unsupported_parameter` | 提供了 `start`、`end` 和 `max_points` 以外的参数，或同一参数提供了两次。 |
-| 400 | `invalid_request` | 范围或 `max_points` 无效。 |
+| 400 | `invalid_request` | 提供了 `range` 以外的参数、重复的 `range`，或 `range` 不是 `1h`、`6h` 或 `24h`。 |
 | 404 | `not_found_error` | Project 不存在，或 Session 不属于该 Project。 |
 | 409 | `runtime_history_unsupported` | Session 不是 `openai_hosted`。 |
 | 500 | `internal_error` | 已存储的标识不一致。 |
 | 503 | `runtime_history_unavailable` | 读取失败、超时或产生了超出界限的结果。 |
 
-每个数组最多包含 `max_points` 个桶，响应最多包含 64 条 series，并且 coverage 和 series 中的点总计最多为 10,000 个。存储错误文本既不会返回，也不会记录到日志中。
+每个数组最多包含 120 个桶，响应最多包含 64 条 series，并且 coverage 和 series 中的点总计最多为 10,000 个。存储错误文本既不会返回，也不会记录到日志中。
 
 ### 客户端 {#client-1}
 
-`AdminClient.retrieveRuntimeHistory(projectId, sessionId, {start, end, maxPoints, signal})` 会在发送查询前验证查询。随后，它会检查精确字段、回显的范围和 Session、范围内的桶顺序、coverage 总计、分配标识、贡献者计数、token 用量顺序、可空性、数值和响应大小。任何违规都会使整个响应被拒绝，并返回 502 `invalid_admin_response` 错误。
+`AdminClient.retrieveRuntimeHistory(projectId, sessionId, range, {signal})` 会在发送前验证 Session ID 和 `range`。随后，它会检查精确字段、回显范围的长度和 Session、范围内的桶顺序、coverage 总计、分配标识、贡献者计数、token 用量顺序、可空性、数值和响应大小。任何违规都会使整个响应被拒绝，并返回 502 `invalid_admin_response` 错误。
 
 ## 节点主机观测值和历史记录 {#node-host-observations-and-history}
 

@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -16,12 +15,13 @@ import (
 
 type runtimeHistoryFixture struct {
 	capabilities runtimehistory.Capabilities
-	response     runtimehistory.Response
-	err          error
-	tenant       string
-	session      string
-	requested    runtimehistory.Range
-	calls        int
+	// respond builds the response for the range the handler chose.
+	respond   func(runtimehistory.Range) runtimehistory.Response
+	err       error
+	tenant    string
+	session   string
+	requested runtimehistory.Range
+	calls     int
 }
 
 func (f *runtimeHistoryFixture) Capabilities() runtimehistory.Capabilities { return f.capabilities }
@@ -29,7 +29,10 @@ func (f *runtimeHistoryFixture) Capabilities() runtimehistory.Capabilities { ret
 func (f *runtimeHistoryFixture) QuerySession(_ context.Context, tenant, session string, requested runtimehistory.Range) (runtimehistory.Response, error) {
 	f.calls++
 	f.tenant, f.session, f.requested = tenant, session, requested
-	return f.response, f.err
+	if f.respond == nil {
+		return runtimehistory.Response{}, f.err
+	}
+	return f.respond(requested), f.err
 }
 
 // historyWith answers Runtime history from service.
@@ -48,47 +51,64 @@ func historyCapabilities() runtimehistory.Capabilities {
 }
 
 func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-	start := now.Add(-time.Hour)
 	sessionID, environmentID, allocationID := uuid.NewString(), uuid.NewString(), uuid.NewString()
 	scope := runtimehistory.Scope{SessionID: sessionID, EnvironmentID: environmentID}
 	zeroRatio := float64(0)
 	capacity := 2.0
 	zeroMemory := uint64(0)
 	limit := uint64(2048)
-	coveragePoint := runtimehistory.CoveragePoint{
-		Start: start, End: start.Add(time.Minute), FirstObservedAt: start.Add(10 * time.Second), LastObservedAt: start.Add(10 * time.Second),
-		ObservationCount: 1, ObservedCount: 1,
-	}
-	resourcePoint := runtimehistory.Point{
-		Start: start, End: start.Add(time.Minute), FirstObservedAt: start.Add(10 * time.Second), LastObservedAt: start.Add(10 * time.Second),
-		ObservationCount: 1, ObservedCount: 1, CPUContributorCount: 1, MemoryContributorCount: 1,
-		CPUUtilizationRatio: &zeroRatio, CPUCapacityCores: &capacity, MemoryUsageBytes: &zeroMemory, MemoryLimitBytes: &limit,
-	}
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities()}
 	handler, _, tenant := adminTestHandler(t, historyWith(service))
 	scope.TenantID = tenant
-	service.response = runtimehistory.Response{
-		Capabilities: service.capabilities, Scope: scope,
-		Requested: runtimehistory.Range{Start: start, End: now, MaxPoints: 60}, Resolution: time.Minute, GeneratedAt: now, RetainedFrom: &start,
-		Coverage:   []runtimehistory.CoveragePoint{coveragePoint},
-		Series:     []runtimehistory.Series{{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker", Points: []runtimehistory.Point{resourcePoint}}},
-		TokenUsage: []runtimehistory.TokenUsagePoint{{Start: start, End: start.Add(time.Minute), SampledAt: start.Add(10 * time.Second), InputTokens: 120, OutputTokens: 30}},
+	service.respond = func(requested runtimehistory.Range) runtimehistory.Response {
+		start := requested.Start
+		coveragePoint := runtimehistory.CoveragePoint{
+			Start: start, End: start.Add(30 * time.Second), FirstObservedAt: start.Add(10 * time.Second), LastObservedAt: start.Add(10 * time.Second),
+			ObservationCount: 1, ObservedCount: 1,
+		}
+		resourcePoint := runtimehistory.Point{
+			Start: start, End: start.Add(30 * time.Second), FirstObservedAt: start.Add(10 * time.Second), LastObservedAt: start.Add(10 * time.Second),
+			ObservationCount: 1, ObservedCount: 1, CPUContributorCount: 1, MemoryContributorCount: 1,
+			CPUUtilizationRatio: &zeroRatio, CPUCapacityCores: &capacity, MemoryUsageBytes: &zeroMemory, MemoryLimitBytes: &limit,
+		}
+		return runtimehistory.Response{
+			Capabilities: service.capabilities, Scope: scope,
+			Requested: requested, Resolution: 30 * time.Second, GeneratedAt: requested.End, RetainedFrom: &start,
+			Coverage:   []runtimehistory.CoveragePoint{coveragePoint},
+			Series:     []runtimehistory.Series{{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker", Points: []runtimehistory.Point{resourcePoint}}},
+			TokenUsage: []runtimehistory.TokenUsagePoint{{Start: start, End: start.Add(30 * time.Second), SampledAt: start.Add(10 * time.Second), InputTokens: 120, OutputTokens: 30}},
+		}
 	}
-	response := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-history?start="+timeString(start)+"&end="+timeString(now)+"&max_points=60")
+	response := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-history?range=1h")
 	if response.Code != http.StatusOK {
 		t.Fatalf("history returned %d: %s", response.Code, response.Body)
 	}
 	var value v1.RuntimeHistory
-	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.Object != "agent.runtime_history" || value.Source != "durable" || value.SessionID != sessionID || value.ResolutionSeconds != 60 || value.Coverage.SampleCount != 1 || value.Coverage.ExpectedSampleCount != 120 || len(value.Coverage.Buckets) != 1 || len(value.Series) != 1 || len(value.Series[0].Points) != 1 || len(value.TokenUsage) != 1 || value.TokenUsage[0].InputTokens != 120 || value.TokenUsage[0].OutputTokens != 30 {
+	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.Object != "agent.runtime_history" || value.Source != "durable" || value.SessionID != sessionID || value.ResolutionSeconds != 30 || value.RequestedRange.End-value.RequestedRange.Start != 3600 || value.Coverage.SampleCount != 1 || value.Coverage.ExpectedSampleCount != 120 || len(value.Coverage.Buckets) != 1 || len(value.Series) != 1 || len(value.Series[0].Points) != 1 || len(value.TokenUsage) != 1 || value.TokenUsage[0].InputTokens != 120 || value.TokenUsage[0].OutputTokens != 30 {
 		t.Fatalf("invalid history response: %s", response.Body)
 	}
 	point := value.Series[0].Points[0]
 	if point.CPU == nil || point.CPU.UtilizationRatio == nil || *point.CPU.UtilizationRatio != 0 || point.Memory == nil || point.Memory.UsageBytes == nil || *point.Memory.UsageBytes != 0 {
 		t.Fatalf("observed zero was lost: %+v", point)
 	}
-	if service.calls != 1 || service.tenant != tenant || service.session != sessionID || !service.requested.Start.Equal(start) || !service.requested.End.Equal(now) || service.requested.MaxPoints != 60 {
-		t.Fatalf("history authority/range mismatch: %+v", service)
+	if service.calls != 1 || service.tenant != tenant || service.session != sessionID {
+		t.Fatalf("history authority mismatch: %+v", service)
+	}
+}
+
+// The request carries no time, so a caller's clock minutes ahead of or behind
+// Core's cannot reject or shift the read: Core's clock ends the range.
+func TestRuntimeHistoryRangeEndsOnCoreClock(t *testing.T) {
+	service := &runtimeHistoryFixture{capabilities: historyCapabilities(), err: runtimehistory.ErrUnavailable}
+	handler, _, _ := adminTestHandler(t, historyWith(service))
+	before := time.Now()
+	runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?range=6h")
+	after := time.Now()
+	step := 3 * time.Minute // 6 hours in 120 buckets
+	got := service.requested
+	if service.calls != 1 || got.End.Unix()%int64(step/time.Second) != 0 || !got.End.After(before.Add(-step)) || got.End.After(after) ||
+		!got.Start.Equal(got.End.Add(-6*time.Hour)) || got.MaxPoints != 120 {
+		t.Fatalf("range %v-%v (%d points) does not end at Core's last complete bucket between %v and %v", got.Start, got.End, got.MaxPoints, before, after)
 	}
 }
 
@@ -97,7 +117,7 @@ func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 	handler, _, _ := adminTestHandler(t, historyWith(service))
 	sessionID := uuid.NewString()
 	for _, query := range []string{
-		"", "?start=1", "?start=2&end=1", "?start=x&end=2", "?start=1&end=2&provider=docker", "?start=1&start=1&end=2", "?start=1&end=2&max_points=x", "?start=1&end=2&max_points=1", "?start=1&end=2&max_points=1001", "?start=1&end=90002", "?start=1&end=9223372036854775807",
+		"?range=", "?range=2h", "?range=7d", "?range=1h&range=1h", "?range=1h&provider=docker", "?range=1h&max_points=60", "?start=1&end=2",
 	} {
 		response := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-history"+query)
 		if response.Code != http.StatusBadRequest {
@@ -108,13 +128,12 @@ func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 		t.Fatalf("unsafe query reached history service %d times", service.calls)
 	}
 
-	now := time.Now().UTC().Truncate(time.Second)
-	path := adminSessionsPath + sessionID + "/runtime-history?start=" + timeString(now.Add(-time.Hour)) + "&end=" + timeString(now)
+	path := adminSessionsPath + sessionID + "/runtime-history?range=1h"
 	for _, tc := range []struct {
 		err  error
 		code int
 	}{
-		{runtimehistory.ErrInvalidRange, http.StatusBadRequest},
+		{runtimehistory.ErrInvalidRange, http.StatusInternalServerError},
 		{runtimehistory.ErrUnsupported, http.StatusConflict},
 		{runtimehistory.ErrUnavailable, http.StatusServiceUnavailable},
 		{runtimehistory.ErrInvalidResult, http.StatusServiceUnavailable},
@@ -127,7 +146,6 @@ func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 		}
 	}
 	service.err = nil
-	service.response = runtimehistory.Response{}
 	response := runtimeObservationRequest(handler, path)
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("malformed history response returned %d: %s", response.Code, response.Body)
@@ -135,20 +153,10 @@ func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 }
 
 func TestRuntimeHistoryRejectsMismatchedServiceResponses(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Second)
-	start := now.Add(-time.Hour)
 	sessionID := uuid.NewString()
 	service := &runtimeHistoryFixture{capabilities: historyCapabilities()}
 	handler, _, tenant := adminTestHandler(t, historyWith(service))
-	base := runtimehistory.Response{
-		Capabilities: service.capabilities,
-		Scope: runtimehistory.Scope{
-			TenantID: tenant, SessionID: sessionID, EnvironmentID: uuid.NewString(),
-		},
-		Requested:  runtimehistory.Range{Start: start, End: now, MaxPoints: 60},
-		Resolution: time.Minute, GeneratedAt: now,
-	}
-	path := adminSessionsPath + sessionID + "/runtime-history?start=" + timeString(start) + "&end=" + timeString(now) + "&max_points=60"
+	path := adminSessionsPath + sessionID + "/runtime-history"
 
 	for name, mutate := range map[string]func(*runtimehistory.Response){
 		"tenant":  func(value *runtimehistory.Response) { value.TenantID = uuid.NewString() },
@@ -158,8 +166,17 @@ func TestRuntimeHistoryRejectsMismatchedServiceResponses(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			service.response = base
-			mutate(&service.response)
+			service.respond = func(requested runtimehistory.Range) runtimehistory.Response {
+				value := runtimehistory.Response{
+					Capabilities: service.capabilities,
+					Scope: runtimehistory.Scope{
+						TenantID: tenant, SessionID: sessionID, EnvironmentID: uuid.NewString(),
+					},
+					Requested: requested, Resolution: 30 * time.Second, GeneratedAt: requested.End,
+				}
+				mutate(&value)
+				return value
+			}
 			response := runtimeObservationRequest(handler, path)
 			if response.Code != http.StatusServiceUnavailable {
 				t.Fatalf("mismatched %s response returned %d: %s", name, response.Code, response.Body)
@@ -173,8 +190,7 @@ func TestRuntimeHistoryDefaultPointBudgetRespectsCapabilities(t *testing.T) {
 	capabilities.MaximumPoints = 60
 	service := &runtimeHistoryFixture{capabilities: capabilities, err: runtimehistory.ErrUnavailable}
 	handler, _, _ := adminTestHandler(t, historyWith(service))
-	now := time.Now().UTC().Truncate(time.Second)
-	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history?start="+timeString(now.Add(-time.Hour))+"&end="+timeString(now))
+	response := runtimeObservationRequest(handler, adminSessionsPath+uuid.NewString()+"/runtime-history")
 	if response.Code != http.StatusServiceUnavailable || service.calls != 1 || service.requested.MaxPoints != 60 {
 		t.Fatalf("default point budget ignored capabilities: status=%d calls=%d requested=%+v", response.Code, service.calls, service.requested)
 	}
@@ -202,5 +218,3 @@ func TestRuntimeHistoryExpectedCoverageUsesOverflowSafeCeiling(t *testing.T) {
 		t.Fatalf("unsafe expected sample ceiling: count=%d err=%v", response.Coverage.ExpectedSampleCount, err)
 	}
 }
-
-func timeString(value time.Time) string { return fmt.Sprintf("%d", value.Unix()) }

@@ -304,6 +304,8 @@ export const metrics = {
       memoryLimit: "配额上限",
       historyUnavailable: "运行时历史不可用。",
       historyFailed: "无法读取运行时历史。{{reason}}",
+      historyBudget: "图表最多覆盖 {{limit}} 个 Session。",
+      historyMixed: "各 Session 返回的时间桶宽度不一致。",
     },
     runtimeMeta: "{{n}} 个 · CPU {{cpu}} · 内存 {{memory}}",
     runtimeMetaSuspended: "{{n}} 个 · {{sleeping}} 个挂起 · CPU {{cpu}} · 内存 {{memory}}",
