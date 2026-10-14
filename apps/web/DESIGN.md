@@ -80,7 +80,6 @@ rounded:
   control-inner: "3px"
   segment: "8px"
   tooltip: "8px"
-  popover: "14px"
   frame: "6px"
   window: "8px"
   pill: "999px"

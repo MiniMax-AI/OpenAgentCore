@@ -42,6 +42,9 @@ test("hides the retained limit when the provider declares no suspension support"
 
 
 test("edits deployment idle time without changing generation", async ({ page, request }) => {
+  // Settings shows the deployment only; Nodes reads the node inventory.
+  const nodeReads: string[] = [];
+  page.on("request", (sent) => { if (new URL(sent.url()).pathname.startsWith("/core/v1/sandbox/nodes")) nodeReads.push(sent.url()); });
   await openConsole(page, request, "settings?id=sandbox");
   const deployment = await setDeployment(request, { suspension: { idle_seconds: 300, retention_seconds: 86400 } });
   await setDeployment(request, { provider: "microsandbox", specification: { ...deployment.specification!, resources: { ...deployment.specification!.resources, root_disk_mib: 8192, environment_disk_mib: 8192 } } });
@@ -62,4 +65,5 @@ test("edits deployment idle time without changing generation", async ({ page, re
   await page.reload();
   await expect(idle).toHaveValue("60");
   expect((await writes(request)).filter((write) => write === "PATCH /core/v1/sandbox/deployment")).toHaveLength(1);
+  expect(nodeReads).toEqual([]);
 });

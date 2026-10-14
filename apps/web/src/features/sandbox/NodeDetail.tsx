@@ -83,7 +83,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
           <Kpi label={t("Active / limit")} help={t("Sandboxes Core has placed on this node, against the most it places here at once.")} value={`${count(node.active)} / ${count(node.max_active)}`} />
           <Kpi label={t("Running")} value={reporting ? count(node.running) : MISSING} />
           {suspends ? <Kpi label={t("Suspended")} help={t("Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.")} value={count(suspendedSandboxes(node))} /> : null}
-          {suspends ? <Kpi label={t("Retained / limit")} help={t("The most sandboxes this node keeps, running and suspended together. A suspended one resumes here on its next Turn.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
+          {suspends ? <Kpi label={t("Retained / limit")} help={t("The most sandboxes this node holds at once: starting, running and suspended.")} value={`${count(node.retained)} / ${count(node.max_retained)}`} /> : null}
           {suspends ? <Kpi label={t("Snapshots")} value={reporting ? count(node.snapshots) : MISSING} /> : null}
           <Kpi label={t("Reserved")} value={count(node.reserved)} />
           <Kpi label={t("Cleanup pending")} help={t("Sandboxes released on this node that it has not removed yet.")} tone={node.cleanup_pending > 0 ? "warning" : undefined} value={count(node.cleanup_pending)} />

@@ -231,7 +231,7 @@ test("a different E2B team leaves the committed configuration intact and require
 });
 
 
-test("uncertain configuration refresh and inventory retry preserve a draft until its generation changes", async ({ page, request }) => {
+test("uncertain configuration refresh preserves a draft until its generation changes", async ({ page, request }) => {
   await openConsole(page, request, "settings?id=sandbox");
   await expect(rollout(page)).toBeVisible();
   const initial = await deploymentRead(page);
@@ -246,26 +246,15 @@ test("uncertain configuration refresh and inventory retry preserve a draft until
   const result = await saveConfiguration(page);
   expect(result.response.status()).toBe(503);
   expect(result.input.expected_generation).toBe(initial.generation);
-  let failInventory = true;
-  await page.route("**/core/v1/sandbox/nodes", (route) => failInventory
-    ? route.fulfill({ status: 503, json: { error: { type: "server_error", code: null, message: "Node inventory unavailable.", param: null } } })
-    : route.continue());
   await expect(edit).toContainText("The sandbox service is unavailable. Refresh to check the current state.");
   await expect(edit).toContainText("Refresh sandbox state to confirm whether the change was saved before submitting again.");
-  const failedInventory = page.waitForResponse((response) => response.url().endsWith("/sandbox/nodes") && response.status() === 503);
+  const refreshed = page.waitForResponse((response) => response.request().method() === "GET" && response.url().endsWith(deploymentPath) && response.ok());
   await edit.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
-  await failedInventory;
-  // Configuration stays authoritative even when the independent node inventory fails.
+  await refreshed;
+  // The confirmed generation is unchanged, so the draft stays for a deliberate save.
   await expect(wizard.getByRole("heading", { name: "Review and save", exact: true })).toBeVisible();
   await expect(fact(wizard, "Each sandbox")).toHaveText(draftSize);
   expect((await deploymentRead(page)).generation).toBe(initial.generation);
-  await expect(wizard.getByRole("button", { name: "Save configuration", exact: true })).toBeEnabled();
-  expect(await writes(request)).toEqual([`PUT ${deploymentPath}`]);
-  failInventory = false;
-  const inventoryRecovered = page.waitForResponse((response) => response.url().endsWith("/sandbox/nodes") && response.ok());
-  await edit.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
-  await inventoryRecovered;
-  await expect(fact(wizard, "Each sandbox")).toHaveText(draftSize);
   await expect(wizard.getByRole("button", { name: "Save configuration", exact: true })).toBeEnabled();
   expect(await writes(request)).toEqual([`PUT ${deploymentPath}`]);
   await setDeployment(request, { generation: initial.generation + 1 });

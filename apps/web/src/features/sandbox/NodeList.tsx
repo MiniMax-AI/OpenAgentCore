@@ -81,7 +81,7 @@ export function NodeList({ nodes, allocations, coreUrl, stale, disabled, suspend
             <th scope="col">{t("Status")}</th>
             <th scope="col" className="numeric">{t("Active / limit")}</th>
             {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Suspended")}<HelpTip>{t("Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.")}</HelpTip></span></th> : null}
-            {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Retained / limit")}<HelpTip>{t("The most sandboxes this node keeps, running and suspended together. A suspended one resumes here on its next Turn.")}</HelpTip></span></th> : null}
+            {suspends ? <th scope="col" className="numeric"><span className="column-help">{t("Retained / limit")}<HelpTip>{t("The most sandboxes this node holds at once: starting, running and suspended.")}</HelpTip></span></th> : null}
             <th scope="col" className="numeric">{t("Last seen")}</th>
             <th scope="col">{t("Added")}</th>
             <th scope="col"><span className="visually-hidden">{t("Actions")}</span></th>

@@ -9,7 +9,6 @@ import { sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-la
 import { Fact } from "../system/Fact";
 import { sandboxAdmin } from "./sandbox-queries";
 import { writeSandboxDeployment } from "./sandbox-deployment-write";
-import { useSandboxPageState } from "./use-sandbox-page-state";
 
 function RetentionHelp({ deployment }: { deployment: SandboxDeployment }) {
   const { t } = useTranslation("sandbox");
@@ -17,13 +16,11 @@ function RetentionHelp({ deployment }: { deployment: SandboxDeployment }) {
 }
 
 /** Settings edits the deployment-wide idle time; each node's limits are on Nodes. */
-export function SuspensionSettings() {
+export function SuspensionSettings({ deployment, disabled }: { deployment: SandboxDeployment; disabled: boolean }) {
   const { t, i18n } = useTranslation("sandbox");
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
-  const { snapshot, loading, busy, setupNeedsRefresh, fresh } = useSandboxPageState();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const disabled = busy || loading || !fresh || setupNeedsRefresh || Boolean(snapshot?.deployment.reset);
   async function save(seconds: number) {
     if (disabled) return false;
     try {
@@ -33,8 +30,7 @@ export function SuspensionSettings() {
       return false;
     }
   }
-  if (!snapshot?.deployment.provider) return null;
-  return <SuspensionForm deployment={snapshot.deployment} disabled={disabled} onSave={save} />;
+  return <SuspensionForm deployment={deployment} disabled={disabled} onSave={save} />;
 }
 
 /** The idle time form and Core's read-only snapshot retention. */

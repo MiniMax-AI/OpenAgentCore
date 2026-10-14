@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 1e5c6491ca2db026042091d5510db1277e2abf9519fda9adf9f89e83ac507251
+source_hash: 6a336cfbec02e451ab41d5addb9744755ee60ef11da5121e0ab7abee61e45244
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -21,12 +21,12 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | Monitor | Overview | 服务状态、运行中的 Session、沙箱槽位和待处理工作；24 小时 Session 活动；以拓扑展示 Core 与节点，各自打开对应页面；需要处理：过去 24 小时内活跃的失败或等待调用方的 Session，每行附一行原因；按 Project 统计的用量 |
 | Monitor | Core metrics | Core 能否运行 Turn：执行槽位、Turn 队列及其 p95 等待时间、被中断的 Turn、已连接守护进程、数据库延迟、CPU 与常驻内存及其限制、后台任务；Go 堆、goroutine 和数据库连接池位于 **Diagnostics** |
 | Monitor | Agent metrics | 1 小时、6 小时、24 小时或 7 天的请求、错误、耗时、token、模型、工具、Agent 和 API 密钥 |
-| Monitor | Sandbox metrics | 各 Project 托管 Runtime 随时间的变化，显示运行中数量与总数及其 CPU、内存观测；支持时另行显示 **Recorded compute** 生命周期状态；E2B 部署还显示 Core 在 E2B 云中持有的沙箱 |
+| Monitor | Sandbox metrics | 各 Project 托管 Runtime 随时间的变化，显示活跃数量与总数及其 CPU、内存观测；支持时另行显示 **Recorded compute** 生命周期状态；E2B 部署还显示 Core 在 E2B 云中持有的沙箱 |
 | Monitor | Request log | 到达 Core 的近期 HTTP 请求、状态、耗时和安全错误码；[范围及保留方式](../../../contracts/agents-api/zh/admin-api.md#request-log) |
 | Monitor | Session log | 全部 Session；各 Session 的只读对话、跟踪、Turn、失败分类原因及下一步操作；自托管 Session 页面还管理执行器凭据并提供主机连接命令 |
 | Resources | Agents、Environment templates、Skills、Files、Vaults | 检查和允许的删除操作，显示各资源所属 Project 及创建密钥 |
 | Platform | Projects and keys | 创建、重命名和归档 Project；签发与撤销密钥；各 Project 的用量、写入历史和 API 调用方法 |
-| Platform | Nodes | 查看和移除 microsandbox 或 Docker 节点；各节点的就绪状态、容量和分配，以及支持时的自动挂起策略、活跃与保留名额、各计算阶段的已用时间 |
+| Platform | Nodes | 添加、编辑和移除 microsandbox 或 Docker 节点；各节点的就绪状态、活跃与保留上限、主机 CPU 与内存及其历史、可用磁盘，以及分配及其在各计算阶段的已用时间 |
 | Platform | Settings | **Sandbox and scheduling**、**Workspace storage**、**Models and credentials** 和 **Service and deployment**；参阅[配置](../configuration.md#runtime-settings-web) |
 
 缺失数据展示为缺失（—），不会当作零。[控制台 API 使用](console-api-usage.md)列出各页面读取内容及统计边界。

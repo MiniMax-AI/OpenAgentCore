@@ -204,6 +204,7 @@ export const metrics = {
       build: { ready: "就绪", notReady: "未就绪", unknown: "未知" },
     },
     node: "节点",
+    openNode: "打开节点 {{name}}",
     status: "状态",
     notSetUpTitle: "还没有设置沙箱",
     setUp: "设置沙箱",
@@ -249,8 +250,8 @@ export const metrics = {
       historyBudget: "图表最多覆盖 {{limit}} 个 Session。",
       historyMixed: "各 Session 返回的时间桶宽度不一致。",
     },
-    runtimeMeta: "{{n}} 个中 {{running}} 个运行中 · CPU {{cpu}} · 内存 {{memory}}",
-    runtimeMetaSuspended: "{{n}} 个中 {{running}} 个运行中 · {{sleeping}} 个挂起 · CPU {{cpu}} · 内存 {{memory}}",
+    runtimeMeta: "{{n}} 个中 {{active}} 个活跃 · CPU {{cpu}} · 内存 {{memory}}",
+    runtimeMetaSuspended: "{{n}} 个中 {{active}} 个活跃 · {{sleeping}} 个挂起 · CPU {{cpu}} · 内存 {{memory}}",
     reason: {
       allocation_pending: "等待分配",
       runtime_not_running: "未运行",

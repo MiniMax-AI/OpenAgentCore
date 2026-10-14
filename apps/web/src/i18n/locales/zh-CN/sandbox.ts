@@ -117,7 +117,7 @@ export const sandbox = {
   "Change provider or resources": "修改运行后端或资源",
   "Sandbox backend": "沙箱后端",
   "Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.": "Core 将这些沙箱记录为已挂起。下一个 Turn 会在兼容容量可用时请求恢复。它们占用保留名额，不占活跃名额。",
-  "The most sandboxes this node keeps, running and suspended together. A suspended one resumes here on its next Turn.": "这台节点最多保留的沙箱数，运行中的和挂起的合计。挂起的沙箱在下一个 Turn 时在这里恢复。",
+  "The most sandboxes this node holds at once: starting, running and suspended.": "这台节点同时最多容纳的沙箱数，包括启动中、运行中和已挂起的。",
   "Edit node": "编辑节点",
   "Name": "名称",
   "Save": "保存",

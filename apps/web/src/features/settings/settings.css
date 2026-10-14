@@ -158,7 +158,6 @@
 
 .settings-table .data-table tbody tr:last-child > * { border-bottom: 0; }
 .settings-table .data-table tbody th { font-weight: 500; text-align: left; }
-.settings-table .data-table .settings-table-action { width: 1%; text-align: right; white-space: nowrap; }
 
 /* The irreversible operation closes the page, apart from the settings above it. */
 .settings-danger {

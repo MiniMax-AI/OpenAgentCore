@@ -26,7 +26,8 @@ test("shows the deployment's health on Overview and each monitor page", async ({
   await page.getByRole("button", { name: "Agent metrics" }).click();
   await expect(page.getByLabel("Agent run summary")).toContainText("Requests");
   await page.getByRole("button", { name: "Sandbox metrics" }).click();
-  await expect(page.getByRole("table", { name: "Hosted Runtimes" })).toContainText("core-01");
+  await page.getByRole("table", { name: "Hosted Runtimes" }).getByRole("button", { name: "Open node core-01" }).first().click();
+  await expect(page.getByRole("heading", { name: "core-01", level: 1 })).toBeVisible();
 });
 
 test("opens a Session's conversation from the Session log, read-only", async ({ page, request }) => {

@@ -204,6 +204,7 @@ export const metrics = {
       build: { ready: "Ready", notReady: "Not ready", unknown: "Unknown" },
     },
     node: "Node",
+    openNode: "Open node {{name}}",
     status: "Status",
     notSetUpTitle: "Sandboxes are not set up yet",
     setUp: "Set up sandboxes",
@@ -249,8 +250,8 @@ export const metrics = {
       historyBudget: "Charts cover at most {{limit}} Sessions.",
       historyMixed: "Sessions returned different bucket widths.",
     },
-    runtimeMeta: "{{running}} of {{n}} running · CPU {{cpu}} · memory {{memory}}",
-    runtimeMetaSuspended: "{{running}} of {{n}} running · {{sleeping}} suspended · CPU {{cpu}} · memory {{memory}}",
+    runtimeMeta: "{{active}} of {{n}} active · CPU {{cpu}} · memory {{memory}}",
+    runtimeMetaSuspended: "{{active}} of {{n}} active · {{sleeping}} suspended · CPU {{cpu}} · memory {{memory}}",
     reason: {
       allocation_pending: "Allocation pending",
       runtime_not_running: "Not running",

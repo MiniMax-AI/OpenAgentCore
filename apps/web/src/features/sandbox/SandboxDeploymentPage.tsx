@@ -11,7 +11,7 @@ import { useFailureToast, useToast } from "../../components/Toast";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { sandboxConfigurationRejection, sandboxRequestError, sandboxWriteUncertain } from "../../lib/sandbox-labels";
 import { sandboxAdmin } from "./sandbox-queries";
-import { useSandboxPageState } from "./use-sandbox-page-state";
+import { useSandboxDeploymentState } from "./use-sandbox-page-state";
 import { sandboxWriteOwnershipQuery } from "./sandbox-write-ownership";
 import { writeSandboxDeployment } from "./sandbox-deployment-write";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
@@ -46,7 +46,7 @@ function DeploymentConfiguration() {
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { navigate } = useConsoleNavigation();
   const queryClient = useQueryClient();
-  const { deploymentQuery, snapshot, installation, loading, busy, setupNeedsRefresh, confirmed, fresh, refresh, configurationKey } = useSandboxPageState();
+  const { deploymentQuery, deployment, installation, loading, busy, setupNeedsRefresh, confirmed, fresh, refresh, configurationKey } = useSandboxDeploymentState();
   const error: unknown = deploymentQuery.error;
   const toast = useToast();
   const [writeFailure, setWriteFailure] = useState<{ error: unknown; open: boolean; editing: boolean } | null>(null);
@@ -61,7 +61,7 @@ function DeploymentConfiguration() {
       if (result.isError && result.data) toast.show(t("Refresh failed; showing the last loaded state."), { tone: "error", detail: sandboxRequestError(result.error, locale), key: "sandbox-read" });
     });
   };
-  useFailureToast(snapshot && deploymentQuery.isError ? sandboxRequestError(deploymentQuery.error, locale) : null, t("Refresh failed; showing the last loaded state."), "sandbox-read");
+  useFailureToast(deployment && deploymentQuery.isError ? sandboxRequestError(deploymentQuery.error, locale) : null, t("Refresh failed; showing the last loaded state."), "sandbox-read");
 
   // The shared mutation owner outlives this page. Leaving only suppresses local UI effects.
   async function changeDeployment(operation: (signal: AbortSignal) => Promise<SandboxDeployment>, fromWizard = false, editing = false): Promise<boolean> {
@@ -69,8 +69,8 @@ function DeploymentConfiguration() {
     if (!controller || busy || loading || setupNeedsRefresh || !fresh) return false;
     setWriteFailure(null);
     try {
-      const deployment = await writeSandboxDeployment(queryClient, operation);
-      return deployment !== null && !controller.signal.aborted;
+      const saved = await writeSandboxDeployment(queryClient, operation);
+      return saved !== null && !controller.signal.aborted;
     } catch (error) {
       if (!controller.signal.aborted) {
         if (fromWizard && sandboxConfigurationRejection(error) !== null) throw error;
@@ -84,7 +84,7 @@ function DeploymentConfiguration() {
     if (await changeDeployment((signal) => sandboxAdmin.initializeDeployment(input, { signal }), true) && deploymentContract.providers[input.provider].mode === "nodes" && !installation.data?.local_only) navigate("nodes", {}, "add-node");
   }
   async function update(input: UpdateSandboxDeployment) {
-    return changeDeployment((signal) => sandboxAdmin.updateDeployment({ ...input, expected_generation: snapshot!.deployment.generation }, { signal }), true, true);
+    return changeDeployment((signal) => sandboxAdmin.updateDeployment({ ...input, expected_generation: deployment!.generation }, { signal }), true, true);
   }
   const startReset = (input: StartSandboxReset) => changeDeployment((signal) => sandboxAdmin.startReset(input, { signal }));
   const cancelReset = (expectedGeneration: number) => changeDeployment((signal) => sandboxAdmin.cancelReset(expectedGeneration, { signal }));
@@ -92,28 +92,28 @@ function DeploymentConfiguration() {
     <p>{sandboxRequestError(writeFailure.error, locale)}</p>
     <p>{t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}</p>
   </div> : null;
-  const configured = snapshot?.deployment.provider || snapshot?.deployment.reset ? snapshot.deployment : null;
+  const configured = deployment?.provider || deployment?.reset ? deployment : null;
   const disabled = busy || loading || !fresh || setupNeedsRefresh;
   const reset = configured ? <SandboxResetControls key={`reset:${configurationKey}`} deployment={configured} disabled={disabled} stale={!confirmed} onStart={startReset} onCancel={cancelReset} /> : null;
   const sections = [
     configured ? <SandboxDeploymentSettings key={configurationKey} deployment={configured} fresh={confirmed} disabled={disabled} onUpdate={update} onRefresh={refreshByUser} refreshing={loading} pending={busy} writeFailure={writeFailure?.editing ? unknownWrite : null} /> : null,
-    <SuspensionSettings key="suspension" />,
+    configured?.provider ? <SuspensionSettings key="suspension" deployment={configured} disabled={disabled || Boolean(configured.reset)} /> : null,
   ];
 
   return <>
     <DeploymentHeader actions={<>
-      {snapshot?.deployment.mode === "nodes" ? <button type="button" className="button outline" onClick={() => navigate("nodes")}>{tNavigation("nodes")}</button> : null}
+      {deployment?.mode === "nodes" ? <button type="button" className="button outline" onClick={() => navigate("nodes")}>{tNavigation("nodes")}</button> : null}
       <RefreshButton onClick={refreshByUser} refreshing={loading} disabled={busy} label={t("Refresh sandbox state")} />
     </>} />
     <SettingsTabs active="sandbox" />
     <div className="console-page-body sandbox-content settings-body">
       <InstallationNotice installation={installation.data} />
-      {!snapshot && (loading || deploymentQuery.isPending) ? <TableSkeleton label={t("Loading sandbox state…")} rows={3} columns={2} /> : null}
-      {snapshot && deploymentQuery.isError ? <p role="alert" className="sandbox-error">{t("Refresh failed; showing the last loaded state.")}</p> : null}
+      {!deployment && (loading || deploymentQuery.isPending) ? <TableSkeleton label={t("Loading sandbox state…")} rows={3} columns={2} /> : null}
+      {deployment && deploymentQuery.isError ? <p role="alert" className="sandbox-error">{t("Refresh failed; showing the last loaded state.")}</p> : null}
       {setupNeedsRefresh ? <p role="alert" className="sandbox-error">{t("Refresh sandbox state to confirm whether the change was saved before submitting again.")}</p> : null}
       {busy ? <span role="status">{t("Saving sandbox change…")}</span> : null}
-      {!snapshot && error !== null ? <ErrorState title={t("Sandbox state couldn't be read")} detail={sandboxRequestError(error, locale)} onRetry={refresh} /> : null}
-      {snapshot && !configured ? <SandboxSetupWizard key={configurationKey} coreUrl={snapshot.deployment.core_url} expectedGeneration={snapshot.deployment.generation} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
+      {!deployment && error !== null ? <ErrorState title={t("Sandbox state couldn't be read")} detail={sandboxRequestError(error, locale)} onRetry={refresh} /> : null}
+      {deployment && !configured ? <SandboxSetupWizard key={configurationKey} coreUrl={deployment.core_url} expectedGeneration={deployment.generation} disabled={busy || loading || setupNeedsRefresh || error !== null} onSubmit={initialize} /> : null}
       {configured?.reset ? [reset, ...sections] : [...sections, reset]}
     </div>
     <ErrorDialog action={{ label: t("Refresh sandbox state"), onClick: refreshByUser }} open={Boolean(writeFailure?.open && !writeFailure.editing)} title={t("Couldn't confirm the sandbox change")} onClose={() => setWriteFailure((failure) => failure && { ...failure, open: false })}>

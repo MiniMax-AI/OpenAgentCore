@@ -1,14 +1,7 @@
-/* Metrics pages reuse the console grammar; the embedded runtime trend panel
-   is flattened so it reads as part of the page instead of a nested card. */
+/* Metrics pages reuse the console grammar. */
 
 .metrics-page .console-page-header .segmented {
   flex: 0 0 auto;
-}
-
-.runtime-embed {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 /* The Runtime list belongs to the section; its toolbar sits a step below the trends. */
@@ -43,12 +36,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.data-table .numeric-warning {
-  color: var(--orange);
-}
-
-
-/* A node or sandbox dialog: its facts, then its charts. */
+/* A sandbox dialog: its facts, then its charts. */
 .metrics-dialog {
   display: grid;
   gap: 24px;
@@ -81,8 +69,6 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-
-.metrics-node-status { display: grid; gap: 4px; }
 
 /* Core process internals stay collapsed below the operator's figures. */
 .core-diagnostics > summary {

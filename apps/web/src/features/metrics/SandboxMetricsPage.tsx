@@ -239,7 +239,7 @@ function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: R
         {usage?.hosted ? (
           <span className="section-meta">
             {t(fleet?.deployment.suspension ? "sandbox.runtimeMetaSuspended" : "sandbox.runtimeMeta", {
-              running: formatInteger(usage.active, locale),
+              active: formatInteger(usage.active, locale),
               n: formatInteger(usage.hosted, locale),
               sleeping: formatInteger(usage.sleeping, locale),
               cpu: usage.cpuUsageCores === null ? MISSING : t("sandbox.cores", { value: formatCores(usage.cpuUsageCores, locale) }),
@@ -316,7 +316,7 @@ function RuntimeTable({ rows, showProject, showNode, showCompute, onOpen }: { ro
                     <NameCell name={sessionTitle(session)} id={observation.session_id} fallback={tCommon("untitledSession")} onOpen={open} openLabel={t("sandbox.runtimeDialog.openLabel", { name: sessionTitle(session) ?? observation.session_id })} />
                   </th>
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
-                  {showNode ? <td>{row.node ? row.node.name || row.node.id : <span className="table-muted">{MISSING}</span>}</td> : null}
+                  {showNode ? <td><NodeLink node={row.node} /></td> : null}
                   <td><StatusDot tone={lifecycleTone(row)} label={lifecycleLabel(row, t)} /></td>
                   {showCompute ? <td>{row.allocation ? sandboxStateLabel(row.allocation.compute_phase, locale?.startsWith("zh") ? "zh-CN" : "en") : MISSING}</td> : null}
                   <td>
@@ -356,6 +356,15 @@ function RuntimeTable({ rows, showProject, showNode, showCompute, onOpen }: { ro
   );
 }
 
+/** A Runtime's host, opening its page on Nodes. */
+function NodeLink({ node }: { node: HostedRuntimeRow["node"] }) {
+  const { t } = useTranslation("metrics");
+  const { navigate } = useConsoleNavigation();
+  if (!node) return <span className="table-muted">{MISSING}</span>;
+  const name = node.name || node.id;
+  return <button type="button" className="table-link" aria-label={t("sandbox.openNode", { name })} onClick={(event) => { event.stopPropagation(); navigate("nodes", { id: node.id }); }}><strong>{name}</strong></button>;
+}
+
 /** Keeps the last value on screen while a dialog closes. */
 function useLast<T>(value: T | null): T | null {
   const last = useRef(value);
@@ -383,7 +392,7 @@ function RuntimeDialog({ row, showNode, showCompute, onClose }: { row: HostedRun
         <div className="metrics-dialog">
           <dl className="resource-facts" aria-label={t("sandbox.runtimeDialog.facts")}>
             <div><dt>{tCommon("project.column")}</dt><dd><ProjectName project={byId.get(observation.project_id)} /></dd></div>
-            {showNode ? <div><dt>{t("sandbox.node")}</dt><dd>{shown.node ? shown.node.name || shown.node.id : MISSING}</dd></div> : null}
+            {showNode ? <div><dt>{t("sandbox.node")}</dt><dd><NodeLink node={shown.node} /></dd></div> : null}
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={lifecycleTone(shown)} label={lifecycleLabel(shown, t)} /></dd></div>
             {showCompute && shown.allocation ? <div><dt>{t("sandbox.recordedCompute")}</dt><dd>{sandboxStateLabel(shown.allocation.compute_phase, i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en")}</dd></div> : null}
             <div><dt>{t("sandbox.configurationGeneration")}</dt><dd>{shown.deploymentGeneration ?? MISSING}</dd></div>
