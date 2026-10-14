@@ -72,9 +72,12 @@ type SessionPlan struct {
 // The codex binary itself is resolved via PATH only.
 func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
 	plan := SessionPlan{
-		// Harnesses run unattended: Codex never offers its ask-the-user tool.
-		ExtraConfig: [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
-		Cleanup:     func() {},
+		// Harnesses run unattended: Codex never offers its ask-the-user tool,
+		// and an unreachable model host fails the Turn after the provider's
+		// bounded retries instead of waiting for the network forever.
+		ExtraConfig:     [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
+		DisableFeatures: []string{"unbounded_connection_retries"},
+		Cleanup:         func() {},
 	}
 
 	nativeConfig, err := harnessconfiguration.Configuration().PrepareHarnessConfig(opts)

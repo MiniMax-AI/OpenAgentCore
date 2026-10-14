@@ -37,6 +37,7 @@ In the workspace profile, the frozen installation's Skills are linked into the S
 - MiniMax Code reports no usage: ACP context occupancy and cumulative cost are not per-Turn usage.
 - Workspace `workspace_bash` calls become command observations with the command text, output text and status; exit code and duration stay unknown. Native task and Skill utilities produce no public Items.
 - The adapter attaches no [native failure classification](../../../../docs/runtime-protocol.md#native-failure-classification) to its errors: MiniMax Code `0.4.12` reports a model provider rejection over ACP as JSON-RPC internal error `-32603` whose only detail is prose, so these failures stay unclassified.
+- MiniMax Code `0.4.12` retries a failed model request up to 5 times and stops retrying after 120 seconds, so a model host that does not resolve fails the Turn, unclassified, in about two minutes. Its retries stay inside MiniMax Code and never reach ACP.
 
 ## Runtime image
 

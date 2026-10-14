@@ -1,7 +1,7 @@
 ---
 title: "添加 Harness"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: f943975ae46fd7919700890d4f405c9a9e15385c3ab2b2e742098dcc2a2a8c20
+source_hash: a1db7d464a42cc82bbe285b12a3290d76d0535c5a6a8fb2563586631c6b9136c
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
@@ -249,6 +249,8 @@ daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启
 所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
 
 适配器以启动用户的权限无人值守运行原生工具，Harness 从不询问人类。Codex 使用批准策略 `never` 和完全访问权限，在该策略下 Codex 自行处理 MCP elicitation，不会发给客户端；适配器还禁用其阻塞式 `request_user_input` 工具。Claude 通过适配器的工具回调运行，回调直接允许或拒绝、不会询问，使用原生 `default` 权限模式并禁用 SDK sandbox。MiniMax 绕过权限并禁用 sandbox；适配器禁用 `askUser`、不声明 elicitation，并以 ACP `cancelled` 结果答复 `session/request_permission`，MiniMax 将其视为拒绝。原生权限或问题请求都不会到达 Core：需要人工介入时通过 function 工具完成，Session 读取 [`requires_action`](./sessions-events.md#session-status)，由应用提交 function 结果。不要添加权限 profile、bubblewrap 包装器或原生 sandbox 设置；每种 Environment 来源都只有一条执行路径。资源路径属于操作员配置，而不是权限边界。
+
+模型主机不可达时不能让 Turn 一直挂起。适配器通过原生设置让 Harness 自身的连接重试保持有界；Harness 以结构化数据报告最终连接错误时，该错误归为 `connection_failed`（[原生失败分类](../../../docs/zh/runtime-protocol.md#native-failure-classification)）。Core 不另设模型超时。各适配器指南写明其 Harness 的上限。
 
 网络准入遵循 [Restricted network](environments.md#restricted-network)。
 

@@ -248,6 +248,8 @@ Owned output pipes stay readable after the leader exits. Consumers drain stdout 
 
 Adapters run native tools unattended with the launching user's permissions, and a Harness never asks a human. Codex runs with approval policy `never`, under which it settles MCP elicitation itself without reaching the client, and with full access; the adapter also disables its blocking `request_user_input` tool. Claude runs through the adapter's tool callback, which allows or denies without asking, in native `default` permission mode with the SDK sandbox disabled. MiniMax runs with bypassed permissions and its sandbox disabled; the adapter disables `askUser`, advertises no elicitation and answers `session/request_permission` with the ACP `cancelled` outcome, which MiniMax treats as a denial. No native permission or question request reaches Core: a human in the loop goes through a function tool, the Session reads [`requires_action`](./sessions-events.md#session-status) and the application submits the function result. Do not add permission profiles, bubblewrap wrappers or native sandbox settings; there is one execution path for every Environment origin. Resource paths are operator configuration, not a permission boundary.
 
+An unreachable model host must not hold a Turn open. The adapter keeps the Harness's own connection retries bounded through native settings, and the Harness's final connection error becomes `connection_failed` when the Harness reports it as structured data ([native failure classification](../../docs/runtime-protocol.md#native-failure-classification)). Core adds no model timeout of its own. Each adapter guide states its Harness's bound.
+
 Network admission follows [Restricted network](./environments.md#restricted-network).
 
 ## Native references

@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 56719d358e65d838d05bfb60b902a8d8f0803f833048be4a7c56c4731776ed0a
+source_hash: 00b2655a0a6af8e210696b894a9dbce17590a91ff964665be0ecc4787c0accf6
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -70,11 +70,13 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 | 节点状态 | `/var/lib/oac-node/.oac/nodes/<installation-id>/`：身份、配置和节点文件。microsandbox 在 `/var/lib/oac-node/.oac/m/` 保存镜像和沙箱 |
 | 记录 | `/etc/oac-node/`：安装程序创建或修改的内容，用于重新运行和卸载 |
 | Docker | 一次性导入 Runtime 镜像，以及网络 `oac-node-<installation-id>` |
-| microsandbox 网络策略 | 沙箱仅能访问 Core、主机上的 DNS 和公开地址：无入站连接、不可访问私有网络。私有模型或 MCP 端点需要在节点上修改策略 |
+| microsandbox 网络策略 | 沙箱仅能访问 Core、主机上的 DNS 和公开地址：无入站连接、不可访问私有网络 |
 
 root 只准备账号、组和服务单元；其他操作（包括 Docker 网络）都以 `oac-node` 在没有终端的独立会话中执行。安装程序不安装 Docker、KVM 或软件包，不启动 Docker，不修改设备权限、sudoers、防火墙或 SELinux 设置，也不修改其他账号。
 
 **Docker 模式等同于 root 权限。** 加入 `docker` 组后，`oac-node` 以及任何能控制节点的主体，都可以在主机上执行 root 操作。容器共享主机内核，因此容器逃逸能访问主机。只在沙箱专用主机上添加 Docker 节点。microsandbox 节点只需要 `kvm` 组，每个沙箱运行在独立 microVM 中。
+
+**microsandbox 拦截私有端点。** 沙箱无法访问位于私有地址的模型服务或 MCP 服务器。沙箱通过节点主机的解析器解析域名，DNS 重绑定保护会丢弃任何包含私有地址的应答；因此，主机解析为私有地址的域名在沙箱中完全无法解析，即使它是公开服务，例如云 VPC 解析器后的模型 API。Harness 停止重试后，Turn 随即失败。通过安装程序添加的节点没有更改此行为的设置。可以让主机解析器返回该服务的公开地址，例如在主机的 `/etc/hosts` 中添加条目；或使用不过滤沙箱流量的 Docker 节点；或[手动注册节点](#register-a-node-manually)，在 `network` 策略中为该私有网段添加不带端口的允许规则，因为重绑定保护忽略带端口的规则。
 
 **每台主机只服务一个 Core。** 节点共享 `oac-node` 账号，因此主机只服务一个 Core；第二个 Core 的命令会被拒绝。
 

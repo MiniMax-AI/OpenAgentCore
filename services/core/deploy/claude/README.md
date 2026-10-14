@@ -30,7 +30,10 @@ The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/na
 | `overloaded` | `server_overloaded` |
 | `invalid_request` | `invalid_request` |
 | `model_not_found` | `resource_not_found` |
-| `server_error` | `server_error` |
+| `server_error` with an HTTP status in the result's `api_error_status` | `server_error` |
+| `server_error` whose result has no `api_error_status`: no HTTP response, such as a failed DNS lookup, a refused or reset connection or a timeout | `connection_failed` |
+
+Claude Code `2.1.269` retries a failed model request up to 10 times, with backoff that grows to about 35 seconds, so a model host that does not resolve or refuses connections fails the Turn after about three minutes. The adapter leaves that bound as it is.
 
 `unknown`, `max_output_tokens` and other results stay unclassified. The bridge drops the classification when any other error ends the Turn, when cleanup fails or when no native process ran. The Go adapter keeps it only for the reported failed result of the same native Session, and only after it received the Turn settlement ([`executor_turn.go`](../../../../apps/daemon/internal/agent/claudesdk/executor_turn.go)).
 

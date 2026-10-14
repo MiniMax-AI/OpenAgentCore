@@ -42,10 +42,6 @@ type providerConfig struct {
 	// WireAPI is "responses" (codex Responses API) or "chat" (rejected
 	// upstream since codex-rs 0.140). Empty defaults to "responses".
 	WireAPI string
-	// RequestMaxRetries / StreamMaxRetries map to codex's
-	// request_max_retries / stream_max_retries config keys. 0 omits.
-	RequestMaxRetries int
-	StreamMaxRetries  int
 }
 
 // writeCodexProviderConfig writes (or appends to) <codexHome>/config.toml
@@ -104,13 +100,6 @@ func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
 	b.WriteString("wire_api = ")
 	b.WriteString(tomlQuoteString(wireAPI))
 	b.WriteByte('\n')
-
-	if cfg.RequestMaxRetries > 0 {
-		fmt.Fprintf(&b, "request_max_retries = %d\n", cfg.RequestMaxRetries)
-	}
-	if cfg.StreamMaxRetries > 0 {
-		fmt.Fprintf(&b, "stream_max_retries = %d\n", cfg.StreamMaxRetries)
-	}
 
 	if len(cfg.HTTPHeaders) > 0 {
 		keys := make([]string, 0, len(cfg.HTTPHeaders))

@@ -68,11 +68,13 @@ The proxy applies only to installation downloads. It is not saved in the node's 
 | Node state | `/var/lib/oac-node/.oac/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/oac-node/.oac/m/` |
 | Records | `/etc/oac-node/`: what the installer created or changed, used by reruns and uninstall |
 | Docker | The Runtime image, imported once, and a network `oac-node-<installation-id>` |
-| microsandbox network policy | Sandboxes may reach Core, DNS on the host and public addresses, and nothing else: no inbound connections and no private networks. A private model or MCP endpoint needs a policy change on the node |
+| microsandbox network policy | Sandboxes may reach Core, DNS on the host and public addresses, and nothing else: no inbound connections and no private networks |
 
 Root only prepares the account, the group and the unit; everything else, the Docker network included, runs as `oac-node`, in its own session without a terminal. The installer never installs Docker, KVM or packages, never starts Docker, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts.
 
 **Docker mode is root-equivalent.** Membership in the `docker` group lets `oac-node`, and so anything that controls the node, act as root on the host. Containers also share the host kernel, so a container escape reaches the host. Add Docker nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm` group and run each sandbox in its own microVM.
+
+**microsandbox blocks private endpoints.** A sandbox can't reach a model provider or MCP server at a private address. Sandboxes resolve names through the node host's resolver, and DNS rebind protection discards any answer that contains a private address, so a name that the host resolves to a private address doesn't resolve in the sandbox at all, even for a public service such as a model API behind a cloud VPC resolver. The Turn then fails once the Harness stops retrying. Installer-added nodes have no setting to change this. Make the host's resolver return the service's public addresses, for example with entries in the host's `/etc/hosts`; use a Docker node, which doesn't filter sandbox traffic; or [register the node manually](#register-a-node-manually) with a `network` policy that also allows the private range in a rule without a port, because rebind protection ignores port-scoped rules.
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 

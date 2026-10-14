@@ -18,6 +18,14 @@ test("pinned SDK finite native mapping", () => {
   }
 });
 
+test("a server error without an HTTP status is a connection failure", () => {
+  for (const [status, code] of [[null, "connection_failed"], [502, "server_error"]]) {
+    const f = new NativeFailure();
+    f.observe(assistant("server_error"), "native", ["input"]);
+    assert.equal(f.observe(result({ subtype: "success", api_error_status: status }), "native", ["input"]), code);
+  }
+});
+
 test("classification requires same root, input and unsuccessful terminal result", () => {
   for (const transform of [m=>({...m,parent_tool_use_id:"child"}),m=>({...m,session_id:"other"}),m=>({...m,isReplay:true}),m=>({...m,isSynthetic:true})]) {
     const f = new NativeFailure(); f.observe(transform(assistant("rate_limit")),"native",["input"]);

@@ -65,8 +65,6 @@ func TestWriteCodexProviderConfig_FullProvider(t *testing.T) {
 		QueryParams: map[string]string{
 			"api-version": "2025-04-01-preview",
 		},
-		RequestMaxRetries: 4,
-		StreamMaxRetries:  3,
 	}
 	if err := writeCodexProviderConfig(dir, cfg); err != nil {
 		t.Fatalf("write: %v", err)
@@ -76,8 +74,6 @@ func TestWriteCodexProviderConfig_FullProvider(t *testing.T) {
 		`name = "mygw"`,
 		`base_url = "https://platform-api.example.com/v1"`,
 		`env_key = "OAC_CODEX_PROVIDER_API_KEY"`,
-		`request_max_retries = 4`,
-		`stream_max_retries = 3`,
 		`[model_providers.oac.http_headers]`,
 		`"X-Sub-Module" = "codex-internal"`,
 		`"X-Request-ID" = "abc"`,
@@ -217,6 +213,18 @@ func mustReadFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(b)
+}
+
+// Codex's default unbounded connection retries keep a Turn whose model host
+// is unreachable in progress forever.
+func TestModelConnectionRetriesStayBounded(t *testing.T) {
+	plan, err := BuildSessionPlan(t.TempDir(), "bounded", map[string]any{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(plan.DisableFeatures, "unbounded_connection_retries") {
+		t.Fatal("unbounded connection retries stay enabled")
+	}
 }
 
 func TestProviderCredentialOnlyInNativeLoopEnvironment(t *testing.T) {

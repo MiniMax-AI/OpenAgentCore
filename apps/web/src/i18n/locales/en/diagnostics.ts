@@ -47,7 +47,7 @@ export const diagnostics = {
     request_timeout: "Retry later.",
     context_length_exceeded: "Start a new Session or shorten the input.",
     cyber_policy: "Change the input before sending it again, or start a new Session.",
-    connection_failed: "Check the Base URL of the Session's model provider. Without one set on the Session or its saved Agent, a hosted sandbox Session uses the default in Settings → Models and credentials.",
+    connection_failed: "Check the Base URL of the Session's model provider. Without one set on the Session or its saved Agent, a hosted sandbox Session uses the default in Settings → Models and credentials. Then check that the URL's host resolves and is reachable from the Session's sandbox, or from the host of a self-hosted Session.",
     harness_error: "Core does not show the Harness's own message. Check the model and Harness on the Session page, then the Session's model provider. Without one set on the Session or its saved Agent, a hosted sandbox Session uses the default in Settings → Models and credentials.",
     model_provider_required: "Set a model provider on the Session or its saved Agent. A hosted sandbox Session can also use the default in Settings → Models and credentials.",
     runtime_unavailable: "Retry later. For a self-hosted Session, check Host connection on the Session page; for a hosted sandbox Session, check Settings → Sandbox and scheduling.",

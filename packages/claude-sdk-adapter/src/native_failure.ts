@@ -27,7 +27,11 @@ export class NativeFailure {
       const candidate = this.candidates.get(pending[0]!);
       const same = pending.every(id => this.candidates.get(id) === candidate);
       for (const id of pending) this.candidates.delete(id);
-      if (same && (message.subtype === "error_during_execution" || message.subtype === "success" && message.is_error)) return candidate;
+      if (same && message.subtype === "error_during_execution") return candidate;
+      // Claude Code also reports a request that got no HTTP response (DNS, refused or
+      // reset connection, timeout) as server_error; only a provider 5xx has a status.
+      if (same && message.subtype === "success" && message.is_error)
+        return candidate === "server_error" && typeof message.api_error_status !== "number" ? "connection_failed" : candidate;
     }
   }
 }
