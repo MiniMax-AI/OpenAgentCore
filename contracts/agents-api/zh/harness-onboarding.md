@@ -34,7 +34,7 @@ Runtime: Executor preparation, reuse, idle expiry, recovery
 | 服务 profile | 对已认定合格的操作和放置位置进行纯验证 | `services/core/internal/engine` |
 | 注册 | 适配器声明、已安装工厂和已验证能力 | `apps/daemon/internal/agent/<kind>/declaration.go`；`apps/daemon/internal/cli/agent_discovery.go` 中的静态列表 |
 
-Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管提供商仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型提供商提供模型通信设置，而不负责 Turn 调度或原生进程所有权。
+Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管提供商仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型提供商负责模型通信设置，而不负责 Turn 调度或原生进程所有权。
 
 ## 步骤 {#steps}
 

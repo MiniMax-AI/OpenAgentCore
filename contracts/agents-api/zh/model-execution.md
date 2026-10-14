@@ -102,7 +102,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 | --- | --- | --- |
 | Codex | `model_reasoning_effort`：`none`、`minimal`、`low`、`medium`、`high`、`xhigh` | App-server `-c model_reasoning_effort=...` 以及每个 Turn 的 `collaborationMode.settings.reasoning_effort` |
 | Claude SDK | `effort`：`low`、`medium`、`high`、`xhigh`、`max`；`thinking`：SDK 的 `adaptive`、`enabled` 或 `disabled` 对象 | SDK `Options.effort` 和 `Options.thinking` |
-| MiniMax Code | 仅空对象 | 仍必须提供提供商 token 限制 |
+| MiniMax Code | 仅空对象 | 仍必须给出提供商 token 限制 |
 
 对于 `adaptive` 和 `enabled`，Claude `thinking` 接受 `display`（`summarized` 或 `omitted`）；只有 `enabled` 接受正整数 `budgetTokens`；拒绝 `maxThinkingTokens`。这些是原生设置，而不是通用推理词汇表；模型可用性和提供商支持均由 Harness 负责。
 
@@ -125,7 +125,7 @@ PUT 要求提供 `model` 和完整的 `model_provider`；`harness_config` 默认
 
 创建 Session 时，Core 会解密解析后 Harness 的默认值，并像处理其他配置包一样将其冻结在 Session 的加密快照中，因此更改或移除默认值绝不会影响现有 Session。execution-configuration 读取结果会显示冻结的安全视图，其来源为 `deployment`。提供商快照缺失或无效时会安全失败，并且不会回退到其他模型或提供商。
 
-`model_configuration_support` 派生自 Core 和 Runtime 共享的适配器声明：`protocols` 列出可选择的原生协议，并将默认项放在首位；`accepts_harness_config` 表示是否接受原生参数；`token_limits_required` 表示是否必须提供提供商 token 限制。它描述的是构建版本，而不是实时 Runtime 或远程模型。
+`model_configuration_support` 派生自 Core 和 Runtime 共享的适配器声明：`protocols` 列出可选择的原生协议，并将默认项放在首位；`accepts_harness_config` 表示是否接受原生参数；`token_limits_required` 表示是否必须给出提供商 token 限制。它描述的是构建版本，而不是实时 Runtime 或远程模型。
 
 ### 部署默认值观测 {#deployment-default-observations}
 

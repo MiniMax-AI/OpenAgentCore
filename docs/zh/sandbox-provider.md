@@ -115,7 +115,7 @@ Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`�
 3. 基于类型化原生配置实现 `sandbox.ConfigurationAdapter`。`DecodeInput` 严格解析请求中独立的公开 `configuration` 与只写 `credential` 对象。`Encode` 生成白名单公开 selector、只读观测和独立 secret bytes，不透传请求 JSON。`Decode` 恢复已存储 selector 并保留对所属资源的访问，不做远程 admission 或新模板验证。`Normalize` 修改前复制输入。`ResolveChange`、`Equal` 和 `WithCredential` 负责继承、身份与凭据组合。`Requirements` 声明是否需要凭据和公开 Core origin，以及支持哪些 setup 操作：`Discovery` 对应 `DiscoverConfiguration`，`SelectionDiscovery` 对应 `DiscoverSelection`，`CredentialVerification` 对应 `VerifyCredential`。`DiscoverConfiguration` 验证 query 并返回安全 catalog，不做 mutation 或 admission decision；Core 保留授权、输入限制与 deadline。`DiscoverSelection` 在提交前解析候选项省略的原生值，`VerifyCredential` 验证凭据对所属资源的访问，不修改资源。两者都接收候选项的 `sandbox.DirectConfig`，原生 client 只为该次调用构造。node 提供商仅接受空公开对象，拒绝凭据，对每项 setup 操作和 credential replacement 返回 Unsupported。
 4. node adapter 从自己的包中导出 `BuildLocal` constructor、它解码的类型化 `native` 对象，以及它在共享 node artifact 之外添加的原生文件。node-local 设置（如主机路径）只存放在该对象中；resources 和 Runtime 版本从 node 配置的 `specification` 读取。
 5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即提供商 kind，也用于标记该提供商的观测；checkpoint 支持读取此项。生成的投影组合每个已注册的部署模式和 deployment policy 与 `sandbox/deployment_contract.go` 中的共享 field bound：installer 从 `deploy/node/node_spec.py` 读取，TypeScript 客户端和 Web 从 `packages/agents-client/src/deployment-contract.ts` 读取，因此 Web 读取这些声明，而不比较提供商 kind。通过 `go run ./services/core/cmd/specification-contract -write` 重新生成两者。
-6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约向运维人员提供提供商。
+6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约把该提供商交付给运维人员。
 
 **已知设计缺口：** Web 仍在 setup 向导的提供商选择、Docker 确认，以及所有显示或解析 E2B 配置字段的地方（带服务预设的 setup 步骤、部署摘要和客户端的部署投影）中指名提供商，因为协议尚未声明配置字段。通过该界面提供另一提供商目前需要修改共享的 Web。此耦合不符合[复杂性留在 adapter 内](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter)；新集成必须通过协议表达配置，把厂商专有行为留在 adapter。不得添加 Session 或 Turn 调度路径、厂商专有 column 或 API field，或 store 中的厂商 switch。
 
@@ -123,7 +123,7 @@ node 配置 `sandbox.NodeConfig` 包含 `provider`、`generation`、`installatio
 
 ### 注册验证 {#registration-validation}
 
-`providers.ValidateRegistration` 是唯一 wiring 检查。lookup、constructor binding 和生成的投影在任何 configuration callback 或 constructor 前运行它。未知提供商 name 保持为无效输入；格式错误的注册返回安全 `providercontract.ErrContract`，不包含提交的配置或原生诊断。
+`providers.ValidateRegistration` 是唯一 wiring 检查。lookup、constructor binding 和生成的投影在任何 configuration callback 或 constructor 前运行它。未知提供商名称 保持为无效输入；格式错误的注册返回安全 `providercontract.ErrContract`，不包含提交的配置或原生诊断。
 
 - `nodes` 注册仅有 `BuildLocal`，`direct` 注册仅有 `BuildDirect`；缺失、混合或未知 mode 被拒绝。
 - specification 和 resource validator、configuration adapter 与完整 operation 声明都是必需项，因此不完整注册不能发布部分投影。声明的默认大小必须通过 adapter 的 resource validator。
@@ -138,7 +138,7 @@ configuration adapter 必须非 nil，包括其具体值。每个 `Configuration
 
 具有凭据的 direct adapter 在替换 key 前验证全部保留 generation 与 allocation reference。公共 `sandbox.CallFence` 排除原生调用并等待 helper 完成，包括调用方已超时的调用；execution 调用已准备的 verification 和 fencing callback，不按厂商分支。
 
-厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回提供商、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过提供商 name。
+厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回提供商、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过提供商名称。
 
 backend fingerprint 标识原生资源命名空间，不表示容量。Core 保留部署 generation，使所属 allocation 继续解析到原 backend；不要将保留 allocation 重新指向替代 backend。
 
@@ -162,7 +162,7 @@ Node readiness 绑定到精确 generation、当前连接和 owner epoch。持久
 
 ### Allocation 生命周期 {#allocation-lifecycle}
 
-allocation、专用 daemon credential digest 和精确 Session binding 在 `Create` 前、execution lease 与 Session lock 下原子提交。只有新 allocation receipt 允许 `Create`；重试和 Core 重启观察同一 reference，不重放或轮换凭据。allocation 是私有计算资源所有权，与公开 Environment connection 和原生 readiness 独立；adapter 验证 bootstrap completion，Core 不从 engine 或提供商 name 推断。
+allocation、专用 daemon credential digest 和精确 Session binding 在 `Create` 前、execution lease 与 Session lock 下原子提交。只有新 allocation receipt 允许 `Create`；重试和 Core 重启观察同一 reference，不重放或轮换凭据。allocation 是私有计算资源所有权，与公开 Environment connection 和原生 readiness 独立；adapter 验证 bootstrap completion，Core 不从 engine 或提供商名称 推断。
 
 配置提供商后，Worker 扫描已提交且没有 allocation 的 pending hosted Environment，涵盖空闲 Session 创建以及 commit 与 bootstrap 之间中断后的恢复；已有 allocation 不重新进入此路径。scan 有界，由 lifecycle owner 串行化，不需要调用方操作。没有 Turn 的初始预约让 Session 保持空闲，daemon 连接不被当作原生 readiness。同一 scan 在验证精确 Session、device binding 和已结算 bootstrap 后，发布带持久 generation 的认证连接观测。
 
