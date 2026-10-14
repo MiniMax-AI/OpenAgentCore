@@ -206,6 +206,7 @@ export const metrics = {
     node: "节点",
     openNode: "打开节点 {{name}}",
     status: "状态",
+    statusHelp: "Core 记录的沙箱计算状态。活跃的沙箱正在使用计算资源；已挂起的沙箱保留快照，不使用计算资源；已停止的沙箱正在清理或已释放。活跃的沙箱没有采样时，CPU 和内存列会说明原因。",
     notSetUpTitle: "还没有设置沙箱",
     setUp: "设置沙箱",
     runtimeSection: "托管 Runtime",
@@ -228,8 +229,6 @@ export const metrics = {
     uptime: "运行时长",
     tokens: "token",
     tokenSplit: "输入 {{input}} · 输出 {{output}}",
-    recordedCompute: "记录的计算状态",
-    recordedComputeHelp: "Core 记录的计算阶段，与 Runtime 观测分别读取，刷新时可能短暂不同。",
     lifecycle: {
       active: "活跃",
       sleeping: "已挂起",

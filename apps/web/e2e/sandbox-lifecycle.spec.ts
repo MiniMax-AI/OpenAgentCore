@@ -26,11 +26,14 @@ test("shows each node's retained limit and elapsed phase time without inventing 
   await expect(allocations).not.toContainText("reclaim");
   await expect(allocations).not.toContainText("due");
   await page.getByRole("button", { name: "Sandbox metrics", exact: true }).click();
-  await expect(page.getByRole("columnheader", { name: "Recorded compute" })).toBeVisible();
+  // One Status column answers whether each sandbox uses compute, is suspended or is gone.
+  const runtimes = page.getByRole("table", { name: "Hosted Runtimes" });
+  await expect(runtimes.getByRole("columnheader", { name: "Recorded compute" })).toHaveCount(0);
+  await expect(runtimes.getByRole("row").filter({ hasText: "Suspended" }).first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("sandbox-metrics-en.png"), fullPage: true });
   await page.getByRole("button", { name: "Language and appearance" }).click();
   await page.getByRole("menuitemradio", { name: "简体中文" }).click();
-  await expect(page.getByRole("columnheader", { name: "记录的计算状态" })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "已挂起" }).first()).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("sandbox-metrics-zh.png"), fullPage: true });
 });
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { SandboxAllocation } from "@oac/agents-client";
 
 import { hostedObservation, node, session } from "../overview/test-fixtures";
-import { hostedRuntimeRows, hostedRuntimeUsage, loadHostedRuntimes, matchesRuntime, runtimeSnapshot } from "./sandbox-runtime";
+import { hostedRuntimeRows, hostedRuntimeUsage, loadHostedRuntimes, matchesRuntime, runtimeSampleGap, runtimeSnapshot } from "./sandbox-runtime";
 
 const none = { ...hostedObservation("plain", "p1"), mode: "none", instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", cpu: null, memory: null } as unknown as ReturnType<typeof hostedObservation>;
 
@@ -69,12 +69,18 @@ describe("hosted Runtime projections", () => {
     const rows = hostedRuntimeRows(load, "", { nodes: [node("n1", { name: "core-01" })], allocations: [allocation] });
     expect(rows.map((row) => [row.observation.session_id, row.node?.name ?? null, row.uptimeSeconds])).toEqual([["a", "core-01", 600], ["b", null, 600], ["c", null, null]]);
     expect(hostedRuntimeRows(load, "", null)[0]?.node).toBeNull();
-    expect(rows.map((row) => row.allocation?.compute_phase ?? null)).toEqual(["restoring", null, null]);
     expect(rows[0]?.observation.lifecycle_state).toBe("active");
     expect(rows.map((row) => row.deploymentGeneration)).toEqual([3, null, null]);
     expect(hostedRuntimeRows(load, "", null)[0]?.deploymentGeneration).toBeNull();
     expect(matchesRuntime(rows[0]!, "nightly")).toBe(true);
     expect(matchesRuntime(rows[0]!, "core-01")).toBe(true);
     expect(matchesRuntime(rows[2]!, "nightly")).toBe(false);
+  });
+
+  it("names a missing sample only for a sandbox Core records as active", () => {
+    const missing = { status: "unavailable", observed_at: null, started_at: null, cpu: null, memory: null } as const;
+    expect(runtimeSampleGap(hostedObservation("a", "p", { ...missing, reason: "sample_timeout" }))).toBe("sample_timeout");
+    expect(runtimeSampleGap(hostedObservation("b", "p", { ...missing, lifecycle_state: "sleeping", reason: "runtime_not_running" }))).toBeNull();
+    expect(runtimeSampleGap(hostedObservation("c", "p"))).toBeNull();
   });
 });

@@ -21,7 +21,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 | 监控 | 概览 | 服务状态、运行中的 Session、沙箱槽位和待处理工作；24 小时 Session 活动；以拓扑展示 Core 与节点，各自打开对应页面；需要处理：过去 24 小时内活跃的失败或等待调用方的 Session，每行附一行原因；按项目统计的用量 |
 | 监控 | Core 监控 | Core 能否运行 Turn：执行槽位、Turn 队列及其 p95 等待时间、被中断的 Turn、已连接守护进程、数据库延迟、CPU 与常驻内存及其限制、后台任务；Go 堆、goroutine 和数据库连接池位于 **诊断** |
 | 监控 | Agent 监控 | 1 小时、6 小时、24 小时或 7 天的请求、错误、耗时、token、模型、工具、Agent 和 API 密钥 |
-| Monitor | Sandbox metrics | 各 Project 托管 Runtime 随时间的变化，显示活跃数量与总数及其 CPU、内存观测；支持时另行显示 **Recorded compute** 生命周期状态；E2B 部署还显示 Core 在 E2B 云中持有的沙箱 |
+| Monitor | Sandbox metrics | 各 Project 托管 Runtime 随时间的变化，显示活跃数量与总数，以及各自的状态（活跃、已挂起、切换中、等待分配或已停止）和 CPU、内存观测；E2B 部署还显示 Core 在 E2B 云中持有的沙箱 |
 | 监控 | 请求日志 | 到达 Core 的近期 HTTP 请求、状态、耗时和安全错误码；[范围及保留方式](../../../contracts/agents-api/zh/admin-api.md#request-log) |
 | 监控 | Session 日志 | 全部 Session；各 Session 的只读对话、跟踪、Turn、失败分类原因及下一步操作；自托管 Session 页面还管理执行器凭据并提供主机连接命令 |
 | 资源 | Agent、Environment 模板、Skills、文件、Vault | 检查和允许的删除操作，显示各资源所属项目及创建密钥 |

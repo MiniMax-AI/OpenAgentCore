@@ -206,6 +206,7 @@ export const metrics = {
     node: "Node",
     openNode: "Open node {{name}}",
     status: "Status",
+    statusHelp: "Core’s record of each sandbox’s compute. Active sandboxes use compute now; suspended ones keep a snapshot and use none; stopped ones are being cleaned up or are released. When an active sandbox has no sample, CPU and Memory say why.",
     notSetUpTitle: "Sandboxes are not set up yet",
     setUp: "Set up sandboxes",
     runtimeSection: "Hosted Runtimes",
@@ -228,8 +229,6 @@ export const metrics = {
     uptime: "Uptime",
     tokens: "Tokens",
     tokenSplit: "Input {{input}} · output {{output}}",
-    recordedCompute: "Recorded compute",
-    recordedComputeHelp: "Core’s recorded compute phase, read separately from the Runtime observation. Refreshes can briefly differ.",
     lifecycle: {
       active: "Active",
       sleeping: "Suspended",

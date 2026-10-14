@@ -1,4 +1,4 @@
-import type { AgentSession, SandboxAllocation, SandboxNode } from "@oac/agents-client";
+import type { AgentSession, RuntimeObservation, RuntimeUnavailableReason, SandboxAllocation, SandboxNode } from "@oac/agents-client";
 
 import type { ProjectClient } from "../../lib/projects";
 import { sessionTitle } from "../../lib/session-title";
@@ -122,13 +122,19 @@ export function hostedRuntimeUsage(observations: readonly OwnedRuntimeObservatio
   };
 }
 
+/**
+ * Why an active sandbox has no sample. The lifecycle state is Core's record of the sandbox's compute;
+ * a pending, suspended, changing or stopped sandbox already explains its missing figures.
+ */
+export function runtimeSampleGap(observation: RuntimeObservation): RuntimeUnavailableReason | null {
+  return observation.status === "unavailable" && observation.lifecycle_state === "active" ? observation.reason : null;
+}
+
 export interface HostedRuntimeRow {
   observation: OwnedRuntimeObservation;
   session: AgentSession | null;
   /** The host of the Runtime's allocation, when the fleet lists it. */
   node: SandboxNode | null;
-  /** Core's allocation record, joined only by the observation's allocation ID. */
-  allocation: SandboxAllocation | null;
   /** Ownership generation from a matching allocation, never the deployment target or node pin. */
   deploymentGeneration: number | null;
   /** Seconds from the Runtime's start to its last sample. */
@@ -148,7 +154,6 @@ export function hostedRuntimeRows(
       const allocation = observation.instance.allocation_id ? allocations.get(observation.instance.allocation_id) ?? null : null;
       return {
         observation,
-        allocation,
         session: load.sessions.get(observation.session_id) ?? null,
         node: allocation ? nodes.get(allocation.node_id) ?? null : null,
         deploymentGeneration: allocation?.deployment_generation ?? null,
