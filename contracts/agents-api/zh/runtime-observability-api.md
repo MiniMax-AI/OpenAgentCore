@@ -6,7 +6,7 @@ source_hash: 4a9c00d1eed9fe51f9e8f2f08e00f1709ddc55eb1c650ed3a5380f44a5b71e1c
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
 
-每个路由都要求以 Core 密钥作为 Bearer 凭证；缺少或无效的密钥会返回 401 `invalid_admin_key`。路径中的 Project ID 用于选择目标 Project，不承担身份验证作用。响应带有 `Cache-Control: no-store`，采用 Core 错误封装格式，且绝不包含提供方响应、原生标识符、路径或凭证。
+每个路由都要求以 Core 密钥作为 Bearer 凭据；缺少或无效的密钥会返回 401 `invalid_admin_key`。路径中的 Project ID 用于选择目标 Project，不承担身份验证作用。响应带有 `Cache-Control: no-store`，采用 Core 错误封装格式，且绝不包含提供方响应、原生标识符、路径或凭据。
 
 ## 当前 Runtime 观测值 {#current-runtime-observations}
 

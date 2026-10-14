@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: bfed9ea629660a7018b7993445122e99158bd7b6319f08b0ee6a468f23310bde
+source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。

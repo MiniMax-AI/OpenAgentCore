@@ -8,7 +8,7 @@ Vault 是 Project 所有的 Credential 容器。Credential 保存一个 HTTPS MC
 
 应用负责 OAuth 授权与同意、服务方撤销以及审批策略。Core 不提供授权重定向、回调、撤销或公开刷新端点；创建或替换 Credential 不联系 MCP server 或 OAuth provider。
 
-## 存储并使用凭证 {#store-and-use-a-credential}
+## 存储并使用凭据 {#store-and-use-a-credential}
 
 ```python
 vault = client.beta.agents.vaults.create(name="internal")
@@ -36,11 +36,11 @@ session = client.beta.agents.sessions.create(
 )
 ```
 
-MCP tool 可以通过 `credential_id` 指定 Credential；未指定时，Core 选择已关联 Credential 中 `mcp_server_url` 等于 tool 的 `server_url` 的凭证（[选择规则](#credential-selection-in-a-session)）。能够连接该 server 的 Harness 和 placement 取决于 tool 的 `connection_origin`（[MCP 连接来源](environments.md#public-mcp-connection-origin)）。
+MCP tool 可以通过 `credential_id` 指定 Credential；未指定时，Core 选择已关联 Credential 中 `mcp_server_url` 等于 tool 的 `server_url` 的凭据（[选择规则](#credential-selection-in-a-session)）。能够连接该 server 的 Harness 和 placement 取决于 tool 的 `connection_origin`（[MCP 连接来源](environments.md#public-mcp-connection-origin)）。
 
 ## 路由 {#routes}
 
-所有路由位于 `/v1`，使用 Project API key，要求 `OpenAI-Beta: agents=v1`。Project 的 key 共享其 Vault；其他 Project 的 Vault 或 Credential 与不存在的资源一样返回 404。
+所有路由位于 `/v1`，使用 Project API 密钥，要求 `OpenAI-Beta: agents=v1`。Project 的 key 共享其 Vault；其他 Project 的 Vault 或 Credential 与不存在的资源一样返回 404。
 
 | 操作 | 路由 | 结果 |
 | --- | --- | --- |
@@ -104,9 +104,9 @@ Credential 读取包含 `id`、`vault_id`、`name`、`object: "vault.credential"
 
 更新时改变 Credential 的 `auth.type` 返回 400。
 
-## Session 中的凭证选择 {#credential-selection-in-a-session}
+## Session 中的凭据选择 {#credential-selection-in-a-session}
 
-创建 Session 时，`vault_ids` 列出 Session 可以使用凭证的 Vault。省略、`null` 和 `[]` 均不关联任何 Vault；条目为 `null` 无效；每个 Vault 必须属于 Project，否则创建返回 404 `not_found_error`。Agent 上保存 `credential_id` 不提供授权；只有 Session 的关联提供授权。
+创建 Session 时，`vault_ids` 列出 Session 可以使用凭据的 Vault。省略、`null` 和 `[]` 均不关联任何 Vault；条目为 `null` 无效；每个 Vault 必须属于 Project，否则创建返回 404 `not_found_error`。Agent 上保存 `credential_id` 不提供授权；只有 Session 的关联提供授权。
 
 创建 Session 时，Core 为每个 HTTP MCP tool 从已关联 Vault 中选择 Credential：
 
@@ -145,6 +145,6 @@ key 文件不可读或格式错误会使 Core 启动失败。丢失或替换 key
 
 ## 删除 {#deletion}
 
-删除 Credential 或其 Vault 会移除凭证行，但不会擦除 PostgreSQL 页面、WAL、备份或原生历史中的秘密。此后查询、更新和重复删除返回 404；列表不再包含它；新 Session 不能选择它；不能在已删除 Vault 中创建新 Credential。
+删除 Credential 或其 Vault 会移除凭据行，但不会擦除 PostgreSQL 页面、WAL、备份或原生历史中的秘密。此后查询、更新和重复删除返回 404；列表不再包含它；新 Session 不能选择它；不能在已删除 Vault 中创建新 Credential。
 
 现有 Session 保留固定的关联和选择，历史仍可读。下一次需要已删除 Credential 的分派失败；Core 不选择其他 Credential，也不匿名连接。删除不取消运行中的工作、不收回已发送 Runtime 的 token，也不在服务方撤销 grant；需要时自行取消 Session 并撤销 grant。已撤销或无效 OAuth grant 同样失败，直到被替换。

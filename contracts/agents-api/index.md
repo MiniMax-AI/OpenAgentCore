@@ -72,7 +72,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Agents and Sessions** ([Agents](./wire-semantics.md#agents), [Sessions](./wire-semantics.md#sessions))
 
 - A repeated Session creation with the same `Idempotency-Key` returns the original Session; the official service creates a new one.
-- Omitted programmatic tool calling keeps the harness's native behavior; the official default is on.
+- Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
 - An omitted reasoning effort stays null instead of taking the model's default.
 - A Session's `agent.tools` omits `tool_search` declarations.
 - Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returned 200.

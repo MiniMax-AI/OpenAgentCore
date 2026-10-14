@@ -4,7 +4,7 @@
 
 # OpenAgentCore
 
-An open-source, self-hosted implementation of the OpenAI Agents API with multiple native harnesses.
+An open-source, self-hosted implementation of the OpenAI Agents API with multiple native Harnesses.
 
 [Website](https://openagentcore.dev/) · [Install](#install) · [Call the API](https://openagentcore.dev/docs/getting-started/quickstart) · [Documentation](https://openagentcore.dev/docs/getting-started/) · [Contributing](CONTRIBUTING.md)
 
@@ -17,9 +17,9 @@ An open-source, self-hosted implementation of the OpenAI Agents API with multipl
 OpenAgentCore runs AI agents on your own infrastructure behind the [OpenAI Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview).
 
 - **Same API as OpenAI.** Point the [OpenAI Agent API](https://developers.openai.com/api/docs/guides/agents/sdk), or plain HTTP, at your installation. No new client to learn.
-- **Your choice of agent.** Each [Session](https://openagentcore.dev/docs/api/public-agent-api) runs a [native harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding): [Codex](https://github.com/openai/codex), [Claude Code](https://code.claude.com/docs/en/overview) or [MiniMax Code](https://github.com/MiniMax-AI/minimax-code), with the [model provider you configure](https://openagentcore.dev/contracts/agents-api/model-execution).
+- **Your choice of agent.** Each [Session](https://openagentcore.dev/docs/api/public-agent-api) runs a [native Harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding): [Codex](https://github.com/openai/codex), [Claude Code](https://code.claude.com/docs/en/overview) or [MiniMax Code](https://github.com/MiniMax-AI/minimax-code), with the [model provider you configure](https://openagentcore.dev/contracts/agents-api/model-execution).
 - **Reusable compute, persistent workspaces.** We recommend [microsandbox](https://github.com/zerocore-ai/microsandbox) with [independent workspace storage](https://openagentcore.dev/docs/workspace-provider): idle sandboxes suspend, release compute and resume on compatible nodes. [E2B](https://e2b.dev/) is the managed alternative; Docker and your own Linux, macOS or Windows machine remain supported execution choices.
-- **Every part is replaceable.** [Sandboxes](https://openagentcore.dev/docs/sandbox-provider), [workspace filesystems](https://openagentcore.dev/docs/workspace-provider), [harnesses](https://openagentcore.dev/contracts/agents-api/harness-onboarding) and [model providers](https://openagentcore.dev/contracts/agents-api/model-execution) plug in through [defined protocols](AGENTS.md#protocols-at-every-boundary).
+- **Every part is replaceable.** [Sandboxes](https://openagentcore.dev/docs/sandbox-provider), [workspace filesystems](https://openagentcore.dev/docs/workspace-provider), [Harnesses](https://openagentcore.dev/contracts/agents-api/harness-onboarding) and [model providers](https://openagentcore.dev/contracts/agents-api/model-execution) plug in through [defined protocols](AGENTS.md#protocols-at-every-boundary).
 
 ## How it fits together
 
@@ -32,7 +32,7 @@ Applications and operators use these Core APIs:
 | **[Agents API](https://openagentcore.dev/docs/api/public-agent-api)** | `/v1` | Your applications. Same protocol as [OpenAI's Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) |
 | **[Core API](https://openagentcore.dev/contracts/agents-api/admin-api)** | `/core/v1` | Operators, through Web |
 
-Core keeps durable execution state. The Runtime runs the chosen harness inside the Environment. Each connection is a defined protocol, so any part can be replaced on its own. See the [architecture guide](https://openagentcore.dev/docs/architecture).
+Core keeps durable execution state. The Runtime runs the chosen Harness inside the Environment. Each connection is a defined protocol, so any part can be replaced on its own. See the [architecture guide](https://openagentcore.dev/docs/architecture).
 
 ## Screenshots
 
@@ -73,6 +73,6 @@ The [installation guide](https://openagentcore.dev/docs/getting-started/install)
 | Run agents on my own machine | [Self-hosted execution](https://openagentcore.dev/docs/getting-started/self-hosted) |
 | Check Harness capabilities and limits | [Harness capabilities](https://openagentcore.dev/contracts/agents-api/harness-capabilities) |
 | Understand the design | [Architecture](https://openagentcore.dev/docs/architecture) |
-| Add a sandbox, harness or other component | [Developer guide](https://openagentcore.dev/docs/development) |
+| Add a sandbox, Harness or other component | [Developer guide](https://openagentcore.dev/docs/development) |
 
 All pages: [documentation index](https://openagentcore.dev/docs/getting-started/). Before changing code, read the [contributor rules](CONTRIBUTING.md).

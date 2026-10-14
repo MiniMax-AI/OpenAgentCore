@@ -6,7 +6,7 @@ Every setting of a Core installation has exactly one home, in one of three categ
 
 | Category | Examples | Home | Change it with | Takes effect |
 | --- | --- | --- | --- | --- |
-| [Process settings](#process-settings) | Public URL, ports, logging, harnesses, execution concurrency, audit retention, OAuth origins, Runtime history | `.env` in the installation directory (default `~/.oac/core`) | Edit `.env`, then run `oac apply` | `oac apply` recreates the services that read the changed settings |
+| [Process settings](#process-settings) | Public URL, ports, logging, Harnesses, execution concurrency, audit retention, OAuth origins, Runtime history | `.env` in the installation directory (default `~/.oac/core`) | Edit `.env`, then run `oac apply` | `oac apply` recreates the services that read the changed settings |
 | [Secrets](#compose-installations) | Database password, credential encryption key, installation ID, Core key and the Core key digest derived from it | `secrets/` in the Compose data volume, one copy each | Initialization generates them once; `oac rotate-core-key` replaces the Core key and its digest | `oac rotate-core-key` restarts Core and Web |
 | [Runtime settings](#runtime-settings-web) | Sandbox backend and size, nodes, Projects and keys, default models, executor credentials | Core's PostgreSQL database | Web, or the Core API (`/core/v1`) with the Core key | Saved without a Core restart; nodes prepare Runtime changes asynchronously |
 
@@ -98,10 +98,10 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Idle suspension | **Settings** → **Sandbox and scheduling** → **Automatic suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | Deployment-wide; see [suspension policy](../contracts/agents-api/sandbox-deployment.md#suspension-policy) |
 | Independent workspace storage and tenant capacity | **Settings → Workspace storage** | `/core/v1/workspace-storage` | See [independent workspace storage](#independent-workspace-storage); existing workspaces retain their configuration |
 | Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
-| Default model per harness | **Settings** → **Models and credentials**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
+| Default model per Harness | **Settings** → **Models and credentials**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
 | Executor credentials of a self-hosted Session | **Session log**, then the **Session** page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](./getting-started/self-hosted.md) |
 
-Which harnesses are enabled, and the default one, are process settings (`OAC_HARNESSES`, `OAC_DEFAULT_HARNESS`); **Settings → Service and deployment** lists them under **Startup settings**. **Settings → Models and credentials** marks each harness **Ready** once it is enabled and has a default model, and otherwise names the missing step: **Model provider not set** or **Disabled**. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
+Which Harnesses are enabled, and the default one, are process settings (`OAC_HARNESSES`, `OAC_DEFAULT_HARNESS`); **Settings → Service and deployment** lists them under **Startup settings**. **Settings → Models and credentials** marks each Harness **Ready** once it is enabled and has a default model, and otherwise names the missing step: **Model provider not set** or **Disabled**. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
 
 ### Independent workspace storage
 

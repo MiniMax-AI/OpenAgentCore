@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 52e9519b47d1c05f00f38968dbeab6a27568b51d454a17aab2d80b56563d0bb0
+source_hash: 9b8c548e48923c2ee6e51deaebb85422db2b568f36a6718af6b44ff13099ff2a
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。

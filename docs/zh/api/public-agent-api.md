@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: c20c794bcdae4935c3384ca7aa61e7baccbf6becb3e44c4a13a754cc5e636cc0
+source_hash: 1648667dbd1c35f043f6e93e5fdb9dbe45c1d28e4634de08fc3fa9e69d3e3f0d
 ---
 
 Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-reference)。可以使用官方 OpenAI SDK 或普通 HTTP。本指南针对每项常见操作同时展示这两种方式，并说明 Core 与 OpenAI 存在差异的地方。
@@ -47,7 +47,7 @@ oac /agents
 
 | 资源 | 路径 | 用途 |
 | --- | --- | --- |
-| [Agents](#agents) | `/agents` | 可复用配置：模型、指令、工具和 harness |
+| [Agents](#agents) | `/agents` | 可复用配置：模型、指令、工具和 Harness |
 | [Sessions](#sessions) | `/agents/sessions` | 一次 Agent 对话及其独立的 Environment |
 | [输入事件](#send-input) | `/agents/sessions/{id}/events`（POST） | 消息、取消和工具结果 |
 | [事件流](#stream-events) | `/agents/sessions/{id}/events`（GET） | 实时的服务器发送事件 |
@@ -140,27 +140,27 @@ client.beta.agents.sessions.create(environment=..., extra_headers={"Idempotency-
 
 ### Core 扩展：`x_agents_core` {#core-extensions-x-agents-core}
 
-Core 可以运行多种 harness，并允许接入你自己的模型访问方式。这些设置是对 OpenAI 数据结构仅有的扩展，位于 `x_agents_core` 内：
+Core 可以运行多种 Harness，并允许接入你自己的模型访问方式。这些设置是对 OpenAI 数据结构仅有的扩展，位于 `x_agents_core` 内：
 
 | 字段 | 所在位置 | 值 |
 | --- | --- | --- |
 | `harness` | Agent，或 Session 的内联 `agent` | `codex`、`claude_sdk` 或 `mcode` |
-| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`；对于 `mcode`，还包括 `context_window` 和 `max_output_tokens`。协议必须是该 harness 的原生协议之一 |
-| `harness_config` | Agent、内联 `agent`，或 Session 创建请求（顶层，优先） | harness 的原生模型参数，例如 Codex 的 `model_reasoning_effort` |
+| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`；对于 `mcode`，还包括 `context_window` 和 `max_output_tokens`。协议必须是该 Harness 的原生协议之一 |
+| `harness_config` | Agent、内联 `agent`，或 Session 创建请求（顶层，优先） | Harness 的原生模型参数，例如 Codex 的 `model_reasoning_effort` |
 | `environment` | `openai_hosted` 或 `self_hosted` Session 创建请求（顶层） | 可移植的准备配置：`environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins`、`capability_directories`。同一字段不能也出现在 `environment` 中；请参阅 [Environments](../../../contracts/agents-api/zh/environments.md#preparation-order) |
 | `installation` | 只读，适用于 `self_hosted` Session | 在你的计算机上运行的短期安装命令；请参阅 [self-hosted execution](../getting-started/self-hosted.md) |
 
 任何其他成员都会导致 400 错误。`api_key` 为只写字段；读取时会返回 `api_key_configured`。`harness_config` 会替换整个对象；传入 `{}` 可将其清除。使用 SDK 时，请通过 `extra_body` 传入这些字段。
 
-## 选择 harness 和模型 {#choose-a-harness-and-a-model}
+## 选择 Harness 和模型 {#choose-a-harness-and-a-model}
 
-harness 是运行 Session 的 Agent 程序：Codex（`codex`）、Claude Code（`claude_sdk`）或 MiniMax Code（`mcode`）。请在 Agent 或内联 `agent` 上设置 `x_agents_core.harness`；如果未设置，则使用安装的默认 harness（[`OAC_DEFAULT_HARNESS`](../configuration.md#settings)，除非操作员另行更改，否则为 Codex）。
+Harness 是运行 Session 的 Agent 程序：Codex（`codex`）、Claude Code（`claude_sdk`）或 MiniMax Code（`mcode`）。请在 Agent 或内联 `agent` 上设置 `x_agents_core.harness`；如果未设置，则使用安装的默认 Harness（[`OAC_DEFAULT_HARNESS`](../configuration.md#settings)，除非操作员另行更改，否则为 Codex）。
 
-- **模型。** `model` 是提供商给出的准确模型 ID。`openai_hosted` 或 `none` Session 上的内联 Agent 可以省略此字段，以使用其 harness 的默认模型配置。保存的 Agent 始终必须指定模型。
-- **提供商。** harness 会使用其原生协议之一直接调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[Model execution](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
-- **原生参数。** `harness_config` 承载 harness 自身的模型设置；请参阅[原生模型参数](../../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。
+- **模型。** `model` 是提供商给出的准确模型 ID。`openai_hosted` 或 `none` Session 上的内联 Agent 可以省略此字段，以使用其 Harness 的默认模型配置。保存的 Agent 始终必须指定模型。
+- **提供商。** Harness 会使用其原生协议之一直接调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[Model execution](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 Harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
+- **原生参数。** `harness_config` 承载 Harness 自身的模型设置；请参阅[原生模型参数](../../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。
 
-并非每种 harness、部署位置和操作组合都受支持；[Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 列出了受支持的组合。
+并非每种 Harness、部署位置和操作组合都受支持；[Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 列出了受支持的组合。
 
 ## Agents（智能体） {#agents}
 
@@ -202,7 +202,7 @@ oac "/agents" -d '{
 
 - **更新**只会更改你发送的字段。`metadata` 会替换所有键值对；`null` 会清除 `name` 或 `instructions`。
 - **删除**不会影响现有 Session。
-- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及设置了 `mode: "disabled"` 的 `web_search`。支持情况取决于 harness 和 Environment；请参阅 [execution tools](../../../contracts/agents-api/zh/execution-tools.md)。
+- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及设置了 `mode: "disabled"` 的 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [execution tools](../../../contracts/agents-api/zh/execution-tools.md)。
 
 ## Sessions（会话） {#sessions}
 
@@ -531,17 +531,17 @@ client.beta.agents.vaults.credentials.create(
 session = client.beta.agents.sessions.create(environment={"type": "none"}, input="...", vault_ids=[vault.id], agent_id=agent.id)
 ```
 
-HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` 中选择凭据，也可以通过 `credential_id` 指定具体凭据；无论采用哪种方式，MCP 服务器的 URL 都必须与所选凭据的 `mcp_server_url` 完全匹配。[Vaults contract](../../../contracts/agents-api/zh/vaults.md) 负责选择、错误、OAuth 刷新和删除。MCP 工具的 `connection_origin` 决定由 Core 端还是工作区连接服务器，而且每个 harness 支持的取值集合不同；请参阅 [MCP connection origin](../../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)。
+HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` 中选择凭据，也可以通过 `credential_id` 指定具体凭据；无论采用哪种方式，MCP 服务器的 URL 都必须与所选凭据的 `mcp_server_url` 完全匹配。[Vaults contract](../../../contracts/agents-api/zh/vaults.md) 负责选择、错误、OAuth 刷新和删除。MCP 工具的 `connection_origin` 决定由 Core 端还是工作区连接服务器，而且每个 Harness 支持的取值集合不同；请参阅 [MCP connection origin](../../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)。
 
 ## 诊断故障 {#diagnose-a-failure}
 
 1. 读取 Session 的 `status` 和 `error`，以及最新 Turn 的 `error`。失败的 Turn 只会报告通用的 `internal_error`。
-2. 检查 Environment 是否已连接，以及其 harness 是否可用。
-3. 在 [Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 中检查 harness、模型和工具的组合。
+2. 检查 Environment 是否已连接，以及其 Harness 是否可用。
+3. 在 [Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 中检查 Harness、模型和工具的组合。
 4. 向管理员索取 Session 的[诊断信息](../../../contracts/agents-api/zh/session-diagnostics.md)，其中会指出故障类别；同时请查看[故障排除](../getting-started/operations.md#troubleshooting)，了解服务日志、凭据和节点就绪状态。
 
 401 通常表示使用了其他命名空间中的密钥；请参阅 [API 命名空间与凭据](index.md)。
 
 ## 与 OpenAI 的差异 {#differences-from-openai}
 
-Core 在某些行为上与 OpenAI 服务不同，例如 Session 创建的幂等性和特定 harness 的工具支持。[覆盖情况清单](../../../contracts/agents-api/zh/index.md#differences-from-openai) 列出了所有差异及各资源的状态；[公共 OpenAPI](../../../contracts/agents-api/openapi.yaml) 包含准确的模式定义。
+Core 在某些行为上与 OpenAI 服务不同，例如 Session 创建的幂等性和特定 Harness 的工具支持。[覆盖情况清单](../../../contracts/agents-api/zh/index.md#differences-from-openai) 列出了所有差异及各资源的状态；[公共 OpenAPI](../../../contracts/agents-api/openapi.yaml) 包含准确的模式定义。

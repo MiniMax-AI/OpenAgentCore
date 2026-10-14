@@ -271,7 +271,7 @@ session = client.beta.agents.sessions.create(
 
 ### 操作 {#operations}
 
-- 每个操作都需要 Project API key 和 `OpenAI-Beta: agents=v1`。Template 操作无需执行部署，也不会分配计算资源。
+- 每个操作都需要 Project API 密钥 和 `OpenAI-Beta: agents=v1`。Template 操作无需执行部署，也不会分配计算资源。
 - `name` 可选且可为 null，会逐字保留，长度为 1–256 个 Unicode 字符。
 - `network.access` 为 `enabled`、`disabled` 或 `restricted`；省略或传入 null 表示启用。请参阅 [Restricted network](#restricted-network)。
 - 响应会携带安全元数据，绝不会包含 `env`、`setup_commands` 正文或内联文件数据。
@@ -332,7 +332,7 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-固定版本的 `/v1/skills` 资源、版本及内容路由使用 Project API key，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。固定版本 SDK 3.13.0 在多部分内容提取过程中会丢弃单文件 tuple，因此应使用原始 HTTP 上传单个 ZIP。一次上传最多包含 500 个常规文件，并且必须恰好包含一个 `SKILL.md`；压缩后为 5 MiB，展开后为 20 MiB。[File resource semantics](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
+固定版本的 `/v1/skills` 资源、版本及内容路由使用 Project API 密钥，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。固定版本 SDK 3.13.0 在多部分内容提取过程中会丢弃单文件 tuple，因此应使用原始 HTTP 上传单个 ZIP。一次上传最多包含 500 个常规文件，并且必须恰好包含一个 `SKILL.md`；压缩后为 5 MiB，展开后为 20 MiB。[File resource semantics](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
 
 省略或传入 null 版本的引用会在 Session 创建时选择默认版本，`"latest"` 会选择最新版本，正版本号字符串则选择该版本。Template 响应会保留未解析的选择器（默认版本为 `version: null`）；Session 元数据会显示 `{type, skill_id, version, name, description}`，其中版本为具体值。Session 会在其创建事务中冻结所选版本的字节和元数据；之后默认版本发生变化、源被删除或 Template 被更新，都无法改变这些内容。
 

@@ -36,7 +36,7 @@ Use these observations for different questions:
 | Environment connection | The Runtime transport is connected |
 | A finished Turn and its results | The task's recorded outcome |
 
-Service health does not show that a harness or a model works. Use Session, Turn, Items and Usage reads for execution, and Web's **Nodes** page for node connection, readiness and placement. For local diagnosis, use the installation's own Compose file:
+Service health does not show that a Harness or a model works. Use Session, Turn, Items and Usage reads for execution, and Web's **Nodes** page for node connection, readiness and placement. For local diagnosis, use the installation's own Compose file:
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
@@ -95,7 +95,7 @@ core() (  # core METHOD PATH [JSON body]
 | Issue an API key (shown once, as `key`) | `core POST /projects/$PROJECT_ID/keys '{"name": "prod"}'` |
 | Revoke a key | `core DELETE /projects/$PROJECT_ID/keys/$KEY_ID` |
 | Archive a Project (revokes all keys) | `core POST /projects/$PROJECT_ID/archive` |
-| See harnesses and their default models | `core GET /harnesses` |
+| See Harnesses and their default models | `core GET /harnesses` |
 | Set Codex's default model | `core PUT /harnesses/codex/model-configuration '{"model": "your-model-id", "model_provider": {"protocol": "responses", "base_url": "https://provider.example/v1", "api_key": "sk-..."}}'` |
 | Installation facts, including the API base URL | `core GET /installation` |
 
@@ -203,7 +203,7 @@ Installation and mutating `oac` commands share the [installation lock](../config
 | `Installation and data retained at …` | Read the service logs above it, fix the cause, then [resume installation](./install.md#install); keep the data |
 | Web answers 403 `Forbidden` | The browser host is not `OAC_PUBLIC_URL`. Open that origin; a reverse proxy must pass the original Host |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `docker compose ps`, then Core's log |
-| Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the harness, or pass one; self-hosted Sessions always pass their own |
+| Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the Harness, or pass one; self-hosted Sessions always pass their own |
 | Add node shows no command | See [Before you add a node](./nodes.md#before-you-add-a-node) |
 | A node is not ready | See [node troubleshooting](./nodes.md#troubleshooting) |
 

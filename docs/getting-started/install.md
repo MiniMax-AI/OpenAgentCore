@@ -82,7 +82,7 @@ Applications, nodes and sandboxes reach Core at one address, the public URL. HTT
 
 ## Set a default model
 
-Core-hosted Sessions without their own model provider use their harness's default model. In **Settings → Models and credentials**, under **Default model configuration**, find the harness marked **Default** (Codex unless you changed `OAC_DEFAULT_HARNESS`); it shows **Model provider not set**. Choose **Set** and enter the model ID, the protocol, and the provider's base URL and API key. MiniMax Code also needs the context window and max output tokens. The harness then shows **Ready**. See [default models](../configuration.md#default-models).
+Core-hosted Sessions without their own model provider use their Harness's default model. In **Settings → Models and credentials**, under **Default model configuration**, find the Harness marked **Default** (Codex unless you changed `OAC_DEFAULT_HARNESS`); it shows **Model provider not set**. Choose **Set** and enter the model ID, the protocol, and the provider's base URL and API key. MiniMax Code also needs the context window and max output tokens. The Harness then shows **Ready**. See [default models](../configuration.md#default-models).
 
 ## Issue a Project API key
 

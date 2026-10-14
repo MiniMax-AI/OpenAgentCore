@@ -7,7 +7,7 @@ This walkthrough takes you from a Project API key to an agent that has created a
 - a Project API key and the API base URL, from your administrator ([Issue a Project API key](./install.md#issue-a-project-api-key));
 - a ready node or E2B backend, so Core has somewhere to run the agent ([Nodes](./nodes.md));
 - Python 3.9 or newer;
-- a model: the installation's default model, or your own provider's model ID, base URL and API key. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which one a Session uses and which protocols each harness speaks.
+- a model: the installation's default model, or your own provider's model ID, base URL and API key. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) says which one a Session uses and which protocols each Harness speaks.
 
 The example uses Codex, whose model provider must speak the OpenAI Responses API.
 
@@ -46,7 +46,7 @@ curl "$OPENAI_BASE_URL/agents" -H "OpenAI-Beta: agents=v1" \
 
 ## 2. Start a Session
 
-A Session is one agent conversation with its own workspace. With `openai_hosted`, Core creates a sandbox for it on a node or E2B and starts the harness inside.
+A Session is one agent conversation with its own workspace. With `openai_hosted`, Core creates a sandbox for it on a node or E2B and starts the Harness inside.
 
 With the installation's default model, skip this. To use your own provider:
 

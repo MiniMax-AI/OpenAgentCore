@@ -14,7 +14,7 @@ Core 拥有持久化的 Session、Turn、input 和 Environment 记录、调度�
 
 Runtime 按以下顺序连接：
 
-1. 获取 daemon 凭据和 device ID。[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型；Project API key 和 Core key 都不是 Runtime 凭据。
+1. 获取 daemon 凭据和 device ID。[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型；Project API 密钥 和 Core 密钥 都不是 Runtime 凭据。
 2. 调用 `POST /api/v1/agent-daemon/bootstrap`，通过 Bearer header 提供凭据，并提供 device ID。使用返回的连接 URL。
 3. 连接 `/api/v1/agent-daemon/ws` 的 WebSocket，传入 `device_id`、`version` 查询参数和 Bearer header。凭据不得出现在 URL、payload 日志或 trace 中。
 4. 立即发送 heartbeat，之后按 bootstrap 返回的间隔发送。每个 heartbeat 声明 `supported_agent_kinds`、其可用性和[能力](#capability-declarations)。第一个 heartbeat 之前能力未知；heartbeat 中缺失的 kind 视为未声明。两者都不允许推断。

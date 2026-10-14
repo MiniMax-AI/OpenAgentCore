@@ -76,7 +76,7 @@ describe("executor credential display ownership", () => {
   it("uses the same row ownership and recovery wording in Chinese", async () => {
     await i18n.changeLanguage("zh-CN");
     const html = render(read(true));
-    expect(html).toContain("绑定凭证</span>");
+    expect(html).toContain("绑定凭据</span>");
     expect(html.match(/aria-label="轮换以恢复"/g)).toHaveLength(1);
     expect(html).toContain("刷新 · 主机连接");
     expect(html).toContain('data-host-connected="false"');

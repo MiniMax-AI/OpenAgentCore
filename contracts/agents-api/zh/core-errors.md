@@ -85,12 +85,12 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 409 | `workspace_storage_conflict` | 工作区存储归属或配置与当前状态冲突 |
 | 503 | `workspace_storage_unavailable` | 工作区存储不可用或操作尚未确认 |
 | 400 | `sandbox_operation_unsupported` | 所选沙箱提供商不支持该操作 |
-| 401 | `invalid_admin_key` | Bearer 凭据不是有效的 Core Key |
+| 401 | `invalid_admin_key` | Bearer 凭据不是有效的 Core 密钥 |
 | 404 | `not_found` | 操作不存在、Harness 未知，或该 Harness 没有部署默认模型服务 |
 | 409 | `project_archived` | 目标 Project 已归档 |
 | 409 | `project_exists` | 该 Project ID 已存在 |
-| 409 | `project_api_key_exists` | 该 API Key ID 已存在 |
-| 409 | `executor_credential_exists` | 该执行器凭证 ID 已存在；要替换密钥，请轮换它 |
+| 409 | `project_api_key_exists` | 该 API 密钥 ID 已存在 |
+| 409 | `executor_credential_exists` | 该执行器凭据 ID 已存在；要替换密钥，请轮换它 |
 | 409 | `sandbox_not_configured` | 沙箱部署尚未配置 |
 | 409 或 503 | `sandbox_reset_in_progress` | 沙箱正在重置 |
 | 409 | `sandbox_configuration_error` | 当前安装无法支持所选提供商，例如公开 URL 为 loopback 时选择 E2B |

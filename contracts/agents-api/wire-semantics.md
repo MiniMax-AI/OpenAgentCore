@@ -207,7 +207,7 @@ Omitted, null and explicit `medium` text verbosity give the same Session configu
 
 ### Configuration snapshot
 
-Session creation copies the effective Agent configuration into an immutable snapshot. With `agent_id`, the saved Agent is read once; fields in the inline `agent` replace the saved field whole, including arrays, and null `tools` clears the list. Omitted fields inherit; an inline `x_agents_core` that omits `harness` keeps the saved harness. Saved Agent metadata never becomes Session metadata. Later Agent updates or deletion affect only new Sessions.
+Session creation copies the effective Agent configuration into an immutable snapshot. With `agent_id`, the saved Agent is read once; fields in the inline `agent` replace the saved field whole, including arrays, and null `tools` clears the list. Omitted fields inherit; an inline `x_agents_core` that omits `harness` keeps the saved Harness. Saved Agent metadata never becomes Session metadata. Later Agent updates or deletion affect only new Sessions.
 
 `stream` defaults to false. `stream` and `agent_id` cannot be null. Omitted or null `metadata` is `{}`.
 

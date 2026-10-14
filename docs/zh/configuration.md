@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 72de9b828d70f6f96e20de6bf1173c8a1232924517c50b308ed8ed74d6668255
+source_hash: 8a7d64ed4be902844e1cbd5c7725e8364599131f3d7df6ce409300159db0ce47
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -127,7 +127,7 @@ services:
           create_host_path: false
 ```
 
-在 **Settings → Workspace storage → Select new configuration** 中选择存储，或按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core key 调用 `PUT /core/v1/workspace-storage`。首次设置时，分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构。恢复时保留已有标识。选择操作会在 Core 中运行适配器的可用性、所有权和 xattr 检查；它不证明每个节点均能解析该挂载：
+在 **Settings → Workspace storage → Select new configuration** 中选择存储，或按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core 密钥 调用 `PUT /core/v1/workspace-storage`。首次设置时，分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构。恢复时保留已有标识。选择操作会在 Core 中运行适配器的可用性、所有权和 xattr 检查；它不证明每个节点均能解析该挂载：
 
 ```json
 {

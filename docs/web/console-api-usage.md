@@ -89,11 +89,11 @@ Summary figures are cumulative per Session and are not billing records. Sessions
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| List harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials default model cards: each harness's readiness (Ready when `enabled` and its model configuration is set, otherwise Model provider not set or Disabled), `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (the default harness is Ready, or any harness when none is default) |
+| List Harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials default model cards: each Harness's readiness (Ready when `enabled` and its model configuration is set, otherwise Model provider not set or Disabled), `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (the default Harness is Ready, or any Harness when none is default) |
 | Set or replace | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** or **Replace**: the complete model configuration with its write-only provider key, never prefilled and never retried; a 400 shows Core's message in the form; then the list is read again |
 | Clear | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**, confirmed, then the list is read again |
 
-The list carries each harness's configuration, so the console does not read `GET /core/v1/harnesses/{harness}/model-configuration`.
+The list carries each Harness's configuration, so the console does not read `GET /core/v1/harnesses/{harness}/model-configuration`.
 
 ## Workspace storage
 
@@ -151,4 +151,4 @@ Its help tips and coverage notes state what a request is and what is not counted
 - Any `/v1/**` route, including Session creation, Session events and their stream, message input, function results and cancellation.
 - Creation or update of Agents, Environment templates, Skills, Files, Vaults or Credentials, including uploads and Credential token replacement.
 - Single Turn reads, Artifacts, Session execution configuration, Environment Files and administrative Session archive.
-- The administrator audit log (`GET /core/v1/audit-log`). Settings shows the installation, each harness's default model and the sandbox deployment instead.
+- The administrator audit log (`GET /core/v1/audit-log`). Settings shows the installation, each Harness's default model and the sandbox deployment instead.

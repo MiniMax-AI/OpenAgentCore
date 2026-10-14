@@ -45,7 +45,7 @@ On a shared host, `-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")`
 
 | Resource | Path | What it is |
 | --- | --- | --- |
-| [Agents](#agents) | `/agents` | Reusable configuration: model, instructions, tools, harness |
+| [Agents](#agents) | `/agents` | Reusable configuration: model, instructions, tools, Harness |
 | [Sessions](#sessions) | `/agents/sessions` | One agent conversation with its own Environment |
 | [Input events](#send-input) | `/agents/sessions/{id}/events` (POST) | Messages, cancellation and tool results |
 | [Event stream](#stream-events) | `/agents/sessions/{id}/events` (GET) | Live server-sent events |
@@ -138,27 +138,27 @@ Every response carries `X-Request-Id`; include it when reporting a problem.
 
 ### Core extensions: `x_agents_core`
 
-Core runs several harnesses and accepts your own model access. Those settings are the only additions to the OpenAI shapes, and they sit inside `x_agents_core`:
+Core runs several Harnesses and accepts your own model access. Those settings are the only additions to the OpenAI shapes, and they sit inside `x_agents_core`:
 
 | Field | Where | Value |
 | --- | --- | --- |
 | `harness` | Agent, or a Session's inline `agent` | `codex`, `claude_sdk` or `mcode` |
-| `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. The protocol must be one of the harness's native protocols |
-| `harness_config` | Agent, inline `agent`, or Session creation (top level, wins) | The harness's native model parameters, such as Codex's `model_reasoning_effort` |
+| `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. The protocol must be one of the Harness's native protocols |
+| `harness_config` | Agent, inline `agent`, or Session creation (top level, wins) | The Harness's native model parameters, such as Codex's `model_reasoning_effort` |
 | `environment` | `openai_hosted` or `self_hosted` Session creation (top level) | Portable preparation: `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins`, `capability_directories`. A field may not also appear in `environment`; see [Environments](../../contracts/agents-api/environments.md#preparation-order) |
 | `installation` | Read-only, on `self_hosted` Sessions | Short-lived install commands for your machine; see [self-hosted execution](../getting-started/self-hosted.md) |
 
 Any other member is rejected with 400. `api_key` is write-only: reads return `api_key_configured`. `harness_config` replaces the whole object; `{}` clears it. With the SDK, pass these through `extra_body`.
 
-## Choose a harness and a model
+## Choose a Harness and a model
 
-The harness is the agent program that runs a Session: Codex (`codex`), Claude Code (`claude_sdk`) or MiniMax Code (`mcode`). Set `x_agents_core.harness` on the Agent or the inline `agent`; without it, the installation's default harness applies ([`OAC_DEFAULT_HARNESS`](../configuration.md#settings), Codex unless the operator changed it).
+The Harness is the agent program that runs a Session: Codex (`codex`), Claude Code (`claude_sdk`) or MiniMax Code (`mcode`). Set `x_agents_core.harness` on the Agent or the inline `agent`; without it, the installation's default Harness applies ([`OAC_DEFAULT_HARNESS`](../configuration.md#settings), Codex unless the operator changed it).
 
-- **Model.** `model` is the provider's exact model ID. An inline Agent on an `openai_hosted` or `none` Session may omit it to use the default model configuration of its harness. A saved Agent always needs one.
-- **Provider.** The harness calls your provider directly, with one of the harness's native protocols; there is no conversion, and a mismatch is rejected when the Session is created. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) lists each harness's protocols and which provider a Session uses on each Environment type. A Session freezes its provider at creation.
-- **Native parameters.** `harness_config` carries the harness's own model settings; see [native model parameters](../../contracts/agents-api/model-execution.md#native-model-parameters).
+- **Model.** `model` is the provider's exact model ID. An inline Agent on an `openai_hosted` or `none` Session may omit it to use the default model configuration of its Harness. A saved Agent always needs one.
+- **Provider.** The Harness calls your provider directly, with one of the Harness's native protocols; there is no conversion, and a mismatch is rejected when the Session is created. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) lists each Harness's protocols and which provider a Session uses on each Environment type. A Session freezes its provider at creation.
+- **Native parameters.** `harness_config` carries the Harness's own model settings; see [native model parameters](../../contracts/agents-api/model-execution.md#native-model-parameters).
 
-Not every combination of harness, placement and operation is supported; the [Harness capabilities](../../contracts/agents-api/harness-capabilities.md) lists them.
+Not every combination of Harness, placement and operation is supported; the [Harness capabilities](../../contracts/agents-api/harness-capabilities.md) lists them.
 
 ## Agents
 
@@ -200,7 +200,7 @@ oac "/agents" -d '{
 
 - **Update** changes only the fields you send. `metadata` replaces all pairs; `null` clears `name` or `instructions`.
 - **Delete** keeps existing Sessions.
-- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search` with `mode: "disabled"`. Support depends on harness and Environment; see [execution tools](../../contracts/agents-api/execution-tools.md).
+- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search` with `mode: "disabled"`. Support depends on Harness and Environment; see [execution tools](../../contracts/agents-api/execution-tools.md).
 
 ## Sessions
 
@@ -529,17 +529,17 @@ client.beta.agents.vaults.credentials.create(
 session = client.beta.agents.sessions.create(environment={"type": "none"}, input="...", vault_ids=[vault.id], agent_id=agent.id)
 ```
 
-The HTTP path is `/vaults`, with the Beta header. A Session selects credentials from its `vault_ids`, optionally by `credential_id`; the MCP server's URL must match the selected credential's `mcp_server_url` exactly in either case. The [Vaults contract](../../contracts/agents-api/vaults.md) owns selection, errors, OAuth refresh and deletion. An MCP tool's `connection_origin` decides whether Core's side or the workspace connects to the server, and each harness supports a different set: see [MCP connection origin](../../contracts/agents-api/environments.md#public-mcp-connection-origin).
+The HTTP path is `/vaults`, with the Beta header. A Session selects credentials from its `vault_ids`, optionally by `credential_id`; the MCP server's URL must match the selected credential's `mcp_server_url` exactly in either case. The [Vaults contract](../../contracts/agents-api/vaults.md) owns selection, errors, OAuth refresh and deletion. An MCP tool's `connection_origin` decides whether Core's side or the workspace connects to the server, and each Harness supports a different set: see [MCP connection origin](../../contracts/agents-api/environments.md#public-mcp-connection-origin).
 
 ## Diagnose a failure
 
 1. Read the Session's `status` and `error`, and the latest Turn's `error`. A failed Turn reports only a generic `internal_error`.
-2. Check that the Environment is connected and its harness is available.
-3. Check the harness, model and tool combination in [Harness capabilities](../../contracts/agents-api/harness-capabilities.md).
+2. Check that the Environment is connected and its Harness is available.
+3. Check the Harness, model and tool combination in [Harness capabilities](../../contracts/agents-api/harness-capabilities.md).
 4. Ask the administrator for the Session's [diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [troubleshooting](../getting-started/operations.md#troubleshooting) for service logs, credentials and node readiness.
 
 A 401 usually means a key from another namespace; see [API namespaces and credentials](./index.md).
 
 ## Differences from OpenAI
 
-Core differs from the OpenAI service in some behavior, such as Session creation idempotency and harness-specific tool support. The [coverage ledger](../../contracts/agents-api/index.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.
+Core differs from the OpenAI service in some behavior, such as Session creation idempotency and Harness-specific tool support. The [coverage ledger](../../contracts/agents-api/index.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.

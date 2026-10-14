@@ -1,7 +1,7 @@
 ---
 title: "Core 协议行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: bed64f05b6e52ab5774063f649173b4a42c0a2da4038bc273f595f81c5dbd128
+source_hash: 13d033e194fe4316dfaeced837907b594e4c95d93ebbf9ef9078f47b42cbec92
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[coverage ledger](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -209,7 +209,7 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 
 ### 配置快照 {#configuration-snapshot}
 
-Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `agent_id` 时，已保存的 Agent 只会读取一次；内联 `agent` 中的字段会整体替换已保存字段，包括数组，而 null `tools` 会清空列表。省略的字段会继承保存值；如果内联 `x_agents_core` 省略 `harness`，则保留已保存的 harness。已保存的 Agent metadata 永远不会成为 Session metadata。后续更新或删除 Agent 只会影响新的 Session。
+Session 创建会将 Agent 的有效配置复制到不可变快照中。使用 `agent_id` 时，已保存的 Agent 只会读取一次；内联 `agent` 中的字段会整体替换已保存字段，包括数组，而 null `tools` 会清空列表。省略的字段会继承保存值；如果内联 `x_agents_core` 省略 `harness`，则保留已保存的 Harness。已保存的 Agent metadata 永远不会成为 Session metadata。后续更新或删除 Agent 只会影响新的 Session。
 
 `stream` 默认为 false。`stream` 和 `agent_id` 不能为 null。省略或 null 的 `metadata` 为 `{}`。
 

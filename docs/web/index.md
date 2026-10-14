@@ -36,7 +36,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 | Give the installation an HTTPS address | Set `OAC_PUBLIC_URL` and point a reverse proxy at Web; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
 | Choose the sandbox backend (microsandbox, E2B or Docker), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | Add, resize or remove execution nodes | **Nodes**: **Add node**, **Edit node** and removal; see the [nodes guide](../getting-started/nodes.md) |
-| Set the default model of a harness | **Settings → Models and credentials**; see [default models](../configuration.md#default-models) |
+| Set the default model of a Harness | **Settings → Models and credentials**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |
 | Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [self-hosted executors](../getting-started/self-hosted.md) |
 | Delete a resource, for example a leaked Credential | The resource's row in its list, or its page; Files are deleted from the Files list. The public deletion rules apply |

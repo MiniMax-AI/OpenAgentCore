@@ -1,7 +1,7 @@
 ---
 title: "运行第一个 Session"
 source: docs/getting-started/quickstart.md
-source_hash: 8c44adf64e32f23578128c60f401b38de809954ceec79540acd10e353c32d6b4
+source_hash: 36731629434acafda8c48640aba3eda4967622525ed1b9dbf49ba40769513bc3
 ---
 
 本教程从 Project API 密钥开始，让 Agent 创建一个文件并汇报结果。你需要：

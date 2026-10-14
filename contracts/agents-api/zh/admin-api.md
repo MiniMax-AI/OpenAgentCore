@@ -57,7 +57,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：Project 及其 API 密
 
 ## 工作区存储 {#workspace-storage}
 
-**Settings → Workspace storage** 和运维脚本使用 Core key 调用 `GET /core/v1/workspace-storage` 和 `PUT /core/v1/workspace-storage`。成功响应为选择结果：`{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...},"tenant_capacity_mib":<integer>}`。请求包含相同的必需字段，以及可选的只写 `credential` 对象。`parameters` 和 `credential` 是适配器定义的 JSON 对象，由所选适配器验证。未知顶层字段会被拒绝。
+**Settings → Workspace storage** 和运维脚本使用 Core 密钥 调用 `GET /core/v1/workspace-storage` 和 `PUT /core/v1/workspace-storage`。成功响应为选择结果：`{"id":"<canonical UUID>","adapter":"<adapter identifier>","parameters":{...},"tenant_capacity_mib":<integer>}`。请求包含相同的必需字段，以及可选的只写 `credential` 对象。`parameters` 和 `credential` 是适配器定义的 JSON 对象，由所选适配器验证。未知顶层字段会被拒绝。
 
 GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspace_storage_not_found`。它绝不返回凭据。PUT 验证并选择不可变配置，同时设置 [`tenant_capacity_mib`](../../../docs/zh/configuration.md#tenant-capacity)，以 200 返回选择结果。正的 `tenant_capacity_mib` 要求实施容量配额的配置，此类配置也要求正值；否则 PUT 返回 400 `workspace_operation_unsupported`。Core 加密凭据，绝不返回、记录日志或审计凭据。复用 ID 要求适配器、参数和凭据完全一致；省略 `credential` 会保留已存储的凭据，显式 `null` 无效。更改其含义或与保留归属冲突会返回 409 `workspace_storage_conflict`。配置更改与工作区归属变更串行执行，成功变更携带与其他部署设置相同的管理员审计来源。[工作区文件系统协议](../../../docs/zh/workspace-provider.md) 规定标识、挂载、准入和保留语义。
 

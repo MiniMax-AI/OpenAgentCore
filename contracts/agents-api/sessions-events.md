@@ -29,16 +29,16 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Later re
 
 ## Send input
 
-`POST /v1/agents/sessions/{session_id}/events` takes an ordered array of 1 to 64 events: `agent.session.input.message`, `agent.session.input.cancel` and `agent.session.input.tool_result`. The whole batch is admitted atomically, and the response is 202 with no body once the batch is stored, before any harness reads it. Admission never confirms native application.
+`POST /v1/agents/sessions/{session_id}/events` takes an ordered array of 1 to 64 events: `agent.session.input.message`, `agent.session.input.cancel` and `agent.session.input.tool_result`. The whole batch is admitted atomically, and the response is 202 with no body once the batch is stored, before any Harness reads it. Admission never confirms native application.
 
 - **Limits.** The request body is at most 1 MiB, and the stored input of one request at most 512 KiB.
 - **Null batch.** An explicit `null` for `events` is invalid.
 - **Empty batch.** `{"events": []}` checks that the Session exists and returns 202. It creates no Turn, Item or retry identity.
 - **Retries.** An `Idempotency-Key` of up to 128 bytes identifies the whole ordered batch. The same key and batch return 202 again without admitting anything twice; the same key with another batch returns 409 `idempotency_conflict`. A request without a key is always new.
-- **Messages.** On an idle Session a message batch starts a queued Turn. While a Turn runs, messages join it (steering); they never start a parallel Turn. Each message stays its own user Item, even when the harness receives several as one prompt.
+- **Messages.** On an idle Session a message batch starts a queued Turn. While a Turn runs, messages join it (steering); they never start a parallel Turn. Each message stays its own user Item, even when the Harness receives several as one prompt.
 - **Cancellation.** A queued Turn is cancelled without a live Runtime. A running Turn is cancelled when the Runtime confirms it; completion can win that race. The Turn has stopped when it reads `cancelled`, not when the request returns. A cancellation on an idle Session with no pending input is accepted and has no effect; while an input reservation is pending, it returns 409.
-- **Function results.** `turn_id`, `call_id` and `success` are required; `output` and `error` are optional and nullable ([content rules](./message-content.md#function-results)). An identical repeated result returns 202 without another application or event. The result Item appears when the harness applies the result; a result that cancellation prevents from being applied stays stored but produces no Item.
-- **Queueing.** A queued Turn starts when a Runtime that supports the Session's harness and configuration is connected and one of Core's [`OAC_EXECUTION_CONCURRENCY`](../../docs/configuration.md#settings) work slots is free. A Session stays bound to the Runtime that first ran it.
+- **Function results.** `turn_id`, `call_id` and `success` are required; `output` and `error` are optional and nullable ([content rules](./message-content.md#function-results)). An identical repeated result returns 202 without another application or event. The result Item appears when the Harness applies the result; a result that cancellation prevents from being applied stays stored but produces no Item.
+- **Queueing.** A queued Turn starts when a Runtime that supports the Session's Harness and configuration is connected and one of Core's [`OAC_EXECUTION_CONCURRENCY`](../../docs/configuration.md#settings) work slots is free. A Session stays bound to the Runtime that first ran it.
 - **Execution availability.** While Core shuts down, or after its Worker loses execution ownership, requests return 503 `execution_unavailable`.
 
 ### Sessions with an Environment
@@ -62,7 +62,7 @@ Checks run in this order: request validation, Session lookup, retry lookup, the 
 | A missing, malformed or foreign Session | 404 `not_found_error` | "Resource not found." |
 | New input after an `openai_hosted` Environment failed to provision | 409 `conflict_error` | "the hosted environment failed to provision" |
 | New input after a `self_hosted` Environment failed, input already waiting when the Environment failed, or an expired Environment | 409 `environment_unavailable` | "The environment is no longer available for new input." |
-| A message the Session's harness cannot take, such as whitespace-only text on Claude Code | 400 `unsupported_or_invalid_configuration` | See [whitespace-only text](./message-content.md#whitespace-only-text) |
+| A message the Session's Harness cannot take, such as whitespace-only text on Claude Code | 400 `unsupported_or_invalid_configuration` | See [whitespace-only text](./message-content.md#whitespace-only-text) |
 
 An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Error messages never repeat caller input or internal identifiers.
 
@@ -106,7 +106,7 @@ A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only
 - An assistant message follows one sequence: `item.added` in progress with empty `content`, `content_part.added` with empty text, `output_text.delta` events, `output_text.done`, `content_part.done` and `item.done`. A message first observed complete, such as structured output, sends its whole text in one `output_text.delta`, byte for byte. The completed text replaces the accumulated deltas.
 - Codex command output streams as `agent.output.command_execution_output.delta` with the command's Item ID and output index. Native output quotas and text conversion apply, so the deltas are not a byte-exact capture; the completed Item is authoritative.
 - A cancelled or failed Turn marks its unfinished Items `incomplete` and keeps their partial content.
-- A function call stays in `required_actions` until the harness applies its result, or cancellation or the Turn's end removes it. A repeated notification emits no new state.
+- A function call stays in `required_actions` until the Harness applies its result, or cancellation or the Turn's end removes it. A repeated notification emits no new state.
 
 ## Turns and Items
 
@@ -118,7 +118,7 @@ Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-seman
 
 | Item `type` | Content |
 | --- | --- |
-| `message` | User or assistant content parts. `phase` is the harness's phase when it reports one (`commentary`, `final_answer`), otherwise null |
+| `message` | User or assistant content parts. `phase` is the Harness's phase when it reports one (`commentary`, `final_answer`), otherwise null |
 | `command_execution` | Command, reported output, exit code, duration and working directory |
 | `mcp_call` | Server and tool identity, arguments, structured result or error |
 | `function_call`, `function_call_output` | A linked call and its result. The result always carries `output` and `error`, null when the submission omitted them; stored results keep the submitted field presence. Native file changes appear as an `apply_patch` function call with the changes as arguments and no invented result |
@@ -131,9 +131,9 @@ A failed tool does not fail its Turn. Tool output is readable by the Session's P
 
 Turn and Session `usage` uses the pinned `TokenUsage` fields: input, cached input, output, reasoning output and total tokens. Null means unknown, never zero.
 
-- **Turn usage** is the latest complete snapshot the harness reported for that Turn. A new snapshot replaces the previous one; repeats never add. Stored snapshots survive cancellation and Worker restarts.
+- **Turn usage** is the latest complete snapshot the Harness reported for that Turn. A new snapshot replaces the previous one; repeats never add. Stored snapshots survive cancellation and Worker restarts.
 - **Session usage** is the sum of root Turn usage when every root Turn has ended (completed, failed or cancelled) with known usage. It is null while any root Turn is queued, running or waiting, and stays null once a root Turn ends without usage. Subagent Turns do not count.
-- **By harness.** Codex reports measured snapshots while a Turn runs and at its end; a Turn interrupted before any usage report stays null. Claude Code and MiniMax Code report no complete public breakdown, so their usage is null.
+- **By Harness.** Codex reports measured snapshots while a Turn runs and at its end; a Turn interrupted before any usage report stays null. Claude Code and MiniMax Code report no complete public breakdown, so their usage is null.
 
 Usage is best-effort accounting of reported measurements. It is not an invoice, and Core never estimates missing usage.
 

@@ -93,7 +93,7 @@ CPU 静默状态、心跳时龄和连接状态都不是空闲时间。
 
 ### 存储的历史记录 {#stored-history}
 
-PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读取无法虚增覆盖率。每条记录都会写入一行 `runtime_history_samples`，以租户、Session、Environment 和解析时间为键，包括分配信息、provider 类型、状态、观测时间与启动时间、CPU 秒数、容量和利用率比率、内存使用量和限制，以及实测令牌计数器。磁盘数据不存储。缺少 `started_at` 的采样仍计入覆盖范围，但会丢弃资源值，因为这些值无法关联到某次计算实例启动周期。
+PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读取无法虚增覆盖率。每条记录都会写入一行 `runtime_history_samples`，以租户、Session、Environment 和解析时间为键，包括分配信息、provider 类型、状态、观测时间与启动时间、CPU 秒数、容量和利用率比率、内存使用量和限制，以及实测 token 计数器。磁盘数据不存储。缺少 `started_at` 的采样仍计入覆盖范围，但会丢弃资源值，因为这些值无法关联到某次计算实例启动周期。
 
 历史服务在查询前解析 Project、Session 和 Environment；查询始终携带该作用域和有界时间范围，但绝不携带 provider 身份。存储保留 7 天。单次读取最多覆盖 24 小时，最多读取 20,000 条原始采样，并从范围起点之前两个采样间隔处开始读取，以查找 CPU 基线；每个数组最多返回 1,000 个桶，最多返回 64 个序列，总点数最多 10,000 个。结果超出请求的作用域、时间范围或限制时，读取失败。API 的 [Series](runtime-observability-api.md#series) 部分说明了聚合方式。
 
@@ -105,7 +105,7 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 
 每次扫描结束后，Core 会在 2 秒内且在检查租约后，将每个新鲜节点心跳复制到 `node_host_history_samples`，其中包含主机 CPU 利用率、已用内存和可用磁盘，并以节点和心跳自身时间为键，因此重复扫描不会增加数据。心跳新鲜的判定条件是：其节点未被移除、在当前所有者 epoch 下处于连接状态、在过去 45 秒内被观察到，并且所报告的主机时间位于过去 45 秒内且不在未来。同样适用 7 天清理期。节点主机历史属于遥测数据，绝不作为调度或容量的权威依据，读取也绝不会对其进行采样或回填。
 
-### 令牌使用量 {#token-usage}
+### token 使用量 {#token-usage}
 
 每次观测都携带来自 `MeasuredSessionUsage` 的 Session 实测使用量，即所有已记录根 Turn 快照之和，其中包含活跃 Turn。这不是公开的 Session 使用量规则，并且 Core 绝不会从 provider 计数器、上下文占用量或成本推导令牌数。
 
@@ -120,8 +120,8 @@ PostgreSQL 存储仅保留周期性的 `openai_hosted` 记录，因此 API 读�
 | `agents.runtime.cpu.utilization` | Gauge，比率 | Provider 报告的 CPU 占比（E2B） |
 | `agents.runtime.memory.usage` | Gauge，字节 | 内存使用量 |
 | `agents.runtime.memory.limit` | Gauge，字节 | 内存限制 |
-| `agents.session.tokens.input` | Gauge，令牌 | 实测 Session 输入令牌 |
-| `agents.session.tokens.output` | Gauge，令牌 | 实测 Session 输出令牌 |
+| `agents.session.tokens.input` | Gauge，token | 实测 Session 输入 token |
+| `agents.session.tokens.output` | Gauge，token | 实测 Session 输出 token |
 | `agents.runtime.sample` | 单调差值和 | 每个经验证的结果一条，包括 unavailable 和 unsupported |
 | `agents.runtime.sample.duration` | Delta 直方图，秒 | Provider 读取时长 |
 

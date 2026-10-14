@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 6a336cfbec02e451ab41d5addb9744755ee60ef11da5121e0ab7abee61e45244
+source_hash: 3c4a694989738a6b8aad43b8554423a0a529f404d100740f4619e6a1669393fc
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各 Project 的资源与执行历史，并管理 Project、密钥、节点和部署设置。应用不使用 Web；它们通过自己的 Project API 密钥调用 Core 的 Agents API（`/v1`）。

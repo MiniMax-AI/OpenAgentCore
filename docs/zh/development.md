@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: a3e1dc325f8500863c9424344ac010e9091912e72ac1bf66cca212c3f62192e8
+source_hash: cf241a574a30389dc38d0fdaa87fe5d82714beed489e39e42bd6710478f3a3eb
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -72,7 +72,7 @@ python3 "$bundle/install.py" \
   --public-url http://YOUR_CORE_HOST:8080
 ```
 
-将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。需要时使用反向代理后的 HTTPS 地址；入口配置见[安装选项](getting-started/install-options.md)。安装器输出用于登录的 Core key。它创建标准 Compose 安装，以及包含该构建公共节点制品的只读 `node-payload` 目录。磁盘需同时容纳解压后的构建包和安装副本。Core、Web 均不会获得 Docker socket。
+将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。需要时使用反向代理后的 HTTPS 地址；入口配置见[安装选项](getting-started/install-options.md)。安装器输出用于登录的 Core 密钥。它创建标准 Compose 安装，以及包含该构建公共节点制品的只读 `node-payload` 目录。磁盘需同时容纳解压后的构建包和安装副本。Core、Web 均不会获得 Docker socket。
 
 构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`。可将其复制到另一台 Linux amd64 Docker 主机，解压后执行其中的 `install.py`；目标主机只需要 Python 3.9+ 和 Docker，无需源码、Go、Node 或 pnpm。安装完成前保留解压目录；安装后的服务和节点下载不再依赖它的原始位置。
 
@@ -113,11 +113,11 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | `services/core/internal/persistence`、`services/core/internal/db` 和 `services/core/migrations` | Core 的 PostgreSQL adapter、事务、查询和迁移 | [服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
 | `services/core/tests/integration` | 共同驱动 HTTP 边界、执行 Worker 和 PostgreSQL adapter 的测试 | [服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#tests) |
 | `services/core/internal/execution` | 持久化 Turn 分发与调度 | [Runtime 协议](runtime-protocol.md) |
-| `services/core/internal/engine` | 对 harness 操作与执行位置进行纯资格验证 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |
+| `services/core/internal/engine` | 对 Harness 操作与执行位置进行纯资格验证 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire 类型与验证器 | [Runtime 协议](runtime-protocol.md) |
 | `internal/runtimebootstrap` | Provider 到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
 | `apps/daemon/internal/dispatch` | Runtime 准备、Executor 复用、Turn 和清理所有权 | [Harness 生命周期](../../contracts/agents-api/zh/harness-onboarding.md#required-adapter-interfaces) |
-| `apps/daemon/internal/agent` | 原生 harness adapter | [原生参考](../../contracts/agents-api/zh/harness-onboarding.md#native-references) |
+| `apps/daemon/internal/agent` | 原生 Harness adapter | [原生参考](../../contracts/agents-api/zh/harness-onboarding.md#native-references) |
 | `services/core/internal/sandbox` | Provider 接口与托管计算资源生命周期 | [Provider 接入](sandbox-provider.md) |
 | `services/web` | 控制台登录与服务端管理代理 | [控制台服务端](web/console-server.md) |
 | `apps/web` 和 `packages/agents-client` | 控制台 UI 与类型化 client | [Web 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md) |

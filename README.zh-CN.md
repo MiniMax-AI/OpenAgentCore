@@ -56,8 +56,8 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 
 然后：
 
-1. 用安装器生成的 Core key **登录 Web**（管理控制台），并**配置域名和 HTTPS**。
-2. **设置默认模型**，并**签发 Project API key**。
+1. 用安装器生成的 Core 密钥 **登录 Web**（管理控制台），并**配置域名和 HTTPS**。
+2. **设置默认模型**，并**签发 Project API 密钥**。
 3. **添加执行资源**：节点、E2B，或你自己的机器。
 4. 用 OpenAI SDK **[运行第一个 Session](https://openagentcore.dev/zh/docs/getting-started/quickstart)**。
 
