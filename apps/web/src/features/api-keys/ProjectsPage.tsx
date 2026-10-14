@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 
 
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, revealInPageBody } from "../../components/console-ui";
+import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, revealInPageBody, SegmentedControl } from "../../components/console-ui";
 import { ErrorState } from "../../components/ErrorState";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
@@ -20,7 +20,6 @@ import { ProjectDetail, useProjectKeys } from "./ProjectDetail";
 import { invalidateProjects, projectActivityQuery, projectKeysQuery, projectScope, projectSummaryQuery } from "./project-queries";
 import { installationQuery } from "../../lib/installation";
 import { projectsQuery } from "../../lib/queries";
-import { ProjectStatus } from "./ProjectStatus";
 import { useKeyFlow } from "./use-key-flow";
 import "./api-keys.css";
 import { TableSkeleton } from "../../components/Skeleton";
@@ -34,6 +33,9 @@ type Dialog =
   | { kind: "revoke"; project: AdminProject; key: AdminAPIKey; activeCount: number };
 
 const manageable = (project: AdminProject) => project.archived_at === null;
+
+/** The list shows active or archived projects, never both. */
+type ProjectView = "active" | "archived";
 
 /**
  * Platform › Projects and keys. A project owns the assets shared by all of
@@ -50,6 +52,7 @@ export function ProjectsPage() {
   const { params, navigate, back } = useConsoleNavigation();
   const [selectedId, setSelectedId] = useState<string | null>(params.id ?? null);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<ProjectView>("active");
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
   const [dialogError, setDialogError] = useState<FlowError | null>(null);
@@ -72,7 +75,9 @@ export function ProjectsPage() {
   const projects = state.projects;
   useFailureToast(refreshError, t("page.refreshFailed"), "projects-refresh");
   const names = useMemo(() => projects.map((project) => project.name), [projects]);
-  const visible = useMemo(() => projects.filter((project) => matchesProject(project, query)), [projects, query]);
+  const archivedCount = useMemo(() => projects.filter((project) => !manageable(project)).length, [projects]);
+  const inView = useMemo(() => projects.filter((project) => manageable(project) === (view === "active")), [projects, view]);
+  const visible = useMemo(() => inView.filter((project) => matchesProject(project, query)), [inView, query]);
   const selected = selectedId ? byId.get(selectedId) ?? null : null;
   const keys = useProjectKeys(selected?.id ?? null);
   // The open project's keys and usage; its write operations show their own progress.
@@ -228,13 +233,22 @@ export function ProjectsPage() {
     if (state.status === "failed" && !projects.length) {
       body = <ErrorState title={t("page.loadFailed")} detail={state.error} onRetry={refreshAll} />;
     } else if (state.status === "loading" && !projects.length) {
-      body = <TableSkeleton label={t("page.loading")} rows={4} columns={5} />;
+      body = <TableSkeleton label={t("page.loading")} rows={4} columns={4} />;
     } else if (!projects.length) {
       body = <EmptyState icon={FolderKanban} title={t("page.empty")} action={createButton} />;
     } else {
       body = (
         <>
-          <ListToolbar label={t("list.label")} summary={listSummary(tCommon, visible.length, projects.length, { locale })}>
+          <ListToolbar label={t("list.label")} summary={listSummary(tCommon, visible.length, inView.length, { locale })}>
+            <SegmentedControl
+              label={t("list.statusFilter")}
+              value={view}
+              options={[
+                { value: "active", label: t("status.active"), count: formatInteger(projects.length - archivedCount, locale) },
+                { value: "archived", label: t("status.archived"), count: formatInteger(archivedCount, locale) },
+              ]}
+              onChange={setView}
+            />
             <SearchField value={query} onChange={setQuery} placeholder={t("list.search")} label={t("list.search")} />
           </ListToolbar>
           {visible.length ? (
@@ -243,7 +257,6 @@ export function ProjectsPage() {
                 <thead>
                   <tr>
                     <th scope="col">{t("list.name")}</th>
-                    <th scope="col">{t("list.status")}</th>
                     <th scope="col" className="numeric">{t("list.activeKeys")}</th>
                     <th scope="col">{t("list.created")}</th>
                     <th scope="col"><span className="column-help">{t("list.lastActive")}<HelpTip>{t("list.lastActiveHelp")}</HelpTip></span></th>
@@ -258,7 +271,6 @@ export function ProjectsPage() {
                         <th scope="row">
                           <NameCell name={project.name} id={project.id} onOpen={() => open(project.id)} openLabel={t("list.open", { name: project.name })} />
                         </th>
-                        <td><ProjectStatus project={project} /></td>
                         <td className="numeric">{formatInteger(project.active_key_count, locale)}</td>
                         <td className="key-nowrap">{formatDateTime(epochSeconds(project.created_at), locale)}</td>
                         <td className="key-nowrap" title={lastActive !== null ? formatDateTime(lastActive, locale) : undefined}>{formatRelative(lastActive, now, locale)}</td>
@@ -276,11 +288,13 @@ export function ProjectsPage() {
                 </tbody>
               </table>
             </div>
-          ) : (
+          ) : query ? (
             <EmptyState
               title={t("list.noMatch")}
               action={<button className="button outline" type="button" onClick={() => setQuery("")}>{tCommon("actions.clearSearch")}</button>}
             />
+          ) : (
+            <EmptyState title={t(`list.none.${view}`)} />
           )}
         </>
       );

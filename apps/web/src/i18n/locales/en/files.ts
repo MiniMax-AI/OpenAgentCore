@@ -44,7 +44,6 @@ export const files = {
   },
   empty: {
     title: "No files yet",
-    description: "Upload a file, then reference its File ID from an Environment Template.",
   },
   unsupported: {
     title: "This Core does not list files",

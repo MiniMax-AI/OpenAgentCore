@@ -48,8 +48,6 @@ export const skills = {
   },
   empty: {
     title: "还没有 Skill",
-    description: "上传一个文件夹或它的 ZIP，其中的 SKILL.md 以这样的内容开头：",
-    exampleLabel: "最小的 report/SKILL.md",
   },
   unsupported: {
     title: "当前 Core 不提供 Skill",

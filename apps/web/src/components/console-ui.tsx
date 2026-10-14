@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import * as m from "motion/react-m";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { docsUrl } from "../lib/docs";
 
 /**
  * Shared page grammar for the administrator console. Every page uses the same
@@ -289,6 +290,26 @@ export function EmptyState({
       {description ? <p className="console-empty-description">{description}</p> : null}
       {action ? <div className="console-empty-action">{action}</div> : null}
     </div>
+  );
+}
+
+/** The section of the Agents API guide that explains how applications create a resource. */
+export type ApiGuideSection = "agents" | "sessions" | "environment-templates" | "skills" | "source-files" | "vaults";
+
+/**
+ * An empty resource list. Web only reads and deletes these resources, so the
+ * state says that applications create them and links to the API guide.
+ */
+export function ApiEmptyState({ icon, title, hint, section }: { icon?: LucideIcon; title: ReactNode; hint?: ReactNode; section: ApiGuideSection }) {
+  const { t, i18n } = useTranslation();
+  return (
+    <EmptyState
+      icon={icon}
+      title={title}
+      hint={hint}
+      description={t(`apiEmpty.${section}`)}
+      action={<a className="text-action" href={docsUrl(`docs/api/public-agent-api#${section}`, i18n.resolvedLanguage)} target="_blank" rel="noreferrer">{t("apiEmpty.guide")}</a>}
+    />
   );
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: b5bc17e6fe3870240abf18f62dcaecc4f8ccc92b0828550e374011c17e8667dd
+source_hash: e96e3146dd30a88416e920f66b4071d217baedf3471e3d6f9334085645191587
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -91,7 +91,7 @@ source_hash: b5bc17e6fe3870240abf18f62dcaecc4f8ccc92b0828550e374011c17e8667dd
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 列出 Harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials 的 Default model 卡片：每个 Harness 的只读 `enabled` 和 `default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 Usage details；Overview 的 Getting started（默认 Harness 上的默认模型；如果没有默认模型，则为任意已启用 Harness 上的默认模型） |
+| 列出 Harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials 的 Default model 卡片：每个 Harness 的就绪状态（`enabled` 且已设置模型配置时为 Ready，否则为 Model provider not set 或 Disabled）、`default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 Usage details；Overview 的 Getting started（默认 Harness 为 Ready；没有默认 Harness 时，任意 Harness 为 Ready） |
 | 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** 或 **Replace**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息；随后再次读取列表 |
 | 清除 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**，需确认，随后再次读取列表 |
 

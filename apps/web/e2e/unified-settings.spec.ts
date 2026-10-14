@@ -18,6 +18,10 @@ test("storage capacity has one settings home and preserves immutable configurati
   });
   await openConsole(page, request, "settings?id=storage");
   await expect(page.getByRole("navigation").getByRole("button", { name: "Workspace storage", exact: true })).toHaveAttribute("aria-current", "page");
+  // The configuration's identity and raw parameters wait behind Configuration details.
+  await expect(page.getByText(initial.id)).toBeHidden();
+  await page.getByText("Configuration details").click();
+  await expect(page.getByText(initial.id)).toBeVisible();
   await page.getByRole("button", { name: "Edit tenant capacity", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Edit tenant capacity" });
   await expect(dialog.getByLabel("Credential", { exact: false })).toHaveCount(0);
@@ -25,9 +29,9 @@ test("storage capacity has one settings home and preserves immutable configurati
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(dialog).toBeHidden();
   expect(saves).toEqual([{ ...initial, tenant_capacity_mib: 8192 }]);
-  await expect(page.getByText("8,192", { exact: true })).toBeVisible();
+  await expect(page.getByText("8 GiB", { exact: true })).toBeVisible();
   await page.reload();
-  await expect(page.getByText("8,192", { exact: true })).toBeVisible();
+  await expect(page.getByText("8 GiB", { exact: true })).toBeVisible();
 });
 
 test("new storage selection validates objects, retains retry identity, and never redisplays server secrets", async ({ page, request }) => {

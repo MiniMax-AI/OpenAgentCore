@@ -3,6 +3,7 @@ import type { AdminProject, CoreHarness } from "@oac/agents-client";
 import { nodeServingReady } from "../fleet/fleet-model";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
 import { templateBuildStatus } from "../sandbox/deployment-specification";
+import { harnessReady } from "../system/harness-queries";
 
 /**
  * Getting started on the Overview: four steps to a working deployment,
@@ -74,15 +75,11 @@ function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   return { state: "todo", action: nodes.length ? "nodes" : "add-node", cloud: false };
 }
 
-/**
- * Done once the default harness has a deployment default model provider;
- * without a default harness, once any enabled harness has one.
- */
+/** Done once the default harness is ready; without a default harness, once any harness is. */
 export function modelStep(harnesses: readonly CoreHarness[] | "failed" | undefined): StepState {
   if (!harnesses || harnesses === "failed") return harnesses ? "unknown" : null;
   const target = harnesses.find((harness) => harness.default);
-  const set = target ? target.model_configuration !== null : harnesses.some((harness) => harness.enabled && harness.model_configuration !== null);
-  return set ? "done" : "todo";
+  return (target ? harnessReady(target) : harnesses.some(harnessReady)) ? "done" : "todo";
 }
 
 /** The newest of the projects, most likely the one just created. */

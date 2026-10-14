@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { useFailureToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
+import { ApiEmptyState, EmptyState, HelpTip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
@@ -65,7 +65,7 @@ function VaultsList() {
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
-    body = <EmptyState icon={VaultIcon} title={t("noVaults")} />;
+    body = <ApiEmptyState icon={VaultIcon} title={t("noVaults")} section="vaults" />;
   } else if (!collection.items.length) {
     body = <EmptyState title={tCommon("project.failed", { names: failedNames })} description={collection.failures[0]?.message} action={<button className="button outline" type="button" onClick={collection.refresh}>{tCommon("actions.retry")}</button>} />;
   } else {

@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 3dab6f5604de00a1d8498b40b26e2993d3081ccd10ed6049f4d6ea21b9d978f6
+source_hash: f0ebc1f28e681ebe9fb47737ab4997b480f2516dfba2fa0210ecd6f7ba666cf4
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发 Project API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -84,7 +84,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
 ## 设置默认模型 {#set-a-default-model}
 
-没有自带模型提供商的 Core 托管 Session 使用其 Harness 的默认模型。在 **Settings → Models and credentials** 的 **Default model configuration** 下，找到标记为 **Default** 的 Harness（除非修改了 `core.default_harness`，否则为 Codex），选择 **Set**。输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。MiniMax Code 还需要上下文窗口和最大输出 token 数。参阅[默认模型](../configuration.md#default-models)。
+没有自带模型提供商的 Core 托管 Session 使用其 Harness 的默认模型。在 **Settings → Models and credentials** 的 **Default model configuration** 下，找到标记为 **Default** 的 Harness（除非修改了 `OAC_DEFAULT_HARNESS`，否则为 Codex），它显示 **Model provider not set**。选择 **Set**，输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。MiniMax Code 还需要上下文窗口和最大输出 token 数。之后该 Harness 显示 **Ready**。参阅[默认模型](../configuration.md#default-models)。
 
 ## 签发 Project API 密钥 {#issue-a-project-api-key}
 

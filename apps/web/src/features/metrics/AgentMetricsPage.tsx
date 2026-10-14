@@ -8,6 +8,7 @@ import type { TFunction } from "i18next";
 import { LiveNumber } from "../../components/live-number";
 import { TimeSeriesChart, type TimeSeries } from "../../components/charts/TimeSeriesChart";
 import {
+  ApiEmptyState,
   EmptyState,
   HelpTip,
   Kpi,
@@ -224,7 +225,7 @@ function AgentMetricsContent({
     return (
       <>
         {failedReads}
-        <EmptyState title={t("agent.emptyTitle")} hint={t("agent.emptyDescription", { range: t(`range.${window.range}`) })} />
+        <ApiEmptyState title={t("agent.emptyTitle")} hint={t("agent.emptyDescription", { range: t(`range.${window.range}`) })} section="sessions" />
       </>
     );
   }

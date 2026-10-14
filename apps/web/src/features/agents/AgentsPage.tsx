@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { useFailureToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
+import { ApiEmptyState, EmptyState, Kpi, KpiStrip, PageBody, PageHeader, RefreshButton, Section } from "../../components/console-ui";
 import { CopyableId, ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
@@ -71,7 +71,7 @@ function AgentsList() {
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("loading", { defaultValue: "…" })} columns={8} />;
   } else if (!collection.items.length && !collection.failures.length) {
-    body = <EmptyState icon={Bot} title={t("catalog.noSaved")} />;
+    body = <ApiEmptyState icon={Bot} title={t("catalog.noSaved")} section="agents" />;
   } else if (!collection.items.length) {
     body = <EmptyState title={tCommon("project.failed", { names: failedNames })} description={collection.failures[0]?.message} action={<button className="button outline" type="button" onClick={collection.refresh}>{tCommon("actions.retry")}</button>} />;
   } else {

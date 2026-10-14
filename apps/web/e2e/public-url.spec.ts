@@ -48,11 +48,13 @@ test("lists the startup settings on System", async ({ page, request }) => {
   await expect(installation).toContainText("https://core.example.com/v1");
   const startup = page.getByRole("region", { name: "Startup settings" });
   const settings = startup.getByRole("table", { name: "Startup settings" });
-  await expect(settings.getByRole("row", { name: /^log_level/ })).toContainText("debug");
-  await expect(settings.getByRole("row", { name: /^listen_address/ })).toContainText("Default");
-  await expect(settings.getByRole("row", { name: /^data_dir/ })).toContainText("Fixed after install");
-  await expect(settings.getByRole("row", { name: /^core_key/ })).toContainText("Configured");
-  await expect(settings.getByRole("row", { name: /^public_url/ })).toHaveCount(0);
+  // Settings read by their names, with Harnesses by name; a sensitive one shows only that it is set.
+  await expect(settings.getByRole("row", { name: /^Log level/ })).toContainText("debug");
+  await expect(settings.getByRole("row", { name: /^Enabled Harnesses/ })).toContainText("Claude Code, Codex");
+  await expect(settings.getByRole("row", { name: /^Default Harness/ })).toContainText("Codex");
+  await expect(settings.getByRole("row", { name: /^Runtime history file/ })).toContainText("Configured");
+  await expect(settings).not.toContainText("core.harnesses");
+  await expect(settings).not.toContainText("public_url");
 });
 
 test("warns on Nodes about a node bound to an old Core address until it is removed", async ({ page, request }) => {

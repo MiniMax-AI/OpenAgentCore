@@ -114,6 +114,23 @@
   white-space: pre-wrap;
 }
 
+/* Values few tasks need, such as internal IDs and raw adapter parameters, close the card behind a disclosure. */
+.settings-details > summary {
+  padding: 10px 16px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.settings-details[open] > summary { border-bottom: 1px solid var(--grid-line); }
+
+.settings-details > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-card);
+}
+
 /* An editable value: a sized field, its local Save, and its error underneath. */
 .settings-row .settings-row-control input {
   width: 128px;

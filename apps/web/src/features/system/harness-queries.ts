@@ -1,3 +1,4 @@
+import type { CoreHarness } from "@oac/agents-client";
 import { queryOptions } from "@tanstack/react-query";
 
 import { admin } from "../../lib/projects";
@@ -11,3 +12,11 @@ export const harnessesQuery = queryOptions({
   queryKey: ["harnesses"],
   queryFn: ({ signal }) => admin.listHarnesses({ signal }),
 });
+
+/**
+ * Whether a new Core-hosted Session can run on this harness without bringing
+ * its own model provider: the harness is enabled and has a deployment default.
+ */
+export function harnessReady(harness: CoreHarness): boolean {
+  return harness.enabled && harness.model_configuration !== null;
+}

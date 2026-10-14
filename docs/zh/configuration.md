@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 7341dde58d8b2bdaa44ad64689e57a3e7a7853017448ea616dc7841f05b8163b
+source_hash: b74391a59485125e91aed6a64ed0f73afd068e8390f900c2c01ad71e642901e9
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -105,7 +105,7 @@ Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` �
 | 每个 Harness 的默认模型 | **Settings** → **Models and credentials**：**Set** | `/core/v1/harnesses/{harness}/model-configuration` | 请参阅[默认模型](#default-models) |
 | 自托管 Session 的执行器凭据 | **Session log**，然后进入 **Session** 页面：**Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 请参阅[自托管执行器](getting-started/self-hosted.md) |
 
-哪些 Harness 已启用以及默认 Harness 属于进程设置（`core.harnesses`、`core.default_harness`）；**Settings → Models and credentials** 会以只读方式显示它们。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
+哪些 Harness 已启用以及默认 Harness 属于进程设置（`OAC_HARNESSES`、`OAC_DEFAULT_HARNESS`）；**Settings → Service and deployment** 在 **Startup settings** 中列出它们。**Settings → Models and credentials** 在 Harness 已启用且设置了默认模型时将其标记为 **Ready**，否则指出缺少的步骤：**Model provider not set** 或 **Disabled**。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
 
 ### 独立工作区存储 {#independent-workspace-storage}
 

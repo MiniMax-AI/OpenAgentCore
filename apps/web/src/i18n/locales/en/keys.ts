@@ -13,7 +13,6 @@ export const keys = {
     label: "Projects",
     search: "Search by name or ID",
     name: "Name",
-    status: "Status",
     activeKeys: "Active keys",
     created: "Created",
     lastActive: "Last active",
@@ -21,6 +20,8 @@ export const keys = {
     actions: "Actions",
     open: "Open {{name}}",
     noMatch: "No project matches",
+    statusFilter: "Project status",
+    none: { active: "No active projects", archived: "No archived projects" },
   },
   status: {
     active: "Active",

@@ -8,7 +8,7 @@ export const agents: TranslationShape<typeof english> = {
   view: {
     filterLabel: "筛选 Agent",
     searchPlaceholder: "按名称、模型或 ID 搜索",
-    columns: { agent: "Agent", model: "模型", harness: "执行框架", tools: "工具", sessions: "Session", tokens: "Token", lastActive: "最近活跃", updated: "更新时间", actions: "操作" },
+    columns: { agent: "Agent", model: "模型", harness: "Harness", tools: "工具", sessions: "Session", tokens: "Token", lastActive: "最近活跃", updated: "更新时间", actions: "操作" },
     open: "打开 {{name}}",
     coreDefault: "Core 默认",
     back: "返回",
@@ -32,7 +32,7 @@ export const agents: TranslationShape<typeof english> = {
     serviceTier: "服务层级",
     provider: {
       title: "模型服务",
-      help: "保存在此 Agent 上。它的 Session 使用这里的模型服务，除非请求中另外指定。Core 从不返回 API key。",
+      help: "保存在此 Agent 上。它的 Session 使用这里的模型服务，除非请求中另外指定。Core 从不返回 API 密钥。",
       protocol: "协议",
       baseUrl: "Base URL",
       apiKey: "API key",
@@ -56,8 +56,8 @@ export const agents: TranslationShape<typeof english> = {
     delete: "删除",
   },
   catalog: {
-    listLabel: "Agent", create: "创建 Agent", untitled: "未命名 Agent", editLabel: "编辑 {{name}}（{{id}}）", opening: "正在打开最新定义…", startLabel: "使用 {{name}}（{{id}}）启动 Session", unavailable: "不可用", startSession: "启动 Session", sessionUnavailable: "Session 不可用：{{reason}}", noMatch: "没有匹配的 Agent", noSaved: "没有已保存的 Agent", trySearch: "请尝试其他名称、模型或 ID。", emptyHelp: "创建 Agent 后会显示在这里。", clearSearch: "清除搜索",
-    columns: { agent: "Agent", model: "模型", harness: "执行框架", tools: "工具", updated: "更新时间", actions: "操作" }, coreDefaultHarness: "Core 默认", copyId: "复制 Agent ID {{id}}", copied: "已复制", unavailableHelp: "无法启动 Session 的原因",
+    listLabel: "Agent", create: "创建 Agent", untitled: "未命名 Agent", editLabel: "编辑 {{name}}（{{id}}）", opening: "正在打开最新定义…", startLabel: "使用 {{name}}（{{id}}）启动 Session", unavailable: "不可用", startSession: "启动 Session", sessionUnavailable: "Session 不可用：{{reason}}", noMatch: "没有匹配的 Agent", noSaved: "还没有 Agent", clearSearch: "清除搜索",
+    columns: { agent: "Agent", model: "模型", harness: "Harness", tools: "工具", updated: "更新时间", actions: "操作" }, coreDefaultHarness: "Core 默认", copyId: "复制 Agent ID {{id}}", copied: "已复制", unavailableHelp: "无法启动 Session 的原因",
   },
   details: {
     id: "ID", created: "创建时间", updated: "更新时间", model: "模型", name: "名称", instructions: "指令", metadata: "元数据", notSet: "未设置", none: "无", blocked: "此 Agent 可以保存，但已知的 Core Session 配置无法启动它：{{reason}}", runtimeBoundary: "已保存的高级配置不能证明运行时可用。模型、provider、主机、工具和条件性详细程度仍需 executor 验证。", advanced: "高级配置 · 只读", tools: "工具", reasoning: "推理", text: "文本", serviceTier: "服务层级", multiAgent: "多 Agent", functionTool: "Function {{name}}", mcpTool: "{{auth}} 服务来源 HTTP MCP {{name}}", serviceOriginMcp: "服务来源 HTTP MCP", vaultBearer: "Vault bearer", anonymous: "匿名", readOnly: "{{label}} · 只读", deletePrompt: "从 OpenAgentCore 删除 {{name}}？", deleteBefore: "从 OpenAgentCore 删除", deleteAfter: "？", exactId: "精确 Agent ID：{{id}}", exactIdLabel: "精确 Agent ID：", deleteWarning: "只有在 Core 确认成功后才会移除已保存的 Agent。现有 Session 会保留持久化的 Agent 快照。", deleteTitle: "删除 Agent？", cancel: "取消", deleting: "删除中…",

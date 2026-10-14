@@ -47,8 +47,7 @@ export const files: TranslationShape<typeof english> = {
     moreFailed: "无法加载更多文件：{{reason}}",
   },
   empty: {
-    title: "暂无文件",
-    description: "上传文件后，即可在环境模板中引用它的 File ID。",
+    title: "还没有文件",
   },
   unsupported: {
     title: "此 Core 不支持列出文件",

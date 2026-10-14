@@ -65,7 +65,7 @@ export const agents = {
   catalog: {
     listLabel: "Agents", create: "Create agent", untitled: "Untitled Agent", editLabel: "Edit {{name}} ({{id}})", opening: "Opening latest definition…",
     startLabel: "Start a Session with {{name}} ({{id}})", unavailable: "Unavailable", startSession: "Start Session", sessionUnavailable: "Session unavailable: {{reason}}",
-    noMatch: "No matching Agents", noSaved: "No saved Agents", trySearch: "Try another name, model, or ID.", emptyHelp: "Create an Agent to see it here.", clearSearch: "Clear search",
+    noMatch: "No matching Agents", noSaved: "No Agents yet", clearSearch: "Clear search",
     columns: { agent: "Agent", model: "Model", harness: "Harness", tools: "Tools", updated: "Updated", actions: "Actions" }, coreDefaultHarness: "Core default", copyId: "Copy Agent ID {{id}}", copied: "Copied", unavailableHelp: "Why a Session cannot start",
   },
   details: {

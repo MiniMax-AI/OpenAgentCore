@@ -11,12 +11,6 @@
   color: var(--ink-3);
 }
 
-/* Setting names and values are the table's data, not secondary IDs. */
-.data-table.system-settings code {
-  color: var(--ink);
-  font-size: 12px;
-}
-
 .system-setting-value {
   display: inline-flex;
   flex-wrap: wrap;
@@ -24,7 +18,7 @@
   gap: 4px 6px;
 }
 
-/* Default model: one card per harness, stacked; its header carries the startup state and the actions. */
+/* Default model: one card per harness, stacked; its header carries the readiness and the actions. */
 .system-models {
   display: grid;
   gap: 16px;

@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { useFailureToast } from "../../components/Toast";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
-import { EmptyState, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
+import { ApiEmptyState, EmptyState, PageBody, PageHeader, RefreshButton } from "../../components/console-ui";
 import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
@@ -74,7 +74,7 @@ function SkillsList() {
   if (collection.status === "loading" && !collection.items.length) {
     body = <TableSkeleton label={t("list.loading")} columns={6} />;
   } else if (!collection.items.length && !collection.failures.length) {
-    body = <EmptyState icon={Puzzle} title={t("empty.title")} />;
+    body = <ApiEmptyState icon={Puzzle} title={t("empty.title")} section="skills" />;
   } else if (!collection.items.length) {
     body = <EmptyState title={tCommon("project.failed", { names: failedNames })} description={collection.failures[0]?.message} action={<button className="button outline" type="button" onClick={collection.refresh}>{tCommon("actions.retry")}</button>} />;
   } else {

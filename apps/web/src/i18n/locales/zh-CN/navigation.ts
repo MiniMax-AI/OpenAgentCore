@@ -19,7 +19,7 @@ export const navigation = {
     skills: "Skills",
     files: "文件",
     vaults: "Vault",
-    projects: "项目与 key",
+    projects: "项目与密钥",
     nodes: "节点",
     sandboxBackend: "沙箱后端",
     settings: "设置",

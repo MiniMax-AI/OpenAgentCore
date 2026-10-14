@@ -9,6 +9,15 @@ export const common = {
     request: "Core request failed ({{status}}).",
     unknown: "Could not read from Core. Retry to update the data.",
   },
+  apiEmpty: {
+    agents: "Applications create Agents through the Agents API.",
+    sessions: "Applications start Sessions through the Agents API.",
+    "environment-templates": "Applications create Environment Templates through the Agents API.",
+    skills: "Applications upload Skills through the Agents API.",
+    "source-files": "Applications upload files through the Agents API.",
+    vaults: "Applications create Vaults through the Agents API.",
+    guide: "Read the API guide",
+  },
   installationNotice: {
     title: "Public address needs attention",
     body: "Set a public address other machines can reach before connecting their applications and nodes.",

@@ -101,7 +101,7 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Default model per harness | **Settings** → **Models and credentials**: **Set** | `/core/v1/harnesses/{harness}/model-configuration` | See [Default models](#default-models) |
 | Executor credentials of a self-hosted Session | **Session log**, then the **Session** page: **Executor credentials** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | See [self-hosted executors](./getting-started/self-hosted.md) |
 
-Which harnesses are enabled, and the default one, are process settings (`core.harnesses`, `core.default_harness`); **Settings → Models and credentials** shows them read-only. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
+Which harnesses are enabled, and the default one, are process settings (`OAC_HARNESSES`, `OAC_DEFAULT_HARNESS`); **Settings → Service and deployment** lists them under **Startup settings**. **Settings → Models and credentials** marks each harness **Ready** once it is enabled and has a default model, and otherwise names the missing step: **Model provider not set** or **Disabled**. The [Core administration API](../contracts/agents-api/admin-api.md) lists every Core API route, and the [deployment contract](../contracts/agents-api/sandbox-deployment.md) defines the sandbox fields, limits and change rules.
 
 ### Independent workspace storage
 

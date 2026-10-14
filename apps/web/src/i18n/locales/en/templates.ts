@@ -15,7 +15,6 @@ export const templates = {
   filterPlaceholder: "Filter by name or ID",
   count: "{{visible}} of {{total}} Templates",
   emptyTitle: "No Environment Templates yet",
-  emptyDescription: "Create a Template through the Agents API, then select it when starting a Session.",
   noMatch: "No matching Templates",
   clearFilter: "Clear filter",
   listLabel: "Environment Templates",

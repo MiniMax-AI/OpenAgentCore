@@ -140,7 +140,7 @@ function CoreKeyForm({ onAuthenticated }: {
     </div>
     <div className="console-key-location" id={`${id}-location`}>
       <p>{t("On the Core host, run this command to read the Core key:")}</p>
-      <CopyableId id={'docker compose -f "$HOME/.oac/core/compose.yaml" exec -T web oac-web core-key'} label={t("Copy key read command")} />
+      <CopyableId id="~/.oac/core/oac core-key --show" label={t("Copy key read command")} />
       <p>{t("For a custom installation directory, replace the path in this command.")}</p>
     </div>
     {error ? <p className="console-auth-error" id={`${id}-error`} role="alert">{error}</p> : null}

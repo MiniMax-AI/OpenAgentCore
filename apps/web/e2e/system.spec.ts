@@ -12,10 +12,10 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   const section = page.getByRole("region", { name: "Default model configuration" });
   const codex = section.getByRole("article", { name: "Codex" });
   const mcode = section.getByRole("article", { name: "MiniMax Code" });
-  await expect(codex).toContainText("Enabled");
+  // An enabled harness without a default model provider is not ready; a disabled one says so.
+  await expect(codex).toContainText("Model provider not set");
   await expect(codex).toContainText("Default");
-  await expect(codex).toContainText("Not set");
-  await expect(section.getByRole("article", { name: "Claude Code" })).toContainText("Not set");
+  await expect(section.getByRole("article", { name: "Claude Code" })).toContainText("Model provider not set");
   await expect(mcode).toContainText("Disabled");
 
   await codex.getByRole("button", { name: "Set the default model configuration for Codex" }).click();
@@ -62,7 +62,7 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   await set.getByLabel("Context window").fill("200000");
   await set.getByRole("button", { name: "Save" }).click();
   await expect(set).toBeHidden();
-  for (const text of ["OpenAI Responses", "https://model.example/v1", "Configured", "200,000", "32,000"]) await expect(codex).toContainText(text);
+  for (const text of ["Ready", "OpenAI Responses", "https://model.example/v1", "Configured", "200,000", "32,000"]) await expect(codex).toContainText(text);
   expect(await page.content()).not.toContain(KEY);
 
   // Replacing starts from the saved fields but never from the key; closing the form forgets a typed key.
@@ -104,7 +104,7 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   const confirm = page.getByRole("dialog", { name: "Clear default model configuration" });
   await confirm.getByRole("button", { name: "Clear default model configuration" }).click();
   await expect(confirm).toBeHidden();
-  await expect(codex).toContainText("Not set");
+  await expect(codex).toContainText("Model provider not set");
 
   // MiniMax Code needs both limits; the form shows Core's reason. A disabled harness may still be configured.
   await mcode.getByRole("button", { name: "Set the default model configuration for MiniMax Code" }).click();

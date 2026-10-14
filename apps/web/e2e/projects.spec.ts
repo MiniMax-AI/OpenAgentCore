@@ -51,6 +51,18 @@ test("archives a project with active keys only once its name is typed", async ({
   await expect(page.getByText("Archived").first()).toBeVisible();
 });
 
+test("lists active projects by default and archived ones on request", async ({ page, request }) => {
+  await openConsole(page, request, "projects");
+  const table = page.getByRole("table", { name: "Projects" });
+  await expect(table).toContainText("Production");
+  await expect(table).not.toContainText("Legacy");
+  const status = page.getByRole("radiogroup", { name: "Project status" });
+  await status.getByRole("radio", { name: /^Archived/ }).click();
+  await expect(status.getByRole("radio", { name: /^Archived/ })).toContainText("1");
+  await expect(table).toContainText("Legacy");
+  await expect(table).not.toContainText("Production");
+});
+
 test("reports an unconfirmed key issue and never replays it", async ({ page, request }) => {
   await openConsole(page, request, "projects");
   await page.getByRole("button", { name: "Open Production" }).click();

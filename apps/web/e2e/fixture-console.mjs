@@ -44,7 +44,7 @@ const INSTALLATION_ID = "7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f";
 /** GET /core/v1/installation: the address, the startup settings Core loaded and what is bound to the address. */
 function installation() {
   const local = state.installation === "local";
-  const setting = (key, value, fallback, restarts, extra = {}) => ({ key, value, default: fallback, changeable: true, sensitive: false, restarts, ...extra });
+  const setting = (key, value, fallback, restarts) => ({ key, value, default: fallback, changeable: true, sensitive: false, restarts });
   const secret = (key, restarts) => ({ key, value: null, default: null, changeable: true, sensitive: true, restarts, configured: true });
   const nodes = state.deployment?.provider && state.deployment.provider !== "e2b" ? state.nodes : [];
   return {
@@ -53,13 +53,17 @@ function installation() {
     local_only: local, source_commit: release.source_commit,
     configuration: {
       settings: [
-        setting("public_url", publicUrl(), LOCAL_URL, ["core", "web"]),
-        setting("listen_address", "127.0.0.1:8091", "127.0.0.1:8091", ["core"]),
-        setting("web_listen_address", "127.0.0.1:4173", "127.0.0.1:4173", ["web"]),
-        setting("data_dir", "/var/lib/oac", "/var/lib/oac", [], { changeable: false }),
-        setting("log_level", "debug", "info", ["core", "web"]),
-        secret("core_key", ["core", "web"]),
-        secret("database_url", ["core"]),
+        // The settings Core reports (services/core/internal/processconfig), with the enabled harnesses of this fixture.
+        setting("public_url", publicUrl(), null, ["core", "web"]),
+        setting("log.level", "debug", "info", ["core", "web"]),
+        setting("log.format", "auto", "auto", ["core", "web"]),
+        setting("log.add_source", false, false, ["core", "web"]),
+        setting("core.execution_concurrency", 4, 4, ["core"]),
+        setting("core.harnesses", ["claude_sdk", "codex"], ["claude_sdk", "codex", "mcode"], ["core"]),
+        setting("core.default_harness", "codex", "codex", ["core"]),
+        setting("core.write_audit_retention", "2160h", "2160h", ["core"]),
+        setting("core.oauth_trusted_origins", [], [], ["core"]),
+        secret("core.runtime_history", ["core"]),
       ],
     },
     // As Core counts them: the deployment's retained and pending hosted sandboxes, and the unrevoked executor credentials.
@@ -120,6 +124,8 @@ function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "d
       codex: { enabled: true, default: true, provider: fresh ? null : { object: "core.model_configuration", harness: "codex", model: "fixture-model", harness_config: {}, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true }, last_used_at: null, last_error_code: null, last_error_at: null, updated_at: new Date((now - 86400) * 1000).toISOString().replace(/\.\d{3}Z$/, "Z") } },
       mcode: { enabled: false, default: false, provider: null },
     },
+    // The selected workspace storage (GET /core/v1/workspace-storage), as in the configuration guide; a fresh install has none.
+    workspaceStorage: fresh ? null : { id: "11111111-1111-4111-8111-111111111111", adapter: "nfs", parameters: { root: "/srv/oac-workspaces", namespace_id: "22222222-2222-4222-8222-222222222222", uid: 65532 }, tenant_capacity_mib: 0 },
     // "none": the deployment is not configured yet, so the Nodes page offers setup.
     deployment: null,
     // Whether the console has its node installation payload, and so serves both installers.
@@ -662,6 +668,7 @@ http.createServer(async (request, response) => {
     if (url.pathname.startsWith("/core/v1/")) {
       const path = url.pathname.slice("/core/v1".length);
       if (path === "/harnesses" || path.startsWith("/harnesses/")) return await harnessRoute(request, response, path);
+      if (path === "/workspace-storage" && request.method === "GET") return state.workspaceStorage ? send(response, 200, state.workspaceStorage) : error(response, 404, "Workspace storage is not configured.", "workspace_storage_not_found");
       const installation = path.match(/^\/projects\/([^/]+)\/environments\/([^/]+)\/installation$/);
       if (installation && request.method === "GET") return send(response, 200, { status: "available", version: "fixture", expires_at: Math.floor(Date.now()/1000)+1800, commands: { posix: "bash fixture-bootstrap --authorization fixture-short-lived", powershell: "& fixture-bootstrap.ps1 -Authorization fixture-short-lived" } });
       const credentials = path.match(EXECUTOR_CREDENTIALS);

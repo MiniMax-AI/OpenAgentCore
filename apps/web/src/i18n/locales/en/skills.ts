@@ -48,8 +48,6 @@ export const skills = {
   },
   empty: {
     title: "No Skills yet",
-    description: "Upload a folder, or a ZIP of one, whose SKILL.md starts like this:",
-    exampleLabel: "Minimal report/SKILL.md",
   },
   unsupported: {
     title: "This Core does not offer Skills",

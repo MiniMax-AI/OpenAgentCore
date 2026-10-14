@@ -89,7 +89,7 @@ Summary figures are cumulative per Session and are not billing records. Sessions
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| List harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials default model cards: each harness's read-only `enabled` and `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (a default model on the default harness, or on any enabled harness when none is default) |
+| List harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials default model cards: each harness's readiness (Ready when `enabled` and its model configuration is set, otherwise Model provider not set or Disabled), `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (the default harness is Ready, or any harness when none is default) |
 | Set or replace | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** or **Replace**: the complete model configuration with its write-only provider key, never prefilled and never retried; a 400 shows Core's message in the form; then the list is read again |
 | Clear | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**, confirmed, then the list is read again |
 

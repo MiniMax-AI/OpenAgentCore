@@ -8,6 +8,8 @@ import { CopyableId } from "../../components/list-ui";
 import { Modal } from "../../components/Modal";
 import { TableSkeleton } from "../../components/Skeleton";
 import { knownCoreError } from "../../lib/core-error";
+import { formatBytes } from "../../lib/format";
+import { docsUrl } from "../../lib/docs";
 import { admin } from "../../lib/projects";
 import { Fact } from "../system/Fact";
 import { storageCapacity, storageObject, workspaceStorageQuery } from "./workspace-storage";
@@ -59,12 +61,12 @@ function StorageEditor({ current, replacement, onClose }: { current: WorkspaceSt
     <form id={formId} className="form-stack" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       {replacement ? <>
         <p>{t("newSelection")}</p>
-        <a href={`https://minimax-ai.github.io/OpenAgentCore/${i18n.resolvedLanguage === "zh-CN" ? "zh/" : ""}docs/configuration#independent-workspace-storage`} target="_blank" rel="noreferrer">{t("instructions")}</a>
+        <a href={docsUrl("docs/configuration#independent-workspace-storage", i18n.resolvedLanguage)} target="_blank" rel="noreferrer">{t("instructions")}</a>
         <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-adapter`}>{t("adapter")}</label><HelpTip>{t("adapterHelp")}</HelpTip></div><input id={`${formId}-adapter`} value={adapter} onChange={(event) => setAdapter(event.target.value)} required disabled={busy} /></div>
         <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-parameters`}>{t("parameters")}</label><HelpTip>{t("parametersHelp")}</HelpTip></div><textarea id={`${formId}-parameters`} rows={8} value={parameters} onChange={(event) => setParameters(event.target.value)} disabled={busy} spellCheck={false} /></div>
         <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-credential`}>{t("credential")}</label><HelpTip>{t("credentialHelp")}</HelpTip></div><input id={`${formId}-credential`} type="password" value={credential} onChange={(event) => setCredential(event.target.value)} disabled={busy} autoComplete="new-password" spellCheck={false} /></div>
       </> : null}
-      <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-capacity`}>{t("capacity")}</label><HelpTip>{t("capacityHelp")}</HelpTip></div><input id={`${formId}-capacity`} type="number" min={0} max={4294967295} step={1} required value={capacity} onChange={(event) => setCapacity(event.target.value)} disabled={busy} /></div>
+      <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-capacity`}>{t("capacityInput")}</label><HelpTip>{t("capacityHelp")}</HelpTip></div><input id={`${formId}-capacity`} type="number" min={0} max={4294967295} step={1} required value={capacity} onChange={(event) => setCapacity(event.target.value)} disabled={busy} /></div>
       {selectionChanged ? <p role="alert" className="confirm-dialog-error">{t("selectionChanged")}</p> : null}
       {error ? <><p role="alert" className="confirm-dialog-error">{error}</p><button type="button" className="button outline" disabled={busy} onClick={() => void refresh()}>{t("refresh")}</button></> : null}
       {observed ? <p role="status">{t("observed", { value: observed })}</p> : null}
@@ -82,10 +84,14 @@ export function WorkspaceStorageSettings() {
     {query.isError ? <ErrorState title={t("readFailed")} onRetry={() => void query.refetch()} /> : null}
     {current === undefined && !query.isError ? <TableSkeleton rows={4} columns={2} /> : null}
     {current ? <div className="settings-rows">
-      <Fact label={t("id")}><CopyableId id={current.id} /></Fact>
       <Fact label={t("adapter")}>{current.adapter}</Fact>
-      <Fact label={t("parameters")} help={t("parametersHelp")}><pre className="system-code">{JSON.stringify(current.parameters, null, 2)}</pre></Fact>
-      <Fact label={t("capacity")} help={t("capacityHelp")} action={<button className="button outline" disabled={blocked} onClick={() => setEditor("capacity")}>{t("editCapacity")}</button>}>{current.tenant_capacity_mib === 0 ? t("noQuota") : current.tenant_capacity_mib.toLocaleString()}</Fact>
+      <Fact label={t("capacity")} help={t("capacityHelp")} action={<button className="button outline" disabled={blocked} onClick={() => setEditor("capacity")}>{t("editCapacity")}</button>}>{current.tenant_capacity_mib === 0 ? t("noQuota") : formatBytes(current.tenant_capacity_mib * 1024 * 1024)}</Fact>
+      {/* The immutable identity and the adapter's raw parameters matter only when restoring or preparing a new configuration. */}
+      <details className="settings-details">
+        <summary>{t("details")}</summary>
+        <Fact label={t("id")}><CopyableId id={current.id} /></Fact>
+        <Fact label={t("parameters")} help={t("parametersHelp")}><pre className="system-code">{JSON.stringify(current.parameters, null, 2)}</pre></Fact>
+      </details>
     </div> : current === null ? <div className="settings-rows"><p className="settings-empty">{t("notConfigured")}</p></div> : null}
     {editor && current !== undefined ? <StorageEditor current={current} replacement={editor === "configuration"} onClose={() => setEditor(null)} /> : null}
   </Section>;
