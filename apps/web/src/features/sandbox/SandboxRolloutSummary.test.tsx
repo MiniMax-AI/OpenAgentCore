@@ -1,4 +1,5 @@
 import type { SandboxDeployment } from "@oac/agents-client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { node } from "../overview/test-fixtures";
@@ -51,7 +52,7 @@ describe("authoritative configuration rollout", () => {
   });
 
   it("allows same-provider online editing with held resources but keeps reset active as a boundary", () => {
-    const render = (value: SandboxDeployment) => renderToStaticMarkup(<SandboxDeploymentSettings deployment={value} fresh disabled={false} onUpdate={async () => true} onRefresh={() => undefined} refreshing={false} pending={false} />);
+    const render = (value: SandboxDeployment) => renderToStaticMarkup(<QueryClientProvider client={new QueryClient()}><SandboxDeploymentSettings deployment={value} fresh disabled={false} onUpdate={async () => true} onRefresh={() => undefined} refreshing={false} pending={false} /></QueryClientProvider>);
     const html = render(deployment);
     expect(html).toMatch(/<button[^>]*class="button outline"[^>]*>Change resources<\/button>/);
     expect(html).not.toMatch(/<button[^>]*disabled[^>]*>Change resources<\/button>/);

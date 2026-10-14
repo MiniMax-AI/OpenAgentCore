@@ -15,9 +15,9 @@ import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
 import type { ParseKeys } from "i18next";
 import { sandboxConfigurationRejection, sandboxProviderLabel } from "../../lib/sandbox-labels";
-import { defaultSandboxResources, distributionRuntime, isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS, savedSpecification, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS, savedSpecification, validSandboxResources } from "./deployment-specification";
 import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
-import { sandboxAdmin } from "./sandbox-queries";
+import { distributionRuntimeQuery, sandboxAdmin } from "./sandbox-queries";
 import "./sandbox-wizard.css";
 
 type Where = "nodes" | "direct";
@@ -118,16 +118,18 @@ type WizardProps = {
   expectedGeneration: number;
   current?: { provider: SandboxProvider; specification?: SandboxSpecification; e2bTemplate?: string; e2bAPIURL?: string; e2bDomain?: string };
   disabled: boolean;
+  /** A Runtime release an update proposes; the wizard opens on its review. */
+  proposedRuntime?: SandboxRuntimeRelease;
 } & ({ editing: true; onSubmit: (input: UpdateSandboxDeployment) => Promise<void> } |
   { editing?: false; onSubmit: (input: InitializeSandboxDeployment) => Promise<void> });
 
-export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disabled, editing, onSubmit }: WizardProps) {
+export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disabled, editing, proposedRuntime, onSubmit }: WizardProps) {
   const { t, i18n } = useTranslation("sandbox");
   const { t: tCommon } = useTranslation("common");
   const id = useId();
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const currentMode: Where | null = current ? deploymentContract.providers[current.provider].mode : null;
-  const [step, setStep] = useState<Step>(editing ? currentMode === "direct" ? "e2b" : "size" : "where");
+  const [step, setStep] = useState<Step>(proposedRuntime ? "review" : editing ? currentMode === "direct" ? "e2b" : "size" : "where");
   const [where, setWhere] = useState<Where | null>(currentMode);
   const [provider, setProvider] = useState<SandboxProvider | null>(current?.provider ?? null);
   const policy = provider ? deploymentContract.providers[provider] : null;
@@ -149,7 +151,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const [discovery, setDiscovery] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [buildDiscovery, setBuildDiscovery] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [discoveryRetry, setDiscoveryRetry] = useState(0);
-  const [runtime, setRuntime] = useState<Partial<SandboxRuntimeRelease>>({});
+  const [runtime, setRuntime] = useState<Partial<SandboxRuntimeRelease>>(proposedRuntime ?? {});
   const [busy, setBusy] = useState(false);
   const [dockerConfirmed, setDockerConfirmed] = useState(current?.provider === "docker");
   const [confirmingDocker, setConfirmingDocker] = useState(false);
@@ -193,9 +195,9 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
     setTemplate(""); setSelectedTemplate(""); setTemplates([]); setBuilds([]);
   }
 
-  // A release the administrator entered comes first, then the saved one of the same backend,
+  // A release the administrator entered or an update proposes comes first, then the saved one of the same backend,
   // then the one this console distributes (the release its node installer verifies).
-  const matched = useQuery({ queryKey: ["sandbox-runtime-release"], queryFn: ({ signal }) => distributionRuntime(signal).catch(() => null), staleTime: Infinity, retry: false });
+  const matched = useQuery(distributionRuntimeQuery);
   const release: Partial<SandboxRuntimeRelease> = Object.keys(runtime).length ? runtime : saved?.runtime ?? matched.data ?? {};
 
   const needsRuntime = policy?.runtime ?? false;

@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
+source_hash: 77a5047c028ea755622714bf89f92066f9b331b7832f0295dec85390e13b182e
 ---
 
 本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
@@ -10,7 +10,7 @@ source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
 
 | 接口 | 路径 | 身份验证 | 控制台用途 |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；**添加节点** 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置的发行版 Runtime release。参见 [console server](console-server.md) |
+| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；**添加节点** 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置以及 **设置** → **沙箱与调度** 中 Runtime 行的发行版 Runtime release。参见 [console server](console-server.md) |
 | Administrator API | `/core/v1/**`，不包括 `/core/v1/sandbox` | Core 密钥，由控制台服务器添加 | 项目、密钥、资源读取和删除、诊断、执行器凭据和安装命令、来源信息、汇总、Core 指标、安装信息、默认模型 |
 | Sandbox administration | `/core/v1/sandbox/**` | Core 密钥，由控制台服务器添加 | 沙箱配置；**节点**；**概览** 上的机群与容量摘要；**沙箱监控** 中每个项目的 Runtime 观测 |
 | Agents API | `/v1/**` | 项目 API 密钥 | 不使用。控制台会向开发者说明如何调用它（参见 [Provenance and monitoring](#provenance-and-monitoring)） |
@@ -116,7 +116,7 @@ source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 **清理主机** 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | **沙箱监控**：每个项目的托管 Runtime，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |
 
-E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.allocations` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。用于 Docker 和 microsandbox 的 Runtime 版本来自控制台自身的 `GET /node-install/manifest.json`；如果无法获取该信息，管理员需在高级设置中输入 release。
+E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.allocations` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。用于 Docker 和 microsandbox 的 Runtime 版本来自控制台自身的 `GET /node-install/manifest.json`；如果无法获取该信息，管理员需在高级设置中输入 release。**设置** → **沙箱与调度** 只为已保存 `specification.runtime` 的部署读取该清单，并且只在两个 release 不同时显示 Runtime 行；**使用本安装的 Runtime** 通过同一个 `PUT` 发送清单中的 release。
 
 ## 写入 {#writes}
 

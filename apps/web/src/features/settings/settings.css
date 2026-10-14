@@ -105,7 +105,7 @@
   overflow-wrap: anywhere;
 }
 
-.settings-row-content { min-width: 0; flex: 1; }
+.settings-row-content { min-width: 0; flex: 1 1 auto; }
 .settings-row-action { display: flex; flex: none; gap: 8px; margin-left: auto; }
 
 .settings-row pre {
