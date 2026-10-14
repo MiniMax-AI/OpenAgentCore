@@ -19,6 +19,9 @@
 .metric-tile:first-child { padding-left: 0; border-left: 0; }
 .metric-tile:last-child { padding-right: 0; }
 
+/* A Partial chip wraps under the label on narrow tiles instead of being cut off. */
+.metric-tile > header { flex-wrap: wrap; }
+
 .metric-tile-label {
   color: var(--fg-muted);
   font-size: 13px;
