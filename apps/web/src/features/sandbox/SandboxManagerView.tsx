@@ -232,7 +232,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
         {hostedNodes && nodes.some((node) => node.active > node.max_active || node.retained > node.max_retained) ? <p role="status" className="sandbox-notice">{t("Current usage exceeds a saved limit. Existing sandboxes are preserved; new placements wait for capacity.")}</p> : null}
         {hostedNodes ? nodes.length
           ? <NodeList nodes={nodes} allocations={allocations} coreUrl={snapshot.deployment.core_url} stale={!nodesConfirmed} disabled={busy || loading || removing || !nodesConfirmed} suspends={suspends} onOpen={(node) => navigate("nodes", { id: node.id })} onEdit={(node) => setEditId(node.id)} onRemove={askRemove} />
-          : nodesConfirmed ? <EmptyState icon={Server} title={t("Add your first node")} hint={t("No nodes registered. Add a node to provide hosted capacity.")} /> : null
+          : nodesConfirmed ? <EmptyState icon={Server} title={t("Add your first node")} hint={t("No nodes yet. Add a node to provide hosted capacity.")} /> : null
         : null}
       </> : null}
     </div>

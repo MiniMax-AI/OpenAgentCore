@@ -79,7 +79,7 @@ export const system: TranslationShape<typeof english> = {
       formatJson: "格式化 JSON",
       setTitle: "设置 {{harness}} 的默认模型配置",
       replaceTitle: "替换 {{harness}} 的默认模型配置",
-      modelName: "应用未指定模型时，新会话使用此模型。请填写该服务接受的准确模型 ID。",
+      modelName: "应用未指定模型时，新 Session 使用此模型。请填写该服务接受的准确模型 ID。",
       baseUrlInvalid: "请输入包含主机名、不含账号密码、查询参数或片段的 HTTPS URL，例如 https://api.example.com/v1。",
       apiKeyHelp: "每次都必须填写。Core 会加密保存，之后不再显示。",
       contextHelp: "模型的上下文窗口，单位为 token。可选。",
@@ -97,7 +97,7 @@ export const system: TranslationShape<typeof english> = {
     clearDialog: {
       title: "清除默认模型配置",
       prompt: "清除 {{harness}} 的默认模型配置？",
-      consequence: "新会话将需要应用或 Agent 提供模型配置。已有会话保留原配置。",
+      consequence: "新 Session 将需要应用或 Agent 提供模型配置。已有 Session 保留原配置。",
       confirm: "清除默认模型配置",
       busy: "正在清除…",
       uncertain: "Core 没有确认清除。已重新读取默认模型配置，请先核对再重试。",

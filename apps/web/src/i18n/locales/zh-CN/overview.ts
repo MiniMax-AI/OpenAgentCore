@@ -66,7 +66,7 @@ export const overview = {
     runningHelp: "所有项目中正在运行的 Session，来自 Core 的用量汇总。",
     summaryUnavailable: "用量汇总不可用",
     slots: "沙箱容量",
-    slotsHelp: "活跃沙箱数，相对于在线宿主机的活跃上限。",
+    slotsHelp: "活跃沙箱数，相对于在线主机的活跃上限。",
     cloudRunning: "运行中的沙箱",
     cloudRunningHelp: "Core 当前在 E2B 云端占用的沙箱。E2B 没有可供 Core 读取的上限。",
     attention: "需要处理",
@@ -110,7 +110,7 @@ export const overview = {
   },
   nodeHealth: {
     available: "可用",
-    degraded: "提供方未就绪",
+    degraded: "沙箱后端未就绪",
     offline: "离线",
   },
   fleet: {
@@ -140,7 +140,7 @@ export const overview = {
   },
   projects: {
     title: "按项目",
-    help: "每个项目的有效密钥和全部 Session，来自 Core 的用量汇总；资产数量在项目详情里。Token 只累加上报了用量的 Session；覆盖率是上报用量的 Session 所占比例。用量是每个 Session 的累计值，不作为计费依据。",
+    help: "每个项目的有效密钥和全部 Session，来自 Core 的用量汇总；资产数量在项目详情里。token 只累加上报了用量的 Session；覆盖率是上报用量的 Session 所占比例。用量是每个 Session 的累计值，不作为计费依据。",
     manage: "项目与密钥",
     open: "打开 {{name}}",
     keys: "有效密钥",
@@ -152,7 +152,7 @@ export const overview = {
     running: "运行中",
     waiting: "等待调用方",
     failed: "失败",
-    tokens: "Token",
+    tokens: "token",
     coverage: "用量覆盖",
     lastActive: "最近活跃",
     tokenDetail: "输入 {{input}} · 输出 {{output}} · 缓存 {{cached}} · 推理 {{reasoning}}",

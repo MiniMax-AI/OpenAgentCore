@@ -187,7 +187,7 @@ export const keys: TranslationShape<typeof english> = {
       id: "ID",
       key: "密钥",
     },
-    empty: "暂无写操作记录",
+    empty: "还没有写操作记录",
     loading: "正在加载写操作记录…",
     failed: "无法加载写操作记录。",
     moreFailed: "无法加载更多记录。",

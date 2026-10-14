@@ -304,7 +304,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           </Field>
           <Field id={`${id}-key`} label={t("E2B API key")} error={fieldError("credential")} help={t(editing ? "Leave blank to keep the saved key. Any key you enter is verified as a replacement, even if unchanged." : "The key is write-only: Core encrypts it and never shows it again.")} afterHelp={keyConsoleURL ? (
             <a className="wizard-key-console" href={keyConsoleURL} target="_blank" rel="noopener noreferrer">
-              {t("Console → API Keys")} <ExternalLink size={11} aria-hidden="true" />
+              {t("Console → API keys")} <ExternalLink size={11} aria-hidden="true" />
             </a>
           ) : null}>
             <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => { if (editing) { setApiKey(event.target.value); setTemplates([]); setBuilds([]); } else changeConnection(event.target.value, apiURL, domain); setReplacementRequested(Boolean(event.target.value.trim())); setFieldRejection(null); }} />

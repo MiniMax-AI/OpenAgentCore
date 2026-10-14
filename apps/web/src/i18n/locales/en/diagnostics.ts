@@ -1,5 +1,5 @@
 export const diagnostics = {
-  providerUnknown: "Not recorded",
+  providerUnknown: "Not recorded yet",
   providerStale: "Observation unconfirmed",
   providerError: "Recent error",
   providerDetails: "Usage details",

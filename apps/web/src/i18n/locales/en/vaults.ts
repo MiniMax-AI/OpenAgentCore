@@ -5,7 +5,7 @@ export const vaults = {
   credential: "Credential", deleteVaultLabel: "Delete {{name}}", created: "Created", credentialsIn: "Credentials in {{name}}",
   oauthHelp: "OAuth · Manage authorization and token replacement in your application.",
   deleteCredentialLabel: "Delete {{name}}",
-  noCredentials: "No Credentials in this Vault.", noVaults: "No Vaults yet",
+  noCredentials: "No Credentials in this Vault yet.", noVaults: "No Vaults yet",
   deleteVaultTitle: "Delete Vault?", deleteCredentialTitle: "Delete Credential?",
   deleting: "Deleting…", delete: "Delete", deleteVaultPrompt: "Delete {{name}} and all of its stored Credentials? Existing Sessions keep frozen IDs, but later secret lookup fails. Provider tokens and running work are not revoked.",
   deleteCredentialPrompt: "Delete {{name}}? Existing Sessions keep its frozen identity, but later secret lookup fails. This does not revoke the token at the MCP provider.",

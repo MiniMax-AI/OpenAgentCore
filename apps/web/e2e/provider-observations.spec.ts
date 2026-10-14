@@ -18,7 +18,7 @@ test("default provider observations are optional details and recover only on Cor
   await expect(card).not.toContainText("Last successful use");
   await card.getByRole("button", { name: "Usage details", exact: true }).click();
   const details = page.getByRole("dialog", { name: "Codex usage details", exact: true });
-  await expect(details).toContainText("Not recorded");
+  await expect(details).toContainText("Not recorded yet");
   await details.getByRole("button", { name: "Close dialog", exact: true }).click();
   observation = { last_used_at: null, last_error_code: "authentication_error", last_error_at: "2026-09-28T08:01:00Z" };
   await page.getByRole("button", { name: "Refresh system configuration", exact: true }).click();

@@ -45,7 +45,7 @@ test("reads an Agent saved with a model provider and no harness, without its key
 
 test("explains on a fresh install that applications create resources through the Agents API", async ({ page, request }) => {
   await openConsole(page, request, "agents", { fresh: true });
-  for (const [view, title, section] of [["agents", "No Agents yet", "agents"], ["templates", "No Environment Templates yet", "environment-templates"], ["skills", "No Skills yet", "skills"], ["files", "No files yet", "source-files"], ["vaults", "No Vaults yet", "vaults"]]) {
+  for (const [view, title, section] of [["agents", "No Agents yet", "agents"], ["templates", "No Environment templates yet", "environment-templates"], ["skills", "No Skills yet", "skills"], ["files", "No files yet", "source-files"], ["vaults", "No Vaults yet", "vaults"]]) {
     await page.goto(`/#${view}`);
     await expect(page.getByText(title)).toBeVisible();
     await expect(page.getByText(/through the Agents API\.$/)).toBeVisible();

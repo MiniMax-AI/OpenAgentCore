@@ -5,7 +5,7 @@ export const agents: TranslationShape<typeof english> = {
   view: {
     filterLabel: "筛选 Agent",
     searchPlaceholder: "按名称、模型或 ID 搜索",
-    columns: { agent: "Agent", model: "模型", harness: "Harness", tools: "工具", sessions: "Session", tokens: "Token", lastActive: "最近活跃", actions: "操作" },
+    columns: { agent: "Agent", model: "模型", harness: "Harness", tools: "工具", sessions: "Session", tokens: "token", lastActive: "最近活跃", actions: "操作" },
     open: "打开 {{name}}",
     coreDefault: "Core 默认",
     back: "返回",

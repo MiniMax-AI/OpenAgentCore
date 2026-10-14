@@ -1,12 +1,12 @@
 export const diagnostics = {
-  providerUnknown: "暂无记录",
+  providerUnknown: "还没有记录",
   providerStale: "记录尚未确认",
   providerError: "近期错误",
   providerDetails: "使用详情",
   providerTitle: "{{name}} 使用详情",
   providerLastUsed: "最近成功使用",
   providerLastError: "成功后发生的错误",
-  providerNoError: "暂无记录",
+  providerNoError: "没有记录",
   providerHelp: "Core 记录使用此部署默认配置的托管 Turn 结果。记录可能延迟或缺失；暂无记录不代表服务已就绪或从未使用。替换默认配置后会重新记录。",
   providerStaleHelp: "最新读取失败，当前显示上次确认的记录。",
   failure: {

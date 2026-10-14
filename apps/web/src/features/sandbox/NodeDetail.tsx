@@ -126,7 +126,7 @@ export function NodeDetail({ node, allocations, coreUrl, targetGeneration, stale
               </tbody>
             </table>
           </div>
-        ) : <EmptyState title={t("No sandbox allocations.")} />}
+        ) : <EmptyState title={t("No sandbox allocations yet.")} />}
       </Section>
     </>
   );

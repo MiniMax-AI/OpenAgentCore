@@ -139,15 +139,15 @@ export const sessions = {
       sample_timeout: "Sample timed out",
       sample_unavailable: "Sample unavailable",
     },
-    observationFailed: "The runtime observation could not be loaded: {{reason}}",
-    historyUnavailable: "Core keeps no runtime history for this Session.",
+    observationFailed: "The Runtime observation could not be loaded: {{reason}}",
+    historyUnavailable: "Core keeps no Runtime history for this Session.",
     historyFailed: "Runtime history could not be loaded: {{reason}}",
-    historyLoading: "Loading runtime history…",
+    historyLoading: "Loading Runtime history…",
   },
   executor: {
     connection: {
       title: "Host connection",
-      help: "Core reports a connection only while the executor has current authority and a live connection. Last seen is the last recorded heartbeat and may lag. This does not confirm model or harness readiness.",
+      help: "Core reports a connection only while the executor has current authority and a live connection. Last seen is the last recorded heartbeat and may lag. This does not confirm model or Harness readiness.",
       status: { never_enrolled: "Never connected", connected: "Connected", disconnected: "Disconnected", revoked: "Bound credential revoked", unknown: "Unknown" },
       boundKey: "Bound credential",
       lastSeen: "Last seen",
@@ -258,7 +258,7 @@ export const sessions = {
   },
   items: {
     agentWorkTrace: "Agent work trace", arguments: "Arguments", result: "Result", command: "Command", webSearch: "Web search", functionResult: "Function result", mcpTool: "MCP tool", function: "Function", unknown: "unknown", item: "Item",
-    verb: { run: "Run", search: "Search", return: "Return", use: "Use", unsupported: "Unsupported" }, workingNote: "working note", emptyMessage: "Empty message item",
+    verb: { run: "Run", search: "Search", return: "Return", use: "Use", unsupported: "Unsupported" }, workingNote: "working note", emptyMessage: "Empty message Item",
     applyPatchDiff: "OpenAgentCore apply patch diff", fileCount: "{{count}} files", changeKind: { add: "add", modify: "modify", delete: "delete" }, unifiedDiffFor: "Unified diff for {{path}}", rawArguments: "Raw arguments", rawResult: "Raw result", noResultYet: "No result yet",
   },
 

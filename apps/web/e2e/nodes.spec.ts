@@ -247,7 +247,7 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
   await expect(page.getByLabel("E2B provider")).toHaveValue("sandbase");
   await expect(page.getByLabel("Sandbox API URL")).toHaveValue("https://sandbox.sandbase.ai");
   await expect(page.getByLabel("Sandbox data-plane domain")).toHaveValue("sandbox.sandbase.ai");
-  const keyConsole = page.getByRole("link", { name: "Console → API Keys" });
+  const keyConsole = page.getByRole("link", { name: "Console → API keys" });
   await expect(keyConsole.locator("..")).toHaveClass(/field-label-row/);
   await expect(keyConsole).toHaveCSS("font-size", "11px");
   await expect(keyConsole).toHaveAttribute("href", "https://www.sandbase.ai/console/keys");
@@ -272,7 +272,7 @@ test("uses the official E2B preset and clears a selected build when the key chan
   await page.getByLabel("E2B provider").selectOption("official");
   await expect(page.getByLabel("Sandbox API URL")).toHaveValue("https://api.e2b.app");
   await expect(page.getByLabel("Sandbox data-plane domain")).toHaveValue("e2b.app");
-  const keyConsole = page.getByRole("link", { name: "Console → API Keys" });
+  const keyConsole = page.getByRole("link", { name: "Console → API keys" });
   await expect(keyConsole).toHaveAttribute("href", "https://e2b.dev/dashboard?tab=api-keys");
   await page.getByLabel("Sandbox API URL").fill("https://custom.e2b.app");
   await expect(keyConsole).toHaveCount(0);

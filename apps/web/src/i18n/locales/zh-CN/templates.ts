@@ -3,7 +3,7 @@ type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : Tran
 export const templates: TranslationShape<typeof english> = {
   boundary: "模板由应用使用项目 API 密钥通过 Agents API 创建和修改；控制台只查看和删除。",
   refreshFailed: "无法刷新目录。请检查连接后重试。",
-  created: "模板已创建，未分配运行时。", updated: "模板已更新。现有 Session 会保留原配置。", deleted: "模板已删除。",
+  created: "模板已创建，未分配 Runtime。", updated: "模板已更新。现有 Session 会保留原配置。", deleted: "模板已删除。",
   loading: "正在加载环境模板…",
   loadFailedTitle: "无法加载环境模板",
   filterLabel: "筛选模板", filterPlaceholder: "按名称或 ID 筛选", count: "显示 {{visible}} / {{total}} 个模板",

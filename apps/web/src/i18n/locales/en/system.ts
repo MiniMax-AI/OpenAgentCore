@@ -8,7 +8,7 @@ export const system = {
     publicUrl: "Public address",
     publicUrlHelp: "The address applications, nodes and sandboxes use to reach Core.",
     apiBaseUrl: "API base URL",
-    apiBaseUrlHelp: "Applications use it as OPENAI_BASE_URL, with a Project API key as OPENAI_API_KEY.",
+    apiBaseUrlHelp: "Applications use it as OPENAI_BASE_URL, with a project API key as OPENAI_API_KEY.",
     copyApiBaseUrl: "Copy API base URL",
     details: "Installation details",
     id: "Installation ID",

@@ -1,6 +1,6 @@
 export const files = {
   title: "Files",
-  help: "Files uploaded to this project through the Files API, including uploads made by API callers. Reference a File ID from an Environment Template to copy the file into the workspace of each new Session. User data files cannot be downloaded: Core rejects content requests for them.",
+  help: "Files uploaded to this project through the Files API, including uploads made by API callers. Reference a File ID from an Environment template to copy the file into the workspace of each new Session. User data files cannot be downloaded: Core rejects content requests for them.",
   limits: "Uploads accept one file of at most 512 MiB with a 1–1024 byte name; empty files are allowed.",
   actions: {
     upload: "Upload file",
@@ -43,7 +43,7 @@ export const files = {
   },
   delete: {
     prompt: "Delete {{name}}?",
-    consequences: "Copies already placed in Session workspaces are not affected, and neither are existing Sessions. New Sessions from an Environment Template that references this File ID will fail.",
+    consequences: "Copies already placed in Session workspaces are not affected, and neither are existing Sessions. New Sessions from an Environment template that references this File ID will fail.",
     deleted: "Deleted {{name}}",
     rejected: "Core rejected the deletion: {{reason}}",
     uncertain: "The deletion of {{name}} was not confirmed. Refresh the list to check before trying again.",

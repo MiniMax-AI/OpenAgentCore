@@ -12,7 +12,7 @@ export const common = {
   apiEmpty: {
     agents: "Applications create Agents through the Agents API.",
     sessions: "Applications start Sessions through the Agents API.",
-    "environment-templates": "Applications create Environment Templates through the Agents API.",
+    "environment-templates": "Applications create Environment templates through the Agents API.",
     skills: "Applications upload Skills through the Agents API.",
     "source-files": "Applications upload files through the Agents API.",
     vaults: "Applications create Vaults through the Agents API.",
