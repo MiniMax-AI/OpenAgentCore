@@ -12,10 +12,4 @@ export const vaults = {
   unnamed: "Unnamed Vault",
   list: { label: "Vaults", filterLabel: "Filter Vaults", filterPlaceholder: "Filter by name or ID", name: "Name", created: "Created", actions: "Actions", open: "Open {{name}}", noMatch: "No matching Vaults" },
   detail: { back: "Back", facts: "Vault details", id: "ID", created: "Created", metadata: "Metadata", credentials: "Credentials", credentialsHelp: "Static bearer tokens are write-only: Core never returns them, so this page shows metadata only. Replacing a token does not revoke the old one at the provider.", name: "Name", url: "MCP server URL", auth: "Authentication", updated: "Updated", addCredential: "Add Credential", deleteVault: "Delete Vault", staticBearer: "Static bearer", oauth: "OAuth", tokenHidden: "Token hidden" },
-  errors: {
-    tooLarge: "The Credential request exceeded Core's accepted size.",
-    uniqueAttachments: "Vault attachments must be unique.", catalogIncomplete: "Credential metadata is not fully loaded from this Core.", vaultMissing: "A selected Vault is no longer available in the current catalog.",
-    credentialMismatch: "MCP server {{server}} references an unavailable or URL-mismatched Credential.", credentialVaultMissing: "MCP server {{server}} references a Credential whose Vault is unavailable.",
-    multipleCredentials: "Anonymous MCP server {{server}} matches multiple Credentials in the selected Vaults. Select a single matching Vault or configure one Credential explicitly.", matchedVaultMissing: "MCP server {{server}} matched a Credential whose Vault is unavailable.",
-  },
 } as const;

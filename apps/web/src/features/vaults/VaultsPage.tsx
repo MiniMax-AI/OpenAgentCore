@@ -11,7 +11,6 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime } from "../../lib/format";
 import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
-import { vaultName } from "./vault-catalog";
 import "./vaults.css";
 import { collections } from "../../lib/queries";
 import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
@@ -90,7 +89,7 @@ function VaultsList() {
               <tbody>
                 {rows.map((row) => {
                   const vault = row.value;
-                  const name = vaultName(vault);
+                  const name = vault.name ?? t("unnamed");
                   const open = () => navigate("vaults", { project: row.project.id, id: vault.id });
                   return (
                     <tr key={`${row.project.id}:${vault.id}`} className="clickable-row" onClick={open}>
@@ -138,7 +137,7 @@ function VaultsList() {
         onConfirm={() => void remove.confirm()}
         onClose={remove.cancel}
       >
-        <p>{remove.target ? t("deleteVaultPrompt", { name: vaultName(remove.target.value) }) : null}</p>
+        <p>{remove.target ? t("deleteVaultPrompt", { name: remove.target.value.name ?? t("unnamed") }) : null}</p>
       </ConfirmDialog>
     </section>
   );
@@ -180,7 +179,7 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   // Detail reads are not polled: each failed read was asked for and is reported.
   useFailureToast(vault !== null ? failure : null, t("refreshFailed"), "vault-refresh", read.errorUpdatedAt);
   useFailureToast(credentialsRead.data ? credentialsFailure : null, t("refreshFailed"), "vault-credentials-refresh", credentialsRead.errorUpdatedAt);
-  const name = vault ? vaultName(vault) : vaultId;
+  const name = vault ? vault.name ?? t("unnamed") : vaultId;
   return (
     <section className="page-section console-page vaults-page" aria-labelledby="vault-detail-heading">
       <PageHeader
