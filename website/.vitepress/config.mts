@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 const vueDir = dirname(require.resolve('vue/package.json'))
 
 const repo = 'https://github.com/MiniMax-AI/OpenAgentCore'
-const description = 'An open-source, self-hosted implementation of the OpenAI Agents API with multiple native harnesses.'
+const description = 'An open-source, self-hosted implementation of the OpenAI Agents API with multiple native Harnesses.'
 
 const base = siteBase(process.env.WEBSITE_URL)
 
