@@ -1,14 +1,11 @@
 import type { agents as english } from "../en/agents";
 type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : TranslationShape<T[K]> };
 export const agents: TranslationShape<typeof english> = {
-  loading: "正在加载 Agent", requestFailed: "OpenAgentCore 请求失败。", searchPlaceholder: "按名称、模型或 ID 搜索…", filtersLabel: "Agent 筛选", searchLabel: "搜索 Agent", refreshLabel: "刷新 Agent", loadFailed: "无法加载 Agent", refreshFailed: "无法刷新 Agent", staleDescription: "上次加载的 Agent 配置仍然可用。", loadDescription: "Web 无法从已连接的 OpenAgentCore 读取 Agent 配置。", connectionHint: "请检查侧栏中的 OpenAgentCore 连接后重试。", openFailed: "无法打开最新 Agent", retry: "重试", requestFailure: "请求失败",
-  errors: {
-    retrievalUnavailable: "此 OpenAgentCore 连接不支持读取 Agent。", interrupted: "Agent 请求因连接变化而中断。", differentRetrieved: "OpenAgentCore 返回了与请求不同的 Agent。", updateUnavailable: "此 OpenAgentCore 连接不支持更新 Agent。", updateInterrupted: "Agent 更新因连接变化而中断。", differentUpdated: "OpenAgentCore 返回了与所更新对象不同的 Agent。", deleteUnavailable: "此 OpenAgentCore 连接不支持删除。", modelRequired: "请输入模型 ID。", nameTooLong: "名称最多 128 个字符。", metadataJson: "元数据必须是有效 JSON。", metadataObject: "元数据必须是 JSON 对象。", metadataStrings: "每个元数据值都必须是字符串。", metadataCount: "Agent 元数据最多支持 16 组键值。", metadataLength: "元数据键最多 64 个字符，值最多 512 个字符。", reasoningDefault: "当前 Core Session 要求两个推理字段都使用 Core 默认值。", serviceTier: "当前 Core Session 仅支持 auto 服务层级。", textFormat: "当前 Core Session 仅支持文本格式。", verbosity: "低或高详细程度需要已发现的兼容 Codex 模型；此 Web 流程请使用 medium。", readOnlyTools: "此 Agent 包含只读的已保存工具定义，因此不能更改工具。", functionName: "每个 Function 都需要非空名称。", functionNameLength: "Function 名称最多 512 个 UTF-8 字节。", functionUnique: "Function 名称不能重复。", functionJson: "Function {{name}} 的参数必须是有效 JSON。", functionSchema: "Function {{name}} 的参数必须是 JSON 对象 schema。", mcpLabel: "每个 MCP 服务都需要非空标签。", mcpUnique: "MCP 服务标签不能重复。", mcpUrl: "MCP 服务 {{name}} 需要有效的匿名 HTTP(S) URL。", credentialMissing: "MCP 服务 {{name}} 引用了当前目录中不存在的 Credential。", credentialUrl: "MCP 服务 {{name}} 必须使用所选 Credential 的精确 URL。", functionCount: "最多可配置 64 个 Function。",
-  },
+  loading: "正在加载 Agent", searchPlaceholder: "按名称、模型或 ID 搜索…", refreshLabel: "刷新 Agent", loadFailed: "无法加载 Agent", refreshFailed: "无法刷新 Agent", retry: "重试",
   view: {
     filterLabel: "筛选 Agent",
     searchPlaceholder: "按名称、模型或 ID 搜索",
-    columns: { agent: "Agent", model: "模型", harness: "Harness", tools: "工具", sessions: "Session", tokens: "Token", lastActive: "最近活跃", updated: "更新时间", actions: "操作" },
+    columns: { agent: "Agent", model: "模型", harness: "Harness", tools: "工具", sessions: "Session", tokens: "Token", lastActive: "最近活跃", actions: "操作" },
     open: "打开 {{name}}",
     coreDefault: "Core 默认",
     back: "返回",
@@ -56,25 +53,9 @@ export const agents: TranslationShape<typeof english> = {
     delete: "删除",
   },
   catalog: {
-    listLabel: "Agent", create: "创建 Agent", untitled: "未命名 Agent", editLabel: "编辑 {{name}}（{{id}}）", opening: "正在打开最新定义…", startLabel: "使用 {{name}}（{{id}}）启动 Session", unavailable: "不可用", startSession: "启动 Session", sessionUnavailable: "Session 不可用：{{reason}}", noMatch: "没有匹配的 Agent", noSaved: "还没有 Agent", clearSearch: "清除搜索",
-    columns: { agent: "Agent", model: "模型", harness: "Harness", tools: "工具", updated: "更新时间", actions: "操作" }, coreDefaultHarness: "Core 默认", copyId: "复制 Agent ID {{id}}", copied: "已复制", unavailableHelp: "无法启动 Session 的原因",
+    listLabel: "Agent", untitled: "未命名 Agent", noMatch: "没有匹配的 Agent", noSaved: "还没有 Agent",
   },
   details: {
-    id: "ID", created: "创建时间", updated: "更新时间", model: "模型", name: "名称", instructions: "指令", metadata: "元数据", notSet: "未设置", none: "无", blocked: "此 Agent 可以保存，但已知的 Core Session 配置无法启动它：{{reason}}", runtimeBoundary: "已保存的高级配置不能证明运行时可用。模型、provider、主机、工具和条件性详细程度仍需 executor 验证。", advanced: "高级配置 · 只读", tools: "工具", reasoning: "推理", text: "文本", serviceTier: "服务层级", multiAgent: "多 Agent", functionTool: "Function {{name}}", mcpTool: "{{auth}} 服务来源 HTTP MCP {{name}}", serviceOriginMcp: "服务来源 HTTP MCP", vaultBearer: "Vault bearer", anonymous: "匿名", readOnly: "{{label}} · 只读", deletePrompt: "从 OpenAgentCore 删除 {{name}}？", deleteBefore: "从 OpenAgentCore 删除", deleteAfter: "？", exactId: "精确 Agent ID：{{id}}", exactIdLabel: "精确 Agent ID：", deleteWarning: "只有在 Core 确认成功后才会移除已保存的 Agent。现有 Session 会保留持久化的 Agent 快照。", deleteTitle: "删除 Agent？", cancel: "取消", deleting: "删除中…",
-  },
-  savedTool: { malformed: "已保存的工具定义格式错误", toolSearch: "tool_search 仅可保存，不能在 Session 中运行", programmatic: "programmatic_tool_calling 仅可保存，不能在 Session 中运行", webSearchDisabled: "已禁用的 web_search 在 Web 中仅可查看；Session 将保持搜索关闭", webSearchEnabled: "已启用的 web_search 仅可保存；Core 不会在 Session 中运行已启用的搜索", deferred: "延迟 Function 仅可保存", credentialedMcp: "当前 Vault 目录中无法解析需要 Credential 的 MCP，或其 URL 不匹配", unsupportedFunction: "不支持的 Function 工具定义", unsupportedMcp: "不支持的 MCP 工具定义", unsupported: "不支持的已保存工具定义" },
-  admission: { model: "模型不能为空", multiAgent: "不支持多 Agent 执行", reasoning: "显式推理选项仅可保存", serviceTier: "服务层级必须为 auto", text: "文本格式必须为 text", malformedTool: "已保存的工具配置不可执行", malformedFunction: "已保存的 Function 工具不完整或格式错误", deferred: "延迟 Function 仅可保存", functionName: "Function 名称必须非空且最多 512 字节", functionUnique: "Function 名称必须唯一", malformedMcp: "已保存的 MCP 工具不完整或格式错误", credential: "此 Web Session 流程无法使用附加的 MCP Credential", mcpUnique: "MCP 服务标签必须唯一", malformedWebSearch: "已保存的 web_search 工具不完整或格式错误", enabledWebSearch: "web_search 模式必须禁用，因为 Core 不会运行已启用的搜索", savedOnly: "{{type}} 仅可保存", unsupportedTool: "已保存的工具类型不可执行", functionCount: "最多可执行 64 个 Function 工具", webSearchCount: "最多可执行一个 web_search 工具", coreRequires: "当前 Core Session 准入要求：{{reasons}}。", vaultUnavailable: "无法附加 Session Vault。{{reason}}", managedMcp: "托管 Session 暂不支持 MCP 工具。请选择无环境或自托管环境，或使用仅含 Function 的 Agent。" },
-  usage: {
-    title: "用量", rangeLabel: "Session 创建时间", ranges: { all: "全部", "7d": "近 7 天", "30d": "近 30 天" },
-    help: "用量是 Core 报告的每个 Session 的累计值，不按天拆分。Session 按创建时间归入时间范围，其全部用量都计入该范围。",
-    caveat: "数据来自 Core 报告的 Session 累计用量，不包含未报告的部分，不能作为计费依据。",
-    reading: "正在读取 Session…已读取 {{formattedCount}} 个", cancel: "取消", cancelled_one: "已在读取 {{formattedCount}} 个 Session 后停止。", cancelled_other: "已在读取 {{formattedCount}} 个 Session 后停止。", continue: "继续", failed: "无法读取 Session。", retry: "重试",
-    large: "Session 超过 {{formattedCount}} 个，统计可能较慢。建议先缩小时间范围。", largeShortest: "Session 超过 {{formattedCount}} 个，统计可能较慢。",
-    sessions: "Session", tokens: "Token", coverage: "覆盖率", lastActive: "最近活跃", noData: "无数据", cardLabel: "{{name}} 的用量",
-    coverageHelp: "Core 报告了用量的 Session 占范围内全部 Session 的比例。没有报告用量的 Session 不计入 Token 合计，也不按 0 计算。",
-    coverageDetail_one: "{{formattedCount}} 个 Session 中有 {{reported}} 个报告了用量", coverageDetail_other: "{{formattedCount}} 个 Session 中有 {{reported}} 个报告了用量",
-    status: "状态", statuses: { in_progress: "进行中", requires_action: "需要处理", failed: "失败", idle: "空闲", unknown: "无法识别" },
-    tokenKinds: { input: "输入", output: "输出", total: "总计", cached: "缓存命中", reasoning: "推理" },
-    other: { title: "其他 Agent", help: "这些 Session 的 Agent ID 不在当前 Agent 列表中：Agent 可能已被删除，或创建 Session 时使用了内联配置。按原始 Agent ID 分组。", agentId: "Agent ID", missingId: "无 Agent ID", showAll: "显示全部 {{formattedCount}} 个", showLess: "收起" },
+    reasoning: "推理",
   },
 };

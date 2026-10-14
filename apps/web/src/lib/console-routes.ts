@@ -47,19 +47,9 @@ const routedViews = new Set<string>([
   ...Object.keys(consoleSecondaryViews),
 ]);
 
-/** Earlier console releases used these hashes; keep bookmarks working. */
-const legacyHashes: Readonly<Record<string, ConsoleView>> = {
-  dashboard: "overview",
-  sandbox: "nodes",
-  builder: "agents",
-  playground: "sessions",
-  workbench: "overview",
-  "api-keys": "projects",
-};
-
 export function consoleViewFromHash(hash: string): ConsoleView {
   const candidate = hash.startsWith("#") ? hash.slice(1).split("?")[0]! : hash;
-  return legacyHashes[candidate] ?? (routedViews.has(candidate) ? candidate as ConsoleView : "overview");
+  return routedViews.has(candidate) ? candidate as ConsoleView : "overview";
 }
 
 export function consoleHashForView(view: ConsoleView): string {

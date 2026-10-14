@@ -71,6 +71,5 @@ export const common = {
     loadedMore: "{{n}} loaded · more available",
     noMatches: "No matches",
     deleteUncertain: "The deletion was not confirmed; Core may or may not have removed it. The view was re-read, so check it before trying again.",
-    noMatchesDescription: "Nothing matches the current search or filters.",
   },
 } as const;

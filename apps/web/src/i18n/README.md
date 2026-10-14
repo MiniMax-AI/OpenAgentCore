@@ -4,7 +4,7 @@ The console uses `i18next` and `react-i18next`. English is the fallback language
 
 Translations are split by namespace, registered in `resources.ts`:
 
-- `locales/en/*.ts` and `locales/zh-CN/*.ts` hold one file per feature namespace: `common` (reusable actions and labels, with the Core error messages of `core-errors.ts` nested inside it), `navigation` (the shell), `pages`, `agents`, `templates`, `vaults`, `files`, `skills`, `keys`, `sessions`, `diagnostics`, `dashboard`, `overview`, `metrics`, `system`, `sandbox-navigation` (registered as `sandboxNavigation`) and `onboarding`.
+- `locales/en/*.ts` and `locales/zh-CN/*.ts` hold one file per feature namespace: `common` (reusable actions and labels, with the Core error messages of `core-errors.ts` nested inside it), `navigation` (the shell), `pages`, `agents`, `templates`, `vaults`, `files`, `skills`, `keys`, `sessions`, `diagnostics`, `overview`, `metrics`, `system`, `onboarding`, `sandbox-navigation` (registered as `sandboxNavigation`), `request-log` (`requestLog`) and `workspace-storage` (`workspaceStorage`).
 - `sandbox` and `firstRun` use English text as keys in `locales/zh-CN/sandbox.ts` and `locales/zh-CN/first-run.ts`; `resources.ts` projects those keys into the English resources. Keep these keys unchanged when moving copy.
 
 Add a namespace when a feature grows beyond page-level labels; do not grow one application-wide translation object.

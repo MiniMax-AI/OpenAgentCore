@@ -12,7 +12,6 @@ export const system: TranslationShape<typeof english> = {
     apiBaseUrl: "API 基础地址",
     apiBaseUrlHelp: "应用把它设为 OPENAI_BASE_URL，并把项目 API 密钥设为 OPENAI_API_KEY。",
     copyApiBaseUrl: "复制 API 基础地址",
-    localOnly: "只能在 Core 所在的机器上访问",
     details: "安装详情",
     id: "安装 ID",
     sourceCommit: "源码提交",

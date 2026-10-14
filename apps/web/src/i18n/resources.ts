@@ -13,7 +13,6 @@ import { agents as enAgents } from "./locales/en/agents";
 import { templates as enTemplates } from "./locales/en/templates";
 import { vaults as enVaults } from "./locales/en/vaults";
 import { files as enFiles } from "./locales/en/files";
-import { dashboard as enDashboard } from "./locales/en/dashboard";
 import { sessions as enSessions } from "./locales/en/sessions";
 import { overview as enOverview } from "./locales/en/overview";
 import { metrics as enMetrics } from "./locales/en/metrics";
@@ -28,7 +27,6 @@ import { agents as zhCNAgents } from "./locales/zh-CN/agents";
 import { templates as zhCNTemplates } from "./locales/zh-CN/templates";
 import { vaults as zhCNVaults } from "./locales/zh-CN/vaults";
 import { files as zhCNFiles } from "./locales/zh-CN/files";
-import { dashboard as zhCNDashboard } from "./locales/zh-CN/dashboard";
 import { sessions as zhCNSessions } from "./locales/zh-CN/sessions";
 import { overview as zhCNOverview } from "./locales/zh-CN/overview";
 import { metrics as zhCNMetrics } from "./locales/zh-CN/metrics";
@@ -60,7 +58,6 @@ export const resources = {
     templates: enTemplates,
     vaults: enVaults,
     files: enFiles,
-    dashboard: enDashboard,
     sessions: enSessions,
     diagnostics: enDiagnostics,
     overview: enOverview,
@@ -83,7 +80,6 @@ export const resources = {
     templates: zhCNTemplates,
     vaults: zhCNVaults,
     files: zhCNFiles,
-    dashboard: zhCNDashboard,
     sessions: zhCNSessions,
     diagnostics: zhDiagnostics,
     overview: zhCNOverview,
