@@ -331,6 +331,9 @@ func writePointer(root string, release releaseIdentity) error {
 // commit time. A manifest without source_time reads as 0, the oldest.
 func requireNewer(root, installed string, release releaseIdentity, manifest []byte) error {
 	raw, err := os.ReadFile(filepath.Join(root, "node-payload", "releases", installed, "manifest.json"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("installation receipt names release %.12s, whose node metadata is missing; restore the matching data directory", installed)
+	}
 	if err != nil {
 		return err
 	}
@@ -345,7 +348,7 @@ func requireNewer(root, installed string, release releaseIdentity, manifest []by
 		return nil
 	}
 	date := func(seconds int64) string { return time.Unix(seconds, 0).UTC().Format("2006-01-02 15:04 UTC") }
-	return fmt.Errorf("This installation was upgraded to a newer release (%.12s, %s) than this one (%.12s, %s). Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade.",
+	return fmt.Errorf("This installation runs release %.12s (%s); this release, %.12s (%s), is not newer. Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade.",
 		installed, date(current.SourceTime), release.revision, date(next.SourceTime))
 }
 

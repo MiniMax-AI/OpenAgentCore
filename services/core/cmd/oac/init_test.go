@@ -217,7 +217,7 @@ func TestInitializeRefusesAnOlderRelease(t *testing.T) {
 	}
 	before := snapshot(t, root)
 	older, olderFiles := releaseFixture(strings.Repeat("e", 40), 1700000000)
-	want := "This installation was upgraded to a newer release (dddddddddddd, 2025-10-09 08:53 UTC) than this one (eeeeeeeeeeee, 2023-11-14 22:13 UTC). Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade."
+	want := "This installation runs release dddddddddddd (2025-10-09 08:53 UTC); this release, eeeeeeeeeeee (2023-11-14 22:13 UTC), is not newer. Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade."
 	if err := initialize(root, older, fixed(olderFiles)); err == nil || err.Error() != want {
 		t.Fatalf("err = %v", err)
 	}
