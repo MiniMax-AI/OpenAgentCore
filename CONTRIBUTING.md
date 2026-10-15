@@ -37,7 +37,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Installer lifecycle, locking, generated state, managed HTTPS and downloads | [Deployment](deploy/README.md) and [Node installer](deploy/node/README.md) |
 | Operator installation and alternatives | [Installation](docs/getting-started/install.md), [installation options](docs/getting-started/install-options.md) |
 | Settings, defaults, files and installation layout | [Configuration](docs/configuration.md) |
-| Operator commands, keys, backup and version policy | [Operations](docs/getting-started/operations.md) |
+| Operator commands, keys, backup and upgrades | [Operations](docs/getting-started/operations.md) |
 | Web console request boundary and sign-in | [Console server](docs/web/console-server.md) |
 | Web page behavior and visual rules | [Web product](apps/web/PRODUCT.md), [Web design](apps/web/DESIGN.md) |
 | Application example behavior and local operation | [Application example](example/parsar/README.md) |
@@ -145,7 +145,7 @@ Native adapter changes require their build/check targets and live provider accep
 
 Provider bootstrap, Runtime images and Harness adapters must agree on these names.
 
-The [installation version policy](docs/getting-started/operations.md#installation-version-policy) owns release changes and preservation of installed data and resources.
+[Upgrade](docs/getting-started/operations.md#upgrade) owns release changes and preservation of installed data and resources.
 
 ## Branding
 

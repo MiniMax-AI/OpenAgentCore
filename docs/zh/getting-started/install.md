@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 9b8c548e48923c2ee6e51deaebb85422db2b568f36a6718af6b44ff13099ff2a
+source_hash: 8afdf9e68232572599bf432b0d98b08e456b26c6c51280b3bd7139c4ef2db8ea
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发项目 API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -60,7 +60,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
 ```
 
-如果使用了其他目录，请替换路径。重新执行时沿用已保存的 Compose 文件和设置；安装参数只对新目录生效。已有镜像和容器直接复用，缺失镜像会重新下载。修改设置请编辑 `.env` 并运行 `oac apply`。新发布版使用新目录；见[版本策略](operations.md#installation-version-policy)。
+如果使用了其他目录，请替换路径。重新执行时沿用已保存的 Compose 文件和设置；安装参数只对新目录生效。已有镜像和容器直接复用，缺失镜像会重新下载。修改设置请编辑 `.env` 并运行 `oac apply`。要换到更新的发布版本，请按[升级](operations.md#upgrade)操作。
 
 空间或配额不足时，请释放错误信息所指文件系统的空间。加载镜像失败还可能需要释放 Docker 存储空间，该存储可能位于另一个文件系统。
 

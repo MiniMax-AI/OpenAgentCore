@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: 2fa7ecf80a4f78813dee915b9f327137b286bda61c706022c29512ba9e282e62
+source_hash: b1392b29ace751cdd42738a1aeb1e29068ceb83bf74ee940604b432e59785ad9
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
@@ -43,7 +43,7 @@ docker compose exec web oac-web core-key
 
 登录后，使用 [Nodes](nodes.md)选择沙箱提供商并添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
 
-使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，备份数据卷。请遵循[安装版本策略](operations.md#installation-version-policy)：使用不同发布版本时，需要创建新的 Compose 项目并使用全新的数据卷。
+使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，一并备份数据卷和配置。升级时先备份，再使用相同的项目、环境和数据卷部署新版本的 `compose.yaml`：初始化会升级数据卷，Core 会迁移数据库。[升级](operations.md#upgrade)说明会保留哪些内容，以及为何拒绝较旧的版本。
 
 ## 进程设置 {#process-settings}
 
@@ -58,11 +58,12 @@ docker compose exec web oac-web core-key
 
 ## 安装操作 {#installation-actions}
 
-`--install-dir` 选择安装目录。它不是进程设置。
+`--install-dir` 选择安装目录。这两个选项都不是进程设置。
 
 | 选项 | 用途 |
 | --- | --- |
-| `--install-dir DIR` | 绝对安装目录；默认为 `~/.oac/core`。新安装使用空目录或不存在的目录；[重试](install.md#install)使用已有安装目录 |
+| `--install-dir DIR` | 绝对安装目录；默认为 `~/.oac/core`。新安装使用空目录或不存在的目录；[重试](install.md#install)或升级时使用已有安装目录 |
+| `--upgrade` | 将 `--install-dir` 中的已有安装升级到安装程序所属的版本；参见[升级](operations.md#upgrade) |
 
 只要使用不同的安装目录和端口，多个安装就可以共用一台机器。需要更多安装时，请使用不同的 IP 地址或共享反向代理。每个安装都有自己的数据库、Core 密钥和节点。
 

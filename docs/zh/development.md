@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: cf241a574a30389dc38d0fdaa87fe5d82714beed489e39e42bd6710478f3a3eb
+source_hash: b4d3c7f1700ac0d60038069a7cc62a5e8231e32cc8e33513814da841d260d112
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -88,7 +88,7 @@ docker compose up -d --wait --pull never
 ./oac core-key --show
 ```
 
-`install.py` 要求安装目录为空。若配置准备在 `compose.yaml`、`.env` 和 `oac` 三者齐备之前失败，删除该未完成目录后重试；这些文件齐备后使用 Compose 重试。配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。不同源码提交需要全新安装，不支持原地升级：先删除受管资源并卸载节点，再执行 `docker compose down --volumes` 删除旧 Compose 容器和数据卷，最后删除安装目录。这会永久删除该测试安装的数据。也可以选择另一安装目录和 Web 端口。
+对安装目录重新运行同一源码包的 `install.py`，会以已保存的设置继续该安装；只有新目录才需要 `--public-url`。其他提交的源码包会拒绝已有安装，除非传入 `--upgrade`，此时会[原地升级](getting-started/operations.md#upgrade)该安装。若在 `compose.yaml` 和 `.env` 齐备之前准备失败，删除该未完成目录后重试。配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
 
 ## 构建与运行组件 {#build-and-run-components}
 

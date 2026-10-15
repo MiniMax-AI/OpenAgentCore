@@ -14,6 +14,6 @@ export function NodeRolloutStatus({ node, stale = false }: { node: SandboxNode; 
   return <span className="status-with-help">
     <StatusDot tone={tones[state]} label={t(labels[state])} />
     {state === "failed" && node.rollout.diagnostic ? <DiagnosticTip code={node.rollout.diagnostic} /> : null}
-    {state === "update_required" ? <HelpTip>{t("In-place upgrades from older project versions are not supported. Reinstall using the current version. Existing data is not removed automatically.")}</HelpTip> : null}
+    {state === "update_required" ? <HelpTip>{t("This node can't prepare new sandbox configurations and keeps serving the one it registered with. To move it to the current configuration, choose Remove node, then add the host again with Add node.")}</HelpTip> : null}
   </span>;
 }

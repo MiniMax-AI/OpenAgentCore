@@ -41,7 +41,7 @@ On either platform, open its server terminal and run `docker compose ls` to find
 
 After signing in, choose the sandbox backend and add nodes using [Nodes](./nodes.md). The Compose stack deploys the control plane; execution machines remain separate.
 
-Stop with `docker compose stop` using the same files and environment. Back up the data volume and configuration together while the services are stopped. Follow the [installation version policy](./operations.md#installation-version-policy): a different release needs a new Compose project and a fresh data volume.
+Stop with `docker compose stop` using the same files and environment. Back up the data volume and configuration together while the services are stopped. To upgrade, back up first, then deploy the new release's `compose.yaml` with the same project, environment and data volume: initialization upgrades the volume and Core migrates the database. [Upgrade](./operations.md#upgrade) describes what is kept and why an older release is refused.
 
 ## Process settings
 
@@ -56,11 +56,12 @@ These flags are written to `.env` once. After installation, edit that file and r
 
 ## Installation actions
 
-`--install-dir` chooses where the installation is created. It is not a process setting.
+`--install-dir` chooses where the installation is created. Neither option is a process setting.
 
 | Option | Purpose |
 | --- | --- |
-| `--install-dir DIR` | Absolute installation directory; defaults to `~/.oac/core`. Use an empty or missing directory for a new installation, or an existing installation directory to [retry](./install.md#install) |
+| `--install-dir DIR` | Absolute installation directory; defaults to `~/.oac/core`. Use an empty or missing directory for a new installation, or an existing installation directory to [retry](./install.md#install) or upgrade |
+| `--upgrade` | Upgrade the existing installation in `--install-dir` to the installer's release; see [Upgrade](./operations.md#upgrade) |
 
 Several installations can share a machine when they use distinct installation directories and ports. Use distinct IP addresses or a shared reverse proxy for more. Each installation has its own database, Core key and nodes.
 

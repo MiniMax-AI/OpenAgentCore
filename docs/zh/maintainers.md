@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: ae368641567f256f0579182f65cc565e5c6d10161bdb35e6b473306b03167b53
+source_hash: 06be9f5ebff84ac8d7ec419e965345d0ac7d0064f8c79f35c4c025f73b9b82dd
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -134,7 +134,7 @@ git push origin v1.2.3
 
 标签使用 `vMAJOR.MINOR.PATCH` 格式，可选用 `-rc.1` 等预发布后缀以及 `+build.1` 等构建元数据。预发布后缀会创建 GitHub 预发布版。推送标签即表示发布决定。自动检查用于确定构建和测试结果，而不是真实模型资格：推送标签前应评估实际执行证据。模型凭据和私有证书颁发机构绝不能进入 CI 或发布输入，包含它们的验收镜像也不例外。
 
-发布说明会列出每一项协议版本变更（节点线协议、microsandbox 辅助程序或 Core–Runtime 协议），以及它要求运维人员执行的操作。Release 发布后，将 `deploy/compose/smoke-pins.json` 设为它的标签及其 `compose.yaml` 的 SHA-256，使 Compose 冒烟测试从最新的已发布版本升级。
+发布说明会列出每一项协议版本变更（节点线协议、microsandbox 辅助程序或 Core–Runtime 协议），以及它要求运维人员执行的操作。Core 绝不能依赖只有更新版本的初始化才会创建的密钥或文件：升级会先运行新 Core 的 `check-config`，再运行新的 `init`。Release 发布后，将 `deploy/compose/smoke-pins.json` 设为它的标签及其 `compose.yaml` 的 SHA-256，使 Compose 冒烟测试从最新的已发布版本升级。
 
 工作流会在带标签的提交上运行 `check`，包括完整的本地门禁、官方客户端和镜像验收，以及启用打包构件的原生平台矩阵。检查成功后，`blacksmith-4vcpu-ubuntu-2204` 上的一个 `build` 作业会准备固定的 Runtime 输入、复用原生安装器、构建分发包，并直接从本地文件发布。此合并作业具有 `contents: write` 和 `packages: write` 权限；检出过程不会保留凭据。只有发布失败或手动构建不发布时，才会把这些文件保留为未压缩的 Actions 构建产物，供恢复使用。
 

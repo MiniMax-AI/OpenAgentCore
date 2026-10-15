@@ -78,13 +78,13 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 
-**One release.** A node runs the program of the console that added it and is never upgraded in place; see the [installation version policy](./operations.md#installation-version-policy).
+**Node software.** A node keeps the host program of the console that added it; an upgrade of Core doesn't replace it. A release that changes the node protocol lists the actions it requires; see [protocol changes](./operations.md#protocol-changes).
 
 **The token.** It is single-use, expires after 10 minutes and only registers the node. The installer takes it only on standard input and refuses it in the environment, where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy with `log_input` records standard input, and so the token.
 
 ## Rerun, expiry and slow links
 
-- Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It refuses, without changing anything, when the node's retained identity belongs to another Core address or installation.
+- Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It refuses, without changing anything, when the node's retained identity belongs to another Core address or installation, and with `Retained node specification differs from Core` once the sandbox configuration has changed since the node registered. A node added with this command prepares new configurations itself; see [Change the sandbox configuration](#change-the-sandbox-configuration).
 - A command that already expired, or was used on another host, fails at once with `Core rejected the node configuration read (HTTP 401)`: generate a new command and run it within 10 minutes.
 - If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it.
 - Failed or interrupted downloads discard their temporary files. A rerun downloads missing files from the beginning and reuses verified complete files. A transfer that brings less than 64 KiB in a minute stops; check the network and retry.

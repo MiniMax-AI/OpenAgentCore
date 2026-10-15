@@ -16,7 +16,7 @@
 
 ## Database
 
-Core uses its own PostgreSQL database and account and shares no tables with an application. Its migrations are embedded goose migrations in [`migrations/`](migrations), tracked in `agents_api_schema_version`; a migration is never edited after it lands. Queries live in `internal/db/queries` and generate typed code with sqlc: run `make sqlc-generate` after changing a query and commit the generated files, which `make check-sqlc` compares.
+Core uses its own PostgreSQL database and account and shares no tables with an application. Its migrations are embedded goose migrations in [`migrations/`](migrations), tracked in `agents_api_schema_version`; a migration is never edited after it lands. Core applies pending migrations when it starts and refuses a database whose schema version is newer than its own, which a [downgrade](../../docs/getting-started/operations.md#downgrades) would produce. Queries live in `internal/db/queries` and generate typed code with sqlc: run `make sqlc-generate` after changing a query and commit the generated files, which `make check-sqlc` compares.
 
 ## Run from source
 

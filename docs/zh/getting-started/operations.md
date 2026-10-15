@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: dbbd6d6729435146779a1fcf0d262ca4b9d4f45859b80f5804c945ef68e4f07c
+source_hash: 36a0202a83bc194598d64750a876f51ca3461ea9c615c6e1afad4caa78c4ad30
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -19,7 +19,7 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `docker compose ps` | 在安装目录中展示服务 |
 | `docker compose start` | 启动服务 |
 | `docker compose stop` | 停止服务。保留数据、节点和沙箱 |
-| `oac apply` | 先运行 `oac-core check-config`，再执行 `docker compose up -d --wait`。校验失败时不改动任何服务 |
+| `oac apply` | 检查数据卷和 `.env`，然后启动服务，并重新创建配置有变化的服务；参见 [oac apply 的工作方式](../configuration.md#how-oac-apply-works)。校验失败时不改动任何服务 |
 | `oac core-key [--show]` | 指出 Core 密钥在数据卷中的位置；加上 `--show` 时打印密钥本身 |
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web |
 | `docker compose down` | 移除容器。数据保留；要删除数据，请[卸载](#uninstall) |
@@ -127,7 +127,7 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 ## 备份 {#back-up}
 
-可恢复的备份必须是一组在停止写入期间取得的一致数据。仅数据库转储或 Core 卷导出不包含独立工作区存储及节点计算状态。恢复时使用相同版本；参见[安装版本策略](#installation-version-policy)。
+可恢复的备份必须是一组在停止写入期间取得的一致数据。仅数据库转储或 Core 卷导出不包含独立工作区存储及节点计算状态。恢复数据卷时，同时恢复同一份备份中的安装目录，其中保存着写入该数据的版本；之后可以用更新的版本[升级](#upgrade)恢复后的安装。
 
 ### 备份内容 {#backup-contents}
 
@@ -168,6 +168,52 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 
 恢复依赖全部完整后才启动 database、Core 和节点服务；检查期间保持入口受限。在隔离演练中，验证保留 Session 的文件和具备资格时在新计算资源上的原生续接，确认已删除对象无法重新打开，并检查旧写入方均无法访问恢复后的命名空间。在依赖备份进行恢复前记录结果。
 
+## 升级 {#upgrade}
+
+v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并保留数据库、数据卷、`.env`、密钥、Core 密钥、安装 ID 以及你在 `compose.override.yaml` 中添加的条目。更早的安装无法升级：请将新版本安装到新目录。降级会被拒绝。
+
+1. 阅读目标版本的发布说明，了解[协议变更](#protocol-changes)及其要求的操作。
+2. [备份](#back-up)安装。升级不会备份；升级之后，备份是回到先前版本的唯一途径。
+3. 使用目标版本的安装程序，带上 `--upgrade` 和安装目录运行：
+
+   ```sh
+   curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
+   ```
+
+   `--version TAG` 选择最新版本以外的发布版本。Windows 上，将相同参数传给下载的 `install.ps1`。对于从[源码包](../development.md#install-a-checkout-without-publishing-a-release)安装的实例，运行新源码包的安装程序：`python3 <bundle>/install.py --install-dir <dir> --upgrade`。
+4. 准备好后，[应用该版本的 Runtime](#runtime-after-an-upgrade)。
+
+不带 `--upgrade` 时，其他版本的安装程序不做任何更改，并以 `This installation runs release <old>; this installer is <new>. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.` 停止（`install.py` 的提示为 `this bundle is`）。无论是否带该参数，已安装版本的安装程序都会继续该安装。安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)；其他命令正在运行时，等待其结束后重试。
+
+### 升级会做什么 {#what-the-upgrade-does}
+
+安装程序下载该版本的 `compose.yaml` 并拉取缺失的镜像。替换任何文件之前，它使用安装的 `.env` 和 Compose 覆盖文件运行新版本的配置检查和初始化。初始化会升级数据卷，或拒绝降级。随后安装程序将新的 `compose.yaml` 和 `oac` 放到位并启动服务，重新创建有变化的服务；Core 启动时迁移数据库。[部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation)说明了每个步骤。这次重启对工作的影响与任何一次 [Core 重启](#stop-and-restart)相同；节点和沙箱继续运行并重新连接。
+
+成功时，安装程序打印 Core 密钥以及一行 `Upgraded from <old> to <new>. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.`
+
+如果某项检查失败，安装程序会打印 `Upgrade stopped; the running services are unchanged` 及 Docker 的输出，先前版本继续提供服务。修复原因后重新运行命令。初始化升级数据卷后，先前版本便无法再在该数据卷上启动：如果后续步骤失败（例如出现 `startup failed; data retained, rerun the installer`），重新运行同一命令，它会安全地重复每个步骤；也可以[回滚](#roll-back)。
+
+### 升级后的 Runtime {#runtime-after-an-upgrade}
+
+升级不会改变沙箱配置：节点继续服务已保存的 Runtime，新 Session 也使用它。要切换到该版本的 Runtime，打开 **设置** → **沙箱与调度**，在 **Runtime** 行选择 **使用本安装的 Runtime**，确认更改后选择 **保存配置**。节点随后准备新代次，现有沙箱保留原代次，直到被释放；参阅[修改沙箱配置](nodes.md#change-the-sandbox-configuration)。E2B 部署没有 **Runtime** 行；除非该版本更改了 Core–Runtime 协议，其模板继续可用。
+
+### 协议变更 {#protocol-changes}
+
+以下三种连接要求两端的协议版本相同：Core 与节点、节点与 microsandbox 辅助程序、Core 与 Runtime。升级不会改动任何节点主机或正在运行的沙箱。更改其中某个协议的版本会在发布说明中注明，并指出需要以下哪些操作：
+
+- 重新安装每个节点：[移除节点](nodes.md#remove-a-node)，清理主机，再通过 **添加节点** 重新添加该主机；
+- 升级后立即应用该版本的 Runtime；仍在较早代次上的沙箱将停止工作；
+- [构建新的 E2B 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template)，并在[沙箱配置](nodes.md#change-the-sandbox-configuration)中选择它；
+- 重新安装[自托管机器](self-hosted.md#connect-a-machine)。
+
+### 降级 {#downgrades}
+
+初始化会拒绝不比已安装版本更新的版本，并提示 `This installation runs release <installed> (<date>); this release, <own> (<date>), is not newer. Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade.` 安装程序将其报告为已停止的升级，安装继续运行。Core 会拒绝由更新版本迁移过的数据库，并提示 `Agents API database schema version N is newer than this Core supports (M). Downgrades are not supported: run the release that upgraded this database or a newer one, or restore the backup taken before the upgrade.` 要回到较早的版本，请[回滚](#roll-back)。
+
+### 回滚 {#roll-back}
+
+回滚即恢复升级前的备份：停止服务，[恢复](#restore-and-rehearse)数据卷和安装目录，然后启动服务。尽量在应用该版本的 Runtime 之前恢复：节点准备好它之后，恢复的数据库并不知道节点的新代次，因此还需[移除每个节点](nodes.md#remove-a-node)并重新添加。备份之后创建的 Session 和数据会丢失。
+
 ## 卸载 {#uninstall}
 
 ```sh
@@ -184,25 +230,17 @@ cd && rm -rf ~/.oac/core
 
 其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装目录删除后，它们的 Core 已不存在：在各节点主机使用当时发布版的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。安装 ID 在数据卷的 `secrets/core/installation.id` 中。
 
-## 安装版本策略 {#installation-version-policy}
-
-安装在整个生命周期使用同一发行版本。不支持原地升级或降级，也不在版本间迁移数据。
-
-迁移到新版本时，安装到全新的空目录，使用独立数据库、Core 密钥和节点，并从新 Web 添加节点。保留旧安装、数据和节点，直到工作完成。节点运行添加它的控制台所提供的程序，不原地升级；Core 仅接受使用自身节点协议的节点。
-
-中断的安装可以[沿用已保存配置继续](install.md#install)。与本安装无关的非空目录会被拒绝。
-
-安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)。其他命令正在运行时，等待其结束后重试。
-
 ## 问题排查 {#troubleshooting}
 
 | 症状 | 原因与解决方法 |
 | --- | --- |
-| `Port N is already in use.` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口 |
-| `Directory is not a complete Core installation` | 保留目录内容，选择另一个 `--install-dir` |
+| `Web port unavailable; choose --web-port` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口 |
+| `incomplete installation: preserve … and choose another directory` | 保留目录内容，选择另一个 `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
+| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷已被更新的版本升级。参见[降级](#downgrades) |
+| `This installation runs release …` | 安装程序或初始化属于另一个版本。要换到更新的版本，请按[升级](#upgrade)操作；降级会被拒绝 |
 | `Docker Compose 2.26 or newer is required` | 更新 Docker Compose 插件 |
-| `Installation and data retained at …` | 查看上方服务日志，修复原因，再[继续安装](install.md#install)；不要删除数据 |
+| `startup failed; data retained, rerun the installer` | 查看上方服务日志，修复原因，再[继续安装](install.md#install)；不要删除数据 |
 | Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
 | 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |

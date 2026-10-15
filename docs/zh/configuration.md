@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: da6efd48db2be8e2b7afafceeb825be946d25faf606e1ed8b749f036fa3ed793
+source_hash: d8e517c85fbc4da3e6cc8906d49c8ac9d92c7b571edf964916d4c2d7efbc5c6d
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -249,7 +249,8 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 | 路径 | 内容 | 修改者 |
 | --- | --- | --- |
 | `.env` | 进程设置和固定的 Compose 项目名 | 用户修改后运行 `oac apply` |
-| `compose.yaml`、`compose-sha256sums.txt` | 已校验的发行版服务定义 | 发行流程 |
+| `compose.yaml` | 已校验的发行版服务定义 | 安装程序，在安装或[升级](getting-started/operations.md#upgrade)时 |
+| `compose.override.yaml` | 可选的本地 Compose 条目。源码包安装中它是 JSON，还保存四个服务镜像和 Web 的 `/node-payload` 绑定 | 用户。`install.py` 只替换自己的条目，并要求 JSON 格式 |
 | `oac`（Windows 为 `oac.exe`） | 原生管理命令 | 安装程序 |
 
 同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。

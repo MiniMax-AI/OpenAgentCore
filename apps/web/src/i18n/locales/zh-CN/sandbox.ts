@@ -59,7 +59,7 @@ export const sandbox = {
   "Review affected nodes for preparation errors, incompatible node software or an unconfirmed connection. Qualified earlier generations may still serve work.": "请检查相关节点的准备错误、不兼容的节点程序或尚未确认的连接。符合条件的旧代次仍可提供服务。",
   "Existing sandboxes keep their configuration generation. Saving does not move them or prove the target is ready.": "现有沙箱保留所属配置代次。保存不会迁移沙箱，也不代表目标配置已就绪。",
   "Changes keep this backend and existing Sessions and nodes. Core prepares the new target for future work; placement may continue on qualified earlier generations.": "修改会保留当前沙箱提供商、现有 Session 和节点。Core 为后续任务准备新目标配置，期间仍可能将任务分配到符合条件的旧代次。",
-  "In-place upgrades from older project versions are not supported. Reinstall using the current version. Existing data is not removed automatically.": "不支持旧项目版本原地升级，请使用当前版本重新安装。现有数据不会自动删除。",
+  "This node can't prepare new sandbox configurations and keeps serving the one it registered with. To move it to the current configuration, choose Remove node, then add the host again with Add node.": "该节点无法准备新的沙箱配置，会继续服务注册时的配置。要让它使用当前配置，请选择“移除节点”，再通过“添加节点”重新添加该主机。",
   "The saved serving generation is not proof that this node is online, ready or has free capacity.": "已保存的服务代次不代表节点当前在线、已就绪或有空闲容量。",
   "Node observations are from an earlier configuration generation. Refreshing does not change their owned sandboxes.": "节点观测来自较早的配置代次。刷新不会改变节点所属的沙箱。",
   "Leave blank to keep the saved key. Any key you enter is verified as a replacement, even if unchanged.": "留空可保留已保存的密钥。填写的密钥都会作为替换密钥进行验证，即使内容未变。",

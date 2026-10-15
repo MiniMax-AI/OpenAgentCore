@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 1a87d17a7d38d808c8d60c616b439bfb4d50c549412e2366dc8c4d7cc01c28d5
+source_hash: 58450f2e430e5c8d7758835990b9726421f5fe361c6dd22441ae9c9be887e387
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -80,13 +80,13 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 **每台主机只服务一个 Core。** 节点共享 `oac-node` 账号，因此主机只服务一个 Core；第二个 Core 的命令会被拒绝。
 
-**一个发行版本。** 节点运行添加它的控制台所提供的程序，不进行原地升级；参阅[安装版本策略](operations.md#installation-version-policy)。
+**节点程序。** 节点保留添加它的控制台所提供的主机程序；升级 Core 不会替换它。更改节点协议的版本会列出所需操作；参阅[协议变更](operations.md#protocol-changes)。
 
 **令牌。** 令牌仅用于注册节点，一次性使用，10 分钟后过期。安装程序只从标准输入接收它，拒绝环境变量中的令牌，因为 `sudo VAR=… python3` 会在 sudo 日志中记录它。启用了 `log_input` 的 sudoers 策略会记录标准输入，从而记录令牌。
 
 ## 重新运行、过期与慢速网络 {#rerun-expiry-and-slow-links}
 
-- 重新执行同一命令是安全的。节点注册后，重新运行使用节点自身凭据，不改变已匹配的内容，也无需令牌。保留的节点身份属于其他 Core 地址或安装时，程序拒绝且不修改任何内容。
+- 重新执行同一命令是安全的。节点注册后，重新运行使用节点自身凭据，不改变已匹配的内容，也无需令牌。保留的节点身份属于其他 Core 地址或安装时，程序拒绝且不修改任何内容；节点注册后沙箱配置发生变化时，程序同样不做修改，并以 `Retained node specification differs from Core` 拒绝。通过此命令添加的节点会自行准备新配置；参阅[修改沙箱配置](#change-the-sandbox-configuration)。
 - 已过期或已在其他主机使用的命令立即失败，显示 `Core rejected the node configuration read (HTTP 401)`：生成新命令并在 10 分钟内执行。
 - 慢速下载期间命令过期时，注册失败并显示 `The enrollment command expired or was already used`。下载文件保留：在 Web 生成新命令后执行。
 - 失败或中断时删除下载残片；重新执行时从头下载缺失文件，复用已校验的完整文件。每分钟下载不足 64 KiB 时会停止，请检查网络后重试。

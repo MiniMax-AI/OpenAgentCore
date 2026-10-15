@@ -86,7 +86,7 @@ docker compose up -d --wait --pull never
 ./oac core-key --show
 ```
 
-`install.py` requires an empty installation directory. Configuration preparation failures before `compose.yaml`, `.env` and `oac` exist require removing that incomplete directory and retrying. After those files exist, use Compose to retry. Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services. A different source commit is a fresh installation, not an in-place upgrade: delete managed resources and uninstall nodes first, then remove the old Compose containers and data volume with `docker compose down --volumes`, and remove its installation directory. This permanently deletes that test installation's data. Alternatively choose another installation directory and Web port.
+Rerunning the same bundle's `install.py` on its installation directory resumes the installation with the saved settings; `--public-url` is required only for a new directory. A bundle from another commit refuses an existing installation unless you pass `--upgrade`, which [upgrades it in place](./getting-started/operations.md#upgrade). If preparation fails before `compose.yaml` and `.env` exist, remove that incomplete directory and retry. Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services.
 
 ## Build and run components
 
