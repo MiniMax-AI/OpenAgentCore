@@ -13,7 +13,7 @@ func TestApplyDoesNotStartWhenTheConfigurationCheckFails(t *testing.T) {
 	var calls [][]string
 	runner := scriptedRunner{run: func(args ...string) error {
 		calls = append(calls, args)
-		if args[0] == "run" {
+		if args[len(args)-1] == "check-config" {
 			return os.ErrInvalid
 		}
 		return nil
@@ -21,7 +21,7 @@ func TestApplyDoesNotStartWhenTheConfigurationCheckFails(t *testing.T) {
 	if err := apply(context.Background(), runner); err == nil {
 		t.Fatal("apply continued")
 	}
-	if len(calls) != 1 || calls[0][0] != "run" {
+	if len(calls) != 2 || strings.Join(calls[0], " ") != strings.Join(initVolume, " ") {
 		t.Fatal(calls)
 	}
 }

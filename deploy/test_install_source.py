@@ -77,10 +77,17 @@ class SourceInstallTest(unittest.TestCase):
     def test_existing_installation_is_not_replaced(self):
         self.destination.mkdir()
         (self.destination / 'keep').write_text('existing')
-        with self.assertRaisesRegex(ValueError, 'rerun with --upgrade'):
+        with self.assertRaisesRegex(ValueError, 'Incomplete installation'):
             self.install()
         self.assertEqual((self.destination / 'keep').read_text(), 'existing')
         self.assertEqual(self.calls, [])
+
+    def test_same_release_reruns_init_before_the_configuration_check(self):
+        # A first start that stopped before init left no secrets for check-config.
+        self.install()
+        self.calls = []
+        self.install()
+        self.assertEqual([command[-1] for command in self.commands()], ['init', 'check-config', '--remove-orphans', 'core-key'])
 
     def test_upgrade_checks_the_new_release_before_replacing_it_and_keeps_operator_entries(self):
         self.install()
@@ -96,7 +103,10 @@ class SourceInstallTest(unittest.TestCase):
         (self.bundle / 'oac').write_bytes(b'upgraded operator')
 
         self.calls = []
-        with self.assertRaisesRegex(ValueError, 'Upgrade refused; the installation is unchanged'):
+        with self.assertRaisesRegex(ValueError, 'rerun with --upgrade'):
+            self.install(image='sha256:' + '2' * 64)
+        self.assertEqual(self.snapshot(), before)
+        with self.assertRaisesRegex(ValueError, 'Upgrade stopped; the running services are unchanged'):
             self.install(upgrade=True, image='sha256:' + '2' * 64, failure='init')
         self.assertEqual(self.snapshot(), before)
 
@@ -105,6 +115,7 @@ class SourceInstallTest(unittest.TestCase):
         self.assertEqual([command[-1] for command in self.commands()], ['check-config', 'init', '--remove-orphans', 'core-key'])
         services = json.loads((self.destination / 'compose.override.yaml').read_text())['services']
         self.assertEqual(services['core']['volumes'], [nfs])
+        self.assertEqual(os.stat(self.destination / 'compose.override.yaml').st_mode & 0o777, 0o600)
         self.assertEqual({services[name]['image'] for name in ('core', 'web', 'init', 'database')}, {'sha256:' + '2' * 64})
         self.assertEqual([volume['target'] for volume in services['web']['volumes']], ['/node-payload'])
         self.assertIn('OAC_REVISION: ' + upgraded, (self.destination / 'compose.yaml').read_text())

@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 8a7d64ed4be902844e1cbd5c7725e8364599131f3d7df6ce409300159db0ce47
+source_hash: da6efd48db2be8e2b7afafceeb825be946d25faf606e1ed8b749f036fa3ed793
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -24,8 +24,9 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 
 ### oac apply 的工作方式 {#how-oac-apply-works}
 
-1. 它用你改过的 `.env` 运行 `oac-core check-config`。值无效时什么都不改。
-2. 它运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务。
+1. 它运行 `init` 服务，确认数据卷属于已安装的版本；如果首次启动中途停止，就完成初始化。
+2. 它用你改过的 `.env` 运行 `oac-core check-config`。值无效时不改动任何服务。
+3. 它用主机上已有的镜像运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务，并移除该版本不再定义的容器。
 
 用 `docker compose ps` 检查服务。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
 

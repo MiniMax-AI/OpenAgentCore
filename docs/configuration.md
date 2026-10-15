@@ -22,8 +22,9 @@ Installer flags in [installation options](./getting-started/install-options.md) 
 
 ### How oac apply works {#how-oac-apply-works}
 
-1. It runs `oac-core check-config` with the `.env` you edited and changes nothing if a value is invalid.
-2. It runs `docker compose up -d --wait`. Compose recreates only the services whose configuration changed.
+1. It runs the `init` service, which checks that the data volume belongs to the installed release and finishes initializing it if the first start stopped early.
+2. It runs `oac-core check-config` with the `.env` you edited and changes no service if a value is invalid.
+3. It runs `docker compose up -d --wait` with the images already on the host. Compose recreates only the services whose configuration changed and removes containers the release no longer defines.
 
 Use `docker compose ps` to check the services. See [stop and restart](./getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 

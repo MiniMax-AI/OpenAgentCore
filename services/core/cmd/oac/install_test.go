@@ -158,11 +158,12 @@ func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
 		t.Fatal("saved configuration replaced")
 	}
 	for _, call := range f.calls {
-		if strings.HasPrefix(call, "pull") || strings.Contains(call, "down") || strings.Contains(call, "init") {
+		if strings.HasPrefix(call, "pull") || strings.Contains(call, "down") {
 			t.Fatal(call)
 		}
 	}
-	assertCallsInOrder(t, f.calls, "compose "+strings.Join(checkConfig, " "), "compose "+strings.Join(startServices, " "))
+	// Init finishes a first start that stopped before it, so check-config finds the secrets.
+	assertCallsInOrder(t, f.calls, "compose "+strings.Join(initVolume, " "), "compose "+strings.Join(checkConfig, " "), "compose "+strings.Join(startServices, " "))
 }
 
 func TestInstallUpgradesAnotherReleaseOnlyWhenRequested(t *testing.T) {
@@ -187,7 +188,7 @@ func TestInstallUpgradesAnotherReleaseOnlyWhenRequested(t *testing.T) {
 
 	f.options.upgrade = true
 	f.failure = "staged compose run --rm --no-deps init"
-	if err := f.run(); err == nil || !strings.HasPrefix(err.Error(), "Upgrade refused; the installation is unchanged") {
+	if err := f.run(); err == nil || !strings.HasPrefix(err.Error(), "Upgrade stopped; the running services are unchanged") {
 		t.Fatal(err)
 	}
 	if after := installationFiles(t, f.options.dir); !maps.Equal(before, after) {

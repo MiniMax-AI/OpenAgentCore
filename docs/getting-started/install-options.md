@@ -45,7 +45,7 @@ Stop with `docker compose stop` using the same files and environment. Back up th
 
 ## Process settings
 
-These flags are written to `.env` once. After installation, edit that file and run `oac apply`. Rerunning the installer does not change an installation that has already started.
+These flags are written to `.env` once. After installation, edit that file and run `oac apply`. Rerunning the installer on an existing installation ignores these flags and starts it with the saved settings.
 
 | Flag | `.env` variable |
 | --- | --- |

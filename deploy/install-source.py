@@ -43,11 +43,17 @@ def install(bundle, destination, host, port, public_url, upgrade):
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise ValueError('Another operation is using this installation') from None
+        # A staging directory left by a killed run is never published.
+        for leftover in destination.glob('.staging-*'):
+            shutil.rmtree(leftover)
         existing = destination.exists() and any(destination.iterdir())
-        if existing and not upgrade:
-            raise ValueError('Installation directory is not empty. To move it to this release, back up the installation (Upgrade in the operations guide), then rerun with --upgrade.')
         if existing and not all((destination / name).is_file() for name in ('compose.yaml', '.env')):
             raise ValueError(f'Incomplete installation: preserve {destination} and choose another directory')
+        previous = compose_revision((destination / 'compose.yaml').read_text()) if existing else ''
+        if existing and not previous:
+            raise ValueError(f'Incomplete installation: preserve {destination} and choose another directory')
+        if previous and previous != revision and not upgrade:
+            raise ValueError(f'This installation runs release {previous[:12]}; this bundle is {revision[:12]}. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.')
         if not existing and public_url is None:
             raise ValueError('--public-url is required for a new installation')
         # Docker validates both daemon access and the production template's required features.
@@ -61,7 +67,6 @@ def install(bundle, destination, host, port, public_url, upgrade):
             os.chmod(root, 0o755)
             for name in files:
                 os.chmod(Path(root) / name, 0o644)
-        previous = compose_revision((destination / 'compose.yaml').read_text()) if existing else ''
         if not existing:
             (destination / '.env').write_text(f"COMPOSE_PROJECT_NAME=oac-{uuid.uuid4().hex[:10]}\nOAC_HOST='{host}'\nOAC_WEB_PORT='{port}'\nOAC_PUBLIC_URL='{public_url}'\n")
             os.chmod(destination / '.env', 0o600)
@@ -84,16 +89,23 @@ def install(bundle, destination, host, port, public_url, upgrade):
             web['volumes'] = [volume for volume in web.get('volumes', []) if not (isinstance(volume, dict) and volume.get('target') == '/node-payload')]
             web['volumes'].append({'type': 'bind', 'source': str(payload), 'target': '/node-payload', 'read_only': True})
             (stage / 'compose.override.yaml').write_text(json.dumps(override, indent=2) + '\n')
+            os.chmod(stage / 'compose.override.yaml', 0o600)
             shutil.copyfile(bundle / 'oac', stage / 'oac')
             os.chmod(stage / 'oac', 0o700)
             compose = ('docker', 'compose', '-f', str(stage / 'compose.yaml'), '-f', str(stage / 'compose.override.yaml'), '--project-directory', str(destination))
             if existing:
                 # Init upgrades the data volume or refuses; until then the running release is untouched.
+                # On the same release init comes first: it finishes a first start that stopped before it,
+                # so check-config finds the secrets.
+                checks = [('run', '--rm', '--no-deps', '--entrypoint', '/usr/local/bin/oac-core', 'core', 'check-config'),
+                          ('run', '--rm', '--no-deps', 'init')]
+                if previous == revision:
+                    checks.reverse()
                 try:
-                    run(*compose, 'run', '--rm', '--no-deps', '--entrypoint', '/usr/local/bin/oac-core', 'core', 'check-config', cwd=destination)
-                    run(*compose, 'run', '--rm', '--no-deps', 'init', cwd=destination)
+                    for check in checks:
+                        run(*compose, *check, cwd=destination)
                 except subprocess.CalledProcessError:
-                    raise ValueError('Upgrade refused; the installation is unchanged') from None
+                    raise ValueError('Upgrade stopped; the running services are unchanged') from None
             else:
                 run(*compose, 'config', '--quiet', cwd=destination)
             node_payload.activate(payload, revision)

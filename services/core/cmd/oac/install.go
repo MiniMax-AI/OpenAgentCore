@@ -255,10 +255,8 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 	}
 	fmt.Println("Checking and downloading images...")
 	for _, image := range strings.Fields(string(images)) {
-		if !fresh && !upgrade {
-			if _, err := i.docker(ctx, "", "image", "inspect", image); err == nil {
-				continue
-			}
+		if _, err := i.docker(ctx, "", "image", "inspect", image); err == nil {
+			continue
 		}
 		if _, err := i.docker(ctx, "", "pull", image); err != nil {
 			return err
@@ -267,9 +265,9 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 	if upgrade {
 		// Init upgrades the data volume or refuses; until then the running release is untouched.
 		fmt.Println("Checking the upgrade...")
-		for _, check := range [][]string{checkConfig, {"run", "--rm", "--no-deps", "init"}} {
+		for _, check := range [][]string{checkConfig, initVolume} {
 			if err := compose.Run(ctx, check...); err != nil {
-				return fmt.Errorf("Upgrade refused; the installation is unchanged: %w", err)
+				return fmt.Errorf("Upgrade stopped; the running services are unchanged: %w", err)
 			}
 		}
 		for _, name := range []string{cliName(), "compose.yaml"} {
@@ -277,6 +275,8 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 				return err
 			}
 		}
+	}
+	if !fresh {
 		// Installations from earlier releases kept a checksum that no longer describes compose.yaml.
 		_ = os.Remove(filepath.Join(o.dir, "compose-sha256sums.txt"))
 	}
