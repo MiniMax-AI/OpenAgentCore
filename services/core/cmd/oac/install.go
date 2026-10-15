@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -28,6 +29,8 @@ type installOptions struct {
 	dir, version, publicURL, host string
 	port                          int
 	upgrade                       bool
+	// given names the settings flags the caller passed, which an existing installation ignores.
+	given []string
 }
 type installer struct {
 	docker     func(context.Context, string, ...string) ([]byte, error)
@@ -48,9 +51,20 @@ func installCommand(ctx context.Context, args []string) error {
 	flags.StringVar(&o.host, "host", "0.0.0.0", "Web bind address")
 	flags.IntVar(&o.port, "web-port", 8080, "Web port")
 	flags.BoolVar(&o.upgrade, "upgrade", false, "upgrade an existing installation to this release")
+	// The flag package's own report would repeat the error main prints.
+	flags.SetOutput(io.Discard)
 	if err := flags.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			flags.SetOutput(os.Stderr)
+			flags.PrintDefaults()
+		}
 		return err
 	}
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "host" || f.Name == "web-port" || f.Name == "public-url" {
+			o.given = append(o.given, f.Name)
+		}
+	})
 	if flags.NArg() != 0 {
 		return errors.New("unexpected installation arguments")
 	}
@@ -66,6 +80,7 @@ func installCommand(ctx context.Context, args []string) error {
 func dockerOutput(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = dir
+	cmd.Env = dockerEnv()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	output, err := cmd.Output()
@@ -150,7 +165,8 @@ func (i installer) install(ctx context.Context, o installOptions) error {
 	if net.ParseIP(o.host) == nil {
 		return errors.New("--host must be an IP address")
 	}
-	if o.publicURL == "" {
+	detected := o.publicURL == ""
+	if detected {
 		o.publicURL = "http://localhost:" + strconv.Itoa(o.port)
 		if o.host == "0.0.0.0" {
 			// UDP connect selects a route without transmitting a packet.
@@ -186,10 +202,11 @@ func (i installer) install(ctx context.Context, o installOptions) error {
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return accessError(o.dir, err)
 	}
-	return withLock(o.dir, func() error { return i.installLocked(ctx, o) })
+	return withLock(o.dir, func() error { return i.installLocked(ctx, o, detected) })
 }
 
-func (i installer) installLocked(ctx context.Context, o installOptions) error {
+// installLocked installs or resumes under the lock; detected says the console origin was not given.
+func (i installer) installLocked(ctx context.Context, o installOptions, detected bool) error {
 	info, err := i.docker(ctx, "", "info", "--format", "{{.OSType}}/{{.Architecture}}")
 	switch {
 	case errors.Is(err, exec.ErrNotFound):
@@ -299,11 +316,12 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Checking and downloading images...")
+	fmt.Println("Checking images...")
 	for _, image := range strings.Fields(string(images)) {
 		if _, err := i.docker(ctx, "", "image", "inspect", image); err == nil {
 			continue
 		}
+		fmt.Printf("Pulling %s…\n", image)
 		if _, err := i.docker(ctx, "", "pull", image); err != nil {
 			return fmt.Errorf("Docker could not pull %s: %w\nImage pulls go through the Docker daemon, which does not use this shell's proxy settings: if the registry is unreachable, configure the daemon's proxy or a registry mirror, or install from the offline archive (Offline hosts in the installation options).", image, err)
 		}
@@ -338,34 +356,36 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		_ = os.Remove(filepath.Join(o.dir, stageMarker(o.dir)))
 	}
 	compose = installCompose{docker: i.docker, dir: o.dir}
-	fmt.Println("Starting services...")
-	if fresh || upgrade {
-		err = compose.Run(ctx, startServices...)
-	} else {
-		err = apply(ctx, compose)
-	}
-	if err != nil {
-		return fmt.Errorf("startup failed; data retained, rerun the installer: %w", err)
-	}
-	key, err := compose.Output(ctx, "exec", "-T", "web", "/usr/local/bin/oac-web", "core-key")
-	if err != nil {
-		return err
-	}
-	environment, err := compose.Output(ctx, "config", "--environment")
-	if err != nil {
-		return err
-	}
-	for _, line := range strings.Split(string(environment), "\n") {
-		if strings.HasPrefix(line, "OAC_PUBLIC_URL=") {
-			o.publicURL = strings.TrimPrefix(line, "OAC_PUBLIC_URL=")
+	if !fresh {
+		if differing := i.differingSettings(o); len(differing) > 0 {
+			fmt.Printf("Ignored %s: they differ from the saved settings. To change them, edit .env and run %s apply.\n", strings.Join(differing, ", "), filepath.Join(o.dir, cliName()))
 		}
 	}
-	fmt.Printf("\nOpenAgentCore is running.\n\nConsole: %s\nCore key: %s\nCommand: %s\n", o.publicURL, strings.TrimSpace(string(key)), filepath.Join(o.dir, cliName()))
+	fmt.Println("Starting services (up to 3 minutes)…")
+	if err := apply(ctx, compose, o.dir, "rerun the installer"); err != nil {
+		return err
+	}
+	origin, err := consoleOrigin(ctx, compose)
+	if err != nil {
+		return err
+	}
+	command := filepath.Join(o.dir, cliName())
+	fmt.Printf("\nOpenAgentCore is running.\n\nConsole: %s\n", origin)
+	if fresh {
+		key, err := compose.Output(ctx, "exec", "-T", "web", "/usr/local/bin/oac-web", "core-key")
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Core key: %s\n", strings.TrimSpace(string(key)))
+	} else {
+		fmt.Printf("Core key: %s core-key --show\n", command)
+	}
+	fmt.Printf("Command: %s\n", command)
 	if upgrade {
 		fmt.Printf("Upgraded from %s to %s. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.\n", short(installed), short(buildRevision))
 	}
-	if u, _ := url.Parse(o.publicURL); u != nil && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1") {
-		fmt.Println("For remote access, set OAC_PUBLIC_URL in .env to a reachable origin and run oac apply.")
+	if fresh && detected {
+		fmt.Printf("Browsers must open exactly %s. If they reach this host at another address, set OAC_PUBLIC_URL in .env and run %s apply.\n", origin, command)
 	}
 	return nil
 }
@@ -382,6 +402,43 @@ func (i installer) portHolderHint(ctx context.Context, port int) string {
 		}
 	}
 	return ""
+}
+
+// consoleOrigin is the origin Web accepts, with the installation's defaults applied.
+func consoleOrigin(ctx context.Context, compose Runner) (string, error) {
+	raw, err := compose.Output(ctx, "config", "--format", "json")
+	if err != nil {
+		return "", err
+	}
+	var config struct {
+		Services struct {
+			Web struct{ Environment map[string]string }
+		}
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return "", err
+	}
+	return config.Services.Web.Environment["OAC_PUBLIC_URL"], nil
+}
+
+// differingSettings names the settings flags the caller passed that disagree with the saved .env.
+func (i installer) differingSettings(o installOptions) []string {
+	saved := map[string]string{}
+	raw, _ := os.ReadFile(filepath.Join(o.dir, ".env"))
+	for _, line := range strings.Split(string(raw), "\n") {
+		if name, value, ok := strings.Cut(line, "="); ok {
+			saved[name] = strings.Trim(value, "'")
+		}
+	}
+	want := map[string]string{"host": saved["OAC_HOST"], "web-port": saved["OAC_WEB_PORT"], "public-url": saved["OAC_PUBLIC_URL"]}
+	given := map[string]string{"host": o.host, "web-port": strconv.Itoa(o.port), "public-url": o.publicURL}
+	var names []string
+	for _, name := range o.given {
+		if given[name] != want[name] {
+			names = append(names, "--"+name)
+		}
+	}
+	return names
 }
 
 // releaseCompose downloads the requested release's compose.yaml, verifies its published checksum and requires it to start this installer's release.
@@ -456,8 +513,15 @@ type installCompose struct {
 	files  []string
 }
 
+// Output reports a failure as the last line of Compose's output, which holds the cause; the progress lines before it only repeat what happened.
 func (c installCompose) Output(ctx context.Context, args ...string) ([]byte, error) {
-	return c.docker(ctx, c.dir, append(append([]string{"compose"}, c.files...), args...)...)
+	output, err := c.docker(ctx, c.dir, append(append([]string{"compose"}, c.files...), args...)...)
+	if err != nil {
+		if lines := strings.Split(strings.TrimSpace(err.Error()), "\n"); len(lines) > 1 {
+			err = errors.New(strings.TrimSpace(lines[len(lines)-1]))
+		}
+	}
+	return output, err
 }
 
 func (c installCompose) Run(ctx context.Context, args ...string) error {

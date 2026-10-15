@@ -24,7 +24,7 @@ Installer flags in [installation options](./getting-started/install-options.md) 
 
 1. It runs the `init` service, which checks that the data volume belongs to the installed release and finishes initializing it if the first start stopped early.
 2. It runs `oac-core check-config` with the `.env` you edited and changes no service if a value is invalid.
-3. It runs `docker compose up -d --wait` with the images already on the host. Compose recreates only the services whose configuration changed and removes containers the release no longer defines.
+3. It runs `docker compose up -d --wait` with the images already on the host. Compose recreates only the services whose configuration changed and removes containers the release no longer defines. If a service does not become healthy, the message names it and the command that prints its log.
 
 Use `docker compose ps` to check the services. See [stop and restart](./getting-started/operations.md#stop-and-restart) for what a restart interrupts.
 

@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: c4e6dc4ae4e0167591ecad9e5a8534271c523e655a95d605c5cd7f3902db4876
+source_hash: daba721bddebf8d6544ddef597390307a7b4a28f041978133acc200004812d69
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -19,9 +19,9 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `docker compose ps` | 在安装目录中展示服务 |
 | `docker compose start` | 启动服务 |
 | `docker compose stop` | 停止服务。保留数据、节点和沙箱 |
-| `oac apply` | 检查数据卷和 `.env`，然后启动服务，并重新创建配置有变化的服务；参见 [oac apply 的工作方式](../configuration.md#how-oac-apply-works)。校验失败时不改动任何服务 |
+| `oac apply` | 检查数据卷和 `.env`，然后启动服务，并重新创建配置有变化的服务；参见 [oac apply 的工作方式](../configuration.md#how-oac-apply-works)。校验失败时不改动任何服务。成功时打印 `Services are running with the current settings.` |
 | `oac core-key [--show]` | 指出 Core 密钥在数据卷中的位置；加上 `--show` 时打印密钥本身 |
-| `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web |
+| `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web，然后说明如何读取新密钥 |
 | `docker compose down` | 移除容器。数据保留 |
 | `oac uninstall` | 确认后删除安装及其数据；参见[卸载](#uninstall) |
 
@@ -218,7 +218,7 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
 
 安装程序下载该版本的 `compose.yaml` 并拉取缺失的镜像。替换任何文件之前，它使用安装的 `.env` 和 Compose 覆盖文件运行新版本的配置检查和初始化。初始化会升级数据卷，或拒绝降级。随后安装程序将新的 `compose.yaml` 和 `oac` 放到位并启动服务，重新创建有变化的服务；Core 启动时迁移数据库。[部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation)说明了每个步骤。这次重启对工作的影响与任何一次 [Core 重启](#stop-and-restart)相同；节点和沙箱继续运行并重新连接。
 
-成功时，安装程序打印 Core 密钥以及一行 `Upgraded from <old> to <new>. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.`
+成功时，安装程序打印控制台地址、用 `oac core-key --show` 代替密钥，以及一行 `Upgraded from <old> to <new>. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.`
 
 如果某项检查失败，安装程序会打印 `Upgrade stopped; the running services are unchanged` 及 Docker 的输出，先前版本继续提供服务。修复原因后重新运行命令。初始化升级数据卷后，先前版本便无法再在该数据卷上启动：如果后续步骤失败（例如出现 `startup failed; data retained, rerun the installer`），重新运行同一命令，它会安全地重复每个步骤；也可以[回滚](#roll-back)。
 
@@ -279,7 +279,7 @@ docker compose -p <project> down --volumes --remove-orphans
 | `This account cannot access …` | 之前用 `sudo` 运行留下了属于 root 的文件。运行消息给出的 `sudo chown` 命令，再以自己的账号重新运行 |
 | `Docker Compose 2.26 or newer is required` | 安装或更新 Docker Compose 插件 |
 | `Docker could not pull …` | Docker 守护进程无法访问容器注册表。配置其代理或镜像加速器，或使用[离线归档](install-options.md#offline-hosts) |
-| `startup failed; data retained, rerun the installer` | 查看上方服务日志，修复原因，再[继续安装](install.md#install)；不要删除数据 |
+| `startup failed; data retained, rerun the installer` | 消息会列出不健康的服务和查看其日志的 `docker compose logs --tail 50` 命令。修复原因，再[继续安装](install.md#install)；不要删除数据。运行 `oac apply` 时，同一消息会提示再次运行 `oac apply` |
 | Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
 | 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |

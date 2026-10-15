@@ -55,15 +55,15 @@ The script downloads that release's Compose files, checks their SHA-256, and:
 2. prepares the [installation directory](../configuration.md#installation-directory), `~/.oac/core`, with `.env` and the native `oac` command (`oac.exe` on Windows);
 3. starts the services with Docker Compose. Web serves the console on port 8080 and forwards `/v1`, `/api/v1` and `/docs` to Core. Core and PostgreSQL are not published.
 
-The installer prints the console address and Core key. After signing in, configure execution resources and create Projects in Web.
+The installer prints the console address and, on a fresh install only, the Core key; a rerun or upgrade prints `oac core-key --show` instead. When the installer chose the console address itself, it adds that browsers must open exactly that address and how to change it with `OAC_PUBLIC_URL`. After signing in, configure execution resources and create Projects in Web.
 
-Downloads and configuration checks happen before the installation directory is published. After that, failures preserve the configuration and data and report the failed step; inspect it with `docker compose logs --tail 100` in the installation directory. Fix the reported cause and rerun the same command, or specify the installation directory:
+Downloads and configuration checks happen before the installation directory is published. After that, failures preserve the configuration and data. A rejected setting or data volume is reported by itself: fix it as the message says. A service that does not become healthy within three minutes is named together with the `docker compose logs --tail 50` command for it; fix the cause and rerun the same command. Ctrl-C prints `Interrupted; rerun the installer to continue.` and leaves the installation ready for that rerun. Rerun the same command, or specify the installation directory:
 
 ```bash
 curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
 ```
 
-Use your chosen directory if it differs. A rerun uses the saved Compose file and settings; installation flags only apply to new directories. Existing images and containers are reused; missing images are downloaded. To change settings, edit `.env` and run `oac apply`. To move to a newer release, follow [Upgrade](./operations.md#upgrade).
+Use your chosen directory if it differs. A rerun uses the saved Compose file and settings; installation flags only apply to new directories, and the installer names the ones it ignored. Existing images and containers are reused; missing images are downloaded. To change settings, edit `.env` and run `oac apply`. To move to a newer release, follow [Upgrade](./operations.md#upgrade).
 
 For insufficient space or quota, free space on the filesystem named by the error. Image-loading failures can also require space in Docker's storage, which may be on a different filesystem.
 

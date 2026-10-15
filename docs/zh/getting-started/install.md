@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: de77f596cad24c26ddb2ddfa71ef104ace08dfe62d57a785b26f692df8f5a3ed
+source_hash: 5589a96a188bc9d778f5bebf8cab78db7f9fbebffb1656a0b91001ac05f31d95
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发项目 API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -57,15 +57,15 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 2. 准备[安装目录](../configuration.md#installation-directory) `~/.oac/core`，写入 `.env` 和原生 `oac` 命令（Windows 为 `oac.exe`）；
 3. 用 Docker Compose 启动服务。Web 在 8080 端口提供控制台，并把 `/v1`、`/api/v1` 和 `/docs` 转发到 Core。Core 和 PostgreSQL 不发布端口。
 
-安装器会打印控制台地址和 Core 密钥。登录后，在 Web 中配置执行资源并创建项目。
+安装器会打印控制台地址；仅在全新安装时打印 Core 密钥，重新运行或升级则打印 `oac core-key --show`。控制台地址由安装器自行选定时，它还会提示浏览器必须打开的确切地址，以及如何用 `OAC_PUBLIC_URL` 修改。登录后，在 Web 中配置执行资源并创建项目。
 
-安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据，并报告失败步骤；在安装目录运行 `docker compose logs --tail 100` 查看日志。修复报错后，重新执行同一命令，或指定安装目录即可继续：
+安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据。被拒绝的设置或数据卷会单独报告，按提示修复即可。服务三分钟内未变为健康时，会列出这些服务和查看其日志的 `docker compose logs --tail 50` 命令；修复原因后重新执行同一命令。按 Ctrl-C 会打印 `Interrupted; rerun the installer to continue.`，安装保持可继续的状态。重新执行同一命令，或指定安装目录即可继续：
 
 ```bash
 curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
 ```
 
-如果使用了其他目录，请替换路径。重新执行时沿用已保存的 Compose 文件和设置；安装参数只对新目录生效。已有镜像和容器直接复用，缺失镜像会重新下载。修改设置请编辑 `.env` 并运行 `oac apply`。要换到更新的发布版本，请按[升级](operations.md#upgrade)操作。
+如果使用了其他目录，请替换路径。重新执行时沿用已保存的 Compose 文件和设置；安装参数只对新目录生效，安装器会指出被忽略的参数。已有镜像和容器直接复用，缺失镜像会重新下载。修改设置请编辑 `.env` 并运行 `oac apply`。要换到更新的发布版本，请按[升级](operations.md#upgrade)操作。
 
 空间或配额不足时，请释放错误信息所指文件系统的空间。加载镜像失败还可能需要释放 Docker 存储空间，该存储可能位于另一个文件系统。
 

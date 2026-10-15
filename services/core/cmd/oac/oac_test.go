@@ -18,7 +18,7 @@ func TestApplyDoesNotStartWhenTheConfigurationCheckFails(t *testing.T) {
 		}
 		return nil
 	}}
-	if err := apply(context.Background(), runner); err == nil {
+	if err := apply(context.Background(), runner, t.TempDir(), "rerun"); err == nil {
 		t.Fatal("apply continued")
 	}
 	if len(calls) != 2 || strings.Join(calls[0], " ") != strings.Join(initVolume, " ") {

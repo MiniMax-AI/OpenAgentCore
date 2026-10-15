@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 51d98943e71402c79cf134e757192607c3628944369e869a69a9582e34fa8666
+source_hash: 600946b2952a270983450ee93e75fbcdb950c2249ff845c7e3fc81a6154a6910
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -26,7 +26,7 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 
 1. 它运行 `init` 服务，确认数据卷属于已安装的版本；如果首次启动中途停止，就完成初始化。
 2. 它用你改过的 `.env` 运行 `oac-core check-config`。值无效时不改动任何服务。
-3. 它用主机上已有的镜像运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务，并移除该版本不再定义的容器。
+3. 它用主机上已有的镜像运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务，并移除该版本不再定义的容器。若有服务未变为健康，消息会指出该服务和打印其日志的命令。
 
 用 `docker compose ps` 检查服务。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
 

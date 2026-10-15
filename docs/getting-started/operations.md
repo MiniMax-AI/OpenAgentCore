@@ -17,9 +17,9 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `docker compose ps` | Shows the services. Run it in the installation directory |
 | `docker compose start` | Starts the services |
 | `docker compose stop` | Stops the services. Data, nodes and sandboxes are kept |
-| `oac apply` | Checks the data volume and `.env`, then starts the services and recreates those whose configuration changed; see [how oac apply works](../configuration.md#how-oac-apply-works). A failed check changes no service |
+| `oac apply` | Checks the data volume and `.env`, then starts the services and recreates those whose configuration changed; see [how oac apply works](../configuration.md#how-oac-apply-works). A failed check changes no service. On success it prints `Services are running with the current settings.` |
 | `oac core-key [--show]` | Identifies the key location in the data volume, or prints the key with `--show` |
-| `oac rotate-core-key` | Replaces the Core key and restarts Core and Web |
+| `oac rotate-core-key` | Replaces the Core key and restarts Core and Web, then says how to read the new key |
 | `docker compose down` | Removes the containers. Data is kept |
 | `oac uninstall` | Deletes the installation and its data after confirmation; see [Uninstall](#uninstall) |
 
@@ -216,7 +216,7 @@ Without `--upgrade`, another release's installer changes nothing and stops with 
 
 The installer downloads the release's `compose.yaml` and pulls missing images. Before it replaces any file, it runs the new release's configuration check and initialization with the installation's `.env` and Compose overrides. Initialization upgrades the data volume, or refuses a downgrade. The installer then puts the new `compose.yaml` and `oac` in place and starts the services, recreating those that changed; Core migrates the database as it starts. [Deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation) describes each step. The restart interrupts work as any [Core restart](#stop-and-restart) does; nodes and sandboxes keep running and reconnect.
 
-On success the installer prints the Core key and the line `Upgraded from <old> to <new>. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.`
+On success the installer prints the console address, `oac core-key --show` in place of the key, and the line `Upgraded from <old> to <new>. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.`
 
 If a check fails, the installer prints `Upgrade stopped; the running services are unchanged` with Docker's output, and the previous release keeps serving. Fix the cause and rerun the command. Once initialization has upgraded the data volume, the previous release can no longer start on it: if a later step fails, for example with `startup failed; data retained, rerun the installer`, rerun the same command, which repeats every step safely, or [roll back](#roll-back).
 
@@ -277,7 +277,7 @@ The project is the `oac-…` name from the list. Then delete `~/.oac/core.lock` 
 | `This account cannot access …` | An earlier run with `sudo` left files owned by root. Run the `sudo chown` command the message prints, then rerun as your own account |
 | `Docker Compose 2.26 or newer is required` | Install or update the Docker Compose plugin |
 | `Docker could not pull …` | The Docker daemon cannot reach the registry. Configure its proxy or a registry mirror, or use the [offline archive](./install-options.md#offline-hosts) |
-| `startup failed; data retained, rerun the installer` | Read the service logs above it, fix the cause, then [resume installation](./install.md#install); keep the data |
+| `startup failed; data retained, rerun the installer` | The message lists the services that are not healthy and the `docker compose logs --tail 50` command for them. Fix the cause, then [resume installation](./install.md#install); keep the data. After `oac apply`, the same message says to run `oac apply` again |
 | Web answers 403 `Forbidden` | The browser host is not `OAC_PUBLIC_URL`. Open that origin; a reverse proxy must pass the original Host |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `docker compose ps`, then Core's log |
 | Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the Harness, or pass one; self-hosted Sessions always pass their own |

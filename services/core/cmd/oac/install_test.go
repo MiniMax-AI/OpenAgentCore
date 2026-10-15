@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/http"
@@ -25,6 +26,10 @@ type installFixture struct {
 	// failureErr is what the failing Docker call reports; os.ErrPermission when nil.
 	failureErr error
 	cached     bool
+	// origin is the console origin Compose resolves.
+	origin string
+	// psOutput is what compose ps reports after a failed start.
+	psOutput string
 }
 
 // installedRevision reads the release the installation directory starts.
@@ -51,6 +56,7 @@ func newInstallFixture(t *testing.T) *installFixture {
 	}
 	f := &installFixture{options: installOptions{dir: filepath.Join(root, "installation with spaces"), version: "latest", host: "127.0.0.1", port: port}}
 	f.executable = exe
+	f.origin = "http://localhost:8080"
 	// The release served for download is always the running installer's.
 	f.download = func(_ context.Context, address string) ([]byte, error) {
 		if f.failure == "download" {
@@ -99,10 +105,15 @@ func newInstallFixture(t *testing.T) *installFixture {
 			return []byte("v2.26.0"), nil
 		case "version --format {{.Server.APIVersion}}":
 			return []byte("1.45"), nil
+		case "compose exec -T web /usr/local/bin/oac-web core-key":
+			return []byte("oac_admin_test\n"), nil
 		case "compose config --images":
 			return []byte("example/core:latest\nexample/web:latest"), nil
-		case "compose config --environment":
-			return []byte("OAC_PUBLIC_URL=http://localhost:8080"), nil
+		case "compose config --format json":
+			return []byte(`{"services":{"web":{"environment":{"OAC_PUBLIC_URL":"` + f.origin + `"}}}}`), nil
+		}
+		if command == "compose ps --all --format json" {
+			return []byte(f.psOutput), nil
 		}
 		if strings.HasPrefix(command, "image inspect") && !f.cached {
 			return nil, os.ErrNotExist
@@ -410,5 +421,120 @@ func TestInstallerInterruptedProcess(t *testing.T) {
 	cmd.Wait()
 	if err := f.run(); err != nil {
 		t.Fatalf("killed installer left unrecoverable state: %v", err)
+	}
+}
+
+// captureOutput returns what fn prints to standard output.
+func captureOutput(t *testing.T, fn func()) string {
+	t.Helper()
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Stdout
+	os.Stdout = writer
+	fn()
+	os.Stdout = previous
+	writer.Close()
+	raw, _ := io.ReadAll(reader)
+	return string(raw)
+}
+
+func TestFreshInstallStartsLikeApplyAndPrintsTheKeyOnce(t *testing.T) {
+	f := newInstallFixture(t)
+	f.options.upgrade = false
+	var err error
+	out := captureOutput(t, func() { err = f.run() })
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The shared start: init, then check-config, then up.
+	assertCallsInOrder(t, f.calls, "compose "+strings.Join(initVolume, " "), "compose "+strings.Join(checkConfig, " "), "compose "+strings.Join(startServices, " "))
+	command := filepath.Join(f.options.dir, cliName())
+	for _, want := range []string{"Pulling example/core:latest…", "Starting services (up to 3 minutes)…", "Console: http://localhost:8080\n", "Core key: oac_admin_test\n",
+		"Browsers must open exactly http://localhost:8080. If they reach this host at another address, set OAC_PUBLIC_URL in .env and run " + command + " apply."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("fresh output lacks %q:\n%s", want, out)
+		}
+	}
+	f.options.publicURL, f.options.port, f.options.given = "", f.options.port+1, []string{"web-port"}
+	out = captureOutput(t, func() { err = f.run() })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "Core key: "+command+" core-key --show\n") || strings.Contains(out, "oac_admin_") || strings.Contains(out, "Browsers must open") {
+		t.Errorf("rerun output:\n%s", out)
+	}
+	if !strings.Contains(out, "Ignored --web-port: they differ from the saved settings. To change them, edit .env and run "+command+" apply.") {
+		t.Errorf("rerun does not name the ignored flag:\n%s", out)
+	}
+}
+
+func TestInstallReportsStartFailuresByCause(t *testing.T) {
+	progress := "Container x-database-1  Healthy\nContainer x-core-1  Error\ndependency failed to start: container x-core-1 is unhealthy"
+	for _, c := range []struct {
+		call, stderr, want, unwanted string
+	}{
+		// A refusal is not fixed by rerunning, and only its own line is shown.
+		{"compose run --rm --no-deps init", "{\"msg\":\"Initialization started\"}\nthis data belongs to a newer release", "data volume check failed; no service was changed: this data belongs to a newer release", "startup failed"},
+		{"compose run --rm --no-deps --entrypoint", "OAC_EXECUTION_CONCURRENCY must be positive", "configuration check failed; no service was changed: OAC_EXECUTION_CONCURRENCY must be positive", "startup failed"},
+		{"compose up", progress, "startup failed; data retained, rerun the installer: dependency failed to start: container x-core-1 is unhealthy\nNot healthy: core (unhealthy), web (starting)\nSee why: docker compose -f '", "Healthy"},
+	} {
+		t.Run(c.call, func(t *testing.T) {
+			f := newInstallFixture(t)
+			f.failure, f.failureErr = c.call, errors.New(c.stderr)
+			f.psOutput = `{"Service":"init","State":"exited","ExitCode":0}
+{"Service":"database","State":"running","Health":"healthy"}
+{"Service":"core","State":"running","Health":"unhealthy"}
+{"Service":"web","State":"running","Health":"starting"}`
+			err := f.run()
+			if err == nil || !strings.HasPrefix(err.Error(), c.want) || strings.Contains(err.Error(), c.unwanted) {
+				t.Fatalf("got %v", err)
+			}
+			if c.call == "compose up" && !strings.HasSuffix(err.Error(), "compose.yaml' logs --tail 50 core web") {
+				t.Fatalf("no log command: %v", err)
+			}
+		})
+	}
+}
+
+func TestInterruptedInstallLeavesAStateTheRerunAccepts(t *testing.T) {
+	f := newInstallFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	docker := f.docker
+	f.docker = func(c context.Context, dir string, args ...string) ([]byte, error) {
+		if strings.Contains(strings.Join(args, " "), " up ") {
+			cancel()
+			return nil, errors.New("signal: killed")
+		}
+		return docker(c, dir, args...)
+	}
+	err := f.install(ctx, f.options)
+	if err == nil || failureMessage(ctx, "install", err) != "Interrupted; rerun the installer to continue." {
+		t.Fatalf("got %v", err)
+	}
+	if _, err := os.Stat(f.options.dir + ".staging"); !os.IsNotExist(err) {
+		t.Fatal("interrupt left the stage")
+	}
+	f.docker = docker
+	if err := f.run(); err != nil {
+		t.Fatalf("rerun after interrupt: %v", err)
+	}
+}
+
+func TestDockerChildrenIgnoreTheCallersInstallationSettings(t *testing.T) {
+	t.Setenv("COMPOSE_PROJECT_NAME", "elsewhere")
+	t.Setenv("OAC_WEB_PORT", "1")
+	t.Setenv("DOCKER_HOST", "unix:///kept.sock")
+	env := strings.Join(dockerEnv(), "\n")
+	if strings.Contains(env, "COMPOSE_PROJECT_NAME") || strings.Contains(env, "OAC_WEB_PORT") || !strings.Contains(env, "DOCKER_HOST=unix:///kept.sock") {
+		t.Fatal("unexpected child environment")
+	}
+}
+
+func TestUnknownCommandPrintsUsageOutsideAnInstallation(t *testing.T) {
+	err := run(context.Background(), "frobnicate", nil)
+	if err == nil || strings.Count(err.Error(), "Usage: oac") != 1 || !strings.HasPrefix(err.Error(), `Unknown command "frobnicate".`) {
+		t.Fatalf("got %v", err)
 	}
 }
