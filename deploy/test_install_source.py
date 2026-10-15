@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -35,17 +36,25 @@ class SourceInstallTest(unittest.TestCase):
         shutil.copyfile(ROOT / 'deploy/compose/compose.yaml', self.bundle / 'compose.yaml.template')
         (self.bundle / 'oac').write_bytes(b'operator')
         self.calls = []
+        self.replies = {}
 
     def write_sums(self):
         (self.bundle / 'SHA256SUMS').write_text(hashlib.sha256((self.bundle / 'manifest.json').read_bytes()).hexdigest() + '  manifest.json\n')
 
-    def install(self, upgrade=False, image='sha256:' + '1' * 64, failure=None):
+    def docker(self, *args, **kwargs):
+        """A reachable Docker whose Web publishes its port; tests override replies by command."""
+        key = 'port' if args[1:3] == ('compose', 'port') else args[1]
+        reply = self.replies.get(key, (0, '127.0.0.1:19873' if key == 'port' else '', ''))
+        return subprocess.CompletedProcess(args, reply[0], reply[1], reply[2])
+
+    def install(self, upgrade=False, image='sha256:' + '1' * 64, failure=None, port=19873):
         def run(message, *args, **kwargs):
             self.calls.append((args, kwargs))
             if failure and failure in args:
                 raise ValueError(message)
-        with patch.object(installer, 'ensure_docker_image', return_value=image), patch.object(installer, 'run', side_effect=run):
-            installer.install(self.bundle, self.destination, '127.0.0.1', 19873, None if upgrade else 'http://127.0.0.1:19873', upgrade)
+        with patch.object(installer, 'ensure_docker_image', return_value=image) as load, patch.object(installer, 'run', side_effect=run), patch.object(installer, 'docker', side_effect=self.docker):
+            self.load = load
+            installer.install(self.bundle, self.destination, '127.0.0.1', port, None if upgrade else f'http://127.0.0.1:{port}', upgrade)
 
     def main(self):
         """Run the command line and return its exit message."""
@@ -97,6 +106,34 @@ class SourceInstallTest(unittest.TestCase):
         (self.destination / '.staging-killed/node-payload').mkdir(parents=True)
         self.install()
         self.assertEqual(sorted(path.name for path in self.destination.iterdir()), ['.env', 'compose.override.yaml', 'compose.yaml', 'node-payload', 'oac'])
+
+    def test_taken_web_port_is_refused_before_images_load(self):
+        with socket.socket() as holder:
+            holder.bind(('127.0.0.1', 0))
+            port = holder.getsockname()[1]
+            self.replies['ps'] = (0, 'oac-abc\t/gone/installation\n', '')
+            with self.assertRaisesRegex(ValueError, f'^Web port {port} is unavailable; choose --web-port.\nThe Compose project oac-abc holds it, and its installation directory /gone/installation no longer exists. Remove it with: docker compose -p oac-abc down --volumes --remove-orphans'):
+                self.install(port=port)
+        self.load.assert_not_called()
+        self.assertFalse(self.destination.exists())
+
+    def test_missing_docker_access_names_the_docker_group(self):
+        self.replies['info'] = (1, '', 'permission denied while trying to connect to the docker API at unix:///var/run/docker.sock')
+        with self.assertRaisesRegex(ValueError, '^This account cannot use Docker: add it to the docker group and log in again'):
+            self.install()
+        self.load.assert_not_called()
+
+    def test_rerun_fails_when_web_lost_its_port_and_prints_the_console_otherwise(self):
+        self.install()
+        self.calls = []
+        self.replies['port'] = (1, '', 'no port 8080/tcp')
+        self.replies['ps'] = (0, f'oac-other\t{self.root}\n', '')
+        with self.assertRaisesRegex(ValueError, f'Web is running without its published port 19873; something else holds it.\nThe installation in {self.root} holds it'):
+            self.install()
+        del self.replies['port']
+        with patch('builtins.print') as output:
+            self.install()
+        output.assert_any_call('Console: http://127.0.0.1:19873')
 
     def test_same_release_reruns_init_before_the_configuration_check(self):
         # A first start that stopped before init left no secrets for check-config.

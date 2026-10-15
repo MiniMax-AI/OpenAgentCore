@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -34,12 +35,58 @@ def valid_public_origin(value):
         return False
 
 
+def docker(*args, **kwargs):
+    """Run a command with its output captured. The installation's .env is the one home of OAC_* and COMPOSE_* settings, so the caller's shell cannot override them."""
+    kwargs['env'] = {name: value for name, value in os.environ.items() if not name.upper().startswith(('OAC_', 'COMPOSE_'))}
+    return subprocess.run(args, capture_output=True, text=True, **kwargs)
+
+
 def run(failure, *args, **kwargs):
     """Run a command whose output the user sees; a nonzero exit raises failure."""
-    # The installation's .env is the one home of OAC_* and COMPOSE_* settings, so the caller's shell cannot override them.
     kwargs['env'] = {name: value for name, value in os.environ.items() if not name.upper().startswith(('OAC_', 'COMPOSE_'))}
     if subprocess.run(args, **kwargs).returncode:
         raise ValueError(failure)
+
+
+def check_docker():
+    """Refuse early, with the same words as oac install, when Docker is missing or out of reach."""
+    try:
+        result = docker('docker', 'info')
+    except FileNotFoundError:
+        raise ValueError('Docker is not installed; install Docker Engine 26 or newer with the Compose plugin, then rerun the installer') from None
+    if 'permission denied while trying to connect to' in result.stderr:
+        raise ValueError('This account cannot use Docker: add it to the docker group and log in again, or use rootless Docker. Do not run the installer with sudo.')
+    if result.returncode:
+        raise ValueError('Docker is not running or not reachable; start it and rerun the installer')
+
+
+def port_holder_hint(port):
+    """Name the OpenAgentCore Compose project that publishes the port, as oac install does."""
+    rows = docker('docker', 'ps', '--filter', f'publish={port}', '--format', '{{.Label "com.docker.compose.project"}}\t{{.Label "com.docker.compose.project.working_dir"}}').stdout
+    for row in rows.splitlines():
+        name, _, directory = row.strip().partition('\t')
+        if not name.startswith('oac-'):
+            continue
+        if not directory:
+            return f'\nThe Compose project {name} holds it.'
+        if Path(directory).exists():
+            return f'\nThe installation in {directory} holds it; upgrade or manage it with --install-dir {directory}.'
+        return f'\nThe Compose project {name} holds it, and its installation directory {directory} no longer exists. Remove it with: docker compose -p {name} down --volumes --remove-orphans (this deletes its data)'
+    return ''
+
+
+def check_port(host, port):
+    with socket.socket(socket.AF_INET6 if ':' in host else socket.AF_INET) as probe:
+        try:
+            probe.bind((host, port))
+        except OSError:
+            raise ValueError(f'Web port {port} is unavailable; choose --web-port.{port_holder_hint(port)}') from None
+
+
+def read_env(path):
+    """The installation's saved settings."""
+    pairs = (line.partition('=') for line in path.read_text().splitlines())
+    return {name: value.strip("'") for name, _, value in pairs}
 
 
 def compose_revision(text):
@@ -77,6 +124,9 @@ def install(bundle, destination, host, port, public_url, upgrade):
             raise ValueError(f'This installation runs release {previous[:12]}; this bundle is {revision[:12]}. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.')
         if not existing and public_url is None:
             raise ValueError('--public-url is required for a new installation')
+        check_docker()
+        if not existing:
+            check_port(host, port)
         # Docker validates both daemon access and the production template's required features.
         images = {name: ensure_docker_image(manifest, name, lambda name=name: bundle / 'images' / (name + '.tar'))
                   for name in ('core', 'web', 'ingress', 'database')}
@@ -141,8 +191,12 @@ def install(bundle, destination, host, port, public_url, upgrade):
         print(f'Configuration ready in {destination}. Starting services…', flush=True)
         run('Starting services failed; see the output above. Settings and data are kept: fix the cause and rerun the same command.',
             'docker', 'compose', 'up', '-d', '--wait', '--wait-timeout', '180', '--pull', 'never', '--remove-orphans', cwd=destination)
-        if not existing:
-            print(f'Console: {public_url}')
+        # A rerun of a start that lost the port must not report success: the console would be another installation's.
+        settings = read_env(destination / '.env')
+        published = docker('docker', 'compose', 'port', 'web', '8080', cwd=destination)
+        if published.returncode or not published.stdout.strip():
+            raise ValueError(f"Web is running without its published port {settings['OAC_WEB_PORT']}; something else holds it.{port_holder_hint(settings['OAC_WEB_PORT'])}\nFree the port, then rerun the same command.")
+        print(f"Console: {settings['OAC_PUBLIC_URL']}")
         if previous and previous != revision:
             print(f"Upgraded from {previous[:12]} to {revision[:12]}. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.")
         if existing:
