@@ -52,7 +52,7 @@ services:
     depends_on:
       database: {condition: service_healthy}
     environment:
-      OAC_PUBLIC_URL: &public-url ${OAC_PUBLIC_URL:-http://localhost:8080}
+      OAC_PUBLIC_URL: &public-url ${OAC_PUBLIC_URL:-http://localhost:${OAC_WEB_PORT:-8080}}
       OAC_INSTALLATION_ID_FILE: /run/oac/installation.id
       OAC_DATABASE_URL: postgres://agents_api@database:5432/agents_api?sslmode=disable
       OAC_DATABASE_PASSWORD_FILE: /run/database/password
@@ -82,6 +82,11 @@ services:
         source: data
         target: /state
         volume: {nocopy: true, subpath: state}
+    healthcheck:
+      test: [CMD, /usr/local/bin/oac-core, healthcheck]
+      interval: 5s
+      timeout: 10s
+      retries: 30
 
   web:
     ports:

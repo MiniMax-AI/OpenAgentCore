@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 1d79122c41ef06b70dfd592c55d6b474dc53485f4500518871d8e4a7aba43b91
+source_hash: 8a7e237e49368e9704af1a18a8b22b5ff84f00a7eb42bfc182b960ea59f41121
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -32,7 +32,7 @@ docker compose -f ~/.oac/core/compose.yaml ps
 
 | 观察 | 能证明什么 |
 | --- | --- |
-| `docker compose ps` | 数据库接受就绪检查 |
+| `docker compose ps` | 数据库接受就绪检查，Core 和 Web 各自响应自己的 `/healthz` |
 | Core `/healthz` | Core 进程存活 |
 | 经过认证的 API 读取 | 调用者的密钥适用于该资源 |
 | Environment 连接 | Runtime 传输已连接 |

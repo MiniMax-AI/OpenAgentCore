@@ -44,7 +44,7 @@ Model providers are not process settings; see [Default models](#default-models).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_PUBLIC_URL` | Required; `compose.yaml` sets `http://localhost:8080` | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
+| `OAC_PUBLIC_URL` | Required; `compose.yaml` sets `http://localhost:` followed by `OAC_WEB_PORT` | Origin applications, nodes, sandboxes and self-hosted executors use. See [changing the public URL](#changing-the-public-url) |
 | `OAC_HOST` | `127.0.0.1` | Web bind address published by `compose.yaml`. The installer sets `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -260,7 +260,7 @@ Core reads its process environment. Compose interpolates `.env` into it and moun
 | Variable | Set from |
 | --- | --- |
 | `OAC_PUBLIC_URL` | Required. The [public URL](#settings). Core validates it once and derives the Agents API base, the daemon WebSocket URL, the self-hosted `remote_url`, the installer downloads, the hosted sandbox address and the deployment's read-only `core_url` from it, never from request headers |
-| `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty |
+| `OAC_ADDR` | The image sets `:8091`. Independently started Core defaults to `127.0.0.1:8091` when unset or empty. `oac-core healthcheck` probes its `/healthz` on `127.0.0.1` when its host is empty or unspecified |
 | `OAC_DATABASE_URL` | Required. PostgreSQL without a password |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`. The URL must then carry no password |
 | `OAC_CREDENTIAL_KEY_FILE` | Required. `/run/oac/credential.key`: a base64-encoded random 32-byte key. Core seals stored credentials with it |
@@ -279,9 +279,9 @@ Compose sets these for Web. Set them yourself only when you run the console with
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_WEB_ADDR` | `:8080` | Listener address. The healthcheck probes it on `127.0.0.1` when its host is empty or unspecified |
+| `OAC_WEB_ADDR` | `:8080` | Listener address. `oac-web healthcheck` probes its `/healthz` on `127.0.0.1` when its host is empty or unspecified |
 | `OAC_PUBLIC_URL` | Required | The [public URL](#settings): the exact browser-facing origin, HTTP or HTTPS, without a path. Host and origin checks use it; HTTPS makes the session cookie `Secure` |
-| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path. The healthcheck probes its `/healthz` |
+| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path |
 | `OAC_WEB_CORE_KEY_FILE` | Required | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
 | `OAC_WEB_DIST` | `/www` | Absolute directory of the built console; must contain `index.html` |
 | `OAC_WEB_NODE_PAYLOAD_DIR` | unset | Absolute path of the matched distribution's node payload (the installer's `node-payload/`). Unset, `/node-install/*` is not served and Add node is unavailable |

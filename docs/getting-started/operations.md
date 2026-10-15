@@ -30,7 +30,7 @@ Use these observations for different questions:
 
 | Observation | What it establishes |
 | --- | --- |
-| `docker compose ps` | The database accepts its readiness check |
+| `docker compose ps` | The database accepts its readiness check, and Core and Web each answer their own `/healthz` |
 | Core `/healthz` | Core's process is alive |
 | An authenticated API read | The caller's key works for that resource |
 | Environment connection | The Runtime transport is connected |

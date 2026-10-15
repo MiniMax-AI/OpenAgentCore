@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: d8e517c85fbc4da3e6cc8906d49c8ac9d92c7b571edf964916d4c2d7efbc5c6d
+source_hash: 51d98943e71402c79cf134e757192607c3628944369e869a69a9582e34fa8666
 ---
 
 Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
@@ -48,7 +48,7 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_PUBLIC_URL` | 必填；`compose.yaml` 设为 `http://localhost:8080` | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[更改公共 URL](#changing-the-public-url) |
+| `OAC_PUBLIC_URL` | 必填；`compose.yaml` 设为 `http://localhost:` 加 `OAC_WEB_PORT` | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[更改公共 URL](#changing-the-public-url) |
 | `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。安装器设置为 `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
@@ -264,7 +264,7 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 | 变量 | 设置来源 |
 | --- | --- |
 | `OAC_PUBLIC_URL` | 必填。[公共 URL](#settings)。Core 只校验一次，并从中派生 Agents API 基地址、守护进程 WebSocket URL、自托管 `remote_url`、安装程序下载地址、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生 |
-| `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091` |
+| `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091`。主机部分为空或未指定时，`oac-core healthcheck` 在 `127.0.0.1` 上探测其 `/healthz` |
 | `OAC_DATABASE_URL` | 必填。不含密码的 PostgreSQL URL |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`。此时 URL 不得包含密码 |
 | `OAC_CREDENTIAL_KEY_FILE` | 必填。`/run/oac/credential.key`：Base64 编码的 32 字节随机密钥。Core 用它加密存储的凭据 |
@@ -283,9 +283,9 @@ Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时�
 
 | 变量 | 默认值 | 含义 |
 | --- | --- | --- |
-| `OAC_WEB_ADDR` | `:8080` | 监听地址。主机部分为空或未指定时，健康检查在 `127.0.0.1` 上探测它 |
+| `OAC_WEB_ADDR` | `:8080` | 监听地址。主机部分为空或未指定时，`oac-web healthcheck` 在 `127.0.0.1` 上探测其 `/healthz` |
 | `OAC_PUBLIC_URL` | 必填 | [公共 URL](#settings)：面向浏览器的准确源地址，可以使用 HTTP 或 HTTPS，且不得包含路径。Host 和源地址检查使用此值；HTTPS 会使 Session Cookie 具备 `Secure` 属性 |
-| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core 的源地址，可以使用 HTTP 或 HTTPS，且不得包含凭据、查询参数或路径。健康检查探测其 `/healthz` |
+| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core 的源地址，可以使用 HTTP 或 HTTPS，且不得包含凭据、查询参数或路径 |
 | `OAC_WEB_CORE_KEY_FILE` | 必填 | 常规文件的绝对路径，该文件没有组或其他用户权限，并保存 Core 密钥：至少 32 个字符、不含空白字符、最大 4 KiB |
 | `OAC_WEB_DIST` | `/www` | 已构建控制台的绝对目录；必须包含 `index.html` |
 | `OAC_WEB_NODE_PAYLOAD_DIR` | 未设置 | 所匹配发行版的节点载荷（即安装程序的 `node-payload/`）的绝对路径。未设置时，不提供 `/node-install/*`，且 **添加节点** 不可用 |

@@ -1,8 +1,8 @@
 // Package processconfig is the process settings Core loads from its
 // environment. Load reads every variable and every file it names exactly once,
-// applies each default and validates the result; startup and `oac-core
-// check-config` both call it. Errors name the variable and never include its
-// value or the content of a file.
+// applies each default and validates the result; startup, `oac-core
+// check-config` and `oac-core healthcheck` call it. Errors name the variable
+// and never include its value or the content of a file.
 package processconfig
 
 import (

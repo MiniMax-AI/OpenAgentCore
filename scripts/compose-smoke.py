@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import shutil
 import signal
+import socket
 import subprocess
 import tempfile
 import urllib.error
@@ -115,8 +116,12 @@ def main():
     images = build_images(directory, project.removeprefix('oac-smoke-'), revision, source_time)
 
     override.write_text(json.dumps({'services': {'init': {'network_mode': 'none'}}}))
+    # A free loopback port, kept for the whole run: the default origin follows it.
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0))
+        port = str(probe.getsockname()[1])
     env = {**os.environ, 'COMPOSE_PROGRESS': 'plain',
-           'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': '0',
+           'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': port,
            **{'OAC_IMAGE_' + name.upper(): image for name, image in images.items()}}
     env.pop('OAC_PUBLIC_URL', None)
 
@@ -142,7 +147,7 @@ def main():
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
     browser = client()
-    origin = 'http://localhost:8080'
+    origin = 'http://localhost:' + port
     address = ''
 
     def request(path, body=None, headers=None, status=200):
@@ -208,15 +213,13 @@ def main():
         private_logs(key, project_key)
 
         print('Configuring a reachable URL and recreating containers with the same data directory', flush=True)
-        # Retain the assigned port across recreation, without claiming a fixed host port.
-        env['OAC_WEB_PORT'] = address.rsplit(':', 1)[1]
         env['OAC_PUBLIC_URL'] = address
         compose('down')
         compose('up', '-d', '--wait', '--wait-timeout', '120', timeout=180)
         origin = address
         browser = client()
         assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == key, 'Sign-in key changed'
-        request('/', headers={'Host': 'localhost:8080'}, status=403)
+        request('/', headers={'Host': 'localhost:' + port}, status=403)
         request('/console/auth/login', {'core_key': key})
         updated = get('/core/v1/installation')
         assert updated['installation_id'] == facts['installation_id'], 'Installation identity changed'
@@ -244,7 +247,6 @@ def main():
         urllib.request.urlretrieve(RELEASES + pins['tag'] + '/compose.yaml', published)
         if hashlib.sha256(published.read_bytes()).hexdigest() != pins['compose_sha256']:
             raise ValueError('Pinned release compose.yaml checksum mismatch')
-        env['OAC_WEB_PORT'] = '0'
         env.pop('OAC_PUBLIC_URL')
         released = runner([published], {name: value for name, value in env.items() if not name.startswith('OAC_IMAGE_')})
         released('up', '-d', '--wait', '--wait-timeout', '600', timeout=900)
@@ -265,11 +267,14 @@ def main():
         compose('run', '--rm', '--no-deps', 'init')
         compose('up', '-d', '--wait', '--wait-timeout', '180', '--pull', 'never', '--remove-orphans', timeout=240)
         address = 'http://' + compose('port', 'web', '8080').decode().strip()
+        # The release's default origin ignored the Web port; this checkout's follows it.
+        origin = 'http://localhost:' + port
         browser = client()
         assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == key, 'Upgrade changed the Core key'
         request('/console/auth/login', {'core_key': key})
         upgraded = get('/core/v1/installation')
         assert upgraded['installation_id'] == facts['installation_id'], 'Upgrade changed the installation identity'
+        assert upgraded['public_url'] == origin, 'The upgraded default origin does not follow the Web port'
         assert upgraded['source_commit'] == revision, 'Core does not run this checkout'
         assert json.loads(request('/node-install/manifest.json'))['source_commit'] == revision, 'Web serves another release'
         assert any(p['id'] == project_data['id'] for p in get('/core/v1/projects')['data']), 'Upgrade lost the Project'
