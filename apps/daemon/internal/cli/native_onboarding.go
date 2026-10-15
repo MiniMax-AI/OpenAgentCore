@@ -44,7 +44,7 @@ func installationRequest(ctx context.Context, endpoint, authorization string, in
 	case http.StatusUnauthorized:
 		return errors.New("install: authorization rejected or expired; copy a fresh command from the Session")
 	case http.StatusConflict:
-		return errors.New("install: this Environment already has a different or revoked credential; reuse the original installation or resolve its credential in Core")
+		return errors.New("install: this Session's machine credential is already claimed by another installation; rerun the command in the original installation directory, or rotate the credential in Web and install from an extracted distribution (see Self-hosted executors > Reconnect an existing Session), or create a new Session")
 	default:
 		return fmt.Errorf("install: Core rejected installation (HTTP %d); check the Session and obtain a fresh command", response.StatusCode)
 	}
@@ -116,7 +116,7 @@ func prepareOnboardingCredential(ctx context.Context, o *nativeInstallOptions, h
 	var previous nativeInstallation
 	if raw, err := runtimefs.ReadPrivate(held, "installation.json", 1<<20); err == nil {
 		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version || previous.Remote != o.Remote || previous.Environment != o.Environment || previous.Workspace != o.Workspace {
-			return errors.New("install: this directory belongs to an incompatible installation; choose a separate directory")
+			return errors.New("install: this directory holds an installation of another Core build or Session, which the installer never changes; rotate the Session's credential in Web and install from an extracted distribution into a new directory (see Self-hosted executors > Reconnect an existing Session), or create a new Session")
 		}
 		o.Credential = previous.Credential
 		// A completed installation already owns its key. Rotation and revocation

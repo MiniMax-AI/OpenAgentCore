@@ -202,7 +202,7 @@ Three connections require the same protocol version on both sides: Core and its 
 - reinstall each node: [remove it](./nodes.md#remove-a-node), clean up the host, then add the host again with **Add node**;
 - apply the release's Runtime right after the upgrade; sandboxes on earlier generations stop working;
 - [build a new E2B template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template) and select it in [the sandbox configuration](./nodes.md#change-the-sandbox-configuration);
-- reinstall [self-hosted machines](./self-hosted.md#connect-a-machine).
+- reconnect [self-hosted machines](./self-hosted.md#reconnect-an-existing-session).
 
 ### Downgrades
 

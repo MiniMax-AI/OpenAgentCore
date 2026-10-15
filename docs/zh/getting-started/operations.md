@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 9281f985f203a33cf2e861a118204839277cef13ebdd484c7b41dfd5cd68b8d5
+source_hash: 635fa6022d6fd132ee0af8ce329298355b924803e421db1d6e41add73c970f4f
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -204,7 +204,7 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
 - 重新安装每个节点：[移除节点](nodes.md#remove-a-node)，清理主机，再通过 **添加节点** 重新添加该主机；
 - 升级后立即应用该版本的 Runtime；仍在较早代次上的沙箱将停止工作；
 - [构建新的 E2B 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template)，并在[沙箱配置](nodes.md#change-the-sandbox-configuration)中选择它；
-- 重新安装[自托管机器](self-hosted.md#connect-a-machine)。
+- 重新连接[自托管机器](self-hosted.md#reconnect-an-existing-session)。
 
 ### 降级 {#downgrades}
 

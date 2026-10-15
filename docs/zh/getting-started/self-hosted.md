@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: c42a64b5e59406594143866c503817525c55ea844d858f25119c8fa54993134c
+source_hash: 2b61e5062fd95157615bced421f4f25a1862b3b17a2100f2113c9a4fcd7b3372
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -131,11 +131,11 @@ session = client.beta.agents.sessions.create(
 | `oac-daemon logs -n 100`、`oac-daemon logs -f` | 输出或持续跟踪守护进程日志 |
 | `oac-daemon stop` | 停止守护进程 |
 
-设置了 `OAC_RUNTIME_HOME` 时，每个命令都使用同一值。在 Web 的 Session 页面 **主机连接** 下检查连接，或使用[连接状态](../../../contracts/agents-api/zh/environment-executor-credentials.md#connection-status)。
+已安装的 `bin/oac-daemon` 忽略 `OAC_RUNTIME_HOME`，始终操作自己所在的安装。在 Web 的 Session 页面 **主机连接** 下检查连接，或使用[连接状态](../../../contracts/agents-api/zh/environment-executor-credentials.md#connection-status)。
 
 添加 Harness 时，以同一安装目录重新执行安装命令，并指定要添加的 Harness（命令过期时从 Web 复制新的）。安装程序检查已有内容、只添加缺失组件，并保留已安装的 Harness。之后重启正在运行的守护进程，让它发现新的 Harness。
 
-停止守护进程、取消 Turn 或删除 Session，都不会删除机器的工作区、原生历史或能力快照。安装程序拒绝其他守护进程版本的安装，以及文件已被修改的安装。程序不升级、修复或迁移它们；请安装到另一个目录。
+停止守护进程、取消 Turn 或删除 Session，都不会删除机器的工作区、原生历史或能力快照。安装程序拒绝其他守护进程版本的安装，以及文件已被修改的安装。程序不升级、修复或迁移它们。要在新目录上使用该 Session，请[重新连接](#reconnect-an-existing-session)。
 
 ## 轮换或撤销 {#rotate-or-revoke}
 
@@ -149,6 +149,18 @@ session = client.beta.agents.sessions.create(
 轮换后重新连接时，通过 `oac-daemon stop` 停止守护进程，用新凭据替换已配置的凭据文件路径中的 JSON，然后运行 `oac-daemon start`。不要再次对已有安装运行 `install`；轮换现有凭据，而非签发第二个凭据，后者[无法连接](../../../contracts/agents-api/zh/environment-executor-credentials.md#revoked-or-rotated-credential)。
 
 已归档项目无法签发或轮换凭据，仍可撤销。运维人员可以使用 Core 密钥管理凭据；参阅[凭据协议](../../../contracts/agents-api/zh/environment-executor-credentials.md#core-key-routes)。
+
+## 重新连接已有 Session {#reconnect-an-existing-session}
+
+安装命令只能认领一次 Session 的机器凭据，再次认领会以 `This Session's machine credential is already claimed by another installation` 结束。在另一个目录、另一台机器上运行命令，安装目录丢失，或目录中是其他 Core 版本或其他 Session 的安装（安装程序拒绝修改）时，都会出现这种情况。在原目录中重新运行命令始终可行。
+
+没有原目录时，轮换该 Session 的凭据，并用已解压的发行包安装到新目录：
+
+1. 在 Web 中打开该 Session，在 **执行器凭据** 中选择 **轮换**，保存返回的凭据 JSON。
+2. 下载并解压 `<base>/<platform>.tar.gz`。`<base>` 是安装命令中的第一个 URL（以 Core 版本结尾），`<platform>` 是 `linux-amd64`、`linux-arm64`、`darwin-arm64` 或 `windows-amd64`。
+3. 按[从已解压的发行包安装](#install-from-an-extracted-distribution)运行安装程序，使用该 Session 的 `remote_url`、Environment ID、工作区和保存的凭据文件。
+
+或者新建 Session 并运行它的命令。
 
 ## 从已解压的发行包安装 {#install-from-an-extracted-distribution}
 
@@ -164,4 +176,4 @@ session = client.beta.agents.sessions.create(
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-使用 Session 的 `remote_url` 和 Environment ID。在 PowerShell 中，以原生绝对路径运行 `.\oac-daemon.exe`。此模式要求工作区已存在，且在运行 `start` 前不会启动守护进程。
+使用 Session 的 `remote_url` 和 Environment ID。发行包即[重新连接已有 Session](#reconnect-an-existing-session) 中的压缩包。在 PowerShell 中，以原生绝对路径运行 `.\oac-daemon.exe`。此模式要求工作区已存在，且在运行 `start` 前不会启动守护进程。

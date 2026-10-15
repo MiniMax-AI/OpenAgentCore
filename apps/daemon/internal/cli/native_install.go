@@ -349,9 +349,6 @@ func runStart(rc *runContext, args []string) error {
 }
 
 func useInstalledNativeHome() {
-	if os.Getenv("OAC_RUNTIME_HOME") != "" {
-		return
-	}
 	exe, err := os.Executable()
 	if err != nil {
 		return

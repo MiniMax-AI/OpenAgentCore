@@ -129,11 +129,11 @@ The installation's `bin/oac-daemon` finds its own installation. Use it for:
 | `oac-daemon logs -n 100`, `oac-daemon logs -f` | Print or follow the daemon log |
 | `oac-daemon stop` | Stop the daemon |
 
-If you set `OAC_RUNTIME_HOME`, use the same value for every command. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
+The installed `bin/oac-daemon` ignores `OAC_RUNTIME_HOME` and always acts on its own installation. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
 
 To add a Harness, run the install command again (a fresh copy from Web if it has expired) with the same installation directory and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed. Restart a running daemon afterwards so it discovers the new Harness.
 
-Stopping the daemon, cancelling a Turn or deleting the Session never removes the machine's workspace, native history or capability snapshot. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it; install into a separate directory.
+Stopping the daemon, cancelling a Turn or deleting the Session never removes the machine's workspace, native history or capability snapshot. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it. To use the Session on a new directory, [reconnect it](#reconnect-an-existing-session).
 
 ## Rotate or revoke
 
@@ -147,6 +147,18 @@ In Web, the Session's **Executor credentials** list the machine's credential:
 To reconnect after a rotation, stop the daemon with `oac-daemon stop`, replace the JSON at its configured credential-file path with the new credential, and run `oac-daemon start`. Do not run `install` again over the existing installation, and rotate the existing credential rather than issuing a second one, which [cannot connect](../../contracts/agents-api/environment-executor-credentials.md#revoked-or-rotated-credential).
 
 In an archived Project, credentials cannot be issued or rotated; revocation remains available. Operators can manage credentials with the Core key; see the [credential contract](../../contracts/agents-api/environment-executor-credentials.md#core-key-routes).
+
+## Reconnect an existing Session {#reconnect-an-existing-session}
+
+The install command claims the Session's machine credential once, and a second claim ends in `This Session's machine credential is already claimed by another installation`. That happens when you run the command in a different directory, on another machine, after the installation directory was lost, or when the directory holds an installation of another Core build or Session, which the installer refuses to change. Rerunning the command in the original directory always works.
+
+To reconnect the Session without the original directory, rotate its credential and install from an extracted distribution into a new directory:
+
+1. In Web, open the Session and choose **Rotate** in **Executor credentials**. Save the credential JSON it returns.
+2. Download `<base>/<platform>.tar.gz` and extract it, where `<base>` is the first URL of the install command (it ends with the Core version) and `<platform>` is `linux-amd64`, `linux-arm64`, `darwin-arm64` or `windows-amd64`.
+3. Run the installer as in [Install from an extracted distribution](#install-from-an-extracted-distribution) with the Session's `remote_url`, Environment ID, workspace and the saved credential file.
+
+Or create a new Session and run its command.
 
 ## Install from an extracted distribution
 
@@ -162,4 +174,4 @@ The same installer accepts an already extracted distribution and a credential fi
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-Use the Session's `remote_url` and Environment ID. In PowerShell, run `.\oac-daemon.exe` with native absolute paths. This mode needs an existing workspace and does not start the daemon until you run `start`.
+Use the Session's `remote_url` and Environment ID. The distribution is the archive named in [Reconnect an existing Session](#reconnect-an-existing-session). In PowerShell, run `.\oac-daemon.exe` with native absolute paths. This mode needs an existing workspace and does not start the daemon until you run `start`.

@@ -153,7 +153,7 @@ export const sessions = {
       rotateBound: "Rotate bound credential",
     },
     title: "Executor credentials",
-    help: "A credential lets one self-hosted executor connect to Core for this environment only. It cannot call the Agents API. Save the downloaded credential JSON as a private file on the executor host and give the installer its absolute path. Core shows each credential once; rotate a credential to replace a lost one.",
+    help: "A credential lets one self-hosted executor connect to Core for this environment only. It cannot call the Agents API. Save the downloaded credential JSON as a private file on the executor host. The install command claims its own credential; use a downloaded one to reconnect after a rotation or to install from an extracted distribution. Core shows each credential once; rotate a credential to replace a lost one.",
     issue: "Issue credential",
     issuing: "Issuing…",
     loading: "Loading executor credentials…",

@@ -245,13 +245,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 			DaemonVersion: proto.Version,
 		})
 		if remote != "" && err != nil {
-			if errors.Is(err, transport.ErrIncompatibleVersion) {
-				return nil, fmt.Errorf("Environment connection rejected: %w: %w", transport.ErrPermanent, transport.ErrIncompatibleVersion)
-			}
-			if errors.Is(err, transport.ErrPermanent) {
-				return nil, fmt.Errorf("Environment connection rejected: %w", transport.ErrPermanent)
-			}
-			return nil, errors.New("Environment connection failed")
+			return nil, environmentDialError(err)
 		}
 		return conn, err
 	}
@@ -374,4 +368,16 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 			}
 		}
 	}
+}
+
+// environmentDialError wraps a Dial failure for connect.log. The credential
+// travels only in a request header, so the transport's cause is safe to keep.
+func environmentDialError(err error) error {
+	if errors.Is(err, transport.ErrIncompatibleVersion) {
+		return fmt.Errorf("Environment connection rejected: %w: %w", transport.ErrPermanent, transport.ErrIncompatibleVersion)
+	}
+	if errors.Is(err, transport.ErrPermanent) {
+		return fmt.Errorf("Environment connection rejected: %w", transport.ErrPermanent)
+	}
+	return fmt.Errorf("Environment connection failed: %w", err)
 }

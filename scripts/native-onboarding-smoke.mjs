@@ -93,10 +93,10 @@ try {
   assert.equal(connections, 1, 'Repeated installation created a duplicate daemon');
   console.log(JSON.stringify({ installation: 'passed', connection: 'passed', interactive: 'passed', retry: 'passed', repeat: 'passed', authentication: 'passed', model_requests: 0 }));
 } finally {
-  // The installed executable resolves its own home unless explicitly overridden.
+  // The installed executable always acts on its own installation.
   delete process.env.OAC_RUNTIME_HOME;
   const installed = join(installation, 'bin', windows ? 'oac-daemon.exe' : 'oac-daemon');
-  try { execFileSync(installed, ['stop'], { env: { ...process.env, OAC_RUNTIME_HOME: installation }, stdio: 'ignore', timeout: 15000 }); } catch { /* A failed installation may never have started. */ }
+  try { execFileSync(installed, ['stop'], { stdio: 'ignore', timeout: 15000 }); } catch { /* A failed installation may never have started. */ }
   for (const socket of sockets) socket.destroy();
   await new Promise(resolve => server.close(resolve));
 }
