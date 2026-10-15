@@ -18,6 +18,8 @@ The Session brings its own model provider; the installation default never applie
 
 The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
+The download is about 320 MiB. At its peak the installation needs about 2 GiB free on the disk that holds the Runtime home and the installation directory with one Harness selected (archive 316 MiB, unpacked installer 907 MiB, installed files about 560 MiB), and about 2.2 GiB with all three; the unpacked copy is removed when the command ends and the archive when the installation completes. The finished installation takes about 560 MiB with one Harness and about 940 MiB with all three.
+
 The machine needs:
 
 - HTTP or HTTPS access to Core, and to the release download host unless Core carries an offline copy of the installers;
@@ -69,7 +71,7 @@ The installer reports three results:
 | **Daemon connection** | Core confirmed the daemon's authenticated connection |
 | **Model configuration** | Not checked; the first Turn uses the Session's model provider |
 
-Downloads retry temporary network failures up to three attempts and show progress in a terminal. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. Download staging lives in `native-download` under the Runtime home; its small `download.lock` file remains for concurrency control. An active download or installation is never cleared by another run. If the command expires, copy a fresh one from the Session.
+The installer checks the grant before it downloads anything, so an expired command costs no download. The archive download resumes after a reset, fails only when it stalls (no data for 60 seconds) and gives up after five attempts; rerun the command to continue where it stopped. A verified archive is kept in `native-download` under the Runtime home until the installation completes, so a rerun after a failure needs no new download; it is checked against Core's checksum on every run and discarded if it fails. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. The small `download.lock` file in `native-download` remains for concurrency control. An active download or installation is never cleared by another run. If the command expires, copy a fresh one from the Session.
 
 If the connection is not confirmed within 45 seconds, the installer prints the path of the daemon's log. The daemon keeps reconnecting. Fix the cause and run the install command again with the same installation directory, copying a fresh one from Web if it has expired: completed components and the credential are kept and a running daemon is reused. Do not remove the workspace or the Session to retry.
 

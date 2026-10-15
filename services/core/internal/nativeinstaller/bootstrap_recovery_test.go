@@ -15,14 +15,19 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func bootstrapFixtureArchive(t *testing.T) []byte {
+	return bootstrapScriptArchive(t, "#!/bin/sh\nexit 0\n")
+}
+
+func bootstrapScriptArchive(t *testing.T, script string) []byte {
 	t.Helper()
 	var buffer bytes.Buffer
 	z := gzip.NewWriter(&buffer)
 	tarball := tar.NewWriter(z)
-	data := []byte("#!/bin/sh\nexit 0\n")
+	data := []byte(script)
 	if err := tarball.WriteHeader(&tar.Header{Name: "oac-daemon", Mode: 0700, Size: int64(len(data))}); err != nil {
 		t.Fatal(err)
 	}
@@ -61,6 +66,10 @@ func TestBootstrapRecovery(t *testing.T) {
 				sum = strings.Repeat("0", 64)
 			}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/installation") {
+					w.WriteHeader(404)
+					return
+				}
 				if strings.HasSuffix(r.URL.Path, ".sha256") {
 					request := metadata.Add(1)
 					if scenario == "missing" {
@@ -80,7 +89,7 @@ func TestBootstrapRecovery(t *testing.T) {
 					w.Write(archive[:len(archive)/2])
 					return
 				}
-				w.Write(archive)
+				http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(archive))
 			}))
 			defer server.Close()
 			home := filepath.Join(t.TempDir(), "Runtime home with spaces")

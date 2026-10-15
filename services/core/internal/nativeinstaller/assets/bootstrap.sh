@@ -51,46 +51,75 @@ space() {
 }
 progress=(-sS)
 if [ -t 2 ]; then progress=(--progress-bar --show-error); fi
+# Resume after resets and fail only when a transfer stalls, with no total time cap. A partial file is kept in the download directory for the next run.
 fetch() {
   local url=$1 destination=$2 limit=$3 status code attempt
-  for attempt in 1 2 3; do
+  for attempt in 1 2 3 4 5; do
     code=0
-    run curl "${progress[@]}" --fail --location --proto-redir =https --connect-timeout 15 --max-time 1200 --speed-time 60 --speed-limit 1024 --max-filesize "$limit" --write-out '%{http_code}' "$url" -o "$destination" >"$work/http-status" || code=$?
+    run curl "${progress[@]}" --fail --location --proto-redir =https --connect-timeout 15 --speed-time 60 --speed-limit 1024 --continue-at - --max-filesize "$limit" --write-out '%{http_code}' "$url" -o "$destination" >"$work/http-status" || code=$?
     status=$(cat "$work/http-status")
     [ "$code" -ne 0 ] || return 0
     case "$status" in 404) fail 'This Core has no qualified installer for this platform.';; esac
     case "$code" in
       23) fail 'Cannot write the installer download. Check disk space, quota and directory permissions.';;
       63) fail 'Installer download exceeds the available space or metadata size limit.';;
+      33) rm -f "$destination";; # The server cannot resume; start the file again.
     esac
     case "$code:$status" in
-      6:*|7:*|18:*|28:*|52:*|55:*|56:*|22:408|22:429|22:500|22:502|22:503|22:504)
-        if [ "$attempt" -lt 3 ]; then printf 'Download interrupted; retrying (%s/2)...\n' "$attempt" >&2; run sleep "$attempt"; continue; fi;;
+      6:*|7:*|16:*|18:*|28:*|33:*|35:*|52:*|55:*|56:*|92:*|22:408|22:429|22:500|22:502|22:503|22:504)
+        if [ "$attempt" -lt 5 ]; then printf 'Download interrupted; retrying (%s/4)...\n' "$attempt" >&2; run sleep "$attempt"; continue; fi;;
     esac
-    fail "Installer download failed (HTTP ${status:-unknown}, curl $code). Check network, proxy and certificates, then retry."
+    fail "Installer download failed (HTTP ${status:-unknown}, curl $code). Check the network to Core and GitHub (set HTTPS_PROXY if a proxy is required), then rerun the command; downloaded data is kept and resumed."
   done
 }
-printf 'Downloading the installer matched to Core...\n'
+# Reject a rejected grant before any large download. Only a 401 stops here; any other answer is reported by the installer.
+check_grant() {
+  [ -n "${OAC_INSTALL_GRANT:-}" ] || return 0
+  local status
+  printf 'header = "Authorization: Bearer %s"\n' "$OAC_INSTALL_GRANT" | run curl -sS --config - --request POST --connect-timeout 15 --max-time 30 --write-out '%{http_code}' --output /dev/null "${base%/install/*}/installation" >"$work/http-status" 2>/dev/null || :
+  status=$(cat "$work/http-status")
+  [ "$status" != 401 ] || fail 'Installation authorization rejected or expired; copy a fresh command from the Session.'
+}
+verified() {
+  run "${hash[@]}" "$1" >"$work/digest" || return 1
+  local actual rest
+  read -r actual rest <"$work/digest"
+  [ "$actual" = "$expected" ]
+}
 space 0
+check_grant
+printf 'Downloading the installer matched to Core...\n'
 fetch "$base/$os-$arch.sha256" "$work/checksum" 1024
 expected=$(cat "$work/checksum")
 [[ "$expected" =~ ^[0-9a-f]{64}$ ]] || fail 'Core returned an invalid installer checksum.'
-available=$(df -Pk "$work" | awk 'NR==2 {print $4}')
-fetch "$base/$os-$arch.tar.gz" "$work/bundle.tar.gz" "$((available * 1024 - 67108864))"
-printf 'Verifying the installer archive...\n'
-run "${hash[@]}" "$work/bundle.tar.gz" >"$work/digest"
-read -r actual rest <"$work/digest"
-[ "$actual" = "$expected" ] || fail 'Installer checksum mismatch; download again.'
+# The verified archive outlives this run so a later failure, such as a wrong option, needs no new download; it is removed once the installation completes.
+archive=$cache/$expected.tar.gz
+for stale in "$cache"/*.tar.gz "$cache"/*.tar.gz.part; do
+  case "$stale" in "$archive"|"$archive.part") ;; *) rm -f "$stale";; esac
+done
+if [ -f "$archive" ]; then
+  printf 'Verifying the installer archive from an earlier run...\n'
+  verified "$archive" || { rm -f "$archive"; printf 'The earlier archive failed verification and was discarded.\n' >&2; }
+fi
+if [ ! -f "$archive" ]; then
+  [ ! -s "$archive.part" ] || printf 'Resuming the earlier download...\n'
+  available=$(df -Pk "$work" | awk 'NR==2 {print $4}')
+  fetch "$base/$os-$arch.tar.gz" "$archive.part" "$((available * 1024 - 67108864))"
+  printf 'Verifying the installer archive...\n'
+  verified "$archive.part" || { rm -f "$archive.part"; fail 'Installer checksum mismatch; the download was discarded. Rerun the command to download it again.'; }
+  mv "$archive.part" "$archive"
+fi
 printf 'Checking extraction space...\n'
 # Count the verified tar stream without storing another copy, including its headers and padding.
-run bash -o pipefail -c 'gzip -dc "$1" | wc -c' -- "$work/bundle.tar.gz" >"$work/unpacked-size" || fail 'Installer archive is incomplete or invalid.'
+run bash -o pipefail -c 'gzip -dc "$1" | wc -c' -- "$archive" >"$work/unpacked-size" || { rm -f "$archive"; fail 'Installer archive is incomplete or invalid; it was discarded. Rerun the command to download it again.'; }
 unpacked=$(cat "$work/unpacked-size")
 space "$unpacked"
 printf 'Extracting the installer...\n'
 mkdir "$work/bundle"
-run tar -xzf "$work/bundle.tar.gz" -C "$work/bundle" || fail 'Installer extraction failed. Check disk space, quota and filesystem permissions.'
+run tar -xzf "$archive" -C "$work/bundle" || fail 'Installer extraction failed. Check disk space, quota and filesystem permissions.'
 [ -x "$work/bundle/oac-daemon" ] || fail 'Cannot start the native installer. Check executable permissions and use a Runtime home that permits execution.'
 if run "$work/bundle/oac-daemon" install --onboard-url "${base%/install/*}/installation" "$@"; then
+  rm -f "$archive"
   exit 0
 else
   code=$?

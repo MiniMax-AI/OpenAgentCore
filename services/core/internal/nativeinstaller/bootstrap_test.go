@@ -67,6 +67,10 @@ func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
 	for _, valid := range []bool{true, false} {
 		t.Run(fmt.Sprint(valid), func(t *testing.T) {
 			core := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/installation") {
+					w.WriteHeader(404)
+					return
+				}
 				if strings.HasSuffix(r.URL.Path, ".sha256") {
 					checksum := hex.EncodeToString(hash[:])
 					if !valid {

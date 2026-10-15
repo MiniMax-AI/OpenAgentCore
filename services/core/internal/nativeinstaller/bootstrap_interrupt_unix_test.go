@@ -24,6 +24,10 @@ func TestBootstrapParentDeathKeepsActiveDownloadLocked(t *testing.T) {
 	release := make(chan struct{})
 	var downloads atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/installation") {
+			w.WriteHeader(404)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, ".sha256") {
 			fmt.Fprintf(w, "%x\n", sha256.Sum256(archive))
 			return
@@ -36,7 +40,7 @@ func TestBootstrapParentDeathKeepsActiveDownloadLocked(t *testing.T) {
 			<-release
 			return
 		}
-		w.Write(archive)
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(archive))
 	}))
 	defer server.Close()
 	defer close(release)
@@ -63,8 +67,8 @@ func TestBootstrapParentDeathKeepsActiveDownloadLocked(t *testing.T) {
 	if err == nil || !bytes.Contains(retry, []byte("Another native download")) {
 		t.Fatalf("active download was not protected: %v %s", err, retry)
 	}
-	if _, err := os.Stat(filepath.Join(home, "native-download", "staging", "bundle.tar.gz")); err != nil {
-		t.Fatal("active staging removed")
+	if _, err := os.Stat(filepath.Join(home, "native-download", fmt.Sprintf("%x.tar.gz.part", sha256.Sum256(archive)))); err != nil {
+		t.Fatal("active download removed")
 	}
 	syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 	_ = command.Wait()

@@ -47,13 +47,19 @@ function Show-Bytes([string]$Label, [long]$Bytes, [long]$Total) {
   $percent = if ($Total -gt 0) { [Math]::Min(100, [int](100.0 * $Bytes / $Total)) } else { -1 }
   Write-Progress -Activity $Label -Status ("{0:N1} MiB" -f ($Bytes / 1MB)) -PercentComplete $percent
 }
+# Resume after resets and fail only when a transfer stalls, with no total time cap. A partial file is kept in the download directory for the next run.
 function Get-NativeFile([string]$Uri, [string]$Destination, [long]$Limit) {
-  for ($attempt=1; $attempt -le 3; $attempt++) {
-    $response = $null; $inputStream = $null; $outputStream = $null; $retryable = $true
+  for ($attempt=1; $attempt -le 5; $attempt++) {
+    $request = $null; $response = $null; $inputStream = $null; $outputStream = $null; $retryable = $true
     try {
+      [long]$offset = 0
+      if (Test-Path -LiteralPath $Destination) { $offset = (Get-Item -LiteralPath $Destination).Length }
       $address = [Uri]$Uri
       for ($redirect=0; $redirect -le 5; $redirect++) {
-        $response = $client.GetAsync($address, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        $request = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Get, $address)
+        if ($offset -gt 0) { $request.Headers.Range = [Net.Http.Headers.RangeHeaderValue]::new($offset, $null) }
+        $response = $client.SendAsync($request, [Net.Http.HttpCompletionOption]::ResponseHeadersRead).GetAwaiter().GetResult()
+        $request.Dispose(); $request = $null
         $status = [int]$response.StatusCode
         if ($status -notin @(301,302,303,307,308)) { break }
         if ($redirect -eq 5 -or !$response.Headers.Location) { $retryable=$false; throw 'Installer download has too many or invalid redirects.' }
@@ -61,17 +67,21 @@ function Get-NativeFile([string]$Uri, [string]$Destination, [long]$Limit) {
         if ($next.Scheme -ne 'https' -or $next.UserInfo) { $retryable=$false; throw 'Installer download redirect must use HTTPS without credentials.' }
         $response.Dispose(); $response=$null; $address=$next
       }
-      if ($status -ne 200) {
+      if ($status -eq 416) { Remove-Item -LiteralPath $Destination -Force; throw 'The server cannot resume the earlier download; starting it again.' }
+      if ($status -notin @(200,206)) {
         $retryable = $status -in @(408,429,500,502,503,504)
         if ($status -eq 404) { throw 'This Core has no qualified installer for this platform.' }
         throw "Installer download failed (HTTP $status). Check Core and the download host."
       }
+      # A 200 answer ignores the Range header, so start the file again.
+      $mode = [IO.FileMode]::Append
+      if ($status -eq 200) { $mode = [IO.FileMode]::Create; $offset = 0 }
       $total = $response.Content.Headers.ContentLength
       if ($null -eq $total) { $total = 0 }
       $retryable=$false
-      if ($total -gt $Limit) { throw 'Installer download exceeds the available space or metadata size limit.' }
+      if ($offset + $total -gt $Limit) { throw 'Installer download exceeds the available space or metadata size limit.' }
       Assert-Space $total
-      $outputStream = [IO.File]::Open($Destination, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+      $outputStream = [IO.File]::Open($Destination, $mode, [IO.FileAccess]::Write, [IO.FileShare]::None)
       $retryable=$true
       $inputStream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
       $buffer = New-Object byte[] 65536
@@ -79,7 +89,6 @@ function Get-NativeFile([string]$Uri, [string]$Destination, [long]$Limit) {
       $clock = [Diagnostics.Stopwatch]::StartNew()
       [long]$lastProgress=0
       while ($true) {
-        if ($clock.Elapsed.TotalSeconds -gt 1200) { throw 'Installer download timed out; retry with a fresh command if it expired.' }
         $cancel = [Threading.CancellationTokenSource]::new()
         try {
           $cancel.CancelAfter(60000)
@@ -90,10 +99,10 @@ function Get-NativeFile([string]$Uri, [string]$Destination, [long]$Limit) {
         if ($read -eq 0) { break }
         $received += $read
         $retryable=$false
-        if ($received -gt $Limit) { throw 'Installer download exceeds the available space or metadata size limit.' }
+        if ($offset + $received -gt $Limit) { throw 'Installer download exceeds the available space or metadata size limit.' }
         $outputStream.Write($buffer,0,$read)
         $retryable=$true
-        if ($clock.ElapsedMilliseconds - $lastProgress -ge 200) { Show-Bytes 'Downloading installer' $received $total; $lastProgress=$clock.ElapsedMilliseconds }
+        if ($clock.ElapsedMilliseconds - $lastProgress -ge 200) { Show-Bytes 'Downloading installer' ($offset + $received) ($offset + $total); $lastProgress=$clock.ElapsedMilliseconds }
       }
       if ($total -gt 0 -and $received -ne $total) { throw 'Installer download was interrupted.' }
       $retryable=$false
@@ -101,16 +110,30 @@ function Get-NativeFile([string]$Uri, [string]$Destination, [long]$Limit) {
       return
     } catch {
       if (!$retryable) { throw }
-      if ($attempt -eq 3) { throw 'Installer download failed after three attempts. Check network, proxy and certificates, then retry.' }
-      Write-Host "Download interrupted; retrying ($attempt/2)..."
+      if ($attempt -eq 5) { throw 'Installer download failed after five attempts. Check the network to Core and GitHub and any proxy settings, then rerun the command; downloaded data is kept and resumed.' }
+      Write-Host "Download interrupted; retrying ($attempt/4)..."
       Start-Sleep -Seconds $attempt
     } finally {
       if ($inputStream) { $inputStream.Dispose() }
       if ($outputStream) { $outputStream.Dispose() }
+      if ($request) { $request.Dispose() }
       if ($response) { $response.Dispose() }
       if ($terminal) { Write-Progress -Activity 'Downloading installer' -Completed }
     }
   }
+}
+function Get-ArchiveHash([string]$Path) { (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant() }
+# Reject a rejected grant before any large download. Only a 401 stops here; any other answer is reported by the installer.
+function Test-Grant {
+  if (!$env:OAC_INSTALL_GRANT) { return }
+  $rejected = $false
+  try {
+    $message = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Post, ($Base -replace '/install/[^/]+$', '/installation'))
+    $message.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $env:OAC_INSTALL_GRANT)
+    $answer = $client.SendAsync($message).GetAwaiter().GetResult()
+    $rejected = [int]$answer.StatusCode -eq 401
+  } catch { } finally { if ($message) { $message.Dispose() }; if ($answer) { $answer.Dispose() } }
+  if ($rejected) { throw 'Installation authorization rejected or expired; copy a fresh command from the Session.' }
 }
 try {
   Assert-OrdinaryPath $cache
@@ -136,17 +159,29 @@ try {
   $handler.AllowAutoRedirect = $false
   $client = [Net.Http.HttpClient]::new($handler)
   $client.Timeout = [TimeSpan]::FromSeconds(15)
+  Test-Grant
   Assert-Space 0
   Write-Host 'Downloading the installer matched to Core...'
   $checksum = Join-Path $work 'checksum'
   Get-NativeFile "$Base/windows-$architecture.sha256" $checksum 1024
   $expected = [IO.File]::ReadAllText($checksum).Trim()
   if ($expected -cnotmatch '^[0-9a-f]{64}$') { throw 'Core returned an invalid installer checksum.' }
-  $archive = Join-Path $work 'bundle.tar.gz'
-  $available = [OacNativeDownloadSpace]::Available($cache)
-  Get-NativeFile "$Base/windows-$architecture.tar.gz" $archive ($available-64MB)
-  Write-Host 'Verifying the installer archive...'
-  if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Installer checksum mismatch; download again.' }
+  # The verified archive outlives this run so a later failure, such as a wrong option, needs no new download; it is removed once the installation completes.
+  $archive = Join-Path $cache "$expected.tar.gz"
+  Get-ChildItem -LiteralPath $cache -Filter '*.tar.gz*' -File | Where-Object { $_.Name -ne "$expected.tar.gz" -and $_.Name -ne "$expected.tar.gz.part" } | Remove-Item -Force
+  if (Test-Path -LiteralPath $archive) {
+    Write-Host 'Verifying the installer archive from an earlier run...'
+    if ((Get-ArchiveHash $archive) -ne $expected) { Remove-Item -LiteralPath $archive -Force; Write-Host 'The earlier archive failed verification and was discarded.' }
+  }
+  if (!(Test-Path -LiteralPath $archive)) {
+    $part = "$archive.part"
+    if ((Test-Path -LiteralPath $part) -and (Get-Item -LiteralPath $part).Length -gt 0) { Write-Host 'Resuming the earlier download...' }
+    $available = [OacNativeDownloadSpace]::Available($cache)
+    Get-NativeFile "$Base/windows-$architecture.tar.gz" $part ($available-64MB)
+    Write-Host 'Verifying the installer archive...'
+    if ((Get-ArchiveHash $part) -ne $expected) { Remove-Item -LiteralPath $part -Force; throw 'Installer checksum mismatch; the download was discarded. Rerun the command to download it again.' }
+    Move-Item -LiteralPath $part -Destination $archive
+  }
   Write-Host 'Checking extraction space...'
   $file = [IO.File]::OpenRead($archive)
   $gzip = [IO.Compression.GZipStream]::new($file,[IO.Compression.CompressionMode]::Decompress)
@@ -165,6 +200,7 @@ try {
   Write-Host 'Starting installation...'
   & (Join-Path $bundle 'oac-daemon.exe') install --onboard-url $endpoint @InstallArguments
   if ($LASTEXITCODE -ne 0) { throw 'Installation or connection failed; follow the installer guidance and retry.' }
+  Remove-Item -LiteralPath $archive -Force
 } finally {
   if ($client) { $client.Dispose() }
   if ($lock) {

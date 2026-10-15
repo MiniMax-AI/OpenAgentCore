@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 8603c51679351eefcaa3977c90af7658e1e86d62be7980baf42f1d72faedf044
+source_hash: 1084921d73014c1c48c6b4c2df5fa356544ed3b046bf0bc90cb9dce85b7188f7
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -19,6 +19,8 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 | Windows amd64 | 支持 | 支持 | 不支持 |
 
 安装程序自带固定版本的 Node.js 和 Harness（列于 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
+
+下载约 320 MiB。安装高峰时，Runtime 主目录和安装目录所在磁盘需要约 2 GiB 可用空间（只选一个 Harness：归档 316 MiB、解包后的安装程序 907 MiB、安装后的文件约 560 MiB），三个 Harness 全选约 2.2 GiB；解包副本在命令结束时删除，归档在安装完成时删除。安装完成后占用约 560 MiB（一个 Harness）至约 940 MiB（全部三个）。
 
 机器需要：
 
@@ -71,7 +73,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 | **Daemon connection** | Core 已确认守护进程的认证连接 |
 | **Model configuration** | 未检查；第一个 Turn 使用 Session 的模型提供商 |
 
-临时网络故障会重试下载，最多尝试三次，并在终端展示进度。下载、解压和复制组件前会检查磁盘空间。如果下载或安装被中断，重新执行命令：它清理未完成的临时副本，同时保留已完成的组件、凭据和工作区。下载暂存位于 Runtime 主目录的 `native-download` 中；小型 `download.lock` 文件保留用于并发控制。其他运行不会清理仍在进行的下载或安装。命令过期时，从 Session 复制新命令。
+安装程序在下载任何内容之前先检查授权，因此过期的命令不会白下载。归档下载在连接重置后会续传，只在传输停滞（60 秒没有数据）时失败，最多尝试五次；重新执行命令即可从中断处继续。校验通过的归档保存在 Runtime 主目录的 `native-download` 中，直到安装完成，因此失败后重跑无需重新下载；每次运行都会对照 Core 提供的校验和检查它，未通过则丢弃。下载、解压和复制组件前会检查磁盘空间。如果下载或安装被中断，重新执行命令：它清理未完成的临时副本，同时保留已完成的组件、凭据和工作区。`native-download` 中的小型 `download.lock` 文件保留用于并发控制。其他运行不会清理仍在进行的下载或安装。命令过期时，从 Session 复制新命令。
 
 如果 45 秒内未确认连接，安装程序输出守护进程日志路径。守护进程继续重连。修复原因后，以同一安装目录重新执行安装命令；如果命令已过期，从 Web 复制新的。已完成的组件和凭据会保留，已运行的守护进程会复用。不要删除工作区或 Session 来重试。
 
