@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 base=$1
-authorization=$2
-shift 2
+shift
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 case "$(uname -s)" in Linux) os=linux;; Darwin) os=darwin;; *) fail 'Unsupported operating system.';; esac
 case "$(uname -m)" in x86_64) arch=amd64;; arm64|aarch64) arch=arm64;; *) fail 'Unsupported processor architecture.';; esac
@@ -91,7 +90,7 @@ printf 'Extracting the installer...\n'
 mkdir "$work/bundle"
 run tar -xzf "$work/bundle.tar.gz" -C "$work/bundle" || fail 'Installer extraction failed. Check disk space, quota and filesystem permissions.'
 [ -x "$work/bundle/oac-daemon" ] || fail 'Cannot start the native installer. Check executable permissions and use a Runtime home that permits execution.'
-if run "$work/bundle/oac-daemon" install --onboard-url "${base%/install/*}/installation" --authorization "$authorization" "$@"; then
+if run "$work/bundle/oac-daemon" install --onboard-url "${base%/install/*}/installation" "$@"; then
   exit 0
 else
   code=$?

@@ -59,7 +59,7 @@ No administrator privileges or Docker are needed. The Unix download command also
 
 In Web, open the Session and copy the command under **Connect a host**.
 
-Keep the command private: it carries a short-lived [installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. When it has expired, read the Session again or copy a fresh command from Web.
+Keep the command private: it carries a short-lived [installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. The command passes the grant in the `OAC_INSTALL_GRANT` environment variable, never as an argument, and starts with a space so shells that skip space-prefixed commands leave it out of history. When it has expired, read the Session again or copy a fresh command from Web.
 
 The installer reports three results:
 

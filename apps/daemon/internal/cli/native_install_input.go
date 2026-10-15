@@ -20,11 +20,16 @@ type nativeInstallOptions struct {
 	Interactive, NonInteractive                bool
 }
 
+// grantEnv carries the short-lived installation grant, never an executor credential. Core's command sets it.
+const grantEnv = "OAC_INSTALL_GRANT"
+
 func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, error) {
 	var o nativeInstallOptions
+	// Take the grant first and drop it from the environment, which start, the daemon and Harnesses inherit.
+	o.Authorization = os.Getenv(grantEnv)
+	_ = os.Unsetenv(grantEnv)
 	flags := newFlagSet("install")
 	flags.StringVar(&o.OnboardURL, "onboard-url", "", "Core installation endpoint")
-	flags.StringVar(&o.Authorization, "authorization", "", "short-lived installation authorization (never an executor credential)")
 	flags.StringVar(&o.Remote, "remote", "", "Environment remote_url from Core")
 	flags.StringVar(&o.Environment, "environment-id", "", "Environment ID from Core")
 	flags.StringVar(&o.Workspace, "workspace", "", "existing absolute workspace directory")

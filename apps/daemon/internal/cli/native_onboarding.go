@@ -63,7 +63,7 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 		return nil
 	}
 	if o.OnboardURL == "" || o.Authorization == "" {
-		return errors.New("install: --onboard-url and --authorization are required together")
+		return errors.New("install: --onboard-url and " + grantEnv + " are required together")
 	}
 	const suffix = "/api/v1/agent-daemon/installation"
 	if !strings.HasSuffix(o.OnboardURL, suffix) {
@@ -158,7 +158,7 @@ func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOption
 			return err
 		}
 		// Run the installed executable. A detached child must never reference the
-		// temporary bundle or inherit the short-lived authorization in argv.
+		// temporary bundle or inherit the short-lived authorization.
 		command := exec.CommandContext(ctx, executable, "start")
 		command.Env = withNativeEnv(map[string]string{"OAC_RUNTIME_HOME": o.Directory, daemonize.BackgroundSentinelEnv: ""})
 		command.Stdout, command.Stderr = rc.stdout, rc.stderr

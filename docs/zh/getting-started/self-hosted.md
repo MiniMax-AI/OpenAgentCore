@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 2b61e5062fd95157615bced421f4f25a1862b3b17a2100f2113c9a4fcd7b3372
+source_hash: 23da409f07281f38ffb1d38e9312b75906972b8093631f6a417c95f7ce3fdc81
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -61,7 +61,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 
 在 Web 中打开 Session，复制 **连接主机** 下的命令。
 
-请保密该命令：它包含短期[安装授权](../../../contracts/agents-api/zh/environment-executor-credentials.md#installation-grant)，用于领取机器凭据。过期后重新读取 Session，或从 Web 复制新命令。
+请保密该命令：它包含短期[安装授权](../../../contracts/agents-api/zh/environment-executor-credentials.md#installation-grant)，用于领取机器凭据。命令通过环境变量 `OAC_INSTALL_GRANT` 传递授权，从不放在参数中；命令以空格开头，会忽略空格开头命令的 shell 不会把它记入历史。过期后重新读取 Session，或从 Web 复制新命令。
 
 安装程序报告三个结果：
 

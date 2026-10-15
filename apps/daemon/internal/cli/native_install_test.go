@@ -266,3 +266,18 @@ func TestNativeInstallationConnectCannotBypassValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestNativeInstallTakesGrantOutOfTheEnvironment(t *testing.T) {
+	rc, _, _, _ := nativeInstallFixture(t)
+	t.Setenv(grantEnv, "private-grant")
+	// The endpoint is invalid so parsing stops before it contacts Core; the grant is already taken.
+	o, _ := parseNativeInstall(rc, []string{"--onboard-url", "https://core.example/other", "--non-interactive"})
+	if o.Authorization != "private-grant" {
+		t.Fatal("grant not read from the environment")
+	}
+	for _, entry := range withNativeEnv(nil) {
+		if strings.HasPrefix(entry, grantEnv+"=") {
+			t.Fatal("grant reaches child processes")
+		}
+	}
+}

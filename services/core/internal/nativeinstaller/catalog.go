@@ -127,6 +127,9 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'" }
 func psQuote(s string) string    { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
+// GrantEnv names the environment variable that carries the installation grant to the installer.
+const GrantEnv = "OAC_INSTALL_GRANT"
+
 // Commands installs this catalog's version from the installer base URL.
 func (c *Catalog) Commands(installerBase, authorization string) map[string]string {
 	base := installerBase + c.Version
@@ -134,7 +137,8 @@ func (c *Catalog) Commands(installerBase, authorization string) map[string]strin
 	// Only execute a complete successful response; preserve interactive stdin.
 	posix := `set -e; script=; for attempt in 1 2 3; do if script=$(curl -fsS --connect-timeout 15 --max-time 60 --max-filesize 1048576 ` + shellQuote(base+"/bootstrap.sh") + `); then break; fi; [ "$attempt" -lt 3 ] || exit 1; sleep "$attempt"; done; bash -c "$script" -- "$@"`
 	return map[string]string{
-		"posix":      "bash -c " + shellQuote(posix) + " -- " + shellQuote(base) + " " + shellQuote(authorization),
-		"powershell": "& { $source=$null; for ($attempt=1; $attempt -le 3; $attempt++) { try { $source=(Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -TimeoutSec 60 -ErrorAction Stop).Content; break } catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds $attempt } }; & ([scriptblock]::Create($source)) -Base " + psQuote(base) + " -Authorization " + psQuote(authorization) + " @args }",
+		// The grant travels in the environment, never in an argument; the leading space keeps it out of shell history where the shell supports that.
+		"posix":      " " + GrantEnv + "=" + shellQuote(authorization) + " bash -c " + shellQuote(posix) + " -- " + shellQuote(base),
+		"powershell": "& { $env:" + GrantEnv + "=" + psQuote(authorization) + "; try { $source=$null; for ($attempt=1; $attempt -le 3; $attempt++) { try { $source=(Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -TimeoutSec 60 -ErrorAction Stop).Content; break } catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds $attempt } }; & ([scriptblock]::Create($source)) -Base " + psQuote(base) + " @args } finally { Remove-Item Env:" + GrantEnv + " -ErrorAction SilentlyContinue } }",
 	}
 }

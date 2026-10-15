@@ -61,9 +61,9 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const remote = origin.replace('http:', 'ws:')+'/api/v1/agent-daemon/ws';
 const base = `${origin}/api/v1/agent-daemon/install/${manifest.daemon_version}`;
-function run(executable, args, input = '') {
+function run(executable, args, input = '', env = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { env: { ...process.env, OAC_RUNTIME_HOME: join(root, 'unused-onboarding-home') }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(executable, args, { env: { ...process.env, OAC_RUNTIME_HOME: join(root, 'unused-onboarding-home'), ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
     child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
     child.stdin.on('error', () => {}); child.stdin.end(input);
@@ -73,15 +73,16 @@ function run(executable, args, input = '') {
   });
 }
 const executable = join(bundle, windows ? 'oac-daemon.exe' : 'oac-daemon');
-const args = ['install', '--onboard-url', `${origin}/api/v1/agent-daemon/installation`, '--authorization', authorization, '--install-dir', installation];
+const args = ['install', '--onboard-url', `${origin}/api/v1/agent-daemon/installation`, '--install-dir', installation];
+process.env.OAC_INSTALL_GRANT = authorization;
 try {
-  assert.notEqual((await run(executable, [...args, '--authorization', 'expired', '--non-interactive', '--harness', 'codex'])).code, 0);
+  assert.notEqual((await run(executable, [...args, '--non-interactive', '--harness', 'codex'], '', { OAC_INSTALL_GRANT: 'expired' })).code, 0);
   assert.notEqual((await run(executable, [...args, '--non-interactive'])).code, 0, 'Missing Harness must not prompt');
   assert.notEqual((await run(executable, [...args, '--non-interactive', '--harness', 'codex'])).code, 0, 'Lost claim response should fail safely');
   const saved = JSON.parse(await readFile(join(installation, 'daemon', 'executor-credential.json'), 'utf8'));
   assert.equal(saved.executor_token, secret, 'Secret must survive a lost response');
   const script = resolve(`services/core/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
-  const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base, '-Authorization', authorization] : [script, base, authorization];
+  const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base] : [script, base];
   const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], '\n\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);
   assert.match(result.output, /Daemon connection: connected/);

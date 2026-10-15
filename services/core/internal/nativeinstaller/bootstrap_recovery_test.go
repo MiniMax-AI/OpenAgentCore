@@ -42,11 +42,11 @@ func bootstrapCommand(t *testing.T, base, home string) *exec.Cmd {
 	t.Helper()
 	var command *exec.Cmd
 	if runtime.GOOS == "windows" {
-		command = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-File", "assets/bootstrap.ps1", "-Base", base, "-Authorization", "fixture-grant")
+		command = exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-File", "assets/bootstrap.ps1", "-Base", base)
 	} else {
-		command = exec.Command("bash", "assets/bootstrap.sh", base, "fixture-grant")
+		command = exec.Command("bash", "assets/bootstrap.sh", base)
 	}
-	command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
+	command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, GrantEnv+"=fixture-grant", "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 	return command
 }
 
@@ -215,7 +215,7 @@ func TestWindowsBootstrapChecksArchiveToolBeforeDownload(t *testing.T) {
 	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "''") + "'" }
 	// Keep the real SystemRoot while PowerShell itself loads.
 	command.Args = []string{command.Path, "-NoProfile", "-NonInteractive", "-Command",
-		"$env:SystemRoot = " + quote(t.TempDir()) + "; & './assets/bootstrap.ps1' -Base " + quote(server.URL) + " -Authorization 'fixture-grant'"}
+		"$env:SystemRoot = " + quote(t.TempDir()) + "; & './assets/bootstrap.ps1' -Base " + quote(server.URL) + ""}
 	output, err := command.CombinedOutput()
 	if err == nil || !bytes.Contains(output, []byte("tar.exe is required")) || requests.Load() != 0 {
 		t.Fatalf("%v: %s", err, output)

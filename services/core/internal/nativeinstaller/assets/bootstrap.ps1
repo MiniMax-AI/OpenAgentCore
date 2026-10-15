@@ -1,6 +1,5 @@
 param(
   [Parameter(Mandatory=$true)][string]$Base,
-  [Parameter(Mandatory=$true)][string]$Authorization,
   [Parameter(ValueFromRemainingArguments=$true)][string[]]$InstallArguments
 )
 $ErrorActionPreference = 'Stop'
@@ -164,7 +163,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Installer extraction failed. Check disk space, quota and filesystem permissions.' }
   $endpoint = $Base -replace '/install/[^/]+$', '/installation'
   Write-Host 'Starting installation...'
-  & (Join-Path $bundle 'oac-daemon.exe') install --onboard-url $endpoint --authorization $Authorization @InstallArguments
+  & (Join-Path $bundle 'oac-daemon.exe') install --onboard-url $endpoint @InstallArguments
   if ($LASTEXITCODE -ne 0) { throw 'Installation or connection failed; follow the installer guidance and retry.' }
 } finally {
   if ($client) { $client.Dispose() }
