@@ -307,7 +307,7 @@ type NodeTx interface {
 	InsertNode(node NewNode) (StoredNode, error)
 	UpdateNode(id string, limits NodeLimits) error
 	RemoveNode(id string) error
-	// CreateEnrollment stores a token that expires in ten minutes and returns
+	// CreateEnrollment stores a token that expires in one hour and returns
 	// its expiry.
 	CreateEnrollment(enrollment NewEnrollment) (time.Time, error)
 	// ConsumeEnrollment marks an unexpired, unconsumed token of the current

@@ -51,7 +51,7 @@ func (q *Queries) ConsumeRuntimeEnrollment(ctx context.Context, arg ConsumeRunti
 }
 
 const createRuntimeEnrollment = `-- name: CreateRuntimeEnrollment :exec
-INSERT INTO runtime_node_enrollments(id,token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,$3,clock_timestamp()+interval '10 minutes',$4,$5)
+INSERT INTO runtime_node_enrollments(id,token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,$3,clock_timestamp()+interval '1 hour',$4,$5)
 `
 
 type CreateRuntimeEnrollmentParams struct {

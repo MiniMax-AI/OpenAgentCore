@@ -6,11 +6,11 @@ test.afterEach(async ({ request }) => expectManagementBoundary(request));
 
 test("adds a node: host requirements, a root/sudo command, a countdown, the same command after closing, a new one after expiry, then its own node's registration", async ({ page, request }) => {
   await page.clock.install();
-  // Core counts a token's ten minutes on its own clock; the page's clock stands in for it, so fast-forwarding expires a command.
+  // Core counts a token's hour on its own clock; the page's clock stands in for it, so fast-forwarding expires a command.
   await page.route("**/core/v1/sandbox/enrollment-tokens", async (route) => {
     const response = await route.fetch();
     const now = await page.evaluate(() => Date.now());
-    await route.fulfill({ response, json: { ...await response.json(), expires_at: new Date(now + 10 * 60_000).toISOString() } });
+    await route.fulfill({ response, json: { ...await response.json(), expires_at: new Date(now + 60 * 60_000).toISOString() } });
   });
   await openConsole(page, request, "nodes");
   await page.getByRole("button", { name: "Add node" }).click();
@@ -39,7 +39,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(field).toHaveValue(/curl [^\n]* 'https:\/\/core\.example\.com\/node-install\/node-install\.pyz' /);
   await expect(field).toHaveValue(/ --source-url 'https:\/\/core\.example\.com' --core-url 'https:\/\/core\.example\.com' /);
   await expect(add.getByText("If the command is interrupted or the download stalls, run it again: unfinished downloads restart, and verified files are reused.")).toBeVisible();
-  await expect(add.getByRole("timer")).toHaveText(/^Expires in (10:00|9:\d\d)$/);
+  await expect(add.getByRole("timer")).toHaveText(/^Expires in (1:00:00|59:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
   await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
 
@@ -55,7 +55,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
 
   // Once expired, a new command is issued only on request, for the same limits.
-  await page.clock.fastForward("10:30");
+  await page.clock.fastForward("01:00:30");
   await expect(progress).toContainText("Command expired");
   await expect(field).toBeHidden();
   const reissued = tokenRequest();
@@ -69,7 +69,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await add.getByRole("button", { name: "Close dialog" }).click();
   await expect(add).toBeHidden();
   await setNode(request, { id: "node-new", name: "edge-04" });
-  await page.clock.fastForward("10:30");
+  await page.clock.fastForward("01:00:30");
   // Every render from the reopening on is watched, so even a brief "Command expired" would count.
   await page.evaluate(() => {
     const watch = window as unknown as { expiredShown: boolean; expiredWatch: MutationObserver };

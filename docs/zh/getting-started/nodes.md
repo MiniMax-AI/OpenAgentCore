@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 68864862ec5696e17779a10923f326b5c2b9ba8d729cc1e30dad62c6415ee85a
+source_hash: 8398432d9a47fa5588fca9d0ffdea96db5407c3ef7b259c892865e5d58da9417
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -26,7 +26,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 
 1. 在 Web 打开 **节点**，选择 **添加节点**。
 2. 设置 **同时运行的沙箱**，使用 microsandbox 时还设置 **保留的沙箱**，即节点[容量](../configuration.md#node-capacity)。之后可以通过 **编辑节点** 修改。
-3. 选择 **生成命令** 并复制命令。命令仅注册一个节点、只能使用一次，且必须在 10 分钟内执行；Web 显示倒计时，过期后提供 **生成新命令**。
+3. 选择 **生成命令** 并复制命令。命令仅注册一个节点、只能使用一次，且必须在 1 小时内执行；Web 显示倒计时，过期后提供 **生成新命令**。
 4. 在主机上执行。Web 跟踪节点从注册、连接到就绪的过程。
 
 命令从你的控制台下载节点安装程序、检查 SHA-256，并使用一次性注册令牌运行它。安装程序下载节点文件并逐一对照发行清单验证、导入 Runtime 镜像、注册节点、启动服务，并等待 Core 报告节点已连接且就绪。程序不安装软件；前置条件缺失时，会在修改任何内容之前停止并输出一行提示。
@@ -82,16 +82,16 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 **节点程序。** 节点保留添加它的控制台所提供的主机程序；升级 Core 不会替换它。更改节点协议的版本会列出所需操作；参阅[协议变更](operations.md#protocol-changes)。
 
-**令牌。** 令牌仅用于注册节点，一次性使用，10 分钟后过期。安装程序只从标准输入接收它，拒绝环境变量中的令牌，因为 `sudo VAR=… python3` 会在 sudo 日志中记录它。启用了 `log_input` 的 sudoers 策略会记录标准输入，从而记录令牌。
+**令牌。** 令牌仅用于注册节点，一次性使用，1 小时后过期。安装程序只从标准输入接收它，拒绝环境变量中的令牌，因为 `sudo VAR=… python3` 会在 sudo 日志中记录它。启用了 `log_input` 的 sudoers 策略会记录标准输入，从而记录令牌。
 
 ## 重新运行、过期与慢速网络 {#rerun-expiry-and-slow-links}
 
 - 重新执行同一命令是安全的。节点注册后，重新运行使用节点自身凭据，不改变已匹配的内容，也无需令牌。以下情况程序不做任何修改并说明原因：保留的节点身份属于其他 Core 地址或安装；节点注册后沙箱配置发生变化（节点会自行准备，参阅[修改沙箱配置](#change-the-sandbox-configuration)）；或 Core 已升级、提供了更新的节点程序，此时在 **节点** 选择 **移除节点**，在主机上卸载该节点，再通过 **添加节点** 重新添加。
 - 节点注册前失败的运行不会在 Core 留下任何记录。下一条命令即使在配置变更或 Core 升级之后执行，也会替换上次尝试的配置和不再匹配的已下载文件，保留匹配的文件并继续。
-- 已过期或已在其他主机使用的命令立即失败，显示 `The enrollment command expired or was already used`：生成新命令并在 10 分钟内执行。
-- 慢速下载期间命令过期时，注册失败并显示 `The enrollment command expired or was already used`。下载文件保留：在 Web 生成新命令后执行。
-- 失败或中断时删除下载残片；重新执行时从头下载缺失文件，复用已校验的完整文件。每分钟下载不足 64 KiB 时会停止，请检查网络后重试。
-- Docker Runtime 镜像约 400 MB。网络较慢时可提前加载：将发行资产 `oac-<commit>-linux-amd64-runtime.tar.gz` 复制到主机并运行 `sudo docker load -i`。安装程序发现精确匹配的镜像后跳过下载。
+- 已过期或已在其他主机使用的命令立即失败，显示 `The enrollment command expired or was already used`：生成新命令并在 1 小时内执行。
+- 慢速下载期间命令过期时，注册失败并显示 `The enrollment command expired or was already used`。下载文件保留：在 Web 生成新命令后执行，下载从中断处继续。
+- 每个文件都会显示进度。失败或中断时保留已收到的部分；重新执行时，每个未完成的文件从中断处继续（`Resuming …`），复用已校验的完整文件，其余照常下载。服务器不支持续传时，该文件从头开始。每分钟下载不足 64 KiB 时会停止，请检查网络后重新执行命令。
+- Docker Runtime 镜像约 400 MB，microsandbox 文件约 500 MB。使用 Docker 且网络较慢时，可先加载镜像：将发行资产 `oac-<commit>-linux-amd64-runtime.tar.gz` 复制到主机并运行 `sudo docker load -i`。安装程序发现精确匹配的镜像后跳过下载。
 - 中断安装程序或关闭终端会停止程序；重新执行命令继续。
 
 ## 日志 {#logs}
@@ -202,7 +202,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 | 消息 | 解决方法 |
 | --- | --- |
-| `The enrollment command expired or was already used` | 在 Web 生成新命令并在 10 分钟内执行 |
+| `The enrollment command expired or was already used` | 在 Web 生成新命令并在 1 小时内执行 |
 | `Core rejected the node configuration read (HTTP …)` | 检查 Core URL 及其前面的反向代理后重试 |
 | `Not enough disk space under …` 或 `The disk is full` | 按提示释放空间后重试；尚未下载任何内容 |
 | This host's node program differs from the one this console serves | 节点添加后 Core 已升级。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |

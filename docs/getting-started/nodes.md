@@ -24,7 +24,7 @@ The Core host joins like any other host: to run sandboxes on it, add it as a nod
 
 1. In Web, open **Nodes** and choose **Add node**.
 2. Set **Sandboxes at once** and, with microsandbox, **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). You can change them later with **Edit node**.
-3. Choose **Generate command** and copy the command. It registers one node, once, and only if it runs within 10 minutes; Web counts down and offers **Generate new command** when it expires.
+3. Choose **Generate command** and copy the command. It registers one node, once, and only if it runs within an hour; Web counts down and offers **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
 
 The command downloads the node installer from your console, checks its SHA-256 and runs it with a one-time enrollment token. The installer downloads the node files and checks each against the release manifest, imports the Runtime image, registers the node, starts its service and waits until Core reports the node connected and ready. It never installs software, and it stops with a one-line hint before changing anything when a prerequisite is missing.
@@ -80,16 +80,16 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 **Node software.** A node keeps the host program of the console that added it; an upgrade of Core doesn't replace it. A release that changes the node protocol lists the actions it requires; see [protocol changes](./operations.md#protocol-changes).
 
-**The token.** It is single-use, expires after 10 minutes and only registers the node. The installer takes it only on standard input and refuses it in the environment, where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy with `log_input` records standard input, and so the token.
+**The token.** It is single-use, expires after an hour and only registers the node. The installer takes it only on standard input and refuses it in the environment, where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy with `log_input` records standard input, and so the token.
 
 ## Rerun, expiry and slow links
 
 - Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It changes nothing and says why when the node's retained identity belongs to another Core address or installation, when the sandbox configuration has changed since the node registered (the node prepares it itself; see [Change the sandbox configuration](#change-the-sandbox-configuration)), or when Core was upgraded and serves a newer node program: choose **Remove node** on **Nodes**, uninstall the node on the host, then add it again with **Add node**.
 - A run that fails before the node registers leaves nothing that Core knows. The next command, even after a configuration change or a Core upgrade, replaces the earlier attempt's configuration and any downloaded file that no longer matches, keeps the files that match and continues.
-- A command that already expired, or was used on another host, fails at once with `The enrollment command expired or was already used`: generate a new command and run it within 10 minutes.
-- If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it.
-- Failed or interrupted downloads discard their temporary files. A rerun downloads missing files from the beginning and reuses verified complete files. A transfer that brings less than 64 KiB in a minute stops; check the network and retry.
-- The Docker Runtime image is about 400 MB. On a slow link, load it first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
+- A command that already expired, or was used on another host, fails at once with `The enrollment command expired or was already used`: generate a new command and run it within an hour.
+- If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it, and the download continues where it stopped.
+- Every file shows its progress. Failed or interrupted downloads keep what arrived, and a rerun resumes each partial file where it stopped (`Resuming …`), reuses verified complete files and downloads the rest. If the server cannot resume, the file starts again from the beginning. A transfer that brings less than 64 KiB in a minute stops; check the network and rerun the command.
+- The Docker Runtime image is about 400 MB and the microsandbox files about 500 MB. On a slow link with Docker, load the image first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
 - Interrupting the installer, or closing its terminal, stops it; run the command again to continue.
 
 ## Logs
@@ -200,7 +200,7 @@ A registered node that can't connect to Core says why in its [log](#logs): `sand
 
 | Message | Fix |
 | --- | --- |
-| `The enrollment command expired or was already used` | Generate a new command in Web and run it within 10 minutes |
+| `The enrollment command expired or was already used` | Generate a new command in Web and run it within an hour |
 | `Core rejected the node configuration read (HTTP …)` | Check the Core URL and the reverse proxy in front of it, then rerun |
 | `Not enough disk space under …` or `The disk is full` | Free the space it names, then rerun; nothing was downloaded |
 | This host's node program differs from the one this console serves | Core was upgraded after the node was added. Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |

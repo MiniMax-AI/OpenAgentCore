@@ -487,15 +487,16 @@ def require_disk(root, args, program_manifest, manifest, names):
             entry = distribution.artifact(program_manifest if name in provider_assets.artifacts(args.provider, ("node",)) else manifest, name)
             target = root / name
             if not (target.is_file() and distribution.matches(target, entry)):
-                needed += entry["size"]
+                needed += entry["size"] - distribution.resumable(distribution.partial_path(target), entry["size"])
     if args.provider == "docker":
         imported = distribution.docker_image(manifest, "runtime", DOCKER) is not None
     else:
         imported = (root / MICRO[1]).is_file() and micro_image_ready(root, args, manifest)
     if not imported:
         archive = distribution.artifact(manifest, "images/runtime.tar.gz")
-        if not (root / "images/runtime.tar.gz").is_file():
-            needed += archive["size"]
+        packed = root / "images/runtime.tar.gz"
+        if not packed.is_file():
+            needed += archive["size"] - distribution.resumable(distribution.partial_path(packed), archive["size"])
         if not (root / "images/runtime.tar").is_file():
             needed += archive["unpacked_size"]
         if args.provider == "microsandbox":

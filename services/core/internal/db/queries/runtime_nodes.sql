@@ -46,7 +46,7 @@ SELECT id FROM runtime_nodes WHERE id=$1 FOR UPDATE;
 UPDATE runtime_nodes SET connection_id=NULL FROM runtime_deployment d WHERE runtime_nodes.id=$1 AND connection_id=$2 AND connected_epoch=d.owner_epoch AND d.owner_epoch=sqlc.arg(owner_epoch);
 
 -- name: CreateRuntimeEnrollment :exec
-INSERT INTO runtime_node_enrollments(id,token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,$3,clock_timestamp()+interval '10 minutes',$4,$5);
+INSERT INTO runtime_node_enrollments(id,token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,$3,clock_timestamp()+interval '1 hour',$4,$5);
 
 -- name: ConsumeRuntimeEnrollment :execrows
 UPDATE runtime_node_enrollments SET consumed_at=clock_timestamp(),node_id=$2

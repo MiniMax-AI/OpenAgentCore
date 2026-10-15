@@ -436,14 +436,14 @@ async function sandboxRoute(request, response, path, url) {
   if (path === "/nodes") return send(response, 200, { data: state.nodes });
   if (path === "/enrollment-tokens" && request.method === "POST") {
     if (state.deployment.reset) return error(response, 409, "A sandbox reset is in progress.", "sandbox_reset_in_progress");
-    // As Core: a one-time token valid for ten minutes, whose limits and enrollment ID the node it enrolls takes;
+    // As Core: a one-time token valid for one hour, whose limits and enrollment ID the node it enrolls takes;
     // only microsandbox keeps a retained limit above the active one.
     const input = await body(request);
     const maxActive = input.max_active ?? 1;
     const serial = state.nextId++;
     const enrollmentId = `00000000-0000-4000-8000-${String(serial).padStart(12, "0")}`;
     state.enrollment = { max_active: maxActive, max_retained: state.deployment?.provider === "microsandbox" ? input.max_retained ?? maxActive : maxActive, enrollment_id: enrollmentId };
-    return send(response, 201, { token: `enroll_fixture_${serial}`, expires_at: new Date(Date.now() + 10 * 60_000).toISOString(), enrollment_id: enrollmentId });
+    return send(response, 201, { token: `enroll_fixture_${serial}`, expires_at: new Date(Date.now() + 60 * 60_000).toISOString(), enrollment_id: enrollmentId });
   }
   let m;
   if ((m = path.match(/^\/nodes\/([^/]+)\/allocations$/))) return send(response, 200, { data: state.allocations.filter((entry) => entry.node_id === m[1]) });

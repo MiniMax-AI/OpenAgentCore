@@ -40,7 +40,7 @@ The distribution manifest is the one download contract for nodes: flat versioned
 - A Compose installation keeps only the node metadata from its release archive; Core's image never acquires execution-only payloads.
 - A node obtains bootstrap metadata from the console that generated its command. Web serves artifacts it has locally and redirects missing declared execution artifacts to the versioned HTTPS release base in the verified manifest. Web never downloads or caches those bytes.
 - Only artifact requests may follow HTTPS redirects, and only without credentials or cookies. Metadata and enrollment requests stay on the configured console. The console publishes only fixed non-secret files and declared artifact names.
-- Download into private temporary files, verify size and SHA-256 before an atomic rename, clear leftover temporary downloads and extracted files before retrying, and reuse only verified cache entries or exact image identities. Never select a release other than the pinned one.
+- Download into private temporary files, verify size and SHA-256 before an atomic rename, resume a leftover partial artifact download with an HTTP range (a server that cannot resume, or bytes that fail verification, restart the file) and clear leftover extracted files before retrying, and reuse only verified cache entries or exact image identities. Never select a release other than the pinned one.
 - Release downloads are anonymous. Never add repository credentials to installed node or Runtime configuration.
 - Manual builds use the `build-<full SHA>` release tag and tag builds the `v*` tag. The manifest's download base must match the release tag; artifact file names and source provenance keep the full source SHA.
 

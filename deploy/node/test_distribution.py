@@ -29,6 +29,7 @@ class ArtifactTests(unittest.TestCase):
         self.ranges = []
         self.if_ranges = []
         self.status = 200
+        self.resumable = True
         self.redirect_target = 'https://elsewhere.example'
         self.interrupted_once = False
         test = self
@@ -48,12 +49,16 @@ class ArtifactTests(unittest.TestCase):
                     self.end_headers()
                     self.wfile.write(test.data[start:] if start else test.data[:len(test.data) // 2])
                     return
-                self.send_response(test.status)
+                start = int(self.headers['Range'][6:-1]) if test.resumable and test.status == 200 and self.headers.get('Range') else 0
+                self.send_response(206 if start else test.status)
                 if test.status in (302, 307):
                     self.send_header('Location', test.redirect_target + self.path)
+                if start:
+                    self.send_header('Content-Range', f'bytes {start}-{len(test.data) - 1}/{len(test.data)}')
+                    self.send_header('Content-Length', str(len(test.data) - start))
                 self.end_headers()
                 if test.status == 200:
-                    self.wfile.write(test.data)
+                    self.wfile.write(test.data[start:])
             def log_message(self, *args):
                 pass
         self.server = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Handler)
@@ -110,26 +115,54 @@ class ArtifactTests(unittest.TestCase):
         self.data = self.data[:20]
         with patch.object(distribution.time, 'sleep'), self.assertRaisesRegex(distribution.DistributionError, 'interrupted'):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
-        self.assertEqual(list(self.root.iterdir()), [])
+        self.assertEqual([path.name for path in self.root.iterdir()], ['.node.partial'])
         self.data = b'prebuilt artifact' * 1000
         distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
         self.assertEqual([path.name for path in self.root.iterdir()], ['node'])
+        self.assertEqual((self.root / 'node').read_bytes(), self.data)
 
-    def test_interrupted_download_restarts_with_a_clean_file(self):
+    def test_interrupted_download_resumes_where_it_stopped(self):
         self.interrupted_once = True
         with patch.object(distribution.time, 'sleep'):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
         self.assertEqual((self.root / 'node').read_bytes(), self.data)
-        self.assertEqual(self.ranges, [None, None])
-        self.assertEqual(self.if_ranges, [None, None])
+        self.assertEqual(self.ranges, [None, f'bytes={len(self.data) // 2}-'])
         self.assertEqual([path.name for path in self.root.iterdir()], ['node'])
 
-    def test_a_stalled_download_stops_and_removes_its_part(self):
+    def test_a_partial_file_from_an_earlier_run_resumes_and_reports_it(self):
+        target = self.root / 'node'
+        target.with_name('.node.partial').write_bytes(self.data[:5000])
+        output = io.StringIO()
+        with patch('sys.stdout', output):
+            distribution.obtain_artifact(self.manifest, 'native/bin/node', target)
+        self.assertEqual(target.read_bytes(), self.data)
+        self.assertEqual(self.ranges, ['bytes=5000-'])
+        self.assertIn('Resuming native/bin/node at 0.0 MiB of 0.0 MiB', output.getvalue())
+        self.assertIn('Downloading native/bin/node: 100%', output.getvalue())
+        self.assertEqual([path.name for path in self.root.iterdir()], ['node'])
+
+    def test_a_server_that_ignores_the_range_gets_a_full_download(self):
+        self.resumable = False
+        target = self.root / 'node'
+        target.with_name('.node.partial').write_bytes(self.data[:5000])
+        distribution.obtain_artifact(self.manifest, 'native/bin/node', target)
+        self.assertEqual(target.read_bytes(), self.data)
+        self.assertEqual(self.ranges, ['bytes=5000-'])
+        self.assertEqual([path.name for path in self.root.iterdir()], ['node'])
+
+    def test_a_partial_file_longer_than_the_artifact_is_dropped(self):
+        target = self.root / 'node'
+        target.with_name('.node.partial').write_bytes(self.data + b'more')
+        distribution.obtain_artifact(self.manifest, 'native/bin/node', target)
+        self.assertEqual(target.read_bytes(), self.data)
+        self.assertEqual(self.ranges, [None])
+
+    def test_a_stalled_download_stops_and_keeps_its_part(self):
         with patch.object(distribution, 'SLOW_SECONDS', 0), \
                 self.assertRaisesRegex(distribution.DistributionError, 'stalled.*rerun the command'):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
         self.assertEqual(len(self.requests), 1)  # Not retried as a network error.
-        self.assertEqual(list(self.root.iterdir()), [])
+        self.assertEqual([path.name for path in self.root.iterdir()], ['.node.partial'])
 
     def test_runtime_expansion_is_verified_and_a_differing_cache_is_refused_or_replaced(self):
         raw = b'synthetic tar contents' * 1000
@@ -171,7 +204,8 @@ with distribution.temporary_file(Path(sys.argv[1])) as partial:
         distribution.obtain_artifact(self.manifest, 'native/bin/node', target)
         self.assertEqual(target.read_bytes(), self.data)
         self.assertFalse(partial.exists())
-        self.assertEqual(self.ranges, [None])
+        # The unrelated bytes fail the checksum, so the file is fetched again from the start.
+        self.assertEqual(self.ranges, ['bytes=16-', None])
 
     def test_expansion_discards_stale_temporary_and_preserves_verified_archive(self):
         raw = b'complete runtime image' * 1000
@@ -216,7 +250,7 @@ with distribution.temporary_file(Path(sys.argv[1])) as partial:
         self.assertEqual(list(self.root.iterdir()), [])
 
 
-    def test_https_redirect_discards_stale_partial_and_verifies_on_the_node(self):
+    def test_https_redirect_resumes_a_partial_and_verifies_on_the_node(self):
         certificate, key = self.root / 'cert.pem', self.root / 'key.pem'
         subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes',
                         '-keyout', str(key), '-out', str(certificate), '-days', '1',
@@ -253,7 +287,7 @@ with distribution.temporary_file(Path(sys.argv[1])) as partial:
                 distribution.obtain_artifact(self.manifest, 'native/bin/node', target)
             self.assertEqual(target.read_bytes(), self.data)
             self.assertEqual(len(received), 1)
-            self.assertNotIn('Range', received[0])
+            self.assertEqual(received[0]['Range'], 'bytes=7-')
             self.assertNotIn('If-Range', received[0])
             self.assertFalse(target.with_name('.node.partial').exists())
         finally:
@@ -261,7 +295,7 @@ with distribution.temporary_file(Path(sys.argv[1])) as partial:
             release.server_close()
             thread.join()
 
-    def test_artifact_redirect_strips_credentials_and_custom_headers(self):
+    def test_artifact_redirect_keeps_only_the_resume_range(self):
         request = distribution.urllib.request.Request('https://console.example/artifact', headers={
             'Range': 'bytes=123-', 'If-Range': 'etag', 'Authorization': 'Bearer secret',
             'Cookie': 'session=secret', 'X-Core-Key': 'secret'})
@@ -270,7 +304,7 @@ with distribution.temporary_file(Path(sys.argv[1])) as partial:
         forwarded = redirect.redirect_request(request, None, 307, '', {}, target)
         self.assertEqual(forwarded.full_url, target)
         self.assertEqual(dict((k.lower(), v) for k, v in forwarded.header_items()),
-                         {})
+                         {'range': 'bytes=123-'})
         for invalid in ('http://release.example/file', 'file:///tmp/file', 'https://user:secret@release.example/file'):
             with self.subTest(invalid=invalid), self.assertRaises(distribution.ArtifactError):
                 redirect.redirect_request(request, None, 302, '', {}, invalid)
