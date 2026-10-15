@@ -1178,13 +1178,12 @@ def install_system(args, token):
         run_as(account, prepare_service_node, args, token, helper_archive)
         environment = SYSTEM_RECORDS / (args.installation_id + ".env")
         root_file(unit, system_unit(root, provider, environment))
-        known = environment.exists()
-        restart = write_service_environment(environment, proxy) and known
+        changed = write_service_environment(environment, proxy)
         install_display.step("Starting the node service")
         checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
-        checked(["systemctl", "enable", "--now", unit.name], "Cannot start the node service; its identity is kept. Inspect sudo journalctl -u " + unit.name)
-        if restart:  # A running service reads its environment only when it starts.
+        if changed:  # A running service reads its environment only when it starts; a stopped one is left to enable.
             checked(["systemctl", "try-restart", unit.name], "Cannot restart the node service with the new proxy settings. Inspect sudo journalctl -u " + unit.name)
+        checked(["systemctl", "enable", "--now", unit.name], "Cannot start the node service; its identity is kept. Inspect sudo journalctl -u " + unit.name)
         checked(["systemctl", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect sudo journalctl -u " + unit.name)
         install_display.step("Waiting for Core connection and provider readiness")
         run_as(account, wait_ready, root, args)

@@ -910,7 +910,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertIn("proxy-one", environment.read_text())
         self.assertEqual(stat.S_IMODE(environment.stat().st_mode), 0o600)
         self.assertNotIn("proxy-one", (system / "units" / unit).read_text())
-        self.assertNotIn(["systemctl", "try-restart", unit], [call for call, _ in self.calls])
+        self.calls.clear()
         with mock.patch.dict(os.environ, {"https_proxy": "http://proxy-two.invalid:3128", "http_proxy": ""}):
             installer.install_system(self.args, "")
         self.assertIn("proxy-two", environment.read_text())
