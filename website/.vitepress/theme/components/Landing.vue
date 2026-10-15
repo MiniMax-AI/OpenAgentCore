@@ -898,7 +898,7 @@ h3 { font-family: var(--l-display); }
 </style>
 
 <style scoped>
-.architecture-visual { display: block; max-width: 980px; margin: 0 auto 20px; padding: 16px; background: #fff; border-radius: 4px; }
+.architecture-visual { display: block; max-width: 980px; margin: 0 auto 20px; }
 .architecture-visual img { display: block; width: 100%; height: auto; }
 .more { display: inline-block; }
 .session-flow { display: flex; align-items: center; justify-content: center; gap: 28px; padding: 32px 24px; margin: 24px 0; border: 1px solid var(--l-line-strong); background: var(--l-panel); }
