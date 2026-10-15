@@ -87,7 +87,8 @@ try {
   assert.match(result.output, /Daemon connection: connected/);
   assert.match(result.output, /Model configuration: not checked/);
   assert.equal(connections, 1);
-  const repeat = await run(executable, [...args, '--non-interactive', '--harness', 'codex']);
+  // The running daemon must not keep the bootstrap's download lock.
+  const repeat = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation, '--non-interactive', '--harness', 'codex']);
   assert.equal(repeat.code, 0, `Repeat failed: ${repeat.output}`);
   assert.equal(connections, 1, 'Repeated installation created a duplicate daemon');
   console.log(JSON.stringify({ installation: 'passed', connection: 'passed', interactive: 'passed', retry: 'passed', repeat: 'passed', authentication: 'passed', model_requests: 0 }));
