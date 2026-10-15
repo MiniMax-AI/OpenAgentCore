@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: d816781ff3fa3b765f0e207efd9c993fcb3ea194d88a42c7c4bba9d5913d8d17
+source_hash: de77f596cad24c26ddb2ddfa71ef104ace08dfe62d57a785b26f692df8f5a3ed
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发项目 API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -42,6 +42,8 @@ Windows PowerShell：
 ```powershell
 irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
 ```
+
+Windows 上传参的方式见[安装选项](./install-options.md)。
 
 绑定所有 IPv4 地址时，安装器会使用默认路由的私网地址；如果没有可用私网地址，则使用 `http://localhost:8080`。也可以通过 `--public-url` 指定可访问的源地址；如果已有反向代理，就使用它的 HTTPS 地址：
 

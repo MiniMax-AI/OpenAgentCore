@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 635fa6022d6fd132ee0af8ce329298355b924803e421db1d6e41add73c970f4f
+source_hash: 1d79122c41ef06b70dfd592c55d6b474dc53485f4500518871d8e4a7aba43b91
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -180,7 +180,7 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
    curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
    ```
 
-   `--version TAG` 选择最新版本以外的发布版本。Windows 上，将相同参数传给下载的 `install.ps1`。对于从[源码包](../development.md#install-a-checkout-without-publishing-a-release)安装的实例，运行新源码包的安装程序：`python3 <bundle>/install.py --install-dir <dir> --upgrade`。
+   `--version TAG` 选择最新版本以外的发布版本。Windows 上运行 `& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --upgrade --install-dir "$HOME\.oac\core"`。对于从[源码包](../development.md#install-a-checkout-without-publishing-a-release)安装的实例，运行新源码包的安装程序：`python3 <bundle>/install.py --install-dir <dir> --upgrade`。
 4. 准备好后，[应用该版本的 Runtime](#runtime-after-an-upgrade)。
 
 不带 `--upgrade` 时，其他版本的安装程序不做任何更改，并以 `This installation runs release <old>; this installer is <new>. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.` 停止（`install.py` 的提示为 `this bundle is`）。无论是否带该参数，已安装版本的安装程序都会继续该安装。安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)；其他命令正在运行时，等待其结束后重试。

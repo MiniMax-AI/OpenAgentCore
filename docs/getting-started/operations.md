@@ -178,7 +178,7 @@ An installation of v0.0.10 or later upgrades in place to a newer release. It kee
    curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
    ```
 
-   `--version TAG` selects a release other than the latest. On Windows, pass the same flags to the downloaded `install.ps1`. For an installation from a [source bundle](../development.md#install-a-checkout-without-publishing-a-release), run the new bundle's installer: `python3 <bundle>/install.py --install-dir <dir> --upgrade`.
+   `--version TAG` selects a release other than the latest. On Windows, run `& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --upgrade --install-dir "$HOME\.oac\core"`. For an installation from a [source bundle](../development.md#install-a-checkout-without-publishing-a-release), run the new bundle's installer: `python3 <bundle>/install.py --install-dir <dir> --upgrade`.
 4. When you are ready, [apply the release's Runtime](#runtime-after-an-upgrade).
 
 Without `--upgrade`, another release's installer changes nothing and stops with `This installation runs release <old>; this installer is <new>. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.` (`install.py` says `this bundle is`). The installed release's installer resumes the installation, with or without the flag. Installation and mutating `oac` commands share the [installation lock](../configuration.md#installation-directory); if another command is running, wait for it to finish before retrying.

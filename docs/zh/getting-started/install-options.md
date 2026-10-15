@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: f4d146c2e939103b489c20709d15eae5ec8916f1bc30dd90ad1b6b4dadc80bbc
+source_hash: b3802e02538475497cc07acc8b5a20646cb555e3f77bc03e16eef4f82adac456
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
@@ -12,7 +12,7 @@ source_hash: f4d146c2e939103b489c20709d15eae5ec8916f1bc30dd90ad1b6b4dadc80bbc
 ./install.sh --public-url https://core.example
 ```
 
-Windows 可下载 `install.ps1`，然后使用相同参数，例如 `& ./install.ps1 --public-url https://core.example`。Unix 单行命令的参数追加在 `bash -s --` 后。`--version TAG` 选择已发布的版本；默认选择最新稳定版，并校验原生命令和 Compose 文件的 SHA-256。
+Windows 上 `irm … | iex` 无法传参，默认执行策略也会拦截下载的 `.ps1` 文件，因此以脚本块运行：`& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --public-url https://core.example`。Unix 单行命令的参数追加在 `bash -s --` 后。`--version TAG` 选择已发布的版本；默认选择最新稳定版，并校验原生命令和 Compose 文件的 SHA-256。
 
 ## Docker Compose 与托管平台 {#docker-compose-and-hosting-platforms}
 

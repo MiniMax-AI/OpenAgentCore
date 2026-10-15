@@ -285,6 +285,6 @@ for platform in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64;
   if [[ "$platform" == windows-* ]]; then extension=.exe; fi
   asset="oac-$platform$extension"
   GOOS="${platform%-*}" GOARCH="${platform#*-}" CGO_ENABLED=0 go build -mod=readonly -trimpath \
-    -ldflags "-X main.buildRevision=$revision" -o "$output_dir/$asset" ./services/core/cmd/oac
+    -ldflags "-s -w -X main.buildRevision=$revision" -o "$output_dir/$asset" ./services/core/cmd/oac
   (cd "$output_dir" && sha256sum "$asset" > "$asset.sha256")
 done

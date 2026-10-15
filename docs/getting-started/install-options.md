@@ -10,7 +10,7 @@ Pass options to the downloaded script:
 ./install.sh --public-url https://core.example
 ```
 
-On Windows, download `install.ps1` and pass the same flags with `& ./install.ps1 --public-url https://core.example`. With the Unix one-line command, append them after `bash -s --`. `--version TAG` selects a published release; otherwise the script selects the latest stable release and verifies the native command and Compose files against their SHA-256 checksums.
+On Windows, `irm … | iex` cannot pass flags and the default execution policy blocks a downloaded `.ps1` file, so run the script as a script block: `& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --public-url https://core.example`. With the Unix one-line command, append them after `bash -s --`. `--version TAG` selects a published release; otherwise the script selects the latest stable release and verifies the native command and Compose files against their SHA-256 checksums.
 
 ## Docker Compose and hosting platforms
 

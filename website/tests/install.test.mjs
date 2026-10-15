@@ -24,14 +24,17 @@ done
 printf '%s\\n' '#!/usr/bin/env bash' 'printf "%s\\n" "$@"' 'exit 17' > "$target"
 exit "$DOWNLOAD_STATUS"
 `)
+    writeFileSync(join(root, 'sleep'), '#!/bin/sh\n')
+    chmodSync(join(root, 'sleep'), 0o700)
     chmodSync(join(root, 'curl'), 0o700)
     const args = ['--upgrade', '--install-dir', '/path with spaces/core', '--version', 'v0.0.10']
     for (const downloadStatus of [0, 22]) {
-      const result = spawnSync('bash', ['-s', '--', ...args], {
+      const result = spawnSync('/bin/bash', ['-s', '--', ...args], {
         input: readFileSync(script), encoding: 'utf8',
         env: { ...process.env, PATH: `${root}:${process.env.PATH}`, TMPDIR: temporary, CURL_ARGS: join(root, 'curl-args'), DOWNLOAD_STATUS: String(downloadStatus) },
       })
-      assert.equal(result.status, downloadStatus || 17, result.stderr)
+      assert.equal(result.status, downloadStatus ? 1 : 17, result.stderr)
+      if (downloadStatus) assert.match(result.stderr, /Check the network/)
       assert.equal(result.stdout, downloadStatus ? '' : args.join('\n') + '\n')
       const curlArgs = readFileSync(join(root, 'curl-args'), 'utf8').trim().split('\n')
       assert.ok(curlArgs.includes(release))
