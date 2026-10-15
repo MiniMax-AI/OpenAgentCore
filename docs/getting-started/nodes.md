@@ -112,18 +112,9 @@ The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation
 ## Remove a node
 
 1. In Web, open **Nodes** and choose **Remove node** on the node's page, or **Remove** in its list row, then **Confirm removal**. Core refuses while the node still holds sandboxes, snapshots or pending cleanup; let them finish, or archive their Sessions. Removal is permanent: the host can come back only as a new node. Removing every node keeps the sandbox configuration.
-2. Web then shows **Clean up the host** with the uninstall command. Run it on the host:
+2. Web then shows **Clean up the host** with the uninstall command. Run it on the host. **Clean up a host** on **Nodes** shows the same command at any time, for a host you removed earlier, after a deployment reset retired its node, or for a host that never registered.
 
-   ```sh
-    (umask 077; d=$(mktemp -d) || exit; trap 'rm -rf "$d"' EXIT; s=; [ "$(id -u)" -eq 0 ] || s=sudo
-   printf '\n==> Downloading node installer...\n' &&
-   curl -fsS --max-time 30 --max-filesize 1048576 'https://core.example/node-install/node-install.pyz' -o "$d/node-install.pyz" &&
-   printf '==> Verifying node installer...\n' &&
-   printf '%s  %s\n' '<installer-sha256>' "$d/node-install.pyz" | sha256sum -c --status &&
-   $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
-   ```
-
-Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. Without the dialog, take the installer's SHA-256 from the `node-install.pyz` line of `https://core.example/node-install/SHA256SUMS`. Uninstall stops and removes the service, the node state, the records, the proxy settings and the Docker network. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added.
+Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. If Core is gone, so is Web: run `sudo python3 ~/.oac/node-bootstrap/<sha256>.pyz --uninstall --installation-id <installation-id> --force` on the host, with the installer the original command left in that directory. The installation ID is in the unit name `oac-node-<installation-id>.service` and in `/etc/oac-node/<installation-id>.json`; Web shows it under **Settings** → **Service and deployment** → **Installation details**. Uninstall stops and removes the service, the node state, the records, the proxy settings and the Docker network. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added.
 
 It never deletes Docker images or volumes. It keeps the Runtime image and prints the `sudo docker image rm` command. For microsandbox, once Core has confirmed the removal, it also deletes the node's store under `/var/lib/oac-node/.oac/m/` (about 1.5 GB), and with it the created account. With `--force` Core isn't asked, so the store is kept and the output prints the command that deletes it (`sudo -u oac-node rm -rf <store>`); microVMs may still use it, so check `pgrep -u oac-node` first, then rerun uninstall to finish removing the account. The output lists what was deleted and what was kept. Uninstall can be rerun until it completes.
 

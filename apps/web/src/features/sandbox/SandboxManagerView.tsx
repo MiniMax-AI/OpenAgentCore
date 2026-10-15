@@ -216,6 +216,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const actions = <>
     {localOnly && hostedNodes ? <span id="add-node-blocked" className="muted">{tCommon("installationNotice.addBlocked")}</span> : null}
     {hostedNodes ? <button className="button outline" type="button" onClick={() => navigate("settings", { id: "sandbox" })}>{tSandboxNav("open")}</button> : null}
+    {consoleConfig.node_installer && snapshot ? <button className="button outline" type="button" onClick={() => setCleanup({ node: {
+      name: null, installationId: snapshot.deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, oldAddress: null,
+    }, open: true })}>{t("Clean up a host")}</button> : null}
     {refreshButton}
     {hostedNodes && snapshot ? <button type="button" className="button primary" disabled={addDisabled} aria-describedby={localOnly ? "add-node-blocked" : undefined} onClick={() => setAdding(true)}><Plus size={16} />{t("Add node")}</button> : null}
   </>;

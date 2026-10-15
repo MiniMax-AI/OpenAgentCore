@@ -163,6 +163,13 @@ test("removes a node after confirmation", async ({ page, request }) => {
   await expect(page.getByRole("heading", { name: "Nodes", level: 1 })).toBeFocused();
 });
 
+test("gives a host's uninstall command at any time from Clean up a host", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
+  await page.getByRole("button", { name: "Clean up a host" }).click();
+  const cleanup = page.getByRole("dialog", { name: "Clean up the host" });
+  await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/--uninstall --installation-id '7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f'\)$/);
+});
+
 test("marks a node on an old Core address in its row, beside each node's limit", async ({ page, request }) => {
   await openConsole(page, request, "nodes", { installation: "stale" });
   const row = page.getByRole("row", { name: /core-01/ });

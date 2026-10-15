@@ -228,7 +228,7 @@ The upgrade leaves the sandbox configuration unchanged: nodes keep serving the s
 
 Three connections require the same protocol version on both sides: Core and its nodes, a node and its microsandbox helper, and Core and the Runtime. The upgrade changes no node host and no running sandbox. A release that changes one of these protocols says so in its release notes and names which of these actions it requires:
 
-- reinstall each node: [remove it](./nodes.md#remove-a-node), clean up the host, then add the host again with **Add node**;
+- reinstall each node: [remove it](./nodes.md#remove-a-node), clean up the host, then add the host again with **Add node**. Core refuses to remove a node that still holds sandboxes, so archive those Sessions before you upgrade;
 - apply the release's Runtime right after the upgrade; sandboxes on earlier generations stop working;
 - [build a new E2B template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template) and select it in [the sandbox configuration](./nodes.md#change-the-sandbox-configuration);
 - reconnect [self-hosted machines](./self-hosted.md#reconnect-an-existing-session).
@@ -253,7 +253,7 @@ All data goes with it: Projects and API keys, Session history, stored credential
 
 Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete.
 
-Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](./nodes.md#remove-a-node). After the installation is gone, their Core is gone: on each node host, run the node uninstall command with `--force`, using `node-install.pyz` from the release that installed them and the installation ID that `oac uninstall` printed. The data volume held the ID, so if you didn't note it, read it from the `oac-node-<installation-id>.service` unit on a node host.
+Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](./nodes.md#remove-a-node). After the installation is gone, their Core is gone: on each node host, run the node uninstall command with `--force`, using the installer the original command left in `~/.oac/node-bootstrap/`, as in [Remove a node](./nodes.md#remove-a-node), and the installation ID that `oac uninstall` printed. If you didn't note it, read it from the node's unit name `oac-node-<installation-id>.service`.
 
 If the installation directory was deleted by hand, its containers keep running and keep the Web port. Find the project and remove it without any installation file:
 
