@@ -111,6 +111,7 @@ def main():
         'INIT_IMAGE': 'ghcr.io/minimax-ai/openagentcore/ingress@sha256:' + '0' * 64,
         'CORE_IMAGE': 'ghcr.io/minimax-ai/openagentcore/core@sha256:' + '0' * 64,
         'WEB_IMAGE': 'ghcr.io/minimax-ai/openagentcore/web@sha256:' + '0' * 64,
+        'DATABASE_IMAGE': render_compose.DATABASE_PIN,
     }))
     override = directory / 'offline-init.json'
     images = build_images(directory, project.removeprefix('oac-smoke-'), revision, source_time)

@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: b3802e02538475497cc07acc8b5a20646cb555e3f77bc03e16eef4f82adac456
+source_hash: dc50c81c07f235146acb81aa965c6d9814dc3e57e43fd9769f98713eb008da4f
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
@@ -16,7 +16,7 @@ Windows 上 `irm … | iex` 无法传参，默认执行策略也会拦截下载�
 
 ## Docker Compose 与托管平台 {#docker-compose-and-hosting-platforms}
 
-在任一[支持的 Core 主机](install.md#prerequisites)上使用发行版中的 `compose.yaml`。发行流程会在 [Compose 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml)中固定初始化、Core 和 Web 镜像及源码版本。PostgreSQL 使用 `postgres:16-alpine`。它会启动 PostgreSQL、Core 和 Web。Web 把 `/v1` 和 `/api/v1` 转发到 Core。数据保存在 Docker 命名卷中。一次性初始化服务会在该目录中生成随机机密信息并准备节点安装程序；Core 启动时执行数据库迁移。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
+在任一[支持的 Core 主机](install.md#prerequisites)上使用发行版中的 `compose.yaml`。发行流程会固定初始化、Core、Web 和 PostgreSQL 镜像及源码版本。PostgreSQL 16 使用官方镜像，按摘要固定，并与其他镜像一起镜像到 GHCR。它会启动 PostgreSQL、Core 和 Web。Web 把 `/v1` 和 `/api/v1` 转发到 Core。数据保存在 Docker 命名卷中。一次性初始化服务会在该目录中生成随机机密信息并准备节点安装程序；Core 启动时执行数据库迁移。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
 
 进行本地试用时，请将发行版的 `compose.yaml` 下载到一个空目录，然后运行：
 
@@ -136,6 +136,6 @@ http://:8443 {
 
 ## 离线主机 {#offline-hosts}
 
-安装程序使用当前 shell 的网络设置（包括 `HTTPS_PROXY`）从 GitHub Releases 下载发行文件。Docker 通过其守护进程拉取镜像，守护进程不读取 shell 的代理变量：如果只能经代理或镜像加速器访问容器注册表，请配置[守护进程代理](https://docs.docker.com/engine/daemon/proxy/)或[镜像加速器](https://docs.docker.com/docker-hub/image-library/mirror/)，然后重新运行安装程序。
+安装程序使用当前 shell 的网络设置（包括 `HTTPS_PROXY`）从 GitHub Releases 下载发行文件。Docker 通过其守护进程拉取镜像，守护进程不读取 shell 的代理变量。所有镜像（包括 PostgreSQL）都来自 GHCR（`ghcr.io`），不需要 Docker Hub。如果只能经代理或镜像加速器访问 GHCR，请配置[守护进程代理](https://docs.docker.com/engine/daemon/proxy/)或[镜像加速器](https://docs.docker.com/docker-hub/image-library/mirror/)，然后重新运行安装程序。
 
 无法访问这些地址的 Linux amd64 主机可使用发行资产 `oac-<commit>-linux-amd64-offline.tar.gz` 安装，其中包含所有镜像和节点制品。将其复制到该主机并解压，然后用 Python 3.9 或更高版本运行其中的 `install.py`；[源码安装](../development.md#install-a-checkout-without-publishing-a-release)介绍其选项。

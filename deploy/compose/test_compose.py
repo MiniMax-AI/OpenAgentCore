@@ -21,6 +21,7 @@ def rendered_compose(directory):
         'INIT_IMAGE': 'ghcr.io/minimax-ai/openagentcore/ingress@sha256:' + 'e' * 64,
         'CORE_IMAGE': 'ghcr.io/minimax-ai/openagentcore/core@sha256:' + 'e' * 64,
         'WEB_IMAGE': 'ghcr.io/minimax-ai/openagentcore/web@sha256:' + 'e' * 64,
+        'DATABASE_IMAGE': 'ghcr.io/minimax-ai/openagentcore/postgres@sha256:' + 'f' * 64,
     })
     path = Path(directory) / 'compose.yaml'
     path.write_text(text)
@@ -62,7 +63,7 @@ class ComposeTests(unittest.TestCase):
             self.assertNotIn('build', service)
             if service is not services['web']:
                 self.assertNotIn('ports', service)
-            self.assertTrue(service['image'] == 'postgres:16-alpine' or service['image'].endswith('@sha256:' + 'e' * 64))
+            self.assertTrue(service['image'].startswith('ghcr.io/'))
             for volume in service.get('volumes', []):
                 self.assertNotIn('docker.sock', json.dumps(volume))
                 self.assertEqual(volume['type'], 'volume')
@@ -79,6 +80,10 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(services['init']['environment']['OAC_REVISION'], 'd' * 40)
         for name in ('OAC_EXECUTION_CONCURRENCY', 'OAC_DEFAULT_HARNESS', 'OAC_HARNESSES', 'OAC_WRITE_AUDIT_RETENTION', 'OAC_LOG_LEVEL'):
             self.assertEqual(services['core']['environment'][name], '', name)
+
+    def test_database_stays_on_postgresql_16_pinned_by_digest(self):
+        # An upgrade keeps the data volume only within one PostgreSQL major version.
+        self.assertRegex(render_compose.DATABASE_PIN, r'^postgres:16-alpine@sha256:[0-9a-f]{64}$')
 
     def test_public_url_can_be_configured_after_initial_startup(self):
         for value, port, expected in ((None, None, 'http://localhost:8080'), ('', None, 'http://localhost:8080'),

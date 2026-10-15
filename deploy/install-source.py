@@ -80,7 +80,7 @@ def install(bundle, destination, host, port, public_url, upgrade):
                 (stage / '.env').write_text(f"COMPOSE_PROJECT_NAME=oac-{uuid.uuid4().hex[:10]}\nOAC_HOST='{host}'\nOAC_WEB_PORT='{port}'\nOAC_PUBLIC_URL='{public_url}'\n")
                 os.chmod(stage / '.env', 0o600)
             template = (bundle / 'compose.yaml.template').read_text().replace('__OAC_REVISION__', revision).replace('__OAC_INIT_IMAGE__', images['ingress'])
-            for name in ('core', 'web'):
+            for name in ('core', 'web', 'database'):
                 template = template.replace('__OAC_' + name.upper() + '_IMAGE__', images[name])
             (stage / 'compose.yaml').write_text(template)
             # The installer owns only the service images and Web's payload bind; other entries are the operator's.

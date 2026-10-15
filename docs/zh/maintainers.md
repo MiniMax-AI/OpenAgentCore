@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 06be9f5ebff84ac8d7ec419e965345d0ac7d0064f8c79f35c4c025f73b9b82dd
+source_hash: e2ebdce087ab0890f1c28871b09e7301d8efead9a2174d22469e9c8f6e9b2b77
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -37,7 +37,7 @@ make build-core-distribution
 | `CORE_DISTRIBUTION_BUILD_DIR` | `~/.oac` 下的输出目录。默认值：`~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker 构建网络：`default`、`host` 或 `none` |
 | `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | 已缓存的 microsandbox 发布归档。默认值：`~/.oac/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz`，缺失时下载 |
-| `CORE_DISTRIBUTION_DATABASE_IMAGE` | PostgreSQL 16 镜像；默认值通过其 linux/amd64 清单摘要固定 |
+| `CORE_DISTRIBUTION_DATABASE_IMAGE` | PostgreSQL 16 镜像；默认值为 `deploy/compose/database-image.txt` 中索引的 linux/amd64 清单 |
 
 构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交、其提交时间（`source_time`，用于在升级时为发布版本排序）和源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装器在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装器资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
 
@@ -142,7 +142,7 @@ git push origin v1.2.3
 
 ### 容器注册表 {#container-registry}
 
-版本发布和手动 `build-<full SHA>` 草稿使用 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime` 或 `ingress`。Core、Web 和 ingress 索引包含 Linux amd64 和 arm64 镜像，Runtime 包含 Linux amd64。各平台镜像使用 `<version>-<architecture>` 标签，从发行归档加载。已有版本标签必须与发行镜像及平台集合一致。发布器校验全部版本索引后，才为稳定版更新 `latest`；预发布版和草稿保持 `latest` 不变。PostgreSQL 使用上游镜像。容器标签中的 SemVer 构建元数据用 `_` 替换 `+`，版本字符串上限为 128 个字符。镜像校验后，发布器上传该版本的 `compose.yaml` 和校验和清单。Compose 用对应发行版的索引摘要固定 Core、Web 和 ingress，初始化时检查其构建版本与 Compose 版本一致。
+版本发布和手动 `build-<full SHA>` 草稿使用 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime`、`ingress` 或 `postgres`。Core、Web 和 ingress 索引包含 Linux amd64 和 arm64 镜像，Runtime 包含 Linux amd64。各平台镜像使用 `<version>-<architecture>` 标签，从发行归档加载。已有版本标签必须与发行镜像及平台集合一致。发布器校验全部版本索引后，才为稳定版更新 `latest`；预发布版和草稿保持 `latest` 不变。`postgres` 是固定在 `deploy/compose/database-image.txt` 中的官方 PostgreSQL 索引，连同全部平台和原摘要一并复制；注册表中的标签若指向其他摘要，发布器会拒绝。要升级 PostgreSQL，请把该文件改为同一主版本的新摘要，模板、离线包和镜像复制都读取这一处。容器标签中的 SemVer 构建元数据用 `_` 替换 `+`，版本字符串上限为 128 个字符。镜像校验后，发布器上传该版本的 `compose.yaml` 和校验和清单。Compose 用对应发行版的索引摘要固定 Core、Web、ingress 和 PostgreSQL，初始化时检查其构建版本与 Compose 版本一致。
 
 合并的构建/发布作业使用具有 `packages: write` 权限的 `GITHUB_TOKEN`。首次发布时，GitHub 会将每个容器软件包创建为私有：软件包管理员必须先在各自的软件包设置中将全部四个软件包改为 **Public**，用户才能匿名拉取。请参阅 [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。更改可见性后，请验证未认证拉取。仅更改仓库可见性并不会使新的容器软件包变为公开。
 

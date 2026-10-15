@@ -1,4 +1,4 @@
-# Release template. The publisher pins the initialization image to this release.
+# Release template. The publisher pins the initialization image to this release and PostgreSQL to its mirrored upstream digest.
 # Release images are pinned; OAC_IMAGE_* selects another reference.
 # Docker owns data permissions on every host platform.
 x-ingress-image: &ingress-image ${OAC_IMAGE_INGRESS:-__OAC_INIT_IMAGE__}
@@ -17,7 +17,7 @@ services:
         volume: {nocopy: true}
 
   database:
-    image: postgres:16-alpine
+    image: __OAC_DATABASE_IMAGE__
     restart: unless-stopped
     depends_on:
       init: {condition: service_completed_successfully}

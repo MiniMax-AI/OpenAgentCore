@@ -108,6 +108,27 @@ def registry_image(reference):
     return manifest, selected
 
 
+def registry_index_digest(reference):
+    index = json.loads(subprocess.check_output(["docker", "buildx", "imagetools", "inspect", reference,
+                                                "--format", "{{json .Manifest}}"], text=True))
+    digest = index.get("digest", "")
+    if not distribution.DIGEST.fullmatch(digest):
+        raise ValueError("Invalid registry index digest")
+    return digest
+
+
+def mirror_database(repository, image_tag):
+    """Copy the pinned official PostgreSQL index to GHCR, keeping its digest and every platform."""
+    source = render_compose.DATABASE_PIN
+    digest = source.rsplit("@", 1)[1]
+    reference = "ghcr.io/" + repository.lower() + "/postgres:" + image_tag
+    if registry_manifest(reference) is None:
+        subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", reference, source], check=True)
+    if registry_index_digest(reference) != digest:
+        raise ValueError("Registry tag names a different PostgreSQL image: " + reference)
+    return {"tag": reference, "digest": reference.rsplit(":", 1)[0] + "@" + digest}
+
+
 def publish_images(assets, repository, revision, tag, floating_latest=False):
     """Verify both architectures before publishing immutable platform tags and indexes."""
     image_tag = tag.replace("+", "_")
@@ -183,13 +204,9 @@ def publish_images(assets, repository, revision, tag, floating_latest=False):
             if registry_manifest(reference) is None:
                 subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", reference, *sources], check=True)
             verify_index(reference, registry_manifest(reference), expected)
-            index = json.loads(subprocess.check_output(["docker", "buildx", "imagetools", "inspect", reference,
-                                                        "--format", "{{json .Manifest}}"], text=True))
-            digest = index.get("digest", "")
-            if not distribution.DIGEST.fullmatch(digest):
-                raise ValueError("Invalid registry index digest")
-            pinned = reference.rsplit(":", 1)[0] + "@" + digest
+            pinned = reference.rsplit(":", 1)[0] + "@" + registry_index_digest(reference)
             result[name] = {"tag": reference, "digest": pinned}
+        database = mirror_database(repository, image_tag)
         # Advance floating tags only after all version indexes are verified.
         if floating_latest:
             for name, entry in result.items():
@@ -197,6 +214,7 @@ def publish_images(assets, repository, revision, tag, floating_latest=False):
                 expected = {arch: value[1] for (n, arch), value in entries.items() if n == name}
                 subprocess.run(["docker", "buildx", "imagetools", "create", "--tag", latest, entry["digest"]], check=True)
                 verify_index(latest, registry_manifest(latest), expected)
+        result["database"] = database
         return result
 
 
@@ -304,6 +322,7 @@ def publish(assets, repository, revision, tag, mode):
         "INIT_IMAGE": images["ingress"]["digest"],
         "CORE_IMAGE": images["core"]["digest"],
         "WEB_IMAGE": images["web"]["digest"],
+        "DATABASE_IMAGE": images["database"]["digest"],
     })
     expected.update({path.name: path.stat().st_size for path in compose_files})
     parallel_each(upload, compose_files)

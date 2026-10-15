@@ -70,7 +70,7 @@ RULES = (
     (("packages/claude-sdk-adapter/", "packages/mcode-harness/"), WEB, ("harness", "native", "backend", "distribution")),
     (("packages/tsconfig/",), (".json",), ("harness", "native")),
     (("deploy/node/", "scripts/acceptance/"), (".py", ".json", ".sh"), ("distribution",)),
-    (("deploy/compose/",), (".yaml", ".toml", ".json"), ("distribution", "compose")),
+    (("deploy/compose/",), (".yaml", ".toml", ".json", ".txt"), ("distribution", "compose")),
     (("scripts/compose-smoke.py", "scripts/render-compose.py", "deploy/compose/test_compose.py"), (".py",), ("distribution", "compose")),
     (("deploy/install.sh", "deploy/install-source.py", "deploy/test_install.py", "scripts/publish-core-release.",
       "scripts/core-distribution-manifest.", "scripts/build-core-distribution.sh",

@@ -14,7 +14,7 @@ On Windows, `irm … | iex` cannot pass flags and the default execution policy b
 
 ## Docker Compose and hosting platforms
 
-Use the `compose.yaml` from a release on any [supported Core host](./install.md#prerequisites). The release pins its initialization, Core and Web images and source revision in the [Compose template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/compose/compose.yaml). PostgreSQL uses `postgres:16-alpine`. It starts PostgreSQL, Core and Web. Web forwards `/v1` and `/api/v1` to Core. Data lives in a named Docker volume. The one-time initialization service generates random secrets there and prepares the node installer; Core applies database migrations when it starts. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
+Use the `compose.yaml` from a release on any [supported Core host](./install.md#prerequisites). The release pins its initialization, Core, Web and PostgreSQL images and source revision. PostgreSQL 16 is the official image, pinned by digest and mirrored to GHCR with the other images. It starts PostgreSQL, Core and Web. Web forwards `/v1` and `/api/v1` to Core. Data lives in a named Docker volume. The one-time initialization service generates random secrets there and prepares the node installer; Core applies database migrations when it starts. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
 
 For a local trial, download `compose.yaml` from a release into an empty directory, then run:
 
@@ -132,6 +132,6 @@ The address changes whenever `cloudflared` restarts; nodes bound to the old addr
 
 ## Offline hosts
 
-The installer downloads release files from GitHub Releases with this shell's network settings, including `HTTPS_PROXY`. Docker pulls the images through its daemon, which does not read the shell's proxy variables: when the registries are reachable only through a proxy or mirror, configure [the daemon's proxy](https://docs.docker.com/engine/daemon/proxy/) or a [registry mirror](https://docs.docker.com/docker-hub/image-library/mirror/), then rerun the installer.
+The installer downloads release files from GitHub Releases with this shell's network settings, including `HTTPS_PROXY`. Docker pulls the images through its daemon, which does not read the shell's proxy variables. Every image, PostgreSQL included, comes from GHCR (`ghcr.io`); Docker Hub is not needed. When GHCR is reachable only through a proxy or mirror, configure [the daemon's proxy](https://docs.docker.com/engine/daemon/proxy/) or a [registry mirror](https://docs.docker.com/docker-hub/image-library/mirror/), then rerun the installer.
 
 A Linux amd64 host without that access installs from the release asset `oac-<commit>-linux-amd64-offline.tar.gz`, which contains every image and node artifact. Copy it to the host, extract it and run its `install.py` with Python 3.9 or newer; [source installation](../development.md#install-a-checkout-without-publishing-a-release) describes its options.
