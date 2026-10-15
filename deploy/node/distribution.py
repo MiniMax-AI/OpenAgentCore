@@ -119,13 +119,6 @@ class ArtifactRedirect(urllib.request.HTTPRedirectHandler):
         return urllib.request.Request(newurl, headers=headers, method=request.get_method(), unverifiable=True)
 
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Bootstrap metadata and credentials stay on the configured console origin."""
-    def redirect_request(self, request, fp, code, message, headers, newurl):
-        raise ArtifactError('Metadata downloads do not follow redirects; check the console URL '
-                                'and the reverse proxy in front of it')
-
-
 def checked_path(path):
     path = Path(path)
     if not path.is_absolute() or path.resolve() != path:
@@ -309,28 +302,11 @@ def runtime_archive(manifest, cache_root, replace=False):
     return target
 
 
-def load_manifest(source_url=None, offline_root=None):
-    """Read the matched public manifest without transmitting installation credentials."""
+def load_manifest(offline_root):
+    """Read the matched public manifest from an offline bundle."""
     def read(name):
-        if offline_root is not None:
-            with (Path(offline_root) / name).open('rb') as stream:
-                data = stream.read(1024 * 1024 + 1)
-        else:
-            if not source_url:
-                raise DistributionError('A Core source URL or offline bundle is required')
-            url = safe_url(source_url.rstrip('/') + '/node-install/' + name)
-            for attempt in range(3):
-                try:
-                    with urllib.request.build_opener(NoRedirect()).open(url, timeout=30) as stream:
-                        data = stream.read(1024 * 1024 + 1)
-                    break
-                except urllib.error.HTTPError as error:
-                    if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
-                        raise DistributionError(f'Distribution metadata unavailable (HTTP {error.code}); check the Core source URL') from None
-                except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
-                    if attempt == 2:
-                        raise DistributionError('Cannot reach distribution metadata; check network and TLS trust, then retry') from None
-                time.sleep(attempt + 1)
+        with (Path(offline_root) / name).open('rb') as stream:
+            data = stream.read(1024 * 1024 + 1)
         if len(data) > 1024 * 1024:
             raise DistributionError('Distribution metadata exceeds size limit')
         return data
@@ -348,8 +324,7 @@ def load_manifest(source_url=None, offline_root=None):
         if (manifest.get('platform') != 'linux/amd64'
                 or not re.fullmatch(r'[0-9a-f]{40}', manifest.get('source_commit', ''))):
             raise DistributionError('Unsupported distribution platform or revision')
-        # Resolve artifacts through the console, which selects local bytes or a pinned HTTPS release.
-        manifest['artifact_base_url'] = source_url.rstrip('/') + '/node-install/artifacts' if source_url and offline_root is None else ''
+        manifest['artifact_base_url'] = ''
         return manifest
     except (ValueError, TypeError, AttributeError):
         raise DistributionError('Invalid distribution metadata') from None

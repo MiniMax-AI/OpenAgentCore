@@ -365,6 +365,7 @@ def drop_runtime_archives(root):
     """The imported image is the cache; the archives only hold disk."""
     for name in ("images/runtime.tar", "images/runtime.tar.gz"):
         (root / name).unlink(missing_ok=True)
+        distribution.partial_path(root / name).unlink(missing_ok=True)
 
 
 def micro_env(root, args):
@@ -881,14 +882,14 @@ def host_checks():
 
 
 def root_file(path, content, replace=False):
-    """Write a root-owned 0644 file, or accept an identical existing one (or replace it)."""
+    """Write a root-owned 0644 file, or accept an identical existing one (or replace it); True when it wrote."""
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise InstallError(str(path) + " must be a regular file")
     if path.exists():
         if path.stat().st_uid != os.geteuid():
             raise InstallError(str(path) + " must be owned by root; preserve it and inspect the node")
         if path.read_text() == content:
-            return
+            return False
         if not replace:
             raise InstallError(str(path) + " differs from this installer's version; preserve it and inspect the node")
     if not path.parent.exists():
@@ -900,6 +901,7 @@ def root_file(path, content, replace=False):
             stream.write(content)
         os.chmod(temporary, 0o644)
         os.replace(temporary, path)
+    return True
 
 
 def read_root_json(path):
@@ -1139,12 +1141,24 @@ def node_record(installation_id):
     return record
 
 
+def refresh_service(installation_id, root, provider, proxy):
+    """Write the root-owned unit and proxy settings, reload systemd and restart a running service that changed."""
+    unit, environment = SYSTEM_UNITS / unit_name(installation_id), SYSTEM_RECORDS / (installation_id + ".env")
+    changed = root_file(unit, system_unit(root, provider, environment), replace=True)
+    changed = write_service_environment(environment, proxy) or changed
+    checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
+    if changed:  # A running service reads its unit and environment only when it starts; a stopped one is left to enable.
+        checked(["systemctl", "try-restart", unit.name], "Cannot restart the node service with the new settings. Inspect sudo journalctl -u " + unit.name)
+
+
 def install_system(args, token):
     """Sudo mode: prepare the host, then run the node as a root-owned system service."""
     os.environ["PATH"] = SAFE_PATH
     host_checks()
     # Checks that change nothing run first, so a refusal leaves no trace, not even a lock.
-    record = node_record(args.installation_id)
+    recorded = node_record(args.installation_id)
+    # A record still marked pending belongs to an attempt that never registered; it pins nothing.
+    record = None if recorded and recorded.get("pending") else recorded
     proxy = service_environment(os.environ)
     configuration = None
     if record is None:
@@ -1162,7 +1176,7 @@ def install_system(args, token):
         other_node(args, provider)
         host_capacity(provider, configuration["specification"]["resources"], details)
     with host_lock():
-        if node_record(args.installation_id) != record or (record is None and [i for i in node_records() if i != args.installation_id]):
+        if node_record(args.installation_id) != recorded or (record is None and [i for i in node_records() if i != args.installation_id]):
             raise InstallError("Another node installation changed this host meanwhile; rerun the command." + NOTHING_CHANGED)
         account, account_record = account_plan()
         helper_archive = node_generations.helper_archive(args, sys.modules[__name__])
@@ -1172,18 +1186,18 @@ def install_system(args, token):
         child_docker_config()
         root = SERVICE_HOME / ".oac/nodes" / args.installation_id
         unit = SYSTEM_UNITS / unit_name(args.installation_id)
-        root_file(SYSTEM_RECORDS / (args.installation_id + ".json"),
-                  json_text({"format": 1, "installation_id": args.installation_id, "provider": provider,
-                             "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}))
+        entry = {"format": 1, "installation_id": args.installation_id, "provider": provider,
+                 "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}
+        if record is None:
+            root_file(SYSTEM_RECORDS / (args.installation_id + ".json"), json_text(dict(entry, pending=True)), replace=True)
+        else:  # A registered node's service takes the new proxy even when the node step stops.
+            refresh_service(args.installation_id, root, provider, proxy)
         args.system, args.provider = True, provider
         run_as(account, prepare_service_node, args, token, helper_archive)
-        environment = SYSTEM_RECORDS / (args.installation_id + ".env")
-        root_file(unit, system_unit(root, provider, environment))
-        changed = write_service_environment(environment, proxy)
+        if record is None:
+            root_file(SYSTEM_RECORDS / (args.installation_id + ".json"), json_text(entry), replace=True)
+            refresh_service(args.installation_id, root, provider, proxy)
         install_display.step("Starting the node service")
-        checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
-        if changed:  # A running service reads its environment only when it starts; a stopped one is left to enable.
-            checked(["systemctl", "try-restart", unit.name], "Cannot restart the node service with the new proxy settings. Inspect sudo journalctl -u " + unit.name)
         checked(["systemctl", "enable", "--now", unit.name], "Cannot start the node service; its identity is kept. Inspect sudo journalctl -u " + unit.name)
         checked(["systemctl", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect sudo journalctl -u " + unit.name)
         install_display.step("Waiting for Core connection and provider readiness")
@@ -1216,14 +1230,20 @@ def no_links(path):
         raise InstallError(str(path) + " is reached through a symbolic link; inspect and remove it by hand." + NOTHING_CHANGED)
 
 
+def has_node_state(root):
+    """Whether the node ever registered: only then does Core know it."""
+    return (root / "registered.json").exists() or (root / "state/node/identity.json").exists()
+
+
 def confirm_removed(root, core_url, force):
     """Continue only once Core rejects the node's credential, or when it never registered.
 
     Runs as the node's own user. The Core address comes from the caller: in sudo mode
     the root-owned record, never a file the service user can write."""
     no_links(root)
+    no_links(micro_home(root.name))  # Refused here, before anything is removed, so "Nothing was changed" holds.
     identity_file = root / "state/node/identity.json"
-    if not (root / "registered.json").exists() and not identity_file.exists():
+    if not has_node_state(root):
         return
     if force:
         print("Skipping the Core check (--force).", flush=True)
@@ -1271,14 +1291,17 @@ def release_docker_network(installation_id):
     checked(list(DOCKER) + ["network", "rm", network], "Cannot remove Docker network " + network)
 
 
-def remove_node_files(root, installation_id, delete_store):
+def remove_node_files(root, installation_id, confirmed):
     """Delete the node's state directory and, once Core confirmed the removal, its microsandbox store; keep the Runtime image.
+
+    A node without registered state was never confirmed, so its store stays.
 
     Runs as the node's own user, so a link it planted can never reach another user's files."""
     no_links(root)
     provider = private_json(root / "provider.json") or {}
     image = (provider.get("native") or {}).get("image")
     runtime_home = micro_home(installation_id)
+    delete_store = confirmed and has_node_state(root)
     if root.exists():
         shutil.rmtree(root)
     # The service user can write provider.json; print only what an image ID can be.

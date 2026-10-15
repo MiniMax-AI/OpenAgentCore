@@ -193,7 +193,7 @@ A registered node that can't connect to Core says why in its [log](#logs): `sand
 | --- | --- |
 | `The enrollment command expired or was already used` | Generate a new command in Web and run it within an hour |
 | `Core rejected the node configuration read (HTTP …)` | Check the Core URL and the reverse proxy in front of it, then rerun |
-| `Not enough disk space under …` or `The disk is full` | Free the space it names, then rerun; nothing was downloaded |
+| `Not enough disk space under …` or `The disk is full` | Free the space it names, then rerun; the download resumes |
 | This host's node program differs from the one this console serves | Core was upgraded after the node was added. Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |
 | Another node installation is running, or this node is preparing a new sandbox configuration | Retry once **Nodes** no longer shows **Preparing target** |
 | A sandbox provider check failed before registering, such as `This host lacks a capability …` | Fix what it names (see [Readiness codes](#readiness-codes)) and rerun; the token was not used |

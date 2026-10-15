@@ -30,6 +30,13 @@ REAL_FETCH = installer.fetch
 
 
 
+def refuse(error):
+    """A service-user step that stops with this error."""
+    def prepare_service_node(*arguments):
+        raise error
+    return prepare_service_node
+
+
 def ended(pid, wait=5):
     """The process is gone or a zombie waiting for its new parent to reap it."""
     deadline = time.monotonic() + wait
@@ -918,6 +925,62 @@ class NodeInstallTests(unittest.TestCase):
         self.assertIn(["systemctl", "try-restart", unit], [call for call, _ in self.calls])
         self.uninstall_output(False)
         self.assertFalse(environment.exists())
+
+    def test_rerun_applies_the_proxy_even_when_the_node_step_stops(self):
+        system = self.sudo_host()
+        unit = "oac-node-" + self.args.installation_id + ".service"
+        with mock.patch.dict(os.environ, {"https_proxy": "http://proxy-one.invalid:3128", "http_proxy": ""}):
+            installer.install_system(self.args, "synthetic-once-token")
+        self.calls.clear()
+        stopped = node_spec.SpecificationError("This node is registered and prepares the changed sandbox configuration itself")
+        with mock.patch.dict(os.environ, {"https_proxy": "http://proxy-two.invalid:3128", "http_proxy": ""}), \
+                mock.patch.object(installer, "prepare_service_node", new=refuse(stopped)), \
+                self.assertRaisesRegex(node_spec.SpecificationError, "prepares the changed"):
+            installer.install_system(self.args, "")
+        self.assertIn("proxy-two", (system / "etc" / (self.args.installation_id + ".env")).read_text())
+        self.assertIn(["systemctl", "try-restart", unit], [call for call, _ in self.calls])
+
+    def test_rerun_replaces_a_changed_unit_and_restarts(self):
+        system = self.sudo_host()
+        unit = system / "units" / ("oac-node-" + self.args.installation_id + ".service")
+        installer.install_system(self.args, "synthetic-once-token")
+        expected = unit.read_text()
+        unit.write_text(expected + "# older template\n")
+        self.calls.clear()
+        installer.install_system(self.args, "")
+        self.assertEqual(unit.read_text(), expected)
+        self.assertIn(["systemctl", "try-restart", unit.name], [call for call, _ in self.calls])
+
+    def test_unregistered_attempt_pins_neither_provider_nor_core_address(self):
+        system = self.sudo_host()
+        with mock.patch.object(installer, "prepare_service_node", new=refuse(installer.InstallError("registration failed"))), \
+                self.assertRaisesRegex(installer.InstallError, "registration failed"):
+            installer.install_system(self.args, "synthetic-once-token")
+        self.args.core_url = "https://moved.example:24443"
+        installer.install_system(self.args, "synthetic-once-token")
+        record = json.loads((system / "etc" / (self.args.installation_id + ".json")).read_text())
+        self.assertEqual((record["core_url"], "pending" in record), ("https://moved.example:24443", False))
+
+    def test_uninstall_keeps_the_store_when_core_was_never_asked(self):
+        self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        store = self.home / "m"
+        store.mkdir()
+        (store / "oac-installation.json").write_text(json.dumps({"installation_id": self.args.installation_id}))
+        shutil.rmtree(self.root)
+        self.assertIn("Kept the microsandbox store " + str(store), self.uninstall_output(False))
+        self.assertTrue(store.is_dir())
+
+    def test_uninstall_refuses_a_linked_store_before_removing_anything(self):
+        system = self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        elsewhere = self.home / "elsewhere"
+        elsewhere.mkdir()
+        (self.home / "m").symlink_to(elsewhere, target_is_directory=True)
+        with self.assertRaisesRegex(installer.InstallError, "symbolic link.*Nothing was changed"):
+            self.uninstall_output(False)
+        self.assertTrue((self.root / "registered.json").exists())
+        self.assertTrue((system / "units" / ("oac-node-" + self.args.installation_id + ".service")).exists())
 
     def test_uninstall_keeps_a_store_it_did_not_create(self):
         self.sudo_host()

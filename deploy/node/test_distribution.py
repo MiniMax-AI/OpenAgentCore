@@ -239,14 +239,12 @@ with distribution.temporary_file(Path(sys.argv[1])) as partial:
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'link')
 
 
-    def test_artifact_downgrades_and_metadata_redirects_are_refused(self):
+    def test_artifact_downgrades_are_refused(self):
         self.status = 302
         self.redirect_target = 'http://127.0.0.1:1'
         with self.assertRaisesRegex(distribution.DistributionError, 'HTTPS'):
             distribution.obtain_artifact(self.manifest, 'native/bin/node', self.root / 'node')
-        with self.assertRaisesRegex(distribution.DistributionError, 'do not follow redirects'):
-            distribution.load_manifest(source_url=f'http://127.0.0.1:{self.server.server_port}')
-        self.assertEqual(len(self.requests), 2)
+        self.assertEqual(len(self.requests), 1)
         self.assertEqual(list(self.root.iterdir()), [])
 
 
@@ -386,11 +384,6 @@ class ManifestSourceTests(unittest.TestCase):
             (Path(bundle) / 'manifest.json').write_bytes(manifest)
             (Path(bundle) / 'SHA256SUMS').write_bytes(sums)
             self.assertEqual(distribution.load_manifest(offline_root=bundle)['artifact_base_url'], '')
-        files = {'SHA256SUMS': sums, 'manifest.json': manifest}
-        opener = Mock(open=lambda url, timeout: io.BytesIO(files[url.rsplit('/', 1)[1]]))
-        with patch.object(distribution.urllib.request, 'build_opener', return_value=opener):
-            loaded = distribution.load_manifest(source_url='https://console.example')
-        self.assertEqual(loaded['artifact_base_url'], 'https://console.example/node-install/artifacts')
 
 
 if __name__ == '__main__':

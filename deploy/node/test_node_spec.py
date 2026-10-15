@@ -61,12 +61,10 @@ class SpecificationTests(unittest.TestCase):
         with self.assertRaisesRegex(node_spec.SpecificationError, "public URL changed"):
             node_spec.fetch(self.args, "once", None, mock.Mock(return_value=self.response()))
 
-    def test_retired_node_gets_a_runnable_uninstall_command(self):
+    def test_retired_node_points_to_clean_up_a_host(self):
         rejected = urllib.error.HTTPError("https://core.example", 401, "", {}, None)
-        with mock.patch.object(node_spec.sys, "argv", ["/home/me/.oac/node-bootstrap/abc.pyz"]):
-            with self.assertRaises(node_spec.SpecificationError) as raised:
-                node_spec.fetch(self.args, "", self.retained, mock.Mock(side_effect=rejected))
-        self.assertIn("sudo python3 /home/me/.oac/node-bootstrap/abc.pyz --uninstall --installation-id " + self.args.installation_id, str(raised.exception))
+        with self.assertRaisesRegex(node_spec.SpecificationError, "Clean up a host on the Nodes page"):
+            node_spec.fetch(self.args, "", self.retained, mock.Mock(side_effect=rejected))
 
     def test_failures_name_their_cause(self):
         for failure, message in ((urllib.error.HTTPError("https://core.example", 404, "", {}, None), "route /api/v1"),

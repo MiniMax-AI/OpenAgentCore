@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 145fda7f31f290b1d592a5796ed093f89cb2a12d6de51b919fa8570622aee850
+source_hash: 0933f59c941d62b9b8a23c31c50f8cbc72f7b013c1103363366c8b075a286d98
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -195,7 +195,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 | --- | --- |
 | `The enrollment command expired or was already used` | 在 Web 生成新命令并在 1 小时内执行 |
 | `Core rejected the node configuration read (HTTP …)` | 检查 Core URL 及其前面的反向代理后重试 |
-| `Not enough disk space under …` 或 `The disk is full` | 按提示释放空间后重试；尚未下载任何内容 |
+| `Not enough disk space under …` 或 `The disk is full` | 按提示释放空间后重试，下载会继续 |
 | This host's node program differs from the one this console serves | 节点添加后 Core 已升级。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
 | Another node installation is running, or this node is preparing a new sandbox configuration | 待 **节点** 不再显示 **正在准备目标配置** 后重试 |
 | 注册前的沙箱提供商检查失败，例如 `This host lacks a capability …` | 修复提示的问题（参阅[就绪状态码](#readiness-codes)）后重试；令牌未被使用 |

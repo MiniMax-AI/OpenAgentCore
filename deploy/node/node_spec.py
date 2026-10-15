@@ -3,8 +3,6 @@ import hashlib
 import http.client
 import json
 import re
-import shlex
-import sys
 import urllib.error
 import urllib.request
 import uuid
@@ -145,8 +143,8 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
     except urllib.error.HTTPError as error:
         if error.code == 401 and retained is not None and not allow_enrollment:
             raise SpecificationError("Core no longer accepts this node: it was removed on the Nodes page, or a sandbox "
-                                     "deployment change retired it. Uninstall it with: sudo python3 " + shlex.quote(sys.argv[0]) +
-                                     " --uninstall --installation-id " + shlex.quote(args.installation_id) + ", then add the host with a new command.") from None
+                                     "deployment change retired it. Uninstall it with the command from Clean up a host on the Nodes page, "
+                                     "then add the host with a new command.") from None
         if error.code == 404:
             raise SpecificationError("Core node configuration was not found (HTTP 404); route /api/v1 on the Core origin directly to Core, not to Web") from None
         if error.code == 409:

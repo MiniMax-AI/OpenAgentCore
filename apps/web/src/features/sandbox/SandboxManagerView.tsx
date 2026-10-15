@@ -185,8 +185,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   </ConfirmDialog>;
   const cleanupDialog = <NodeCleanupDialog cleanup={cleanup?.node ?? null} open={cleanup?.open ?? false} onClose={() => {
     setCleanup((current) => current && { ...current, open: false });
-    // The removed node's button is gone, so focus returns to the page, after the dialog restores its own.
-    window.requestAnimationFrame(() => heading.current?.focus());
+    // After a removal the node's button is gone, so focus returns to the page, after the dialog restores its own.
+    // Clean up a host keeps its button, which the dialog restores focus to.
+    if (cleanup?.node.name !== null) window.requestAnimationFrame(() => heading.current?.focus());
   }} />;
   if (params.id && hostedNodes) {
     const back = () => goBack("nodes");
