@@ -61,7 +61,7 @@ No administrator privileges or Docker are needed. The Unix download command also
 
 In Web, open the Session and copy the command under **Connect a host**.
 
-Keep the command private: it carries a short-lived [installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. The command passes the grant in the `OAC_INSTALL_GRANT` environment variable, never as an argument, and starts with a space so shells that skip space-prefixed commands leave it out of history. When it has expired, read the Session again or copy a fresh command from Web.
+Keep the command private: it carries a short-lived [installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. The command passes the grant in the `OAC_INSTALL_GRANT` environment variable, never as an argument. On Linux and macOS it starts with a space so shells that skip space-prefixed commands leave it out of history. PowerShell has no such rule: its history file (`ConsoleHost_history.txt`) keeps the whole command, grant included, until you clear it, although the grant stops working after 30 minutes. When it has expired, read the Session again or copy a fresh command from Web.
 
 The installer reports three results:
 
@@ -83,7 +83,7 @@ Append these to the command:
 | --- | --- |
 | `--non-interactive` | Never prompt; missing input fails |
 | `--harness codex,claude,minimax` | Harnesses to install, comma-separated. Must include the Session's Harness |
-| `--install-dir ABS` | Installation directory. Default: `environments/<environment-id>` under `~/.oac`, or under `OAC_RUNTIME_HOME` when set |
+| `--install-dir ABS` | Installation directory. It must be missing, empty or hold an installation; any other non-empty directory is refused. Default: `environments/<environment-id>` under `~/.oac`, or under `OAC_RUNTIME_HOME` when set |
 | `--capability-directory ABS` | Where [capability snapshots](#local-capability-directories) are stored. Default: `capabilities` in the installation directory |
 | `--tool-env-file ABS` | A JSON file of string variables for tools and MCP servers; see [explicit local tool environment](../../contracts/agents-api/environments.md#explicit-local-tool-environment) |
 
@@ -146,9 +146,17 @@ Run the installation's own command:
 "$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
 ```
 
-It stops the daemon, lists what it deletes and asks for confirmation. It deletes the installation directory with its credential file, native history and Harnesses, and, when no other installation shares the Runtime home, the `native-download` directory that holds the installer's download lock. It never deletes the workspace. Where nothing is installed it says so and exits 0. On Windows, the final deletion finishes a few seconds after the command exits.
+On Windows PowerShell:
+
+```powershell
+& "$HOME\.oac\environments\<environment-id>\bin\oac-daemon.exe" uninstall
+```
+
+It stops the daemon, lists what it deletes and asks for confirmation. It deletes only what an installation owns inside its directory (`bin`, `daemon`, `components`, `capabilities`, `runtime`, `initialization` and `packages`, with their credential file, native history and Harnesses) and then the directory itself if nothing else is left in it. Anything else in the directory stays, and so do the workspace and any credential file or capability directory outside the installation; the command names each one it keeps. The `native-download` directory and its `download.lock` are never touched. Where nothing is installed it says so and exits 0. If a file cannot be deleted, the command names it and can be run again once it is released. On Windows, the final deletion finishes a few seconds after the command exits.
 
 Then, in Web, open the Session and choose **Revoke** in **Executor credentials**, or **Delete** the Session; Core keeps accepting the machine's credential until you do.
+
+The Session's install command cannot connect the machine again: its credential stays claimed in Core. To reconnect the Session, choose **Rotate** and [install from an extracted distribution](#reconnect-an-existing-session), or create a new Session.
 
 After a Session is deleted or its credential is revoked or rotated, the daemon started with `start` prints why in `connect.log` (see `oac-daemon logs`) and exits. Starting it again prints the same reason. To reconnect it, follow [Rotate or revoke](#rotate-or-revoke) or [Reconnect an existing Session](#reconnect-an-existing-session); to remove it, run `uninstall`.
 
@@ -191,4 +199,4 @@ The same installer accepts an already extracted distribution and a credential fi
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-Use the Session's `remote_url` and Environment ID. The distribution is the archive named in [Reconnect an existing Session](#reconnect-an-existing-session). In PowerShell, run `.\oac-daemon.exe` with native absolute paths. This mode needs an existing workspace and does not start the daemon until you run `start`.
+Use the Session's `remote_url` and Environment ID. The distribution is the archive named in [Reconnect an existing Session](#reconnect-an-existing-session). In PowerShell, run `.\oac-daemon.exe` with native absolute paths. The installation directory must be missing, empty or hold an installation. This mode needs an existing workspace and does not start the daemon until you run `start`.

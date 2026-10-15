@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
@@ -106,6 +107,9 @@ func runInstall(rc *runContext, args []string) error {
 }
 
 func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallOptions) error {
+	if o.Directory == "" {
+		return errors.New("install: --environment-id is required; it names the default installation directory")
+	}
 	if runtimefs.ValidateLocalPath(o.Directory) != nil || runtimefs.ValidateLocalPath(o.Bundle) != nil {
 		return errors.New("install: --install-dir and --bundle-dir must be clean absolute directories")
 	}
@@ -115,6 +119,15 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	}
 	if o.RequiredHarness != "" && !slices.Contains(selected, o.RequiredHarness) {
 		return errors.New("install: --harness must include the Session Harness")
+	}
+	if _, err = os.Stat(filepath.Join(o.Directory, "daemon", "installation.json")); err != nil {
+		foreign, e := foreignEntries(o.Directory)
+		if e != nil {
+			return errors.New("install: cannot read --install-dir " + o.Directory)
+		}
+		if len(foreign) > 0 {
+			return fmt.Errorf("install: %s is not empty and holds no installation (it contains %s); choose an empty --install-dir", o.Directory, strings.Join(foreign, ", "))
+		}
 	}
 	o.Version = Version
 	if o.CapabilityDirectory == "" {

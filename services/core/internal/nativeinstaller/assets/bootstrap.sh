@@ -2,6 +2,9 @@
 set -euo pipefail
 base=$1
 shift
+# Only the installer receives the grant; every other program started below runs without it.
+grant=${OAC_INSTALL_GRANT:-}
+unset OAC_INSTALL_GRANT
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 case "$(uname -s)" in Linux) os=linux;; Darwin) os=darwin;; *) fail 'Unsupported operating system.';; esac
 case "$(uname -m)" in x86_64) arch=amd64;; arm64|aarch64) arch=arm64;; *) fail 'Unsupported processor architecture.';; esac
@@ -66,6 +69,7 @@ fetch() {
       33) rm -f "$destination";; # The server cannot resume; start the file again.
     esac
     case "$code:$status" in
+      22:416) return 0;; # The partial file already holds the whole download; the checksum decides.
       6:*|7:*|16:*|18:*|28:*|33:*|35:*|52:*|55:*|56:*|92:*|22:408|22:429|22:500|22:502|22:503|22:504)
         if [ "$attempt" -lt 5 ]; then printf 'Download interrupted; retrying (%s/4)...\n' "$attempt" >&2; run sleep "$attempt"; continue; fi;;
     esac
@@ -74,9 +78,9 @@ fetch() {
 }
 # Reject a rejected grant before any large download. Only a 401 stops here; any other answer is reported by the installer.
 check_grant() {
-  [ -n "${OAC_INSTALL_GRANT:-}" ] || return 0
+  [ -n "$grant" ] || return 0
   local status
-  printf 'header = "Authorization: Bearer %s"\n' "$OAC_INSTALL_GRANT" | run curl -sS --config - --request POST --connect-timeout 15 --max-time 30 --write-out '%{http_code}' --output /dev/null "${base%/install/*}/installation" >"$work/http-status" 2>/dev/null || :
+  printf 'header = "Authorization: Bearer %s"\n' "$grant" | run curl -sS --config - --request POST --connect-timeout 15 --max-time 30 --write-out '%{http_code}' --output /dev/null "${base%/install/*}/installation" >"$work/http-status" 2>/dev/null || :
   status=$(cat "$work/http-status")
   [ "$status" != 401 ] || fail 'Installation authorization rejected or expired; copy a fresh command from the Session.'
 }
@@ -118,7 +122,7 @@ printf 'Extracting the installer...\n'
 mkdir "$work/bundle"
 run tar -xzf "$archive" -C "$work/bundle" || fail 'Installer extraction failed. Check disk space, quota and filesystem permissions.'
 [ -x "$work/bundle/oac-daemon" ] || fail 'Cannot start the native installer. Check executable permissions and use a Runtime home that permits execution.'
-if run "$work/bundle/oac-daemon" install --onboard-url "${base%/install/*}/installation" "$@"; then
+if OAC_INSTALL_GRANT=$grant run "$work/bundle/oac-daemon" install --onboard-url "${base%/install/*}/installation" "$@"; then
   rm -f "$archive"
   exit 0
 else

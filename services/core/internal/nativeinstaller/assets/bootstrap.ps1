@@ -3,6 +3,9 @@ param(
   [Parameter(ValueFromRemainingArguments=$true)][string[]]$InstallArguments
 )
 $ErrorActionPreference = 'Stop'
+# Only the installer receives the grant; every other program started below runs without it.
+$grant = $env:OAC_INSTALL_GRANT
+Remove-Item Env:OAC_INSTALL_GRANT -ErrorAction SilentlyContinue
 $tar = Join-Path $env:SystemRoot 'System32\tar.exe'
 if (!(Test-Path -LiteralPath $tar -PathType Leaf)) { throw 'Windows tar.exe is required. Install the Windows archive tools, then rerun this command.' }
 Add-Type -AssemblyName System.Net.Http
@@ -125,11 +128,11 @@ function Get-NativeFile([string]$Uri, [string]$Destination, [long]$Limit) {
 function Get-ArchiveHash([string]$Path) { (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant() }
 # Reject a rejected grant before any large download. Only a 401 stops here; any other answer is reported by the installer.
 function Test-Grant {
-  if (!$env:OAC_INSTALL_GRANT) { return }
+  if (!$grant) { return }
   $rejected = $false
   try {
     $message = [Net.Http.HttpRequestMessage]::new([Net.Http.HttpMethod]::Post, ($Base -replace '/install/[^/]+$', '/installation'))
-    $message.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $env:OAC_INSTALL_GRANT)
+    $message.Headers.Authorization = [Net.Http.Headers.AuthenticationHeaderValue]::new('Bearer', $grant)
     $answer = $client.SendAsync($message).GetAwaiter().GetResult()
     $rejected = [int]$answer.StatusCode -eq 401
   } catch { } finally { if ($message) { $message.Dispose() }; if ($answer) { $answer.Dispose() } }
@@ -198,7 +201,9 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Installer extraction failed. Check disk space, quota and filesystem permissions.' }
   $endpoint = $Base -replace '/install/[^/]+$', '/installation'
   Write-Host 'Starting installation...'
-  & (Join-Path $bundle 'oac-daemon.exe') install --onboard-url $endpoint @InstallArguments
+  $env:OAC_INSTALL_GRANT = $grant
+  try { & (Join-Path $bundle 'oac-daemon.exe') install --onboard-url $endpoint @InstallArguments }
+  finally { Remove-Item Env:OAC_INSTALL_GRANT -ErrorAction SilentlyContinue }
   if ($LASTEXITCODE -ne 0) { throw 'Installation or connection failed; follow the installer guidance and retry.' }
   Remove-Item -LiteralPath $archive -Force
 } finally {

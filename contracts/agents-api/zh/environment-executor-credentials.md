@@ -1,7 +1,7 @@
 ---
 title: "Environment 执行器凭据"
 source: contracts/agents-api/environment-executor-credentials.md
-source_hash: 5e18405343cbd5aa8814ed71efc0c97453ffc91e6c8d604159db7765dcb83f28
+source_hash: 5615fb412652ebcf34a1378a81128e0cd153b08932c443c02c6a59d2326718ec
 ---
 
 执行器凭据允许 `oac-daemon` 为一个 `self_hosted` Environment 注册并连接。它只授权该 Environment 的私有 daemon 传输（`/api/v1/agent-daemon/*`），不授权 `/v1`、`/core/v1`、sandbox node 注册或项目资源。项目的 principal 是其执行 principal。Core 只保存密钥摘要。
@@ -24,7 +24,7 @@ Core 不创建、停止或回收机器。断开连接、撤销凭据或删除 Se
 | `expires_at` | grant 到期的 Unix 时间，为响应生成后 30 分钟 |
 | `commands.posix`, `commands.powershell` | Linux/macOS 和 Windows PowerShell 的安装命令 |
 
-grant 绑定 Environment、Session 创建者的 principal 和 Core 构建版本。在到期、Session 被删除、项目被归档或 Core 运行另一构建版本时失效。重新读取 Session 会获得新 grant。Core 不存储 grant：每个响应重新签名，存储的事件从不包含它。命令通过环境变量 `OAC_INSTALL_GRANT` 把 grant 交给安装器，从不放在进程参数中，安装器在启动任何进程之前先从自身环境中移除该变量。将命令视为临时秘密：它能领取凭据，但不能执行工作或读取文件。
+grant 绑定 Environment、Session 创建者的 principal 和 Core 构建版本。在到期、Session 被删除、项目被归档或 Core 运行另一构建版本时失效。重新读取 Session 会获得新 grant。Core 不存储 grant：每个响应重新签名，存储的事件从不包含它。命令通过环境变量 `OAC_INSTALL_GRANT` 传递 grant，从不放在进程参数中。引导脚本只把它交给安装器，安装器在启动守护进程或任何 Harness 之前先从自身环境中移除该变量。将命令视为临时秘密：它能领取凭据，但不能执行工作或读取文件。
 
 安装器生成密钥，在领取前将其私密保存到安装目录的 `daemon/executor-credential.json`。Core 将摘要保存在 key ID 等于 Environment ID 的记录中。响应丢失后可以安全重试，但必须提交同一个密钥。grant 不替换或恢复凭据。如果 Environment 已有不同、已轮换或已撤销的凭据，领取返回 409 `executor_credential_exists`。
 

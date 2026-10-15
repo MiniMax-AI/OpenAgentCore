@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 1084921d73014c1c48c6b4c2df5fa356544ed3b046bf0bc90cb9dce85b7188f7
+source_hash: 9fda47d5be8d2977ac66a7db3ae2ce7c1112784a0a6521dc3791cdd0f284899f
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -63,7 +63,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 
 在 Web 中打开 Session，复制 **连接主机** 下的命令。
 
-请保密该命令：它包含短期[安装授权](../../../contracts/agents-api/zh/environment-executor-credentials.md#installation-grant)，用于领取机器凭据。命令通过环境变量 `OAC_INSTALL_GRANT` 传递授权，从不放在参数中；命令以空格开头，会忽略空格开头命令的 shell 不会把它记入历史。过期后重新读取 Session，或从 Web 复制新命令。
+请保密该命令：它包含短期[安装授权](../../../contracts/agents-api/zh/environment-executor-credentials.md#installation-grant)，用于领取机器凭据。命令通过环境变量 `OAC_INSTALL_GRANT` 传递授权，从不放在参数中。在 Linux 和 macOS 上，命令以空格开头，会忽略空格开头命令的 shell 不会把它记入历史。PowerShell 没有这条规则：它的历史文件（`ConsoleHost_history.txt`）会把整条命令连同授权一起保存，直到你清除它，不过授权在 30 分钟后就会失效。过期后重新读取 Session，或从 Web 复制新命令。
 
 安装程序报告三个结果：
 
@@ -85,7 +85,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 | --- | --- |
 | `--non-interactive` | 不提示；缺少输入时失败 |
 | `--harness codex,claude,minimax` | 要安装的 Harness，以逗号分隔。必须包含 Session 的 Harness |
-| `--install-dir ABS` | 安装目录。默认是 `~/.oac` 下的 `environments/<environment-id>`；设置了 `OAC_RUNTIME_HOME` 时则在该目录下 |
+| `--install-dir ABS` | 安装目录。它必须不存在、为空，或已包含一个安装；其他非空目录会被拒绝。默认是 `~/.oac` 下的 `environments/<environment-id>`；设置了 `OAC_RUNTIME_HOME` 时则在该目录下 |
 | `--capability-directory ABS` | [能力快照](#local-capability-directories)存储位置。默认是安装目录中的 `capabilities` |
 | `--tool-env-file ABS` | 为工具和 MCP 服务器提供字符串变量的 JSON 文件；参阅[显式本地工具环境](../../../contracts/agents-api/zh/environments.md#explicit-local-tool-environment) |
 
@@ -148,9 +148,17 @@ session = client.beta.agents.sessions.create(
 "$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
 ```
 
-它会停止守护进程，列出将删除的内容并请求确认。删除的内容包括安装目录（含凭据文件、原生历史和 Harness），以及（没有其他安装共用该 Runtime 主目录时）保存安装程序下载锁的 `native-download` 目录。工作区永远不会被删除。在没有安装的位置运行时，它会说明这一点并以 0 退出。在 Windows 上，最后的删除会在命令退出几秒后完成。
+在 Windows PowerShell 中：
+
+```powershell
+& "$HOME\.oac\environments\<environment-id>\bin\oac-daemon.exe" uninstall
+```
+
+它会停止守护进程，列出将删除的内容并请求确认。它只删除安装目录中属于该安装的条目（`bin`、`daemon`、`components`、`capabilities`、`runtime`、`initialization` 和 `packages`，含凭据文件、原生历史和 Harness），之后若目录中没有其他内容，再删除目录本身。目录中的其他内容会保留，工作区以及安装目录之外的凭据文件或能力目录也会保留；命令会逐一列出保留的路径。`native-download` 目录及其 `download.lock` 不会被触碰。在没有安装的位置运行时，它会说明这一点并以 0 退出。如果某个文件无法删除，命令会指出它，待其被释放后可再次运行。在 Windows 上，最后的删除会在命令退出几秒后完成。
 
 随后在 Web 中打开该 Session，在 **执行器凭据** 中选择 **撤销**，或 **删除** 该 Session；在此之前，Core 仍接受这台机器的凭据。
+
+该 Session 的安装命令无法再次连接这台机器：它的凭据在 Core 中仍处于已领取状态。要重新连接该 Session，请选择 **轮换**，并[从已解压的发行包安装](#reconnect-an-existing-session)，或新建 Session。
 
 Session 被删除，或其凭据被撤销或轮换后，由 `start` 启动的守护进程会在 `connect.log` 中写明原因（见 `oac-daemon logs`）并退出，再次启动会打印同样的原因。要重新连接，参阅[轮换或撤销](#rotate-or-revoke)或[重新连接已有 Session](#reconnect-an-existing-session)；要移除，运行 `uninstall`。
 
@@ -193,4 +201,4 @@ Session 被删除，或其凭据被撤销或轮换后，由 `start` 启动的守
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-使用 Session 的 `remote_url` 和 Environment ID。发行包即[重新连接已有 Session](#reconnect-an-existing-session) 中的压缩包。在 PowerShell 中，以原生绝对路径运行 `.\oac-daemon.exe`。此模式要求工作区已存在，且在运行 `start` 前不会启动守护进程。
+使用 Session 的 `remote_url` 和 Environment ID。发行包即[重新连接已有 Session](#reconnect-an-existing-session) 中的压缩包。在 PowerShell 中，以原生绝对路径运行 `.\oac-daemon.exe`。安装目录必须不存在、为空，或已包含一个安装。此模式要求工作区已存在，且在运行 `start` 前不会启动守护进程。

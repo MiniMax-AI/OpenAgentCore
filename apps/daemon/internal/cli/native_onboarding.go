@@ -63,7 +63,7 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 		return nil
 	}
 	if o.OnboardURL == "" || o.Authorization == "" {
-		return errors.New("install: --onboard-url and " + grantEnv + " are required together")
+		return errors.New("install: --onboard-url and " + v1.NativeInstallGrantEnv + " are required together")
 	}
 	const suffix = "/api/v1/agent-daemon/installation"
 	if !strings.HasSuffix(o.OnboardURL, suffix) {
@@ -96,12 +96,8 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 	if o.RequiredHarness == "" {
 		return errors.New("install: the Session requires an unsupported Harness")
 	}
-	if o.Directory == "" {
-		root, err := paths.Root()
-		if err != nil {
-			return err
-		}
-		o.Directory = filepath.Join(root, "environments", o.Environment)
+	if err := o.defaultDirectory(); err != nil {
+		return err
 	}
 	if !o.NonInteractive {
 		o.Interactive = true

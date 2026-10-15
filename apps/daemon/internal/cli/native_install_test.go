@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/google/uuid"
 )
 
@@ -22,7 +23,7 @@ func nativeInstallFixture(t *testing.T) (*runContext, []string, string, string) 
 	bundle := t.TempDir()
 	workspace := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	key := filepath.Join(root, "credential.json")
+	key := filepath.Join(t.TempDir(), "credential.json")
 	environment := uuid.NewString()
 	body, _ := json.Marshal(map[string]string{"key_id": uuid.NewString(), "executor_token": "private-test-credential", "environment_id": environment})
 	if err := os.WriteFile(key, body, 0600); err != nil {
@@ -50,7 +51,7 @@ func nativeInstallFixture(t *testing.T) (*runContext, []string, string, string) 
 	t.Cleanup(func() { probeNativeInstallation = old })
 	output := new(bytes.Buffer)
 	rc := &runContext{stdin: strings.NewReader("must not read"), stdout: output, stderr: output}
-	args := []string{"--non-interactive", "--bundle-dir", bundle, "--harness", "codex", "--remote", "ws://localhost:12345/api/v1/agent-daemon/ws", "--environment-id", environment, "--workspace", workspace, "--credential-file", key}
+	args := []string{"--non-interactive", "--bundle-dir", bundle, "--harness", "codex", "--remote", "ws://localhost:12345/api/v1/agent-daemon/ws", "--environment-id", environment, "--workspace", workspace, "--credential-file", key, "--install-dir", root}
 	return rc, args, root, bundle
 }
 
@@ -269,14 +270,14 @@ func TestNativeInstallationConnectCannotBypassValidation(t *testing.T) {
 
 func TestNativeInstallTakesGrantOutOfTheEnvironment(t *testing.T) {
 	rc, _, _, _ := nativeInstallFixture(t)
-	t.Setenv(grantEnv, "private-grant")
+	t.Setenv(v1.NativeInstallGrantEnv, "private-grant")
 	// The endpoint is invalid so parsing stops before it contacts Core; the grant is already taken.
 	o, _ := parseNativeInstall(rc, []string{"--onboard-url", "https://core.example/other", "--non-interactive"})
 	if o.Authorization != "private-grant" {
 		t.Fatal("grant not read from the environment")
 	}
 	for _, entry := range withNativeEnv(nil) {
-		if strings.HasPrefix(entry, grantEnv+"=") {
+		if strings.HasPrefix(entry, v1.NativeInstallGrantEnv+"=") {
 			t.Fatal("grant reaches child processes")
 		}
 	}

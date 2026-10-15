@@ -39,15 +39,21 @@ func runUninstall(rc *runContext, args []string) error {
 	if config.Workspace != "" && within(root, config.Workspace) {
 		return fmt.Errorf("uninstall: the workspace %s is inside the installation directory; move it out first", config.Workspace)
 	}
-	targets := []string{root}
-	if cache := downloadCache(root); cache != "" && !within(root, cache) {
-		targets = append(targets, cache)
+	var owned []string
+	for _, name := range nativeInstallationEntries {
+		if _, err = os.Lstat(filepath.Join(root, name)); err == nil {
+			owned = append(owned, filepath.Join(root, name))
+		}
+	}
+	foreign, err := foreignEntries(root)
+	if err != nil {
+		return errors.New("uninstall: cannot read the installation directory; delete its entries by hand")
 	}
 	fmt.Fprintln(rc.stdout, "This stops the daemon and deletes, with everything inside:")
-	for _, target := range targets {
+	for _, target := range owned {
 		fmt.Fprintln(rc.stdout, "  "+target)
 	}
-	fmt.Fprintln(rc.stdout, "The installation directory holds the executor credential, native history and Harnesses; native-download holds the download lock. The workspace is kept.")
+	fmt.Fprintln(rc.stdout, "These hold the executor credential, native history and Harnesses. The workspace stays, and so does anything else in "+root+" and any credential or capability directory outside the installation.")
 	fmt.Fprint(rc.stdout, "Continue? [y/N] ")
 	answer, _ := bufio.NewReader(rc.stdin).ReadString('\n')
 	if !strings.EqualFold(strings.TrimSpace(answer), "y") {
@@ -57,82 +63,98 @@ func runUninstall(rc *runContext, args []string) error {
 		return err
 	}
 	// Windows cannot delete the executable it is running.
-	running := ""
+	var running os.FileInfo
 	if runtime.GOOS == "windows" {
-		running, _ = os.Executable()
-	}
-	for _, target := range targets[1:] {
-		if err = os.RemoveAll(target); err != nil {
-			return fmt.Errorf("uninstall: cannot delete %s: %w", target, err)
+		if exe, e := os.Executable(); e == nil {
+			running, _ = os.Stat(exe)
 		}
 	}
-	remaining, err := removeInstallation(root, running)
-	if err != nil {
-		return fmt.Errorf("uninstall: cannot delete %s; close programs using it and run the command again: %w", root, err)
+	// The record and the executable go last: a failed uninstall can run again.
+	order := owned[:0:0]
+	for _, target := range owned {
+		if name := filepath.Base(target); name != "bin" && name != "daemon" {
+			order = append(order, target)
+		}
 	}
-	if remaining {
+	record := filepath.Join(root, "daemon", "installation.json")
+	if entries, e := os.ReadDir(filepath.Join(root, "daemon")); e == nil {
+		for _, entry := range entries {
+			if path := filepath.Join(root, "daemon", entry.Name()); path != record {
+				order = append(order, path)
+			}
+		}
+	}
+	bin := filepath.Join(root, "bin")
+	order = append(order, bin, record)
+	var kept bool
+	for _, target := range order {
+		held, e := removeTree(target, running)
+		if e != nil {
+			return fmt.Errorf("uninstall: cannot delete %s; close programs using it and run the command again: %w", target, e)
+		}
+		kept = kept || held
+	}
+	// Only empty directories go; anything left belongs to the user.
+	_ = os.Remove(filepath.Join(root, "daemon"))
+	if kept {
 		// Windows keeps the running executable open until this process exits.
 		deleteAfterExit(root)
+	} else {
+		_ = os.Remove(root)
 	}
 	fmt.Fprintln(rc.stdout, "oac-daemon: uninstalled")
 	if config.Workspace != "" {
 		fmt.Fprintln(rc.stdout, "Workspace kept: "+config.Workspace)
 	}
-	fmt.Fprintf(rc.stdout, "Core still accepts this machine's credential. In Web, open the Session (Environment %s) and choose Revoke in Executor credentials, or Delete the Session.\n", config.Environment)
-	return nil
-}
-
-// removeInstallation deletes dir. A running executable cannot be deleted on
-// Windows, so everything else goes and the function reports what is left.
-func removeInstallation(dir, running string) (remaining bool, err error) {
-	if running == "" || !within(dir, running) {
-		return false, os.RemoveAll(dir)
+	for _, name := range foreign {
+		fmt.Fprintln(rc.stdout, "Kept: "+filepath.Join(root, name))
 	}
-	return true, removeAllExcept(dir, running)
-}
-
-func removeAllExcept(dir, keep string) error {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, entry := range entries {
-		path := filepath.Join(dir, entry.Name())
-		switch {
-		case path == keep:
-		case entry.IsDir() && within(path, keep):
-			if err = removeAllExcept(path, keep); err != nil {
-				return err
-			}
-		default:
-			if err = os.RemoveAll(path); err != nil {
-				return err
-			}
+	for _, path := range []string{config.Credential, config.CapabilityDirectory} {
+		if path != "" && !within(root, path) {
+			fmt.Fprintln(rc.stdout, "Kept: "+path)
 		}
 	}
+	fmt.Fprintf(rc.stdout, "Core still accepts this machine's credential. In Web, open the Session (Environment %s) and choose Revoke in Executor credentials, or Delete the Session. This Session's install command cannot be used again; to reconnect it, choose Rotate and install from an extracted distribution, or create a new Session.\n", config.Environment)
 	return nil
+}
+
+// removeTree deletes path. keep is the running executable, which Windows
+// cannot delete; it stays, and so does every directory that holds it.
+func removeTree(path string, keep os.FileInfo) (kept bool, err error) {
+	if keep == nil {
+		return false, os.RemoveAll(path)
+	}
+	info, err := os.Lstat(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if os.SameFile(info, keep) {
+		return true, nil
+	}
+	if !info.IsDir() {
+		return false, os.Remove(path)
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		held, e := removeTree(filepath.Join(path, entry.Name()), keep)
+		if e != nil {
+			return false, e
+		}
+		kept = kept || held
+	}
+	if kept {
+		return true, nil
+	}
+	return false, os.Remove(path)
 }
 
 func within(dir, path string) bool {
 	rel, err := filepath.Rel(dir, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-// downloadCache is the bootstrap's native-download directory (staging and the
-// download lock). It sits in the Runtime home, which the default installation
-// directory <home>/environments/<id> shares with other installations; it goes
-// only with the last of them.
-func downloadCache(root string) string {
-	home := root
-	if environments := filepath.Dir(root); filepath.Base(environments) == "environments" {
-		if entries, err := os.ReadDir(environments); err != nil || len(entries) > 1 {
-			return ""
-		}
-		home = filepath.Dir(environments)
-	}
-	cache := filepath.Join(home, "native-download")
-	if info, err := os.Lstat(cache); err != nil || !info.IsDir() {
-		return ""
-	}
-	return cache
 }

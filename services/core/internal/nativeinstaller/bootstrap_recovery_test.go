@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 func bootstrapFixtureArchive(t *testing.T) []byte {
@@ -51,7 +53,7 @@ func bootstrapCommand(t *testing.T, base, home string) *exec.Cmd {
 	} else {
 		command = exec.Command("bash", "assets/bootstrap.sh", base)
 	}
-	command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, GrantEnv+"=fixture-grant", "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
+	command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, v1.NativeInstallGrantEnv+"=fixture-grant", "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 	return command
 }
 

@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 // resumeServer serves the installation endpoint and a ranged archive.
@@ -60,7 +62,7 @@ func newResumeServer(t *testing.T, archive []byte) *resumeServer {
 
 func (s *resumeServer) command(t *testing.T, home string, args ...string) *exec.Cmd {
 	command := exec.Command("bash", append([]string{"assets/bootstrap.sh", s.URL + "/api/v1/agent-daemon/install/test"}, args...)...)
-	command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, GrantEnv+"=fixture-grant", "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
+	command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+home, v1.NativeInstallGrantEnv+"=fixture-grant", "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 	return command
 }
 
@@ -114,6 +116,46 @@ func TestBootstrapKeepsVerifiedArchiveUntilInstallCompletes(t *testing.T) {
 	}
 	if _, err := os.Stat(cached); !os.IsNotExist(err) {
 		t.Fatal("archive kept after a completed installation")
+	}
+}
+
+// A rerun after an interrupt between the last byte and the rename finds a complete .part file; the server answers 416 and the checksum decides.
+func TestBootstrapAcceptsCompletePartialDownload(t *testing.T) {
+	archive := bootstrapFixtureArchive(t)
+	server := newResumeServer(t, archive)
+	home := t.TempDir()
+	part := filepath.Join(home, "native-download", sha256Hex(archive)+".tar.gz.part")
+	if err := os.MkdirAll(filepath.Dir(part), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(part, archive, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if output, err := server.command(t, home).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, output)
+	}
+}
+
+// Only the installer receives the grant, not curl, tar or the other tools around it.
+func TestBootstrapGivesGrantOnlyToInstaller(t *testing.T) {
+	curl, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skip("curl unavailable")
+	}
+	leak := filepath.Join(t.TempDir(), "leak")
+	bin := t.TempDir()
+	wrapper := "#!/bin/sh\n[ -z \"$OAC_INSTALL_GRANT\" ] || echo curl >> " + shellQuote(leak) + "\nexec " + shellQuote(curl) + " \"$@\"\n"
+	if err = os.WriteFile(filepath.Join(bin, "curl"), []byte(wrapper), 0700); err != nil {
+		t.Fatal(err)
+	}
+	server := newResumeServer(t, bootstrapScriptArchive(t, "#!/bin/sh\n[ \"$OAC_INSTALL_GRANT\" = fixture-grant ]\n"))
+	command := server.command(t, t.TempDir())
+	command.Env = append(command.Env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("the installer did not receive the grant: %v: %s", err, output)
+	}
+	if _, err = os.Stat(leak); !os.IsNotExist(err) {
+		t.Fatal("a download tool received the grant")
 	}
 }
 

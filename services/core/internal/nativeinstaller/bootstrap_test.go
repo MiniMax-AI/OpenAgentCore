@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 // Exercise the shipped script against two actual TLS origins. The downloaded
@@ -87,7 +89,7 @@ func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
 			defer core.Close()
 			result := filepath.Join(t.TempDir(), "result")
 			command := exec.Command("bash", "assets/bootstrap.sh", core.URL+"/api/v1/agent-daemon/install/build", "--harness", "codex")
-			command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+t.TempDir(), GrantEnv+"=private-grant", "CURL_CA_BUNDLE="+ca, "OAC_BOOTSTRAP_TEST_RESULT="+result, "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
+			command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+t.TempDir(), v1.NativeInstallGrantEnv+"=private-grant", "CURL_CA_BUNDLE="+ca, "OAC_BOOTSTRAP_TEST_RESULT="+result, "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 			output, err := command.CombinedOutput()
 			if valid {
 				if err != nil {
