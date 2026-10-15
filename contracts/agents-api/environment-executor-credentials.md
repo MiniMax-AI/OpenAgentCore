@@ -89,7 +89,7 @@ The installer derives this route from the returned `remote_url` and does not fol
 
 ## Revoked or rotated credential
 
-When Core permanently rejects the daemon (enrollment 401 or 409, a permanent WebSocket rejection, or a daemon version from another Core distribution), the daemon prints the reason once and makes no further requests until it is stopped; it then exits successfully, so a supervisor that restarts on exit does not loop. When started again, it tries enrollment once and parks again. Transient failures keep the normal reconnect behavior and never replay execution.
+When Core permanently rejects the daemon (enrollment 401 or 409, a permanent WebSocket rejection, or a daemon version from another Core distribution), a daemon started by `oac-daemon start` prints the reason once and exits with an error, and starting it again tries enrollment once and exits again. A Docker Runtime (`oac-daemon connect`) prints the reason once and makes no further requests until it is stopped, then exits successfully, so a supervisor that restarts on exit does not loop; started again, it tries enrollment once and parks again. Transient failures keep the normal reconnect behavior and never replay execution.
 
 A machine reconnects only with its bound `key_id`, rotated to a new secret that replaces the credential file at its configured path; the [self-hosted guide](../../docs/getting-started/self-hosted.md#rotate-or-revoke) gives the steps. A new `key_id` cannot reconnect an Environment that is already bound: issuing it succeeds, but enrollment with it returns 409. Rotation does not reinstall Harnesses, change the workspace or replace native history; never create a new Session history to recover a credential.
 

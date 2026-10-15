@@ -128,12 +128,27 @@ The installation's `bin/oac-daemon` finds its own installation. Use it for:
 | `oac-daemon status` | Show the local profile and process; not the connection |
 | `oac-daemon logs -n 100`, `oac-daemon logs -f` | Print or follow the daemon log |
 | `oac-daemon stop` | Stop the daemon |
+| `oac-daemon uninstall` | [Remove the machine](#remove-a-machine) |
 
-The installed `bin/oac-daemon` ignores `OAC_RUNTIME_HOME` and always acts on its own installation. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
+The installed `bin/oac-daemon` ignores `OAC_RUNTIME_HOME` and always acts on its own installation. Nothing restarts the daemon after a reboot: run `bin/oac-daemon start` again, which keeps the installation, credential and history. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
 
 To add a Harness, run the install command again (a fresh copy from Web if it has expired) with the same installation directory and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed. Restart a running daemon afterwards so it discovers the new Harness.
 
 Stopping the daemon, cancelling a Turn or deleting the Session never removes the machine's workspace, native history or capability snapshot. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it. To use the Session on a new directory, [reconnect it](#reconnect-an-existing-session).
+
+## Remove a machine {#remove-a-machine}
+
+Run the installation's own command:
+
+```sh
+"$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
+```
+
+It stops the daemon, lists what it deletes and asks for confirmation. It deletes the installation directory with its credential file, native history and Harnesses, and the `native-download` directory that holds the installer's download lock. It never deletes the workspace. Where nothing is installed it says so and exits 0. On Windows, the final deletion finishes a few seconds after the command exits.
+
+Then, in Web, open the Session and choose **Revoke** in **Executor credentials**, or **Delete** the Session; Core keeps accepting the machine's credential until you do.
+
+After a Session is deleted or its credential is revoked or rotated, the daemon started with `start` prints why in `connect.log` (see `oac-daemon logs`) and exits. Starting it again prints the same reason. To reconnect it, follow [Rotate or revoke](#rotate-or-revoke) or [Reconnect an existing Session](#reconnect-an-existing-session); to remove it, run `uninstall`.
 
 ## Rotate or revoke
 

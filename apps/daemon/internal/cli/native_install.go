@@ -345,7 +345,7 @@ func runStart(rc *runContext, args []string) error {
 			return err
 		}
 	}
-	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, !*foreground, config.Remote, config.Environment, config.Credential)
+	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, !*foreground, true, config.Remote, config.Environment, config.Credential)
 }
 
 func useInstalledNativeHome() {

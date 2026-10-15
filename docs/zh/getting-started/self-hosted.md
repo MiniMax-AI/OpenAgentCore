@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 23da409f07281f38ffb1d38e9312b75906972b8093631f6a417c95f7ce3fdc81
+source_hash: 65e42f3e36922074a8c14a06dd0eaae1a309bcd5d86de1e1e71aad34154ef1bc
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -130,12 +130,27 @@ session = client.beta.agents.sessions.create(
 | `oac-daemon status` | 展示本地配置与进程，不表示连接状态 |
 | `oac-daemon logs -n 100`、`oac-daemon logs -f` | 输出或持续跟踪守护进程日志 |
 | `oac-daemon stop` | 停止守护进程 |
+| `oac-daemon uninstall` | [移除机器](#remove-a-machine) |
 
-已安装的 `bin/oac-daemon` 忽略 `OAC_RUNTIME_HOME`，始终操作自己所在的安装。在 Web 的 Session 页面 **主机连接** 下检查连接，或使用[连接状态](../../../contracts/agents-api/zh/environment-executor-credentials.md#connection-status)。
+已安装的 `bin/oac-daemon` 忽略 `OAC_RUNTIME_HOME`，始终操作自己所在的安装。重启机器后没有任何东西会自动拉起守护进程：再次运行 `bin/oac-daemon start`，安装、凭据和历史都保留。在 Web 的 Session 页面 **主机连接** 下检查连接，或使用[连接状态](../../../contracts/agents-api/zh/environment-executor-credentials.md#connection-status)。
 
 添加 Harness 时，以同一安装目录重新执行安装命令，并指定要添加的 Harness（命令过期时从 Web 复制新的）。安装程序检查已有内容、只添加缺失组件，并保留已安装的 Harness。之后重启正在运行的守护进程，让它发现新的 Harness。
 
 停止守护进程、取消 Turn 或删除 Session，都不会删除机器的工作区、原生历史或能力快照。安装程序拒绝其他守护进程版本的安装，以及文件已被修改的安装。程序不升级、修复或迁移它们。要在新目录上使用该 Session，请[重新连接](#reconnect-an-existing-session)。
+
+## 移除机器 {#remove-a-machine}
+
+运行该安装自带的命令：
+
+```sh
+"$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
+```
+
+它会停止守护进程，列出将删除的内容并请求确认。删除的内容包括安装目录（含凭据文件、原生历史和 Harness），以及保存安装程序下载锁的 `native-download` 目录。工作区永远不会被删除。在没有安装的位置运行时，它会说明这一点并以 0 退出。在 Windows 上，最后的删除会在命令退出几秒后完成。
+
+随后在 Web 中打开该 Session，在 **执行器凭据** 中选择 **撤销**，或 **删除** 该 Session；在此之前，Core 仍接受这台机器的凭据。
+
+Session 被删除，或其凭据被撤销或轮换后，由 `start` 启动的守护进程会在 `connect.log` 中写明原因（见 `oac-daemon logs`）并退出，再次启动会打印同样的原因。要重新连接，参阅[轮换或撤销](#rotate-or-revoke)或[重新连接已有 Session](#reconnect-an-existing-session)；要移除，运行 `uninstall`。
 
 ## 轮换或撤销 {#rotate-or-revoke}
 

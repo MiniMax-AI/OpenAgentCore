@@ -37,6 +37,7 @@ func defaultRunContext() *runContext {
 var commands = []command{
 	{name: "install", summary: "Install a native daemon and selected Harnesses", run: runInstall},
 	{name: "start", summary: "Start the installed native daemon", run: runStart},
+	{name: "uninstall", summary: "Stop the daemon and delete this installation", run: runUninstall},
 	{name: "resume", summary: "Wake one planned hosted suspension", run: runResume},
 	{name: "runtime-mcp-exec", summary: "Execute an installed MCP server", run: runRuntimeMCP},
 	{name: "placement", summary: "Enroll or retire an explicitly managed local execution placement", run: runPlacement},

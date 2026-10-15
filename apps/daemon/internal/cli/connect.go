@@ -81,7 +81,7 @@ func runConnect(ctx *runContext, args []string) error {
 		}
 		connectCtx, stop := daemonize.NotifyContext(context.Background())
 		defer stop()
-		return runEnvironmentConnect(connectCtx, ctx, *profile, *background, *remote, *environment, *credentialFile)
+		return runEnvironmentConnect(connectCtx, ctx, *profile, *background, false, *remote, *environment, *credentialFile)
 	}
 
 	// -b mode: parent forks, child re-enters with sentinel env set

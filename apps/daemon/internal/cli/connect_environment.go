@@ -124,7 +124,10 @@ func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string)
 	return boot, nil
 }
 
-func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background bool, remote, environment, credentialFile string) error {
+// exitOnRejection selects the native `start` behaviour: a permanent rejection
+// ends the process with the message as its error. Otherwise the process that
+// owns the connection parks (see parkEnvironment).
+func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background, exitOnRejection bool, remote, environment, credentialFile string) error {
 	base, err := environmentBase(remote)
 	if err != nil {
 		return err
@@ -143,7 +146,12 @@ func runEnvironmentConnect(parent context.Context, rc *runContext, profile strin
 	// the connection parks instead.
 	parks := !background || daemonize.IsBackgroundChild()
 	rejected := func(err error) error {
-		if message := environmentRejection(err, keyID, environment); parks && message != "" {
+		message := environmentRejection(err, keyID, environment, exitOnRejection)
+		switch {
+		case message == "":
+		case exitOnRejection:
+			return errors.New(message)
+		case parks:
 			return parkEnvironment(parent, rc.stderr, message)
 		}
 		return err
@@ -180,9 +188,13 @@ var (
 // environmentRejection names the fix for a permanent Environment rejection:
 // enrollment 401 or 409, or a permanent WebSocket rejection or close. It returns
 // "" for anything else (transport failures, 5xx, 404), which keeps the ordinary
-// failure exit so the Runtime's restart policy retries it.
-func environmentRejection(err error, keyID, environment string) string {
+// failure exit so the Runtime's restart policy retries it. The native daemon
+// names its own commands; the Docker Runtime names its restart.
+func environmentRejection(err error, keyID, environment string, native bool) string {
 	reconnect, remove := "install it for this Runtime and restart it", "stop this Runtime"
+	if native {
+		reconnect, remove = "replace the credential file and run oac-daemon start", "run oac-daemon uninstall"
+	}
 	switch {
 	case errors.Is(err, errEnvironmentBindingConflict):
 		return fmt.Sprintf("executor credential %s cannot connect: Environment %s is bound to a different executor credential. This Runtime will not retry. Rotate the credential first used for this Environment instead of issuing a new one, then %s. To remove this Runtime instead, %s.", keyID, environment, reconnect, remove)
