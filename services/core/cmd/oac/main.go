@@ -47,7 +47,7 @@ func main() {
 var buildRevision = "development"
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "oac (%s)\nUsage: oac install|apply|core-key|rotate-core-key\n", buildRevision)
+	fmt.Fprintf(os.Stderr, "oac (%s)\nUsage: oac install|apply|core-key|rotate-core-key|uninstall\n", buildRevision)
 }
 
 func run(ctx context.Context, command string, args []string) error {
@@ -56,6 +56,8 @@ func run(ctx context.Context, command string, args []string) error {
 		return installCommand(ctx, args)
 	case "init":
 		return initCommand()
+	case "uninstall":
+		return uninstallCommand(ctx, args)
 	case "rotate-volume-key":
 		return withLock("/data/secrets/init", func() error { return rotateVolumeKey("/data") })
 	}

@@ -14,7 +14,7 @@ type Runner interface {
 	Output(ctx context.Context, args ...string) ([]byte, error)
 }
 
-type execRunner struct{ dir string }
+type execRunner struct{ dir, project string }
 
 func (r execRunner) Run(ctx context.Context, args ...string) error {
 	cmd := r.command(ctx, args)
@@ -36,7 +36,11 @@ func (r execRunner) Output(ctx context.Context, args ...string) ([]byte, error) 
 }
 
 func (r execRunner) command(ctx context.Context, args []string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "docker", append([]string{"compose"}, args...)...)
+	prefix := []string{"compose"}
+	if r.project != "" {
+		prefix = append(prefix, "-p", r.project)
+	}
+	cmd := exec.CommandContext(ctx, "docker", append(prefix, args...)...)
 	cmd.Dir = r.dir
 	cmd.Env = os.Environ()
 	return cmd

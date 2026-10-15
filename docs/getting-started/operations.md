@@ -20,7 +20,8 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `oac apply` | Checks the data volume and `.env`, then starts the services and recreates those whose configuration changed; see [how oac apply works](../configuration.md#how-oac-apply-works). A failed check changes no service |
 | `oac core-key [--show]` | Identifies the key location in the data volume, or prints the key with `--show` |
 | `oac rotate-core-key` | Replaces the Core key and restarts Core and Web |
-| `docker compose down` | Removes the containers. Data is kept; to delete it, [uninstall](#uninstall) |
+| `docker compose down` | Removes the containers. Data is kept |
+| `oac uninstall` | Deletes the installation and its data after confirmation; see [Uninstall](#uninstall) |
 
 The examples use the default installation directory. On Windows, invoke the management command with `& "$HOME/.oac/core/oac.exe"` followed by the same arguments. For a custom installation directory, replace the path in each command.
 
@@ -127,6 +128,34 @@ Core records which key made each public resource write; the retention of that hi
 
 A recoverable backup contains one consistent, stopped-write set. A database dump or Core volume export alone does not include independent workspace storage or node compute state. Restore the data volume together with the installation directory from the same backup, which holds the release that wrote it; a newer release can [upgrade](#upgrade) the restored installation afterward.
 
+### Single-host backup and restore {#single-host-backup}
+
+For an installation whose data all lives in its Docker volume, with no independent workspace storage and no node state to keep, the data volume and the installation directory are the whole backup. This recipe uses a Unix shell and the PostgreSQL image the installation already pulled.
+
+```sh
+cd ~/.oac/core
+docker compose stop
+project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
+mkdir -p ~/oac-backup
+docker run --rm -v "${project}_data:/data:ro" -v ~/oac-backup:/backup --entrypoint tar postgres:16-alpine czf /backup/data.tar.gz -C /data .
+cp -a ~/.oac/core ~/oac-backup/installation
+docker compose start
+```
+
+To restore on this host or another, first [uninstall](#uninstall) any installation that still uses the project, then:
+
+```sh
+cp -a ~/oac-backup/installation ~/.oac/core
+cd ~/.oac/core
+project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
+docker compose pull
+docker compose up --no-start
+docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoint tar postgres:16-alpine xzf /backup/data.tar.gz -C /data
+./oac apply
+```
+
+An installation with independent workspace storage or nodes needs the full procedure below.
+
 ### Backup contents
 
 - The Docker volume `<project>_data`, including `database/`, `secrets/` and `state/`. It holds Projects, key digests, nodes, default models, encrypted credentials and execution history, including large objects. Keep `secrets/core/credential.key` with its matching database or stored credentials cannot be decrypted.
@@ -171,7 +200,7 @@ Start the database, Core and node services only after their restored dependencie
 An installation of v0.0.10 or later upgrades in place to a newer release. It keeps its database, data volume, `.env`, secrets, Core key, installation ID and the entries you added to `compose.override.yaml`. An older installation can't upgrade: install the new release into a new directory. Downgrades are refused.
 
 1. Read the target release's notes for [protocol changes](#protocol-changes) and the actions they require.
-2. [Back up](#back-up) the installation. The upgrade takes no backup, and after it the backup is the only way back to the previous release.
+2. [Back up](#single-host-backup) the installation. The upgrade takes no backup, and after it the backup is the only way back to the previous release.
 3. Run the target release's installer with `--upgrade` and the installation directory:
 
    ```sh
@@ -215,24 +244,31 @@ A rollback restores the backup taken before the upgrade: stop the services, [res
 ## Uninstall
 
 ```sh
-cd ~/.oac/core
-docker compose down --volumes --remove-orphans --rmi all
-cd && rm -rf ~/.oac/core
+~/.oac/core/oac uninstall
 ```
 
-`down --volumes` deletes the installation data volume. Remove the installation directory afterward; on Windows use `Remove-Item -Recurse "$HOME/.oac/core"`.
+On Windows, run `& "$HOME/.oac/core/oac.exe" uninstall`. The command shows the Compose project, the data volume, the installation directory and the installation ID, and deletes nothing until you type the directory name or `yes`. It then removes the containers, the network and the data volume, the installation directory and the [installation lock](../configuration.md#installation-directory) (`~/.oac/core.lock`). On Windows the running `oac.exe` cannot delete itself: the command prints the `Remove-Item` that removes the rest. It keeps the Docker images so that a reinstall doesn't download them again, and prints the `docker image rm` command that removes them. Run it again and it reports that nothing is installed.
 
 All data goes with it: Projects and API keys, Session history, stored credentials and the Core key. To keep the data, stop the installation with `docker compose stop` instead, or [back it up](#back-up) first.
 
-Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete; the command shows how many sandboxes Core has in use.
+Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete.
 
-Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](./nodes.md#remove-a-node). After the installation directory is gone, their Core is gone: on each node host, run the node uninstall command with `--force`, using `node-install.pyz` from the release that installed them. The installation ID is `secrets/core/installation.id` in the data volume.
+Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](./nodes.md#remove-a-node). After the installation is gone, their Core is gone: on each node host, run the node uninstall command with `--force`, using `node-install.pyz` from the release that installed them and the installation ID that `oac uninstall` printed. The data volume held the ID, so if you didn't note it, read it from the `oac-node-<installation-id>.service` unit on a node host.
+
+If the installation directory was deleted by hand, its containers keep running and keep the Web port. Find the project and remove it without any installation file:
+
+```sh
+docker compose ls --all
+docker compose -p <project> down --volumes --remove-orphans
+```
+
+The project is the `oac-…` name from the list. Then delete `~/.oac/core.lock` (on Windows also `~/.oac/.core.lock.runtime.lock`) if it is still there.
 
 ## Troubleshooting
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `Web port unavailable; choose --web-port` | Another program holds that port. Stop it, or choose another `--web-port`. The installer does not move to a different port |
+| `Web port unavailable; choose --web-port` | Another program holds that port. Stop it, or choose another `--web-port`. The installer does not move to a different port. When the message names a Compose project `oac-…`, an earlier installation whose directory is gone still runs: remove it as in [Uninstall](#uninstall) |
 | `incomplete installation: preserve … and choose another directory` | Preserve the directory and choose another `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` has a value Core rejects. The message names the variable and not the value. Fix `.env` and run `oac apply` again |
 | `data volume check failed; no service was changed` | Initialization refused the data volume; the message names the cause, such as a volume a newer release upgraded. See [downgrades](#downgrades) |

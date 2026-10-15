@@ -253,7 +253,7 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		if fresh {
 			listener, err := net.Listen("tcp", net.JoinHostPort(o.host, strconv.Itoa(o.port)))
 			if err != nil {
-				return fmt.Errorf("Web port unavailable; choose --web-port: %w", err)
+				return fmt.Errorf("Web port unavailable; choose --web-port: %w%s", err, i.portHolderHint(ctx, o.port))
 			}
 			listener.Close()
 		}
@@ -368,6 +368,20 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 		fmt.Println("For remote access, set OAC_PUBLIC_URL in .env to a reachable origin and run oac apply.")
 	}
 	return nil
+}
+
+// portHolderHint names an OpenAgentCore Compose project that publishes the port. Its containers keep running after the installation directory is deleted by hand.
+func (i installer) portHolderHint(ctx context.Context, port int) string {
+	names, err := i.docker(ctx, "", "ps", "--filter", "publish="+strconv.Itoa(port), "--format", `{{.Label "com.docker.compose.project"}}`)
+	if err != nil {
+		return ""
+	}
+	for _, name := range strings.Fields(string(names)) {
+		if strings.HasPrefix(name, "oac-") {
+			return fmt.Sprintf("\nThe Compose project %s holds it. If you deleted its installation directory, remove it with: docker compose -p %s down --volumes --remove-orphans (this deletes its data)", name, name)
+		}
+	}
+	return ""
 }
 
 // releaseCompose downloads the requested release's compose.yaml, verifies its published checksum and requires it to start this installer's release.

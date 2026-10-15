@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 8a7e237e49368e9704af1a18a8b22b5ff84f00a7eb42bfc182b960ea59f41121
+source_hash: f200c2e22c60ff8c4e1779321aec0045e265a1a22ed7d1ce89e89b37b0fa2296
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -22,7 +22,8 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | `oac apply` | 检查数据卷和 `.env`，然后启动服务，并重新创建配置有变化的服务；参见 [oac apply 的工作方式](../configuration.md#how-oac-apply-works)。校验失败时不改动任何服务 |
 | `oac core-key [--show]` | 指出 Core 密钥在数据卷中的位置；加上 `--show` 时打印密钥本身 |
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web |
-| `docker compose down` | 移除容器。数据保留；要删除数据，请[卸载](#uninstall) |
+| `docker compose down` | 移除容器。数据保留 |
+| `oac uninstall` | 确认后删除安装及其数据；参见[卸载](#uninstall) |
 
 示例使用默认安装目录。Windows 上使用 `& "$HOME/.oac/core/oac.exe"` 调用管理命令，后接相同参数。使用自定义安装目录时，替换各命令中的路径。
 
@@ -129,6 +130,34 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 可恢复的备份必须是一组在停止写入期间取得的一致数据。仅数据库转储或 Core 卷导出不包含独立工作区存储及节点计算状态。恢复数据卷时，同时恢复同一份备份中的安装目录，其中保存着写入该数据的版本；之后可以用更新的版本[升级](#upgrade)恢复后的安装。
 
+### 单机备份与恢复 {#single-host-backup}
+
+如果安装的全部数据都在其 Docker 数据卷中，没有独立工作区存储，也没有需要保留的节点状态，那么数据卷加安装目录就是完整备份。以下流程使用 Unix shell，以及该安装已拉取的 PostgreSQL 镜像。
+
+```sh
+cd ~/.oac/core
+docker compose stop
+project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
+mkdir -p ~/oac-backup
+docker run --rm -v "${project}_data:/data:ro" -v ~/oac-backup:/backup --entrypoint tar postgres:16-alpine czf /backup/data.tar.gz -C /data .
+cp -a ~/.oac/core ~/oac-backup/installation
+docker compose start
+```
+
+要在本机或另一台主机上恢复，先[卸载](#uninstall)仍在使用该项目的安装，然后：
+
+```sh
+cp -a ~/oac-backup/installation ~/.oac/core
+cd ~/.oac/core
+project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
+docker compose pull
+docker compose up --no-start
+docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoint tar postgres:16-alpine xzf /backup/data.tar.gz -C /data
+./oac apply
+```
+
+带有独立工作区存储或节点的安装需要下面的完整流程。
+
 ### 备份内容 {#backup-contents}
 
 - Docker 卷 `<project>_data`，包括 `database/`、`secrets/` 和 `state/`。其中保存项目、密钥摘要、节点、默认模型、加密凭据和执行历史（含大对象）。`secrets/core/credential.key` 必须与匹配的数据库一起保留，否则存储的凭据无法解密。
@@ -173,7 +202,7 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并保留数据库、数据卷、`.env`、密钥、Core 密钥、安装 ID 以及你在 `compose.override.yaml` 中添加的条目。更早的安装无法升级：请将新版本安装到新目录。降级会被拒绝。
 
 1. 阅读目标版本的发布说明，了解[协议变更](#protocol-changes)及其要求的操作。
-2. [备份](#back-up)安装。升级不会备份；升级之后，备份是回到先前版本的唯一途径。
+2. [备份](#single-host-backup)安装。升级不会备份；升级之后，备份是回到先前版本的唯一途径。
 3. 使用目标版本的安装程序，带上 `--upgrade` 和安装目录运行：
 
    ```sh
@@ -217,24 +246,31 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
 ## 卸载 {#uninstall}
 
 ```sh
-cd ~/.oac/core
-docker compose down --volumes --remove-orphans --rmi all
-cd && rm -rf ~/.oac/core
+~/.oac/core/oac uninstall
 ```
 
-`down --volumes` 会删除安装数据卷。之后删除安装目录；Windows 使用 `Remove-Item -Recurse "$HOME/.oac/core"`。
+Windows 上运行 `& "$HOME/.oac/core/oac.exe" uninstall`。命令会展示 Compose 项目、数据卷、安装目录和安装 ID，在你输入目录名或 `yes` 之前不会删除任何内容。随后它删除容器、网络和数据卷、安装目录以及[安装锁](../configuration.md#installation-directory)（`~/.oac/core.lock`）。Windows 上正在运行的 `oac.exe` 无法删除自身：命令会打印删除其余内容的 `Remove-Item`。它保留 Docker 镜像，重新安装时不必再次下载，并打印删除镜像的 `docker image rm` 命令。再次运行会提示没有已安装的内容。
 
 全部数据随之删除：项目和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
 
-卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成；命令展示 Core 正在使用的沙箱数量。
+卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成。
 
-其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装目录删除后，它们的 Core 已不存在：在各节点主机使用当时发布版的 `node-install.pyz`，执行带 `--force` 的节点卸载命令。安装 ID 在数据卷的 `secrets/core/installation.id` 中。
+其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装删除后，它们的 Core 已不存在：在各节点主机使用当时发布版的 `node-install.pyz`，执行带 `--force` 的节点卸载命令，并传入 `oac uninstall` 打印的安装 ID。安装 ID 保存在数据卷中，如果没有记下，可以在节点主机的 `oac-node-<installation-id>.service` 单元名中读取。
+
+如果安装目录被手动删除，其容器会继续运行并占用 Web 端口。不依赖任何安装文件即可找到并移除该项目：
+
+```sh
+docker compose ls --all
+docker compose -p <project> down --volumes --remove-orphans
+```
+
+项目是列表中的 `oac-…` 名称。之后如果 `~/.oac/core.lock` 仍然存在（Windows 上还有 `~/.oac/.core.lock.runtime.lock`），将其删除。
 
 ## 问题排查 {#troubleshooting}
 
 | 症状 | 原因与解决方法 |
 | --- | --- |
-| `Web port unavailable; choose --web-port` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口 |
+| `Web port unavailable; choose --web-port` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口。如果消息点名了 Compose 项目 `oac-…`，说明目录已不存在的早期安装仍在运行：按[卸载](#uninstall)移除它 |
 | `incomplete installation: preserve … and choose another directory` | 保留目录内容，选择另一个 `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
 | `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷已被更新的版本升级。参见[降级](#downgrades) |
