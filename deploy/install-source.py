@@ -128,9 +128,12 @@ def install(bundle, destination, host, port, public_url, upgrade):
             print(f'Console: {public_url}')
         if previous and previous != revision:
             print(f"Upgraded from {previous[:12]} to {revision[:12]}. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.")
-        print('Core key:', flush=True)
-        run(f'Reading the Core key failed; see the output above. Show it with {destination / "oac"} core-key --show.',
-            'docker', 'compose', 'exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key', cwd=destination)
+        if existing:
+            print(f'Core key: {destination / "oac"} core-key --show')
+        else:
+            print('Core key:', flush=True)
+            run(f'Reading the Core key failed; see the output above. Show it with {destination / "oac"} core-key --show.',
+                'docker', 'compose', 'exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key', cwd=destination)
     finally:
         # A new installation that failed before compose.yaml was in place leaves nothing behind.
         if created and not committed:

@@ -70,7 +70,7 @@ python3 "$bundle/install.py" \
   --public-url http://YOUR_CORE_HOST:8080
 ```
 
-Replace `YOUR_CORE_HOST` with an address reachable by your browser and sandbox nodes. Use your HTTPS origin behind a reverse proxy when needed; [installation options](./getting-started/install-options.md) owns ingress configuration. The installer prints the Core key for signing in. It creates the standard Compose installation plus a read-only `node-payload` directory containing the bundle's public node artifacts. Allow disk space for both the extracted bundle and this installed copy. No Docker socket is passed to Core or Web.
+Replace `YOUR_CORE_HOST` with an address reachable by your browser and sandbox nodes. Use your HTTPS origin behind a reverse proxy when needed; [installation options](./getting-started/install-options.md) owns ingress configuration. A new installation prints the Core key for signing in; a rerun prints the command that shows it. It creates the standard Compose installation plus a read-only `node-payload` directory containing the bundle's public node artifacts. Allow disk space for both the extracted bundle and this installed copy. No Docker socket is passed to Core or Web.
 
 The build also creates `oac-<commit>-linux-amd64-offline.tar.gz`. Copy and extract that archive on another Linux amd64 Docker host, then run its `install.py`; no checkout, Go, Node or pnpm is needed on that host, only Python 3.9+ and Docker. Keep the extracted bundle until installation completes. The installed services and node downloads do not depend on its original location afterward.
 

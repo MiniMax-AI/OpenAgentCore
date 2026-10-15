@@ -103,7 +103,7 @@ class SourceInstallTest(unittest.TestCase):
         self.install()
         self.calls = []
         self.install()
-        self.assertEqual([command[-1] for command in self.commands()], ['init', 'check-config', '--remove-orphans', 'core-key'])
+        self.assertEqual([command[-1] for command in self.commands()], ['init', 'check-config', '--remove-orphans'])
         with self.assertRaisesRegex(ValueError, '^Data volume check failed; no service was changed. See the output above.$'):
             self.install(failure='init')
 
@@ -130,7 +130,7 @@ class SourceInstallTest(unittest.TestCase):
 
         self.calls = []
         self.install(upgrade=True, image='sha256:' + '2' * 64)
-        self.assertEqual([command[-1] for command in self.commands()], ['check-config', 'init', '--remove-orphans', 'core-key'])
+        self.assertEqual([command[-1] for command in self.commands()], ['check-config', 'init', '--remove-orphans'])
         services = json.loads((self.destination / 'compose.override.yaml').read_text())['services']
         self.assertEqual(services['core']['volumes'], [nfs])
         self.assertEqual(os.stat(self.destination / 'compose.override.yaml').st_mode & 0o777, 0o600)
