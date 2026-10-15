@@ -29,8 +29,10 @@ Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a 
 Linux and macOS:
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
+curl -fsSL https://openagentcore.dev/install.sh | bash
 ```
+
+The domain entry downloads and runs the latest GitHub Release installer, forwarding all arguments. Release downloads still require access to GitHub.
 
 Windows PowerShell:
 
@@ -41,7 +43,7 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 When binding to all IPv4 addresses, the installer uses the private address of the default route if available; otherwise the console address is `http://localhost:8080`. To choose another reachable origin, pass `--public-url`; if a reverse proxy already serves this host, use its HTTPS address:
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --public-url https://core.example
+curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https://core.example
 ```
 
 The script downloads that release's Compose files, checks their SHA-256, and:
@@ -55,7 +57,7 @@ The installer prints the console address and Core key. After signing in, configu
 Downloads and configuration checks happen before the installation directory is published. After that, failures preserve the configuration and data and report the failed step; inspect it with `docker compose logs --tail 100` in the installation directory. Fix the reported cause and rerun the same command, or specify the installation directory:
 
 ```bash
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
+curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
 ```
 
 Use your chosen directory if it differs. A rerun uses the saved Compose file and settings; installation flags only apply to new directories. Existing images and containers are reused; missing images are downloaded. To change settings, edit `.env` and run `oac apply`. To move to a newer release, follow [Upgrade](./operations.md#upgrade).

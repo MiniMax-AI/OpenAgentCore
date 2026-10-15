@@ -292,6 +292,6 @@ export const harnesses = [
 
 export const protocols = ['responses', 'anthropic', 'chat_completions'] as const
 
-export const installCommand = 'curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash'
+export const installCommand = 'curl -fsSL https://openagentcore.dev/install.sh | bash'
 
 export const repoUrl = 'https://github.com/MiniMax-AI/OpenAgentCore'

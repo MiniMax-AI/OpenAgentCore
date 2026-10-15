@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 36a0202a83bc194598d64750a876f51ca3461ea9c615c6e1afad4caa78c4ad30
+source_hash: 80a57d4cee51989f34be587a4b48ec32ce3ed580784352a6f61ffed6a93e7daa
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -177,7 +177,7 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
 3. 使用目标版本的安装程序，带上 `--upgrade` 和安装目录运行：
 
    ```sh
-   curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
+   curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
    ```
 
    `--version TAG` 选择最新版本以外的发布版本。Windows 上，将相同参数传给下载的 `install.ps1`。对于从[源码包](../development.md#install-a-checkout-without-publishing-a-release)安装的实例，运行新源码包的安装程序：`python3 <bundle>/install.py --install-dir <dir> --upgrade`。

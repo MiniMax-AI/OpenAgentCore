@@ -48,6 +48,8 @@ Brand names and marks belong to their respective owners. Keep provenance and lic
 
 ## Publish
 
+`/install.sh` serves `website/install.sh`, a Bash entry that downloads the latest GitHub Release installer before executing it and forwards all arguments. Installation behavior remains owned by the release launcher; new releases require no website rebuild. The custom domain uses the same GitHub Pages deployment as the website, with no separate DNS record for this path.
+
 `make check-website` builds and tests the site. `make check-docs` checks repository Markdown links, including explicit heading IDs used by translations. core-check runs it for pull requests that change the website, published documentation or relevant Node dependencies; `.github/workflows/website.yml` builds and deploys `main` to GitHub Pages. A repository administrator enables Pages once: **Settings → Pages → Source: GitHub Actions**.
 
 The publishing step reads `html_url` directly from the GitHub Pages API and passes it to the build as `WEBSITE_URL`. VitePress derives the base path from that URL, supporting both `https://<owner>.github.io/<repository>/` and a custom domain set under **Settings → Pages → Custom domain**. An empty or invalid URL stops the build. Local builds omit `WEBSITE_URL` to serve from `/`.

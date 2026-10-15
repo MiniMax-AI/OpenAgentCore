@@ -150,6 +150,7 @@ export default defineConfig({
   buildEnd: (site) => {
     writeMarkdownCopies(site)
     writeLegacyRedirects(site)
+    copyFileSync(resolve(repoRoot, 'website/install.sh'), resolve(site.outDir, 'install.sh'))
   },
 })
 

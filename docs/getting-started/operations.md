@@ -175,7 +175,7 @@ An installation of v0.0.10 or later upgrades in place to a newer release. It kee
 3. Run the target release's installer with `--upgrade` and the installation directory:
 
    ```sh
-   curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
+   curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
    ```
 
    `--version TAG` selects a release other than the latest. On Windows, pass the same flags to the downloaded `install.ps1`. For an installation from a [source bundle](../development.md#install-a-checkout-without-publishing-a-release), run the new bundle's installer: `python3 <bundle>/install.py --install-dir <dir> --upgrade`.

@@ -45,7 +45,7 @@ Core keeps durable execution state. The Runtime runs the chosen Harness inside t
 On Linux or macOS with [Docker configured](https://openagentcore.dev/docs/getting-started/install#prerequisites):
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
+curl -fsSL https://openagentcore.dev/install.sh | bash
 ```
 
 Windows PowerShell:

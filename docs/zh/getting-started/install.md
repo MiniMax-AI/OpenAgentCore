@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 8afdf9e68232572599bf432b0d98b08e456b26c6c51280b3bd7139c4ef2db8ea
+source_hash: 21a5b7cd79529767d3ccd6f685ca5d7f9c9c46c93590cfd06a6ef43efe9a41f7
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发项目 API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -31,8 +31,10 @@ source_hash: 8afdf9e68232572599bf432b0d98b08e456b26c6c51280b3bd7139c4ef2db8ea
 Linux 和 macOS：
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
+curl -fsSL https://openagentcore.dev/install.sh | bash
 ```
+
+该域名入口会下载并运行 GitHub 最新 Release 中的安装脚本，并透传所有参数。下载发行制品仍需能够访问 GitHub。
 
 Windows PowerShell：
 
@@ -43,7 +45,7 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 绑定所有 IPv4 地址时，安装器会使用默认路由的私网地址；如果没有可用私网地址，则使用 `http://localhost:8080`。也可以通过 `--public-url` 指定可访问的源地址；如果已有反向代理，就使用它的 HTTPS 地址：
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --public-url https://core.example
+curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https://core.example
 ```
 
 脚本下载该发布版的 Compose 文件，校验 SHA-256，然后：
@@ -57,7 +59,7 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据，并报告失败步骤；在安装目录运行 `docker compose logs --tail 100` 查看日志。修复报错后，重新执行同一命令，或指定安装目录即可继续：
 
 ```bash
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
+curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
 ```
 
 如果使用了其他目录，请替换路径。重新执行时沿用已保存的 Compose 文件和设置；安装参数只对新目录生效。已有镜像和容器直接复用，缺失镜像会重新下载。修改设置请编辑 `.env` 并运行 `oac apply`。要换到更新的发布版本，请按[升级](operations.md#upgrade)操作。

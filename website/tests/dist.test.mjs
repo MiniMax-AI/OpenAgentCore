@@ -88,3 +88,11 @@ test('Chinese landing and top navigation link to Chinese documentation', () => {
     assert.ok(source.includes(`href="${base}zh/${page}"`), page)
   }
 })
+
+test('domain installer is published as shell source, not an HTML redirect', () => {
+  const script = readFileSync(new URL('../install.sh', import.meta.url), 'utf8')
+  assert.equal(readFileSync(resolve(dist, 'install.sh'), 'utf8'), script)
+  for (const page of ['index.html', 'zh/index.html']) {
+    assert.ok(readFileSync(resolve(dist, page), 'utf8').includes('https://openagentcore.dev/install.sh'))
+  }
+})

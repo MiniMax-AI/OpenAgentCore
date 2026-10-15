@@ -45,7 +45,7 @@ OpenAgentCore 在你自己的基础设施上运行 AI Agent，对外提供 [Open
 在已按[前置条件](https://openagentcore.dev/zh/docs/getting-started/install#prerequisites)准备 Docker 的 Linux 或 macOS 上：
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
+curl -fsSL https://openagentcore.dev/install.sh | bash
 ```
 
 Windows PowerShell:

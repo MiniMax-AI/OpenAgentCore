@@ -45,7 +45,7 @@ OpenAgentCore は、自分のインフラ上で AI エージェントを実行�
 [前提条件](https://openagentcore.dev/docs/getting-started/install#prerequisites)に従って Docker をセットアップした Linux または macOS で、次のコマンドを実行します。
 
 ```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
+curl -fsSL https://openagentcore.dev/install.sh | bash
 ```
 
 Windows PowerShell の場合：
