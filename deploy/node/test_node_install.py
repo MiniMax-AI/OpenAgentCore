@@ -1000,8 +1000,10 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse([call for call, _ in self.calls if call[:1] == ["useradd"]])
         self.assertEqual(json.loads((system / "etc/account.json").read_text())["created"], False)
         self.calls.clear()
-        with mock.patch.object(installer, "open_request", side_effect=urllib.error.HTTPError("https://core.example", 401, "", {}, None)):
-            installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=False))
+        with mock.patch.object(installer.sys, "argv", ["/home/me/.oac/node-bootstrap/abc.pyz"]):
+            output = self.uninstall_output(False)
+        self.assertIn("Kept the oac-node user and", output)
+        self.assertIn("rm -f /home/me/.oac/node-bootstrap/*.pyz", output)
         commands = [call for call, _ in self.calls]
         self.assertNotIn(["userdel", "oac-node"], commands)
         self.assertIn(["gpasswd", "--delete", "oac-node", "docker"], commands)

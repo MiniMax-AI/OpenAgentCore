@@ -807,7 +807,9 @@ def service_environment(environment):
         return ""
     direct = "localhost,127.0.0.1,::1"
     for name in ("no_proxy", "NO_PROXY"):
-        settings[name] = ",".join(filter(None, (settings.get(name, "").strip(), direct)))
+        entries = [entry.strip() for entry in settings.get(name, "").split(",") if entry.strip()]
+        known = {entry.lower() for entry in entries}
+        settings[name] = ",".join(entries + [entry for entry in direct.split(",") if entry not in known])
     if any(set(value) & {"\n", "\r", "\0"} for value in settings.values()):
         raise InstallError("A proxy setting contains a line break; fix it, then rerun the command." + NOTHING_CHANGED)
     return "".join(name + '="' + value.replace("\\", "\\\\").replace('"', '\\"') + '"\n' for name, value in sorted(settings.items()) if value)
@@ -1362,6 +1364,9 @@ def uninstall_system(args):
             (SYSTEM_RECORDS / (args.installation_id + ".env")).unlink(missing_ok=True)
             print("Node for installation " + args.installation_id + " uninstalled from this host.")
         release_account(account, account_record)
+    if sys.argv[0].endswith(".pyz"):
+        cache = plain(str(Path(sys.argv[0]).resolve().parent), sys.stdout.encoding)
+        print("Kept the downloaded installers in " + cache + ". Remove them with `rm -f " + cache + "/*.pyz`.")
 
 
 def release_account(account, record):
@@ -1394,6 +1399,7 @@ def release_account(account, record):
                 print("Removed " + SERVICE_USER + " from the " + group + " group, which this installer added.")
         if record.get("home_mode") and SERVICE_HOME.is_dir() and not SERVICE_HOME.is_symlink():
             os.chmod(SERVICE_HOME, int(record["home_mode"], 8))
+        print("Kept the " + SERVICE_USER + " user and " + str(SERVICE_HOME) + ", which existed before this installer.")
     (SYSTEM_RECORDS / "account.json").unlink()
     with contextlib.suppress(OSError):
         SYSTEM_RECORDS.rmdir()

@@ -200,6 +200,8 @@ class NodeProxyTests(unittest.TestCase):
         self.assertIn('https_proxy="' + secret + '"\n', content)
         self.assertIn('HTTPS_PROXY="' + secret + '"\n', content)
         self.assertIn('no_proxy="internal.invalid,localhost,127.0.0.1,::1"\n', content)
+        self.assertIn('NO_PROXY="Localhost,internal.invalid,127.0.0.1,::1"\n', installer.service_environment(
+            {"https_proxy": secret, "NO_PROXY": "Localhost,internal.invalid"}))
         self.assertEqual(installer.service_environment({"no_proxy": "internal.invalid"}), "")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "node.env"

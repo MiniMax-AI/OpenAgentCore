@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 0933f59c941d62b9b8a23c31c50f8cbc72f7b013c1103363366c8b075a286d98
+source_hash: b6c4b068edb9c7ecd3b59e105ef77ea05d39e9b8a2eae90f0f2bbd30d826e3aa
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -116,7 +116,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 1. 在 Web 打开 **节点**，在节点页面选择 **移除节点**，或在列表行选择 **移除**，再选择 **确认移除**。节点仍持有沙箱、快照或待清理资源时，Core 拒绝操作；等待完成或归档对应 Session。移除是永久的：主机只能作为新节点重新加入。移除所有节点仍保留沙箱配置。
 2. Web 随后展示 **清理主机** 和卸载命令，在主机执行。**节点** 页的 **清理主机** 随时展示同一条命令：主机早先已移除、部署重置使其节点失效，或主机从未注册，都可使用。
 
-卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **旧 Core 地址已失效？**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 **节点** 页面移除节点。Core 已不存在时 Web 也不在了：在主机用原命令留下的安装程序执行 `sudo python3 ~/.oac/node-bootstrap/<sha256>.pyz --uninstall --installation-id <installation-id> --force`。安装 ID 在单元名 `oac-node-<installation-id>.service` 和 `/etc/oac-node/<installation-id>.json` 中；Web 在 **设置** → **服务与部署** → **安装详情** 中也会展示。卸载停止并移除服务、节点状态、记录、代理设置和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。
+卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **旧 Core 地址已失效？**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 **节点** 页面移除节点。Core 已不存在时 Web 也不在了：在主机用原命令留下的安装程序执行 `sudo python3 ~/.oac/node-bootstrap/<sha256>.pyz --uninstall --installation-id <installation-id> --force`。安装 ID 在单元名 `oac-node-<installation-id>.service` 和 `/etc/oac-node/<installation-id>.json` 中；Web 在 **设置** → **服务与部署** → **安装详情** 中也会展示。卸载停止并移除服务、节点状态、记录、代理设置和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。输出会列出保留的内容：复用的账号及其主目录 `/var/lib/oac-node`，以及 `~/.oac/node-bootstrap` 中下载的安装程序，可用 `rm -f ~/.oac/node-bootstrap/*.pyz` 删除。
 
 程序不删除 Docker 镜像或卷。保留 Runtime 镜像并输出 `sudo docker image rm` 命令。microsandbox 在 Core 确认节点已移除后，还会删除节点位于 `/var/lib/oac-node/.oac/m/` 的存储（约 1.5 GB），随后删除所创建的账号。使用 `--force` 时不询问 Core，因此保留存储，并输出删除命令（`sudo -u oac-node rm -rf <store>`）；microVM 可能仍使用存储，请先检查 `pgrep -u oac-node`，再重新卸载以完成账号移除。输出会列出已删除和已保留的内容。可以重复卸载直到完成。
 
