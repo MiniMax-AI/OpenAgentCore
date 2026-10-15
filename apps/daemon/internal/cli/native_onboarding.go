@@ -23,6 +23,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
+var errCredentialClaimed = errors.New("install: this Session's machine credential is already claimed by another installation, so its install command cannot be used again; to reconnect it, choose Rotate in Web (Session > Executor credentials) and install from an extracted distribution (see Self-hosted executors > Reconnect an existing Session), or create a new Session")
+
 func installationRequest(ctx context.Context, endpoint, authorization string, input any, output any) error {
 	body, err := json.Marshal(input)
 	if err != nil {
@@ -44,7 +46,7 @@ func installationRequest(ctx context.Context, endpoint, authorization string, in
 	case http.StatusUnauthorized:
 		return errors.New("install: authorization rejected or expired; copy a fresh command from the Session")
 	case http.StatusConflict:
-		return errors.New("install: this Session's machine credential is already claimed by another installation; rerun the command in the original installation directory, or rotate the credential in Web and install from an extracted distribution (see Self-hosted executors > Reconnect an existing Session), or create a new Session")
+		return errCredentialClaimed
 	default:
 		return fmt.Errorf("install: Core rejected installation (HTTP %d); check the Session and obtain a fresh command", response.StatusCode)
 	}
@@ -143,7 +145,12 @@ func prepareOnboardingCredential(ctx context.Context, o *nativeInstallOptions, h
 	} else {
 		return err
 	}
-	return installationRequest(ctx, o.OnboardURL+"/claim", o.Authorization, map[string]string{"executor_token": secret}, nil)
+	err := installationRequest(ctx, o.OnboardURL+"/claim", o.Authorization, map[string]string{"executor_token": secret}, nil)
+	if errors.Is(err, errCredentialClaimed) {
+		// This directory holds no installation, and Core never accepts this secret.
+		_ = held.Remove("executor-credential.json")
+	}
+	return err
 }
 
 func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOptions) error {

@@ -63,13 +63,24 @@ func TestInstalledDaemonIgnoresRuntimeHomeEnvironment(t *testing.T) {
 	}
 }
 
-// A lost, moved or incompatible installation gets the working recovery, not a
-// dead end.
-func TestInstallationConflictNamesRecovery(t *testing.T) {
+// A claim refused as already taken names the working recovery and leaves no
+// credential file behind in the directory.
+func TestClaimConflictNamesRecoveryAndRemovesCredential(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusConflict) }))
 	defer server.Close()
-	err := installationRequest(t.Context(), server.URL+"/api/v1/agent-daemon/installation/claim", "grant", map[string]string{"executor_token": "x"}, nil)
-	if err == nil || !strings.Contains(err.Error(), "already claimed") || !strings.Contains(err.Error(), "Reconnect an existing Session") {
+	directory := t.TempDir()
+	held, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Close()
+	o := &nativeInstallOptions{OnboardURL: server.URL + "/api/v1/agent-daemon/installation", Authorization: "grant"}
+	o.Directory, o.Environment = directory, "11111111-1111-4111-8111-111111111111"
+	err = prepareOnboardingCredential(t.Context(), o, held)
+	if err == nil || !strings.Contains(err.Error(), "already claimed") || !strings.Contains(err.Error(), "Rotate") || !strings.Contains(err.Error(), "Reconnect an existing Session") {
 		t.Fatalf("conflict message: %v", err)
+	}
+	if _, err := held.Stat("executor-credential.json"); !os.IsNotExist(err) {
+		t.Fatal("unclaimed credential file was kept")
 	}
 }

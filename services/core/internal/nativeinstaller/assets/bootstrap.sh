@@ -35,6 +35,7 @@ cleanup() { rm -rf "$work"; }
 interrupt() {
   trap '' INT TERM HUP
   if [ -n "$active" ]; then kill -TERM "$active" 2>/dev/null || :; wait "$active" 2>/dev/null || :; fi
+  printf 'Interrupted; rerun the same command to continue.\n' >&2
   exit 130
 }
 trap cleanup EXIT
@@ -105,6 +106,8 @@ if [ -f "$archive" ]; then
   printf 'Verifying the installer archive from an earlier run...\n'
   verified "$archive" || { rm -f "$archive"; printf 'The earlier archive failed verification and was discarded.\n' >&2; }
 fi
+# An interrupt between the last byte and the rename leaves a complete part file; accept it without asking the server for more.
+if [ ! -f "$archive" ] && [ -s "$archive.part" ] && verified "$archive.part"; then mv "$archive.part" "$archive"; fi
 if [ ! -f "$archive" ]; then
   [ ! -s "$archive.part" ] || printf 'Resuming the earlier download...\n'
   available=$(df -Pk "$work" | awk 'NR==2 {print $4}')

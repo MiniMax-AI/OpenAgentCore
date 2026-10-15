@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -119,6 +120,8 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if c.local[platform] {
+		// An archive outlives the server-wide write timeout on a slow link.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 		http.ServeFile(w, r, filepath.Join(c.directory, name))
 		return
 	}

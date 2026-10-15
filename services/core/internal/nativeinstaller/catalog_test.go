@@ -1,13 +1,17 @@
 package nativeinstaller
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -112,5 +116,37 @@ func TestOnlineCatalogRedirectsOnlyDeclaredMatchedArchives(t *testing.T) {
 func TestMissingCatalogServesNoInstallers(t *testing.T) {
 	if catalog, err := Load(t.TempDir(), "build"); catalog != nil || err != nil {
 		t.Fatal(catalog, err)
+	}
+}
+
+func TestLocalArchiveOutlivesServerWriteTimeout(t *testing.T) {
+	dir := t.TempDir()
+	data := bytes.Repeat([]byte("x"), 64<<20)
+	hash := sha256.Sum256(data)
+	raw, _ := json.Marshal(Catalog{Version: "build", ProtocolVersion: proto.Version, Artifacts: map[string]Artifact{"linux-amd64": {SHA256: hex.EncodeToString(hash[:])}}})
+	if err := os.WriteFile(filepath.Join(dir, "catalog.json"), raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "linux-amd64.tar.gz"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := Load(dir, "build")
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(catalog)
+	server.Config.WriteTimeout = 100 * time.Millisecond
+	server.Start()
+	defer server.Close()
+	response, err := http.Get(server.URL + "/api/v1/agent-daemon/install/build/linux-amd64.tar.gz")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	// Read past the write timeout, as a slow link does.
+	time.Sleep(300 * time.Millisecond)
+	body, err := io.ReadAll(response.Body)
+	if err != nil || !bytes.Equal(body, data) {
+		t.Fatalf("download was cut: %d of %d bytes, %v", len(body), len(data), err)
 	}
 }

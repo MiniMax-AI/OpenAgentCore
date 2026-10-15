@@ -112,3 +112,45 @@ func TestBootstrapCommandDiscardsTimedOutResponse(t *testing.T) {
 		t.Fatalf("partial bootstrap executed: %v requests=%d %s", err, requests.Load(), output)
 	}
 }
+
+func TestBootstrapInterruptSaysHowToContinue(t *testing.T) {
+	archive := bootstrapFixtureArchive(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/installation"):
+			w.WriteHeader(404)
+		case strings.HasSuffix(r.URL.Path, ".sha256"):
+			fmt.Fprintf(w, "%x\n", sha256.Sum256(archive))
+		default:
+			w.Header().Set("Content-Length", fmt.Sprint(len(archive)))
+			w.Write(archive[:1])
+			w.(http.Flusher).Flush()
+			close(started)
+			<-release
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	command := bootstrapCommand(t, server.URL, t.TempDir())
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var output bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = &output
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("download did not start")
+	}
+	if err := command.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err == nil || !strings.Contains(output.String(), "Interrupted; rerun the same command to continue.") {
+		t.Fatalf("interrupt message missing: %v %s", err, output.String())
+	}
+}

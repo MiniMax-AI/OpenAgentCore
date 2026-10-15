@@ -131,7 +131,8 @@ func TestBootstrapAcceptsCompletePartialDownload(t *testing.T) {
 	if err := os.WriteFile(part, archive, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := server.command(t, home).CombinedOutput(); err != nil {
+	output, err := server.command(t, home).CombinedOutput()
+	if err != nil || strings.Contains(string(output), "416") {
 		t.Fatalf("%v: %s", err, output)
 	}
 }
