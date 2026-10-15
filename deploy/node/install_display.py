@@ -52,8 +52,8 @@ def heading(message):
     print("\n" + color(message, "1"))
 
 
-def error(message):
-    print(color("Installation failed: ", "31", sys.stderr) + message, file=sys.stderr, flush=True)
+def error(message, label="Installation failed: "):
+    print((color(label, "31", sys.stderr) if label else "") + message, file=sys.stderr, flush=True)
 
 
 def paragraph(message):

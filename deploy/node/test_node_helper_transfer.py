@@ -21,8 +21,8 @@ class HelperTransferTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "node-install.pyz"
-            source.write_bytes(node_generations.helper_archive(SimpleNamespace(bundle=None), installer))
-            args = SimpleNamespace(bundle=None, source_url="https://core.example", core_url="https://core.example")
+            source.write_bytes(node_generations.helper_archive(SimpleNamespace(), installer))
+            args = SimpleNamespace(source_url="https://core.example", core_url="https://core.example")
             with mock.patch.object(sys, "argv", [str(source)]):
                 captured = node_generations.helper_archive(args, installer)
                 source.unlink()
@@ -45,9 +45,9 @@ class HelperTransferTests(unittest.TestCase):
             uid = gid = 65534
             os.chown(root, uid, gid)
             source = download / "node-install.pyz"
-            source.write_bytes(node_generations.helper_archive(SimpleNamespace(bundle=None), installer))
+            source.write_bytes(node_generations.helper_archive(SimpleNamespace(), installer))
             source.chmod(0o600)
-            args = SimpleNamespace(bundle=None, source_url="https://core.example", core_url="https://core.example")
+            args = SimpleNamespace(source_url="https://core.example", core_url="https://core.example")
             with mock.patch.object(sys, "argv", [str(source)]):
                 captured = node_generations.helper_archive(args, installer)
                 pid = os.fork()

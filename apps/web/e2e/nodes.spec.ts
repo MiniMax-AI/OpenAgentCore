@@ -19,7 +19,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(add.getByText("What the sandbox backend needs on the host; the installer checks it and names anything missing")).toBeVisible();
   await expect(add.getByText("SELinux is not enforcing")).toBeVisible();
   await expect(add.getByText("In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused.")).toBeVisible();
-  await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 2 GB of disk for the Runtime image")).toBeVisible();
+  await expect(add.getByText("CPUs and memory for at least one sandbox: 2 CPU · 4 GiB; about 3 GB of free disk while the Runtime image installs")).toBeVisible();
   await expect(add.getByText("Reaches https://core.example.com, as do its sandboxes")).toBeVisible();
   // Node installation only offers a system service; there is no user-mode alternative.
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);

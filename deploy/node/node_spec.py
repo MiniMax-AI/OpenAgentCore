@@ -12,8 +12,14 @@ class SpecificationError(Exception):
     pass
 
 
+class UnrecordedIdentity(SpecificationError):
+    """Core rejects the retained identity of a node that never registered, so it never recorded it."""
+
+
 PUBLIC_URL_CHANGED = ("Core's public URL changed after this command was generated. Generate a new command on the "
                       "Nodes page and run it on this host.")
+ENROLLMENT_EXPIRED = ("The enrollment command expired or was already used. Generate a new command on the Nodes page "
+                      "and run it on this host.")
 
 
 def release(manifest):
@@ -128,9 +134,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
                 raise
             # Identity is persisted before enrollment. A failed first registration
             # may therefore have no durable credential on Core yet.
-            request = urllib.request.Request(args.core_url + "/api/v1/sandbox-node/configuration",
-                                             headers={"Authorization": "Bearer " + token})
-            response = open_request(request)
+            raise UnrecordedIdentity("Core has no record of the retained node identity") from None
         with response:
             raw = response.read(16385)
         if len(raw) > 16384:
@@ -145,7 +149,9 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
             raise SpecificationError("Core node configuration was not found (HTTP 404); route /api/v1 on the Core origin directly to Core, not to Web") from None
         if error.code == 409:
             raise SpecificationError("Core refused node configuration (HTTP 409): the deployment is resetting or conflicts with this node's retained specification; inspect the deployment before retrying") from None
-        raise SpecificationError("Core rejected the node configuration read (HTTP " + str(error.code) + "); verify the retained or enrollment credential") from None
+        if error.code == 401:
+            raise SpecificationError(ENROLLMENT_EXPIRED) from None
+        raise SpecificationError("Core rejected the node configuration read (HTTP " + str(error.code) + "); check the Core URL and the reverse proxy in front of it, then rerun the command") from None
     except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
         raise SpecificationError("Cannot reach Core node configuration; verify the Core origin and that the reverse proxy routes /api/v1 to Core") from None
     except (ValueError, AttributeError):
@@ -155,7 +161,8 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
         if (identity.get("provider") != data["provider"]
                 or not allow_selection_change and (identity.get("specification_digest") != data["specification_digest"]
                 or identity.get("deployment_generation") != data["generation"])):
-            raise SpecificationError("Retained node specification differs from Core; preserve its state and follow the deployment change procedure")
+            raise SpecificationError("This node is registered and prepares the changed sandbox configuration itself; the Nodes page "
+                                     "shows its progress. Nothing was changed.")
     if generation is not None and data["generation"] != generation:
         raise SpecificationError("Core returned a different generation")
     return data

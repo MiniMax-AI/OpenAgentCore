@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 8d0888dcd75b63daeb6bcd1207bcd006606f3f843ce786e5427a6c092b1b3b55
+source_hash: da770b5195c28cc9ffa6e2d374113adfb2b30a3526710386ff7c49ce8ac62a94
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -49,7 +49,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 - SELinux 不处于 enforcing 模式。安装程序不支持 enforcing SELinux 主机。
 - Docker：正在运行的 rootful Docker Engine，其 `/var/run/docker.sock` 套接字属于 `docker` 组，权限为 `0660`，并强制执行 CPU 和内存限制（cgroup v2）。
 - microsandbox：`/dev/kvm` 属于 `kvm` 组（硬件或嵌套虚拟化），并具有 microsandbox 链接的库（glibc）。
-- CPU 和内存至少足以运行一个所配置规格的沙箱，以及约 2 GB 的 Runtime 镜像磁盘空间。
+- CPU 和内存至少足以运行一个所配置规格的沙箱；安装 Runtime 镜像期间约需 3 GB 空闲磁盘：下载的归档及其解包副本在导入完成前位于 `/var/lib/oac-node`，镜像本身在 Docker 存储或 microsandbox 存储中约占 1.5 GB。安装程序在下载前检查空间，并在导入后删除归档，因此节点最终只保留镜像和不足 0.2 GB 的程序。
 - 可通过公开 URL 访问控制台和 Core；沙箱也能访问 Core。
 
 ### 通过代理下载 {#download-through-a-proxy}
@@ -86,11 +86,12 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 ## 重新运行、过期与慢速网络 {#rerun-expiry-and-slow-links}
 
-- 重新执行同一命令是安全的。节点注册后，重新运行使用节点自身凭据，不改变已匹配的内容，也无需令牌。保留的节点身份属于其他 Core 地址或安装时，程序拒绝且不修改任何内容；节点注册后沙箱配置发生变化时，程序同样不做修改，并以 `Retained node specification differs from Core` 拒绝。通过此命令添加的节点会自行准备新配置；参阅[修改沙箱配置](#change-the-sandbox-configuration)。
-- 已过期或已在其他主机使用的命令立即失败，显示 `Core rejected the node configuration read (HTTP 401)`：生成新命令并在 10 分钟内执行。
+- 重新执行同一命令是安全的。节点注册后，重新运行使用节点自身凭据，不改变已匹配的内容，也无需令牌。以下情况程序不做任何修改并说明原因：保留的节点身份属于其他 Core 地址或安装；节点注册后沙箱配置发生变化（节点会自行准备，参阅[修改沙箱配置](#change-the-sandbox-configuration)）；或 Core 已升级、提供了更新的节点程序，此时在 **节点** 选择 **移除节点**，在主机上卸载该节点，再通过 **添加节点** 重新添加。
+- 节点注册前失败的运行不会在 Core 留下任何记录。下一条命令即使在配置变更或 Core 升级之后执行，也会替换上次尝试的配置和不再匹配的已下载文件，保留匹配的文件并继续。
+- 已过期或已在其他主机使用的命令立即失败，显示 `The enrollment command expired or was already used`：生成新命令并在 10 分钟内执行。
 - 慢速下载期间命令过期时，注册失败并显示 `The enrollment command expired or was already used`。下载文件保留：在 Web 生成新命令后执行。
 - 失败或中断时删除下载残片；重新执行时从头下载缺失文件，复用已校验的完整文件。每分钟下载不足 64 KiB 时会停止，请检查网络后重试。
-- Docker Runtime 镜像约 500 MB。网络较慢时可提前加载：将发行资产 `oac-<commit>-linux-amd64-runtime.tar.gz` 复制到主机并运行 `sudo docker load -i`。安装程序发现精确匹配的镜像后跳过下载。
+- Docker Runtime 镜像约 400 MB。网络较慢时可提前加载：将发行资产 `oac-<commit>-linux-amd64-runtime.tar.gz` 复制到主机并运行 `sudo docker load -i`。安装程序发现精确匹配的镜像后跳过下载。
 - 中断安装程序或关闭终端会停止程序；重新执行命令继续。
 
 ## 日志 {#logs}
@@ -201,7 +202,12 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 | 消息 | 解决方法 |
 | --- | --- |
-| 下载前出现 `Core rejected the node configuration read (HTTP 401)`，或 `The enrollment command expired or was already used` | 在 Web 生成新命令并在 10 分钟内执行 |
+| `The enrollment command expired or was already used` | 在 Web 生成新命令并在 10 分钟内执行 |
+| `Core rejected the node configuration read (HTTP …)` | 检查 Core URL 及其前面的反向代理后重试 |
+| `Not enough disk space under …` 或 `The disk is full` | 按提示释放空间后重试；尚未下载任何内容 |
+| This host's node program differs from the one this console serves | 节点添加后 Core 已升级。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
+| Another node installation is running, or this node is preparing a new sandbox configuration | 待 **节点** 不再显示 **正在准备目标配置** 后重试 |
+| 注册前的沙箱提供商检查失败，例如 `This host lacks a capability …` | 修复提示的问题（参阅[就绪状态码](#readiness-codes)）后重试；令牌未被使用 |
 | Core's public URL changed after this command was generated | 在 Web 生成并执行新命令 |
 | This host's node uses `<address>`, but this command uses `<address>` | 节点在旧公开 URL 下添加。在 Web 移除、卸载，然后重新添加 |
 | Docker Engine is not installed, or Docker is not running | 安装 Docker Engine，或运行 `sudo systemctl enable --now docker` 后重试 |

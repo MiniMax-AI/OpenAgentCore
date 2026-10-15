@@ -15,9 +15,12 @@ for tool in curl sha256sum python3 flock; do command -v "$tool" >/dev/null || { 
 python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' || { printf 'Python 3.9 or newer is required.\\n' >&2; exit 1; }
 [ "$(id -u)" -eq 0 ] || command -v sudo >/dev/null || { printf 'sudo is required; ask the host administrator to run this command.\\n' >&2; exit 1; }
 d="$HOME/.oac/node-bootstrap"
-[ ! -L "$d" ] && mkdir -p "$d" && [ -d "$d" ] && [ -O "$d" ] && chmod 700 "$d" || { printf 'Cannot use the private node bootstrap directory.\\n' >&2; exit 1; }
+[ ! -L "$d" ] || { printf '%s is a symbolic link; remove it and rerun the command.\\n' "$d" >&2; exit 1; }
+mkdir -p "$d" || { printf 'Cannot create %s. A root-owned ~/.oac usually means this command ran under sudo; run it as your own user.\\n' "$d" >&2; exit 1; }
+{ [ -d "$d" ] && [ -O "$d" ]; } || { printf '%s must be a directory you own. If root owns it, remove it with sudo and run the command as your own user.\\n' "$d" >&2; exit 1; }
+chmod 700 "$d" || exit
 installer="$d"/${quote(scriptDigest + ".pyz")}
-for f in "$d/download.lock" "$d/download.partial" "$installer"; do [ ! -L "$f" ] && { [ ! -e "$f" ] || { [ -f "$f" ] && [ -O "$f" ]; }; } || { printf 'Invalid node bootstrap file.\\n' >&2; exit 1; }; done
+for f in "$d/download.lock" "$d/download.partial" "$installer"; do [ ! -L "$f" ] && { [ ! -e "$f" ] || { [ -f "$f" ] && [ -O "$f" ]; }; } || { printf '%s must be a regular file you own, not a link.\\n' "$f" >&2; exit 1; }; done
 exec 9>>"$d/download.lock"
 flock -n 9 || { printf 'Another node download is running; wait and retry.\\n' >&2; exit 1; }
 rm -f "$d/download.partial" || exit
@@ -26,7 +29,7 @@ s=; [ "$(id -u)" -eq 0 ] || s=sudo
 export http_proxy="\${http_proxy-\${HTTP_PROXY-}}" https_proxy="\${https_proxy-\${HTTPS_PROXY-}}" no_proxy="\${no_proxy-\${NO_PROXY-}}"
 export HTTP_PROXY="$http_proxy" HTTPS_PROXY="$https_proxy" NO_PROXY="$no_proxy"
 printf '\\n==> Downloading node installer...\\n' &&
-curl -fs --connect-timeout 15 --max-time 60 --retry 2 --retry-connrefused --retry-delay 1 --max-filesize 1048576 ${quote(sourceUrl + "/node-install/node-install.pyz")} -o "$d/download.partial" || { c=$?; printf 'Cannot download node installer; check the console URL, TLS and proxy settings.\\n' >&2; exit "$c"; }
+curl -fsS --connect-timeout 15 --max-time 60 --retry 2 --retry-connrefused --retry-delay 1 --max-filesize 1048576 ${quote(sourceUrl + "/node-install/node-install.pyz")} -o "$d/download.partial" || { c=$?; printf 'Cannot download node installer; check the console URL, TLS and proxy settings.\\n' >&2; exit "$c"; }
 printf '==> Verifying node installer...\\n' &&
 printf '%s  %s\\n' ${quote(scriptDigest)} "$d/download.partial" | sha256sum -c --status || { printf 'Node installer checksum mismatch; generate a fresh command in Web and retry.\\n' >&2; exit 1; }
 mv "$d/download.partial" "$installer" || exit

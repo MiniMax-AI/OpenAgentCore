@@ -47,7 +47,7 @@ The installer shows each phase as it runs and, once Core confirms the node, a su
 - SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
 - Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
 - microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
-- CPUs and memory for at least one sandbox of the installation's size, and about 2 GB of disk for the Runtime image.
+- CPUs and memory for at least one sandbox of the installation's size, and about 3 GB of free disk while the Runtime image installs: its download and unpacked copy sit under `/var/lib/oac-node` until the import finishes, and the image takes about 1.5 GB in Docker's storage or the microsandbox store. The installer checks the space before it downloads and deletes the archives after the import, so the node keeps the image and under 0.2 GB of programs.
 - Access to the console and Core at the public URL; sandboxes reach Core too.
 
 ### Download through a proxy
@@ -84,11 +84,12 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 ## Rerun, expiry and slow links
 
-- Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It refuses, without changing anything, when the node's retained identity belongs to another Core address or installation, and with `Retained node specification differs from Core` once the sandbox configuration has changed since the node registered. A node added with this command prepares new configurations itself; see [Change the sandbox configuration](#change-the-sandbox-configuration).
-- A command that already expired, or was used on another host, fails at once with `Core rejected the node configuration read (HTTP 401)`: generate a new command and run it within 10 minutes.
+- Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It changes nothing and says why when the node's retained identity belongs to another Core address or installation, when the sandbox configuration has changed since the node registered (the node prepares it itself; see [Change the sandbox configuration](#change-the-sandbox-configuration)), or when Core was upgraded and serves a newer node program: choose **Remove node** on **Nodes**, uninstall the node on the host, then add it again with **Add node**.
+- A run that fails before the node registers leaves nothing that Core knows. The next command, even after a configuration change or a Core upgrade, replaces the earlier attempt's configuration and any downloaded file that no longer matches, keeps the files that match and continues.
+- A command that already expired, or was used on another host, fails at once with `The enrollment command expired or was already used`: generate a new command and run it within 10 minutes.
 - If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it.
 - Failed or interrupted downloads discard their temporary files. A rerun downloads missing files from the beginning and reuses verified complete files. A transfer that brings less than 64 KiB in a minute stops; check the network and retry.
-- The Docker Runtime image is about 500 MB. On a slow link, load it first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
+- The Docker Runtime image is about 400 MB. On a slow link, load it first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
 - Interrupting the installer, or closing its terminal, stops it; run the command again to continue.
 
 ## Logs
@@ -199,7 +200,12 @@ A registered node that can't connect to Core says why in its [log](#logs): `sand
 
 | Message | Fix |
 | --- | --- |
-| `Core rejected the node configuration read (HTTP 401)` before anything downloads, or `The enrollment command expired or was already used` | Generate a new command in Web and run it within 10 minutes |
+| `The enrollment command expired or was already used` | Generate a new command in Web and run it within 10 minutes |
+| `Core rejected the node configuration read (HTTP …)` | Check the Core URL and the reverse proxy in front of it, then rerun |
+| `Not enough disk space under …` or `The disk is full` | Free the space it names, then rerun; nothing was downloaded |
+| This host's node program differs from the one this console serves | Core was upgraded after the node was added. Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |
+| Another node installation is running, or this node is preparing a new sandbox configuration | Retry once **Nodes** no longer shows **Preparing target** |
+| A sandbox provider check failed before registering, such as `This host lacks a capability …` | Fix what it names (see [Readiness codes](#readiness-codes)) and rerun; the token was not used |
 | Core's public URL changed after this command was generated | Generate a new command in Web and run it |
 | This host's node uses `<address>`, but this command uses `<address>` | The node was added under an older public URL. Remove it in Web, uninstall it, then add it again |
 | Docker Engine is not installed, or Docker is not running | Install Docker Engine, or `sudo systemctl enable --now docker`, then rerun |

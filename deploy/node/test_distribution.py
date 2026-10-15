@@ -131,21 +131,28 @@ class ArtifactTests(unittest.TestCase):
         self.assertEqual(len(self.requests), 1)  # Not retried as a network error.
         self.assertEqual(list(self.root.iterdir()), [])
 
-    def test_offline_and_runtime_expansion_are_verified(self):
+    def test_runtime_expansion_is_verified_and_a_differing_cache_is_refused_or_replaced(self):
         raw = b'synthetic tar contents' * 1000
         self.data = gzip.compress(raw)
         entry = self.entry('images/runtime.tar.gz', self.data)
         entry.update(unpacked_size=len(raw), unpacked_sha256=hashlib.sha256(raw).hexdigest())
-        offline = self.root / 'offline'
-        (offline / 'artifacts').mkdir(parents=True)
-        (offline / 'artifacts' / entry['filename']).write_bytes(self.data)
-        output = distribution.runtime_archive(self.manifest, self.root / 'cache', offline)
+        output = distribution.runtime_archive(self.manifest, self.root / 'cache')
         self.assertEqual(output.read_bytes(), raw)
-        self.assertEqual(self.requests, [])
         self.assertEqual(distribution.runtime_archive(self.manifest, self.root / 'cache'), output)
+        self.assertEqual(len(self.requests), 1)
         output.write_bytes(b'bad cache')
         with self.assertRaisesRegex(distribution.DistributionError, 'differs'):
             distribution.runtime_archive(self.manifest, self.root / 'cache')
+        self.assertEqual(distribution.runtime_archive(self.manifest, self.root / 'cache', replace=True).read_bytes(), raw)
+
+    def test_a_differing_cached_artifact_is_refused_unless_the_caller_replaces_it(self):
+        target = self.root / 'node'
+        target.write_bytes(b'other release')
+        with self.assertRaisesRegex(distribution.ArtifactError, 'Cached artifact differs'):
+            distribution.obtain_artifact(self.manifest, 'native/bin/node', target)
+        self.assertEqual(target.read_bytes(), b'other release')
+        distribution.obtain_artifact(self.manifest, 'native/bin/node', target, replace=True)
+        self.assertEqual(target.read_bytes(), self.data)
 
     def test_retry_after_sigkill_discards_unfinished_artifact(self):
         target = self.root / 'node'

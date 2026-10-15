@@ -44,17 +44,17 @@ class SpecificationTests(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Bearer " + self.retained["credential"])
         self.assertEqual(headers["X-oac-node-id"], self.retained["identity"]["node_id"])
 
-    def test_partial_registration_can_use_enrollment_after_unauthenticated_identity(self):
+    def test_a_retained_identity_core_never_recorded_is_reported_so_it_can_be_discarded(self):
         rejected = urllib.error.HTTPError("https://core.example", 401, "private details", {}, None)
-        opener = mock.Mock(side_effect=[rejected, self.response()])
-        node_spec.fetch(self.args, "once", self.retained, opener, allow_enrollment=True)
-        self.assertEqual(opener.call_count, 2)
-        self.assertEqual(dict(opener.call_args.args[0].header_items()), {"Authorization": "Bearer once"})
+        opener = mock.Mock(side_effect=rejected)
+        with self.assertRaises(node_spec.UnrecordedIdentity):
+            node_spec.fetch(self.args, "once", self.retained, opener, allow_enrollment=True)
+        self.assertEqual(opener.call_count, 1)
+        # A registered node, or a rerun without a token, has nothing to fall back to.
         for allowed, token in ((False, "once"), (True, "")):
-            opener = mock.Mock(side_effect=rejected)
-            with self.assertRaises(node_spec.SpecificationError):
-                node_spec.fetch(self.args, token, self.retained, opener, allow_enrollment=allowed)
-            self.assertEqual(opener.call_count, 1)
+            with self.assertRaises(node_spec.SpecificationError) as raised:
+                node_spec.fetch(self.args, token, self.retained, mock.Mock(side_effect=rejected), allow_enrollment=allowed)
+            self.assertNotIsInstance(raised.exception, node_spec.UnrecordedIdentity)
 
     def test_changed_public_url_says_to_generate_a_new_command(self):
         self.data["core_url"] = "https://core-new.example"
@@ -64,7 +64,8 @@ class SpecificationTests(unittest.TestCase):
     def test_failures_name_their_cause(self):
         for failure, message in ((urllib.error.HTTPError("https://core.example", 404, "", {}, None), "route /api/v1"),
                                  (urllib.error.HTTPError("https://core.example", 409, "", {}, None), "resetting"),
-                                 (urllib.error.HTTPError("https://core.example", 401, "", {}, None), "credential"),
+                                 (urllib.error.HTTPError("https://core.example", 401, "", {}, None), "Generate a new command"),
+                                 (urllib.error.HTTPError("https://core.example", 502, "", {}, None), "reverse proxy in front of it"),
                                  (urllib.error.URLError("refused"), "reverse proxy routes /api/v1")):
             with self.assertRaisesRegex(node_spec.SpecificationError, message):
                 node_spec.fetch(self.args, "once", None, mock.Mock(side_effect=failure))
@@ -74,7 +75,7 @@ class SpecificationTests(unittest.TestCase):
             original = copy.deepcopy(self.data)
             change()
             self.data["specification_digest"] = node_spec.digest("docker", self.data["specification"])
-            with self.assertRaisesRegex(node_spec.SpecificationError, "Retained node specification differs"):
+            with self.assertRaisesRegex(node_spec.SpecificationError, "prepares the changed sandbox configuration itself"):
                 node_spec.fetch(self.args, "once", self.retained, mock.Mock(return_value=self.response()))
             self.data = original
             self.spec = self.data["specification"]

@@ -35,8 +35,6 @@ def atomic_json(path, value):
 def helper_archive(args, installer):
     """Read the trusted bootstrap before dropping access to its private directory."""
     source = Path(sys.argv[0])
-    if getattr(args, "bundle", None) is not None:
-        source = args.bundle / "node-install.pyz"
     if source.suffix == ".pyz" and source.is_file() and not source.is_symlink():
         return source.read_bytes()
     archive = io.BytesIO()
@@ -394,7 +392,6 @@ def prepare(args, installer):
         if not finalized or value is None or not image_available(value, installer):
             settings = installer.private_json(root / "preparation.json")
             args.source_url = installer.origin(settings["source_url"])
-            args.bundle = None
             manifest, sums = installer.metadata(args.source_url, prefix="releases/" + runtime["source_commit"] + "/")
             try:
                 installer.node_spec.verify_release(args.configuration, manifest)
@@ -462,7 +459,12 @@ def collection_lease(root, generation, installer, identity=None, initialize=Fals
     created = False
     if initialize and not record.exists() and not record.is_symlink():
         # O_EXCL prevents adopting an old unrecorded inode after interruption.
-        descriptor = os.open(path, flags | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            descriptor = os.open(path, flags | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            raise installer.InstallError(
+                "An earlier run stopped while creating " + str(path) + ". Check that no process of the oac-node user still "
+                "uses this installation (`pgrep -u oac-node`), delete that file with sudo, then rerun the command.") from None
         created = True
     else:
         descriptor = os.open(path, flags)

@@ -116,7 +116,7 @@ class GenerationReviewRegressions(unittest.TestCase):
             with self.assertRaises(OSError):
                 with node_generations.collection_lease(case.root, 3, installer, identity, initialize=True):
                     self.fail('initialization not durable')
-        with self.assertRaises(FileExistsError):
+        with self.assertRaisesRegex(installer.InstallError, 'earlier run stopped while creating.*delete that file'):
             with node_generations.collection_lease(case.root, 3, installer, identity, initialize=True):
                 self.fail('interrupted inode adopted')
         (case.directory / '1.lease-identity').unlink()
@@ -273,13 +273,3 @@ class GenerationReviewRegressions(unittest.TestCase):
         final=installer.private_json(case.root/'state/node/generations/2.json')
         self.assertNotEqual(final['native']['helper_path'],original['native']['helper_path'])
         self.assertIn(1,node_generations.retained_configs(case.root,installer))
-
-    def test_operator_update_refuses_before_download_or_update(self):
-        result = subprocess.run(
-            [sys.executable, 'node_install.py', '--installation-id', '94be54a1-138c-4f30-bc87-b13686272dbe',
-             '--update', '--source-url', 'https://core.invalid', '--core-url', 'https://core.invalid'],
-            capture_output=True, text=True, timeout=10, cwd=Path(__file__).parent,
-        )
-        self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn('updates are not supported', result.stderr)
-        self.assertIn('reinstall', result.stderr)

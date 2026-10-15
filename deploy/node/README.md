@@ -29,6 +29,10 @@ The node installer runs as root and prepares the host for one node per installat
 
 The generated command uses `~/.oac/node-bootstrap` in the invoking account's home. Under `download.lock`, it discards an unfinished `download.partial`, downloads and verifies the bootstrap, then publishes `<sha256>.pyz`. The lock is released before invoking sudo; verified files stay available to running installers. Node file writes share `distribution.temporary_file`: under the caller's installation lock, remove the previous temporary file, write privately, and publish atomically. The same lifecycle covers payloads, extraction, helpers, settings and enrollment tokens. Registration tokens are removed even when a rerun finds the node already registered.
 
+Core records a node when its registration completes, and the installer marks that with `registered.json`. Until then, an earlier attempt's configuration, identity and cached files that no longer match are disposable: the next command replaces them and keeps the files that match. A registered node's files are never replaced; a rerun that finds a different node program stops and names the remove, uninstall and add steps.
+
+Before downloading, the installer refuses when the node account's disk lacks the space the missing files and the Runtime import need. It deletes the Runtime archive and its unpacked copy once the image is imported.
+
 Configuration files are published only after their complete contents are written; a retry preserves an existing matching file and refuses conflicting contents. Generation leases are durable locks, not disposable temporary files: interruption between creating a lease and recording its inode identity requires operator inspection. A retry refuses that unrecorded lease instead of replacing an inode that a Runtime helper could still hold.
 
 The distribution manifest is the one download contract for nodes: flat versioned file names, and the compressed and unpacked size and SHA-256 of the Runtime.
