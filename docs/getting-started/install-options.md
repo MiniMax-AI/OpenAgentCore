@@ -132,4 +132,6 @@ The address changes whenever `cloudflared` restarts; nodes bound to the old addr
 
 ## Offline hosts
 
-Core installation requires access to GitHub Releases and the container registries to download release files and images.
+The installer downloads release files from GitHub Releases with this shell's network settings, including `HTTPS_PROXY`. Docker pulls the images through its daemon, which does not read the shell's proxy variables: when the registries are reachable only through a proxy or mirror, configure [the daemon's proxy](https://docs.docker.com/engine/daemon/proxy/) or a [registry mirror](https://docs.docker.com/docker-hub/image-library/mirror/), then rerun the installer.
+
+A Linux amd64 host without that access installs from the release asset `oac-<commit>-linux-amd64-offline.tar.gz`, which contains every image and node artifact. Copy it to the host, extract it and run its `install.py` with Python 3.9 or newer; [source installation](../development.md#install-a-checkout-without-publishing-a-release) describes its options.

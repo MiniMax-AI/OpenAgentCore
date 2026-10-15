@@ -237,7 +237,10 @@ Nodes on other hosts keep running. To uninstall them the usual way, remove them 
 | `configuration check failed; no service was changed` | `.env` has a value Core rejects. The message names the variable and not the value. Fix `.env` and run `oac apply` again |
 | `data volume check failed; no service was changed` | Initialization refused the data volume; the message names the cause, such as a volume a newer release upgraded. See [downgrades](#downgrades) |
 | `This installation runs release …` | The installer or initialization belongs to another release. To move to a newer one, follow [Upgrade](#upgrade); downgrades are refused |
-| `Docker Compose 2.26 or newer is required` | Update the Docker Compose plugin |
+| `This account cannot use Docker` | Add the account to the `docker` group and log in again, or use Docker Desktop or rootless Docker. Do not run the installer with `sudo` |
+| `This account cannot access …` | An earlier run with `sudo` left files owned by root. Run the `sudo chown` command the message prints, then rerun as your own account |
+| `Docker Compose 2.26 or newer is required` | Install or update the Docker Compose plugin |
+| `Docker could not pull …` | The Docker daemon cannot reach the registry. Configure its proxy or a registry mirror, or use the [offline archive](./install-options.md#offline-hosts) |
 | `startup failed; data retained, rerun the installer` | Read the service logs above it, fix the cause, then [resume installation](./install.md#install); keep the data |
 | Web answers 403 `Forbidden` | The browser host is not `OAC_PUBLIC_URL`. Open that origin; a reverse proxy must pass the original Host |
 | Web shows that Core is unavailable (502) | Core is stopped or failing: `docker compose ps`, then Core's log |

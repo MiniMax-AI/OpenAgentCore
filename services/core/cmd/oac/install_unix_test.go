@@ -6,9 +6,39 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"testing"
 )
+
+func TestInstallExplainsPathsAnotherAccountOwns(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses file permissions")
+	}
+	// An unreadable directory stands in for one an earlier run with sudo left owned by root.
+	for _, blocked := range []string{"parent", "lock"} {
+		t.Run(blocked, func(t *testing.T) {
+			f := newInstallFixture(t)
+			parent := filepath.Dir(f.options.dir)
+			t.Setenv("HOME", filepath.Dir(parent))
+			path := parent
+			if blocked == "lock" {
+				path = f.options.dir + ".lock"
+				os.Mkdir(path, 0o700)
+			}
+			os.Chmod(path, 0)
+			t.Cleanup(func() { os.Chmod(path, 0o700) })
+			want := "This account cannot access " + path + ". If an earlier run used sudo, return ownership to this account and retry: sudo chown -R \"$(id -un)\" '" + path + "'"
+			if err := f.run(); err == nil || err.Error() != want {
+				t.Fatalf("got %v", err)
+			}
+			os.Chmod(path, 0o700)
+			if _, err := os.Stat(f.options.dir); !os.IsNotExist(err) {
+				t.Fatal("refused installation created its directory")
+			}
+		})
+	}
+}
 
 func TestInstallWriteFailureLeavesRetryableState(t *testing.T) {
 	if os.Getenv("OAC_TEST_FILE_LIMIT") != "1" {

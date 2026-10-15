@@ -9,9 +9,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -91,7 +94,8 @@ func installDir() (string, error) {
 	return "", errors.New("run oac from an installation directory that contains compose.yaml")
 }
 
-func withLock(root string, fn func() error) error {
+func withLock(root string, fn func() error) (err error) {
+	defer func() { err = accessError(root, err) }()
 	dir := root + ".lock"
 	if info, err := os.Lstat(dir); err == nil && !info.IsDir() {
 		return errors.New("invalid installation lock directory")
@@ -105,11 +109,52 @@ func withLock(root string, fn func() error) error {
 	}
 	defer handle.Close()
 	unlock, err := runtimefs.LockDirectory(handle)
-	if err != nil {
-		return fmt.Errorf("another operation is using this installation: %w", err)
+	if errors.Is(err, fs.ErrPermission) {
+		return err
+	} else if err != nil {
+		return errors.New("Another oac command is running on this installation; wait for it to finish and retry.")
 	}
 	defer unlock()
 	return fn()
+}
+
+// accessError explains a permission failure on the installation's own paths or
+// the directories above them inside the home directory. An earlier run with sudo
+// typically leaves them owned by root.
+func accessError(root string, err error) error {
+	var pathErr *fs.PathError
+	if !errors.As(err, &pathErr) || !errors.Is(err, fs.ErrPermission) {
+		return err
+	}
+	// A directory this account cannot enter hides every path below it.
+	path := pathErr.Path
+	for path != filepath.Dir(path) {
+		if _, err := os.Lstat(path); err == nil {
+			break
+		}
+		path = filepath.Dir(path)
+	}
+	quote := func(name string) string { return "'" + strings.ReplaceAll(name, "'", `'\''`) + "'" }
+	owned := []string{root, root + ".lock", root + ".staging"}
+	var targets []string
+	home, _ := os.UserHomeDir()
+	separator := string(filepath.Separator)
+	switch {
+	case slices.Contains(owned, path):
+		for _, name := range owned {
+			if _, err := os.Lstat(name); err == nil {
+				targets = append(targets, quote(name))
+			}
+		}
+	case home != "" && strings.HasPrefix(root, path+separator) && strings.HasPrefix(path, home+separator):
+		targets = []string{quote(path)}
+	default:
+		return err
+	}
+	if runtime.GOOS == "windows" {
+		return fmt.Errorf("This account cannot access %s; give it access and retry.", path)
+	}
+	return fmt.Errorf("This account cannot access %s. If an earlier run used sudo, return ownership to this account and retry: sudo chown -R \"$(id -un)\" %s", path, strings.Join(targets, " "))
 }
 
 var (

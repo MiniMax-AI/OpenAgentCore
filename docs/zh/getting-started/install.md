@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 21a5b7cd79529767d3ccd6f685ca5d7f9c9c46c93590cfd06a6ef43efe9a41f7
+source_hash: d816781ff3fa3b765f0e207efd9c993fcb3ea194d88a42c7c4bba9d5913d8d17
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发项目 API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -20,7 +20,8 @@ source_hash: 21a5b7cd79529767d3ccd6f685ca5d7f9c9c46c93590cfd06a6ef43efe9a41f7
 
 - Linux amd64/arm64 或 macOS Intel/Apple Silicon，需安装 curl；Windows x64 需 PowerShell。
 - Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。macOS 和 Windows 使用已启动的 Docker Desktop，并选择 Linux 容器。
-- 能运行 `docker` 并向自己的主目录写入文件的账号。普通用户和 root 均可；安装程序不会调用 sudo。
+- 能运行 `docker` 并向自己的主目录写入文件的账号。在 Linux 上，将该账号加入 `docker` 组后重新登录，或使用 rootless Docker。始终以该账号运行安装程序和 `oac`，不要使用 `sudo`：`sudo` 运行会在 `~/.oac` 中留下属于 root 的文件，导致之后的运行失败。
+- Docker 守护进程能访问容器注册表；守护进程不使用当前 shell 的代理变量。参阅[离线主机](install-options.md#offline-hosts)。
 - Web 的 8080 端口空闲。参阅[端口](install-options.md#ports)。Docker 必须能发布该端口；安装程序不会修改主机策略。
 - 本机以外的访问要求 `OAC_PUBLIC_URL` 就是浏览器、节点和执行器使用的地址。可以先在本机登录。
 

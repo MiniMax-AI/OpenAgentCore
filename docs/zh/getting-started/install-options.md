@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: b1392b29ace751cdd42738a1aeb1e29068ceb83bf74ee940604b432e59785ad9
+source_hash: f4d146c2e939103b489c20709d15eae5ec8916f1bc30dd90ad1b6b4dadc80bbc
 ---
 
 [默认安装](install.md)无需任何选项。本页介绍安装选项、Compose 部署和反向代理配置。
@@ -136,4 +136,6 @@ http://:8443 {
 
 ## 离线主机 {#offline-hosts}
 
-Core 安装需要访问 GitHub Releases 和容器注册表，以下载发行文件和镜像。
+安装程序使用当前 shell 的网络设置（包括 `HTTPS_PROXY`）从 GitHub Releases 下载发行文件。Docker 通过其守护进程拉取镜像，守护进程不读取 shell 的代理变量：如果只能经代理或镜像加速器访问容器注册表，请配置[守护进程代理](https://docs.docker.com/engine/daemon/proxy/)或[镜像加速器](https://docs.docker.com/docker-hub/image-library/mirror/)，然后重新运行安装程序。
+
+无法访问这些地址的 Linux amd64 主机可使用发行资产 `oac-<commit>-linux-amd64-offline.tar.gz` 安装，其中包含所有镜像和节点制品。将其复制到该主机并解压，然后用 Python 3.9 或更高版本运行其中的 `install.py`；[源码安装](../development.md#install-a-checkout-without-publishing-a-release)介绍其选项。

@@ -18,7 +18,8 @@ This page follows the default path. Every flag, existing reverse proxies and off
 
 - Linux amd64/arm64 or macOS Intel/Apple Silicon with curl; Windows x64 with PowerShell.
 - Docker Engine 26 or newer and Docker Compose 2.26.0 or newer. On macOS and Windows, install and start Docker Desktop using Linux containers.
-- An account that can run `docker` and write to its home directory. Ordinary users and root both work; the installer never calls sudo.
+- An account that can run `docker` and write to its home directory. On Linux, add it to the `docker` group and log in again, or use rootless Docker. Run the installer and `oac` as that account, never with `sudo`: a `sudo` run leaves files in `~/.oac` that belong to root and stop later runs.
+- Access to the container registries from the Docker daemon, which does not use this shell's proxy variables. See [offline hosts](./install-options.md#offline-hosts).
 - Free port 8080 for Web. See [ports](./install-options.md#ports). Docker must be able to publish it; the installer does not change host policy.
 - For anything off this machine, the origin in `OAC_PUBLIC_URL` must be the address browsers, nodes and executors use. You can sign in on this machine first.
 

@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"maps"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +22,9 @@ type installFixture struct {
 	options installOptions
 	calls   []string
 	failure string
-	cached  bool
+	// failureErr is what the failing Docker call reports; os.ErrPermission when nil.
+	failureErr error
+	cached     bool
 }
 
 // installedRevision reads the release the installation directory starts.
@@ -82,6 +87,9 @@ func newInstallFixture(t *testing.T) *installFixture {
 			f.calls = append(f.calls, command)
 		}
 		if f.failure != "" && strings.HasPrefix(f.calls[len(f.calls)-1], f.failure) {
+			if f.failureErr != nil {
+				return nil, f.failureErr
+			}
 			return nil, os.ErrPermission
 		}
 		switch command {
@@ -130,6 +138,67 @@ func TestInstallFailureBeforePublicationAndRetry(t *testing.T) {
 		})
 	}
 }
+func TestInstallExplainsDockerFailures(t *testing.T) {
+	for _, c := range []struct {
+		call string
+		err  error
+		want string
+	}{
+		{"info", errors.New("permission denied while trying to connect to the docker API at unix:///var/run/docker.sock"),
+			"This account cannot use Docker: add it to the docker group and log in again, or use Docker Desktop or rootless Docker. Do not run the installer with sudo."},
+		{"info", &exec.Error{Name: "docker", Err: exec.ErrNotFound},
+			"Docker is not installed; install Docker Engine 26 or newer with the Compose plugin, or Docker Desktop on macOS and Windows, then rerun the installer"},
+		{"info", errors.New("Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"),
+			"Docker is not running or not reachable; start it and rerun the installer: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"},
+		{"compose version", errors.New("docker: unknown command: docker compose"),
+			"Docker Compose 2.26 or newer is required; install or update the Docker Compose plugin and rerun the installer"},
+		{"pull", errors.New("Error response from daemon: Get \"https://registry-1.docker.io/v2/\": dial tcp: lookup registry-1.docker.io: server misbehaving"),
+			"Docker could not pull example/core:latest: Error response from daemon: Get \"https://registry-1.docker.io/v2/\": dial tcp: lookup registry-1.docker.io: server misbehaving\nImage pulls go through the Docker daemon, which does not use this shell's proxy settings"},
+	} {
+		t.Run(c.call, func(t *testing.T) {
+			f := newInstallFixture(t)
+			f.failure, f.failureErr = c.call, c.err
+			if err := f.run(); err == nil || !strings.HasPrefix(err.Error(), c.want) {
+				t.Fatalf("got %v", err)
+			}
+			for _, path := range []string{f.options.dir, f.options.dir + ".staging"} {
+				if _, err := os.Stat(path); !os.IsNotExist(err) {
+					t.Fatalf("failed check left %s", path)
+				}
+			}
+		})
+	}
+}
+
+func TestDownloadRetriesTransientFailures(t *testing.T) {
+	previous := downloadRetryDelay
+	downloadRetryDelay = 0
+	t.Cleanup(func() { downloadRetryDelay = previous })
+	var requests int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch {
+		case r.URL.Path == "/unavailable/compose.yaml" || requests == 2:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		case requests == 1:
+			// The connection drops before a response.
+			connection, _, _ := w.(http.Hijacker).Hijack()
+			connection.Close()
+		default:
+			fmt.Fprint(w, "services: {}")
+		}
+	}))
+	defer server.Close()
+	if raw, err := downloadAsset(context.Background(), server.URL+"/compose.yaml"); err != nil || string(raw) != "services: {}" || requests != 3 {
+		t.Fatalf("after %d requests: %q %v", requests, raw, err)
+	}
+	requests = 10
+	_, err := downloadAsset(context.Background(), server.URL+"/unavailable/compose.yaml")
+	if err == nil || err.Error() != "download compose.yaml: HTTP 503; check the network or HTTPS_PROXY and rerun" || requests != 13 {
+		t.Fatalf("after %d requests: %v", requests-10, err)
+	}
+}
+
 func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
 	// The same release resumes with or without --upgrade.
 	f := newInstallFixture(t)
@@ -297,8 +366,8 @@ func TestInstallRejectsBusyPortAndLock(t *testing.T) {
 	}
 	listener.Close()
 	if err := withLock(f.options.dir, func() error {
-		if err := f.run(); err == nil {
-			t.Fatal("concurrent installation accepted")
+		if err := f.run(); err == nil || err.Error() != "Another oac command is running on this installation; wait for it to finish and retry." {
+			t.Fatalf("concurrent installation: %v", err)
 		}
 		return nil
 	}); err != nil {

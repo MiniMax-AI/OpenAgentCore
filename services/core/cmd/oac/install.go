@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -13,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -60,16 +62,26 @@ func installCommand(ctx context.Context, args []string) error {
 	return i.install(ctx, o)
 }
 
+// dockerOutput returns standard output. A failure carries Docker's own reason, which it writes to standard error.
 func dockerOutput(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("docker %s: %w\n%s", args[0], err, output)
+		if reason := strings.TrimSpace(stderr.String()); reason != "" {
+			return nil, errors.New(reason)
+		}
+		return nil, err
 	}
 	return output, nil
 }
 
+// downloadRetryDelay spaces download attempts; tests shorten it.
+var downloadRetryDelay = time.Second
+
+// downloadAsset retries network errors, 429 and 5xx responses; each attempt has its own timeout.
 func downloadAsset(ctx context.Context, address string) ([]byte, error) {
 	client := &http.Client{Timeout: 2 * time.Minute, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if req.URL.Scheme != "https" || len(via) >= 10 {
@@ -81,22 +93,51 @@ func downloadAsset(ctx context.Context, address string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	for attempt := 1; ; attempt++ {
+		raw, status, err := fetch(client, req)
+		switch {
+		case ctx.Err() != nil:
+			return nil, ctx.Err()
+		case err == nil && status == http.StatusOK:
+			if len(raw) > 1<<20 {
+				return nil, errors.New("release configuration exceeds size limit")
+			}
+			return raw, nil
+		case err == nil:
+			err = fmt.Errorf("HTTP %d", status)
+		}
+		// Status 0 is a network error.
+		if attempt == 3 || (status != 0 && status != http.StatusTooManyRequests && status < 500) {
+			return nil, fmt.Errorf("download %s: %w; check the network or HTTPS_PROXY and rerun", path.Base(req.URL.Path), err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(attempt) * downloadRetryDelay):
+		}
+	}
+}
+
+// fetch returns the response status and body, or status 0 with a network error.
+func fetch(client *http.Client, req *http.Request) ([]byte, int, error) {
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		// The cause without the request line, which repeats the whole URL.
+		var urlErr *url.Error
+		if errors.As(err, &urlErr) {
+			err = urlErr.Err
+		}
+		return nil, 0, err
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download %s: HTTP %d", address, res.StatusCode)
+		return nil, res.StatusCode, nil
 	}
 	raw, err := io.ReadAll(io.LimitReader(res.Body, (1<<20)+1))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	if len(raw) > 1<<20 {
-		return nil, errors.New("release configuration exceeds size limit")
-	}
-	return raw, nil
+	return raw, res.StatusCode, nil
 }
 
 func (i installer) install(ctx context.Context, o installOptions) error {
@@ -143,35 +184,40 @@ func (i installer) install(ctx context.Context, o installOptions) error {
 	if info, err := os.Lstat(o.dir); err == nil && !info.IsDir() {
 		return errors.New("installation path must be a directory, not a symbolic link or file")
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+		return accessError(o.dir, err)
 	}
 	return withLock(o.dir, func() error { return i.installLocked(ctx, o) })
 }
 
 func (i installer) installLocked(ctx context.Context, o installOptions) error {
 	info, err := i.docker(ctx, "", "info", "--format", "{{.OSType}}/{{.Architecture}}")
-	if err != nil {
-		return fmt.Errorf("start Docker and check this account's access: %w", err)
+	switch {
+	case errors.Is(err, exec.ErrNotFound):
+		return errors.New("Docker is not installed; install Docker Engine 26 or newer with the Compose plugin, or Docker Desktop on macOS and Windows, then rerun the installer")
+	case err != nil && strings.Contains(err.Error(), "permission denied"):
+		return errors.New("This account cannot use Docker: add it to the docker group and log in again, or use Docker Desktop or rootless Docker. Do not run the installer with sudo.")
+	case err != nil:
+		return fmt.Errorf("Docker is not running or not reachable; start it and rerun the installer: %w", err)
 	}
 	switch strings.TrimSpace(string(info)) {
 	case "linux/x86_64", "linux/amd64", "linux/aarch64", "linux/arm64":
 	default:
 		return errors.New("Docker must run Linux amd64 or arm64 containers; on Windows select Linux containers in Docker Desktop")
 	}
-	version, err := i.docker(ctx, "", "compose", "version", "--short")
-	if err != nil {
-		return err
-	}
 	var major, minor int
-	if _, err := fmt.Sscanf(strings.TrimPrefix(strings.TrimSpace(string(version)), "v"), "%d.%d", &major, &minor); err != nil || major < 2 || (major == 2 && minor < 26) {
-		return errors.New("Docker Compose 2.26 or newer is required")
+	version, err := i.docker(ctx, "", "compose", "version", "--short")
+	if err == nil {
+		_, err = fmt.Sscanf(strings.TrimPrefix(strings.TrimSpace(string(version)), "v"), "%d.%d", &major, &minor)
+	}
+	if err != nil || major < 2 || (major == 2 && minor < 26) {
+		return errors.New("Docker Compose 2.26 or newer is required; install or update the Docker Compose plugin and rerun the installer")
 	}
 	engine, err := i.docker(ctx, "", "version", "--format", "{{.Server.APIVersion}}")
 	if err != nil {
 		return err
 	}
 	if _, err := fmt.Sscanf(strings.TrimSpace(string(engine)), "%d.%d", &major, &minor); err != nil || major < 1 || (major == 1 && minor < 45) {
-		return errors.New("Docker Engine 26 or newer is required for data volume subdirectories")
+		return errors.New("Docker Engine 26 or newer is required for data volume subdirectories; update Docker and rerun the installer")
 	}
 	stage := o.dir + ".staging"
 	if err := cleanStage(stage, o.dir); err != nil {
@@ -259,7 +305,7 @@ func (i installer) installLocked(ctx context.Context, o installOptions) error {
 			continue
 		}
 		if _, err := i.docker(ctx, "", "pull", image); err != nil {
-			return err
+			return fmt.Errorf("Docker could not pull %s: %w\nImage pulls go through the Docker daemon, which does not use this shell's proxy settings: if the registry is unreachable, configure the daemon's proxy or a registry mirror, or install from the offline archive (Offline hosts in the installation options).", image, err)
 		}
 	}
 	if upgrade {

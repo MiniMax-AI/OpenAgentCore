@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 80a57d4cee51989f34be587a4b48ec32ce3ed580784352a6f61ffed6a93e7daa
+source_hash: 9281f985f203a33cf2e861a118204839277cef13ebdd484c7b41dfd5cd68b8d5
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -239,7 +239,10 @@ cd && rm -rf ~/.oac/core
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
 | `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷已被更新的版本升级。参见[降级](#downgrades) |
 | `This installation runs release …` | 安装程序或初始化属于另一个版本。要换到更新的版本，请按[升级](#upgrade)操作；降级会被拒绝 |
-| `Docker Compose 2.26 or newer is required` | 更新 Docker Compose 插件 |
+| `This account cannot use Docker` | 将该账号加入 `docker` 组后重新登录，或使用 Docker Desktop 或 rootless Docker。不要用 `sudo` 运行安装程序 |
+| `This account cannot access …` | 之前用 `sudo` 运行留下了属于 root 的文件。运行消息给出的 `sudo chown` 命令，再以自己的账号重新运行 |
+| `Docker Compose 2.26 or newer is required` | 安装或更新 Docker Compose 插件 |
+| `Docker could not pull …` | Docker 守护进程无法访问容器注册表。配置其代理或镜像加速器，或使用[离线归档](install-options.md#offline-hosts) |
 | `startup failed; data retained, rerun the installer` | 查看上方服务日志，修复原因，再[继续安装](install.md#install)；不要删除数据 |
 | Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
