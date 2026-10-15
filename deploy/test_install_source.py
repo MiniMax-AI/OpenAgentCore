@@ -22,7 +22,7 @@ class SourceInstallTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.bundle, self.destination = self.root / 'bundle', self.root / 'installation'
         self.bundle.mkdir()
         self.revision = 'a' * 40
@@ -40,12 +40,19 @@ class SourceInstallTest(unittest.TestCase):
         (self.bundle / 'SHA256SUMS').write_text(hashlib.sha256((self.bundle / 'manifest.json').read_bytes()).hexdigest() + '  manifest.json\n')
 
     def install(self, upgrade=False, image='sha256:' + '1' * 64, failure=None):
-        def run(*args, **kwargs):
+        def run(message, *args, **kwargs):
             self.calls.append((args, kwargs))
             if failure and failure in args:
-                raise subprocess.CalledProcessError(1, args)
-        with patch('distribution.ensure_docker_image', return_value=image), patch.object(installer, 'run', side_effect=run):
+                raise ValueError(message)
+        with patch.object(installer, 'ensure_docker_image', return_value=image), patch.object(installer, 'run', side_effect=run):
             installer.install(self.bundle, self.destination, '127.0.0.1', 19873, None if upgrade else 'http://127.0.0.1:19873', upgrade)
+
+    def main(self):
+        """Run the command line and return its exit message."""
+        argv = ['install.py', '--install-dir', str(self.destination), '--public-url', 'http://127.0.0.1:19873']
+        with patch.object(sys, 'argv', argv), patch.object(installer, 'BUNDLE', self.bundle), self.assertRaises(SystemExit) as exit:
+            installer.main()
+        return exit.exception.code
 
     def commands(self):
         """Compose subcommands, without the staged file arguments."""
@@ -82,12 +89,23 @@ class SourceInstallTest(unittest.TestCase):
         self.assertEqual((self.destination / 'keep').read_text(), 'existing')
         self.assertEqual(self.calls, [])
 
+    def test_failed_first_install_leaves_nothing_and_reruns(self):
+        with self.assertRaisesRegex(ValueError, '^Compose configuration check failed; see the output above. Nothing was installed.$'):
+            self.install(failure='config')
+        self.assertFalse(self.destination.exists())
+        # A killed run leaves only its stage, which the rerun removes.
+        (self.destination / '.staging-killed/node-payload').mkdir(parents=True)
+        self.install()
+        self.assertEqual(sorted(path.name for path in self.destination.iterdir()), ['.env', 'compose.override.yaml', 'compose.yaml', 'node-payload', 'oac'])
+
     def test_same_release_reruns_init_before_the_configuration_check(self):
         # A first start that stopped before init left no secrets for check-config.
         self.install()
         self.calls = []
         self.install()
         self.assertEqual([command[-1] for command in self.commands()], ['init', 'check-config', '--remove-orphans', 'core-key'])
+        with self.assertRaisesRegex(ValueError, '^Data volume check failed; no service was changed. See the output above.$'):
+            self.install(failure='init')
 
     def test_upgrade_checks_the_new_release_before_replacing_it_and_keeps_operator_entries(self):
         self.install()
@@ -106,7 +124,7 @@ class SourceInstallTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'rerun with --upgrade'):
             self.install(image='sha256:' + '2' * 64)
         self.assertEqual(self.snapshot(), before)
-        with self.assertRaisesRegex(ValueError, 'Upgrade stopped; the running services are unchanged'):
+        with self.assertRaisesRegex(ValueError, '^Upgrade stopped; the running services are unchanged. Data volume check failed; see the output above.$'):
             self.install(upgrade=True, image='sha256:' + '2' * 64, failure='init')
         self.assertEqual(self.snapshot(), before)
 
@@ -132,6 +150,24 @@ class SourceInstallTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'offline distribution'):
             self.install()
         self.assertFalse(self.destination.exists())
+
+    def test_failures_exit_with_one_line_and_the_next_step(self):
+        (self.bundle / 'SHA256SUMS').write_text('0' * 64 + '  manifest.json\n')
+        self.assertEqual(self.main(), 'Distribution manifest checksum mismatch')
+        self.write_sums()
+
+        def interrupt(*args, **kwargs):
+            raise KeyboardInterrupt
+        with patch.object(installer, 'ensure_docker_image', return_value='sha256:' + '1' * 64), patch.object(installer, 'run', side_effect=interrupt):
+            self.assertEqual(self.main(), 'Interrupted; rerun the same command to continue.')
+        self.assertFalse(self.destination.exists())
+
+        if os.geteuid():
+            # Root-owned after an earlier sudo run; root itself is never denied.
+            lock = Path(str(self.destination) + '.lock')
+            lock.chmod(0)
+            self.addCleanup(lock.chmod, 0o700)
+            self.assertEqual(self.main(), f'{lock} is not writable by this account; if an earlier run used sudo, return it with: sudo chown -R "$(id -un)" {lock}')
 
 
 if __name__ == '__main__':

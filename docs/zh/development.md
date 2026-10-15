@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: b4d3c7f1700ac0d60038069a7cc62a5e8231e32cc8e33513814da841d260d112
+source_hash: 28bc363f9cd73938afef53f0ed7399721ae179c48a543cebd1111f3054ccf52e
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -88,7 +88,7 @@ docker compose up -d --wait --pull never
 ./oac core-key --show
 ```
 
-对安装目录重新运行同一源码包的 `install.py`，会以已保存的设置继续该安装；只有新目录才需要 `--public-url`。其他提交的源码包会拒绝已有安装，除非传入 `--upgrade`，此时会[原地升级](getting-started/operations.md#upgrade)该安装。若在 `compose.yaml` 和 `.env` 齐备之前准备失败，删除该未完成目录后重试。配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
+对安装目录重新运行同一源码包的 `install.py`，会以已保存的设置继续该安装；只有新目录才需要 `--public-url`。其他提交的源码包会拒绝已有安装，除非传入 `--upgrade`，此时会[原地升级](getting-started/operations.md#upgrade)该安装。新安装若在启动服务之前失败，安装目录会保持运行前的状态；修复原因后重新运行同一命令即可。配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
 
 ## 构建与运行组件 {#build-and-run-components}
 

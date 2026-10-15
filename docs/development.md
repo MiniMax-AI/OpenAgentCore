@@ -86,7 +86,7 @@ docker compose up -d --wait --pull never
 ./oac core-key --show
 ```
 
-Rerunning the same bundle's `install.py` on its installation directory resumes the installation with the saved settings; `--public-url` is required only for a new directory. A bundle from another commit refuses an existing installation unless you pass `--upgrade`, which [upgrades it in place](./getting-started/operations.md#upgrade). If preparation fails before `compose.yaml` and `.env` exist, remove that incomplete directory and retry. Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services.
+Rerunning the same bundle's `install.py` on its installation directory resumes the installation with the saved settings; `--public-url` is required only for a new directory. A bundle from another commit refuses an existing installation unless you pass `--upgrade`, which [upgrades it in place](./getting-started/operations.md#upgrade). If a new installation fails before it starts the services, it leaves the installation directory as it found it; fix the cause and rerun the same command. Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services.
 
 ## Build and run components
 
