@@ -56,7 +56,7 @@ RULES = (
     (("services/web/",), (*GO, "Dockerfile"), ("distribution", "compose", "web", "web-acceptance")),
     (("example/",), WEB, ("example",)),
     (("docs/", "contracts/"), ("",), ("website",)),
-    (("website/",), (*WEB, ".vue", ".md"), ("website",)),
+    (("website/",), (*WEB, ".vue", ".md", ".sh"), ("website",)),
     (("services/core/",), CORE, ("backend", "api", "compose")),
     (("services/core/cmd/oac/",), GO, ("native", "distribution")),
     (("deploy/install.sh", "deploy/install.ps1", "deploy/test_install.ps1"), (".sh", ".ps1"), ("native", "distribution")),
