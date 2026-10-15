@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: e2ebdce087ab0890f1c28871b09e7301d8efead9a2174d22469e9c8f6e9b2b77
+source_hash: 18bb1549e69536abfe758b043e8621e77899a848efa8613760f7aff728afd63e
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装指南](getting-started/install.md)。安装器代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装器](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -144,7 +144,7 @@ git push origin v1.2.3
 
 版本发布和手动 `build-<full SHA>` 草稿使用 `ghcr.io/minimax-ai/openagentcore/<component>:<version>`，其中 `<component>` 为 `core`、`web`、`runtime`、`ingress` 或 `postgres`。Core、Web 和 ingress 索引包含 Linux amd64 和 arm64 镜像，Runtime 包含 Linux amd64。各平台镜像使用 `<version>-<architecture>` 标签，从发行归档加载。已有版本标签必须与发行镜像及平台集合一致。发布器校验全部版本索引后，才为稳定版更新 `latest`；预发布版和草稿保持 `latest` 不变。`postgres` 是固定在 `deploy/compose/database-image.txt` 中的官方 PostgreSQL 索引，连同全部平台和原摘要一并复制；注册表中的标签若指向其他摘要，发布器会拒绝。要升级 PostgreSQL，请把该文件改为同一主版本的新摘要，模板、离线包和镜像复制都读取这一处。容器标签中的 SemVer 构建元数据用 `_` 替换 `+`，版本字符串上限为 128 个字符。镜像校验后，发布器上传该版本的 `compose.yaml` 和校验和清单。Compose 用对应发行版的索引摘要固定 Core、Web、ingress 和 PostgreSQL，初始化时检查其构建版本与 Compose 版本一致。
 
-合并的构建/发布作业使用具有 `packages: write` 权限的 `GITHUB_TOKEN`。首次发布时，GitHub 会将每个容器软件包创建为私有：软件包管理员必须先在各自的软件包设置中将全部四个软件包改为 **Public**，用户才能匿名拉取。请参阅 [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。更改可见性后，请验证未认证拉取。仅更改仓库可见性并不会使新的容器软件包变为公开。
+合并的构建/发布作业使用具有 `packages: write` 权限的 `GITHUB_TOKEN`。首次发布时，GitHub 会将每个容器软件包创建为私有：软件包管理员必须先在各自的软件包设置中将全部五个软件包（`core`、`web`、`runtime`、`ingress` 和 `postgres`）改为 **Public**，用户才能匿名拉取。请参阅 [GitHub container visibility](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)。更改可见性后，请验证未认证拉取。仅更改仓库可见性并不会使新的容器软件包变为公开。
 
 GHCR 和 GitHub Releases 不共享事务。发布失败后，GHCR 中可能仍会保留一些匹配的版本标签；请保留这些镜像，并使用原始构件按照下文的草稿恢复流程操作。除清单缺失以外，注册表故障都会停止发布。作业摘要会记录按摘要固定的引用。这些镜像和渲染后的 Compose 文件仍需要[配置](configuration.md)中描述的配置、机密和路由。
 

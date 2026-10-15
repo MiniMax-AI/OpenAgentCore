@@ -60,7 +60,18 @@ func uninstall(ctx context.Context, runner Runner, project, dir, keep string, in
 		images, _ := runner.Output(ctx, "config", "--images")
 		fmt.Fprintf(out, "This deletes the OpenAgentCore installation in %s:\n  Compose project  %s (containers and network)\n  Data volume      %s_data (database, secrets, Core key, Session history)\n  Directory        %s\n  Installation ID  %s\n", dir, project, project, dir, id)
 		fmt.Fprintf(out, "Type %q or yes to delete it: ", filepath.Base(dir))
-		answer, _ := bufio.NewReader(in).ReadString('\n')
+		// Read in the background so Ctrl-C ends the wait at once instead of after Enter.
+		typed := make(chan string, 1)
+		go func() {
+			answer, _ := bufio.NewReader(in).ReadString('\n')
+			typed <- answer
+		}()
+		var answer string
+		select {
+		case answer = <-typed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 		if answer = strings.TrimSpace(answer); answer != "yes" && answer != filepath.Base(dir) {
 			return errors.New("Uninstall cancelled; nothing was changed.")
 		}

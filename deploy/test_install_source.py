@@ -112,6 +112,7 @@ class SourceInstallTest(unittest.TestCase):
         override = json.loads((self.destination / 'compose.override.yaml').read_text())
         nfs = {'type': 'bind', 'source': '/srv/workspaces', 'target': '/srv/workspaces'}
         override['services']['core']['volumes'] = [nfs]
+        override['services']['core']['image'] = 'old'
         (self.destination / 'compose.override.yaml').write_text(json.dumps(override))
         before = self.snapshot()
         upgraded = 'b' * 40
@@ -134,7 +135,8 @@ class SourceInstallTest(unittest.TestCase):
         services = json.loads((self.destination / 'compose.override.yaml').read_text())['services']
         self.assertEqual(services['core']['volumes'], [nfs])
         self.assertEqual(os.stat(self.destination / 'compose.override.yaml').st_mode & 0o777, 0o600)
-        self.assertEqual({services[name]['image'] for name in ('core', 'web', 'init', 'database')}, {'sha256:' + '2' * 64})
+        self.assertFalse([name for name, service in services.items() if 'image' in service])
+        self.assertEqual((self.destination / 'compose.yaml').read_text().count('sha256:' + '2' * 64), 4)
         self.assertEqual([volume['target'] for volume in services['web']['volumes']], ['/node-payload'])
         self.assertIn('OAC_REVISION: ' + upgraded, (self.destination / 'compose.yaml').read_text())
         self.assertEqual((self.destination / 'oac').read_bytes(), b'upgraded operator')
@@ -150,6 +152,19 @@ class SourceInstallTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'offline distribution'):
             self.install()
         self.assertFalse(self.destination.exists())
+
+    def test_docker_children_ignore_the_shells_installation_settings(self):
+        with patch.dict(os.environ, {'COMPOSE_PROJECT_NAME': 'other', 'OAC_PUBLIC_URL': 'https://other.example', 'PATH_KEEP': '1'}), patch.object(subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            installer.run('failed', 'docker', 'compose', 'up')
+        env = run.call_args.kwargs['env']
+        self.assertEqual((env.get('PATH_KEEP'), 'COMPOSE_PROJECT_NAME' in env, 'OAC_PUBLIC_URL' in env), ('1', False, False))
+
+    def test_public_url_must_be_what_core_accepts(self):
+        for value in ('https://core.example', 'http://10.0.0.5:8080', 'http://[::1]:8091'):
+            self.assertTrue(installer.valid_public_origin(value), value)
+        for value in ('https://core.example/', 'https://Core.example', 'https://core.example/path', 'https://core.example?', 'https://user@core.example', 'https://core.example:0', 'https://core.example:65536', 'ftp://core.example', 'https://core..example'):
+            self.assertFalse(installer.valid_public_origin(value), value)
 
     def test_failures_exit_with_one_line_and_the_next_step(self):
         (self.bundle / 'SHA256SUMS').write_text('0' * 64 + '  manifest.json\n')

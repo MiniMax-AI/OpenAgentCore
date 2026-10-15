@@ -6,11 +6,11 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
-from urllib.parse import urlsplit
 import uuid
 
 # The bundle ships the node installer's distribution modules beside this file.
@@ -20,8 +20,24 @@ from distribution import DistributionError, ensure_docker_image, load_manifest
 import node_payload
 
 
+# Matches Core's OAC_PUBLIC_URL rule (publicorigin.New): a canonical http(s) origin with no path or credentials.
+PUBLIC_ORIGIN = re.compile(r'https?://(?P<host>(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?|\[(?P<ip6>[0-9a-f:.]+)\])(?::(?P<port>[1-9][0-9]{0,4}))?')
+
+
+def valid_public_origin(value):
+    match = PUBLIC_ORIGIN.fullmatch(value)
+    if not match or len(match['host']) > 253 or int(match['port'] or 1) > 65535:
+        return False
+    try:
+        return match['ip6'] is None or bool(ipaddress.IPv6Address(match['ip6']))
+    except ValueError:
+        return False
+
+
 def run(failure, *args, **kwargs):
     """Run a command whose output the user sees; a nonzero exit raises failure."""
+    # The installation's .env is the one home of OAC_* and COMPOSE_* settings, so the caller's shell cannot override them.
+    kwargs['env'] = {name: value for name, value in os.environ.items() if not name.upper().startswith(('OAC_', 'COMPOSE_'))}
     if subprocess.run(args, **kwargs).returncode:
         raise ValueError(failure)
 
@@ -90,8 +106,9 @@ def install(bundle, destination, host, port, public_url, upgrade):
             except ValueError:
                 raise ValueError('compose.override.yaml must stay JSON so the installer can replace its own entries') from None
             services = override.setdefault('services', {})
-            for name, image in (('core', 'core'), ('web', 'web'), ('init', 'ingress'), ('database', 'database')):
-                services.setdefault(name, {})['image'] = images[image]
+            # compose.yaml is the one home of the image references; earlier installers also wrote them here.
+            for name in ('core', 'web', 'init', 'database'):
+                services.setdefault(name, {}).pop('image', None)
             web = services['web']
             web['volumes'] = [volume for volume in web.get('volumes', []) if not (isinstance(volume, dict) and volume.get('target') == '/node-payload')]
             web['volumes'].append({'type': 'bind', 'source': str(destination / 'node-payload'), 'target': '/node-payload', 'read_only': True})
@@ -158,9 +175,8 @@ def main():
     if not 1 <= args.web_port <= 65535:
         parser.error('web port must be between 1 and 65535')
     if args.public_url is not None:
-        url = urlsplit(args.public_url)
-        if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password or url.path not in ('', '/') or url.query or url.fragment or any(c in args.public_url for c in "\r\n'\\$"):
-            parser.error('public URL must be an HTTP(S) origin without credentials')
+        if not valid_public_origin(args.public_url):
+            parser.error('public URL must be a canonical http or https origin without a path, such as https://core.example')
     destination = args.install_dir.resolve()
     try:
         install(BUNDLE, destination, args.host, args.web_port, args.public_url, args.upgrade)

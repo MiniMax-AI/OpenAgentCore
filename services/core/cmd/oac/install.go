@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/publicorigin"
 )
 
 // Installation is host-independent. Only the launchers select a native binary;
@@ -83,7 +85,15 @@ func dockerOutput(ctx context.Context, dir string, args ...string) ([]byte, erro
 	cmd.Env = dockerEnv()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	output, err := cmd.Output()
+	var output []byte
+	var err error
+	if len(args) > 0 && args[0] == "pull" {
+		// A pull transfers hundreds of megabytes; Docker's own progress shows it is not stuck.
+		cmd.Stdout = os.Stdout
+		err = cmd.Run()
+	} else {
+		output, err = cmd.Output()
+	}
 	if err != nil {
 		if reason := strings.TrimSpace(stderr.String()); reason != "" {
 			return nil, errors.New(reason)
@@ -179,14 +189,11 @@ func (i installer) install(ctx context.Context, o installOptions) error {
 			}
 		}
 	}
-	u, err := url.Parse(o.publicURL)
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") {
-		return errors.New("--public-url must be an HTTP(S) origin")
+	if _, err := publicorigin.New(o.publicURL); err != nil {
+		return errors.New("--public-url must be a canonical http or https origin without a path, such as https://core.example")
 	}
-	for _, value := range []string{o.publicURL, o.version} {
-		if strings.ContainsAny(value, "\r\n'\\") {
-			return errors.New("installation options contain invalid characters")
-		}
+	if strings.ContainsAny(o.version, "\r\n'\\") {
+		return errors.New("installation options contain invalid characters")
 	}
 	o.dir = filepath.Clean(o.dir)
 	if err := os.MkdirAll(filepath.Dir(o.dir), 0o700); err != nil {
@@ -211,7 +218,7 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 	switch {
 	case errors.Is(err, exec.ErrNotFound):
 		return errors.New("Docker is not installed; install Docker Engine 26 or newer with the Compose plugin, or Docker Desktop on macOS and Windows, then rerun the installer")
-	case err != nil && strings.Contains(err.Error(), "permission denied"):
+	case err != nil && strings.Contains(err.Error(), "permission denied while trying to connect to"):
 		return errors.New("This account cannot use Docker: add it to the docker group and log in again, or use Docker Desktop or rootless Docker. Do not run the installer with sudo.")
 	case err != nil:
 		return fmt.Errorf("Docker is not running or not reachable; start it and rerun the installer: %w", err)
@@ -245,6 +252,9 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		return err
 	}
 	fresh := len(entries) == 0
+	if fresh && o.upgrade {
+		return fmt.Errorf("No installation in %s; pass the installation's --install-dir.", o.dir)
+	}
 	installed := buildRevision
 	if !fresh {
 		for _, name := range []string{"compose.yaml", ".env", cliName()} {
@@ -390,16 +400,24 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 	return nil
 }
 
-// portHolderHint names an OpenAgentCore Compose project that publishes the port. Its containers keep running after the installation directory is deleted by hand.
+// portHolderHint names an OpenAgentCore Compose project that publishes the port. A project whose directory is gone keeps running; one whose directory exists is a live installation, so the hint names it instead of offering to delete it.
 func (i installer) portHolderHint(ctx context.Context, port int) string {
-	names, err := i.docker(ctx, "", "ps", "--filter", "publish="+strconv.Itoa(port), "--format", `{{.Label "com.docker.compose.project"}}`)
+	rows, err := i.docker(ctx, "", "ps", "--filter", "publish="+strconv.Itoa(port), "--format", `{{.Label "com.docker.compose.project"}}	{{.Label "com.docker.compose.project.working_dir"}}`)
 	if err != nil {
 		return ""
 	}
-	for _, name := range strings.Fields(string(names)) {
-		if strings.HasPrefix(name, "oac-") {
-			return fmt.Sprintf("\nThe Compose project %s holds it. If you deleted its installation directory, remove it with: docker compose -p %s down --volumes --remove-orphans (this deletes its data)", name, name)
+	for _, row := range strings.Split(string(rows), "\n") {
+		name, dir, _ := strings.Cut(strings.TrimSpace(row), "\t")
+		if !strings.HasPrefix(name, "oac-") {
+			continue
 		}
+		if dir == "" {
+			return fmt.Sprintf("\nThe Compose project %s holds it.", name)
+		}
+		if _, err := os.Stat(dir); err == nil {
+			return fmt.Sprintf("\nThe installation in %s holds it; upgrade or manage it with --install-dir %s.", dir, dir)
+		}
+		return fmt.Sprintf("\nThe Compose project %s holds it, and its installation directory %s no longer exists. Remove it with: docker compose -p %s down --volumes --remove-orphans (this deletes its data)", name, dir, name)
 	}
 	return ""
 }
@@ -443,13 +461,9 @@ func (i installer) differingSettings(o installOptions) []string {
 
 // releaseCompose downloads the requested release's compose.yaml, verifies its published checksum and requires it to start this installer's release.
 func (i installer) releaseCompose(ctx context.Context, version string) ([]byte, error) {
-	repository := os.Getenv("OAC_REPOSITORY")
-	if repository == "" {
-		repository = "MiniMax-AI/OpenAgentCore"
-	}
-	base := "https://github.com/" + repository + "/releases/latest/download/"
+	base := "https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/"
 	if version != "latest" {
-		base = "https://github.com/" + repository + "/releases/download/" + url.PathEscape(version) + "/"
+		base = "https://github.com/MiniMax-AI/OpenAgentCore/releases/download/" + url.PathEscape(version) + "/"
 	}
 	fmt.Println("Downloading release configuration...")
 	sums, err := i.download(ctx, base+"compose-sha256sums.txt")

@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/publicorigin"
 	"io"
 	"net/url"
 	"os"
@@ -22,7 +23,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
@@ -44,7 +44,7 @@ type Config struct {
 	// Addr is OAC_ADDR, the listener address.
 	Addr string
 	// PublicOrigin is OAC_PUBLIC_URL.
-	PublicOrigin deployment.PublicOrigin
+	PublicOrigin publicorigin.Origin
 	// DatabaseURL is OAC_DATABASE_URL with the password from
 	// OAC_DATABASE_PASSWORD_FILE.
 	DatabaseURL string
@@ -110,7 +110,7 @@ func Load() (Config, error) {
 	if value == "" {
 		return Config{}, configError("OAC_PUBLIC_URL is required; applications, nodes and sandboxes reach Core at this origin")
 	}
-	if c.PublicOrigin, err = deployment.NewPublicOrigin(value); err != nil {
+	if c.PublicOrigin, err = publicorigin.New(value); err != nil {
 		return Config{}, configError("OAC_PUBLIC_URL must be a canonical http or https origin without path, credentials, query or fragment, such as https://core.example")
 	}
 	if c.DatabaseURL, err = databaseurl.FromEnvironment(); err != nil {

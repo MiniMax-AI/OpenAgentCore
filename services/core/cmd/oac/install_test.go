@@ -538,3 +538,16 @@ func TestUnknownCommandPrintsUsageOutsideAnInstallation(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestInstallRejectsWhatCoreRejectsBeforePublishing(t *testing.T) {
+	for _, value := range []string{"https://core.example/", "https://Core.example", "https://core.example/path"} {
+		f := newInstallFixture(t)
+		f.options.publicURL = value
+		if err := f.run(); err == nil || !strings.Contains(err.Error(), "--public-url must be a canonical") {
+			t.Fatalf("%s: %v", value, err)
+		}
+		if exists(f.options.dir) || exists(f.options.dir+".staging") {
+			t.Fatalf("%s: files were published", value)
+		}
+	}
+}

@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -84,6 +86,21 @@ func TestUninstallRefusedConfirmationChangesNothing(t *testing.T) {
 	}
 }
 
+func TestUninstallInterruptedAtThePromptStopsAtOnce(t *testing.T) {
+	f := newUninstallFixture(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	reader, _ := io.Pipe() // never answers
+	done := make(chan error, 1)
+	go func() { done <- uninstall(ctx, f, "oac-abc123", f.dir, "", reader, io.Discard) }()
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	if !exists(f.dir) {
+		t.Fatal("an interrupted uninstall removed files")
+	}
+}
+
 func TestUninstallRemovesProjectDirectoryAndLock(t *testing.T) {
 	for _, answer := range []string{"yes\n", "core\n"} {
 		f := newUninstallFixture(t)
@@ -101,10 +118,6 @@ func TestUninstallRemovesProjectDirectoryAndLock(t *testing.T) {
 			if !strings.Contains(out, want) {
 				t.Fatalf("missing %q in %s", want, out)
 			}
-		}
-		// The second run finds no .env and reports nothing installed.
-		if _, err := installedProject(f.dir); !os.IsNotExist(err) {
-			t.Fatal(err)
 		}
 	}
 }
@@ -133,23 +146,39 @@ func TestUninstallLeavesOnlyTheRunningBinary(t *testing.T) {
 	}
 }
 
-func TestInstallPortHintNamesAnOrphanedProject(t *testing.T) {
-	f := newInstallFixture(t)
-	listener, err := net.Listen("tcp", f.options.host+":0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer listener.Close()
-	f.options.port = listener.Addr().(*net.TCPAddr).Port
-	inner := f.docker
-	f.docker = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
-		if args[0] == "ps" {
-			return []byte("oac-abc123\n"), nil
+func TestInstallPortHintOffersDeletionOnlyForAMissingDirectory(t *testing.T) {
+	for _, c := range []struct{ dir, want, not string }{
+		{filepath.Join(t.TempDir(), "gone"), "docker compose -p oac-abc123 down --volumes --remove-orphans", ""},
+		{t.TempDir(), "--install-dir", "down --volumes"},
+	} {
+		f := newInstallFixture(t)
+		listener, err := net.Listen("tcp", f.options.host+":0")
+		if err != nil {
+			t.Fatal(err)
 		}
-		return inner(ctx, dir, args...)
+		defer listener.Close()
+		f.options.port = listener.Addr().(*net.TCPAddr).Port
+		inner := f.docker
+		f.docker = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+			if args[0] == "ps" {
+				return []byte("oac-abc123\t" + c.dir + "\n"), nil
+			}
+			return inner(ctx, dir, args...)
+		}
+		err = f.run()
+		if err == nil || !strings.Contains(err.Error(), c.want) || (c.not != "" && strings.Contains(err.Error(), c.not)) {
+			t.Fatal(err)
+		}
 	}
-	err = f.run()
-	if err == nil || !strings.Contains(err.Error(), "docker compose -p oac-abc123 down --volumes --remove-orphans") {
+}
+
+func TestUpgradeWithoutAnInstallationRefuses(t *testing.T) {
+	f := newInstallFixture(t)
+	f.options.upgrade = true
+	if err := f.run(); err == nil || !strings.Contains(err.Error(), "No installation in "+f.options.dir) {
 		t.Fatal(err)
+	}
+	if exists(f.options.dir) || exists(f.options.dir+".staging") {
+		t.Fatal("a refused upgrade left files")
 	}
 }

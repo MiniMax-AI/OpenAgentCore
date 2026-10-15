@@ -136,8 +136,9 @@ For an installation whose data all lives in its Docker volume, with no independe
 cd ~/.oac/core
 docker compose stop
 project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
+image=$(docker compose images --quiet database)
 mkdir -p ~/oac-backup
-docker run --rm -v "${project}_data:/data:ro" -v ~/oac-backup:/backup --entrypoint tar postgres:16-alpine czf /backup/data.tar.gz -C /data .
+docker run --rm -v "${project}_data:/data:ro" -v ~/oac-backup:/backup --entrypoint tar "$image" czf /backup/data.tar.gz -C /data .
 cp -a ~/.oac/core ~/oac-backup/installation
 docker compose start
 ```
@@ -150,7 +151,8 @@ cd ~/.oac/core
 project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
 docker compose pull
 docker compose up --no-start
-docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoint tar postgres:16-alpine xzf /backup/data.tar.gz -C /data
+image=$(docker compose images --quiet database)
+docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoint tar "$image" xzf /backup/data.tar.gz -C /data
 ./oac apply
 ```
 
@@ -247,7 +249,7 @@ A rollback restores the backup taken before the upgrade: stop the services, [res
 ~/.oac/core/oac uninstall
 ```
 
-On Windows, run `& "$HOME/.oac/core/oac.exe" uninstall`. The command shows the Compose project, the data volume, the installation directory and the installation ID, and deletes nothing until you type the directory name or `yes`. It then removes the containers, the network and the data volume, the installation directory and the [installation lock](../configuration.md#installation-directory) (`~/.oac/core.lock`). On Windows the running `oac.exe` cannot delete itself: the command prints the `Remove-Item` that removes the rest. It keeps the Docker images so that a reinstall doesn't download them again, and prints the `docker image rm` command that removes them. Run it again and it reports that nothing is installed.
+On Windows, run `& "$HOME/.oac/core/oac.exe" uninstall`. The command shows the Compose project, the data volume, the installation directory and the installation ID, and deletes nothing until you type the directory name or `yes`. It then removes the containers, the network and the data volume, the installation directory and the [installation lock](../configuration.md#installation-directory) (`~/.oac/core.lock`). On Windows the running `oac.exe` cannot delete itself: the command prints the `Remove-Item` that removes the rest, and you run it before you reinstall into the same directory. It keeps the Docker images so that a reinstall doesn't download them again, and prints the `docker image rm` command that removes them.
 
 All data goes with it: Projects and API keys, Session history, stored credentials and the Core key. To keep the data, stop the installation with `docker compose stop` instead, or [back it up](#back-up) first.
 

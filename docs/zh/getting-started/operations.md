@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: daba721bddebf8d6544ddef597390307a7b4a28f041978133acc200004812d69
+source_hash: 1f07f9a80da3ad0218949a4856093d716d9d3af2b40426be9e74e3bd0b3ca18b
 ---
 
 安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
@@ -138,8 +138,9 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 cd ~/.oac/core
 docker compose stop
 project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
+image=$(docker compose images --quiet database)
 mkdir -p ~/oac-backup
-docker run --rm -v "${project}_data:/data:ro" -v ~/oac-backup:/backup --entrypoint tar postgres:16-alpine czf /backup/data.tar.gz -C /data .
+docker run --rm -v "${project}_data:/data:ro" -v ~/oac-backup:/backup --entrypoint tar "$image" czf /backup/data.tar.gz -C /data .
 cp -a ~/.oac/core ~/oac-backup/installation
 docker compose start
 ```
@@ -152,7 +153,8 @@ cd ~/.oac/core
 project=$(sed -n 's/^COMPOSE_PROJECT_NAME=//p' .env)
 docker compose pull
 docker compose up --no-start
-docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoint tar postgres:16-alpine xzf /backup/data.tar.gz -C /data
+image=$(docker compose images --quiet database)
+docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoint tar "$image" xzf /backup/data.tar.gz -C /data
 ./oac apply
 ```
 
@@ -249,7 +251,7 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
 ~/.oac/core/oac uninstall
 ```
 
-Windows 上运行 `& "$HOME/.oac/core/oac.exe" uninstall`。命令会展示 Compose 项目、数据卷、安装目录和安装 ID，在你输入目录名或 `yes` 之前不会删除任何内容。随后它删除容器、网络和数据卷、安装目录以及[安装锁](../configuration.md#installation-directory)（`~/.oac/core.lock`）。Windows 上正在运行的 `oac.exe` 无法删除自身：命令会打印删除其余内容的 `Remove-Item`。它保留 Docker 镜像，重新安装时不必再次下载，并打印删除镜像的 `docker image rm` 命令。再次运行会提示没有已安装的内容。
+Windows 上运行 `& "$HOME/.oac/core/oac.exe" uninstall`。命令会展示 Compose 项目、数据卷、安装目录和安装 ID，在你输入目录名或 `yes` 之前不会删除任何内容。随后它删除容器、网络和数据卷、安装目录以及[安装锁](../configuration.md#installation-directory)（`~/.oac/core.lock`）。Windows 上正在运行的 `oac.exe` 无法删除自身：命令会打印删除其余内容的 `Remove-Item`，在同一目录重新安装之前先运行它。它保留 Docker 镜像，重新安装时不必再次下载，并打印删除镜像的 `docker image rm` 命令。
 
 全部数据随之删除：项目和 API 密钥、Session 历史、存储的凭据和 Core 密钥。要保留数据，请用 `docker compose stop` 停止安装，或先[备份](#back-up)。
 
