@@ -193,10 +193,12 @@ def install(bundle, destination, host, port, public_url, upgrade):
             'docker', 'compose', 'up', '-d', '--wait', '--wait-timeout', '180', '--pull', 'never', '--remove-orphans', cwd=destination)
         # A rerun of a start that lost the port must not report success: the console would be another installation's.
         settings = read_env(destination / '.env')
+        # compose.yaml's defaults apply when .env leaves a setting empty.
+        web_port = settings.get('OAC_WEB_PORT') or '8080'
         published = docker('docker', 'compose', 'port', 'web', '8080', cwd=destination)
         if published.returncode or not published.stdout.strip():
-            raise ValueError(f"Web is running without its published port {settings['OAC_WEB_PORT']}; something else holds it.{port_holder_hint(settings['OAC_WEB_PORT'])}\nFree the port, then rerun the same command.")
-        print(f"Console: {settings['OAC_PUBLIC_URL']}")
+            raise ValueError(f"Web is running without its published port {web_port}; something else holds it.{port_holder_hint(web_port)}\nFree the port, then rerun the same command.")
+        print(f"Console: {settings.get('OAC_PUBLIC_URL') or 'http://localhost:' + web_port}")
         if previous and previous != revision:
             print(f"Upgraded from {previous[:12]} to {revision[:12]}. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.")
         if existing:
