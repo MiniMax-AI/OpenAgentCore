@@ -2,11 +2,15 @@ package node
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,6 +42,9 @@ type agent struct {
 	active     atomic.Int32
 	ready      atomic.Bool
 	healthSeen atomic.Bool
+	// failureLogged is set when Run logged a connection failure and cleared when
+	// the next accepted connection is logged. Only Run's goroutine uses it.
+	failureLogged bool
 }
 type agentConnection struct {
 	controlBusy                    bool
@@ -121,6 +128,9 @@ func Run(ctx context.Context, config AgentConfig) error {
 		<-workerDone
 	}()
 	backoff := time.Second
+	// A cause is logged once; retries that fail the same way stay out of the
+	// journal until a connection holds for 30 seconds.
+	logged := ""
 	for {
 		if ctx.Err() != nil {
 			return nil
@@ -130,11 +140,12 @@ func Run(ctx context.Context, config AgentConfig) error {
 		if errors.Is(err, ErrAuthentication) || errors.Is(err, sandbox.ErrOwnership) {
 			return err
 		}
-		if ctx.Err() == nil {
-			log.Ctx(ctx).Warn("sandbox node connection interrupted; reconnecting", "node_id", config.Identity.NodeID)
-		}
 		if time.Since(connectedAt) >= 30*time.Second {
-			backoff = time.Second
+			backoff, logged = time.Second, ""
+		}
+		if cause := connectionCause(err); ctx.Err() == nil && cause != logged {
+			logged, a.failureLogged = cause, true
+			log.Ctx(ctx).Warn("sandbox node connection to Core failed; retrying", "node_id", config.Identity.NodeID, "cause", cause)
 		}
 		delay := backoff/2 + time.Duration(rand.Int64N(int64(backoff/2)+1))
 		timer := time.NewTimer(delay)
@@ -203,8 +214,9 @@ func (a *agent) connect(ctx context.Context) error {
 			if resp.StatusCode == http.StatusUnauthorized {
 				return ErrAuthentication
 			}
+			return fmt.Errorf("HTTP %d on the WebSocket upgrade", resp.StatusCode)
 		}
-		return ErrUnavailable
+		return err
 	}
 	defer conn.Close()
 	conn.SetReadLimit(MaxFrameBytes)
@@ -217,10 +229,10 @@ func (a *agent) connect(ctx context.Context) error {
 	}
 	welcome, err := readFrame(conn)
 	if err != nil {
-		return err
+		return notAccepted{err}
 	}
 	if (a.config.Generations == nil && welcome.Deployment != nil) || welcome.Version != version || welcome.Type != "welcome" || !validID(welcome.ConnectionID) || welcome.OwnerEpoch == 0 {
-		return sandbox.ErrInvalid
+		return notAccepted{sandbox.ErrInvalid}
 	}
 	a.mu.Lock()
 	if welcome.OwnerEpoch < a.stored.OwnerEpoch {
@@ -237,6 +249,10 @@ func (a *agent) connect(ctx context.Context) error {
 	current := &agentConnection{version: version, conn: conn, id: welcome.ConnectionID, epoch: welcome.OwnerEpoch, done: make(chan struct{})}
 	a.current = current
 	a.mu.Unlock()
+	if a.failureLogged {
+		a.failureLogged = false
+		log.Ctx(ctx).Info("sandbox node connected to Core", "node_id", a.config.Identity.NodeID)
+	}
 	defer current.close()
 	connectionCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -319,6 +335,43 @@ func (a *agent) connect(ctx context.Context) error {
 		}
 	}
 }
+
+// notAccepted is a connection that ended between the node's hello and Core's
+// welcome. Core closes it without a frame when it refuses the hello, for example
+// from a node of another protocol version.
+type notAccepted struct{ err error }
+
+func (e notAccepted) Error() string { return "Core did not accept the node: " + e.err.Error() }
+func (e notAccepted) Unwrap() error { return e.err }
+
+// connectionCause names why a connection to Core failed, in words that stay the
+// same across retries so Run logs each cause once: the HTTP status of a refused
+// WebSocket upgrade, the WebSocket close code and reason, or the network or TLS
+// error without the URL, addresses and local port. No error carries the
+// credential.
+func connectionCause(err error) string {
+	var (
+		pending notAccepted
+		invalid x509.CertificateInvalidError
+		op      *net.OpError
+		request *url.Error
+	)
+	switch {
+	case errors.As(err, &pending):
+		return "Core did not accept the node: " + connectionCause(pending.err)
+	case errors.As(err, &invalid) && invalid.Reason == x509.Expired:
+		// The error text names the current time.
+		return "TLS certificate expired or not yet valid"
+	case errors.As(err, &op):
+		return strings.TrimSpace(op.Op+" "+op.Net) + ": " + op.Err.Error()
+	case errors.Is(err, sandbox.ErrInvalid):
+		return "frame outside node protocol " + strconv.Itoa(ProtocolVersion)
+	case errors.As(err, &request):
+		return request.Err.Error()
+	}
+	return err.Error()
+}
+
 func (a *agent) heartbeats(ctx context.Context, c *agentConnection, host *hostHealthSampler) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()

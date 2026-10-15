@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -286,5 +288,110 @@ func TestReservationRemainsUntilFencedDisconnectFinishes(t *testing.T) {
 	defer mu.Unlock()
 	if active != current || connections != 2 || callbackErr != nil {
 		t.Fatalf("stale disconnect cleared current presence: count=%d error=%v", connections, callbackErr)
+	}
+}
+
+type lockedLog struct {
+	mu  sync.Mutex
+	out strings.Builder
+}
+
+func (l *lockedLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.out.Write(p)
+}
+func (l *lockedLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.out.String()
+}
+
+// A node behind a reverse proxy that does not pass WebSocket upgrades logs the
+// refused upgrade once however often it retries, then logs its recovery.
+func TestNodeLogsEachConnectionCauseOnce(t *testing.T) {
+	var refused atomic.Int32
+	var accept atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !accept.Load() {
+			refused.Add(1)
+			http.Error(w, "missing websocket upgrade", http.StatusBadRequest)
+			return
+		}
+		conn, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		if _, err = readFrame(conn); err != nil || writeFrame(conn, frame{Type: "welcome", ConnectionID: uuid.NewString(), OwnerEpoch: 1}) != nil {
+			return
+		}
+		for err == nil {
+			_, _, err = conn.ReadMessage()
+		}
+	}))
+	defer server.Close()
+	logs := new(lockedLog)
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
+	defer slog.SetDefault(previous)
+	id := identity()
+	dir := stateDir(t)
+	stored, err := InitIdentity(dir, server.URL, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: &fakeProvider{}, Probe: probe})
+	}()
+	wait(t, func() bool { return refused.Load() >= 2 })
+	accept.Store(true)
+	wait(t, func() bool { return strings.Contains(logs.String(), "sandbox node connected to Core") })
+	cancel()
+	if err = <-done; err != nil {
+		t.Fatal(err)
+	}
+	out := logs.String()
+	if strings.Count(out, `cause="HTTP 400 on the WebSocket upgrade"`) != 1 || strings.Count(out, "sandbox node connected to Core") != 1 {
+		t.Fatalf("each cause and the recovery must be logged once:\n%s", out)
+	}
+}
+
+func TestNodeConnectionFailuresNameTheirCause(t *testing.T) {
+	closed := httptest.NewServer(http.NotFoundHandler())
+	closed.Close()
+	untrusted := httptest.NewTLSServer(http.NotFoundHandler())
+	defer untrusted.Close()
+	// Core closes the socket without a frame when it refuses a hello, here one
+	// whose identity differs from the registered node.
+	hub := NewHub(HubOptions{
+		Authenticate: func(_ context.Context, node, _ string) (Identity, error) {
+			other := identity()
+			other.NodeID = node
+			return other, nil
+		},
+		OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil },
+	})
+	defer hub.Close()
+	core := httptest.NewServer(hub)
+	defer core.Close()
+	for _, c := range []struct{ origin, cause string }{
+		{closed.URL, "dial tcp: connect: connection refused"},
+		{untrusted.URL, "tls: failed to verify certificate: x509: certificate signed by unknown authority"},
+		{core.URL, "Core did not accept the node: websocket: close 1006 (abnormal closure): unexpected EOF"},
+	} {
+		a := agent{config: AgentConfig{CoreURL: c.origin, StateDirectory: t.TempDir(), Identity: identity(), Credential: "credential", Probe: probe}}
+		if cause := connectionCause(a.connect(t.Context())); cause != c.cause {
+			t.Errorf("%s: cause %q, want %q", c.origin, cause, c.cause)
+		}
+	}
+	dir := stateDir(t)
+	if _, err := InitIdentity(dir, closed.URL, identity()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := RefreshIdentity(t.Context(), dir); err == nil || err.Error() != "cannot confirm approved node capacity: dial tcp: connect: connection refused" {
+		t.Fatalf("service start must name why Core is unreachable: %v", err)
 	}
 }

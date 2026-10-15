@@ -133,7 +133,7 @@ func RefreshIdentity(ctx context.Context, dir string) (StoredIdentity, error) {
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	response, err := client.Do(request)
 	if err != nil {
-		return StoredIdentity{}, errors.New("cannot confirm approved node capacity")
+		return StoredIdentity{}, errors.New("cannot confirm approved node capacity: " + connectionCause(err))
 	}
 	out, err := readEnrollment(response)
 	if err != nil {

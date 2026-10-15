@@ -181,7 +181,19 @@ A node reports only its first failed check, in this order: the Docker daemon or 
 | `artifacts_unavailable` | Provider files missing | A pinned provider file, such as the microsandbox Runtime, firmware or helper, is missing or fails its SHA-256 check | A node added with Web's command downloads the missing files by itself; otherwise restore them from the matching release |
 | `runtime_download_failed` | Runtime download failed | While preparing a new configuration, the node could not download or verify the Runtime files | Check the node's HTTPS access to the console and the release. The node retries with growing delays, up to 30 minutes apart |
 
-A new group membership applies only to a new process. Restart the node service: `sudo systemctl restart oac-node-<installation-id>.service`. A node that is registered but never connects usually can't reach Core at the public URL, or its `/api/v1` WebSocket doesn't pass the reverse proxy.
+A new group membership applies only to a new process. Restart the node service: `sudo systemctl restart oac-node-<installation-id>.service`.
+
+### Connection failures
+
+A registered node that can't connect to Core says why in its [log](#logs): `sandbox node connection to Core failed; retrying` with a `cause`, once for each cause however often it retries, then `sandbox node connected to Core` when it connects. A node service that starts while Core is unreachable logs `cannot confirm approved node capacity:` followed by the cause.
+
+| Cause | Fix |
+| --- | --- |
+| `HTTP 400 on the WebSocket upgrade` | The reverse proxy in front of Core doesn't pass WebSocket upgrades on `/api/v1`; see [HTTPS and the reverse proxy](./install-options.md#https-and-the-reverse-proxy) |
+| Another status, such as `HTTP 404 on the WebSocket upgrade` or `HTTP 502 …` | The reverse proxy doesn't route `/api/v1` to Core or doesn't preserve Host, or Core is not running |
+| `dial tcp: …`, such as `connection refused`, `i/o timeout` or `no such host` | The host can't reach Core at the public URL. Check DNS and firewalls; the node service doesn't use the installer's [download proxy](#download-through-a-proxy) |
+| `tls: …`, or `TLS certificate expired or not yet valid` | The host doesn't trust Core's certificate, or the public URL uses `https` on a port that doesn't serve it |
+| `Core did not accept the node: …` | Core closed the connection after the node introduced itself. After a Core upgrade, apply the release's [protocol changes](./operations.md#protocol-changes); otherwise read Core's log |
 
 ### Installer messages
 

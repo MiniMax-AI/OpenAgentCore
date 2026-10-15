@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 58450f2e430e5c8d7758835990b9726421f5fe361c6dd22441ae9c9be887e387
+source_hash: 8d0888dcd75b63daeb6bcd1207bcd006606f3f843ce786e5427a6c092b1b3b55
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -183,7 +183,19 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 | `artifacts_unavailable` | 沙箱提供商文件缺失 | 固定版本的提供商文件（例如 microsandbox 的 Runtime、固件或辅助程序）缺失或 SHA-256 检查失败 | Web 命令添加的节点自动下载缺失文件；其他节点从匹配发行版恢复 |
 | `runtime_download_failed` | Runtime 下载失败 | 准备新配置时无法下载或验证 Runtime 文件 | 检查节点到控制台和发行下载地址的 HTTPS 访问。节点以递增间隔重试，最长间隔 30 分钟 |
 
-新用户组成员关系仅对新进程生效。重启节点服务：`sudo systemctl restart oac-node-<installation-id>.service`。已注册但从未连接的节点通常无法通过公开 URL 访问 Core，或 `/api/v1` WebSocket 无法通过反向代理。
+新用户组成员关系仅对新进程生效。重启节点服务：`sudo systemctl restart oac-node-<installation-id>.service`。
+
+### 连接失败 {#connection-failures}
+
+已注册但无法连接 Core 的节点会在[日志](#logs)中说明原因：记录 `sandbox node connection to Core failed; retrying` 并附带 `cause`，无论重试多少次，每种原因只记录一次；连接成功后记录 `sandbox node connected to Core`。节点服务启动时若 Core 不可达，会记录 `cannot confirm approved node capacity:`，后接原因。
+
+| 原因 | 解决方法 |
+| --- | --- |
+| `HTTP 400 on the WebSocket upgrade` | Core 前的反向代理没有在 `/api/v1` 上传递 WebSocket 升级；参见 [HTTPS 与反向代理](install-options.md#https-and-the-reverse-proxy) |
+| 其他状态码，例如 `HTTP 404 on the WebSocket upgrade` 或 `HTTP 502 …` | 反向代理没有将 `/api/v1` 转发到 Core 或没有保留 Host，或者 Core 未运行 |
+| `dial tcp: …`，例如 `connection refused`、`i/o timeout` 或 `no such host` | 主机无法通过公开 URL 访问 Core。检查 DNS 和防火墙；节点服务不使用安装程序的[下载代理](#download-through-a-proxy) |
+| `tls: …`，或 `TLS certificate expired or not yet valid` | 主机不信任 Core 的证书，或公开 URL 对不提供 HTTPS 的端口使用了 `https` |
+| `Core did not accept the node: …` | 节点自我介绍后 Core 关闭了连接。Core 升级后，执行该发行版的[协议变更](operations.md#protocol-changes)；否则查看 Core 日志 |
 
 ### 安装程序消息 {#installer-messages}
 
