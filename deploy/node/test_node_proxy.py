@@ -8,6 +8,7 @@ from pathlib import Path
 import pwd
 import select
 import socket
+import stat
 import ssl
 import subprocess
 import sys
@@ -193,11 +194,27 @@ class NodeProxyTests(unittest.TestCase):
                                         "http://downloads.invalid", expect_failure=True)
             self.assertIn("HTTP 407", error)
 
-    def test_installer_proxy_is_not_in_service_unit(self):
-        with mock.patch.dict(os.environ, {"https_proxy": "http://fixture:private%20password@proxy.invalid"}):
-            unit = installer.system_unit(Path("/var/lib/oac-node/.oac/nodes/fixture"), "docker")
-        self.assertIn("User=oac-node", unit)
-        self.assertNotIn("proxy", unit.lower())
+    def test_service_keeps_the_installer_proxy_in_a_private_file(self):
+        secret = "http://fixture:private%20password@proxy.invalid:3128"
+        content = installer.service_environment({"https_proxy": secret, "NO_PROXY": "internal.invalid"})
+        self.assertIn('https_proxy="' + secret + '"\n', content)
+        self.assertIn('HTTPS_PROXY="' + secret + '"\n', content)
+        self.assertIn('no_proxy="internal.invalid,localhost,127.0.0.1,::1"\n', content)
+        self.assertEqual(installer.service_environment({"no_proxy": "internal.invalid"}), "")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "node.env"
+            unit = installer.system_unit(Path("/var/lib/oac-node/.oac/nodes/fixture"), "docker", path)
+            self.assertIn("EnvironmentFile=-" + str(path) + "\n", unit)
+            self.assertNotIn("private", unit)
+            self.assertTrue(installer.write_service_environment(path, content))
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertFalse(installer.write_service_environment(path, content))
+            # A rerun with other settings replaces them; one without a proxy removes the file.
+            other = installer.service_environment({"HTTP_PROXY": "http://other.invalid:3128"})
+            self.assertTrue(installer.write_service_environment(path, other))
+            self.assertNotIn("private", path.read_text())
+            self.assertTrue(installer.write_service_environment(path, ""))
+            self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":

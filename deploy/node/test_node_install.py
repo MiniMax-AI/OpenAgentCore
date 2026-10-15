@@ -871,6 +871,62 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse((system / "units" / ("oac-node-" + self.args.installation_id + ".service")).exists())
         self.assertFalse((system / "etc").exists())
 
+    def uninstall_output(self, force):
+        output = io.StringIO()
+        rejected = urllib.error.HTTPError("https://core.example", 401, "", {}, None)
+        with mock.patch.object(installer, "open_request", side_effect=rejected), mock.patch.object(installer.sys, "stdout", output):
+            installer.uninstall_system(SimpleNamespace(installation_id=self.args.installation_id, force=force))
+        return output.getvalue()
+
+    def test_uninstall_deletes_the_store_once_core_confirmed_the_removal(self):
+        self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        store = self.home / "m"
+        store.mkdir()
+        (store / "oac-installation.json").write_text(json.dumps({"installation_id": self.args.installation_id}))
+        (store / "image").write_text("layers")
+        output = self.uninstall_output(False)
+        self.assertFalse(store.exists())
+        self.assertIn("Deleted the microsandbox store " + str(store), output)
+        self.assertNotIn("Kept the microsandbox store", output)
+
+    def test_forced_uninstall_keeps_the_store_and_prints_the_command(self):
+        self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        store = self.home / "m"
+        store.mkdir()
+        (store / "oac-installation.json").write_text(json.dumps({"installation_id": self.args.installation_id}))
+        output = self.uninstall_output(True)
+        self.assertTrue(store.is_dir())
+        self.assertIn("Kept the microsandbox store " + str(store), output)
+        self.assertIn("rm -rf " + str(store) + "`", output)
+
+    def test_rerun_updates_the_service_proxy_and_restarts_the_service(self):
+        system = self.sudo_host()
+        unit = "oac-node-" + self.args.installation_id + ".service"
+        environment = system / "etc" / (self.args.installation_id + ".env")
+        with mock.patch.dict(os.environ, {"https_proxy": "http://proxy-one.invalid:3128", "http_proxy": ""}):
+            installer.install_system(self.args, "synthetic-once-token")
+        self.assertIn("proxy-one", environment.read_text())
+        self.assertEqual(stat.S_IMODE(environment.stat().st_mode), 0o600)
+        self.assertNotIn("proxy-one", (system / "units" / unit).read_text())
+        self.assertNotIn(["systemctl", "try-restart", unit], [call for call, _ in self.calls])
+        with mock.patch.dict(os.environ, {"https_proxy": "http://proxy-two.invalid:3128", "http_proxy": ""}):
+            installer.install_system(self.args, "")
+        self.assertIn("proxy-two", environment.read_text())
+        self.assertNotIn("proxy-one", environment.read_text())
+        self.assertIn(["systemctl", "try-restart", unit], [call for call, _ in self.calls])
+        self.uninstall_output(False)
+        self.assertFalse(environment.exists())
+
+    def test_uninstall_keeps_a_store_it_did_not_create(self):
+        self.sudo_host()
+        installer.install_system(self.args, "synthetic-once-token")
+        store = self.home / "m"
+        store.mkdir()
+        self.assertIn("Kept the microsandbox store", self.uninstall_output(False))
+        self.assertTrue(store.is_dir())
+
     def test_uninstall_leaves_an_adopted_account_as_found(self):
         system = self.sudo_host()
         (self.home / "service").mkdir()
@@ -958,13 +1014,13 @@ class NodeInstallTests(unittest.TestCase):
         (root / "provider.json").write_text(json.dumps({"native": {"image": "x\nFinish with: sudo sh"}}))
         output = io.StringIO()
         with mock.patch.object(installer.sys, "stdout", output):
-            installer.remove_node_files(root, self.args.installation_id)
+            installer.remove_node_files(root, self.args.installation_id, False)
         self.assertNotIn("Finish", output.getvalue())
         root.mkdir()
         (root / "provider.json").write_text(json.dumps({"native": {"image": "sha256:" + "b" * 64}}))
         output = io.StringIO()
         with mock.patch.object(installer.sys, "stdout", output):
-            installer.remove_node_files(root, self.args.installation_id)
+            installer.remove_node_files(root, self.args.installation_id, False)
         self.assertIn("`sudo docker image rm sha256:", output.getvalue())
 
     def test_service_user_step_gets_its_own_session_keyring(self):

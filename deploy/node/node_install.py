@@ -759,11 +759,7 @@ def service_child(account, function, arguments, parent, mask, read_ends, output_
         # service. Keep only standard HTTP proxy settings across the UID boundary.
         # curl/urllib prefer lowercase, while the Go registration command prefers
         # uppercase. Give both spellings one value, including an explicit empty value.
-        proxies = {}
-        for name in ("http_proxy", "https_proxy", "no_proxy"):
-            value = os.environ.get(name, os.environ.get(name.upper()))
-            if value is not None:
-                proxies[name] = proxies[name.upper()] = value
+        proxies = proxy_settings(os.environ)
         os.environ.clear()
         os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH,
                           LANG="C.UTF-8", DOCKER_CONFIG=str(CHILD_DOCKER_CONFIG))
@@ -788,6 +784,48 @@ def service_child(account, function, arguments, parent, mask, read_ends, output_
 
 
 run_as = as_service_user
+
+
+def proxy_settings(environment):
+    """The standard proxy variables, each under both spellings with one value (an explicit empty value included)."""
+    settings = {}
+    for name in ("http_proxy", "https_proxy", "no_proxy"):
+        value = environment.get(name, environment.get(name.upper()))
+        if value is not None:
+            settings[name] = settings[name.upper()] = value
+    return settings
+
+
+def service_environment(environment):
+    """The proxy settings the node service keeps, as an EnvironmentFile; empty without an HTTP(S) proxy.
+
+    Loopback always stays direct. Systemd reads quoted values without expanding anything."""
+    settings = proxy_settings(environment)
+    if not (settings.get("http_proxy") or settings.get("https_proxy")):
+        return ""
+    direct = "localhost,127.0.0.1,::1"
+    for name in ("no_proxy", "NO_PROXY"):
+        settings[name] = ",".join(filter(None, (settings.get(name, "").strip(), direct)))
+    if any(set(value) & {"\n", "\r", "\0"} for value in settings.values()):
+        raise InstallError("A proxy setting contains a line break; fix it, then rerun the command." + NOTHING_CHANGED)
+    return "".join(name + '="' + value.replace("\\", "\\\\").replace('"', '\\"') + '"\n' for name, value in sorted(settings.items()) if value)
+
+
+def write_service_environment(path, content):
+    """Keep the installer's proxy settings in a root-only file the unit reads; True when they changed."""
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise InstallError(str(path) + " must be a regular file")
+    current = path.read_text() if path.exists() else ""
+    if current == content:
+        return False
+    if not content:
+        path.unlink()
+        return True
+    with distribution.temporary_file(path) as temporary:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
+            stream.write(content)
+        os.replace(temporary, path)
+    return True
 
 
 def child_docker_config():
@@ -1064,7 +1102,7 @@ def prepare_account(account, record, group):
     return service_account()
 
 
-def system_unit(root, provider):
+def system_unit(root, provider, environment):
     def quote(value):
         return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
     after = "network-online.target docker.service" if provider == "docker" else "network-online.target"
@@ -1074,6 +1112,7 @@ def system_unit(root, provider):
             + "\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nUser=" + SERVICE_USER
             + "\nExecStart=:" + quote(root / provider_assets.artifacts(provider, ("node",))[0]) + " run --config " + quote(root / "provider.json")
             + " --state-dir " + quote(root / "state/node") + "\nWorkingDirectory=" + str(root).replace("%", "%%")
+            + "\nEnvironmentFile=-" + str(environment).replace("%", "%%")
             + "\nRestart=on-failure\nRestartSec=5s\nRestartPreventExitStatus=78\nKillMode=process\nUMask=0077"
             + "\n\n[Install]\nWantedBy=multi-user.target\n")
 
@@ -1105,6 +1144,7 @@ def install_system(args, token):
     host_checks()
     # Checks that change nothing run first, so a refusal leaves no trace, not even a lock.
     record = node_record(args.installation_id)
+    proxy = service_environment(os.environ)
     configuration = None
     if record is None:
         install_display.step("Reading the Core deployment specification")
@@ -1136,10 +1176,15 @@ def install_system(args, token):
                              "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}))
         args.system, args.provider = True, provider
         run_as(account, prepare_service_node, args, token, helper_archive)
-        root_file(unit, system_unit(root, provider))
+        environment = SYSTEM_RECORDS / (args.installation_id + ".env")
+        root_file(unit, system_unit(root, provider, environment))
+        known = environment.exists()
+        restart = write_service_environment(environment, proxy) and known
         install_display.step("Starting the node service")
         checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
         checked(["systemctl", "enable", "--now", unit.name], "Cannot start the node service; its identity is kept. Inspect sudo journalctl -u " + unit.name)
+        if restart:  # A running service reads its environment only when it starts.
+            checked(["systemctl", "try-restart", unit.name], "Cannot restart the node service with the new proxy settings. Inspect sudo journalctl -u " + unit.name)
         checked(["systemctl", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect sudo journalctl -u " + unit.name)
         install_display.step("Waiting for Core connection and provider readiness")
         run_as(account, wait_ready, root, args)
@@ -1226,8 +1271,8 @@ def release_docker_network(installation_id):
     checked(list(DOCKER) + ["network", "rm", network], "Cannot remove Docker network " + network)
 
 
-def remove_node_files(root, installation_id):
-    """Delete the node's state directory; keep the Runtime image and the microsandbox store.
+def remove_node_files(root, installation_id, delete_store):
+    """Delete the node's state directory and, once Core confirmed the removal, its microsandbox store; keep the Runtime image.
 
     Runs as the node's own user, so a link it planted can never reach another user's files."""
     no_links(root)
@@ -1240,11 +1285,14 @@ def remove_node_files(root, installation_id):
     if isinstance(image, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", image):
         print("Kept the Runtime image " + image + "; remove it with `sudo docker image rm " + image + "` if no other node uses it.")
     if runtime_home.exists():
-        sudo_mode = str(Path.home()) == str(SERVICE_HOME)
-        remove = ("sudo -u " + SERVICE_USER + " rm -rf " if sudo_mode else "rm -rf ") + str(runtime_home)
-        print("Kept the microsandbox store " + str(runtime_home) + " with its images and any sandbox state. When no "
-              "microVM runs (`pgrep -u " + os.environ.get("USER", "") + "` is empty), remove it with `" + remove
-              + "`, then rerun this uninstall command.")
+        no_links(runtime_home)
+        if delete_store and private_json(runtime_home / "oac-installation.json") == {"installation_id": installation_id}:
+            shutil.rmtree(runtime_home)
+            print("Deleted the microsandbox store " + str(runtime_home) + ".")
+        else:
+            sudo_mode = str(Path.home()) == str(SERVICE_HOME)
+            print("Kept the microsandbox store " + str(runtime_home) + " with its images and any sandbox state. Delete it with `"
+                  + ("sudo -u " + SERVICE_USER + " rm -rf " if sudo_mode else "rm -rf ") + str(runtime_home) + "`.")
 
 
 def uninstall_system(args):
@@ -1285,8 +1333,10 @@ def uninstall_system(args):
                 with contextlib.suppress(InstallError):
                     checked(["systemctl", "reset-failed", unit.name], "Cannot reset " + unit.name)
             release_docker_network(args.installation_id)
-            run_as(account, remove_node_files, root, args.installation_id)
+            # --force skips Core's confirmation, so it never deletes the store.
+            run_as(account, remove_node_files, root, args.installation_id, not args.force)
             (SYSTEM_RECORDS / (args.installation_id + ".json")).unlink(missing_ok=True)
+            (SYSTEM_RECORDS / (args.installation_id + ".env")).unlink(missing_ok=True)
             print("Node for installation " + args.installation_id + " uninstalled from this host.")
         release_account(account, account_record)
 

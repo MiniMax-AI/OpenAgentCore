@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: da770b5195c28cc9ffa6e2d374113adfb2b30a3526710386ff7c49ce8ac62a94
+source_hash: 68864862ec5696e17779a10923f326b5c2b9ba8d729cc1e30dad62c6415ee85a
 ---
 
 节点是一台 Linux 主机，在沙箱提供商为 microsandbox（推荐）或 Docker 时，为 Core 托管 Session 运行沙箱。Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。E2B 不需要节点。应用为自己的 Session 连接的机器是[自托管执行器](self-hosted.md)，而不是节点。
@@ -58,7 +58,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 
 命令要求 sudo 仅保留这六个变量名，安装程序降权到 `oac-node` 时继续保留它们。如果 sudo 策略拒绝，请让主机管理员允许这些变量，或在 root shell 中导出变量后执行。你自行添加的外层 `sudo` 可能丢弃它们。不要将凭据放进命令参数，也不要分享 shell 跟踪输出。
 
-代理仅用于安装下载，不保存到节点配置或服务中，因此运行中的节点仍需独立访问 Core。
+节点服务保留最近一次运行所用的代理设置，因此通过安装时的代理访问 Core。设置保存在 `/etc/oac-node/<installation-id>.env`，仅 root 可读，不写入单元文件。回环地址始终直连。使用不同设置重新执行命令会替换它们并重启服务；不带代理重新执行则移除它们。
 
 ## 安装程序设置的内容 {#what-the-installer-sets-up}
 
@@ -68,7 +68,7 @@ Microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因�
 | 用户组 | 拥有 `/var/run/docker.sock`（Docker）或 `/dev/kvm`（microsandbox）的组：仅 `docker` 或 `kvm` |
 | 服务 | `/etc/systemd/system/oac-node-<installation-id>.service`，root 所属的系统单元，使用 `User=oac-node`，开机启用。Core 无法访问时每 5 秒重启；Core 不再接受节点后永久停止 |
 | 节点状态 | `/var/lib/oac-node/.oac/nodes/<installation-id>/`：身份、配置和节点文件。microsandbox 在 `/var/lib/oac-node/.oac/m/` 保存镜像和沙箱 |
-| 记录 | `/etc/oac-node/`：安装程序创建或修改的内容，用于重新运行和卸载 |
+| 记录 | `/etc/oac-node/`：安装程序创建或修改的内容，用于重新运行和卸载，以及服务的代理设置 |
 | Docker | 一次性导入 Runtime 镜像，以及网络 `oac-node-<installation-id>` |
 | microsandbox 网络策略 | 沙箱仅能访问 Core、主机上的 DNS 和公开地址：无入站连接、不可访问私有网络 |
 
@@ -125,9 +125,9 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
    $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
 
-卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **旧 Core 地址已失效？**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 **节点** 页面移除节点。不使用对话框时，从 `https://core.example/node-install/SHA256SUMS` 的 `node-install.pyz` 行获取安装程序 SHA-256。卸载停止并移除服务、节点状态、记录和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。
+卸载先向节点注册时使用的 Core 地址确认节点是否已移除；Core 仍列出该节点时拒绝卸载。注册地址与当前公开 URL 不同时，对话框还展示 **旧 Core 地址已失效？**：该地址不再响应时，提供带 `--force` 的命令以跳过检查；先在 **节点** 页面移除节点。不使用对话框时，从 `https://core.example/node-install/SHA256SUMS` 的 `node-install.pyz` 行获取安装程序 SHA-256。卸载停止并移除服务、节点状态、记录、代理设置和 Docker 网络。只有安装程序创建了 `oac-node` 且不再有节点时，才删除该账号；复用的账号仅移除安装程序添加的组。
 
-程序不删除沙箱、卷或镜像。保留 Runtime 镜像并输出 `docker image rm` 命令。microsandbox 保留 `/var/lib/oac-node/.oac/m/` 存储，并输出删除方法（`sudo -u oac-node rm -rf <store>`）；存储删除前保留所创建的账号，之后重新卸载。使用 `--force` 时 microVM 可能仍使用存储，请先检查 `pgrep -u oac-node`。可以重复卸载直到完成。
+程序不删除 Docker 镜像或卷。保留 Runtime 镜像并输出 `sudo docker image rm` 命令。microsandbox 在 Core 确认节点已移除后，还会删除节点位于 `/var/lib/oac-node/.oac/m/` 的存储（约 1.5 GB），随后删除所创建的账号。使用 `--force` 时不询问 Core，因此保留存储，并输出删除命令（`sudo -u oac-node rm -rf <store>`）；microVM 可能仍使用存储，请先检查 `pgrep -u oac-node`，再重新卸载以完成账号移除。输出会列出已删除和已保留的内容。可以重复卸载直到完成。
 
 ## 手动注册节点 {#register-a-node-manually}
 
@@ -194,7 +194,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 | --- | --- |
 | `HTTP 400 on the WebSocket upgrade` | Core 前的反向代理没有在 `/api/v1` 上传递 WebSocket 升级；参见 [HTTPS 与反向代理](install-options.md#https-and-the-reverse-proxy) |
 | 其他状态码，例如 `HTTP 404 on the WebSocket upgrade` 或 `HTTP 502 …` | 反向代理没有将 `/api/v1` 转发到 Core 或没有保留 Host，或者 Core 未运行 |
-| `dial tcp: …`，例如 `connection refused`、`i/o timeout` 或 `no such host` | 主机无法通过公开 URL 访问 Core。检查 DNS 和防火墙；节点服务不使用安装程序的[下载代理](#download-through-a-proxy) |
+| `dial tcp: …`，例如 `connection refused`、`i/o timeout` 或 `no such host` | 主机无法通过公开 URL 访问 Core。检查 DNS 和防火墙；节点服务使用安装程序运行时的[代理](#download-through-a-proxy)，代理变化后请用正确的设置重新执行命令 |
 | `tls: …`，或 `TLS certificate expired or not yet valid` | 主机不信任 Core 的证书，或公开 URL 对不提供 HTTPS 的端口使用了 `https` |
 | `Core did not accept the node: …` | 节点自我介绍后 Core 关闭了连接。Core 升级后，执行该发行版的[协议变更](operations.md#protocol-changes)；否则查看 Core 日志 |
 

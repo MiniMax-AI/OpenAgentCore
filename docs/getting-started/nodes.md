@@ -56,7 +56,7 @@ Export `http_proxy`, `https_proxy` and `no_proxy` before running the generated c
 
 The command asks sudo to preserve only these six names, and the installer keeps them when it drops to `oac-node`. If sudo policy refuses, ask the host administrator to permit those names, or run from a root shell with the variables exported there. An outer `sudo` you add yourself can discard them. Don't put credentials in command arguments or share shell traces.
 
-The proxy applies only to installation downloads. It is not saved in the node's configuration or service, so the running node needs its own network access to Core.
+The node service keeps the proxy settings of the latest run, so it reaches Core through the proxy it was installed with. They are stored in `/etc/oac-node/<installation-id>.env`, readable only by root, never in the unit file. Loopback addresses always stay direct. Rerunning the command with different settings replaces them and restarts the service; a rerun without a proxy removes them.
 
 ## What the installer sets up
 
@@ -66,7 +66,7 @@ The proxy applies only to installation downloads. It is not saved in the node's 
 | Group | The group that owns `/var/run/docker.sock` (Docker) or `/dev/kvm` (microsandbox): `docker` or `kvm`, nothing else |
 | Service | `/etc/systemd/system/oac-node-<installation-id>.service`, a root-owned system unit with `User=oac-node`, enabled at boot. It restarts every 5 seconds while Core is unreachable and stops for good once Core no longer accepts the node |
 | Node state | `/var/lib/oac-node/.oac/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/oac-node/.oac/m/` |
-| Records | `/etc/oac-node/`: what the installer created or changed, used by reruns and uninstall |
+| Records | `/etc/oac-node/`: what the installer created or changed, used by reruns and uninstall, and the service's proxy settings |
 | Docker | The Runtime image, imported once, and a network `oac-node-<installation-id>` |
 | microsandbox network policy | Sandboxes may reach Core, DNS on the host and public addresses, and nothing else: no inbound connections and no private networks |
 
@@ -123,9 +123,9 @@ The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation
    $s python3 "$d/node-install.pyz" ${NO_COLOR+--no-color} --uninstall --installation-id '<installation-id>')
    ```
 
-Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. Without the dialog, take the installer's SHA-256 from the `node-install.pyz` line of `https://core.example/node-install/SHA256SUMS`. Uninstall stops and removes the service, the node state, the records and the Docker network. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added.
+Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. Without the dialog, take the installer's SHA-256 from the `node-install.pyz` line of `https://core.example/node-install/SHA256SUMS`. Uninstall stops and removes the service, the node state, the records, the proxy settings and the Docker network. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added.
 
-It never deletes sandboxes, volumes or images. It keeps the Runtime image and prints the `docker image rm` command. For microsandbox it keeps the store under `/var/lib/oac-node/.oac/m/`, prints how to delete it (`sudo -u oac-node rm -rf <store>`), and keeps a created account until the store is gone; rerun uninstall afterwards. With `--force`, microVMs may still use the store, so check `pgrep -u oac-node` first. Uninstall can be rerun until it completes.
+It never deletes Docker images or volumes. It keeps the Runtime image and prints the `sudo docker image rm` command. For microsandbox, once Core has confirmed the removal, it also deletes the node's store under `/var/lib/oac-node/.oac/m/` (about 1.5 GB), and with it the created account. With `--force` Core isn't asked, so the store is kept and the output prints the command that deletes it (`sudo -u oac-node rm -rf <store>`); microVMs may still use it, so check `pgrep -u oac-node` first, then rerun uninstall to finish removing the account. The output lists what was deleted and what was kept. Uninstall can be rerun until it completes.
 
 ## Register a node manually
 
@@ -192,7 +192,7 @@ A registered node that can't connect to Core says why in its [log](#logs): `sand
 | --- | --- |
 | `HTTP 400 on the WebSocket upgrade` | The reverse proxy in front of Core doesn't pass WebSocket upgrades on `/api/v1`; see [HTTPS and the reverse proxy](./install-options.md#https-and-the-reverse-proxy) |
 | Another status, such as `HTTP 404 on the WebSocket upgrade` or `HTTP 502 …` | The reverse proxy doesn't route `/api/v1` to Core or doesn't preserve Host, or Core is not running |
-| `dial tcp: …`, such as `connection refused`, `i/o timeout` or `no such host` | The host can't reach Core at the public URL. Check DNS and firewalls; the node service doesn't use the installer's [download proxy](#download-through-a-proxy) |
+| `dial tcp: …`, such as `connection refused`, `i/o timeout` or `no such host` | The host can't reach Core at the public URL. Check DNS and firewalls; the node service uses the [proxy](#download-through-a-proxy) the installer ran with, so rerun the command with the right settings if the proxy changed |
 | `tls: …`, or `TLS certificate expired or not yet valid` | The host doesn't trust Core's certificate, or the public URL uses `https` on a port that doesn't serve it |
 | `Core did not accept the node: …` | Core closed the connection after the node introduced itself. After a Core upgrade, apply the release's [protocol changes](./operations.md#protocol-changes); otherwise read Core's log |
 
