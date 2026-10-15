@@ -151,7 +151,7 @@ export const sandbox = {
   "Copy command with --force": "复制命令（--force）",
   "Checking this installation's public URL…": "正在检查这个安装的公网地址…",
   "The installation couldn't be read, so no command can be issued.": "无法读取安装信息，暂时不能生成命令。",
-  "It never deletes sandboxes, volumes or images.": "它不会删除任何沙箱、卷或镜像。",
+  "It keeps Docker images and volumes; a microsandbox store goes once Core confirmed the removal.": "它保留 Docker 镜像和卷；Core 确认移除后，microsandbox 存储会一并删除。",
   "Old Core address gone?": "旧 Core 地址已失效？",
   "{{name}} still points at the old Core address {{address}}.": "{{name}} 仍指向旧的 Core 地址 {{address}}。",
   "If this node's old Core address no longer responds, first remove it on the Nodes page, then add --force to the uninstall command.": "如果这个节点的旧 Core 地址已无法访问，请先在“节点”页移除它，再在卸载命令后加上 --force。",

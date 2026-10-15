@@ -49,7 +49,7 @@ export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCle
         ? join(t("To remove a node's service and files from its host, run this on the host."), t("Core must no longer list the node, so remove it on this page first. A host that never registered needs no removal."))
         : t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
       <CommandBlock key={command()} value={command()} label={t("Uninstall command")} autoFocus />
-      <p className="sandbox-cleanup-note">{t("It never deletes sandboxes, volumes or images.")}</p>
+      <p className="sandbox-cleanup-note">{t("It keeps Docker images and volumes; a microsandbox store goes once Core confirmed the removal.")}</p>
       {cleanup.oldAddress !== null ? <details className="sandbox-host-requirements">
         <summary>{t("Old Core address gone?")}</summary>
         <div className="sandbox-cleanup-details">
