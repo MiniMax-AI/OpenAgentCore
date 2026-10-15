@@ -120,11 +120,15 @@ func within(dir, path string) bool {
 
 // downloadCache is the bootstrap's native-download directory (staging and the
 // download lock). It sits in the Runtime home, which the default installation
-// directory <home>/environments/<id> shares with other installations.
+// directory <home>/environments/<id> shares with other installations; it goes
+// only with the last of them.
 func downloadCache(root string) string {
 	home := root
-	if filepath.Base(filepath.Dir(root)) == "environments" {
-		home = filepath.Dir(filepath.Dir(root))
+	if environments := filepath.Dir(root); filepath.Base(environments) == "environments" {
+		if entries, err := os.ReadDir(environments); err != nil || len(entries) > 1 {
+			return ""
+		}
+		home = filepath.Dir(environments)
 	}
 	cache := filepath.Join(home, "native-download")
 	if info, err := os.Lstat(cache); err != nil || !info.IsDir() {

@@ -1,7 +1,7 @@
 ---
 title: "自托管执行器"
 source: docs/getting-started/self-hosted.md
-source_hash: 65e42f3e36922074a8c14a06dd0eaae1a309bcd5d86de1e1e71aad34154ef1bc
+source_hash: 8603c51679351eefcaa3977c90af7658e1e86d62be7980baf42f1d72faedf044
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行：工作站、虚拟机或你管理的沙箱。应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
@@ -146,7 +146,7 @@ session = client.beta.agents.sessions.create(
 "$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
 ```
 
-它会停止守护进程，列出将删除的内容并请求确认。删除的内容包括安装目录（含凭据文件、原生历史和 Harness），以及保存安装程序下载锁的 `native-download` 目录。工作区永远不会被删除。在没有安装的位置运行时，它会说明这一点并以 0 退出。在 Windows 上，最后的删除会在命令退出几秒后完成。
+它会停止守护进程，列出将删除的内容并请求确认。删除的内容包括安装目录（含凭据文件、原生历史和 Harness），以及（没有其他安装共用该 Runtime 主目录时）保存安装程序下载锁的 `native-download` 目录。工作区永远不会被删除。在没有安装的位置运行时，它会说明这一点并以 0 退出。在 Windows 上，最后的删除会在命令退出几秒后完成。
 
 随后在 Web 中打开该 Session，在 **执行器凭据** 中选择 **撤销**，或 **删除** 该 Session；在此之前，Core 仍接受这台机器的凭据。
 

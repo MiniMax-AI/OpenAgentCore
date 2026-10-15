@@ -144,7 +144,7 @@ Run the installation's own command:
 "$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
 ```
 
-It stops the daemon, lists what it deletes and asks for confirmation. It deletes the installation directory with its credential file, native history and Harnesses, and the `native-download` directory that holds the installer's download lock. It never deletes the workspace. Where nothing is installed it says so and exits 0. On Windows, the final deletion finishes a few seconds after the command exits.
+It stops the daemon, lists what it deletes and asks for confirmation. It deletes the installation directory with its credential file, native history and Harnesses, and, when no other installation shares the Runtime home, the `native-download` directory that holds the installer's download lock. It never deletes the workspace. Where nothing is installed it says so and exits 0. On Windows, the final deletion finishes a few seconds after the command exits.
 
 Then, in Web, open the Session and choose **Revoke** in **Executor credentials**, or **Delete** the Session; Core keeps accepting the machine's credential until you do.
 
