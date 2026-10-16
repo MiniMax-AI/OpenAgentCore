@@ -536,7 +536,7 @@ The HTTP path is `/vaults`, with the Beta header. A Session selects credentials 
 1. Read the Session's `status` and `error`, and the latest Turn's `error`. A failed Turn reports only a generic `internal_error`.
 2. Check that the Environment is connected and its Harness is available.
 3. Check the Harness, model and tool combination in [Harness capabilities](../../contracts/agents-api/harness-capabilities.md).
-4. Ask the administrator for the Session's [diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [troubleshooting](../getting-started/operations.md#troubleshooting) for service logs, credentials and node readiness.
+4. Ask the administrator for the Session's [diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [Troubleshooting](../getting-started/troubleshooting.md) for service logs, credentials and node readiness.
 
 A 401 usually means a key from another namespace; see [API namespaces and credentials](./index.md).
 

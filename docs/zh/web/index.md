@@ -1,7 +1,7 @@
 ---
 title: "OpenAgentCore Web"
 source: docs/web/index.md
-source_hash: 78038da909a1040224a2303365b2c1eb03e5345a58cbeca5ab7fd651b41a0462
+source_hash: 0d99013b26c471b429dbcc45c4996216432cd8677d706e1d67f091dc83feb23f
 ---
 
 Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看健康状态、容量、用量和失败情况，检查各项目的资源与执行历史，并管理项目、密钥、节点和部署设置。应用不使用 Web；它们通过自己的项目 API 密钥调用 Core 的 Agents API（`/v1`）。
@@ -35,7 +35,7 @@ Web 是单个 OpenAgentCore 部署的管理员控制台。管理员用它查看�
 
 | 任务 | 位置 |
 | --- | --- |
-| 为安装设置 HTTPS 地址 | 设置 `OAC_PUBLIC_URL`，并把反向代理指向 Web；参阅[使 Core 可访问](../getting-started/install.md#configure-the-domain-and-https) |
+| 为安装设置 HTTPS 地址 | 设置 `OAC_PUBLIC_URL`，并把反向代理指向 Web；参阅[配置公开地址](../getting-started/public-address.md) |
 | 选择沙箱提供商（microsandbox、E2B 或 Docker）、规格和 Runtime，或重置沙箱提供商 | **设置 → 沙箱与调度**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | 添加、调整或移除执行节点 | **节点**：**添加节点**、**编辑节点** 和移除；参阅[节点指南](../getting-started/nodes.md) |
 | 设置 Harness 默认模型 | **设置 → 模型与凭据**；参阅[默认模型](../configuration.md#default-models) |

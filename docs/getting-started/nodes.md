@@ -2,23 +2,29 @@
 title: "Add and manage nodes"
 ---
 
-A node is a Linux host that runs sandboxes for Core-hosted Sessions when the sandbox backend is microsandbox (recommended) or Docker. Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. E2B needs no nodes. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes.
+A node is a Linux host that runs sandboxes for Core-hosted Sessions. This guide is for operators who add, change and remove nodes when the sandbox backend (see [Choose a sandbox backend](./sandbox-backends.md)) is microsandbox or Docker; E2B needs no nodes.
 
-You add a node by generating a command in Web and running it on the host. The [sandbox deployment contract](../../contracts/agents-api/sandbox-deployment.md) defines the sandbox settings and their change rules, and the [node protocol](../../contracts/agents-api/node-generation-protocol.md) defines how nodes prepare and keep Runtime generations.
+Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes. You add a node by generating a command in Web and running it on the host. The [sandbox deployment contract](../../contracts/agents-api/sandbox-deployment.md) defines the sandbox settings and their change rules, and the [node protocol](../../contracts/agents-api/node-generation-protocol.md) defines how nodes prepare and keep Runtime generations.
 
 ## Before you add a node
 
-- **Core has a public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Set a public address other machines can reach before adding nodes*; see [Configure the public address](./install.md#configure-the-domain-and-https).
-- **The sandbox configuration is saved.** Open **Settings** → **Sandbox and scheduling**, choose **Own machines**, the backend and a sandbox size, and **Save configuration**. To change the backend, choose **Reset deployment** first. Every node of an installation uses that backend.
+- **The sandbox configuration is saved.** Open **Settings** → **Sandbox and scheduling**, choose **Own machines**, the backend and a sandbox size, and **Save configuration**; see [Choose a sandbox backend](./sandbox-backends.md). To change the backend, choose **Reset deployment** first. Every node of an installation uses that backend.
+- **Core has a public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Set a public address other machines can reach before adding nodes*; see [Configure the public address](./public-address.md).
 - **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. Node hosts therefore need access to the release. Without the files, Add node says *This console has no node files for …*.
-
-For microsandbox checkpoint recovery across nodes, add `--checkpoint-root /absolute/private/shared-store` to the installer command on each participating node. Mount the same private store at those paths before installation and grant only the node service account access. The default is a private node-local store and supports recovery on that node. The checkpoint store is separate from workspace storage and must never be guest-accessible; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns compatibility and retention requirements.
-
-Microsandbox includes the host kernel and CPU profile in its checkpoint execution compatibility. An OS or CPU-profile change can therefore make retained checkpoints incompatible even on their original node. Before maintenance, keep a node with the matching execution class and the same ready generation available for those checkpoints; otherwise their requests wait under the [checkpoint retention policy](../sandbox-provider.md#checkpoint-transfer).
-
-For microsandbox with independent workspace storage, complete the [NFS mount and service-account setup](../configuration.md#independent-workspace-storage) on this host before enrollment. The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
+- **The host meets the requirements below.**
+- **For independent workspace storage,** the NFS mount and service account are ready on this host; see [Set up workspace storage](./workspace-storage.md). The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
+- **For checkpoint recovery across microsandbox nodes,** see [Checkpoint recovery across nodes](#checkpoint-recovery-across-nodes).
 
 The Core host joins like any other host: to run sandboxes on it, add it as a node.
+
+### Host requirements
+
+- Linux amd64 with systemd; Python 3.9+, `curl`, `sha256sum` and `flock`; root or sudo.
+- SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
+- Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
+- microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
+- CPUs and memory for at least one sandbox of the installation's size, and about 3 GB of free disk while the Runtime image installs: its download and unpacked copy sit under `/var/lib/oac-node` until the import finishes, and the image takes about 1.5 GB in Docker's storage or the microsandbox store. The installer checks the space before it downloads and deletes the archives after the import, so the node keeps the image and under 0.2 GB of programs.
+- Access to the console and Core at the public URL; sandboxes reach Core too.
 
 ## Add a node
 
@@ -26,6 +32,9 @@ The Core host joins like any other host: to run sandboxes on it, add it as a nod
 2. Set **Sandboxes at once** and, with microsandbox, **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). You can change them later with **Edit node**.
 3. Choose **Generate command** and copy the command. It registers one node, once, and only if it runs within an hour; Web counts down and offers **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
+
+> [!NOTE]
+> The enrollment token is single-use, expires after an hour and only registers the node. The installer takes it only on standard input and refuses it in the environment, where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy with `log_input` records standard input, and so the token.
 
 The command downloads the node installer from your console, checks its SHA-256 and runs it with a one-time enrollment token. The installer downloads the node files and checks each against the release manifest, imports the Runtime image, registers the node, starts its service and waits until Core reports the node connected and ready. It never installs software, and it stops with a one-line hint before changing anything when a prerequisite is missing.
 
@@ -40,15 +49,6 @@ Copy the current command from **Nodes → Add node**. It includes this installat
 - The leading space keeps the command out of the shell history where `HISTCONTROL` ignores such lines (the Debian and Ubuntu default).
 
 The installer shows each phase as it runs and, once Core confirms the node, a summary with status and log commands. `export NO_COLOR=1` disables colors; the command passes this through sudo as `--no-color`. It never prints tokens.
-
-### Host requirements
-
-- Linux amd64 with systemd; Python 3.9+, `curl`, `sha256sum` and `flock`; root or sudo.
-- SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
-- Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
-- microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
-- CPUs and memory for at least one sandbox of the installation's size, and about 3 GB of free disk while the Runtime image installs: its download and unpacked copy sit under `/var/lib/oac-node` until the import finishes, and the image takes about 1.5 GB in Docker's storage or the microsandbox store. The installer checks the space before it downloads and deletes the archives after the import, so the node keeps the image and under 0.2 GB of programs.
-- Access to the console and Core at the public URL; sandboxes reach Core too.
 
 ### Download through a proxy
 
@@ -72,15 +72,15 @@ The node service keeps the proxy settings of the latest run, so it reaches Core 
 
 Root only prepares the account, the group and the unit; everything else, the Docker network included, runs as `oac-node`, in its own session without a terminal. The installer never installs Docker, KVM or packages, never starts Docker, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts.
 
-**Docker mode is root-equivalent.** Membership in the `docker` group lets `oac-node`, and so anything that controls the node, act as root on the host. Containers also share the host kernel, so a container escape reaches the host. Add Docker nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm` group and run each sandbox in its own microVM.
+> [!CAUTION]
+> Docker mode is root-equivalent. Membership in the `docker` group lets `oac-node`, and so anything that controls the node, act as root on the host, and containers share the host kernel. Add Docker nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm` group and run each sandbox in its own microVM.
 
-**microsandbox blocks private endpoints.** A sandbox can't reach a model provider or MCP server at a private address. Sandbox DNS queries go to the nameservers listed in the host's `/etc/resolv.conf`, and DNS rebind protection discards any answer that contains a private address, so a name those nameservers resolve to a private address doesn't resolve in the sandbox at all, even for a public service such as a model API behind a cloud VPC resolver. The Turn then fails once the Harness stops retrying. Installer-added nodes have no setting to change this. Make those nameservers return the service's public addresses; microsandbox doesn't read the host's `/etc/hosts`, so an entry there helps only when `/etc/resolv.conf` points at a local stub resolver that serves it, such as systemd-resolved at `127.0.0.53`. Otherwise use a Docker node, which doesn't filter sandbox traffic, or [register the node manually](#register-a-node-manually) with a `network` policy that also allows the private range in a rule without a port, because rebind protection ignores port-scoped rules.
+> [!WARNING]
+> microsandbox sandboxes cannot reach private addresses; see [Sandboxes cannot reach a private endpoint](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint).
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 
 **Node software.** A node keeps the host program of the console that added it; an upgrade of Core doesn't replace it. A release that changes the node protocol lists the actions it requires; see [protocol changes](./operations.md#protocol-changes).
-
-**The token.** It is single-use, expires after an hour and only registers the node. The installer takes it only on standard input and refuses it in the environment, where `sudo VAR=… python3` would record it in sudo's log. A sudoers policy with `log_input` records standard input, and so the token.
 
 ## Rerun, expiry and slow links
 
@@ -108,6 +108,12 @@ Sandbox settings apply to the whole installation; nodes follow them.
 - **Backend.** On the same page, choose **Reset deployment**. Auto reset archives idle hosted Sessions at once and lets running work finish until the deadline you set; force cancels it now. Offline nodes must come back so Core can confirm their cleanup. When the reset completes, Core has retired every node and unused command: set up the new backend, then add nodes again. **Cancel reset** stops the remaining work; archived Sessions stay archived.
 
 The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation-ownership-and-rollout) describes what reset archives and keeps. To archive a single hosted Session, use the [Core API](../../contracts/agents-api/admin-api.md#session-archive).
+
+## Checkpoint recovery across nodes
+
+For microsandbox checkpoint recovery across nodes, add `--checkpoint-root /absolute/private/shared-store` to the installer command on each participating node. Mount the same private store at those paths before installation and grant only the node service account access. The default is a private node-local store and supports recovery on that node. The checkpoint store is separate from workspace storage and must never be guest-accessible; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns compatibility and retention requirements.
+
+microsandbox includes the host kernel and CPU profile in its checkpoint execution compatibility. An OS or CPU-profile change can therefore make retained checkpoints incompatible even on their original node. Before maintenance, keep a node with the matching execution class and the same ready generation available for those checkpoints; otherwise their requests wait under the [checkpoint retention policy](../sandbox-provider.md#checkpoint-transfer).
 
 ## Remove a node
 
@@ -153,6 +159,8 @@ A restarted node service keeps its identity and finds its existing sandboxes aga
 
 ## Troubleshooting
 
+Connection failures and installer messages are in [Troubleshooting](./troubleshooting.md#nodes).
+
 ### Readiness codes
 
 When a node is online but its sandbox provider is not ready, **Nodes** and **Overview** show it as **Provider not ready**. Where the reason appears depends on how the node was added:
@@ -160,7 +168,7 @@ When a node is online but its sandbox provider is not ready, **Nodes** and **Ove
 - **Nodes added with Web's command** report a failed check of the current sandbox configuration as **Preparation failed** in the node's target status, with the reason in a help tip (`rollout.diagnostic` in `GET /core/v1/sandbox/nodes`). The tip beside **Provider not ready** only says *Sandbox provider unavailable*.
 - **Manually registered nodes** show the reason in the help tip beside **Provider not ready** (`diagnostic`).
 
-Each code is a Provider-neutral class; the local error behind it stays on the node. A manually registered node logs it. For a node added with Web's command, rerun the command on the host: the installer checks the host requirements first and names what to fix ([Installer messages](#installer-messages)).
+Each code is a Provider-neutral class; the local error behind it stays on the node. A manually registered node logs it. For a node added with Web's command, rerun the command on the host: the installer checks the host requirements first and names what to fix ([Installer messages](./troubleshooting.md#installer-messages)).
 
 A node reports only its first failed check, in this order: the Docker daemon or KVM, Docker's limit support, host capacity, then the installed Runtime files. An unreachable Docker daemon therefore hides a missing image. The next heartbeat, about ten seconds after a fix, clears or replaces the code. An offline node keeps its last code, which Web hides until the node reconnects.
 
@@ -174,37 +182,3 @@ A node reports only its first failed check, in this order: the Docker daemon or 
 | `runtime_download_failed` | Runtime download failed | While preparing a new configuration, the node could not download or verify the Runtime files | Check the node's HTTPS access to the console and the release. The node retries with growing delays, up to 30 minutes apart |
 
 A new group membership applies only to a new process. Restart the node service: `sudo systemctl restart oac-node-<installation-id>.service`.
-
-### Connection failures
-
-A registered node that can't connect to Core says why in its [log](#logs): `sandbox node connection to Core failed; retrying` with a `cause`, once for each cause however often it retries, then `sandbox node connected to Core` when it connects. A node service that starts while Core is unreachable logs `cannot confirm approved node capacity:` followed by the cause.
-
-| Cause | Fix |
-| --- | --- |
-| `HTTP 400 on the WebSocket upgrade` | The reverse proxy in front of Core doesn't pass WebSocket upgrades on `/api/v1`; see [HTTPS and the reverse proxy](./install-options.md#https-and-the-reverse-proxy) |
-| Another status, such as `HTTP 404 on the WebSocket upgrade` or `HTTP 502 …` | The reverse proxy doesn't route `/api/v1` to Core or doesn't preserve Host, or Core is not running |
-| `dial tcp: …`, such as `connection refused`, `i/o timeout` or `no such host` | The host can't reach Core at the public URL. Check DNS and firewalls; the node service uses the [proxy](#download-through-a-proxy) the installer ran with, so rerun the command with the right settings if the proxy changed |
-| `tls: …`, or `TLS certificate expired or not yet valid` | The host doesn't trust Core's certificate, or the public URL uses `https` on a port that doesn't serve it |
-| `Core did not accept the node: …` | Core closed the connection after the node introduced itself. After a Core upgrade, apply the release's [protocol changes](./operations.md#protocol-changes); otherwise read Core's log |
-
-### Installer messages
-
-| Message | Fix |
-| --- | --- |
-| `The enrollment command expired or was already used` | Generate a new command in Web and run it within an hour |
-| `Core rejected the node configuration read (HTTP …)` | Check the Core URL and the reverse proxy in front of it, then rerun |
-| `Not enough disk space under …` or `The disk is full` | Free the space it names, then rerun; the download resumes |
-| This host's node program differs from the one this console serves | Core was upgraded after the node was added. Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |
-| Another node installation is running, or this node is preparing a new sandbox configuration | Retry once **Nodes** no longer shows **Preparing target** |
-| A sandbox provider check failed before registering, such as `This host lacks a capability …` | Fix what it names (see [Readiness codes](#readiness-codes)) and rerun; the token was not used |
-| Core's public URL changed after this command was generated | Generate a new command in Web and run it |
-| This host's node uses `<address>`, but this command uses `<address>` | The node was added under an older public URL. Remove it in Web, uninstall it, then add it again |
-| Docker Engine is not installed, or Docker is not running | Install Docker Engine, or `sudo systemctl enable --now docker`, then rerun |
-| Docker on this host does not enforce CPU and memory limits | Use cgroup v2, then rerun |
-| KVM is unavailable, or `/dev/kvm` must be group-accessible | Enable virtualization; your distribution's KVM package sets `root:kvm 0660` |
-| This host has N CPUs and M MiB of memory; each sandbox needs … | Use a larger host, or change the sandbox size |
-| SELinux is enforcing on this host | Use a host supported by the installer; it does not change SELinux settings |
-| This host already runs a sudo-mode node for another Core | Remove that node and uninstall it first |
-| Node installation and removal require root | Run Web's command with sudo, or from a root shell |
-| Core still lists this node | Remove it on the Nodes page first |
-| Core no longer accepts this node | It was removed, or a reset retired it. Uninstall it, then add the host with a new command |

@@ -2,28 +2,27 @@
 title: "Operations"
 ---
 
-The installation operator owns the Core host, its storage and its availability. Node hosts run their own services; see [Nodes](./nodes.md). Settings are described in the [configuration reference](../configuration.md).
+Day-to-day tasks for the operator of a Core installation: the `oac` command, service health, the Core key, backups, upgrades and uninstalling. Nodes have [their own guide](./nodes.md), and [Troubleshooting](./troubleshooting.md) lists installer and access messages. Settings are in the [Configuration reference](../configuration.md).
 
 ## The oac command
 
-Each installation has its own native management command in its directory: `oac` on Unix, `oac.exe` on Windows. It needs Docker access and no root privileges:
-
-```sh
-docker compose -f ~/.oac/core/compose.yaml ps
-```
+Each installation has its own `oac` command in its directory (`oac.exe` on Windows). Run it as the account that installed Core; it needs Docker access, not root. The examples use the default installation directory `~/.oac/core`; on Windows, invoke the command with `& "$HOME/.oac/core/oac.exe"` followed by the same arguments. For a custom directory, replace the path.
 
 | Command | What it does |
 | --- | --- |
-| `docker compose ps` | Shows the services. Run it in the installation directory |
-| `docker compose start` | Starts the services |
-| `docker compose stop` | Stops the services. Data, nodes and sandboxes are kept |
+| `oac install` | Installs, resumes or [upgrades](#upgrade) an installation; the installer scripts run it |
 | `oac apply` | Checks the data volume and `.env`, then starts the services and recreates those whose configuration changed; see [how oac apply works](../configuration.md#how-oac-apply-works). A failed check changes no service. On success it prints `Services are running with the current settings.` |
 | `oac core-key [--show]` | Identifies the key location in the data volume, or prints the key with `--show` |
 | `oac rotate-core-key` | Replaces the Core key and restarts Core and Web, then says how to read the new key |
-| `docker compose down` | Removes the containers. Data is kept |
 | `oac uninstall` | Deletes the installation and its data after confirmation; see [Uninstall](#uninstall) |
 
-The examples use the default installation directory. On Windows, invoke the management command with `& "$HOME/.oac/core/oac.exe"` followed by the same arguments. For a custom installation directory, replace the path in each command.
+Docker Compose commands manage the services; run them against the installation's Compose file. [Stop and restart](#stop-and-restart) covers `stop` and `start`.
+
+| Command | What it does |
+| --- | --- |
+| `docker compose -f ~/.oac/core/compose.yaml ps` | Shows the services |
+| `docker compose -f ~/.oac/core/compose.yaml logs --tail 200 core` | Shows a service's log |
+| `docker compose -f ~/.oac/core/compose.yaml down` | Removes the containers. Data is kept |
 
 ## Service health
 
@@ -37,7 +36,7 @@ Use these observations for different questions:
 | Environment connection | The Runtime transport is connected |
 | A finished Turn and its results | The task's recorded outcome |
 
-Service health does not show that a Harness or a model works. Use Session, Turn, Items and Usage reads for execution, and Web's **Nodes** page for node connection, readiness and placement. For local diagnosis, use the installation's own Compose file:
+Only Web is a listener; see [Configure the public address](./public-address.md#listeners-and-access). Service health does not show that a Harness or a model works. Use Session, Turn, Items and Usage reads for execution, and Web's **Nodes** page for node connection, readiness and placement. For local diagnosis, use the installation's own Compose file:
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
@@ -64,7 +63,7 @@ docker compose -f ~/.oac/core/compose.yaml start
 
 Stopping Core stops no node and no sandbox. Node services, their microVMs and Docker containers keep running; stopping is not a way to reclaim compute. A Core restart does not continue an interrupted native tool call transparently. After reconnecting, query the same Session; don't create a new Session to replay uncertain work. Session event streams are live only; recover through Session, Turn and Items reads.
 
-A Web restart, including one caused by `oac apply`, signs everyone out of the console. Web sign-ins otherwise last 12 hours.
+A Web restart, including one caused by `oac apply`, signs everyone out of the console; see [sign-in](../web/console-server.md#sign-in).
 
 ## Core key
 
@@ -78,7 +77,7 @@ Keep it private. Web reads `secrets/web/core.key`. Core reads only its SHA-256 f
 
 ### Script the Core API
 
-Core publishes no host port. On the Core host, this helper runs `curl` in Core's network namespace and passes the key on stdin, keeping it off the command line:
+On the Core host, this helper runs `curl` in Core's network namespace and passes the key on stdin, keeping it off the command line:
 
 ```sh
 core() (  # core METHOD PATH [JSON body]
@@ -191,7 +190,7 @@ A logical dump still needs the matching secrets, state, independent filesystems 
 
 Keep application ingress and Core/node services stopped while restoring. Fence or shut down every old writer before exposing the restored filesystem; an unreachable old host is not a fence. A rehearsal must use an isolated installation and storage copy that cannot connect to the original nodes or share their writable namespace.
 
-Restore matching secrets and database state, the complete independent filesystem namespaces and any required node identities/provider stores before starting Core. Preserve the database's configuration and namespace UUIDs, object identities and deletion markers; do not run first-time namespace initialization over restored storage. Restore a quota mode filesystem by writing its block-level copy to the backing device and mounting it with `prjquota` at the configured mount point; never run `oac-workspace-quota init` over it, and do not mount the copy beside the original, which has the same filesystem UUID. Reestablish the configured mount paths and service UIDs, then validate the mounted filesystem, ownership and xattrs from each participating service context. [Independent workspace storage](../configuration.md#independent-workspace-storage) owns deployment setup.
+Restore matching secrets and database state, the complete independent filesystem namespaces and any required node identities/provider stores before starting Core. Preserve the database's configuration and namespace UUIDs, object identities and deletion markers; do not run first-time namespace initialization over restored storage. Restore a quota mode filesystem by writing its block-level copy to the backing device and mounting it with `prjquota` at the configured mount point; never run `oac-workspace-quota init` over it, and do not mount the copy beside the original, which has the same filesystem UUID. Reestablish the configured mount paths and service UIDs, then validate the mounted filesystem, ownership and xattrs from each participating service context. [Set up workspace storage](./workspace-storage.md) owns deployment setup.
 
 The cold released baseline resumes only qualified native history after new compute admission. A backup containing retained checkpoints also depends on the matching native runtime, node identity, provider store and external filesystem identities. File-level restore can change inode identity and prevent strict checkpoint restore even when file bytes match. This procedure does not promise portable memory snapshots or restoration onto an arbitrary replacement node; preserve unresolved ownership rather than substituting a new sandbox.
 
@@ -201,16 +200,17 @@ Start the database, Core and node services only after their restored dependencie
 
 An installation of v0.0.10 or later upgrades in place to a newer release. It keeps its database, data volume, `.env`, secrets, Core key, installation ID and the entries you added to `compose.override.yaml`. An older installation can't upgrade: install the new release into a new directory. Downgrades are refused.
 
-1. Read the target release's notes for [protocol changes](#protocol-changes) and the actions they require.
-2. [Back up](#single-host-backup) the installation. The upgrade takes no backup, and after it the backup is the only way back to the previous release.
-3. Run the target release's installer with `--upgrade` and the installation directory:
+> [!IMPORTANT]
+> Before you upgrade, read the target release's notes for [protocol changes](#protocol-changes) and the actions they require, and [back up](#single-host-backup) the installation. The upgrade takes no backup, and after it the backup is the only way back to the previous release.
+
+1. Run the target release's installer with `--upgrade` and the installation directory:
 
    ```sh
    curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
    ```
 
    `--version TAG` selects a release other than the latest. On Windows, run `& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --upgrade --install-dir "$HOME\.oac\core"`. For an installation from a [source bundle](../development.md#install-a-checkout-without-publishing-a-release), run the new bundle's installer: `python3 <bundle>/install.py --install-dir <dir> --upgrade`.
-4. When you are ready, [apply the release's Runtime](#runtime-after-an-upgrade).
+2. When you are ready, [apply the release's Runtime](#runtime-after-an-upgrade).
 
 Without `--upgrade`, another release's installer changes nothing and stops with `This installation runs release <old>; this installer is <new>. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.` (`install.py` says `this bundle is`). The installed release's installer resumes the installation, with or without the flag. Installation and mutating `oac` commands share the [installation lock](../configuration.md#installation-directory); if another command is running, wait for it to finish before retrying.
 
@@ -245,6 +245,8 @@ A rollback restores the backup taken before the upgrade: stop the services, [res
 
 ## Uninstall
 
+Remove nodes first; see [Remove a node](./nodes.md#remove-a-node).
+
 ```sh
 ~/.oac/core/oac uninstall
 ```
@@ -255,7 +257,7 @@ All data goes with it: Projects and API keys, Session history, stored credential
 
 Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete.
 
-Nodes on other hosts keep running. To uninstall them the usual way, remove them in Web first, as in [Remove a node](./nodes.md#remove-a-node). After the installation is gone, their Core is gone: on each node host, run the node uninstall command with `--force`, using the installer the original command left in `~/.oac/node-bootstrap/`, as in [Remove a node](./nodes.md#remove-a-node), and the installation ID that `oac uninstall` printed. If you didn't note it, read it from the node's unit name `oac-node-<installation-id>.service`.
+If Core is already gone, run the node uninstall command with `--force` on each node host, as described there, using the installation ID that `oac uninstall` printed or the one in the node's unit name `oac-node-<installation-id>.service`.
 
 If the installation directory was deleted by hand, its containers keep running and keep the Web port. Find the project and remove it without any installation file:
 
@@ -265,35 +267,3 @@ docker compose -p <project> down --volumes --remove-orphans
 ```
 
 The project is the `oac-…` name from the list. Then delete `~/.oac/core.lock` (on Windows also `~/.oac/.core.lock.runtime.lock`) if it is still there.
-
-## Troubleshooting
-
-| Symptom | Cause and fix |
-| --- | --- |
-| `Web port unavailable; choose --web-port` | Another program holds that port. Stop it, or choose another `--web-port`. The installer does not move to a different port. When the message names a Compose project `oac-…`, an earlier installation whose directory is gone still runs: remove it as in [Uninstall](#uninstall) |
-| `incomplete installation: preserve … and choose another directory` | Preserve the directory and choose another `--install-dir` |
-| `configuration check failed; no service was changed` | `.env` has a value Core rejects. The message names the variable and not the value. Fix `.env` and run `oac apply` again |
-| `data volume check failed; no service was changed` | Initialization refused the data volume; the message names the cause, such as a volume a newer release upgraded. See [downgrades](#downgrades) |
-| `This installation runs release …` | The installer or initialization belongs to another release. To move to a newer one, follow [Upgrade](#upgrade); downgrades are refused |
-| `This account cannot use Docker` | Add the account to the `docker` group and log in again, or use Docker Desktop or rootless Docker. Do not run the installer with `sudo` |
-| `This account cannot access …` | An earlier run with `sudo` left files owned by root. Run the `sudo chown` command the message prints, then rerun as your own account |
-| `Docker Compose 2.26 or newer is required` | Install or update the Docker Compose plugin |
-| `Docker could not pull …` | The Docker daemon cannot reach the registry. Configure its proxy or a registry mirror, or use the [offline archive](./install-options.md#offline-hosts) |
-| `startup failed; data retained, rerun the installer` | The message lists the services that are not healthy and the `docker compose logs --tail 50` command for them. Fix the cause, then [resume installation](./install.md#install); keep the data. After `oac apply`, the same message says to run `oac apply` again |
-| Web answers 403 `Forbidden` | The browser host is not `OAC_PUBLIC_URL`. Open that origin; a reverse proxy must pass the original Host |
-| Web shows that Core is unavailable (502) | Core is stopped or failing: `docker compose ps`, then Core's log |
-| Session creation returns 400 `model_provider_required` | No model provider: set a [default model](../configuration.md#default-models) for the Harness, or pass one; self-hosted Sessions always pass their own |
-| Add node shows no command | See [Before you add a node](./nodes.md#before-you-add-a-node) |
-| A node is not ready | See [node troubleshooting](./nodes.md#troubleshooting) |
-
-## Exposure and network policy
-
-| Listener | Host installation | Behind a reverse proxy |
-| --- | --- | --- |
-| Web and the API | Web publishes `OAC_WEB_PORT` (8080) on `OAC_HOST` | Web publishes `OAC_WEB_PORT` on `OAC_HOST`. Your proxy should use `127.0.0.1` |
-| Core | No published port. Web forwards `/v1`, `/api/v1` and `/docs` | No published port. Web forwards `/v1`, `/api/v1` and `/docs` |
-| PostgreSQL | No published port | No published port |
-
-Web signs administrators in with the Core key, checks the origin of every request, and forwards signed-in `/core/v1` requests to Core with the Core key, which stays on the server. It forwards `/v1` and `/api/v1` to Core unchanged, with the caller's own credential, serves only the non-secret node payload at `/node-install/`, and has no Docker or KVM access. Machine routes under `/api/v1` use their own enrollment and connection credentials. No service receives a Docker socket.
-
-Sandboxes are the isolation boundary ([Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation)). Docker sandboxes share the node's kernel, and a Docker node is [root-equivalent](./nodes.md#what-the-installer-sets-up) on its host; microsandbox gives each sandbox a microVM with an explicit [network policy](./nodes.md#what-the-installer-sets-up). Core itself has no Docker socket or KVM access.

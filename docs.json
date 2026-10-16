@@ -14,9 +14,13 @@
         "group": "Operate",
         "pages": [
           "docs/getting-started/install-options",
+          "docs/getting-started/public-address",
+          "docs/getting-started/sandbox-backends",
+          "docs/getting-started/workspace-storage",
           "docs/getting-started/nodes",
           "docs/getting-started/self-hosted",
           "docs/getting-started/operations",
+          "docs/getting-started/troubleshooting",
           "docs/configuration"
         ]
       },

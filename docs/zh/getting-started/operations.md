@@ -1,31 +1,30 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 1f07f9a80da3ad0218949a4856093d716d9d3af2b40426be9e74e3bd0b3ca18b
+source_hash: 54c6d2de28e483497c00a3f2bfc310b4d8b7ff22519607778e7340ec851f252e
 ---
 
-安装运维人员负责 Core 主机、存储和可用性。节点主机运行各自的服务；参阅[节点](nodes.md)。设置见[配置参考](../configuration.md)。
+Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Core 密钥、备份、升级和卸载。节点有[专门的指南](./nodes.md)，[故障排查](./troubleshooting.md)列出了安装程序和访问方面的提示信息。设置见[配置参考](../configuration.md)。
 
 ## oac 命令 {#the-oac-command}
 
-每个安装目录都有自己的原生管理命令：Unix 使用 `oac`，Windows 使用 `oac.exe`。命令需要 Docker 访问权限，不需要 root：
-
-```sh
-docker compose -f ~/.oac/core/compose.yaml ps
-```
+每个安装目录都有自己的 `oac` 命令（Windows 为 `oac.exe`）。以安装 Core 的账号运行它；它需要 Docker 访问权限，不需要 root。示例使用默认安装目录 `~/.oac/core`；Windows 上使用 `& "$HOME/.oac/core/oac.exe"` 调用该命令，后接相同参数。使用自定义目录时，替换路径。
 
 | 命令 | 功能 |
 | --- | --- |
-| `docker compose ps` | 在安装目录中展示服务 |
-| `docker compose start` | 启动服务 |
-| `docker compose stop` | 停止服务。保留数据、节点和沙箱 |
+| `oac install` | 安装、继续或[升级](#upgrade)安装；安装脚本会运行它 |
 | `oac apply` | 检查数据卷和 `.env`，然后启动服务，并重新创建配置有变化的服务；参见 [oac apply 的工作方式](../configuration.md#how-oac-apply-works)。校验失败时不改动任何服务。成功时打印 `Services are running with the current settings.` |
 | `oac core-key [--show]` | 指出 Core 密钥在数据卷中的位置；加上 `--show` 时打印密钥本身 |
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web，然后说明如何读取新密钥 |
-| `docker compose down` | 移除容器。数据保留 |
 | `oac uninstall` | 确认后删除安装及其数据；参见[卸载](#uninstall) |
 
-示例使用默认安装目录。Windows 上使用 `& "$HOME/.oac/core/oac.exe"` 调用管理命令，后接相同参数。使用自定义安装目录时，替换各命令中的路径。
+Docker Compose 命令管理服务；针对该安装的 Compose 文件运行它们。`stop` 和 `start` 见[停止与重启](#stop-and-restart)。
+
+| 命令 | 功能 |
+| --- | --- |
+| `docker compose -f ~/.oac/core/compose.yaml ps` | 展示服务 |
+| `docker compose -f ~/.oac/core/compose.yaml logs --tail 200 core` | 展示服务的日志 |
+| `docker compose -f ~/.oac/core/compose.yaml down` | 移除容器。数据保留 |
 
 ## 服务健康状态 {#service-health}
 
@@ -39,7 +38,7 @@ docker compose -f ~/.oac/core/compose.yaml ps
 | Environment 连接 | Runtime 传输已连接 |
 | 已完成的 Turn 及结果 | 任务已记录的结果 |
 
-服务健康状态不表示 Harness 或模型可用。执行情况使用 Session、Turn、Items 和 Usage 读取，节点连接、就绪和分配使用 Web 的 **节点** 页面。本地诊断使用安装自身的 Compose 文件：
+只有 Web 是监听器；参阅[配置公开地址](./public-address.md#listeners-and-access)。服务健康状态不表示 Harness 或模型可用。执行情况使用 Session、Turn、Items 和 Usage 读取，节点连接、就绪和分配使用 Web 的 **节点** 页面。本地诊断使用安装自身的 Compose 文件：
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
@@ -66,7 +65,7 @@ docker compose -f ~/.oac/core/compose.yaml start
 
 停止 Core 不会停止节点或沙箱。节点服务、microVM 和 Docker 容器继续运行；停止不是回收计算资源的方法。Core 重启不会透明地继续被中断的原生工具调用。重连后查询同一 Session；不要创建新 Session 来重放结果不确定的工作。Session 事件流仅提供实时事件；通过读取 Session、Turn 和 Items 恢复。
 
-Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退出登录。其他情况下，Web 登录持续 12 小时。
+Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退出登录；参阅[登录](../web/console-server.md#sign-in)。
 
 ## Core 密钥 {#core-key}
 
@@ -80,7 +79,7 @@ Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退
 
 ### 用脚本调用 Core API {#script-the-core-api}
 
-Core 不发布主机端口。在 Core 主机上，此辅助函数在 Core 的网络命名空间中运行 `curl`，并通过 stdin 传入密钥，使其不进入命令行：
+在 Core 主机上，此辅助函数在 Core 的网络命名空间中运行 `curl`，并通过 stdin 传入密钥，使其不进入命令行：
 
 ```sh
 core() (  # core METHOD PATH [JSON body]
@@ -193,7 +192,7 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 
 恢复期间保持应用入口及 Core/节点服务关闭。暴露恢复后的文件系统前，必须隔离或关闭每一个旧写入方；旧主机不可达不代表已隔离。演练必须使用隔离的安装和存储副本，不能连接原节点，也不能共享其可写命名空间。
 
-启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和提供商存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[独立工作区存储](../configuration.md#independent-workspace-storage)负责定义部署设置。
+启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和提供商存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[设置工作区存储](./workspace-storage.md)负责定义部署设置。
 
 已释放计算资源的冷恢复基线仅在新计算资源准入后续接具备资格的原生历史。包含保留检查点的备份还依赖匹配的原生 Runtime、节点标识、提供商存储和外部文件系统标识。文件级恢复可能改变 inode 标识，即使文件字节一致，也可能阻止严格检查点恢复。此流程不承诺可移植内存快照，也不承诺恢复到任意替代节点；应保留未解决的归属，而不是替换为新沙箱。
 
@@ -203,16 +202,17 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 
 v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并保留数据库、数据卷、`.env`、密钥、Core 密钥、安装 ID 以及你在 `compose.override.yaml` 中添加的条目。更早的安装无法升级：请将新版本安装到新目录。降级会被拒绝。
 
-1. 阅读目标版本的发布说明，了解[协议变更](#protocol-changes)及其要求的操作。
-2. [备份](#single-host-backup)安装。升级不会备份；升级之后，备份是回到先前版本的唯一途径。
-3. 使用目标版本的安装程序，带上 `--upgrade` 和安装目录运行：
+> [!IMPORTANT]
+> 升级之前，阅读目标版本的发布说明，了解[协议变更](#protocol-changes)及其要求的操作，并[备份](#single-host-backup)安装。升级不会备份；升级之后，备份是回到先前版本的唯一途径。
+
+1. 使用目标版本的安装程序，带上 `--upgrade` 和安装目录运行：
 
    ```sh
    curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
    ```
 
    `--version TAG` 选择最新版本以外的发布版本。Windows 上运行 `& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --upgrade --install-dir "$HOME\.oac\core"`。对于从[源码包](../development.md#install-a-checkout-without-publishing-a-release)安装的实例，运行新源码包的安装程序：`python3 <bundle>/install.py --install-dir <dir> --upgrade`。
-4. 准备好后，[应用该版本的 Runtime](#runtime-after-an-upgrade)。
+2. 准备好后，[应用该版本的 Runtime](#runtime-after-an-upgrade)。
 
 不带 `--upgrade` 时，其他版本的安装程序不做任何更改，并以 `This installation runs release <old>; this installer is <new>. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.` 停止（`install.py` 的提示为 `this bundle is`）。无论是否带该参数，已安装版本的安装程序都会继续该安装。安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)；其他命令正在运行时，等待其结束后重试。
 
@@ -247,6 +247,8 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
 
 ## 卸载 {#uninstall}
 
+先移除节点，参见[移除节点](./nodes.md#remove-a-node)。
+
 ```sh
 ~/.oac/core/oac uninstall
 ```
@@ -257,7 +259,7 @@ Windows 上运行 `& "$HOME/.oac/core/oac.exe" uninstall`。命令会展示 Comp
 
 卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成。
 
-其他主机上的节点继续运行。按常规方式卸载时，先在 Web 移除，见[移除节点](nodes.md#remove-a-node)。安装删除后，它们的 Core 已不存在：在各节点主机用原命令留在 `~/.oac/node-bootstrap/` 的安装程序，执行带 `--force` 的节点卸载命令（见[移除节点](nodes.md#remove-a-node)），并传入 `oac uninstall` 打印的安装 ID。如果没有记下，可以从节点的单元名 `oac-node-<installation-id>.service` 中读取。
+如果 Core 已不存在，按那里的说明在各节点主机上带 `--force` 运行节点卸载命令，使用 `oac uninstall` 打印的安装 ID，或节点单元名 `oac-node-<installation-id>.service` 中的安装 ID。
 
 如果安装目录被手动删除，其容器会继续运行并占用 Web 端口。不依赖任何安装文件即可找到并移除该项目：
 
@@ -267,35 +269,3 @@ docker compose -p <project> down --volumes --remove-orphans
 ```
 
 项目是列表中的 `oac-…` 名称。之后如果 `~/.oac/core.lock` 仍然存在（Windows 上还有 `~/.oac/.core.lock.runtime.lock`），将其删除。
-
-## 问题排查 {#troubleshooting}
-
-| 症状 | 原因与解决方法 |
-| --- | --- |
-| `Web port unavailable; choose --web-port` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口。如果消息点名了 Compose 项目 `oac-…`，说明目录已不存在的早期安装仍在运行：按[卸载](#uninstall)移除它 |
-| `incomplete installation: preserve … and choose another directory` | 保留目录内容，选择另一个 `--install-dir` |
-| `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
-| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷已被更新的版本升级。参见[降级](#downgrades) |
-| `This installation runs release …` | 安装程序或初始化属于另一个版本。要换到更新的版本，请按[升级](#upgrade)操作；降级会被拒绝 |
-| `This account cannot use Docker` | 将该账号加入 `docker` 组后重新登录，或使用 Docker Desktop 或 rootless Docker。不要用 `sudo` 运行安装程序 |
-| `This account cannot access …` | 之前用 `sudo` 运行留下了属于 root 的文件。运行消息给出的 `sudo chown` 命令，再以自己的账号重新运行 |
-| `Docker Compose 2.26 or newer is required` | 安装或更新 Docker Compose 插件 |
-| `Docker could not pull …` | Docker 守护进程无法访问容器注册表。配置其代理或镜像加速器，或使用[离线归档](install-options.md#offline-hosts) |
-| `startup failed; data retained, rerun the installer` | 消息会列出不健康的服务和查看其日志的 `docker compose logs --tail 50` 命令。修复原因，再[继续安装](install.md#install)；不要删除数据。运行 `oac apply` 时，同一消息会提示再次运行 `oac apply` |
-| Web 返回 403 `Forbidden` | 浏览器主机名不是 `OAC_PUBLIC_URL`。打开该源地址；反向代理必须传递原始 Host |
-| Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
-| 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |
-| **添加节点** 不展示命令 | 参阅[添加节点前](nodes.md#before-you-add-a-node) |
-| 节点未就绪 | 参阅[节点问题排查](nodes.md#troubleshooting) |
-
-## 对外暴露与网络策略 {#exposure-and-network-policy}
-
-| 监听器 | 主机安装 | 反向代理之后 |
-| --- | --- | --- |
-| Web 和 API | Web 在 `OAC_HOST` 上发布 `OAC_WEB_PORT`（8080） | Web 在 `OAC_HOST` 上发布 `OAC_WEB_PORT`。反向代理应使用 `127.0.0.1` |
-| Core | 不发布端口。Web 转发 `/v1`、`/api/v1` 和 `/docs` | 不发布端口。Web 转发 `/v1`、`/api/v1` 和 `/docs` |
-| PostgreSQL | 不发布端口 | 不发布端口 |
-
-Web 使用 Core 密钥让管理员登录，检查每个请求来源，并用保留在服务器上的 Core 密钥将已登录的 `/core/v1` 请求转发到 Core。它把 `/v1` 和 `/api/v1` 原样转发给 Core，使用调用方自己的凭据；Web 仅在 `/node-install/` 提供不含密钥的节点文件，没有 Docker 或 KVM 访问权限。`/api/v1` 机器路由使用独立注册和连接凭据。没有服务持有 Docker 套接字。
-
-沙箱是隔离边界（[Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)）。Docker 沙箱共享节点内核，Docker 节点在主机上[等同于 root 权限](nodes.md#what-the-installer-sets-up)；microsandbox 为每个沙箱提供具有显式[网络策略](nodes.md#what-the-installer-sets-up)的 microVM。Core 自身无 Docker 套接字或 KVM 访问权限。

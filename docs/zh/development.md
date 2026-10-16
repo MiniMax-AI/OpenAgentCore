@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: 3516f7088aadb05c19a61187a3c66fcf39503c24635b38509349d05eecf06623
+source_hash: 3636bfa078276bfaf7a7449ce8cbc71ad3ebc10c8e1752c84203093a9f1b4a2f
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -50,7 +50,7 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 
 ## 不发布版本，直接安装工作副本 {#install-a-checkout-without-publishing-a-release}
 
-使用此路径体验已提交工作副本中的完整 Core、Web 和受管沙箱节点。它复用正式发版的分发构建器、Compose 服务、初始化和节点安装器。构建时需要联网获取固定的上游依赖；生成的离线包不依赖 OpenAgentCore 发版或镜像仓库。在 Linux amd64 上按[分发构建前提](maintainers.md#build-a-distribution)构建和安装。需要 Docker Engine 26+ 和 Compose 2.26+。源码必须已提交，包括本地修改。
+使用此路径体验已提交工作副本中的完整 Core、Web 和受管沙箱节点。它复用正式发版的分发构建器、Compose 服务、初始化和节点安装程序。构建时需要联网获取固定的上游依赖；生成的离线包不依赖 OpenAgentCore 发版或镜像仓库。在 Linux amd64 上按[分发构建前提](maintainers.md#build-a-distribution)构建和安装。需要 Docker Engine 26+ 和 Compose 2.26+。源码必须已提交，包括本地修改。
 
 在仓库根目录一次性准备固定 Runtime 输入，然后构建和安装。如果 `~/.oac/build/release-inputs/inputs.json` 已存在，跳过第一条命令并复用它：
 
@@ -72,23 +72,11 @@ python3 "$bundle/install.py" \
   --public-url http://YOUR_CORE_HOST:8080
 ```
 
-将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。需要时使用反向代理后的 HTTPS 地址；入口配置见[安装选项](getting-started/install-options.md)。新安装会输出用于登录的 Core 密钥；重新运行时输出显示该密钥的命令。它创建标准 Compose 安装，以及包含该构建公共节点制品的只读 `node-payload` 目录。磁盘需同时容纳解压后的构建包和安装副本。Core、Web 均不会获得 Docker socket。
+将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。[安装选项](getting-started/install-options.md#offline-hosts)说明 `install.py` 的选项、重新运行和恢复。构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`，用于在另一台 Linux amd64 Docker 主机上安装。
 
-构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`。可将其复制到另一台 Linux amd64 Docker 主机，解压后执行其中的 `install.py`；目标主机只需要 Python 3.9+ 和 Docker，无需源码、Go、Node 或 pnpm。安装完成前保留解压目录；安装后的服务和节点下载不再依赖它的原始位置。
+在 Web 中配置模型提供商，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装程序目录](maintainers.md#native-installers)，否则可选的自托管原生安装程序不可用，不会生成占位目录。
 
-在 Web 中配置模型提供商，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装器目录](maintainers.md#native-installers)，否则可选的自托管原生安装器不可用，不会生成占位目录。
-
-启动失败或安装已停止时，使用保存的配置，而不是重新安装：
-
-```sh
-cd "$HOME/.oac/local"
-docker compose logs --tail 100
-# Retry without downloading release images or replacing saved configuration.
-docker compose up -d --wait --pull never
-./oac core-key --show
-```
-
-对安装目录重新运行同一源码包的 `install.py`，会以已保存的设置继续该安装；只有新目录才需要 `--public-url`。其他提交的源码包会拒绝已有安装，除非传入 `--upgrade`，此时会[原地升级](getting-started/operations.md#upgrade)该安装。新安装若在启动服务之前失败，安装目录会保持运行前的状态；修复原因后重新运行同一命令即可。配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
+配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
 
 ## 构建与运行组件 {#build-and-run-components}
 
@@ -141,7 +129,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | 提供商集成 | `make check-sandbox-provider-contract` 和提供商的原生检查 |
 | Claude SDK bridge 与产物 | `make check-claude-sdk` |
 | Web UI 与 client | `make check-web` |
-| 发行或安装器 | `make check-distribution` |
+| 发行或安装程序 | `make check-distribution` |
 | 文档 | `make check-names`；`make check-distribution` 验证 Markdown 链接与打包文档 |
 
 Fixture 浏览器验收使用 loopback 端口 18092 和 4174。并行验证时通过 `AGENTS_FIXTURE_PORT` 和 `AGENTS_WEB_PORT` 选择空闲端口。验证 worker 之间使用独立数据库、端口和容器。编译、fixture 成功和真实模型/提供商验收分别证明不同事实；应明确报告跳过或不可用的检查。验证后遵循[独立盲审工作流](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
