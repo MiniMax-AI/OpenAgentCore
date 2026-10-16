@@ -29,7 +29,7 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 | Web and operators–Core (`/core/v1`) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/core.openapi.yaml` | [Core administration API](contracts/agents-api/admin-api.md) |
 | Nodes and daemons–Core (`/api/v1` HTTP routes; the node and daemon wire protocols are separate rows) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/runtime.openapi.yaml` | [Machine connection API](contracts/agents-api/machine-api.md) |
 | Core and sandbox nodes–Workspace filesystem | `services/core/internal/workspacefs/workspacefs.go` | [Workspace filesystem protocol](docs/workspace-provider.md) |
-| Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
+| Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider protocol](docs/sandbox-provider.md) |
 | Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Sandbox node protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/` | [Core–Runtime protocol](docs/runtime-protocol.md) |
@@ -38,7 +38,7 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 
 ### Complexity stays in the adapter
 
-- A new Sandbox Provider, Harness, model provider or vendor feature changes only its adapter. It adds no Core execution path, store table or column, migration, deployment or configuration field, API field or Web UI specific to one vendor or Harness. The [Sandbox Provider guide](docs/sandbox-provider.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md) describe how to add an adapter.
+- A new Sandbox Provider, Harness, model provider or vendor feature changes only its adapter. It adds no Core execution path, store table or column, migration, deployment or configuration field, API field or Web UI specific to one vendor or Harness. The [Sandbox Provider protocol](docs/sandbox-provider.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md) describe how to add an adapter.
 - When the protocol cannot express what an adapter needs, change the protocol. Never add an optional side interface for one implementation.
 - Implementing the declared checkpoint lifecycle in one vendor's Provider is an adapter change. A vendor-only pause interface, a Core path for that vendor, vendor receipts in the store or a vendor idle setting in the deployment is not.
 - Fix shared lifecycle, admission, cancellation, reuse and performance problems in the common flow, never in a branch selected by Harness, Runtime or vendor name. Core preparation and execution never branch on operating system or Environment source; platform support requires native CI builds and automated tests.
@@ -47,7 +47,7 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 ### Public API
 
 - The target is the complete OpenAI Agents API (`openai/openai-python` `beta/agents`) as pinned in [`contracts/agents-api/upstream.json`](contracts/agents-api/upstream.json): paths, methods, headers, field presence, nullability, discriminators, defaults, status transitions, pagination, errors and streaming. Engine limitations are gaps to close, never grounds to narrow or redefine the contract. Operations or fields newer than the pinned baseline wait for a protocol upgrade.
-- Record each native Harness difference, and any unspecified or unverified behavior, in the [coverage ledger](contracts/agents-api/index.md). Reject explicit enablement of an unsupported feature and never invent official semantics. When a material difference has no clear mapping, stop and ask before changing its semantics. Native differences never relax authentication, isolation, credential protection or data consistency.
+- Record each native Harness difference, and any unspecified or unverified behavior, in the [OpenAI compatibility](contracts/agents-api/index.md). Reject explicit enablement of an unsupported feature and never invent official semantics. When a material difference has no clear mapping, stop and ask before changing its semantics. Native differences never relax authentication, isolation, credential protection or data consistency.
 - Applications, including the Parsar product, reach Core only through the public contract, with no privileged endpoint and no shared tables. Core never interprets their product payloads.
 
 ### One home for each setting and datum

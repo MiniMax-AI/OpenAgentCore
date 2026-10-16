@@ -1,10 +1,10 @@
 ---
 title: 工作区文件系统协议
 source: docs/workspace-provider.md
-source_hash: 1627563bb3b40ce2876913938d3cb7bf702aaacab8ad709acb1813e74d2b93c5
+source_hash: dd42ae9d7ae231ac69b7b3c16abfde13b96a08833572395640018f5ef57da1cd
 ---
 
-工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建、观察和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
+工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建、观察和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
 
 | | |
 | --- | --- |

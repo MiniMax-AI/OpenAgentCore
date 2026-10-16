@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 1648667dbd1c35f043f6e93e5fdb9dbe45c1d28e4634de08fc3fa9e69d3e3f0d
+source_hash: 0da1a41b28ee266af53b559dd4cd864bf23cb66c4b4971b1ab9daa35c2771c3c
 ---
 
 Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-reference)。可以使用官方 OpenAI SDK 或普通 HTTP。本指南针对每项常见操作同时展示这两种方式，并说明 Core 与 OpenAI 存在差异的地方。
@@ -544,4 +544,4 @@ HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` �
 
 ## 与 OpenAI 的差异 {#differences-from-openai}
 
-Core 在某些行为上与 OpenAI 服务不同，例如 Session 创建的幂等性和特定 Harness 的工具支持。[覆盖情况清单](../../../contracts/agents-api/zh/index.md#differences-from-openai) 列出了所有差异及各资源的状态；[公共 OpenAPI](../../../contracts/agents-api/openapi.yaml) 包含准确的模式定义。
+Core 在某些行为上与 OpenAI 服务不同，例如 Session 创建的幂等性和特定 Harness 的工具支持。[OpenAI 兼容性](../../../contracts/agents-api/zh/index.md#differences-from-openai) 列出了所有差异及各资源的状态；[公共 OpenAPI](../../../contracts/agents-api/openapi.yaml) 包含准确的模式定义。

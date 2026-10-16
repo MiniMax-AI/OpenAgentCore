@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: fddbe0a4e99431dacba2f368d0d0d3b350b6fcb1ea8723e0eb889f23d1f61fb7
+source_hash: 1ace9fb85fb4673fc4b671da08514c64716509ecc69461917dd2d4bed59b66e7
 ---
 
 沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
@@ -102,7 +102,7 @@ Core 发送包含以下内容的 `request` 帧：
 | `unsupported` | 该操作被声明为不支持；见下文 |
 | `unconfirmed` 或任何其他值 | 结果未知 |
 
-失败响应不携带结果，唯一的例外是作为精确引用 `CreateSettled` 回执的 `info` 结果：即便已确认的原生 Create 在后续检查中失败，仍可证明该尝试已有确定结果。超时、响应丢失或断连属于不可用或不确定情况，绝不能证明资源不存在；发生这些情况后，Core 绝不重放变更操作，而是改为观察原始操作。[沙箱提供商指南](../../../docs/zh/sandbox-provider.md#operation-outcomes-and-retries) 定义了每种结果。
+失败响应不携带结果，唯一的例外是作为精确引用 `CreateSettled` 回执的 `info` 结果：即便已确认的原生 Create 在后续检查中失败，仍可证明该尝试已有确定结果。超时、响应丢失或断连属于不可用或不确定情况，绝不能证明资源不存在；发生这些情况后，Core 绝不重放变更操作，而是改为观察原始操作。[沙箱提供商协议](../../../docs/zh/sandbox-provider.md#operation-outcomes-and-retries) 定义了每种结果。
 
 节点启动和代次加载会在接受工作前验证完整的提供商操作声明，Core 代理使用同一份已注册声明，因此不支持的操作会在节点解析或原生 I/O 之前被拒绝。操作清单由[操作契约](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)维护。`unsupported` 响应包含一个 `unsupported` 对象，其中有精确的方法 `operation` 和经作者编写且安全的 `reason`；代理会将两者与请求进行核对。证据缺失、格式错误或不匹配会得到 `unconfirmed` 结果，而绝不会证明变更操作被拒绝。`unsupported` 始终不同于观察不可用，也不同于计算或命令结果未知；它既不确定资源所有权，也不授权重放。
 

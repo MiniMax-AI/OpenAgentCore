@@ -16,7 +16,7 @@ The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or Mi
 
 - **Same API as OpenAI.** Set `OPENAI_BASE_URL` and the [official OpenAI SDK](https://developers.openai.com/api/docs/libraries), or plain HTTP, works unchanged.
 - **Your agent, your model.** Each Session runs Codex, Claude Code or MiniMax Code natively, with the model provider you configure. See [Harness capabilities](https://openagentcore.dev/contracts/agents-api/harness-capabilities).
-- **Compute that sleeps, workspaces that stay.** On microsandbox with independent workspace storage, idle sandboxes release compute and resume on a compatible node with their files intact. E2B, Docker and your own Linux, macOS or Windows machine also run Sessions. See [Add a Sandbox Provider](https://openagentcore.dev/docs/sandbox-provider).
+- **Compute that sleeps, workspaces that stay.** On microsandbox with independent workspace storage, idle sandboxes release compute and resume on a compatible node with their files intact. E2B, Docker and your own Linux, macOS or Windows machine also run Sessions. See [Sandbox Provider protocol](https://openagentcore.dev/docs/sandbox-provider).
 - **Replaceable parts.** Sandbox Providers, workspace filesystems, Harnesses and model providers plug in through [defined protocols](AGENTS.md#protocols-at-every-boundary).
 
 ![Deployment overview](docs/assets/console-overview-en.webp)

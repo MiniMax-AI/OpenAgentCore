@@ -35,7 +35,23 @@ An Environment read joins its live owning Session within the caller's Project an
 | [Environment resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environment_info.py) | `pending`, `connected`, `disconnected`, `expired`, `failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agent_session_environment_state.py) | `pending`, `ready`, `connected`, `disconnected`, `failed`, with a nullable error |
 
-The two vocabularies are separate; never cast one to the other. Session environment events carry Session and Environment identity and an optional Turn identity, and never configuration, credentials, registration IDs or revisions. A Session's `required_actions` can contain `{type: "environment_connection", environment_id}`, separate from function calls. Environment connection, Session status and Turn status are independent.
+The two vocabularies are separate; never cast one to the other. The resource moves as follows, and a failed or expired Environment is final:
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> connected
+    connected --> disconnected
+    disconnected --> connected
+    pending --> failed
+    connected --> failed
+    disconnected --> failed
+    pending --> expired
+    connected --> expired
+    disconnected --> expired
+```
+
+Session environment events carry Session and Environment identity and an optional Turn identity, and never configuration, credentials, registration IDs or revisions. A Session's `required_actions` can contain `{type: "environment_connection", environment_id}`, separate from function calls. Environment connection, Session status and Turn status are independent.
 
 Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment derives its Project and immutable configuration from the owning Session. Its first state is `pending`. After the Session is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A Session with `none` has no Environment.
 
@@ -117,20 +133,20 @@ Creation accepts initial text as a string or an ordered array of user messages. 
 
 Core returns 202 only after the batch is durably admitted. For a cancellation, 202 confirms admission, not native completion or process exit. Under the Session lock, a retry recovers its original reservation or receipt before Core chooses between the active Turn and a new reservation, and keeps that target during later work. An unlocked read or a retry after a conflict never picks a different path.
 
-The waiting request uses bounded pooled operations, outside transactions and execution leases; it never prepares or starts native work. Only this route extends its response write deadline, to six minutes, covering the five-minute database deadline plus response time. Disconnecting stops the wait, not the reservation. Errors:
-
-| Condition | Response |
-| --- | --- |
-| Reservation expired | 409 `environment_input_expired` |
-| Reservation cancelled | 409 `environment_input_cancelled` |
-| New input on a failed `openai_hosted` Environment | 409 `conflict_error`, "the hosted environment failed to provision" |
-| New input on a failed `self_hosted` or an expired Environment, or input that was waiting when the Environment failed | 409 `environment_unavailable` |
-| Execution ownership lost | 503 `execution_unavailable` |
-| Session deleted | 404 |
+The waiting request uses bounded pooled operations, outside transactions and execution leases; it never prepares or starts native work. Only this route extends its response write deadline, to six minutes, covering the five-minute database deadline plus response time. Disconnecting stops the wait, not the reservation. [Input errors](./sessions-events.md#input-errors) lists every outcome of the request.
 
 ### Reservations
 
 A reservation stores one canonical message batch before Turn admission, with a five-minute deadline from the database clock.
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> admitted: Turn claim
+    pending --> expired: deadline
+    pending --> cancelled: cancellation, archive or reset
+    pending --> failed: preparation failure
+```
 
 - It requires an Environment-bearing Session without active work. Reservations and direct input share the Session lock and retry identity; a pending or settled key cannot bypass its reservation through direct admission.
 - A pending reservation blocks new direct batches, including cancellation, while successful earlier retries stay readable.
@@ -146,11 +162,9 @@ A Runtime `failed` result with `preparation_failed` and no Run settles the pendi
 
 Before a Turn exists, Session activity comes from the latest relevant reservation and the connection state. Pending input on an offline `self_hosted` Environment requests `environment_connection`; the connection arriving clears it to `idle`, while the Worker still owns native readiness and admission. An offline Environment without pending input requests nothing, and `openai_hosted` provisioning never requests a connection. A reservation or connection change commits immutable Session activity and usage snapshots in the same transaction; a newer or active Turn owns later activity. Settled non-initial reservations return the action to `idle` until newer work exists.
 
-### Expiry and scheduling
+### Expiry
 
-The Worker expires at most 32 due reservations per tick, after checking its lease and before checking devices or execution slots. The sweep uses the leased Store connection with its transaction timeout, never a pooled writer. A partial deadline index and `SKIP LOCKED` Session locks let unrelated work proceed. The cutoff is statement time, and settlement rechecks the database clock after taking the Session lock. A restart resumes expiry on normal ticks; there is no separate scheduler. A failed Turn never stands in for a pre-Turn connection failure.
-
-When next-Turn input is pending on a completed managed allocation that is suspended or recovering, Core hints the managed Runtime maintenance loop. Initial input, cold creation, running or disabled compute, terminal receipts, cancellation and function results, history and file operations send no hint. Hints are best effort and coalesced without blocking; they add at most one scan per normal five-second cycle and never bypass capacity, a busy lifecycle gate or ownership checks. Persisted work and the normal ticker stay authoritative.
+The Worker expires due reservations on its normal ticks and resumes after a restart. A failed Turn never stands in for a pre-Turn connection failure.
 
 ## Runtime capability preparation
 
@@ -217,7 +231,7 @@ The daemon runs as its launching account and never uses sudo or raises its permi
 
 Every command uses the launching user's permissions and the host network. Process ownership waits for exit and I/O settlement. Command output is discarded; a confirmed failure keeps only a bounded integer exit status.
 
-When hosted compute uses external workspace storage and is replaced, only the retained Environment filesystem and the qualified Harness's private native history persist. Setup commands are not replayed. Setup and tools can write other locations permitted to the launching user, but changes on the temporary system disk, process memory and background processes are not preserved by cold continuation. Store durable outputs in the workspace and use the declared package installation paths; the [Sandbox Provider lifecycle](../../docs/sandbox-provider.md#suspension) defines when compute can be replaced.
+When hosted compute uses external workspace storage and is replaced, only the retained Environment filesystem and the qualified Harness's private native history persist. Setup commands are not replayed. Setup and tools can write other locations permitted to the launching user, but changes on the temporary system disk, process memory and background processes are not preserved by cold continuation. Store durable outputs in the workspace and use the declared package installation paths; the [Sandbox Provider protocol](../../docs/sandbox-provider.md#cold-replacement-after-checkpoint-retention) defines when compute can be replaced.
 
 ### Explicit local tool environment
 
@@ -227,13 +241,22 @@ The installer's `--tool-env-file` (`OAC_RUNTIME_TOOL_ENV_FILE`) supplies the Run
 
 An Environment's initialization is `pending`, `running`, `complete` or `failed`, independent of any allocation and of authentication and connection publication.
 
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> running
+    running --> complete
+    pending --> failed
+    running --> failed
+```
+
 - The Worker's initialization scheduler scans 32 Environments at a time, wraps at the end and bounds concurrent preparations by execution concurrency, independently of Provider maintenance.
 - A missing socket does not consume a pending attempt. An unavailable Harness fails before installation. Each operation rechecks current authority and the original socket; completion rechecks the exact binding.
 - Each file, Skill or Plugin transfer has a two-minute staging budget. Configure, package installation, setup commands and snapshot finalization share the whole initialization’s 30-minute budget, whose remaining duration Core carries on each operation and the Runtime enforces. Initial input keeps its five-minute admission deadline, so large installations should start from an idle Session.
 - A running initialization whose owner is lost, including across a Core restart, fails as unconfirmed; nothing is replayed. A completed Environment never reinstalls on reconnect or native recovery, so later user changes survive.
 - Failure is terminal for the Session but destroys neither compute nor files.
 
-On failure, one transaction marks the Environment failed and records `agent.session.environment.failed`, an `error` event and one `agent.session.failed`. Session reads return `failed`, the reason as `error` and the failure time as `last_active_at`; live streams end after the failed event. Pending input settles as failed. The reason names only the step and its exit status:
+A failed initialization records the events and Session state that [Environment initialization failure](./sessions-events.md#environment-initialization-failure) defines. The reason names only the step and its exit status:
 
 | Failed step | Reason |
 | --- | --- |

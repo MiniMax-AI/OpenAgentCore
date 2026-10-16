@@ -16,7 +16,7 @@
 
 - **与 OpenAI 相同的 API。** 设置 `OPENAI_BASE_URL` 后，[官方 OpenAI SDK](https://developers.openai.com/api/docs/libraries)或直接的 HTTP 调用无需改动即可使用。
 - **你的 Agent，你的模型。** 每个 Session 原生运行 Codex、Claude Code 或 MiniMax Code，并使用你配置的模型提供商。详见 [Harness 能力](https://openagentcore.dev/zh/contracts/agents-api/harness-capabilities)。
-- **计算会休眠，工作区会保留。** 在 microsandbox 配合独立工作区存储时，空闲沙箱释放计算资源，并在兼容节点上带着文件恢复。E2B、Docker 以及你自己的 Linux、macOS 或 Windows 机器同样可以运行 Session。详见[添加沙箱提供商](https://openagentcore.dev/zh/docs/sandbox-provider)。
+- **计算会休眠，工作区会保留。** 在 microsandbox 配合独立工作区存储时，空闲沙箱释放计算资源，并在兼容节点上带着文件恢复。E2B、Docker 以及你自己的 Linux、macOS 或 Windows 机器同样可以运行 Session。详见[沙箱提供商协议](https://openagentcore.dev/zh/docs/sandbox-provider)。
 - **部件可替换。** 沙箱提供商、工作区文件系统、Harness 和模型提供商都通过[既定协议](AGENTS.md#protocols-at-every-boundary)接入。
 
 ![部署概览](docs/assets/console-overview-zh.webp)

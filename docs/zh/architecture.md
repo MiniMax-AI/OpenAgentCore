@@ -1,12 +1,12 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: 1435c3f4152ed2123d46e63528a670a744fbf731dd72f95fae62a169f3bd617f
+source_hash: b0753bcafe4784d06cb2975a8e085283cac4431edda6f9ac4a823e86b19dc43a
 ---
 
 OpenAgentCore 是 Agent 运行平台，通过可替换的协议实现统一组织 Harness、模型、工具、Session 和执行环境。它将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。沙箱提供商管理计算资源。独立工作区文件系统 adapter 通过单独的协议管理 Environment 持久存储。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
 
-推荐的自部署方案是 microsandbox 配合 kernel NFS 工作区存储。E2B 提供托管计算。Docker 运行在没有检查点或外部存储的节点上。它们使用相同的 Core 编排和能力检查。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。具体契约和支持能力见 [沙箱提供商](./sandbox-provider.md) 和[工作区文件系统提供商](./workspace-provider.md)。
+推荐的自部署方案是 microsandbox 配合 kernel NFS 工作区存储。E2B 提供托管计算。Docker 运行在没有检查点或外部存储的节点上。它们使用相同的 Core 编排和能力检查。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。具体契约和支持能力见 [沙箱提供商协议](./sandbox-provider.md) 和[工作区文件系统提供商](./workspace-provider.md)。
 
 ```mermaid
 flowchart TB
@@ -27,7 +27,7 @@ Runtime daemon 主动向 Core 发起经过认证的 WebSocket 连接。[API 索�
 | 组件 | 职责 | 参考 |
 | --- | --- | --- |
 | Core | 认证调用方，解析并冻结配置，调度 Turn，处理取消和待处理交互，将资源与执行事实持久化到 PostgreSQL | [Core 服务](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md) |
-| 沙箱提供商 | 创建、观察、续期和回收计算资源；提供 Runtime 启动输入 | [沙箱提供商](sandbox-provider.md)、[Runtime 引导](runtime-bootstrap.md) |
+| 沙箱提供商 | 创建、观察、续期和回收计算资源；提供 Runtime 启动输入 | [沙箱提供商协议](sandbox-provider.md)、[Runtime 引导](runtime-bootstrap.md) |
 | Workspace filesystem adapter | 创建、观察和删除 Environment 持久存储；验证并解析计算资源所需的挂载 | [工作区文件系统协议](workspace-provider.md) |
 | Sandbox node | 运行 Docker 或 microsandbox 主机，协调分配给它的 generation 与 allocation | [Sandbox node 协议](../../contracts/agents-api/zh/node-generation-protocol.md) |
 | Runtime | 准备工作区和能力，管理 Session Executor，执行 Turn 并报告事件与回执 | [Core–Runtime 协议](runtime-protocol.md) |

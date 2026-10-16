@@ -16,7 +16,7 @@
 
 - **OpenAI と同じ API。** `OPENAI_BASE_URL` を設定すれば、[公式 OpenAI SDK](https://developers.openai.com/api/docs/libraries)または直接の HTTP リクエストがそのまま動作します。
 - **自分のエージェント、自分のモデル。** 各 Session は Codex、Claude Code、MiniMax Code のいずれかをネイティブに実行し、設定したモデルプロバイダーを使用します。詳しくは [Harness の機能](https://openagentcore.dev/contracts/agents-api/harness-capabilities)をご覧ください。
-- **計算資源は休止し、ワークスペースは残る。** microsandbox と独立したワークスペースストレージの組み合わせでは、アイドル状態のサンドボックスが計算資源を解放し、互換性のあるノードでファイルをそのまま再開します。E2B、Docker、自分の Linux、macOS、Windows マシンでも Session を実行できます。詳しくは[サンドボックスプロバイダーの追加](https://openagentcore.dev/docs/sandbox-provider)をご覧ください。
+- **計算資源は休止し、ワークスペースは残る。** microsandbox と独立したワークスペースストレージの組み合わせでは、アイドル状態のサンドボックスが計算資源を解放し、互換性のあるノードでファイルをそのまま再開します。E2B、Docker、自分の Linux、macOS、Windows マシンでも Session を実行できます。詳しくは[Sandbox Provider protocol](https://openagentcore.dev/docs/sandbox-provider)をご覧ください。
 - **置き換え可能なコンポーネント。** サンドボックスプロバイダー、ワークスペースファイルシステム、Harness、モデルプロバイダーは、[定義されたプロトコル](AGENTS.md#protocols-at-every-boundary)を通じて接続されます。
 
 ![デプロイの概要](docs/assets/console-overview-en.webp)

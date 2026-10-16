@@ -6,12 +6,6 @@ The sandbox deployment selects the Sandbox Provider, the per-sandbox resources a
 
 This contract owns the Core API routes below and their semantics. The [nodes guide](../../docs/getting-started/nodes.md) owns the operator workflow, the [machine connection API](./machine-api.md#node-routes) the routes nodes call, and the [sandbox node protocol](./node-generation-protocol.md) the node connection.
 
-## Suspension policy
-
-`PATCH /core/v1/sandbox/deployment` accepts `{"idle_seconds": 300}`. `idle_seconds` is a required integer from 30 to 86400 seconds, defaulting to 300, stored in Core's database. Only configured Providers declaring checkpoint support accept this change; unconfigured, unsupported or resetting deployments reject it. Success returns the deployment view with the saved `suspension.idle_seconds`.
-
-Changes apply to existing and new running allocations on the next lifecycle pass, without a Core restart, generation change or node rollout. Suspension already in progress is not cancelled; existing snapshots and the 24-hour retention period are unchanged. [Capacity-pressure reclamation](../../docs/sandbox-provider.md#suspension) can still suspend after 15 seconds of inactivity. Web manages this deployment-wide policy in **Settings** → **Sandbox and scheduling** → **Automatic suspension**; each node's capacity limits stay node-owned and are edited on **Nodes** with **Edit node**.
-
 ## Routes
 
 Every route requires the Core key. [Web's console server](../../docs/web/console-server.md) adds it on the server side for signed-in requests.
@@ -127,6 +121,12 @@ Initial setup requires the selected template to appear in the key's team-owned t
 
 No provider text or credential is returned. The write and its `change` or `replace_credential` audit entry share one transaction. A replacement briefly fences provider calls, waits for helper processes to actually exit even after the caller cancelled, and verifies again before committing; a helper's exit does not prove that a remote Create settled. The fence and reads are bounded, and a failure keeps the old key and lifecycles. After the successful response, all retained-generation management uses the committed key; only then revoke the old key in E2B, never before cleanup. Template and resource changes do not drain lifecycles.
 
+## Suspension policy
+
+`PATCH /core/v1/sandbox/deployment` accepts `{"idle_seconds": 300}`. `idle_seconds` is a required integer from 30 to 86400 seconds, defaulting to 300, stored in Core's database. Only configured Providers declaring checkpoint support accept this change; unconfigured, unsupported or resetting deployments reject it. Success returns the deployment view with the saved `suspension.idle_seconds`.
+
+Changes apply to existing and new running allocations on the next lifecycle pass, without a Core restart, generation change or node rollout. Suspension already in progress is not cancelled; existing snapshots and the 24-hour retention period are unchanged. [Capacity-pressure reclamation](../../docs/sandbox-provider.md#suspension) can still suspend an idle allocation earlier. Web manages this deployment-wide policy in **Settings** → **Sandbox and scheduling** → **Automatic suspension**; each node's capacity limits stay node-owned and are edited on **Nodes** with **Edit node**.
+
 ## Generation ownership and rollout
 
 `runtime_deployment` holds the current specification. Superseded rows keep only immutable specification, build and endpoint metadata, never another E2B key. An E2B allocation binds its generation at reservation; a node placement binds when the scheduler reserves compatible capacity, and its allocation copies that generation, even across later updates. Inspection, renewal, commands and cleanup use the allocation's original specification and endpoint with the current key; a missing generation never falls back to the current specification. Released generation identifiers stay reserved.
@@ -145,7 +145,19 @@ Every deployment response includes `rollout`:
 - an online node without generation management that enrolled at an older target is `update_required`;
 - otherwise the exact target observation on the current connection and owner epoch gives `ready`, `preparing` or `failed`, and a missing observation gives `unknown`.
 
-A node is online while it is connected under the current owner epoch with a heartbeat in the last 45 seconds. Target rollout is independent of serving readiness: `unknown`, `preparing`, `failed` or `update_required` does not remove an independently confirmed older serving generation. `provider_ready` requires online presence and an exact observation of the serving generation on that connection and epoch; a node without generation management qualifies only its enrolled generation. Pins alone never imply readiness.
+```mermaid
+flowchart TD
+    A{"Online on its current connection?"} -- no --> U["unknown"]
+    A -- yes --> B{"Generation management?"}
+    B -- "no, older target" --> UR["update_required"]
+    B -- otherwise --> C{"Target observation on this connection and epoch"}
+    C -- ready --> R["ready"]
+    C -- preparing --> P["preparing"]
+    C -- failed --> F["failed"]
+    C -- missing --> U
+```
+
+A node is [online](./node-generation-protocol.md#connection) when it is connected under the current owner epoch with a fresh heartbeat. Target rollout is independent of serving readiness: `unknown`, `preparing`, `failed` or `update_required` does not remove an independently confirmed older serving generation. `provider_ready` requires online presence and an exact observation of the serving generation on that connection and epoch; a node without generation management qualifies only its enrolled generation. Pins alone never imply readiness.
 
 Each node adds `rollout: {state, ready_generation, diagnostic?}`, where `ready_generation` is the nullable durable serving pin and `diagnostic` a fixed code for the target generation; allocation items add `deployment_generation`. Poll every five seconds only while `rollout.state` is `preparing` or `reset` is not null; old Sessions and failed, update-required or offline nodes alone do not keep polling active.
 
@@ -161,6 +173,19 @@ To change backend, start a reset:
 
 `clear` is required: `auto` or `force`. `deadline_seconds` applies to `auto`, defaults to 3600 and accepts 300 to 86400; `force` must omit it. Core persists an absolute deadline and the requester's audit provenance before it closes fresh hosted admission, and the execution owner advances the clear after the request ends and across restarts. `auto` archives idle hosted Sessions, including queued or pending work and suspended sandboxes, and waits for root and Subagent Turns that are in progress or waiting and for pending file writes, rechecking under the Session lock. At the persisted deadline it escalates to `force` durably. `force` uses the ordinary archive cancellation and cleanup path for every eligible hosted Session. Self-hosted Sessions are never touched.
 
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> inactive
+    inactive --> auto: POST auto
+    inactive --> force: POST force
+    auto --> force: deadline or POST force
+    auto --> inactive: DELETE
+    force --> inactive: DELETE
+    auto --> unconfigured: no held resources
+    force --> unconfigured: no held resources
+```
+
 Starting again at the same generation and mode keeps the original deadline. `auto` can escalate to `force`, never the reverse. DELETE with the current `expected_generation` cancels the remaining work and reopens admission; it does not undo archives, revive expired Environments or cancel cleanup already requested. DELETE without an active reset is a no-op, and a stale request returns 409.
 
 `reset` is null when inactive, otherwise:
@@ -172,7 +197,7 @@ Starting again at the same generation and mode keeps the original deadline. `aut
                "offline_nodes": [{"node_id": "node-uuid", "name": "worker", "resources": 2}]}}
 ```
 
-One database snapshot partitions every unreleased allocation and every pending hosted Environment without an allocation into `cleanup` first, then `busy` or `idle`, so `busy + idle + cleanup == resources.allocations + resources.pending`. Deleted or expired Sessions with unreleased receipts count as cleanup. `offline_nodes` is the complete, ID-sorted list of offline nodes that hold resources by allocation or active placement, and its sum equals `on_offline_nodes`; presence uses the current owner epoch, connection and a heartbeat within 45 seconds, not provider readiness. Direct E2B resources have no node. Offline resources stay blockers until cleanup confirms their release.
+One database snapshot partitions every unreleased allocation and every pending hosted Environment without an allocation into `cleanup` first, then `busy` or `idle`, so `busy + idle + cleanup == resources.allocations + resources.pending`. Deleted or expired Sessions with unreleased receipts count as cleanup. `offline_nodes` is the complete, ID-sorted list of offline nodes that hold resources by allocation or active placement, and its sum equals `on_offline_nodes`; presence is the [online](./node-generation-protocol.md#connection) test, not provider readiness. Direct E2B resources have no node. Offline resources stay blockers until cleanup confirms their release.
 
 When both held counts reach zero, the owner drains and atomically clears the provider, mode, specification, provider configuration, credential and metadata and provider policy, retires nodes and unused enrollment tokens, increments the generation and owner epoch, and records `reset_complete`. The installation identity and history remain. Core immediately publishes the unconfigured state and keeps the new generation even with no provider, so a delayed load cannot revive the old one. Configure again with POST and the returned generation; no restart is needed.
 

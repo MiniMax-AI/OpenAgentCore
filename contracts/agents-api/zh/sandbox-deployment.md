@@ -1,18 +1,12 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 84fd89164b02406f379720805b6d30b64746b97e5bd322459bffa88496399b91
+source_hash: d33d04510af1786ec0682c4853c961df54e0ce98800674da7735f0797cb55dce
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
 
 本契约负责下列 Core API 路由及其语义。[节点指南](../../../docs/zh/getting-started/nodes.md)负责操作员工作流，[机器连接 API](machine-api.md#node-routes)负责节点调用的路由，[沙箱节点协议](node-generation-protocol.md)负责节点连接。
-
-## 挂起策略 {#suspension-policy}
-
-`PATCH /core/v1/sandbox/deployment` 接受 `{"idle_seconds": 300}`。`idle_seconds` 是必填整数，范围为 30–86400 秒，默认为 300。该设置保存在 Core 的数据库中。只有已配置且声明 checkpoint 支持的提供商可修改；未配置、不支持或正在重置的部署拒绝写入。成功返回当前部署视图，`suspension.idle_seconds` 反映已保存的值。
-
-变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可在空闲 15 秒后提前挂起。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级策略；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
 
 ## 路由 {#routes}
 
@@ -130,6 +124,12 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 不会返回提供商文本或凭据。写入操作及其 `change` 或 `replace_credential` 审计条目共用一个事务。替换操作会短暂对提供商调用设置栅栏，即使调用方已取消，也会等待辅助进程实际退出，并在提交前再次验证；辅助进程退出并不能证明远程 Create 已结算。栅栏和读取均有时间边界，失败时会保留旧密钥和生命周期。成功响应后，所有保留代次管理都使用已提交的密钥；只有在清理完成后，才能在 E2B 中撤销旧密钥，绝不能提前撤销。模板和资源更改不会排空生命周期。
 
+## 挂起策略 {#suspension-policy}
+
+`PATCH /core/v1/sandbox/deployment` 接受 `{"idle_seconds": 300}`。`idle_seconds` 是必填整数，范围为 30–86400 秒，默认为 300。该设置保存在 Core 的数据库中。只有已配置且声明 checkpoint 支持的提供商可修改；未配置、不支持或正在重置的部署拒绝写入。成功返回当前部署视图，`suspension.idle_seconds` 反映已保存的值。
+
+变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可提前挂起空闲的分配。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级策略；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
+
 ## 代次所有权与推出 {#generation-ownership-and-rollout}
 
 `runtime_deployment` 保存当前 specification。被取代的行仅保留不可变的 specification、构建和端点元数据，绝不保留另一个 E2B 密钥。E2B 分配在预留时绑定其代次；节点放置在调度器预留兼容容量时绑定，其分配会复制该代次，即使之后发生更新也是如此。检查、续期、命令和清理使用分配的原始 specification 和端点以及当前密钥；缺失代次绝不会回退到当前 specification。已释放代次的标识仍会保留。
@@ -148,7 +148,19 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 - 不具备代次管理且在较旧目标上注册的在线节点为 `update_required`；
 - 否则，当前连接和所有者 epoch 上的精确目标观测会给出 `ready`、`preparing` 或 `failed`，缺少观测则给出 `unknown`。
 
-节点在当前所有者 epoch 下保持连接，并且最近 45 秒内有心跳时，即为在线。目标推出与服务就绪状态相互独立：`unknown`、`preparing`、`failed` 或 `update_required` 不会移除已独立确认的较旧服务代次。`provider_ready` 要求节点在线，并且在该连接和 epoch 上观测到精确的服务代次；不具备代次管理的节点仅能使其注册时的代次满足此条件。固定状态本身绝不表示就绪。
+```mermaid
+flowchart TD
+    A{"Online on its current connection?"} -- no --> U["unknown"]
+    A -- yes --> B{"Generation management?"}
+    B -- "no, older target" --> UR["update_required"]
+    B -- otherwise --> C{"Target observation on this connection and epoch"}
+    C -- ready --> R["ready"]
+    C -- preparing --> P["preparing"]
+    C -- failed --> F["failed"]
+    C -- missing --> U
+```
+
+节点在当前所有者 epoch 下保持连接且心跳未过期时，即为[在线](node-generation-protocol.md#connection)。目标推出与服务就绪状态相互独立：`unknown`、`preparing`、`failed` 或 `update_required` 不会移除已独立确认的较旧服务代次。`provider_ready` 要求节点在线，并且在该连接和 epoch 上观测到精确的服务代次；不具备代次管理的节点仅能使其注册时的代次满足此条件。固定状态本身绝不表示就绪。
 
 每个节点会添加 `rollout: {state, ready_generation, diagnostic?}`，其中 `ready_generation` 是可为 null 的持久服务固定状态，`diagnostic` 是目标代次的固定代码；分配项会添加 `deployment_generation`。仅当 `rollout.state` 为 `preparing` 或 `reset` 非 null 时，才每五秒轮询一次；旧 Session 以及失败、需要更新或离线的节点本身均不会使轮询保持活动状态。
 
@@ -166,6 +178,19 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 `clear` 必填，可取 `auto` 或 `force`。`deadline_seconds` 适用于 `auto`，默认值为 3600，接受 300 到 86400；`force` 必须省略该字段。在关闭新的托管准入之前，Core 会持久保存绝对截止时间和请求方的审计来源信息；请求结束后以及跨重启时，执行所有者会继续推进清除。在 `auto` 模式下，Core 会归档空闲的托管 Session，包括排队或待处理工作以及已暂停沙箱，并等待正在执行或等待的 root Turn 和 Subagent Turn 以及待处理的文件写入完成，同时在 Session 锁下重新检查。到达持久保存的截止时间时，Core 会持久地将操作升级为 `force`。`force` 会对每个符合条件的托管 Session 使用常规归档取消和清理路径。绝不触碰自托管 Session。
 
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> inactive
+    inactive --> auto: POST auto
+    inactive --> force: POST force
+    auto --> force: deadline or POST force
+    auto --> inactive: DELETE
+    force --> inactive: DELETE
+    auto --> unconfigured: no held resources
+    force --> unconfigured: no held resources
+```
+
 以相同代次和模式再次启动时，会保留原始截止时间。`auto` 可以升级为 `force`，但不能反向升级。使用当前 `expected_generation` 发出 DELETE 会取消剩余工作并重新开放准入；它不会撤销归档、恢复已过期 Environment，也不会取消已经请求的清理。没有活动重置时，DELETE 是无操作；请求过期则返回 409。
 
 未激活时 `reset` 为 null，否则为：
@@ -177,7 +202,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
                "offline_nodes": [{"node_id": "node-uuid", "name": "worker", "resources": 2}]}}
 ```
 
-一个数据库快照会先按 `cleanup`，再按 `busy` 或 `idle`，对每个尚未释放的分配和每个尚未分配沙箱的待处理托管 Environment 进行划分，因此 `busy + idle + cleanup == resources.allocations + resources.pending`。已删除或已过期且具有未释放回执的 Session 计入 cleanup。`offline_nodes` 是通过分配或活动放置持有资源的离线节点的完整列表，并按 ID 排序，其总和等于 `on_offline_nodes`；存在性依据当前所有者 epoch、连接状态以及 45 秒内的心跳判断，而不依据提供商就绪状态。直接 E2B 资源没有节点。离线资源会持续构成阻塞条件，直到清理确认其已释放。
+一个数据库快照会先按 `cleanup`，再按 `busy` 或 `idle`，对每个尚未释放的分配和每个尚未分配沙箱的待处理托管 Environment 进行划分，因此 `busy + idle + cleanup == resources.allocations + resources.pending`。已删除或已过期且具有未释放回执的 Session 计入 cleanup。`offline_nodes` 是通过分配或活动放置持有资源的离线节点的完整列表，并按 ID 排序，其总和等于 `on_offline_nodes`；存在性依据节点是否[在线](node-generation-protocol.md#connection)判断，而不依据提供商就绪状态。直接 E2B 资源没有节点。离线资源会持续构成阻塞条件，直到清理确认其已释放。
 
 当两个占用计数均达到零时，所有者会排空执行，并原子清除提供商、mode、specification、提供商 configuration、credential、metadata 和提供商 policy，停用节点和未使用的注册令牌，递增代次与所有者 epoch，并记录 `reset_complete`。安装身份和历史会保留。Core 会立即发布未配置状态，即使没有提供商也保留新代次，因此延迟加载无法恢复旧配置。使用 POST 和返回的代次即可重新配置，无需重启。
 

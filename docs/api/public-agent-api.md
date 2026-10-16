@@ -542,4 +542,4 @@ A 401 usually means a key from another namespace; see [API namespaces and creden
 
 ## Differences from OpenAI
 
-Core differs from the OpenAI service in some behavior, such as Session creation idempotency and Harness-specific tool support. The [coverage ledger](../../contracts/agents-api/index.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.
+Core differs from the OpenAI service in some behavior, such as Session creation idempotency and Harness-specific tool support. The [OpenAI compatibility](../../contracts/agents-api/index.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.

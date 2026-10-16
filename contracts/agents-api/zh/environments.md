@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 9007be1099cf50f5ba376d2de4a060d039b6ee0b1c13c78a94665c28c2fc3fc6
+source_hash: d25a0d0ec0768d6f46ce4928b574bdab42db6d46782d28a742a380fb8bb365d1
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -37,7 +37,23 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 | [Environment resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environment_info.py) | `pending`、`connected`、`disconnected`、`expired`、`failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agent_session_environment_state.py) | `pending`、`ready`、`connected`、`disconnected`、`failed`，并带可为 null 的 error |
 
-这两套词汇彼此独立；绝不要将其中一套转换为另一套。Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
+这两套词汇彼此独立；绝不要将其中一套转换为另一套。资源状态按下图变化，失败或过期的 Environment 不再改变：
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> connected
+    connected --> disconnected
+    disconnected --> connected
+    pending --> failed
+    connected --> failed
+    disconnected --> failed
+    pending --> expired
+    connected --> expired
+    disconnected --> expired
+```
+
+Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
 Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
 
@@ -119,20 +135,20 @@ Session 输入通过 `POST /agents/sessions/{id}/events` 以每次 1–64 个事
 
 Core 仅在批次已持久接纳后返回 202。对于取消，202 确认的是接纳，而非原生完成或进程退出。在 Session 锁内，重试会先恢复其原始预留或回执，然后由 Core 在活动 Turn 与新预留之间选择，并在后续工作中保持该目标。未加锁的读取或冲突后的重试绝不会选择不同路径。
 
-等待请求使用有界的池化操作，位于事务和执行租约之外；它绝不会准备或启动原生工作。只有此路由会将其响应写入期限延长至六分钟，以涵盖五分钟的数据库期限及响应时间。断开连接会停止等待，但不会取消预留。错误如下：
-
-| 条件 | 响应 |
-| --- | --- |
-| 预留已过期 | 409 `environment_input_expired` |
-| 预留已取消 | 409 `environment_input_cancelled` |
-| 向失败的 `openai_hosted` Environment 提交新输入 | 409 `conflict_error`，"the hosted environment failed to provision" |
-| 向失败或过期的 `self_hosted` Environment 提交新输入，或 Environment 失败时仍在等待的输入 | 409 `environment_unavailable` |
-| 执行所有权丧失 | 503 `execution_unavailable` |
-| Session 已删除 | 404 |
+等待请求使用有界的池化操作，位于事务和执行租约之外；它绝不会准备或启动原生工作。只有此路由会将其响应写入期限延长至六分钟，以涵盖五分钟的数据库期限及响应时间。断开连接会停止等待，但不会取消预留。该请求的全部结果见[输入错误](sessions-events.md#input-errors)。
 
 ### 预留 {#reservations}
 
 预留会在 Turn 接纳之前存储一个规范消息批次，截止时间依据数据库时钟设置为五分钟。
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> admitted: Turn claim
+    pending --> expired: deadline
+    pending --> cancelled: cancellation, archive or reset
+    pending --> failed: preparation failure
+```
 
 - 它要求 Session 带有 Environment，且没有活动工作。预留和直接输入共享 Session 锁和重试标识；pending 或 settled 的 key 不能通过直接接纳绕过其预留。
 - pending 预留会阻止新的直接批次，包括取消；较早成功的重试仍保持可读。
@@ -148,11 +164,9 @@ Core 仅在批次已持久接纳后返回 202。对于取消，202 确认的是�
 
 在 Turn 存在之前，Session 活动来自最近相关的预留和连接状态。离线 `self_hosted` Environment 上的待处理输入会请求 `environment_connection`；连接到达后会将其清除并设为 `idle`，同时 Worker 仍负责原生就绪性和接纳。没有待处理输入的离线 Environment 不会请求任何操作，而 `openai_hosted` 置备也绝不会请求连接。预留或连接变更会在同一事务中提交不可变的 Session 活动和使用量快照；较新的预留或活动 Turn 负责后续活动。已结算的非初始预留会将操作恢复为 `idle`，直至出现较新的工作。
 
-### 过期与调度 {#expiry-and-scheduling}
+### 过期 {#expiry}
 
-Worker 在每个 tick 中最多处理 32 个到期预留，处理顺序是在检查其租约之后、检查设备或执行槽位之前。该扫描使用带事务超时的租约 Store 连接，绝不使用池化写入方。部分截止时间索引和 `SKIP LOCKED` Session 锁使无关工作得以继续。截止点采用语句时间，而结算会在取得 Session 锁后重新检查数据库时钟。重启会在正常 tick 中继续处理过期；不存在单独的调度器。失败的 Turn 绝不能代替 Turn 之前的连接失败。
-
-当已完成的托管分配处于暂停或恢复状态且有下一 Turn 输入处于 pending 时，Core 会向托管 Runtime 维护循环发出提示。初始输入、冷创建、运行中或已禁用的计算资源、终止回执、取消和函数结果、历史及文件操作均不会发送提示。提示采用尽力而为的方式合并且不会阻塞；它们在正常的五秒周期中最多增加一次扫描，绝不会绕过容量、繁忙的生命周期门控或所有权检查。持久化工作和正常 ticker 始终具有权威性。
+Worker 在正常 tick 中处理到期的预留，重启后继续。失败的 Turn 绝不能代替 Turn 之前的连接失败。
 
 ## Runtime 能力准备 {#runtime-capability-preparation}
 
@@ -219,7 +233,7 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 
 每条命令都使用启动用户的权限和主机网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
 
-使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[沙箱提供商生命周期](../../../docs/zh/sandbox-provider.md#suspension)定义何时可以替换计算。
+使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[沙箱提供商协议](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)定义何时可以替换计算。
 
 ### 显式本地工具环境 {#explicit-local-tool-environment}
 
@@ -229,13 +243,22 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 
 Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed`，且独立于任何分配、身份验证和连接发布。
 
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> running
+    running --> complete
+    pending --> failed
+    running --> failed
+```
+
 - Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于提供商维护。
 - 缺少套接字不会消耗一次 pending 尝试。Harness 不可用时，会在安装前失败。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
 - 每个文件、Skill 或 Plugin 传输的暂存预算为两分钟。configure、软件包安装、设置命令和快照最终确定共享整个初始化过程的 30 分钟预算，Core 在每项操作中携带剩余时长，由 Runtime 执行。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
 - 失败对 Session 而言是终止状态，但不会销毁计算资源或文件。
 
-失败时，一个事务会将 Environment 标记为失败，并记录 `agent.session.environment.failed`、一个 `error` 事件和一个 `agent.session.failed`。Session 读取会返回 `failed`、作为 `error` 的原因以及作为 `last_active_at` 的失败时间；实时流会在失败事件后结束。待处理输入以失败状态结算。原因只指明步骤及其退出状态：
+初始化失败时记录的事件和 Session 状态由 [Environment 初始化失败](sessions-events.md#environment-initialization-failure)定义。原因只指明步骤及其退出状态：
 
 | 失败步骤 | 原因 |
 | --- | --- |

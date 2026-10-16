@@ -2,7 +2,7 @@
 title: Workspace filesystem protocol
 ---
 
-The workspace filesystem protocol connects Core and sandbox nodes to the adapter that owns durable Environment storage. Core creates, observes and deletes storage objects; a node resolves an object to a host directory that its [Sandbox Provider](sandbox-provider.md) attaches to compute. It is for authors of filesystem adapters and Sandbox Providers.
+The workspace filesystem protocol connects Core and sandbox nodes to the adapter that owns durable Environment storage. Core creates, observes and deletes storage objects; a node resolves an object to a host directory that its [Sandbox Provider protocol](sandbox-provider.md) attaches to compute. It is for authors of filesystem adapters and Sandbox Providers.
 
 | | |
 | --- | --- |

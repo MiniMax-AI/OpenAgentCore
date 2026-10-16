@@ -1,6 +1,6 @@
 # E2B Sandbox Provider helper
 
-Core's E2B Sandbox Provider ([`sandbox/e2b`](../../internal/sandbox/e2b)) is a pure-Go adapter that runs this one-shot Python helper for each lifecycle and read operation. The helper uses the official E2B Python SDK 2.51.0 ([`requirements.lock`](requirements.lock)); it implements no provider HTTP, envd RPC, scheduler or network service. E2B uses direct placement: there is no node, and each sandbox's daemon connects to Core over the public URL. Runtime execution and Files use that daemon connection. [Add a Sandbox Provider](../../../../docs/sandbox-provider.md) owns the provider contract this adapter implements.
+Core's E2B Sandbox Provider ([`sandbox/e2b`](../../internal/sandbox/e2b)) is a pure-Go adapter that runs this one-shot Python helper for each lifecycle and read operation. The helper uses the official E2B Python SDK 2.51.0 ([`requirements.lock`](requirements.lock)); it implements no provider HTTP, envd RPC, scheduler or network service. E2B uses direct placement: there is no node, and each sandbox's daemon connects to Core over the public URL. Runtime execution and Files use that daemon connection. [Sandbox Provider protocol](../../../../docs/sandbox-provider.md) owns the provider contract this adapter implements.
 
 ## Deployment
 

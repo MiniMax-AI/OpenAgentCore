@@ -22,7 +22,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 | Harness capabilities by placement | [Harness capabilities](contracts/agents-api/harness-capabilities.md) |
 | Harness selection, model providers and native parameters | [Model execution](contracts/agents-api/model-execution.md) |
 | Independent workspace filesystem protocol and adapter behavior | [Workspace filesystem protocol](docs/workspace-provider.md) |
-| Provider registration and lifecycle | [Sandbox Provider guide](docs/sandbox-provider.md) |
+| Provider registration and lifecycle | [Sandbox Provider protocol](docs/sandbox-provider.md) |
 | Sandbox deployment, selection and administrative transitions | [Sandbox deployment](contracts/agents-api/sandbox-deployment.md) |
 | Operator node tasks | [Nodes guide](docs/getting-started/nodes.md) |
 | Codex, Claude and MiniMax Runtime adapters and images | [Codex](services/core/deploy/codex/README.md), [Claude](services/core/deploy/claude/README.md), [MiniMax](services/core/deploy/mcode/README.md) |
@@ -131,7 +131,7 @@ Use official SDKs and upstream types or schemas. Validate raw HTTP payloads and 
 
 Controlled fixtures and synthetic model responses qualify deterministic behavior. Live acceptance calls a real model API through Core, the daemon and the Harness adapter. Direct native probes establish feasibility only. Keep provider credentials in private test configuration, outside source, logs and task records.
 
-For wire details the pinned SDK does not specify, probe resources you own and retain the request evidence. In the [coverage ledger](contracts/agents-api/index.md), keep observed behavior distinct from guarantees, accepted profiles distinct from complete coverage, and provider connectivity distinct from deployment qualification.
+For wire details the pinned SDK does not specify, probe resources you own and retain the request evidence. In the [OpenAI compatibility](contracts/agents-api/index.md), keep observed behavior distinct from guarantees, accepted profiles distinct from complete coverage, and provider connectivity distinct from deployment qualification.
 
 ### Live acceptance
 
