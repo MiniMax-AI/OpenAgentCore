@@ -4,15 +4,56 @@
 
 # OpenAgentCore
 
-複数のネイティブ実行エンジンに対応し、自分のインフラにデプロイできる OpenAI Agents API のオープンソース実装です。
+オープンソースでセルフホストできる OpenAI Agents API。公式 OpenAI SDK から、自分のマシンと自分のモデルで Codex、Claude Code、MiniMax Code を実行できます。
 
-[公式サイト](https://openagentcore.dev/) · [インストール](#インストール) · [API を使う](https://openagentcore.dev/docs/getting-started/quickstart) · [ドキュメント](https://openagentcore.dev/docs/getting-started/) · [コントリビューション](CONTRIBUTING.md)
+[![Release](https://img.shields.io/github/v/release/MiniMax-AI/OpenAgentCore)](https://github.com/MiniMax-AI/OpenAgentCore/releases/latest) [![License](https://img.shields.io/github/license/MiniMax-AI/OpenAgentCore)](LICENSE)
+
+[公式サイト](https://openagentcore.dev/) · [ドキュメント](https://openagentcore.dev/docs/getting-started/) · [クイックスタート](#クイックスタート) · [コントリビューション](CONTRIBUTING.md)
 
 [English](README.md) · [简体中文](README.zh-CN.md) · **日本語**
 
 </div>
 
-## コンポーネントの関係
+- **OpenAI と同じ API。** `OPENAI_BASE_URL` を設定すれば、[公式 OpenAI SDK](https://developers.openai.com/api/docs/libraries)または直接の HTTP リクエストがそのまま動作します。
+- **自分のエージェント、自分のモデル。** 各 Session は Codex、Claude Code、MiniMax Code のいずれかをネイティブに実行し、設定したモデルプロバイダーを使用します。詳しくは [Harness の機能](https://openagentcore.dev/contracts/agents-api/harness-capabilities)をご覧ください。
+- **計算資源は休止し、ワークスペースは残る。** microsandbox と独立したワークスペースストレージの組み合わせでは、アイドル状態のサンドボックスが計算資源を解放し、互換性のあるノードでファイルをそのまま再開します。E2B、Docker、自分の Linux、macOS、Windows マシンでも Session を実行できます。詳しくは[サンドボックスプロバイダーの追加](https://openagentcore.dev/docs/sandbox-provider)をご覧ください。
+- **置き換え可能なコンポーネント。** サンドボックスプロバイダー、ワークスペースファイルシステム、Harness、モデルプロバイダーは、[定義されたプロトコル](AGENTS.md#protocols-at-every-boundary)を通じて接続されます。
+
+![デプロイの概要](docs/assets/console-overview-en.webp)
+
+## クイックスタート
+
+[前提条件](https://openagentcore.dev/docs/getting-started/install#prerequisites)に従って Docker をセットアップした Linux または macOS で、Core、Web、PostgreSQL をインストールします。
+
+```sh
+curl -fsSL https://openagentcore.dev/install.sh | bash
+```
+
+Windows では PowerShell で実行します。
+
+```powershell
+irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
+```
+
+Web で、インストーラーが表示する Core key でサインインし、パブリックアドレスを設定し、デフォルトモデルを設定し、Project API key を発行して、サンドボックスの容量（ノードまたは E2B）を追加します。各手順は[Core と Web のインストール](https://openagentcore.dev/docs/getting-started/install)をご覧ください。
+
+続いて OpenAI SDK から呼び出します。`OPENAI_BASE_URL` に API のベース URL（`https://core.example/v1`）、`OPENAI_API_KEY` に Project API key を設定してください。
+
+```python
+from openai import OpenAI
+
+client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
+session = client.beta.agents.sessions.create(
+    environment={"type": "openai_hosted"},
+    input="Create /workspace/hello.txt with a short greeting, then describe it.",
+    extra_body={"agent": {"x_agents_core": {"harness": "codex"}}},
+)
+print(session.id)
+```
+
+[最初の Session を実行](https://openagentcore.dev/docs/getting-started/quickstart)では、結果を待って読み戻します。
+
+## 仕組み
 
 ![OpenAgentCore のアーキテクチャ](docs/assets/architecture.svg)
 
@@ -23,56 +64,21 @@
 | **[Agents API](https://openagentcore.dev/docs/api/public-agent-api)** | `/v1` | アプリケーション。[OpenAI の Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) と同じプロトコルを使用 |
 | **[Core API](https://openagentcore.dev/contracts/agents-api/admin-api)** | `/core/v1` | 管理者。Web 経由で利用 |
 
-Core は実行状態を永続化し、Runtime は Environment 内で選択した Harness を実行します。各コンポーネントは定義されたプロトコルで接続されているため、個別に置き換えられます。詳しくは[アーキテクチャガイド](https://openagentcore.dev/docs/architecture)をご覧ください。
-
-## OpenAgentCore とは
-
-OpenAgentCore は、自分のインフラ上で AI エージェントを実行し、[OpenAI Agents API](https://developers.openai.com/api/docs/guides/agents-api/overview) を提供します。
-
-- **OpenAI と同じ API。** [公式 OpenAI SDK](https://developers.openai.com/api/docs/guides/agents/sdk) または直接の HTTP リクエストで、接続先を変更するだけで利用できます。新しいクライアントを覚える必要はありません。
-- **エージェントを選択可能。** 各 [Session](https://openagentcore.dev/docs/api/public-agent-api) は、[Codex](https://github.com/openai/codex)、[Claude Code](https://code.claude.com/docs/en/overview)、[MiniMax Code](https://github.com/MiniMax-AI/minimax-code) のいずれかの[ネイティブ Harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding) を実行し、[設定したモデルプロバイダー](https://openagentcore.dev/contracts/agents-api/model-execution)を使用します。
-- **計算資源を再利用し、ワークスペースを永続化。** [microsandbox](https://github.com/zerocore-ai/microsandbox) と[独立したワークスペースストレージ](https://openagentcore.dev/docs/workspace-provider)の組み合わせを推奨します。アイドル状態のサンドボックスは休止して計算資源を解放し、互換性のあるノードで再開できます。[E2B](https://e2b.dev/) はマネージド環境の選択肢です。Docker や自分の Linux、macOS、Windows マシンでの実行もサポートします。
-- **すべてのコンポーネントを置き換え可能。** [サンドボックス](https://openagentcore.dev/docs/sandbox-provider)、[ワークスペースファイルシステム](https://openagentcore.dev/docs/workspace-provider)、[Harness](https://openagentcore.dev/contracts/agents-api/harness-onboarding)、[モデルプロバイダー](https://openagentcore.dev/contracts/agents-api/model-execution)は、[定義されたプロトコル](AGENTS.md#protocols-at-every-boundary)を通じて接続されます。
-
-## スクリーンショット
-
-| 概要 | エージェントの監視 |
-| --- | --- |
-| ![デプロイの概要](docs/assets/console-overview-en.webp) | ![エージェントの監視](docs/assets/console-agent-metrics-en.webp) |
-
-## インストール
-
-[前提条件](https://openagentcore.dev/docs/getting-started/install#prerequisites)に従って Docker をセットアップした Linux または macOS で、次のコマンドを実行します。
-
-```sh
-curl -fsSL https://openagentcore.dev/install.sh | bash
-```
-
-Windows PowerShell の場合：
-
-```powershell
-irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
-```
-
-続いて、以下の手順で設定します。
-
-1. インストーラーが生成した Core key で **Web（管理コンソール）にサインイン**し、**ドメインと HTTPS を設定**します。
-2. **デフォルトモデルを設定**し、**Project API key を発行**します。
-3. ノード、E2B、または自分のマシンを**実行リソースとして追加**します。
-4. OpenAI SDK で **[最初の Session を実行](https://openagentcore.dev/docs/getting-started/quickstart)** します。
-
-[インストールガイド](https://openagentcore.dev/docs/getting-started/install)では、各手順に加え、HTTPS の設定とローカルで手軽に試す方法を説明しています。リッスンアドレスやポートなどの設定は、[インストールオプション](https://openagentcore.dev/docs/getting-started/install-options)をご覧ください。
+Core は実行状態を永続化し、Runtime は Environment 内で選択した Harness を実行します。各コンポーネントは定義されたプロトコルで接続されているため、個別に置き換えられます。詳しくは[アーキテクチャ](https://openagentcore.dev/docs/architecture)をご覧ください。
 
 ## ドキュメント
 
 | 目的 | 参照先 |
 | --- | --- |
-| インストールと運用 | [インストールガイド](https://openagentcore.dev/docs/getting-started/install)、続いて[運用ガイド](https://openagentcore.dev/docs/getting-started/operations) |
-| API を使ったアプリケーション開発 | [クイックスタート](https://openagentcore.dev/docs/getting-started/quickstart)、続いて [Agents API ガイド](https://openagentcore.dev/docs/api/public-agent-api) |
+| インストールと運用 | [Core と Web のインストール](https://openagentcore.dev/docs/getting-started/install)、続いて[運用](https://openagentcore.dev/docs/getting-started/operations) |
+| API を使ったアプリケーション開発 | [最初の Session を実行](https://openagentcore.dev/docs/getting-started/quickstart)、続いて [Agents API ガイド](https://openagentcore.dev/docs/api/public-agent-api) |
 | 完成したアプリケーションの確認 | [サンプル](https://openagentcore.dev/docs/examples) |
 | 自分のマシンでエージェントを実行 | [セルフホスト実行](https://openagentcore.dev/docs/getting-started/self-hosted) |
 | Harness の機能と制限の確認 | [Harness の機能](https://openagentcore.dev/contracts/agents-api/harness-capabilities) |
-| 設計の理解 | [アーキテクチャガイド](https://openagentcore.dev/docs/architecture) |
-| 新しいサンドボックス、Harness などのコンポーネントの追加 | [開発ガイド](https://openagentcore.dev/docs/development) |
+| 設計の理解 | [アーキテクチャ](https://openagentcore.dev/docs/architecture) |
+| 新しいサンドボックス、Harness などのコンポーネントの追加 | [OpenAgentCore の開発](https://openagentcore.dev/docs/development) |
+| すべてのページの一覧 | [llms.txt](https://openagentcore.dev/llms.txt) |
 
-すべてのドキュメントは[ドキュメント一覧](https://openagentcore.dev/docs/getting-started/)から参照できます。コードを変更する前に、[コントリビューションガイド](CONTRIBUTING.md)をお読みください。
+## コントリビューションとライセンス
+
+コードを変更する前に [CONTRIBUTING.md](CONTRIBUTING.md) をお読みください。バグ報告と質問は [GitHub Issues](https://github.com/MiniMax-AI/OpenAgentCore/issues) へお寄せください。[MIT License](LICENSE) で公開しています。
