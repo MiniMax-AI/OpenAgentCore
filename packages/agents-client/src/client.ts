@@ -1211,6 +1211,8 @@ async function consumeEventStream(
   const text = new TextDecoder();
   let sawEvent = false;
   const decoder = createSSEDecoder((message) => {
+    // One network chunk can hold several events; a callback may abort between them.
+    options.signal?.throwIfAborted();
     if (message.data.trim() === "[DONE]") return;
     const event = parseStreamEvent(message);
     sawEvent = true;
