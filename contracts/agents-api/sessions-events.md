@@ -32,9 +32,10 @@ stateDiagram-v2
     idle --> requires_action: input waits for a self_hosted machine
     in_progress --> requires_action: function call waits for a result
     requires_action --> in_progress: result submitted or machine connected
+    requires_action --> idle: Turn cancelled
     in_progress --> idle: Turn completed or cancelled
     in_progress --> failed: Turn failed
-    idle --> failed: reserved input expired or Environment failed
+    idle --> failed: initial input expired or Environment failed
     failed --> in_progress: new input starts a Turn
 ```
 

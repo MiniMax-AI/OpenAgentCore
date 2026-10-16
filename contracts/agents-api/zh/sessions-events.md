@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 728aa5fc9e2aacd4e61d4747c78aece5d90191b6f299191c3e4f12020954dbfb
+source_hash: 5458554e547d39b9c3104281358476368162ac4da010449c2097e407dfa887c3
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -34,9 +34,10 @@ stateDiagram-v2
     idle --> requires_action: input waits for a self_hosted machine
     in_progress --> requires_action: function call waits for a result
     requires_action --> in_progress: result submitted or machine connected
+    requires_action --> idle: Turn cancelled
     in_progress --> idle: Turn completed or cancelled
     in_progress --> failed: Turn failed
-    idle --> failed: reserved input expired or Environment failed
+    idle --> failed: initial input expired or Environment failed
     failed --> in_progress: new input starts a Turn
 ```
 
