@@ -25,7 +25,7 @@ flowchart LR
   core <--> database
 ```
 
-The deployment's reverse proxy sends every path to the console. The console forwards `/v1`, `/api/v1` and `/docs` to Core and serves everything else itself; the [installation options](../getting-started/install-options.md#https-and-the-reverse-proxy) gives the proxy requirements. The console handles each path as follows:
+The deployment's reverse proxy sends every path to the console. The console forwards `/v1`, `/api/v1` and `/docs` to Core and serves everything else itself; [Configure the public address](../getting-started/public-address.md#https-and-the-reverse-proxy) gives the proxy requirements. The console handles each path as follows:
 
 | Path | Sign-in | Handling |
 | --- | --- | --- |
@@ -110,4 +110,4 @@ After installing or changing the console, check:
 4. A cross-origin write to the console is rejected, and a forged `X-Core-Console-Actor` header does not change the audit label.
 5. Neither sign-in nor the sandbox deployment read (`GET /core/v1/sandbox/deployment`) proves that a model or a sandbox is ready. Runtime observations and history report execution separately.
 
-A sign-in failure belongs to the console. A 401 from Core on a signed-in request means the console's Core key does not match Core's digest, or the console reaches the wrong Core. The [troubleshooting table](../getting-started/operations.md#troubleshooting) covers the common symptoms.
+A sign-in failure belongs to the console. A 401 from Core on a signed-in request means the console's Core key does not match Core's digest, or the console reaches the wrong Core. [Troubleshooting](../getting-started/troubleshooting.md#web-and-api-access) covers the common symptoms.

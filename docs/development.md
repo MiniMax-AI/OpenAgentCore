@@ -70,23 +70,11 @@ python3 "$bundle/install.py" \
   --public-url http://YOUR_CORE_HOST:8080
 ```
 
-Replace `YOUR_CORE_HOST` with an address reachable by your browser and sandbox nodes. Use your HTTPS origin behind a reverse proxy when needed; [installation options](./getting-started/install-options.md) owns ingress configuration. A new installation prints the Core key for signing in; a rerun prints the command that shows it. It creates the standard Compose installation plus a read-only `node-payload` directory containing the bundle's public node artifacts. Allow disk space for both the extracted bundle and this installed copy. No Docker socket is passed to Core or Web.
-
-The build also creates `oac-<commit>-linux-amd64-offline.tar.gz`. Copy and extract that archive on another Linux amd64 Docker host, then run its `install.py`; no checkout, Go, Node or pnpm is needed on that host, only Python 3.9+ and Docker. Keep the extracted bundle until installation completes. The installed services and node downloads do not depend on its original location afterward.
+Replace `YOUR_CORE_HOST` with an address reachable by your browser and sandbox nodes. [Installation options](./getting-started/install-options.md#offline-hosts) describes the `install.py` options, reruns and recovery. The build also creates `oac-<commit>-linux-amd64-offline.tar.gz` for installing on another Linux amd64 Docker host.
 
 In Web, configure a model provider, create a sandbox deployment and add nodes with the command shown in [Nodes](./getting-started/nodes.md). Node prerequisites still apply, including KVM for microsandbox. The command downloads the matching execution artifacts directly from this installation. This path builds all three managed Harnesses; optional self-hosted native installers are unavailable unless you supply their [native installer catalog](./maintainers.md#native-installers). It does not create a placeholder catalog.
 
-For a startup failure or a stopped installation, use the saved configuration instead of reinstalling:
-
-```sh
-cd "$HOME/.oac/local"
-docker compose logs --tail 100
-# Retry without downloading release images or replacing saved configuration.
-docker compose up -d --wait --pull never
-./oac core-key --show
-```
-
-Rerunning the same bundle's `install.py` on its installation directory resumes the installation with the saved settings; `--public-url` is required only for a new directory. A bundle from another commit refuses an existing installation unless you pass `--upgrade`, which [upgrades it in place](./getting-started/operations.md#upgrade). If a new installation fails before it starts the services, it leaves the installation directory as it found it; fix the cause and rerun the same command. Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services.
+Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services.
 
 ## Build and run components
 

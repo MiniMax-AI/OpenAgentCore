@@ -1,7 +1,7 @@
 ---
 title: 工作区文件系统协议
 source: docs/workspace-provider.md
-source_hash: dd42ae9d7ae231ac69b7b3c16abfde13b96a08833572395640018f5ef57da1cd
+source_hash: 7d20a39d5ea33ae1874c4aee79257b4e80bd806727375b9664535c0172dc102d
 ---
 
 工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建、观察和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
@@ -117,7 +117,7 @@ Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解�
 
 ### 配额模式 {#quota-mode}
 
-配额模式通过 NFS 服务端自身文件系统强制执行的 XFS project quota 为每个对象设定上限。`quota` 精确包含 `endpoint`（存储服务器 SSH 服务的 `host:port`）、`user`（受限账户）和 `host_key`（以 authorized-key 格式固定的服务器 OpenSSH 公共主机密钥；注释会被丢弃）。凭据为 `{"ssh_private_key": "..."}`，即一个未加密的 OpenSSH 私钥，服务器仅为 `oac-workspace-quota` 强制命令授权其公钥。服务器准备工作由[配置文档](configuration.md#quota-mode-storage-server)负责。
+配额模式通过 NFS 服务端自身文件系统强制执行的 XFS project quota 为每个对象设定上限。`quota` 精确包含 `endpoint`（存储服务器 SSH 服务的 `host:port`）、`user`（受限账户）和 `host_key`（以 authorized-key 格式固定的服务器 OpenSSH 公共主机密钥；注释会被丢弃）。凭据为 `{"ssh_private_key": "..."}`，即一个未加密的 OpenSSH 私钥，服务器仅为 `oac-workspace-quota` 强制命令授权其公钥。服务器准备工作由[设置工作区存储](getting-started/workspace-storage.md#quota-mode-storage-server)负责。
 
 对于正容量，`Create` 在认领标识并创建对象空的 `staging/` 和 `trash/` 之后、创建任何 stage 或返回现有 `live` 对象之前调用该命令，因此每次重试都会重新验证上限。请求携带完整引用、配置 ID、命名空间 ID、容量以及每 MiB 256 个的 inode 上限；请求无法指定任何路径、project ID、用户或命令。客户端验证固定的主机密钥，仅在内存中保存私钥，每次调用使用一个有界会话。请求发送前失败为 `ErrUnavailable`；发送后缺少或无法解析应答为 `ErrUnconfirmed`，同一引用在重试时收敛。`Check` 同样调用该命令，在选择前证明可达性、主机密钥、命名空间标记、日志库和强制执行状态。
 

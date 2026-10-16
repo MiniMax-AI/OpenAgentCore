@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: 3516f7088aadb05c19a61187a3c66fcf39503c24635b38509349d05eecf06623
+source_hash: 3636bfa078276bfaf7a7449ce8cbc71ad3ebc10c8e1752c84203093a9f1b4a2f
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -72,23 +72,11 @@ python3 "$bundle/install.py" \
   --public-url http://YOUR_CORE_HOST:8080
 ```
 
-将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。需要时使用反向代理后的 HTTPS 地址；入口配置见[安装选项](getting-started/install-options.md)。新安装会输出用于登录的 Core 密钥；重新运行时输出显示该密钥的命令。它创建标准 Compose 安装，以及包含该构建公共节点制品的只读 `node-payload` 目录。磁盘需同时容纳解压后的构建包和安装副本。Core、Web 均不会获得 Docker socket。
-
-构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`。可将其复制到另一台 Linux amd64 Docker 主机，解压后执行其中的 `install.py`；目标主机只需要 Python 3.9+ 和 Docker，无需源码、Go、Node 或 pnpm。安装完成前保留解压目录；安装后的服务和节点下载不再依赖它的原始位置。
+将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。[安装选项](getting-started/install-options.md#offline-hosts)说明 `install.py` 的选项、重新运行和恢复。构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`，用于在另一台 Linux amd64 Docker 主机上安装。
 
 在 Web 中配置模型提供商，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装器目录](maintainers.md#native-installers)，否则可选的自托管原生安装器不可用，不会生成占位目录。
 
-启动失败或安装已停止时，使用保存的配置，而不是重新安装：
-
-```sh
-cd "$HOME/.oac/local"
-docker compose logs --tail 100
-# Retry without downloading release images or replacing saved configuration.
-docker compose up -d --wait --pull never
-./oac core-key --show
-```
-
-对安装目录重新运行同一源码包的 `install.py`，会以已保存的设置继续该安装；只有新目录才需要 `--public-url`。其他提交的源码包会拒绝已有安装，除非传入 `--upgrade`，此时会[原地升级](getting-started/operations.md#upgrade)该安装。新安装若在启动服务之前失败，安装目录会保持运行前的状态；修复原因后重新运行同一命令即可。配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
+配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
 
 ## 构建与运行组件 {#build-and-run-components}
 
