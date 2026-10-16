@@ -21,7 +21,7 @@ function Invoke-WebRequest {
 # A failure writes one error and sets a non-zero exit code; the session stays open.
 function Assert-Failure([string]$Pattern, [string[]]$Arguments = @('--help')) {
     $global:LASTEXITCODE = 0
-    $output = (& "$PSScriptRoot/install.ps1" @Arguments 2>&1 | Out-String)
+    $output = (& "$PSScriptRoot/install.ps1" @Arguments *>&1 | Out-String)
     if ($LASTEXITCODE -eq 0 -or $output -notlike $Pattern) { throw "Expected a failure matching $Pattern, got exit $LASTEXITCODE`: $output" }
 }
 & "$PSScriptRoot/install.ps1" --help
@@ -35,5 +35,5 @@ Assert-Failure '*Missing release tag*' @('--version')
 $testAssets.Status = 404
 Assert-Failure '*Release v9.9.9 not found*' @('--version=v9.9.9')
 $testAssets.Status = 503
-Assert-Failure '*Check the network*'
+Assert-Failure '*retrying (2/5)...*Check the network*'
 exit 0

@@ -11,6 +11,7 @@
             try { Invoke-WebRequest -UseBasicParsing -Uri "$base/$name" -OutFile (Join-Path $directory $name); return }
             catch {
                 if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { throw "Release $version not found." }
+                if ($attempt -lt 5) { Write-Host "Download interrupted; retrying ($($attempt + 1)/5)..." }
                 Start-Sleep -Seconds 3
             }
         }

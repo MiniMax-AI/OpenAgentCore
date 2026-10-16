@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 5589a96a188bc9d778f5bebf8cab78db7f9fbebffb1656a0b91001ac05f31d95
+source_hash: 9ca5e983c99230810d97f783db12c2810e3f20cd0a67ae38004ee399a684eddd
 ---
 
 一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发项目 API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
@@ -59,7 +59,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 
 安装器会打印控制台地址；仅在全新安装时打印 Core 密钥，重新运行或升级则打印 `oac core-key --show`。控制台地址由安装器自行选定时，它还会提示浏览器必须打开的确切地址，以及如何用 `OAC_PUBLIC_URL` 修改。登录后，在 Web 中配置执行资源并创建项目。
 
-安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据。被拒绝的设置或数据卷会单独报告，按提示修复即可。服务三分钟内未变为健康时，会列出这些服务和查看其日志的 `docker compose logs --tail 50` 命令；修复原因后重新执行同一命令。按 Ctrl-C 会打印 `Interrupted; rerun the installer to continue.`，安装保持可继续的状态。重新执行同一命令，或指定安装目录即可继续：
+安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据。被拒绝的设置或数据卷会单独报告，按提示修复即可。服务三分钟内未变为健康时，会列出这些服务和查看其日志的 `docker compose logs --tail 50` 命令；修复原因后重新执行同一命令。按 Ctrl-C 会打印 `Interrupted; rerun the installer to continue.`，安装保持可继续的状态。在 Linux 和 macOS 上，启动脚本把未完成的 `oac` 下载保存在 `${TMPDIR:-/tmp}/oac-install-<uid>`，重新执行时从断点继续；若 curl 报错且没有安装任何内容，重新执行同一命令即可。重新执行同一命令，或指定安装目录即可继续：
 
 ```bash
 curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
