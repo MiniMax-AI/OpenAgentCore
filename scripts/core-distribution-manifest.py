@@ -42,8 +42,12 @@ BUNDLED_DOCS = (
     "docs/getting-started/install-options.md",
     "docs/getting-started/nodes.md",
     "docs/getting-started/operations.md",
+    "docs/getting-started/public-address.md",
     "docs/getting-started/quickstart.md",
+    "docs/getting-started/sandbox-backends.md",
     "docs/getting-started/self-hosted.md",
+    "docs/getting-started/troubleshooting.md",
+    "docs/getting-started/workspace-storage.md",
     "contracts/agents-api/environment-executor-credentials.md",
 )
 # Files the bundled docs show, copied as they are, so they work offline.

@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 993473f539d1c78c5cfbccb112f3594d570b2898a1e324f8b14010ae6be338be
+source_hash: 2c91ae75c201e043ad59cddaacc19fb55789e4186b9b2c7348fc004dea47b5d9
 ---
 
 控制台服务器（`services/web`、`oac-web` 进程）提供构建后的控制台，使用 Core 密钥认证管理员，并将已登录浏览器的 `/core/v1` 请求携带该密钥转发到 Core。浏览器不持有 Core 密钥或任何 API 密钥。应用、节点和自托管执行器经控制台到达 Core，控制台原样转发 `/v1`、`/api/v1` 和 `/docs`。
@@ -27,7 +27,7 @@ flowchart LR
   core <--> database
 ```
 
-部署的反向代理把所有路径发给控制台。控制台把 `/v1`、`/api/v1` 和 `/docs` 转发到 Core，其余由自己提供；[安装选项](../getting-started/install-options.md#https-and-the-reverse-proxy)列出对反向代理的要求。控制台按如下方式处理路径：
+部署的反向代理把所有路径发给控制台。控制台把 `/v1`、`/api/v1` 和 `/docs` 转发到 Core，其余由自己提供；[配置公开地址](../getting-started/public-address.md#https-and-the-reverse-proxy)列出对反向代理的要求。控制台按如下方式处理路径：
 
 | 路径 | 需要登录 | 处理方式 |
 | --- | --- | --- |
@@ -112,4 +112,4 @@ flowchart LR
 4. 跨来源控制台写入被拒绝，伪造 `X-Core-Console-Actor` 请求头不会改变审计标签。
 5. 登录成功或读取沙箱部署（`GET /core/v1/sandbox/deployment`）均不能证明模型或沙箱就绪。Runtime 观察与历史独立报告执行情况。
 
-登录失败属于控制台问题。已登录请求收到 Core 的 401，表示控制台 Core 密钥不匹配 Core 摘要，或控制台访问了错误的 Core。[问题排查表](../getting-started/operations.md#troubleshooting)覆盖常见症状。
+登录失败属于控制台问题。已登录请求收到 Core 的 401，表示控制台 Core 密钥不匹配 Core 摘要，或控制台访问了错误的 Core。[故障排查](../getting-started/troubleshooting.md#web-and-api-access)覆盖常见症状。

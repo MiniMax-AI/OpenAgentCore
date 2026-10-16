@@ -33,7 +33,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 
 | Task | Where |
 | --- | --- |
-| Give the installation an HTTPS address | Set `OAC_PUBLIC_URL` and point a reverse proxy at Web; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
+| Give the installation an HTTPS address | Set `OAC_PUBLIC_URL` and point a reverse proxy at Web; see [Configure the public address](../getting-started/public-address.md) |
 | Choose the sandbox backend (microsandbox, E2B or Docker), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | Add, resize or remove execution nodes | **Nodes**: **Add node**, **Edit node** and removal; see the [nodes guide](../getting-started/nodes.md) |
 | Set the default model of a Harness | **Settings → Models and credentials**; see [default models](../configuration.md#default-models) |
