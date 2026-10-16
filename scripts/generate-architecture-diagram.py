@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draw the README architecture diagram, docs/assets/architecture.svg.
+"""Draw the architecture diagram, docs/assets/architecture.svg and architecture-dark.svg.
 
 Edit the layout below and run this script; never edit the SVG by hand. The SVG
 embeds IBM Plex Sans from Web's @fontsource dependency, so GitHub and the
@@ -14,7 +14,7 @@ import struct
 import zlib
 
 ROOT = Path(__file__).resolve().parent.parent
-OUTPUT = ROOT / "docs/assets/architecture.svg"
+ASSETS = ROOT / "docs/assets"
 FONTS = ROOT / "apps/web/node_modules/@fontsource/ibm-plex-sans/files"
 WIDTH, HEIGHT = 1560, 1270
 
@@ -31,25 +31,61 @@ PILL_HEIGHT, PILL_PADDING = 22, 22
 RADIUS = {"canvas": 18, "region": 10, "card": 7, "pill": 11}
 
 # Colors follow the README banner: sand control plane, sea-mist compute,
-# sunlit E2B, olive user machine and stone storage.
-CSS = """
-.canvas{fill:#f9f5ee}
-.region{stroke-width:1.2}
-.control{fill:#f3eadb;stroke:#d5be97}.control+g .band{fill:#ece0ca}
-.compute{fill:#e9eff0;stroke:#a6bdc3}.compute+g .band{fill:#dce7e9}
-.sandbox{fill:#f7fafa;stroke:#6f929d}.sandbox+g .band{fill:#e8f0f1}
-.managed{fill:#fbf1de;stroke:#d6a457;stroke-dasharray:6 5}.managed+g .band{fill:#f6e5c4}
-.user{fill:#eef0e4;stroke:#b0b68b}.user+g .band{fill:#e3e7d3}
-.storage{fill:#f1ebe2;stroke:#bfaa8e}.storage+g .band{fill:#e8dfd1}
-.external{fill:#f4f2ee;stroke:#cbc3b7}.external+g .band{fill:#ebe7e0}
-.sep{stroke:rgba(60,48,30,.14);stroke-width:1}
-.card{fill:#fffdf9;stroke:#dcd2c3;stroke-width:1}
-.rt,.t1{fill:#1f1c17}.rs,.t2,.lg{fill:#675e51}
-.pill rect{fill:#24211c}.pl{fill:#f7f1e6}
-.line{fill:none;stroke:#5b5346;stroke-width:1.4}.dash{stroke-dasharray:6 5}
-.arrow,.dot{fill:#5b5346}
-text{text-rendering:geometricPrecision;font-kerning:normal}
+# sunlit E2B, olive user machine and stone storage. The dark variant uses the
+# website's dark palette. Both paint the same shapes.
+def palette(c):
+    return f"""
+.canvas{{fill:{c['canvas']}}}
+.region{{stroke-width:1.2}}
+.control{{fill:{c['control'][0]};stroke:{c['control'][1]}}}.control+g .band{{fill:{c['control'][2]}}}
+.compute{{fill:{c['compute'][0]};stroke:{c['compute'][1]}}}.compute+g .band{{fill:{c['compute'][2]}}}
+.sandbox{{fill:{c['sandbox'][0]};stroke:{c['sandbox'][1]}}}.sandbox+g .band{{fill:{c['sandbox'][2]}}}
+.managed{{fill:{c['managed'][0]};stroke:{c['managed'][1]};stroke-dasharray:6 5}}.managed+g .band{{fill:{c['managed'][2]}}}
+.user{{fill:{c['user'][0]};stroke:{c['user'][1]}}}.user+g .band{{fill:{c['user'][2]}}}
+.storage{{fill:{c['storage'][0]};stroke:{c['storage'][1]}}}.storage+g .band{{fill:{c['storage'][2]}}}
+.external{{fill:{c['external'][0]};stroke:{c['external'][1]}}}.external+g .band{{fill:{c['external'][2]}}}
+.sep{{stroke:{c['sep']};stroke-width:1}}
+.card{{fill:{c['card'][0]};stroke:{c['card'][1]};stroke-width:1}}
+.rt,.t1{{fill:{c['ink']}}}.rs,.t2,.lg{{fill:{c['ink2']}}}
+.pill rect{{fill:{c['pill'][0]}}}.pl{{fill:{c['pill'][1]}}}
+.line{{fill:none;stroke:{c['line']};stroke-width:1.4}}.dash{{stroke-dasharray:6 5}}
+.arrow,.dot{{fill:{c['line']}}}
+text{{text-rendering:geometricPrecision;font-kerning:normal}}
 """
+
+
+PALETTES = {
+    "architecture.svg": palette({
+        "canvas": "#f9f5ee",
+        "control": ("#f3eadb", "#d5be97", "#ece0ca"),
+        "compute": ("#e9eff0", "#a6bdc3", "#dce7e9"),
+        "sandbox": ("#f7fafa", "#6f929d", "#e8f0f1"),
+        "managed": ("#fbf1de", "#d6a457", "#f6e5c4"),
+        "user": ("#eef0e4", "#b0b68b", "#e3e7d3"),
+        "storage": ("#f1ebe2", "#bfaa8e", "#e8dfd1"),
+        "external": ("#f4f2ee", "#cbc3b7", "#ebe7e0"),
+        "sep": "rgba(60,48,30,.14)",
+        "card": ("#fffdf9", "#dcd2c3"),
+        "ink": "#1f1c17", "ink2": "#675e51",
+        "pill": ("#24211c", "#f7f1e6"),
+        "line": "#5b5346",
+    }),
+    "architecture-dark.svg": palette({
+        "canvas": "#111712",
+        "control": ("#17201a", "#3f5f4a", "#1c2920"),
+        "compute": ("#131d1c", "#386058", "#182725"),
+        "sandbox": ("#162521", "#4f8574", "#1b302a"),
+        "managed": ("#1f1d13", "#b0924c", "#2a271a"),
+        "user": ("#181f14", "#6c7f4c", "#1f2919"),
+        "storage": ("#1c1c17", "#6e6852", "#25241d"),
+        "external": ("#161a19", "#4c5651", "#1d2321"),
+        "sep": "rgba(232,241,235,.08)",
+        "card": ("#1c2520", "#33433a"),
+        "ink": "#e8f1eb", "ink2": "#94a59b",
+        "pill": ("#4ade80", "#04210f"),
+        "line": "#8fa598",
+    }),
+}
 
 
 def woff_advances(data):
@@ -148,10 +184,10 @@ class Diagram:
         if rotate:
             self.parts.append("</g>")
 
-    def svg(self):
+    def svg(self, palette):
         if self.overflows:
             raise ValueError(f"text overflows its box: {self.overflows!r}")
-        css = [CSS.strip()]
+        css = [palette.strip()]
         for weight, (data, _, _) in sorted(self.fonts.items()):
             css.append(f'@font-face{{font-family:"OAC Plex";font-weight:{weight};'
                        f'src:url(data:font/woff;base64,{base64.b64encode(data).decode()}) format("woff")}}')
@@ -173,9 +209,9 @@ class Diagram:
 def draw(d):
     # Callers and their Core APIs.
     for x, title, text, api in [
-        (80, "Applications / official SDK", "Submit work · stream results", "P1 · Agents API /v1"),
-        (560, "Web console / operators", "Configure the platform · view status", "P2 · Core API /core/v1"),
-        (1040, "Nodes / Runtime connections", "Machine identity · register and connect", "P3 · Machine API /api/v1"),
+        (80, "Applications / official SDK", "Submit work · stream results", "Agents API /v1"),
+        (560, "Web console / operators", "Configure the platform · view status", "Core API /core/v1"),
+        (1040, "Nodes / Runtime connections", "Machine identity · register and connect", "Machine API /api/v1"),
     ]:
         d.card(x, 28, 440, 66, title, text)
         d.line(f"M{x + 220},94 V194")
@@ -192,12 +228,12 @@ def draw(d):
     # Every execution location connects through the same protocols.
     for cx in (400, 950, 1330):
         d.line(f"M{cx},454 V618")
-    d.pill(400, 489, "P4 · Sandbox Provider · compute lifecycle")
-    d.pill(400, 528, "P5 · Node · host management")
-    d.pill(400, 567, "P7 · Runtime · work and events")
-    d.pill(950, 508, "P4 · Sandbox Provider")
-    d.pill(950, 557, "P7 · Runtime")
-    d.pill(1330, 534, "P7 · Runtime")
+    d.pill(400, 489, "Sandbox Provider · compute lifecycle")
+    d.pill(400, 528, "Node · host management")
+    d.pill(400, 567, "Runtime · work and events")
+    d.pill(950, 508, "Sandbox Provider")
+    d.pill(950, 557, "Runtime")
+    d.pill(1330, 534, "Runtime")
 
     d.region(80, 618, 640, 302, "compute", "Compute servers × N · microsandbox")
     d.card(104, 672, 592, 52, "sandbox node · host manager", "Manages compute from outside the sandboxes")
@@ -208,7 +244,6 @@ def draw(d):
     d.region(800, 672, 300, 224, "sandbox", "E2B Sandbox")
     d.card(820, 734, 260, 62, "Runtime + Harness", "Agent and tools in the sandbox")
     d.text(950, 841, "Provider-owned filesystem", "t2", "middle")
-    d.text(950, 868, "No independent FS yet", "t2", "middle")
 
     d.region(1180, 618, 300, 302, "user", "Your machine · self_hosted")
     d.card(1200, 734, 260, 62, "Runtime + Harness", "You install and maintain it")
@@ -221,7 +256,7 @@ def draw(d):
     d.line("M550,920 V1010 H1330 V920", arrows=False)
     d.line("M950,920 V1060")
     d.parts.append('<circle cx="950" cy="1010" r="3.5" class="dot"/>')
-    d.pill(1040, 1010, "P13 · Model protocol")
+    d.pill(1040, 1010, "Model protocol")
     d.text(1190, 998, "HTTP MCP", "t2")
 
     d.region(80, 1060, 640, 156, "storage", "Independent storage server", "Deployed apart from compute servers")
@@ -232,7 +267,7 @@ def draw(d):
     d.card(1140, 1114, 316, 76, "Remote MCP servers", "HTTP MCP")
 
     d.line("M80,410 H40 V1148 H80", dashed=True)
-    d.pill(40, 785, "P14 · Workspace filesystem · storage lifecycle and binding", rotate=True)
+    d.pill(40, 785, "Workspace filesystem · storage lifecycle and binding", rotate=True)
     x = 80
     for item in ["Solid: communication or mount", "Dashed: independent storage management",
                  "Outer frame: deployment location", "Inner frame: sandbox isolation boundary"]:
@@ -242,7 +277,8 @@ def draw(d):
 def main():
     diagram = Diagram()
     draw(diagram)
-    OUTPUT.write_text(diagram.svg())
+    for name, palette in PALETTES.items():
+        (ASSETS / name).write_text(diagram.svg(palette))
 
 
 if __name__ == "__main__":

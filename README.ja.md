@@ -1,8 +1,9 @@
 <div align="center">
 
-![OpenAgentCore — One core. Many agents.](docs/assets/openagentcore-banner.jpeg)
-
-# OpenAgentCore
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/openagentcore-wordmark-dark.svg">
+  <img alt="OpenAgentCore" src="docs/assets/openagentcore-wordmark-light.svg" width="440">
+</picture>
 
 オープンソースでセルフホストできる OpenAI Agents API。公式 OpenAI SDK から、自分のマシンと自分のモデルで Codex、Claude Code、MiniMax Code を実行できます。
 
@@ -55,7 +56,10 @@ print(session.id)
 
 ## 仕組み
 
-![OpenAgentCore のアーキテクチャ](docs/assets/architecture.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img alt="OpenAgentCore のアーキテクチャ" src="docs/assets/architecture.svg">
+</picture>
 
 アプリケーションと管理者は、次の Core API を使用します。
 

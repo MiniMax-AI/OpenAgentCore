@@ -1,8 +1,9 @@
 <div align="center">
 
-![OpenAgentCore — One core. Many agents.](docs/assets/openagentcore-banner.jpeg)
-
-# OpenAgentCore
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/openagentcore-wordmark-dark.svg">
+  <img alt="OpenAgentCore" src="docs/assets/openagentcore-wordmark-light.svg" width="440">
+</picture>
 
 开源、可自部署的 OpenAI Agents API。用官方 OpenAI SDK，在你自己的机器上用你自己的模型运行 Codex、Claude Code 或 MiniMax Code。
 
@@ -55,7 +56,10 @@ print(session.id)
 
 ## 工作原理
 
-![OpenAgentCore 架构](docs/assets/architecture.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img alt="OpenAgentCore 架构" src="docs/assets/architecture.svg">
+</picture>
 
 应用和管理员使用以下 Core API：
 

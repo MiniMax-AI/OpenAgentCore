@@ -1,8 +1,9 @@
 <div align="center">
 
-![OpenAgentCore — One core. Many agents.](docs/assets/openagentcore-banner.jpeg)
-
-# OpenAgentCore
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/openagentcore-wordmark-dark.svg">
+  <img alt="OpenAgentCore" src="docs/assets/openagentcore-wordmark-light.svg" width="440">
+</picture>
 
 The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or MiniMax Code on your own machines with your own models, through the official OpenAI SDK.
 
@@ -55,7 +56,10 @@ print(session.id)
 
 ## How it works
 
-![OpenAgentCore architecture](docs/assets/architecture.svg)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img alt="OpenAgentCore architecture" src="docs/assets/architecture.svg">
+</picture>
 
 Applications and operators use these Core APIs:
 

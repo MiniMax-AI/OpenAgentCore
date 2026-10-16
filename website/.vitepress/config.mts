@@ -65,8 +65,9 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#0a0d0c' }],
     ['meta', { property: 'og:title', content: 'OpenAgentCore — One core. Many agents.' }],
     ['meta', { property: 'og:description', content: description }],
-    ['meta', { property: 'og:image', content: 'https://raw.githubusercontent.com/MiniMax-AI/OpenAgentCore/main/docs/assets/openagentcore-banner.jpeg' }],
+    ['meta', { property: 'og:image', content: 'https://raw.githubusercontent.com/MiniMax-AI/OpenAgentCore/main/docs/assets/og-image.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:image', content: 'https://raw.githubusercontent.com/MiniMax-AI/OpenAgentCore/main/docs/assets/og-image.png' }],
   ],
 
   locales: {
