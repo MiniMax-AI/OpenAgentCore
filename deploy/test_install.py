@@ -94,7 +94,15 @@ if MISSING:
         result = self.run_launcher('Linux', 'x86_64', seed={name: binary[:10], 'oac-linux-amd64.' + '1' * 64: b'old'})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.resumed, [10])
-        self.assertEqual(result.cache, ['oac-linux-amd64.sha256'])
+        self.assertEqual(result.cache, [])
+
+    def test_complete_cached_binary_runs_without_downloading_again(self):
+        binary = b'#!/bin/sh\nprintf "%s\\n" "$@"\n'
+        name = 'oac-linux-amd64.' + hashlib.sha256(binary).hexdigest()
+        result = self.run_launcher('Linux', 'x86_64', seed={name: binary})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.resumed, [])
+        self.assertNotIn('curl', result.stderr)
 
     def test_corrupt_cached_file_is_discarded(self):
         binary = b'#!/bin/sh\nprintf "%s\\n" "$@"\n'

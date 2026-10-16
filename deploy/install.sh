@@ -50,15 +50,22 @@ binary="$cache/$asset.$expected"
 for stale in "$cache/$asset".*; do
   [[ "$stale" == "$binary" || "$stale" == "$cache/$asset.sha256" || ! -e "$stale" ]] || rm -f "$stale"
 done
-download "$asset" "$asset.$expected" "$progress"
-if command -v sha256sum >/dev/null; then read -r actual _ < <(sha256sum "$binary"); else read -r actual _ < <(shasum -a 256 "$binary"); fi
-[[ "$actual" == "$expected" ]] || { rm -f "$binary"; echo 'Installer checksum mismatch. Rerun the installer to download it again.' >&2; exit 1; }
+verified() {
+  local actual=
+  if command -v sha256sum >/dev/null; then read -r actual _ < <(sha256sum "$binary"); else read -r actual _ < <(shasum -a 256 "$binary"); fi
+  [[ "$actual" == "$expected" ]]
+}
+# A complete file from an earlier run is used without asking the server for more.
+if [[ ! -s "$binary" ]] || ! verified; then
+  download "$asset" "$asset.$expected" "$progress"
+  verified || { rm -f "$binary"; echo 'Installer checksum mismatch. Rerun the installer to download it again.' >&2; exit 1; }
+fi
 chmod 700 "$binary"
 # oac reports its own interruption.
 trap - INT
 status=0
 "$binary" install "$@" || status=$?
-if (( status == 0 )); then rm -f "$binary"; fi
+if (( status == 0 )); then rm -rf "$cache"; fi
 exit "$status"
 }
 main "$@"
