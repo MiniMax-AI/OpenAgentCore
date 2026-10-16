@@ -1,10 +1,10 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 9b648c6aad6fe635975ccb4b6930b665bc92542670118e188dc9e815868344af
+source_hash: 6bde0267753b797a6ada321509d9ac4ab2270021069308f4f07bb33c9d3e03cd
 ---
 
-本指南带运维人员从一台空主机到可用的安装：在 Docker 下运行的 Core、Web 控制台和 PostgreSQL，一个沙箱后端，一个默认模型和第一个项目 API 密钥。Web 的 **概览** 通过 **新手引导** 清单跟踪同样的步骤。
+本指南带运维人员从一台空主机到可用的安装：在 Docker 下运行的 Core、Web 控制台和 PostgreSQL，一个沙箱提供商，一个默认模型和第一个项目 API 密钥。Web 的 **概览** 通过 **新手引导** 清单跟踪同样的步骤。
 
 1. [检查前置条件](#prerequisites)。
 2. [运行安装程序](#install)。
@@ -13,23 +13,22 @@ source_hash: 9b648c6aad6fe635975ccb4b6930b665bc92542670118e188dc9e815868344af
 5. [设置默认模型](#set-a-default-model)。
 6. [签发项目 API 密钥](#issue-a-project-api-key)。
 
-全部安装程序参数、已有反向代理和离线主机见[安装选项](./install-options.md)。要从其他机器访问 Core，参阅[从其他机器访问 Core](#configure-the-domain-and-https)。
+全部安装程序参数、已有反向代理和离线主机见[安装选项](./install-options.md)。
 
 ## 前置条件 {#prerequisites}
 
 | | Linux | macOS | Windows |
 | --- | --- | --- | --- |
 | 主机 | amd64 或 arm64，需安装 curl | Intel 或 Apple Silicon，需安装 curl | x64，需 PowerShell |
-| Docker | Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本 | Docker Desktop，已启动 | Docker Desktop，运行 Linux 容器 |
+| Docker | Docker Engine，已启动 | Docker Desktop，已启动 | Docker Desktop，运行 Linux 容器 |
 | 账号 | `docker` 组成员，或使用 rootless Docker | 你的用户 | 你的用户 |
 
+- 所有平台都需要 Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。Docker Desktop 的版本需足够新，已包含它们。
 - Docker 守护进程能访问容器注册表。它不使用当前 shell 的代理变量，参阅[离线主机](./install-options.md#offline-hosts)。下载发行制品还需要能访问 GitHub。
 - 8080 端口空闲，且 Docker 能发布该端口，参阅[端口](./public-address.md#ports)。安装程序不会修改主机策略。
 
 > [!WARNING]
 > 以该账号运行安装程序和 `oac`，不要使用 `sudo`。`sudo` 运行会在 `~/.oac` 中留下属于 root 的文件，导致之后的运行失败。
-
-沙箱节点运行在 Linux amd64 上。在 macOS 或 Windows 上部署 Core 时，可连接 Linux 节点，或使用 E2B。
 
 ## 安装 {#install}
 
@@ -45,7 +44,7 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 
 :::
 
-安装程序检查 Docker 和端口，写入[安装目录](../configuration.md#installation-directory) `~/.oac/core`，其中包含 `.env` 和 `oac` 命令（Windows 为 `oac.exe`），然后启动服务。Web 在 8080 端口提供控制台，并把 `/v1`、`/api/v1` 和 `/docs` 转发到 Core。Core 和 PostgreSQL 不发布端口。安装程序会打印控制台地址；仅在全新安装时打印 Core 密钥，重新运行或升级则打印 `oac core-key --show`。
+安装程序检查 Docker 和端口，写入[安装目录](../configuration.md#installation-directory) `~/.oac/core`，其中包含 `.env` 和 `oac` 命令（Windows 为 `oac.exe`），然后启动服务。Web 在 8080 端口提供控制台，并[把 API 请求转发到 Core](./public-address.md#listeners-and-access)。下载和配置检查在创建安装目录之前完成，因此全新安装失败时不会留下任何文件。安装程序会打印控制台地址；仅在全新安装时打印 Core 密钥，重新运行或升级则打印 `oac core-key --show`。
 
 控制台地址默认是本机默认路由上的私网 IP；没有时为 `http://localhost:8080`。浏览器必须打开这个确切的地址。要自行指定，例如已有反向代理的 HTTPS 地址，请传入 `--public-url`。Windows 上传参的方式见[传入参数](./install-options.md#pass-flags)。
 
@@ -62,7 +61,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 :::
 
 > [!TIP]
-> 可以放心重新运行。如果安装程序因检查失败、服务三分钟内未变为健康或按 Ctrl-C 而停止，修复提示信息所指的问题后重新执行同一命令。重新运行会保留配置和数据，并继续未完成的下载。参数只对新的安装目录生效；之后要修改设置，请编辑 `.env` 并运行 `oac apply`。[故障排查](./troubleshooting.md#installation)列出了这些提示信息。
+> 可以放心重新运行。如果安装程序因检查失败、服务三分钟内未变为健康或按 Ctrl-C 而停止，修复提示信息所指的问题后重新执行同一命令。重新运行会保留配置和数据，并复用已有镜像。`--public-url`、`--host` 和 `--web-port` 只对全新安装生效；之后要修改它们，请编辑 `.env` 并运行 `oac apply`。在 Linux 和 macOS 上，启动脚本还会继续未完成的下载。[故障排查](./troubleshooting.md#installation)列出了这些提示信息。
 
 要换到更新的发布版本，请按[升级](./operations.md#upgrade)操作。
 
@@ -79,7 +78,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 
 ## 添加沙箱容量 {#add-sandbox-capacity}
 
-安装程序不选择沙箱后端。请[选择沙箱后端](./sandbox-backends.md)：在自有 Linux 节点上运行 microsandbox，并使用[设置工作区存储](./workspace-storage.md)中的工作区存储，是推荐的自管部署；E2B 不需要节点。应用也可以在自己的机器上运行[自托管 Session](./self-hosted.md)。
+安装程序不选择沙箱提供商。请[选择沙箱提供商](./sandbox-backends.md)：在自有 Linux 节点上运行 microsandbox，并使用[设置工作区存储](./workspace-storage.md)中的工作区存储，是推荐的自管部署；E2B 不需要节点。应用也可以在自己的机器上运行[自托管 Session](./self-hosted.md)。
 
 ## 设置默认模型 {#set-a-default-model}
 

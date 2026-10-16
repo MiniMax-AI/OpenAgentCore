@@ -1,16 +1,16 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 535cbf05232c33cf5cfd55f1272ca932e79a9da0a1bf236a8ac5850902609bd6
+source_hash: 86f0ce968eff1d82b31620be4c216e44741ad6a0536ef9dfde3d5a96c6bd0675
 ---
 
-节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱后端（参阅[选择沙箱后端](./sandbox-backends.md)）为 microsandbox 或 Docker 时添加、修改和移除节点的运维人员；E2B 不需要节点。
+节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 或 Docker 时添加、修改和移除节点的运维人员；E2B 不需要节点。
 
 Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙箱回连 Core。应用为自己的 Session 连接的机器是[自托管执行器](./self-hosted.md)，而不是节点。添加节点的方法是在 Web 生成命令并在主机上执行。[沙箱部署协议](../../../contracts/agents-api/zh/sandbox-deployment.md)定义沙箱设置及其变更规则，[节点协议](../../../contracts/agents-api/zh/node-generation-protocol.md)定义节点如何准备和保留 Runtime 代次。
 
 ## 添加节点前 {#before-you-add-a-node}
 
-- **沙箱配置已保存。** 打开 **设置** → **沙箱与调度**，选择 **自有机器**、沙箱后端和沙箱规格，最后选择 **保存配置**；参阅[选择沙箱后端](./sandbox-backends.md)。要更改沙箱后端，先选择 **重置部署**。同一安装的所有节点使用同一沙箱后端。
+- **沙箱配置已保存。** 打开 **设置** → **沙箱与调度**，选择 **自有机器**、沙箱提供商和沙箱规格，最后选择 **保存配置**；参阅[选择沙箱提供商](./sandbox-backends.md)。要更改沙箱提供商，先选择 **重置部署**。同一安装的所有节点使用同一沙箱提供商。
 - **Core 已有主机及沙箱可访问的公开 URL。** 节点从 Core 控制台下载文件，并通过 `public_url` 连接 Core。设置前，**添加节点** 显示 *添加节点前，请先设置其他机器能访问的公开地址。*参阅[配置公开地址](./public-address.md)。
 - **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，**添加节点** 显示 *这个控制台没有 … 的节点文件。*
 - **主机满足下面的要求。**
@@ -78,7 +78,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 > Docker 模式等同于 root 权限。加入 `docker` 组后，`oac-node` 以及任何能控制节点的主体，都可以在主机上执行 root 操作，并且容器共享主机内核。只在沙箱专用主机上添加 Docker 节点。microsandbox 节点只需要 `kvm` 组，每个沙箱运行在独立 microVM 中。
 
 > [!WARNING]
-> microsandbox 沙箱无法访问私有地址，包含私有地址的 DNS 应答会被丢弃。如果模型或工具端点位于私有地址，请将节点的解析器指向本地 stub（例如 systemd-resolved），使用 Docker 节点，或[手动注册节点](#register-a-node-manually)。
+> microsandbox 沙箱无法访问私有地址；参见[沙箱无法访问私有端点](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint)。
 
 **每台主机只服务一个 Core。** 节点共享 `oac-node` 账号，因此主机只服务一个 Core；第二个 Core 的命令会被拒绝。
 

@@ -1,7 +1,7 @@
 ---
 title: "配置公开地址"
 source: docs/getting-started/public-address.md
-source_hash: 1cd6feb51f3b6ae70502a91b7563acdd06902e9f9c03a4a16b644c30ac60d541
+source_hash: 18cf3655776a7bd22a09023a7764abf17461570371b846ef5ce4d1caa3d13a6f
 ---
 
 设置浏览器、节点、沙箱和应用访问 Core 所用的唯一源地址，并在其前面放置带 HTTPS 的反向代理。本指南面向将 Core 暴露到其所在机器之外的运维人员。
@@ -12,12 +12,12 @@ source_hash: 1cd6feb51f3b6ae70502a91b7563acdd06902e9f9c03a4a16b644c30ac60d541
 
 | 场景 | 公开 URL |
 | --- | --- |
-| 在本机试用 | `http://localhost:8080`，主机没有私有地址时的默认值 |
+| 在本机试用 | `http://localhost:8080`，`--host` 不是 `0.0.0.0` 或主机没有私有地址时的默认值 |
 | 本地网络 | `http://<private address>:8080`，`--host` 为 `0.0.0.0` 且默认路由带有私有网络地址时由安装程序选用 |
 | 本地网络之外 | 反向代理提供的 HTTPS 源地址，例如 `https://core.example` |
 | E2B 提供商 | 可从互联网访问且不是回环地址的 HTTPS 源地址，因为 E2B 沙箱会从 E2B 云端调用 Core |
 
-安装时用 `--public-url` 传入该源地址，或按[更改公开 URL](#changing-the-public-url)稍后修改。使用选项安装，参见[安装选项](./install-options.md#pass-flags)。
+安装时用 `--public-url` 传入该源地址，或按[更改公开 URL](#changing-the-public-url)稍后修改。使用选项安装，参阅[安装选项](./install-options.md#pass-flags)。
 
 ## 监听器与访问 {#listeners-and-access}
 
@@ -26,10 +26,10 @@ source_hash: 1cd6feb51f3b6ae70502a91b7563acdd06902e9f9c03a4a16b644c30ac60d541
 | 服务 | 外部可访问性 |
 | --- | --- |
 | Web | `OAC_HOST` 上的 `OAC_WEB_PORT`。使用反向代理时，用 `--host 127.0.0.1` 安装 |
-| Core | 仅通过 Web，Web 转发 `/v1`、`/api/v1` 和 `/docs`，其余由自己提供；参见[请求边界](../web/console-server.md#request-boundary) |
+| Core | 仅通过 Web。`/v1`、`/api/v1` 和 `/docs` 原样透传；已登录的控制台 `/core/v1` 请求带有 Core 密钥。其余由 Web 自己提供；参阅[请求边界](../web/console-server.md#request-boundary) |
 | PostgreSQL | 否 |
 
-没有服务获得 Docker 套接字；参见[安装目录](../configuration.md#installation-directory)。沙箱是隔离边界：参见 [Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)。
+沙箱是隔离边界：参阅 [Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)。
 
 ### 端口 {#ports}
 
@@ -45,7 +45,7 @@ source_hash: 1cd6feb51f3b6ae70502a91b7563acdd06902e9f9c03a4a16b644c30ac60d541
 用 `--host 127.0.0.1` 安装，并把反向代理指向 Web，默认是 `127.0.0.1:8080`。反向代理必须：
 
 - **保留 Host。** Web 仅接受 `OAC_PUBLIC_URL` 中的主机。
-- **传递 WebSocket 升级请求**，包括 `/api/v1` 上的升级请求。节点通过它连接。
+- **在 `/api/v1` 上传递 WebSocket 升级请求。** 节点、沙箱 Runtime（包括 E2B）和自托管执行器通过它连接。
 - **不对流进行缓冲或设置超时。** `/v1` 会流式传输 Session 事件。
 - **接受大文件上传。** 源文件最大可达 512 MiB；具体限制由 Core 执行。
 
@@ -69,12 +69,12 @@ server {
 	ssl_certificate     /etc/ssl/core.example/fullchain.pem;
 	ssl_certificate_key /etc/ssl/core.example/privkey.pem;
 
-	client_max_body_size 512m;
+	client_max_body_size 513m;
 
 	location / {
 		proxy_pass http://127.0.0.1:8080;
 		proxy_http_version 1.1;
-		proxy_set_header Host $host;
+		proxy_set_header Host $http_host;
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection $connection_upgrade;
 		proxy_buffering off;
@@ -96,7 +96,7 @@ Caddy 会自行获取证书，默认传递 Host 和 WebSockets。nginx 的 serve
 curl -s -o /dev/null -w '%{http_code}\n' -H 'OpenAI-Beta: agents=v1' https://core.example/v1/agents
 ```
 
-`401` 表示 `/v1` 已到达 Core，Core 正在要求提供密钥。`404` 表示请求已到达 Web：请修复反向代理，否则应用调用和每个节点连接都会失败。节点记录 `HTTP 400 on the WebSocket upgrade`，说明其前面的代理没有在 `/api/v1` 上传递升级请求；参见[故障排查](./troubleshooting.md#nodes)。
+`401` 表示 `/v1` 已到达 Core，Core 正在要求提供密钥。`404` 表示请求已到达 Web：请修复反向代理，否则应用调用和每个节点连接都会失败。节点记录 `HTTP 400 on the WebSocket upgrade`，说明其前面的代理没有在 `/api/v1` 上传递升级请求；参阅[故障排查](./troubleshooting.md#nodes)。
 
 所有位置都必须保持启用 TLS 验证。使用私有证书颁发机构时，节点主机、自托管机器和 Runtime 镜像必须信任该机构。
 

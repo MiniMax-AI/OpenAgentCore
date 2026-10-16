@@ -37,9 +37,7 @@ Several installations can share a machine when they use distinct installation di
 
 ## Reverse proxy and HTTPS
 
-Install with `--host 127.0.0.1`, point your reverse proxy at Web and set `--public-url` to its HTTPS origin. [Configure the public address](./public-address.md#https-and-the-reverse-proxy) has the proxy requirements, Caddy and nginx examples and the routing check.
-
-[Configure the public address](./public-address.md#listeners-and-access) covers `--host`, `--web-port` and the port check.
+Install with `--host 127.0.0.1`, point your reverse proxy at Web and set `--public-url` to its HTTPS origin. [Configure the public address](./public-address.md#https-and-the-reverse-proxy) has the proxy requirements, Caddy and nginx examples and the routing check, and covers `--host`, `--web-port` and the port check.
 
 ## Docker Compose and hosting platforms
 
@@ -87,17 +85,16 @@ The installer downloads release files from GitHub Releases with this shell's net
 
 A Linux amd64 host without that access installs from the release asset `oac-<commit>-linux-amd64-offline.tar.gz`, which contains every image and node artifact. Copy it to the host, extract it and run its `install.py` with Python 3.9 or newer and Docker. No checkout, Go, Node or pnpm is needed on that host. Keep the extracted bundle until installation completes; the installed services and node downloads do not depend on its original location afterward. The same archive is what [Develop OpenAgentCore](../development.md#install-a-checkout-without-publishing-a-release) builds from a checkout.
 
-
 ### `install.py` options
 
 ```sh
-python3 oac-<commit>-linux-amd64/install.py --install-dir "$HOME/.oac/local" --public-url http://YOUR_CORE_HOST:8080
+python3 oac-<commit>-linux-amd64/install.py --install-dir "$HOME/.oac/local" --host 0.0.0.0 --public-url http://YOUR_CORE_HOST:8080
 ```
 
 | Option | Default | Effect |
 | --- | --- | --- |
 | `--install-dir` | `~/.oac/local` | Absolute installation directory |
-| `--host` | `127.0.0.1` | The address Web binds. Use `0.0.0.0` for access from other machines |
+| `--host` | `127.0.0.1` | The address Web binds. Unlike `oac install`, `install.py` defaults to loopback: pass `0.0.0.0` for access from other machines |
 | `--web-port` | `8080` | The host port of Web |
 | `--public-url` | | The origin browsers and nodes use. Required for a new installation |
 | `--upgrade` | | Upgrade an existing installation to this bundle's release; see [Upgrade](./operations.md#upgrade) |

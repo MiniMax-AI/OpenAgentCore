@@ -76,7 +76,7 @@ Selection runs the adapter's availability, ownership and xattr checks in Core. I
 
 Create or update the microsandbox deployment through the [sandbox deployment API](../../contracts/agents-api/sandbox-deployment.md#routes), keeping the required compute resources, Runtime and provider configuration. `resources.environment_disk_mib` is each new workspace's capacity: `0` without quota mode, where a positive value is rejected, and at least 1024 MiB in quota mode, where `0` is refused at workspace admission. Existing workspaces keep the capacity they were admitted with when the deployment changes.
 
-Deployment workspace requirements and each Session's attachment come from the selected database configuration. Do not add a filesystem field to the deployment or a second storage configuration to node files.
+Deployment workspace requirements and each Session's attachment come from the selected database configuration. The selected configuration is the only storage setting.
 
 Then use **Nodes → Add node** on each prepared host; see [Add and manage nodes](./nodes.md).
 

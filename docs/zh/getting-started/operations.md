@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: b6b27f31aa4837b00db0314acf5e316277e07564f8467b74b7f61cf72ccd634a
+source_hash: 54c6d2de28e483497c00a3f2bfc310b4d8b7ff22519607778e7340ec851f252e
 ---
 
 Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Core 密钥、备份、升级和卸载。节点有[专门的指南](./nodes.md)，[故障排查](./troubleshooting.md)列出了安装程序和访问方面的提示信息。设置见[配置参考](../configuration.md)。
@@ -18,14 +18,12 @@ Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Cor
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web，然后说明如何读取新密钥 |
 | `oac uninstall` | 确认后删除安装及其数据；参见[卸载](#uninstall) |
 
-Docker Compose 命令管理服务；针对该安装的 Compose 文件运行它们：
+Docker Compose 命令管理服务；针对该安装的 Compose 文件运行它们。`stop` 和 `start` 见[停止与重启](#stop-and-restart)。
 
 | 命令 | 功能 |
 | --- | --- |
 | `docker compose -f ~/.oac/core/compose.yaml ps` | 展示服务 |
 | `docker compose -f ~/.oac/core/compose.yaml logs --tail 200 core` | 展示服务的日志 |
-| `docker compose -f ~/.oac/core/compose.yaml stop` | 停止服务。保留数据、节点和沙箱 |
-| `docker compose -f ~/.oac/core/compose.yaml start` | 启动服务 |
 | `docker compose -f ~/.oac/core/compose.yaml down` | 移除容器。数据保留 |
 
 ## 服务健康状态 {#service-health}
@@ -40,7 +38,7 @@ Docker Compose 命令管理服务；针对该安装的 Compose 文件运行它�
 | Environment 连接 | Runtime 传输已连接 |
 | 已完成的 Turn 及结果 | 任务已记录的结果 |
 
-Core 和 PostgreSQL 不发布主机端口；Web 是唯一的监听器（参阅[配置公开地址](./public-address.md#listeners-and-access)）。服务健康状态不表示 Harness 或模型可用。执行情况使用 Session、Turn、Items 和 Usage 读取，节点连接、就绪和分配使用 Web 的 **节点** 页面。本地诊断使用安装自身的 Compose 文件：
+只有 Web 是监听器；参阅[配置公开地址](./public-address.md#listeners-and-access)。服务健康状态不表示 Harness 或模型可用。执行情况使用 Session、Turn、Items 和 Usage 读取，节点连接、就绪和分配使用 Web 的 **节点** 页面。本地诊断使用安装自身的 Compose 文件：
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
@@ -81,7 +79,7 @@ Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退
 
 ### 用脚本调用 Core API {#script-the-core-api}
 
-Core 不发布主机端口。在 Core 主机上，此辅助函数在 Core 的网络命名空间中运行 `curl`，并通过 stdin 传入密钥，使其不进入命令行：
+在 Core 主机上，此辅助函数在 Core 的网络命名空间中运行 `curl`，并通过 stdin 传入密钥，使其不进入命令行：
 
 ```sh
 core() (  # core METHOD PATH [JSON body]
@@ -194,7 +192,7 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 
 恢复期间保持应用入口及 Core/节点服务关闭。暴露恢复后的文件系统前，必须隔离或关闭每一个旧写入方；旧主机不可达不代表已隔离。演练必须使用隔离的安装和存储副本，不能连接原节点，也不能共享其可写命名空间。
 
-启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和提供商存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[独立工作区存储](../configuration.md#independent-workspace-storage)负责定义部署设置。
+启动 Core 前，恢复相匹配的 secrets 和数据库状态、完整的独立文件系统命名空间，以及任何所需的节点标识和提供商存储。保留数据库中的配置和命名空间 UUID、对象标识及删除标记；不要对恢复后的存储执行首次命名空间初始化。恢复配额模式文件系统时，将其块级副本写入后备设备，并以 `prjquota` 挂载到配置的挂载点；绝不要对其运行 `oac-workspace-quota init`，也不要将副本与原文件系统同时挂载，二者具有相同的文件系统 UUID。重新建立配置中的挂载路径和服务 UID，然后从每个参与服务的上下文验证所挂载文件系统、所有权及 xattr。[设置工作区存储](./workspace-storage.md)负责定义部署设置。
 
 已释放计算资源的冷恢复基线仅在新计算资源准入后续接具备资格的原生历史。包含保留检查点的备份还依赖匹配的原生 Runtime、节点标识、提供商存储和外部文件系统标识。文件级恢复可能改变 inode 标识，即使文件字节一致，也可能阻止严格检查点恢复。此流程不承诺可移植内存快照，也不承诺恢复到任意替代节点；应保留未解决的归属，而不是替换为新沙箱。
 
@@ -249,6 +247,8 @@ v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并
 
 ## 卸载 {#uninstall}
 
+先移除节点，参见[移除节点](./nodes.md#remove-a-node)。
+
 ```sh
 ~/.oac/core/oac uninstall
 ```
@@ -259,7 +259,7 @@ Windows 上运行 `& "$HOME/.oac/core/oac.exe" uninstall`。命令会展示 Comp
 
 卸载不停止沙箱：节点沙箱在节点继续运行，E2B 沙箱在 E2B 继续运行并计费。Core 仍运行时，归档它们的 Session，或[重置部署](nodes.md#change-the-sandbox-configuration)并等待完成。
 
-先移除节点，参见[移除节点](./nodes.md#remove-a-node)。如果 Core 已不存在，按那里的说明在各节点主机上带 `--force` 运行节点卸载命令，使用 `oac uninstall` 打印的安装 ID，或节点单元名 `oac-node-<installation-id>.service` 中的安装 ID。
+如果 Core 已不存在，按那里的说明在各节点主机上带 `--force` 运行节点卸载命令，使用 `oac uninstall` 打印的安装 ID，或节点单元名 `oac-node-<installation-id>.service` 中的安装 ID。
 
 如果安装目录被手动删除，其容器会继续运行并占用 Web 端口。不依赖任何安装文件即可找到并移除该项目：
 

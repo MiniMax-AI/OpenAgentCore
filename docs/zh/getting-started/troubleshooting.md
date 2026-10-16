@@ -1,12 +1,12 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: 952f655f4944290ad66290cc3486116a6aca19c0a9ad93496b023b483b3c0bc0
+source_hash: c562ed30e22adc12c0be5dbfbcbf740aaa977c467d38bf6c2f1f5bc961d90ccc
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
 
-对于失败的请求或 Turn，先查看 Web 的 **监控 → 请求日志** 和 **Session 日志**；参见[请求诊断](./operations.md#request-diagnosis)和[服务健康状态](./operations.md#service-health)。
+对于失败的请求或 Turn，先查看 Web 的 **监控 → 请求日志** 和 **Session 日志**；参阅[请求诊断](./operations.md#request-diagnosis)和[服务健康状态](./operations.md#service-health)。
 
 ## 安装 {#installation}
 
@@ -15,12 +15,13 @@ source_hash: 952f655f4944290ad66290cc3486116a6aca19c0a9ad93496b023b483b3c0bc0
 | `Web port unavailable; choose --web-port` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口。如果消息点名了 Compose 项目 `oac-…`，说明目录已不存在的早期安装仍在运行：按[卸载](./operations.md#uninstall)移除它 |
 | `incomplete installation: preserve … and choose another directory` | 保留目录内容，选择另一个 `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
-| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷已被更新的版本升级。参见[降级](./operations.md#downgrades) |
+| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷已被更新的版本升级。参阅[降级](./operations.md#downgrades) |
 | `This installation runs release …` | 安装程序或初始化属于另一个版本。要换到更新的版本，请按[升级](./operations.md#upgrade)操作；降级会被拒绝 |
 | `This account cannot use Docker` | 将该账号加入 `docker` 组后重新登录，或使用 Docker Desktop 或 rootless Docker。不要用 `sudo` 运行安装程序 |
 | `This account cannot access …` | 之前用 `sudo` 运行留下了属于 root 的文件。运行消息给出的 `sudo chown` 命令，再以自己的账号重新运行 |
 | `Docker Compose 2.26 or newer is required` | 安装或更新 Docker Compose 插件 |
 | `Docker could not pull …` | Docker 守护进程无法访问容器注册表。配置其代理或镜像加速器，或使用[离线归档](./install-options.md#offline-hosts) |
+| `Interrupted; rerun the installer to continue.` | Ctrl-C 中断了安装程序，安装保持可重新运行的状态。再次执行同一命令即可。在 Linux 和 macOS 上，启动脚本把未完成的 `oac` 下载保存在 `${TMPDIR:-/tmp}/oac-install-<uid>`，重新运行会继续该下载；删除该目录可让下载重新开始 |
 | `startup failed; data retained, rerun the installer` | 消息会列出不健康的服务和查看其日志的 `docker compose logs --tail 50` 命令。修复原因，再[继续安装](./install.md#install)；不要删除数据。运行 `oac apply` 时，同一消息会提示再次运行 `oac apply` |
 
 如果安装程序的某个步骤报告空间或配额不足，请释放错误所指文件系统上的空间。导入镜像失败还可能需要 Docker 存储中的空间，它可能位于另一个文件系统。
@@ -33,7 +34,7 @@ source_hash: 952f655f4944290ad66290cc3486116a6aca19c0a9ad93496b023b483b3c0bc0
 | Web 显示 Core 不可用（502） | Core 停止或失败：先 `docker compose ps`，再查看 Core 日志 |
 | 创建 Session 返回 400 `model_provider_required` | 缺少模型提供商：为 Harness 设置[默认模型](../configuration.md#default-models)，或显式提供；自托管 Session 始终自带提供商 |
 
-对于已到达 Core 的请求，参见 Agents API 指南中的[诊断失败](../api/public-agent-api.md#diagnose-a-failure)。执行失败的 Session 有 [Session 诊断](../../../contracts/agents-api/zh/session-diagnostics.md)，其中说明了失败类别。
+对于已到达 Core 的请求，参阅 Agents API 指南中的[诊断失败](../api/public-agent-api.md#diagnose-a-failure)。执行失败的 Session 有 [Session 诊断](../../../contracts/agents-api/zh/session-diagnostics.md)，其中说明了失败类别。
 
 ## 节点 {#nodes}
 
@@ -51,7 +52,7 @@ microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务�
 
 | 原因 | 解决方法 |
 | --- | --- |
-| `HTTP 400 on the WebSocket upgrade` | Core 前的反向代理没有在 `/api/v1` 上传递 WebSocket 升级；参见 [HTTPS 与反向代理](./public-address.md#https-and-the-reverse-proxy) |
+| `HTTP 400 on the WebSocket upgrade` | Core 前的反向代理没有在 `/api/v1` 上传递 WebSocket 升级；参阅 [将 Core 置于 HTTPS 之后](./public-address.md#https-and-the-reverse-proxy) |
 | 其他状态码，例如 `HTTP 404 on the WebSocket upgrade` 或 `HTTP 502 …` | 反向代理没有将 `/api/v1` 转发到 Core 或没有保留 Host，或者 Core 未运行 |
 | `dial tcp: …`，例如 `connection refused`、`i/o timeout` 或 `no such host` | 主机无法通过公开 URL 访问 Core。检查 DNS 和防火墙；节点服务使用安装程序运行时的[代理](./nodes.md#download-through-a-proxy)，代理变化后请用正确的设置重新执行命令 |
 | `tls: …`，或 `TLS certificate expired or not yet valid` | 主机不信任 Core 的证书，或公开 URL 对不提供 HTTPS 的端口使用了 `https` |
@@ -76,5 +77,5 @@ microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务�
 | SELinux is enforcing on this host | 使用安装程序支持的主机；程序不修改 SELinux 设置 |
 | This host already runs a sudo-mode node for another Core | 先移除并卸载该节点 |
 | Node installation and removal require root | 通过 sudo 或 root shell 执行 Web 命令 |
-| Core still lists this node | 先在 Nodes 页面移除 |
+| Core still lists this node | 先在 **节点** 页面移除 |
 | Core no longer accepts this node | 节点已移除或重置已撤销它。卸载后使用新命令重新添加主机 |

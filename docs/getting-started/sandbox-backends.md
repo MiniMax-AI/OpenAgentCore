@@ -13,15 +13,14 @@ The installer selects no backend. One installation uses one backend. To change i
 | Where sandboxes run | A microVM on your Linux nodes | A container on your Linux nodes | E2B's cloud |
 | Nodes to add | Yes | Yes | None |
 | You provide | Linux amd64 hosts with systemd and `/dev/kvm` | Linux amd64 hosts with systemd and rootful Docker Engine | An E2B API key and a template; a public HTTPS URL for Core |
-| Isolation | Each sandbox has its own kernel | Containers share the node's kernel, and the node account is root-equivalent on its host | E2B's |
+| Isolation | Each sandbox has its own kernel | Containers share the node's kernel | E2B's |
 | Idle sandboxes suspend and resume | Yes, with checkpoints | No | No |
 | Independent workspace storage | Optional, on NFS | No | No |
 | Disk limits | Root and data disks | None | Set by the template |
 
 The field-level differences are in the [deployment contract](../../contracts/agents-api/sandbox-deployment.md#what-each-field-means-per-sandbox-provider). Host requirements for nodes are in [Add and manage nodes](./nodes.md#host-requirements).
 
-> [!CAUTION]
-> Docker nodes are root-equivalent: membership in the `docker` group lets `oac-node`, and anything that controls the node, act as root on the host. Add Docker nodes only on hosts dedicated to sandboxes.
+Docker nodes are [root-equivalent](./nodes.md#what-the-installer-sets-up) on their host: add them only on hosts dedicated to sandboxes.
 
 Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a Linux node or use E2B. Applications can also run [self-hosted Sessions](./self-hosted.md) on their own machines, with no backend.
 
@@ -31,7 +30,7 @@ Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a 
 2. Choose the backend and the sandbox size. Web proposes the [default size the Provider declares](../sandbox-provider.md#register-the-provider-kind) as **Standard**.
 3. Choose **Save configuration**. The choice is stored in Core's database.
 
-For **Own machines**, continue with [Add and manage nodes](./nodes.md). To keep workspaces off the nodes, first [Set up workspace storage](./workspace-storage.md). For checkpoint recovery across microsandbox nodes, see [Before you add a node](./nodes.md#before-you-add-a-node).
+For **Own machines**, continue with [Add and manage nodes](./nodes.md). To keep workspaces off the nodes, first [Set up workspace storage](./workspace-storage.md). For checkpoint recovery across microsandbox nodes, see [Checkpoint recovery across nodes](./nodes.md#checkpoint-recovery-across-nodes).
 
 ## Use E2B
 

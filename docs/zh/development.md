@@ -50,7 +50,7 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 
 ## 不发布版本，直接安装工作副本 {#install-a-checkout-without-publishing-a-release}
 
-使用此路径体验已提交工作副本中的完整 Core、Web 和受管沙箱节点。它复用正式发版的分发构建器、Compose 服务、初始化和节点安装器。构建时需要联网获取固定的上游依赖；生成的离线包不依赖 OpenAgentCore 发版或镜像仓库。在 Linux amd64 上按[分发构建前提](maintainers.md#build-a-distribution)构建和安装。需要 Docker Engine 26+ 和 Compose 2.26+。源码必须已提交，包括本地修改。
+使用此路径体验已提交工作副本中的完整 Core、Web 和受管沙箱节点。它复用正式发版的分发构建器、Compose 服务、初始化和节点安装程序。构建时需要联网获取固定的上游依赖；生成的离线包不依赖 OpenAgentCore 发版或镜像仓库。在 Linux amd64 上按[分发构建前提](maintainers.md#build-a-distribution)构建和安装。需要 Docker Engine 26+ 和 Compose 2.26+。源码必须已提交，包括本地修改。
 
 在仓库根目录一次性准备固定 Runtime 输入，然后构建和安装。如果 `~/.oac/build/release-inputs/inputs.json` 已存在，跳过第一条命令并复用它：
 
@@ -74,7 +74,7 @@ python3 "$bundle/install.py" \
 
 将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。[安装选项](getting-started/install-options.md#offline-hosts)说明 `install.py` 的选项、重新运行和恢复。构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`，用于在另一台 Linux amd64 Docker 主机上安装。
 
-在 Web 中配置模型提供商，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装器目录](maintainers.md#native-installers)，否则可选的自托管原生安装器不可用，不会生成占位目录。
+在 Web 中配置模型提供商，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装程序目录](maintainers.md#native-installers)，否则可选的自托管原生安装程序不可用，不会生成占位目录。
 
 配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
 
@@ -129,7 +129,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | 提供商集成 | `make check-sandbox-provider-contract` 和提供商的原生检查 |
 | Claude SDK bridge 与产物 | `make check-claude-sdk` |
 | Web UI 与 client | `make check-web` |
-| 发行或安装器 | `make check-distribution` |
+| 发行或安装程序 | `make check-distribution` |
 | 文档 | `make check-names`；`make check-distribution` 验证 Markdown 链接与打包文档 |
 
 Fixture 浏览器验收使用 loopback 端口 18092 和 4174。并行验证时通过 `AGENTS_FIXTURE_PORT` 和 `AGENTS_WEB_PORT` 选择空闲端口。验证 worker 之间使用独立数据库、端口和容器。编译、fixture 成功和真实模型/提供商验收分别证明不同事实；应明确报告跳过或不可用的检查。验证后遵循[独立盲审工作流](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
