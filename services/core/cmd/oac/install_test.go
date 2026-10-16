@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -305,7 +306,8 @@ func TestUpgradeDropsTheOfflineNodePayloadBind(t *testing.T) {
 	}
 	payload := filepath.Join(f.options.dir, "node-payload")
 	os.Mkdir(payload, 0o755)
-	override := `{"services":{"web":{"volumes":[{"type":"bind","source":"` + payload + `","target":"/node-payload","read_only":true},{"type":"bind","source":"/srv/ca","target":"/ca"}]}}}`
+	source, _ := json.Marshal(payload)
+	override := `{"services":{"web":{"volumes":[{"type":"bind","source":` + string(source) + `,"target":"/node-payload","read_only":true},{"type":"bind","source":"/srv/ca","target":"/ca"}]}}}`
 	path := filepath.Join(f.options.dir, "compose.override.yaml")
 	os.WriteFile(path, []byte(override), 0o600)
 	setBuildRevision(t, "development")
