@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: a7f8abd74e031f1ce974ac8d6a2900dc5a5d0c177167c6c30675a5b620574f1c
+source_hash: fddbe0a4e99431dacba2f368d0d0d3b350b6fcb1ea8723e0eb889f23d1f61fb7
 ---
 
 沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
@@ -126,14 +126,14 @@ stateDiagram-v2
 
 一个代次可以是目标代次、服务代次、两者兼是或两者皆非。节点将所持有的每个代次报告为 `preparing`、`ready` 或 `failed`；已丢弃的代次不会再被准备或使用。已丢弃代次的本地回收见 [Node installer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#generation-storage-and-recovery)。
 
-保留使用独立且有界的交换。`retention` 请求最多指定八个本地 `(generation, specification_digest)` 引用、一个 UUID、一个每次递增 1 的 `sequence`、当前 `connection_id` 和所有者 epoch。`retention_ack` 必须与完整的待处理请求匹配，包括条目顺序和身份信息，并为每个条目给出显式布尔值 `keep`。每条连接只能有一个交换处于待处理状态，断连会将其丢弃。任何未经请求、重放、过期、不完整或混合的确认都不会删除任何内容。保留流量从不使用提供商请求队列。
+保留使用独立且有界的交换：由节点询问，由 Core 决定。节点的 `retention` 请求最多指定八个本地 `(generation, specification_digest)` 引用、一个 UUID、一个每次递增 1 的 `sequence`、当前 `connection_id` 和所有者 epoch。Core 的 `retention_ack` 必须与完整的待处理请求匹配，包括条目顺序和身份信息，并为每个条目给出显式布尔值 `keep`。每条连接只能有一个交换处于待处理状态，断连会将其丢弃。任何未经请求、重放、过期、不完整或混合的确认都不会删除任何内容。保留流量从不使用提供商请求队列。
 
 ```mermaid
 sequenceDiagram
-    participant C as Core
     participant N as Node
-    C->>N: retention (id, sequence, up to 8 references)
-    N->>C: retention_ack (keep for every entry, same order)
+    participant C as Core
+    N->>C: retention (id, sequence, up to 8 references)
+    C->>N: retention_ack (keep for every entry, same order)
     Note over C,N: One exchange is pending per connection
 ```
 

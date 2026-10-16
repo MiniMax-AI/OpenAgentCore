@@ -124,14 +124,14 @@ stateDiagram-v2
 
 A generation is the target, the serving generation, both or neither. The node reports each held generation as `preparing`, `ready` or `failed`; a dropped generation is never prepared or used again. Local collection of a dropped generation is described in the [Node installer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#generation-storage-and-recovery).
 
-Retention uses its own bounded exchange. A `retention` request names at most eight local `(generation, specification_digest)` references, a UUID, a sequence that increases by one, the current `connection_id` and the owner epoch. The `retention_ack` must match the complete pending request, entry order and identity included, and give an explicit boolean `keep` for every entry. One exchange is pending per connection, and a disconnect discards it. An unsolicited, replayed, stale, partial or mixed acknowledgement deletes nothing. Retention traffic never uses the Provider request queue.
+Retention uses its own bounded exchange: the node asks and Core decides. The node's `retention` request names at most eight local `(generation, specification_digest)` references, a UUID, a sequence that increases by one, the current `connection_id` and the owner epoch. Core's `retention_ack` must match the complete pending request, entry order and identity included, and give an explicit boolean `keep` for every entry. One exchange is pending per connection, and a disconnect discards it. An unsolicited, replayed, stale, partial or mixed acknowledgement deletes nothing. Retention traffic never uses the Provider request queue.
 
 ```mermaid
 sequenceDiagram
-    participant C as Core
     participant N as Node
-    C->>N: retention (id, sequence, up to 8 references)
-    N->>C: retention_ack (keep for every entry, same order)
+    participant C as Core
+    N->>C: retention (id, sequence, up to 8 references)
+    C->>N: retention_ack (keep for every entry, same order)
     Note over C,N: One exchange is pending per connection
 ```
 
