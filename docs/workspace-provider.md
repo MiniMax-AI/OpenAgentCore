@@ -1,8 +1,38 @@
 ---
-title: Workspace filesystem providers
+title: Workspace filesystem protocol
 ---
 
-The independent workspace filesystem boundary is defined in [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go). This document specifies the required integration contract; it does not establish that every Sandbox Provider or placement implements it. Filesystem adapters own storage objects and native attachment resolution. [Sandbox Providers](sandbox-provider.md) own compute. Core selects and validates their combination before allocating either resource.
+The workspace filesystem protocol connects Core and sandbox nodes to the adapter that owns durable Environment storage. Core creates, observes and deletes storage objects; a node resolves an object to a host directory that its [Sandbox Provider](sandbox-provider.md) attaches to compute. It is for authors of filesystem adapters and Sandbox Providers.
+
+| | |
+| --- | --- |
+| Caller | Core (`Control`) and the sandbox node (`Resolver`) |
+| Implementations | The kernel NFS adapter (`nfs`), registered in `services/core/internal/workspacefs/providers` |
+| Code | [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) |
+| Transport | In-process Go interfaces; a `Binding` crosses the [Sandbox node protocol](../contracts/agents-api/node-generation-protocol.md#provider-requests) in `Create` bootstrap and `Resume` requests |
+
+Core selects and validates the combination of a Sandbox Provider and a filesystem adapter before it allocates either resource.
+
+| Sandbox Provider | External workspace storage |
+| --- | --- |
+| microsandbox | Supported (`host_directory`, `user_xattr`) |
+| Docker, E2B | Not supported; the Provider's own Environment disk |
+
+## Implement an adapter
+
+1. Define `Parameters` and the optional credential, and implement `Normalize` ([Identity and configuration](#identity-and-configuration)).
+2. Implement `Declaration`, `Check`, `Create`, `Observe` and `Delete` in `Control`, and `Resolve` in `Resolver` ([Operations and outcomes](#operations-and-outcomes)).
+3. Declare the attachment kind, user xattr support and quota enforcement ([Capability validation](#capability-validation)).
+4. Keep one writer per object and delete only on Core's authorization ([Lifetime and filesystem scope](#lifetime-and-filesystem-scope)).
+
+## Roles
+
+| Party | Owns |
+| --- | --- |
+| Core | Identities, the persisted `Reference`, configuration and credential, admitted capacity, the lifecycle order and every deletion decision |
+| Filesystem adapter | Native storage objects, their receipts, native ownership checks and path resolution |
+| Sandbox Provider | Compute, and attaching the resolved directory to it |
+
 
 ## Identity and configuration
 
@@ -31,7 +61,18 @@ Every control adapter implements `Declaration`, `Check`, `Create`, `Observe` and
 | `Delete(ctx, reference)` | Converge on terminal deletion of the verified owned object after Core has authorized deletion and confirmed compute stop. |
 | `Resolve(ctx, binding)` | Validate native ownership and resolve the attachment for local compute. |
 
-Errors support `errors.Is`: `ErrInvalid` for invalid input, `ErrOwnership` for a reference or configuration mismatch, `ErrUnavailable` for unavailable storage, `ErrUnconfirmed` for an unknown mutation outcome, `ErrNotFound` for a missing object and `ErrUnsupported` for an unsupported combination. Adapters preserve these outcomes when wrapping errors. A missing observation does not prove an earlier mutation settled. A timeout or canceled context ends the caller's wait; it does not prove native stop or rollback. Core retains ownership on unknown outcomes. It may retry `Create` or `Delete` with the same persisted immutable reference and configuration, including after `ErrUnconfirmed`; it must never substitute a new object identity to retry an uncertain operation.
+Errors support `errors.Is`. Adapters preserve these outcomes when wrapping errors.
+
+| Error | Condition |
+| --- | --- |
+| `ErrInvalid` | Invalid input |
+| `ErrOwnership` | A reference or configuration mismatch |
+| `ErrUnavailable` | Storage is unavailable |
+| `ErrUnconfirmed` | The mutation outcome is unknown |
+| `ErrNotFound` | The object is missing |
+| `ErrUnsupported` | The combination is unsupported |
+
+A missing observation does not prove an earlier mutation settled. A timeout or canceled context ends the caller's wait; it does not prove native stop or rollback. Core retains ownership on unknown outcomes. It may retry `Create` or `Delete` with the same persisted immutable reference and configuration, including after `ErrUnconfirmed`; it must never substitute a new object identity to retry an uncertain operation.
 
 Same-reference retry and concurrent convergence are mandatory adapter guarantees. `Create` preserves any existing object data and returns the attachment for that owned object; it never reinitializes a live object. Repeated and concurrent `Delete` calls converge on the same terminal deletion. Once terminal deletion is recorded, concurrent, delayed or retried `Create` calls must not resurrect the object, and `Resolve` must not expose it. Retained deletion metadata and further cleanup of settled in-flight operations are permitted. These guarantees apply to storage lifecycle operations; they do not establish mutation settlement at timeout or distributed compute fencing.
 
@@ -53,11 +94,19 @@ The object contains the whole `/environment` tree, including the workspace, stag
 
 Workspace storage is retained with its Session until explicit Session deletion. Archival, expiration, reset and compute checkpoint deletion do not authorize workspace deletion. Core calls `Delete` only after explicit Session deletion and confirmed compute stop; unresolved compute or storage mutations retain ownership. Failed creation does not authorize deleting storage while its Session is retained. Eligible nonterminal Sessions can survive checkpoint retention expiry and later attach the same object to fresh compute under the [cold replacement lifecycle](sandbox-provider.md#cold-replacement-after-checkpoint-retention). This does not revive archived, reset or deleted execution.
 
+## Attachment
+
+`Bootstrap.Workspace` and `ResumeRequest.Workspace` optionally carry a [workspace filesystem binding](#identity-and-configuration). Absence selects the Provider's owned Environment disk; presence selects the exact external object and never permits a fallback to an owned disk. Providers validate the tenant and Environment against the binding and its configuration receipt before resolving it. `LocalOptions.Workspace` injects the filesystem resolver; Sandbox Providers never interpret filesystem adapter parameters or native receipts.
+
+`DeploymentPolicy.Workspace` declares supported attachment requirements; absence means external storage is unsupported. The derived immutable `DeploymentSpec.Workspace` receipt selects the generation mode and capabilities; its [deployment workflow](../contracts/agents-api/sandbox-deployment.md#resources) never copies filesystem configuration into the generation. Microsandbox requires `host_directory` and `user_xattr`; Docker and E2B reject external attachments. `ValidateWorkspacePolicy` uses the filesystem protocol's combination validator: an external filesystem without an enforced quota rejects a positive `EnvironmentDiskMiB`, while zero requests no quota. Root disk capacity is still required. Without an external declaration, the existing owned disk bounds apply.
+
+Microsandbox resolves each Create and Resume binding, including observation of an interrupted restore, and passes only the local directory and immutable ObjectID to its private helper. The helper binds the whole `/environment`; its retained contents and private native history follow the [workspace filesystem scope](#lifetime-and-filesystem-scope) and [Runtime resource directories](configuration.md#runtime-resource-directories). Private HOME, credentials and the compute root are not a durable history store. Explicit mode, object and path labels qualify native resources; mount shape alone never selects a mode. Checkpoint restore verifies the snapshot's object, remaps `/environment` through SDK `Volumes`, requires strict external mount policy and rejects every restore warning. Partial restore errors retain the exact target identity for cleanup and never establish readiness. Unknown outcomes remain observations of the original operation. Native Bind checkpoint and guest-local flock continuity do not establish fencing against an unknown writer.
+
 ## Kernel NFS adapter
 
 The `nfs` adapter uses an operator-premounted Linux kernel NFS filesystem. The supported setup is NFSv4.2 on trusted AUTH_SYS clients with `root_squash`, using the same export and absolute mount path on Core and nodes. The adapter neither mounts exports nor manages NFS credentials or service accounts. Other operating systems return `ErrUnsupported`. [Configuration](./configuration.md#independent-workspace-storage) owns installation steps and selection.
 
-Parameters contain `root`, `namespace_id`, `uid` and, in quota mode, `quota`. `root` is a clean absolute mount path; `namespace_id` is a canonical nonzero UUID; `uid` is the nonzero effective host UID required on both Core and nodes. The initial deployment uses 65532. The operator prepares the mounted root with mode `0700`, owned by this UID, and a regular `.oac-storage-root` file with mode `0600`, owned by the same UID, containing exactly the namespace UUID followed by one newline. Do this on the export's server-side storage as its administrator; root-squashed clients cannot assume privileged ownership changes. The root marker is an assertion of the selected export's identity, not a credential or distributed lock.
+Parameters contain `root`, `namespace_id`, `uid` and, in quota mode, `quota`. `root` is a clean absolute mount path; `namespace_id` is a canonical nonzero UUID; `uid` is the nonzero effective host UID required on both Core and nodes. A Compose installation uses 65532, the UID of Core's container. The operator prepares the mounted root with mode `0700`, owned by this UID, and a regular `.oac-storage-root` file with mode `0600`, owned by the same UID, containing exactly the namespace UUID followed by one newline. Do this on the export's server-side storage as its administrator; root-squashed clients cannot assume privileged ownership changes. The root marker is an assertion of the selected export's identity, not a credential or distributed lock.
 
 Construction validates and canonicalizes JSON without filesystem I/O. `Check` verifies the opened root is kernel NFS, the effective UID and private ownership/modes match, the namespace marker matches, and real file-descriptor `user.*` xattr set/get/remove operations succeed. Every filesystem operation, including opening the root and checking availability, runs within one process-wide budget of 32 in-flight operations. A timed-out caller receives `ErrUnconfirmed`; its slot remains occupied until the kernel call returns. An exhausted budget returns `ErrUnavailable`. Directory-descriptor-relative operations stay anchored to the opened root. An unavailable mount or a local directory at the configured path fails validation; no local fallback is created.
 
@@ -77,6 +126,19 @@ The bound is authoritative when `Create` succeeds; `Resolve` does not re-attest 
 
 Each object owns `objects/<ObjectID>/identity`, `staging/`, `live/`, `trash/` and, after deletion begins, `deleted-marker`. The permanent identity binds the tenant, Environment and object UUIDs. Create prepares and syncs a private unique staging envelope before atomically publishing its nonempty directory as `live`; replay cannot overwrite existing live data. Delete first records a durable object-local terminal marker, retires live data to unique object-local trash and removes data before its ownership markers. Concurrent deleters converge. Minimal identity and deletion metadata remain intentionally; deletion does not mean every metadata file disappears. Create and Resolve refuse the retired identity. A late in-flight Create can leave empty controlled metadata requiring a repeated Delete after its syscall settles; it cannot authorize a new writer or reuse the object identity. Cleanup examines only that object's staging and trash, without a namespace-wide sweep or background service.
 
+```mermaid
+stateDiagram-v2
+    [*] --> staging: Create
+    staging --> live: publish
+    live --> deleted: Delete (marker written)
+    deleted --> [*]: data removed from trash
+    note right of deleted: Create and Resolve refuse the retired identity
+```
+
 NFS storage does not supply compute fencing or automatic distributed failover. Guest `flock` is not a cross-VM writer lock. The single-writer and explicit-deletion requirements above remain mandatory. Confirmed release can permit a fresh VM on another compatible node to attach the same object, but an offline node or an unknown Create, Kill or snapshot-cleanup result never proves that the old writer stopped. Native history and database behavior require qualification of the selected Runtime, Harness and filesystem combination; file persistence alone is not a guarantee of native Session recovery, cross-node memory restore or arbitrary crash durability.
 
 Core requires the selected Harness profile to support `retained_native_history` when the selected deployment generation uses external workspace storage. Creation validates that generation while holding the deployment lock, before committing the Session or compute reservation. Existing Sessions use their immutable workspace binding for Runtime admission and the final execution check. Owned workspace storage does not require this capability.
+
+## Conformance
+
+The shared validators and the combination check are covered by `services/core/internal/workspacefs/workspacefs_test.go`, and the kernel NFS adapter by the tests in `services/core/internal/workspacefs/nfs`. `make check-core-packages` runs them.

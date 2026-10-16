@@ -1,10 +1,39 @@
 ---
-title: 工作区文件系统提供商
+title: 工作区文件系统协议
 source: docs/workspace-provider.md
-source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
+source_hash: 1627563bb3b40ce2876913938d3cb7bf702aaacab8ad709acb1813e74d2b93c5
 ---
 
-独立工作区文件系统边界由 [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) 定义。本文规定必需的集成契约，并不表示所有沙箱提供商或执行位置均已实现。文件系统适配器拥有存储对象与原生挂载解析职责；[沙箱提供商](sandbox-provider.md) 拥有计算资源职责。Core 在分配任一资源前选择并验证二者的组合。
+工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建、观察和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
+
+| | |
+| --- | --- |
+| 调用方 | Core（`Control`）和沙箱节点（`Resolver`） |
+| 实现 | 内核 NFS 适配器（`nfs`），注册于 `services/core/internal/workspacefs/providers` |
+| 代码 | [`workspacefs.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/workspacefs/workspacefs.go) |
+| 传输 | 进程内 Go 接口；`Binding` 通过 `Create` 引导和 `Resume` 请求经[沙箱节点协议](../../contracts/agents-api/zh/node-generation-protocol.md#provider-requests)传递 |
+
+Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适配器的组合。
+
+| 沙箱提供商 | 外部工作区存储 |
+| --- | --- |
+| microsandbox | 支持（`host_directory`、`user_xattr`） |
+| Docker、E2B | 不支持；使用提供商自有的 Environment 磁盘 |
+
+## 实现适配器 {#implement-an-adapter}
+
+1. 定义 `Parameters` 和可选凭据，并实现 `Normalize`（[标识与配置](#identity-and-configuration)）。
+2. 在 `Control` 中实现 `Declaration`、`Check`、`Create`、`Observe` 和 `Delete`，在 `Resolver` 中实现 `Resolve`（[操作与结果](#operations-and-outcomes)）。
+3. 声明挂载类型、用户扩展属性支持和配额强制执行（[能力验证](#capability-validation)）。
+4. 每个对象保持单一写入方，仅在 Core 授权时删除（[生命周期与文件系统范围](#lifetime-and-filesystem-scope)）。
+
+## 角色 {#roles}
+
+| 参与方 | 负责 |
+| --- | --- |
+| Core | 标识、持久化的 `Reference`、配置和凭据、已准入容量、生命周期顺序以及每个删除决定 |
+| 文件系统适配器 | 原生存储对象及其回执、原生归属检查和路径解析 |
+| 沙箱提供商 | 计算资源，以及将解析出的目录挂载到计算资源 |
 
 ## 标识与配置 {#identity-and-configuration}
 
@@ -33,7 +62,18 @@ source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
 | `Delete(ctx, reference)` | Core 授权删除且确认计算资源停止后，收敛到已验证归属对象的终态删除。 |
 | `Resolve(ctx, binding)` | 验证原生归属并为本地计算解析挂载。 |
 
-错误支持 `errors.Is`：`ErrInvalid` 表示无效输入，`ErrOwnership` 表示引用或配置不匹配，`ErrUnavailable` 表示存储不可用，`ErrUnconfirmed` 表示变更结果未知，`ErrNotFound` 表示对象不存在，`ErrUnsupported` 表示不支持的组合。适配器包装错误时保留这些结果。观察到不存在不证明先前变更已结束。超时或上下文取消只结束调用方的等待，不证明原生操作停止或回滚。结果未知时 Core 保留归属。Core 可以使用同一持久化不可变引用和配置重试 `Create` 或 `Delete`，包括收到 `ErrUnconfirmed` 后；绝不能通过替换新对象标识重试结果不确定的操作。
+错误支持 `errors.Is`。适配器包装错误时保留这些结果。
+
+| 错误 | 条件 |
+| --- | --- |
+| `ErrInvalid` | 无效输入 |
+| `ErrOwnership` | 引用或配置不匹配 |
+| `ErrUnavailable` | 存储不可用 |
+| `ErrUnconfirmed` | 变更结果未知 |
+| `ErrNotFound` | 对象不存在 |
+| `ErrUnsupported` | 不支持的组合 |
+
+观察到不存在不证明先前变更已结束。超时或上下文取消只结束调用方的等待，不证明原生操作停止或回滚。结果未知时 Core 保留归属。Core 可以使用同一持久化不可变引用和配置重试 `Create` 或 `Delete`，包括收到 `ErrUnconfirmed` 后；绝不能通过替换新对象标识重试结果不确定的操作。
 
 同一引用的重试与并发收敛是适配器必须提供的保证。`Create` 保留现有对象数据并返回该归属对象的挂载凭据，绝不重新初始化存活对象。重复或并发的 `Delete` 调用收敛到同一终态删除。一旦记录终态删除，并发、延迟或重试的 `Create` 均不得使对象复活，`Resolve` 也不得暴露该对象。允许保留删除元数据，并在先前进行中的操作结束后继续清理。这些保证适用于存储生命周期操作，不表示超时时变更已结束，也不提供分布式计算隔离。
 
@@ -55,11 +95,19 @@ source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
 
 工作区存储随 Session 保留，直至显式删除 Session。归档、过期、重置和删除计算检查点均不授权删除工作区。Core 仅在显式删除 Session 且确认计算资源停止后调用 `Delete`；未解决的计算或存储变更须保留归属。Session 仍被保留时，创建失败不授权删除其存储。符合条件且未终结的 Session 可以在检查点保留期结束后继续保留，并按[冷替换生命周期](sandbox-provider.md#cold-replacement-after-checkpoint-retention)将同一对象挂载到新的计算资源。此流程不会复活已归档、重置或删除的执行。
 
+## 挂载 {#attachment}
+
+`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 可携带[工作区文件系统绑定](#identity-and-configuration)。未提供时使用提供商自有的 Environment 磁盘；提供时选择精确的外部对象，不得回退到自有磁盘。提供商在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；沙箱提供商不解释文件系统适配器参数或原生回执。
+
+`DeploymentPolicy.Workspace` 声明挂载要求；未声明表示不支持外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执选择代次的模式和能力；[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)不会将文件系统配置复制进代次。Microsandbox 要求 `host_directory` 和 `user_xattr`；Docker 和 E2B 拒绝外部挂载。`ValidateWorkspacePolicy` 使用文件系统协议的组合校验器：不强制容量配额的外部文件系统拒绝正值 `EnvironmentDiskMiB`，零表示不请求配额。根磁盘容量仍为必需。未提供外部声明时，继续使用自有磁盘的容量边界。
+
+Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解析绑定，仅向私有 helper 传递本地目录和不可变 ObjectID。Helper 挂载整个 `/environment`；保留内容与私有原生历史遵循[工作区文件系统范围](#lifetime-and-filesystem-scope)和 [Runtime 资源目录](configuration.md#runtime-resource-directories)。私有 HOME、凭据和计算根磁盘不是持久历史存储。原生资源通过明确的模式、对象和路径标签校验，不根据挂载形状推断模式。检查点恢复校验快照对象，通过 SDK `Volumes` 重映射 `/environment`，要求严格外部挂载策略，并拒绝任何恢复警告。恢复部分失败时保留精确目标身份用于清理，不证明就绪。未知结果继续观察原操作。原生 Bind 检查点及 guest 内 flock 连续性不证明对未知 writer 的隔离。
+
 ## 内核 NFS 适配器 {#kernel-nfs-adapter}
 
 `nfs` 适配器使用由运维人员预挂载的 Linux 内核 NFS 文件系统。支持的配置是受信任 AUTH_SYS 客户端上的 NFSv4.2，启用 `root_squash`，Core 和节点使用相同导出和绝对挂载路径。适配器不挂载导出，也不管理 NFS 凭据或服务账户。其他操作系统返回 `ErrUnsupported`。[配置文档](./configuration.md#independent-workspace-storage)负责安装步骤和选择方式。
 
-参数包含 `root`、`namespace_id`、`uid`，配额模式下还包含 `quota`。`root` 是规范的绝对挂载路径；`namespace_id` 是非零规范 UUID；`uid` 是 Core 和节点均须使用的非零有效主机 UID。初始部署使用 65532。运维人员将挂载根目录设置为该 UID 所有、权限 `0700`，并准备同 UID 所有、权限 `0600` 的常规文件 `.oac-storage-root`，内容精确为命名空间 UUID 加一个换行符。应由导出服务端管理员在服务端存储上完成此操作；启用 root squash 的客户端不能假定有权变更所有者。根标记声明所选导出的身份，并非凭据或分布式锁。
+参数包含 `root`、`namespace_id`、`uid`，配额模式下还包含 `quota`。`root` 是规范的绝对挂载路径；`namespace_id` 是非零规范 UUID；`uid` 是 Core 和节点均须使用的非零有效主机 UID。Compose 安装使用 65532，即 Core 容器的 UID。运维人员将挂载根目录设置为该 UID 所有、权限 `0700`，并准备同 UID 所有、权限 `0600` 的常规文件 `.oac-storage-root`，内容精确为命名空间 UUID 加一个换行符。应由导出服务端管理员在服务端存储上完成此操作；启用 root squash 的客户端不能假定有权变更所有者。根标记声明所选导出的身份，并非凭据或分布式锁。
 
 构造函数只验证并规范化 JSON，不执行文件系统 I/O。`Check` 验证打开的根目录确实位于内核 NFS，有效 UID 与私有所有权和权限匹配，命名空间标记匹配，并且实际文件描述符上的 `user.*` xattr 设置、读取和删除成功。包括打开根目录和可用性检查在内的所有文件系统操作，共享每进程最多 32 个在途操作的预算。调用者超时后收到 `ErrUnconfirmed`；该操作仍占用名额，直到内核调用返回。预算耗尽返回 `ErrUnavailable`。相对于目录描述符的操作始终锚定已打开的根目录。挂载不可用或配置路径只是本地目录时，验证失败，不创建本地回退。
 
@@ -79,6 +127,19 @@ source_hash: ff018b1117a7f87786a23737212f1ed6b265d17fde43a0ef847f9f104788df2c
 
 每个对象拥有 `objects/<ObjectID>/identity`、`staging/`、`live/`、`trash/`，以及删除开始后的 `deleted-marker`。永久标识绑定租户、Environment 和对象 UUID。Create 先准备并同步唯一的私有 staging 封装目录，再原子发布其非空目录为 `live`；重放不会覆盖现有 live 数据。Delete 先持久记录对象本地的终态标记，将 live 数据退役到唯一的对象本地 trash，再先删除数据、后删除其所有权标记。并发删除者收敛。最少量的标识和删除元数据会有意保留；删除不代表所有元数据文件均消失。Create 和 Resolve 拒绝已退役标识。迟到的在途 Create 可能留下空的受控元数据，需要在其系统调用完成后重复 Delete；它不能授权新写入者或复用对象标识。清理只查看该对象的 staging 和 trash，不全量扫描命名空间，也不使用后台服务。
 
+```mermaid
+stateDiagram-v2
+    [*] --> staging: Create
+    staging --> live: publish
+    live --> deleted: Delete (marker written)
+    deleted --> [*]: data removed from trash
+    note right of deleted: Create and Resolve refuse the retired identity
+```
+
 NFS 存储不提供计算 fencing 或自动分布式故障转移。Guest `flock` 不是跨 VM 写入者锁。上述单写入者和显式删除要求仍然必须遵守。确认释放后，可以允许另一兼容 node 上的新 VM 挂载同一对象，但 node 离线或 Create、Kill、快照清理结果未知均不证明旧写入方已停止。原生历史和数据库行为需要对所选 Runtime、Harness、文件系统组合进行资格验证；仅保留文件不保证原生 Session 恢复、跨 node 内存恢复或任意崩溃后的持久性。
 
 所选部署代次使用外部工作区存储时，Core 要求所选 Harness profile 支持 `retained_native_history`。创建流程在持有部署锁时校验该代次，然后才提交 Session 或计算预留。既有 Session 的 Runtime 准入和最终执行检查以不可变工作区绑定为依据。自带工作区存储不要求此能力。
+
+## 一致性测试 {#conformance}
+
+共享校验器和组合检查由 `services/core/internal/workspacefs/workspacefs_test.go` 覆盖，内核 NFS 适配器由 `services/core/internal/workspacefs/nfs` 中的测试覆盖，由 `make check-core-packages` 运行。
