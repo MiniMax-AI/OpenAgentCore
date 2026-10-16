@@ -4,33 +4,21 @@ title: "Architecture"
 
 OpenAgentCore is an Agent execution platform that brings Harnesses, models, tools, Sessions and execution environments together through replaceable protocol implementations. It separates orchestration, compute and native execution. Core owns the API and durable state. Sandbox Providers manage compute. Independent workspace filesystem adapters manage durable Environment storage through a separate protocol. A Runtime daemon prepares an Environment and runs the selected Harness, whose native SDK or protocol owns the model and tool loop.
 
-The recommended self-managed deployment is microsandbox with independent persistent workspace storage, currently provided by the kernel NFS adapter. E2B is the managed-compute alternative. Both use the same Core orchestration and capability checks. Docker remains an available Provider. Compute and filesystem adapters declare their supported combinations; a deployment choice does not introduce a separate Agent execution flow. See [Sandbox Providers](./sandbox-provider.md) and [workspace filesystem providers](./workspace-provider.md) for their contracts and supported capabilities.
+The recommended self-managed deployment is microsandbox with kernel NFS workspace storage. E2B supplies managed compute. Docker runs on nodes without checkpoint or external storage. All use the same Core orchestration and capability checks. Compute and filesystem adapters declare their supported combinations; a deployment choice does not introduce a separate Agent execution flow. See [Sandbox Providers](./sandbox-provider.md) and [workspace filesystem providers](./workspace-provider.md) for their contracts and supported capabilities.
 
 ```mermaid
 flowchart TB
-    App["Application / official SDK"] <-->|"Agents API /v1: HTTP and SSE"| Core
-    Web["Web administrator console"] <-->|"Core API /core/v1"| Core
-    Core["Core: authorization, configuration snapshots,<br/>orchestration and durable state"]
-    Core --- DB[("PostgreSQL")]
-    Core -->|"Sandbox Provider protocol"| SP["Sandbox Provider:<br/>microsandbox / E2B / Docker"]
-    Core -->|"Workspace filesystem protocol"| FS["Workspace filesystem adapter: NFS"]
-    SP -->|"Resolve external attachment"| FS
-    FS -->|"Own durable storage"| Store[("Independent Environment storage")]
-    SP -.->|"Provision compute and bootstrap Runtime"| R
-    User["User-machine installer"] -.->|"Start Runtime"| R
-    Core <-->|"Core–Runtime protocol:<br/>preparation, execution, events and receipts"| R
-    subgraph Env["Environment: managed sandbox or user-owned machine"]
-        R["Runtime daemon"] --> P["Workspace and capability preparation"]
-        P -->|"Harness protocol"| A["Harness adapter"]
-        A <-->|"Native SDK or protocol"| H["Native Harness: model and tool loop"]
-        H <--> F["Workspace, tools and artifacts"]
-    end
-    F <-->|"Mount when the combination supports external storage"| Store
-    H <-->|"Model API"| Model["Model provider"]
-    H <-->|"MCP"| MCP["Local or remote MCP servers"]
+    App["Application"] -->|"Application–Core"| Core
+    Web["Web"] -->|"Web–Core"| Core
+    Core[("Core + PostgreSQL")]
+    Core -->|"Core–Sandbox Provider"| SP["Sandbox Provider"]
+    Core -->|"Workspace filesystem"| FS["Workspace storage"]
+    SP -->|"Provider–Runtime"| Env
+    Core <-->|"Core–Runtime"| Env["Environment:<br/>Runtime + Harness"]
+    Env -->|"Harness–Model provider"| Model["Model provider"]
 ```
 
-Dashed arrows show provisioning and installation. Solid arrows show component interactions, including in-process interfaces. The daemon initiates its authenticated WebSocket connection to Core. The [API index](./api/index.md) describes the application, operator and machine namespaces; [protocol boundaries](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) lists each protocol's code and owning document.
+The Runtime daemon initiates its authenticated WebSocket connection to Core. The [API index](./api/index.md) describes the application, operator and machine namespaces; [protocol boundaries](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) lists each protocol's code and owning document.
 
 ## Component responsibilities
 
@@ -51,9 +39,34 @@ The [repository map](./development.md#repository-map) locates these components. 
 
 ## A Session, end to end
 
-An application creates a Session through the Agents API. Core resolves its configuration and execution location. A managed Session obtains compute through the selected Sandbox Provider; a self-hosted Session waits for the user to run its installation command. A Session with `environment: none` uses a connected execution device without a workspace. The [application guide](./api/public-agent-api.md#create-a-session) describes these choices.
+An application creates a Session through the Agents API, and Core resolves its configuration and execution location. A managed Session obtains compute from the selected Sandbox Provider. A self-hosted Session waits for the user to run its installation command, which starts the Runtime in place of steps 2 and 3. A Session with `environment: none` uses a connected execution device without a workspace. The [application guide](./api/public-agent-api.md#create-a-session) describes these choices.
 
-After the daemon connects, Core checks the available Harness and requested capabilities. The Runtime prepares a workspace Environment and its capability snapshot, then prepares or reuses the Session Executor. Each Turn runs through the native Harness. Core persists the output, tool interactions and receipts for application reads and events. Completion or cancellation settles the Turn; a healthy Executor can serve the next Turn in the same Environment.
+```mermaid
+%%{init: {"sequence": {"actorMargin": 16, "width": 100}}}%%
+sequenceDiagram
+    autonumber
+    participant App as Application
+    participant Core
+    participant P as Sandbox Provider
+    participant R as Runtime
+    participant H as Harness
+    App->>Core: Create Session
+    Core->>P: Create(Bootstrap)
+    P->>R: Start Runtime
+    R->>Core: Connect, heartbeat
+    Core->>R: runtime_prepare
+    R-->>Core: prepare result
+    App->>Core: Send input
+    Core->>R: execution_prepare
+    R-->>Core: status ready
+    Core->>R: execution_start
+    R->>H: Run the Turn
+    H-->>R: Native events
+    R-->>Core: delta, tool_call, done
+    Core-->>App: Stream events
+```
+
+After the daemon connects, Core checks the available Harness and requested capabilities. The Runtime prepares a workspace Environment and its capability snapshot, then prepares or reuses the Session Executor. Core persists the output, tool interactions and receipts for application reads and events. Completion or cancellation settles the Turn; a healthy Executor can serve the next Turn in the same Environment.
 
 For checkpoint-capable compute, Core automatically suspends idle work and releases active compute capacity after confirmed capture and source stop. New work restores retained memory on an eligible compatible node; independent workspace storage stays attached to the same Environment identity. The [checkpoint lifecycle](./sandbox-provider.md#suspension) owns idle admission, wake and retention, and [checkpoint transfer](./sandbox-provider.md#checkpoint-transfer) defines the shared-store and compatibility requirements. An unreachable node alone never authorizes a replacement writer.
 

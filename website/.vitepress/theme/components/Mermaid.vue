@@ -65,6 +65,8 @@ onBeforeUnmount(() => themeObserver?.disconnect())
 .oac-mermaid-diagram :deep(svg) {
   display: block;
   max-width: 100%;
+  /* Below this width the container scrolls, so node text stays readable on phones. */
+  min-width: 640px;
   height: auto;
   margin: 0 auto;
 }
