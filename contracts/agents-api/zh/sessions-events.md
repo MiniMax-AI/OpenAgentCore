@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 5458554e547d39b9c3104281358476368162ac4da010449c2097e407dfa887c3
+source_hash: f2d2832178aa0f0e4293ee2ae01e12d57400c3b70abcb7f51a1ab4f810970085
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -31,14 +31,14 @@ Session 的 `status` 和 `last_active_at` 由其最新的根 Turn 以及仍在�
 stateDiagram-v2
     [*] --> idle
     idle --> in_progress: Turn queued
-    idle --> requires_action: input waits for a self_hosted machine
-    in_progress --> requires_action: function call waits for a result
-    requires_action --> in_progress: result submitted or machine connected
-    requires_action --> idle: Turn cancelled
-    in_progress --> idle: Turn completed or cancelled
+    in_progress --> idle: completed or cancelled
+    in_progress --> requires_action: awaits function result
+    idle --> requires_action: awaits self_hosted machine
+    requires_action --> in_progress: result or machine
+    requires_action --> idle: cancelled
     in_progress --> failed: Turn failed
-    idle --> failed: initial input expired or Environment failed
-    failed --> in_progress: new input starts a Turn
+    idle --> failed: input expired or Environment failed
+    failed --> in_progress: new input
 ```
 
 Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来预留的输入到期时，Session 保持为 `idle`。Environment 初始化失败或过期会阻止新工作。

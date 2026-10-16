@@ -107,7 +107,6 @@ An Executor moves through these states. Each Turn runs between `StartTurn` and `
 
 ```mermaid
 stateDiagram-v2
-    direction LR
     [*] --> Idle: prepared
     Idle --> Running: StartTurn
     Running --> Idle: reusable

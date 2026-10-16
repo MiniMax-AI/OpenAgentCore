@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: fbeb2f838dc5836a9bad8e744a456ac1cb2c68831460f5b513d80f9cc387bc4e
+source_hash: a0f1d4f6d33670b5e80fb8e073cac683550712a1ff836f75eb2853abb7fa0a4e
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、注册、Core 资格认定和验收。本文面向添加或维护 Harness 的开发者。
@@ -109,7 +109,6 @@ Executor 按下列状态转移。每个 Turn 在 `StartTurn` 与 `AwaitSettlemen
 
 ```mermaid
 stateDiagram-v2
-    direction LR
     [*] --> Idle: prepared
     Idle --> Running: StartTurn
     Running --> Idle: reusable

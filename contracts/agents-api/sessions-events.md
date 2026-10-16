@@ -29,14 +29,14 @@ A Session's `status` and `last_active_at` derive from its latest root Turn and f
 stateDiagram-v2
     [*] --> idle
     idle --> in_progress: Turn queued
-    idle --> requires_action: input waits for a self_hosted machine
-    in_progress --> requires_action: function call waits for a result
-    requires_action --> in_progress: result submitted or machine connected
-    requires_action --> idle: Turn cancelled
-    in_progress --> idle: Turn completed or cancelled
+    in_progress --> idle: completed or cancelled
+    in_progress --> requires_action: awaits function result
+    idle --> requires_action: awaits self_hosted machine
+    requires_action --> in_progress: result or machine
+    requires_action --> idle: cancelled
     in_progress --> failed: Turn failed
-    idle --> failed: initial input expired or Environment failed
-    failed --> in_progress: new input starts a Turn
+    idle --> failed: input expired or Environment failed
+    failed --> in_progress: new input
 ```
 
 A Session stays usable after a Turn fails: new input starts a new Turn. Later reserved input that expires leaves the Session idle. An Environment initialization failure or expiry prevents new work.
