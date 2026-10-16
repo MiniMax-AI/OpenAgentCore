@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 const vueDir = dirname(require.resolve('vue/package.json'))
 
 const repo = 'https://github.com/MiniMax-AI/OpenAgentCore'
-const description = 'An open-source, self-hosted implementation of the OpenAI Agents API with multiple native Harnesses.'
+const description = 'The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or MiniMax Code on your own machines with your own models, through the official OpenAI SDK.'
 
 const base = siteBase(process.env.WEBSITE_URL)
 
@@ -73,7 +73,7 @@ export default defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      description: '开源、可自部署的 OpenAI Agents API 实现，支持多种原生 Harness。',
+      description: '开源、可自部署的 OpenAI Agents API。用官方 OpenAI SDK，在你自己的机器上用你自己的模型运行 Codex、Claude Code 或 MiniMax Code。',
       themeConfig: {
         nav: docsNav('zh'),
         langMenuLabel: '切换语言',

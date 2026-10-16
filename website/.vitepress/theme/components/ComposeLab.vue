@@ -75,7 +75,7 @@ const lines = computed<Tok[][]>(() => {
   <div class="lab">
     <div class="lab-controls">
       <fieldset>
-        <legend><span class="dollar">$</span> {{ t.harness }}</legend>
+        <legend>{{ t.harness }}</legend>
         <button
           v-for="h in harnesses"
           :key="h.id"
@@ -87,12 +87,11 @@ const lines = computed<Tok[][]>(() => {
         >
           <span class="box">{{ harness === h.id ? '■' : '□' }}</span>
           <span class="name">{{ h.label }}</span>
-          <code>{{ h.id }}</code>
         </button>
       </fieldset>
 
       <fieldset>
-        <legend><span class="dollar">$</span> {{ t.protocol }}</legend>
+        <legend>{{ t.protocol }}</legend>
         <button
           v-for="p in protocols"
           :key="p"
@@ -104,14 +103,13 @@ const lines = computed<Tok[][]>(() => {
         >
           <span class="box">{{ protocol === p ? '■' : '□' }}</span>
           <span class="name">{{ p }}</span>
-          <code>{{ (selected.protocols as readonly string[]).includes(p) ? 'native' : '—' }}</code>
         </button>
       </fieldset>
 
       <fieldset>
-        <legend><span class="dollar">$</span> {{ t.environment }}</legend>
+        <legend>{{ t.environment }}</legend>
         <button
-          v-for="(e, id) in t.envs"
+          v-for="(label, id) in t.envs"
           :key="id"
           type="button"
           class="opt"
@@ -120,8 +118,7 @@ const lines = computed<Tok[][]>(() => {
           @click="env = id as Env"
         >
           <span class="box">{{ env === id ? '■' : '□' }}</span>
-          <span class="name">{{ e.label }}</span>
-          <code>{{ e.note }}</code>
+          <span class="name">{{ label }}</span>
         </button>
       </fieldset>
     </div>
@@ -150,39 +147,37 @@ const lines = computed<Tok[][]>(() => {
 .lab {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr);
-  gap: 20px;
+  gap: 24px;
 }
 .lab-controls {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   align-content: start;
 }
 fieldset {
+  position: relative;
   border: 1px solid var(--l-line);
   border-radius: 10px;
-  padding: 10px 10px 8px;
+  padding: 8px;
   margin: 0;
   background: var(--l-panel);
 }
 legend {
-  padding: 0 6px;
-  font: 500 12px/1 var(--l-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--l-muted);
-}
-.dollar {
-  color: var(--l-accent);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
 }
 .opt {
   display: grid;
-  grid-template-columns: 18px 1fr auto;
+  grid-template-columns: 18px 1fr;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 7px 8px;
+  padding: 9px 10px;
   border-radius: 6px;
-  font: 14px/1.3 var(--l-mono);
+  font: 15px/1.3 var(--l-mono);
   color: var(--l-text-2);
   text-align: left;
   transition: background 0.15s, color 0.15s;
@@ -206,13 +201,8 @@ legend {
 .opt.unsupported.on .name {
   color: var(--l-danger);
 }
-.opt code {
-  font-size: 11px;
-  color: var(--l-muted);
-  white-space: nowrap;
-}
 .box {
-  font-size: 12px;
+  font-size: 14px;
 }
 .lab-code {
   display: flex;
@@ -229,7 +219,7 @@ legend {
   gap: 12px;
   padding: 10px 14px;
   border-bottom: 1px solid rgba(232, 241, 235, 0.08);
-  font: 12px var(--l-mono);
+  font: 14px var(--l-mono);
   color: #7f8f85;
 }
 .dots {
@@ -249,7 +239,7 @@ legend {
   margin: 0;
   padding: 16px 18px;
   overflow-x: auto;
-  font: 13px/1.7 var(--l-mono);
+  font: 14px/1.7 var(--l-mono);
   color: var(--l-code-text);
   animation: settle 0.35s ease-out;
 }
@@ -286,7 +276,7 @@ legend {
   align-items: baseline;
   padding: 12px 18px;
   border-top: 1px solid rgba(232, 241, 235, 0.08);
-  font: 13px/1.5 var(--l-mono);
+  font: 14px/1.5 var(--l-mono);
 }
 .verdict.pass {
   color: #4ade80;
@@ -307,13 +297,15 @@ legend {
 }
 .lab-foot {
   grid-column: 1 / -1;
-  margin: 0;
-  font-size: 14px;
-  color: var(--l-muted);
+  margin: 12px 0 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--l-text-2);
 }
 .lab-foot a {
   color: var(--l-accent);
   font-family: var(--l-mono);
+  white-space: nowrap;
   text-decoration: none;
 }
 @keyframes settle {

@@ -1,24 +1,20 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import type { Lang } from '../landing-content'
+import { copy as landing, type Lang } from '../landing-content'
 import codex from '../assets/logos/codex.svg'
 import claude from '../assets/logos/claudecode.svg'
 import minimax from '../assets/logos/minimax.svg'
 
 const props = defineProps<{ lang: Lang }>()
-const copy = computed(() => props.lang === 'zh' ? {
-  stages: ['原生 Agent', '统一执行', '自由组合'],
-  captions: ['Runtime 准备环境，原生 Harness 运行模型与工具循环。', '应用通过 Agents API 创建 Session，Core 管理执行与持久状态。', '不同 Session 使用不同 Harness 与模型；此示例中的托管 Session 共用 microsandbox 部署，独立工作区可跨计算生命周期保留。'],
-  app: '你的应用', api: 'OpenAI SDK · Agents API', state: 'Session 与 Turn', orchestration: '调度 · 取消 · 交互', events: '事件 · 结果 · 持久状态', workspace: '挂载工作区 · Shell · 工具', loop: '原生 Agent 循环', runtime: '环境准备 · 执行管理', model: '模型提供商', provider: '沙箱提供商', compute: '创建与回收计算资源', next: '下一步', back: '上一步', play: '播放', pause: '暂停', label: 'Session 架构演示', step: '演示阶段',
-} : {
-  stages: ['Native agent', 'Managed execution', 'Many combinations'],
-  captions: ['Runtime prepares the environment. The native harness owns the model and tool loop.', 'Your app creates a Session through the Agents API. Core manages execution and durable state.', 'Sessions use different Harnesses and models. Managed Sessions here share one microsandbox deployment; independent workspaces outlive compute.'],
-  app: 'Your application', api: 'OpenAI SDK · Agents API', state: 'Sessions & Turns', orchestration: 'Schedule · cancel · interact', events: 'Events · results · durable state', workspace: 'Mounted workspace · shell · tools', loop: 'Native agent loop', runtime: 'Prepare · execute · report', model: 'Model provider', provider: 'Sandbox Provider', compute: 'Provision & reclaim compute', next: 'Next', back: 'Back', play: 'Play', pause: 'Pause', label: 'Inside a Session', step: 'Architecture stage',
-})
+const copy = computed(() => landing[props.lang].session.flow)
 const step = ref(0)
 const playing = ref(true)
 const visible = ref(false)
 const root = ref<HTMLElement>()
+const fit = ref<HTMLElement>()
+// The 1100 px board scales down to the column width instead of scrolling.
+const scale = ref(1)
+let resize: ResizeObserver | undefined
 let timer: ReturnType<typeof setInterval> | undefined
 let observer: IntersectionObserver | undefined
 let media: MediaQueryList | undefined
@@ -36,15 +32,16 @@ onMounted(() => {
   observer = new IntersectionObserver(([entry]) => { visible.value = entry.isIntersecting; syncTimer() }, { threshold: .2 })
   observer.observe(root.value!)
   document.addEventListener('visibilitychange', syncTimer)
+  resize = new ResizeObserver(([entry]) => { scale.value = Math.min(1, entry.contentRect.width / 1100) })
+  resize.observe(fit.value!)
 })
-onBeforeUnmount(() => { clearInterval(timer); observer?.disconnect(); media?.removeEventListener('change', onMotion); document.removeEventListener('visibilitychange', syncTimer) })
+onBeforeUnmount(() => { clearInterval(timer); observer?.disconnect(); resize?.disconnect(); media?.removeEventListener('change', onMotion); document.removeEventListener('visibilitychange', syncTimer) })
 </script>
 
 <template>
   <figure ref="root" class="session-sketch" :data-stage="step" :class="{ paused: !playing || !visible }" :aria-label="copy.label">
-    <div class="sketch-top"><strong>{{ copy.label }}</strong><span>0{{ step + 1 }} · {{ copy.stages[step] }}</span></div>
-    <div class="sketch-scroll" tabindex="0" :aria-label="copy.label">
-      <div class="sketch-board">
+    <div ref="fit" class="sketch-fit" :style="{ height: 530 * scale + 'px' }">
+      <div class="sketch-board" :style="{ transform: `scale(${scale})` }">
         <svg class="wires" viewBox="0 0 1100 530" aria-hidden="true">
           <defs><marker id="session-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1 8 5 1 9" /></marker></defs>
           <g class="core-wires"><path d="M205 228 Q238 222 266 228" marker-end="url(#session-arrow)" /><path d="M266 265 Q238 271 205 265" marker-end="url(#session-arrow)" /><text x="219" y="210">/v1</text>
@@ -91,11 +88,9 @@ onBeforeUnmount(() => { clearInterval(timer); observer?.disconnect(); media?.rem
 </template>
 
 <style scoped>
-.session-sketch { margin: 28px 0 24px; color: var(--l-text); font-family: 'OAC Hand', 'Kaiti SC', KaiTi, cursive; line-height: 1.35; }
-.sketch-top { display: flex; justify-content: space-between; gap: 20px; padding: 0 20px 12px; font-size: 20px; }
-.sketch-top > span { color: var(--l-muted); font-size: 16px; }
-.sketch-scroll { overflow-x: auto; }
-.sketch-board { position: relative; width: 1100px; height: 530px; margin: auto; background-image: linear-gradient(var(--l-grid) 1px,transparent 1px),linear-gradient(90deg,var(--l-grid) 1px,transparent 1px); background-size: 32px 32px; }
+.session-sketch { margin: 40px 0 24px; color: var(--l-text); font-family: 'OAC Hand', 'Kaiti SC', KaiTi, cursive; line-height: 1.35; }
+.sketch-fit { width: 100%; max-width: 1100px; margin: 0 auto; }
+.sketch-board { position: relative; width: 1100px; height: 530px; transform-origin: top left; background-image: linear-gradient(var(--l-grid) 1px,transparent 1px),linear-gradient(90deg,var(--l-grid) 1px,transparent 1px); background-size: 32px 32px; }
 .hand-box { position: relative; border: 1.3px solid var(--l-text-2); border-radius: 2px 5px 3px 7px; background: var(--l-bg); }
 .hand-box::after { content: ''; pointer-events: none; position: absolute; inset: 2px -3px -3px 2px; border: .7px solid var(--l-muted); opacity: .4; border-radius: 5px 2px 6px 3px; transform: rotate(-.35deg); }
 .sketch-board > article { position: absolute; box-sizing: border-box; transition: left .85s cubic-bezier(.22,1,.36,1), top .85s cubic-bezier(.22,1,.36,1), width .85s, height .85s, opacity .5s, transform .85s; }
@@ -122,7 +117,8 @@ strong, b { font-weight: 400; }
 .runtime small { font-size: 11px; }
 .harness { padding: 12px; margin-top: 14px; }
 .harness > strong { display: flex; align-items: center; gap: 9px; font-size: 19px; }
-.harness img { width: 22px; height: 22px; filter: brightness(0) invert(1); }
+.harness img { width: 22px; height: 22px; filter: brightness(0); }
+.dark .harness img { filter: brightness(0) invert(1); }
 .agent-loop { text-align: center; margin-top: 8px; }
 .cycle { position: relative; height: 90px; width: 200px; margin: auto; font-size: 14px; }
 .cycle span { position: absolute; z-index: 1; background: var(--l-bg); padding: 0 3px; }
@@ -164,10 +160,14 @@ figcaption { min-height: 2.8em; max-width: 900px; margin: 8px auto 14px; padding
 .sketch-controls { display: flex; gap: 22px; align-items: center; justify-content: center; padding: 8px 12px; }
 .sketch-controls button { border: 1px solid var(--l-line-strong); padding: 7px 14px; font: 16px 'OAC Hand', 'Kaiti SC', cursive; cursor: pointer; }.sketch-controls button:disabled { opacity: .3; cursor: default; }
 .sketch-controls button:hover:enabled { border-color: var(--l-accent); color: var(--l-accent); }
-.sketch-controls :focus-visible,.sketch-scroll:focus-visible { outline: 2px solid var(--l-accent); outline-offset: 3px; }
-.stage-picker { width: 330px; }.stage-picker input { width: 100%; accent-color: var(--l-accent); }.stage-picker > div { display: flex; justify-content: space-between; font-size: 13px; color: var(--l-muted); }
+.sketch-controls :focus-visible { outline: 2px solid var(--l-accent); outline-offset: 3px; }
+.stage-picker { width: 520px; max-width: 100%; }.stage-picker input { width: 100%; accent-color: var(--l-accent); }.stage-picker > div { display: flex; justify-content: space-between; font-size: 14px; color: var(--l-muted); }
 @keyframes ink-flow { to { stroke-dashoffset: -54; } }
 .paused .cycle svg,.paused .request { animation-play-state: paused; }
-@media (max-width: 640px) { .sketch-top { padding: 0 4px 12px; font-size: 16px; }.sketch-top > span { font-size: 13px; }.sketch-controls { gap: 8px; flex-wrap: wrap; }.stage-picker { width: 100%; order: -1; }figcaption { font-size: 16px; } }
+@media (max-width: 640px) { .sketch-controls { gap: 8px; flex-wrap: wrap; }.stage-picker { width: 100%; order: -1; }figcaption { font-size: 16px; } }
 @media (prefers-reduced-motion: reduce) { article,.core-wires,.fleet-wires { transition: none; }.cycle svg,.wires .request { animation: none; } }
+</style>
+
+<style scoped>
+@font-face { font-family: 'OAC Hand'; src: url('../assets/fonts/Virgil.woff2') format('woff2'); font-weight: 400; font-display: swap; }
 </style>
