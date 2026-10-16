@@ -77,7 +77,6 @@ Core は実行状態を永続化し、Runtime は Environment 内で選択した
 | Harness の機能と制限の確認 | [Harness の機能](https://openagentcore.dev/contracts/agents-api/harness-capabilities) |
 | 設計の理解 | [アーキテクチャ](https://openagentcore.dev/docs/architecture) |
 | 新しいサンドボックス、Harness などのコンポーネントの追加 | [OpenAgentCore の開発](https://openagentcore.dev/docs/development) |
-| すべてのページの一覧 | [llms.txt](https://openagentcore.dev/llms.txt) |
 
 ## コントリビューションとライセンス
 

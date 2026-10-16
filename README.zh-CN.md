@@ -77,7 +77,6 @@ print(session.id)
 | 查看 Harness 能力和限制 | [Harness 能力](https://openagentcore.dev/zh/contracts/agents-api/harness-capabilities) |
 | 了解设计 | [架构](https://openagentcore.dev/zh/docs/architecture) |
 | 接入新的沙箱、Harness 或其他组件 | [开发 OpenAgentCore](https://openagentcore.dev/zh/docs/development) |
-| 查找所有页面 | [llms.txt](https://openagentcore.dev/llms.txt) |
 
 ## 参与贡献与许可证
 

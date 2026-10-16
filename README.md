@@ -77,7 +77,6 @@ Core keeps durable execution state. The Runtime runs the chosen Harness inside t
 | Check Harness capabilities and limits | [Harness capabilities](https://openagentcore.dev/contracts/agents-api/harness-capabilities) |
 | Understand the design | [Architecture](https://openagentcore.dev/docs/architecture) |
 | Add a sandbox, Harness or other component | [Develop OpenAgentCore](https://openagentcore.dev/docs/development) |
-| Find every page | [llms.txt](https://openagentcore.dev/llms.txt) |
 
 ## Contributing and license
 
