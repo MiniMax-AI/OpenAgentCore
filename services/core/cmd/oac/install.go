@@ -276,6 +276,7 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		return fmt.Errorf("This installation runs release %s; this installer is %s. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.", short(installed), short(buildRevision))
 	}
 	compose := installCompose{docker: i.docker, dir: o.dir}
+	cleanedOverride := false
 	if fresh || upgrade {
 		if fresh {
 			listener, err := net.Listen("tcp", net.JoinHostPort(o.host, strconv.Itoa(o.port)))
@@ -308,8 +309,17 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		} else {
 			// The staged release runs with the installation's settings, project name and override.
 			compose.files = []string{"-f", filepath.Join(stage, "compose.yaml")}
-			if _, err := os.Stat(filepath.Join(o.dir, "compose.override.yaml")); err == nil {
-				compose.files = append(compose.files, "-f", filepath.Join(o.dir, "compose.override.yaml"))
+			override := filepath.Join(o.dir, "compose.override.yaml")
+			if raw, err := os.ReadFile(override); err == nil {
+				if cleaned, changed := dropPayloadBind(raw); changed {
+					// The release serves the node payload from the data volume, so the offline installer's host bind goes.
+					if err := os.WriteFile(filepath.Join(stage, "compose.override.yaml"), cleaned, 0o600); err != nil {
+						return err
+					}
+					override = filepath.Join(stage, "compose.override.yaml")
+					cleanedOverride = true
+				}
+				compose.files = append(compose.files, "-f", override)
 			}
 			compose.files = append(compose.files, "--project-directory", o.dir)
 		}
@@ -344,10 +354,18 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 				return fmt.Errorf("Upgrade stopped; the running services are unchanged: %w", err)
 			}
 		}
-		for _, name := range []string{cliName(), "compose.yaml"} {
+		names := []string{cliName(), "compose.yaml"}
+		if cleanedOverride {
+			names = append(names, "compose.override.yaml")
+		}
+		for _, name := range names {
 			if err := os.Rename(filepath.Join(stage, name), filepath.Join(o.dir, name)); err != nil {
 				return err
 			}
+		}
+		if cleanedOverride {
+			// Nothing serves the offline installer's host copy any more.
+			_ = os.RemoveAll(filepath.Join(o.dir, "node-payload"))
 		}
 	}
 	if !fresh {
@@ -398,6 +416,29 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		fmt.Printf("Browsers must open exactly %s. If they reach this host at another address, set OAC_PUBLIC_URL in .env and run %s apply.\n", origin, command)
 	}
 	return nil
+}
+
+// dropPayloadBind removes the offline installer's Web bind of /node-payload from a JSON override and keeps every other entry. Other formats are the operator's and stay as they are.
+func dropPayloadBind(raw []byte) ([]byte, bool) {
+	var override map[string]any
+	if json.Unmarshal(raw, &override) != nil {
+		return nil, false
+	}
+	services, _ := override["services"].(map[string]any)
+	web, _ := services["web"].(map[string]any)
+	volumes, _ := web["volumes"].([]any)
+	kept := make([]any, 0, len(volumes))
+	for _, volume := range volumes {
+		if entry, ok := volume.(map[string]any); !ok || entry["target"] != "/node-payload" {
+			kept = append(kept, volume)
+		}
+	}
+	if len(kept) == len(volumes) {
+		return nil, false
+	}
+	web["volumes"] = kept
+	cleaned, err := json.MarshalIndent(override, "", "  ")
+	return append(cleaned, '\n'), err == nil
 }
 
 // portHolderHint names an OpenAgentCore Compose project that publishes the port. A project whose directory is gone keeps running; one whose directory exists is a live installation, so the hint names it instead of offering to delete it.

@@ -297,6 +297,42 @@ func TestInstallUpgradesAnotherReleaseOnlyWhenRequested(t *testing.T) {
 	}
 }
 
+func TestUpgradeDropsTheOfflineNodePayloadBind(t *testing.T) {
+	f := newInstallFixture(t)
+	setBuildRevision(t, "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0")
+	if err := f.run(); err != nil {
+		t.Fatal(err)
+	}
+	payload := filepath.Join(f.options.dir, "node-payload")
+	os.Mkdir(payload, 0o755)
+	override := `{"services":{"web":{"volumes":[{"type":"bind","source":"` + payload + `","target":"/node-payload","read_only":true},{"type":"bind","source":"/srv/ca","target":"/ca"}]}}}`
+	path := filepath.Join(f.options.dir, "compose.override.yaml")
+	os.WriteFile(path, []byte(override), 0o600)
+	setBuildRevision(t, "development")
+	f.options.upgrade = true
+	f.failure = "staged compose run --rm --no-deps init"
+	if err := f.run(); err == nil {
+		t.Fatal("upgrade should have stopped")
+	}
+	if raw, _ := os.ReadFile(path); string(raw) != override {
+		t.Fatal("a stopped upgrade changed the override")
+	}
+	if _, err := os.Stat(payload); err != nil {
+		t.Fatal("a stopped upgrade removed the node payload")
+	}
+	f.failure = ""
+	if err := f.run(); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := os.ReadFile(path)
+	if strings.Contains(string(raw), "/node-payload") || !strings.Contains(string(raw), "/srv/ca") {
+		t.Fatalf("override after upgrade: %s", raw)
+	}
+	if _, err := os.Stat(payload); !os.IsNotExist(err) {
+		t.Fatal("upgrade kept the node payload directory")
+	}
+}
+
 func setBuildRevision(t *testing.T, revision string) {
 	previous := buildRevision
 	buildRevision = revision
