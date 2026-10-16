@@ -1,26 +1,28 @@
 ---
-title: "Add a Harness"
+title: "Harness protocol"
 ---
 
-A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code) that runs the model and tool loop. A **Harness adapter** translates the Runtime's Executor and Turn contract into that engine's SDK or protocol. This document is the Runtime–Harness protocol: the adapter interfaces and their lifecycle obligations, registration, Core qualification and acceptance. [Harness capabilities](./harness-capabilities.md) records what each current Harness supports.
+A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code) that runs the model and tool loop; a **Harness adapter** translates the Runtime's Executor and Turn contract into that engine's SDK or protocol. The Harness protocol is the contract between the Runtime and the adapter: the adapter interfaces and their lifecycle obligations, registration, Core qualification and acceptance. It is for developers who add or maintain a Harness.
 
-Start from two entry points:
-
-- [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go): the shared model configuration contract (declarations and preparation).
-- [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go): the execution lifecycle, the extension contracts and the registration methods.
+| Property | Value |
+| --- | --- |
+| Caller | The Runtime ([dispatch](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch)) |
+| Implementations | The Codex, Claude Code and MiniMax Code adapters ([Native references](#native-references)). [Harness capabilities](./harness-capabilities.md) records what each supports. |
+| Code | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go): the execution lifecycle, the extension contracts and the registration methods. [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go): the shared model configuration contract (declarations and preparation). |
+| Transport | In-process Go interfaces. The Runtime speaks the [Core–Runtime protocol](../../docs/runtime-protocol.md) to Core. |
+| Version rule | A change to the interfaces edits this page and every adapter in one change. |
 
 ## Ownership
 
-```text
-Core: Session, Turn, immutable configuration, durable events
-                         |
-              common Runtime protocol
-                         |
-Runtime: Executor preparation, reuse, idle expiry, recovery
-                         |
-               Harness adapter package
-                         |
-          native SDK, process or connection
+```mermaid
+flowchart TB
+    Core["Core<br/>Session, Turn, immutable configuration, durable events"]
+    Runtime["Runtime<br/>Executor preparation, reuse, idle expiry, recovery"]
+    Adapter["Harness adapter package"]
+    Native["Native SDK, process or connection"]
+    Core -->|"Core-Runtime protocol"| Runtime
+    Runtime -->|"Executor and Turn interfaces"| Adapter
+    Adapter --> Native
 ```
 
 | Component | Responsibility | Location |
@@ -48,8 +50,7 @@ Implement the mandatory text lifecycle and handle every extension explicitly. Qu
 
 ## Architecture rules
 
-- Codex, Claude Code and future Harnesses have equal standing. The common Runtime wire protocol and Executor and Turn interfaces own lifecycle, input receipts, cancellation, recovery and resource access; each adapter keeps its native implementation and model and tool loop.
-- A new engine supplies an adapter, a qualified profile, registration and an independently verified deployment. It adds no engine-name branches to API handlers, persistence, dispatch, scheduling or Environment providers, and no handler, store table, scheduler, event projector or model loop for capabilities the contract already represents.
+[Complexity stays in the adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter) applies to every Harness. These rules are Harness-specific:
 - Keep required lifecycle declarations, extension interfaces and registration methods in `agent/harness.go`. Result types, errors and Registry storage may stay in focused files.
 - Use the existing `proto.SupportedAgentKind` and `AgentKindCapabilities` schema. Do not add a second capability descriptor or a combined optional interface.
 - Onboarding does not require feature equality. Harnesses need not match each other's optional features, and MCP, functions, images or verbosity control are not required to register. Verify the common lifecycle obligations and use the same public assertions for each declared operation. An omitted declaration or a missing extension implementation blocks onboarding; a native difference does not.
@@ -102,6 +103,21 @@ The service profile qualifies public combinations and the Runtime advertises the
 
 A Session owns one reusable Executor in its connected Runtime; a Turn owns one input execution, its output stream and its cancellation. `agent.ExecutorFactory` prepares the fixed configuration without model input, and `Executor.StartTurn` creates a new `agent.Turn` without replacing healthy native resources. Normal completion settles only the Turn. `Executor.Close` releases native resources on idle expiry, Environment shutdown or confirmed invalidation; it releases neither the Environment allocation nor the workspace. Core keeps no second Executor cache. The same lifecycle applies to hosted, self-hosted and `none` placements.
 
+An Executor moves through these states. Each Turn runs between `StartTurn` and `AwaitSettlement`.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> Idle: prepared
+    Idle --> Running: StartTurn
+    Running --> Idle: reusable
+    Running --> Closing: not reusable or shutdown
+    Idle --> Closing: idle expiry, shutdown or invalidation
+    Closing --> Closing: Close failed, retry
+    Closing --> Closed: Close confirmed
+    Closed --> [*]
+```
+
 **Binding.** The Runtime binds its Executor record to the Session, Environment, connection and immutable execution configuration. Resume identity and prior-Turn recovery flags are continuity assertions, not configuration changes. A supplied native identity must match the retained owner, and when existing history is required, recovery never starts a new root. A configuration conflict is an error, not a hot switch. An ordinary lost connection retires its owners and handles; [planned suspension](../../docs/runtime-protocol.md#preparation-and-execution-order) retains settled idle owners through exact authenticated resume. Old timers, output and cancellation cannot affect replacement owners.
 
 **Per-Turn state.** Each Turn gets a fresh wrapper, output channel and receipt state. Steering and function interfaces belong to that Turn. Native callbacks capture the originating Turn before asynchronous work, so a late event is never attributed to whichever Turn is active. Native processes, query or transport connections, fixed capability configuration and native session identity belong to the Executor. Do not reset completed `sync.Once` values or reuse an old Turn object.
@@ -117,7 +133,7 @@ A Session owns one reusable Executor in its connected Runtime; a Turn owns one i
 - Every `Session` declares `CancellationOutcome`. `Turn` inherits it. The snapshot keeps observed native identity, Usage and output and remains readable after cancellation. Missing evidence stays unset; an empty `DonePayload` means nothing has been observed, not that cancellation succeeded or is unsupported. Reading the snapshot does not wait for settlement.
 - `Session.Cancel` requests cancellation; output closure signals teardown. Turn settlement still requires `AwaitSettlement` and any required `Executor.Close`; neither a successful cancellation request nor its snapshot replaces those waits.
 
-**What the Runtime does around a Turn.** One output consumer starts before native Start, drains the bounded 64-frame channel and keeps the terminal observation until Start publication, Turn settlement and admitted operation receipts finish. Natural completion never calls Cancel. Input and function admission close before settlement; operations already admitted hold their barrier through native receipts and outbound acknowledgement. The Runtime sends cancellation to the Turn before waiting on that barrier, because a written input may need a native interrupt to produce its receipt. It joins native settlement, any required confirmed Executor close, output drain and all admitted operations before an applied acknowledgement or reuse, and only then forwards Done or an applied cancellation receipt. A failed Close can report failure while keeping the same Run and outstanding operations for retry; a closed caller wait cannot manufacture an applied input receipt. The Runtime commits native continuity and releases the old Run's admission before publishing Done, since the receiver may start another Turn at once; a late terminal-send failure belongs to the old Run and cannot invalidate a successor that already owns the Executor. Connection shutdown owns transport-loss cleanup. The settlement wait is ten seconds and the receipt send budget five seconds; a timeout is not proof of quiescence.
+**What the Runtime does around a Turn.** One output consumer starts before native Start, drains the bounded output channel and keeps the terminal observation until Start publication, Turn settlement and admitted operation receipts finish. Natural completion never calls Cancel. Input and function admission close before settlement; operations already admitted hold their barrier through native receipts and outbound acknowledgement. The Runtime sends cancellation to the Turn before waiting on that barrier, because a written input may need a native interrupt to produce its receipt. It joins native settlement, any required confirmed Executor close, output drain and all admitted operations before an applied acknowledgement or reuse, and only then forwards Done or an applied cancellation receipt. A failed Close can report failure while keeping the same Run and outstanding operations for retry; a closed caller wait cannot manufacture an applied input receipt. The Runtime commits native continuity and releases the old Run's admission before publishing Done, since the receiver may start another Turn at once; a late terminal-send failure belongs to the old Run and cannot invalidate a successor that already owns the Executor. Connection shutdown owns transport-loss cleanup. The settlement wait and the receipt send budget are bounded ([Timeouts and limits](../../docs/runtime-protocol.md#timeouts-and-limits)); a timeout is not proof of quiescence.
 
 ## Events, inputs and optional capabilities
 
@@ -158,7 +174,7 @@ The Runtime resolves the [state directory](../../docs/configuration.md#runtime-r
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration)` | Kind, availability, version, `AgentKindCapabilities` and the model configuration declaration. It resets the other registrations, so call it first. |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | The Executor and Turn lifecycle used for execution; derives the `Preparation` capability |
 
-Every `proto.AgentKindCapabilities` field must be explicitly `proto.CapabilitySupported` or `proto.CapabilityUnsupported`, even for an unavailable Harness. `proto.CapabilityUnspecified` is invalid: zero values and omitted fields never mean Unsupported. An installation probe may set an individual field with `proto.CapabilityFromBool`; it must not populate unmentioned or future fields. Availability stays separate in `SupportedAgentKind.Available`. Registration validates the complete declaration before changing the registry, and the wire carries an explicit boolean for every field, so omitted and null fields are invalid. A new field requires a decision in every production declaration. Runtime consumers use `IsSupported()` and reject unsupported requests before native operations; an interface assertion verifies implementation, never support. Every declaration must match the behavior verified for that installation; the [Core–Runtime protocol](../../docs/runtime-protocol.md#capability-declarations) owns how declarations travel and are frozen.
+Fill every field of `proto.AgentKindCapabilities` explicitly, even for an unavailable Harness; [Capability declarations](../../docs/runtime-protocol.md#capability-declarations) defines how declarations are encoded, validated and frozen. An installation probe may set an individual field with `proto.CapabilityFromBool`; it must not populate unmentioned or future fields. Availability stays separate in `SupportedAgentKind.Available`. Code that reads a declaration uses `IsSupported()`; an interface assertion verifies implementation, never support. Every declaration must match the behavior verified for that installation.
 
 The admission mapping is explicit. `Steering` controls non-durable `Steerer` input. `DurableInputReceipts` controls `DurableSteerer` input and also requires the Turn settlement contract; neither implies the other, and Core's public text profile requires both. Workspace declarations describe the authorized resource owner, including the common Runtime workspace implementation. `WorkspaceReadPreparation` admits `execution_prepare` with `workspace_read_only`. The Runtime readies that preparation itself and serves its reads from the bound local workspace directory without calling the Executor factory, so an adapter declares it only when this kind's Environment workspace is that local directory. Registration does not derive it. Runtime registration does not grant Core qualification; the service profile does.
 
@@ -180,7 +196,7 @@ The profile is pure: it declares supported placements, public configuration and 
 
 ### Explicit service qualification
 
-`engine.Profile` is the service's qualification declaration, separate from the Runtime's `AgentKindCapabilities`. Its capability fields reuse the small `proto.CapabilitySupport` value type: every field must explicitly select `CapabilitySupported` or `CapabilityUnsupported`. `CapabilityUnspecified`, including an omitted field, is rejected. Sharing this value type does not let a Runtime advertisement grant service authorization.
+`engine.Profile` is the service's qualification declaration, separate from the Runtime's `AgentKindCapabilities`. Its capability fields reuse the small `proto.CapabilitySupport` value type and follow the same explicit-value rule ([Capability declarations](../../docs/runtime-protocol.md#capability-declarations)). Sharing this value type does not let a Runtime advertisement grant service authorization.
 
 Each of `ConfigurationValidation`, `ToolsValidation` and `FunctionResultValidation` chooses one of two strategies:
 
@@ -202,6 +218,31 @@ Run the `engine` and `execution` tests for omission, policy, combination and err
 A supplied `model` must be a nonempty string, and an explicit `model_provider` requires it. The native-owned connection path may omit both; explicit null is invalid. An explicitly empty declaration accepts no provider or nonempty native parameters and advertises no provider support. Unknown protocol formats and duplicate protocol declarations fail at registration.
 
 The declaration's ordered `protocols` list is the only source of accepted protocols and the default (the first entry); it also feeds Core's configuration-support descriptor, and Core and Runtime reject unsupported combinations through it. Adapters connect directly through native configuration; they never introduce a model API proxy or protocol converter, a second model capability registry, or capabilities inferred from model names. Claude's private bridge receives compiled native options and performs structural checks only, not a second copy of the declaration's rules.
+
+## Native installer participation
+
+An adapter may supply `agent.Installation` from `installation.go` in its own package: registered kind, pinned version, supported platforms, activation environment and a bounded readiness probe. Register it in `cli/native_harness.go` and add its pinned component to the native distribution builder. This optional contract does not change Executor and Turn semantics. The Runtime owns checksums, copying, locks and additive installation; adapters own native layout and probes. Validate installation and execution on each advertised platform. Missing or incompatible native content fails; it never installs itself during a Turn.
+
+## Native process ownership
+
+The daemon's `clirunner` starts every native child in its own Unix process group (a Job object on Windows); other hosts reject the launch. Explicit and parent-context cancellation share a TERM grace period and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits within its limit for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
+
+Owned output pipes stay readable after the leader exits. Consumers drain stdout and stderr before calling `Wait`, which joins the cached process result and closes the readers. `Done` reports leader reaping and group cleanup signals; it is not a native execution receipt or proof of persisted history. SDK adapters settle each Turn and drain its observations before publishing completion, and Executor close also closes the query and awaits the native child. Process groups are lifecycle supervision, not isolation or containment of descendants that leave the group.
+
+Adapters run native tools unattended with the launching user's permissions, and a Harness never asks a human. Codex runs with approval policy `never`, under which it settles MCP elicitation itself without reaching the client, and with full access; the adapter also disables its blocking `request_user_input` tool. Claude runs through the adapter's tool callback, which allows or denies without asking, in native `default` permission mode with the SDK sandbox disabled. MiniMax runs with bypassed permissions and its sandbox disabled; the adapter disables `askUser`, advertises no elicitation and answers `session/request_permission` with the ACP `cancelled` outcome, which MiniMax treats as a denial. No native permission or question request reaches Core: a human in the loop goes through a function tool, the Session reads [`requires_action`](./sessions-events.md#session-status) and the application submits the function result. Do not add permission profiles, bubblewrap wrappers or native sandbox settings; there is one execution path for every Environment origin. Resource paths are operator configuration, not a permission boundary.
+
+An unreachable model host must not hold a Turn open. The adapter keeps the Harness's own connection retries bounded through native settings, and the Harness's final connection error becomes `connection_failed` when the Harness reports it as structured data ([native failure classification](../../docs/runtime-protocol.md#native-failure-classification)). Core adds no model timeout of its own. Each adapter guide states its Harness's bound.
+
+Network admission follows [Restricted network](./environments.md#restricted-network).
+
+## Timeouts and limits
+
+The Runtime's per-Turn limits (settlement wait, receipt send budget and output channel) are in the [Core–Runtime protocol](../../docs/runtime-protocol.md#timeouts-and-limits). The limits on native child processes are:
+
+| Value | Applies to | On expiry |
+| --- | --- | --- |
+| 3 seconds (default) | The TERM grace period of a native child process on explicit or parent-context cancellation | The Runtime escalates to a bounded KILL. |
+| 10 seconds | The daemon's `stop` command waiting for confirmed shutdown, which covers the grace period and the pipe and owner cleanup after it | Shutdown is not confirmed. |
 
 ## Qualify the adapter
 
@@ -235,22 +276,6 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 | MiniMax cancellation retirement, failed Start and cleanup retry | `mcode/executor_test.go`, `executor_backpressure_test.go` |
 | MiniMax native history binding | `mcode/session_test.go` |
 | Explicit refusals without native effects or fabricated results | Each adapter's `unsupported_test.go` |
-
-## Native installer participation
-
-An adapter may supply `agent.Installation` from `installation.go` in its own package: registered kind, pinned version, supported platforms, activation environment and a bounded readiness probe. Register it in `cli/native_harness.go` and add its pinned component to the native distribution builder. This optional contract does not change Executor and Turn semantics. The Runtime owns checksums, copying, locks and additive installation; adapters own native layout and probes. Validate installation and execution on each advertised platform. Missing or incompatible native content fails; it never installs itself during a Turn.
-
-## Native process ownership
-
-The daemon's `clirunner` starts every native child in its own Unix process group (a Job object on Windows); other hosts reject the launch. Explicit and parent-context cancellation share a TERM grace period (three seconds by default) and a bounded KILL escalation. An internal reaper also cleans remaining group members when the direct process exits, even if a descendant still holds stdout open; during cancellation, surviving descendants keep the remaining grace after the leader exits. The daemon's `stop` command waits up to ten seconds for confirmed shutdown, which covers that grace period and the pipe and owner cleanup after it.
-
-Owned output pipes stay readable after the leader exits. Consumers drain stdout and stderr before calling `Wait`, which joins the cached process result and closes the readers. `Done` reports leader reaping and group cleanup signals; it is not a native execution receipt or proof of persisted history. SDK adapters settle each Turn and drain its observations before publishing completion, and Executor close also closes the query and awaits the native child. Process groups are lifecycle supervision, not isolation or containment of descendants that leave the group.
-
-Adapters run native tools unattended with the launching user's permissions, and a Harness never asks a human. Codex runs with approval policy `never`, under which it settles MCP elicitation itself without reaching the client, and with full access; the adapter also disables its blocking `request_user_input` tool. Claude runs through the adapter's tool callback, which allows or denies without asking, in native `default` permission mode with the SDK sandbox disabled. MiniMax runs with bypassed permissions and its sandbox disabled; the adapter disables `askUser`, advertises no elicitation and answers `session/request_permission` with the ACP `cancelled` outcome, which MiniMax treats as a denial. No native permission or question request reaches Core: a human in the loop goes through a function tool, the Session reads [`requires_action`](./sessions-events.md#session-status) and the application submits the function result. Do not add permission profiles, bubblewrap wrappers or native sandbox settings; there is one execution path for every Environment origin. Resource paths are operator configuration, not a permission boundary.
-
-An unreachable model host must not hold a Turn open. The adapter keeps the Harness's own connection retries bounded through native settings, and the Harness's final connection error becomes `connection_failed` when the Harness reports it as structured data ([native failure classification](../../docs/runtime-protocol.md#native-failure-classification)). Core adds no model timeout of its own. Each adapter guide states its Harness's bound.
-
-Network admission follows [Restricted network](./environments.md#restricted-network).
 
 ## Native references
 

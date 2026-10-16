@@ -1,28 +1,57 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 2daf6711170282ee521509c9305c25f3286ab6de48f84f589ad33f95768eabc3
+source_hash: 2b4bd6958c7addec906c30ccba8b359d98e267049ff87a6d54fe73be8de16e85
 ---
 
-此协议在 Runtime daemon 获取机器凭据后连接 Core 与 daemon，定义 daemon 连接上消息的含义和顺序。wire 类型、限制和验证器仅在 [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto) 中定义一次；Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) 与参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) 都使用它们，因此无需同步第二套 payload schema。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。
+Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
 
-托管和自托管 Runtime 使用同一协议。Harness 通过 [Harness adapter 契约](../../contracts/agents-api/zh/harness-onboarding.md)接入，该契约负责 Runtime registry 后的 Executor 和 Turn 生命周期义务。
+| Property | Value |
+| --- | --- |
+| 调用方 | Core 的 [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) |
+| 实现方 | 参考 Runtime 的 [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch)。Harness 通过 [Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md)接入，该协议负责 Runtime registry 后的 Executor 和 Turn 生命周期义务。 |
+| 代码 | [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto)：wire 类型、限制和验证器仅定义一次，供两端共用，因此无需同步第二套 payload schema |
+| 传输 | 通过 `/api/v1/agent-daemon/ws` 的 WebSocket 传输 JSON [envelope](#envelope-and-identity)。签发凭据和打开连接的 HTTP 路由见[机器连接 API](../../contracts/agents-api/zh/machine-api.md)。 |
+| 版本规则 | `proto.Version` 精确匹配（[版本](#versioning)） |
 
 ## 所有权与连接 {#ownership-and-connection}
 
-Core 拥有持久化的 Session、Turn、input 和 Environment 记录、调度与协调。Runtime 拥有原生 Executor、活动 Turn、传输状态和清理责任，直到完成结算。沙箱提供商拥有执行位置与外围计算资源。释放执行准入或关闭 Executor 不会删除、暂停或回收沙箱。daemon 不是隔离边界；参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)。
+| 参与方 | 拥有 | 绝不 |
+| --- | --- | --- |
+| Core | 持久化的 Session、Turn、input 和 Environment 记录、调度与协调 | 重连后重放 input、初始化、transfer 或未决 mutation |
+| Runtime | 原生 Executor、活动 Turn、传输状态和清理责任，直到完成结算 | 因释放执行准入或关闭 Executor 而删除、暂停或回收沙箱；daemon 不是隔离边界（参见 [Runtime 与外层隔离](concepts.md#runtime-and-outer-isolation)） |
+| 沙箱提供商 | 执行位置与外围计算资源 | 拥有 Executor 或 Turn |
 
 Runtime 按以下顺序连接：
 
-1. 获取 daemon 凭据和 device ID。[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型；项目 API 密钥和 Core 密钥都不是 Runtime 凭据。
-2. 调用 `POST /api/v1/agent-daemon/bootstrap`，通过 Bearer header 提供凭据，并提供 device ID。使用返回的连接 URL。
-3. 连接 `/api/v1/agent-daemon/ws` 的 WebSocket，传入 `device_id`、`version` 查询参数和 Bearer header。凭据不得出现在 URL、payload 日志或 trace 中。
-4. 立即发送 heartbeat，之后按 bootstrap 返回的间隔发送。每个 heartbeat 声明 `supported_agent_kinds`、其可用性和[能力](#capability-declarations)。第一个 heartbeat 之前能力未知；heartbeat 中缺失的 kind 视为未声明。两者都不允许推断。
-5. 交换有序 JSON [envelope](#envelope-and-identity)。Heartbeat 仅证明存活，不证明执行进度，也不充当此前消息的回执。
+```mermaid
+sequenceDiagram
+    participant R as Runtime
+    participant C as Core
+    R->>C: POST /api/v1/agent-daemon/bootstrap (device ID, Bearer credential)
+    C-->>R: connection URL, heartbeat interval
+    R->>C: WebSocket /api/v1/agent-daemon/ws?device_id&version
+    alt version differs from proto.Version
+        C-->>R: HTTP 426 incompatible_version
+    end
+    R->>C: heartbeat (supported_agent_kinds, availability, capabilities)
+    loop every heartbeat interval
+        R->>C: heartbeat
+    end
+    C->>R: ordered envelopes
+    R->>C: ordered envelopes
+```
 
-wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go)，独立于 heartbeat 报告的 Runtime 构建版本。Core 仅接受精确匹配，包括 patch 部分。不匹配时，在任何 dispatch 前返回 HTTP 426 `incompatible_version`；daemon 将其视为永久错误并停止重连。应一起部署版本匹配的两端。
+- [机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型；项目 API 密钥和 Core 密钥都不是 Runtime 凭据。
+- 两个请求都通过 Bearer header 提供凭据。凭据不得出现在 URL、payload 日志或 trace 中。
+- 立即发送第一个 heartbeat，之后按 bootstrap 返回的间隔发送。每个 heartbeat 声明 `supported_agent_kinds`、其可用性和[能力](#capability-declarations)。第一个 heartbeat 之前能力未知；heartbeat 中缺失的 kind 视为未声明。两者都不允许推断。
+- Heartbeat 仅证明存活，不证明执行进度，也不充当此前消息的回执。
 
 每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 隔离 owner lease，移除旧 Run 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
+
+## 版本 {#versioning}
+
+wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go)，独立于 heartbeat 报告的 Runtime 构建版本。Core 仅接受精确匹配，包括 patch 部分。不匹配时，在任何 dispatch 前返回 HTTP 426 `incompatible_version`；daemon 将其视为永久错误并停止重连。应一起部署版本匹配的两端；payload 或其语义的任何变更都会改变 `proto.Version`。
 
 ## 能力声明 {#capability-declarations}
 
@@ -32,7 +61,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 
 每个已准入的 Executor 和 Turn 保留准入时的声明。后续 heartbeat 不能给已有 owner 增加操作。可选操作在任何原生调用前检查此快照；存在 Go interface 不代表支持。已声明操作返回 `agent.ErrUnsupportedOperation` 属于契约违规，与不可用、原生调用失败或不确定写入不同。不确定操作保留回执与所有权，绝不自动重放。工作区支持包括公共 Runtime 工作区实现，因此原生 adapter 不支持的 workspace 方法不会禁用该组合。
 
-新增字段要求每个生产声明都作出明确决定。契约测试为注册、wire 往返和持久化 boolean 投影逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)负责各声明的 adapter 侧规则。
+新增字段要求每个生产声明都作出明确决定。契约测试为注册、wire 往返和持久化 boolean 投影逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md#register-the-adapter)负责各声明的 adapter 侧规则。
 
 声明描述 Runtime 能做什么。Core 仅在 Harness 的 engine profile 也通过资格验证时准入公开功能，并在设备选择及领取 Turn 前的最终检查中检查选定设备的声明：
 
@@ -57,23 +86,6 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 `retained_native_history` 表示 Runtime 与 Harness 组合可在确认原生进程关闭后，从私有持久状态重新打开同一个原生 Session。它不保证恢复进程内存、后台进程或外部连接。所选文件系统还必须独立提供持久存储。Core 根据旧设备已持久化的声明判断能否释放计算而不终结 Session，并在准入执行前验证新 Runtime。原生历史缺失或无效时明确失败，绝不授权新建原生会话或重放此前输入。
 
 Core 对 `usage` 和 `resume` 没有准入规则。
-
-`execution_prepare` 的配置携带 Core 为各 Run 设置的显式启用项：
-
-| 字段 | Core 设置方式 |
-| --- | --- |
-| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
-| `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
-| `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
-| `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
-| `disable_execution_environment` | Environment 类型为 `none` 时设置 |
-| `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
-| `require_existing_native_session` | 需要恢复原生 Session 时设置 |
-| `prompt_steer` 上的 `durable_receipt` | Core 交付的每个活动输入都设置 |
-
-执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
-
-未携带显式启用项的请求保留未启用时的 frame 和字段。只要 adapter 映射了原生工具，`tool_call` frame 就携带与 engine 无关的 `observation`。
 
 ## Envelope 与身份 {#envelope-and-identity}
 
@@ -112,38 +124,135 @@ Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替�
 
 ## 准备与执行顺序 {#preparation-and-execution-order}
 
-无论托管还是用户自有环境，每条连接都通过 `runtime_prepare` 初始化 Environment；[Environment 契约](../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)负责准备内容和时机。传输文件或 archive 时，发送 `begin`，等待 `ready`，发送有序 chunk 并等待每个匹配的 `received` offset，再发送 `commit` 并等待 `completed`。初始化和终结阶段使用不含文件数据的类型化 header。每个 `begin` 必须携带 `budget_ms`，取值为 1 至 1800000 的整数，表示 Core 所拥有的初始化预算剩余毫秒数；chunk 和 commit 不携带该字段。Runtime 从收到 `begin` 起执行此相对预算，Core 的等待不超过原操作期限。完整的 `begin`–`commit` 暂存阶段另有两分钟限制；应用已提交操作及等待 `completed` 使用剩余初始化预算，不受暂存期限限制。应用前到期会拒绝传输；应用中到期则在本地变更停止后报告 `unknown`，绝不授权重放。使用共享 validator 验证预期结果、offset、size 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
+无论托管还是用户自有环境，每条连接都通过 `runtime_prepare` 初始化 Environment；[Environment 契约](../../contracts/agents-api/zh/environments.md#runtime-capability-preparation)负责准备内容和时机。文件或 archive 通过一次 transfer 传输，流程如下。
 
-执行 Turn 分为五步：
+```mermaid
+sequenceDiagram
+    participant C as Core
+    participant R as Runtime
+    C->>R: runtime_prepare begin (budget_ms)
+    R-->>C: runtime_prepare_result ready
+    loop each chunk
+        C->>R: runtime_prepare chunk (offset)
+        R-->>C: runtime_prepare_result received (offset)
+    end
+    C->>R: runtime_prepare commit
+    R-->>C: runtime_prepare_result completed
+```
 
-1. 订阅 preparation status，再发送 `execution_prepare`，携带不可变 Session 配置，不包含 Run 输入。
-2. `preparing` 表示 Runtime 拥有 preparation。`ready` 提供 Executor ID、admission handle、revision 和 expiry。两者都不提交用户输入。
-3. 订阅 Run，再发送 `execution_start`，携带该 Executor ID、handle、Run ID 和有序输入。有效 start 将预约转移一次。`started` 确认转移给 Turn，不确认完成；输出可能与 status 竞争，因此必须事先有 subscriber。
-4. 消费 Run 事件，直到原生终结结果或观测丢失。执行 error 后跟随 `done`，关闭流；之前的 error 仍属于结果的一部分。
-5. start 前放弃时发送 `execution_release`。所有权转给 Run 后使用 `prompt_cancel`；释放旧 handle 不能取消后继 Turn。
+初始化和终结阶段使用不含文件数据的类型化 header。每个 `begin` 携带 `budget_ms`，表示 Core 所拥有的初始化预算剩余毫秒数；chunk 和 commit 不携带该字段。Runtime 从收到 `begin` 起执行此相对预算，Core 的等待不超过原操作期限。`begin`–`commit` 暂存阶段另有独立限制；应用已提交操作及等待 `completed` 使用剩余初始化预算，不受暂存限制约束。应用前到期会拒绝传输；应用中到期则在本地变更停止后报告 `unknown`，绝不授权重放。使用共享 validator 验证预期结果、offset、size 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
 
-preparation 预约每个 Turn 的准入，而不是新 Executor。它携带明确 Session 身份和不可变配置，不包含模型输入或 Run ID。新请求返回连接本地 handle 与所属 Executor ID；复用健康 Executor 时直接返回 `ready`，无需原生 preparation。每个 handle 的 revision 决定 status 观测顺序：忽略旧的或重复的 revision，不将 status 应用于其他 handle。典型状态转移为 `preparing → ready → starting → started`，或由 `released`、`expired`、`failed` 终止。`rejected` 控制操作携带 `operation` 和 error code，不替代 handle 的当前 revision。释放 admission 仅放弃该 admission；不关闭 Session 的空闲 Executor，也不取消后续 Turn。
+执行 Turn 流程如下。Core 在发送 `execution_prepare` 之前订阅 preparation status，在发送 `execution_start` 之前订阅 Run，因为输出可能与 status 竞争。
 
-preparation 和 start 在 receive loop 与 router lock 之外运行。admission 在授予五分钟后到期，重试不延长截止时间；到期不解除 Runtime 完成清理结算的义务。Runtime 分别限制活动 preparation、execution 和保留的空闲资源，关闭中或不确定资源持续计入限制，直到清理成功。明确的 `execution_prepare` 拒绝若为 `preparation_capacity`，会让排队 Turn 保持未领取，供 Worker 重试，包括清理占用容量的情况；其他错误或不确定交付都不授权重放。Runtime 最多保留 64 条 admission 记录，旧 handle 不会消耗替代项的 admission。这些记录仅属于连接，不是持久化输入重放。
+```mermaid
+sequenceDiagram
+    participant C as Core
+    participant R as Runtime
+    participant H as Harness adapter
+    Note over C: Subscribe to preparation status
+    C->>R: execution_prepare (Session configuration, no Run input)
+    alt new Executor
+        R-->>C: preparation_status preparing
+        R->>H: ExecutorFactory
+        R-->>C: preparation_status ready (Executor ID, handle, revision, expiry)
+    else reused healthy Executor
+        R-->>C: preparation_status ready
+    end
+    alt abandon before start
+        C->>R: execution_release
+        R-->>C: preparation_status released
+    else start
+        Note over C: Subscribe to the Run
+        C->>R: execution_start (Executor ID, handle, Run ID, input)
+        R-->>C: preparation_status starting
+        R->>H: StartTurn
+        R-->>C: preparation_status started
+        loop until a native terminal outcome
+            R-->>C: delta, tool_call, usage, error
+        end
+        alt Run ends
+            R-->>C: done
+        else cancel during the Run
+            C->>R: prompt_cancel
+            R-->>C: interaction_decision_ack
+        end
+    end
+```
+
+- `preparing` 表示 Runtime 拥有 preparation。`ready` 提供 Executor ID、admission handle、revision 和 expiry。两者都不提交用户输入。
+- 有效的 `execution_start` 将预约转移一次。`started` 确认转移给 Turn，不确认完成。
+- 消费 Run 事件，直到原生终结结果或观测丢失。执行 error 后跟随 `done`，关闭流；之前的 error 仍属于结果的一部分。
+- start 前放弃时发送 `execution_release`。所有权转给 Run 后使用 `prompt_cancel`；释放旧 handle 不能取消后继 Turn。
+
+preparation 预约每个 Turn 的准入，而不是新 Executor。它携带明确 Session 身份和不可变配置，不包含模型输入或 Run ID。新请求返回连接本地 handle 与所属 Executor ID；复用健康 Executor 时直接返回 `ready`，无需原生 preparation。每个 handle 的 revision 决定 status 观测顺序：忽略旧的或重复的 revision，不将 status 应用于其他 handle。admission 按下列状态转移。`rejected` 控制操作携带 `operation` 和 error code，不替代 handle 的当前 revision。释放 admission 仅放弃该 admission；不关闭 Session 的空闲 Executor，也不取消后续 Turn。
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> preparing: execution_prepare
+    [*] --> ready: reused Executor
+    preparing --> ready
+    ready --> starting: execution_start
+    starting --> started
+    starting --> failed
+    preparing --> released: execution_release
+    ready --> released: execution_release
+    preparing --> expired
+    ready --> expired
+    preparing --> failed
+    ready --> failed
+```
+
+preparation 和 start 在 receive loop 与 router lock 之外运行。admission 在固定截止时间到期，重试不延长该时间；到期不解除 Runtime 完成清理结算的义务。Runtime 分别限制活动 preparation、execution 和保留的空闲资源，关闭中或不确定资源持续计入限制，直到清理成功。明确的 `execution_prepare` 拒绝若为 `preparation_capacity`，会让排队 Turn 保持未领取，供 Worker 重试，包括清理占用容量的情况；其他错误或不确定交付都不授权重放。Runtime 保留有限数量的 admission 记录，旧 handle 不会消耗替代项的 admission。这些记录仅属于连接，不是持久化输入重放。
 
 Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并发限制独立。关闭时 Runtime 关闭活动和空闲 Executor，保留关闭失败的目标，并允许稍后串行重试。普通断连会关闭失败的 transport 并保留原 router，直到 shutdown 成功；等待超时或清理失败不授权重连，进程 shutdown 继续等待，不丢弃自己拥有的原生资源。对于 Runtime 初始化，shutdown 会等待同步 apply 操作和回执发送结束后才释放连接；`unknown` 结果仍是不确定结果，并阻止该 Router 上的后续准备，但本地变更停止后不再阻止重连。Core 保留失败的初始化状态，绝不重放初始化。工作区操作在跨 Turn 和 Executor 关闭后仍保留绑定与结算规则。
 
-
 挂起先关闭准入、排空已接纳工作与回执，同时保留已结算的空闲 Executor，随后才确认 `environment_quiesced`。活动、准备中、失效或其他未结算的所有者会阻止挂起。整个挂起期间停止空闲到期计时并隔离其回调；精确匹配且已认证的 `environment_resume` 为同一批所有者恢复一个新的空闲计时间隔。只有这种计划性重连跨 socket 保留 Router 与原生所有者；普通断连、shutdown 和连接生命周期取消仍要求确认清理完成。排空失败后，准入保持关闭直到 shutdown。恢复后的准备仍检查相同的原生身份与不可变配置，包括凭据冲突；绝不静默替换配置冲突的驻留 Executor。沙箱提供商仍负责其 checkpoint 实现的文件系统刷新和计算停止保证；Runtime 静止本身既不证明这些保证，也不证明原生 RAM 或外部网络连接已恢复。
+
+### 执行配置 {#execution-configuration}
+
+`execution_prepare` 的配置携带 Core 为各 Run 设置的显式启用项：
+
+| 字段 | Core 设置方式 |
+| --- | --- |
+| `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
+| `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
+| `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
+| `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
+| `disable_execution_environment` | Environment 类型为 `none` 时设置 |
+| `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
+| `require_existing_native_session` | 需要恢复原生 Session 时设置 |
+| `prompt_steer` 上的 `durable_receipt` | Core 交付的每个活动输入都设置 |
+
+执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
+
+未携带显式启用项的请求保留未启用时的 frame 和字段。只要 adapter 映射了原生工具，`tool_call` frame 就携带与 engine 无关的 `observation`。
 
 ## 活动输入回执 {#active-input-receipts}
 
-Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`，每个 Run 一次交付一个输入，并等待回执后再发送下一个：
+Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`，每个 Run 一次交付一个输入，并等待回执后再发送下一个。
 
-| 阶段 | 定时器 |
-| --- | --- |
-| 原生写入 | Runtime 将 adapter 原生写入限制为 10 秒；写入完成后停止计时 |
-| `written` 确认 | Core 从交付开始最多等待 30 秒取得 `written`；否则输入结果未知 |
-| 回执发送 | 每次发送回执都有独立的 5 秒预算，并感知 shutdown |
-| 原生接受 | `accepted` 在 Turn 生命周期内到达，不自动重新交付 |
-| Done | Runtime 在原生 Turn 结算完成、且正在处理的输入的回执发送结束后才发送 `done`；该输入受原生写入与回执发送预算限制 |
+```mermaid
+sequenceDiagram
+    participant C as Core
+    participant R as Runtime
+    participant H as Harness adapter
+    C->>R: prompt_steer (durable_receipt)
+    Note over C,R: written wait limit, from delivery
+    R->>H: SteerWithReceipt
+    Note over R,H: native write limit
+    H-->>R: write complete
+    Note over R,C: receipt send limit
+    R-->>C: prompt_steer_ack written
+    H-->>R: native application receipt
+    Note over R,C: receipt send limit
+    R-->>C: prompt_steer_ack accepted
+    R-->>C: done after Turn settlement
+```
 
-`written` 和发送失败都不会推进 Core 的 input cursor。取消发出后，即使输入先变为未知，终结结果也由取消回执负责；15 秒内没有取消确认时，Core 记录 `cancel_unconfirmed`。未发出 `done` 时，取消回执携带已停止 Turn 的已确认 continuity snapshot。
+`accepted` 在 Turn 生命周期内到达，不自动重新交付。Runtime 在原生 Turn 结算完成、且正在处理的输入的回执发送结束后才发送 `done`；该输入受原生写入与回执发送限制约束。限制数值见[超时与限制](#timeouts-and-limits)。
+
+`written` 和发送失败都不会推进 Core 的 input cursor。取消发出后，即使输入先变为未知，终结结果也由取消回执负责；取消确认限制到期仍无确认时，Core 记录 `cancel_unconfirmed`。未发出 `done` 时，取消回执携带已停止 Turn 的已确认 continuity snapshot。
 
 ## 每类确认所证明的事实 {#what-each-acknowledgement-proves}
 
@@ -191,17 +300,41 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 从绑定的本地工作区提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
 
-`workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果最多携带 1024 个单路径组件 UTF-8 名称，每个最多 255 字节，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。
+`workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果携带有限数量的单路径组件 UTF-8 名称，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。
 
-准入前，请求 payload 限制为 8 KiB，correlation ID 限制为 128 字节；过长 ID 不回显，过大的 trace metadata 不进入回复。原始 read result 限制为 1 MiB，位于 4 MiB transport frame 内。这些是私有 transport 限制，不是公开 Files 参数。成功读取要求完整字节或明确截断，并确认原生 close。安全的原生拒绝不携带字节；中断或有歧义的读取保持未知，并停止该 owner 的后续读取。已 dispatch 的读取在 observer 取消以及资源转移或释放后仍保留有限时等待方，资源关闭阻止新准入。gateway 限制订阅，不在重连后重试或重放读取；重复的 pending operation ID 不能启动另一次读取。
+准入前，请求 payload 与 correlation ID 受限；过长 ID 不回显，过大的 trace metadata 不进入回复。原始 read result 受限于 transport frame 之内。这些是私有 transport 限制，不是公开 Files 参数。成功读取要求完整字节或明确截断，并确认原生 close。安全的原生拒绝不携带字节；中断或有歧义的读取保持未知，并停止该 owner 的后续读取。已 dispatch 的读取在 observer 取消以及资源转移或释放后仍保留有限时等待方，资源关闭阻止新准入。gateway 限制订阅，不在重连后重试或重放读取；重复的 pending operation ID 不能启动另一次读取。
 
 Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执行时针对精确 Run。它在有限时 read 与 release 期间保留预约，仅在确认 close 后返回数据（不完整读取或不确定清理返回 unavailable，不包含数据），在交付结果前释放预约，并在完成或失败后撤销限定作用域的读取凭据。Runtime 保留不确定清理的所有权和容量。[Environment Files 契约](../../contracts/agents-api/zh/environment-files.md)负责公开授权、路径和分页。
 
-`workspace_write` 在原生 writer 运行前，通过已确认的 64 KiB frame 传输完整且有界的 body，验证声明的 digest，不运行模型。私有 transfer 限制为 50 MiB，与公开 API 在任何 Runtime 工作前检查的 5 MiB decoded inline 限制独立。Runtime 在接收或应用写入时排除执行；格式错误、不完整或到期的 transfer 不会到达 installer。精确的 commit 或拒绝回执释放 mutation owner。缺失或有歧义的回执保留不确定性：observer 取消和本地进程退出不能证明没有改变任何内容。公开准入前，Core 在 Session lock 下持久预约写入，跨重启阻止后继 mutation，直到精确结算；请求不重放。各平台都使用 daemon 的 Go 实现进行有界读取、目录列举、文件创建与输出导出，不使用外部 helper 或 staging directory。
+`workspace_write` 在原生 writer 运行前，通过已确认的 frame 传输完整且有界的 body，验证声明的 digest，不运行模型。私有 transfer 限制与公开 API 在任何 Runtime 工作前检查的 decoded inline 限制相互独立。Runtime 在接收或应用写入时排除执行；格式错误、不完整或到期的 transfer 不会到达 installer。精确的 commit 或拒绝回执释放 mutation owner。缺失或有歧义的回执保留不确定性：observer 取消和本地进程退出不能证明没有改变任何内容。公开准入前，Core 在 Session lock 下持久预约写入，跨重启阻止后继 mutation，直到精确结算；请求不重放。各平台都使用 daemon 的 Go 实现进行有界读取、目录列举、文件创建与输出导出，不使用外部 helper 或 staging directory。
 
 ## MCP 连接权限 {#mcp-connection-authority}
 
 `execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
+
+## 超时与限制 {#timeouts-and-limits}
+
+本协议中的所有数值都在此处给出。Turn 生命周期中 Harness 一侧的限制见 [Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md#timeouts-and-limits)。
+
+| 数值 | 适用对象 | 到期或超出时 |
+| --- | --- | --- |
+| 5 分钟 | 执行 admission，自授予起算；重试不延长 | admission 变为 `expired`。Runtime 仍须完成清理结算。 |
+| 64 条记录 | Runtime 在每条连接上保留的 admission 记录 | `execution_prepare` 被 `preparation_capacity` 拒绝，Core 让排队 Turn 保持未领取，供 Worker 重试。 |
+| 64 个 frame | Turn 的有界输出 channel | 由原生 Start 之前启动的单个消费者排空。 |
+| 10 秒 | Runtime 围绕 Turn 的结算等待 | 超时不证明已静默；资源保持被占用，直到清理得到确认。 |
+| 1 至 1,800,000 ms | `runtime_prepare` `begin` 的 `budget_ms`：Core 所拥有的初始化预算剩余量 | 应用前到期会拒绝传输；应用中到期报告 `unknown`，绝不重放。 |
+| 2 分钟 | 一次 `runtime_prepare` transfer 的 `begin`–`commit` 暂存阶段 | 传输被拒绝。 |
+| 64 KiB | `runtime_prepare` transfer 或 `workspace_write` body 的单个 chunk | 更大的 chunk 验证失败。 |
+| 50 MiB | 一次 `runtime_prepare` transfer 或 `workspace_write` body（私有限制） | 传输在到达 installer 前被拒绝。 |
+| 5 MiB | 公开写入的 decoded inline body，由 API 在任何 Runtime 工作前检查 | API 拒绝请求。 |
+| 4 MiB | 单个入站 transport frame | frame 被拒绝。 |
+| 8 KiB、128 字节 | `workspace_read` 请求 payload 与 correlation ID，在准入前检查 | 请求被拒绝；过长 ID 不回显，过大的 trace metadata 不进入回复。 |
+| 1 MiB | `workspace_read` 的原始结果，位于 transport frame 内 | 结果明确截断。 |
+| 1024 个名称，每个 255 字节 | 一次目录结果 | 结果明确截断。 |
+| 10 秒 | adapter 对活动输入的原生写入；写入完成后停止计时 | Runtime 确认 `outcome_unknown`，绝不自动重新交付该输入。 |
+| 30 秒 | Core 自交付起等待 `written` | 输入结果未知。 |
+| 5 秒 | 每次回执发送，感知 shutdown | 发送失败；发送失败不会推进 Core 的 input cursor。 |
+| 15 秒 | Core 等待取消确认 | Core 记录 `cancel_unconfirmed`。 |
 
 ## 契约验证 {#contract-verification}
 
@@ -211,4 +344,4 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 
 套件覆盖不兼容版本、preparation 失败、取消结算、连接丢失而不虚构终结事件、重连而不重放、陈旧或重复 handle 与回执、清理失败、有界 transfer 验证，以及超时后的资源所有权。详细故障注入测试放在所测 gateway 和 dispatcher 代码旁。
 
-其他 Runtime 对接脚本化 Core 重放同一组 scenario，再对每个声明的能力运行原生验收。受控 adapter 测试证明 transport 契约，不证明原生 Harness 行为、操作系统支持、提供商认证或沙箱隔离。共享类型、本文和契约检查应一起修改。Harness adapter 还需运行 [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md)中描述的共享文本断言。
+其他 Runtime 对接脚本化 Core 重放同一组 scenario，再对每个声明的能力运行原生验收。受控 adapter 测试证明 transport 契约，不证明原生 Harness 行为、操作系统支持、提供商认证或沙箱隔离。共享类型、本文和契约检查应一起修改。Harness adapter 还需运行 [Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md#qualify-the-adapter)中描述的共享文本断言。

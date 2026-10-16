@@ -2,25 +2,54 @@
 title: "Core\u2013Runtime protocol"
 ---
 
-This protocol connects Core to a Runtime daemon after the daemon has its machine credential. It defines the meaning and order of the messages on the daemon connection. The wire types, limits and validators live once in [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto); Core's [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) and the reference Runtime's [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch) both use them, so there is no second payload schema to keep in sync. The HTTP routes that issue credentials and open the connection are in the [machine connection API](../contracts/agents-api/machine-api.md).
+The Core–Runtime protocol connects Core to a Runtime daemon and defines the meaning and order of the messages on the daemon connection. Hosted and self-hosted Runtimes use the same protocol.
 
-Hosted and self-hosted Runtimes use the same protocol. A Harness joins through the [Harness adapter contract](../contracts/agents-api/harness-onboarding.md), which owns the Executor and Turn lifecycle obligations behind the Runtime registry.
+| Property | Value |
+| --- | --- |
+| Caller | Core's [gateway](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/runtimegateway) |
+| Implementations | The reference Runtime's [dispatcher](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch). A Harness joins through the [Harness protocol](../contracts/agents-api/harness-onboarding.md), which owns the Executor and Turn lifecycle obligations behind the Runtime registry. |
+| Code | [`internal/agentdaemon/proto`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/internal/agentdaemon/proto): wire types, limits and validators, defined once and used by both sides, so there is no second payload schema to keep in sync |
+| Transport | JSON [envelopes](#envelope-and-identity) over a WebSocket at `/api/v1/agent-daemon/ws`. The HTTP routes that issue credentials and open the connection are in the [Machine connection API](../contracts/agents-api/machine-api.md). |
+| Version rule | Exact match of `proto.Version` ([Versioning](#versioning)) |
 
 ## Ownership and connection
 
-Core owns durable Session, Turn, input and Environment records, scheduling and reconciliation. Runtime owns native Executors, active Turns, transfer state and cleanup until settlement. A Sandbox Provider owns placement and the surrounding compute. Releasing an execution admission or closing an Executor never deletes, suspends or reclaims a sandbox. The daemon is not an isolation boundary; see [Runtime and outer isolation](./concepts.md#runtime-and-outer-isolation).
+| Party | Owns | Never does |
+| --- | --- | --- |
+| Core | Durable Session, Turn, input and Environment records, scheduling and reconciliation | Replays input, initialization, transfers or unresolved mutations after a reconnection |
+| Runtime | Native Executors, active Turns, transfer state and cleanup until settlement | Deletes, suspends or reclaims a sandbox when it releases an execution admission or closes an Executor; the daemon is not an isolation boundary ([Runtime and outer isolation](./concepts.md#runtime-and-outer-isolation)) |
+| Sandbox Provider | Placement and the surrounding compute | Owns Executors or Turns |
 
 A Runtime connects in this order:
 
-1. Obtain a daemon credential and device ID. The [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists the credential kinds; Project API keys and the Core key are never Runtime credentials.
-2. Call `POST /api/v1/agent-daemon/bootstrap` with the credential as a Bearer header and the device ID. Use the connection URL it returns.
-3. Dial the WebSocket at `/api/v1/agent-daemon/ws` with `device_id` and `version` query parameters and the Bearer header. Never put a credential in a URL, a payload log or a trace.
-4. Send a heartbeat at once, then at the interval bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
-5. Exchange ordered JSON [envelopes](#envelope-and-identity). Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
+```mermaid
+sequenceDiagram
+    participant R as Runtime
+    participant C as Core
+    R->>C: POST /api/v1/agent-daemon/bootstrap (device ID, Bearer credential)
+    C-->>R: connection URL, heartbeat interval
+    R->>C: WebSocket /api/v1/agent-daemon/ws?device_id&version
+    alt version differs from proto.Version
+        C-->>R: HTTP 426 incompatible_version
+    end
+    R->>C: heartbeat (supported_agent_kinds, availability, capabilities)
+    loop every heartbeat interval
+        R->>C: heartbeat
+    end
+    C->>R: ordered envelopes
+    R->>C: ordered envelopes
+```
 
-The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together.
+- The [Machine connection API](../contracts/agents-api/machine-api.md#credentials) lists the credential kinds. Project API keys and the Core key are never Runtime credentials.
+- Both requests carry the credential as a Bearer header. A credential never appears in a URL, a payload log or a trace.
+- The first heartbeat is sent at once, then at the interval that bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
+- Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
 Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core fences the owner lease and evicts the old Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
+
+## Versioning
+
+The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go), independent of the Runtime build version that heartbeats report. Core accepts only an exact match, including the patch component. A mismatch returns HTTP 426 `incompatible_version` before any dispatch; the daemon treats it as permanent and stops reconnecting. Deploy matching peers together; a change to a payload or its semantics changes `proto.Version`.
 
 ## Capability declarations
 
@@ -30,7 +59,7 @@ On the wire each field is a JSON boolean, and every field is present, including 
 
 Each admitted Executor and Turn keeps the declaration it was admitted with. A later heartbeat cannot add operations to an existing owner. Optional operations check this snapshot before any native call; the presence of a Go interface never grants support. A declared operation that returns `agent.ErrUnsupportedOperation` is a contract violation, distinct from unavailability, a failed native call or an uncertain write. Uncertain operations keep their receipts and ownership and are never replayed automatically. Workspace support includes the common Runtime workspace implementation, so a native adapter's unsupported workspace method does not disable that composition.
 
-A new field requires an explicit decision in every production declaration. Contract tests enumerate every field for registration, wire round trips and the persisted boolean projection; the shared test fixture lists fields individually and supplies no defaults for future ones. [Harness onboarding](../contracts/agents-api/harness-onboarding.md) owns the adapter side of each declaration.
+A new field requires an explicit decision in every production declaration. Contract tests enumerate every field for registration, wire round trips and the persisted boolean projection; the shared test fixture lists fields individually and supplies no defaults for future ones. The [Harness protocol](../contracts/agents-api/harness-onboarding.md#register-the-adapter) owns the adapter side of each declaration.
 
 A declaration describes what the Runtime can do. Core admits a public feature only when the Harness's engine profile also qualifies it, and checks the declaration of the selected device during device selection and again at the final check before it claims a Turn:
 
@@ -55,23 +84,6 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 Core has no admission rule for `usage` and `resume`.
 
 `retained_native_history` means the composed Runtime and Harness can reopen the same native Session from its private retained state after confirmed native shutdown. It does not promise process memory, background processes or external connection recovery. The selected filesystem must separately provide retained storage. Core uses the previous device's persisted declaration to determine whether compute can be released without terminating the Session, and validates the replacement Runtime before admitting execution. Missing or invalid native history fails explicitly; it never authorizes a new native root or replay of prior input.
-
-The `execution_prepare` configuration carries the opt-ins Core sets for each Run:
-
-| Field | Set by Core |
-| --- | --- |
-| `agent_options` | Always `model` and `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
-| `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
-| `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
-| `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
-| `disable_execution_environment` | For an Environment of type `none` |
-| `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
-| `require_existing_native_session` | When a native Session must be recovered |
-| `durable_receipt` on `prompt_steer` | For every active input Core delivers |
-
-An execution configuration requires exactly one of `local_environment` and `disable_execution_environment`; `execution_prepare` rejects neither or both with `unsupported_configuration`.
-
-Requests without an opt-in keep the frames and fields they had without it. A `tool_call` frame carries the engine-neutral `observation` whenever the adapter maps the native tool.
 
 ## Envelope and identity
 
@@ -110,37 +122,135 @@ Usage frames and the final usage snapshot each carry the cumulative measurement 
 
 ## Preparation and execution order
 
-Environment initialization uses `runtime_prepare` on every connection, managed or user-owned; the [Environment contract](../contracts/agents-api/environments.md#runtime-capability-preparation) owns what is prepared and when. For a file or archive, send `begin`, wait for `ready`, send ordered chunks and await each matching `received` offset, then send `commit` and await `completed`. Initialization and finalization have typed headers without file data. Every `begin` requires `budget_ms`, an integer from 1 through 1800000 carrying the remaining Core-owned initialization budget; chunks and commits omit it. The Runtime enforces that relative budget from receipt of `begin`, and Core waits no longer than its original operation deadline. The complete `begin`–`commit` staging phase has a separate two-minute limit; applying a committed operation and waiting for `completed` use the remaining initialization budget, not the staging limit. Expiry before application rejects the transfer; expiry during application reports `unknown` after local mutations stop and never authorizes replay. Validate the expected outcome, offset, size and finite error code with the shared validator. One transfer is allowed per connection. A chunk receipt confirms staged bytes, not installation; a completed commit confirms that operation, not that a later Turn ran.
+Environment initialization uses `runtime_prepare` on every connection, managed or user-owned; the [Environment contract](../contracts/agents-api/environments.md#runtime-capability-preparation) owns what is prepared and when. A file or archive moves in one transfer, shown below.
 
-An execution Turn runs in five steps:
+```mermaid
+sequenceDiagram
+    participant C as Core
+    participant R as Runtime
+    C->>R: runtime_prepare begin (budget_ms)
+    R-->>C: runtime_prepare_result ready
+    loop each chunk
+        C->>R: runtime_prepare chunk (offset)
+        R-->>C: runtime_prepare_result received (offset)
+    end
+    C->>R: runtime_prepare commit
+    R-->>C: runtime_prepare_result completed
+```
 
-1. Subscribe to preparation status, then send `execution_prepare` with the immutable Session configuration and no Run input.
-2. `preparing` means the Runtime owns preparation. `ready` supplies the Executor ID, admission handle, revision and expiry. Neither submits user input.
-3. Subscribe to the Run, then send `execution_start` with that Executor ID, handle, Run ID and ordered input. A valid start transfers the reservation once. `started` confirms the transfer to the Turn, not its completion; output can race the status, so it must already have a subscriber.
-4. Consume Run events until a native terminal outcome or loss of observation. An execution error is followed by `done`, which closes the stream; the preceding errors remain part of its outcome.
-5. To abandon before start, send `execution_release`. After ownership passes to a Run, use `prompt_cancel`; releasing the old handle cannot cancel its successor.
+Initialization and finalization have typed headers without file data. Every `begin` carries `budget_ms`, the remaining Core-owned initialization budget; chunks and commits omit it. The Runtime enforces that relative budget from receipt of `begin`, and Core waits no longer than its original operation deadline. The `begin`–`commit` staging phase has its own limit; applying a committed operation and waiting for `completed` use the remaining initialization budget, not the staging limit. Expiry before application rejects the transfer; expiry during application reports `unknown` after local mutations stop and never authorizes replay. Validate the expected outcome, offset, size and finite error code with the shared validator. One transfer is allowed per connection. A chunk receipt confirms staged bytes, not installation; a completed commit confirms that operation, not that a later Turn ran.
 
-A preparation reserves a per-Turn admission, not a new Executor. It carries an explicit Session identity and immutable configuration without model input or a Run ID. A fresh request returns a connection-local handle and the owning Executor ID; a reused healthy Executor returns `ready` without native preparation. Per-handle revisions order status observations: ignore older or repeated revisions and never apply a status to another handle. Typical transitions are `preparing → ready → starting → started`, or termination by `released`, `expired` or `failed`. A `rejected` control operation carries an `operation` and error code and does not replace the handle's current revision. Releasing an admission abandons only that admission; it does not close the Session's idle Executor or cancel a later Turn.
+An execution Turn runs as follows. Core subscribes to preparation status before it sends `execution_prepare` and to the Run before it sends `execution_start`, because output can race the status.
 
-Preparation and start run outside the receive loop and router lock. An admission expires five minutes after it is granted, and retries do not extend that deadline; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains at most 64 admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
+```mermaid
+sequenceDiagram
+    participant C as Core
+    participant R as Runtime
+    participant H as Harness adapter
+    Note over C: Subscribe to preparation status
+    C->>R: execution_prepare (Session configuration, no Run input)
+    alt new Executor
+        R-->>C: preparation_status preparing
+        R->>H: ExecutorFactory
+        R-->>C: preparation_status ready (Executor ID, handle, revision, expiry)
+    else reused healthy Executor
+        R-->>C: preparation_status ready
+    end
+    alt abandon before start
+        C->>R: execution_release
+        R-->>C: preparation_status released
+    else start
+        Note over C: Subscribe to the Run
+        C->>R: execution_start (Executor ID, handle, Run ID, input)
+        R-->>C: preparation_status starting
+        R->>H: StartTurn
+        R-->>C: preparation_status started
+        loop until a native terminal outcome
+            R-->>C: delta, tool_call, usage, error
+        end
+        alt Run ends
+            R-->>C: done
+        else cancel during the Run
+            C->>R: prompt_cancel
+            R-->>C: interaction_decision_ack
+        end
+    end
+```
+
+- `preparing` means the Runtime owns preparation. `ready` supplies the Executor ID, admission handle, revision and expiry. Neither submits user input.
+- A valid `execution_start` transfers the reservation once. `started` confirms the transfer to the Turn, not its completion.
+- Consume Run events until a native terminal outcome or loss of observation. An execution error is followed by `done`, which closes the stream; the preceding errors remain part of its outcome.
+- To abandon before start, send `execution_release`. After ownership passes to a Run, use `prompt_cancel`; releasing the old handle cannot cancel its successor.
+
+A preparation reserves a per-Turn admission, not a new Executor. It carries an explicit Session identity and immutable configuration without model input or a Run ID. A fresh request returns a connection-local handle and the owning Executor ID; a reused healthy Executor returns `ready` without native preparation. Per-handle revisions order status observations: ignore older or repeated revisions and never apply a status to another handle. An admission moves through the states below. A `rejected` control operation carries an `operation` and error code and does not replace the handle's current revision. Releasing an admission abandons only that admission; it does not close the Session's idle Executor or cancel a later Turn.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> preparing: execution_prepare
+    [*] --> ready: reused Executor
+    preparing --> ready
+    ready --> starting: execution_start
+    starting --> started
+    starting --> failed
+    preparing --> released: execution_release
+    ready --> released: execution_release
+    preparing --> expired
+    ready --> expired
+    preparing --> failed
+    ready --> failed
+```
+
+Preparation and start run outside the receive loop and router lock. An admission expires at a fixed deadline that retries do not extend; expiry does not remove the Runtime's obligation to settle cleanup. The Runtime bounds active preparation and execution separately from idle retained resources and counts closing or uncertain resources until their cleanup succeeds. A definite `execution_prepare` rejection with `preparation_capacity` leaves the queued Turn unclaimed for the Worker to retry, including when cleanup holds the capacity; any other error or uncertain delivery authorizes no replay. The Runtime retains a bounded number of admission records, and an old handle never consumes a replacement's admission. These records are connection-local, not durable input replay.
 
 Idle expiry of an Executor is a Runtime resource policy, separate from Core's active-Turn concurrency. On shutdown the Runtime closes active and idle Executors, keeps any target whose close failed and allows a later serialized retry. An ordinary disconnection closes the failed transport and keeps the exact router until shutdown succeeds; a wait timeout or failed cleanup never authorizes reconnection, and process shutdown keeps waiting rather than discarding owned native resources. For Runtime initialization, shutdown joins the synchronous apply operation and its receipt delivery before releasing the connection; an `unknown` result remains unknown and blocks further preparation on that Router, but does not prevent reconnection after local mutations have stopped. Core retains the failed initialization and never replays it. Workspace operations keep their binding and settlement rules across Turn boundaries and Executor closure.
 
 Suspension closes admission and drains admitted work and receipts while retaining settled idle Executors before acknowledging `environment_quiesced`. Active, preparing, invalid or otherwise unsettled owners prevent suspension. Idle expiry is stopped and its callbacks fenced throughout suspension; exact authenticated `environment_resume` restores a fresh idle interval on the same owners. Only this planned reconnect preserves the Router and native owners across sockets; ordinary disconnect, shutdown and cancellation of the connection lifecycle still require confirmed cleanup. A drain failure keeps admission closed until shutdown. Preparation after resume retains the same native identity and immutable-configuration checks, including credential conflicts; it never silently replaces a conflicting resident Executor. The Sandbox Provider remains responsible for the filesystem flush and compute-stop guarantees of its checkpoint implementation; Runtime quiescence alone proves neither those guarantees nor restoration of native RAM or external network connections.
 
+### Execution configuration
+
+The `execution_prepare` configuration carries the opt-ins Core sets for each Run:
+
+| Field | Set by Core |
+| --- | --- |
+| `agent_options` | Always `model` and `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
+| `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
+| `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
+| `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
+| `disable_execution_environment` | For an Environment of type `none` |
+| `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
+| `require_existing_native_session` | When a native Session must be recovered |
+| `durable_receipt` on `prompt_steer` | For every active input Core delivers |
+
+An execution configuration requires exactly one of `local_environment` and `disable_execution_environment`; `execution_prepare` rejects neither or both with `unsupported_configuration`.
+
+Requests without an opt-in keep the frames and fields they had without it. A `tool_call` frame carries the engine-neutral `observation` whenever the adapter maps the native tool.
+
 ## Active input receipts
 
-Core delivers active input as `prompt_steer` with `durable_receipt: true`, one input at a time per Run, and waits for its receipt before sending the next:
+Core delivers active input as `prompt_steer` with `durable_receipt: true`, one input at a time per Run, and waits for its receipt before sending the next.
 
-| Phase | Timer |
-| --- | --- |
-| Native write | The Runtime bounds the adapter's native write at 10 seconds; the timer stops once the write is complete |
-| `written` acknowledgement | Core waits at most 30 seconds from delivery for `written`; otherwise the input outcome is unknown |
-| Receipt send | Each receipt send has its own 5-second, shutdown-aware budget |
-| Native acceptance | `accepted` arrives under the Turn lifetime, with no automatic redelivery |
-| Done | The Runtime sends `done` after native Turn settlement and after the receipt send of any in-flight input; the native write and receipt send budgets bound that input |
+```mermaid
+sequenceDiagram
+    participant C as Core
+    participant R as Runtime
+    participant H as Harness adapter
+    C->>R: prompt_steer (durable_receipt)
+    Note over C,R: written wait limit, from delivery
+    R->>H: SteerWithReceipt
+    Note over R,H: native write limit
+    H-->>R: write complete
+    Note over R,C: receipt send limit
+    R-->>C: prompt_steer_ack written
+    H-->>R: native application receipt
+    Note over R,C: receipt send limit
+    R-->>C: prompt_steer_ack accepted
+    R-->>C: done after Turn settlement
+```
 
-Neither `written` nor a send failure advances Core's input cursor. Once cancellation is sent, its receipt owns the terminal outcome even if an input becomes unknown first; Core records `cancel_unconfirmed` when no cancellation confirmation arrives within 15 seconds. A cancellation receipt carries the stopped Turn's confirmed continuity snapshot when no `done` is emitted.
+`accepted` arrives under the Turn lifetime, with no automatic redelivery. The Runtime sends `done` after native Turn settlement and after the receipt send of any in-flight input; the native write and receipt send limits bound that input. The limits are in [Timeouts and limits](#timeouts-and-limits).
+
+Neither `written` nor a send failure advances Core's input cursor. Once cancellation is sent, its receipt owns the terminal outcome even if an input becomes unknown first; Core records `cancel_unconfirmed` when no cancellation confirmation arrives before its limit expires. A cancellation receipt carries the stopped Turn's confirmed continuity snapshot when no `done` is emitted.
 
 ## What each acknowledgement proves
 
@@ -188,17 +298,41 @@ Core stores accepted values in the Turn outcome as `engine_error_code` and `engi
 
 A workspace read that needs no running Turn uses the read-only preparation profile: `execution_prepare` with `workspace_read_only`, which requires the `workspace_read_preparation` capability. It accepts only the bound Environment and resource identity; execution options, model and MCP credentials, native Session continuation and model or tool input are excluded, and the owner rejects `execution_start`. The Runtime serves it from its bound local workspace without starting a Harness process. The profile publishes `released` after the Runtime drops the preparation's ownership; a stale status snapshot never publishes success. A release request, HTTP disconnect or remote socket closure alone does not confirm the release.
 
-`workspace_read` targets an existing preparation handle, or the Run it was transferred to, on the same authenticated device connection, with the exact frozen Environment identity; callers cannot supply sockets, credentials or workspace roots. `operation: directory` lists one workspace-relative directory (an empty path selects the root) with mutually exclusive byte and entry limits. A result carries at most 1024 single-component UTF-8 names of at most 255 bytes each, the entry kind, regular-file sizes and explicit truncation, and is returned only after directory access and handle cleanup settle. There is no snapshot, recursion or pagination at this layer. Byte and directory reads share target checks, correlation, capacity and retained operation waits.
+`workspace_read` targets an existing preparation handle, or the Run it was transferred to, on the same authenticated device connection, with the exact frozen Environment identity; callers cannot supply sockets, credentials or workspace roots. `operation: directory` lists one workspace-relative directory (an empty path selects the root) with mutually exclusive byte and entry limits. A result carries a bounded number of single-component UTF-8 names, the entry kind, regular-file sizes and explicit truncation, and is returned only after directory access and handle cleanup settle. There is no snapshot, recursion or pagination at this layer. Byte and directory reads share target checks, correlation, capacity and retained operation waits.
 
-Request payloads are bounded at 8 KiB and correlation IDs at 128 bytes before admission; oversized IDs are not echoed, and oversized trace metadata is omitted from replies. Raw read results are bounded at 1 MiB within the 4 MiB transport frame. These are private transport limits, not public Files parameters. A successful read requires complete bytes or explicit truncation and an acknowledged native close. A safe native rejection carries no bytes; an interrupted or ambiguous read stays unknown and stops further reads on that owner. A dispatched read keeps its bounded waiter across observer cancellation and resource transfer or release, and resource closure stops new admission. The gateway bounds subscriptions and never retries or replays a read on reconnect; a duplicate pending operation ID cannot start another read.
+Request payloads and correlation IDs are bounded before admission; oversized IDs are not echoed, and oversized trace metadata is omitted from replies. Raw read results are bounded within the transport frame. These are private transport limits, not public Files parameters. A successful read requires complete bytes or explicit truncation and an acknowledged native close. A safe native rejection carries no bytes; an interrupted or ambiguous read stays unknown and stops further reads on that owner. A dispatched read keeps its bounded waiter across observer cancellation and resource transfer or release, and resource closure stops new admission. The gateway bounds subscriptions and never retries or replays a read on reconnect; a duplicate pending operation ID cannot start another read.
 
 Core runs an idle directory read on the Worker's Session scheduling reservation and targets the exact Run during active execution. It keeps the reservation through the bounded read and release, returns data only after a confirmed close (an incomplete read or uncertain cleanup returns unavailable without data), releases the reservation before delivering the result, and revokes the scoped read credential on completion or failure. The Runtime keeps uncertain cleanup ownership and capacity. The [Environment Files contract](../contracts/agents-api/environment-files.md) owns public authorization, paths and pagination.
 
-`workspace_write` transfers a complete bounded body in acknowledged 64 KiB frames before the native writer runs, verifies the declared digest and runs no model. The private transfer bound is 50 MiB, separate from the public 5 MiB decoded inline bound that the API checks before any Runtime work. The Runtime excludes execution while it receives or applies a write; a malformed, incomplete or expired transfer never reaches the installer. An exact commit or rejection receipt releases the mutation owner. A missing or ambiguous receipt keeps the uncertainty: observer cancellation and local process exit cannot prove that nothing changed. Before public admission Core durably reserves the write under the Session lock and blocks successor mutations across restarts until exact settlement; the request is never replayed. Every platform uses the daemon's Go implementation for bounded reads, directory listing, file creation and output export, with no external helper or staging directory.
+`workspace_write` transfers a complete bounded body in acknowledged frames before the native writer runs, verifies the declared digest and runs no model. The private transfer bound is separate from the public decoded inline bound that the API checks before any Runtime work. The Runtime excludes execution while it receives or applies a write; a malformed, incomplete or expired transfer never reaches the installer. An exact commit or rejection receipt releases the mutation owner. A missing or ambiguous receipt keeps the uncertainty: observer cancellation and local process exit cannot prove that nothing changed. Before public admission Core durably reserves the write under the Session lock and blocks successor mutations across restarts until exact settlement; the request is never replayed. Every platform uses the daemon's Go implementation for bounded reads, directory listing, file creation and output export, with no external helper or staging directory.
 
 ## MCP connection authority
 
 Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
+
+## Timeouts and limits
+
+Every number in this protocol is stated here. The Harness side of the Turn lifetime is in the [Harness protocol](../contracts/agents-api/harness-onboarding.md#timeouts-and-limits).
+
+| Value | Applies to | On expiry or breach |
+| --- | --- | --- |
+| 5 minutes | An execution admission, from the moment it is granted; retries do not extend it | The admission becomes `expired`. The Runtime still owes cleanup settlement. |
+| 64 records | Admission records a Runtime retains per connection | `execution_prepare` is rejected with `preparation_capacity`, and Core leaves the queued Turn unclaimed for the Worker to retry. |
+| 64 frames | The bounded output channel of a Turn | A single consumer, started before native Start, drains it. |
+| 10 seconds | The Runtime's settlement wait around a Turn | A timeout is not proof of quiescence; the resources stay owned until cleanup is confirmed. |
+| 1 to 1,800,000 ms | `budget_ms` of a `runtime_prepare` `begin`: the remaining Core-owned initialization budget | Expiry before application rejects the transfer; expiry during application reports `unknown` and is never replayed. |
+| 2 minutes | The `begin`–`commit` staging phase of one `runtime_prepare` transfer | The transfer is rejected. |
+| 64 KiB | One chunk of a `runtime_prepare` transfer or a `workspace_write` body | A larger chunk fails validation. |
+| 50 MiB | One `runtime_prepare` transfer or `workspace_write` body (private bound) | The transfer is rejected before it reaches the installer. |
+| 5 MiB | The decoded inline body of a public write, checked by the API before any Runtime work | The API rejects the request. |
+| 4 MiB | One inbound transport frame | The frame is refused. |
+| 8 KiB, 128 bytes | A `workspace_read` request payload, and a correlation ID, checked before admission | The request is rejected; an oversized ID is not echoed and oversized trace metadata is omitted from replies. |
+| 1 MiB | The raw result of a `workspace_read`, within the transport frame | The result is explicitly truncated. |
+| 1024 names, 255 bytes each | One directory result | The result is explicitly truncated. |
+| 10 seconds | The adapter's native write of an active input; the timer stops when the write completes | The Runtime acknowledges `outcome_unknown` and never redelivers the input automatically. |
+| 30 seconds | Core's wait for `written`, from delivery | The input outcome is unknown. |
+| 5 seconds | Each receipt send, which is shutdown-aware | The send fails; a send failure does not advance Core's input cursor. |
+| 15 seconds | Core's wait for a cancellation confirmation | Core records `cancel_unconfirmed`. |
 
 ## Contract verification
 
@@ -208,4 +342,4 @@ Each [wire scenario](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/inter
 
 The suite covers incompatible versions, preparation failure, cancellation settlement, connection loss without invented terminal events, reconnection without replay, stale or duplicate handles and receipts, cleanup failures, bounded transfer validation and resource ownership after a timeout. Detailed fault injection stays next to the gateway and dispatcher code it tests.
 
-Another Runtime replays the same scenarios against a scripted Core, then runs native acceptance for every capability it declares. A controlled-adapter test establishes the transport contract, not native Harness behavior, operating-system support, provider authentication or sandbox isolation. Change the shared types, this document and the contract checks together. Harness adapters also run the shared text assertions described in [Harness onboarding](../contracts/agents-api/harness-onboarding.md).
+Another Runtime replays the same scenarios against a scripted Core, then runs native acceptance for every capability it declares. A controlled-adapter test establishes the transport contract, not native Harness behavior, operating-system support, provider authentication or sandbox isolation. Change the shared types, this document and the contract checks together. Harness adapters also run the shared text assertions described in [Harness protocol](../contracts/agents-api/harness-onboarding.md#qualify-the-adapter).
