@@ -21,7 +21,5 @@ test('harness protocols match Model execution, default first', () => {
       .filter(([, name]) => !name.startsWith('---'))
       .map(([, name, protocols]) => [name.trim(), [...protocols.matchAll(/`([a-z_]+)`/g)].map((m) => m[1])]),
   )
-  // The table names Claude Code by its SDK.
-  const docName = { codex: 'Codex', claude_sdk: 'Claude SDK', mcode: 'MiniMax Code' }
-  for (const h of harnesses) assert.deepEqual([...h.protocols], rows[docName[h.id]], h.id)
+  for (const h of harnesses) assert.deepEqual([...h.protocols], rows[h.label], h.id)
 })
