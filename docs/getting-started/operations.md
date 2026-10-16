@@ -16,14 +16,12 @@ Each installation has its own `oac` command in its directory (`oac.exe` on Windo
 | `oac rotate-core-key` | Replaces the Core key and restarts Core and Web, then says how to read the new key |
 | `oac uninstall` | Deletes the installation and its data after confirmation; see [Uninstall](#uninstall) |
 
-Docker Compose commands manage the services; run them against the installation's Compose file:
+Docker Compose commands manage the services; run them against the installation's Compose file. [Stop and restart](#stop-and-restart) covers `stop` and `start`.
 
 | Command | What it does |
 | --- | --- |
 | `docker compose -f ~/.oac/core/compose.yaml ps` | Shows the services |
 | `docker compose -f ~/.oac/core/compose.yaml logs --tail 200 core` | Shows a service's log |
-| `docker compose -f ~/.oac/core/compose.yaml stop` | Stops the services. Data, nodes and sandboxes are kept |
-| `docker compose -f ~/.oac/core/compose.yaml start` | Starts the services |
 | `docker compose -f ~/.oac/core/compose.yaml down` | Removes the containers. Data is kept |
 
 ## Service health
@@ -38,7 +36,7 @@ Use these observations for different questions:
 | Environment connection | The Runtime transport is connected |
 | A finished Turn and its results | The task's recorded outcome |
 
-Core and PostgreSQL publish no host port; Web is the only listener (see [Configure the public address](./public-address.md#listeners-and-access)). Service health does not show that a Harness or a model works. Use Session, Turn, Items and Usage reads for execution, and Web's **Nodes** page for node connection, readiness and placement. For local diagnosis, use the installation's own Compose file:
+Only Web is a listener; see [Configure the public address](./public-address.md#listeners-and-access). Service health does not show that a Harness or a model works. Use Session, Turn, Items and Usage reads for execution, and Web's **Nodes** page for node connection, readiness and placement. For local diagnosis, use the installation's own Compose file:
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" ps --all
@@ -79,7 +77,7 @@ Keep it private. Web reads `secrets/web/core.key`. Core reads only its SHA-256 f
 
 ### Script the Core API
 
-Core publishes no host port. On the Core host, this helper runs `curl` in Core's network namespace and passes the key on stdin, keeping it off the command line:
+On the Core host, this helper runs `curl` in Core's network namespace and passes the key on stdin, keeping it off the command line:
 
 ```sh
 core() (  # core METHOD PATH [JSON body]
@@ -192,7 +190,7 @@ A logical dump still needs the matching secrets, state, independent filesystems 
 
 Keep application ingress and Core/node services stopped while restoring. Fence or shut down every old writer before exposing the restored filesystem; an unreachable old host is not a fence. A rehearsal must use an isolated installation and storage copy that cannot connect to the original nodes or share their writable namespace.
 
-Restore matching secrets and database state, the complete independent filesystem namespaces and any required node identities/provider stores before starting Core. Preserve the database's configuration and namespace UUIDs, object identities and deletion markers; do not run first-time namespace initialization over restored storage. Restore a quota mode filesystem by writing its block-level copy to the backing device and mounting it with `prjquota` at the configured mount point; never run `oac-workspace-quota init` over it, and do not mount the copy beside the original, which has the same filesystem UUID. Reestablish the configured mount paths and service UIDs, then validate the mounted filesystem, ownership and xattrs from each participating service context. [Independent workspace storage](../configuration.md#independent-workspace-storage) owns deployment setup.
+Restore matching secrets and database state, the complete independent filesystem namespaces and any required node identities/provider stores before starting Core. Preserve the database's configuration and namespace UUIDs, object identities and deletion markers; do not run first-time namespace initialization over restored storage. Restore a quota mode filesystem by writing its block-level copy to the backing device and mounting it with `prjquota` at the configured mount point; never run `oac-workspace-quota init` over it, and do not mount the copy beside the original, which has the same filesystem UUID. Reestablish the configured mount paths and service UIDs, then validate the mounted filesystem, ownership and xattrs from each participating service context. [Set up workspace storage](./workspace-storage.md) owns deployment setup.
 
 The cold released baseline resumes only qualified native history after new compute admission. A backup containing retained checkpoints also depends on the matching native runtime, node identity, provider store and external filesystem identities. File-level restore can change inode identity and prevent strict checkpoint restore even when file bytes match. This procedure does not promise portable memory snapshots or restoration onto an arbitrary replacement node; preserve unresolved ownership rather than substituting a new sandbox.
 
@@ -247,6 +245,8 @@ A rollback restores the backup taken before the upgrade: stop the services, [res
 
 ## Uninstall
 
+Remove nodes first; see [Remove a node](./nodes.md#remove-a-node).
+
 ```sh
 ~/.oac/core/oac uninstall
 ```
@@ -257,7 +257,7 @@ All data goes with it: Projects and API keys, Session history, stored credential
 
 Uninstall stops no sandbox: node sandboxes keep running on their nodes, and E2B sandboxes keep running, and billing, at E2B. While Core is still up, archive their Sessions or [reset the deployment](./nodes.md#change-the-sandbox-configuration) and let it complete.
 
-Remove nodes first; see [Remove a node](./nodes.md#remove-a-node). If Core is already gone, run the node uninstall command with `--force` on each node host, as described there, using the installation ID that `oac uninstall` printed or the one in the node's unit name `oac-node-<installation-id>.service`.
+If Core is already gone, run the node uninstall command with `--force` on each node host, as described there, using the installation ID that `oac uninstall` printed or the one in the node's unit name `oac-node-<installation-id>.service`.
 
 If the installation directory was deleted by hand, its containers keep running and keep the Web port. Find the project and remove it without any installation file:
 

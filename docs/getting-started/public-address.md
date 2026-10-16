@@ -10,7 +10,7 @@ Set the one origin that browsers, nodes, sandboxes and applications use to reach
 
 | Situation | Public URL |
 | --- | --- |
-| Trial on this machine | `http://localhost:8080`, the default when the host has no private address |
+| Trial on this machine | `http://localhost:8080`, the default when `--host` is not `0.0.0.0` or the host has no private address |
 | Local network | `http://<private address>:8080`, which the installer picks when `--host` is `0.0.0.0` and the default route has a private-network address |
 | Beyond the local network | The HTTPS origin your reverse proxy serves, for example `https://core.example` |
 | E2B backend | An HTTPS origin reachable from the internet and not loopback, because E2B's sandboxes call Core from E2B's cloud |
@@ -24,10 +24,10 @@ The default installation publishes Web on `--web-port` (8080) at `--host` `0.0.0
 | Service | Reachable from outside |
 | --- | --- |
 | Web | `OAC_WEB_PORT` on `OAC_HOST`. Behind a reverse proxy, install with `--host 127.0.0.1` |
-| Core | Only through Web, which forwards `/v1`, `/api/v1` and `/docs` and serves everything else itself; see [Request boundary](../web/console-server.md#request-boundary) |
+| Core | Only through Web. `/v1`, `/api/v1` and `/docs` pass through unchanged; signed-in console requests to `/core/v1` carry the Core key. Web serves everything else itself; see [Request boundary](../web/console-server.md#request-boundary) |
 | PostgreSQL | No |
 
-No service receives a Docker socket; see [Installation directory](../configuration.md#installation-directory). Sandboxes are the isolation boundary: see [Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation).
+Sandboxes are the isolation boundary; see [Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation).
 
 ### Ports
 
@@ -43,9 +43,9 @@ The installer checks `--web-port` before it downloads images.
 Install with `--host 127.0.0.1` and point your reverse proxy at Web, `127.0.0.1:8080` by default. The proxy must:
 
 - **Preserve Host.** Web accepts only the host of `OAC_PUBLIC_URL`.
-- **Pass WebSocket upgrades** on `/api/v1`. Nodes connect there.
+- **Pass WebSocket upgrades** on `/api/v1`. Nodes, sandbox Runtimes (E2B included) and self-hosted executors connect there.
 - **Not buffer or time out streams.** `/v1` streams Session events.
-- **Accept large uploads.** Source files may reach 512 MiB; Core enforces the limits.
+- **Accept large uploads.** Source files may reach 512 MiB plus multipart overhead; Core enforces the limits.
 
 ::: code-group
 
@@ -67,12 +67,12 @@ server {
 	ssl_certificate     /etc/ssl/core.example/fullchain.pem;
 	ssl_certificate_key /etc/ssl/core.example/privkey.pem;
 
-	client_max_body_size 512m;
+	client_max_body_size 513m;
 
 	location / {
 		proxy_pass http://127.0.0.1:8080;
 		proxy_http_version 1.1;
-		proxy_set_header Host $host;
+		proxy_set_header Host $http_host;
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection $connection_upgrade;
 		proxy_buffering off;

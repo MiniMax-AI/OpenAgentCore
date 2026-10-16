@@ -61,7 +61,7 @@ function StorageEditor({ current, replacement, onClose }: { current: WorkspaceSt
     <form id={formId} className="form-stack" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       {replacement ? <>
         <p>{t("newSelection")}</p>
-        <a href={docsUrl("docs/configuration#independent-workspace-storage", i18n.resolvedLanguage)} target="_blank" rel="noreferrer">{t("instructions")}</a>
+        <a href={docsUrl("docs/getting-started/workspace-storage", i18n.resolvedLanguage)} target="_blank" rel="noreferrer">{t("instructions")}</a>
         <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-adapter`}>{t("adapter")}</label><HelpTip>{t("adapterHelp")}</HelpTip></div><input id={`${formId}-adapter`} value={adapter} onChange={(event) => setAdapter(event.target.value)} required disabled={busy} /></div>
         <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-parameters`}>{t("parameters")}</label><HelpTip>{t("parametersHelp")}</HelpTip></div><textarea id={`${formId}-parameters`} rows={8} value={parameters} onChange={(event) => setParameters(event.target.value)} disabled={busy} spellCheck={false} /></div>
         <div className="field"><div className="field-label-row"><label htmlFor={`${formId}-credential`}>{t("credential")}</label><HelpTip>{t("credentialHelp")}</HelpTip></div><input id={`${formId}-credential`} type="password" value={credential} onChange={(event) => setCredential(event.target.value)} disabled={busy} autoComplete="new-password" spellCheck={false} /></div>

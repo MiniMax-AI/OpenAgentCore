@@ -19,6 +19,7 @@ For a failing request or Turn, start with Web's **Monitor → Request log** and 
 | `This account cannot access …` | An earlier run with `sudo` left files owned by root. Run the `sudo chown` command the message prints, then rerun as your own account |
 | `Docker Compose 2.26 or newer is required` | Install or update the Docker Compose plugin |
 | `Docker could not pull …` | The Docker daemon cannot reach the registry. Configure its proxy or a registry mirror, or use the [offline archive](./install-options.md#offline-hosts) |
+| `Interrupted; rerun the installer to continue.` | Ctrl-C stopped the installer and left the installation ready for a rerun. Run the same command again. On Linux and macOS the launcher keeps an unfinished `oac` download in `${TMPDIR:-/tmp}/oac-install-<uid>` and the rerun resumes it; delete that directory to start the download over |
 | `startup failed; data retained, rerun the installer` | The message lists the services that are not healthy and the `docker compose logs --tail 50` command for them. Fix the cause, then [resume installation](./install.md#install); keep the data. After `oac apply`, the same message says to run `oac apply` again |
 
 If an installer step reports insufficient space or quota, free space on the filesystem named by the error. Image-loading failures can also require space in Docker's storage, which may be on a different filesystem.
@@ -49,7 +50,7 @@ A registered node that can't connect to Core says why in its [log](./nodes.md#lo
 
 | Cause | Fix |
 | --- | --- |
-| `HTTP 400 on the WebSocket upgrade` | The reverse proxy in front of Core doesn't pass WebSocket upgrades on `/api/v1`; see [HTTPS and the reverse proxy](./public-address.md#https-and-the-reverse-proxy) |
+| `HTTP 400 on the WebSocket upgrade` | The reverse proxy in front of Core doesn't pass WebSocket upgrades on `/api/v1`; see [Put Core behind HTTPS](./public-address.md#https-and-the-reverse-proxy) |
 | Another status, such as `HTTP 404 on the WebSocket upgrade` or `HTTP 502 …` | The reverse proxy doesn't route `/api/v1` to Core or doesn't preserve Host, or Core is not running |
 | `dial tcp: …`, such as `connection refused`, `i/o timeout` or `no such host` | The host can't reach Core at the public URL. Check DNS and firewalls; the node service uses the [proxy](./nodes.md#download-through-a-proxy) the installer ran with, so rerun the command with the right settings if the proxy changed |
 | `tls: …`, or `TLS certificate expired or not yet valid` | The host doesn't trust Core's certificate, or the public URL uses `https` on a port that doesn't serve it |
@@ -74,5 +75,5 @@ A registered node that can't connect to Core says why in its [log](./nodes.md#lo
 | SELinux is enforcing on this host | Use a host supported by the installer; it does not change SELinux settings |
 | This host already runs a sudo-mode node for another Core | Remove that node and uninstall it first |
 | Node installation and removal require root | Run Web's command with sudo, or from a root shell |
-| Core still lists this node | Remove it on the Nodes page first |
+| Core still lists this node | Remove it on the **Nodes** page first |
 | Core no longer accepts this node | It was removed, or a reset retired it. Uninstall it, then add the host with a new command |

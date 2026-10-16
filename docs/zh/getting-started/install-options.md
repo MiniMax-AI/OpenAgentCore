@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: d3e8172878209dadb2fa7e24318f24e96bb5d9bbbdc266d452934cc65f099592
+source_hash: de599bae1dc932f9f1c25f06c2b67bee8b90d2287ebd9e45157141128ac9fec1
 ---
 
 本页是安装程序参数的参考，并说明如何用默认方式以外的方式安装：在已有反向代理之后、在托管平台上使用 Docker Compose，或在无法访问互联网的主机上。[默认安装](./install.md)无需任何选项。
@@ -39,9 +39,7 @@ Windows 上 `irm … | iex` 无法传参，默认执行策略也会拦截下载�
 
 ## 反向代理与 HTTPS {#reverse-proxy-and-https}
 
-请用 `--host 127.0.0.1` 安装，把反向代理指向 Web，并把 `--public-url` 设为它的 HTTPS 源地址。代理要求、Caddy 和 nginx 示例以及路由检查见[配置公开地址](./public-address.md#https-and-the-reverse-proxy)。
-
-`--host`、`--web-port` 和端口检查见[配置公开地址](./public-address.md#listeners-and-access)。
+请用 `--host 127.0.0.1` 安装，把反向代理指向 Web，并把 `--public-url` 设为它的 HTTPS 源地址。代理要求、Caddy 和 nginx 示例、路由检查，以及 `--host`、`--web-port` 和端口检查，见[配置公开地址](./public-address.md#https-and-the-reverse-proxy)。
 
 ## Docker Compose 与托管平台 {#docker-compose-and-hosting-platforms}
 
@@ -79,7 +77,7 @@ docker compose exec web oac-web core-key
 
 在这两个平台上，打开服务器终端并运行 `docker compose ls`，查找已部署的项目名称和 Compose 文件。使用这些完全一致的值以及该部署的 `OAC_PUBLIC_URL`，运行 `docker compose -p <project-name> -f <compose-file> exec web oac-web core-key`，然后在已配置的源地址登录。[Dokploy 域名指南](https://docs.dokploy.com/docs/core/docker-compose/domains)和 [Coolify Compose 指南](https://coolify.io/docs/services/configuration/docker-compose)介绍了各自的域名和服务控制项。
 
-登录后，[选择沙箱后端](./sandbox-backends.md)，并按[添加和管理节点](./nodes.md)添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
+登录后，[选择沙箱提供商](./sandbox-backends.md)，并按[添加和管理节点](./nodes.md)添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
 
 使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，一并备份数据卷和配置。升级时先备份，再使用相同的项目、环境和数据卷部署新版本的 `compose.yaml`：初始化会升级数据卷，Core 会迁移数据库。[升级](./operations.md#upgrade)说明会保留哪些内容，以及为何拒绝较旧的版本。
 
@@ -92,13 +90,13 @@ docker compose exec web oac-web core-key
 ### `install.py` 选项 {#install-py-options}
 
 ```sh
-python3 oac-<commit>-linux-amd64/install.py --install-dir "$HOME/.oac/local" --public-url http://YOUR_CORE_HOST:8080
+python3 oac-<commit>-linux-amd64/install.py --install-dir "$HOME/.oac/local" --host 0.0.0.0 --public-url http://YOUR_CORE_HOST:8080
 ```
 
 | 选项 | 默认值 | 作用 |
 | --- | --- | --- |
 | `--install-dir` | `~/.oac/local` | 绝对安装目录 |
-| `--host` | `127.0.0.1` | Web 绑定的地址。需要其他机器访问时使用 `0.0.0.0` |
+| `--host` | `127.0.0.1` | Web 绑定的地址。与 `oac install` 不同，`install.py` 默认使用回环地址：需要从其他机器访问时传入 `0.0.0.0` |
 | `--web-port` | `8080` | Web 的主机端口 |
 | `--public-url` | | 浏览器和节点使用的源地址。新安装必须提供 |
 | `--upgrade` | | 将已有安装升级到此安装包所属的版本；参阅[升级](./operations.md#upgrade) |

@@ -1,12 +1,12 @@
 ---
 title: "设置工作区存储"
 source: docs/getting-started/workspace-storage.md
-source_hash: 6491f731737cbad9fdef3e2e1b00609e856184dbc8e45363631a99991c9bf744
+source_hash: c236fdfcbcdcf01856361813476c7d6b1f6e5de2e28022ac5d3b2b3bb49c2a1b
 ---
 
 将 Session 工作区保存在沙箱节点之外的 NFS 文件系统上，可选择是否设置每个工作区的配额。本指南面向运行 microsandbox、希望工作区比计算资源存活更久的运维人员。
 
-支持的组合是 microsandbox 与[内核 NFS 适配器](../workspace-provider.md#kernel-nfs-adapter)。Docker 和 E2B 不支持独立工作区存储；参见[选择沙箱提供商](./sandbox-backends.md)。[配置参考](../configuration.md#independent-workspace-storage)列出了该设置所在的位置。
+支持的组合是 microsandbox 与[内核 NFS 适配器](../workspace-provider.md#kernel-nfs-adapter)。Docker 和 E2B 不支持独立工作区存储；参阅[选择沙箱提供商](./sandbox-backends.md)。[配置参考](../configuration.md#independent-workspace-storage)列出了该设置所在的位置。
 
 ```mermaid
 flowchart LR
@@ -78,9 +78,9 @@ services:
 
 通过[沙箱部署 API](../../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，并保留所需计算资源、Runtime 和提供商配置。`resources.environment_disk_mib` 是每个新工作区的容量：非配额模式下为 `0`，正数会被拒绝；配额模式下至少为 1024 MiB，`0` 会在工作区准入时被拒绝。部署变更时，既有工作区保持其获准时的容量。
 
-部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生。不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。
+部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生。已选配置是唯一的存储设置。
 
-然后在每台已准备的主机上使用 **节点 → 添加节点**；参见[添加和管理节点](./nodes.md)。
+然后在每台已准备的主机上使用 **节点 → 添加节点**；参阅[添加和管理节点](./nodes.md)。
 
 ## 用 Session 验证 {#validate-with-a-session}
 
@@ -124,4 +124,4 @@ services:
 
 凭据属于不可变配置。如需轮换，先授权新密钥，使用新密钥选择新的配置 ID，并在仍有绑定旧配置的工作区处于创建过程中时保留旧密钥的授权。
 
-配额模式支持的恢复方式是对 XFS 文件系统进行块级复制；参见[备份](./operations.md#back-up)。
+配额模式支持的恢复方式是对 XFS 文件系统进行块级复制；参阅[备份](./operations.md#back-up)。

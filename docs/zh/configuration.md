@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 46ddfbb1ef010de054f2e62727b8cd7b50e60bb044da44c69e9967d6e11b406e
+source_hash: d59774502bc1508bd7372abbb833abbed5629152ece25dc00fb4b6baab7f5f65
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -136,11 +136,11 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 
 同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。
 
-Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台并把 `/v1`、`/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。
+Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台，是唯一发布端口（`OAC_WEB_PORT`）的服务；它转发的内容见[请求边界](./web/console-server.md#request-boundary)。没有服务持有 Docker 套接字，Web 和 Core 也没有 KVM 访问权限。
 
 ## 独立工作区存储 {#independent-workspace-storage}
 
-支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、`oac-node` 账户、Compose 挂载、选择负载和配额模式存储服务器。[租户容量](#tenant-capacity)见上文。
+支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、`oac-node` 账户、Compose 挂载、选择负载和配额模式存储服务器。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 

@@ -26,7 +26,6 @@ The Core host joins like any other host: to run sandboxes on it, add it as a nod
 - CPUs and memory for at least one sandbox of the installation's size, and about 3 GB of free disk while the Runtime image installs: its download and unpacked copy sit under `/var/lib/oac-node` until the import finishes, and the image takes about 1.5 GB in Docker's storage or the microsandbox store. The installer checks the space before it downloads and deletes the archives after the import, so the node keeps the image and under 0.2 GB of programs.
 - Access to the console and Core at the public URL; sandboxes reach Core too.
 
-
 ## Add a node
 
 1. In Web, open **Nodes** and choose **Add node**.
@@ -77,13 +76,11 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 > Docker mode is root-equivalent. Membership in the `docker` group lets `oac-node`, and so anything that controls the node, act as root on the host, and containers share the host kernel. Add Docker nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm` group and run each sandbox in its own microVM.
 
 > [!WARNING]
-> microsandbox sandboxes cannot reach private addresses, and DNS answers that contain one are dropped. If a model or tool endpoint is private, point the node's resolver at a local stub such as systemd-resolved, use a Docker node, or [register the node manually](#register-a-node-manually).
+> microsandbox sandboxes cannot reach private addresses; see [Sandboxes cannot reach a private endpoint](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint).
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 
 **Node software.** A node keeps the host program of the console that added it; an upgrade of Core doesn't replace it. A release that changes the node protocol lists the actions it requires; see [protocol changes](./operations.md#protocol-changes).
-
-
 
 ## Rerun, expiry and slow links
 

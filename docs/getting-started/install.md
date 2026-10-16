@@ -11,23 +11,22 @@ This guide takes an operator from an empty host to a working installation: Core,
 5. [Set a default model](#set-a-default-model).
 6. [Issue a Project API key](#issue-a-project-api-key).
 
-Every installer flag, existing reverse proxies and offline hosts are in [Installation options](./install-options.md). To reach Core from other machines, see [Reach Core from other machines](#configure-the-domain-and-https).
+Every installer flag, existing reverse proxies and offline hosts are in [Installation options](./install-options.md).
 
 ## Prerequisites
 
 | | Linux | macOS | Windows |
 | --- | --- | --- | --- |
 | Host | amd64 or arm64, with curl | Intel or Apple Silicon, with curl | x64, with PowerShell |
-| Docker | Docker Engine 26 or newer and Docker Compose 2.26.0 or newer | Docker Desktop, running | Docker Desktop, running Linux containers |
+| Docker | Docker Engine, running | Docker Desktop, running | Docker Desktop, running Linux containers |
 | Account | A member of the `docker` group, or rootless Docker | Your user | Your user |
 
+- Docker Engine 26 or newer and Docker Compose 2.26.0 or newer, on every platform. Docker Desktop must be recent enough to include them.
 - The Docker daemon can reach the container registries. It does not read this shell's proxy variables; see [offline hosts](./install-options.md#offline-hosts). Release downloads also require access to GitHub.
 - Port 8080 is free, and Docker can publish it; see [ports](./public-address.md#ports). The installer does not change host policy.
 
 > [!WARNING]
 > Run the installer and `oac` as that account, never with `sudo`. A `sudo` run leaves files in `~/.oac` owned by root, and later runs fail.
-
-Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a Linux node or use E2B.
 
 ## Install
 
@@ -43,7 +42,7 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 
 :::
 
-The installer checks Docker and the port, writes the [installation directory](../configuration.md#installation-directory) `~/.oac/core` with its `.env` and the `oac` command (`oac.exe` on Windows), and starts the services. Web serves the console on port 8080 and forwards `/v1`, `/api/v1` and `/docs` to Core. Core and PostgreSQL are not published. It prints the console address and, on a fresh installation, the Core key; a rerun or upgrade prints `oac core-key --show` instead.
+The installer checks Docker and the port, writes the [installation directory](../configuration.md#installation-directory) `~/.oac/core` with its `.env` and the `oac` command (`oac.exe` on Windows), and starts the services. Web serves the console on port 8080 and [forwards API requests to Core](./public-address.md#listeners-and-access). Downloads and configuration checks finish before the installation directory is created, so a failed new installation leaves nothing behind. It prints the console address and, on a fresh installation, the Core key; a rerun or upgrade prints `oac core-key --show` instead.
 
 The console address defaults to this host's private IP on the default route, or `http://localhost:8080` when there is none. Browsers must open exactly that address. To choose it yourself, for example the HTTPS address of an existing reverse proxy, pass `--public-url`. To pass flags on Windows, see [Pass flags](./install-options.md#pass-flags).
 
@@ -60,7 +59,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 :::
 
 > [!TIP]
-> Rerunning is safe. If the installer stops on a failed check, on a service that is not healthy within three minutes, or on Ctrl-C, fix what the message names and run the same command again. A rerun keeps the configuration and data and resumes unfinished downloads. Flags apply only to a new installation directory; to change settings later, edit `.env` and run `oac apply`. [Troubleshooting](./troubleshooting.md#installation) lists the messages.
+> Rerunning is safe. If the installer stops on a failed check, on a service that is not healthy within three minutes, or on Ctrl-C, fix what the message names and run the same command again. A rerun keeps the configuration and data and reuses existing images. `--public-url`, `--host` and `--web-port` apply only to a new installation; to change them later, edit `.env` and run `oac apply`. On Linux and macOS the launcher also resumes an unfinished download. [Troubleshooting](./troubleshooting.md#installation) lists the messages.
 
 To move to a newer release, follow [Upgrade](./operations.md#upgrade).
 
