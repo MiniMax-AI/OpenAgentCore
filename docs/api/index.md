@@ -23,3 +23,7 @@ Nodes, Runtime daemons and the self-hosted installer call `/api/v1` with their o
 Operator scripts configure independent filesystem storage through Core-key-authenticated `GET` and `PUT /core/v1/workspace-storage`; see [Workspace storage](../../contracts/agents-api/admin-api.md#workspace-storage).
 
 Web and operator scripts update the sandbox idle policy through Core-key-authenticated `PATCH /core/v1/sandbox/deployment`; see [Sandbox deployment](../../contracts/agents-api/sandbox-deployment.md).
+
+The optional [application example](../../CONTRIBUTING.md#optional-application-example) owns its loopback `/app/` product routes. Their caller is its same-origin local UI; in-process workers reuse the product operations. Its server uses a Project API key for public `/v1` calls and accepts no Core administrator credential.
+
+Its loopback `/mcp/agents/<id>` endpoint serves local MCP clients authenticated with a product-issued Agent token; `/oauth/callback` is a read-only OAuth return page. Product route families, callers and credentials are owned by the [Parsar local API](../../example/parsar/README.md#ownership-and-local-api). These are not Core namespaces.

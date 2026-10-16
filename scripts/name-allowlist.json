@@ -268,5 +268,15 @@
     "path": "apps/daemon/internal/cli/connect_suspend_test.go",
     "regex": "\"agents-api-\"",
     "reason": "The cleanup regression uses the persisted Session state-key prefix required by Runtime executor ownership validation."
+  },
+  {
+    "path": "docs/api/index.md",
+    "regex": "Parsar local API|example/parsar/README\\.md",
+    "reason": "The API index links the named application example’s local API contract."
+  },
+  {
+    "path": "docs/zh/api/index.md",
+    "regex": "Parsar 本地 API|example/parsar/README\\.zh\\.md",
+    "reason": "The API index links the named application example’s local API contract."
   }
 ]

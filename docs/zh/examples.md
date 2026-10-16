@@ -1,18 +1,18 @@
 ---
 title: "示例"
 source: docs/examples.md
-source_hash: 60a228b1b499d11f5f6f122a5e298962fcc9ced9777688f69f5078a2f5df4c9c
+source_hash: 55efc4906a38e5bd9e65aef60f686f17c57f75c0e7356e5f6549b436d5e92137
 ---
 
 基于 [Agents API](api/public-agent-api.md)构建的完整应用。每个示例都使用项目 API 密钥连接真实的 Core 安装。
 
 | 示例 | 展示内容 |
 | --- | --- |
-| [Parsar Agent 工作台](#parsar-agent-workbench) | 产品 UI：模型、Skills、MCP、可复用 Agent，以及在任意 Runtime 上运行的 Session |
+| [Parsar Agent 工作台](#parsar-agent-workbench) | 项目、任务看板、可复用 Agent、执行历史、定时任务和飞书分配 |
 
 ## Parsar Agent 工作台 {#parsar-agent-workbench}
 
-基于 Core 构建的小型单用户产品。保存模型提供商、Skills 和 MCP 服务器，将它们组合成 Agent，然后在托管沙箱、无工作区环境或自己的机器上启动 Session。
+基于 Core 构建的任务工作空间，通过本地 Web UI 和受信任的飞书群操作。组织项目，将任务分配给可复用 Agent，继续执行 Session，检查 Artifacts 并记录交付进度。间隔计划和飞书分配复用公开 Session 流程。执行使用 bypass 模式；不包含产品账号和细粒度权限。
 
 源码：[`example/parsar`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/README.md)。
 
@@ -24,6 +24,8 @@ source_hash: 60a228b1b499d11f5f6f122a5e298962fcc9ced9777688f69f5078a2f5df4c9c
 
 | 功能 | 使用的 API | 指南 | 代码 |
 | --- | --- | --- | --- |
+| 任务分配与恢复 | 公开 Session 创建和持久历史 | [创建 Session](api/public-agent-api.md#create-a-session) | [`server/work.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/work.mjs) |
+| 飞书和定时任务 | 公开 Sessions、输入事件、Turns 和 Items | [发送输入](api/public-agent-api.md#send-input) | [`server/feishu.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/feishu.mjs)、[`server/schedules.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/schedules.mjs) |
 | 服务端密钥和请求头 | Bearer 密钥、`OpenAI-Beta`、路由允许列表 | [开始前](api/public-agent-api.md#before-you-start) | [`server.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server.mjs) |
 | 带 Harness 和模型的 Agent | `x_agents_core.harness`、`model_provider` | [Core 扩展](api/public-agent-api.md#core-extensions-x-agents-core) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
 | 三种 Runtime 上的 Session | `openai_hosted`、`none`、带 `workspace_directory` 的 `self_hosted` | [创建 Session](api/public-agent-api.md#create-a-session) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |

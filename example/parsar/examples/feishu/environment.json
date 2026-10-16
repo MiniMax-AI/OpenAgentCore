@@ -1,0 +1,21 @@
+{
+  "name": "飞书工作环境",
+  "description": "安装官方 lark-cli；通过模板声明的变量读取用户连接。需要运行节点能够访问飞书开放平台。",
+  "environment": "openai_hosted",
+  "packages": { "npm": ["@larksuite/cli@1.0.98"], "python": [] },
+  "env": {
+    "npm_config_ignore_scripts": "true",
+    "LARKSUITE_CLI_DEFAULT_AS": "user",
+    "LARKSUITE_CLI_STRICT_MODE": "user",
+    "LARKSUITE_CLI_NO_UPDATE_NOTIFIER": "1",
+    "LARKSUITE_CLI_NO_SKILLS_NOTIFIER": "1"
+  },
+  "connection_env": {
+    "LARKSUITE_CLI_USER_ACCESS_TOKEN": "access_token",
+    "LARKSUITE_CLI_APP_ID": "client_id",
+    "LARKSUITE_CLI_BRAND": "region"
+  },
+  "files": [
+    { "path": "/workspace/WORKSPACE.md", "content": "# 飞书工作环境\n\n官方 lark-cli 已在 Agent 启动前安装。个人凭据由 Parsar 根据环境模板注入，禁止输出令牌。外部凭据模式不支持 auth 管理命令；读取 Skill 后使用具体业务命令。网络错误与权限不足分别报告。产物写到 ./outputs。\n" }
+  ]
+}

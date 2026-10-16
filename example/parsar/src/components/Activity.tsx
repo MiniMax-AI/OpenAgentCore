@@ -1,3 +1,5 @@
+import { ToolCardSlot } from "./plugin/SlotRenderer";
+import { tr } from "../lib/i18n";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -5,7 +7,6 @@ import { Check, Copy, Terminal, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import type { SessionItem } from "@oac/agents-client";
 import { Button } from "./ui/button";
-
 export function Thinking() {
   const reduce = useReducedMotion();
   return (
@@ -27,12 +28,11 @@ export function Thinking() {
         }
         transition={{ repeat: Infinity, duration: 2.5, ease: "linear" }}
       >
-        Agent 正在执行…
+        {tr("Agent 正在执行\u2026")}
       </motion.span>
     </div>
   );
 }
-
 function CodeBlock({ children }: { children?: React.ReactNode }) {
   const [copied, setCopied] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -47,7 +47,11 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
         size="icon"
         className="absolute right-2 top-2"
         aria-label={
-          failed ? "复制失败，请手动选择代码" : copied ? "已复制" : "复制代码"
+          failed
+            ? tr("复制失败，请手动选择代码")
+            : copied
+              ? tr("已复制")
+              : tr("复制代码")
         }
         onClick={async (e) => {
           const content =
@@ -66,14 +70,17 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
       </Button>
       {failed && (
         <p role="alert" className="px-4 pb-3 text-sm">
-          复制失败，请手动选择代码。
+          {tr("复制失败，请手动选择代码。")}
         </p>
       )}
     </div>
   );
 }
-
 export function Activity({ item }: { item: SessionItem }) {
+  const native = <NativeActivity item={item} />;
+  return item.type === "mcp_call" ? <ToolCardSlot item={item} fallback={native} /> : native;
+}
+function NativeActivity({ item }: { item: SessionItem }) {
   if (item.type === "message") {
     const text =
       item.content
@@ -92,7 +99,7 @@ export function Activity({ item }: { item: SessionItem }) {
       );
     return (
       <article
-        aria-label="Agent 回复"
+        aria-label={tr("Agent 回复")}
         className="py-4 text-base leading-relaxed"
       >
         <div className="prose prose-sm max-w-none text-fg [overflow-wrap:anywhere] prose-headings:text-fg prose-headings:font-medium prose-strong:text-fg prose-strong:font-medium prose-code:text-fg prose-a:text-fg prose-a:underline prose-blockquote:text-fg-muted prose-blockquote:border-line prose-code:before:content-none prose-code:after:content-none">
@@ -107,7 +114,10 @@ export function Activity({ item }: { item: SessionItem }) {
                 </a>
               ),
               img: ({ alt }) => (
-                <span>{alt || "图片"}（此示例不加载外部图片）</span>
+                <span>
+                  {alt || tr("图片")}
+                  {tr("（此示例不加载外部图片）")}
+                </span>
               ),
             }}
           >
@@ -121,7 +131,7 @@ export function Activity({ item }: { item: SessionItem }) {
     item.type === "command_execution"
       ? item.command
       : item.type === "reasoning"
-        ? "思考过程"
+        ? tr("思考过程")
         : item.name || item.type;
   const detail =
     item.type === "reasoning"
@@ -133,7 +143,7 @@ export function Activity({ item }: { item: SessionItem }) {
         <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
         <Terminal className="h-4 w-4 shrink-0" />
         <span className="min-w-0 truncate text-fg">{name}</span>
-        {item.status === "failed" && <span>失败</span>}
+        {item.status === "failed" && <span>{tr("失败")}</span>}
       </summary>
       <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words py-3 text-sm">
         {typeof detail === "string"
@@ -142,4 +152,44 @@ export function Activity({ item }: { item: SessionItem }) {
       </pre>
     </details>
   );
+}
+
+export function SessionTimeline({ items }: { items: SessionItem[] }) {
+  const groups: { id: string; message?: SessionItem; steps: SessionItem[] }[] =
+    [];
+  for (const item of items) {
+    if (item.type === "message")
+      groups.push({ id: item.id, message: item, steps: [] });
+    else {
+      const last = groups.at(-1);
+      if (last && !last.message && last.steps.at(-1)?.turn_id === item.turn_id)
+        last.steps.push(item);
+      else groups.push({ id: item.id, steps: [item] });
+    }
+  }
+  return groups.map((group) => (
+    <div
+      id={`item-${group.id}`}
+      data-turn-key={group.message?.role === "user" ? group.id : undefined}
+      key={group.id}
+    >
+      {group.message ? (
+        <Activity item={group.message} />
+      ) : (
+        <details className="my-3 rounded-lg border border-line px-4 py-2">
+          <summary className="cursor-pointer text-sm text-fg-muted">
+            {tr("执行过程")} · {group.steps.length} {tr("个步骤")}
+            {group.steps.some((step) => step.status === "failed")
+              ? ` · ${tr("失败")}`
+              : ""}
+          </summary>
+          <div className="border-l border-line pl-3">
+            {group.steps.map((item) => (
+              <Activity key={item.id} item={item} />
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  ));
 }

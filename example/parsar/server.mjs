@@ -1,3 +1,5 @@
+import { guardConnectionInput } from "./server/connections.mjs";
+import { agentMCPHandler } from "./server/agent-mcp.mjs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createServer } from "node:http";
@@ -7,9 +9,19 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildDirectory } from "./paths.mjs";
 import { openStore, dataPath, AppError } from "./server/store.mjs";
 import { productAPI } from "./server/product.mjs";
+import { scheduleWorker } from "./server/schedules.mjs";
+import { createFeishuTransport, feishuWorkers } from "./server/feishu.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 const routes = [
+  [/^\/v1\/agents\/sessions$/, ["GET"]],
+  [/^\/v1\/vaults$/, ["GET", "POST"]],
+  [/^\/v1\/vaults\/[a-f0-9-]{36}$/, ["GET", "DELETE"]],
+  [/^\/v1\/vaults\/[a-f0-9-]{36}\/credentials$/, ["GET", "POST"]],
+  [
+    /^\/v1\/vaults\/[a-f0-9-]{36}\/credentials\/[a-f0-9-]{36}$/,
+    ["GET", "POST", "DELETE"],
+  ],
   [/^\/v1\/agents\/environments\/[a-f0-9-]{36}$/, ["GET"]],
   [/^\/v1\/agents\/environments\/[a-f0-9-]{36}\/files$/, ["GET", "POST"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/artifacts$/, ["GET"]],
@@ -24,6 +36,10 @@ const routes = [
   [/^\/v1\/agents\/[a-f0-9-]{36}$/, ["GET", "POST"]],
 ];
 routes.push(
+  [
+    /^\/v1\/skills\/skill_[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/versions\/[1-9][0-9]*\/content$/,
+    ["GET"],
+  ],
   [/^\/v1\/skills$/, ["GET", "POST"]],
   [
     /^\/v1\/skills\/skill_[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/,
@@ -43,13 +59,13 @@ const mime = {
 };
 
 export function configuration(env = process.env) {
-  const target = new URL(env.OAC_EXAMPLE_CORE_URL || "http://127.0.0.1:8091");
+  const target = new URL(env.OPENAI_BASE_URL || "http://127.0.0.1:8091/v1");
   if (
     target.username ||
     target.password ||
     target.search ||
     target.hash ||
-    target.pathname !== "/" ||
+    !["/v1", "/v1/"].includes(target.pathname) ||
     !(
       target.protocol === "https:" ||
       (target.protocol === "http:" &&
@@ -57,12 +73,12 @@ export function configuration(env = process.env) {
     )
   ) {
     throw new Error(
-      "OAC_EXAMPLE_CORE_URL must be an HTTPS origin, or a loopback HTTP origin, without /v1.",
+      "OPENAI_BASE_URL must be an HTTPS URL, or a loopback HTTP URL, ending in /v1.",
     );
   }
-  const key = env.OAC_EXAMPLE_PROJECT_KEY?.trim();
+  const key = env.OPENAI_API_KEY?.trim();
   if (!key || /[\r\n]/.test(key))
-    throw new Error("Set OAC_EXAMPLE_PROJECT_KEY to a Project API key.");
+    throw new Error("Set OPENAI_API_KEY to a Project API key.");
   const port = Number(env.OAC_EXAMPLE_PORT || 18180);
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid OAC_EXAMPLE_PORT.");
@@ -77,48 +93,71 @@ function fail(res, status, message) {
   res.end(JSON.stringify({ error: { message } }));
 }
 
+export function coreClient(config, fetchImpl = fetch) {
+  return async (path, method, body, key) => {
+    const response = await fetchImpl(`${config.target}${path}`, {
+      method,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      redirect: "manual",
+      signal: AbortSignal.timeout(30_000),
+      headers: {
+        ...(key ? { "Idempotency-Key": key } : {}),
+        Authorization: `Bearer ${config.key}`,
+        "OpenAI-Beta": "agents=v1",
+        "Content-Type": "application/json",
+      },
+    });
+    if (response.status >= 300 && response.status < 400)
+      throw new AppError(502, "Core returned a redirect.");
+    const value =
+      response.status === 202 || response.status === 204
+        ? undefined
+        : await response.json();
+    if (!response.ok)
+      throw new AppError(
+        response.status,
+        value.error?.message || "Core request failed.",
+        value.error?.code,
+      );
+    return value;
+  };
+}
+
 export function createHandler(
   config,
-  { fetchImpl = fetch, frontend, store } = {},
+  { fetchImpl = fetch, frontend, store, productHandler } = {},
 ) {
   const product =
-    store &&
-    productAPI(
-      store,
-      async (path, method, body, key) => {
-        const response = await fetchImpl(`${config.target}${path}`, {
-          method,
-          body: JSON.stringify(body),
-          redirect: "manual",
-          signal: AbortSignal.timeout(30_000),
-          headers: {
-            ...(key ? { "Idempotency-Key": key } : {}),
-            Authorization: `Bearer ${config.key}`,
-            "OpenAI-Beta": "agents=v1",
-            "Content-Type": "application/json",
-          },
-        });
-        if (response.status >= 300 && response.status < 400)
-          throw new AppError(502, "Core returned a redirect.");
-        const value = await response.json();
-        if (!response.ok)
-          throw new AppError(
-            response.status,
-            value.error?.message || "Core request failed.",
-          );
-        return value;
-      },
-      fetchImpl,
-    );
+    productHandler ||
+    (store &&
+      productAPI(
+        store,
+        coreClient(config, fetchImpl),
+        fetchImpl,
+        `http://127.0.0.1:${config.port}`,
+      ));
+  const agentMCP =
+    store && agentMCPHandler(store, coreClient(config, fetchImpl), product);
   return async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
-    const hosts = [`127.0.0.1:${config.port}`, `localhost:${config.port}`];
+    const path = req.url.split("?")[0];
+    const homeNavigation =
+      req.method === "GET" &&
+      ["/", "/index.html"].includes(path) &&
+      req.headers["sec-fetch-mode"] === "navigate" &&
+      req.headers["sec-fetch-dest"] === "document";
+    const host = /^(?:127\.0\.0\.1|localhost)(?::([1-9]\d{0,4}))?$/.exec(
+      req.headers.host || "",
+    );
     if (
-      !hosts.includes(req.headers.host) ||
+      !host ||
+      (host[1] && Number(host[1]) > 65535) ||
       (req.headers.origin &&
         req.headers.origin !== `http://${req.headers.host}`) ||
-      req.headers["sec-fetch-site"] === "cross-site"
+      (req.headers["sec-fetch-site"] === "cross-site" &&
+        !homeNavigation &&
+        !(req.method === "GET" && path === "/oauth/callback"))
     ) {
       return fail(
         res,
@@ -127,6 +166,44 @@ export function createHandler(
       );
     }
     const url = new URL(req.url, `http://${req.headers.host}`);
+    const mcpMatch = url.pathname.match(/^\/mcp\/agents\/([a-f0-9-]{36})$/);
+    if (mcpMatch && agentMCP) {
+      try {
+        const chunks = [];
+        let size = 0;
+        for await (const chunk of req) {
+          size += chunk.length;
+          if (size > 1024 * 1024) return fail(res, 413, "Request too large.");
+          chunks.push(chunk);
+        }
+        const body = size ? JSON.parse(Buffer.concat(chunks)) : undefined;
+        await agentMCP(mcpMatch[1], req, res, body);
+      } catch {
+        if (!res.headersSent) fail(res, 400, "Invalid MCP request.");
+        else res.destroy();
+      }
+      return;
+    }
+
+    const clientMatch = url.pathname.match(
+      /^\/app\/capabilities\/([a-f0-9-]{36})\/client.js$/,
+    );
+    if (clientMatch && req.method === "GET" && store) {
+      const capability = store.get("capabilities", clientMatch[1]);
+      const bundle =
+        capability &&
+        !capability.deprecated &&
+        capability.versions.find(
+          (row) => row.version === capability.default_version,
+        )?.client_bundle;
+      if (!bundle) return fail(res, 404, "Plugin client not found.");
+      res.writeHead(200, {
+        "Content-Type": "text/javascript; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(bundle);
+      return;
+    }
     if (url.pathname.startsWith("/app/")) {
       if (
         req.method !== "GET" &&
@@ -143,7 +220,13 @@ export function createHandler(
         let size = 0;
         for await (const chunk of req) {
           size += chunk.length;
-          if (size > 1024 * 1024) return fail(res, 413, "Request too large.");
+          if (
+            size >
+            (url.pathname.startsWith("/app/capabilities/")
+              ? 45 * 1024 * 1024
+              : 1024 * 1024)
+          )
+            return fail(res, 413, "Request too large.");
           chunks.push(chunk);
         }
         let body = {};
@@ -217,6 +300,23 @@ export function createHandler(
             return fail(res, 413, "Request too large.");
           chunks.push(chunk);
         }
+        if (
+          store &&
+          req.method === "POST" &&
+          url.pathname.endsWith("/events")
+        ) {
+          let input;
+          try {
+            input = JSON.parse(Buffer.concat(chunks));
+          } catch {
+            return fail(res, 400, "Invalid JSON.");
+          }
+          try {
+            guardConnectionInput(store, url.pathname, input);
+          } catch (error) {
+            return fail(res, error.status || 502, error.message);
+          }
+        }
         const headers = {
           Authorization: `Bearer ${config.key}`,
           "OpenAI-Beta": "agents=v1",
@@ -266,6 +366,10 @@ export function createHandler(
           clearTimeout(timer);
           res.writeHead(upstream.status, {
             "Content-Type": "application/octet-stream",
+            ...(upstream.headers.has("content-length") &&
+            !upstream.headers.has("content-encoding")
+              ? { "Content-Length": upstream.headers.get("content-length") }
+              : {}),
             "Content-Disposition":
               upstream.headers.get("content-disposition") || "attachment",
             "Cache-Control": "no-store",
@@ -339,15 +443,53 @@ if (
       })
     : undefined;
   const store = openStore(dataPath(config));
+  const rawCore = coreClient(config);
+  const core = (path, method, body, idempotencyKey) => {
+    if (method === "POST") guardConnectionInput(store, path, body);
+    return rawCore(path, method, body, idempotencyKey);
+  };
+  const productHandler = productAPI(
+    store,
+    core,
+    fetch,
+    `http://127.0.0.1:${config.port}`,
+  );
+  const feishu = feishuWorkers(
+    store,
+    core,
+    productHandler,
+    createFeishuTransport,
+  );
+  let connectionTimer, connectionRunning;
+  const pollConnections = () => {
+    connectionRunning = productHandler
+      .tickConnections()
+      .catch(() => {})
+      .finally(() => {
+        if (connectionTimer !== null)
+          connectionTimer = setTimeout(pollConnections, 2000);
+      });
+  };
+  pollConnections();
+  feishu.start();
+  const schedules = scheduleWorker(store, productHandler, core);
+  schedules.start();
   server.on(
     "request",
-    createHandler(config, { frontend: vite?.middlewares, store }),
+    createHandler(config, {
+      frontend: vite?.middlewares,
+      store,
+      productHandler,
+    }),
   );
   server.listen(config.port, "127.0.0.1", () => {
     process.stdout.write(`Parsar: http://127.0.0.1:${config.port}\n`);
   });
   for (const signal of ["SIGINT", "SIGTERM"])
-    process.on(signal, () => {
+    process.on(signal, async () => {
+      clearTimeout(connectionTimer);
+      connectionTimer = null;
+      await Promise.all([feishu.stop(), schedules.stop(), connectionRunning]);
       server.close(() => store.close());
       void vite?.close();
     });

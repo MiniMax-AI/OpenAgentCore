@@ -6,11 +6,11 @@ Complete applications built on the [Agents API](./api/public-agent-api.md). Each
 
 | Example | What it shows |
 | --- | --- |
-| [Parsar Agent workbench](#parsar-agent-workbench) | A product UI: models, Skills, MCP, reusable Agents, and Sessions on any runtime |
+| [Parsar Agent workbench](#parsar-agent-workbench) | Projects, task boards, reusable Agents, execution history, recurring work and Feishu dispatch |
 
 ## Parsar Agent workbench
 
-A small single-user product built on Core. You save model providers, Skills and MCP servers, combine them into Agents, then start Sessions in a managed sandbox, with no workspace, or on your own machine.
+A task workspace built on Core, operated through a local Web UI and trusted Feishu groups. Organize projects, assign tasks to reusable Agents, continue execution Sessions, inspect Artifacts and record delivery progress. Interval plans and Feishu dispatch reuse the public Session flow. Execution runs in bypass mode; product accounts and fine-grained permissions are omitted.
 
 Source: [`example/parsar`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/README.md).
 
@@ -22,6 +22,8 @@ Each feature maps to one part of the API. Read the code next to the guide sectio
 
 | Feature | API used | Guide | Code |
 | --- | --- | --- | --- |
+| Task dispatch and recovery | Public Session creation and durable history | [Create a Session](./api/public-agent-api.md#create-a-session) | [`server/work.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/work.mjs) |
+| Feishu and recurring work | Public Sessions, input events, Turns and Items | [Send input](./api/public-agent-api.md#send-input) | [`server/feishu.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/feishu.mjs), [`server/schedules.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/schedules.mjs) |
 | Server-side key and headers | Bearer key, `OpenAI-Beta`, route allowlist | [Before you start](./api/public-agent-api.md#before-you-start) | [`server.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server.mjs) |
 | Agents with a Harness and model | `x_agents_core.harness`, `model_provider` | [Core extensions](./api/public-agent-api.md#core-extensions-x_agents_core) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
 | Sessions on three runtimes | `openai_hosted`, `none`, `self_hosted` with `workspace_directory` | [Create a Session](./api/public-agent-api.md#create-a-session) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |

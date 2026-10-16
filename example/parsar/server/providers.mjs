@@ -134,6 +134,7 @@ export function providerAPI(store, fetchImpl) {
           for (const row of selected) {
             const old = existing.find((entry) => entry.model === row.model);
             store.put("models", {
+              ...old,
               ...row,
               id: old?.id || randomUUID(),
               provider_id: id,

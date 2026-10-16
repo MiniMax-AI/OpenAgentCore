@@ -4,100 +4,106 @@ import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { unzipSync, strFromU8 } from "fflate";
 import { openStore, dataPath, AppError } from "../server/store.mjs";
 import { productAPI } from "../server/product.mjs";
 
-test("native runtimes keep host paths, freeze provider secrets, and create without running a Turn", async (t) => {
+test("environment templates prepare hosted Sessions, protect variables and freeze retries", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
-  let fail = true,
-    sent;
-  const { api, put, model, agent } = await setup(
+  let failed = true;
+  const calls = [];
+  const { api, put, agent } = await setup(
     store,
     async (_path, _method, body) => {
-      sent = body;
-      if (fail) throw new Error("network");
+      calls.push(structuredClone(body));
+      if (failed) throw new Error("lost response");
       return { id: randomUUID() };
     },
   );
-  const provider = store.get("providers", model.provider_id);
-  await put(
-    "providers",
-    {
-      ...provider,
-      base_url: "https://provider.example/v1",
-      api_key: "provider-secret",
-    },
-    provider.id,
-  );
-  const config = await put(
-    "agents",
-    { ...agent, harness: "codex", skill_ids: [], mcp_ids: [] },
-    agent.id,
-  );
-  for (const [platform, directory] of [
-    ["linux", "/home/user/project"],
-    ["macos", "/Users/user/project"],
-    ["windows", "C:\\Users\\user\\project"],
-  ]) {
-    const runtime = await put("runtimes", {
-      name: platform,
-      environment: "self_hosted",
-      platform,
-      workspace_directory: directory,
-      capability_directories: [directory],
-    });
-    const id = randomUUID();
-    fail = true;
-    await assert.rejects(
-      put(
-        "sessions",
-        { name: "Native", agent_id: config.id, runtime_id: runtime.id },
-        id,
-      ),
-      /network/,
-    );
-    assert.equal(sent.input, undefined);
-    assert.equal(sent.environment.workspace_directory, directory);
-    assert.deepEqual(sent.environment.capability_directories, [directory]);
-    assert.equal(sent.x_agents_core.model_provider.api_key, "provider-secret");
-    assert.equal(
-      JSON.stringify(await api("GET", `/app/sessions/${id}`)).includes(
-        "provider-secret",
-      ),
-      false,
-    );
-    assert.equal(
-      JSON.stringify(await api("GET", "/app/sessions")).includes(
-        "provider-secret",
-      ),
-      false,
-    );
-    fail = false;
-    const record = await put("sessions", {}, id);
-    assert.equal(record.self_hosted.platform, platform);
-    assert.equal(record.request, undefined);
-  }
-  for (const [platform, directory] of [
-    ["linux", "relative"], ["linux", "/tmp/work/"], ["linux", "/tmp//work"],
-    ["linux", "/tmp/../work"], ["linux", "/tmp/a\tb"],
-    ["windows", "\\work"], ["windows", "C:\\work\\"], ["windows", "C:\\a?b"],
-  ]) {
-    await assert.rejects(put("runtimes", {
-      name: "bad", environment: "self_hosted", platform, workspace_directory: directory,
-    }), /绝对目录/);
-  }
   const runtime = await put("runtimes", {
-    name: "Local", environment: "self_hosted", platform: "linux", workspace_directory: "/workspace",
+    name: "Office",
+    packages: { npm: ["typescript@5.8.3"], python: ["packaging==26.0"] },
+    setup_script: "set -eu\nprintf ready > outputs/ready",
+    env: { OFFICE_TOKEN: "private-env" },
+    files: [{ path: "/workspace/config.txt", content: "initial content" }],
   });
-  await put("agents", { ...config, mcp_ids: agent.mcp_ids }, config.id);
-  sent = undefined;
-  await assert.rejects(put("sessions", {
-    name: "Unsupported MCP", agent_id: config.id, runtime_id: runtime.id,
-  }), /本地 Plugin/);
-  assert.equal(sent, undefined);
-
+  assert.deepEqual(runtime.env, { OFFICE_TOKEN: null });
+  assert.ok(
+    !JSON.stringify(await api("GET", "/app/runtimes")).includes("private-env"),
+  );
+  const id = randomUUID();
+  await assert.rejects(
+    put(
+      "sessions",
+      {
+        name: "Prepare",
+        input: "Read config",
+        agent_id: agent.id,
+        runtime_id: runtime.id,
+        files: [
+          { type: "inline", path: "/workspace/inputs/input.txt", data: "eA==" },
+        ],
+      },
+      id,
+    ),
+    /lost response/,
+  );
+  const frozen = calls[0];
+  assert.equal(frozen.environment.type, "openai_hosted");
+  assert.equal(frozen.environment.env.OFFICE_TOKEN, "private-env");
+  assert.deepEqual(frozen.environment.packages, runtime.packages);
+  assert.equal(
+    frozen.environment.setup_commands[0].command,
+    runtime.setup_script,
+  );
+  assert.deepEqual(
+    frozen.environment.files.map((f) => f.path),
+    ["/workspace/config.txt", "/workspace/inputs/input.txt"],
+  );
+  assert.ok(
+    !JSON.stringify(await api("GET", `/app/sessions/${id}`)).includes(
+      "private-env",
+    ),
+  );
+  const next = await put(
+    "runtimes",
+    {
+      ...runtime,
+      setup_script: "echo changed",
+      env: { OFFICE_TOKEN: null, NEW: "value" },
+    },
+    runtime.id,
+  );
+  assert.equal(
+    store.get("runtimes", runtime.id).env.OFFICE_TOKEN,
+    "private-env",
+  );
+  failed = false;
+  const record = await put("sessions", {}, id);
+  assert.deepEqual(calls.at(-1), frozen);
+  assert.deepEqual(record.configuration.env_names, ["OFFICE_TOKEN"]);
+  await put("runtimes", { ...next, env: {} }, runtime.id);
+  assert.deepEqual(store.get("runtimes", runtime.id).env, {});
+  for (const body of [
+    { environment: "self_hosted" },
+    { environment: "none" },
+    { packages: { system: ["curl"] } },
+    { packages: { npm: ["--ignore-scripts"] } },
+    { env: { PATH: "x" } },
+    { env: { OAC_KEY: "x" } },
+    { env: { NEW: null } },
+    { files: [{ path: "/workspace/../outside", content: "x" }] },
+    {
+      files: [
+        { path: "/workspace/a", content: "x" },
+        { path: "/workspace/a", content: "y" },
+      ],
+    },
+  ])
+    await assert.rejects(
+      put("runtimes", { name: "Invalid", ...body }),
+      (error) => error.status === 400,
+    );
 });
 
 test("Provider discovery uses only its credential; selected and custom models save together", async () => {
@@ -201,7 +207,11 @@ async function setup(store, core) {
   const api = productAPI(store, core);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
-  const provider = await put("providers", { name: "Moonshot", base_url: "https://provider.example/v1", api_key: "provider-secret" });
+  const provider = await put("providers", {
+    name: "Moonshot",
+    base_url: "https://provider.example/v1",
+    api_key: "provider-secret",
+  });
   const model = await put("models", {
     name: "Kimi",
     model: "kimi-k2.6",
@@ -264,17 +274,19 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
     { type: "skill_reference", skill_id: "skill_review" },
   ]);
   assert.deepEqual(calls[0].body.x_agents_core.model_provider, {
-    protocol: "anthropic", base_url: "https://provider.example/v1", api_key: "provider-secret",
+    protocol: "anthropic",
+    base_url: "https://provider.example/v1",
+    api_key: "provider-secret",
   });
   assert.equal(JSON.stringify(first).includes("provider-secret"), false);
-  assert.equal(calls[0].body.agent.tools.length, 1);
-  const zip = unzipSync(
-    Buffer.from(calls[0].body.environment.plugins[0].source.data, "base64"),
-  );
-  assert.equal(
-    JSON.parse(strFromU8(zip["agent/.mcp.json"])).mcpServers.docs.url,
-    "https://mcp.example/docs",
-  );
+  assert.equal(calls[0].body.agent.tools.length, 2);
+  assert.deepEqual(calls[0].body.agent.tools[1], {
+    type: "mcp",
+    server_label: "docs",
+    transport: { type: "http", server_url: "https://mcp.example/docs" },
+    connection_origin: "environment",
+    required: true,
+  });
   await put("agents", { ...agent, instructions: "Updated" }, agent.id);
   const second = await put("sessions", input);
   assert.notEqual(first.core_session_id, second.core_session_id);
@@ -305,10 +317,15 @@ test("compatibility validation precedes execution, and old configurations migrat
   const { api, put, agent, input } = await setup(store, () => {
     throw new Error("must not execute");
   });
-  const runtime = await put("runtimes", { name: "Text", environment: "none" });
+  const runtime = {
+    id: randomUUID(),
+    name: "Unsupported",
+    environment: "none",
+  };
+  store.put("runtimes", runtime);
   await assert.rejects(
     put("sessions", { ...input, runtime_id: runtime.id }),
-    /Skills 需要/,
+    /仅支持托管/,
   );
   await assert.rejects(
     put("mcps", {
@@ -440,16 +457,251 @@ test("model editing and moving retain unique IDs within each Provider", async (t
   assert.equal(renamed.model, "three");
 });
 
-
-test("MiniMax MCP bindings reject before Core for text-only and hosted placements", async (t) => {
+test("MiniMax MCP bindings reject before Core", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   let calls = 0;
-  const { put, agent } = await setup(store, async () => { calls++; return { id: randomUUID() }; });
-  const config = await put("agents", { ...agent, harness: "mcode", skill_ids: [] }, agent.id);
-  for (const environment of ["none", "openai_hosted"]) {
+  const { put, agent } = await setup(store, async () => {
+    calls++;
+    return { id: randomUUID() };
+  });
+  const config = await put(
+    "agents",
+    { ...agent, harness: "mcode", skill_ids: [] },
+    agent.id,
+  );
+  for (const environment of ["openai_hosted"]) {
     const runtime = await put("runtimes", { name: environment, environment });
-    await assert.rejects(put("sessions", { name: "Rejected", input: "hello", agent_id: config.id, runtime_id: runtime.id }), /MiniMax Code.*MCP/);
+    await assert.rejects(
+      put("sessions", {
+        name: "Rejected",
+        input: "hello",
+        agent_id: config.id,
+        runtime_id: runtime.id,
+      }),
+      /MiniMax Code.*MCP/,
+    );
   }
   assert.equal(calls, 0);
+});
+
+test("Skills directory preview uses the pinned CLI, bounds imports, and cleans its temporary checkout", async () => {
+  const { previewRegistrySkill } = await import(
+    "../server/skills-directory.mjs"
+  );
+  const { writeFile, access, symlink } = await import("node:fs/promises");
+  const { unzipSync, strFromU8 } = await import("fflate");
+  let temporary;
+  const result = await previewRegistrySkill(
+    { source: "example/skills", slug: "review" },
+    async (command, args, options) => {
+      assert.equal(command, "npx");
+      assert.deepEqual(args, [
+        "--yes",
+        "skills@1.5.23",
+        "add",
+        "example/skills",
+        "--skill",
+        "review",
+        "--agent",
+        "claude-code",
+        "--copy",
+        "--yes",
+      ]);
+      temporary = options.cwd;
+      const directory = join(temporary, ".claude", "skills", "review");
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        join(directory, "SKILL.md"),
+        "---\nname: review\ndescription: Review changes\n---\nCheck tests.",
+      );
+    },
+  );
+  assert.match(
+    strFromU8(
+      unzipSync(Buffer.from(result.archive, "base64"))["review/SKILL.md"],
+    ),
+    /Check tests/,
+  );
+  await assert.rejects(access(temporary));
+  await assert.rejects(
+    previewRegistrySkill({ source: "--evil/repo", slug: "review" }, () =>
+      assert.fail("must not run"),
+    ),
+    { status: 400 },
+  );
+  await assert.rejects(
+    previewRegistrySkill({ source: "example/repo", slug: "../escape" }, () =>
+      assert.fail("must not run"),
+    ),
+    { status: 400 },
+  );
+  await assert.rejects(
+    previewRegistrySkill(
+      { source: "example/skills", slug: "review" },
+      async (_command, _args, options) => {
+        temporary = options.cwd;
+        const directory = join(temporary, ".claude", "skills", "review");
+        await mkdir(directory, { recursive: true });
+        await symlink("/etc/passwd", join(directory, "SKILL.md"));
+      },
+    ),
+    { status: 400 },
+  );
+  await assert.rejects(access(temporary));
+});
+
+test("MCP OAuth uses SDK PKCE, persists a public OAuth Vault credential and redacts completed state", async () => {
+  const { mcpOAuthAPI } = await import("../server/mcp-oauth.mjs");
+  const rows = new Map(),
+    credentials = [],
+    requests = [];
+  const store = {
+    get: (kind, id) => rows.get(`${kind}:${id}`),
+    put: (kind, value) =>
+      rows.set(`${kind}:${value.id}`, structuredClone(value)),
+    remove: (kind, id) => rows.delete(`${kind}:${id}`),
+  };
+  const vault = randomUUID(),
+    id = randomUUID();
+  const core = async (path, method, body) => {
+    assert.ok(path.startsWith("/v1/vaults/"));
+    requests.push({ method, path, body });
+    if (method === "GET" && path.includes("/credentials"))
+      return { data: credentials, has_more: false };
+    if (method === "GET") return { id: vault };
+    const value = {
+      id: randomUUID(),
+      name: body.name,
+      auth: { type: "mcp_oauth", mcp_server_url: body.auth.mcp_server_url },
+    };
+    credentials.push(value);
+    return value;
+  };
+  const metadata = {
+    issuer: "https://auth.example",
+    authorization_endpoint: "https://auth.example/authorize",
+    token_endpoint: "https://auth.example/token",
+    registration_endpoint: "https://auth.example/register",
+    response_types_supported: ["code"],
+    code_challenge_methods_supported: ["S256"],
+    token_endpoint_auth_methods_supported: ["none"],
+  };
+  const network = async (url, options) => {
+    const path = String(url);
+    if (path.includes("oauth-protected-resource"))
+      return Response.json({
+        resource: "https://mcp.example/docs",
+        authorization_servers: ["https://auth.example"],
+      });
+    if (path.includes(".well-known")) return Response.json(metadata);
+    if (path.endsWith("/register"))
+      return Response.json(
+        {
+          client_id: "parsar-client",
+          redirect_uris: ["http://127.0.0.1:18190/oauth/callback"],
+        },
+        { status: 201 },
+      );
+    if (path.endsWith("/token")) {
+      assert.equal(options.body.get("code"), "authorized-code");
+      assert.ok(options.body.get("code_verifier"));
+      return Response.json({
+        access_token: "private-access",
+        token_type: "Bearer",
+        refresh_token: "private-refresh",
+        expires_in: 3600,
+      });
+    }
+    throw new Error(`Unexpected fixture URL ${path}`);
+  };
+  const api = mcpOAuthAPI(store, core, "http://127.0.0.1:18190", network);
+  const start = await api("POST", `/app/mcp-oauth/${id}`, {
+    action: "begin",
+    vault_id: vault,
+    name: "Docs",
+    url: "https://mcp.example/docs",
+  });
+  const redirect = new URL(start.authorization_url);
+  assert.equal(redirect.origin, "https://auth.example");
+  assert.equal(redirect.searchParams.get("code_challenge_method"), "S256");
+  const state = redirect.searchParams.get("state").split(":")[1];
+  await assert.rejects(
+    api("POST", `/app/mcp-oauth/${id}`, {
+      action: "complete",
+      state: "wrong",
+      code: "authorized-code",
+    }),
+    /state does not match/,
+  );
+  const result = await api("POST", `/app/mcp-oauth/${id}`, {
+    action: "complete",
+    state,
+    code: "authorized-code",
+  });
+  const saved = requests.find((row) => row.method === "POST").body.auth;
+  assert.equal(saved.type, "mcp_oauth");
+  assert.equal(saved.refresh.refresh_token, "private-refresh");
+  assert.equal(saved.refresh.token_endpoint_auth.type, "none");
+  assert.equal(JSON.stringify(result).includes("private-"), false);
+  assert.equal(
+    JSON.stringify(store.get("mcp_oauth", id)).includes("private-"),
+    false,
+  );
+  await api("POST", `/app/mcp-oauth/${id}`, {
+    action: "complete",
+    state,
+    code: "authorized-code",
+  });
+  assert.equal(credentials.length, 1);
+});
+
+test("model availability and pricing remain product-owned and freeze with a Session", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const { api, model, agent } = await setup(store, async () => ({
+    id: randomUUID(),
+  }));
+  const priced = await api("PUT", `/app/models/${model.id}`, {
+    ...model,
+    pricing: { input: 2, output: 8 },
+    enabled: false,
+  });
+  store.put("agents", { ...agent, skill_ids: [], mcp_ids: [] });
+  const runtime = {
+    id: randomUUID(),
+    name: "Workspace",
+    environment: "openai_hosted",
+    revision: 1,
+  };
+  store.put("runtimes", runtime);
+  const body = {
+    agent_id: agent.id,
+    runtime_id: runtime.id,
+    name: "Priced task",
+    input: "Check usage",
+  };
+  await assert.rejects(
+    api("PUT", `/app/sessions/${randomUUID()}`, body),
+    /资源已不可用/,
+  );
+  await api("PUT", `/app/models/${model.id}`, { ...priced, enabled: true });
+  const record = await api("PUT", `/app/sessions/${randomUUID()}`, body);
+  assert.deepEqual(record.pricing, { input: 2, output: 8 });
+  const current = store.get("models", model.id);
+  await api("PUT", `/app/models/${model.id}`, {
+    ...current,
+    pricing: { input: 3, output: 9 },
+  });
+  assert.deepEqual(store.get("sessions", record.id).pricing, {
+    input: 2,
+    output: 8,
+  });
+  await assert.rejects(
+    api("PUT", `/app/models/${model.id}`, {
+      ...store.get("models", model.id),
+      pricing: { input: -1, output: 0 },
+    }),
+    /价格/,
+  );
 });

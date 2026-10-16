@@ -1,3 +1,4 @@
+import { tr } from "./lib/i18n";
 import { sessionRestriction } from "../shared/session-profile.mjs";
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -35,12 +36,11 @@ export function NewSession({
     name: "",
     input: "",
     agent_id: agent.id,
-    runtime_id: "",
+    runtime_id: agent.runtime_id || "",
   }));
   const runtime = runtimes.data?.find(
     (runtime) => runtime.id === form.runtime_id,
   );
-  const selfHosted = runtime?.environment === "self_hosted";
   const restriction = sessionRestriction(agent, runtime);
   const startedAt = useRef<number>(0);
   const [uncertain, setUncertain] = useState(false);
@@ -60,7 +60,7 @@ export function NewSession({
       void cache.invalidateQueries({ queryKey: ["sessions"] });
     },
     onSuccess: (session) => {
-      if (session.core_session_id && !session.self_hosted) {
+      if (session.core_session_id) {
         beginTiming(
           session.core_session_id,
           form.id,
@@ -82,7 +82,7 @@ export function NewSession({
     >
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>开始会话</DialogTitle>
+          <DialogTitle>{tr("开始会话")}</DialogTitle>
         </DialogHeader>
         <form
           id="session-form"
@@ -92,7 +92,7 @@ export function NewSession({
             save.mutate();
           }}
         >
-          <Field label="会话名称" id="session-name">
+          <Field label={tr("会话名称")} id="session-name">
             <Input
               disabled={save.isPending || uncertain}
               id="session-name"
@@ -102,14 +102,14 @@ export function NewSession({
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </Field>
-          <Field label="运行时" id="session-runtime">
+          <Field label={tr("环境模板")} id="session-runtime">
             <Select
               disabled={save.isPending || uncertain}
               id="session-runtime"
               value={form.runtime_id}
               onValueChange={(runtime_id) => setForm({ ...form, runtime_id })}
             >
-              <SelectOption value="">选择运行时</SelectOption>
+              <SelectOption value="">{tr("选择环境模板")}</SelectOption>
               {runtimes.data?.map((runtime) => (
                 <SelectOption key={runtime.id} value={runtime.id}>
                   {runtime.name}
@@ -118,12 +118,12 @@ export function NewSession({
             </Select>
             {!runtimes.isPending && !runtimes.data?.length && (
               <a className="underline" href="#/runtimes" onClick={close}>
-                前往添加运行时
+                {tr("前往添加环境模板")}
               </a>
             )}
           </Field>
-          {!selfHosted && (
-            <Field label="第一条消息" id="session-input">
+          {
+            <Field label={tr("第一条消息")} id="session-input">
               <Textarea
                 disabled={save.isPending || uncertain}
                 id="session-input"
@@ -131,33 +131,34 @@ export function NewSession({
                 rows={5}
                 value={form.input}
                 onChange={(e) => setForm({ ...form, input: e.target.value })}
-                placeholder="希望 Agent 做什么？"
+                placeholder={tr("希望 Agent 做什么？")}
               />
             </Field>
-          )}
+          }
           {restriction && (
             <p role="alert" className="text-base">
               {restriction}
             </p>
           )}
-          {!restriction &&
-            runtime &&
-            (runtime.environment === "none" || agent.harness === "mcode") && (
-              <p className="text-base">
-                此组合使用 Core 部署的模型连接；这里选择的 Provider
-                仅用于模型分组。
-              </p>
-            )}
+          {!restriction && runtime && agent.harness === "mcode" && (
+            <p className="text-base">
+              {tr(
+                "此组合使用 Core 部署的模型连接；这里选择的 Provider 仅用于模型分组。",
+              )}
+            </p>
+          )}
           <ErrorNotice error={save.error || runtimes.error} />
           {uncertain && (
-            <p>如请求结果未确定，可关闭弹窗，在会话列表中恢复同一次创建。</p>
+            <p>
+              {tr("如请求结果未确定，可关闭弹窗，在会话列表中恢复同一次创建。")}
+            </p>
           )}
         </form>
         <DialogFooter>
           <Help>
-            用户机器需要先创建会话，再按连接指引启动
-            daemon，连接后发送消息。此会话使用当前 Agent
-            配置的副本。托管会话有独立工作区；继续同一会话可保留历史和仍在运行的工作区。纯文本运行时不提供工作区。
+            {tr(
+              "先按环境模板准备软件包和文件，再启动 Agent。继续同一会话可保留历史和工作目录。",
+            )}
           </Help>
           <Button
             form="session-form"
@@ -168,10 +169,10 @@ export function NewSession({
               save.isPending ||
               !form.runtime_id ||
               !form.name.trim() ||
-              (!selfHosted && !form.input.trim())
+              !form.input.trim()
             }
           >
-            {save.isPending ? "启动中…" : "开始"}
+            {save.isPending ? tr("启动中\u2026") : tr("开始")}
           </Button>
         </DialogFooter>
       </DialogContent>

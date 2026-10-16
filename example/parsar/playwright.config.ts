@@ -30,8 +30,8 @@ export default defineConfig({
       command: "node server.mjs --dev",
       url: "http://127.0.0.1:18180",
       env: {
-        OAC_EXAMPLE_CORE_URL: "http://127.0.0.1:18181",
-        OAC_EXAMPLE_PROJECT_KEY: "fixture-project-key",
+        OPENAI_BASE_URL: "http://127.0.0.1:18181/v1",
+        OPENAI_API_KEY: "fixture-project-key",
         OAC_EXAMPLE_PORT: "18180",
         OAC_EXAMPLE_DATA_DIR: join(
           homedir(),

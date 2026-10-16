@@ -1,5 +1,5 @@
+import { tr } from "./i18n";
 import { useEffect, useState } from "react";
-
 interface SendTiming {
   operation: string;
   startedAt: number;
@@ -66,5 +66,7 @@ export function useSendTiming(id: string) {
   return timing;
 }
 export function timingLabel(ms?: number) {
-  return ms === undefined ? "—" : `${(ms / 1000).toFixed(2)} 秒`;
+  return ms === undefined
+    ? "—"
+    : tr("{{value0}} 秒", { value0: (ms / 1000).toFixed(2) });
 }

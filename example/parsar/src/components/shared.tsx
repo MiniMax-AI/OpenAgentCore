@@ -1,9 +1,9 @@
+import { tr, englishTitle } from "../lib/i18n";
 import type { ReactNode } from "react";
 import { AlertCircle } from "lucide-react";
 import { CircleHelp } from "lucide-react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { errorText } from "../lib/api";
-
 export function PageHeader({
   title,
   children,
@@ -13,17 +13,23 @@ export function PageHeader({
 }) {
   return (
     <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-3">
-      <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">
-        {title}
-      </h1>
+      <div className="flex min-w-0 items-baseline gap-2">
+        <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">
+          {title}
+        </h1>
+        {englishTitle(title) && englishTitle(title) !== title && (
+          <span className="shrink-0 text-xs text-fg-muted">
+            {englishTitle(title)}
+          </span>
+        )}
+      </div>
       <div className="flex items-center gap-2">{children}</div>
     </header>
   );
 }
-
 export function Help({
   children,
-  label = "了解更多",
+  label = tr("了解更多"),
 }: {
   children: ReactNode;
   label?: string;
@@ -41,8 +47,9 @@ export function Help({
       </Tooltip.Trigger>
       <Tooltip.Portal>
         <Tooltip.Content
+          style={{ pointerEvents: "none" }}
           sideOffset={6}
-          className="app-shadow-floating z-[60] max-w-xs rounded-md border border-line bg-surface px-3 py-2 text-base text-fg"
+          className="pointer-events-none app-shadow-floating z-[60] max-w-xs rounded-md border border-line bg-surface px-3 py-2 text-base text-fg"
         >
           {children}
           <Tooltip.Arrow className="fill-surface" />
@@ -51,7 +58,6 @@ export function Help({
     </Tooltip.Root>
   );
 }
-
 export function ErrorNotice({
   error,
   retry,
@@ -70,14 +76,13 @@ export function ErrorNotice({
         <p>{errorText(error)}</p>
         {retry && (
           <button className="mt-1 underline underline-offset-4" onClick={retry}>
-            重新加载
+            {tr("重新加载")}
           </button>
         )}
       </div>
     </div>
   );
 }
-
 export function Field({
   label,
   id,

@@ -135,6 +135,7 @@ class SelectionTests(unittest.TestCase):
             "apps/web/pnpm-lock.yaml": {"web", "web-acceptance"},
             "apps/web/package.json": {"web", "web-acceptance"},
             "example/parsar/pnpm-lock.yaml": {"example"},
+            "example/parsar/examples/feishu/setup.sh": {"example"},
             "packages/agents-client/pnpm-lock.yaml": {"web", "web-acceptance", "example"},
             "packages/claude-sdk-adapter/pnpm-lock.yaml": {"harness", "native", "distribution"},
             "packages/claude-sdk-adapter/package.json": {"harness", "native", "distribution"},

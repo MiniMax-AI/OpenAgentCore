@@ -1,6 +1,10 @@
+import { zipSync, strToU8 } from "fflate";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 let executorConnected = false;
+let vaults = [],
+  credentials = [],
+  skillBundles = new Map();
 let agents = [],
   templates = [],
   skills = [],
@@ -95,6 +99,9 @@ createServer(async (req, res) => {
     for (const peers of streams.values()) for (const peer of peers) peer.end();
     streams.clear();
     executorConnected = false;
+    vaults = [];
+    credentials = [];
+    skillBundles = new Map();
     agents = [];
     sessions = [];
     histories = new Map();
@@ -120,6 +127,84 @@ createServer(async (req, res) => {
     req.headers["content-type"]?.startsWith("application/json")
   )
     body = JSON.parse(bytes);
+  if (url.pathname === "/question") {
+    const session = sessions.at(-1),
+      turn = turns.get(session.id).at(-1);
+    session.status = "requires_action";
+    turn.status = "in_progress";
+    turn.completed_at = null;
+    session.required_actions = [
+      {
+        type: "function_call",
+        name: "ask_user",
+        call_id: "call_business",
+        turn_id: turn.id,
+        arguments: { question: "选择报告语言", options: ["中文", "English"] },
+      },
+    ];
+    return reply({});
+  }
+  if (url.pathname === "/v1/vaults") {
+    if (req.method === "GET") return reply(page(vaults));
+    const vault = {
+      id: randomUUID(),
+      object: "vault",
+      name: body.name || null,
+      metadata: {},
+      created_at: now(),
+    };
+    vaults.push(vault);
+    return reply(vault, 201);
+  }
+  const credentialPath = url.pathname.match(
+    /^\/v1\/vaults\/([^/]+)\/credentials(?:\/([^/]+))?$/,
+  );
+  if (credentialPath) {
+    const [, vaultId, credentialId] = credentialPath;
+    if (!credentialId && req.method === "GET")
+      return reply(page(credentials.filter((row) => row.vault_id === vaultId)));
+    if (credentialId) {
+      const row = credentials.find((row) => row.id === credentialId);
+      if (!row) return reply({ error: { message: "Not found" } }, 404);
+      if (req.method === "DELETE") {
+        credentials = credentials.filter((entry) => entry !== row);
+        return reply({
+          id: row.id,
+          object: "vault.credential.deleted",
+          deleted: true,
+        });
+      }
+      if (req.method === "POST") row.updated_at = now();
+      return reply(row);
+    }
+    const row = {
+      id: randomUUID(),
+      object: "vault.credential",
+      vault_id: vaultId,
+      name: body.name,
+      auth: { type: "static_bearer", mcp_server_url: body.auth.mcp_server_url },
+      created_at: now(),
+      updated_at: now(),
+    };
+    credentials.push(row);
+    return reply(row, 201);
+  }
+  const contentPath = url.pathname.match(
+    /^\/v1\/skills\/([^/]+)\/versions\/([0-9]+)\/content$/,
+  );
+  if (contentPath) {
+    const data = skillBundles.get(`${contentPath[1]}/${contentPath[2]}`);
+    if (!data) return reply({ error: { message: "Not found" } }, 404);
+    res.writeHead(200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": "attachment; filename=skill.zip",
+      "Content-Length": data.length,
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+    res.end(data);
+    return;
+  }
   if (url.pathname === "/v1/agents" && req.method === "POST") {
     const agent = {
       id: randomUUID(),
@@ -197,6 +282,10 @@ createServer(async (req, res) => {
       description,
     };
     versions.get(skill.id).push(version);
+    skillBundles.set(
+      `${skill.id}/${number}`,
+      zipSync({ [`${name}/SKILL.md`]: strToU8(content) }),
+    );
     skill.latest_version = number;
     if (form.get("default") === "true") {
       skill.default_version = number;
@@ -262,12 +351,21 @@ createServer(async (req, res) => {
                 plugins: [],
                 skills: [],
               },
-      ...(body.environment.type === "self_hosted" ? {
-        x_agents_core: { installation: {
-          status: "available", version: "fixture", expires_at: now() + 1800,
-          commands: { posix: "bash fixture-native-bootstrap.sh", powershell: "& fixture-native-bootstrap.ps1" },
-        } },
-      } : {}),
+      ...(body.environment.type === "self_hosted"
+        ? {
+            x_agents_core: {
+              installation: {
+                status: "available",
+                version: "fixture",
+                expires_at: now() + 1800,
+                commands: {
+                  posix: "bash fixture-native-bootstrap.sh",
+                  powershell: "& fixture-native-bootstrap.ps1",
+                },
+              },
+            },
+          }
+        : {}),
       status: "idle",
       error: null,
       metadata: body.metadata,
@@ -322,32 +420,76 @@ createServer(async (req, res) => {
     }
     return reply(session, 201);
   }
-  const fileMatch = url.pathname.match(/^\/v1\/agents\/environments\/([^/]+)\/files$/);
+  const fileMatch = url.pathname.match(
+    /^\/v1\/agents\/environments\/([^/]+)\/files$/,
+  );
   if (fileMatch) {
-    if (req.method === "POST") return reply({
-      object: "agent.environment.file", environment_id: fileMatch[1], path: body.path,
-      size_bytes: Buffer.from(body.data, "base64").length,
-    }, 201);
+    if (req.method === "POST")
+      return reply(
+        {
+          object: "agent.environment.file",
+          environment_id: fileMatch[1],
+          path: body.path,
+          size_bytes: Buffer.from(body.data, "base64").length,
+        },
+        201,
+      );
   }
-  const artifactMatch = url.pathname.match(/^\/v1\/agents\/sessions\/([^/]+)\/artifacts(?:\/([^/]+)\/content)?$/);
+  const artifactMatch = url.pathname.match(
+    /^\/v1\/agents\/sessions\/([^/]+)\/artifacts(?:\/([^/]+)\/content)?$/,
+  );
   if (artifactMatch) {
     if (artifactMatch[2]) {
-      res.writeHead(200, { "Content-Type": "application/octet-stream", "Content-Disposition": 'attachment; filename="report.bin"' });
+      res.writeHead(200, {
+        "Content-Type": "application/octet-stream",
+        "Content-Disposition": 'attachment; filename="report.bin"',
+      });
       return res.end(Buffer.from([0, 255, 128, 13, 10]));
     }
-    return reply(page([{ id: "aabbccdd-0000-4000-8000-000000000001", object: "agent.session.artifact",
-      session_id: artifactMatch[1], environment_id: sessions.find((s) => s.id === artifactMatch[1])?.environment.id,
-      turn_id: "aabbccdd-0000-4000-8000-000000000002", path: "/workspace/outputs/report.bin", size_bytes: 5, created_at: now() }]));
+    return reply(
+      page([
+        {
+          id: "aabbccdd-0000-4000-8000-000000000001",
+          object: "agent.session.artifact",
+          session_id: artifactMatch[1],
+          environment_id: sessions.find((s) => s.id === artifactMatch[1])
+            ?.environment.id,
+          turn_id: "aabbccdd-0000-4000-8000-000000000002",
+          path: "/workspace/outputs/report.bin",
+          size_bytes: 5,
+          created_at: now(),
+        },
+      ]),
+    );
   }
   const match = url.pathname.match(
     /^\/v1\/agents\/sessions\/([^/]+)(?:\/(items|turns|events))?$/,
   );
   const session = sessions.find((entry) => entry.id === match?.[1]);
   if (!session) return reply({ error: { message: "Not found" } }, 404);
-  if (!match[2]) return reply(session);
+  if (!match[2]) {
+    if (req.method === "POST") session.metadata = body.metadata;
+    if (req.method === "DELETE") {
+      if (session.status === "in_progress")
+        return reply({ error: { message: "Session busy" } }, 409);
+      sessions = sessions.filter((row) => row.id !== session.id);
+      return reply({
+        id: session.id,
+        object: "agent.session.deleted",
+        deleted: true,
+      });
+    }
+    return reply(session);
+  }
   if (match[2] === "items") return reply(page(histories.get(session.id)));
   if (match[2] === "turns")
-    return reply(page([...turns.get(session.id)].reverse()));
+    return reply(
+      page(
+        url.searchParams.get("order") === "asc"
+          ? [...turns.get(session.id)]
+          : [...turns.get(session.id)].reverse(),
+      ),
+    );
   if (match[2] === "events" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/event-stream" });
     res.write(": connected\n\n");
@@ -357,10 +499,32 @@ createServer(async (req, res) => {
     return;
   }
   const event = body.events[0];
+  if (
+    ![
+      "agent.session.input.message",
+      "agent.session.input.tool_result",
+      "agent.session.input.cancel",
+    ].includes(event?.type)
+  )
+    return reply(
+      {
+        error: {
+          message: "Invalid input event type",
+          type: "invalid_request_error",
+        },
+      },
+      400,
+    );
   const key = req.headers["idempotency-key"];
   if (receipts.has(key)) return reply({}, 202);
   receipts.set(key, true);
-  if (event.type === "agent.session.input.cancel") {
+  if (event.type === "agent.session.input.tool_result") {
+    session.status = "idle";
+    session.required_actions = [];
+    const turn = turns.get(session.id).at(-1);
+    turn.status = "completed";
+    turn.completed_at = now();
+  } else if (event.type === "agent.session.input.cancel") {
     session.status = "idle";
     const turn = turns.get(session.id).at(-1);
     turn.status = "cancelled";
@@ -382,6 +546,7 @@ createServer(async (req, res) => {
       const base = { turn_id: turn.id, output_index: 0 };
       const text = { ...base, item_id: item.id, content_index: 0 };
       setTimeout(() => {
+        if (!histories.has(session.id)) return;
         emit(session, { ...base, type: "agent.session.turn.item.added", item });
         emit(session, {
           ...text,
@@ -390,6 +555,7 @@ createServer(async (req, res) => {
         });
       }, 250);
       setTimeout(() => {
+        if (!histories.has(session.id)) return;
         emit(session, {
           ...text,
           type: "agent.session.turn.output_text.delta",

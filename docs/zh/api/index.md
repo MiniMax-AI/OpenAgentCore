@@ -1,7 +1,7 @@
 ---
 title: "API 命名空间和凭据"
 source: docs/api/index.md
-source_hash: 12a1933c91e95828ccd8bf8405a892726c7da265ddf2bbf6bf99bd156af0f96d
+source_hash: d913f9c0750ca03c6fd70fcaf10d5662212ee8ed97adc54325b60e0ad1eab2f4
 ---
 
 Core 提供三个命名空间。每个命名空间都有一种调用方及其独立凭据，凭据只能在其所属命名空间中使用。
@@ -25,3 +25,7 @@ Core 提供三个命名空间。每个命名空间都有一种调用方及其独
 运维脚本通过经 Core 密钥认证的 `GET` 和 `PUT /core/v1/workspace-storage` 配置独立文件系统存储；参见[工作区存储](../../../contracts/agents-api/zh/admin-api.md#workspace-storage)。
 
 Web 和运维脚本通过 Core 密钥认证的 `PATCH /core/v1/sandbox/deployment` 更新沙箱空闲策略；参见[沙箱部署](../../../contracts/agents-api/zh/sandbox-deployment.md)。
+
+可选的 [应用示例](../../../CONTRIBUTING.md#optional-application-example)拥有自己的回环 `/app/` 产品路由，调用方是同源本地 UI；进程内工作器复用产品操作。其服务器使用 Project API 密钥调用公开 `/v1`，不接受 Core 管理员凭据。
+
+示例的回环 `/mcp/agents/<id>` 端点供本机 MCP 客户端使用，以产品签发的 Agent Token 鉴权；`/oauth/callback` 是只读 OAuth 返回页。产品路由组、调用方与凭据由 [Parsar 本地 API](../../../example/parsar/README.zh.md#ownership-and-local-api) 说明，不属于 Core 命名空间。
