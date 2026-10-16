@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 606f9b08989b4a64de7a04fe15b17587ced9164ac3572ac3c33a9306a681d1c3
+source_hash: 63a21ad08b69df2df5f56a4a52cb3d1571a873fea5a00046f397bf8bd3310587
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -208,8 +208,8 @@ stateDiagram-v2
     suspended --> restoring: new work or file access
     restoring --> waking: Resume reports running
     waking --> running: daemon resumed
-    running --> released: confirmed compute loss
-    suspended --> released: cold replacement after retention
+    running --> [*]: confirmed compute loss releases the allocation
+    suspended --> [*]: cold replacement after retention
 ```
 
 暂停与唤醒流程按下列顺序调用提供商。Core 在每个效果发生之前先持久化相应阶段。

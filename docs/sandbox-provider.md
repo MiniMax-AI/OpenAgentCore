@@ -207,8 +207,8 @@ stateDiagram-v2
     suspended --> restoring: new work or file access
     restoring --> waking: Resume reports running
     waking --> running: daemon resumed
-    running --> released: confirmed compute loss
-    suspended --> released: cold replacement after retention
+    running --> [*]: confirmed compute loss releases the allocation
+    suspended --> [*]: cold replacement after retention
 ```
 
 The suspend and wake flows call the Provider in this order. Core persists each phase before the effect it describes.
