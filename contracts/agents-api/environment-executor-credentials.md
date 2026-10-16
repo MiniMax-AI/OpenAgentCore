@@ -1,5 +1,5 @@
 ---
-title: "Environment executor credentials"
+title: "Executor credentials"
 ---
 
 An executor credential lets `oac-daemon` enroll and connect for one `self_hosted` Environment. It authorizes only the private daemon transport (`/api/v1/agent-daemon/*`) for that Environment, never `/v1`, `/core/v1`, sandbox-node enrollment or Project resources. The Project's principal is its execution principal. Core stores only a digest of the secret.

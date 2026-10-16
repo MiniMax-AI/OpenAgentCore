@@ -66,4 +66,4 @@ It checks the upstream and generated response schemas, retries, ordering, tenant
 
 ## Generated contracts
 
-Run `make openapi` after changing the pinned public schema, Go bindings, Core extensions or internal handler annotations. The [contract generation guide](../../contracts/agents-api/index.md#pinned-baseline) owns the inputs, generated files and checks. Review and commit the generated diffs. `make check-openapi` verifies freshness; contract tests check all three documents against registered routes.
+Run `make openapi` after changing the pinned public schema, Go bindings, Core extensions or internal handler annotations. The [contract and schema rules](../../CONTRIBUTING.md#contract-and-schema-rules) owns the inputs, generated files and checks. Review and commit the generated diffs. `make check-openapi` verifies freshness; contract tests check all three documents against registered routes.

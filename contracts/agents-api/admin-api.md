@@ -10,7 +10,7 @@ Applications never call `/core/v1`. It has no operation that creates or edits Ag
 
 Every `/core/v1` request, including one for an unknown path, must send `Authorization: Bearer <Core key>`. Without it Core answers 401 `invalid_admin_key` with `WWW-Authenticate: Bearer`; an unknown path answers 404 `not_found` only after authentication.
 
-- Core compares the SHA-256 of the bearer with the Core key digest it reads at startup from `generated/core-key-digests.json`, which `oac apply` derives from `secrets/core.key` ([Core key](../../docs/getting-started/operations.md#core-key)). A rotated Core key takes effect when Core restarts. Core serves no `/core/v1` route when no digest is configured.
+- Core compares the SHA-256 of the bearer with the [Core key](../../docs/getting-started/operations.md#core-key) digest it reads at startup. A rotated Core key takes effect when Core restarts. Core serves no `/core/v1` route when no digest is configured.
 - The Core key authenticates only `/core/v1`. Project API keys and machine credentials get 401 here, and the Core key gets 401 on `/v1` and `/api/v1` ([API namespaces and credentials](../../docs/api/index.md)).
 - `X-Core-Console-Actor` is a label the caller asserts. Core records it as the audit `actor_label` without checking it. The console server sends `console`; scripts normally send none, which records an empty label. Never use it for authorization or as proof of origin.
 - A `{project_id}` in a path selects the target Project, including an archived one; it grants nothing.
@@ -28,7 +28,7 @@ Paths are relative to `/core/v1`.
 | `projects/{project_id}/sessions/{session_id}/archive` | Archive one hosted Session | [Session archive](#session-archive) |
 | `projects/{project_id}/sessions/{session_id}/execution-configuration` | The Session's frozen model, Harness and provider selection | [Execution configuration](#execution-configuration) |
 | `projects/{project_id}/sessions/{session_id}/diagnostics`, `…/turns/{turn_id}/diagnostics` | Failure categories and Item receipt timing | [Session diagnostics](./session-diagnostics.md) |
-| `projects/{project_id}/sessions/{session_id}/runtime-observation`, `sandbox/runtime-observations` | Current Runtime observations | [Runtime observations](./runtime-observability-api.md), [the list's disk field](#runtime-observations) |
+| `projects/{project_id}/sessions/{session_id}/runtime-observation`, `sandbox/runtime-observations` | Current Runtime observations | [Runtime observations](./runtime-observability-api.md), [the list's disk field](./runtime-observability-api.md#disk) |
 | `projects/{project_id}/sessions/{session_id}/runtime-history` | Stored Runtime history | [Runtime history](./runtime-observability-api.md#session-runtime-history) |
 | `projects/{project_id}/environments/{environment_id}/installation` | Install commands of a `self_hosted` Environment | [Installation grant](./environment-executor-credentials.md#installation-grant) |
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | Executor credentials of a `self_hosted` Environment | [Executor credentials](./environment-executor-credentials.md#core-key-routes) |
@@ -41,17 +41,31 @@ Paths are relative to `/core/v1`.
 | `request-logs` | Recent public or administration HTTP requests and their response metadata | [Request log](#request-log) |
 | `audit-log` | Administrator writes | [Audit log](#audit-log) |
 
-## Request log
+## Installation facts
 
-`GET /core/v1/request-logs` is a Core-key-only diagnostic read for Web's **Request log** and operator scripts. It observes HTTP requests that reach Core's `/v1` and `/core/v1` APIs, including rejected authentication and unsuccessful responses. The log read itself, health and documentation endpoints, Web sign-in/proxy failures before Core, machine transports and background execution are outside this view. It is not an audit archive or a distributed execution trace.
+`GET /installation` reports what an administrator needs to call and change this installation. It answers before any sandbox deployment exists and calls no provider or model.
 
-Each API instance retains the most recent 1,000 started requests for each surface independently: `public` for `/v1`, `admin` for `/core/v1`. Administration polling cannot evict application requests. Older entries, including long-lived requests, are overwritten when their surface fills. Restart clears the rings. `instance_id` and `instance_started_at` identify the serving API instance; a load balancer can return another instance's window. Core also emits each request's completion metadata through its existing structured logger; retention of that output belongs to the operator's log system, not this endpoint.
+| Field | Meaning |
+| --- | --- |
+| `object` | `core.installation` |
+| `installation_id` | The installation ID from `OAC_INSTALLATION_ID_FILE` ([Compose installations](../../docs/configuration.md#compose-installations)) |
+| `public_url` | The [`public_url`](../../docs/configuration.md#settings) setting: the origin applications, nodes, sandboxes and self-hosted executors use |
+| `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys |
+| `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
+| `source_commit` | The full source commit Core was built from; null for development builds |
+| `configuration` | The process settings Core loaded from its environment, under `settings` |
+| `address_bindings` | What a change of `public_url` affects, counted on each read |
 
-Query parameters are `surface=public|admin` (default `public`), `limit` (1–200, default 100), optional exact `request_id`, `outcome=all|errors|active` (default `all`) and optional `method`. Supported method values are `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `CONNECT`, `TRACE` and `OTHER`; other incoming methods are recorded as `OTHER`. Unsupported, repeated or malformed query parameters return 400. `errors` includes HTTP status 400 or above and aborted requests. Filtering scans only the retained window and returns newest-started first. `retained_count` describes that surface's retained window, `total_matching` counts retained matches, and `has_more` means the response limit omitted matches; it does not promise older evicted history is available.
+`configuration.settings` has one entry per setting Core loaded: its `key`, the environment variable that sets it (such as `OAC_LOG_LEVEL`), its effective `value`, `default`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`).
 
-The response has `object: "core.request_log.list"`, instance identity, `surface`, `capacity`, coverage counts and `data`. Each entry contains `request_id`, `trace_id`, `started_at`, `method`, `route`, `state`, `status`, `duration_ms`, `response_bytes` and nullable `error_code`. `route` is a registered route template, a partially matched authentication prefix or `(unmatched)`, never the raw resource path or query. `status` is null until final response headers are committed. `state` distinguishes `active`, `completed` and `aborted`; duration and bytes describe the observation so far for active requests. `response_bytes` counts bytes accepted by the response writer, excluding headers and transport framing; it is not a network transfer measurement. An SSE response remains active until its handler ends. HTTP status and completion do not establish the outcome of an asynchronous Agent Turn; use [Session diagnostics](./session-diagnostics.md) and the Session's recorded history for that outcome.
+A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. `oac-core check-config` validates the same environment and exits without starting Core or printing a value. [Configuration](../../docs/configuration.md) describes each setting.
 
-Bodies, header values, credentials, prompts, file contents, raw paths, query values and error messages are not captured. Only the API's safe error code is retained. The returned request ID corresponds to `X-Request-Id` and can be used to find related existing process log entries. Trace IDs are correlation metadata, not proof of a complete component trace.
+| `address_bindings` field | Meaning |
+| --- | --- |
+| `nodes` | Enrolled nodes that are not removed |
+| `nodes_on_other_address` | Nodes enrolled with an address other than `public_url`. They receive no new sandboxes; remove and add them again. At most `nodes` |
+| `hosted_sandboxes` | Retained and pending hosted sandboxes, which run with the address current when they started |
+| `self_hosted_executors` | Unrevoked executor credentials, whose executors were installed with the `remote_url` then advertised |
 
 ## Workspace storage
 
@@ -147,32 +161,6 @@ Each `source` is `session`, `agent`, `deployment` or `unknown`, recorded indepen
 
 Core writes this record in the same transaction that creates the Session. Later Agent edits or deletion, deployment default changes, restarts and same-key creation retries never change it. A Session without the record reports its stored model and Harness with source `unknown`, a null value where none is stored, and an `unavailable` provider. A missing Session and one in another Project return the same 404. The response never contains keys, ciphertext, secret references, native headers or query parameters.
 
-## Installation facts
-
-`GET /installation` reports what an administrator needs to call and change this installation. It answers before any sandbox deployment exists and calls no provider or model.
-
-| Field | Meaning |
-| --- | --- |
-| `object` | `core.installation` |
-| `installation_id` | The installation ID from `OAC_INSTALLATION_ID_FILE` ([Compose installations](../../docs/configuration.md#compose-installations)) |
-| `public_url` | The [`public_url`](../../docs/configuration.md#settings) setting: the origin applications, nodes, sandboxes and self-hosted executors use |
-| `api_base_url` | `public_url` followed by `/v1`, the `OPENAI_BASE_URL` for Project API keys |
-| `local_only` | True when `public_url` names a loopback host, which only the Core host reaches |
-| `source_commit` | The full source commit Core was built from; null for development builds |
-| `configuration` | The process settings Core loaded from its environment, under `settings` |
-| `address_bindings` | What a change of `public_url` affects, counted on each read |
-
-`configuration.settings` has one entry per setting Core loaded: its `key`, the environment variable that sets it (such as `OAC_LOG_LEVEL`), its effective `value`, `default`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`).
-
-A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. `oac-core check-config` validates the same environment and exits without starting Core or printing a value. [Configuration](../../docs/configuration.md) describes each setting.
-
-| `address_bindings` field | Meaning |
-| --- | --- |
-| `nodes` | Enrolled nodes that are not removed |
-| `nodes_on_other_address` | Nodes enrolled with an address other than `public_url`. They receive no new sandboxes; remove and add them again. At most `nodes` |
-| `hosted_sandboxes` | Retained and pending hosted sandboxes, which run with the address current when they started |
-| `self_hosted_executors` | Unrevoked executor credentials, whose executors were installed with the `remote_url` then advertised |
-
 ## Write provenance
 
 Core records which Project API key made each successful public write, in the same transaction as the write; if the record fails, the write fails. Reads, rejected requests and Core's own maintenance, such as OAuth token refresh and cleanup, are not recorded.
@@ -231,9 +219,17 @@ The response is `{data, has_more, next_cursor}`. Each row has `project_id`, null
 - A Session whose public usage is null adds no tokens but counts in the coverage denominator.
 - Each Project is read in one database snapshot; a page is not one snapshot of the whole deployment. Totals are operational counts, not billing records.
 
-## Runtime observations
+## Request log
 
-The [Runtime telemetry API](./runtime-observability-api.md) owns current observations, the [list-only disk field](./runtime-observability-api.md#disk), Session history and node host observations and history.
+`GET /core/v1/request-logs` is a Core-key-only diagnostic read for Web's **Request log** and operator scripts. It observes HTTP requests that reach Core's `/v1` and `/core/v1` APIs, including rejected authentication and unsuccessful responses. The log read itself, health and documentation endpoints, Web sign-in/proxy failures before Core, machine transports and background execution are outside this view. It is not an audit archive or a distributed execution trace.
+
+Each API instance retains the most recent 1,000 started requests for each surface independently: `public` for `/v1`, `admin` for `/core/v1`. Administration polling cannot evict application requests. Older entries, including long-lived requests, are overwritten when their surface fills. Restart clears the rings. `instance_id` and `instance_started_at` identify the serving API instance; a load balancer can return another instance's window. Core also emits each request's completion metadata through its existing structured logger; retention of that output belongs to the operator's log system, not this endpoint.
+
+Query parameters are `surface=public|admin` (default `public`), `limit` (1–200, default 100), optional exact `request_id`, `outcome=all|errors|active` (default `all`) and optional `method`. Supported method values are `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, `CONNECT`, `TRACE` and `OTHER`; other incoming methods are recorded as `OTHER`. Unsupported, repeated or malformed query parameters return 400. `errors` includes HTTP status 400 or above and aborted requests. Filtering scans only the retained window and returns newest-started first. `retained_count` describes that surface's retained window, `total_matching` counts retained matches, and `has_more` means the response limit omitted matches; it does not promise older evicted history is available.
+
+The response has `object: "core.request_log.list"`, instance identity, `surface`, `capacity`, coverage counts and `data`. Each entry contains `request_id`, `trace_id`, `started_at`, `method`, `route`, `state`, `status`, `duration_ms`, `response_bytes` and nullable `error_code`. `route` is a registered route template, a partially matched authentication prefix or `(unmatched)`, never the raw resource path or query. `status` is null until final response headers are committed. `state` distinguishes `active`, `completed` and `aborted`; duration and bytes describe the observation so far for active requests. `response_bytes` counts bytes accepted by the response writer, excluding headers and transport framing; it is not a network transfer measurement. An SSE response remains active until its handler ends. HTTP status and completion do not establish the outcome of an asynchronous Agent Turn; use [Session diagnostics](./session-diagnostics.md) and the Session's recorded history for that outcome.
+
+Bodies, header values, credentials, prompts, file contents, raw paths, query values and error messages are not captured. Only the API's safe error code is retained. The returned request ID corresponds to `X-Request-Id` and can be used to find related existing process log entries. Trace IDs are correlation metadata, not proof of a complete component trace.
 
 ## Audit log
 

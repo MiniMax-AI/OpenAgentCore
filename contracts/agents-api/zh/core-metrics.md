@@ -1,7 +1,7 @@
 ---
-title: "Core 运行指标"
+title: "Core 指标"
 source: contracts/agents-api/core-metrics.md
-source_hash: b6abd04eb7e69e7a72cd81e2e801da0135f35c26eb6ab40dd509558d66916673
+source_hash: 5843b943903b0a288e941998d365ed1d01fd282ea71feacadb3fe5f1bbb576a7
 ---
 
 `GET /core/v1/metrics?range=1h|6h|24h|7d` 报告 Core 自身的健康状况：进程、执行队列与槽位、PostgreSQL 和后台任务。它要求 Core 密钥（[Core 管理 API](admin-api.md)）。

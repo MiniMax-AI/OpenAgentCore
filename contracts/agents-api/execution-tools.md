@@ -67,7 +67,7 @@ Execution admits only `mode: "disabled"` and `enabled: false`. Enabled or omitte
 | Harness | Native enforcement |
 | --- | --- |
 | Codex | Disables code-mode features; checks native managed requirements before thread start or resume and rejects a forced conflicting feature |
-| Claude SDK | Keeps the restricted built-in inventory and verifies native initialization against it |
+| Claude Code | Keeps the restricted built-in inventory and verifies native initialization against it |
 | MiniMax Code | Keeps the restricted native tool profile, an empty text-execution inventory and disabled web search |
 
 ## HTTP MCP

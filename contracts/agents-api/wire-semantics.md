@@ -1,8 +1,8 @@
 ---
-title: "Core wire behavior"
+title: "API behavior"
 ---
 
-The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)) defines the `/v1` routes, fields and types. This page states what Core does where those types are silent, such as status codes, error fields, defaults and list bounds, and where Core behaves differently from the official service. The [coverage ledger](./index.md) lists the differences and open gaps; [Sessions, events and history](./sessions-events.md), [message content](./message-content.md), [Vaults](./vaults.md), [source Files and Skills](./source-files.md) and [Environment files and Artifacts](./environment-files.md) own the rules of their resources.
+The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)) defines the `/v1` routes, fields and types. This page states what Core does where those types are silent, such as status codes, error fields, defaults and list bounds, and where Core behaves differently from the official service. The [OpenAI compatibility](./index.md) lists the differences and open gaps; [Sessions, events and history](./sessions-events.md), [message content](./message-content.md), [Vaults](./vaults.md), [source Files and Skills](./source-files.md) and [Environment files and Artifacts](./environment-files.md) own the rules of their resources.
 
 "Beta routes" below are the routes under `/v1/agents` and `/v1/vaults`. "Files and Skills" are the routes under `/v1/files` and `/v1/skills`, which ignore `OpenAI-Beta`.
 

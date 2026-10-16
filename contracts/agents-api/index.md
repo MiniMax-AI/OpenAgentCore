@@ -1,8 +1,10 @@
 ---
-title: "Agents API coverage ledger"
+title: "OpenAI compatibility"
 ---
 
-Core targets the complete OpenAI Agents API as pinned below ([public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)). This ledger records how much of each resource Core implements and which contract holds its details, then every known difference from the OpenAI service and every open gap. [API namespaces and credentials](../../docs/api/index.md) says who calls which API; the [Agents API guide](../../docs/api/public-agent-api.md) shows how to use it.
+Core implements the OpenAI Agents API pinned below. This ledger lists each resource's coverage, every difference from the official service and the known gaps.
+
+The target is the complete API ([public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)). [API namespaces and credentials](../../docs/api/index.md) says who calls which API, and the [Agents API guide](../../docs/api/public-agent-api.md) shows how to use it.
 
 ## Pinned baseline
 
@@ -14,13 +16,7 @@ Core targets the complete OpenAI Agents API as pinned below ([public API rule](h
 | [openapi.yaml](./openapi.yaml) | The official public contract with Core's `x_agents_core` extension on Agent and Session request/response objects |
 | [go-bindings.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/go-bindings.json) | Go names, field representations, encoding order and stored projections; it does not define official field membership, enums or constraints |
 
-Run `make openapi` to regenerate the public Go types, the Agent request shapes, the route inventory and all three OpenAPI documents. `scripts/generate-public-api.py` reads the checked-in, checksum-verified official source without network access. It selects Agents, Vaults, Files and Skills and follows their schema references, preserving union types, nullability, required fields and constraints. The request shapes in `services/core/internal/api/official_shapes.gen.go` project `CreateAgentParams`, `UpdateAgentParams` and `SessionAgentConfigParam`; Core checks request bodies against them before it reads an Agent configuration. Core's extension types in `v1/` remain authored in Go and are added to the public schema during generation. The TypeScript client's types, enum values and field names in `packages/agents-client/src/generated/public-api.ts` are generated from the resulting public schema. The internal `/core/v1` and `/api/v1` documents come from handler annotations; the same generator projects the `/core/v1` document into `packages/agents-client/src/generated/core-api.ts`, which imports the public types it references from `public-api.ts`. In those annotations a response field Core always sends carries `binding:"required"`, a field that can be null carries `extensions:"x-nullable"`, and a Core-owned closed set uses a named Go type with typed constants in its producing package. Swag derives one enum definition from that type, shared by every wire field. Single-value discriminators keep `enums:` tags; fields mirroring official or Runtime-owned sets retain tags checked against their owners by contract tests. These annotations only shape the documents, and the client rejects a response that breaks them. `make check-openapi` checks freshness and the generator; it also runs through `make check-go`.
-
-The public contract is the official API plus Core extensions. Standard fields are generated into `v1/official.gen.go`; `go-bindings.json` lists types consumed by Core and overrides only the Go representation or field order that existing storage or custom JSON encoding requires. Unspecified fields follow the official schema; shared shapes use one Go type. Selected discriminated unions also generate JSON serializers to retain required nullable fields for each variant. Other union serializers, Core's local limits, execution admission and state transitions remain implementation code. Contract tests verify that the public schema preserves the official definitions, extensions remain in `x_agents_core`, and all documents match registered routes. Official-client and raw HTTP tests verify behavior. Schema generation does not qualify an unimplemented feature; the gaps below still apply. Upstream upgrades update the OpenAPI and SDK pins together after comparison and compatibility tests.
-
-The official source and existing service have these recorded differences: Agents authentication errors can return a null `code`; empty Files pages return null `first_id` and `last_id`; File resources can return null `expires_at` and `status_details`. The source declares those fields non-null. The official-client response validator allows null only for these named fields and otherwise validates OpenAPI 3.1 response schemas. Files and Skills operations omit error responses in the source, so those error bodies use the upstream shared `ErrorResponse` schema. [Wire semantics](./wire-semantics.md) and raw HTTP tests qualify service behavior; the published schema retains the official definitions.
-
-Go input projections exclude `packages.system` to preserve its explicit rejection, recorded below. Generation does not enable an unsupported operation or change stored setup validation.
+The official source and existing service have these recorded differences: Agents authentication errors can return a null `code`; empty Files pages return null `first_id` and `last_id`; File resources can return null `expires_at` and `status_details`. The source declares those fields non-null. The official-client response validator allows null only for these named fields and otherwise validates OpenAPI 3.1 response schemas. Files and Skills operations omit error responses in the source, so those error bodies use the upstream shared `ErrorResponse` schema. [API behavior](./wire-semantics.md) and raw HTTP tests qualify service behavior; the published schema retains the official definitions.
 
 Evidence for a status comes from the pinned official SDK and raw HTTP against the running service, as [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#compatibility-evidence) requires.
 
@@ -45,7 +41,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
 
-Which operation each Harness supports on each placement is in the [Harness capabilities](./harness-capabilities.md). [Core wire behavior](./wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
+Which operation each Harness supports on each placement is in the [Harness capabilities](./harness-capabilities.md). [API behavior](./wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
 
 Core's own fields sit inside `x_agents_core` ([Core extensions](../../docs/api/public-agent-api.md#core-extensions-x_agents_core)). The Core administration API (`/core/v1`) and the machine API (`/api/v1`) are not part of the Agents API.
 
@@ -53,7 +49,7 @@ Core's own fields sit inside `x_agents_core` ([Core extensions](../../docs/api/p
 
 Each item is Core's deliberate or native behavior where the official service behaves otherwise. The linked rule states the exact behavior.
 
-**Requests and errors** ([Core wire behavior](./wire-semantics.md))
+**Requests and errors** ([API behavior](./wire-semantics.md))
 
 - Core sends no `OpenAI-Organization` or `OpenAI-Project` response headers.
 - `HEAD` on the event stream, on content downloads and on the Environment files list returns 405.
@@ -128,7 +124,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the existing [input reservation deadline](./environments.md#reservations).
 - Runtimes do not enforce `disabled` or `restricted` networks, so Sessions that need them are rejected ([restricted network policy](./environments.md#restricted-network)).
 - `packages.system` is rejected; system packages must be preinstalled.
-- Cold continuation does not restore process memory, background processes or temporary system-disk changes; completed setup is not replayed. See [Environment persistence](./environments.md#runtime-capability-preparation). Codex and Claude Code passed cross-node memory restoration on compatible microsandbox nodes with retained NFS storage under the [checkpoint transfer requirements](../../docs/sandbox-provider.md#checkpoint-transfer). Takeover of an unconfirmed old writer remains unqualified. On microsandbox with retained NFS storage, Codex and Claude Code passed [confirmed compute loss](../../docs/sandbox-provider.md#confirmed-compute-loss) continuation checks after idle and interrupted Turns and within two seconds of completion acknowledgement. Missing-history checks preserved the native identity and failed explicitly with generic `engine_failed` or `environment_unavailable` outcomes. Host-crash durability and completeness of arbitrary crash-damaged history remain unqualified.
+- Cold continuation does not restore process memory, background processes or temporary system-disk changes, and completed setup is not replayed ([Environment persistence](./environments.md#runtime-capability-preparation)). Takeover of an unconfirmed old writer, host-crash durability and arbitrary crash-damaged history are unqualified; [Checkpoint transfer](../../docs/sandbox-provider.md#checkpoint-transfer) defines the qualification.
 
 **Files and Environment files**
 

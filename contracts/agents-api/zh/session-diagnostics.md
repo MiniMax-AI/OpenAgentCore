@@ -1,8 +1,10 @@
 ---
-title: "根 Session 与 Turn 诊断"
+title: "Session 诊断"
 source: contracts/agents-api/session-diagnostics.md
-source_hash: d84a678de2a21f66e2090afff19aea5cff5d3f11d5c32306ebd4387b015cb416
+source_hash: 7ed290070a66339d3a427f1f1735a21915c70c874ce4456b37206b11998a28d7
 ---
+
+管理员通过两个需要 Core 密钥的路由读取 Session 或 Turn 失败的原因，它们报告失败类别和 Item 接收时间。
 
 这些只读路由要求 Core 密钥。项目 ID 选择目标项目，不用于认证。两者都返回 `Cache-Control: no-store`：
 

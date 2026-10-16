@@ -2,7 +2,7 @@
 title: "Sessions, events and history"
 ---
 
-This contract covers what happens inside a Session: sending input, the live event stream, and reading the durable history of Turns, Items and usage. The Session resource itself (creation configuration, retry identity, update, list and deletion) is in [Core wire behavior](./wire-semantics.md). Message and function-result content is in [message content](./message-content.md). The [Agents API guide](../../docs/api/public-agent-api.md) shows the calls with the SDK and HTTP.
+This contract covers what happens inside a Session: sending input, the live event stream, and reading the durable history of Turns, Items and usage. The Session resource itself (creation configuration, retry identity, update, list and deletion) is in [API behavior](./wire-semantics.md). Message and function-result content is in [message content](./message-content.md). The [Agents API guide](../../docs/api/public-agent-api.md) shows the calls with the SDK and HTTP.
 
 ## Recovery model
 
@@ -25,6 +25,19 @@ A Session's `status` and `last_active_at` derive from its latest root Turn and f
 | `requires_action` | The latest Turn waits for a function result and no cancellation was requested, or input waits for a `self_hosted` machine to connect. `required_actions` lists `function_call` or `environment_connection` entries |
 | `failed` | The latest Turn failed (`error` is "The execution could not complete."), input reserved for the Environment failed, initial input expired before admission, or the Environment failed to initialize (see [Environment initialization failure](#environment-initialization-failure)) |
 
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> in_progress: Turn queued
+    idle --> requires_action: input waits for a self_hosted machine
+    in_progress --> requires_action: function call waits for a result
+    requires_action --> in_progress: result submitted or machine connected
+    in_progress --> idle: Turn completed or cancelled
+    in_progress --> failed: Turn failed
+    idle --> failed: reserved input expired or Environment failed
+    failed --> in_progress: new input starts a Turn
+```
+
 A Session stays usable after a Turn fails: new input starts a new Turn. Later reserved input that expires leaves the Session idle. An Environment initialization failure or expiry prevents new work.
 
 ## Send input
@@ -43,9 +56,7 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Later re
 
 ### Sessions with an Environment
 
-On `openai_hosted` and `self_hosted` Sessions, messages sent while a Turn runs join it at once. Messages sent to an idle Session reserve the batch for the Environment: the request waits until a Turn starts, for at most five minutes from the reservation. While the reservation waits for a `self_hosted` machine, the Session reads `requires_action` with an `environment_connection` action. A batch that carries messages on these placements may contain only messages. Cancellation-only and result-only batches are admitted at once and create no Turn.
-
-The waiting request ends with 202 when the Turn starts, or with 409 `environment_input_expired` when the deadline passes, 409 `environment_input_cancelled` when an administrator archives the Session or resets its deployment and cancels the reservation, or 409 `environment_unavailable` when the Environment fails or expires. Disconnecting the waiting request does not cancel the reservation or restart its deadline.
+On `openai_hosted` and `self_hosted` Sessions, messages sent while a Turn runs join it at once. Messages sent to an idle Session reserve the batch for the Environment: the request waits until a Turn starts, for at most five minutes from the reservation, and ends with 202 when the Turn starts or with one of the [input errors](#input-errors). While the reservation waits for a `self_hosted` machine, the Session reads `requires_action` with an `environment_connection` action. A batch that carries messages on these placements may contain only messages. Cancellation-only and result-only batches are admitted at once and create no Turn. Disconnecting the waiting request does not cancel the reservation or restart its deadline.
 
 ### Input errors
 
@@ -60,6 +71,8 @@ Checks run in this order: request validation, Session lookup, retry lookup, the 
 | A result whose `call_id` names no function call of this Session | 400 `invalid_request_error`, param null | "Unknown pending tool call." |
 | A result for a call of this Session whose `turn_id` names another Turn, an unknown Turn ID or a value that is not a Turn ID | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
 | A missing, malformed or foreign Session | 404 `not_found_error` | "Resource not found." |
+| A reserved batch whose five-minute deadline passed before a Turn started | 409 `environment_input_expired` | "The environment input deadline elapsed before admission." |
+| A reserved batch cancelled because an administrator archived the Session or reset its deployment | 409 `environment_input_cancelled` | "The environment input was cancelled before admission." |
 | New input after an `openai_hosted` Environment failed to provision | 409 `conflict_error` | "the hosted environment failed to provision" |
 | New input after a `self_hosted` Environment failed, input already waiting when the Environment failed, or an expired Environment | 409 `environment_unavailable` | "The environment is no longer available for new input." |
 | A message the Session's Harness cannot take, such as whitespace-only text on Claude Code | 400 `unsupported_or_invalid_configuration` | See [whitespace-only text](./message-content.md#whitespace-only-text) |

@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: eacb0d566f9d787f393c1d462351023a1ca6fe97ffb32773c8f23139833f5762
+source_hash: da45f9109c503af19c24ad210ce42e063916e4b8d3ca959c9ed3a37d83dfd03d
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -69,7 +69,7 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 | Harness | 原生执行约束 |
 | --- | --- |
 | Codex | 禁用 code-mode 功能；在启动或恢复线程前检查原生受管要求，拒绝被强制启用的冲突功能 |
-| Claude SDK | 保留受限内置工具清单，并据此验证原生初始化 |
+| Claude Code | 保留受限内置工具清单，并据此验证原生初始化 |
 | MiniMax Code | 保留受限原生工具配置、空文本执行工具清单和禁用的 Web 搜索 |
 
 ## HTTP MCP {#http-mcp}

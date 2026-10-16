@@ -14,7 +14,7 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 
 ## Execution and input
 
-| Operation | Codex | Claude SDK | MiniMax Code |
+| Operation | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | Text Turns, active input, cancellation, restart and continuation | Verified on all placements | Verified on all placements | Verified on all placements |
 | [Files and Artifacts](./environment-files.md) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted |
@@ -29,7 +29,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 
 ## Tools
 
-| Operation | Codex | Claude SDK | MiniMax Code |
+| Operation | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | [Public functions](./execution-tools.md#functions) with text results | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; object-root schemas only | Rejected |
 | [Function results with images](./message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; successful inline PNG or JPEG results only | Rejected |
@@ -50,7 +50,7 @@ Claude structured output requires a single Agent, medium verbosity and no Skills
 
 These operations need a workspace, so they apply to hosted and self-hosted placements only.
 
-| Operation | Codex | Claude SDK | MiniMax Code |
+| Operation | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | [Initial files, setup commands, Skills and Plugins](./environments.md#runtime-capability-preparation) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Capability directories | Admitted | Admitted | Admitted |
@@ -60,4 +60,4 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, anonymous or HTTPS bearer | Verified: self-hosted; admitted: hosted; anonymous or HTTPS bearer |
 
-External workspace storage additionally requires the selected Harness profile and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace Provider guide](../../docs/workspace-provider.md) owns storage combination admission.
+External workspace storage additionally requires the selected Harness profile and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.

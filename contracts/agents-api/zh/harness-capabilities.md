@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: a88b7238811707dd7fecae6ee8e509572677b49958e36ddabf8b783e97382c13
+source_hash: 80be524f00965cfa3f7349a65597d9511126f54cbdd8ac8857c6332003db7a01
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `services/core/internal/engine` 中 Harness 的引擎配置决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -16,7 +16,7 @@ source_hash: a88b7238811707dd7fecae6ee8e509572677b49958e36ddabf8b783e97382c13
 
 ## 执行与输入 {#execution-and-input}
 
-| 操作 | Codex | Claude SDK | MiniMax Code |
+| 操作 | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | 文本 Turn、活动输入、取消、重启与继续 | 所有位置已验证 | 所有位置已验证 | 所有位置已验证 |
 | [文件与 Artifact](environment-files.md) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管 |
@@ -31,7 +31,7 @@ source_hash: a88b7238811707dd7fecae6ee8e509572677b49958e36ddabf8b783e97382c13
 
 ## 工具 {#tools}
 
-| 操作 | Codex | Claude SDK | MiniMax Code |
+| 操作 | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | 文本结果的[公开函数](execution-tools.md#functions) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅对象根 schema | 已拒绝 |
 | [含图像函数结果](message-content.md#function-results) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅成功结果中的内联 PNG 或 JPEG | 已拒绝 |
@@ -52,7 +52,7 @@ Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin
 
 这些操作要求工作区，因此仅适用于托管与自托管位置。
 
-| 操作 | Codex | Claude SDK | MiniMax Code |
+| 操作 | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | [初始文件、设置命令、Skill 与 Plugin](environments.md#runtime-capability-preparation) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | 能力目录 | 已准入 | 已准入 | 已准入 |
@@ -62,4 +62,4 @@ Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，匿名或 HTTPS bearer | 已验证：自托管；已准入：托管；匿名或 HTTPS bearer |
 
-外部工作区存储还要求所选 Harness profile 和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区提供商指南](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。
+外部工作区存储还要求所选 Harness profile 和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。

@@ -1,10 +1,31 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: d26140f4fdaa6d0c68dbeff52a2318ed213799966b224302eb04b9ec718f5fc3
+source_hash: 2be5448431eec645227d40404ecdd292546c63a7e3f943f11aef605804f89e34
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
+
+## 模型提供商配置包 {#model-provider-bundle}
+
+Harness 接收一个冻结的模型提供商配置包，其定义见 [`modelprovider.Provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go)。Core 在创建 Session 时验证它，Harness 原样使用。
+
+| 字段 | 含义 |
+| --- | --- |
+| `protocol` | 上游 API：`anthropic`、`responses` 或 `chat_completions`，而不是引擎。所选 Harness 必须原生支持它 |
+| `base_url` | 带有效主机名的 HTTPS URL，不得包含凭据、查询参数或片段 |
+| `api_key` | 不得为空，最长 16 KiB，不得包含 NUL、CR 或 LF |
+| `context_window`、`max_output_tokens` | 可选的非负整数，输出限制不得大于上下文限制。请使用真实模型的限制 |
+
+各 Harness 支持的协议：
+
+| Harness | 支持的协议（默认项在前） |
+| --- | --- |
+| Codex | `responses` |
+| Claude Code | `anthropic` |
+| MiniMax Code | `anthropic`、`responses`、`chat_completions` |
+
+MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。不存在模型 API 代理、直通网关或跨协议转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
 
 ## Harness 选择 {#harness-selection}
 
@@ -28,15 +49,7 @@ Session 的 `environment` 和 Environment 模板用于选择准备流程，而�
 
 创建 Session 时，Core 会先解析每个显式的模型或 Harness 覆盖值，再应用已保存默认值；未选择 Harness 时，应用部署默认值。已保存 Agent 必须指定模型。内联 `openai_hosted` 或 `none` Session 可以省略模型，以使用解析后 Harness 的部署模型；`self_hosted` 绝不会使用部署模型设置。Core 绝不会根据模型名称推断模型。
 
-提供商配置的优先级依次为：完整的 Session 配置包、完整的已保存配置包，以及解析后 Harness 的部署默认值。Core 绝不会将替换后的端点与继承的密钥合并；仅覆盖模型时会复用整个继承的配置包。每个 Harness 仅通过其原生协议连接：
-
-| Harness | 支持的协议（默认项在前） |
-| --- | --- |
-| Codex | `responses` |
-| Claude SDK | `anthropic` |
-| MiniMax Code | `anthropic`、`responses`、`chat_completions` |
-
-MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。不存在模型 API 代理、直通网关或跨协议转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
+提供商配置的优先级依次为：完整的 Session 配置包、完整的已保存配置包，以及解析后 Harness 的部署默认值。Core 绝不会将替换后的端点与继承的密钥合并；仅覆盖模型时会复用整个继承的配置包。每个 Harness 仅通过其原生协议连接（见[模型提供商配置包](#model-provider-bundle)）。
 
 适用来源取决于接收密钥的计算资源由谁拥有：
 
@@ -81,10 +94,6 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 }
 ```
 
-- `protocol` 指定上游 API（`anthropic`、`responses` 或 `chat_completions`），而不是引擎。所选 Harness 必须原生支持它。
-- `base_url` 使用 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。
-- `api_key` 不得为空，最长为 16 KiB，并且不得包含 NUL、CR 或 LF。
-- `context_window` 和 `max_output_tokens` 是可选的非负整数，输出限制不得大于上下文限制；对于 MiniMax Code，两者都必须为正数。请使用真实模型的限制。
 - `agent.model` 是准确的提供商模型 ID；只要提供该值，就始终会替换部署模型。
 - Session 的 `x_agents_core` 接受 `model_provider`、`harness_config` 和 `environment`（[Environments](environments.md#preparation-order)）；任何其他成员，例如 `sandbox_node_id`，都会以 400 拒绝。托管节点放置自动完成。
 
@@ -101,7 +110,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 | Harness | 接受的字段 | 应用方式 |
 | --- | --- | --- |
 | Codex | `model_reasoning_effort`：`none`、`minimal`、`low`、`medium`、`high`、`xhigh` | App-server `-c model_reasoning_effort=...` 以及每个 Turn 的 `collaborationMode.settings.reasoning_effort` |
-| Claude SDK | `effort`：`low`、`medium`、`high`、`xhigh`、`max`；`thinking`：SDK 的 `adaptive`、`enabled` 或 `disabled` 对象 | SDK `Options.effort` 和 `Options.thinking` |
+| Claude Code | `effort`：`low`、`medium`、`high`、`xhigh`、`max`；`thinking`：SDK 的 `adaptive`、`enabled` 或 `disabled` 对象 | SDK `Options.effort` 和 `Options.thinking` |
 | MiniMax Code | 仅空对象 | 仍必须给出提供商 token 限制 |
 
 对于 `adaptive` 和 `enabled`，Claude `thinking` 接受 `display`（`summarized` 或 `omitted`）；只有 `enabled` 接受正整数 `budgetTokens`；拒绝 `maxThinkingTokens`。这些是原生设置，而不是通用推理词汇表；模型可用性和提供商支持均由 Harness 负责。

@@ -1,7 +1,7 @@
 ---
 title: "子 Agent"
 source: contracts/agents-api/subagents.md
-source_hash: 8fed8b73a8403d2ccf80354b2a981f11240eba3c10d5a0257206a39d048b92a7
+source_hash: 5502201e91555cbc23df61c9eea52990acb0d956709134876194b8b4fb5c7bc1
 ---
 
 启用 `multi_agent.enabled` 后，Harness 可以启动原生子 Agent。Core 通过锁定版本的 SDK（见 [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）中的六项 Subagent 读取操作公开它们，并根据适配器观察结果记录它们。当 `multi_agent.enabled=false` 时，Runtime 会移除原生子 Agent 工具。[Harness capabilities](harness-capabilities.md) 列出各 Harness 在哪些组合中支持子 Agent。
@@ -56,7 +56,7 @@ Core 根据已授权的 Session 绑定关系分配合公开 ID 和所有权。�
 
 **Codex.** 适配器会启用原生 `multi_agent` 特性，将嵌套深度设为 64，并把并发限制映射到 `agents.max_threads`。它会禁用原生钩子、插件、代码模式和 `multi_agent_v2`；如果原生钩子列表非空，或托管配置要求强制启用冲突特性，则拒绝启动。关闭和重新打开的事实来自直接工具输出，并与同一次调用的持久化完成记录相关联，因此需要原生持久化回执。原生 Turn 时间具有秒级精度。根级 Turn 完成后，子级文件工作可以在同一所有者下完成。超过调用方截止时间后，取消操作仍会在同一所有者下继续；后续调用可以确认已经收敛，而无需重复执行原生中断。
 
-**Claude SDK.** 锁定版本 SDK 的原生 Agent 和 SendMessage 调用会运行唯一的子级类型 `oac_worker`；该类型继承模型，并可使用工作区中的 Bash、Agent 和 SendMessage；bridge 的 `subagent_resources` 特性控制是否启用它。子级使用原生 Bash，权限继承自父级的启动用户。私有子级记录用于确定父子关系、首次自身输入时间及后续自身 Turns；继承的父级上下文会被排除。查询所有者会在启动前接纳子级，并将子级历史保留至工作收敛。已确认的取消操作会写入不可变的操作回执，因为原生中止可能不会留下终态记录。不存在关闭操作：已完成或已取消的子级保持 active 状态。向运行中的子级发送消息、使用后台工作、采用其他子级配置以及按次覆盖模型都会被拒绝。[Claude SDK adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md#subagents) 记录了详细信息。
+**Claude Code.** 锁定版本 SDK 的原生 Agent 和 SendMessage 调用会运行唯一的子级类型 `oac_worker`；该类型继承模型，并可使用工作区中的 Bash、Agent 和 SendMessage；bridge 的 `subagent_resources` 特性控制是否启用它。子级使用原生 Bash，权限继承自父级的启动用户。私有子级记录用于确定父子关系、首次自身输入时间及后续自身 Turns；继承的父级上下文会被排除。查询所有者会在启动前接纳子级，并将子级历史保留至工作收敛。已确认的取消操作会写入不可变的操作回执，因为原生中止可能不会留下终态记录。不存在关闭操作：已完成或已取消的子级保持 active 状态。向运行中的子级发送消息、使用后台工作、采用其他子级配置以及按次覆盖模型都会被拒绝。[Claude SDK adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md#subagents) 记录了详细信息。
 
 **MiniMax Code.** 原生 ACP 委派（`task`、`task_append`、`task_stop`）会创建子级。Session 私有 SQLite 记录提供子级身份、已接受的输入、终态时间和自身消息。原生 task-create 事务会在启动前强制执行并发限制，并且原生准备过程必须在任何模型输入前确认该限制和受限工具配置。不存在关闭或重新打开操作，原生工作器也不会委派嵌套工作。
 

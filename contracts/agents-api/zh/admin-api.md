@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 9c83e8b192408ea96e8614dfa5ffe4bdd65931954bc0359928c1985291b97962
+source_hash: 9b6c43139f2b15e97ac4ebee407d58ce691810de85c16ab131705509c0a96d14
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -12,7 +12,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密�
 
 每个 `/core/v1` 请求，包括针对未知路径的请求，都必须发送 `Authorization: Bearer <Core key>`。缺少该请求头时，Core 会返回 401 `invalid_admin_key` 和 `WWW-Authenticate: Bearer`；只有在身份验证通过后，未知路径才会返回 404 `not_found`。
 
-- Core 将 bearer 凭据的 SHA-256 与启动时从 `generated/core-key-digests.json` 读取的 Core 密钥摘要进行比较；该摘要由 `oac apply` 根据 `secrets/core.key` 派生（[Core 密钥](../../../docs/zh/getting-started/operations.md#core-key)）。轮换 Core 密钥后，需要重启 Core 才会生效。未配置任何摘要时，Core 不提供 `/core/v1` 路由。
+- Core 将 bearer 凭据的 SHA-256 与启动时读取的 [Core 密钥](../../../docs/zh/getting-started/operations.md#core-key)摘要进行比较。轮换 Core 密钥后，需要重启 Core 才会生效。未配置任何摘要时，Core 不提供 `/core/v1` 路由。
 - Core 密钥仅用于 `/core/v1` 身份验证。项目 API 密钥和机器凭据在此处会收到 401，而 Core 密钥在 `/v1` 和 `/api/v1` 上会收到 401（[API 命名空间和凭据](../../../docs/zh/api/index.md)）。
 - `X-Core-Console-Actor` 是由调用方声明的标签。Core 会将其记录为审计 `actor_label`，但不会验证。控制台服务器发送 `console`；脚本通常不发送该值，因此会记录空标签。切勿将其用于授权或作为来源证明。
 - 路径中的 `{project_id}` 用于选择目标项目，包括已归档的项目；它不会授予任何权限。
@@ -30,7 +30,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密�
 | `projects/{project_id}/sessions/{session_id}/archive` | 归档一个托管 Session | [Session 归档](#session-archive) |
 | `projects/{project_id}/sessions/{session_id}/execution-configuration` | Session 创建时冻结的模型、Harness 和提供商选择 | [执行配置](#execution-configuration) |
 | `projects/{project_id}/sessions/{session_id}/diagnostics`、`…/turns/{turn_id}/diagnostics` | 失败类别和 Item 接收时序 | [Session 诊断](session-diagnostics.md) |
-| `projects/{project_id}/sessions/{session_id}/runtime-observation`、`sandbox/runtime-observations` | 当前 Runtime 观测值 | [Runtime 观测](runtime-observability-api.md)、[列表中的磁盘字段](#runtime-observations) |
+| `projects/{project_id}/sessions/{session_id}/runtime-observation`、`sandbox/runtime-observations` | 当前 Runtime 观测值 | [Runtime 观测](runtime-observability-api.md)、[列表中的磁盘字段](runtime-observability-api.md#disk) |
 | `projects/{project_id}/sessions/{session_id}/runtime-history` | 已存储的 Runtime 历史 | [Runtime 历史](runtime-observability-api.md#session-runtime-history) |
 | `projects/{project_id}/environments/{environment_id}/installation` | `self_hosted` Environment 的安装命令 | [安装授权](environment-executor-credentials.md#installation-grant) |
 | `projects/{project_id}/environments/{environment_id}/executor-credentials[/{key_id}]` | `self_hosted` Environment 的执行器凭据 | [执行器凭据](environment-executor-credentials.md#core-key-routes) |
@@ -43,17 +43,31 @@ Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密�
 | `request-logs` | 近期应用或管理 HTTP 请求及其响应元数据 | [请求日志](#request-log) |
 | `audit-log` | 管理员写入 | [审计日志](#audit-log) |
 
-## 请求日志 {#request-log}
+## 安装信息 {#installation-facts}
 
-`GET /core/v1/request-logs` 是仅供 Core 密钥调用的诊断读取，由 Web 的 **请求日志** 和运维脚本使用。它观察到达 Core `/v1` 与 `/core/v1` API 的 HTTP 请求，包括认证拒绝和失败响应。日志读取本身、健康检查与文档端点、到达 Core 前的 Web 登录或代理失败、机器传输和后台执行不在此视图中。它不是审计档案或分布式执行追踪。
+`GET /installation` 报告管理员调用和更改此安装实例所需的信息。即使尚未创建任何沙箱部署，该接口也会响应，并且不会调用任何提供商或模型。
 
-每个 API 实例按入口分别保留最近开始的 1,000 个请求：`public` 对应 `/v1`，`admin` 对应 `/core/v1`。管理页面轮询不会挤掉应用请求。各自容量用尽后覆盖较旧条目，包括长连接请求；重启清空记录。`instance_id` 和 `instance_started_at` 标识提供响应的 API 实例；负载均衡可能返回另一个实例的窗口。Core 同时通过现有结构化日志输出请求结束时的元数据，其保留由运维日志系统负责，不属于本端点。
+| 字段 | 含义 |
+| --- | --- |
+| `object` | `core.installation` |
+| `installation_id` | `OAC_INSTALLATION_ID_FILE` 中的安装 ID（[Compose 安装](../../../docs/zh/configuration.md#compose-installations)） |
+| `public_url` | `public_url` 设置（[设置](../../../docs/zh/configuration.md#settings)）：应用程序、节点、沙箱和自托管执行器使用的源地址 |
+| `api_base_url` | 在 `public_url` 后附加 `/v1`，即项目 API 密钥使用的 `OPENAI_BASE_URL` |
+| `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
+| `source_commit` | Core 构建所依据的完整源代码提交；开发构建为 null |
+| `configuration` | Core 从环境加载的进程设置，位于 `settings` 中 |
+| `address_bindings` | 更改 `public_url` 所影响的内容，每次读取都会重新统计 |
 
-查询参数包括 `surface=public|admin`（默认 `public`）、`limit`（1–200，默认 100）、可选的精确 `request_id`、`outcome=all|errors|active`（默认 `all`）及可选 `method`。支持的方法值为 `GET`、`HEAD`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS`、`CONNECT`、`TRACE` 和 `OTHER`；其他入站方法记为 `OTHER`。不支持、重复或格式错误的查询参数返回 400。`errors` 包括 HTTP 状态为 400 及以上的请求和已中断的请求。筛选仅扫描保留窗口，按开始时间从新到旧返回。`retained_count` 表示该入口的保留条目数，`total_matching` 是保留条目中匹配的数量，`has_more` 表示响应条数限制省略了匹配项，不代表仍能读取已被覆盖的历史。
+`configuration.settings` 为 Core 加载的每项设置一条记录，包含 `key`（设置它的环境变量，例如 `OAC_LOG_LEVEL`）、生效的 `value`、`default`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`）。
 
-响应包含 `object: "core.request_log.list"`、实例标识、`surface`、`capacity`、覆盖数量及 `data`。每条记录包含 `request_id`、`trace_id`、`started_at`、`method`、`route`、`state`、`status`、`duration_ms`、`response_bytes` 和可为空的 `error_code`。`route` 是注册路由模板、认证时部分匹配的前缀或 `(unmatched)`，不会包含原始资源路径或查询。最终响应头提交前，`status` 为 null。`state` 区分 `active`、`completed` 和 `aborted`；活跃请求的耗时和字节数是读取时的观测值。`response_bytes` 统计响应写入器接受的字节数，不包括响应头和传输封装，不是网络传输量测量。SSE 响应在处理函数结束前保持活跃。HTTP 状态及结束不代表异步 Agent Turn 的执行结果；执行结果以 [Session 诊断](./session-diagnostics.md)和该 Session 已记录的历史为准。
+敏感设置的 `value` 和 `default` 为 null，并改为包含一个布尔值 `configured`；只有敏感设置具有 `configured`。`oac-core check-config` 校验同一组环境变量，然后退出，不启动 Core，也不打印值。[配置](../../../docs/zh/configuration.md)会说明每个设置。
 
-不采集正文、请求头值、凭据、提示词、文件内容、原始路径、查询值或错误消息，只保留 API 的安全错误码。返回的请求 ID 对应 `X-Request-Id`，可用于查找已有进程日志的关联条目。Trace ID 仅供关联，不表示完整组件链路已经被追踪。
+| `address_bindings` 字段 | 含义 |
+| --- | --- |
+| `nodes` | 已注册且未移除的节点 |
+| `nodes_on_other_address` | 使用了 `public_url` 以外地址注册的节点。它们不会获得新的沙箱；请移除后重新添加。最多为 `nodes` 个 |
+| `hosted_sandboxes` | 保留的待处理托管沙箱；它们启动时使用当时有效的地址运行 |
+| `self_hosted_executors` | 未吊销的执行器凭据；对应执行器安装时使用的是当时公布的 `remote_url` |
 
 ## 工作区存储 {#workspace-storage}
 
@@ -149,32 +163,6 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
 
 Core 会在创建 Session 的同一事务中写入此记录。之后的 Agent 编辑或删除、部署默认模型更改、重启以及使用同一密钥重试创建都不会改变该记录。没有该记录的 Session 会报告其已存储的模型和 Harness，来源均为 `unknown`；未存储任何值时对应字段为 null；提供商为 `unavailable`。Session 不存在和 Session 属于另一个项目时返回相同的 404。响应绝不会包含密钥、密文、机密引用、原生标头或查询参数。
 
-## 安装信息 {#installation-facts}
-
-`GET /installation` 报告管理员调用和更改此安装实例所需的信息。即使尚未创建任何沙箱部署，该接口也会响应，并且不会调用任何提供商或模型。
-
-| 字段 | 含义 |
-| --- | --- |
-| `object` | `core.installation` |
-| `installation_id` | `OAC_INSTALLATION_ID_FILE` 中的安装 ID（[Compose 安装](../../../docs/zh/configuration.md#compose-installations)） |
-| `public_url` | `public_url` 设置（[设置](../../../docs/zh/configuration.md#settings)）：应用程序、节点、沙箱和自托管执行器使用的源地址 |
-| `api_base_url` | 在 `public_url` 后附加 `/v1`，即项目 API 密钥使用的 `OPENAI_BASE_URL` |
-| `local_only` | 当 `public_url` 指向回环主机时为 True，该主机只能由 Core 主机访问 |
-| `source_commit` | Core 构建所依据的完整源代码提交；开发构建为 null |
-| `configuration` | Core 从环境加载的进程设置，位于 `settings` 中 |
-| `address_bindings` | 更改 `public_url` 所影响的内容，每次读取都会重新统计 |
-
-`configuration.settings` 为 Core 加载的每项设置一条记录，包含 `key`（设置它的环境变量，例如 `OAC_LOG_LEVEL`）、生效的 `value`、`default`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`）。
-
-敏感设置的 `value` 和 `default` 为 null，并改为包含一个布尔值 `configured`；只有敏感设置具有 `configured`。`oac-core check-config` 校验同一组环境变量，然后退出，不启动 Core，也不打印值。[配置](../../../docs/zh/configuration.md)会说明每个设置。
-
-| `address_bindings` 字段 | 含义 |
-| --- | --- |
-| `nodes` | 已注册且未移除的节点 |
-| `nodes_on_other_address` | 使用了 `public_url` 以外地址注册的节点。它们不会获得新的沙箱；请移除后重新添加。最多为 `nodes` 个 |
-| `hosted_sandboxes` | 保留的待处理托管沙箱；它们启动时使用当时有效的地址运行 |
-| `self_hosted_executors` | 未吊销的执行器凭据；对应执行器安装时使用的是当时公布的 `remote_url` |
-
 ## 写入溯源 {#write-provenance}
 
 Core 会记录是哪个项目 API 密钥完成了每次成功的公共写入；该记录与写入在同一事务中完成，如果记录失败，写入也会失败。读取、被拒绝的请求以及 Core 自身的维护操作（例如 OAuth 令牌刷新和清理）不会被记录。
@@ -233,9 +221,17 @@ Core 会记录是哪个项目 API 密钥完成了每次成功的公共写入；�
 - 公共用量为 null 的 Session 不会增加 token 数量，但仍会计入覆盖率分母。
 - 每个项目都在单个数据库快照中读取；一页数据并不是整个部署的单一快照。总计属于运营计数，不是计费记录。
 
-## Runtime 观测 {#runtime-observations}
+## 请求日志 {#request-log}
 
-[Runtime 遥测 API](runtime-observability-api.md)负责当前观测值、[仅列表可用的磁盘字段](runtime-observability-api.md#disk)、Session 历史以及节点主机观测值和历史。
+`GET /core/v1/request-logs` 是仅供 Core 密钥调用的诊断读取，由 Web 的 **请求日志** 和运维脚本使用。它观察到达 Core `/v1` 与 `/core/v1` API 的 HTTP 请求，包括认证拒绝和失败响应。日志读取本身、健康检查与文档端点、到达 Core 前的 Web 登录或代理失败、机器传输和后台执行不在此视图中。它不是审计档案或分布式执行追踪。
+
+每个 API 实例按入口分别保留最近开始的 1,000 个请求：`public` 对应 `/v1`，`admin` 对应 `/core/v1`。管理页面轮询不会挤掉应用请求。各自容量用尽后覆盖较旧条目，包括长连接请求；重启清空记录。`instance_id` 和 `instance_started_at` 标识提供响应的 API 实例；负载均衡可能返回另一个实例的窗口。Core 同时通过现有结构化日志输出请求结束时的元数据，其保留由运维日志系统负责，不属于本端点。
+
+查询参数包括 `surface=public|admin`（默认 `public`）、`limit`（1–200，默认 100）、可选的精确 `request_id`、`outcome=all|errors|active`（默认 `all`）及可选 `method`。支持的方法值为 `GET`、`HEAD`、`POST`、`PUT`、`PATCH`、`DELETE`、`OPTIONS`、`CONNECT`、`TRACE` 和 `OTHER`；其他入站方法记为 `OTHER`。不支持、重复或格式错误的查询参数返回 400。`errors` 包括 HTTP 状态为 400 及以上的请求和已中断的请求。筛选仅扫描保留窗口，按开始时间从新到旧返回。`retained_count` 表示该入口的保留条目数，`total_matching` 是保留条目中匹配的数量，`has_more` 表示响应条数限制省略了匹配项，不代表仍能读取已被覆盖的历史。
+
+响应包含 `object: "core.request_log.list"`、实例标识、`surface`、`capacity`、覆盖数量及 `data`。每条记录包含 `request_id`、`trace_id`、`started_at`、`method`、`route`、`state`、`status`、`duration_ms`、`response_bytes` 和可为空的 `error_code`。`route` 是注册路由模板、认证时部分匹配的前缀或 `(unmatched)`，不会包含原始资源路径或查询。最终响应头提交前，`status` 为 null。`state` 区分 `active`、`completed` 和 `aborted`；活跃请求的耗时和字节数是读取时的观测值。`response_bytes` 统计响应写入器接受的字节数，不包括响应头和传输封装，不是网络传输量测量。SSE 响应在处理函数结束前保持活跃。HTTP 状态及结束不代表异步 Agent Turn 的执行结果；执行结果以 [Session 诊断](./session-diagnostics.md)和该 Session 已记录的历史为准。
+
+不采集正文、请求头值、凭据、提示词、文件内容、原始路径、查询值或错误消息，只保留 API 的安全错误码。返回的请求 ID 对应 `X-Request-Id`，可用于查找已有进程日志的关联条目。Trace ID 仅供关联，不表示完整组件链路已经被追踪。
 
 ## 审计日志 {#audit-log}
 

@@ -4,6 +4,27 @@ title: "Model execution"
 
 Each Session runs one Harness with one model provider. Core selects them through three Core extensions that the pinned upstream protocol does not define: `x_agents_core.harness` chooses the Harness, `x_agents_core.model_provider` supplies the endpoint and key, and `x_agents_core.harness_config` carries native model parameters. Core has no provider catalog, model alias resolution or product permission model; besides Session and saved-Agent bundles, the only stored bundle is one [deployment default](#deployment-defaults) per Harness. This document is the Harness–model provider protocol: [`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) validates the frozen provider connection, and each Harness declares its protocols and native parameters through [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go).
 
+## Model provider bundle
+
+A Harness receives one frozen model provider bundle, defined by [`modelprovider.Provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go). Core validates it at Session creation and the Harness uses it unchanged.
+
+| Field | Meaning |
+| --- | --- |
+| `protocol` | The upstream API: `anthropic`, `responses` or `chat_completions`, not an engine. The selected Harness must support it natively |
+| `base_url` | An HTTPS URL with a valid host, without credentials, query or fragment |
+| `api_key` | Nonempty, at most 16 KiB, without NUL, CR or LF |
+| `context_window`, `max_output_tokens` | Optional nonnegative integers, with output no larger than context. Use the real model's limits |
+
+Supported protocols by Harness:
+
+| Harness | Supported protocols, default first |
+| --- | --- |
+| Codex | `responses` |
+| Claude Code | `anthropic` |
+| MiniMax Code | `anthropic`, `responses`, `chat_completions` |
+
+MiniMax Code requires positive context and output limits. Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. There is no model API proxy, passthrough gateway or cross-protocol conversion, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
+
 ## Harness selection
 
 ```json
@@ -26,15 +47,7 @@ A saved Agent is editable configuration, not a bound runtime. Create or update i
 
 Session creation resolves each explicit model or Harness override before saved defaults; without a selected Harness, the deployment default applies. Saved Agents require a model. An inline `openai_hosted` or `none` Session may omit its model to use the deployment model of the resolved Harness; `self_hosted` never uses deployment model settings. Core never infers a model from its name.
 
-Provider precedence is: a complete Session bundle, then a complete saved bundle, then the deployment default for the resolved Harness. Core never merges a replacement endpoint with an inherited key; a model-only override reuses the whole inherited bundle. Each Harness connects only through its native protocols:
-
-| Harness | Supported protocols, default first |
-| --- | --- |
-| Codex | `responses` |
-| Claude SDK | `anthropic` |
-| MiniMax Code | `anthropic`, `responses`, `chat_completions` |
-
-MiniMax Code requires positive context and output limits. Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. There is no model API proxy, passthrough gateway or cross-protocol conversion, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
+Provider precedence is: a complete Session bundle, then a complete saved bundle, then the deployment default for the resolved Harness. Core never merges a replacement endpoint with an inherited key; a model-only override reuses the whole inherited bundle. Each Harness connects only through its native protocols ([Model provider bundle](#model-provider-bundle)).
 
 Which sources apply depends on who owns the compute that receives the key:
 
@@ -79,10 +92,6 @@ New hosted requests, and requests that omit the inline model, record caller inte
 }
 ```
 
-- `protocol` names the upstream API (`anthropic`, `responses` or `chat_completions`), not an engine. The selected Harness must support it natively.
-- `base_url` uses HTTPS with a valid host, without credentials, query or fragment.
-- `api_key` is nonempty, at most 16 KiB and contains no NUL, CR or LF.
-- `context_window` and `max_output_tokens` are optional nonnegative integers, with output no larger than context; both must be positive for MiniMax Code. Use the real model's limits.
 - `agent.model` is the exact provider model ID; a supplied value always replaces the deployment model.
 - The Session's `x_agents_core` accepts `model_provider`, `harness_config` and `environment` ([Environments](./environments.md#preparation-order)); any other member, such as `sandbox_node_id`, is rejected with 400. Hosted node placement is automatic.
 
@@ -99,7 +108,7 @@ At dispatch, Core sends the snapshot as one confidential provider bundle over th
 | Harness | Accepted fields | Applied as |
 | --- | --- | --- |
 | Codex | `model_reasoning_effort`: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | App-server `-c model_reasoning_effort=...` and each Turn's `collaborationMode.settings.reasoning_effort` |
-| Claude SDK | `effort`: `low`, `medium`, `high`, `xhigh`, `max`; `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.effort` and `Options.thinking` |
+| Claude Code | `effort`: `low`, `medium`, `high`, `xhigh`, `max`; `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.effort` and `Options.thinking` |
 | MiniMax Code | Empty object only | Provider token limits remain required |
 
 Claude `thinking` accepts `display` (`summarized` or `omitted`) for `adaptive` and `enabled`, and a positive integer `budgetTokens` only for `enabled`; `maxThinkingTokens` is rejected. These are native settings, not a shared reasoning vocabulary; model availability and provider support are the Harness's responsibility.

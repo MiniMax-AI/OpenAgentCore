@@ -1,10 +1,10 @@
 ---
-title: "Core 协议行为"
+title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 13d033e194fe4316dfaeced837907b594e4c95d93ebbf9ef9078f47b42cbec92
+source_hash: 7ce636ba3e318cd1ceda8000076dd427cd4fd1ad53ba502474ca3ff2cb9ab87b
 ---
 
-已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[coverage ledger](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
+已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
 
 下文所称“Beta 路由”是 `/v1/agents` 和 `/v1/vaults` 下的路由。“Files and Skills”是 `/v1/files` 和 `/v1/skills` 下的路由，这些路由会忽略 `OpenAI-Beta`。
 
