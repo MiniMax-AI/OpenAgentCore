@@ -10,7 +10,7 @@ SCRIPT = Path(__file__).with_name('install.sh').resolve()
 
 
 class LauncherTests(unittest.TestCase):
-    def run_launcher(self, system='Darwin', machine='arm64', corrupt=False, arguments=('--install-dir', '/path with spaces/core', '--version', 'v1.2.3'), missing=False, outage=False, seed=None, interrupt=False):
+    def run_launcher(self, system='Darwin', machine='arm64', corrupt=False, arguments=('--install-dir', '/path with spaces/core', '--version', 'v1.2.3'), missing=False, outage=False, seed=None, interrupt=False, resumable=True):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             binary = b'#!/bin/sh\nprintf "%s\\n" "$@"\n'
@@ -26,6 +26,10 @@ if INTERRUPT:
     os.kill(os.getppid(), signal.SIGINT); time.sleep(0.2); sys.exit(2)
 if asset.endswith('.sha256'):
     target.write_text(DIGEST + '  ' + asset.removesuffix('.sha256') + '\\n')
+elif target.exists() and not RESUMABLE:
+    # Like curl against a server that ignores Range: it answers 200, exits 33 and leaves the file alone.
+    with open(HERE + '/curl.log', 'a') as log: log.write(str(target.stat().st_size) + '\\n')
+    sys.stdout.write('200'); sys.exit(33)
 elif target.exists():
     # Like curl --continue-at -: append the rest, or answer 416 when the file is already complete.
     have = target.stat().st_size
@@ -38,7 +42,7 @@ else:
 if OUTAGE: sys.exit(22)
 if MISSING:
     sys.stdout.write('404'); sys.exit(22)
-'''.replace('OUTAGE', repr(outage)).replace('MISSING', repr(missing)).replace('DIGEST', repr('0' * 64 if corrupt else digest)).replace('BINARY', repr(binary)).replace('INTERRUPT', repr(interrupt)).replace('HERE', repr(str(root))),
+'''.replace('OUTAGE', repr(outage)).replace('MISSING', repr(missing)).replace('DIGEST', repr('0' * 64 if corrupt else digest)).replace('BINARY', repr(binary)).replace('INTERRUPT', repr(interrupt)).replace('RESUMABLE', repr(resumable)).replace('HERE', repr(str(root))),
             }
             scripts['sleep'] = '#!/bin/sh\n'
             for name, contents in scripts.items():
@@ -93,6 +97,15 @@ if MISSING:
         name = 'oac-linux-amd64.' + hashlib.sha256(binary).hexdigest()
         result = self.run_launcher('Linux', 'x86_64', seed={name: binary[:10], 'oac-linux-amd64.' + '1' * 64: b'old'})
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.resumed, [10])
+        self.assertEqual(result.cache, [])
+
+    def test_unfinished_download_restarts_when_the_server_cannot_resume(self):
+        binary = b'#!/bin/sh\nprintf "%s\\n" "$@"\n'
+        name = 'oac-linux-amd64.' + hashlib.sha256(binary).hexdigest()
+        result = self.run_launcher('Linux', 'x86_64', seed={name: binary[:10]}, resumable=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines(), ['install', '--install-dir', '/path with spaces/core', '--version', 'v1.2.3'])
         self.assertEqual(result.resumed, [10])
         self.assertEqual(result.cache, [])
 
