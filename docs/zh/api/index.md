@@ -1,7 +1,7 @@
 ---
 title: "API 命名空间和凭据"
 source: docs/api/index.md
-source_hash: b7ea8930433504088688d7f09d23f8d6d3fdbc95d24be999320969857e0fbc0c
+source_hash: 2948bfd2f5ed2f86ebef424f6dd45367e3906bc7fe30b57efdc6a4b68cefde89
 ---
 
 Core 提供三个 API 命名空间，每个面向一类调用方并使用独立凭据：应用使用 `/v1`，管理员使用 `/core/v1`，机器使用 `/api/v1`。凭据只能在其所属命名空间中使用。

@@ -1,7 +1,7 @@
 ---
 title: "Web 控制台"
 source: docs/web/index.md
-source_hash: 67aaef8604acb4a49d06c10825410e97433df97c9fe77597650ec6737e227731
+source_hash: fed3544a6fb993db8fb8a4f6c4dc3f64894ff2a587cd6d2deb3b49b9b74d082f
 ---
 
 Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥登录，查看健康状态和用量，检查应用创建的内容，并管理项目、密钥、节点和设置。应用使用项目 API 密钥调用 `/v1`，不使用 Web。

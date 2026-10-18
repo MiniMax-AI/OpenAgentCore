@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: ff909133be833f45753721b250cf1224b029943690e2dcc8e08bada456434b25
+source_hash: 6c7a12683a6cfb0ceda9ea0440f3e1fb90091203e4d044cc21850ae651399254
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
