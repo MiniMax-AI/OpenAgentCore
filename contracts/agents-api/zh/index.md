@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 5032e5d52040d39196c2cfeb46daa004d268c766a440b155fe34129500207772
+source_hash: a18ebc428c0610870c2d231d8d51c187b4096e2980f1a4950b72545529917fbd
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -84,6 +84,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Items 列表会包含进行中和未完成的输出 Items，并保留失败函数结果中已提交的 `output`。
 - 错误消息会省略官方消息包含的 call 和 executor ID。
 - 与其他文本并存的空文本部分可被接受并存储。
+- 对于既没有图像、也没有非空白文本的函数结果，Claude Code 会向模型显示其自身的占位文本；函数错误文本的首尾空白会被去除。
 - 空输入会返回 400 `invalid_request`，附带通用消息和值为 null 的 param；官方响应为 `invalid_request_error`，param 为 `input`。
 - 一旦所有根级 Turn 均已进入终态，Session 用量即可用；官方读取会滞后数秒。
 

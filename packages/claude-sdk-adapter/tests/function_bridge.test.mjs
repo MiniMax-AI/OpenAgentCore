@@ -149,6 +149,7 @@ test("blank results accept the native placeholder and error text is compared as 
     ["whitespace", true, [text("  \n")], "(mcp__functions__lookup completed with no output)"],
     ["empty-error", false, [], "Unknown error"],
     ["empty-text-error", false, [text("")], "Command failed with no output"],
+    ["whitespace-error", false, [text("  \n")], "Command failed with no output"],
   ];
   const events = [];
   const bridge = new FunctionBridge(async event => { events.push(event); });
@@ -164,7 +165,8 @@ test("blank results accept the native placeholder and error text is compared as 
   bridge.assertComplete();
 
   for (const [id, content, received] of [["trailing-empty", [text("x"), text("")], "x"],
-    ["trailing-newline", [text("boom\n")], "boom"], ["empty-between", [text("x"), text(""), text("y")], "x\n\ny"]]) {
+    ["trailing-newline", [text("boom\n")], "boom"], ["leading-space", [text(" boom")], "boom"],
+    ["leading-empty", [text(""), text("y")], "y"], ["empty-between", [text("x"), text(""), text("y")], "x\n\ny"]]) {
     const value = { ...result(id, false), content };
     const waiting = bridge.invoke(call(id), new AbortController().signal);
     bridge.submit(JSON.stringify(value));

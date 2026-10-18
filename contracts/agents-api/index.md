@@ -81,6 +81,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
 - Error messages omit the call and executor IDs that official messages include.
 - An empty text part beside other text is accepted and stored.
+- Claude Code shows the model its own placeholder text for a function result with no image and no non-blank text, and trims surrounding whitespace from function error text.
 - Empty input returns 400 `invalid_request` with a generic message and a null param; the official response is `invalid_request_error` with param `input`.
 - Session usage is available as soon as every root Turn has settled; official reads lag by seconds.
 
