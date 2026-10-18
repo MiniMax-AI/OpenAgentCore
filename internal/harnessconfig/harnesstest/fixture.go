@@ -7,12 +7,14 @@ import (
 )
 
 // Declaration supports only common text admission in the "none" placement by
-// default: every capability is unsupported. change adjusts the result.
+// default: every capability is unsupported, with the official default medium
+// verbosity that Core always sends. change adjusts the result.
 func Declaration(kind string, change func(*harnessconfig.Declaration)) harnessconfig.Declaration {
 	d := harnessconfig.Declaration{
 		Kind:               kind,
 		Label:              kind,
 		Capabilities:       proto.UnsupportedCapabilities(),
+		Execution:          harnessconfig.ExecutionOptions{TextVerbosities: []string{"medium"}},
 		Placements:         []string{"none"},
 		MCPOrigins:         []string{},
 		WhitespaceOnlyText: proto.CapabilityUnsupported,

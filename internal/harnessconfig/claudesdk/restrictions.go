@@ -22,12 +22,6 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 	if environment == nil || (environment.Type != "none" && environment.Type != "openai_hosted" && environment.Type != "self_hosted") || strings.TrimSpace(admission.Model) == "" {
 		return harnessconfig.ErrInvalidInput
 	}
-	if admission.TextVerbosity != "" && admission.TextVerbosity != "medium" {
-		return errors.New("The configured engine currently supports medium text verbosity only.")
-	}
-	if admission.Reasoning || (admission.ServiceTier != "" && admission.ServiceTier != "auto") {
-		return harnessconfig.ErrInvalidInput
-	}
 	if admission.TextFormat == "json_schema" {
 		if err := proto.ValidateBinary64Schema(admission.TextSchema); err != nil {
 			return err

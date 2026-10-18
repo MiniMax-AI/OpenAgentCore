@@ -69,17 +69,14 @@ type KindCapabilities struct {
 	Steering              bool `json:"steering,omitempty"`
 	MessageItems          bool `json:"message_items,omitempty"`
 
-	ToolObservations               bool `json:"tool_observations,omitempty"`
-	EnvironmentNone                bool `json:"environment_none,omitempty"`
-	LocalEnvironment               bool `json:"local_environment,omitempty"`
-	Preparation                    bool `json:"preparation,omitempty"`
-	WorkspaceReadPreparation       bool `json:"workspace_read_preparation,omitempty"`
-	WorkspaceOutputExport          bool `json:"workspace_output_export,omitempty"`
-	ProgrammaticToolCallingDisable bool `json:"programmatic_tool_calling_disable,omitempty"`
-	WebSearchControl               bool `json:"web_search_control,omitempty"`
-	// ExecutionControls supports typed search and verbosity controls.
+	ToolObservations         bool `json:"tool_observations,omitempty"`
+	EnvironmentNone          bool `json:"environment_none,omitempty"`
+	LocalEnvironment         bool `json:"local_environment,omitempty"`
+	Preparation              bool `json:"preparation,omitempty"`
+	WorkspaceReadPreparation bool `json:"workspace_read_preparation,omitempty"`
+	WorkspaceOutputExport    bool `json:"workspace_output_export,omitempty"`
+	// ExecutionControls accepts the typed execution controls.
 	ExecutionControls    bool `json:"execution_controls,omitempty"`
-	TextVerbosity        bool `json:"text_verbosity,omitempty"`
 	StructuredOutput     bool `json:"structured_output,omitempty"`
 	ToolSearch           bool `json:"tool_search,omitempty"`
 	MessageImages        bool `json:"message_images,omitempty"`

@@ -70,6 +70,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - A repeated Session creation with the same `Idempotency-Key` returns the original Session; the official service creates a new one.
 - Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
 - An omitted reasoning effort stays null instead of taking the model's default.
+- Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - A Session's `agent.tools` omits `tool_search` declarations.
 - Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returned 200.
 
@@ -104,14 +105,14 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Configuration and tools**
 
-- Explicit reasoning effort or summary, service tiers other than `auto`, enabled `web_search` and enabled programmatic tool calling are saved but rejected at Session admission.
+- A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions, no service-origin MCP and no image input.
 - Model-derived reasoning defaults are not resolved.
 - MCP tools support the `http` transport only; `stdio` is rejected, and so is an inline `authorization` on a Session MCP transport ([HTTP MCP](./execution-tools.md#http-mcp)).
 
 **Execution and history**
 
-- The stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
+- Codex reasoning summaries are requested but not projected as `reasoning` Items, and the stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.

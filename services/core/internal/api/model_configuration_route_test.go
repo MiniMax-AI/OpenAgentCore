@@ -12,7 +12,7 @@ func TestModelConfigurationRouteAdmission(t *testing.T) {
 		{"invalid model", "responses", "{}", "", "model_configuration_model_invalid", "model"},
 		{"reserved parameter", "responses", `{"api_key":"native-secret"}`, "model", "harness_config_invalid", "harness_config"},
 		{"unknown parameter", "responses", `{"unknown":"native-secret"}`, "model", "harness_config_invalid", "harness_config"},
-		{"non native route", "anthropic", `{"model_reasoning_effort":"high"}`, "model", "model_provider_protocol_unsupported", "protocol"},
+		{"non native route", "anthropic", `{}`, "model", "model_provider_protocol_unsupported", "protocol"},
 		{"null", "responses", "null", "model", "invalid_model_provider", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

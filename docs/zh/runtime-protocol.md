@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: c46df89c43896c27b6c799a22055388161074e613a25c5308adc3fbcfce83a6d
+source_hash: d8e2ef6c37e49d482f9eed39490ce5f20dc892c29667fb71070fe88c1321600f
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -73,12 +73,10 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
 | `native_session_recovery` | Session 已启动过 Turn，但未记录原生 Session ID |
 | `retained_native_history` | Environment 使用外部工作区绑定；自带工作区存储不要求此能力 |
-| `web_search_control`, `text_verbosity` | Harness 的声明支持该控制 |
 | `structured_output` 和 `message_items` | Agent 请求 `json_schema` 输出 |
 | `subagent_observations` | `multi_agent.enabled` 为 true |
 | `subagent_control` | `multi_agent.enabled` 为 false |
 | `tool_search` | Agent 启用 tool search 或延迟 function 加载 |
-| `programmatic_tool_calling_disable` | Agent 明确禁用 programmatic tool calling |
 | `function_tools` | Agent 声明 function tool |
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
@@ -216,7 +214,7 @@ Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并�
 | 字段 | Core 设置方式 |
 | --- | --- |
 | `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
-| `execution_controls` | 始终设置：web search 为 `disabled`、解析后的 text verbosity（默认 `medium`）、明确禁用 programmatic tool calling，以及任何 `json_schema` 输出格式。原生选项名称由 adapter 负责 |
+| `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`），以及 Agent 设置的每个选项，包括 web search（mode、`context_size`、`allowed_domains`、`location`）、programmatic tool calling、reasoning effort 和 summary、非 `auto` 的 service tier，以及 `json_schema` 输出格式。Core 在分发前按 Harness 声明校验每个值；原生选项名称属于适配器 |
 | `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |

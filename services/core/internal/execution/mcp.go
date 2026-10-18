@@ -12,18 +12,20 @@ import (
 )
 
 type executionToolSet struct {
-	Functions           []proto.FunctionTool
-	MCP                 []proto.MCPHTTPServer
-	Search              bool
-	DisableProgrammatic bool
+	Functions []proto.FunctionTool
+	MCP       []proto.MCPHTTPServer
+	Search    bool
+	// WebSearch and ProgrammaticToolCalling are set only when the Session declares the tool.
+	WebSearch               *proto.WebSearchControl
+	ProgrammaticToolCalling *bool
 }
 
 func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 	functions := make([]json.RawMessage, 0, len(raw))
 	var servers []proto.MCPHTTPServer
 	search := false
-	disableProgrammatic := false
-	controls := map[string]bool{}
+	var webSearch *proto.WebSearchControl
+	var programmatic *bool
 	names := map[string]bool{}
 	for _, value := range raw {
 		var kind struct {
@@ -32,30 +34,30 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 		if json.Unmarshal(value, &kind) != nil {
 			return executionToolSet{}, errors.New("invalid execution tool")
 		}
-		if kind.Type == "programmatic_tool_calling" || kind.Type == "web_search" {
-			if controls[kind.Type] {
-				return executionToolSet{}, errors.New("execution requires distinct tool controls")
+		if kind.Type == "programmatic_tool_calling" {
+			var control struct {
+				Enabled *bool `json:"enabled"`
 			}
-			controls[kind.Type] = true
-			if kind.Type == "programmatic_tool_calling" {
-				var control struct {
-					Type    string `json:"type"`
-					Enabled *bool  `json:"enabled"`
-				}
-				decoder := json.NewDecoder(bytes.NewReader(value))
-				decoder.DisallowUnknownFields()
-				if decoder.Decode(&control) != nil || control.Enabled == nil || *control.Enabled {
-					return executionToolSet{}, errors.New("programmatic tool calling is not qualified for execution")
-				}
-				disableProgrammatic = true
-			} else {
-				var control struct {
-					Mode string `json:"mode"`
-				}
-				if json.Unmarshal(value, &control) != nil || control.Mode != "disabled" {
-					return executionToolSet{}, errors.New("only disabled web search is qualified for execution")
-				}
+			if json.Unmarshal(value, &control) != nil || control.Enabled == nil {
+				return executionToolSet{}, errors.New("invalid programmatic_tool_calling control")
 			}
+			programmatic = control.Enabled
+			continue
+		}
+		if kind.Type == "web_search" {
+			var control struct {
+				Mode           string                `json:"mode"`
+				ContextSize    string                `json:"context_size"`
+				AllowedDomains []string              `json:"allowed_domains"`
+				Location       *proto.SearchLocation `json:"location"`
+			}
+			if json.Unmarshal(value, &control) != nil || control.Mode == "" || control.ContextSize == "" {
+				return executionToolSet{}, errors.New("invalid web_search control")
+			}
+			if location := control.Location; location != nil && location.City == nil && location.Country == nil && location.Region == nil && location.Timezone == nil {
+				control.Location = nil
+			}
+			webSearch = &proto.WebSearchControl{Mode: control.Mode, ContextSize: control.ContextSize, AllowedDomains: control.AllowedDomains, Location: control.Location}
 			continue
 		}
 		if kind.Type == "tool_search" {
@@ -93,5 +95,5 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 			ServerURL: tool.Transport.ServerURL, AllowedTools: tool.AllowedTools, Required: tool.Required})
 	}
 	resolved, err := functionTools(functions)
-	return executionToolSet{Functions: resolved, MCP: servers, Search: search, DisableProgrammatic: disableProgrammatic}, err
+	return executionToolSet{Functions: resolved, MCP: servers, Search: search, WebSearch: webSearch, ProgrammaticToolCalling: programmatic}, err
 }

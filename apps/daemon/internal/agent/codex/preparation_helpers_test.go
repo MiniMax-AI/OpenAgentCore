@@ -42,7 +42,7 @@ func preparationFixture(t *testing.T) (proto.PromptRequestPayload, sessionConfig
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "prepared-session",
 		AgentOptions:                map[string]any{"model": "fixture-model"},
-		ExecutionControls:           &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"},
+		ExecutionControls:           &proto.ExecutionControls{TextVerbosity: "medium"},
 		DisableExecutionEnvironment: true,
 		FunctionTools:               []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"value":{"type":"integer"}}}`)}},
 	}

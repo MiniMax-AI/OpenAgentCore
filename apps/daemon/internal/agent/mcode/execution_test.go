@@ -44,7 +44,9 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 		func(r *proto.PromptRequestPayload) { r.DisableSubagents = false },
 		func(r *proto.PromptRequestPayload) { r.RequireExistingNativeSession = true },
 		func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "f"}} },
-		func(r *proto.PromptRequestPayload) { r.ExecutionControls.WebSearch = "enabled" },
+		func(r *proto.PromptRequestPayload) {
+			r.ExecutionControls.WebSearch = &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}
+		},
 	} {
 		r := testRequest(t)
 		change(&r)

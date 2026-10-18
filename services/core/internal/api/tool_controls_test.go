@@ -8,10 +8,13 @@ import (
 	"testing"
 )
 
-func TestDisabledToolConfigurationRoundTrip(t *testing.T) {
+func TestToolControlConfigurationRoundTrip(t *testing.T) {
 	for _, raw := range []string{
 		`{"type":"programmatic_tool_calling","enabled":false}`,
+		`{"type":"programmatic_tool_calling","enabled":true}`,
 		`{"type":"web_search","mode":"disabled"}`,
+		`{"type":"web_search","mode":"live","context_size":"low"}`,
+		`{"type":"web_search","mode":"cached"}`,
 		`{"type":"web_search","mode":"disabled","context_size":"high","allowed_domains":[],"location":{"city":"Paris","country":null}}`,
 		`{"type":"web_search","mode":"disabled","context_size":null,"allowed_domains":["example.com"],"location":null}`,
 	} {
@@ -36,16 +39,12 @@ func TestDisabledToolConfigurationRoundTrip(t *testing.T) {
 	}
 }
 
-func TestDisabledToolAdmissionPrecedesPersistence(t *testing.T) {
+func TestMalformedToolControlsAreRejectedBeforePersistence(t *testing.T) {
 	for _, tools := range []string{
-		`[{"type":"programmatic_tool_calling"}]`,
-		`[{"type":"programmatic_tool_calling","enabled":true}]`,
 		`[{"type":"programmatic_tool_calling","enabled":null}]`,
 		`[{"type":"programmatic_tool_calling","enabled":"false"}]`,
 		`[{"type":"programmatic_tool_calling","enabled":false,"extra":true}]`,
 		`[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`,
-		`[{"type":"web_search","mode":"live"}]`,
-		`[{"type":"web_search","mode":"cached"}]`,
 		`[{"type":"web_search","mode":"disabled","allowed_domains":[null]}]`,
 		`[{"type":"web_search","mode":"disabled","context_size":"enormous"}]`,
 		`[{"type":"web_search","mode":"disabled","location":{"extra":true}}]`,

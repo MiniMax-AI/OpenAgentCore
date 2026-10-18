@@ -8,16 +8,6 @@ import (
 func validateNativeConfig(config proto.HarnessConfig) bool {
 	for key, value := range config {
 		switch key {
-		case "effort":
-			text, ok := value.(string)
-			if !ok {
-				return false
-			}
-			switch text {
-			case "low", "medium", "high", "xhigh", "max":
-			default:
-				return false
-			}
 		case "thinking":
 			thinking, ok := value.(map[string]any)
 			if !ok || !validThinking(thinking) {

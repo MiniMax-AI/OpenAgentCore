@@ -85,7 +85,7 @@ func TestClaudeWorkerSelectsStoredEngineAndRestrictiveCapabilities(t *testing.T)
 			if h.read(testExecutionRequest).DecodePayload(&prompt) != nil {
 				t.Fatal("invalid prompt")
 			}
-			if prompt.AgentKind != "claude_sdk" || len(prompt.FunctionTools) != 1 || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}) {
+			if prompt.AgentKind != "claude_sdk" || len(prompt.FunctionTools) != 1 || !prompt.DisableExecutionEnvironment || !prompt.DisableSubagents || prompt.ExecutionControls == nil || *prompt.ExecutionControls != (proto.ExecutionControls{TextVerbosity: "medium"}) {
 				t.Fatal(prompt)
 			}
 			h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "claude-native"}})

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 5032e5d52040d39196c2cfeb46daa004d268c766a440b155fe34129500207772
+source_hash: e98c94f7c0ca91c766e162983615fc07d9ffef8afebd512cefb5119032e8ba99
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -73,6 +73,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 使用相同 `Idempotency-Key` 重复创建 Session 会返回原 Session；官方服务会创建一个新的 Session。
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
+- Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - 在 events 202 之后立即删除 Session 会返回 409，因为 Core 会在同一事务中准入该 Turn；官方服务返回 200。
 
@@ -107,14 +108,14 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **配置和工具**
 
-- 显式指定推理强度或摘要、使用 `auto` 之外的服务层级、启用 `web_search` 或启用程序化工具调用，这些设置都会被保存，但在 Session 准入时会被拒绝。
+- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions、没有服务源 MCP，也不支持图像输入。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
 **执行和历史**
 
-- 流不会发出 reasoning-summary 事件、Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
+- Codex 的推理摘要会被请求，但不会投影为 `reasoning` Item；流也不会发出 reasoning-summary 事件、Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
 - 除 [Turns and Items](sessions-events.md#turns-and-items) 中列出的变体外，其他原生 Item 变体不会被投影，而且 Items 无法修改。
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。

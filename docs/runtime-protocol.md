@@ -71,12 +71,10 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
 | `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
 | `retained_native_history` | The Environment uses an external workspace binding; owned workspace storage does not require this capability |
-| `web_search_control`, `text_verbosity` | The Harness's declaration supports that control |
 | `structured_output` and `message_items` | The Agent requests `json_schema` output |
 | `subagent_observations` | `multi_agent.enabled` is true |
 | `subagent_control` | `multi_agent.enabled` is false |
 | `tool_search` | The Agent enables tool search or defers function loading |
-| `programmatic_tool_calling_disable` | The Agent explicitly disables programmatic tool calling |
 | `function_tools` | The Agent declares function tools |
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
 | `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
@@ -214,7 +212,7 @@ The `execution_prepare` configuration carries the opt-ins Core sets for each Run
 | Field | Set by Core |
 | --- | --- |
 | `agent_options` | Always `model` and `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
-| `execution_controls` | Always: web search `disabled`, the resolved text verbosity (default `medium`), an explicit programmatic-tool-calling disable and any `json_schema` output format. Native option names belong to the adapter |
+| `execution_controls` | Always: the resolved text verbosity (default `medium`) plus each option the Agent sets, whether web search (mode, `context_size`, `allowed_domains`, `location`), programmatic tool calling, reasoning effort and summary, a non-`auto` service tier or a `json_schema` output format. Core validates every value against the Harness declaration before dispatch; native option names belong to the adapter |
 | `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |

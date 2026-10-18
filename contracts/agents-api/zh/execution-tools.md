@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 80502785bc87eb9863b38400eb86723483640b41acce2803be809779b8ea53d9
+source_hash: e9c3fd5267e24f56f1e24ef04af39abc3839ba6f31d1cc6537ba2553eb5417fe
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -62,15 +62,15 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 
 已保存 Agent 保留固定版本的所有 `web_search` 模式：省略或 null 保存为 `live`，`cached` 和 `live` 原样保存（[保存模式](wire-semantics.md#saved-configuration)）。搜索设置是资源数据：省略或 null 的 `context_size` 解析为 `medium`；省略域名和位置解析为 null；空域名列表保持为空；提供的位置（包括 `{}`）包含 `city`、`country`、`region` 和 `timezone`，省略字段为 null。
 
-执行仅允许 `mode: "disabled"` 和 `enabled: false`。启用或省略模式的搜索、启用或省略 `enabled` 的程序化调用，在 Session 准入时被拒绝，除非 Session 替换了保存的工具。省略程序化配置会保留各 Harness 原生行为，这与官方默认启用行为不同。无关的原生实用工具不会被移除。
+执行把解析后的值交给 Harness，并按 `internal/harnessconfig` 中的声明（`Execution`）校验：支持的 Web 搜索模式以及是否接受搜索设置、reasoning effort 与 summary、service tier、程序化工具调用的取值和 text verbosity。声明之外的值会在 Session 准入时被拒绝，消息会指出字段，除非 Session 替换了保存的工具。Core 仅在 Agent 设置了选项或适用固定版本的默认值时才发送该选项，因此省略 `web_search` 或 `programmatic_tool_calling` 会保留各 Harness 的原生行为。对程序化调用而言，这与官方默认启用的行为不同。无关的原生实用工具不会被移除。
 
-`DisableProgrammaticToolCalling` 在初次执行和冷继续执行中携带禁用意图，仅在存在时要求 Runtime 能力。搜索使用已有禁用控制项。
+`ExecutionControls` 携带这些选项（[Runtime 协议](../../../docs/zh/runtime-protocol.md#capability-declarations)）。Runtime 只需要 `execution_controls` 能力。
 
-| Harness | 原生执行约束 |
-| --- | --- |
-| Codex | 禁用 code-mode 功能；在启动或恢复线程前检查原生受管要求，拒绝被强制启用的冲突功能 |
-| Claude Code | 保留受限内置工具清单，并据此验证原生初始化 |
-| MiniMax Code | 保留受限原生工具配置、空文本执行工具清单和禁用的 Web 搜索 |
+| Harness | Web 搜索 | 程序化工具调用 |
+| --- | --- | --- |
+| Codex | `disabled`、`cached` 和 `live`，以及 `context_size`、`allowed_domains` 和 `location`，对应原生 `web_search` 与 `tools.web_search` 设置 | `enabled: true` 开启原生 `code_mode`；`false` 关闭 `code_mode`、`code_mode_only` 和 `code_mode_prewarm`，并在启动或恢复线程前检查原生受管要求 |
+| Claude Code | 仅 `disabled`，并在原生初始化时验证受限内置工具清单 | 仅 `false` |
+| MiniMax Code | 仅 `disabled`，受限配置没有搜索工具，通过原生 `features.webSearch=false` 实现 | 仅 `false` |
 
 ## HTTP MCP {#http-mcp}
 

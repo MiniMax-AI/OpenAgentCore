@@ -79,6 +79,9 @@ type Declaration struct {
 	// MCPOrigins lists where HTTP MCP connections originate: "service" for the
 	// service-side environment:none profile, "environment" for the Environment.
 	MCPOrigins []string
+	// Execution declares which official execution option values the Harness
+	// maps to a native setting. Admission rejects any other user-set value.
+	Execution ExecutionOptions
 	// WhitespaceOnlyText declares messages without an image or non-whitespace
 	// text. Unsupported Harnesses reject them at admission; Core never trims or
 	// pads model input to fit a Harness.
@@ -104,6 +107,7 @@ func (d Declaration) Accepts(placement string) bool {
 
 func (d Declaration) Clone() Declaration {
 	d.Configuration = d.Configuration.Clone()
+	d.Execution = d.Execution.Clone()
 	d.Placements = slices.Clone(d.Placements)
 	d.MCPOrigins = slices.Clone(d.MCPOrigins)
 	return d

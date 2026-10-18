@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 25364c00b8123a4f5dc70916e98d89af8cf3eae05bb5a4b597cf86b14c491800
+source_hash: da7f631aea81c3b934e61e8749de577f2dc458d5b45ede3f5492a3f184affe08
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -144,7 +144,7 @@ GET 返回所选配置和租户容量策略；尚未配置时返回 404 `workspa
   "session_id": "013773a9-44b9-4f84-baca-b51c04a01201",
   "model": {"value": "requested-model", "source": "session"},
   "harness": {"value": "codex", "source": "agent"},
-  "harness_config": {"value": {"model_reasoning_effort": "high"}, "source": "agent"},
+  "harness_config": {"value": {"thinking": {"type": "adaptive"}}, "source": "agent"},
   "model_provider": {
     "source": "agent",
     "status": "available",

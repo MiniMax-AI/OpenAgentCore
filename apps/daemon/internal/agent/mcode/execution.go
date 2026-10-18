@@ -5,14 +5,18 @@ import (
 	"os"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 func validateExecutionRequest(req proto.PromptRequestPayload) error {
 	if !req.DisableExecutionEnvironment || req.AgentStateKey == "" || req.LocalEnvironment != nil || req.RequireExistingNativeSession || len(req.FunctionTools) != 0 || (req.MCPHTTPServers != nil && len(*req.MCPHTTPServers) != 0) {
 		return fmt.Errorf("mcode: unsupported execution configuration")
 	}
-	if req.ExecutionControls == nil || req.ExecutionControls.OutputFormat != nil || req.ExecutionControls.WebSearch != "disabled" || (req.ExecutionControls.TextVerbosity != "" && req.ExecutionControls.TextVerbosity != "medium") {
+	if req.ExecutionControls == nil || req.ExecutionControls.OutputFormat != nil {
 		return fmt.Errorf("mcode: unsupported execution controls")
+	}
+	if err := declaration.Declaration.ValidateExecutionControls(req.ExecutionControls); err != nil {
+		return err
 	}
 	if !req.DisableSubagents {
 		if req.MaxConcurrentSubagents == nil || *req.MaxConcurrentSubagents < 1 {
@@ -28,6 +32,7 @@ func validateExecutionRequest(req proto.PromptRequestPayload) error {
 func configureTextExecution(config map[string]any) {
 	config["agents"] = map[string]any{"default": map[string]any{
 		"tools": []string{}, "builtinTools": []string{}, "skills": []string{},
+		// Native web search calls MiniMax's cloud with a MiniMax account credential that Core does not hold.
 		"features": map[string]bool{"mavis": false, "delegation": false, "webSearch": false},
 	}}
 	config["askUser"] = map[string]bool{"enabled": false}

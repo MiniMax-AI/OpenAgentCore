@@ -38,9 +38,9 @@ import { OpenAIAgentsClient } from "@oac/agents-client";
 const client = new OpenAIAgentsClient({ baseUrl: apiBaseURL, token: projectAPIKey });
 const agent = await client.createAgent({
   model: "requested-model",
+  reasoning: { effort: "high" },
   x_agents_core: {
     harness: "codex",
-    harness_config: { model_reasoning_effort: "high" },
     model_provider: {
       protocol: "responses",
       base_url: modelBaseURL,
@@ -82,7 +82,6 @@ if (frozen.model_provider.status === "available") {
 await admin.setHarnessModelConfiguration("codex", {
   model_provider: { protocol: "responses", base_url: modelBaseURL, api_key: modelAPIKey },
   model: "requested-model",
-  harness_config: { model_reasoning_effort: "high" },
 });
 const defaults = await admin.retrieveHarnessModelConfiguration("codex");
 console.log(defaults.model, defaults.harness_config, defaults.model_provider.api_key_configured);

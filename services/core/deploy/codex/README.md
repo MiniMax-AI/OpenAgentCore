@@ -21,9 +21,9 @@ By default Codex retries a failed model connection forever, waiting up to 60 sec
 The adapter applies Core's typed controls and opt-ins, described in the [Runtime protocol](../../../../docs/runtime-protocol.md#capability-declarations), through native Codex settings on both new and resumed Turns.
 
 - **`environment: none`.** The daemon forces `CODEX_EXEC_SERVER_URL=none` and confirms that Codex reports its `local` and `remote` environments as unknown before it starts or resumes a thread; a binary that cannot do this fails closed. The engine process runs on the bound device, which is not a user execution environment.
-- **Web search.** The control becomes Codex's `web_search` option (`disabled`, `cached` or `live`); Core sends `disabled`.
-- **Programmatic tool calling.** An explicit disable turns off the native `code_mode`, `code_mode_only` and `code_mode_prewarm` features and checks managed requirements before a thread starts or resumes, rejecting a conflicting requirement.
-- **Text verbosity.** The adapter reads the model catalog with `codex debug models`, checks the model's support and pins that catalog snapshot for the execution. The probe needs Unix process-group cancellation, so other hosts do not declare `text_verbosity`. For a model without declared verbosity support, including Codex's unknown-model fallback, `medium` omits the override and keeps native default text; a supported model receives an explicit `medium`. Unsupported `low` or `high` and an unreadable catalog fail before model execution.
+- **Web search.** The control becomes Codex's `web_search` option (`disabled`, `cached` or `live`) with `tools.web_search` `context_size`, `allowed_domains` and `location`.
+- **Programmatic tool calling.** `enabled: true` turns on the native `code_mode` feature. An explicit disable turns off the native `code_mode`, `code_mode_only` and `code_mode_prewarm` features and checks managed requirements before a thread starts or resumes, rejecting a conflicting requirement.
+- **Reasoning, service tier and verbosity.** `reasoning.effort` and `reasoning.summary` become `model_reasoning_effort` and `model_reasoning_summary`, a non-`auto` service tier becomes `service_tier` and the text verbosity becomes `model_verbosity`.
 - **Subagents.** Disabling Subagents turns off both native multi-agent feature generations, `multi_agent` and `multi_agent_v2`, overriding the operator's feature preferences.
 
 ## MCP servers

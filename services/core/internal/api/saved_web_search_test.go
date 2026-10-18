@@ -8,10 +8,8 @@ import (
 	"github.com/google/uuid"
 )
 
-const onlyDisabledSearch = "Only disabled web_search is qualified for execution."
-
 // TV-05 W1/W2: saved web_search keeps every pinned mode with the official
-// projection, while Session execution still qualifies only the disabled form.
+// projection, and Session admission resolves it to the same bytes.
 func TestSavedWebSearchProjection(t *testing.T) {
 	const defaults = `"context_size":"medium","allowed_domains":null,"location":null}`
 	live := `{"type":"web_search","mode":"live",` + defaults
@@ -38,14 +36,8 @@ func TestSavedWebSearchProjection(t *testing.T) {
 			t.Fatalf("%s: resaved %s %v", tc.input, again, err)
 		}
 		executed, err := resolveSessionTools(saved)
-		var mode struct{ Mode string }
-		_ = json.Unmarshal(saved[0], &mode)
-		if mode.Mode == "disabled" {
-			if err != nil || string(executed[0]) != tc.want {
-				t.Fatalf("%s: disabled execution changed: %s %v", tc.input, executed, err)
-			}
-		} else if err == nil || err.Error() != onlyDisabledSearch {
-			t.Fatalf("%s: enabled search admitted: %v", tc.input, err)
+		if err != nil || string(executed[0]) != tc.want {
+			t.Fatalf("%s: Session resolution changed the saved tool: %s %v", tc.input, executed, err)
 		}
 	}
 }
@@ -64,74 +56,36 @@ func TestSavedWebSearchAgentCreate(t *testing.T) {
 	}
 }
 
-// TV-05 W4-W7: a saved Agent with enabled search cannot reach execution through
-// any creation mode; a Session tools replacement or disabled search is admitted.
+// TV-05 W4-W7: a Session keeps the saved search mode, an inline omitted mode
+// resolves to live, and a per-Session tools replacement wins.
 func TestSavedWebSearchSessionAdmission(t *testing.T) {
 	saved := func(tool string) string {
 		return `{"model":"m","multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":[` + tool + `]}`
 	}
-	enabled := map[string]string{}
-	for _, mode := range []string{"live", "cached"} {
-		enabled[uuid.NewString()] = saved(`{"type":"web_search","mode":"` + mode + `","context_size":"medium","allowed_domains":null,"location":null}`)
-	}
-	disabled := uuid.NewString()
-	agents := map[string]string{disabled: saved(`{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}`)}
-	for id, configuration := range enabled {
-		agents[id] = configuration
-	}
-	h, s := configurationHandler(t, agents)
-	for id := range enabled {
-		for _, suffix := range []string{
-			`"environment":{"type":"none"},"input":"x"}`,
-			`"environment":{"type":"none"},"input":"x","stream":true}`,
-			`"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"x"}`,
-			`"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`,
-			`"environment":{"type":"openai_hosted"}}`,
-			// Replacing another field keeps the saved tools.
-			`"agent":{"instructions":"x"},"environment":{"type":"none"},"input":"x"}`,
-		} {
-			w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+id+`",`+suffix)
-			assertConfigurationError(t, w, "unsupported_or_invalid_configuration", nil, onlyDisabledSearch)
+	const cached = `{"type":"web_search","mode":"cached","context_size":"medium","allowed_domains":[],"location":null}`
+	id := uuid.NewString()
+	h, _ := configurationHandler(t, map[string]string{id: saved(cached)})
+	for _, tc := range []struct{ body, want string }{
+		{`{"agent_id":"` + id + `","environment":{"type":"none"},"input":"x"}`, cached},
+		{`{"agent_id":"` + id + `","agent":{"instructions":"x"},"environment":{"type":"none"},"input":"x"}`, cached},
+		{`{"agent_id":"` + id + `","agent":{"tools":[{"type":"web_search"}]},"environment":{"type":"none"},"input":"x"}`, `{"type":"web_search","mode":"live","context_size":"medium","allowed_domains":null,"location":null}`},
+		{`{"agent":{"model":"m","tools":[{"type":"web_search","mode":null}]},"environment":{"type":"none"},"input":"x"}`, `{"type":"web_search","mode":"live","context_size":"medium","allowed_domains":null,"location":null}`},
+	} {
+		w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", tc.body)
+		var session struct {
+			Agent struct{ Tools []json.RawMessage }
 		}
-		// C4: the input requirement still precedes execution admission.
-		w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+id+`","environment":{"type":"none"}}`)
-		assertConfigurationError(t, w, "invalid_request_error", nil, "conversation-only sessions currently require initial input")
-	}
-	// W6: inline enabled or omitted-mode search, also as a saved-Agent override.
-	for _, tool := range []string{`{"type":"web_search"}`, `{"type":"web_search","mode":null}`, `{"type":"web_search","mode":"live"}`, `{"type":"web_search","mode":"cached"}`} {
-		for _, body := range []string{
-			`{"agent":{"model":"m","tools":[` + tool + `]},"environment":{"type":"none"},"input":"x"}`,
-			`{"agent_id":"` + disabled + `","agent":{"tools":[` + tool + `]},"environment":{"type":"none"},"input":"x"}`,
-		} {
-			assertConfigurationError(t, credentialRequest(h, http.MethodPost, "/v1/agents/sessions", body), "unsupported_or_invalid_configuration", nil, onlyDisabledSearch)
+		if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &session) != nil || len(session.Agent.Tools) != 1 || string(session.Agent.Tools[0]) != tc.want {
+			t.Fatal(tc.body, w.Code, w.Body)
 		}
 	}
-	if s.writes != 0 {
-		t.Fatal("rejected configuration reached storage")
-	}
-	// W5 and W7: a per-Session tools replacement and saved disabled search are admitted.
-	for id := range enabled {
-		for _, tools := range []string{`[]`, `null`, `[{"type":"web_search","mode":"disabled"}]`} {
-			w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+id+`","agent":{"tools":`+tools+`},"environment":{"type":"none"},"input":"x"}`)
-			var session struct {
-				Agent struct{ Tools []json.RawMessage }
-			}
-			if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &session) != nil {
-				t.Fatal(tools, w.Code, w.Body)
-			}
-			for _, tool := range session.Agent.Tools {
-				if string(tool) != `{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":null,"location":null}` {
-					t.Fatalf("saved search leaked into the Session: %s", w.Body)
-				}
-			}
+	for _, tools := range []string{`[]`, `null`} {
+		w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+id+`","agent":{"tools":`+tools+`},"environment":{"type":"none"},"input":"x"}`)
+		var session struct {
+			Agent struct{ Tools []json.RawMessage }
 		}
-	}
-	w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+disabled+`","environment":{"type":"none"},"input":"x"}`)
-	var session struct {
-		Agent struct{ Tools []json.RawMessage }
-	}
-	if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &session) != nil || len(session.Agent.Tools) != 1 ||
-		string(session.Agent.Tools[0]) != `{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}` {
-		t.Fatal(w.Code, w.Body)
+		if w.Code != http.StatusCreated || json.Unmarshal(w.Body.Bytes(), &session) != nil || len(session.Agent.Tools) != 0 {
+			t.Fatal(tools, w.Code, w.Body)
+		}
 	}
 }

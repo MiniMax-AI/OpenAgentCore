@@ -97,14 +97,8 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	if !caps.ExecutionControls {
 		return fail("device must advertise execution_controls")
 	}
-	if declaration.Capabilities.WebSearchControl.IsSupported() && !caps.WebSearchControl {
-		return fail("device must advertise web_search_control")
-	}
 	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput || !caps.MessageItems) {
 		return fail("device must support structured output and message observations")
-	}
-	if declaration.Capabilities.TextVerbosity.IsSupported() && !caps.TextVerbosity {
-		return fail("device must advertise text_verbosity")
 	}
 	if !caps.ToolObservations {
 		return fail("device must advertise tool_observations")
@@ -121,9 +115,6 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	}
 	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
 		return fail(err.Error())
-	}
-	if tools.DisableProgrammatic && !caps.ProgrammaticToolCallingDisable {
-		return fail("device must support disabling programmatic tool calling")
 	}
 	if len(tools.Functions) > 0 && !caps.FunctionTools {
 		return fail("device must advertise function_tools")

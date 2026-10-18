@@ -32,15 +32,12 @@ func admissionEnvironment(environment *v1.Environment) *harnessconfig.AdmissionE
 func admissionOf(snapshot Snapshot) harnessconfig.Admission {
 	agent := snapshot.Agent
 	return harnessconfig.Admission{
-		Model:         agent.Model,
-		Reasoning:     agent.Reasoning.Effort != nil || agent.Reasoning.Summary != nil,
-		ServiceTier:   agent.ServiceTier,
-		TextVerbosity: agent.Text.Verbosity,
-		TextFormat:    agent.Text.Format.Type,
-		TextSchema:    agent.Text.Format.Schema,
-		MultiAgent:    agent.MultiAgent.Enabled,
-		Tools:         agent.Tools,
-		Environment:   admissionEnvironment(snapshot.Environment),
+		Model:       agent.Model,
+		TextFormat:  agent.Text.Format.Type,
+		TextSchema:  agent.Text.Format.Schema,
+		MultiAgent:  agent.MultiAgent.Enabled,
+		Tools:       agent.Tools,
+		Environment: admissionEnvironment(snapshot.Environment),
 	}
 }
 
@@ -64,8 +61,8 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 		if err := declaration.ValidateMCPOrigins(admissionEnvironment(snapshot.Environment), tools.MCP); err != nil {
 			return err
 		}
-		if tools.DisableProgrammatic && !declaration.Capabilities.ProgrammaticToolCallingDisable.IsSupported() {
-			return errors.New("Disabling programmatic tool calling is not supported by this engine.")
+		if err := declaration.ValidateExecutionControls(executionControls(snapshot.Agent, tools)); err != nil {
+			return err
 		}
 		request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
 		if err := request.ValidateToolSearch(declaration.Capabilities.ToolSearch.IsSupported()); err != nil {
