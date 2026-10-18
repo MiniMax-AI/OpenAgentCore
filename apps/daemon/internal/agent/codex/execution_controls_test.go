@@ -48,7 +48,7 @@ func TestExecutionControlsRejectUndeclaredValues(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	for _, controls := range []proto.ExecutionControls{
 		{WebSearch: &proto.WebSearchControl{Mode: "indexed", ContextSize: "medium"}},
-		{TextVerbosity: "invalid"}, {ReasoningEffort: "ultra"}, {ReasoningSummary: "none"}, {ServiceTier: "fast"},
+		{TextVerbosity: "invalid"}, {ReasoningEffort: "ultra"}, {ReasoningSummary: "none"}, {ServiceTier: "scale"},
 	} {
 		if plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, &controls); err == nil {
 			plan.Cleanup()

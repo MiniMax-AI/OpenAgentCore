@@ -8,7 +8,7 @@ from contextlib import ExitStack, nullcontext
 from types import SimpleNamespace
 
 import httpx2
-from openai import BadRequestError, NotFoundError, OpenAI
+from openai import NotFoundError, OpenAI
 
 
 def main():
@@ -77,15 +77,6 @@ def main():
         entry[stage + "_events"] = events
         save()
 
-    def reject_configuration(payload, message):
-        error = request("POST", "/sessions", status=400, json=payload)["error"]
-        assert error["code"] == "unsupported_or_invalid_configuration" and error["message"] == message, error
-        try:
-            sessions.create(**payload)
-            raise AssertionError("Unsupported enabled tool configuration was admitted")
-        except BadRequestError:
-            pass
-
     try:
         if stage == "initial":
             sdk_agent = client.beta.agents.create(**config)
@@ -126,20 +117,6 @@ def main():
                     save()
                     check_config(sid)
                     execute(entry, prompt, creation=creation)
-            search_only = "Only disabled web_search is qualified for execution."
-            ptc_only = "Programmatic tool calling is not qualified for execution."
-            for enabled, message in [({"type": "web_search", "mode": "cached"}, search_only),
-                                     ({"type": "web_search", "mode": "live"}, search_only),
-                                     ({"type": "programmatic_tool_calling", "enabled": True}, ptc_only)]:
-                reject_configuration({"agent": {"model": model, "tools": [enabled]}, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."}, message)
-                reject_configuration({"agent_id": sdk_agent.id, "agent": {"tools": [enabled]}, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."}, message)
-            # Saving PTC intent is independent of Session execution qualification.
-            enabled_agent = client.beta.agents.create(model=model, tools=[{"type": "programmatic_tool_calling", "enabled": True}])
-            reject_configuration({"agent_id": enabled_agent.id, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."}, ptc_only)
-            # Saved enabled or omitted-mode search is resource data (TV-05); admission still rejects it.
-            for search in ({"type": "web_search"}, {"type": "web_search", "mode": "cached"}):
-                searched = client.beta.agents.create(model=model, tools=[search])
-                reject_configuration({"agent_id": searched.id, "environment": {"type": "none"}, "input": "Verify rejected tool policy configuration."}, search_only)
             # Omitted-tool default projections are covered by the queued SDK/raw
             # resource fixture; these live cases exercise explicit disabled tools.
             for aid in proof["agents"]:

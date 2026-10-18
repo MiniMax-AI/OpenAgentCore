@@ -140,6 +140,10 @@ func (d Declaration) ValidateDeclaration() error {
 		(d.Capabilities.MCPHTTPBearerAuth.IsSupported() && len(d.MCPOrigins) == 0) {
 		return errors.New("harnessconfig: invalid MCP origins")
 	}
+	// Core always sends the official default text verbosity.
+	if !slices.Contains(d.Execution.TextVerbosities, "medium") {
+		return errors.New("harnessconfig: execution must declare text verbosity medium")
+	}
 	return nil
 }
 
@@ -418,7 +422,8 @@ func (d Declaration) ValidateExecutionControls(controls *proto.ExecutionControls
 		if !slices.Contains(o.WebSearchModes, search.Mode) {
 			return reject("web_search.mode", search.Mode)
 		}
-		if !o.WebSearchSettings && (search.ContextSize != "medium" || search.AllowedDomains != nil || search.Location != nil) {
+		// Settings of disabled search configure nothing.
+		if search.Mode != "disabled" && !o.WebSearchSettings && (search.ContextSize != "medium" || search.AllowedDomains != nil || search.Location != nil) {
 			return errors.New("web_search context_size, allowed_domains and location are not supported by this Harness.")
 		}
 	}

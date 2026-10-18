@@ -2,6 +2,9 @@
 package codex
 
 import (
+	"encoding/json"
+	"errors"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
@@ -44,15 +47,16 @@ var Declaration = harnessconfig.Declaration{
 	},
 	// Codex maps every official value natively: web_search, tools.web_search.*,
 	// model_reasoning_effort, model_reasoning_summary, service_tier,
-	// model_verbosity and features.code_mode. Native indexed search and the
-	// legacy fast tier have no official value. Official auto service tier means
-	// unset. Codex ignores a value the selected model does not support.
+	// model_verbosity and features.code_mode. Native indexed search has no
+	// official value. Official auto service tier means unset, and fast is Codex's
+	// native alias of priority. Codex ignores a value the selected model does not
+	// support.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled", "cached", "live"},
 		WebSearchSettings:       true,
 		ReasoningEfforts:        []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"},
 		ReasoningSummaries:      []string{"concise", "detailed", "auto"},
-		ServiceTiers:            []string{"default", "flex", "priority"},
+		ServiceTiers:            []string{"default", "flex", "priority", "fast"},
 		ProgrammaticToolCalling: []bool{true, false},
 		TextVerbosities:         []string{"low", "medium", "high"},
 	},
@@ -60,6 +64,26 @@ var Declaration = harnessconfig.Declaration{
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilitySupported,
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		return harnessconfig.RejectSubagentTools(admission, "function", "mcp")
+		if err := harnessconfig.RejectSubagentTools(admission, "function", "mcp"); err != nil {
+			return err
+		}
+		// Subagent observation turns native code_mode off.
+		if admission.MultiAgent && enablesProgrammaticToolCalling(admission.Tools) {
+			return errors.New("programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness.")
+		}
+		return nil
 	},
+}
+
+func enablesProgrammaticToolCalling(tools []json.RawMessage) bool {
+	for _, raw := range tools {
+		var tool struct {
+			Type    string `json:"type"`
+			Enabled *bool  `json:"enabled"`
+		}
+		if json.Unmarshal(raw, &tool) == nil && tool.Type == "programmatic_tool_calling" && tool.Enabled != nil && *tool.Enabled {
+			return true
+		}
+	}
+	return false
 }

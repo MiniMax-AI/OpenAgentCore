@@ -423,8 +423,6 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 		{"durable_input_receipts", "device must advertise streaming, steering and durable turns for this engine"},
 		{"preparation", "device must advertise executor preparation"},
 		{"execution_controls", "device must advertise execution_controls"},
-		{"web_search_control", "device must advertise web_search_control"},
-		{"text_verbosity", "device must advertise text_verbosity"},
 		{"tool_observations", "device must advertise tool_observations"},
 		{"subagent_control", "device must advertise subagent_control"},
 		{"environment_none", "device must advertise environment_none"},

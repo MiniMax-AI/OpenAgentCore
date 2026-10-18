@@ -69,3 +69,14 @@ func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
 		})
 	}
 }
+
+func TestCodexRejectsCodeModeWithSubagents(t *testing.T) {
+	declaration, _ := Registry().Lookup("codex")
+	tools := []json.RawMessage{json.RawMessage(`{"type":"programmatic_tool_calling","enabled":true}`)}
+	for _, multiAgent := range []bool{false, true} {
+		err := declaration.ValidateConfiguration(harnessconfig.Admission{Model: "real-model", MultiAgent: multiAgent, Tools: tools})
+		if (err == nil) == multiAgent {
+			t.Fatalf("multi_agent=%v: %v", multiAgent, err)
+		}
+	}
+}

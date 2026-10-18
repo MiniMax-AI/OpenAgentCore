@@ -39,8 +39,6 @@ func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 	cases := map[string]proto.ExecutionControls{
 		"cached-search":     {WebSearch: &proto.WebSearchControl{Mode: "cached", ContextSize: "medium"}},
 		"live-search":       {WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}},
-		"search-settings":   {WebSearch: &proto.WebSearchControl{Mode: "disabled", ContextSize: "high"}},
-		"search-domains":    {WebSearch: &proto.WebSearchControl{Mode: "disabled", ContextSize: "medium", AllowedDomains: []string{"example.com"}}},
 		"enabled-ptc":       {ProgrammaticToolCalling: &enabled},
 		"low-verbosity":     {TextVerbosity: "low"},
 		"high-verbosity":    {TextVerbosity: "high"},

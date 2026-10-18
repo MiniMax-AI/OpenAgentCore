@@ -69,6 +69,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - A repeated Session creation with the same `Idempotency-Key` returns the original Session; the official service creates a new one.
 - Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
+- An Agent without a `web_search` tool keeps the Harness's native search, which for Codex is cached search; the pinned contract does not define search without the tool.
 - An omitted reasoning effort stays null instead of taking the model's default.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - A Session's `agent.tools` omits `tool_search` declarations.
