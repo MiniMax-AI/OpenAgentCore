@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: dbfe6923ed532c37cf959b52ffc8c87b3fca9828ab81d28d49dede96f2def7f4
+source_hash: a94d59797cb59ee6c311e1df505a707d379c6ae4b69e1179a95525e7f600a7c1
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -174,7 +174,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration)` | Kind、可用性、版本、`AgentKindCapabilities` 和模型配置声明。它会重置其他注册项，因此必须首先调用。 |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期；据此派生 `Preparation` 能力 |
 
-显式填写声明中 `proto.AgentKindCapabilities` 的每个字段；[能力声明](../../../docs/zh/runtime-protocol.md#capability-declarations)定义声明的编码、验证和冻结方式。安装探测可以使用 `proto.CapabilityFromBool` 设置单个字段；但不得填充未提及字段或未来字段。可用性通过 `SupportedAgentKind.Available` 单独表示。读取声明的代码应调用 `IsSupported()`；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致。
+显式填写声明中 `proto.AgentKindCapabilities` 的每个字段；[能力声明](../../../docs/zh/runtime-protocol.md#capability-declarations)定义声明的编码、验证和冻结方式。安装探测可以使用 `agent.Narrow` 撤回已声明的字段，但绝不授予新字段；`Registry.Register` 会拒绝授予了新字段的探测结果。可用性通过 `SupportedAgentKind.Available` 单独表示。读取声明的代码应调用 `IsSupported()`；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致。
 
 准入映射是显式的。`Steering` 控制非持久化 `Steerer` 输入。`DurableInputReceipts` 控制 `DurableSteerer` 输入，并且还要求 Turn 结算契约；二者互不隐含，而且 Core 的公共文本路径要求同时具备二者。工作区声明描述授权资源所有者，包括通用 Runtime 工作区实现。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`。Runtime 自行就绪该 preparation，并从绑定的本地工作区目录提供读取，不调用 Executor 工厂；因此仅当该 kind 的 Environment 工作区就是该本地目录时，adapter 才声明它。注册过程不会派生它。Runtime 注册不会授予 Core 准入；声明才会授予。
 

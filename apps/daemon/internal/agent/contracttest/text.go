@@ -173,10 +173,7 @@ func sameTurn(a, b agent.Turn) bool {
 // not make: discovery may only withdraw support the installed host cannot give.
 func RequireNarrowed(t *testing.T, declared, discovered proto.AgentKindCapabilities) {
 	t.Helper()
-	d, found := reflect.ValueOf(declared), reflect.ValueOf(discovered)
-	for i := 0; i < d.NumField(); i++ {
-		if found.Field(i).Interface() == proto.CapabilitySupported && d.Field(i).Interface() != proto.CapabilitySupported {
-			t.Errorf("discovery widened %s", d.Type().Field(i).Name)
-		}
+	if widened := agent.Widened(declared, discovered); len(widened) > 0 {
+		t.Errorf("discovery widened %v", widened)
 	}
 }

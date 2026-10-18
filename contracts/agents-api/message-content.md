@@ -29,7 +29,7 @@ Admission checks the Harness before anything is written; an image the Harness ca
 
 ## Whitespace-only text
 
-Whitespace-only text such as `"   "` or `"\n\t"` is valid content and is stored and returned verbatim. Whether a Harness can run it is declared in its engine profile:
+Whitespace-only text such as `"   "` or `"\n\t"` is valid content and is stored and returned verbatim. Whether a Harness can run it is stated in its [declaration](harness-onboarding.md#declare-the-harness):
 
 | Harness | A message with no image and no non-whitespace text |
 | --- | --- |

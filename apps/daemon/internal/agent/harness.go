@@ -29,6 +29,8 @@ package agent
 import (
 	"context"
 	"io"
+	"reflect"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -50,6 +52,19 @@ func Unavailable(info proto.SupportedAgentKind) *Runtime {
 	info.Available, info.Version = false, ""
 	info.Capabilities = proto.UnsupportedCapabilities()
 	return &Runtime{Info: info}
+}
+
+// Widened names the capabilities discovery reports supported although the
+// declaration does not.
+func Widened(declared, discovered proto.AgentKindCapabilities) []string {
+	d, found := reflect.ValueOf(declared), reflect.ValueOf(discovered)
+	var widened []string
+	for i := 0; i < d.NumField(); i++ {
+		if found.Field(i).Interface() == proto.CapabilitySupported && d.Field(i).Interface() != proto.CapabilitySupported {
+			widened = append(widened, d.Type().Field(i).Name)
+		}
+	}
+	return widened
 }
 
 // Narrow withdraws a declared capability the host cannot provide. It never
@@ -83,6 +98,11 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 	}
 	if !runtime.Info.Available && runtime.Executor != nil {
 		panic("agent.Registry.Register: unavailable runtime has factories")
+	}
+	advertised := runtime.Info.Capabilities
+	advertised.Preparation = proto.CapabilityFromBool(runtime.Executor != nil)
+	if widened := Widened(declaration.Capabilities, advertised); len(widened) > 0 {
+		panic("agent.Registry.Register: discovery widened " + strings.Join(widened, ", "))
 	}
 	r.RegisterKind(runtime.Info, declaration.Configuration)
 	if runtime.Executor != nil {

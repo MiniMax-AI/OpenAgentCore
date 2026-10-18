@@ -336,7 +336,7 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 		kinds := registry.SupportedAgentKinds()
 		for i := range kinds {
 			caps := &kinds[i].Capabilities
-			caps.WorkspaceOutputExport = proto.CapabilityFromBool(local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
+			caps.WorkspaceOutputExport = proto.CapabilityFromBool(caps.WorkspaceOutputExport.IsSupported() && local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
 		}
 		return proto.HeartbeatPayload{
 			Timestamp:           time.Now().Unix(),

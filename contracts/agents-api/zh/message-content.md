@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: 5d0d5ba2710d1a91db22b66054701b863739d54f36d8c62df0b667ad9acb900e
+source_hash: 603ab95069d34f2deb277dbde9a74195a9e0e410966d88670eb1c9abbfa1bff7
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -31,7 +31,7 @@ source_hash: 5d0d5ba2710d1a91db22b66054701b863739d54f36d8c62df0b667ad9acb900e
 
 ## 仅空白文本 {#whitespace-only-text}
 
-`"   "` 或 `"\n\t"` 等仅含空白的文本为有效内容，原样存储和返回。Harness 能否运行由引擎配置声明：
+`"   "` 或 `"\n\t"` 等仅含空白的文本为有效内容，原样存储和返回。Harness 能否运行由其[声明](harness-onboarding.md#declare-the-harness)指定：
 
 | Harness | 无图像且无非空白文本的消息 |
 | --- | --- |

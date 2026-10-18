@@ -10,7 +10,7 @@ import (
 )
 
 // EnsurePlacement reserves first or retained demand before entering a node lifecycle.
-// The immutable engine profile and actual selected generation are validated
+// The Harness declaration and actual selected generation are validated
 // before committing its reservation.
 func (e *ExecutionOperations) EnsurePlacement(ctx context.Context, key AllocationKey, installation string) (placement.Reserved, error) {
 	key, err := key.parse()

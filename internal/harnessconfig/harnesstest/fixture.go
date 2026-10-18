@@ -7,8 +7,7 @@ import (
 )
 
 // Declaration supports only common text admission in the "none" placement by
-// default. The literal is exhaustive: a new field stays unspecified until it is
-// decided here. change adjusts the result.
+// default: every capability is unsupported. change adjusts the result.
 func Declaration(kind string, change func(*harnessconfig.Declaration)) harnessconfig.Declaration {
 	d := harnessconfig.Declaration{
 		Kind:               kind,

@@ -42,7 +42,7 @@ type Session struct {
 }
 
 type CreateSession struct {
-	// SupportsRetainedNativeHistory is trusted admission input from the immutable engine profile.
+	// SupportsRetainedNativeHistory is trusted admission input from the Harness declaration.
 	// It is not persisted and never contributes to the caller's retry identity.
 	SupportsRetainedNativeHistory bool `json:"-"`
 	// DeploymentProviderRevision is private creation metadata, never retry identity.

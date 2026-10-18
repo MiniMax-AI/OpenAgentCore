@@ -48,6 +48,24 @@ func TestRegistryRegisterRejectsFactoriesForUnavailableRuntime(t *testing.T) {
 	registry.Register(agent.Declaration{Declaration: harnessconfig.Declaration{Kind: "k"}}, agent.Runtime{Info: info, Executor: executor})
 }
 
+func TestRegistryRegisterRejectsWidenedDiscovery(t *testing.T) {
+	declared := prototest.Capabilities(proto.AgentKindCapabilities{})
+	executor := func(context.Context, proto.PromptRequestPayload) (agent.Executor, error) { return nil, nil }
+	for name, runtime := range map[string]agent.Runtime{
+		"capability": {Info: proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported})}},
+		"executor":   {Info: proto.SupportedAgentKind{Kind: "k", Available: true, Capabilities: declared}, Executor: executor},
+	} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("discovery widened the declaration")
+				}
+			}()
+			agent.NewRegistry().Register(agent.Declaration{Declaration: harnessconfig.Declaration{Kind: "k", Capabilities: declared}}, runtime)
+		})
+	}
+}
+
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {
 	reg := agent.NewRegistry()
 	reg.RegisterKind(proto.SupportedAgentKind{
