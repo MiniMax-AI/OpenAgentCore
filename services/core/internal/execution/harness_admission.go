@@ -10,7 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func profileError(err error) error {
+func admissionError(err error) error {
 	if errors.Is(err, harnessconfig.ErrInvalidInput) {
 		return sessions.ErrInvalidInput
 	}
@@ -52,7 +52,7 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 	}
 	if declaration.ValidateConfiguration != nil {
 		if err := declaration.ValidateConfiguration(admissionOf(snapshot)); err != nil {
-			return profileError(err)
+			return admissionError(err)
 		}
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
@@ -74,7 +74,7 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 	}
 	if declaration.ValidateTools != nil {
 		if validationErr := declaration.ValidateTools(tools.Functions, tools.MCP); validationErr != nil {
-			return profileError(validationErr)
+			return admissionError(validationErr)
 		}
 	}
 	return err
@@ -107,7 +107,7 @@ func validateDeclaredInputs(declaration harnessconfig.Declaration, inputs []sess
 			return sessions.ErrInvalidInput
 		}
 		if err := declaration.ValidateFunctionResult(result); err != nil {
-			return profileError(err)
+			return admissionError(err)
 		}
 	}
 	return nil

@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a94d59797cb59ee6c311e1df505a707d379c6ae4b69e1179a95525e7f600a7c1
+source_hash: 43cc8f744d205cfb26a3b6e510ade6356e03c721d49cd238ae20aa36f8500f70
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -31,7 +31,7 @@ flowchart TB
 | --- | --- | --- |
 | Core | 公共 API、控制权、持久状态、调度和配置快照 | `services/core` |
 | Runtime | 经身份验证的连接、共享能力准备以及通用 Executor 和 Turn 生命周期 | `apps/daemon/internal/dispatch` |
-| Adapter | 原生配置、资源、API 调用、事件转换和限制 | `apps/daemon/internal/agent/<kind>` |
+| Adapter | 原生配置、资源、API 调用、事件转换和限制 | `apps/daemon/internal/agent/<package>` |
 | Harness | 原生模型和工具循环以及历史记录 | 锁定版本的 SDK 或可执行文件 |
 | 声明 | Harness 的最大能力、放置位置、配置和纯准入限制，由 Core 准入和 Runtime 共同读取 | `internal/harnessconfig/<package>/declaration.go` |
 | Runtime 绑定 | 声明加上发现、已安装工厂和已验证能力 | `apps/daemon/internal/agent/<package>/declaration.go` |
@@ -41,7 +41,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 ## 步骤 {#steps}
 
 1. **锁定原生来源。** 记录上游包版本和源修订版本，并在适配器旁记录原生入口点。
-2. **实现适配器**，位置为 `apps/daemon/internal/agent/<kind>`：实现 `ExecutorFactory`、`Executor` 和 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)）。复用共享的进程、凭据、配置和本地工作区辅助函数。
+2. **实现适配器**，位置为 `apps/daemon/internal/agent/<package>`，其中 `<package>` 是去掉下划线的 kind：实现 `ExecutorFactory`、`Executor` 和 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)）。复用共享的进程、凭据、配置和本地工作区辅助函数。
 3. **编写声明**：在 `internal/harnessconfig/<package>/declaration.go` 中编写声明，并将其绑定到适配器的发现函数（[declare the Harness](#declare-the-harness)、[register the adapter](#register-the-adapter)）。运行 `make generate-harness-catalog` 完成两处注册。
 4. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
 5. **启用并选择引擎**，通过 `OAC_HARNESSES` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
@@ -163,7 +163,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后运行 `make generate-harness-catalog`，它会把该声明列入生成的 `harnessDeclarations`。绑定由共享的 `harnessconfig.Declaration` 加上 `Discover` 函数组成。发现过程接收 profile、诊断写入器以及 Runtime 解析后的 `DiscoveryOptions.StateRoot` 和实例私有的 `DiscoveryOptions.RuntimeRoot`，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。发现过程只用 `agent.Narrow` 收窄声明的能力，绝不扩大；不可用的描述符来自 `agent.Unavailable`。将版本门控和工厂选择条件保留在适配器内部。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<package>/declaration.go` 导出一个 `agent.Declaration`，然后运行 `make generate-harness-catalog`，它会把该声明列入生成的 `harnessDeclarations`。绑定由共享的 `harnessconfig.Declaration` 加上 `Discover` 函数组成。发现过程接收 profile、诊断写入器以及 Runtime 解析后的 `DiscoveryOptions.StateRoot` 和实例私有的 `DiscoveryOptions.RuntimeRoot`，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。发现过程只用 `agent.Narrow` 收窄声明的能力，绝不扩大；不可用的描述符来自 `agent.Unavailable`。将版本门控和工厂选择条件保留在适配器内部。
 
 Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-resource-directories)，并显式传给每个适配器。支持保留原生历史的适配器在该根目录下按各自的命名空间布局存放历史，不从环境变量选择回退根目录，也不把历史放进工作区。不支持该能力的适配器将原生状态保持为实例私有，不能仅因收到状态根目录就宣称历史可迁移。私有启动主目录、临时数据及实例私有原生状态使用传入的 `DiscoveryOptions.RuntimeRoot`。设备凭据和连接身份必须留在保留状态之外。仅有状态路径并不意味着计算资源替换后的原生续接已通过资格验证：适配器必须保持原生所有权，在提交模型输入之前拒绝缺失或外来历史，并在另一个写入者挂载前完成原生关闭。
 
@@ -190,7 +190,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 - 模型 `Configuration`（[原生模型配置](#native-model-configuration)）；
 - `Capabilities`，即 `proto.AgentKindCapabilities`，表示 Harness 在能力完备的主机上最多能做什么；每个字段都是 `Supported` 或 `Unsupported`，零值无效（[能力声明](../../../docs/zh/runtime-protocol.md#capability-declarations)）；
 - 受支持的 `Placements` 和公共 `MCPOrigins`，以及是否接受仅含空白的文本；
-- 可选的纯限制 `ValidateConfiguration`、`ValidateTools` 和 `ValidateFunctionResult`，在通用检查之外添加原生限制。验证函数为 nil 表示通用检查已足够。它们不能查询业务数据、解密凭据或控制原生进程，且配置限制先于工具解码错误执行。
+- 可选的纯限制 `ValidateConfiguration`、`ValidateTools` 和 `ValidateFunctionResult`，在通用检查之外添加原生限制。验证函数为 nil 表示通用检查已足够。它们不能查询业务数据、解密凭据或控制原生进程，配置限制最先执行。存在 `ValidateConfiguration` 回调时，工具解码错误先于 `ValidateTools` 错误；不存在时，`ValidateTools` 错误先于解码错误。
 
 `harnessconfig.NewRegistry` 会验证每个声明，对无效或重复的声明触发 panic：kind 和 label 必须非空，放置位置必须至少列出一个受支持的位置，MCP 来源必须是非 nil 列表，未知或重复的选项以及没有对应放置位置的来源会被拒绝，bearer 支持要求存在 MCP 来源。共享调度检查能力组合，绝不检查引擎名称。
 

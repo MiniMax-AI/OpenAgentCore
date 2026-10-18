@@ -9,7 +9,7 @@ import (
 )
 
 func TestMCPOriginSupport(t *testing.T) {
-	for _, kind := range Kinds() {
+	for _, kind := range []string{"claude_sdk", "codex", "mcode"} {
 		declaration, _ := Registry().Lookup(kind)
 		for _, placement := range []string{"none", "self_hosted", "openai_hosted"} {
 			for _, origin := range []string{"service", "environment", "", "unknown"} {
@@ -39,7 +39,7 @@ func TestMiniMaxMCPPoliciesRejectInsteadOfDropping(t *testing.T) {
 }
 
 func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
-	for _, kind := range Kinds() {
+	for _, kind := range []string{"claude_sdk", "codex", "mcode"} {
 		t.Run(kind, func(t *testing.T) {
 			declaration, _ := Registry().Lookup(kind)
 			admission := harnessconfig.Admission{Model: "real-model", MultiAgent: true}

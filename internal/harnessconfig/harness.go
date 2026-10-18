@@ -112,7 +112,8 @@ func (d Declaration) Clone() Declaration {
 // ValidateDeclaration rejects ambiguous support before registration. Nothing is
 // inferred: every capability, placement and origin is stated.
 func (d Declaration) ValidateDeclaration() error {
-	if d.Kind == "" || d.Kind != strings.TrimSpace(d.Kind) || strings.TrimSpace(d.Label) == "" {
+	// The label is rendered into the generated Markdown catalog.
+	if d.Kind == "" || d.Kind != strings.TrimSpace(d.Kind) || strings.TrimSpace(d.Label) == "" || strings.ContainsAny(d.Label, "\n\t|") {
 		return errors.New("harnessconfig: invalid kind or label")
 	}
 	if err := d.Configuration.ValidateDeclaration(); err != nil {

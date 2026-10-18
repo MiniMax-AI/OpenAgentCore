@@ -9,7 +9,7 @@
 // return ErrUnsupportedOperation before any native effects. Interface presence
 // does not advertise support; the capability declaration controls admission. MCP,
 // images, structured output and Subagent observations use protocol messages
-// rather than additional Go interfaces; qualify and advertise them separately.
+// rather than additional Go interfaces; declare and advertise them separately.
 //
 // Registration: each adapter exports one Declaration, which binds its shared
 // declaration (internal/harnessconfig/<package>/declaration.go) to Discover.
