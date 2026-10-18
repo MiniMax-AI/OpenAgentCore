@@ -6,8 +6,8 @@ const projectId = "11111111-1111-4111-8111-111111111111";
 const id = "013773a9-44b9-4f84-baca-b51c04a01201";
 const snapshot: SessionExecutionConfiguration = {
   object: "agent.session.execution_configuration", schema_version: 1, session_id: id,
-  model: { value: "frozen-model", source: "session" }, harness: { value: "codex", source: "agent" },
-  harness_config: { value: { model_reasoning_effort: "high" }, source: "agent" },
+  model: { value: "frozen-model", source: "session" }, harness: { value: "claude_sdk", source: "agent" },
+  harness_config: { value: { thinking: { type: "adaptive" } }, source: "agent" },
   model_provider: { status: "available", source: "agent", configuration: { protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true } },
 };
 function clientReturning(value: unknown, seen?: (url: string, init?: RequestInit) => void) {
