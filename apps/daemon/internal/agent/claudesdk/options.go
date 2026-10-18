@@ -25,6 +25,7 @@ type subagentOptions struct {
 type startRequest struct {
 	NativeModelOptions *nativeModelOptions  `json:"native_model_options,omitempty"`
 	ToolSearch         bool                 `json:"tool_search,omitempty"`
+	DisableWebSearch   bool                 `json:"disable_web_search,omitempty"`
 	Subagents          *subagentOptions     `json:"subagents,omitempty"`
 	OutputFormat       *proto.OutputFormat  `json:"output_format,omitempty"`
 	Type               string               `json:"type"`
@@ -80,6 +81,10 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
+	}
+	// Without a search control Claude Code keeps its native web tools.
+	if controls := req.ExecutionControls; controls != nil && controls.WebSearch != nil {
+		start.DisableWebSearch = controls.WebSearch.Mode == "disabled"
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
@@ -163,7 +168,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		}
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
-	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "DISABLE_TELEMETRY=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
+	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"))
 	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return startRequest{}, nil, err

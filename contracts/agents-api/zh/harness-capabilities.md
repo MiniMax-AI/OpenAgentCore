@@ -48,7 +48,7 @@ source_hash: ebe62fa0536333b51a80233883039ed732a6ce7232030cd90e8f8854dfde9859
 | [Subagent](subagents.md) | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 |
 | Subagent 与函数或 HTTP MCP 同时使用 | 已拒绝 | 已拒绝 | 已拒绝 |
 
-Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin、能力目录、MCP 或 `tool_search`。Claude 延迟发现要求单 Agent，除 `tool_search` 与禁用控制项外仅函数工具，无 Skill、Plugin 或能力目录，也无结构化输出。Claude 在工作区位置需要每种操作的打包桥接功能（`workspace_functions`、`workspace_structured_output`、`workspace_tool_search`、`workspace_mcp_http`）。
+在工作区位置上，Claude Code 运行原生工具集和系统提示词，并在其后追加 Agent 的指令；仅当 Harness 无法在云端无人值守运行时，Core 才覆盖原生默认值。Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin、能力目录、MCP 或 `tool_search`。Claude 延迟发现要求单 Agent，除 `tool_search` 与禁用控制项外仅函数工具，无 Skill、Plugin 或能力目录，也无结构化输出。Claude 在工作区位置需要每种操作的打包桥接功能（`workspace_functions`、`workspace_structured_output`、`workspace_tool_search`、`workspace_mcp_http`）。
 
 ## Environment 准备 {#environment-preparation}
 

@@ -46,7 +46,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | [Subagents](./subagents.md) | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted |
 | Subagents together with functions or HTTP MCP | Rejected | Rejected | Rejected |
 
-Claude structured output requires a single Agent, medium verbosity and no Skills, Plugins, capability directories, MCP or `tool_search`. Claude deferred discovery requires a single Agent, only function tools besides `tool_search` and the disabled controls, no Skills, Plugins or capability directories and no structured output. Claude on a workspace placement needs the packaged bridge features for each operation (`workspace_functions`, `workspace_structured_output`, `workspace_tool_search`, `workspace_mcp_http`).
+Claude structured output requires a single Agent, medium verbosity and no Skills, Plugins, capability directories, MCP or `tool_search`. Claude deferred discovery requires a single Agent, only function tools besides `tool_search` and the disabled controls, no Skills, Plugins or capability directories and no structured output. On a workspace placement Claude Code runs its native tool set and system prompt, with the Agent's instructions appended; Core overrides a native default only where the Harness could not otherwise run unattended in the cloud. Claude on a workspace placement needs the packaged bridge features for each operation (`workspace_functions`, `workspace_structured_output`, `workspace_tool_search`, `workspace_mcp_http`).
 
 ## Environment preparation
 

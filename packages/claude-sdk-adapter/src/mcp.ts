@@ -52,10 +52,14 @@ export class MCPProfile {
   readonly denied: string[] = [];
   readonly identities = new Map<string, ToolIdentity>();
   private sessionID = "";
-  private localTools = new Set<string>();
   private admitted = false;
   private release!: (ready: boolean) => void;
   private readonly ready = new Promise<boolean>(resolve => { this.release = resolve; });
+
+  // Declared servers expose only their selected tools. Other native tools are not Core's to restrict.
+  private unselected(name: string): boolean {
+    return !this.identities.has(name) && this.declarations.some(server => name.startsWith(`mcp__${server.server_label}__`));
+  }
 
   readonly beforeTool: HookCallback = async (input, id, { signal }) => {
     let stopped!: () => void;
@@ -66,8 +70,7 @@ export class MCPProfile {
     try {
       if (!signal.aborted && await Promise.race([this.ready, interrupted]) && !signal.aborted && this.admitted &&
           input.hook_event_name === "PreToolUse" && input.agent_id === undefined && input.session_id === this.sessionID &&
-          (id === undefined || id === input.tool_use_id) &&
-          (this.identities.has(input.tool_name) || this.functions.includes(input.tool_name) || this.localTools.has(input.tool_name))) return {};
+          (id === undefined || id === input.tool_use_id) && !this.unselected(input.tool_name)) return {};
       return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny",
         permissionDecisionReason: "Tool is outside the verified execution profile." } };
     } finally {
@@ -95,24 +98,31 @@ export class MCPProfile {
     }
   }
 
-  verify(inventory: string[], statuses: McpServerStatus[], sessionID: string, localTools: readonly string[] = []): void {
+  // With exact inventory the text profile accepts nothing but the declared servers and tools.
+  verify(inventory: string[], statuses: McpServerStatus[], sessionID: string, exact = true): void {
     // Native status.config can contain expanded headers. Retain only identities;
     // never publish or persist the private SDK control response.
     this.admitted = false;
     const expected = new Map<string, ToolIdentity>();
     const declared = new Map(this.declarations.map(server => [server.server_label, server]));
     const seen = new Set<string>();
-    const baseline = [...this.functions, ...localTools];
-    const nativeNames = new Set(baseline);
+    let matched = 0;
+    const nativeNames = new Set(this.functions);
     for (const status of statuses) {
       if (seen.has(status.name)) throw new Error("duplicate native MCP server");
       seen.add(status.name);
       if (status.name === "functions" && this.functions.length) {
         if (status.status !== "connected") throw new Error("native function server unavailable");
+        matched++;
         continue;
       }
       const server = declared.get(status.name);
-      if (!server || status.status !== "connected") throw new Error("native MCP server unavailable or undeclared");
+      if (!server) {
+        if (exact) throw new Error("native MCP server unavailable or undeclared");
+        continue;
+      }
+      if (status.status !== "connected") throw new Error("native MCP server unavailable or undeclared");
+      matched++;
       for (const tool of status.tools ?? []) {
         const native = nativeToolName(server.server_label, tool.name);
         if (nativeNames.has(native)) throw new Error("ambiguous native MCP identity");
@@ -121,14 +131,13 @@ export class MCPProfile {
         expected.set(native, { server: server.server_label, name: tool.name });
       }
     }
-    if (seen.size !== declared.size + (this.functions.length ? 1 : 0) ||
-        inventory.length !== expected.size + baseline.length || new Set(inventory).size !== inventory.length ||
-        inventory.some(name => !expected.has(name) && !baseline.includes(name))) {
+    if (matched !== declared.size + (this.functions.length ? 1 : 0) ||
+        exact && (inventory.length !== expected.size + this.functions.length || new Set(inventory).size !== inventory.length ||
+          inventory.some(name => !expected.has(name) && !this.functions.includes(name)))) {
       throw new Error("unexpected native MCP inventory");
     }
     this.identities.clear();
     for (const [name, identity] of expected) this.identities.set(name, identity);
-    this.localTools = new Set(localTools);
     this.sessionID = sessionID;
     this.admitted = true;
     this.release(true);

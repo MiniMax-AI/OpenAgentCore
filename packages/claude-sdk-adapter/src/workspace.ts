@@ -1,10 +1,10 @@
 import type { Subagents } from "./subagents.js";
-import { parseEnvironmentMCP, type EnvironmentMCPServer } from "./mcp_environment.js";
 import type { MCPProfile } from "./mcp.js";
+import { parseEnvironmentMCP, type EnvironmentMCPServer } from "./mcp_environment.js";
 import { parseSkills, workspaceSkills, type WorkspaceSkill } from "./workspace_skills.js";
-import type { CanUseTool, HookCallback, Options } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, Options } from "@anthropic-ai/claude-agent-sdk";
 import { realpathSync, statSync } from "node:fs";
-import { isAbsolute, parse, resolve } from "node:path";
+import { isAbsolute, parse } from "node:path";
 
 export type Workspace = {
   tool_env?: Record<string, string>;
@@ -24,8 +24,6 @@ const environmentNames = new Set([
   "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
   "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
 ]);
-const nativeTools = ["Bash", "Read", "Edit"];
-const denial = "Tool is outside the workspace execution profile.";
 const invalidPath = /[\x00-\x1f\x7f]/;
 
 
@@ -66,15 +64,15 @@ export class WorkspaceProfile {
   readonly options: Options;
   private readonly skillNames: readonly string[];
 
-  constructor(private readonly cwd: string, private readonly config: Workspace, private readonly functions: readonly string[] = [], private readonly mcp?: MCPProfile, private readonly subagents?: Subagents, private readonly structuredOutput = false, private readonly toolSearch = false) {
+  constructor(cwd: string, config: Workspace, mcp?: MCPProfile, subagents?: Subagents, disableWebSearch = false) {
     config = parseWorkspace(config, cwd)!;
     // SDK history lookup reads the bridge environment, independently of query.env.
     if (process.env.HOME !== config.home || process.env.CLAUDE_CONFIG_DIR !== config.state ||
         process.env.CLAUDE_CODE_PROJECT_DIR_NAME !== undefined) throw new Error("invalid_request");
     const env: Record<string, string> = {
       ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string,string] => entry[1] !== undefined)),
+      // Private state paths, a pinned read-only binary and Turns that leave no detached work.
       HOME: config.home, TMPDIR: config.scratch, CLAUDE_CONFIG_DIR: config.state,
-      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1",
       DISABLE_AUTOUPDATER: "1", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     };
     for (const [name, value] of Object.entries(config.tool_env ?? {})) {
@@ -92,76 +90,28 @@ export class WorkspaceProfile {
     }
     const skills = workspaceSkills(config.skills ?? [], config.capability_root ?? "");
     this.skillNames = skills?.names ?? [];
-    const skillTools = skills ? ["Skill"] : [];
     this.options = {
-      env, tools: [...nativeTools, ...(toolSearch ? ["ToolSearch"] : []), ...skillTools, ...(subagents ? ["Agent", "SendMessage"] : [])],
-      ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}), allowedTools: mcp?.allowed ?? [...functions, ...(toolSearch ? ["ToolSearch"] : [])], mcpServers: {}, strictMcpConfig: true,
-      // The existing callback authorizes tools without CLI permission bypass,
-      // which the native CLI refuses for root accounts.
-      settingSources: [], permissionMode: "default", persistSession: true,
-      settings: {},
-      sandbox: { enabled: false },
-      canUseTool: this.canUseTool,
-      hooks: { PreToolUse: [{ hooks: [this.beforeTool] }] },
+      env, tools: { type: "preset", preset: "claude_code" },
+      // Nobody answers a question, no Turn leaves scheduled work behind, and Core declares subagents and search.
+      disallowedTools: ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup",
+        ...(subagents ? [] : ["Agent", "SendMessage"]), ...(disableWebSearch ? ["WebSearch", "WebFetch"] : [])],
+      ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}),
+      // The native CLI refuses permission bypass for root accounts, so the callback approves every tool.
+      permissionMode: "default", canUseTool: async (_name, input) => ({ behavior: "allow", updatedInput: input }),
     };
   }
 
-  verify(tools: string[], servers: { name: string; status: string; tools?: { name: string }[] }[], sessionID = ""): void {
-    if (this.mcp) {
-      this.mcp.verify(tools, servers as Parameters<MCPProfile["verify"]>[1], sessionID, [...nativeTools, ...(this.skillNames.length ? ["Skill"] : []), ...(this.subagents ? ["Task", "SendMessage"] : [])]);
-      return;
-    }
-    const expected = [...nativeTools, ...(this.toolSearch ? ["ToolSearch"] : []), ...(this.structuredOutput ? ["StructuredOutput"] : []), ...this.functions, ...(this.skillNames.length ? ["Skill"] : []), ...(this.subagents ? ["Task", "SendMessage"] : [])];
-    if (servers.length !== (this.functions.length ? 1 : 0) ||
-        servers.some(server => server.name !== "functions" || server.status !== "connected") ||
-        tools.length !== expected.length || new Set(tools).size !== tools.length ||
-        tools.some(name => !expected.includes(name))) throw new Error("unexpected native workspace inventory");
-  }
-
-  readonly canUseTool: CanUseTool = async (name, input, { signal, agentID }) => {
-    if (!signal.aborted && (agentID === undefined || this.subagents?.permitsActor(agentID)) && this.permits(name, input)) {
-      return { behavior: "allow", updatedInput: this.nativeInput(name, input) };
-    }
-    return { behavior: "deny", message: denial };
+  // Public Skill names resolve to their namespaced native plugin identities.
+  readonly beforeTool: HookCallback = async input => {
+    if (input.hook_event_name !== "PreToolUse" || input.tool_name !== "Skill") return {};
+    const skill = this.skillName((input.tool_input as { skill?: unknown } | null)?.skill);
+    return skill === undefined ? {} : { hookSpecificOutput: { hookEventName: "PreToolUse",
+      updatedInput: { ...(input.tool_input as object), skill } } };
   };
-
-  readonly beforeTool: HookCallback = async (input, id, { signal }) => {
-    if (this.mcp) {
-      const admission = await this.mcp.beforeTool(input, id, { signal });
-      if ("hookSpecificOutput" in admission && admission.hookSpecificOutput?.hookEventName === "PreToolUse" &&
-          admission.hookSpecificOutput.permissionDecision === "deny") return admission;
-      if (input.hook_event_name === "PreToolUse" && this.mcp.permits(input.tool_name)) return admission;
-    }
-    if (!signal.aborted && input.hook_event_name === "PreToolUse" && (input.agent_id === undefined || this.subagents?.permitsActor(input.agent_id)) &&
-        (id === undefined || id === input.tool_use_id) && this.permits(input.tool_name, input.tool_input)) {
-      return !["Read", "Edit", "Skill"].includes(input.tool_name) ? {} : { hookSpecificOutput: { hookEventName: "PreToolUse",
-        updatedInput: this.nativeInput(input.tool_name, input.tool_input as Record<string, unknown>) } };
-    }
-    return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: denial } };
-  };
-
-  private nativeInput(name: string, input: Record<string, unknown>): Record<string, unknown> {
-    if (name === "Skill") return { ...input, skill: this.skillName(input.skill) };
-    return name !== "Read" && name !== "Edit" ? input : { ...input, file_path: resolve(this.cwd, input.file_path as string) };
-  }
 
   private skillName(value: unknown): string | undefined {
     if (typeof value !== "string") return undefined;
     // Public names are unique in the installed snapshot; native plugins add a namespace.
     return this.skillNames.find(name => name === value || name.endsWith(":" + value));
-  }
-
-  private permits(name: string, value: unknown): boolean {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const input = value as Record<string, unknown>;
-    if (this.structuredOutput && name === "StructuredOutput") return true;
-    if (this.toolSearch && name === "ToolSearch") return true;
-    if (this.functions.includes(name) || this.mcp?.permits(name)) return true;
-    if (name === "Skill") return this.skillName(input.skill) !== undefined;
-    if (name === "Bash") return typeof input.command === "string" && !!input.command.trim() &&
-      (input.run_in_background === undefined || input.run_in_background === false);
-    if ((name !== "Read" && name !== "Edit") || typeof input.file_path !== "string" || !input.file_path ||
-        /[\x00-\x1f]/.test(input.file_path)) return false;
-    return true;
   }
 }

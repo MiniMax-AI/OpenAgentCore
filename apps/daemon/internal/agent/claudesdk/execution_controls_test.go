@@ -22,15 +22,25 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium"}
+	request.ExecutionControls = &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "disabled", ContextSize: "medium"}, TextVerbosity: "medium"}
 	before, _ := json.Marshal(request)
 	controlled, _, err := prepare(config, request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	after, _ := json.Marshal(request)
+	if !controlled.DisableWebSearch || ordinary.DisableWebSearch {
+		t.Fatal("disabled web search did not reach the bridge")
+	}
+	controlled.DisableWebSearch = false
 	if !reflect.DeepEqual(ordinary, controlled) || string(before) != string(after) {
 		t.Fatal("default controls changed native input, instructions, continuation or caller options")
+	}
+	// Without a search control Claude Code keeps its native web tools.
+	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium"}
+	absent, _, err := prepare(config, request)
+	if err != nil || !reflect.DeepEqual(ordinary, absent) {
+		t.Fatal("absent search control changed the native configuration", err)
 	}
 }
 

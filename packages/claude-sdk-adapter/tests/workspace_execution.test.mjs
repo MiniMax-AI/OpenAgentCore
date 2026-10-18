@@ -21,7 +21,7 @@ const dirs = Object.fromEntries(["workspace", "home", "state", "scratch", "deps"
 const mode = process.argv[1];
 const workspace = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
     env_names: ["ANTHROPIC_API_KEY"] };
-const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: "", cwd: dirs.workspace,
+const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: mode === "instructions" ? "Be brief." : "", cwd: dirs.workspace,
   workspace, ...(mode.startsWith("resume") ? { resume: "native" } : {}) };
 process.env.HOME = dirs.home;
 process.env.CLAUDE_CONFIG_DIR = dirs.state;
@@ -43,15 +43,16 @@ globalThis.queryFixture = ({prompt, options}) => {
   assert.equal(options.env.UNSELECTED_CANARY, "must-not-inherit");
   assert.equal(options.env.ANTHROPIC_API_KEY, "fixture-secret");
   assert.equal(options.env.HOME, dirs.home);
-  assert.deepEqual(options.tools, ["Bash", "Read", "Edit"]);
-  assert.equal(options.sandbox.enabled, false);
+  assert.deepEqual(options.tools, {type:"preset",preset:"claude_code"});
+  assert.equal(options.settingSources, undefined);
+  assert.deepEqual(options.systemPrompt, {type:"preset",preset:"claude_code",...(mode === "instructions" ? {append:"Be brief."} : {})});
   assert.equal(options.resume, request.resume);
   const child = options.spawnClaudeCodeProcess({ command: process.execPath, env: options.env, signal: abort.signal,
     args: ["-e", "const assert=require('node:assert/strict');assert.equal(process.env.UNSELECTED_CANARY,'must-not-inherit');assert.equal(process.env.ANTHROPIC_API_KEY,'fixture-secret');process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"] });
   return { close() { child.stdin.end(); }, async *[Symbol.asyncIterator]() {
     const first = (await prompt[Symbol.asyncIterator]().next()).value;
-    yield { type: "system", subtype: "init", session_id: "native", mcp_servers: mode === "extra-mcp" ? [{name:"other",status:"connected"}] : [],
-      tools: mode === "extra-tool" ? ["Bash", "Read", "Edit", "Agent"] : ["Bash", "Read", "Edit"] };
+    yield { type: "system", subtype: "init", session_id: "native", mcp_servers: [],
+      tools: ["Bash", "Read", "Edit"] };
     if (mode.startsWith("commands")) {
       const call = id => ({type:"assistant",session_id:"native",parent_tool_use_id:null,
         message:{content:[{type:"tool_use",name:"Bash",id,input:{command:"printf 'observed'"}}]}});
@@ -78,10 +79,7 @@ try {
       assert.deepEqual(events, [{type:"error",code:"history_unavailable"}]);
     } else {
       assert.deepEqual(calls, mode === "resume-existing" ? ["history", "query"] : ["query"]);
-      if (mode.startsWith("extra")) {
-        assert.deepEqual(events.at(-1), {type:"error",code:"execution_failed"});
-        assert.equal(events.some(e => e.type === "input_ready"), false);
-      } else if (mode.startsWith("commands")) {
+      if (mode.startsWith("commands")) {
         const observations=events.filter(e=>e.type==="command_observation");
         assert.deepEqual(observations.slice(0,2).map(e=>[e.id,e.stage,e.observation.output]),
           [["observed","before",undefined],["observed","after","observed"]]);
@@ -99,7 +97,7 @@ try {
 } finally { rmSync(root, {recursive:true,force:true}); }
 `;
 
-for (const mode of ["fresh", "resume-existing", "resume-missing", "resume-mismatch", "extra-tool", "extra-mcp", "commands-success", "commands-cancel", "commands-missing"]) {
+for (const mode of ["fresh", "instructions", "resume-existing", "resume-missing", "resume-mismatch", "commands-success", "commands-cancel", "commands-missing"]) {
   test(`workspace execution boundary: ${mode}`, { timeout: 15000 }, () => {
     const child = spawnSync(process.execPath, ["--input-type=module", "-e", fixture, mode], { encoding: "utf8", timeout: 10000 });
     assert.equal(child.status, 0, child.stderr || child.error?.message);

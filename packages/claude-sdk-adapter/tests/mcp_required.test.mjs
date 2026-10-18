@@ -15,10 +15,11 @@ const baseline=workspace?["Bash","Read","Edit"]:[];
 const sdk='export function startup(args){return globalThis.startup(args);} export function query(args){return globalThis.direct(args);} export async function getSessionInfo(){return process.argv[1]==="missing-history"?undefined:{sessionId:"native"};}';
 registerHooks({resolve(s,c,next){return s==="@anthropic-ai/claude-agent-sdk"?{url:"data:text/javascript,"+encodeURIComponent(sdk),shortCircuit:true}:next(s,c);}});
 function create(options){
- assert.deepEqual(options.tools,baseline);
- assert.equal(options.agent,"oac_root");
- assert.deepEqual(options.agents.oac_root.tools,[...baseline,...(mode==="workspace-empty"?[]:["mcp__fixture__echo"])]);
- assert.deepEqual(options.disallowedTools,mode==="workspace-empty"?["mcp__fixture__*","mcp__optional__*"]:["mcp__optional__*"]);assert.equal(options.strictMcpConfig,true);assert.equal(options.hooks.PreToolUse.length,1);
+ assert.deepEqual(options.tools,workspace?{type:"preset",preset:"claude_code"}:[]);
+ assert.equal(options.agent,undefined);assert.equal(options.agents,undefined);
+ assert.deepEqual(options.disallowedTools.filter(name=>name.startsWith("mcp__")),mode==="workspace-empty"?["mcp__fixture__*","mcp__optional__*"]:["mcp__optional__*"]);
+ assert.equal(options.disallowedTools.includes("AskUserQuestion"),workspace);
+ assert.equal(options.strictMcpConfig,undefined);assert.equal(options.settingSources,undefined);assert.equal(options.hooks.PreToolUse.length,1);
  assert.equal(options.mcpServers.fixture.alwaysLoad,true);
  const child=options.spawnClaudeCodeProcess({command:process.execPath,args:["-e","process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"],env:options.env,signal:options.abortController.signal});
  process.send({kind:"spawn"});

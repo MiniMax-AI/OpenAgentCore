@@ -5,7 +5,7 @@ import { toolSearchEnvironment } from "./tool_search.js";
 import { Subagents } from "./subagents.js";
 import type { Fact } from "./subagent_history.js";
 import { WorkspaceDirectories, type WorkspaceDirectoryEvent } from "./workspace_directories.js";
-import { getSessionInfo, query, startup, type McpServerConfig, type Options, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
+import { getSessionInfo, query, startup, type HookCallback, type McpServerConfig, type Options, type WarmQuery } from "@anthropic-ai/claude-agent-sdk";
 import { WorkspaceReads, type WorkspaceReadEvent } from "./workspace_reads.js";
 import { Inputs, type InputEvent } from "./inputs.js";
 import { executorResultUsage, resultUsage, type NativeUsage } from "./usage.js";
@@ -16,6 +16,7 @@ import { FunctionBridge, type FunctionEvent } from "./function_bridge.js";
 import { MCPProfile } from "./mcp.js";
 import { MCPObserver, type MCPEvent } from "./mcp_observer.js";
 import { CommandObserver, type CommandEvent } from "./command_observer.js";
+import { SearchObserver, type SearchEvent } from "./search_observer.js";
 import { WorkspaceProfile } from "./workspace.js";
 import { immediateInput, type Prepare, type Start, type ExecutorPrepare } from "./request.js";
 import { recoverSession } from "./recovery.js";
@@ -31,6 +32,7 @@ export type Event =
   | FunctionEvent
   | MCPEvent
   | CommandEvent
+  | SearchEvent
   | { type: "prepared" }
   | { type: "usage"; session_id: string; result_id: string; usage: NativeUsage }
   | { type: "delta"; delta: string }
@@ -49,8 +51,9 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
   const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
   const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
-  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, names, profile, subagents, !!request.output_format, !!request.tool_search);
+  const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, profile, subagents, !!request.disable_web_search);
   let commands = workspace ? new CommandObserver() : undefined;
+  let searches = workspace ? new SearchObserver() : undefined;
   if (request.type === "prepare" && !workspace) throw new Error("invalid_request");
   if (workspace && "mcp_http_servers" in request) throw new Error("invalid_request");
   if (request.require_history && !request.resume) {
@@ -85,6 +88,14 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   abort.signal.addEventListener("abort", closeInputs, { once: true });
   try {
     if (abort.signal.aborted) throw new Error("cancelled");
+    const beforeTool: HookCallback = async (input, id, context) => {
+      if (input.hook_event_name !== "PreToolUse") return {};
+      if (subagents?.isCoordination(input.tool_name)) return subagents.beforeTool(input, id, context);
+      const admission = profile ? await profile.beforeTool(input, id, context) : {};
+      if ("hookSpecificOutput" in admission && admission.hookSpecificOutput?.hookEventName === "PreToolUse" &&
+          admission.hookSpecificOutput.permissionDecision === "deny") return admission;
+      return workspace ? workspace.beforeTool(input, id, context) : admission;
+    };
     const options: Options = {
         ...(request.native_model_options?.effort !== undefined ? { effort: request.native_model_options.effort } : {}),
         ...(request.native_model_options?.thinking !== undefined ? { thinking: request.native_model_options.thinking } : {}),
@@ -92,27 +103,22 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         env: workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
         model: request.model,
         ...(request.output_format ? { outputFormat: request.output_format } : {}),
-        systemPrompt: request.system_prompt,
+        // Claude Code keeps its own prompt; the Agent's instructions are appended.
+        systemPrompt: { type: "preset", preset: "claude_code", ...(request.system_prompt ? { append: request.system_prompt } : {}) },
         ...(request.resume ? { resume: request.resume } : {}),
-        tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed, strictMcpConfig: true, settingSources: [],
-        ...(profile ? {
-          agent: "oac_root", disallowedTools: profile.denied,
-          hooks: { PreToolUse: [{ hooks: [profile.beforeTool] }] },
-          agents: { oac_root: { description: "Execution root.", prompt: request.system_prompt,
-            model: request.model, tools: [...(Array.isArray(workspace?.options.tools) ? workspace.options.tools : []), ...profile.allowed] } },
-        } : {}),
-        persistSession: true, includePartialMessages: true, abortController: abort,
-        canUseTool: async () => ({ behavior: "deny", message: "Tools are unavailable in this execution profile." }),
+        includePartialMessages: true, abortController: abort,
+        // Environment none keeps no workspace tools and approves only Core's function and MCP tools.
+        ...(workspace ? {} : {
+          tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed,
+          canUseTool: async () => ({ behavior: "deny" as const, message: "Tools are unavailable in this execution profile." }),
+        }),
         ...(workspace?.options ?? {}),
+        disallowedTools: [...(workspace?.options.disallowedTools ?? []), ...(profile?.denied ?? [])],
         mcpServers,
         ...(subagents ? { ...subagents.options(!!workspace), hooks: {
           Stop: [{ hooks: [subagents.stopped] }], SubagentStart: [{ hooks: [subagents.childStart] }],
-          PostToolUseFailure: [{ hooks: [subagents.failedTool] }],
-          PreToolUse: [{ hooks: [async (input, id, context) => {
-            if (input.hook_event_name === "PreToolUse" && subagents.isCoordination(input.tool_name)) return subagents.beforeTool(input, id, context);
-            return workspace ? workspace.beforeTool(input, id, context) : {};
-          }] }],
-        } } : {}),
+          PostToolUseFailure: [{ hooks: [subagents.failedTool] }], PreToolUse: [{ hooks: [beforeTool] }],
+        } } : workspace || profile ? { hooks: { PreToolUse: [{ hooks: [beforeTool] }] } } : {}),
         spawnClaudeCodeProcess: options => {
           const child = spawnNative(options);
           nativeAlive = true;
@@ -149,6 +155,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           messages=request.observe_messages ? new MessageObserver() : undefined;
           structured=request.output_format ? new StructuredOutput() : undefined;
           commands=workspace ? new CommandObserver() : undefined;
+          searches=workspace ? new SearchObserver() : undefined;
           mcp=profile ? new MCPObserver(profile.identities) : undefined;
           subagents?.beginTurn();
           return inputs;
@@ -179,15 +186,15 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       await functions.consume(message, nativeID, turns?.cancelled);
       if (mcp) for (const event of mcp.consume(message, nativeID)) await emit(event);
       if (commands) for (const event of commands.consume(message, nativeID, inputs.hasInput)) await emit(event);
+      if (searches) for (const event of searches.consume(message, nativeID)) await emit(event);
       if (messages) for (const event of messages.consume(message)) await emit(event);
       if (message.type === "system" && message.subtype === "init") {
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
-        if (workspace) workspace.verify(message.tools, profile ? await stream.mcpServerStatus() : message.mcp_servers, nativeID);
-        else if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID);
-        else if (message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
+        if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID, !workspace);
+        else if (!workspace && (message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
-            message.mcp_servers.some(server => server.name !== "functions" || server.status !== "connected")) {
+            message.mcp_servers.some(server => server.name !== "functions" || server.status !== "connected"))) {
           throw new Error("unexpected native configuration");
         }
         turns?.identify(nativeID);
@@ -212,7 +219,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       if(turns && result && inputs.complete && (!subagents || subagents.complete)) {
         if (turns.cancelled) functions.cancelUnanswered();
         if(!await turns.quiescent() || abort.signal.aborted) throw new Error("unconfirmed interrupt");
-        functions.assertComplete(); mcp?.assertComplete(); commands?.assertComplete();
+        functions.assertComplete(); mcp?.assertComplete(); commands?.assertComplete(); searches?.assertComplete();
         if(subagents) for(const event of await subagents.facts()) await emit(event);
         await emit(turns.cancelled ? {type:"error",code:"cancelled"} : result);
         functions.close();
@@ -224,6 +231,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
     functions.assertComplete();
     mcp?.assertComplete();
     commands?.assertComplete();
+    searches?.assertComplete();
   } catch (error) {
     if (error !== nativeResultFailure) classifiedFailure = undefined;
     failed = true;
@@ -247,6 +255,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
     }
     if (mcp) for (const event of mcp.close()) await emit(event);
     if (commands) for (const event of commands.close()) await emit(event);
+    if (searches) for (const event of searches.close(nativeID)) await emit(event);
   }
   if(turns) {
     if(turns.id) {

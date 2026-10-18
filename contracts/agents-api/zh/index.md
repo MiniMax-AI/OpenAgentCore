@@ -72,7 +72,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 使用相同 `Idempotency-Key` 重复创建 Session 会返回原 Session；官方服务会创建一个新的 Session。
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
-- Agent 未声明 `web_search` 工具时，会保留 Harness 的原生搜索，Codex 为缓存搜索；固定的官方契约未定义未声明该工具时是否搜索。
+- Agent 未声明 `web_search` 工具时，会保留 Harness 的原生搜索：Codex 为缓存搜索，工作区位置上的 Claude Code 保留 `WebSearch` 和 `WebFetch`。固定的官方契约未定义未声明该工具时是否搜索。
+- 工作区位置上的 Claude Code 运行原生工具和提示词。其搜索以带 `search` 和 `open_page` 操作的 `web_search_call` Item 报告；没有缓存模式，也没有域名、位置和上下文大小设置。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
