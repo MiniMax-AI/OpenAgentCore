@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: f2d2832178aa0f0e4293ee2ae01e12d57400c3b70abcb7f51a1ab4f810970085
+source_hash: d56933c7152a4ae3fac2f4f4deab4bcd87f81b6e7a4650542d8480d529742c91
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -138,7 +138,7 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 | `command_execution` | 命令、报告的输出、退出代码、持续时间和工作目录 |
 | `mcp_call` | 服务器和工具标识、参数、结构化结果或错误 |
 | `function_call`、`function_call_output` | 关联的调用及其结果。结果始终携带 `output` 和 `error`；提交时省略这些字段则值为 null。存储的结果会保留提交时字段是否存在的信息。原生文件更改显示为 `apply_patch` 函数调用，更改内容作为参数，不会生成虚构结果 |
-| `web_search_call` | 支持的操作字段（`search`、`open_page`、`find_in_page`、`other`） |
+| `web_search_call` | 支持的操作字段（`search`、`open_page`、`find_in_page`、`other`）；Claude Code 以 `search` 报告 `WebSearch`，以 `open_page` 报告 `WebFetch` |
 | `reasoning`、`agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态；reasoning 状态可以为 null |
 
 工具失败不会导致其 Turn 失败。Session 的项目可以读取工具输出，其中可能包含该工具自己的诊断文本。

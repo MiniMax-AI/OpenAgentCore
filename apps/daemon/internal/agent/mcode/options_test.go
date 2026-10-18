@@ -50,8 +50,8 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if json.Unmarshal(data, &cfg) != nil {
 		t.Fatal("invalid config")
 	}
-	if cfg["permissionMode"] != "auto" {
-		t.Fatal("native permission mode changed")
+	if _, set := cfg["permissionMode"]; set {
+		t.Fatal("text profile restated the native permission mode")
 	}
 	if cfg["skills"].(map[string]any)["external"].(map[string]any)["enabled"] != false {
 		t.Fatal("external discovery enabled")

@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 
 // This companion checks the exact bridge used by execution, without a model query.
 try {
-  assert(Number(process.versions.node.split(".")[0]) >= 20, "unsupported_node");
+  // --use-env-proxy, which routes the bridge's own fetch through the operator's proxy, needs 22.21 or 24.5.
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  assert(major === 22 ? minor >= 21 : major === 24 ? minor >= 5 : major > 24, "unsupported_node");
   const root = await realpath(fileURLToPath(new URL("..", import.meta.url)));
   const inside = async (path: string) => {
     const resolved = await realpath(path);

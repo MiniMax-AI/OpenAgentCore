@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: e9c3fd5267e24f56f1e24ef04af39abc3839ba6f31d1cc6537ba2553eb5417fe
+source_hash: ae8c47681587ccd0e7084c883be63a1f7064c1e780a5516536736943d8d45e08
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -49,7 +49,7 @@ Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `Str
 
 `tool_search` 工具仅包含 `type`；仅适用于 Responses 的执行字段被拒绝。函数 `defer_loading` 标记延迟加载的定义。发现要求两者同时存在：没有延迟函数的 `tool_search`，或没有 `tool_search` 的延迟函数均被拒绝。已保存 Agent 的工具联合类型保留 `tool_search`；固定版本 Session 响应联合类型省略它，因此 Session 与 SSE 资源投影移除它，冻结配置仍保留它。固定版本 Item 联合类型没有 tool-search Item，Core 不自行创建。
 
-Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并启用原生 ToolSearch；函数配置仅允许所声明回调、ToolSearch 与选定的工作区工具。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型与提供商策略；已知冲突模式和 beta 设置在适配器中拒绝，不透明策略改变后，SDK 不提供可靠的输入前信号来确认延迟加载是否生效。
+Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并启用原生 ToolSearch；函数配置仅允许所声明回调、ToolSearch 与工作区的原生工具。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型与提供商策略；已知冲突模式和 beta 设置在适配器中拒绝，不透明策略改变后，SDK 不提供可靠的输入前信号来确认延迟加载是否生效。
 
 ## Web 搜索与程序化工具调用 {#web-search-and-programmatic-tool-calling}
 
@@ -62,14 +62,14 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 
 已保存 Agent 保留固定版本的所有 `web_search` 模式：省略或 null 保存为 `live`，`cached` 和 `live` 原样保存（[保存模式](wire-semantics.md#saved-configuration)）。搜索设置是资源数据：省略或 null 的 `context_size` 解析为 `medium`；省略域名和位置解析为 null；空域名列表保持为空；提供的位置（包括 `{}`）包含 `city`、`country`、`region` 和 `timezone`，省略字段为 null。
 
-执行把解析后的值交给 Harness，并按 `internal/harnessconfig` 中的声明（`Execution`）校验：支持的 Web 搜索模式以及是否接受搜索设置、reasoning effort 与 summary、service tier、程序化工具调用的取值和 text verbosity。声明之外的值会在 Session 准入时被拒绝，消息会指出字段，除非 Session 替换了保存的工具。Core 仅在 Agent 设置了选项或适用固定版本的默认值时才发送该选项，因此省略 `web_search` 或 `programmatic_tool_calling` 会保留各 Harness 的原生行为。对程序化调用而言，这与官方默认启用的行为不同。无关的原生实用工具不会被移除。
+执行把解析后的值交给 Harness，并按 `internal/harnessconfig` 中的声明（`Execution`）校验：支持的 Web 搜索模式以及是否接受搜索设置、reasoning effort 与 summary、service tier、程序化工具调用的取值和 text verbosity。声明之外的值会在 Session 准入时被拒绝，消息会指出字段，除非 Session 替换了保存的工具。Core 仅在 Agent 设置了选项或适用固定版本的默认值时才发送该选项，因此省略 `web_search` 或 `programmatic_tool_calling` 会保留各 Harness 的原生行为。对程序化调用而言，这与官方默认启用的行为不同。无关的原生实用工具不会被移除。省略该控制项时，工作区位置上的 Claude Code 也保留 `WebSearch` 和 `WebFetch`；其 `web_search_call` 操作见 [Turn 与 Item](./sessions-events.md#turns-and-items)。
 
 `ExecutionControls` 携带这些选项（[Runtime 协议](../../../docs/zh/runtime-protocol.md#capability-declarations)）。Runtime 只需要 `execution_controls` 能力。
 
 | Harness | Web 搜索 | 程序化工具调用 |
 | --- | --- | --- |
 | Codex | `disabled`、`cached` 和 `live`，以及 `context_size`、`allowed_domains` 和 `location`，对应原生 `web_search` 与 `tools.web_search` 设置 | `enabled: true` 开启原生 `code_mode`；`false` 关闭 `code_mode`、`code_mode_only` 和 `code_mode_prewarm`，并在启动或恢复线程前检查原生受管要求 |
-| Claude Code | 仅 `disabled`，并在原生初始化时验证受限内置工具清单 | 仅 `false` |
+| Claude Code | 仅 `disabled`。在工作区位置运行原生 `claude_code` 工具集，但移除向用户提问、定时、工作流、后台和 `ListAgents` 工具，`disabled` 会移除 `WebSearch` 和 `WebFetch`；`environment: none` 不保留内置工具 | 仅 `false` |
 | MiniMax Code | 仅 `disabled`，受限配置没有搜索工具，通过原生 `features.webSearch=false` 实现 | 仅 `false` |
 
 ## HTTP MCP {#http-mcp}

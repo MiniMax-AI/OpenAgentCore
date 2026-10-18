@@ -114,7 +114,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			env = append(env, entry)
 		}
 	}
-	env = append(env, "HOME="+w.HomeDir, "TMPDIR="+w.ScratchDir, "CLAUDE_CONFIG_DIR="+config.StateDir, "DISABLE_TELEMETRY=1", "DISABLE_ERROR_REPORTING=1", "DISABLE_AUTOUPDATER=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1")
+	env = append(env, "HOME="+w.HomeDir, "TMPDIR="+w.ScratchDir, "CLAUDE_CONFIG_DIR="+config.StateDir)
 	seen := map[string]bool{}
 	for _, entry := range config.Env {
 		name, _, ok := strings.Cut(entry, "=")

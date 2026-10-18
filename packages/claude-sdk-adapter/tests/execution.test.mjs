@@ -40,6 +40,8 @@ globalThis.queryFixture = ({prompt,options}) => {
   assert.equal(options.effort, "high");
   assert.deepEqual(options.thinking, {type:"enabled",budgetTokens:1024});
   assert.equal(options.model, "fixture");
+  assert.equal(options.systemPrompt, "Translate.");
+  assert.deepEqual(options.settings, {env:{CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:"1",DISABLE_AUTOUPDATER:"1"}});
   const child = options.spawnClaudeCodeProcess({command:process.execPath,args:["-e","process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"],env:process.env,signal:abort.signal});
   return {
     close(){child.stdin.end();},
@@ -59,7 +61,7 @@ globalThis.queryFixture = ({prompt,options}) => {
     },
   };
 };
-await execute({type:"start",input: [{ content: [{ type: "input_text", text: "opening text" }] }],model:"fixture",system_prompt:"",cwd:process.cwd(),native_model_options:{effort:"high",thinking:{type:"enabled",budgetTokens:1024}},
+await execute({type:"start",input: [{ content: [{ type: "input_text", text: "opening text" }] }],model:"fixture",system_prompt:"Translate.",cwd:process.cwd(),native_model_options:{effort:"high",thinking:{type:"enabled",budgetTokens:1024}},
   ...(mode === "later-function" ? {functions:[{name:"lookup",description:"fixture",parameters:{type:"object",properties:{}}}]} : {})},emit,abort,functions,inputs);
 assert.equal(inputs.complete,true);
 assert.equal(events.filter(e=>e.type === "input_applied" && e.input_id === "extra").length,1);
