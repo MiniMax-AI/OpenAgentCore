@@ -11,18 +11,25 @@ import (
 	"testing"
 )
 
-func TestHarnessConfigAppliedWithoutChangingProvider(t *testing.T) {
+func TestReasoningEffortAppliedWithoutChangingProvider(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	plan, err := BuildSessionPlan(testStateRoot(t), "native-config", map[string]any{
-		"model": "fixture", "harness_config": map[string]any{"model_reasoning_effort": "high"},
+		"model":          "fixture",
 		"model_provider": map[string]any{"base_url": "https://provider.invalid/v1", "protocol": "responses", "api_key": "test-key"},
-	}, nil)
+	}, &proto.ExecutionControls{ReasoningEffort: "max"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if plan.Model != "fixture" || plan.ModelProvider != oacProviderSlug || !slices.Contains(plan.ExtraConfig, [2]string{"model_reasoning_effort", `"high"`}) {
+	if plan.Model != "fixture" || plan.ModelProvider != oacProviderSlug || !slices.Contains(plan.ExtraConfig, [2]string{"model_reasoning_effort", `"max"`}) {
 		t.Fatalf("native configuration not applied: %+v", plan.ExtraConfig)
+	}
+}
+
+func TestReasoningEffortHasNoHarnessConfigHome(t *testing.T) {
+	_, err := BuildSessionPlan(testStateRoot(t), "", map[string]any{"harness_config": map[string]any{"model_reasoning_effort": "high"}}, nil)
+	if err != harnessconfig.ErrHarnessConfig {
+		t.Fatalf("duplicate effort home accepted: %v", err)
 	}
 }
 
@@ -33,14 +40,14 @@ func TestHarnessConfigConflictFailsBeforePreparation(t *testing.T) {
 	}
 }
 
-func TestHarnessConfigReachesEveryNativeTurn(t *testing.T) {
+func TestReasoningEffortReachesEveryNativeTurn(t *testing.T) {
 	for _, resumeID := range []string{"", "fixture-native-thread"} {
 		t.Run("resume="+resumeID, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
 			req.AgentSessionID = resumeID
-			native := map[string]any{"model_reasoning_effort": "high"}
-			req.AgentOptions["harness_config"] = native
+			controls := &proto.ExecutionControls{TextVerbosity: "medium", ReasoningEffort: "high"}
+			req.ExecutionControls = controls
 			ownerCtx, cancelOwner := context.WithCancel(context.Background())
 			t.Cleanup(cancelOwner)
 			e, err := newExecutor(ownerCtx, req, cfg)
@@ -54,7 +61,7 @@ func TestHarnessConfigReachesEveryNativeTurn(t *testing.T) {
 					t.Error(err)
 				}
 			})
-			native["model_reasoning_effort"] = "low"
+			controls.ReasoningEffort = "low"
 			for _, id := range []string{"one", "two"} {
 				out := make(chan proto.Envelope, 20)
 				turn, err := e.StartTurn(t.Context(), id, proto.TextInput("answer"), out)

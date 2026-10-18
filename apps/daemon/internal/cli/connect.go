@@ -313,6 +313,16 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 // conn.Recv(), heartbeats every boot.HeartbeatInterval(), and a
 // confirmed router.Shutdown before returning ownership to the reconnect loop.
 // Failed cleanup keeps this exact Router alive, including after a shutdown signal.
+// advertisedKinds withdraws workspace export when this host cannot provide it now.
+func advertisedKinds(registry *agent.Registry, canExport bool) []proto.SupportedAgentKind {
+	kinds := registry.SupportedAgentKinds()
+	for i := range kinds {
+		caps := &kinds[i].Capabilities
+		agent.Narrow(&caps.WorkspaceOutputExport, canExport && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
+	}
+	return kinds
+}
+
 func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, boot *transport.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
 	local, err := localworkspace.Load()
 	if err != nil {
@@ -333,11 +343,7 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 	}()
 
 	conn.StartHeartbeats(parentCtx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
-		kinds := registry.SupportedAgentKinds()
-		for i := range kinds {
-			caps := &kinds[i].Capabilities
-			caps.WorkspaceOutputExport = proto.CapabilityFromBool(local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
-		}
+		kinds := advertisedKinds(registry, local.CanExport())
 		return proto.HeartbeatPayload{
 			Timestamp:           time.Now().Unix(),
 			ActiveRequests:      router.ActiveRuns(),

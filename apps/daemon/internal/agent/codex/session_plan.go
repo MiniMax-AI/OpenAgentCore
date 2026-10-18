@@ -28,7 +28,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		plan.Cleanup()
 		return SessionPlan{}, nil, err
 	}
-	disableProgrammaticTools(&plan, req.ExecutionControls)
+	applyProgrammaticTools(&plan, req.ExecutionControls)
 	if req.LocalEnvironment != nil {
 		plan.Cwd = req.LocalEnvironment.WorkspaceRoot
 	} else {
@@ -55,13 +55,6 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	}
 	if mcpServers != nil {
 		if err := configureMCP(&plan, mcpServers); err != nil {
-			plan.Cleanup()
-			return SessionPlan{}, nil, err
-		}
-	}
-
-	if req.ExecutionControls != nil {
-		if err := prepareModelVerbosity(ctx, cfg.codexBinary, &plan); err != nil {
 			plan.Cleanup()
 			return SessionPlan{}, nil, err
 		}

@@ -18,8 +18,8 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 	if json.Unmarshal(configuration, &snapshot) != nil {
 		return sessions.ErrInvalidInput
 	}
-	profile, ok := p.Engines.Lookup(engine)
-	if !ok || (snapshot.Environment != nil && !profile.Accepts(snapshot.Environment.Type)) {
+	declaration, ok := p.Harnesses().Lookup(engine)
+	if !ok || (snapshot.Environment != nil && !declaration.Accepts(snapshot.Environment.Type)) {
 		return sessions.ErrInvalidInput
 	}
 	_, err := p.mcpCredentialBindings(engine, snapshot)
@@ -32,7 +32,7 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 		}
 	}
 	if snapshot.Environment != nil && snapshot.Environment.Type == "openai_hosted" {
-		// Only this placement/engine combination has current native qualification.
+		// Only this placement/engine combination is currently declared.
 		// Runtime capability checks still apply before any execution claim.
 		if strings.TrimSpace(snapshot.Agent.Model) == "" {
 			return sessions.ErrInvalidInput
@@ -45,12 +45,12 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 	if snapshot.Environment != nil && snapshot.Environment.Type != "none" {
 		// Current Runtime adapters cannot execute a restricted network policy.
 		// Admission must reject it before allocating compute. Runtime itself is
-		// not an enforcement boundary; new support needs outer qualification.
+		// not an enforcement boundary; new support needs outer isolation.
 		if network := snapshot.Environment.Network; network != nil && network.Access != "enabled" {
 			return errors.New("This execution environment does not support disabled or restricted networking. Use enabled networking; Runtime does not provide network isolation.")
 		}
 	}
-	return validateProfileConfiguration(profile, snapshot)
+	return validateDeclaredConfiguration(declaration, snapshot)
 }
 
 func (p Policy) canAdmitInputs(engine string, configuration json.RawMessage) bool {
@@ -62,7 +62,7 @@ func (p Policy) canAdmitInputs(engine string, configuration json.RawMessage) boo
 }
 
 func (p Policy) validateEngineInputs(engine string, configuration json.RawMessage, inputs []sessions.Input) error {
-	profile, ok := p.Engines.Lookup(engine)
+	declaration, ok := p.Harnesses().Lookup(engine)
 	if !ok {
 		return sessions.ErrInvalidInput
 	}
@@ -70,24 +70,20 @@ func (p Policy) validateEngineInputs(engine string, configuration json.RawMessag
 	if json.Unmarshal(configuration, &snapshot) != nil {
 		return sessions.ErrInvalidInput
 	}
-	placement := ""
-	if snapshot.Environment != nil {
-		placement = snapshot.Environment.Type
-	}
-	return validateProfileInputs(profile, placement, inputs)
+	return validateDeclaredInputs(declaration, inputs)
 }
 
 // engineCapabilities is shared by device selection and the final preclaim check.
-// Capability bits describe the adapter; supported values still depend on its profile.
+// Capability bits describe the connected adapter; the declaration states what it may be asked to do.
 func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, snapshot Snapshot) (runtimedevice.KindCapabilities, error) {
 	fail := func(message string) (runtimedevice.KindCapabilities, error) {
 		return runtimedevice.KindCapabilities{}, errors.New(message)
 	}
-	profile, ok := p.Engines.Lookup(engine)
-	if !ok || (snapshot.Environment != nil && !profile.Accepts(snapshot.Environment.Type)) {
+	declaration, ok := p.Harnesses().Lookup(engine)
+	if !ok || (snapshot.Environment != nil && !declaration.Accepts(snapshot.Environment.Type)) {
 		return fail("execution engine placement is not supported")
 	}
-	if err := validateProfileConfiguration(profile, snapshot); err != nil {
+	if err := validateDeclaredConfiguration(declaration, snapshot); err != nil {
 		return runtimedevice.KindCapabilities{}, err
 	}
 	info, found, known := peer.AgentKindStatus(engine)
@@ -101,14 +97,8 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	if !caps.ExecutionControls {
 		return fail("device must advertise execution_controls")
 	}
-	if profile.WebSearchControl.IsSupported() && !caps.WebSearchControl {
-		return fail("device must advertise web_search_control")
-	}
 	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput || !caps.MessageItems) {
 		return fail("device must support structured output and message observations")
-	}
-	if profile.TextVerbosity.IsSupported() && !caps.TextVerbosity {
-		return fail("device must advertise text_verbosity")
 	}
 	if !caps.ToolObservations {
 		return fail("device must advertise tool_observations")
@@ -125,9 +115,6 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	}
 	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
 		return fail(err.Error())
-	}
-	if tools.DisableProgrammatic && !caps.ProgrammaticToolCallingDisable {
-		return fail("device must support disabling programmatic tool calling")
 	}
 	if len(tools.Functions) > 0 && !caps.FunctionTools {
 		return fail("device must advertise function_tools")
@@ -168,9 +155,9 @@ func (d *Dispatcher) sessionCapabilities(ctx context.Context, peer *runtimegatew
 }
 
 func (p Policy) validateEnvironmentHistory(engine string, environment sessions.Environment, supported bool) error {
-	profile, found := p.Engines.Lookup(engine)
+	declaration, found := p.Harnesses().Lookup(engine)
 	if !found {
 		return sessions.ErrInvalidInput
 	}
-	return sessions.ValidateRetainedHistory(environment.ExternalWorkspace, supported && profile.RetainedNativeHistory.IsSupported())
+	return sessions.ValidateRetainedHistory(environment.ExternalWorkspace, supported && declaration.Capabilities.RetainedNativeHistory.IsSupported())
 }

@@ -1,5 +1,5 @@
 // The landing page's harness table must match the repository's declarations:
-// ids and labels from the built-in catalog, protocols from Model execution.
+// ids and labels from the generated client catalog, protocols from Model execution.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -7,9 +7,9 @@ import test from 'node:test'
 import { repoRoot } from '../.vitepress/docs-nav.mts'
 import { harnesses } from '../.vitepress/theme/landing-content.ts'
 
-test('harness ids and labels match the built-in catalog', () => {
-  const catalog = JSON.parse(readFileSync(resolve(repoRoot, 'internal/harnessconfig/builtin/catalog.json'), 'utf8'))
-  const expected = Object.fromEntries(catalog.map((h) => [h.kind, h.label]))
+test('harness ids and labels match the generated client catalog', () => {
+  const source = readFileSync(resolve(repoRoot, 'packages/agents-client/src/harness-catalog.ts'), 'utf8')
+  const expected = Object.fromEntries([...source.matchAll(/^  "([a-z_]+)": "([^"]+)",$/gm)].map((m) => [m[1], m[2]]))
   assert.deepEqual(Object.fromEntries(harnesses.map((h) => [h.id, h.label])), expected)
 })
 

@@ -13,13 +13,14 @@ func TestNativeModelParameters(t *testing.T) {
 		kind, raw string
 		valid     bool
 	}{
-		{"codex", `{"model_reasoning_effort":"high"}`, true},
+		{"codex", `{"model_reasoning_effort":"high"}`, false},
 		{"codex", `{"model_reasoning_effort":"private-sentinel","model_reasoning_effort":"high"}`, false},
 		{"claude_sdk", `{"thinking":{"type":"private-sentinel","type":"enabled"}}`, false},
 		{"codex", `{"model_reasoning_effort":{}}`, false},
 		{"codex", `{"model_reasoning_effort":"max"}`, false},
 		{"codex", `{"effort":"high"}`, false},
-		{"claude_sdk", `{"effort":"max","thinking":{"type":"adaptive","display":"summarized"}}`, true},
+		{"claude_sdk", `{"thinking":{"type":"adaptive","display":"summarized"}}`, true},
+		{"claude_sdk", `{"effort":"max"}`, false},
 		{"claude_sdk", `{"thinking":{"type":"enabled","budgetTokens":1024}}`, true},
 		{"claude_sdk", `{"thinking":{"type":"disabled"}}`, true},
 		{"claude_sdk", `{"thinking":{"type":"enabled"}}`, true},
@@ -32,8 +33,9 @@ func TestNativeModelParameters(t *testing.T) {
 		{"claude_sdk", `{"maxThinkingTokens":1024}`, false},
 		{"mcode", `{}`, true},
 		{"mcode", `{"effort":"high"}`, false},
-		{"", `{"effort":"high"}`, true},
-		{"", `{"model_reasoning_effort":"high"}`, true},
+		{"", `{"thinking":{"type":"adaptive"}}`, true},
+		{"", `{"effort":"high"}`, false},
+		{"", `{"model_reasoning_effort":"high"}`, false},
 		{"", `{"secret":"private-value"}`, false},
 		{"unknown", `{}`, true},
 		{"unknown", `{"effort":"high"}`, false},

@@ -68,32 +68,6 @@ func TestMCPHTTPBearerRejectsInvalidTokensWithoutPersistence(t *testing.T) {
 	}
 }
 
-func TestMCPHTTPBearerDoesNotReachModelCatalogProbe(t *testing.T) {
-	if !SupportsTextVerbosity {
-		t.Skip("catalog probe requires Unix")
-	}
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	binary := filepath.Join(t.TempDir(), "catalog-probe")
-	script := "#!/bin/sh\nif env | grep -q '^OAC_RUNTIME_MCP_BEARER_'; then exit 9; fi\nprintf '%s' '{\"models\":[{\"slug\":\"fixture-model\",\"support_verbosity\":true}]}'\n"
-	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	token := "synthetic-catalog-secret"
-	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
-	req := proto.PromptRequestPayload{AgentStateKey: "catalog", DisableExecutionEnvironment: true, MCPHTTPServers: &servers,
-		AgentOptions: map[string]any{"model": "fixture-model"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
-	cfg := defaultSessionConfig(testStateRoot(t))
-	cfg.codexBinary = binary
-	plan, _, err := prepareSessionPlan(t.Context(), req, cfg)
-	if err != nil {
-		t.Fatal("catalog probe inherited bearer or failed", err)
-	}
-	defer plan.Cleanup()
-	if !slices.Contains(plan.Env, plan.mcpServers["tools"].BearerTokenEnvVar+"="+token) {
-		t.Fatal("app-server did not receive bearer after catalog probe")
-	}
-}
-
 func TestMCPHTTPBearerPreflightMatchesOnlyItsServerReference(t *testing.T) {
 	servers := map[string]mcpServerConfig{
 		"first":  {URL: "https://first.example/mcp", BearerTokenEnvVar: "OAC_RUNTIME_MCP_BEARER_FIRST"},

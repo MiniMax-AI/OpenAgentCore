@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"slices"
 	"testing"
 	"time"
@@ -312,7 +312,7 @@ func allocationOperations(t *testing.T, reservation *fakeReservationTx, locked s
 			return apply(allocation)
 		}
 	}
-	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, builtin.Registry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -543,7 +543,7 @@ func TestCleanupRevokesSettlesTheSessionThenReleases(t *testing.T) {
 			storage := &fakeExecutionStorage{t: t, withAllocationCleanup: func(_ context.Context, _ AllocationKey, apply func(AllocationCleanupTx) error) error {
 				return apply(tx)
 			}}
-			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, builtin.Registry())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -581,7 +581,7 @@ func TestExpiredQualifiedFilesystemCleanupPreservesSessionWork(t *testing.T) {
 			storage := &fakeExecutionStorage{t: t, withAllocationCleanup: func(_ context.Context, _ AllocationKey, apply func(AllocationCleanupTx) error) error {
 				return apply(tx)
 			}}
-			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, builtin.Registry())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -640,7 +640,7 @@ func TestReleaseLostComputeRetainsOrChangesNothing(t *testing.T) {
 			storage := &fakeExecutionStorage{t: t, withAllocationCleanup: func(_ context.Context, _ AllocationKey, apply func(AllocationCleanupTx) error) error {
 				return apply(tx)
 			}}
-			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, builtin.Registry())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -706,7 +706,7 @@ func TestSetComputeRechecksIdlePressureAndActivity(t *testing.T) {
 				},
 			}
 			storage := &fakeExecutionStorage{t: t, withAllocation: func(_ context.Context, _ AllocationKey, apply func(AllocationTx) error) error { return apply(tx) }}
-			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+			operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, builtin.Registry())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -742,7 +742,7 @@ func TestBeginRestoreDirectKeepsAllocationAndRetention(t *testing.T) {
 		return current, nil
 	}}
 	storage := &fakeExecutionStorage{t: t, withAllocation: func(_ context.Context, _ AllocationKey, apply func(AllocationTx) error) error { return apply(tx) }}
-	operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+	operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, builtin.Registry())
 	if err != nil {
 		t.Fatal(err)
 	}

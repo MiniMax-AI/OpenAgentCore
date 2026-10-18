@@ -12,7 +12,7 @@ Workspace execution also requires the companion's readiness report: private prot
 
 ## Model provider
 
-MiniMax Code accepts the `anthropic`, `responses` and `chat_completions` protocols, and each requires the provider's context window and maximum output tokens ([`harnessconfig/mcode`](../../../../internal/harnessconfig/mcode/configuration.go)). The adapter writes the frozen bundle as the native custom provider for the Session's exact `agent.model`, with those limits, using the native `anthropic-messages`, `openai-responses` or `openai-completions` API ([`model_provider.go`](../../../../apps/daemon/internal/agent/mcode/model_provider.go)). It selects that provider explicitly; there is no native account fallback. [Model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults) owns provider selection.
+MiniMax Code accepts the `anthropic`, `responses` and `chat_completions` protocols, and each requires the provider's context window and maximum output tokens ([`harnessconfig/mcode`](../../../../internal/harnessconfig/mcode/declaration.go)). The adapter writes the frozen bundle as the native custom provider for the Session's exact `agent.model`, with those limits, using the native `anthropic-messages`, `openai-responses` or `openai-completions` API ([`model_provider.go`](../../../../apps/daemon/internal/agent/mcode/model_provider.go)). It selects that provider explicitly; there is no native account fallback. [Model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults) owns provider selection.
 
 ## Execution profiles
 

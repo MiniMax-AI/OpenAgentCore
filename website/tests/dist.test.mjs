@@ -6,10 +6,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { legacyRedirects, readDocsJson } from '../.vitepress/docs-nav.mts'
+import { legacyRedirects, listedPages } from '../.vitepress/docs-nav.mts'
 
 const dist = fileURLToPath(new URL('../.vitepress/dist/', import.meta.url))
-const pages = readDocsJson().navigation.groups.flatMap((g) => g.pages)
+const pages = listedPages()
 const basePath = new URL(process.env.WEBSITE_URL ?? 'http://localhost/').pathname
 const base = basePath.endsWith('/') ? basePath : `${basePath}/`
 
@@ -62,6 +62,20 @@ test('legacy paths redirect', () => {
 test('llms.txt lists every page', () => {
   const llms = readFileSync(resolve(dist, 'llms.txt'), 'utf8')
   for (const page of pages) assert.ok(llms.includes(`](${base}${page}.md)`), `${page} in llms.txt uses ${base}`)
+})
+
+test('llms.txt describes each page and groups pages by tab', () => {
+  const llms = readFileSync(resolve(dist, 'llms.txt'), 'utf8')
+  assert.match(llms, /^## Docs › Get started$/m)
+  assert.match(llms, /^## Extend › Protocols$/m)
+  for (const line of llms.split('\n').filter((l) => l.startsWith('- ['))) assert.match(line, /\.md\): \S/, `${line} has a summary`)
+})
+
+test('each tab shows its own sidebar', () => {
+  const sidebar = (file) => [...readFileSync(html(file), 'utf8').matchAll(/class="VPSidebarItem level-0[^"]*"/g)].length
+  assert.equal(sidebar('docs/getting-started/install'), 3)
+  assert.equal(sidebar('contracts/agents-api/environments'), 3)
+  assert.equal(sidebar('docs/sandbox-provider'), 2)
 })
 
 test('Mermaid fences become diagrams, not code blocks', () => {

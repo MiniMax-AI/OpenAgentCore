@@ -1,49 +1,109 @@
 {
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Get started",
-        "pages": [
-          "docs/getting-started/index",
-          "docs/getting-started/install",
-          "docs/getting-started/quickstart",
-          "docs/examples"
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "docs/getting-started/index",
+              "docs/getting-started/install",
+              "docs/getting-started/quickstart"
+            ]
+          },
+          {
+            "group": "Operate",
+            "pages": [
+              "docs/getting-started/install-options",
+              "docs/getting-started/public-address",
+              "docs/web/index",
+              "docs/web/console-server",
+              "docs/getting-started/sandbox-backends",
+              "docs/getting-started/workspace-storage",
+              "docs/getting-started/nodes",
+              "docs/getting-started/operations",
+              "docs/getting-started/troubleshooting",
+              "docs/configuration"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "docs/concepts",
+              "docs/architecture"
+            ]
+          }
         ]
       },
       {
-        "group": "Operate",
-        "pages": [
-          "docs/getting-started/install-options",
-          "docs/getting-started/public-address",
-          "docs/getting-started/sandbox-backends",
-          "docs/getting-started/workspace-storage",
-          "docs/getting-started/nodes",
-          "docs/getting-started/self-hosted",
-          "docs/getting-started/operations",
-          "docs/getting-started/troubleshooting",
-          "docs/configuration"
+        "tab": "API",
+        "groups": [
+          {
+            "group": "Build on the API",
+            "pages": [
+              "docs/api/index",
+              "docs/api/public-agent-api",
+              "docs/getting-started/self-hosted",
+              "docs/examples"
+            ]
+          },
+          {
+            "group": "Agents API reference",
+            "pages": [
+              "contracts/agents-api/index",
+              "contracts/agents-api/wire-semantics",
+              "contracts/agents-api/harness-capabilities",
+              "contracts/agents-api/sessions-events",
+              "contracts/agents-api/message-content",
+              "contracts/agents-api/execution-tools",
+              "contracts/agents-api/subagents",
+              "contracts/agents-api/environments",
+              "contracts/agents-api/environment-files",
+              "contracts/agents-api/source-files",
+              "contracts/agents-api/vaults"
+            ]
+          },
+          {
+            "group": "Core API reference",
+            "pages": [
+              "contracts/agents-api/admin-api",
+              "contracts/agents-api/core-errors",
+              "contracts/agents-api/sandbox-deployment",
+              "contracts/agents-api/environment-executor-credentials",
+              "contracts/agents-api/session-diagnostics",
+              "contracts/agents-api/core-metrics",
+              "contracts/agents-api/runtime-observability-api",
+              "contracts/agents-api/runtime-observability",
+              "contracts/agents-api/machine-api"
+            ]
+          }
         ]
       },
       {
-        "group": "API guides",
-        "pages": [
-          "docs/api/index",
-          "docs/api/public-agent-api",
-          "contracts/agents-api/admin-api",
-          "contracts/agents-api/machine-api",
-          "contracts/agents-api/harness-capabilities"
-        ]
-      },
-      {
-        "group": "Architecture and extensions",
-        "pages": [
-          "docs/concepts",
-          "docs/architecture",
-          "docs/runtime-protocol",
-          "docs/runtime-bootstrap",
-          "docs/sandbox-provider",
-          "contracts/agents-api/harness-onboarding",
-          "docs/development"
+        "tab": "Extend",
+        "groups": [
+          {
+            "group": "Protocols",
+            "pages": [
+              "docs/runtime-protocol",
+              "docs/runtime-bootstrap",
+              "contracts/agents-api/harness-onboarding",
+              "contracts/agents-api/harness-catalog",
+              "contracts/agents-api/model-execution",
+              "docs/sandbox-provider",
+              "contracts/agents-api/node-generation-protocol",
+              "docs/workspace-provider"
+            ]
+          },
+          {
+            "group": "Contribute",
+            "pages": [
+              "docs/development",
+              "docs/maintainers",
+              "docs/web/console-api-usage"
+            ]
+          }
         ]
       }
     ]

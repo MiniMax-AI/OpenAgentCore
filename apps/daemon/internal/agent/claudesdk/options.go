@@ -57,11 +57,18 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
-	modelConfiguration, err := harnessconfiguration.Configuration().Prepare(req.AgentOptions)
+	modelConfiguration, err := harnessconfiguration.Declaration.Configuration.Prepare(req.AgentOptions)
 	if err != nil {
 		return startRequest{}, nil, err
 	}
-	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig)
+	if err := harnessconfiguration.Declaration.ValidateExecutionControls(req.ExecutionControls); err != nil {
+		return fail(err.Error())
+	}
+	effort := ""
+	if req.ExecutionControls != nil {
+		effort = req.ExecutionControls.ReasoningEffort
+	}
+	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig, effort)
 	if err := req.ValidateToolSearch(true); err != nil {
 		return startRequest{}, nil, err
 	}
@@ -73,11 +80,6 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
-	}
-	// Search is disabled by the fixed native tool profile. Medium selects the
-	// SDK's default text generation; it has no native verbosity-level option.
-	if controls := req.ExecutionControls; controls != nil && (controls.WebSearch != "disabled" || controls.TextVerbosity != "medium") {
-		return fail("execution controls require disabled web search and medium text verbosity")
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat

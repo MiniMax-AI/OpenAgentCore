@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -14,10 +14,10 @@ import (
 // write, reservation or promotion.
 var ErrWhitespaceOnlyText = errors.New("whitespace-only message text is not supported by this harness")
 
-// validateMessageTextProfile rejects a message without an image or any
-// non-whitespace text when the harness has not qualified such input.
-func validateMessageTextProfile(profile engine.Profile, input proto.MessageInput) error {
-	if profile.WhitespaceOnlyText.IsSupported() {
+// validateMessageText rejects a message without an image or any non-whitespace
+// text when the Harness does not declare support for such input.
+func validateMessageText(declaration harnessconfig.Declaration, input proto.MessageInput) error {
+	if declaration.WhitespaceOnlyText.IsSupported() {
 		return nil
 	}
 	for _, message := range input {
@@ -46,11 +46,11 @@ func blankTextRune(r rune) bool {
 	return r >= '\u2000' && r <= '\u200a'
 }
 
-func validateMessageImageProfile(profile engine.Profile, _ string, input proto.MessageInput) error {
+func validateMessageImages(declaration harnessconfig.Declaration, input proto.MessageInput) error {
 	if !input.HasImages() {
 		return nil
 	}
-	if !profile.MessageImages.IsSupported() || input.ValidateInlineImages() != nil {
+	if !declaration.Capabilities.MessageImages.IsSupported() || input.ValidateInlineImages() != nil {
 		return sessions.ErrInvalidInput
 	}
 	return nil
@@ -61,15 +61,11 @@ func (p Policy) messageInputSupport(peer *runtimegateway.Session, kind string, s
 	if !input.HasImages() {
 		return nil
 	}
-	profile, ok := p.Engines.Lookup(kind)
+	declaration, ok := p.Harnesses().Lookup(kind)
 	if !ok {
 		return sessions.ErrInvalidInput
 	}
-	placement := ""
-	if snapshot.Environment != nil {
-		placement = snapshot.Environment.Type
-	}
-	if err := validateMessageImageProfile(profile, placement, input); err != nil {
+	if err := validateMessageImages(declaration, input); err != nil {
 		return err
 	}
 	return requireMessageImages(peer, kind, input)

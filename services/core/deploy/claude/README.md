@@ -10,7 +10,7 @@ The bundle pins Claude Agent SDK `0.3.269` ([`package.json`](../../../../package
 
 Workspace execution requires the bundle to report the `workspace_tools`, `workspace_prepare`, `workspace_command_observations` and `local_runtime_v2` features; matching SDK versions alone do not establish compatibility. Function tools in workspace execution additionally require `workspace_functions`. The native installer rejects a bundle that lacks the workspace features ([`installation.go`](../../../../apps/daemon/internal/agent/claudesdk/installation.go)).
 
-Claude accepts only the `anthropic` model protocol ([`harnessconfig/claudesdk`](../../../../internal/harnessconfig/claudesdk/configuration.go)). [Model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults) owns provider selection.
+Claude accepts only the `anthropic` model protocol ([`harnessconfig/claudesdk`](../../../../internal/harnessconfig/claudesdk/declaration.go)). [Model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults) owns provider selection.
 
 ## Native state and recovery
 

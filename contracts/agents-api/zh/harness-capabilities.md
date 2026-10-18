@@ -1,10 +1,10 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 80be524f00965cfa3f7349a65597d9511126f54cbdd8ac8857c6332003db7a01
+source_hash: ebe62fa0536333b51a80233883039ed732a6ce7232030cd90e8f8854dfde9859
 ---
 
-本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `services/core/internal/engine` 中 Harness 的引擎配置决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
+本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
 
 | 状态 | 含义 |
 | --- | --- |
@@ -23,7 +23,9 @@ source_hash: 80be524f00965cfa3f7349a65597d9511126f54cbdd8ac8857c6332003db7a01
 | [仅空白消息文本](message-content.md) | 已准入；原样交付 | 已拒绝 | 已拒绝 |
 | [内联 PNG、JPEG 消息图像](message-content.md) | 所有位置已验证 | 所有位置已验证 | 已拒绝 |
 | 远程图像 URL | 已拒绝 | 已拒绝 | 已拒绝 |
-| 显式 `reasoning`；非 `auto` 的 `service_tier` | 已拒绝 | 已拒绝 | 已拒绝 |
+| `reasoning.effort` | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 | `low`、`medium`、`high`、`xhigh`、`max`：已准入 | 已拒绝 |
+| `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | 已拒绝 | 已拒绝 |
+| 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`：已准入 | 已拒绝 | 已拒绝 |
 | 非 `medium` 的 `text.verbosity` | 已准入；由原生模型决定 | 已拒绝 | 已拒绝 |
 | [公开 token 用量](sessions-events.md) | 测量计数器 | Null | Null |
 
@@ -38,7 +40,7 @@ source_hash: 80be524f00965cfa3f7349a65597d9511126f54cbdd8ac8857c6332003db7a01
 | [结构化输出](execution-tools.md#structured-output) | 已拒绝 | 所有位置已验证 | 已拒绝 |
 | [延迟函数发现](execution-tools.md#deferred-function-discovery) | 已拒绝 | 已验证：`none`、自托管；已准入：托管 | 已拒绝 |
 | [禁用 Web 搜索与程序化工具调用](execution-tools.md#web-search-and-programmatic-tool-calling) | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 |
-| 启用 Web 搜索或程序化工具调用 | 已拒绝 | 已拒绝 | 已拒绝 |
+| Web 搜索 `cached` 或 `live`，以及程序化工具调用 `enabled` | 所有位置已准入 | 已拒绝 | 已拒绝 |
 | [服务端来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：`none`；其他位置拒绝 | 已验证：`none`；其他位置拒绝 | 已拒绝 |
 | [Environment 来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管；仅 `allowed_tools` null、`required` false |
 | [HTTP MCP bearer 凭据](execution-tools.md#http-mcp) | 已验证 | 已验证 | 已验证 |
@@ -62,4 +64,4 @@ Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，匿名或 HTTPS bearer | 已验证：自托管；已准入：托管；匿名或 HTTPS bearer |
 
-外部工作区存储还要求所选 Harness profile 和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。
+外部工作区存储还要求所选 Harness 声明和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。

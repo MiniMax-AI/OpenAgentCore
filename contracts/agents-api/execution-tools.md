@@ -7,7 +7,7 @@ An Agent declares application functions, controls and MCP servers in `tools`, an
 ## Admission
 
 - Saved Agents keep every pinned tool declaration as resource data. Saving never qualifies execution.
-- Session creation resolves saved references and inline declarations with the execution parser into the immutable Session snapshot, then checks the combination against the selected Harness's profile in `services/core/internal/engine`. An unsupported combination returns 400 `unsupported_or_invalid_configuration` before anything is written. Protocol errors, such as a repeated `web_search` or `tool_search` or a non-object schema root, use the official error fields ([validation](./wire-semantics.md#configuration-validation)).
+- Session creation resolves saved references and inline declarations with the execution parser into the immutable Session snapshot, then checks the combination against the selected Harness's declaration in `internal/harnessconfig`. An unsupported combination returns 400 `unsupported_or_invalid_configuration` before anything is written. Protocol errors, such as a repeated `web_search` or `tool_search` or a non-object schema root, use the official error fields ([validation](./wire-semantics.md#configuration-validation)).
 - Before dispatch, the selected Runtime must also advertise the operation's capability. An advertisement alone never enables an operation.
 - The native Harness runs the model and tool loop. Core adds no second loop, output repair, schema coercion or prompt wrapper, and selects no native tool names.
 
@@ -39,7 +39,7 @@ The Worker fails previously claimed work without replay after execution loss; qu
 
 `text.format` accepts `{type: "json_schema", schema: {...}}`, the Agents API form: it has no `name`, `strict` or other Responses API wrapper fields. The schema is saved, inherited through Agent and Session resolution and frozen in the Session snapshot. An explicit non-object root type is a protocol error on save and Session creation for every Harness. Claude requires an explicit `type: "object"` at the schema root. The Claude SDK reads JSON numbers as binary64, so Session admission rejects schemas whose numbers would change in that conversion; saved Agents keep them unchanged.
 
-Core carries the schema in `ExecutionControls.OutputFormat` and requires the profile's structured-output qualification plus the Runtime's `structured_output` and message-observation capabilities, only for requests that use the option. Frozen schemas reach preparation before input and apply to initial and resumed execution; Start cannot replace them.
+Core carries the schema in `ExecutionControls.OutputFormat` and requires structured-output support in the Harness declaration plus the Runtime's `structured_output` and message-observation capabilities, only for requests that use the option. Frozen schemas reach preparation before input and apply to initial and resumed execution; Start cannot replace them.
 
 The Claude adapter passes `outputFormat` to the pinned SDK and allows its native `StructuredOutput` terminal tool, which is internal and never an extra caller function. A matching live root tool result and an attributed successful SDK result confirm the output. The adapter publishes the native `result.result` string unchanged as a completed `final_answer` message with the native tool-use ID; parent assistant prose keeps its own ID. Unvalidated retries and cancelled candidates never become the answer, and the adapter never serializes `structured_output` back to JSON. The stream follows the official message sequence with the whole text in one `output_text.delta`. The bridge advertises the operation only when it reports `structured_output`, and a workspace Runtime also needs `workspace_structured_output`.
 
@@ -47,7 +47,7 @@ The Claude adapter passes `outputFormat` to the pinned SDK and allows its native
 
 A `tool_search` tool has only `type`; Responses-only execution fields are rejected. Function `defer_loading` marks which definitions load lazily. Discovery requires both: `tool_search` without a deferred function, or deferred functions without `tool_search`, is rejected. The saved-Agent tool union keeps `tool_search`; the pinned Session response union omits it, so Session and SSE resources project it out while the frozen configuration keeps it. The pinned Items union has no tool-search Item, and Core invents none.
 
-Core sends `PromptRequestPayload.ToolSearch` and each `FunctionTool.DeferLoading`, and requires the profile's qualification plus the Runtime's `tool_search` capability. Native search and lazy schema loading belong to the adapter. The Claude adapter's MCP server marks eager definitions `anthropic/alwaysLoad:true` and deferred ones false, and enables native ToolSearch; the function profile allows only declared callbacks and ToolSearch besides the selected workspace tools. A workspace Runtime derives `tool_search` from the bridge's `workspace_tool_search` feature. The native Harness owns model and provider policy; known conflicting modes and beta settings reject in the adapter, and the SDK gives no reliable pre-input signal that deferral took effect after an opaque policy change.
+Core sends `PromptRequestPayload.ToolSearch` and each `FunctionTool.DeferLoading`, and requires `tool_search` support in both the Harness declaration and the Runtime. Native search and lazy schema loading belong to the adapter. The Claude adapter's MCP server marks eager definitions `anthropic/alwaysLoad:true` and deferred ones false, and enables native ToolSearch; the function profile allows only declared callbacks and ToolSearch besides the selected workspace tools. A workspace Runtime derives `tool_search` from the bridge's `workspace_tool_search` feature. The native Harness owns model and provider policy; known conflicting modes and beta settings reject in the adapter, and the SDK gives no reliable pre-input signal that deferral took effect after an opaque policy change.
 
 ## Web search and programmatic tool calling
 
@@ -60,15 +60,15 @@ Core sends `PromptRequestPayload.ToolSearch` and each `FunctionTool.DeferLoading
 
 Saved Agents keep every pinned `web_search` mode: omitted or null is saved as `live`, and `cached` and `live` as sent ([saved modes](./wire-semantics.md#saved-configuration)). Search settings are resource data: omitted or null `context_size` resolves to `medium`; omitted domains and location resolve to null; an empty domain list stays empty; a supplied location, including `{}`, has `city`, `country`, `region` and `timezone`, null where omitted.
 
-Execution admits only `mode: "disabled"` and `enabled: false`. Enabled or omitted-mode search and enabled or omitted-`enabled` programmatic calling are rejected at Session admission unless the Session replaces the saved tools. Omitting programmatic configuration keeps each Harness's native behavior, which differs from the official default-on behavior. Unrelated native utility tools are not removed.
+Execution carries the resolved values to the Harness and validates them against its declaration in `internal/harnessconfig` (`Execution`): the supported web search modes and whether search settings are accepted, reasoning efforts and summaries, service tiers, programmatic-tool-calling values and text verbosities. A value outside the declaration is rejected at Session admission with a message naming the field, unless the Session replaces the saved tools. Core sends an option only when the Agent sets it or the pinned default applies, so an omitted `web_search` or `programmatic_tool_calling` keeps each Harness's native behavior. For programmatic calling this differs from the official default-on behavior. Unrelated native utility tools are not removed.
 
-`DisableProgrammaticToolCalling` carries the disabled intent on initial execution and cold continuation and requires the Runtime capability only when present. Search uses the existing disabled control.
+`ExecutionControls` carries the options ([Runtime protocol](../../docs/runtime-protocol.md#capability-declarations)). The Runtime needs only the `execution_controls` capability.
 
-| Harness | Native enforcement |
-| --- | --- |
-| Codex | Disables code-mode features; checks native managed requirements before thread start or resume and rejects a forced conflicting feature |
-| Claude Code | Keeps the restricted built-in inventory and verifies native initialization against it |
-| MiniMax Code | Keeps the restricted native tool profile, an empty text-execution inventory and disabled web search |
+| Harness | Web search | Programmatic tool calling |
+| --- | --- | --- |
+| Codex | `disabled`, `cached` and `live`, with `context_size`, `allowed_domains` and `location`, as native `web_search` and `tools.web_search` settings | `enabled: true` turns on native `code_mode`; `false` turns off `code_mode`, `code_mode_only` and `code_mode_prewarm` and checks native managed requirements before a thread starts or resumes |
+| Claude Code | `disabled` only, with the restricted built-in inventory verified at native initialization | `false` only |
+| MiniMax Code | `disabled` only, through the native `features.webSearch=false` because the restricted profile has no search tool | `false` only |
 
 ## HTTP MCP
 

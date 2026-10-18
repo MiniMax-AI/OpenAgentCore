@@ -77,7 +77,7 @@ func (r Registry) ValidateHarnessConfig(kind string, raw json.RawMessage) error 
 		_, err := c.ParseHarnessConfig(raw)
 		return err
 	}
-	for _, c := range r.configurations {
+	for _, c := range r.declarations {
 		if _, err := c.ParseHarnessConfig(raw); err == nil {
 			return nil
 		}

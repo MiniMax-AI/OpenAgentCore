@@ -188,3 +188,8 @@ html:has(.landing) .VPPage {
 html:has(.landing) .VPFooter {
   border-top: 1px solid var(--vp-c-divider);
 }
+
+/* The landing page has no headings, so its outline bar would be empty. */
+html:has(.landing) .VPLocalNav {
+  display: none;
+}

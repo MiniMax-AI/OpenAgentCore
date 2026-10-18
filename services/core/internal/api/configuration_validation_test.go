@@ -227,7 +227,7 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 	}
 	saved := append([]string{
 		`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`,
-		// TV-05: every pinned web_search mode is saved; admission still qualifies only disabled.
+		// TV-05: every pinned web_search mode is saved.
 		`"tools":[{"type":"web_search"}]`, `"tools":[{"type":"web_search","mode":null}]`,
 		`"tools":[{"type":"web_search","mode":"live","allowed_domains":[]}]`,
 		`"tools":[{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"country":"FR","city":"Paris"}}]`,
@@ -253,21 +253,15 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 	}
 }
 
-// K2: execution admission limits keep their codes. Enabled or omitted-mode
-// web_search is saved (TV-05) but still rejected at Session admission.
+// K2: execution admission limits keep their codes, and a value the selected
+// Harness does not declare is rejected with the field named.
 func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	h, s := configurationHandler(t, nil)
 	session := configurationOperations()[2]
 	for _, tc := range []struct{ fields, message string }{
-		{`"tools":[{"type":"web_search","mode":"live"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search","mode":"cached"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search","mode":null}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Programmatic tool calling is not qualified for execution."},
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls."},
-		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not qualified for this engine."},
-		{`"reasoning":{"effort":"max"}`, "Explicit reasoning execution options are not supported by this service yet."},
-		{`"service_tier":"flex"`, "Execution currently supports service_tier=auto only."},
+		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not supported by this engine."},
+		{`"multi_agent":{"enabled":true},"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Harness codex does not support the requested Agent/environment configuration: programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness."},
 		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty, unique and at most 512 bytes."},
 	} {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, session.path, session.body(tc.fields)), "unsupported_or_invalid_configuration", nil, tc.message)

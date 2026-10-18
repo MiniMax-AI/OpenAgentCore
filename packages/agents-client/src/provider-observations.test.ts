@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { projectCoreHarnessList, projectHarnessModelConfiguration } from "./admin-projection";
 
-const provider = { object: "core.model_configuration", harness: "codex", model: "test-model", harness_config: { model_reasoning_effort: "high" }, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true }, updated_at: "2026-09-26T08:00:00Z", last_used_at: null, last_error_code: null, last_error_at: null };
+const provider = { object: "core.model_configuration", harness: "codex", model: "test-model", harness_config: {}, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true }, updated_at: "2026-09-26T08:00:00Z", last_used_at: null, last_error_code: null, last_error_at: null };
 describe("deployment default observations", () => {
   it("preserves null and safe observations", () => {
     expect(projectHarnessModelConfiguration(provider)).toEqual(provider);

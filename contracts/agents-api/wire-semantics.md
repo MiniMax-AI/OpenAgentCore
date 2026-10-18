@@ -177,7 +177,7 @@ Agent create and update bodies and the inline `agent` of Session create are chec
 
 Within one object Core reports a union's `type` first, then unknown members, then member values in document order, then missing members in the pinned schema's order; tools before `text`, and the whole object before the duplicate and schema-root checks. Schemas without a string root `type` are not checked. Function and output schemas, `request_metadata` and `x_agents_core` keep their own parsers. Update bodies and the inline Session agent are validated before the Agent lookup, so owned, foreign, missing and malformed Agent IDs give the same response.
 
-Core saves values the pinned shapes allow even when it cannot run them: function names of any length, enabled programmatic tool calling, reasoning effort `max` and service tier `flex`.
+Core saves values the pinned shapes allow even when the selected Harness cannot run them: function names of any length and the reasoning, service tier, web search and programmatic tool calling values a Harness does not declare.
 
 ### Session admission
 
@@ -185,15 +185,13 @@ A Session's effective configuration must also pass execution admission, which ap
 
 | Configuration | Message |
 | --- | --- |
-| Explicit `reasoning.effort` or `reasoning.summary` | "Explicit reasoning execution options are not supported by this service yet." |
-| `service_tier` other than `auto` | "Execution currently supports service_tier=auto only." |
-| Enabled or omitted-mode `web_search`, enabled `programmatic_tool_calling` | See [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
+| A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
 | More than 64 functions, or a function name that is blank or longer than 512 bytes | "This service supports at most 64 function tools." or "Function names must be nonempty, unique and at most 512 bytes." |
-| Two `programmatic_tool_calling` declarations, two MCP servers with one label | "Execution requires distinct tool controls.", "Execution requires distinct MCP server labels." |
+| Two MCP servers with one label | "Execution requires distinct MCP server labels." |
 
 A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](./execution-tools.md).
 
-Omitted, null and explicit `medium` text verbosity give the same Session configuration. For a model whose native catalog declares no verbosity support, the Codex adapter drops a `medium` setting and uses the model's default, and rejects `low` or `high`.
+Omitted, null and explicit `medium` text verbosity give the same Session configuration.
 
 ### Update, delete and list
 

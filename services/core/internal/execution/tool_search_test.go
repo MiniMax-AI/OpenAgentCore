@@ -6,25 +6,25 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/harnesstest"
 )
 
 const discoveryConfiguration = `{"agent":{"model":"model","tools":[{"type":"tool_search"},{"type":"function","name":"lookup","description":"Lookup","parameters":{"type":"object"},"defer_loading":true},{"type":"function","name":"clock","description":"Clock","parameters":{"type":"object"}}]},"environment":{"type":"none"}}`
 
 func TestDiscoveryUsesSharedOperationQualification(t *testing.T) {
 	for _, qualified := range []bool{false, true} {
-		policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": enginetest.Profile(func(p *engine.Profile) { p.ToolSearch = proto.CapabilityFromBool(qualified) })})}
+		policy := Policy{Declarations: harnessconfig.NewRegistry(harnesstest.Declaration("new_harness", func(d *harnessconfig.Declaration) { d.Capabilities.ToolSearch = proto.CapabilityFromBool(qualified) }))}
 		if err := policy.ValidateSessionConfiguration("new_harness", json.RawMessage(discoveryConfiguration)); (err == nil) != qualified {
 			t.Fatal("common operation qualification was not applied", qualified, err)
 		}
 	}
 	workspace := strings.Replace(discoveryConfiguration, `"type":"none"`, `"type":"openai_hosted"`, 1)
-	policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": enginetest.Profile(func(p *engine.Profile) {
-		p.Placements = []string{"openai_hosted"}
-		p.RetainedNativeHistory = proto.CapabilitySupported
-		p.ToolSearch = proto.CapabilitySupported
-	})})}
+	policy := Policy{Declarations: harnessconfig.NewRegistry(harnesstest.Declaration("new_harness", func(d *harnessconfig.Declaration) {
+		d.Placements = []string{"openai_hosted"}
+		d.Capabilities.RetainedNativeHistory = proto.CapabilitySupported
+		d.Capabilities.ToolSearch = proto.CapabilitySupported
+	}))}
 	if err := policy.ValidateSessionConfiguration("new_harness", json.RawMessage(workspace)); err != nil {
 		t.Fatal("Core imposed another adapter's placement restriction", err)
 	}

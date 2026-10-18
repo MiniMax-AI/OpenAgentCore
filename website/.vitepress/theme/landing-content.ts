@@ -1,284 +1,170 @@
 // Landing page copy. Every product claim here is backed by a page in docs/ or
-// contracts/; each section links to the page that owns the detail.
+// contracts/; link labels equal the target page titles.
 
 export type Lang = 'en' | 'zh'
 
+export interface FlowCopy {
+  label: string
+  stages: string[]
+  captions: string[]
+  app: string
+  api: string
+  state: string
+  orchestration: string
+  events: string
+  workspace: string
+  loop: string
+  runtime: string
+  model: string
+  provider: string
+  compute: string
+  next: string
+  back: string
+  play: string
+  pause: string
+  step: string
+}
+
 export interface LandingCopy {
-  hero: {
-    eyebrow: string
-    title: [string, string]
-    lede: string
-    primary: string
-    secondary: string
-    installLabel: string
-    copied: string
-    copy: string
-    hud: [string, string][]
-  }
-  video: { title: string; expand: string; close: string; pause: string; play: string }
-  ticker: string[]
+  hero: { title: [string, string]; lede: string; primary: string; secondary: string; copied: string; copy: string; installTabs: [string, string] }
+  video: { title: string; expand: string; close: string }
   compose: {
-    index: string
-    kicker: string
-    title: string
-    titleAccent: string
-    lede: string
     harness: string
     protocol: string
     environment: string
     accepted: string
     rejected: (harness: string, protocols: string) => string
-    envs: Record<'openai_hosted' | 'self_hosted', { label: string; note: string }>
+    envs: Record<'openai_hosted' | 'self_hosted', string>
     input: string
     footnote: string
     footnoteLink: string
   }
-  architecture: {
-    index: string
-    kicker: string
-    title: string
-    titleAccent: string
-    lede: string
-    tabs: { id: string; label: string; alt: string }[]
-    more: string
-  }
-  session: {
-    index: string
-    kicker: string
-    title: string
-    titleAccent: string
-    lede: string
-    rules: { title: string; body: string; art: string }[]
-    animation: { label: string; steps: string[]; messages: string[]; states: string[]; pause: string; play: string; replay: string; next: string; note: string }
-    more: string
-  }
-  observe: {
-    index: string
-    kicker: string
-    title: string
-    titleAccent: string
-    lede: string
-    tabs: { id: 'overview' | 'metrics'; label: string; alt: string }[]
-    caption: string
-  }
-  start: {
-    index: string
-    kicker: string
-    title: string
-    titleAccent: string
-    lede: string
-    steps: { title: string; body: string }[]
-    cta: string
-    trial: string
-  }
+  architecture: { title: string; titleAccent: string; alt: string; more: string }
+  session: { title: string; titleAccent: string; more: string; flow: FlowCopy }
+  observe: { title: string; titleAccent: string; tabs: { id: 'overview' | 'metrics'; label: string; alt: string }[] }
   docs: { title: string; links: { label: string; path: string }[] }
-  ecosystem: { title: string; titleAccent: string; agents: string; compute: string; pause: string; resume: string }
+  ecosystem: { title: string; titleAccent: string; pause: string; resume: string }
+  start: { title: string; titleAccent: string; steps: { label: string; path: string }[] }
 }
 
 const en: LandingCopy = {
   hero: {
-    eyebrow: 'open source · self-hosted · OpenAI Agents API',
     title: ['One core.', 'Many agents.'],
-    lede: 'An open-source, self-hosted implementation of the OpenAI Agents API. Run Codex, Claude Code or MiniMax Code with your own models, on your own machines, through the official OpenAI SDK.',
-    primary: 'Run your first Session',
+    lede: 'The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or MiniMax Code on your own machines with your own models, through the official OpenAI SDK.',
+    primary: 'Get started',
     secondary: 'Read the docs',
-    installLabel: 'Linux amd64 · Docker · Python 3.9+',
     copied: 'copied',
     copy: 'copy',
-    hud: [
-      ['api', '/v1 · OpenAI Agents API'],
-      ['harness', 'codex | claude_sdk | mcode'],
-      ['protocol', 'responses | anthropic | chat_completions'],
-      ['sandbox', 'microsandbox | e2b | docker'],
-      ['workspace', 'independent filesystem adapter'],
-      ['machine', 'linux | macos | windows'],
-    ],
+    installTabs: ['macOS / Linux', 'Windows'],
   },
-  video: { title: 'Meet OpenAgentCore', expand: 'Watch the launch film', close: 'Close video', pause: 'Pause preview', play: 'Play preview' },
-  ticker: ['Codex', 'Claude Code', 'MiniMax Code', 'Responses API', 'Anthropic Messages', 'Chat Completions', 'microsandbox', 'E2B', 'Docker', 'Linux', 'macOS', 'Windows', 'PostgreSQL', 'OpenAI SDK'],
+  video: { title: 'Meet OpenAgentCore', expand: 'Watch the launch film', close: 'Close video' },
   compose: {
-    index: '01',
-    kicker: 'pick each part',
-    title: 'Your agent. Your model. Your machine.', titleAccent: 'Your machine.',
-    lede: 'Choose a combination. See the API call.',
-    harness: 'harness',
-    protocol: 'model protocol',
-    environment: 'environment',
+    harness: 'Harness',
+    protocol: 'Model protocol',
+    environment: 'Environment',
     accepted: 'accepted · Session created',
     rejected: (harness, protocols) => `rejected before the Session is created · ${harness} speaks only ${protocols}`,
-    envs: {
-      openai_hosted: { label: 'managed sandbox', note: 'microsandbox + persistent FS · E2B' },
-      self_hosted: { label: 'your machine', note: 'Linux · macOS · Windows' },
-    },
+    envs: { openai_hosted: 'managed sandbox', self_hosted: 'your machine' },
     input: 'Fix the failing test and explain the change.',
-    footnote: 'The supported combinations are declared by each harness, not guessed.',
+    footnote: 'Each Harness declares the protocols it speaks; Core rejects other combinations before it creates the Session.',
     footnoteLink: 'Harness capabilities',
   },
   architecture: {
-    index: '02',
-    kicker: 'protocols at every boundary',
     title: 'One API. Replaceable parts.', titleAccent: 'Replaceable parts.',
-    lede: 'Core orchestrates. Native harnesses run inside sandboxes. Compute and persistent workspace storage have separate adapters.',
-    tabs: [
-      { id: 'ecosystem', label: 'ecosystem', alt: 'Applications call Core through the Agents API; native Harnesses run inside sandboxes and call models directly. Separate adapters manage compute and persistent workspace storage.' },
-      { id: 'protocols', label: 'components', alt: 'Agents API and Core API on top of Core; Sandbox Provider, Runtime, Harness and Model Provider connected by protocols.' },
-      { id: 'surfaces', label: 'api namespaces', alt: 'Three namespaces with three credentials: Agents API for applications, Core API for operators, Machine API for nodes.' },
-    ],
-    more: 'Read the architecture',
+    alt: 'Applications call Core through the Agents API; native Harnesses run inside sandboxes and call models directly. Separate adapters manage compute and persistent workspace storage.',
+    more: 'Architecture',
   },
   session: {
-    index: '03',
-    kicker: 'execution you can manage',
-    title: 'Session is all you need.', titleAccent: 'Session',
-    lede: 'Submit work, follow its progress, and pick up the conversation.',
-    rules: [
-      { title: 'Connection ≠ work', body: 'Submitted work continues after the stream closes.', art: 'client ──────╳  disconnect\nturn   ━━━━━━━━━━━━━━▶ completed' },
-      { title: 'Retries have identity', body: 'Stable keys prevent duplicates on supported submission paths.', art: 'POST  Idempotency-Key: a1f ──▶ turn_01\nPOST  Idempotency-Key: a1f ──▶ turn_01' },
-      { title: 'Cancel has a receipt', body: 'Core confirms the target Turn\'s execution and cleanup.', art: 'cancel ──▶ turn  in_progress\n       ──▶ turn  cancelled  ✓ confirmed' },
-      { title: 'Compute can sleep', body: 'microsandbox suspends idle compute. Independent workspace files survive snapshot expiry; new work resumes or cold-starts execution.', art: 'compute    ━━━┫ sleep ┣━━━\nworkspace  ━━━━━━━━━━━━━━━' },
-    ],
-    animation: {
-      label: 'Execution demo', steps: ['Submit', 'Run', 'Input needed', 'Resume', 'Complete'],
-      messages: ['Your application submits a task.', 'The native harness runs the task.', 'The turn waits for input from your application.', 'Your application responds. Execution continues.', 'The result is ready for your application.'],
-      states: ['Submitted', 'Running', 'Waiting', 'Running', 'Completed'],
-      pause: 'Pause', play: 'Play', replay: 'Replay', next: 'Next', note: 'Illustrative workflow · Each harness declares its supported interactions.',
+    title: 'One Session, from request to result.', titleAccent: 'from request to result.',
+    more: 'A Session, end to end',
+    flow: {
+      label: 'Inside a Session', stages: ['Native agent', 'Managed execution', 'Many combinations'],
+      captions: ['Runtime prepares the environment. The native Harness owns the model and tool loop.', 'Your app creates a Session through the Agents API. Core manages execution and durable state.', 'Sessions use different Harnesses and models. Managed Sessions here share one microsandbox deployment; independent workspaces outlive compute.'],
+      app: 'Your application', api: 'OpenAI SDK · Agents API', state: 'Sessions & Turns', orchestration: 'Schedule · cancel · interact', events: 'Events · results · durable state', workspace: 'Mounted workspace · shell · tools', loop: 'Native agent loop', runtime: 'Prepare · execute · report', model: 'Model provider', provider: 'Sandbox Provider', compute: 'Provision & reclaim compute', next: 'Next', back: 'Back', play: 'Play', pause: 'Pause', step: 'Architecture stage',
     },
-    more: 'Session lifecycle',
   },
   observe: {
-    index: '04',
-    kicker: 'see it run',
-    title: 'Operations you can actually see.', titleAccent: 'actually see.',
-    lede: 'Sessions · Compute capacity · Usage',
+    title: 'Run it from one console.', titleAccent: 'one console.',
     tabs: [
-      { id: 'overview', label: 'overview', alt: 'Web console overview: service status, running Sessions, sandbox capacity, fleet and Projects.' },
-      { id: 'metrics', label: 'agent metrics', alt: 'Web console agent metrics: requests, errors, latency, tokens and tool calls.' },
+      { id: 'overview', label: 'Overview', alt: 'Web console overview: service status, running Sessions, sandbox capacity, fleet and Projects.' },
+      { id: 'metrics', label: 'Agent metrics', alt: 'Web console agent metrics: requests, errors, latency, tokens and tool calls.' },
     ],
-    caption: 'Screenshot values are illustrative. Usage visibility depends on what each native harness reports.',
   },
-  start: {
-    index: '05',
-    kicker: 'get started',
-    title: 'From install to first Session.', titleAccent: 'first Session.',
-    lede: 'On a Linux amd64 host with Docker and Python 3.9+:',
-    steps: [
-      { title: 'Install & sign in', body: '' },
-      { title: 'Configure model & compute', body: '' },
-      { title: 'Run your first Session', body: '' },
-    ],
-    cta: 'Installation guide',
-    trial: 'Quickstart',
-  },
-  docs: { title: 'Explore the docs', links: [
-    { label: 'Quickstart', path: '/docs/getting-started/quickstart' },
-    { label: 'API reference', path: '/docs/api/public-agent-api' },
-    { label: 'Deployment', path: '/docs/getting-started/install' },
-    { label: 'Build an adapter', path: '/docs/development' },
+  docs: { title: 'Documentation', links: [
+    { label: 'Run your first Session', path: '/docs/getting-started/quickstart' },
+    { label: 'Agents API guide', path: '/docs/api/public-agent-api' },
+    { label: 'Install Core and Web', path: '/docs/getting-started/install' },
+    { label: 'Develop OpenAgentCore', path: '/docs/development' },
   ] },
-  ecosystem: { title: 'One core. An open ecosystem.', titleAccent: 'An open ecosystem.', agents: 'Harnesses & models', compute: 'Cloud & compute', pause: 'Pause', resume: 'Resume' },
+  ecosystem: { title: 'An open ecosystem.', titleAccent: 'open ecosystem.', pause: 'Pause', resume: 'Resume' },
+  start: {
+    title: 'From install to first Session.', titleAccent: 'first Session.',
+    steps: [
+      { label: 'Install Core and Web', path: '/docs/getting-started/install' },
+      { label: 'Add and manage nodes', path: '/docs/getting-started/nodes' },
+      { label: 'Run your first Session', path: '/docs/getting-started/quickstart' },
+    ],
+  },
 }
 
 const zh: LandingCopy = {
   hero: {
-    eyebrow: '开源 · 可自部署 · OpenAI Agents API',
     title: ['One core.', 'Many agents.'],
-    lede: 'OpenAI Agents API 的开源实现。用官方 OpenAI SDK，在你自己的模型和机器上运行 Codex、Claude Code 或 MiniMax Code。',
-    primary: '运行第一个 Session',
+    lede: '开源、可自部署的 OpenAI Agents API。用官方 OpenAI SDK，在你自己的机器上用你自己的模型运行 Codex、Claude Code 或 MiniMax Code。',
+    primary: '开始使用',
     secondary: '阅读文档',
-    installLabel: 'Linux amd64 · Docker · Python 3.9+',
     copied: '已复制',
     copy: '复制',
-    hud: [
-      ['api', '/v1 · OpenAI Agents API'],
-      ['harness', 'codex | claude_sdk | mcode'],
-      ['protocol', 'responses | anthropic | chat_completions'],
-      ['sandbox', 'microsandbox | e2b | docker'],
-      ['workspace', '独立文件系统 adapter'],
-      ['machine', 'linux | macos | windows'],
-    ],
+    installTabs: ['macOS / Linux', 'Windows'],
   },
-  video: { title: '认识 OpenAgentCore', expand: '观看发布视频', close: '关闭视频', pause: '暂停预览', play: '播放预览' },
-  ticker: en.ticker,
+  video: { title: '认识 OpenAgentCore', expand: '观看发布视频', close: '关闭视频' },
   compose: {
-    index: '01',
-    kicker: '自由组合',
-    title: 'Agent、模型、机器，自由组合。', titleAccent: '自由组合。',
-    lede: '选一个组合，看看对应的 API 调用。',
-    harness: 'harness',
+    harness: 'Harness',
     protocol: '模型协议',
     environment: '执行环境',
     accepted: '通过校验 · Session 已创建',
     rejected: (harness, protocols) => `创建前即被拒绝 · ${harness} 只支持 ${protocols}`,
-    envs: {
-      openai_hosted: { label: '托管沙箱', note: 'microsandbox + 持久 FS · E2B' },
-      self_hosted: { label: '你自己的机器', note: 'Linux · macOS · Windows' },
-    },
+    envs: { openai_hosted: '托管沙箱', self_hosted: '你自己的机器' },
     input: '修复失败的测试，并说明改动。',
-    footnote: '支持哪些组合，由每个 Harness 明确声明，而不是猜测。',
-    footnoteLink: 'Harness 能力表',
+    footnote: '每个 Harness 声明自己支持的协议；其他组合在创建 Session 前即被拒绝。',
+    footnoteLink: 'Harness 能力',
   },
   architecture: {
-    index: '02',
-    kicker: '每条边界都是协议',
     title: '一个 API，部件自由替换。', titleAccent: '部件自由替换。',
-    lede: 'Core 编排，原生 Harness 在沙箱内执行；计算与持久工作区存储由独立 adapter 管理。',
-    tabs: [
-      { id: 'ecosystem', label: '生态', alt: '应用通过 Agents API 接入 Core；原生 Harness 在沙箱内运行并调用模型，计算与持久工作区存储由独立 adapter 管理。' },
-      { id: 'protocols', label: '组件', alt: 'Core 之上是 Agents API 与 Core API；沙箱提供商、Runtime、Harness、模型提供商通过协议连接。' },
-      { id: 'surfaces', label: 'API 命名空间', alt: '三个命名空间、三种凭据：应用用 Agents API，管理员用 Core API，节点用 Machine API。' },
-    ],
-    more: '阅读架构文档',
+    alt: '应用通过 Agents API 接入 Core；原生 Harness 在沙箱内运行并调用模型，计算与持久工作区存储由独立 adapter 管理。',
+    more: '架构',
   },
   session: {
-    index: '03',
-    kicker: '可管理的执行',
-    title: 'Session is all you need.', titleAccent: 'Session',
-    lede: '提交任务，追踪进度，继续对话。',
-    rules: [
-      { title: '连接 ≠ 任务', body: '关闭输出流，已提交的任务仍继续执行。', art: en.session.rules[0].art },
-      { title: '重试有身份', body: '支持的提交路径用稳定标识避免重复任务。', art: en.session.rules[1].art },
-      { title: '取消要有回执', body: 'Core 确认任务停止与资源清理。', art: en.session.rules[2].art },
-      { title: '计算可以休眠', body: 'microsandbox 自动挂起空闲计算；独立工作区文件在快照过期后保留，新任务到来时恢复或冷启动。', art: en.session.rules[3].art },
-    ],
-    animation: {
-      label: '执行流程演示', steps: ['提交', '执行', '等待输入', '继续执行', '完成'],
-      messages: ['应用提交一项任务。', '原生 Harness 开始执行。', 'Turn 等待应用提供输入。', '应用回应，任务继续执行。', '结果已就绪，应用可以读取。'],
-      states: ['已提交', '执行中', '等待中', '执行中', '已完成'],
-      pause: '暂停', play: '播放', replay: '重播', next: '下一步', note: '流程示意 · 交互支持范围由各 Harness 声明。',
+    title: '一个 Session，从请求到结果。', titleAccent: '从请求到结果。',
+    more: '一个 Session 的完整流程',
+    flow: {
+      label: 'Session 内部', stages: ['原生 Agent', '统一执行', '自由组合'],
+      captions: ['Runtime 准备环境，原生 Harness 运行模型与工具循环。', '应用通过 Agents API 创建 Session，Core 管理执行与持久状态。', '不同 Session 使用不同 Harness 与模型；此示例中的托管 Session 共用 microsandbox 部署，独立工作区可跨计算生命周期保留。'],
+      app: '你的应用', api: 'OpenAI SDK · Agents API', state: 'Session 与 Turn', orchestration: '调度 · 取消 · 交互', events: '事件 · 结果 · 持久状态', workspace: '挂载工作区 · Shell · 工具', loop: '原生 Agent 循环', runtime: '环境准备 · 执行管理', model: '模型提供商', provider: '沙箱提供商', compute: '创建与回收计算资源', next: '下一步', back: '上一步', play: '播放', pause: '暂停', step: '演示阶段',
     },
-    more: 'Session 生命周期',
   },
   observe: {
-    index: '04',
-    kicker: '看见运行',
-    title: '运行情况，看得见。', titleAccent: '看得见。',
-    lede: 'Session 状态 · 计算资源 · 用量',
+    title: '一个控制台管理全部运行。', titleAccent: '一个控制台',
     tabs: [
-      { id: 'overview', label: '部署概览', alt: 'Web 控制台概览：服务状态、运行中的 Session、沙箱容量、节点与项目。' },
+      { id: 'overview', label: '概览', alt: 'Web 控制台概览：服务状态、运行中的 Session、沙箱容量、节点与项目。' },
       { id: 'metrics', label: 'Agent 监控', alt: 'Web 控制台 Agent 监控：请求、错误、耗时、Token 与工具调用。' },
     ],
-    caption: '截图数值仅用于展示界面。用量可见性取决于原生 Harness 提供的数据。',
   },
-  start: {
-    index: '05',
-    kicker: '开始使用',
-    title: '从安装到第一个 Session。', titleAccent: '第一个 Session。',
-    lede: '在装有 Docker 和 Python 3.9+ 的 Linux amd64 主机上：',
-    steps: [
-      { title: '安装并登录', body: '' },
-      { title: '配置模型与计算资源', body: '' },
-      { title: '运行第一个 Session', body: '' },
-    ],
-    cta: '安装指南',
-    trial: '快速开始',
-  },
-  docs: { title: '文档入口', links: [
-    { label: '快速开始', path: '/docs/getting-started/quickstart' },
-    { label: 'API 参考', path: '/docs/api/public-agent-api' },
-    { label: '部署指南', path: '/docs/getting-started/install' },
-    { label: '扩展适配器', path: '/docs/development' },
+  docs: { title: '文档', links: [
+    { label: '运行第一个 Session', path: '/docs/getting-started/quickstart' },
+    { label: 'Agents API 指南', path: '/docs/api/public-agent-api' },
+    { label: '安装 Core 和 Web', path: '/docs/getting-started/install' },
+    { label: '开发 OpenAgentCore', path: '/docs/development' },
   ] },
-  ecosystem: { title: '一个内核，开放的生态。', titleAccent: '开放的生态。', agents: 'Harness 与模型', compute: '云计算与沙箱', pause: '暂停', resume: '继续' },
+  ecosystem: { title: '开放的生态。', titleAccent: '开放的生态。', pause: '暂停', resume: '继续' },
+  start: {
+    title: '从安装到第一个 Session。', titleAccent: '第一个 Session。',
+    steps: [
+      { label: '安装 Core 和 Web', path: '/docs/getting-started/install' },
+      { label: '添加和管理节点', path: '/docs/getting-started/nodes' },
+      { label: '运行第一个 Session', path: '/docs/getting-started/quickstart' },
+    ],
+  },
 }
 
 export const copy: Record<Lang, LandingCopy> = { en, zh }
@@ -292,6 +178,9 @@ export const harnesses = [
 
 export const protocols = ['responses', 'anthropic', 'chat_completions'] as const
 
-export const installCommand = 'curl -fsSL https://openagentcore.dev/install.sh | bash'
+export const installCommands = {
+  unix: 'curl -fsSL https://openagentcore.dev/install.sh | bash',
+  windows: 'irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex',
+} as const
 
 export const repoUrl = 'https://github.com/MiniMax-AI/OpenAgentCore'

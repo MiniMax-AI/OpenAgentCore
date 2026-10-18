@@ -168,3 +168,12 @@ func settled(t *testing.T, ctx context.Context, turn agent.Turn, output *capture
 func sameTurn(a, b agent.Turn) bool {
 	return reflect.ValueOf(a).Comparable() && a == b
 }
+
+// RequireNarrowed fails when discovery grants a capability its declaration does
+// not make: discovery may only withdraw support the installed host cannot give.
+func RequireNarrowed(t *testing.T, declared, discovered proto.AgentKindCapabilities) {
+	t.Helper()
+	if widened := agent.Widened(declared, discovered); len(widened) > 0 {
+		t.Errorf("discovery widened %v", widened)
+	}
+}

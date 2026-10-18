@@ -84,8 +84,8 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
 		return p.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
 	}
-	if req.ExecutionControls != nil && req.ExecutionControls.DisableProgrammaticToolCalling {
-		if err := verifyProgrammaticToolsDisabled(cancelCtx, rpc); err != nil {
+	if req.ExecutionControls != nil && req.ExecutionControls.ProgrammaticToolCalling != nil {
+		if err := verifyProgrammaticTools(cancelCtx, rpc, *req.ExecutionControls.ProgrammaticToolCalling); err != nil {
 			return p.preparationFailed(err)
 		}
 	}

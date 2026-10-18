@@ -10,22 +10,22 @@ import (
 )
 
 func TestSessionNativeConfigurationSources(t *testing.T) {
-	provider := fixtureModelProvider("codex")
-	saved := &v1.SavedAgent{SavedAgentConfiguration: v1.SavedAgentConfiguration{Model: "saved-model", XAgentsCore: &v1.SavedAgentCore{Harness: "codex", HarnessConfig: json.RawMessage(`{"model_reasoning_effort":"low"}`)}}}
+	provider := fixtureModelProvider("claude_sdk")
+	saved := &v1.SavedAgent{SavedAgentConfiguration: v1.SavedAgentConfiguration{Model: "saved-model", XAgentsCore: &v1.SavedAgentCore{Harness: "claude_sdk", HarnessConfig: json.RawMessage(`{"thinking":{"type":"enabled","budgetTokens":1000}}`)}}}
 	for _, tc := range []struct {
 		name, body            string
 		saved                 *v1.SavedAgent
 		model, native, source string
 		wantError             bool
 	}{
-		{"deployment", `{"agent":{},"environment":{"type":"openai_hosted"}}`, nil, "deployment-model", `{"model_reasoning_effort":"high"}`, "deployment", false},
-		{"none deployment", `{"agent":{},"environment":{"type":"none"}}`, nil, "deployment-model", `{"model_reasoning_effort":"high"}`, "deployment", false},
-		{"saved", `{"agent_id":"a","environment":{"type":"openai_hosted"}}`, saved, "saved-model", `{"model_reasoning_effort":"low"}`, "agent", false},
+		{"deployment", `{"agent":{},"environment":{"type":"openai_hosted"}}`, nil, "deployment-model", `{"thinking":{"type":"enabled","budgetTokens":3000}}`, "deployment", false},
+		{"none deployment", `{"agent":{},"environment":{"type":"none"}}`, nil, "deployment-model", `{"thinking":{"type":"enabled","budgetTokens":3000}}`, "deployment", false},
+		{"saved", `{"agent_id":"a","environment":{"type":"openai_hosted"}}`, saved, "saved-model", `{"thinking":{"type":"enabled","budgetTokens":1000}}`, "agent", false},
 		{"model override discards", `{"agent_id":"a","agent":{"model":"other"},"environment":{"type":"openai_hosted"}}`, saved, "other", `{}`, "session", false},
 		{"explicit model discards deployment", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"}}`, nil, "other", `{}`, "session", false},
 		{"explicit clear", `{"agent_id":"a","environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, saved, "saved-model", `{}`, "session", false},
-		{"inline native", `{"agent":{"model":"other","x_agents_core":{"harness_config":{"model_reasoning_effort":"medium"}}},"environment":{"type":"openai_hosted"}}`, nil, "other", `{"model_reasoning_effort":"medium"}`, "session", false},
-		{"session beats inline", `{"agent":{"model":"other","x_agents_core":{"harness_config":{"model_reasoning_effort":"medium"}}},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, nil, "other", `{}`, "session", false},
+		{"inline native", `{"agent":{"model":"other","x_agents_core":{"harness_config":{"thinking":{"type":"enabled","budgetTokens":2000}}}},"environment":{"type":"openai_hosted"}}`, nil, "other", `{"thinking":{"type":"enabled","budgetTokens":2000}}`, "session", false},
+		{"session beats inline", `{"agent":{"model":"other","x_agents_core":{"harness_config":{"thinking":{"type":"enabled","budgetTokens":2000}}}},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{}}}`, nil, "other", `{}`, "session", false},
 		{"null rejects", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":null}}`, nil, "", "", "", true},
 		{"reserved rejects", `{"agent":{"model":"other"},"environment":{"type":"openai_hosted"},"x_agents_core":{"harness_config":{"api_key":"secret"}}}`, nil, "", "", "", true},
 		{"self hosted never defaults", `{"agent":{},"environment":{"type":"self_hosted","workspace_directory":"/tmp/work"}}`, nil, "", "", "", true},
@@ -41,9 +41,10 @@ func TestSessionNativeConfigurationSources(t *testing.T) {
 			}
 			calls := 0
 			deps, fakes := testDependencies(t)
+			deps.Engine = "claude_sdk"
 			fakes.modelProviders.resolve = func(context.Context, string) (*modelconfiguration.Snapshot, error) {
 				calls++
-				return &modelconfiguration.Snapshot{Provider: provider, Model: "deployment-model", HarnessConfig: json.RawMessage(`{"model_reasoning_effort":"high"}`)}, nil
+				return &modelconfiguration.Snapshot{Provider: provider, Model: "deployment-model", HarnessConfig: json.RawMessage(`{"thinking":{"type":"enabled","budgetTokens":3000}}`)}, nil
 			}
 			h := &Handler{Dependencies: deps}
 			err = h.prepareSessionModelConfiguration(t.Context(), &input, tc.saved, nil)
@@ -72,11 +73,12 @@ func TestSessionNativeConfigurationSources(t *testing.T) {
 }
 
 func TestProviderReplacementDiscardsNativeConfiguration(t *testing.T) {
-	provider := fixtureModelProvider("codex")
+	provider := fixtureModelProvider("claude_sdk")
 	model := "saved-model"
 	input := sessionRequest{CreateSessionRequest: v1.CreateSessionRequest{Agent: &v1.InlineAgent{Model: nil}, Environment: &v1.Environment{Type: "self_hosted"}, XAgentsCore: &v1.SessionExecutionInput{ModelProvider: provider}}}
-	saved := &v1.SavedAgent{SavedAgentConfiguration: v1.SavedAgentConfiguration{Model: model, XAgentsCore: &v1.SavedAgentCore{Harness: "codex", HarnessConfig: json.RawMessage(`{"model_reasoning_effort":"high"}`)}}}
+	saved := &v1.SavedAgent{SavedAgentConfiguration: v1.SavedAgentConfiguration{Model: model, XAgentsCore: &v1.SavedAgentCore{Harness: "claude_sdk", HarnessConfig: json.RawMessage(`{"thinking":{"type":"enabled","budgetTokens":3000}}`)}}}
 	deps, _ := testDependencies(t)
+	deps.Engine = "claude_sdk"
 	h := &Handler{Dependencies: deps}
 	if err := h.prepareSessionModelConfiguration(t.Context(), &input, saved, provider); err != nil {
 		t.Fatal(err)

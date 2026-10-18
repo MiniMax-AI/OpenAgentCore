@@ -142,7 +142,7 @@ After an uncertain `POST` response, `GET` the archive before writing again. Repe
   "session_id": "013773a9-44b9-4f84-baca-b51c04a01201",
   "model": {"value": "requested-model", "source": "session"},
   "harness": {"value": "codex", "source": "agent"},
-  "harness_config": {"value": {"model_reasoning_effort": "high"}, "source": "agent"},
+  "harness_config": {"value": {"thinking": {"type": "adaptive"}}, "source": "agent"},
   "model_provider": {
     "source": "agent",
     "status": "available",

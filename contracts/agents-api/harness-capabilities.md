@@ -2,7 +2,7 @@
 title: "Harness capabilities"
 ---
 
-This page lists what each Harness supports on each placement. Core decides admission from the Harness's engine profile in `services/core/internal/engine`, and the Runtime that runs the Session must also advertise the operation. The linked contracts define each operation; [Harness onboarding](./harness-onboarding.md#qualify-the-adapter) describes how a Harness is qualified.
+This page lists what each Harness supports on each placement. Core decides admission from the Harness's declaration in `internal/harnessconfig/<package>/declaration.go`, and the Runtime that runs the Session must also advertise the operation. The linked contracts define each operation; [Harness onboarding](./harness-onboarding.md#qualify-the-adapter) describes how a Harness is qualified.
 
 | Status | Meaning |
 | --- | --- |
@@ -21,7 +21,9 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | [Whitespace-only message text](./message-content.md) | Admitted; delivered unchanged | Rejected | Rejected |
 | [Inline PNG and JPEG message images](./message-content.md) | Verified on all placements | Verified on all placements | Rejected |
 | Remote image URLs | Rejected | Rejected | Rejected |
-| Explicit `reasoning`; `service_tier` other than `auto` | Rejected | Rejected | Rejected |
+| `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | Rejected |
+| `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | Rejected | Rejected |
+| `service_tier` other than `auto` | `default`, `flex`, `priority`: admitted | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
 | [Public token usage](./sessions-events.md) | Measured counters | Null | Null |
 
@@ -36,7 +38,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | [Structured output](./execution-tools.md#structured-output) | Rejected | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |
-| Enabled web search or programmatic tool calling | Rejected | Rejected | Rejected |
+| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | Rejected | Rejected |
 | [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Rejected |
 | [Environment-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted; `allowed_tools` null and `required` false only |
 | [HTTP MCP bearer credentials](./execution-tools.md#http-mcp) | Verified | Verified | Verified |
@@ -60,4 +62,4 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, anonymous or HTTPS bearer | Verified: self-hosted; admitted: hosted; anonymous or HTTPS bearer |
 
-External workspace storage additionally requires the selected Harness profile and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.
+External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.

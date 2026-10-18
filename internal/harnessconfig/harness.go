@@ -1,10 +1,11 @@
-// Package harnessconfig defines the shared model configuration contract.
-// This file is the authoring entry point for Harness configuration: declare
-// native provider support and parameter validation once, then bind that same
-// Configuration when registering the Runtime Harness. Core admission, support
-// descriptions and every Runtime execution/preparation entry consume it.
+// Package harnessconfig defines the shared Harness declaration. This file is
+// the authoring entry point for a Harness: one Declaration states its kind,
+// display name, model providers, native parameter validation, capabilities,
+// placements and the public admission rules it adds. Core admission, support
+// descriptions and every Runtime execution/preparation entry consume that same
+// value, so nothing about a Harness is declared a second time elsewhere.
 // Adapter-specific validation and native rendering remain private implementations.
-// Execution lifecycle and operation qualification are separate contracts.
+// Execution lifecycle is a separate contract.
 //
 // The current HarnessConfig wire object is defined by proto.HarnessConfig.
 // Omission and {} mean no native parameters. Explicit null, arrays, repeated
@@ -25,12 +26,15 @@
 // continuations and recovery. A Runtime that cannot preserve a frozen snapshot
 // rejects it without rewriting, migration or aliases. Native connection setup is
 // direct: no model API proxy, passthrough gateway or protocol conversion, including
-// inside an adapter. Protocol acceptance does not qualify model capabilities;
+// inside an adapter. Protocol acceptance does not declare model capabilities;
 // operation and input requirements must still be checked before native submission.
 package harnessconfig
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -53,6 +57,105 @@ type Configuration struct {
 	Providers []Provider
 	// ValidateNativeConfig belongs to the selected adapter, never Core.
 	ValidateNativeConfig func(proto.HarnessConfig) bool
+}
+
+// Declaration is everything a Harness states about itself, authored once in
+// internal/harnessconfig/<package>/declaration.go. The Runtime adapter binds it
+// to native execution, and Core admission validates every Session against it:
+// Core keeps no parallel per-Harness description.
+//
+// Every capability is Supported or Unsupported; the zero value is invalid.
+// Runtime discovery may narrow Capabilities for the installed host (a missing
+// binary, an unsupported platform) and never widens them. A nil validator means
+// only the common validation applies.
+type Declaration struct {
+	// Kind is the public identifier; Label is its display name.
+	Kind, Label string
+	// Configuration declares model providers and native parameter validation.
+	Configuration
+	// Capabilities is the maximum the adapter supports on a capable host and the
+	// operations Core may rely on once a connected Runtime advertises them.
+	Capabilities proto.AgentKindCapabilities
+	// Placements lists the Environment types the Harness executes in.
+	Placements []string
+	// MCPOrigins lists where HTTP MCP connections originate: "service" for the
+	// service-side environment:none profile, "environment" for the Environment.
+	MCPOrigins []string
+	// Execution declares which official execution option values the Harness
+	// maps to a native setting. Admission rejects any other user-set value.
+	Execution ExecutionOptions
+	// WhitespaceOnlyText declares messages without an image or non-whitespace
+	// text. Unsupported Harnesses reject them at admission; Core never trims or
+	// pads model input to fit a Harness.
+	WhitespaceOnlyText proto.CapabilitySupport
+	// ValidateConfiguration adds pure restrictions on a saved Agent and
+	// Environment.
+	ValidateConfiguration func(Admission) error
+	// ValidateTools adds restrictions on resolved function and MCP tools.
+	ValidateTools func([]proto.FunctionTool, []proto.MCPHTTPServer) error
+	// ValidateFunctionResult adds restrictions on submitted function results.
+	ValidateFunctionResult func(proto.FunctionResultPayload) error
+}
+
+// Info is the Runtime descriptor before discovery has checked the host.
+func (d Declaration) Info() proto.SupportedAgentKind {
+	return proto.SupportedAgentKind{Kind: d.Kind, Capabilities: d.Capabilities}
+}
+
+// Accepts reports whether the Harness executes in the Environment type.
+func (d Declaration) Accepts(placement string) bool {
+	return slices.Contains(d.Placements, placement)
+}
+
+func (d Declaration) Clone() Declaration {
+	d.Configuration = d.Configuration.Clone()
+	d.Execution = d.Execution.Clone()
+	d.Placements = slices.Clone(d.Placements)
+	d.MCPOrigins = slices.Clone(d.MCPOrigins)
+	return d
+}
+
+// ValidateDeclaration rejects ambiguous support before registration. Nothing is
+// inferred: every capability, placement and origin is stated.
+func (d Declaration) ValidateDeclaration() error {
+	// The label is rendered into the generated Markdown catalog.
+	if d.Kind == "" || d.Kind != strings.TrimSpace(d.Kind) || strings.TrimSpace(d.Label) == "" || strings.ContainsAny(d.Label, "\n\t|") {
+		return errors.New("harnessconfig: invalid kind or label")
+	}
+	if err := d.Configuration.ValidateDeclaration(); err != nil {
+		return err
+	}
+	if err := d.Capabilities.ValidateDeclaration(); err != nil {
+		return err
+	}
+	if d.WhitespaceOnlyText != proto.CapabilitySupported && d.WhitespaceOnlyText != proto.CapabilityUnsupported {
+		return errors.New("harnessconfig: whitespace-only text support must be declared")
+	}
+	if len(d.Placements) == 0 || !validChoices(d.Placements, "none", "openai_hosted", "self_hosted") {
+		return errors.New("harnessconfig: invalid placements")
+	}
+	if d.MCPOrigins == nil || !validChoices(d.MCPOrigins, "service", "environment") ||
+		(slices.Contains(d.MCPOrigins, "service") && !d.Accepts("none")) ||
+		(slices.Contains(d.MCPOrigins, "environment") && !d.Accepts("openai_hosted") && !d.Accepts("self_hosted")) ||
+		(d.Capabilities.MCPHTTPBearerAuth.IsSupported() && len(d.MCPOrigins) == 0) {
+		return errors.New("harnessconfig: invalid MCP origins")
+	}
+	// Core always sends the official default text verbosity.
+	if !slices.Contains(d.Execution.TextVerbosities, "medium") {
+		return errors.New("harnessconfig: execution must declare text verbosity medium")
+	}
+	return nil
+}
+
+func validChoices(values []string, allowed ...string) bool {
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		if !slices.Contains(allowed, value) || seen[value] {
+			return false
+		}
+		seen[value] = true
+	}
+	return true
 }
 
 // PreparedConfiguration owns a validated snapshot without native side effects.
@@ -151,42 +254,193 @@ func (c Configuration) Validate(protocol string, contextWindow, maxOutputTokens 
 }
 
 // Registry is an immutable snapshot. Missing declarations remain unknown rather
-// than inheriting another harness's configuration rules.
+// than inheriting another harness's rules.
 type Registry struct {
-	configurations map[string]Configuration
+	declarations map[string]Declaration
 }
 
-func NewRegistry(configurations map[string]Configuration) Registry {
-	registry := Registry{configurations: make(map[string]Configuration, len(configurations))}
-	for kind, configuration := range configurations {
-		if kind == "" || configuration.ValidateDeclaration() != nil {
-			panic("harnessconfig: invalid declaration")
+// NewRegistry panics on an invalid or duplicate declaration. Static
+// registrations are programmer errors, never runtime input.
+func NewRegistry(declarations ...Declaration) Registry {
+	registry := Registry{declarations: make(map[string]Declaration, len(declarations))}
+	for _, declaration := range declarations {
+		if _, duplicate := registry.declarations[declaration.Kind]; duplicate {
+			panic("harnessconfig: duplicate declaration")
 		}
-		registry.configurations[kind] = configuration.Clone()
+		if err := declaration.ValidateDeclaration(); err != nil {
+			panic(err)
+		}
+		registry.declarations[declaration.Kind] = declaration.Clone()
 	}
 	return registry
 }
 
-func (r Registry) Lookup(kind string) (Configuration, bool) {
-	configuration, ok := r.configurations[kind]
-	return configuration.Clone(), ok
+// IsZero reports a Registry that was never built by NewRegistry.
+func (r Registry) IsZero() bool { return r.declarations == nil }
+
+func (r Registry) Lookup(kind string) (Declaration, bool) {
+	declaration, ok := r.declarations[kind]
+	return declaration.Clone(), ok
+}
+
+// Kinds returns a stable snapshot of the declared Harness identifiers.
+func (r Registry) Kinds() []string {
+	kinds := slices.Collect(maps.Keys(r.declarations))
+	slices.Sort(kinds)
+	return kinds
 }
 
 func (r Registry) ValidateProtocol(kind, protocol string) error {
-	configuration, _ := r.Lookup(kind)
-	return configuration.ValidateProtocol(protocol)
+	declaration, _ := r.Lookup(kind)
+	return declaration.ValidateProtocol(protocol)
 }
 
 func (r Registry) Validate(kind, protocol string, contextWindow, maxOutputTokens int32) error {
-	configuration, _ := r.Lookup(kind)
-	return configuration.Validate(protocol, contextWindow, maxOutputTokens)
+	declaration, _ := r.Lookup(kind)
+	return declaration.Configuration.Validate(protocol, contextWindow, maxOutputTokens)
 }
 
 func (r Registry) SupportsProtocol(protocol string) bool {
-	for _, configuration := range r.configurations {
-		if _, ok := configuration.Provider(protocol); ok {
+	for _, declaration := range r.declarations {
+		if _, ok := declaration.Provider(protocol); ok {
 			return true
 		}
 	}
 	return false
+}
+
+// ErrInvalidInput marks a configuration a Harness declaration rejects. Core
+// reports it as an invalid request, without echoing submitted values.
+var ErrInvalidInput = errors.New("invalid harness configuration")
+
+// Admission is the saved Agent and Environment a Harness declaration validates.
+// Core projects its public types into it, so declarations stay independent of
+// the public API package.
+type Admission struct {
+	Model      string
+	TextFormat string
+	TextSchema json.RawMessage
+	MultiAgent bool
+	Tools      []json.RawMessage
+	// Environment is nil when the request names none.
+	Environment *AdmissionEnvironment
+}
+
+// AdmissionEnvironment carries the placement and whether the Environment adds
+// Skills, Plugins or capability directories.
+type AdmissionEnvironment struct {
+	Type       string
+	Extensions bool
+}
+
+// ValidateMCPOrigins preserves outbound authority independently of Harness names.
+// Workspace connections never stand in for service-network connections.
+func (d Declaration) ValidateMCPOrigins(environment *AdmissionEnvironment, servers []proto.MCPHTTPServer) error {
+	for _, server := range servers {
+		switch server.ConnectionOrigin {
+		case "service":
+			if environment == nil || environment.Type != "none" {
+				return errors.New("Service-origin MCP requires the service-side environment:none profile.")
+			}
+		case "environment":
+			if environment == nil || (environment.Type != "openai_hosted" && environment.Type != "self_hosted") {
+				return errors.New("Environment-origin MCP requires a managed or self-hosted execution Environment.")
+			}
+		default:
+			return errors.New("MCP requires an explicit connection origin.")
+		}
+		if !slices.Contains(d.MCPOrigins, server.ConnectionOrigin) {
+			return errors.New("The configured engine does not support this MCP connection origin.")
+		}
+	}
+	return nil
+}
+
+// RejectSubagentTools rejects the declared tool types that a Harness cannot
+// combine with Subagents.
+func RejectSubagentTools(admission Admission, unsupported ...string) error {
+	if !admission.MultiAgent {
+		return nil
+	}
+	for _, raw := range admission.Tools {
+		var tool struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &tool) != nil {
+			return ErrInvalidInput
+		}
+		if slices.Contains(unsupported, tool.Type) {
+			return errors.New("The configured Subagent profile does not support this tool combination.")
+		}
+	}
+	return nil
+}
+
+// ExecutionOptions lists the official execution option values a Harness maps to
+// a native setting. An empty set declares the option unsupported. Absent
+// options need no declaration: they follow the Harness's native default. Auto
+// service tier means unset, so it is always accepted.
+type ExecutionOptions struct {
+	// WebSearchModes are the supported web_search modes: disabled, cached, live.
+	WebSearchModes []string
+	// WebSearchSettings reports native homes for context_size, allowed_domains
+	// and location.
+	WebSearchSettings bool
+	// ReasoningEfforts and ReasoningSummaries are the supported reasoning values.
+	ReasoningEfforts, ReasoningSummaries []string
+	// ServiceTiers are the supported tiers other than auto.
+	ServiceTiers []string
+	// ProgrammaticToolCalling lists the supported enabled values.
+	ProgrammaticToolCalling []bool
+	// TextVerbosities are the supported text verbosity levels.
+	TextVerbosities []string
+}
+
+func (o ExecutionOptions) Clone() ExecutionOptions {
+	o.WebSearchModes = slices.Clone(o.WebSearchModes)
+	o.ReasoningEfforts = slices.Clone(o.ReasoningEfforts)
+	o.ReasoningSummaries = slices.Clone(o.ReasoningSummaries)
+	o.ServiceTiers = slices.Clone(o.ServiceTiers)
+	o.ProgrammaticToolCalling = slices.Clone(o.ProgrammaticToolCalling)
+	o.TextVerbosities = slices.Clone(o.TextVerbosities)
+	return o
+}
+
+// ValidateExecutionControls rejects a user-set or default value the Harness
+// does not declare. Core admission and the Runtime call it with the same
+// controls, so neither keeps a second list. Messages name the field and never
+// echo configuration other than the rejected value.
+func (d Declaration) ValidateExecutionControls(controls *proto.ExecutionControls) error {
+	if controls == nil {
+		return nil
+	}
+	o := d.Execution
+	reject := func(field, value string) error {
+		return fmt.Errorf("%s %q is not supported by this Harness.", field, value)
+	}
+	if search := controls.WebSearch; search != nil {
+		if !slices.Contains(o.WebSearchModes, search.Mode) {
+			return reject("web_search.mode", search.Mode)
+		}
+		// Settings of disabled search configure nothing.
+		if search.Mode != "disabled" && !o.WebSearchSettings && (search.ContextSize != "medium" || search.AllowedDomains != nil || search.Location != nil) {
+			return errors.New("web_search context_size, allowed_domains and location are not supported by this Harness.")
+		}
+	}
+	if enabled := controls.ProgrammaticToolCalling; enabled != nil && !slices.Contains(o.ProgrammaticToolCalling, *enabled) {
+		return fmt.Errorf("programmatic_tool_calling.enabled=%t is not supported by this Harness.", *enabled)
+	}
+	if v := controls.ReasoningEffort; v != "" && !slices.Contains(o.ReasoningEfforts, v) {
+		return reject("reasoning.effort", v)
+	}
+	if v := controls.ReasoningSummary; v != "" && !slices.Contains(o.ReasoningSummaries, v) {
+		return reject("reasoning.summary", v)
+	}
+	if v := controls.ServiceTier; v != "" && !slices.Contains(o.ServiceTiers, v) {
+		return reject("service_tier", v)
+	}
+	if v := controls.TextVerbosity; v != "" && !slices.Contains(o.TextVerbosities, v) {
+		return reject("text.verbosity", v)
+	}
+	return nil
 }

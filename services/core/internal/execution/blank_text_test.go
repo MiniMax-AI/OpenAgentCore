@@ -10,7 +10,7 @@ import (
 	"unicode"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 )
 
 // The Claude bridge test reads the same table, so both sides must agree on
@@ -50,19 +50,19 @@ func TestBlankTextMatchesClaudeBridgeTable(t *testing.T) {
 			t.Fatalf("U+%04X is Go whitespace but not in the table", r)
 		}
 	}
-	claude, _ := (engine.Catalog{}).Lookup("claude_sdk")
+	claude, _ := builtin.Registry().Lookup("claude_sdk")
 	var all strings.Builder
 	for r := range members {
 		all.WriteRune(r)
-		if !errors.Is(validateMessageTextProfile(claude, proto.TextInput(string(r))), ErrWhitespaceOnlyText) {
+		if !errors.Is(validateMessageText(claude, proto.TextInput(string(r))), ErrWhitespaceOnlyText) {
 			t.Fatalf("U+%04X admitted", r)
 		}
 	}
-	if !errors.Is(validateMessageTextProfile(claude, proto.TextInput(all.String())), ErrWhitespaceOnlyText) {
+	if !errors.Is(validateMessageText(claude, proto.TextInput(all.String())), ErrWhitespaceOnlyText) {
 		t.Fatal("all members admitted")
 	}
 	for r := range nonMembers {
-		if err := validateMessageTextProfile(claude, proto.TextInput(" "+string(r)+"\ufeff")); err != nil {
+		if err := validateMessageText(claude, proto.TextInput(" "+string(r)+"\ufeff")); err != nil {
 			t.Fatalf("U+%04X rejected: %v", r, err)
 		}
 	}
