@@ -62,7 +62,7 @@ export function parseWorkspace(value: unknown, cwd: string): Workspace | undefin
 
 export class WorkspaceProfile {
   readonly options: Options;
-  private readonly skillNames: readonly string[];
+  readonly skillNames: readonly string[];
 
   constructor(cwd: string, config: Workspace, mcp?: MCPProfile, subagents?: Subagents, disableWebSearch = false) {
     config = parseWorkspace(config, cwd)!;
@@ -71,9 +71,8 @@ export class WorkspaceProfile {
         process.env.CLAUDE_CODE_PROJECT_DIR_NAME !== undefined) throw new Error("invalid_request");
     const env: Record<string, string> = {
       ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string,string] => entry[1] !== undefined)),
-      // Private state paths, a pinned read-only binary and Turns that leave no detached work.
+      // Private state paths.
       HOME: config.home, TMPDIR: config.scratch, CLAUDE_CONFIG_DIR: config.state,
-      DISABLE_AUTOUPDATER: "1", CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
     };
     for (const [name, value] of Object.entries(config.tool_env ?? {})) {
       // Initialization cannot redirect the native Session history lookup.

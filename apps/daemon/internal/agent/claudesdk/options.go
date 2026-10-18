@@ -168,8 +168,8 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		}
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
-	// Node's fetch honours the operator's proxy only when asked, and an unattended Runtime never updates itself.
-	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "DISABLE_AUTOUPDATER=1", "NODE_USE_ENV_PROXY=1")
+	// Node's fetch honours the operator's proxy only when asked.
+	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "NODE_USE_ENV_PROXY=1")
 	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return startRequest{}, nil, err

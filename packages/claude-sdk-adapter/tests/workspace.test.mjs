@@ -79,7 +79,7 @@ test("workspace runs the native tool preset and removes only what cannot run una
     assert.equal(options[key], undefined, key);
   }
   const signal = new AbortController().signal;
-  for (const [name, input] of [["Bash", { command: "true", run_in_background: true }], ["Write", { file_path: "file.txt" }], ["Read", { file_path: "../protected/value" }]]) {
+  for (const [name, input] of [["Bash", { command: "true" }], ["Write", { file_path: "file.txt" }], ["Read", { file_path: "../protected/value" }]]) {
     assert.deepEqual(await options.canUseTool(name, input, { signal }), { behavior: "allow", updatedInput: input });
   }
 });
@@ -127,8 +127,6 @@ test("initialized environment is ordinary child environment on every layout", t 
 test("Core sets only the environment that cloud operation needs", t => {
   const { dirs, config } = fixture(t);
   const env = new WorkspaceProfile(dirs.workspace, config).options.env;
-  assert.equal(env.DISABLE_AUTOUPDATER, "1");
-  assert.equal(env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1");
   for (const name of ["DISABLE_TELEMETRY", "DISABLE_ERROR_REPORTING", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"]) assert.equal(env[name], undefined, name);
 });
 

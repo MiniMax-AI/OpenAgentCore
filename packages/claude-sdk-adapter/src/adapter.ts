@@ -102,11 +102,15 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         ...(request.native_model_options?.effort !== undefined ? { effort: request.native_model_options.effort } : {}),
         ...(request.native_model_options?.thinking !== undefined ? { thinking: request.native_model_options.thinking } : {}),
         cwd: request.cwd,
-        env: workspace?.options.env ?? { ...process.env, ...(subagents ? { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1" } : {}) },
+        env: workspace?.options.env ?? { ...process.env },
+        // Flag settings outrank user and project settings, so no settings file brings back detached work after a
+        // Turn or updates of the pinned binary.
+        settings: { env: { CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1", DISABLE_AUTOUPDATER: "1" } },
         model: request.model,
         ...(request.output_format ? { outputFormat: request.output_format } : {}),
-        // Claude Code keeps its own prompt; the Agent's instructions are appended.
-        systemPrompt: { type: "preset", preset: "claude_code", ...(request.system_prompt ? { append: request.system_prompt } : {}) },
+        // On a workspace Claude Code keeps its own prompt and the Agent's instructions are appended; that prompt
+        // describes tools environment none does not have.
+        systemPrompt: workspace ? { type: "preset", preset: "claude_code", ...(request.system_prompt ? { append: request.system_prompt } : {}) } : request.system_prompt,
         ...(request.resume ? { resume: request.resume } : {}),
         includePartialMessages: true, abortController: abort,
         // Environment none keeps no workspace tools and approves only Core's function and MCP tools. The host's
@@ -196,11 +200,13 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
         if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID, !workspace);
-        else if (workspace) {
-          // Native tools and settings may add servers and tools; Core's functions must still be present.
-          if (definitions.length && (!message.mcp_servers.some(server => server.name === "functions" && server.status === "connected") ||
-              names.some(name => !message.tools.includes(name)))) throw new Error("unexpected native configuration");
-        } else if ((message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
+        if (workspace) {
+          // Native tools and settings may add servers and tools, but every tool Core declared must still be present.
+          const declared = [...names, ...(workspace.skillNames.length ? ["Skill"] : []), ...(request.tool_search ? ["ToolSearch"] : []),
+            ...(structured ? ["StructuredOutput"] : []), ...(subagents ? ["Task", "SendMessage"] : [])];
+          if (declared.some(name => !message.tools.includes(name)) ||
+              definitions.length && !message.mcp_servers.some(server => server.name === "functions" && server.status === "connected")) throw new Error("unexpected native configuration");
+        } else if (!profile && (message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
             message.mcp_servers.some(server => server.name !== "functions" || server.status !== "connected"))) {
           throw new Error("unexpected native configuration");

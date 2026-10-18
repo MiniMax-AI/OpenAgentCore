@@ -166,7 +166,7 @@ export class MCPProfile {
       }
     }
     if (matched !== declared.size + (this.functions.length ? 1 : 0) ||
-        !exact && [...expected.keys(), ...this.functions].some(name => !inventory.includes(name)) ||
+        !exact && [...expected.keys()].some(name => !inventory.includes(name)) ||
         exact && (inventory.length !== expected.size + this.functions.length || new Set(inventory).size !== inventory.length ||
           inventory.some(name => !expected.has(name) && !this.functions.includes(name)))) {
       throw new Error("unexpected native MCP inventory");

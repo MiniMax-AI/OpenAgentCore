@@ -114,7 +114,8 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			env = append(env, entry)
 		}
 	}
-	env = append(env, "HOME="+w.HomeDir, "TMPDIR="+w.ScratchDir, "CLAUDE_CONFIG_DIR="+config.StateDir, "DISABLE_AUTOUPDATER=1", "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1", "NODE_USE_ENV_PROXY=1")
+	// Node's fetch honours the operator's proxy only when asked.
+	env = append(env, "HOME="+w.HomeDir, "TMPDIR="+w.ScratchDir, "CLAUDE_CONFIG_DIR="+config.StateDir, "NODE_USE_ENV_PROXY=1")
 	seen := map[string]bool{}
 	for _, entry := range config.Env {
 		name, _, ok := strings.Cut(entry, "=")

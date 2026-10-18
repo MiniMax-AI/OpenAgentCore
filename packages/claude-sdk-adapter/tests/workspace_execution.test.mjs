@@ -23,7 +23,8 @@ const workspace = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
     env_names: ["ANTHROPIC_API_KEY"] };
 const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: mode === "instructions" ? "Be brief." : "", cwd: dirs.workspace,
   workspace, ...(mode.startsWith("resume") ? { resume: "native" } : {}),
-  ...(mode.startsWith("functions") ? { functions: [{ name: "lookup", description: "Lookup", parameters: { type: "object" } }] } : {}) };
+  ...(mode.startsWith("functions") || mode === "search-missing" ? { functions: [{ name: "lookup", description: "Lookup", parameters: { type: "object" }, defer_loading: mode === "search-missing" }] } : {}),
+  ...(mode === "search-missing" ? { tool_search: true } : {}) };
 process.env.HOME = dirs.home;
 process.env.CLAUDE_CONFIG_DIR = dirs.state;
 process.env.ANTHROPIC_API_KEY = "fixture-secret";
@@ -46,14 +47,16 @@ globalThis.queryFixture = ({prompt, options}) => {
   assert.equal(options.env.HOME, dirs.home);
   assert.deepEqual(options.tools, {type:"preset",preset:"claude_code"});
   assert.equal(options.settingSources, undefined);
+  // A project's settings cannot bring background work back.
+  assert.deepEqual(options.settings, {env:{CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:"1",DISABLE_AUTOUPDATER:"1"}});
   assert.deepEqual(options.systemPrompt, {type:"preset",preset:"claude_code",...(mode === "instructions" ? {append:"Be brief."} : {})});
   assert.equal(options.resume, request.resume);
   const child = options.spawnClaudeCodeProcess({ command: process.execPath, env: options.env, signal: abort.signal,
     args: ["-e", "const assert=require('node:assert/strict');assert.equal(process.env.UNSELECTED_CANARY,'must-not-inherit');assert.equal(process.env.ANTHROPIC_API_KEY,'fixture-secret');process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"] });
   return { close() { child.stdin.end(); }, async *[Symbol.asyncIterator]() {
     const first = (await prompt[Symbol.asyncIterator]().next()).value;
-    yield { type: "system", subtype: "init", session_id: "native", mcp_servers: mode.startsWith("functions") ? [{ name: "functions", status: "connected" }] : [],
-      tools: ["Bash", "Read", "Edit", ...(mode === "functions" ? ["mcp__functions__lookup"] : [])] };
+    yield { type: "system", subtype: "init", session_id: "native", mcp_servers: request.functions ? [{ name: "functions", status: "connected" }] : [],
+      tools: ["Bash", "Read", "Edit", ...(mode === "functions" || mode === "search-missing" ? ["mcp__functions__lookup"] : [])] };
     if (mode.startsWith("commands")) {
       const call = id => ({type:"assistant",session_id:"native",parent_tool_use_id:null,
         message:{content:[{type:"tool_use",name:"Bash",id,input:{command:"printf 'observed'"}}]}});
@@ -92,14 +95,14 @@ try {
           assert.deepEqual(observations.at(-1).observation,{kind:"command",status:"incomplete",command:"printf 'observed'"});
           assert.deepEqual(events.at(-1),{type:"error",code:mode === "commands-cancel"?"cancelled":"execution_failed"});
         }
-      } else if (mode === "functions-missing") assert.deepEqual(events.at(-1), {type:"error",code:"execution_failed"});
+      } else if (mode === "functions-missing" || mode === "search-missing") assert.deepEqual(events.at(-1), {type:"error",code:"execution_failed"});
       else assert.equal(events.at(-1).type, "result");
     }
   }
 } finally { rmSync(root, {recursive:true,force:true}); }
 `;
 
-for (const mode of ["fresh", "instructions", "resume-existing", "resume-missing", "resume-mismatch", "commands-success", "commands-cancel", "commands-missing", "functions", "functions-missing"]) {
+for (const mode of ["fresh", "instructions", "resume-existing", "resume-missing", "resume-mismatch", "commands-success", "commands-cancel", "commands-missing", "functions", "functions-missing", "search-missing"]) {
   test(`workspace execution boundary: ${mode}`, { timeout: 15000 }, () => {
     const child = spawnSync(process.execPath, ["--input-type=module", "-e", fixture, mode], { encoding: "utf8", timeout: 10000 });
     assert.equal(child.status, 0, child.stderr || child.error?.message);
