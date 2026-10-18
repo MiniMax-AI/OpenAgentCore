@@ -4,7 +4,7 @@ source: docs/api/public-agent-api.md
 source_hash: ff909133be833f45753721b250cf1224b029943690e2dcc8e08bada456434b25
 ---
 
-如何使用官方 OpenAI SDK 或普通 HTTP 调用 Core 的 Agents API（`/v1`）：每项常见任务都提供两种方式，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
+Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
 
 ## 准备开始 {#before-you-start}
 
@@ -580,7 +580,7 @@ HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` �
 1. 读取 Session 的 `status` 和 `error`，以及最新 Turn 的 `error`。失败的 Turn 只会报告通用的 `internal_error`。
 2. 检查 Environment 是否已连接，以及其 Harness 是否可用。
 3. 在 [Harness 能力](../../../contracts/agents-api/zh/harness-capabilities.md) 中检查 Harness、模型和工具的组合。
-4. 向管理员索取 Session 的[Session 诊断](../../../contracts/agents-api/zh/session-diagnostics.md)，其中会指出故障类别；同时请查看[故障排查](../getting-started/troubleshooting.md)，了解服务日志、凭据和节点就绪状态。
+4. 向管理员索取[Session 诊断](../../../contracts/agents-api/zh/session-diagnostics.md)，其中会指出故障类别；同时请查看[故障排查](../getting-started/troubleshooting.md)，了解服务日志、凭据和节点就绪状态。
 
 401 通常表示使用了其他命名空间中的密钥；请参阅 [API 命名空间和凭据](index.md)。
 

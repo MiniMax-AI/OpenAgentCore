@@ -8,7 +8,7 @@ Core 提供三个 API 命名空间，每个面向一类调用方并使用独立�
 
 | 命名空间 | 调用方 | 凭据 | 内容 | 所有者 |
 | --- | --- | --- | --- | --- |
-| `/v1` | 应用程序：业务系统和官方 OpenAI SDK | 项目 API 密钥 | 固定版本 OpenAI SDK 的路由，列于 [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json)。仅属于 Core 的字段位于 `x_agents_core` 中；参阅 [Core 扩展](public-agent-api.md#core-extensions) | [Agents API 指南](public-agent-api.md) |
+| `/v1` | 应用程序：业务系统和官方 OpenAI SDK | 项目 API 密钥 | 恰好是固定版本 OpenAI SDK 中 Agents API 的路由，列于 [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json)。仅属于 Core 的字段位于 `x_agents_core` 中；参阅 [Core 扩展](public-agent-api.md#core-extensions) | [Agents API 指南](public-agent-api.md) |
 | `/core/v1` | Web 的控制台服务器和操作员脚本 | [Core 密钥](../getting-started/operations.md#core-key) | 安装信息、项目和密钥、资源读取和删除、Session 归档、执行器凭据、默认模型、指标、请求日志、审计、沙箱部署和节点、独立工作区存储配置 | [Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) |
 | `/api/v1` | 节点、Runtime 守护进程、自托管执行器及其安装程序 | 机器凭据：节点注册令牌和节点凭据、安装授权、执行器凭据和守护进程凭据。每种凭据只能用于其各自的路由 | `/api/v1/sandbox-node/*` 和 `/api/v1/agent-daemon/*` 下的机器初始化与连接（包括 WebSockets），以及公共原生安装程序下载 | [机器连接 API](../../../contracts/agents-api/zh/machine-api.md) |
 

@@ -44,7 +44,7 @@ Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥�
 | 签发、轮换或撤销自托管执行器凭据，或复制安装命令 | **Session 日志** 中的 Session 页面；参阅[运行自托管 Session](../getting-started/self-hosted.md) |
 | 删除资源，例如泄露的 Credential | 资源列表行或资源页面；文件从 **文件** 列表删除。适用公开删除规则 |
 
-Web 观察并管理安装。只有应用调用 `/v1` 时 Agent 才会运行；在 Web 中归档托管 Session 会释放其沙箱。[概念](../concepts.md#what-administrators-can-and-cannot-do)定义了管理员能做什么。
+Web 观察并管理安装。它从不启动 Session，也不发送输入；只有应用调用 `/v1` 时 Agent 才会运行。归档托管 Session 会请求取消并回收沙箱。[概念](../concepts.md#what-administrators-can-and-cannot-do)定义了管理员能做什么。
 
 新项目密钥只显示一次，并附带使用它的调用示例：
 

@@ -42,7 +42,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 | Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [Run self-hosted Sessions](../getting-started/self-hosted.md) |
 | Delete a resource, for example a leaked Credential | The resource's row in its list, or its page; Files are deleted from the Files list. The public deletion rules apply |
 
-Web observes and administers the installation. Agents run only when applications call `/v1`; archiving a hosted Session in Web releases its sandbox. [Concepts](../concepts.md#what-administrators-can-and-cannot-do) defines what administrators can do.
+Web observes and administers the installation. It never starts a Session or sends input; agents run only when applications call `/v1`. Archiving a hosted Session requests cancellation and sandbox reclamation. [Concepts](../concepts.md#what-administrators-can-and-cannot-do) defines what administrators can do.
 
 A new Project key is shown once, together with the calls that use it:
 

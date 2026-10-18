@@ -2,7 +2,7 @@
 title: "Console API usage"
 ---
 
-Which Core routes each console page calls, and how it bounds its reads. This reference is for developers of the console; operators need the [Web console](./index.md) guide. The [Core administration API](../../contracts/agents-api/admin-api.md) defines the routes, response shapes, pagination and audit records; [API namespaces and credentials](../api/index.md) defines the terms used here.
+This page lists the Core routes each console page calls and how the console bounds its reads. It is for developers of the console; operators read [Web console](./index.md). The [Core administration API](../../contracts/agents-api/admin-api.md) defines the routes, response shapes, pagination and audit records; [API namespaces and credentials](../api/index.md) defines the terms used here.
 
 ## Interfaces
 
@@ -54,14 +54,14 @@ Resource-specific rules:
 
 ## Executor credentials and host connection
 
-The **Executor credentials** section of a Session page appears only when the Session's environment is `self_hosted`, for that Session's `project_id` and `environment.id`. The [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) defines the routes, their 404 and 409 responses and the credential file.
+The **Executor credentials** section of a Session page appears only when the Session's environment is `self_hosted`, for that Session's `project_id` and `environment.id`. [Executor credentials](../../contracts/agents-api/environment-executor-credentials.md) defines the routes, their 404 and 409 responses and the credential file.
 
 | Operation | Route | Console use |
 | --- | --- | --- |
 | List credentials | `GET /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | Read every 5 seconds while visible. The table shows each credential's short `key_id` with its copy button, creation time (`created_at`, which rotation does not change) and status (Active, or Revoked with its time), active first; the credential itself is never listed. The same read's `connection` observation drives the host connection panel: never connected, connected, disconnected, bound credential revoked, and unknown stay distinct, and only a fresh connected read marks the host connected |
 | Issue or rotate | `POST …/executor-credentials` with `{"key_id", "rotate"}` | Issue keeps the generated key ID before submission. Rotation confirms that the old credential stops working; rotating a revoked credential restores it with a new secret. The private JSON is shown once for download or copy, never stored in browser storage or the query cache, and forgotten on Done |
 | Revoke | `DELETE …/executor-credentials/{key_id}` | **Revoke**, confirmed (the executor disconnects and does not retry; its daemon stays parked until the operator stops it), then the list is read again and shows the credential as Revoked |
-| Installation commands | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **Connect a host**: Core's short-lived Linux/macOS and PowerShell commands, shown as Core returned them with a platform selector and a link to the [Run self-hosted Sessions](../getting-started/self-hosted.md). The commands install the daemon and its Harnesses, start it and check its connection; their authorization expires after 30 minutes, and the console reads them again every 20 minutes. Without an available, unexpired answer the section says the command is unavailable. Archived projects do not read it |
+| Installation commands | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **Connect a host**: Core's short-lived Linux/macOS and PowerShell commands, shown as Core returned them with a platform selector and a link to [Run self-hosted Sessions](../getting-started/self-hosted.md). The commands install the daemon and its Harnesses, start it and check its connection; their authorization expires after 30 minutes, and the console reads them again every 20 minutes. Without an available, unexpired answer the section says the command is unavailable. Archived projects do not read it |
 
 In an archived project the section hides **Issue credential** and **Rotate** behind a note and keeps the list and **Revoke**, which Core still allows.
 
@@ -73,7 +73,7 @@ In an archived project the section hides **Issue credential** and **Rotate** beh
 | Write operations | `GET /core/v1/projects/{project_id}/write-operations` | A project's write history, newest first, filtered by key and resource type, 50 per page |
 | Summary | `GET /core/v1/summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
 | Installation | `GET /core/v1/installation` | Settings → Service and deployment installation facts (`public_url`, `api_base_url`, `installation_id`, `source_commit`) and read-only Startup settings (`configuration.settings`; a sensitive setting shows only whether it is `configured`); `api_base_url` in the call samples; `public_url` as the download origin and `--source-url` of the node install and uninstall commands (and the install command's `--core-url`). A sensitive setting with a value, or an unknown member, fails the read |
-| Core metrics | `GET /core/v1/metrics?range=` | Core metrics page. A Core without the route (404) is shown as not reporting. The [Core metrics](../../contracts/agents-api/core-metrics.md) defines every measurement |
+| Core metrics | `GET /core/v1/metrics?range=` | Core metrics page. A Core without the route (404) is shown as not reporting. [Core metrics](../../contracts/agents-api/core-metrics.md) defines every measurement |
 
 `local_only`, or no `public_url`, stops Add node from issuing a command and Clean up the host from giving one. Overview, Nodes and Settings then show a visible warning, with Review the public address leading to Settings → Service and deployment. Nodes disables Add node with a visible reason, and Getting started leaves its sandbox step to do.
 

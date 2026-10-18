@@ -4,7 +4,7 @@ source: docs/web/console-api-usage.md
 source_hash: 357bd2f80a35a4dc5146306cf6f24a7d54ddc7e3ef2c03ce0840040d6ca43568
 ---
 
-各控制台页面调用哪些 Core 路由，以及控制台如何限定读取范围。本参考面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)指南。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
+本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
 
 ## 接口 {#interfaces}
 
