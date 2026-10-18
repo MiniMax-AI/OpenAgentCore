@@ -88,6 +88,8 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   abort.signal.addEventListener("abort", closeInputs, { once: true });
   try {
     if (abort.signal.aborted) throw new Error("cancelled");
+    // The model sees only the selected tools of a subset server; the hook below remains the backstop.
+    const unselected = profile ? await profile.unselectedTools(abort.signal) : [];
     const beforeTool: HookCallback = async (input, id, context) => {
       if (input.hook_event_name !== "PreToolUse") return {};
       if (subagents?.isCoordination(input.tool_name)) return subagents.beforeTool(input, id, context);
@@ -113,7 +115,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           canUseTool: async () => ({ behavior: "deny" as const, message: "Tools are unavailable in this execution profile." }),
         }),
         ...(workspace?.options ?? {}),
-        disallowedTools: [...(workspace?.options.disallowedTools ?? []), ...(profile?.denied ?? [])],
+        disallowedTools: [...(workspace?.options.disallowedTools ?? []), ...(profile?.denied ?? []), ...unselected],
         mcpServers,
         ...(subagents ? { ...subagents.options(!!workspace), hooks: {
           Stop: [{ hooks: [subagents.stopped] }], SubagentStart: [{ hooks: [subagents.childStart] }],

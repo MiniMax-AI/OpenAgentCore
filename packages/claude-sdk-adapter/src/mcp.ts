@@ -1,4 +1,6 @@
 import type { StdioServer } from "./mcp_environment.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { HookCallback, McpServerConfig, McpServerStatus } from "@anthropic-ai/claude-agent-sdk";
 
 export type HTTPServer = {
@@ -96,6 +98,34 @@ export class MCPProfile {
       else if (!server.allowed_tools.length) this.denied.push(prefix + "*");
       else this.allowed.push(...server.allowed_tools.map(name => nativeToolName(server.server_label, name)));
     }
+  }
+
+  // Lists each subset server with the credentials of its native configuration and returns the native names of the tools it did not select.
+  // A server that cannot be listed fails the query, as a native connection failure does at initialization.
+  async unselectedTools(signal: AbortSignal): Promise<string[]> {
+    const hidden: string[] = [];
+    for (const server of this.declarations) {
+      if ("command" in server || !server.allowed_tools?.length) continue;
+      const selected = new Set(server.allowed_tools.map(name => nativeToolName(server.server_label, name)));
+      const reference = server.bearer_token_env_var;
+      const client = new Client({ name: "oac-claude-sdk-adapter", version: "0.0.0" });
+      try {
+        await client.connect(new StreamableHTTPClientTransport(new URL(server.server_url),
+          { requestInit: reference ? { headers: { Authorization: `Bearer ${process.env[reference]}` } } : {} }), { signal });
+        let cursor: string | undefined;
+        do {
+          const page = await client.listTools({ cursor }, { signal });
+          for (const tool of page.tools) {
+            const native = nativeToolName(server.server_label, tool.name);
+            if (!selected.has(native)) hidden.push(native);
+          }
+          cursor = page.nextCursor;
+        } while (cursor);
+      } finally {
+        await client.close();
+      }
+    }
+    return hidden;
   }
 
   // With exact inventory the text profile accepts nothing but the declared servers and tools.
