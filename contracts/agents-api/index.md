@@ -43,7 +43,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 
 Which operation each Harness supports on each placement is in the [Harness capabilities](./harness-capabilities.md). [API behavior](./wire-semantics.md) holds the rules that apply across resources: requests, errors and lists.
 
-Core's own fields sit inside `x_agents_core` ([Core extensions](../../docs/api/public-agent-api.md#core-extensions-x_agents_core)). The Core administration API (`/core/v1`) and the machine API (`/api/v1`) are not part of the Agents API.
+Core's own fields sit inside `x_agents_core` ([Core extensions](../../docs/api/public-agent-api.md#core-extensions)). The Core administration API (`/core/v1`) and the machine API (`/api/v1`) are not part of the Agents API.
 
 ## Differences from OpenAI
 

@@ -246,4 +246,4 @@ Subagent child Turns and pending Environment file writes do not block deletion. 
 
 ### Response fields
 
-A Session's `agent.tools` omits `tool_search` declarations, which the pinned Session tool union does not include; the frozen configuration keeps them. On `self_hosted` Sessions, `environment.remote_url` is Core's daemon WebSocket URL, `/api/v1/agent-daemon/ws` under the public URL, which only OpenAgentCore's Runtime daemon speaks; requests cannot set it. Other Session fields follow the pinned types; `x_agents_core` is described in the [Agents API guide](../../docs/api/public-agent-api.md#core-extensions-x_agents_core).
+A Session's `agent.tools` omits `tool_search` declarations, which the pinned Session tool union does not include; the frozen configuration keeps them. On `self_hosted` Sessions, `environment.remote_url` is Core's daemon WebSocket URL, `/api/v1/agent-daemon/ws` under the public URL, which only OpenAgentCore's Runtime daemon speaks; requests cannot set it. Other Session fields follow the pinned types; `x_agents_core` is described in the [Agents API guide](../../docs/api/public-agent-api.md#core-extensions).

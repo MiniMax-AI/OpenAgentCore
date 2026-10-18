@@ -1,16 +1,16 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 77a5047c028ea755622714bf89f92066f9b331b7832f0295dec85390e13b182e
+source_hash: 357bd2f80a35a4dc5146306cf6f24a7d54ddc7e3ef2c03ce0840040d6ca43568
 ---
 
-本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
+各控制台页面调用哪些 Core 路由，以及控制台如何限定读取范围。本参考面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)指南。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
 
 ## 接口 {#interfaces}
 
 | 接口 | 路径 | 身份验证 | 控制台用途 |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；**添加节点** 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置以及 **设置** → **沙箱与调度** 中 Runtime 行的发行版 Runtime release。参见 [console server](console-server.md) |
+| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；**添加节点** 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置以及 **设置** → **沙箱与调度** 中 Runtime 行的发行版 Runtime release。参见 [控制台服务器](console-server.md) |
 | Administrator API | `/core/v1/**`，不包括 `/core/v1/sandbox` | Core 密钥，由控制台服务器添加 | 项目、密钥、资源读取和删除、诊断、执行器凭据和安装命令、来源信息、汇总、Core 指标、安装信息、默认模型 |
 | Sandbox administration | `/core/v1/sandbox/**` | Core 密钥，由控制台服务器添加 | 沙箱配置；**节点**；**概览** 上的机群与容量摘要；**沙箱监控** 中每个项目的 Runtime 观测 |
 | Agents API | `/v1/**` | 项目 API 密钥 | 不使用。控制台会向开发者说明如何调用它（参见 [Provenance and monitoring](#provenance-and-monitoring)） |
@@ -56,14 +56,14 @@ source_hash: 77a5047c028ea755622714bf89f92066f9b331b7832f0295dec85390e13b182e
 
 ## 执行器凭据和主机连接 {#executor-credentials-and-host-connection}
 
-仅当 Session 的 Environment 为 `self_hosted` 时，Session 页面才会显示 **执行器凭据** 区段，并针对该 Session 的 `project_id` 和 `environment.id` 读取凭据。[执行器凭据契约](../../../contracts/agents-api/zh/environment-executor-credentials.md) 定义了路由、404 和 409 响应以及凭据文件。
+仅当 Session 的 Environment 为 `self_hosted` 时，Session 页面才会显示 **执行器凭据** 区段，并针对该 Session 的 `project_id` 和 `environment.id` 读取凭据。[执行器凭据](../../../contracts/agents-api/zh/environment-executor-credentials.md) 定义了路由、404 和 409 响应以及凭据文件。
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
 | 列出凭据 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 可见时每 5 秒读取一次。表格显示每个凭据的短 `key_id` 及其复制按钮、创建时间（`created_at`，轮换不会改变该值）和状态（Active，或 Revoked 及其时间），并优先显示活动凭据；绝不会列出凭据本身。同一次读取中的 `connection` 观测值用于驱动主机连接面板：never connected、connected、disconnected、bound credential revoked 和 unknown 保持为不同状态，且只有重新读取并得到 connected 才会将主机标记为已连接 |
 | 签发或轮换 | `POST …/executor-credentials`，请求体为 `{"key_id", "rotate"}` | Issue 会在提交前保留生成的密钥 ID。轮换前会确认旧凭据将停止工作；轮换已吊销的凭据会恢复该凭据并生成新密钥。私有 JSON 仅显示一次，供下载或复制，绝不会存储在浏览器存储或查询缓存中，并在 Done 时清除 |
 | 吊销 | `DELETE …/executor-credentials/{key_id}` | **撤销**，需确认（执行器会断开连接且不会重试；其守护进程会保持停止状态，直到操作员将其停止），随后再次读取列表，并显示凭据为 Revoked |
-| 安装命令 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **连接主机**：按 Core 返回的原始内容显示短效 Linux/macOS 和 PowerShell 命令，并提供平台选择器以及指向 [native installation guide](../getting-started/self-hosted.md) 的链接。这些命令会安装守护进程及其 Harnesses、启动守护进程并检查连接；其授权在 30 分钟后过期，控制台每 20 分钟重新读取一次。如果没有可用且未过期的响应，该区段会说明命令不可用。已归档项目不会读取该信息 |
+| 安装命令 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **连接主机**：按 Core 返回的原始内容显示短效 Linux/macOS 和 PowerShell 命令，并提供平台选择器以及指向 [运行自托管 Session](../getting-started/self-hosted.md) 的链接。这些命令会安装守护进程及其 Harnesses、启动守护进程并检查连接；其授权在 30 分钟后过期，控制台每 20 分钟重新读取一次。如果没有可用且未过期的响应，该区段会说明命令不可用。已归档项目不会读取该信息 |
 
 在已归档项目中，该区段会通过提示隐藏 **签发凭据** 和 **轮换**，但保留列表和 **撤销**，因为 Core 仍允许吊销。
 
@@ -75,7 +75,7 @@ source_hash: 77a5047c028ea755622714bf89f92066f9b331b7832f0295dec85390e13b182e
 | 写入操作 | `GET /core/v1/projects/{project_id}/write-operations` | 项目的写入历史，按最新优先，可按密钥和资源类型筛选，每页 50 条 |
 | 汇总 | `GET /core/v1/summary` | **概览**（按项目）、**Agent** 列表（`group_by=agent`）、项目页面（按项目并使用 `group_by=key`）、**Agent 监控**（跳过空闲项目，并统计从范围开始以来按创建密钥划分的使用量）、**项目与密钥** 列表（最近活动） |
 | 安装 | `GET /core/v1/installation` | **设置 → 服务与部署** 的 **安装** 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 **启动设置**（`configuration.settings`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）。如果敏感设置包含值，或存在未知成员，读取会失败 |
-| Core 指标 | `GET /core/v1/metrics?range=` | **Core 监控** 页面。不存在该路由的 Core（404）会显示为未报告数据。[Core 指标契约](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
+| Core 指标 | `GET /core/v1/metrics?range=` | **Core 监控** 页面。不存在该路由的 Core（404）会显示为未报告数据。[Core 指标](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
 
 如果为 `local_only`，或者没有 `public_url`，**添加节点** 将无法签发命令，**清理主机** 也无法提供命令。随后 **概览**、**节点** 和 **设置** 会显示醒目警告，并通过 **查看公开地址** 前往 **设置 → 服务与部署**。**节点** 会禁用 **添加节点** 并显示明确原因，**新手引导** 则将沙箱步骤保留为待办项。
 
@@ -99,7 +99,7 @@ source_hash: 77a5047c028ea755622714bf89f92066f9b331b7832f0295dec85390e13b182e
 
 ## 工作区存储 {#workspace-storage}
 
-**设置 → 工作区存储** 通过 `GET`、`PUT /core/v1/workspace-storage` 读取和选择配置，并更新租户容量。参数和只写凭据由 adapter 验证；Web 不定义提供商专属字段。表单不回显凭据，也不自动重试结果不确定的写入。完整语义见[管理 API](../../../contracts/agents-api/zh/admin-api.md#workspace-storage)。
+**设置 → 工作区存储** 通过 `GET`、`PUT /core/v1/workspace-storage` 读取和选择配置，并更新租户容量。参数和只写凭据由 adapter 验证；Web 不定义提供商专属字段。表单不回显凭据，也不自动重试结果不确定的写入。完整语义见[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md#workspace-storage)。
 
 ## Sandbox 管理 {#sandbox-administration}
 

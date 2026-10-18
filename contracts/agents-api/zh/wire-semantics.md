@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 7ce636ba3e318cd1ceda8000076dd427cd4fd1ad53ba502474ca3ff2cb9ab87b
+source_hash: c87426d2e0c1f461087ec3416aabad84998508239120b36a9604c3e3a029c66f
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -248,4 +248,4 @@ Subagent 子 Turn 和待处理的 Environment 文件写入不会阻止删除。�
 
 ### 响应字段 {#response-fields}
 
-Session 的 `agent.tools` 会省略 `tool_search` 声明，因为已锁定的 Session 工具联合类型不包含这些声明；冻结配置仍会保留它们。在 `self_hosted` Session 上，`environment.remote_url` 是 Core 守护进程的 WebSocket URL，即公共 URL 下的 `/api/v1/agent-daemon/ws`，只有 OpenAgentCore 的 Runtime 守护进程会与其通信；请求无法设置此值。其他 Session 字段遵循已锁定的类型；`x_agents_core` 的说明见 [Agents API guide](../../../docs/zh/api/public-agent-api.md#core-extensions-x-agents-core)。
+Session 的 `agent.tools` 会省略 `tool_search` 声明，因为已锁定的 Session 工具联合类型不包含这些声明；冻结配置仍会保留它们。在 `self_hosted` Session 上，`environment.remote_url` 是 Core 守护进程的 WebSocket URL，即公共 URL 下的 `/api/v1/agent-daemon/ws`，只有 OpenAgentCore 的 Runtime 守护进程会与其通信；请求无法设置此值。其他 Session 字段遵循已锁定的类型；`x_agents_core` 的说明见 [Agents API guide](../../../docs/zh/api/public-agent-api.md#core-extensions)。

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 436ab11130e4ce9ee8cffc8c080a85039c123eab29928443cc9bebafdb723960
+source_hash: 5032e5d52040d39196c2cfeb46daa004d268c766a440b155fe34129500207772
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -46,7 +46,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 
 各 Harness 在不同部署位置支持哪些操作，请参阅 [Harness capabilities](harness-capabilities.md)。[API 行为](wire-semantics.md) 包含适用于各项资源的通用规则：请求、错误和列表。
 
-Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh/api/public-agent-api.md#core-extensions-x-agents-core)）。Core 管理 API（`/core/v1`）和机器 API（`/api/v1`）不属于 Agents API。
+Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh/api/public-agent-api.md#core-extensions)）。Core 管理 API（`/core/v1`）和机器 API（`/api/v1`）不属于 Agents API。
 
 ## 与 OpenAI 的差异 {#differences-from-openai}
 

@@ -1,13 +1,15 @@
 ---
 title: "运行第一个 Session"
 source: docs/getting-started/quickstart.md
-source_hash: 36731629434acafda8c48640aba3eda4967622525ed1b9dbf49ba40769513bc3
+source_hash: 8795e92d7eb61f7f946e96bcd3966b16e2eb800a8f36ee1b1de524df106c868f
 ---
 
-本教程从项目 API 密钥开始，让 Agent 创建一个文件并汇报结果。你需要：
+使用官方 OpenAI Python SDK 通过 Core 运行 Agent：用项目 API 密钥连接，启动一个会写入文件的 Session，并读取结果。你需要管理员提供的密钥和 API 基础 URL。
 
-- 管理员提供的项目 API 密钥和 API 基础 URL（[签发项目 API 密钥](install.md#issue-a-project-api-key)）；
-- 已就绪的节点或 E2B 沙箱提供商，让 Core 能运行 Agent（[节点](nodes.md)）；
+开始之前，请准备：
+
+- 项目 API 密钥和 API 基础 URL（[签发项目 API 密钥](install.md#issue-a-project-api-key)）；
+- 已就绪的节点或 E2B 沙箱提供商，让 Core 能运行 Agent（[添加和管理节点](nodes.md)）；
 - Python 3.9 或更高版本；
 - 一个模型：安装的默认模型，或你自己的提供商的模型 ID、基础 URL 和 API 密钥。[模型执行](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明 Session 使用哪个模型，以及每个 Harness 支持哪些协议。
 
@@ -32,25 +34,29 @@ read -rs OPENAI_API_KEY && export OPENAI_API_KEY   # paste the key; it is not ec
 
 检查访问情况。此操作不运行模型，也不创建沙箱：
 
-```python
+::: code-group
+
+```python [Python]
 from openai import OpenAI
 
 client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
 print(client.beta.agents.list().data)
 ```
 
-空列表表示连接成功。使用 curl 做同样的检查：
-
-```sh
+```sh [curl]
 curl "$OPENAI_BASE_URL/agents" -H "OpenAI-Beta: agents=v1" \
   -H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")
 ```
+
+:::
+
+空列表（`[]`）表示连接成功。
 
 ## 2. 启动 Session {#_2-start-a-session}
 
 Session 是拥有独立工作区的一次 Agent 对话。使用 `openai_hosted` 时，Core 在节点或 E2B 上创建沙箱，并在其中启动 Harness。
 
-使用安装的默认模型时，跳过下面这一步。如果使用自己的提供商：
+要使用自己的提供商而不是安装的默认模型，请先导出其设置，然后运行第二个标签页的代码：
 
 ```sh
 export MODEL_NAME='your-model-id'
@@ -58,29 +64,40 @@ export MODEL_BASE_URL='https://your-provider.example/v1'
 read -rs MODEL_API_KEY && export MODEL_API_KEY
 ```
 
-```python
-import os
+::: code-group
 
-extra = {"agent": {"x_agents_core": {"harness": "codex"}}}
-if os.environ.get("MODEL_API_KEY"):
-    extra["agent"]["model"] = os.environ["MODEL_NAME"]
-    extra["x_agents_core"] = {"model_provider": {
-        "protocol": "responses",
-        "base_url": os.environ["MODEL_BASE_URL"],
-        "api_key": os.environ["MODEL_API_KEY"],
-    }}
-
+```python [Default model]
 session = client.beta.agents.sessions.create(
     environment={"type": "openai_hosted"},
     input="Create /workspace/hello.txt with a short greeting, then describe it.",
-    extra_body=extra,
+    extra_body={"agent": {"x_agents_core": {"harness": "codex"}}},
 )
 print(session.id)
 ```
 
+```python [Your own provider]
+import os
+
+session = client.beta.agents.sessions.create(
+    environment={"type": "openai_hosted"},
+    input="Create /workspace/hello.txt with a short greeting, then describe it.",
+    extra_body={
+        "agent": {"model": os.environ["MODEL_NAME"], "x_agents_core": {"harness": "codex"}},
+        "x_agents_core": {"model_provider": {
+            "protocol": "responses",
+            "base_url": os.environ["MODEL_BASE_URL"],
+            "api_key": os.environ["MODEL_API_KEY"],
+        }},
+    },
+)
+print(session.id)
+```
+
+:::
+
 这会发起真实模型请求，可能产生费用。
 
-- `x_agents_core` 包含 Core 对 OpenAI API 的扩展；参阅 [Core 扩展](../api/public-agent-api.md#core-extensions-x-agents-core)。
+- `x_agents_core` 包含 Core 对 OpenAI API 的扩展；参阅 [Core 扩展](../api/public-agent-api.md#core-extensions)。
 - 将整个 `agent` 对象放入 `extra_body`。SDK 3.13.0 使用 `extra_body` 中的同名字段替换请求体字段，而非合并。
 
 ## 3. 等待结果 {#_3-wait-for-the-result}
@@ -104,7 +121,14 @@ else:
     raise TimeoutError(f"Session {session.id} is still running; inspect it before retrying")
 ```
 
-成功意味着一个状态为 `completed` 的 Turn，其 Items 描述新文件。超时不会取消工作，也不能证明执行失败。
+它会输出：
+
+```text
+Turn: 00000000-0000-4000-8000-000000000003 completed
+[…the Turn's Items, including the assistant message that describes /workspace/hello.txt…]
+```
+
+状态为 `completed` 且其 Items 描述了新文件的 Turn，表示 Agent 已运行。超时不会取消工作，也不能证明执行失败。
 
 ## 后续步骤 {#next-steps}
 
@@ -112,5 +136,5 @@ else:
 | --- | --- |
 | 流式输出、发送后续消息、上传文件、添加 Skills 或 MCP、取消 | [Agents API 指南](../api/public-agent-api.md#common-tasks) |
 | 查看各资源的请求和响应示例 | [Agents API 指南](../api/public-agent-api.md) |
-| 在自己的机器上运行 Agent | [自托管执行](self-hosted.md) |
+| 在自己的机器上运行 Agent | [运行自托管 Session](self-hosted.md) |
 | 查看完整应用 | [示例](../examples.md) |

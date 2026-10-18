@@ -1,34 +1,27 @@
 ---
 title: "概览"
 source: docs/getting-started/index.md
-source_hash: 50f7acd140432ea6643dce0d3e8186812bf471f5aa844f7a7dde0d4f94bb9b56
+source_hash: d356cbd5268238500410b3152537c2d832e43aeda2310f183b5ab21055bd4618
 ---
 
-OpenAgentCore 在你自己的基础设施上运行 AI Agent，并提供 OpenAI Agents API。[架构概览](../architecture.md)介绍各个组成部分。根据你的角色选择指南。
+OpenAgentCore 在你自己的基础设施上运行 AI Agent，并提供 OpenAI Agents API。运维人员安装它并添加沙箱容量；应用开发者用官方 OpenAI SDK 调用它。[概念](../concepts.md)定义了它的术语，[架构](../architecture.md)展示了它的组成部分。
 
-## 运维人员 {#operators}
+## 运行安装 {#run-an-installation}
 
-运维人员安装 Core 和 Web、添加沙箱容量并签发项目 API 密钥。
+1. [安装 Core 和 Web](install.md)
+2. [配置公开地址](public-address.md)
+3. [选择沙箱提供商](sandbox-backends.md)，然后[设置工作区存储](workspace-storage.md)并[添加和管理节点](nodes.md)
+4. [运维](operations.md)和[故障排查](troubleshooting.md)
 
-| 指南 | 内容 |
-| --- | --- |
-| [安装 Core 和 Web](install.md) | 默认安装流程：从空白主机到第一个项目 API 密钥 |
-| [安装选项](install-options.md) | 安装参数、已有反向代理、离线主机 |
-| [节点](nodes.md) | 添加、修改、移除沙箱节点及排查问题 |
-| [运维](operations.md) | `oac` 命令、Core 密钥、备份、卸载、升级及问题排查 |
-| [配置参考](../configuration.md) | 所有设置、文件和环境变量 |
-| [Web 控制台](../web/index.md) | 控制台展示和管理的内容 |
+所有设置见[配置参考](../configuration.md)。管理员在 [Web 控制台](../web/index.md)中查看和管理安装。
 
-## 应用开发者 {#application-developers}
+## 构建应用 {#build-an-application}
 
-应用开发者使用项目 API 密钥调用 API，也可以在自己的机器上运行 Session。
+1. [运行第一个 Session](quickstart.md)
+2. [Agents API 指南](../api/public-agent-api.md)
+3. 在自己的机器上[运行自托管 Session](self-hosted.md)
+4. [示例](../examples.md)
 
-| 指南 | 内容 |
-| --- | --- |
-| [快速开始](quickstart.md) | 从项目 API 密钥到完成一个 Session |
-| [Agents API 指南](../api/public-agent-api.md) | 常见任务、Harness 与模型选择，以及各资源的 SDK 和 HTTP 示例 |
-| [自托管执行](self-hosted.md) | 在自己的机器上运行 Session |
-| [示例](../examples.md) | 基于 API 构建的完整应用 |
-| [API 索引](../api/index.md) | 三个命名空间及其凭据 |
+[API 命名空间和凭据](../api/index.md)列出三个 API 命名空间及各自使用的凭据。
 
-贡献者从[开发指南](../development.md)和 [CONTRIBUTING.md](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)开始。
+贡献者请从[开发 OpenAgentCore](../development.md)和 [CONTRIBUTING.md](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md) 开始。

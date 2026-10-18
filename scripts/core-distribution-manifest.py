@@ -60,6 +60,7 @@ BUNDLED_FILES = (
     "docs/assets/console-overview-zh.webp",
     "docs/assets/console-agent-metrics-en.webp",
     "docs/assets/console-agent-metrics-zh.webp",
+    "docs/assets/console-connect-host-en.webp",
 )
 REPOSITORY_URL = "https://github.com/MiniMax-AI/OpenAgentCore"
 MARKDOWN_LINK = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")

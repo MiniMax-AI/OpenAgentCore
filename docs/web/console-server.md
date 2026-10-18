@@ -2,9 +2,11 @@
 title: "Console server"
 ---
 
-The console server (`services/web`, the `oac-web` process) serves the built console, signs the administrator in with the Core key and forwards the signed-in browser's `/core/v1` requests to Core with that key. The browser never holds the Core key or any API key. Applications, nodes and self-hosted executors reach Core through the console, which forwards `/v1`, `/api/v1` and `/docs` unchanged.
+The console server (`oac-web`) serves Web, signs the administrator in with the Core key and forwards the browser's `/core/v1` requests to Core. This reference is for operators who run Web without the installer or review its security boundary.
 
-[Configuration](../configuration.md#appendix-web-environment-without-the-installer) owns its process settings and defaults.
+It is the `services/web` process. The browser never holds the Core key or any API key. Applications, nodes and self-hosted executors reach Core through the console, which forwards `/v1`, `/api/v1` and `/docs` unchanged.
+
+[Configuration reference](../configuration.md#appendix-web-environment-without-the-installer) owns its process settings and defaults.
 
 ## Request boundary
 
@@ -56,13 +58,13 @@ On the way to Core, the console:
 
 - removes the browser's `Authorization`, `Proxy-Authorization`, `Cookie`, `Origin` and `Referer` headers;
 - sends `Authorization: Bearer <Core key>`;
-- sets `X-Core-Console-Actor: console`, replacing any value the browser sent. Core records it as a display-only audit label ([administrator API](../../contracts/agents-api/admin-api.md));
+- sets `X-Core-Console-Actor: console`, replacing any value the browser sent. Core records it as a display-only audit label ([Core administration API](../../contracts/agents-api/admin-api.md));
 - ignores ambient HTTP proxy settings, so the Core key reaches only the configured Core;
 - streams responses without buffering.
 
 On the way back, it removes `Set-Cookie`, `WWW-Authenticate`, `Location`, `Refresh` and every `Access-Control-*` header. A redirect from Core, or a failed connection to Core, becomes 502 `core_unreachable`.
 
-The console server never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md); [console API usage](./console-api-usage.md) lists what each page reads and writes.
+The console server never retries a request. Browser code calls `/core/v1` through the typed clients in [`packages/agents-client`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/agents-client/README.md); [Console API usage](./console-api-usage.md) lists what each page reads and writes.
 
 ## Sign-in
 
@@ -98,7 +100,7 @@ With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution
 
 ## Public address
 
-The console does not configure a domain or obtain certificates. The operator's reverse proxy or hosting platform terminates HTTPS and routes to the console, and `OAC_PUBLIC_URL` records the origin that browsers, applications, nodes and executors use. The console accepts only its host, so DNS rebinding cannot reach it.
+The operator's reverse proxy or hosting platform terminates HTTPS and routes to the console ([Configure the public address](../getting-started/public-address.md)), and `OAC_PUBLIC_URL` records the origin that browsers, applications, nodes and executors use. The console accepts only its host, so DNS rebinding cannot reach it.
 
 ## Verification
 
@@ -106,7 +108,7 @@ After installing or changing the console, check:
 
 1. `GET /healthz` on the console and on Core. Each proves only that the process answers.
 2. Sign in, then read `GET /core/v1/projects` in the browser. This proves the browser-to-console and console-to-Core path and the console's Core key.
-3. A Project API key works on `/v1` and fails on `/core/v1`. The Core key fails on `/v1`, and `/v1` sent to the console answers 404.
+3. A Project API key works on `/v1` and fails on `/core/v1`. The Core key fails on `/v1`.
 4. A cross-origin write to the console is rejected, and a forged `X-Core-Console-Actor` header does not change the audit label.
 5. Neither sign-in nor the sandbox deployment read (`GET /core/v1/sandbox/deployment`) proves that a model or a sandbox is ready. Runtime observations and history report execution separately.
 

@@ -1,12 +1,14 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 2c91ae75c201e043ad59cddaacc19fb55789e4186b9b2c7348fc004dea47b5d9
+source_hash: 6e2f860b4f43159b1dcb691ea0343745c82e170b8fb9670247036753a9acd733
 ---
 
-控制台服务器（`services/web`、`oac-web` 进程）提供构建后的控制台，使用 Core 密钥认证管理员，并将已登录浏览器的 `/core/v1` 请求携带该密钥转发到 Core。浏览器不持有 Core 密钥或任何 API 密钥。应用、节点和自托管执行器经控制台到达 Core，控制台原样转发 `/v1`、`/api/v1` 和 `/docs`。
+控制台服务器（`oac-web`）提供 Web，使用 Core 密钥认证管理员，并将浏览器的 `/core/v1` 请求转发到 Core。本参考面向不使用安装程序运行 Web 的运维人员，以及评审其安全边界的人员。
 
-[配置](../configuration.md#appendix-web-environment-without-the-installer)定义其进程设置和默认值。
+它对应 `services/web` 进程。浏览器不持有 Core 密钥或任何 API 密钥。应用、节点和自托管执行器经控制台到达 Core，控制台原样转发 `/v1`、`/api/v1` 和 `/docs`。
+
+[配置参考](../configuration.md#appendix-web-environment-without-the-installer)定义其进程设置和默认值。
 
 ## 请求边界 {#request-boundary}
 
@@ -58,7 +60,7 @@ flowchart LR
 
 - 移除浏览器的 `Authorization`、`Proxy-Authorization`、`Cookie`、`Origin` 和 `Referer` 请求头；
 - 发送 `Authorization: Bearer <Core key>`；
-- 设置 `X-Core-Console-Actor: console`，替换浏览器提供的值。Core 将它记录为仅用于展示的审计标签（[管理员 API](../../../contracts/agents-api/zh/admin-api.md)）；
+- 设置 `X-Core-Console-Actor: console`，替换浏览器提供的值。Core 将它记录为仅用于展示的审计标签（[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md)）；
 - 忽略环境中的 HTTP 代理设置，确保 Core 密钥仅发送到配置的 Core；
 - 流式转发响应，不缓冲。
 
@@ -100,7 +102,7 @@ flowchart LR
 
 ## 公开地址 {#public-address}
 
-控制台不配置域名，也不申请证书。运维人员的反向代理或托管平台终止 HTTPS 并把流量转到控制台，`OAC_PUBLIC_URL` 记录浏览器、应用、节点和执行器使用的源地址。控制台只接受该地址的主机，因此 DNS 重绑定不能访问它。
+运维人员的反向代理或托管平台终止 HTTPS 并把流量转到控制台（[配置公开地址](../getting-started/public-address.md)），`OAC_PUBLIC_URL` 记录浏览器、应用、节点和执行器使用的源地址。控制台只接受该地址的主机，因此 DNS 重绑定不能访问它。
 
 ## 验证 {#verification}
 
@@ -108,7 +110,7 @@ flowchart LR
 
 1. 控制台与 Core 的 `GET /healthz`。各自只证明进程响应。
 2. 登录后在浏览器读取 `GET /core/v1/projects`。这证明浏览器到控制台、控制台到 Core 的路径和控制台 Core 密钥有效。
-3. 项目 API 密钥在 `/v1` 有效，在 `/core/v1` 失败。Core 密钥在 `/v1` 失败；发给控制台的 `/v1` 返回 404。
+3. 项目 API 密钥在 `/v1` 有效，在 `/core/v1` 失败。Core 密钥在 `/v1` 失败。
 4. 跨来源控制台写入被拒绝，伪造 `X-Core-Console-Actor` 请求头不会改变审计标签。
 5. 登录成功或读取沙箱部署（`GET /core/v1/sandbox/deployment`）均不能证明模型或沙箱就绪。Runtime 观察与历史独立报告执行情况。
 

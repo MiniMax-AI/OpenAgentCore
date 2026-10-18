@@ -1,10 +1,13 @@
 ---
-title: "Self-hosted executors"
+title: "Run self-hosted Sessions"
 ---
 
-A `self_hosted` Session runs on a machine your application owns: a workstation, a VM or a sandbox you manage. The application creates the Session through `/v1` and receives a command that installs `oac-daemon`, starts it and connects it to Core. Web shows the same command on the Session's page; it is optional. Core never creates, stops or reclaims the machine.
+A `self_hosted` Session runs on a machine your application owns, such as a workstation, VM or container, instead of a sandbox Core manages. This guide is for application developers who connect such a machine with `oac-daemon` and keep it running.
 
-**The daemon is not a sandbox.** Tools run with the permissions of the account that starts it and can reach whatever that account can. Use a container or VM when you need isolation; see [Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation). The daemon does not restrict network access, so a Template that requires a network policy is rejected for a self-hosted Session.
+The application creates the Session through `/v1` and receives a command that installs `oac-daemon`, starts it and connects it to Core. Web shows the same command on the Session's page; it is optional. Core never creates, stops or reclaims the machine.
+
+> [!WARNING]
+> The daemon is not a sandbox. Tools run with the permissions of the account that starts it and can reach whatever that account can. Use a container or VM when you need isolation; see [Runtime and outer isolation](../concepts.md#runtime-and-outer-isolation). A Template that requires a network policy is rejected for a self-hosted Session, because the daemon does not restrict network access.
 
 The Session brings its own model provider; the installation default never applies ([why](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence)). The machine gets an executor credential that works for this one Environment and nothing else.
 
@@ -18,7 +21,14 @@ The Session brings its own model provider; the installation default never applie
 
 The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
-The download is about 320 MiB. At its peak the installation needs about 2 GiB free on the disk that holds the Runtime home and the installation directory with one Harness selected (archive 316 MiB, unpacked installer 907 MiB, installed files about 560 MiB), and about 2.2 GiB with all three; the unpacked copy is removed when the command ends and the archive when the installation completes. The finished installation takes about 560 MiB with one Harness and about 940 MiB with all three.
+The installer download is about 320 MiB. Free space is needed on the disk that holds the Runtime home and the installation directory:
+
+| | One Harness | All three |
+| --- | --- | --- |
+| Free space at the peak | about 2 GiB | about 2.2 GiB |
+| Installed size | about 560 MiB | about 940 MiB |
+
+With one Harness, the peak is the archive (316 MiB), the unpacked installer (907 MiB) and the installed files (about 560 MiB). The unpacked copy is removed when the command ends and the archive when the installation completes.
 
 The machine needs:
 
@@ -61,6 +71,8 @@ No administrator privileges or Docker are needed. The Unix download command also
 
 In Web, open the Session and copy the command under **Connect a host**.
 
+![Connect a host on a Session's page in Web](../assets/console-connect-host-en.webp)
+
 Keep the command private: it carries a short-lived [installation grant](../../contracts/agents-api/environment-executor-credentials.md#installation-grant) that claims the machine's credential. The command passes the grant in the `OAC_INSTALL_GRANT` environment variable, never as an argument. On Linux and macOS it starts with a space so shells that skip space-prefixed commands leave it out of history. PowerShell has no such rule: its history file (`ConsoleHost_history.txt`) keeps the whole command, grant included, until you clear it, although the grant stops working after 30 minutes. When it has expired, read the Session again or copy a fresh command from Web.
 
 The installer reports three results:
@@ -71,7 +83,12 @@ The installer reports three results:
 | **Daemon connection** | Core confirmed the daemon's authenticated connection |
 | **Model configuration** | Not checked; the first Turn uses the Session's model provider |
 
+<details>
+<summary>If the download stops</summary>
+
 The installer checks the grant before it downloads anything, so an expired command costs no download. The archive download resumes after a reset, fails only when it stalls (no data for 60 seconds) and gives up after five attempts; rerun the command to continue where it stopped. A verified archive is kept in `native-download` under the Runtime home until the installation completes, so a rerun after a failure needs no new download; it is checked against Core's checksum on every run and discarded if it fails. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. The small `download.lock` file in `native-download` remains for concurrency control. An active download or installation is never cleared by another run. If the command expires, copy a fresh one from the Session.
+
+</details>
 
 If the connection is not confirmed within 45 seconds, the installer prints the path of the daemon's log. The daemon keeps reconnecting. Fix the cause and run the install command again with the same installation directory, copying a fresh one from Web if it has expired: completed components and the credential are kept and a running daemon is reused. Do not remove the workspace or the Session to retry.
 
@@ -89,7 +106,74 @@ Append these to the command:
 
 The workspace is fixed when the Session is created. For a different workspace, create another Session.
 
-## Local capability directories
+## Operate the installation
+
+The installation's `bin/oac-daemon` finds its own installation. Use it for:
+
+| Command | Effect |
+| --- | --- |
+| `oac-daemon start` | Validate the installed Harnesses and start the daemon in the background |
+| `oac-daemon status` | Show the local profile and process; not the connection |
+| `oac-daemon logs -n 100`, `oac-daemon logs -f` | Print or follow the daemon log |
+| `oac-daemon stop` | Stop the daemon |
+| `oac-daemon uninstall` | [Remove the machine](#remove-a-machine) |
+
+The installed `bin/oac-daemon` ignores `OAC_RUNTIME_HOME` and always acts on its own installation. Nothing restarts the daemon after a reboot: run `bin/oac-daemon start` again, which keeps the installation, credential and history. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
+
+To add a Harness, run the install command again (a fresh copy from Web if it has expired) with the same installation directory and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed. Restart a running daemon afterwards so it discovers the new Harness.
+
+Stopping the daemon, cancelling a Turn or deleting the Session never removes the machine's workspace, native history or capability snapshot. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it. To use the Session on a new directory, [reconnect it](#reconnect-an-existing-session).
+
+## Rotate or revoke
+
+In Web, the Session's **Executor credentials** list the machine's credential:
+
+| Action | Effect |
+| --- | --- |
+| **Rotate** | The credential gets a new secret; the old secret stops working at once. On a revoked credential the action is **Restore** |
+| **Revoke** | The credential stops working at once |
+
+To reconnect after a rotation, stop the daemon with `oac-daemon stop`, replace the JSON at its configured credential-file path with the new credential, and run `oac-daemon start`. Do not run `install` again over the existing installation, and rotate the existing credential rather than issuing a second one, which [cannot connect](../../contracts/agents-api/environment-executor-credentials.md#revoked-or-rotated-credential).
+
+In an archived Project, credentials cannot be issued or rotated; revocation remains available. Operators can manage credentials with the Core key; see the [credential contract](../../contracts/agents-api/environment-executor-credentials.md#core-key-routes).
+
+## Reconnect an existing Session {#reconnect-an-existing-session}
+
+The install command claims the Session's machine credential once, and a second claim ends in `This Session's machine credential is already claimed by another installation`. That happens when you run the command in a different directory, on another machine, after the installation directory was lost, or when the directory holds an installation of another Core build or Session, which the installer refuses to change. Rerunning the command in the original directory always works.
+
+To reconnect the Session without the original directory, rotate its credential and install from an extracted distribution into a new directory:
+
+1. In Web, open the Session and choose **Rotate** in **Executor credentials**. Save the credential JSON it returns.
+2. Download `<base>/<platform>.tar.gz` and extract it, where `<base>` is the first URL of the install command (it ends with the Core version) and `<platform>` is `linux-amd64`, `darwin-arm64` or `windows-amd64`, matching the rows of [Platforms](#platforms).
+3. Run the installer as in [Install from an extracted distribution](#install-from-an-extracted-distribution) with the Session's `remote_url`, Environment ID, workspace and the saved credential file.
+
+Or create a new Session and run its command.
+
+## Remove a machine {#remove-a-machine}
+
+Run the installation's own command:
+
+```sh
+"$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
+```
+
+On Windows PowerShell:
+
+```powershell
+& "$HOME\.oac\environments\<environment-id>\bin\oac-daemon.exe" uninstall
+```
+
+It stops the daemon, lists what it deletes and asks for confirmation. It deletes only what an installation owns inside its directory (`bin`, `daemon`, `components`, `capabilities`, `runtime`, `initialization` and `packages`, with their credential file, native history and Harnesses) and then the directory itself if nothing else is left in it. Anything else in the directory stays, and so do the workspace and any credential file or capability directory outside the installation; the command names each one it keeps. The `native-download` directory and its `download.lock` are never touched. Where nothing is installed it says so and exits 0. If a file cannot be deleted, the command names it and can be run again once it is released. On Windows, the final deletion finishes a few seconds after the command exits.
+
+Then, in Web, open the Session and choose **Revoke** in **Executor credentials**, or **Delete** the Session; Core keeps accepting the machine's credential until you do.
+
+The Session's install command cannot connect the machine again: its credential stays claimed in Core. To reconnect the Session, choose **Rotate** and [install from an extracted distribution](#reconnect-an-existing-session), or create a new Session.
+
+After a Session is deleted or its credential is revoked or rotated, the daemon started with `start` prints why in `connect.log` (see `oac-daemon logs`) and exits. Starting it again prints the same reason. To reconnect it, follow [Rotate or revoke](#rotate-or-revoke) or [Reconnect an existing Session](#reconnect-an-existing-session); to remove it, run `uninstall`.
+
+## Reference {#reference}
+
+### Local capability directories {#local-capability-directories}
 
 A self-hosted Session may supply `capability_directories` alongside its workspace:
 
@@ -120,72 +204,7 @@ The same extension works with `environment={"type": "openai_hosted"}`. Do not re
 
 Before the first Turn the daemon copies these sources into a snapshot. Reconnecting reuses the snapshot even after you edit the sources; a new Session takes a new snapshot. The [preparation contract](../../contracts/agents-api/environments.md#runtime-capability-preparation) lists fields, merge rules, snapshot behavior and failures.
 
-## Operate the installation
-
-The installation's `bin/oac-daemon` finds its own installation. Use it for:
-
-| Command | Effect |
-| --- | --- |
-| `oac-daemon start` | Validate the installed Harnesses and start the daemon in the background |
-| `oac-daemon status` | Show the local profile and process; not the connection |
-| `oac-daemon logs -n 100`, `oac-daemon logs -f` | Print or follow the daemon log |
-| `oac-daemon stop` | Stop the daemon |
-| `oac-daemon uninstall` | [Remove the machine](#remove-a-machine) |
-
-The installed `bin/oac-daemon` ignores `OAC_RUNTIME_HOME` and always acts on its own installation. Nothing restarts the daemon after a reboot: run `bin/oac-daemon start` again, which keeps the installation, credential and history. Check the connection under **Host connection** on the Session's page in Web, or with the [connection status](../../contracts/agents-api/environment-executor-credentials.md#connection-status).
-
-To add a Harness, run the install command again (a fresh copy from Web if it has expired) with the same installation directory and the Harness to add. The installer checks the existing contents, adds only missing components and keeps the Harnesses already installed. Restart a running daemon afterwards so it discovers the new Harness.
-
-Stopping the daemon, cancelling a Turn or deleting the Session never removes the machine's workspace, native history or capability snapshot. An installation from another daemon version, or one whose files were changed, is refused. The installer never upgrades, repairs or migrates it. To use the Session on a new directory, [reconnect it](#reconnect-an-existing-session).
-
-## Remove a machine {#remove-a-machine}
-
-Run the installation's own command:
-
-```sh
-"$HOME/.oac/environments/<environment-id>/bin/oac-daemon" uninstall
-```
-
-On Windows PowerShell:
-
-```powershell
-& "$HOME\.oac\environments\<environment-id>\bin\oac-daemon.exe" uninstall
-```
-
-It stops the daemon, lists what it deletes and asks for confirmation. It deletes only what an installation owns inside its directory (`bin`, `daemon`, `components`, `capabilities`, `runtime`, `initialization` and `packages`, with their credential file, native history and Harnesses) and then the directory itself if nothing else is left in it. Anything else in the directory stays, and so do the workspace and any credential file or capability directory outside the installation; the command names each one it keeps. The `native-download` directory and its `download.lock` are never touched. Where nothing is installed it says so and exits 0. If a file cannot be deleted, the command names it and can be run again once it is released. On Windows, the final deletion finishes a few seconds after the command exits.
-
-Then, in Web, open the Session and choose **Revoke** in **Executor credentials**, or **Delete** the Session; Core keeps accepting the machine's credential until you do.
-
-The Session's install command cannot connect the machine again: its credential stays claimed in Core. To reconnect the Session, choose **Rotate** and [install from an extracted distribution](#reconnect-an-existing-session), or create a new Session.
-
-After a Session is deleted or its credential is revoked or rotated, the daemon started with `start` prints why in `connect.log` (see `oac-daemon logs`) and exits. Starting it again prints the same reason. To reconnect it, follow [Rotate or revoke](#rotate-or-revoke) or [Reconnect an existing Session](#reconnect-an-existing-session); to remove it, run `uninstall`.
-
-## Rotate or revoke
-
-In Web, the Session's **Executor credentials** list the machine's credential:
-
-| Action | Effect |
-| --- | --- |
-| **Rotate** | The credential gets a new secret; the old secret stops working at once. On a revoked credential the action is **Restore** |
-| **Revoke** | The credential stops working at once |
-
-To reconnect after a rotation, stop the daemon with `oac-daemon stop`, replace the JSON at its configured credential-file path with the new credential, and run `oac-daemon start`. Do not run `install` again over the existing installation, and rotate the existing credential rather than issuing a second one, which [cannot connect](../../contracts/agents-api/environment-executor-credentials.md#revoked-or-rotated-credential).
-
-In an archived Project, credentials cannot be issued or rotated; revocation remains available. Operators can manage credentials with the Core key; see the [credential contract](../../contracts/agents-api/environment-executor-credentials.md#core-key-routes).
-
-## Reconnect an existing Session {#reconnect-an-existing-session}
-
-The install command claims the Session's machine credential once, and a second claim ends in `This Session's machine credential is already claimed by another installation`. That happens when you run the command in a different directory, on another machine, after the installation directory was lost, or when the directory holds an installation of another Core build or Session, which the installer refuses to change. Rerunning the command in the original directory always works.
-
-To reconnect the Session without the original directory, rotate its credential and install from an extracted distribution into a new directory:
-
-1. In Web, open the Session and choose **Rotate** in **Executor credentials**. Save the credential JSON it returns.
-2. Download `<base>/<platform>.tar.gz` and extract it, where `<base>` is the first URL of the install command (it ends with the Core version) and `<platform>` is `linux-amd64`, `linux-arm64`, `darwin-arm64` or `windows-amd64`.
-3. Run the installer as in [Install from an extracted distribution](#install-from-an-extracted-distribution) with the Session's `remote_url`, Environment ID, workspace and the saved credential file.
-
-Or create a new Session and run its command.
-
-## Install from an extracted distribution
+### Install from an extracted distribution {#install-from-an-extracted-distribution}
 
 The same installer accepts an already extracted distribution and a credential file issued by an operator, without the install command:
 
