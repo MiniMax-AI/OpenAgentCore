@@ -140,3 +140,47 @@ test("native cancellation preserves a submitted result's missing receipt", async
   assert.throws(() => bridge.assertComplete(), /unconfirmed/);
   bridge.close();
 });
+
+test("blank results accept the native placeholder and error text is compared as natively trimmed", async () => {
+  const text = value => ({ type: "input_text", text: value });
+  const blank = [
+    ["empty", true, [], "(mcp__functions__lookup completed with no output)"],
+    ["empty-text", true, [text("")], "(mcp__functions__lookup completed with no output)"],
+    ["whitespace", true, [text("  \n")], "(mcp__functions__lookup completed with no output)"],
+    ["empty-error", false, [], "Unknown error"],
+    ["empty-text-error", false, [text("")], "Command failed with no output"],
+  ];
+  const events = [];
+  const bridge = new FunctionBridge(async event => { events.push(event); });
+  for (const [id, success, content, placeholder] of blank) {
+    const value = { ...result(id, success), content };
+    const waiting = bridge.invoke(call(id), new AbortController().signal);
+    bridge.submit(JSON.stringify(value));
+    assert.equal((await waiting).isError, !success);
+    await assert.rejects(bridge.consume(native({ ...value, success: !success }, placeholder), "native"), /differs/);
+    await bridge.consume(native(value, placeholder), "native");
+  }
+  assert.deepEqual(events.filter(event => event.type === "function_applied").map(event => event.call_id), blank.map(([id]) => id));
+  bridge.assertComplete();
+
+  for (const [id, content, received] of [["trailing-empty", [text("x"), text("")], "x"],
+    ["trailing-newline", [text("boom\n")], "boom"], ["empty-between", [text("x"), text(""), text("y")], "x\n\ny"]]) {
+    const value = { ...result(id, false), content };
+    const waiting = bridge.invoke(call(id), new AbortController().signal);
+    bridge.submit(JSON.stringify(value));
+    await waiting;
+    await bridge.consume(native(value, received), "native");
+  }
+  assert.equal(events.at(-1).call_id, "empty-between");
+  bridge.assertComplete();
+
+  for (const [id, success, received] of [["text", true, [{ type: "text", text: "43" }]], ["error", false, "43"]]) {
+    const value = { ...result(id, success), content: [text("42")] };
+    const waiting = bridge.invoke(call(id), new AbortController().signal);
+    bridge.submit(JSON.stringify(value));
+    await waiting;
+    await assert.rejects(bridge.consume(native(value, received), "native"), /differs/);
+  }
+  assert.throws(() => bridge.assertComplete(), /unconfirmed/);
+  bridge.close();
+});
