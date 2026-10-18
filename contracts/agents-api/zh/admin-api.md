@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: 9b6c43139f2b15e97ac4ebee407d58ce691810de85c16ab131705509c0a96d14
+source_hash: 25364c00b8123a4f5dc70916e98d89af8cf3eae05bb5a4b597cf86b14c491800
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -23,7 +23,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密�
 
 | 路由 | 用途 | 契约 |
 | --- | --- | --- |
-| `installation` | 公共 URL、API 基础 URL、源代码提交、安装器的进程设置，以及绑定到公共 URL 的内容 | [安装信息](#installation-facts) |
+| `installation` | 公共 URL、API 基础 URL、源代码提交、安装程序的进程设置，以及绑定到公共 URL 的内容 | [安装信息](#installation-facts) |
 | `workspace-storage` | 读取或选择独立工作区文件系统配置 | [工作区存储](#workspace-storage) |
 | `projects`、`projects/{project_id}`、`projects/{project_id}/archive`、`projects/{project_id}/keys[/{key_id}]` | 项目及其 API 密钥 | [项目与密钥](#projects-and-keys) |
 | `projects/{project_id}/{agents,environment-templates,skills,files,vaults,sessions}/**` | 资源读取和删除、Session 历史及 Artifact | [资源读取和删除](#resource-reads-and-deletion) |
@@ -37,7 +37,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密�
 | `projects/{project_id}/resource-owners`、`projects/{project_id}/write-operations` | 创建资源的 API 密钥以及每个密钥执行的写入 | [写入溯源](#write-provenance) |
 | `harnesses`、`harnesses/{harness}/model-configuration` | 已启用的 Harness 及各 Harness 的部署默认模型 | [部署默认值](model-execution.md#deployment-defaults) |
 | `sandbox/deployment`、`sandbox/deployment/reset`、`sandbox/providers/{provider}/discovery` | 沙箱提供商、资源和 Runtime、空闲挂起策略、重置，以及提供商配置发现，例如 E2B 模板 | [沙箱部署](sandbox-deployment.md#routes) |
-| `sandbox/enrollment-tokens`、`sandbox/nodes[/{node_id}[/allocations]]` | 节点注册令牌、节点及其分配和主机历史 | [节点指南](../../../docs/zh/getting-started/nodes.md)、[沙箱部署](sandbox-deployment.md)、[节点主机历史](runtime-observability-api.md#node-host-observations-and-history) |
+| `sandbox/enrollment-tokens`、`sandbox/nodes[/{node_id}[/allocations]]` | 节点注册令牌、节点及其分配和主机历史 | [添加和管理节点](../../../docs/zh/getting-started/nodes.md)、[沙箱部署](sandbox-deployment.md)、[节点主机历史](runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | 按项目、Agent 或密钥统计的 Session 数量和使用情况 | [汇总](#summary) |
 | `metrics` | Core 自身的进程、执行、数据库和作业指标 | [Core 指标](core-metrics.md) |
 | `request-logs` | 近期应用或管理 HTTP 请求及其响应元数据 | [请求日志](#request-log) |
@@ -60,7 +60,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密�
 
 `configuration.settings` 为 Core 加载的每项设置一条记录，包含 `key`（设置它的环境变量，例如 `OAC_LOG_LEVEL`）、生效的 `value`、`default`、是否 `sensitive`，以及会 `restarts` 的服务（`core`、`web`）。
 
-敏感设置的 `value` 和 `default` 为 null，并改为包含一个布尔值 `configured`；只有敏感设置具有 `configured`。`oac-core check-config` 校验同一组环境变量，然后退出，不启动 Core，也不打印值。[配置](../../../docs/zh/configuration.md)会说明每个设置。
+敏感设置的 `value` 和 `default` 为 null，并改为包含一个布尔值 `configured`；只有敏感设置具有 `configured`。`oac-core check-config` 校验同一组环境变量，然后退出，不启动 Core，也不打印值。[配置参考](../../../docs/zh/configuration.md)会说明每个设置。
 
 | `address_bindings` 字段 | 含义 |
 | --- | --- |

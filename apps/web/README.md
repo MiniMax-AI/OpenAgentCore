@@ -11,7 +11,7 @@
 
 ## Run the console locally
 
-Set up the checkout as described in the [development guide](../../docs/development.md), then start the fixture console and the development server in separate terminals from the repository root:
+Set up the checkout as described in [Develop OpenAgentCore](../../docs/development.md), then start the fixture console and the development server in separate terminals from the repository root:
 
 ```sh
 node apps/web/e2e/fixture-console.mjs
@@ -40,14 +40,4 @@ pnpm test:web:acceptance
 
 ## README screenshots
 
-The fixture has an opt-in scene for Overview and Agent metrics, including five available nodes. From the repository root, start these in separate terminals:
-
-```sh
-OAC_WEB_SCREENSHOT_DEMO=1 AGENTS_FIXTURE_PORT=18394 node apps/web/e2e/fixture-console.mjs
-```
-
-```sh
-OAC_WEB_DEV_PROXY_TARGET=http://127.0.0.1:18394 pnpm --filter @oac/web exec vite --host 127.0.0.1 --mode test --port 4394
-```
-
-Open `http://127.0.0.1:4394` in Chrome and sign in with the fixture key `fixture-core-key-3f9a2c71`. Capture Overview and Agent metrics in light mode, once in English and once in Chinese using the console language menu. Check that all five nodes load and metrics have no partial-data warning before capturing. For a remote preview, forward port 4394 over SSH and capture in local Chrome. Keep the original resolution, crop browser chrome and add a plain macOS-style window bar. Save the four images as `docs/assets/console-*.webp`; the READMEs link them and the distribution manifest includes them. Normal acceptance data and production builds do not enable this scene.
+The fixture console has an opt-in demo scene that fills Overview and Agent metrics with five available nodes: start it with `OAC_WEB_SCREENSHOT_DEMO=1 node apps/web/e2e/fixture-console.mjs` and point the Vite dev server at it with `OAC_WEB_DEV_PROXY_TARGET`. The `docs/assets/console-*.webp` images are captured in light mode, in English and Chinese, from this scene and from the plain acceptance data. Acceptance runs and production builds never enable the scene.

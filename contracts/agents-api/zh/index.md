@@ -6,7 +6,7 @@ source_hash: 436ab11130e4ce9ee8cffc8c080a85039c123eab29928443cc9bebafdb723960
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
 
-目标是支持完整的 API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。[API namespaces and credentials](../../../docs/zh/api/index.md) 说明谁调用哪些 API，[Agents API guide](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
+目标是支持完整的 API（[public API rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#public-api)）。[API 命名空间和凭据](../../../docs/zh/api/index.md) 说明谁调用哪些 API，[Agents API 指南](../../../docs/zh/api/public-agent-api.md) 介绍使用方法。
 
 ## 固定基线 {#pinned-baseline}
 

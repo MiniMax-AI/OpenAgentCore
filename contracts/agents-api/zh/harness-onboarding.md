@@ -220,7 +220,7 @@ profile 是纯逻辑：它使用现有的公共类型和协议类型，声明受
 
 声明中的有序 `protocols` 列表是接受协议及默认协议（第一个条目）的唯一来源；它还为 Core 的配置支持描述符提供数据，Core 和 Runtime 通过它拒绝不受支持的组合。适配器通过原生配置直接连接；它们绝不引入模型 API 代理或协议转换器、第二套模型能力 registry，也不会从模型名称推断能力。Claude 的私有 bridge 接收编译后的原生选项，并且只执行结构检查，而不是声明规则的第二份副本。
 
-## 原生安装器参与 {#native-installer-participation}
+## 原生安装程序参与 {#native-installer-participation}
 
 适配器可以从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本、受支持平台、激活环境和有界就绪探测。在 `cli/native_harness.go` 中注册它，并将其锁定组件添加到原生分发构建器。此可选契约不会改变 Executor 和 Turn 语义。Runtime 负责校验和、复制、锁和增量安装；适配器负责原生布局和探测。必须在每个宣称的平台上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。
 

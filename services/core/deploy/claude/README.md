@@ -1,6 +1,6 @@
 # Claude Code Runtime
 
-The Claude adapter runs Claude Code through the pinned Claude Agent SDK. The SDK owns the model and tool loop. Two parts make up the adapter: the private TypeScript bridge in [`packages/claude-sdk-adapter`](../../../../packages/claude-sdk-adapter/README.md), which owns the bridge protocol and native SDK configuration, and the Go adapter in [`agent/claudesdk`](../../../../apps/daemon/internal/agent/claudesdk), which owns the bridge process. This page holds the Runtime-level rules and the Claude Runtime image. [Harness onboarding](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
+The Claude adapter runs Claude Code through the pinned Claude Agent SDK. The SDK owns the model and tool loop. Two parts make up the adapter: the private TypeScript bridge in [`packages/claude-sdk-adapter`](../../../../packages/claude-sdk-adapter/README.md), which owns the bridge protocol and native SDK configuration, and the Go adapter in [`agent/claudesdk`](../../../../apps/daemon/internal/agent/claudesdk), which owns the bridge process. This page holds the Runtime-level rules and the Claude Runtime image. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
 Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 

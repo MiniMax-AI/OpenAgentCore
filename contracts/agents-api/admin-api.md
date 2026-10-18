@@ -35,7 +35,7 @@ Paths are relative to `/core/v1`.
 | `projects/{project_id}/resource-owners`, `projects/{project_id}/write-operations` | Which API key created a resource and each key's writes | [Write provenance](#write-provenance) |
 | `harnesses`, `harnesses/{harness}/model-configuration` | Enabled Harnesses and each Harness's deployment default model | [Deployment defaults](./model-execution.md#deployment-defaults) |
 | `sandbox/deployment`, `sandbox/deployment/reset`, `sandbox/providers/{provider}/discovery` | The sandbox provider, resources and Runtime, idle suspension policy, reset, and provider configuration discovery such as E2B templates | [Sandbox deployment](./sandbox-deployment.md#routes) |
-| `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Nodes guide](../../docs/getting-started/nodes.md), [sandbox deployment](./sandbox-deployment.md), [node host history](./runtime-observability-api.md#node-host-observations-and-history) |
+| `sandbox/enrollment-tokens`, `sandbox/nodes[/{node_id}[/allocations]]` | Node enrollment tokens, nodes and their allocations and host history | [Add and manage nodes](../../docs/getting-started/nodes.md), [sandbox deployment](./sandbox-deployment.md), [node host history](./runtime-observability-api.md#node-host-observations-and-history) |
 | `summary` | Session counts and usage by Project, Agent or key | [Summary](#summary) |
 | `metrics` | Core's own process, execution, database and job metrics | [Core metrics](./core-metrics.md) |
 | `request-logs` | Recent public or administration HTTP requests and their response metadata | [Request log](#request-log) |
@@ -58,7 +58,7 @@ Paths are relative to `/core/v1`.
 
 `configuration.settings` has one entry per setting Core loaded: its `key`, the environment variable that sets it (such as `OAC_LOG_LEVEL`), its effective `value`, `default`, whether it is `sensitive`, and the services it `restarts` (`core`, `web`).
 
-A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. `oac-core check-config` validates the same environment and exits without starting Core or printing a value. [Configuration](../../docs/configuration.md) describes each setting.
+A sensitive setting has null `value` and `default` and a boolean `configured` instead; only sensitive settings have `configured`. `oac-core check-config` validates the same environment and exits without starting Core or printing a value. [Configuration reference](../../docs/configuration.md) describes each setting.
 
 | `address_bindings` field | Meaning |
 | --- | --- |

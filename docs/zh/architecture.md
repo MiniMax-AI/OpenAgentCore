@@ -1,12 +1,12 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: b0753bcafe4784d06cb2975a8e085283cac4431edda6f9ac4a823e86b19dc43a
+source_hash: 2a3b05ffc7d94d13398548f1362b78aa09be811289c9be58d43cf2ccfb669ed2
 ---
 
 OpenAgentCore 是 Agent 运行平台，通过可替换的协议实现统一组织 Harness、模型、工具、Session 和执行环境。它将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。沙箱提供商管理计算资源。独立工作区文件系统 adapter 通过单独的协议管理 Environment 持久存储。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
 
-推荐的自部署方案是 microsandbox 配合 kernel NFS 工作区存储。E2B 提供托管计算。Docker 运行在没有检查点或外部存储的节点上。它们使用相同的 Core 编排和能力检查。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。具体契约和支持能力见 [沙箱提供商协议](./sandbox-provider.md) 和[工作区文件系统提供商](./workspace-provider.md)。
+推荐的自部署方案是 microsandbox 配合 kernel NFS 工作区存储。E2B 提供托管计算。Docker 运行在没有检查点或外部存储的节点上。它们使用相同的 Core 编排和能力检查。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。[沙箱提供商协议](./sandbox-provider.md)和[工作区文件系统协议](./workspace-provider.md)定义其契约和支持的能力。
 
 ```mermaid
 flowchart TB
@@ -20,7 +20,7 @@ flowchart TB
     Env -->|"Harness–Model provider"| Model["Model provider"]
 ```
 
-Runtime daemon 主动向 Core 发起经过认证的 WebSocket 连接。[API 索引](api/index.md) 说明应用、运维和机器命名空间；[协议边界](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) 列出各协议的代码和所属文档。
+Runtime daemon 主动向 Core 发起经过认证的 WebSocket 连接。[API 命名空间和凭据](api/index.md) 说明应用、运维和机器命名空间；[协议边界](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) 列出各协议的代码和所属文档。
 
 ## 组件职责 {#component-responsibilities}
 
@@ -31,7 +31,7 @@ Runtime daemon 主动向 Core 发起经过认证的 WebSocket 连接。[API 索�
 | Workspace filesystem adapter | 创建、观察和删除 Environment 持久存储；验证并解析计算资源所需的挂载 | [工作区文件系统协议](workspace-provider.md) |
 | Sandbox node | 运行 Docker 或 microsandbox 主机，协调分配给它的 generation 与 allocation | [Sandbox node 协议](../../contracts/agents-api/zh/node-generation-protocol.md) |
 | Runtime | 准备工作区和能力，管理 Session Executor，执行 Turn 并报告事件与回执 | [Core–Runtime 协议](runtime-protocol.md) |
-| Harness adapter | 验证原生配置，调用上游 SDK 或协议，转换事件并确认原生清理完成 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |
+| Harness adapter | 验证原生配置，调用上游 SDK 或协议，转换事件并确认原生清理完成 | [Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md) |
 | 模型提供商 | 提供 Harness 选定的模型协议 | [模型执行](../../contracts/agents-api/zh/model-execution.md) |
 | Web | 让管理员通过服务端 Core API 连接配置与观察安装实例 | [控制台服务端](web/console-server.md) |
 

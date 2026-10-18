@@ -2,7 +2,7 @@
 title: "Build and release OpenAgentCore"
 ---
 
-This guide is for maintainers who build and publish OpenAgentCore. To install Core and Web, use the [installation guide](./getting-started/install.md). The rules the installer code follows are in [Deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) and [Node installer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md); required checks are in [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks).
+This guide is for maintainers who build and publish OpenAgentCore. To install Core and Web, use the [Install Core and Web](./getting-started/install.md). The rules the installer code follows are in [Deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) and [Node installer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md); required checks are in [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks).
 
 ## Build a distribution
 
@@ -43,7 +43,7 @@ The ingress image carries only `oac` and four node metadata files: `manifest.jso
 
 The control archive carries no Runtime image or node execution artifacts; the offline archive carries them. The [download contract](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#download-contract) describes how nodes obtain them.
 
-A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distribution-manifest.py`. Links between bundled docs stay relative; every other relative link is rewritten to the same file on GitHub at the bundle's commit. The build fails when a link or anchor does not resolve, and `make check-distribution` runs the same check on every tracked Markdown file outside `example/`. Update the list when you add or move a doc that the installer or its output refers to.
+A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distribution-manifest.py`. Links between bundled docs stay relative; every other relative link is rewritten to the same file on GitHub at the bundle's commit. The build fails when a link or anchor does not resolve, and `make check-docs` runs the same check on every tracked Markdown file outside `example/`. Update the list when you add or move a doc that the installer or its output refers to.
 
 ### Native installers
 
@@ -94,7 +94,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 
 `scripts/prepare-release-runtimes.sh` runs the companion build from the pins.
 
-The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executable and resources and the Claude SDK bundle copied in. It verifies that each image carries the daemon built from the same commit.
+The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executable and resources and the Claude Code bundle copied in. It verifies that each image carries the daemon built from the same commit.
 
 **E2B helper.**
 
@@ -128,6 +128,11 @@ Push a version tag on the reviewed commit to run the `core-release` workflow:
 ```sh
 git tag -a v1.2.3 FULL_REVIEWED_COMMIT_SHA -m "OpenAgentCore v1.2.3"
 git push origin v1.2.3
+```
+
+```mermaid
+flowchart LR
+  tag[Push tag] --> checks[Full gate and native packaging] --> build[Build distribution and manifest] --> publish[Publish draft Release and images]
 ```
 
 Tags use `vMAJOR.MINOR.PATCH`, optionally with a prerelease suffix such as `-rc.1` and build metadata such as `+build.1`. A prerelease suffix creates a GitHub prerelease. Pushing the tag is the release decision. Automated checks establish build and test results, not real-model qualification: assess live execution evidence before you push the tag. Model credentials and private certificate authorities never enter CI or release inputs, including acceptance images that contain them.
@@ -176,7 +181,7 @@ The planner compares the PR event's tested merge commit with its verified first 
 | `distribution` | Harness catalog and installer schema, install/apply/recovery/cleanup tests, Compose parsing and initialization fixtures, release/download and bundle contracts, Go console tests and build; needs Docker Compose for template parsing, no pnpm install or browser |
 | `compose` | Real startup from empty volumes using images built from the checkout, sign-in and API access, file upload and node installer download, then URL reconfiguration and container recreation with preserved credentials and data, and an in-place upgrade from the pinned published release; needs Docker, Go and network access, no model credentials |
 | `backend` | Parallel parts, each with a dedicated PostgreSQL guard: `runtime` (sqlc freshness, Runtime/shared Go tests, Linux microsandbox helper, daemon build), `core` (standalone Core build, Core service and client tests) and three `integration` shards of the serial Core integration test package |
-| `harness` | Claude SDK tests and packaging, MiniMax companion scripts |
+| `harness` | Claude Code adapter tests and packaging, MiniMax companion scripts |
 | `example` | Optional application typecheck, tests, build and isolated browser acceptance |
 | `web` | TypeScript, Web/client tests and Web build |
 | `website` | Website build and output checks for website, published documentation and dependency changes |
@@ -189,9 +194,29 @@ The planner compares the PR event's tested merge commit with its verified first 
 
 Compose template and Compose test changes select both `distribution` fixtures and the `compose` smoke job; Core, Web, shared Go packages and the image Dockerfiles also select the smoke job. Run `python3 scripts/compose-smoke.py` locally with Docker available to repeat it. The script uses a unique project, an automatically assigned loopback port and artifacts under `~/.oac/tests/`; it removes its containers and volumes on exit. CI also performs cleanup after a failed or interrupted smoke step. Diagnostics show container status without printing HTTP response bodies or sign-in keys. Core, Web and the ingress image are built from the checkout, with node metadata for the checkout's commit; Web serves a placeholder page instead of the console build, and the initialization container runs with networking disabled. The upgrade phase starts a new installation from the published `compose.yaml` of the release pinned by tag and SHA-256 in `deploy/compose/smoke-pins.json`, creates a Project, a Project key and a file, then runs the installer's preflight with the checkout's images (`core check-config`, then `init`) and `up --wait`. It checks that the installation ID, Core key, Project, Project key and file survive, that Core and the node payload report the checkout's commit and that the schema is at the latest migration. The smoke matrix runs on native Linux amd64 and arm64 runners; the native matrix builds and tests the shared Core installer on Linux, macOS and Windows.
 
-Go module and workspace inputs select backend, API (including the container), native and distribution checks. Each Node module owns its manifest and lockfile. Website dependencies select website checks; Web dependencies select Web and browser checks; example dependencies select example checks; shared TypeScript client dependencies select Web, browser and example checks; Claude adapter dependencies select Harness, native and distribution checks. Shared package-manager configuration selects all Node consumers. The root TypeScript configuration selects Web and example checks; the adapter TypeScript configuration selects Harness and native checks. Each selected set includes hygiene. Mixed changes accumulate their consumers, and every job reads the same plan instead of maintaining its own path list. For example, a notification-only PR skips database, browser and native jobs, while a notification plus Core change adds backend and API checks.
+`scripts/ci_plan.py` selects groups from the changed paths. Each selected set includes `hygiene`, mixed changes accumulate their consumers, and every job reads the same plan instead of keeping its own path list. A notification-only PR skips database, browser and native jobs; a notification plus Core change adds backend and API checks.
 
-Published documentation and assets under `docs/` and `contracts/`, plus `docs.json`, select hygiene and website. Other ordinary Markdown, including documentation inside source directories, selects hygiene only. Generated catalog files and configuration reference sections retain their distribution freshness checks. Core `.go`, `.sql`, helper scripts and configuration inputs select backend/API checks; Web source, styles and assets select Web checks. Embedded native assets and declared test fixture directories select their consumers regardless of suffix, including Markdown prompts and extensionless data. Installer changes add distribution checks. Web changes add Web checks and all browser shards; Core/DB changes add backend and official-client acceptance. Shared contracts, SDKs, Runtime inputs and dependencies propagate to their consumers according to the planner. Generated catalog and protocol inputs include the installer, client and UI consumers. Do not duplicate path lists in reusable workflows or put a `paths` filter on the required workflow.
+| Changed input | Groups selected |
+| --- | --- |
+| Published documentation and assets under `docs/` and `contracts/`, and `docs.json` | `hygiene`, `website` |
+| Other Markdown, including documentation inside source directories | `hygiene` |
+| Core `.go`, `.sql`, helper scripts and configuration inputs | `backend`, `api` |
+| Web source, styles and assets | `web`, `web-acceptance` (all browser shards) |
+| Installer | `distribution` |
+| Embedded native assets and declared test fixture directories, whatever the suffix | Their consumers |
+| Shared contracts, SDKs, Runtime inputs and dependencies; generated catalog and protocol inputs | Their consumers, including the installer, client and UI |
+| Go module and workspace inputs | `backend`, `api` (including the container), `native`, `distribution` |
+| Website dependencies | `website` |
+| Web dependencies | `web`, `web-acceptance` |
+| Example dependencies | `example` |
+| Shared TypeScript client dependencies | `web`, `web-acceptance`, `example` |
+| Claude adapter dependencies | `harness`, `native`, `distribution` |
+| Shared package-manager configuration | Every Node consumer |
+| Root TypeScript configuration | `web`, `example` |
+| Adapter TypeScript configuration | `harness`, `native` |
+| Core/DB changes | `backend`, official-client acceptance in `api` |
+
+Do not duplicate path lists in reusable workflows or put a `paths` filter on the required workflow. Generated catalog files and configuration reference sections keep their distribution freshness checks.
 
 The final `check` runs even when planning or a dependency fails. It requires a successful, valid plan, every selected job to be successful, and every unselected job to be skipped. Failure, cancellation, a missing job, an unexpected skip or an unexpected execution fails the gate. API/native reusable workflows are direct dependencies of this gate. A newer run on the same PR cancels its predecessor. Release checks run at their requested immutable ref; native packaging executes once inside those checks, and the distribution build waits for them.
 

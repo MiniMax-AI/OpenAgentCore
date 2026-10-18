@@ -1,6 +1,6 @@
 # Codex Runtime
 
-The Codex adapter ([`agent/codex`](../../../../apps/daemon/internal/agent/codex)) runs the native Codex CLI through its app-server protocol inside the daemon. This page holds the Codex-specific adapter rules, the Codex Runtime image and the Docker sandbox settings that every Docker Runtime uses. [Harness onboarding](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
+The Codex adapter ([`agent/codex`](../../../../apps/daemon/internal/agent/codex)) runs the native Codex CLI through its app-server protocol inside the daemon. This page holds the Codex-specific adapter rules, the Codex Runtime image and the Docker sandbox settings that every Docker Runtime uses. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
 Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 

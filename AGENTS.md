@@ -33,12 +33,12 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 | Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Sandbox node protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/` | [Core–Runtime protocol](docs/runtime-protocol.md) |
-| Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
+| Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness protocol](contracts/agents-api/harness-onboarding.md) |
 | Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |
 
 ### Complexity stays in the adapter
 
-- A new Sandbox Provider, Harness, model provider or vendor feature changes only its adapter. It adds no Core execution path, store table or column, migration, deployment or configuration field, API field or Web UI specific to one vendor or Harness. The [Sandbox Provider protocol](docs/sandbox-provider.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md) describe how to add an adapter.
+- A new Sandbox Provider, Harness, model provider or vendor feature changes only its adapter. It adds no Core execution path, store table or column, migration, deployment or configuration field, API field or Web UI specific to one vendor or Harness. The [Sandbox Provider protocol](docs/sandbox-provider.md) and [Harness protocol](contracts/agents-api/harness-onboarding.md) describe how to add an adapter.
 - When the protocol cannot express what an adapter needs, change the protocol. Never add an optional side interface for one implementation.
 - Implementing the declared checkpoint lifecycle in one vendor's Provider is an adapter change. A vendor-only pause interface, a Core path for that vendor, vendor receipts in the store or a vendor idle setting in the deployment is not.
 - Fix shared lifecycle, admission, cancellation, reuse and performance problems in the common flow, never in a branch selected by Harness, Runtime or vendor name. Core preparation and execution never branch on operating system or Environment source; platform support requires native CI builds and automated tests.
@@ -54,7 +54,7 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 
 Each setting and each piece of data is written in one place and read from that place: no second copy, no environment-variable or file fallback and no alias. A new setting joins its category and lives beside its peers.
 
-The categories are [process settings](docs/configuration.md#process-settings), [secrets](docs/configuration.md#compose-installations), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration](docs/configuration.md) owns the installation layout and the settings themselves.
+The categories are [process settings](docs/configuration.md#process-settings), [secrets](docs/configuration.md#compose-installations), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration reference](docs/configuration.md) owns the installation layout and the settings themselves.
 
 ### Pre-release: no compatibility layers
 
@@ -75,6 +75,8 @@ OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and
 
 - For each new task, create a new Git worktree. Name its directory after that change's commit subject, in kebab-case, beside the checkout. Run `git pull --ff-only` on the base branch, and create the feature branch in that worktree before development.
 - After every push to a pull request, wait 60 seconds, then run `gh pr checks` and confirm CI passes. Fix any failure before reporting the work as done.
+- When documents conflict, apply the latest explicit user decision and update the affected current guidance; recorded evidence does not override it.
+- Review the complete diff with a fresh independent subagent that receives only the requirements, acceptance criteria, boundaries, repository path and comparison baseline, with no implementation summary, self-assessment or earlier findings. Explain these criteria to the user. Do not use `codex exec` as a substitute reviewer. [CONTRIBUTING.md](CONTRIBUTING.md#review) states the review contract.
 - [CONTRIBUTING.md](CONTRIBUTING.md): documentation ownership, repository boundary, workflow, independent review, required checks and naming.
 - [Develop OpenAgentCore](docs/development.md): setup, the repository map, focused checks and [each extension boundary](docs/development.md#choose-an-extension-boundary).
-- [API index](docs/api/index.md): each route's caller and credential.
+- [API namespaces and credentials](docs/api/index.md): each route's caller and credential.

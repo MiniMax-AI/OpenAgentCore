@@ -1,10 +1,10 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: 3636bfa078276bfaf7a7449ce8cbc71ad3ebc10c8e1752c84203093a9f1b4a2f
+source_hash: 5b72a679573bd6a84a1de7c5051029ce0dfb98b85572e5912d9e58fae2d8a86c
 ---
 
-准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[入门指南](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
+准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[概览](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
 
 组件职责和执行流程参见[架构](architecture.md)。
 
@@ -13,7 +13,7 @@ source_hash: 3636bfa078276bfaf7a7449ce8cbc71ad3ebc10c8e1752c84203093a9f1b4a2f
 使用独立 worktree，让实验与验证不影响其他工作副本。从 `main` 已更新的现有克隆执行：
 
 ```sh
-git worktree add ../openagentcore-change -b codex/my-change main
+git worktree add ../openagentcore-change -b fix-session-timeout main
 cd ../openagentcore-change
 ```
 
@@ -40,7 +40,7 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 
 ### Node 依赖边界 {#node-dependency-boundaries}
 
-每个 pnpm 模块在 `package.json` 旁拥有自己的 `pnpm-lock.yaml`。Website 和 Claude SDK adapter 是独立 pnpm 项目，各自拥有工作区边界。Web/example/client 工作区使用 `sharedWorkspaceLockfile: false`：链接已声明的工作区依赖，但不共享依赖解析或虚拟存储。根脚本仅编排模块命令，不安装工具依赖。构建与测试工具应在导入或执行它们的模块中声明。MiniMax companion 使用自己的 npm manifest 和 `package-lock.json`，位于 pnpm 工作区之外。
+每个 pnpm 模块在 `package.json` 旁拥有自己的 `pnpm-lock.yaml`。Website 和 Claude Code adapter 是独立 pnpm 项目，各自拥有工作区边界。Web/example/client 工作区使用 `sharedWorkspaceLockfile: false`：链接已声明的工作区依赖，但不共享依赖解析或虚拟存储。根脚本仅编排模块命令，不安装工具依赖。构建与测试工具应在导入或执行它们的模块中声明。MiniMax companion 使用自己的 npm manifest 和 `package-lock.json`，位于 pnpm 工作区之外。
 
 使用 `pnpm --dir website install --frozen-lockfile` 安装一个模块，或使用 `pnpm --filter @oac/web... install --frozen-lockfile` 连同工作区依赖一起安装。通过同一 package filter 添加或更新依赖，并提交该模块的 manifest 与 lockfile。`make node-deps` 安装所有 pnpm 模块，用于完整本地验证。Web 和示例通过明确的 `workspace:*` 依赖共享 `packages/agents-client`；它们的检查也安装该 client。组件 Make target 使用过滤后的安装与检查。CI 缓存仅使用该作业的依赖锁；[CI 选择策略](maintainers.md#continuous-integration) 负责决定修改选择哪些检查。
 
@@ -74,7 +74,7 @@ python3 "$bundle/install.py" \
 
 将 `YOUR_CORE_HOST` 替换为浏览器与沙箱节点都能访问的地址。[安装选项](getting-started/install-options.md#offline-hosts)说明 `install.py` 的选项、重新运行和恢复。构建还会生成 `oac-<commit>-linux-amd64-offline.tar.gz`，用于在另一台 Linux amd64 Docker 主机上安装。
 
-在 Web 中配置模型提供商，创建沙箱部署，再使用[节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装程序目录](maintainers.md#native-installers)，否则可选的自托管原生安装程序不可用，不会生成占位目录。
+在 Web 中配置模型提供商，创建沙箱部署，再使用[添加和管理节点](getting-started/nodes.md)中显示的命令添加节点。节点前提仍然适用，包括 microsandbox 所需的 KVM。命令直接从本次安装下载匹配的执行制品。此路径构建全部三个受管 Harness；除非提供[原生安装程序目录](maintainers.md#native-installers)，否则可选的自托管原生安装程序不可用，不会生成占位目录。
 
 配置、密钥和停止服务参见[运维命令](getting-started/operations.md)。
 
@@ -97,20 +97,20 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 
 | 位置 | 职责 | 后续阅读 |
 | --- | --- | --- |
-| `services/core/internal/api` | 公开、管理员与机器 HTTP 边界 | [API 索引](api/index.md) |
+| `services/core/internal/api` | 公开、管理员与机器 HTTP 边界 | [API 命名空间和凭据](api/index.md) |
 | `services/core/internal/persistence`、`services/core/internal/db` 和 `services/core/migrations` | Core 的 PostgreSQL adapter、事务、查询和迁移 | [服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
 | `services/core/tests/integration` | 共同驱动 HTTP 边界、执行 Worker 和 PostgreSQL adapter 的测试 | [服务指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#tests) |
 | `services/core/internal/execution` | 持久化 Turn 分发与调度 | [Runtime 协议](runtime-protocol.md) |
-| `services/core/internal/engine` | 对 Harness 操作与执行位置进行纯资格验证 | [Harness 接入](../../contracts/agents-api/zh/harness-onboarding.md) |
+| `services/core/internal/engine` | 对 Harness 操作与执行位置进行纯资格验证 | [Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire 类型与验证器 | [Runtime 协议](runtime-protocol.md) |
 | `internal/runtimebootstrap` | 提供商到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
 | `apps/daemon/internal/dispatch` | Runtime 准备、Executor 复用、Turn 和清理所有权 | [Harness 生命周期](../../contracts/agents-api/zh/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | 原生 Harness adapter | [原生参考](../../contracts/agents-api/zh/harness-onboarding.md#native-references) |
-| `services/core/internal/sandbox` | 提供商接口与托管计算资源生命周期 | [提供商接入](sandbox-provider.md) |
+| `services/core/internal/sandbox` | 提供商接口与托管计算资源生命周期 | [沙箱提供商协议](sandbox-provider.md) |
 | `services/web` | 控制台登录与服务端管理代理 | [控制台服务端](web/console-server.md) |
 | `apps/web` 和 `packages/agents-client` | 控制台 UI 与类型化 client | [Web 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md) |
-| `deploy` 和 `scripts` | 发行、安装和验证工具 | [维护者指南](maintainers.md) |
-| `contracts/agents-api` | 固定 schema、语义契约和覆盖台账 | [覆盖台账](../../contracts/agents-api/zh/index.md) |
+| `deploy` 和 `scripts` | 发行、安装和验证工具 | [构建并发布 OpenAgentCore](maintainers.md) |
+| `contracts/agents-api` | 固定 schema、语义契约和兼容性记录 | [OpenAI 兼容性](../../contracts/agents-api/zh/index.md) |
 
 ## 选择扩展边界 {#choose-an-extension-boundary}
 
@@ -127,12 +127,12 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | 公共 schema、Core 扩展或内部处理函数注解 | `make openapi`、`make check-openapi`；检查生成类型和三个命名空间的 schema |
 | 共享 Runtime 协议 | `make check-runtime-contract` |
 | 提供商集成 | `make check-sandbox-provider-contract` 和提供商的原生检查 |
-| Claude SDK bridge 与产物 | `make check-claude-sdk` |
+| Claude Code adapter 与产物 | `make check-claude-sdk` |
 | Web UI 与 client | `make check-web` |
 | 发行或安装程序 | `make check-distribution` |
-| 文档 | `make check-names`；`make check-distribution` 验证 Markdown 链接与打包文档 |
+| 文档 | `make check-docs`（Markdown 链接与锚点）、`make check-names`，以及用于中文镜像的 `pnpm --dir website check-translations` |
 
-Fixture 浏览器验收使用 loopback 端口 18092 和 4174。并行验证时通过 `AGENTS_FIXTURE_PORT` 和 `AGENTS_WEB_PORT` 选择空闲端口。验证 worker 之间使用独立数据库、端口和容器。编译、fixture 成功和真实模型/提供商验收分别证明不同事实；应明确报告跳过或不可用的检查。验证后遵循[独立盲审工作流](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
+Fixture 浏览器验收使用 loopback 端口 18092 和 4174。并行验证时通过 `AGENTS_FIXTURE_PORT` 和 `AGENTS_WEB_PORT` 选择空闲端口。验证 worker 之间使用独立数据库、端口和容器。编译、fixture 成功和真实模型/提供商验收分别证明不同事实；应明确报告跳过或不可用的检查。验证后遵循[审查流程](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
 
 ## 修改文档 {#change-documentation}
 

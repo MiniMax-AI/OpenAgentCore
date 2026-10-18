@@ -2,7 +2,7 @@
 title: "Develop OpenAgentCore"
 ---
 
-Set up a checkout, build a component and validate your changes. To use an installation, start with the [getting started guide](./getting-started/index.md). Read the [contributor rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md) before changing code.
+Set up a checkout, build a component and validate your changes. To use an installation, start with the [Overview](./getting-started/index.md). Read the [contributor rules](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md) before changing code.
 
 For component responsibilities and execution flow, read [Architecture](./architecture.md).
 
@@ -11,7 +11,7 @@ For component responsibilities and execution flow, read [Architecture](./archite
 Work from an isolated worktree so experiments and validation do not disturb another checkout. From an existing clone with an up-to-date `main`:
 
 ```sh
-git worktree add ../openagentcore-change -b codex/my-change main
+git worktree add ../openagentcore-change -b fix-session-timeout main
 cd ../openagentcore-change
 ```
 
@@ -38,7 +38,7 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 
 ### Node dependency boundaries
 
-Each pnpm module owns a `pnpm-lock.yaml` beside its `package.json`. Website and Claude SDK adapter are independent pnpm projects with their own workspace boundaries. The Web/example/client workspace uses `sharedWorkspaceLockfile: false`: it links declared workspace dependencies without sharing dependency resolution or a virtual store. Root scripts only orchestrate module commands and have no installed tool dependencies. Declare build and test tools in the module that imports or executes them. The MiniMax companion uses its own npm manifest and `package-lock.json` and is outside the pnpm workspace.
+Each pnpm module owns a `pnpm-lock.yaml` beside its `package.json`. Website and the Claude Code adapter are independent pnpm projects with their own workspace boundaries. The Web/example/client workspace uses `sharedWorkspaceLockfile: false`: it links declared workspace dependencies without sharing dependency resolution or a virtual store. Root scripts only orchestrate module commands and have no installed tool dependencies. Declare build and test tools in the module that imports or executes them. The MiniMax companion uses its own npm manifest and `package-lock.json` and is outside the pnpm workspace.
 
 Install one module with `pnpm --dir website install --frozen-lockfile`, or include its workspace dependencies with `pnpm --filter @oac/web... install --frozen-lockfile`. Add or update dependencies through the same package filter and commit that module's manifest and lockfile. `make node-deps` installs all pnpm modules for full local validation. Web and the example share `packages/agents-client` through explicit `workspace:*` dependencies; their checks install that client too. Component Make targets use filtered installs and checks. CI caches use only the job's dependency locks; the [CI selection policy](./maintainers.md#continuous-integration) owns which checks a change selects.
 
@@ -72,7 +72,7 @@ python3 "$bundle/install.py" \
 
 Replace `YOUR_CORE_HOST` with an address reachable by your browser and sandbox nodes. [Installation options](./getting-started/install-options.md#offline-hosts) describes the `install.py` options, reruns and recovery. The build also creates `oac-<commit>-linux-amd64-offline.tar.gz` for installing on another Linux amd64 Docker host.
 
-In Web, configure a model provider, create a sandbox deployment and add nodes with the command shown in [Nodes](./getting-started/nodes.md). Node prerequisites still apply, including KVM for microsandbox. The command downloads the matching execution artifacts directly from this installation. This path builds all three managed Harnesses; optional self-hosted native installers are unavailable unless you supply their [native installer catalog](./maintainers.md#native-installers). It does not create a placeholder catalog.
+In Web, configure a model provider, create a sandbox deployment and add nodes with the command shown in [Add and manage nodes](./getting-started/nodes.md). Node prerequisites still apply, including KVM for microsandbox. The command downloads the matching execution artifacts directly from this installation. This path builds all three managed Harnesses; optional self-hosted native installers are unavailable unless you supply their [native installer catalog](./maintainers.md#native-installers). It does not create a placeholder catalog.
 
 Use the [operator commands](./getting-started/operations.md) for configuration, keys and stopping services.
 
@@ -95,20 +95,20 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 
 | Location | Responsibility | Read next |
 | --- | --- | --- |
-| `services/core/internal/api` | Public, administrator and machine HTTP boundaries | [API index](./api/index.md) |
+| `services/core/internal/api` | Public, administrator and machine HTTP boundaries | [API namespaces and credentials](./api/index.md) |
 | `services/core/internal/persistence`, `services/core/internal/db` and `services/core/migrations` | Core's PostgreSQL adapters, transactions, queries and migrations | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
 | `services/core/tests/integration` | Tests that drive the HTTP boundaries, the execution Worker and the PostgreSQL adapters together | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#tests) |
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](./runtime-protocol.md) |
-| `services/core/internal/engine` | Pure qualification of Harness operations and placements | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
+| `services/core/internal/engine` | Pure qualification of Harness operations and placements | [Harness protocol](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire types and validators | [Runtime protocol](./runtime-protocol.md) |
 | `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](./runtime-bootstrap.md) |
 | `apps/daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | Native Harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |
-| `services/core/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Provider onboarding](./sandbox-provider.md) |
+| `services/core/internal/sandbox` | Provider interfaces and managed compute lifecycle | [Sandbox Provider protocol](./sandbox-provider.md) |
 | `services/web` | Console login and the server-side management proxy | [Console server](./web/console-server.md) |
 | `apps/web` and `packages/agents-client` | Console UI and typed clients | [Web guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md) |
-| `deploy` and `scripts` | Distribution, installation and validation tools | [Maintainers](./maintainers.md) |
-| `contracts/agents-api` | Pinned schema, semantic contracts and coverage ledger | [Coverage ledger](../contracts/agents-api/index.md) |
+| `deploy` and `scripts` | Distribution, installation and validation tools | [Build and release OpenAgentCore](./maintainers.md) |
+| `contracts/agents-api` | Pinned schema, semantic contracts and compatibility record | [OpenAI compatibility](../contracts/agents-api/index.md) |
 
 ## Choose an extension boundary
 
@@ -125,12 +125,12 @@ Choose focused checks for the current diff and its directly affected behavior us
 | Public schema, Core extensions or internal handler annotations | `make openapi`, `make check-openapi`; inspect generated types and all three namespace schemas |
 | Shared Runtime protocol | `make check-runtime-contract` |
 | Provider integration | `make check-sandbox-provider-contract` and the provider's native checks |
-| Claude SDK bridge and artifact | `make check-claude-sdk` |
+| Claude Code adapter and artifact | `make check-claude-sdk` |
 | Web UI and clients | `make check-web` |
 | Distribution or installer | `make check-distribution` |
-| Documentation | `make check-names`; `make check-distribution` validates Markdown links and bundled docs |
+| Documentation | `make check-docs` (Markdown links and anchors), `make check-names`, and `pnpm --dir website check-translations` for Chinese mirrors |
 
-Fixture browser acceptance uses loopback ports 18092 and 4174. Select unused ports with `AGENTS_FIXTURE_PORT` and `AGENTS_WEB_PORT` when running parallel validation. Keep databases, ports and containers separate between validation workers. Compilation, fixture success and live model/provider acceptance establish different facts; report skipped or unavailable checks explicitly. Follow the [independent blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review) after validation.
+Fixture browser acceptance uses loopback ports 18092 and 4174. Select unused ports with `AGENTS_FIXTURE_PORT` and `AGENTS_WEB_PORT` when running parallel validation. Keep databases, ports and containers separate between validation workers. Compilation, fixture success and live model/provider acceptance establish different facts; report skipped or unavailable checks explicitly. Follow the [review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review) after validation.
 
 ## Change documentation
 

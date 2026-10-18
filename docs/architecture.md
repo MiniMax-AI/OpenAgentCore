@@ -4,7 +4,7 @@ title: "Architecture"
 
 OpenAgentCore is an Agent execution platform that brings Harnesses, models, tools, Sessions and execution environments together through replaceable protocol implementations. It separates orchestration, compute and native execution. Core owns the API and durable state. Sandbox Providers manage compute. Independent workspace filesystem adapters manage durable Environment storage through a separate protocol. A Runtime daemon prepares an Environment and runs the selected Harness, whose native SDK or protocol owns the model and tool loop.
 
-The recommended self-managed deployment is microsandbox with kernel NFS workspace storage. E2B supplies managed compute. Docker runs on nodes without checkpoint or external storage. All use the same Core orchestration and capability checks. Compute and filesystem adapters declare their supported combinations; a deployment choice does not introduce a separate Agent execution flow. See [Sandbox Providers](./sandbox-provider.md) and [workspace filesystem providers](./workspace-provider.md) for their contracts and supported capabilities.
+The recommended self-managed deployment is microsandbox with kernel NFS workspace storage. E2B supplies managed compute. Docker runs on nodes without checkpoint or external storage. All use the same Core orchestration and capability checks. Compute and filesystem adapters declare their supported combinations; a deployment choice does not introduce a separate Agent execution flow. The [Sandbox Provider protocol](./sandbox-provider.md) and the [Workspace filesystem protocol](./workspace-provider.md) define their contracts and supported capabilities.
 
 ```mermaid
 flowchart TB
@@ -18,7 +18,7 @@ flowchart TB
     Env -->|"Harness–Model provider"| Model["Model provider"]
 ```
 
-The Runtime daemon initiates its authenticated WebSocket connection to Core. The [API index](./api/index.md) describes the application, operator and machine namespaces; [protocol boundaries](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) lists each protocol's code and owning document.
+The Runtime daemon initiates its authenticated WebSocket connection to Core. The [API namespaces and credentials](./api/index.md) describes the application, operator and machine namespaces; [protocol boundaries](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) lists each protocol's code and owning document.
 
 ## Component responsibilities
 
@@ -29,7 +29,7 @@ The Runtime daemon initiates its authenticated WebSocket connection to Core. The
 | Workspace filesystem adapter | Create, observe and delete durable Environment storage; validate and resolve its compute attachment | [Workspace filesystem protocol](./workspace-provider.md) |
 | Sandbox node | Operate a Docker or microsandbox host and reconcile its assigned generation and allocations | [Sandbox node protocol](../contracts/agents-api/node-generation-protocol.md) |
 | Runtime | Prepare the workspace and capabilities, manage Session Executors, execute Turns and report events and receipts | [Core–Runtime protocol](./runtime-protocol.md) |
-| Harness adapter | Validate native configuration, invoke the upstream SDK or protocol, translate events and confirm native cleanup | [Harness onboarding](../contracts/agents-api/harness-onboarding.md) |
+| Harness adapter | Validate native configuration, invoke the upstream SDK or protocol, translate events and confirm native cleanup | [Harness protocol](../contracts/agents-api/harness-onboarding.md) |
 | Model provider | Serve the model protocol selected for the Harness | [Model execution](../contracts/agents-api/model-execution.md) |
 | Web | Let administrators configure and observe the installation through a server-side Core API connection | [Console server](./web/console-server.md) |
 

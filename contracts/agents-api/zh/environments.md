@@ -237,7 +237,7 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 
 ### 显式本地工具环境 {#explicit-local-tool-environment}
 
-安装器的 `--tool-env-file`（`OAC_RUNTIME_TOOL_ENV_FILE`）提供 Runtime 操作者的基础工具变量。准备过程会将这些值复制到其私有初始化快照中，并由 Session 的 `env` 键覆盖。Runtime 绝不会重写源文件，也不会继承无关的环境凭据。设置、能力解析和 Harness 执行都会读取同一份已准备快照。即使操作者编辑了文件，重连仍会保留该快照；新 Session 会读取当前文件。Harness profile 可以引用由 Runtime 所有的文件，但不得持久保存其值的副本。配置的文件缺失或无效时，准备过程会失败。
+安装程序的 `--tool-env-file`（`OAC_RUNTIME_TOOL_ENV_FILE`）提供 Runtime 操作者的基础工具变量。准备过程会将这些值复制到其私有初始化快照中，并由 Session 的 `env` 键覆盖。Runtime 绝不会重写源文件，也不会继承无关的环境凭据。设置、能力解析和 Harness 执行都会读取同一份已准备快照。即使操作者编辑了文件，重连仍会保留该快照；新 Session 会读取当前文件。Harness profile 可以引用由 Runtime 所有的文件，但不得持久保存其值的副本。配置的文件缺失或无效时，准备过程会失败。
 
 ### 初始化状态与失败 {#initialization-state-and-failure}
 
@@ -382,7 +382,7 @@ Skills 及其不可变版本是项目资源，独立于 Session 和原生安装�
 - Bundle 使用服务密码进行加密，并绑定到项目、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
 - 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的模板意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
 
-内联和引用的 Skills 使用相同的机密快照与安装器。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则为每个包使用一个受控封装，其中包含实际目录和不可变硬链接。自动原生 MCP 发现保持禁用。Codex 的嵌套 `SKILL.md` 发现、`agents/openai.yaml` 依赖项配置以及 Claude 内联 shell 预处理都会导致适配器准备失败。原生 Harness 配置绝不会整体透传。
+内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则为每个包使用一个受控封装，其中包含实际目录和不可变硬链接。自动原生 MCP 发现保持禁用。Codex 的嵌套 `SKILL.md` 发现、`agents/openai.yaml` 依赖项配置以及 Claude 内联 shell 预处理都会导致适配器准备失败。原生 Harness 配置绝不会整体透传。
 
 ### Plugin MCP {#plugin-mcp}
 

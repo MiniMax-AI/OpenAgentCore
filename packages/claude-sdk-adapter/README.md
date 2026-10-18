@@ -2,7 +2,7 @@
 
 This package translates the pinned native Claude Agent SDK into OpenAgentCore's common Executor and Turn lifecycle. It owns the private TypeScript bridge and the native SDK configuration. The [Go adapter](../../apps/daemon/internal/agent/claudesdk) owns the bridge subprocess and translates bridge frames into the shared Runtime protocol.
 
-[Harness onboarding](../../contracts/agents-api/harness-onboarding.md) defines the shared interfaces, registration and acceptance. Public qualification belongs to [Harness capabilities](../../contracts/agents-api/harness-capabilities.md) and its linked operation contracts; local readiness cannot expand it.
+[Harness protocol](../../contracts/agents-api/harness-onboarding.md) defines the shared interfaces, registration and acceptance. Public qualification belongs to [Harness capabilities](../../contracts/agents-api/harness-capabilities.md) and its linked operation contracts; local readiness cannot expand it.
 
 ## Develop and verify
 

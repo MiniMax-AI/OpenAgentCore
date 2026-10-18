@@ -1,6 +1,6 @@
 # MiniMax Code Runtime
 
-The MiniMax Code adapter ([`agent/mcode`](../../../../apps/daemon/internal/agent/mcode)) runs the native MiniMax Code CLI over ACP inside the daemon. MiniMax Code keeps its own ACP Session, model loop and history. The companion package [`packages/mcode-harness`](../../../../packages/mcode-harness/README.md) owns the workspace tool bridge, the native patch and the Subagent history reader. This page holds the Runtime-level adapter rules and the MiniMax Code Runtime image. [Harness onboarding](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
+The MiniMax Code adapter ([`agent/mcode`](../../../../apps/daemon/internal/agent/mcode)) runs the native MiniMax Code CLI over ACP inside the daemon. MiniMax Code keeps its own ACP Session, model loop and history. The companion package [`packages/mcode-harness`](../../../../packages/mcode-harness/README.md) owns the workspace tool bridge, the native patch and the Subagent history reader. This page holds the Runtime-level adapter rules and the MiniMax Code Runtime image. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
 Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 

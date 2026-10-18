@@ -28,7 +28,7 @@ The output file records `template` (the immutable `templateID:build_UUID`), the 
 ## Launch an application-managed Runtime
 
 1. Create a `self_hosted` Environment through Core and keep its ID and the exact returned `remote_url` (`wss://…/api/v1/agent-daemon/ws`). The VM must reach it. Set `workspace_directory` to `/workspace`, which the template binds to `/environment/workspace`.
-2. Obtain a connect-only executor key for that Environment; [Environment executor credentials](../../../../contracts/agents-api/environment-executor-credentials.md) owns issuance. The key file is `{"key_id":"UUID","executor_token":"SECRET"}`, with an optional `environment_id` restriction. Store it and the E2B API key in private files with mode `0600`.
+2. Obtain a connect-only executor key for that Environment; [Executor credentials](../../../../contracts/agents-api/environment-executor-credentials.md) owns issuance. The key file is `{"key_id":"UUID","executor_token":"SECRET"}`, with an optional `environment_id` restriction. Store it and the E2B API key in private files with mode `0600`.
 3. Generate an application launch UUID once and keep it. Run [`launch.py`](launch.py), a thin SDK example rather than a service:
 
 ```sh
