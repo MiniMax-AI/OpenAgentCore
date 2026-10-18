@@ -40,4 +40,14 @@ pnpm test:web:acceptance
 
 ## README screenshots
 
-The fixture console has an opt-in demo scene that fills Overview and Agent metrics with five available nodes: start it with `OAC_WEB_SCREENSHOT_DEMO=1 node apps/web/e2e/fixture-console.mjs` and point the Vite dev server at it with `OAC_WEB_DEV_PROXY_TARGET`. The `docs/assets/console-*.webp` images are captured in light mode, in English and Chinese, from this scene and from the plain acceptance data. Acceptance runs and production builds never enable the scene.
+The fixture console has an opt-in demo scene that fills Overview and Agent metrics with five available nodes. From the repository root, start these in separate terminals, then sign in at `http://127.0.0.1:4394` with the fixture key `fixture-core-key-3f9a2c71`:
+
+```sh
+OAC_WEB_SCREENSHOT_DEMO=1 AGENTS_FIXTURE_PORT=18394 node apps/web/e2e/fixture-console.mjs
+```
+
+```sh
+OAC_WEB_DEV_PROXY_TARGET=http://127.0.0.1:18394 pnpm --filter @oac/web exec vite --host 127.0.0.1 --mode test --port 4394
+```
+
+The `docs/assets/console-*.webp` images are captured from this scene in light mode, once in English and once in Chinese. Acceptance runs and production builds never enable the scene.

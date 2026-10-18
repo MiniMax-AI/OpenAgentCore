@@ -106,7 +106,7 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 
 ## Diagnostic failure categories
 
-The [Session diagnostics](./session-diagnostics.md) return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
+The [Session diagnostics](./session-diagnostics.md) routes return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
 
 | Code | Stored cause or safe meaning |
 | --- | --- |

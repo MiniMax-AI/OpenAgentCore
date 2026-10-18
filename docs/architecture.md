@@ -18,7 +18,7 @@ flowchart TB
     Env -->|"Harness–Model provider"| Model["Model provider"]
 ```
 
-The Runtime daemon initiates its authenticated WebSocket connection to Core. The [API namespaces and credentials](./api/index.md) describes the application, operator and machine namespaces; [protocol boundaries](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) lists each protocol's code and owning document.
+The Runtime daemon initiates its authenticated WebSocket connection to Core. [API namespaces and credentials](./api/index.md) describes the application, operator and machine namespaces; [protocol boundaries](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#protocols-at-every-boundary) lists each protocol's code and owning document.
 
 ## Component responsibilities
 

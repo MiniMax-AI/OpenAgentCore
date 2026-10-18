@@ -1,10 +1,10 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: c5b4fef6332bea698d63da111c0c5ac3263bc68455fea1fdc9c8ee8d91e83afd
+source_hash: ed8fc3819a4f16c96a56b4f10c47ca099ce5ca6c42e79700debeddaf913ee0cb
 ---
 
-本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请使用 [安装 Core 和 Web](getting-started/install.md)。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
+本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
 
 ## 构建分发包 {#build-a-distribution}
 
@@ -134,7 +134,7 @@ git push origin v1.2.3
 
 ```mermaid
 flowchart LR
-  tag[Push tag] --> checks[Full gate and native packaging] --> build[Build distribution and manifest] --> publish[Publish draft Release and images]
+  tag[Push tag] --> checks[Full gate and native packaging] --> build[Build distribution and manifest] --> publish[Push images and publish the Release]
 ```
 
 标签使用 `vMAJOR.MINOR.PATCH` 格式，可选用 `-rc.1` 等预发布后缀以及 `+build.1` 等构建元数据。预发布后缀会创建 GitHub 预发布版。推送标签即表示发布决定。自动检查用于确定构建和测试结果，而不是真实模型资格：推送标签前应评估实际执行证据。模型凭据和私有证书颁发机构绝不能进入 CI 或发布输入，包含它们的验收镜像也不例外。

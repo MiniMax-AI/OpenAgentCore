@@ -31,7 +31,7 @@ The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only th
 | Enrollment token | `POST /core/v1/sandbox/enrollment-tokens` (Web **Add node**), with the node's approved capacity. One use; it expires at the response's `expires_at` | `sandbox-node/configuration` without a node ID, `sandbox-node/enroll` |
 | Node credential | The node itself: it generates a secret of 32 to 256 characters without whitespace and registers it at enrollment | `sandbox-node/configuration` with `X-OAC-Node-ID`, `sandbox-node/identity`, `sandbox-node/connect` |
 | Installation grant | The `x_agents_core.installation` command of a `self_hosted` Session; short-lived | `agent-daemon/installation` and its `claim` |
-| Executor credential | The installation claim, or the Core-key [Executor credentials](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
+| Executor credential | The installation claim, or the Core-key routes in [Executor credentials](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
 | Daemon credential of a hosted sandbox | Core, for each managed allocation, delivered in the [bootstrap file](../../docs/runtime-bootstrap.md) | `agent-daemon/bootstrap`, `device-status` and `ws` |
 | Operator device profile | `oac-core-device`, run by an operator with database access | `agent-daemon/bootstrap`, `device-status` and `ws` |
 

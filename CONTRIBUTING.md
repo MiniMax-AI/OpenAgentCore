@@ -4,7 +4,7 @@ This guide owns how to work in the repository: documentation ownership, the repo
 
 ## Documentation ownership
 
-Every subject has one owner. The sidebar of the [documentation site](docs.json) lists the pages that a title names, such as Configuration reference, Operations or Architecture. This table lists the owners you could not guess from a title.
+Every subject has one owner. Most owners are the page whose title names the subject in the [documentation sidebar](docs.json), such as Configuration reference, Operations or Architecture. This table lists the owners a title does not reveal.
 
 | Subject | Canonical source |
 | --- | --- |
@@ -34,7 +34,7 @@ Core builds, deploys and runs independently of product services, frontends and d
 
 - Parsar owns users, workspaces, business authorization, Agent/Team definitions, capabilities, product conversations, IM/sharing, approval decisions and billing. It uses Core for execution.
 - A product conversation may reference several execution Sessions. Core owns native engine session identities; an execution Session has its own lifetime, separate from a daemon connection, process or sandbox.
-- Build application orchestration on the [Agents API guide](docs/api/public-agent-api.md). Product cursor replay must be an explicit product extension. Business Team orchestration belongs to the application; Core's pinned `multi_agent` and Subagent resources remain part of the public contract.
+- Build application orchestration on the public Session and event contract in the [Agents API guide](docs/api/public-agent-api.md). Product cursor replay must be an explicit product extension. Business Team orchestration belongs to the application; Core's pinned `multi_agent` and Subagent resources remain part of the public contract.
 
 ### Optional application example
 
@@ -62,7 +62,7 @@ If requirements are unresolved, object ownership is unclear, or a design would n
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs. Harness profiles must not copy Runtime tool environment values; see the [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
 - Require absolute user-supplied working directories.
 - Keep test artifacts under `~/.oac/`.
-- New or changed routes identify their caller and credential in the [API namespaces and credentials](docs/api/index.md) and link their detailed contract.
+- New or changed routes identify their caller and credential in [API namespaces and credentials](docs/api/index.md) and link their detailed contract.
 
 ### Review
 

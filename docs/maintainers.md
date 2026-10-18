@@ -2,7 +2,7 @@
 title: "Build and release OpenAgentCore"
 ---
 
-This guide is for maintainers who build and publish OpenAgentCore. To install Core and Web, use the [Install Core and Web](./getting-started/install.md). The rules the installer code follows are in [Deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) and [Node installer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md); required checks are in [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks).
+This guide is for maintainers who build and publish OpenAgentCore. To install Core and Web, follow [Install Core and Web](./getting-started/install.md). The rules the installer code follows are in [Deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) and [Node installer](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md); required checks are in [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks).
 
 ## Build a distribution
 
@@ -132,7 +132,7 @@ git push origin v1.2.3
 
 ```mermaid
 flowchart LR
-  tag[Push tag] --> checks[Full gate and native packaging] --> build[Build distribution and manifest] --> publish[Publish draft Release and images]
+  tag[Push tag] --> checks[Full gate and native packaging] --> build[Build distribution and manifest] --> publish[Push images and publish the Release]
 ```
 
 Tags use `vMAJOR.MINOR.PATCH`, optionally with a prerelease suffix such as `-rc.1` and build metadata such as `+build.1`. A prerelease suffix creates a GitHub prerelease. Pushing the tag is the release decision. Automated checks establish build and test results, not real-model qualification: assess live execution evidence before you push the tag. Model credentials and private certificate authorities never enter CI or release inputs, including acceptance images that contain them.

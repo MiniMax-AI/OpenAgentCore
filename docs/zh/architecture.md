@@ -1,7 +1,7 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: 2a3b05ffc7d94d13398548f1362b78aa09be811289c9be58d43cf2ccfb669ed2
+source_hash: 957a59269543af671ccac136b00d54e78da276958c9c765ac43151174c6fd918
 ---
 
 OpenAgentCore 是 Agent 运行平台，通过可替换的协议实现统一组织 Harness、模型、工具、Session 和执行环境。它将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。沙箱提供商管理计算资源。独立工作区文件系统 adapter 通过单独的协议管理 Environment 持久存储。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
