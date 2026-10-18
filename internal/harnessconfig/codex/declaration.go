@@ -2,6 +2,9 @@
 package codex
 
 import (
+	"encoding/json"
+	"errors"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
@@ -12,44 +15,75 @@ var Declaration = harnessconfig.Declaration{
 	Kind:  "codex",
 	Label: "Codex",
 	Configuration: harnessconfig.Configuration{
-		ValidateNativeConfig: validateNativeConfig,
-		Providers:            []harnessconfig.Provider{{Protocol: "responses"}},
+		Providers: []harnessconfig.Provider{{Protocol: "responses"}},
 	},
 	Capabilities: proto.AgentKindCapabilities{
-		SubagentObservations:           proto.CapabilitySupported,
-		Streaming:                      proto.CapabilitySupported,
-		Usage:                          proto.CapabilitySupported,
-		Resume:                         proto.CapabilitySupported,
-		RetainedNativeHistory:          proto.CapabilitySupported,
-		NativeSessionRecovery:          proto.CapabilitySupported,
-		Steering:                       proto.CapabilitySupported,
-		MessageItems:                   proto.CapabilitySupported,
-		ToolObservations:               proto.CapabilitySupported,
-		EnvironmentNone:                proto.CapabilitySupported,
-		LocalEnvironment:               proto.CapabilitySupported,
-		Preparation:                    proto.CapabilitySupported,
-		WorkspaceReadPreparation:       proto.CapabilitySupported,
-		WorkspaceOutputExport:          proto.CapabilitySupported,
-		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
-		WebSearchControl:               proto.CapabilitySupported,
-		ExecutionControls:              proto.CapabilitySupported,
-		TextVerbosity:                  proto.CapabilitySupported,
-		StructuredOutput:               proto.CapabilityUnsupported,
-		ToolSearch:                     proto.CapabilityUnsupported,
-		MessageImages:                  proto.CapabilitySupported,
-		FunctionResultImages:           proto.CapabilitySupported,
-		SubagentControl:                proto.CapabilitySupported,
-		DurableInputReceipts:           proto.CapabilitySupported,
-		DurableTurns:                   proto.CapabilitySupported,
-		FunctionTools:                  proto.CapabilitySupported,
-		MCPHTTPTools:                   proto.CapabilitySupported,
-		MCPHTTPRequired:                proto.CapabilitySupported,
-		MCPHTTPBearerAuth:              proto.CapabilitySupported,
+		SubagentObservations:     proto.CapabilitySupported,
+		Streaming:                proto.CapabilitySupported,
+		Usage:                    proto.CapabilitySupported,
+		Resume:                   proto.CapabilitySupported,
+		RetainedNativeHistory:    proto.CapabilitySupported,
+		NativeSessionRecovery:    proto.CapabilitySupported,
+		Steering:                 proto.CapabilitySupported,
+		MessageItems:             proto.CapabilitySupported,
+		ToolObservations:         proto.CapabilitySupported,
+		EnvironmentNone:          proto.CapabilitySupported,
+		LocalEnvironment:         proto.CapabilitySupported,
+		Preparation:              proto.CapabilitySupported,
+		WorkspaceReadPreparation: proto.CapabilitySupported,
+		WorkspaceOutputExport:    proto.CapabilitySupported,
+		ExecutionControls:        proto.CapabilitySupported,
+		StructuredOutput:         proto.CapabilityUnsupported,
+		ToolSearch:               proto.CapabilityUnsupported,
+		MessageImages:            proto.CapabilitySupported,
+		FunctionResultImages:     proto.CapabilitySupported,
+		SubagentControl:          proto.CapabilitySupported,
+		DurableInputReceipts:     proto.CapabilitySupported,
+		DurableTurns:             proto.CapabilitySupported,
+		FunctionTools:            proto.CapabilitySupported,
+		MCPHTTPTools:             proto.CapabilitySupported,
+		MCPHTTPRequired:          proto.CapabilitySupported,
+		MCPHTTPBearerAuth:        proto.CapabilitySupported,
+	},
+	// Codex maps every official value natively: web_search, tools.web_search.*,
+	// model_reasoning_effort, model_reasoning_summary, service_tier,
+	// model_verbosity and features.code_mode. Native indexed search has no
+	// official value. Official auto service tier means unset, and fast is Codex's
+	// native alias of priority. Codex ignores a value the selected model does not
+	// support.
+	Execution: harnessconfig.ExecutionOptions{
+		WebSearchModes:          []string{"disabled", "cached", "live"},
+		WebSearchSettings:       true,
+		ReasoningEfforts:        []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"},
+		ReasoningSummaries:      []string{"concise", "detailed", "auto"},
+		ServiceTiers:            []string{"default", "flex", "priority", "fast"},
+		ProgrammaticToolCalling: []bool{true, false},
+		TextVerbosities:         []string{"low", "medium", "high"},
 	},
 	Placements:         []string{"none", "self_hosted", "openai_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilitySupported,
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		return harnessconfig.RejectSubagentTools(admission, "function", "mcp")
+		if err := harnessconfig.RejectSubagentTools(admission, "function", "mcp"); err != nil {
+			return err
+		}
+		// Subagent observation turns native code_mode off.
+		if admission.MultiAgent && enablesProgrammaticToolCalling(admission.Tools) {
+			return errors.New("programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness.")
+		}
+		return nil
 	},
+}
+
+func enablesProgrammaticToolCalling(tools []json.RawMessage) bool {
+	for _, raw := range tools {
+		var tool struct {
+			Type    string `json:"type"`
+			Enabled *bool  `json:"enabled"`
+		}
+		if json.Unmarshal(raw, &tool) == nil && tool.Type == "programmatic_tool_calling" && tool.Enabled != nil && *tool.Enabled {
+			return true
+		}
+	}
+	return false
 }

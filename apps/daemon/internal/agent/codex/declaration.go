@@ -33,8 +33,6 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, i
 	for _, capability := range []*proto.CapabilitySupport{&caps.LocalEnvironment, &caps.WorkspaceReadPreparation, &caps.WorkspaceOutputExport, &caps.RetainedNativeHistory} {
 		agent.Narrow(capability, local)
 	}
-	agent.Narrow(&caps.ExecutionControls, SupportsTextVerbosity)
-	agent.Narrow(&caps.TextVerbosity, SupportsTextVerbosity)
 	runtime.Executor = NewExecutorFactory(options.StateRoot)
 	fmt.Fprintf(options.Stdout, "Codex preflight ok (%s)\n", version)
 	return runtime

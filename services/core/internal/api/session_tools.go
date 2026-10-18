@@ -27,17 +27,11 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 				return nil, errors.New("Execution requires distinct tool controls.")
 			}
 			controls[kind.Type] = true
-			var resolved json.RawMessage
-			var err error
+			resolve := resolveProgrammaticTool
 			if kind.Type == "web_search" {
-				resolved, err = resolveDisabledWebSearch(raw)
-			} else {
-				var enabled bool
-				resolved, enabled, err = resolveProgrammaticTool(raw)
-				if err == nil && enabled {
-					err = errors.New("Programmatic tool calling is not qualified for execution.")
-				}
+				resolve = resolveWebSearch
 			}
+			resolved, err := resolve(raw)
 			if err != nil {
 				return nil, err
 			}
@@ -70,7 +64,7 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			functions = append(functions, function)
 			positions = append(positions, i)
 		default:
-			return nil, errors.New("Unsupported execution tool; supported tools include functions, qualified tool_search, qualified HTTP MCP and explicit disabled controls.")
+			return nil, errors.New("Unsupported execution tool; supported tools include functions, qualified tool_search, qualified HTTP MCP and execution controls.")
 		}
 	}
 	resolved, err := resolveFunctions(functions)

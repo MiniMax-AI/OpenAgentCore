@@ -21,7 +21,7 @@ func TestNativeProviderDeclarationIsSharedWithRuntime(t *testing.T) {
 			if !reflect.DeepEqual(protocols, declared) {
 				t.Fatalf("protocols: %v", declared)
 			}
-			if config.AcceptsHarnessConfig() != (kind != "mcode") {
+			if config.AcceptsHarnessConfig() != (kind == "claude_sdk") {
 				t.Fatal("native configuration support drift")
 			}
 			for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {

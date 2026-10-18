@@ -28,7 +28,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	h := newDispatchHarness(t)
 	fixture := harnesstest.Declaration("fixture_harness", func(d *harnessconfig.Declaration) {
 		d.ValidateConfiguration = func(a harnessconfig.Admission) error {
-			if a.TextVerbosity != "medium" || a.TextFormat != "text" || a.MultiAgent || a.Reasoning || a.ServiceTier != "auto" {
+			if a.TextFormat != "text" || a.MultiAgent {
 				return harnessconfig.ErrInvalidInput
 			}
 			return nil

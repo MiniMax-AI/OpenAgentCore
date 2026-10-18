@@ -9,14 +9,11 @@ type nativeModelOptions struct {
 	Thinking map[string]any `json:"thinking,omitempty"`
 }
 
-func compileNativeModelOptions(config proto.HarnessConfig) *nativeModelOptions {
-	if len(config) == 0 {
+func compileNativeModelOptions(config proto.HarnessConfig, effort string) *nativeModelOptions {
+	if len(config) == 0 && effort == "" {
 		return nil
 	}
-	options := &nativeModelOptions{}
-	if value, exists := config["effort"]; exists {
-		options.Effort = value.(string)
-	}
+	options := &nativeModelOptions{Effort: effort}
 	if value, exists := config["thinking"]; exists {
 		options.Thinking = value.(map[string]any)
 	}

@@ -8,7 +8,7 @@ import (
 
 func testDeclaration(kind string, configuration Configuration) Declaration {
 	return Declaration{Kind: kind, Label: kind, Configuration: configuration, Capabilities: proto.UnsupportedCapabilities(),
-		Placements: []string{"none"}, MCPOrigins: []string{}, WhitespaceOnlyText: proto.CapabilityUnsupported}
+		Placements: []string{"none"}, MCPOrigins: []string{}, WhitespaceOnlyText: proto.CapabilityUnsupported, Execution: ExecutionOptions{TextVerbosities: []string{"medium"}}}
 }
 
 func TestRegistryOwnsDeclarations(t *testing.T) {
@@ -60,6 +60,7 @@ func TestDeclarationRequiresExplicitSupport(t *testing.T) {
 		"bearer":       func(d *Declaration) { d.Capabilities.MCPHTTPBearerAuth = proto.CapabilitySupported },
 		"label":        func(d *Declaration) { d.Label = " " },
 		"unknown kind": func(d *Declaration) { d.Kind = " example" },
+		"verbosity":    func(d *Declaration) { d.Execution.TextVerbosities = []string{"high"} },
 	} {
 		declaration := valid.Clone()
 		change(&declaration)

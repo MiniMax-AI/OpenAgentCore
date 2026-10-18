@@ -11,8 +11,17 @@ import (
 
 var programmaticFeatures = []string{"code_mode", "code_mode_only", "code_mode_prewarm"}
 
-func disableProgrammaticTools(plan *SessionPlan, controls *proto.ExecutionControls) {
-	if controls == nil || !controls.DisableProgrammaticToolCalling {
+// applyProgrammaticTools maps the official programmatic_tool_calling.enabled
+// value to Codex code mode, whose model-written JavaScript calls the other
+// tools. Disabling also turns off its dependent features. Omission keeps the
+// native default.
+func applyProgrammaticTools(plan *SessionPlan, controls *proto.ExecutionControls) {
+	if controls == nil || controls.ProgrammaticToolCalling == nil {
+		return
+	}
+	if *controls.ProgrammaticToolCalling {
+		plan.EnableFeatures = append(plan.EnableFeatures, "code_mode")
+		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"features.code_mode", "true"})
 		return
 	}
 	for _, feature := range programmaticFeatures {
@@ -25,7 +34,7 @@ func disableProgrammaticTools(plan *SessionPlan, controls *proto.ExecutionContro
 
 // Managed native requirements can override command-line feature settings.
 // Check before starting or resuming a native Session, not after model execution.
-func verifyProgrammaticToolsDisabled(ctx context.Context, rpc *JSONRPCClient) error {
+func verifyProgrammaticTools(ctx context.Context, rpc *JSONRPCClient, enabled bool) error {
 	raw, err := rpc.Request(ctx, "configRequirements/read", nil)
 	var response struct {
 		Requirements json.RawMessage `json:"requirements"`
@@ -39,6 +48,12 @@ func verifyProgrammaticToolsDisabled(ctx context.Context, rpc *JSONRPCClient) er
 		}
 		if json.Unmarshal(response.Requirements, &requirements) != nil {
 			return errors.New("codex: invalid programmatic tool requirements")
+		}
+		if enabled {
+			if required, pinned := requirements.Features["code_mode"]; pinned && !required {
+				return errors.New("codex: required programmatic tools conflict with explicit enabling")
+			}
+			return nil
 		}
 		for _, feature := range programmaticFeatures {
 			if requirements.Features[feature] {

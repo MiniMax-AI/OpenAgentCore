@@ -60,15 +60,15 @@ Core sends `PromptRequestPayload.ToolSearch` and each `FunctionTool.DeferLoading
 
 Saved Agents keep every pinned `web_search` mode: omitted or null is saved as `live`, and `cached` and `live` as sent ([saved modes](./wire-semantics.md#saved-configuration)). Search settings are resource data: omitted or null `context_size` resolves to `medium`; omitted domains and location resolve to null; an empty domain list stays empty; a supplied location, including `{}`, has `city`, `country`, `region` and `timezone`, null where omitted.
 
-Execution admits only `mode: "disabled"` and `enabled: false`. Enabled or omitted-mode search and enabled or omitted-`enabled` programmatic calling are rejected at Session admission unless the Session replaces the saved tools. Omitting programmatic configuration keeps each Harness's native behavior, which differs from the official default-on behavior. Unrelated native utility tools are not removed.
+Execution carries the resolved values to the Harness and validates them against its declaration in `internal/harnessconfig` (`Execution`): the supported web search modes and whether search settings are accepted, reasoning efforts and summaries, service tiers, programmatic-tool-calling values and text verbosities. A value outside the declaration is rejected at Session admission with a message naming the field, unless the Session replaces the saved tools. Core sends an option only when the Agent sets it or the pinned default applies, so an omitted `web_search` or `programmatic_tool_calling` keeps each Harness's native behavior. For programmatic calling this differs from the official default-on behavior. Unrelated native utility tools are not removed.
 
-`DisableProgrammaticToolCalling` carries the disabled intent on initial execution and cold continuation and requires the Runtime capability only when present. Search uses the existing disabled control.
+`ExecutionControls` carries the options ([Runtime protocol](../../docs/runtime-protocol.md#capability-declarations)). The Runtime needs only the `execution_controls` capability.
 
-| Harness | Native enforcement |
-| --- | --- |
-| Codex | Disables code-mode features; checks native managed requirements before thread start or resume and rejects a forced conflicting feature |
-| Claude Code | Keeps the restricted built-in inventory and verifies native initialization against it |
-| MiniMax Code | Keeps the restricted native tool profile, an empty text-execution inventory and disabled web search |
+| Harness | Web search | Programmatic tool calling |
+| --- | --- | --- |
+| Codex | `disabled`, `cached` and `live`, with `context_size`, `allowed_domains` and `location`, as native `web_search` and `tools.web_search` settings | `enabled: true` turns on native `code_mode`; `false` turns off `code_mode`, `code_mode_only` and `code_mode_prewarm` and checks native managed requirements before a thread starts or resumes |
+| Claude Code | `disabled` only, with the restricted built-in inventory verified at native initialization | `false` only |
+| MiniMax Code | `disabled` only, through the native `features.webSearch=false` because the restricted profile has no search tool | `false` only |
 
 ## HTTP MCP
 

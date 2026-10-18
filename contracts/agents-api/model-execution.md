@@ -107,13 +107,13 @@ At dispatch, Core sends the snapshot as one confidential provider bundle over th
 
 | Harness | Accepted fields | Applied as |
 | --- | --- | --- |
-| Codex | `model_reasoning_effort`: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | App-server `-c model_reasoning_effort=...` and each Turn's `collaborationMode.settings.reasoning_effort` |
-| Claude Code | `effort`: `low`, `medium`, `high`, `xhigh`, `max`; `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.effort` and `Options.thinking` |
+| Codex | Empty object only | Reasoning effort belongs to the public `reasoning.effort` |
+| Claude Code | `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.thinking`; the public `reasoning.effort` becomes `Options.effort` |
 | MiniMax Code | Empty object only | Provider token limits remain required |
 
 Claude `thinking` accepts `display` (`summarized` or `omitted`) for `adaptive` and `enabled`, and a positive integer `budgetTokens` only for `enabled`; `maxThinkingTokens` is rejected. These are native settings, not a shared reasoning vocabulary; model availability and provider support are the Harness's responsibility.
 
-A supplied object replaces the whole object; `{}` clears it and null is invalid. A Session that selects a model or provider without supplying native parameters uses `{}` instead of inheriting another model's parameters. Otherwise a saved Agent supplies its object, and an inline Session using the deployment model uses the deployment object. Changing the Harness clears inherited parameters, and so does an Agent update of model, provider or Harness that does not supply `harness_config`. There is no deep merge. An inline extension that sets only native parameters keeps the saved Harness. Neither this object nor a deployment default enables public `reasoning` options.
+A supplied object replaces the whole object; `{}` clears it and null is invalid. A Session that selects a model or provider without supplying native parameters uses `{}` instead of inheriting another model's parameters. Otherwise a saved Agent supplies its object, and an inline Session using the deployment model uses the deployment object. Changing the Harness clears inherited parameters, and so does an Agent update of model, provider or Harness that does not supply `harness_config`. There is no deep merge. An inline extension that sets only native parameters keeps the saved Harness.
 
 Core validates the resolved configuration before writing the Session and freezes it in the Session's Agent configuration; the administrator execution-configuration read shows its value and source. Native parameters are not confidential; provider keys stay in the separate encrypted bundle. Reconnection uses the frozen configuration and cannot change the provider, protocol or parameters; an incompatible frozen configuration fails. Protocol support does not qualify structured output, tool discovery, web search, verbosity or image input by itself, and a supported connection does not prove that the remote model accepts a parameter.
 

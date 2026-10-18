@@ -28,20 +28,16 @@ func TestBuildSessionPlan_AllocsCodexHomeAndEnv(t *testing.T) {
 	}
 	defer plan.Cleanup()
 	hasCodexHome := false
-	hasTelemetry := false
 	for _, kv := range plan.Env {
 		switch {
 		case strings.HasPrefix(kv, "CODEX_HOME="):
 			hasCodexHome = true
-		case kv == "DISABLE_TELEMETRY=1":
-			hasTelemetry = true
+		case strings.HasPrefix(kv, "DISABLE_TELEMETRY="):
+			t.Fatalf("env sets a variable Codex does not read: %+v", plan.Env)
 		}
 	}
 	if !hasCodexHome {
 		t.Fatalf("env missing CODEX_HOME: %+v", plan.Env)
-	}
-	if !hasTelemetry {
-		t.Fatalf("env missing DISABLE_TELEMETRY: %+v", plan.Env)
 	}
 }
 

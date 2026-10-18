@@ -3,6 +3,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -10,13 +11,19 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestProgrammaticToolsExplicitDisableOverridesNativeOptions(t *testing.T) {
+func TestProgrammaticToolsFollowTheOfficialValue(t *testing.T) {
+	enabled, disabled := true, false
 	plan := SessionPlan{ExtraConfig: [][2]string{{"features.code_mode", "true"}}}
-	disableProgrammaticTools(&plan, nil)
-	if len(plan.DisableFeatures) != 0 || len(plan.ExtraConfig) != 1 {
+	applyProgrammaticTools(&plan, nil)
+	applyProgrammaticTools(&plan, &proto.ExecutionControls{})
+	if len(plan.DisableFeatures) != 0 || len(plan.EnableFeatures) != 0 || len(plan.ExtraConfig) != 1 {
 		t.Fatal("omission changed native configuration")
 	}
-	disableProgrammaticTools(&plan, &proto.ExecutionControls{DisableProgrammaticToolCalling: true})
+	applyProgrammaticTools(&plan, &proto.ExecutionControls{ProgrammaticToolCalling: &enabled})
+	if !slices.Equal(plan.EnableFeatures, []string{"code_mode"}) || len(plan.DisableFeatures) != 0 || plan.ExtraConfig[len(plan.ExtraConfig)-1] != [2]string{"features.code_mode", "true"} {
+		t.Fatal("enabling did not select code mode", plan)
+	}
+	applyProgrammaticTools(&plan, &proto.ExecutionControls{ProgrammaticToolCalling: &disabled})
 	for _, feature := range programmaticFeatures {
 		if !slices.Contains(plan.DisableFeatures, feature) {
 			t.Fatal("missing disable", feature)
@@ -36,22 +43,26 @@ func TestProgrammaticToolsExplicitDisableOverridesNativeOptions(t *testing.T) {
 func TestProgrammaticToolsRejectManagedOverridesBeforeExecution(t *testing.T) {
 	for _, tc := range []struct {
 		response string
+		enabled  bool
 		accepted bool
 	}{
-		{`{"requirements":null}`, true},
-		{`{"requirements":{"featureRequirements":{"code_mode":false,"unrelated":true}}}`, true},
-		{`{"requirements":{"featureRequirements":{"code_mode":true}}}`, false},
-		{`{"requirements":{"featureRequirements":{"code_mode_only":true}}}`, false},
-		{`{"requirements":{"featureRequirements":{"code_mode_prewarm":true}}}`, false},
-		{`{}`, false}, {`null`, false}, {`{"requirements":[]}`, false},
+		{`{"requirements":null}`, false, true},
+		{`{"requirements":{"featureRequirements":{"code_mode":false,"unrelated":true}}}`, false, true},
+		{`{"requirements":{"featureRequirements":{"code_mode":true}}}`, false, false},
+		{`{"requirements":{"featureRequirements":{"code_mode_only":true}}}`, false, false},
+		{`{"requirements":{"featureRequirements":{"code_mode_prewarm":true}}}`, false, false},
+		{`{}`, false, false}, {`null`, false, false}, {`{"requirements":[]}`, false, false},
+		{`{"requirements":null}`, true, true},
+		{`{"requirements":{"featureRequirements":{"code_mode":true}}}`, true, true},
+		{`{"requirements":{"featureRequirements":{"code_mode":false}}}`, true, false},
 	} {
-		t.Run(tc.response, func(t *testing.T) {
+		t.Run(fmt.Sprint(tc.enabled, tc.response), func(t *testing.T) {
 			client, server, cleanup := NewTestClient()
 			defer cleanup()
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 			defer cancel()
 			done := make(chan error, 1)
-			go func() { done <- verifyProgrammaticToolsDisabled(ctx, client.JSONRPCClient) }()
+			go func() { done <- verifyProgrammaticTools(ctx, client.JSONRPCClient, tc.enabled) }()
 			var request struct{ ID, Method string }
 			if err := json.NewDecoder(server.FromClient).Decode(&request); err != nil {
 				t.Fatal(err)

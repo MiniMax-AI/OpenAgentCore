@@ -22,35 +22,41 @@ var Declaration = harnessconfig.Declaration{
 		{Protocol: "chat_completions", RequiresTokenLimits: true},
 	}},
 	Capabilities: proto.AgentKindCapabilities{
-		SubagentObservations:           proto.CapabilitySupported,
-		Streaming:                      proto.CapabilitySupported,
-		Usage:                          proto.CapabilityUnsupported,
-		Resume:                         proto.CapabilitySupported,
-		RetainedNativeHistory:          proto.CapabilityUnsupported,
-		NativeSessionRecovery:          proto.CapabilityUnsupported,
-		Steering:                       proto.CapabilitySupported,
-		MessageItems:                   proto.CapabilityUnsupported,
-		ToolObservations:               proto.CapabilitySupported,
-		EnvironmentNone:                proto.CapabilitySupported,
-		LocalEnvironment:               proto.CapabilitySupported,
-		Preparation:                    proto.CapabilitySupported,
-		WorkspaceReadPreparation:       proto.CapabilitySupported,
-		WorkspaceOutputExport:          proto.CapabilitySupported,
-		ProgrammaticToolCallingDisable: proto.CapabilitySupported,
-		WebSearchControl:               proto.CapabilityUnsupported,
-		ExecutionControls:              proto.CapabilitySupported,
-		TextVerbosity:                  proto.CapabilityUnsupported,
-		StructuredOutput:               proto.CapabilityUnsupported,
-		ToolSearch:                     proto.CapabilityUnsupported,
-		MessageImages:                  proto.CapabilityUnsupported,
-		FunctionResultImages:           proto.CapabilityUnsupported,
-		SubagentControl:                proto.CapabilitySupported,
-		DurableInputReceipts:           proto.CapabilitySupported,
-		DurableTurns:                   proto.CapabilitySupported,
-		FunctionTools:                  proto.CapabilityUnsupported,
-		MCPHTTPTools:                   proto.CapabilitySupported,
-		MCPHTTPRequired:                proto.CapabilityUnsupported,
-		MCPHTTPBearerAuth:              proto.CapabilitySupported,
+		SubagentObservations:     proto.CapabilitySupported,
+		Streaming:                proto.CapabilitySupported,
+		Usage:                    proto.CapabilityUnsupported,
+		Resume:                   proto.CapabilitySupported,
+		RetainedNativeHistory:    proto.CapabilityUnsupported,
+		NativeSessionRecovery:    proto.CapabilityUnsupported,
+		Steering:                 proto.CapabilitySupported,
+		MessageItems:             proto.CapabilityUnsupported,
+		ToolObservations:         proto.CapabilitySupported,
+		EnvironmentNone:          proto.CapabilitySupported,
+		LocalEnvironment:         proto.CapabilitySupported,
+		Preparation:              proto.CapabilitySupported,
+		WorkspaceReadPreparation: proto.CapabilitySupported,
+		WorkspaceOutputExport:    proto.CapabilitySupported,
+		ExecutionControls:        proto.CapabilitySupported,
+		StructuredOutput:         proto.CapabilityUnsupported,
+		ToolSearch:               proto.CapabilityUnsupported,
+		MessageImages:            proto.CapabilityUnsupported,
+		FunctionResultImages:     proto.CapabilityUnsupported,
+		SubagentControl:          proto.CapabilitySupported,
+		DurableInputReceipts:     proto.CapabilitySupported,
+		DurableTurns:             proto.CapabilitySupported,
+		FunctionTools:            proto.CapabilityUnsupported,
+		MCPHTTPTools:             proto.CapabilitySupported,
+		MCPHTTPRequired:          proto.CapabilityUnsupported,
+		MCPHTTPBearerAuth:        proto.CapabilitySupported,
+	},
+	// Native search needs a MiniMax account credential that Core does not hold, so
+	// features.webSearch stays false and disabled is the only mode. MiniMax Code has
+	// no native home for effort, summary, service tier or programmatic tool calling.
+	// Medium is the official default verbosity and needs no setting.
+	Execution: harnessconfig.ExecutionOptions{
+		WebSearchModes:          []string{"disabled"},
+		ProgrammaticToolCalling: []bool{false},
+		TextVerbosities:         []string{"medium"},
 	},
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"environment"},
@@ -58,8 +64,7 @@ var Declaration = harnessconfig.Declaration{
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
 		environment := admission.Environment
 		if environment == nil || (environment.Type != "none" && environment.Type != "openai_hosted" && environment.Type != "self_hosted") ||
-			strings.TrimSpace(admission.Model) == "" || admission.Reasoning || (admission.ServiceTier != "" && admission.ServiceTier != "auto") ||
-			(admission.TextFormat != "" && admission.TextFormat != "text") || (admission.TextVerbosity != "" && admission.TextVerbosity != "medium") {
+			strings.TrimSpace(admission.Model) == "" || (admission.TextFormat != "" && admission.TextFormat != "text") {
 			return harnessconfig.ErrInvalidInput
 		}
 		return harnessconfig.RejectSubagentTools(admission, "mcp")

@@ -82,7 +82,7 @@ func TestTextFactoryRejectsUnsupportedInput(t *testing.T) {
 			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentOptions: map[string]any{"model": "fake"}}
 			switch kind {
 			case "execution-controls":
-				request.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "low"}
+				request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "low"}
 			case "tool":
 				request.FunctionTools = []proto.FunctionTool{{}}
 			case "outside":

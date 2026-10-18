@@ -13,9 +13,6 @@ func validateExecutionEnvironment(req proto.PromptRequestPayload, caps proto.Age
 	if err := req.ValidateAgentOptions(); err != nil {
 		return err
 	}
-	if err := req.ValidateProgrammaticToolCallingDisable(caps.ProgrammaticToolCallingDisable.IsSupported()); err != nil {
-		return err
-	}
 	if err := req.ValidateToolSearch(caps.ToolSearch.IsSupported()); err != nil {
 		return err
 	}

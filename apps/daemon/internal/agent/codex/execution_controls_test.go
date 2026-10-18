@@ -7,32 +7,52 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-func TestExecutionControlsSelectNativeSettings(t *testing.T) {
+func ptr[T any](v T) *T { return &v }
+
+func TestExecutionControlsMapToNativeSettings(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	for _, search := range []string{"disabled", "cached", "live"} {
-		for _, verbosity := range []string{"low", "medium", "high"} {
-			plan, err := BuildSessionPlan(testStateRoot(t), "state", map[string]any{"model": "test-model"}, &proto.ExecutionControls{WebSearch: search, TextVerbosity: verbosity})
+	base := [][2]string{{"tools.experimental_request_user_input.enabled", "false"}}
+	for _, tc := range []struct {
+		name     string
+		controls *proto.ExecutionControls
+		want     [][2]string
+	}{
+		{"absent controls send nothing", nil, nil},
+		{"empty controls send nothing", &proto.ExecutionControls{}, nil},
+		{"verbosity", &proto.ExecutionControls{TextVerbosity: "high"}, [][2]string{{"model_verbosity", `"high"`}}},
+		{"search without settings", &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}},
+			[][2]string{{"web_search", `"live"`}, {"tools.web_search.context_size", `"medium"`}}},
+		{"search settings", &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "cached", ContextSize: "high", AllowedDomains: []string{"a.example", "b.example"},
+			Location: &proto.SearchLocation{City: ptr("Paris"), Timezone: ptr("Europe/Paris")}}},
+			[][2]string{{"web_search", `"cached"`}, {"tools.web_search.context_size", `"high"`}, {"tools.web_search.allowed_domains", `["a.example","b.example"]`},
+				{"tools.web_search.location.city", `"Paris"`}, {"tools.web_search.location.timezone", `"Europe/Paris"`}}},
+		{"empty domain list stays distinct from null", &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "disabled", ContextSize: "low", AllowedDomains: []string{}}},
+			[][2]string{{"web_search", `"disabled"`}, {"tools.web_search.context_size", `"low"`}, {"tools.web_search.allowed_domains", `[]`}}},
+		{"reasoning and tier", &proto.ExecutionControls{ReasoningEffort: "max", ReasoningSummary: "concise", ServiceTier: "priority"},
+			[][2]string{{"model_reasoning_effort", `"max"`}, {"model_reasoning_summary", `"concise"`}, {"service_tier", `"priority"`}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, err := BuildSessionPlan(testStateRoot(t), "state", map[string]any{"model": "test-model"}, tc.controls)
 			if err != nil {
 				t.Fatal(err)
 			}
 			plan.Cleanup()
-			want := [][2]string{{"tools.experimental_request_user_input.enabled", "false"}, {"web_search", `"` + search + `"`}, {"model_verbosity", `"` + verbosity + `"`}}
-			if !reflect.DeepEqual(plan.ExtraConfig, want) {
+			if want := append(append([][2]string{}, base...), tc.want...); !reflect.DeepEqual(plan.ExtraConfig, want) {
 				t.Fatalf("config = %v, want %v", plan.ExtraConfig, want)
 			}
-		}
+		})
 	}
 }
 
-func TestExecutionControlsRejectIncompleteOrInvalidValues(t *testing.T) {
+func TestExecutionControlsRejectUndeclaredValues(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	for _, controls := range []proto.ExecutionControls{
-		{}, {WebSearch: "disabled"}, {TextVerbosity: "medium"},
-		{WebSearch: "invalid", TextVerbosity: "medium"}, {WebSearch: "disabled", TextVerbosity: "invalid"},
+		{WebSearch: &proto.WebSearchControl{Mode: "indexed", ContextSize: "medium"}},
+		{TextVerbosity: "invalid"}, {ReasoningEffort: "ultra"}, {ReasoningSummary: "none"}, {ServiceTier: "scale"},
 	} {
 		if plan, err := BuildSessionPlan(testStateRoot(t), "state", nil, &controls); err == nil {
 			plan.Cleanup()
-			t.Fatal("invalid controls accepted", controls)
+			t.Fatal("undeclared controls accepted", controls)
 		}
 	}
 }
