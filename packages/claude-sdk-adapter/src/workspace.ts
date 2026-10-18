@@ -92,11 +92,13 @@ export class WorkspaceProfile {
     this.skillNames = skills?.names ?? [];
     this.options = {
       env, tools: { type: "preset", preset: "claude_code" },
-      // Nobody answers a question, no Turn leaves scheduled work behind, and Core declares subagents and search.
-      disallowedTools: ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup",
+      // Nobody answers a question, no Turn leaves scheduled or workflow work behind, ListAgents would reach
+      // other Sessions' processes on the host, and Core declares subagents and search.
+      disallowedTools: ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Workflow", "ListAgents",
         ...(subagents ? [] : ["Agent", "SendMessage"]), ...(disableWebSearch ? ["WebSearch", "WebFetch"] : [])],
       ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}),
-      // The native CLI refuses permission bypass for root accounts, so the callback approves every tool.
+      // The native CLI refuses permission bypass for root accounts, so the callback approves every tool, and
+      // an explicit default mode keeps a project's plan mode from stopping unattended work.
       permissionMode: "default", canUseTool: async (_name, input) => ({ behavior: "allow", updatedInput: input }),
     };
   }

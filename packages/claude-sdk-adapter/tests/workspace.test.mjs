@@ -73,7 +73,7 @@ test("workspace runs the native tool preset and removes only what cannot run una
   const { dirs, config } = fixture(t);
   const options = new WorkspaceProfile(dirs.workspace, config).options;
   assert.deepEqual(options.tools, { type: "preset", preset: "claude_code" });
-  assert.deepEqual(options.disallowedTools, ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Agent", "SendMessage"]);
+  assert.deepEqual(options.disallowedTools, ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Workflow", "ListAgents", "Agent", "SendMessage"]);
   assert.equal(options.permissionMode, "default");
   for (const key of ["allowedTools", "settingSources", "mcpServers", "strictMcpConfig", "persistSession", "sandbox", "settings", "allowDangerouslySkipPermissions"]) {
     assert.equal(options[key], undefined, key);
@@ -107,7 +107,7 @@ test("Runtime rejects network isolation requests", t => {
  for(const network_access of ["disabled","restricted"]) assert.throws(()=>parseWorkspace({...config,network_access,allowed_domains:network_access==="restricted"?["example.com"]:[]},dirs.workspace),/invalid_request/);
 });
 
-test("workspace functions are parsed; Core only checks the function server", async t => {
+test("workspace functions are parsed", async t => {
   const { request } = fixture(t);
   const functions = [{ name: "lookup", description: "Lookup", parameters: { type: "object" } }];
   assert.deepEqual(parseStart(JSON.stringify({ ...request, functions })).functions, functions);

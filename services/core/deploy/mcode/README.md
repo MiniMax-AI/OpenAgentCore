@@ -21,7 +21,7 @@ Each Session has its own native data directory, `$OAC_RUNTIME_HOME/runtime/mcode
 | Profile | Where it runs | Native configuration |
 | --- | --- | --- |
 | Text (`environment: none`) | A private working directory inside the Session's data directory | No native tools, Skills, web search, browser tools, `mcode-tools`, thread goals or user questions. With Subagents enabled, the default agent gets only the task tools (`task`, `task_append`, `task_query`, `task_output`, `task_stop`) and delegation |
-| Workspace | The Environment's workspace directory, for the native process, the ACP Session and the workspace tools | The text configuration plus permission mode `bypassPermissions`, the native sandbox off, the selected workspace Skills and the `oac_workspace` MCP bridge for file and shell tools |
+| Workspace | The Environment's workspace directory, for the native process, the ACP Session and the workspace tools | The text configuration plus permission mode `bypassPermissions`, the selected workspace Skills and the `oac_workspace` MCP bridge for file and shell tools |
 
 The text profile rejects workspace, function tools and MCP servers. Workspace execution requires Linux or macOS and an unrestricted Environment network policy ([`workspace.go`](../../../../apps/daemon/internal/agent/mcode/workspace.go)); the adapter enforces no network restriction.
 

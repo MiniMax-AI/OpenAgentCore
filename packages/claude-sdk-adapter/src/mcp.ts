@@ -113,6 +113,7 @@ export class MCPProfile {
         await client.connect(new StreamableHTTPClientTransport(new URL(server.server_url),
           { requestInit: reference ? { headers: { Authorization: `Bearer ${process.env[reference]}` } } : {} }), { signal });
         let cursor: string | undefined;
+        const cursors = new Set<string>();
         do {
           const page = await client.listTools({ cursor }, { signal });
           for (const tool of page.tools) {
@@ -120,6 +121,9 @@ export class MCPProfile {
             if (!selected.has(native)) hidden.push(native);
           }
           cursor = page.nextCursor;
+          // A repeated cursor would page forever.
+          if (cursor !== undefined && cursors.has(cursor)) throw new Error("MCP tool listing repeated a cursor");
+          if (cursor !== undefined) cursors.add(cursor);
         } while (cursor);
       } finally {
         await client.close();
@@ -162,6 +166,7 @@ export class MCPProfile {
       }
     }
     if (matched !== declared.size + (this.functions.length ? 1 : 0) ||
+        !exact && [...expected.keys(), ...this.functions].some(name => !inventory.includes(name)) ||
         exact && (inventory.length !== expected.size + this.functions.length || new Set(inventory).size !== inventory.length ||
           inventory.some(name => !expected.has(name) && !this.functions.includes(name)))) {
       throw new Error("unexpected native MCP inventory");
@@ -181,8 +186,6 @@ export class MCPProfile {
       }
     }
   }
-
-  permits(name: string): boolean { return this.admitted && this.identities.has(name); }
 
   credentialReferences(): string[] {
     return this.declarations.flatMap(server => "bearer_token_env_var" in server && server.bearer_token_env_var ? [server.bearer_token_env_var] : []);

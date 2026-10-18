@@ -109,9 +109,11 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         systemPrompt: { type: "preset", preset: "claude_code", ...(request.system_prompt ? { append: request.system_prompt } : {}) },
         ...(request.resume ? { resume: request.resume } : {}),
         includePartialMessages: true, abortController: abort,
-        // Environment none keeps no workspace tools and approves only Core's function and MCP tools.
+        // Environment none keeps no workspace tools and approves only Core's function and MCP tools. The host's
+        // settings, memory files and MCP servers belong to no Session.
         ...(workspace ? {} : {
           tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed,
+          settingSources: [], strictMcpConfig: true,
           canUseTool: async () => ({ behavior: "deny" as const, message: "Tools are unavailable in this execution profile." }),
         }),
         ...(workspace?.options ?? {}),
@@ -194,7 +196,11 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
         if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID, !workspace);
-        else if (!workspace && (message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
+        else if (workspace) {
+          // Native tools and settings may add servers and tools; Core's functions must still be present.
+          if (definitions.length && (!message.mcp_servers.some(server => server.name === "functions" && server.status === "connected") ||
+              names.some(name => !message.tools.includes(name)))) throw new Error("unexpected native configuration");
+        } else if ((message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
             message.mcp_servers.some(server => server.name !== "functions" || server.status !== "connected"))) {
           throw new Error("unexpected native configuration");

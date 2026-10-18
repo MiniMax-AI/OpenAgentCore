@@ -38,7 +38,7 @@ function create(options){
  assert.equal(options.agent,undefined);assert.equal(options.agents,undefined);
  assert.deepEqual(options.disallowedTools.filter(name=>name.startsWith("mcp__")),mode==="workspace-empty"?["mcp__fixture__*","mcp__optional__*"]:["mcp__optional__*","mcp__fixture__extra"]);
  assert.equal(options.disallowedTools.includes("AskUserQuestion"),workspace);
- assert.equal(options.strictMcpConfig,undefined);assert.equal(options.settingSources,undefined);assert.equal(options.hooks.PreToolUse.length,1);
+ assert.equal(options.strictMcpConfig,workspace?undefined:true);assert.deepEqual(options.settingSources,workspace?undefined:[]);assert.equal(options.hooks.PreToolUse.length,1);
  assert.equal(options.mcpServers.fixture.alwaysLoad,true);
  const child=options.spawnClaudeCodeProcess({command:process.execPath,args:["-e","process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"],env:options.env,signal:options.abortController.signal});
  process.send({kind:"spawn"});

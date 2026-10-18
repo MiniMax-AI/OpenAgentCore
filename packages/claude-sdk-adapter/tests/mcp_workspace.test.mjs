@@ -134,8 +134,6 @@ test("public workspace HTTP preserves required startup and null versus empty all
     mcp.verifyRequired(statuses);
     const selected=allowed_tools===null?["prove","other"]:allowed_tools;
     mcp.verify([...nativePreset,...selected.map(name=>"mcp__remote__"+name)],statuses,"session",false);
-    assert.equal(mcp.permits("mcp__remote__prove"),allowed_tools===null||allowed_tools.includes("prove"));
-    assert.equal(mcp.permits("mcp__remote__other"),allowed_tools===null);
     mcp.close();
   }
 });
