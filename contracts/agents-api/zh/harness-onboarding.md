@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 701d81da90b63e105b7aba8a35b19fe02bf34d643a38be005a045a38e0bdfd18
+source_hash: dbfe6923ed532c37cf959b52ffc8c87b3fca9828ab81d28d49dede96f2def7f4
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -43,10 +43,9 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 1. **锁定原生来源。** 记录上游包版本和源修订版本，并在适配器旁记录原生入口点。
 2. **实现适配器**，位置为 `apps/daemon/internal/agent/<kind>`：实现 `ExecutorFactory`、`Executor` 和 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)）。复用共享的进程、凭据、配置和本地工作区辅助函数。
 3. **编写声明**：在 `internal/harnessconfig/<package>/declaration.go` 中编写声明，并将其绑定到适配器的发现函数（[declare the Harness](#declare-the-harness)、[register the adapter](#register-the-adapter)）。运行 `make generate-harness-catalog` 完成两处注册。
-4. **检查准入。** Core 读取同一份声明，无需再改动 Core（[declare the Harness](#declare-the-harness)）。
-5. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
-6. **启用并选择引擎**，通过 `OAC_HARNESSES` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
-7. **认定其资格**（[qualify the adapter](#qualify-the-adapter)），并将结果记录到 [Harness capabilities](harness-capabilities.md)。
+4. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
+5. **启用并选择引擎**，通过 `OAC_HARNESSES` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
+6. **认定其资格**（[qualify the adapter](#qualify-the-adapter)），并将结果记录到 [Harness capabilities](harness-capabilities.md)。
 
 实现强制的文本生命周期，并明确处理每一种扩展。逐个认定受支持扩展的资格；未认定资格的扩展返回 `agent.ErrUnsupportedOperation`，且不会产生原生副作用。原生取消可能要求退役而非复用：`Reusable=false` 会携带原因，调用方必须确认 `Executor.Close`。不要为了适配测试辅助函数而强制复用，也不要将适配器的原生限制复制到共享 Core 协议中。
 

@@ -41,10 +41,9 @@ An Environment supplies execution resources. Managed E2B, Docker and microsandbo
 1. **Pin the native source.** Record the upstream package version and source revision and document the native entry point next to the adapter.
 2. **Implement the adapter** in `apps/daemon/internal/agent/<kind>`: an `ExecutorFactory`, an `Executor` and a `Turn` ([required interfaces](#required-adapter-interfaces), [lifetimes](#executor-and-turn-lifetimes)). Reuse the shared process, credential, configuration and local workspace helpers.
 3. **Write the declaration** in `internal/harnessconfig/<package>/declaration.go` and bind it to the adapter's discovery ([declare the Harness](#declare-the-harness), [register the adapter](#register-the-adapter)). Run `make generate-harness-catalog` to register both.
-4. **Check admission.** Core reads the same declaration, so no further Core change is needed ([declare the Harness](#declare-the-harness)).
-5. **Package native prerequisites.** Add a Runtime image under `services/core/deploy/<kind>` and, optionally, [native installer participation](#native-installer-participation).
-6. **Enable and select the engine** with the `OAC_HARNESSES` setting and [Harness selection](./model-execution.md#harness-selection).
-7. **Qualify it** ([qualify the adapter](#qualify-the-adapter)) and record the result in [Harness capabilities](./harness-capabilities.md).
+4. **Package native prerequisites.** Add a Runtime image under `services/core/deploy/<kind>` and, optionally, [native installer participation](#native-installer-participation).
+5. **Enable and select the engine** with the `OAC_HARNESSES` setting and [Harness selection](./model-execution.md#harness-selection).
+6. **Qualify it** ([qualify the adapter](#qualify-the-adapter)) and record the result in [Harness capabilities](./harness-capabilities.md).
 
 Implement the mandatory text lifecycle and handle every extension explicitly. Qualify supported extensions one at a time; an unqualified extension returns `agent.ErrUnsupportedOperation` without native effects. A native cancellation may require retirement instead of reuse: `Reusable=false` carries a reason and the caller must confirm `Executor.Close`. Do not force reuse to fit a test helper, and do not copy an adapter's native limitations into the shared Core protocol.
 

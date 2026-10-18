@@ -33,7 +33,7 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 | Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Sandbox node protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/` | [Core–Runtime protocol](docs/runtime-protocol.md) |
-| Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness protocol](contracts/agents-api/harness-onboarding.md) |
+| Runtime–Harness | `internal/harnessconfig/harness.go` (declaration, read by Core and the Runtime) and `apps/daemon/internal/agent/harness.go` (lifecycle) | [Harness protocol](contracts/agents-api/harness-onboarding.md) |
 | Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |
 
 ### Complexity stays in the adapter
