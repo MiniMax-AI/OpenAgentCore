@@ -315,6 +315,7 @@ definitions:
           - claude_sdk
           - codex
           - mcode
+          - pi
         type: string
       model_configuration:
         allOf:
@@ -459,6 +460,7 @@ definitions:
           - claude_sdk
           - codex
           - mcode
+          - pi
         type: string
       harness_config:
         type: object
@@ -2078,6 +2080,7 @@ definitions:
           - claude_sdk
           - codex
           - mcode
+          - pi
         type: string
       harness_config:
         type: object
@@ -3191,6 +3194,7 @@ definitions:
           - claude_sdk
           - codex
           - mcode
+          - pi
         type: string
       harness_config:
         type: object
@@ -4192,6 +4196,7 @@ paths:
             - claude_sdk
             - codex
             - mcode
+            - pi
           in: path
           name: harness
           required: true
@@ -4224,6 +4229,7 @@ paths:
             - claude_sdk
             - codex
             - mcode
+            - pi
           in: path
           name: harness
           required: true
@@ -4262,6 +4268,7 @@ paths:
             - claude_sdk
             - codex
             - mcode
+            - pi
           in: path
           name: harness
           required: true

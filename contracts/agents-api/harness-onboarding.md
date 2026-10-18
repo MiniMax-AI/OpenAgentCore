@@ -2,12 +2,12 @@
 title: "Harness protocol"
 ---
 
-A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code) that runs the model and tool loop; a **Harness adapter** translates the Runtime's Executor and Turn contract into that engine's SDK or protocol. The Harness protocol is the contract between the Runtime and the adapter: the adapter interfaces and their lifecycle obligations, registration, Core qualification and acceptance. It is for developers who add or maintain a Harness.
+A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code, Pi) that runs the model and tool loop; a **Harness adapter** translates the Runtime's Executor and Turn contract into that engine's SDK or protocol. The Harness protocol is the contract between the Runtime and the adapter: the adapter interfaces and their lifecycle obligations, registration, Core qualification and acceptance. It is for developers who add or maintain a Harness.
 
 | Property | Value |
 | --- | --- |
 | Caller | The Runtime ([dispatch](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch)) |
-| Implementations | The Codex, Claude Code and MiniMax Code adapters ([Native references](#native-references)). [Harness capabilities](./harness-capabilities.md) records what each supports. |
+| Implementations | The Codex, Claude Code, MiniMax Code and Pi adapters ([Native references](#native-references)). [Harness capabilities](./harness-capabilities.md) records what each supports. |
 | Code | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go): the execution lifecycle, the extension contracts and the registration methods. [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go): the shared model configuration contract (declarations and preparation). |
 | Transport | In-process Go interfaces. The Runtime speaks the [Core–Runtime protocol](../../docs/runtime-protocol.md) to Core. |
 | Version rule | A change to the interfaces edits this page and every adapter in one change. |
@@ -283,3 +283,4 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 | Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) |
 | Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) | [Claude Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) |
 | MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP and native workspace companion | [MiniMax Code Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/mcode/README.md) |
+| Pi | [`agent/pi`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/pi) | JSONL RPC over stdio | Installed by the native installer |

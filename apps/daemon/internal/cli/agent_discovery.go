@@ -7,10 +7,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/claudesdk"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/codex"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/mcode"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/pi"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 )
 
-var harnessDeclarations = []agent.Declaration{codex.Declaration, mcode.Declaration, claudesdk.Declaration}
+var harnessDeclarations = []agent.Declaration{codex.Declaration, mcode.Declaration, claudesdk.Declaration, pi.Declaration}
 
 type discoveredHarness struct {
 	declaration agent.Declaration

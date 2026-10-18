@@ -17682,7 +17682,8 @@
             "enum": [
               "claude_sdk",
               "codex",
-              "mcode"
+              "mcode",
+              "pi"
             ],
             "type": "string"
           },
@@ -17782,7 +17783,8 @@
             "enum": [
               "claude_sdk",
               "codex",
-              "mcode"
+              "mcode",
+              "pi"
             ],
             "type": "string"
           },
@@ -17801,7 +17803,8 @@
             "enum": [
               "claude_sdk",
               "codex",
-              "mcode"
+              "mcode",
+              "pi"
             ],
             "type": "string"
           },

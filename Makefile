@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core check-core-packages check-core-integration docker-build-core check-core-container build-codex-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core check-core-packages check-core-integration docker-build-core check-core-container build-codex-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime build-pi-harness
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -140,6 +140,10 @@ check-web-acceptance: web-deps
 
 build-claude-sdk-runtime:
 	./scripts/build-claude-sdk-runtime.sh
+
+.PHONY: build-pi-harness
+build-pi-harness:
+	./scripts/build-pi-harness.sh
 
 .PHONY: check-example
 check-example: example-deps

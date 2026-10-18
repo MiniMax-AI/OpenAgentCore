@@ -6,12 +6,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/pi"
 )
 
 var registry = harnessconfig.NewRegistry(map[string]harnessconfig.Configuration{
 	"claude_sdk": claudesdk.Configuration(),
 	"codex":      codex.Configuration(),
 	"mcode":      mcode.Configuration(),
+	"pi":         pi.Configuration(),
 })
 
 func Registry() harnessconfig.Registry { return registry }
@@ -26,7 +28,7 @@ func Configuration(kind string) harnessconfig.Configuration {
 }
 
 // Kinds returns the public identifiers in this build, not Runtime availability.
-func Kinds() []string { return []string{"claude_sdk", "codex", "mcode"} }
+func Kinds() []string { return []string{"claude_sdk", "codex", "mcode", "pi"} }
 
 func Contains(kind string) bool {
 	_, ok := registry.Lookup(kind)

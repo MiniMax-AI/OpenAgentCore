@@ -2,6 +2,8 @@
 title: "运行自托管 Session"
 source: docs/getting-started/self-hosted.md
 source_hash: 560d1a1084f74b31d66720bd3a48ab73abb36996c5eff1a53e36f504e883889f
+
+Pi 只多一个约 150 MB 的 Node.js 包，并复用同一个 Node 运行时。
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行，例如工作站、虚拟机或容器，而不是 Core 管理的沙箱。本指南面向用 `oac-daemon` 连接此类机器并保持其运行的应用开发者。
@@ -15,11 +17,11 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 
 ## 平台 {#platforms}
 
-| 平台 | Codex | Claude Code | MiniMax Code |
-| --- | --- | --- | --- |
-| Linux amd64 | 支持 | 支持 | 支持 |
-| macOS arm64 | 支持 | 支持 | 支持 |
-| Windows amd64 | 支持 | 支持 | 不支持 |
+| 平台 | Codex | Claude Code | MiniMax Code | Pi |
+| --- | --- | --- | --- | --- |
+| Linux amd64 | 支持 | 支持 | 支持 | 支持 |
+| macOS arm64 | 支持 | 支持 | 支持 | 支持 |
+| Windows amd64 | 支持 | 支持 | 不支持 | 不支持 |
 
 安装程序自带固定版本的 Node.js 和 Harness（列于 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
 
@@ -101,7 +103,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 | 选项 | 效果 |
 | --- | --- |
 | `--non-interactive` | 不提示；缺少输入时失败 |
-| `--harness codex,claude,minimax` | 要安装的 Harness，以逗号分隔。必须包含 Session 的 Harness |
+| `--harness codex,claude,minimax,pi` | 要安装的 Harness，以逗号分隔。必须包含 Session 的 Harness |
 | `--install-dir ABS` | 安装目录。它必须不存在、为空，或已包含一个安装；其他非空目录会被拒绝。默认是 `~/.oac` 下的 `environments/<environment-id>`；设置了 `OAC_RUNTIME_HOME` 时则在该目录下 |
 | `--capability-directory ABS` | [能力快照](#local-capability-directories)存储位置。默认是安装目录中的 `capabilities` |
 | `--tool-env-file ABS` | 为工具和 MCP 服务器提供字符串变量的 JSON 文件；参阅[显式本地工具环境](../../../contracts/agents-api/zh/environments.md#explicit-local-tool-environment) |

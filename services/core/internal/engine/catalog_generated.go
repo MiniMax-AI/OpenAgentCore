@@ -5,4 +5,5 @@ var qualified = NewCatalog(map[string]Profile{
 	"claude_sdk": claudeProfile(),
 	"codex":      codexProfile(),
 	"mcode":      mcodeProfile(),
+	"pi":         piProfile(),
 })

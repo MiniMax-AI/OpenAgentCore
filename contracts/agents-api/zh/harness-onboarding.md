@@ -1,15 +1,15 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a0f1d4f6d33670b5e80fb8e073cac683550712a1ff836f75eb2853abb7fa0a4e
+source_hash: 8757efad218e86e9bd9cafe8fecb99c723499f50040218f1762b3342fa6f51b3
 ---
 
-**Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、注册、Core 资格认定和验收。本文面向添加或维护 Harness 的开发者。
+**Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code、Pi）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、注册、Core 资格认定和验收。本文面向添加或维护 Harness 的开发者。
 
 | 属性 | 内容 |
 | --- | --- |
 | 调用方 | Runtime（[dispatch](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch)） |
-| 实现方 | Codex、Claude Code 和 MiniMax Code 适配器（[原生参考](#native-references)）。[Harness capabilities](harness-capabilities.md) 记录了每个 Harness 支持的功能。 |
+| 实现方 | Codex、Claude Code、MiniMax Code 和 Pi 适配器（[原生参考](#native-references)）。[Harness capabilities](harness-capabilities.md) 记录了每个 Harness 支持的功能。 |
 | 代码 | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go)：执行生命周期、扩展契约和注册方法。[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go)：共享模型配置契约（声明和准备）。 |
 | 传输 | 进程内 Go 接口。Runtime 通过 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md)与 Core 通信。 |
 | 版本规则 | 接口变更须在同一次变更中修改本文和每个适配器。 |
@@ -285,3 +285,4 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 | Codex | [`agent/codex`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/codex/executor.go) | app-server | [Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) |
 | Claude Code | [`agent/claudesdk`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/claudesdk/executor.go) | [TypeScript SDK bridge](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md) | [Claude Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) |
 | MiniMax Code | [`agent/mcode`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/mcode) | ACP 和原生工作区配套组件 | [MiniMax Code Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/mcode/README.md) |
+| Pi | [`agent/pi`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/agent/pi) | stdio 上的 JSONL RPC | 由原生安装器安装 |

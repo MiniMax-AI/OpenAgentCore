@@ -4,4 +4,7 @@ PROVIDERS = {'claude_sdk': {'anthropic': {'requires_token_limits': False}},
  'codex': {'responses': {'requires_token_limits': False}},
  'mcode': {'anthropic': {'requires_token_limits': True},
            'chat_completions': {'requires_token_limits': True},
-           'responses': {'requires_token_limits': True}}}
+           'responses': {'requires_token_limits': True}},
+ 'pi': {'anthropic': {'requires_token_limits': False},
+        'chat_completions': {'requires_token_limits': False},
+        'responses': {'requires_token_limits': False}}}

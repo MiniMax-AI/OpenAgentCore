@@ -36,7 +36,7 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 	flags.StringVar(&o.ToolEnvironmentFile, "tool-env-file", "", "optional tool environment JSON file")
 	flags.StringVar(&o.Directory, "install-dir", "", "installation directory (default <Runtime home>/environments/<environment-id>; Runtime home is OAC_RUNTIME_HOME or ~/.oac)")
 	flags.StringVar(&o.Bundle, "bundle-dir", "", "native distribution directory (defaults beside the executable)")
-	flags.StringVar(&o.Harness, "harness", "", "comma-separated codex,claude,minimax")
+	flags.StringVar(&o.Harness, "harness", "", "comma-separated codex,claude,minimax,pi")
 	flags.BoolVar(&o.Interactive, "interactive", false, "ask for missing installation options")
 	flags.BoolVar(&o.NonInteractive, "non-interactive", false, "require command-line options; never prompt")
 	if err := flags.Parse(args); err != nil {
@@ -110,7 +110,7 @@ func promptNativeInstall(input io.Reader, output io.Writer, o *nativeInstallOpti
 		value    *string
 		optional bool
 	}{
-		{"Harnesses (comma-separated codex,claude,minimax)", &o.Harness, false},
+		{"Harnesses (comma-separated codex,claude,minimax,pi)", &o.Harness, false},
 		{"Installation directory (Enter uses <Runtime home>/environments/<environment-id>)", &o.Directory, true},
 		{"Distribution directory (Enter uses current default)", &o.Bundle, true},
 		{"Environment remote URL", &o.Remote, false},

@@ -13,11 +13,11 @@ The Session brings its own model provider; the installation default never applie
 
 ## Platforms
 
-| Platform | Codex | Claude Code | MiniMax Code |
-| --- | --- | --- | --- |
-| Linux amd64 | Supported | Supported | Supported |
-| macOS arm64 | Supported | Supported | Supported |
-| Windows amd64 | Supported | Supported | Not supported |
+| Platform | Codex | Claude Code | MiniMax Code | Pi |
+| --- | --- | --- | --- | --- |
+| Linux amd64 | Supported | Supported | Supported | Supported |
+| macOS arm64 | Supported | Supported | Supported | Supported |
+| Windows amd64 | Supported | Supported | Not supported | Not supported |
 
 The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
@@ -29,6 +29,8 @@ The installer download is about 320 MiB. Free space is needed on the disk that h
 | Installed size | about 560 MiB | about 940 MiB |
 
 With one Harness, the peak is the archive (316 MiB), the unpacked installer (907 MiB) and the installed files (about 560 MiB). The unpacked copy is removed when the command ends and the archive when the installation completes.
+
+Pi adds one Node.js package of about 150 MB and reuses that runtime.
 
 The machine needs:
 
@@ -99,7 +101,7 @@ Append these to the command:
 | Option | Effect |
 | --- | --- |
 | `--non-interactive` | Never prompt; missing input fails |
-| `--harness codex,claude,minimax` | Harnesses to install, comma-separated. Must include the Session's Harness |
+| `--harness codex,claude,minimax,pi` | Harnesses to install, comma-separated. Must include the Session's Harness |
 | `--install-dir ABS` | Installation directory. It must be missing, empty or hold an installation; any other non-empty directory is refused. Default: `environments/<environment-id>` under `~/.oac`, or under `OAC_RUNTIME_HOME` when set |
 | `--capability-directory ABS` | Where [capability snapshots](#local-capability-directories) are stored. Default: `capabilities` in the installation directory |
 | `--tool-env-file ABS` | A JSON file of string variables for tools and MCP servers; see [explicit local tool environment](../../contracts/agents-api/environments.md#explicit-local-tool-environment) |

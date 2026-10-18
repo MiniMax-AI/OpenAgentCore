@@ -31,7 +31,7 @@ func TestDiscoveryAndRegistration(t *testing.T) {
 				}
 			}
 			rc := &runContext{stdout: io.Discard, stderr: io.Discard}
-			expected := []string{"codex", "mcode", "claude_sdk"}
+			expected := []string{"codex", "mcode", "claude_sdk", "pi"}
 			if selected != "" {
 				rc.installedKinds = map[string]bool{selected: true}
 				expected = []string{selected}
@@ -75,7 +75,7 @@ func TestDiscoveryUnavailableAndCancelled(t *testing.T) {
 	}
 	declarations[0].Discover = func(context.Context, agent.DiscoveryOptions, proto.SupportedAgentKind) *agent.Runtime { return nil }
 	discovery, _ := discoverAgentCLIs(t.Context(), rc, "default", declarations)
-	if len(discovery) != 2 {
+	if len(discovery) != 3 {
 		t.Fatal("unconfigured adapter retained")
 	}
 }

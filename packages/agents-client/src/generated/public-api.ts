@@ -112,7 +112,7 @@ export interface AgentToolResourceWebSearch {
 }
 export const agentToolResourceWebSearchFields = ["type", "mode", "context_size", "allowed_domains", "location"] as const;
 export interface AgentsCore {
-  harness?: "claude_sdk" | "codex" | "mcode";
+  harness?: "claude_sdk" | "codex" | "mcode" | "pi";
   harness_config?: Record<string, unknown>;
 }
 export const agentsCoreFields = ["harness", "harness_config"] as const;
@@ -1032,14 +1032,14 @@ export interface RotateVaultCredentialParams {
 }
 export const rotateVaultCredentialParamsFields = ["auth"] as const;
 export interface SavedAgentCore {
-  harness?: "claude_sdk" | "codex" | "mcode";
+  harness?: "claude_sdk" | "codex" | "mcode" | "pi";
   harness_config?: Record<string, unknown>;
   model_provider?: ModelProviderView;
 }
 export const savedAgentCoreFields = ["harness", "harness_config", "model_provider"] as const;
 export const savedAgentCoreRequired = [] as const;
 export interface SavedAgentCoreInput {
-  harness?: "claude_sdk" | "codex" | "mcode";
+  harness?: "claude_sdk" | "codex" | "mcode" | "pi";
   harness_config?: Record<string, unknown>;
   model_provider?: ModelProviderInput | null;
 }

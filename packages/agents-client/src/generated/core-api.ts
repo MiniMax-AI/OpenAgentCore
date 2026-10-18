@@ -145,7 +145,7 @@ export interface CoreHarness {
   object: "core.harness";
 }
 export const coreHarnessFields = ["default", "enabled", "id", "model_configuration", "model_configuration_support", "object"] as const;
-export const coreHarnessIdValues = ["claude_sdk", "codex", "mcode"] as const;
+export const coreHarnessIdValues = ["claude_sdk", "codex", "mcode", "pi"] as const;
 export type CoreHarnessId = (typeof coreHarnessIdValues)[number];
 export interface CoreHarnessList {
   data: CoreHarness[];
@@ -303,7 +303,7 @@ export interface HarnessModelConfiguration {
   updated_at: string;
 }
 export const harnessModelConfigurationFields = ["harness", "harness_config", "last_error_at", "last_error_code", "last_used_at", "model", "model_provider", "object", "updated_at"] as const;
-export const harnessModelConfigurationHarnessValues = ["claude_sdk", "codex", "mcode"] as const;
+export const harnessModelConfigurationHarnessValues = ["claude_sdk", "codex", "mcode", "pi"] as const;
 export type HarnessModelConfigurationHarness = (typeof harnessModelConfigurationHarnessValues)[number];
 export interface HostHistory {
   points: HostHistoryPoint[];

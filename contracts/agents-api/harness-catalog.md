@@ -12,5 +12,6 @@ The authored registration list is [`catalog.json`](https://github.com/MiniMax-AI
 | `claude_sdk` | Claude Code | `claudesdk.Configuration` | `claudeProfile` |
 | `codex` | Codex | `codex.Configuration` | `codexProfile` |
 | `mcode` | MiniMax Code | `mcode.Configuration` | `mcodeProfile` |
+| `pi` | Pi | `pi.Configuration` | `piProfile` |
 
 Configuration declarations live in `internal/harnessconfig/<package>` and qualification constructors in `services/core/internal/engine`. These registrations describe the build. Which Harnesses a deployment enables is the `OAC_HARNESSES` [process setting](../../docs/configuration.md#settings), [Harness capabilities](./harness-capabilities.md) lists what each Harness supports, and a connected Runtime reports its own availability. [Harness protocol](./harness-onboarding.md) describes the adapter and packaging steps.

@@ -4,7 +4,7 @@ import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, readFile, rename, rm, symli
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { buildBundle, copyComponent, prepareNodeEntrypoints, validateNodeCommands } from './build-native-installer.mjs';
+import { buildBundle, copyComponent, prepareNodeEntrypoints, validateNodeCommands, validatePiComponent } from './build-native-installer.mjs';
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'oac-native-bundle-test-'));
@@ -94,4 +94,29 @@ test('real npm and npx remain runnable from PATH after regular-file copying and 
     assert.equal(files[path].sha256, createHash('sha256').update(await readFile(join(relocated, path))).digest('hex'));
     assert.equal(files[path].executable, true);
   }
+});
+
+test('Pi component validates its packaged layout and launcher version', async t => {
+  const { root } = await fixture(t);
+  const component = join(root, 'pi'); await mkdir(join(component, 'bin'), { recursive: true });
+  const packageRoot = join(component, 'node_modules', '@earendil-works', 'pi-coding-agent');
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ version: '1.3.0' }));
+  const launcher = join(component, 'bin', 'pi');
+  await writeFile(launcher, '#!/bin/sh\nprintf 1.3.0\n'); await chmod(launcher, 0o755);
+  await validatePiComponent(component, { ...process.env, PATH: `${dirname(process.execPath)}:${process.env.PATH ?? ''}` });
+
+  await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ version: '1.2.0' }));
+  await assert.rejects(validatePiComponent(component, process.env), /pin mismatch/);
+});
+
+test('Pi component rejects a launcher with the wrong version', async t => {
+  const { root } = await fixture(t);
+  const component = join(root, 'pi'); await mkdir(join(component, 'bin'), { recursive: true });
+  const packageRoot = join(component, 'node_modules', '@earendil-works', 'pi-coding-agent');
+  await mkdir(packageRoot, { recursive: true });
+  await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ version: '1.3.0' }));
+  const launcher = join(component, 'bin', 'pi');
+  await writeFile(launcher, '#!/bin/sh\nprintf 9.9.9\n'); await chmod(launcher, 0o755);
+  await assert.rejects(validatePiComponent(component, process.env), /native pin mismatch/);
 });
