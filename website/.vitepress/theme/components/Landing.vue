@@ -162,7 +162,6 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="window" data-reveal>
-          <div class="win-bar"><span class="dots"><i /><i /><i /></span></div>
           <img :key="consoleTab + lang" :src="consoleImages[consoleTab]" :alt="consoleAlt" loading="lazy" decoding="async" />
         </div>
       </div>
@@ -514,24 +513,6 @@ h2 {
   height: auto;
   animation: fade 0.4s ease;
 }
-.win-bar {
-  display: flex;
-  align-items: center;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--l-line);
-}
-.dots {
-  display: flex;
-  gap: 6px;
-}
-.dots i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.dots i:nth-child(1) { background: #ff5f57; }
-.dots i:nth-child(2) { background: #febc2e; }
-.dots i:nth-child(3) { background: #28c840; }
 
 /* documentation shortcuts */
 .doc-shortcuts {
@@ -614,6 +595,10 @@ h2 {
   .observe-heading .tabs { margin-bottom: 28px; width: fit-content; }
   .doc-shortcuts { grid-template-columns: minmax(0, 1fr); }
   .start-path { flex-direction: column; gap: 20px; }
+  /* Keep the figure and the console at a readable size and let them scroll sideways. */
+  .architecture-visual, .window { overflow-x: auto; }
+  .architecture-visual img { min-width: 960px; }
+  .window img { min-width: 900px; }
   .outro { padding-bottom: 80px; }
 }
 </style>
