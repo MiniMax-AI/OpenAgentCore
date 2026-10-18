@@ -10,7 +10,7 @@ import (
 )
 
 // EnsurePlacement reserves first or retained demand before entering a node lifecycle.
-// The immutable engine profile and actual selected generation are validated
+// The Harness declaration and actual selected generation are validated
 // before committing its reservation.
 func (e *ExecutionOperations) EnsurePlacement(ctx context.Context, key AllocationKey, installation string) (placement.Reserved, error) {
 	key, err := key.parse()
@@ -102,7 +102,7 @@ func (e *ExecutionOperations) EnsurePlacement(ctx context.Context, key Allocatio
 // allocation admission and capacity-pressure decisions. Retained files require
 // another external-storage generation; new Sessions may select either kind.
 func (e *ExecutionOperations) eligibleNodes(d placement.Deployment, nodes []placement.Node, engineKind string, retained bool, loadGeneration func(uint64) (GenerationSpecification, error)) ([]placement.Node, error) {
-	profile, known := e.engines.Lookup(engineKind)
+	declaration, known := e.harnesses.Lookup(engineKind)
 	if !known {
 		return nil, sessions.ErrInvalidInput
 	}
@@ -129,7 +129,7 @@ func (e *ExecutionOperations) eligibleNodes(d placement.Deployment, nodes []plac
 			if err := json.Unmarshal(specification, &spec); err != nil {
 				return nil, err
 			}
-			accepts = (!retained || spec.Workspace != nil) && sessions.ValidateRetainedHistory(spec.Workspace != nil, profile.RetainedNativeHistory.IsSupported()) == nil
+			accepts = (!retained || spec.Workspace != nil) && sessions.ValidateRetainedHistory(spec.Workspace != nil, declaration.Capabilities.RetainedNativeHistory.IsSupported()) == nil
 			compatible[generation] = accepts
 		}
 		if accepts {

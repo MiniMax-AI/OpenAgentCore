@@ -7,41 +7,11 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	configuration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
-// Declaration owns MiniMax Code discovery, configuration and execution factories.
-var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "mcode", Capabilities: proto.AgentKindCapabilities{
-	SubagentObservations:           proto.CapabilityUnsupported,
-	Streaming:                      proto.CapabilitySupported,
-	Usage:                          proto.CapabilityUnsupported,
-	Resume:                         proto.CapabilitySupported,
-	RetainedNativeHistory:          proto.CapabilityUnsupported,
-	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	Steering:                       proto.CapabilityUnsupported,
-	MessageItems:                   proto.CapabilityUnsupported,
-	ToolObservations:               proto.CapabilityUnsupported,
-	EnvironmentNone:                proto.CapabilityUnsupported,
-	LocalEnvironment:               proto.CapabilityUnsupported,
-	Preparation:                    proto.CapabilityUnsupported,
-	WorkspaceReadPreparation:       proto.CapabilityUnsupported,
-	WorkspaceOutputExport:          proto.CapabilityUnsupported,
-	ProgrammaticToolCallingDisable: proto.CapabilityUnsupported,
-	WebSearchControl:               proto.CapabilityUnsupported,
-	ExecutionControls:              proto.CapabilityUnsupported,
-	TextVerbosity:                  proto.CapabilityUnsupported,
-	StructuredOutput:               proto.CapabilityUnsupported,
-	ToolSearch:                     proto.CapabilityUnsupported,
-	MessageImages:                  proto.CapabilityUnsupported,
-	FunctionResultImages:           proto.CapabilityUnsupported,
-	SubagentControl:                proto.CapabilityUnsupported,
-	DurableInputReceipts:           proto.CapabilityUnsupported,
-	DurableTurns:                   proto.CapabilityUnsupported,
-	FunctionTools:                  proto.CapabilityUnsupported,
-	MCPHTTPTools:                   proto.CapabilityUnsupported,
-	MCPHTTPRequired:                proto.CapabilityUnsupported,
-	MCPHTTPBearerAuth:              proto.CapabilityUnsupported,
-}}, Configuration: configuration.Configuration(), Discover: discover}
+// Declaration binds the shared MiniMax Code declaration to discovery and execution factories.
+var Declaration = agent.Declaration{Declaration: declaration.Declaration, Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckCLIAvailable)
@@ -54,21 +24,9 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, r
 	version, err := check(ctx, "")
 	if err != nil {
 		fmt.Fprintf(options.Stderr, "oac-daemon: mcode unavailable: %v\n  Install: npm install -g @minimax-ai/code@0.4.12\n", err)
-		return runtime
+		return agent.Unavailable(result)
 	}
 	result.Available, result.Version = true, version
-	result.Capabilities.Steering = proto.CapabilitySupported
-	result.Capabilities.DurableTurns = proto.CapabilitySupported
-	result.Capabilities.DurableInputReceipts = proto.CapabilitySupported
-	result.Capabilities.ExecutionControls = proto.CapabilitySupported
-	result.Capabilities.ProgrammaticToolCallingDisable = proto.CapabilitySupported
-	result.Capabilities.ToolObservations = proto.CapabilitySupported
-	result.Capabilities.SubagentControl = proto.CapabilitySupported
-	// Native preparation verifies the applied admission/tool profile before input.
-	result.Capabilities.SubagentObservations = proto.CapabilitySupported
-	result.Capabilities.EnvironmentNone = proto.CapabilitySupported
-	result.Capabilities.MCPHTTPTools = proto.CapabilitySupported
-	result.Capabilities.MCPHTTPBearerAuth = proto.CapabilitySupported
 	runtime.Info = result
 	workspace := discoverWorkspace(parent, options, runtime)
 	if runtime.Info.Available {

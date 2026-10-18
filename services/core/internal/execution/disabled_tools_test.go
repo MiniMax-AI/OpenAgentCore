@@ -6,8 +6,8 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/harnesstest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -20,7 +20,9 @@ func TestDisabledToolsUseCommonOperationQualification(t *testing.T) {
 		}
 	}
 	for _, qualified := range []bool{false, true} {
-		policy := Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"new_harness": enginetest.Profile(func(p *engine.Profile) { p.ProgrammaticToolCallingDisable = proto.CapabilityFromBool(qualified) })})}
+		policy := Policy{Declarations: harnessconfig.NewRegistry(harnesstest.Declaration("new_harness", func(d *harnessconfig.Declaration) {
+			d.Capabilities.ProgrammaticToolCallingDisable = proto.CapabilityFromBool(qualified)
+		}))}
 		if err := policy.ValidateSessionConfiguration("new_harness", raw); (err == nil) != qualified {
 			t.Fatal("qualification differs", qualified, err)
 		}

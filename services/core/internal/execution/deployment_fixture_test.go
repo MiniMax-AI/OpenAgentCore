@@ -3,7 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"testing"
 	"time"
 
@@ -69,7 +69,7 @@ func deploymentOperations(t *testing.T, storage deployment.Storage, reader deplo
 	if err != nil {
 		t.Fatal(err)
 	}
-	operations, err := deployment.NewExecutionOperations(service, execution, engine.Catalog{})
+	operations, err := deployment.NewExecutionOperations(service, execution, builtin.Registry())
 	if err != nil {
 		t.Fatal(err)
 	}

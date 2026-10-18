@@ -80,7 +80,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		Cleanup:         func() {},
 	}
 
-	nativeConfig, err := harnessconfiguration.Configuration().PrepareHarnessConfig(opts)
+	nativeConfig, err := harnessconfiguration.Declaration.Configuration.PrepareHarnessConfig(opts)
 	if err != nil {
 		return plan, err
 	}
@@ -199,7 +199,7 @@ func normaliseProviderConfig(raw any) (providerConfig, bool, error) {
 	if raw == nil {
 		return providerConfig{}, false, nil
 	}
-	provider, err := harnessconfiguration.Configuration().ParseProvider(raw)
+	provider, err := harnessconfiguration.Declaration.Configuration.ParseProvider(raw)
 	if err != nil {
 		return providerConfig{}, false, err
 	}

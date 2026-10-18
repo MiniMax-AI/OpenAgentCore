@@ -28,6 +28,16 @@ func CapabilityFromBool(supported bool) CapabilitySupport {
 	return CapabilityUnsupported
 }
 
+// UnsupportedCapabilities declares every capability explicitly unsupported.
+func UnsupportedCapabilities() AgentKindCapabilities {
+	var capabilities AgentKindCapabilities
+	fields := reflect.ValueOf(&capabilities).Elem()
+	for i := 0; i < fields.NumField(); i++ {
+		fields.Field(i).Set(reflect.ValueOf(CapabilityUnsupported))
+	}
+	return capabilities
+}
+
 func (s CapabilitySupport) MarshalJSON() ([]byte, error) {
 	switch s {
 	case CapabilitySupported:

@@ -99,7 +99,7 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | `services/core/internal/persistence`, `services/core/internal/db` and `services/core/migrations` | Core's PostgreSQL adapters, transactions, queries and migrations | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#database) |
 | `services/core/tests/integration` | Tests that drive the HTTP boundaries, the execution Worker and the PostgreSQL adapters together | [Service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md#tests) |
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](./runtime-protocol.md) |
-| `services/core/internal/engine` | Pure qualification of Harness operations and placements | [Harness protocol](../contracts/agents-api/harness-onboarding.md) |
+| `internal/harnessconfig` | One declaration per Harness, read by Core admission and the Runtime | [Harness protocol](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire types and validators | [Runtime protocol](./runtime-protocol.md) |
 | `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](./runtime-bootstrap.md) |
 | `apps/daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |

@@ -269,7 +269,7 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey), dispatcher.Engines)
+	deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey), dispatcher.Harnesses())
 	if err != nil {
 		return errors.Join(err, lease.Close(ctx))
 	}

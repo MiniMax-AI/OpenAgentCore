@@ -1,7 +1,7 @@
 package integration
 
 import (
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -35,6 +35,6 @@ func fixtureDeploymentExecution(s *Store, lease *pgunit.Lease) (*deployment.Serv
 	if err != nil {
 		return nil, nil, err
 	}
-	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, s.credentialCipher), engine.Catalog{})
+	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, s.credentialCipher), builtin.Registry())
 	return service, changes, err
 }

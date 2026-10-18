@@ -20,7 +20,7 @@ type launchOptions struct {
 
 func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload) (launchOptions, error) {
 	var result launchOptions
-	if _, err := harnessconfiguration.Configuration().PrepareHarnessConfig(req.AgentOptions); err != nil {
+	if _, err := harnessconfiguration.Declaration.Configuration.PrepareHarnessConfig(req.AgentOptions); err != nil {
 		return result, err
 	}
 	if err := validateExecutionRequest(req); err != nil {

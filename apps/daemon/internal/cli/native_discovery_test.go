@@ -31,7 +31,7 @@ func TestDiscoveryAndRegistration(t *testing.T) {
 				}
 			}
 			rc := &runContext{stdout: io.Discard, stderr: io.Discard}
-			expected := []string{"codex", "mcode", "claude_sdk"}
+			expected := []string{"claude_sdk", "codex", "mcode"}
 			if selected != "" {
 				rc.installedKinds = map[string]bool{selected: true}
 				expected = []string{selected}

@@ -8,7 +8,7 @@ import (
 
 // Validate the frozen native provider before producing launch variables.
 func providerEnvironment(value any) ([]string, error) {
-	provider, err := harnessconfiguration.Configuration().ParseProvider(value)
+	provider, err := harnessconfiguration.Declaration.Configuration.ParseProvider(value)
 	if err != nil {
 		return nil, err
 	}
