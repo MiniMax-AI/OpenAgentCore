@@ -22,8 +22,8 @@ globalThis.startupFixture = async ({options, initializeTimeoutMs}) => {
   assert.equal(options.model,"fixed-model");
   assert.equal(options.env.UNSELECTED_CANARY,"must-not-inherit");
   assert.equal(options.env.HOME,process.env.HOME);
-  assert.deepEqual(options.tools,["Bash","Read","Edit"]);
-  assert.equal(options.sandbox.enabled,false);
+  assert.deepEqual(options.tools,{type:"preset",preset:"claude_code"});
+  assert.equal(options.sandbox,undefined);
   assert.equal(options.hooks.PreToolUse.length,1);
   const child = options.spawnClaudeCodeProcess({command:process.execPath,env:options.env,signal:options.abortController.signal,
     args:["-e","process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"]});
@@ -57,7 +57,7 @@ globalThis.startupFixture = async ({options, initializeTimeoutMs}) => {
           if(first.done)return;
           process.send({kind:"input",text:first.value.message.content[0].text});
           yield {type:"system",subtype:"init",session_id:mode === "resume-mismatch"?"other":"native",mcp_servers:[],
-            tools:mode === "bad-inventory"?["Bash","Read","Edit","Agent"]:["Bash","Read","Edit"]};
+            tools:["Bash","Read","Edit"]};
           const ids=[first.value.uuid];
           if(mode === "commands") {
             yield command;
@@ -149,7 +149,7 @@ async function launch(t, mode) {
   return { child, request, events, observations, send, wait, finish };
 }
 
-for (const mode of ["release", "resume", "steer", "commands", "unused", "owner-cancel", "native-exit", "duplicate", "replacement", "early-steer", "bad-inventory", "resume-mismatch"]) {
+for (const mode of ["release", "resume", "steer", "commands", "unused", "owner-cancel", "native-exit", "duplicate", "replacement", "early-steer", "resume-mismatch"]) {
   test(`prepared entrypoint lifecycle: ${mode}`, { timeout: 10000 }, async t => {
     const bridge = await launch(t, mode);
     const { child, request, events, observations, send, wait, finish } = bridge;
@@ -167,7 +167,7 @@ for (const mode of ["release", "resume", "steer", "commands", "unused", "owner-c
     else {
       send({ type: "start", input: [{ content: [{ type: "input_text", text: "first" }] }] });
       if (mode === "duplicate") { send({ type: "start", input: [{ content: [{ type: "input_text", text: "second" }] }] }); await finish("invalid_request"); }
-      else if (["bad-inventory", "resume-mismatch"].includes(mode)) {
+      else if (mode === "resume-mismatch") {
         await finish("execution_failed");
         assert.equal(events.some(event => event.type === "input_ready"), false);
       } else {

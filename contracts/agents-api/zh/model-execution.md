@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 3007a19d5f030e14149218f9d1822efceb1188c3a31c6505180df511fb1ab205
+source_hash: d65e90e7ce794129a02a2091aadcee3919f8c4c22917d6558ed66933657896d4
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -101,7 +101,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 解析后的提供商配置会在 Session 创建事务中被冻结并加密，使用自己的加密用途，并绑定到项目和 Session。创建重试会将其纳入请求哈希，因此使用相同 Idempotency-Key 时，更改密钥或端点会产生冲突；密钥进入任何存储哈希时，只会表现为由部署凭据密钥加键控的指纹。任何公开的 Session、Agent、Environment、事件或常规配置均不包含该密钥。顶层扩展仅可写入，无法更新。
 
-在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器会原生应用该配置并直接连接提供商。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。执行器主机将该配置包存放在其原生 Harness home 中，与托管 Runtime 的做法相同。原生工具以启动账户的权限运行，并且可以读取该账户有权读取的内容；吊销凭据不会擦除已经交付的配置包。
+在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器会原生应用该配置并直接连接提供商。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。执行器主机将该配置包存放在其原生 Harness home 中，与托管 Runtime 的做法相同。原生工具以启动账户的权限运行，并且可以读取该账户有权读取的内容。工作区的原生配置（例如 Claude Code 的项目设置和 hooks）会像在本机一样生效，并且可以使用提供商密钥，因此只能附加可以接触该密钥的可信仓库。吊销凭据不会擦除已经交付的配置包。
 
 ## 原生模型参数 {#native-model-parameters}
 

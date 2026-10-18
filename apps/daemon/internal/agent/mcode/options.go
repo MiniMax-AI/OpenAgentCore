@@ -64,7 +64,6 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload) (launchO
 			"features": map[string]bool{"mavis": false, "delegation": true, "webSearch": false},
 		}}
 	}
-	config["permissionMode"] = "auto"
 	data, err := json.Marshal(config)
 	if err != nil {
 		return result, err

@@ -11,7 +11,6 @@ for directory in "$runtime_root" "$output_dir"; do
   fi
 done
 
-node -e 'if (Number(process.versions.node.split(".")[0]) < 20) throw new Error("Claude SDK runtime builds require Node 20 or newer")'
 mkdir -p "$runtime_root/cache/claude-sdk-builds"
 build_context="$(mktemp -d "$runtime_root/cache/claude-sdk-builds/runtime.XXXXXX")"
 trap 'rm -rf "$build_context"' EXIT

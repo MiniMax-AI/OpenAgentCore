@@ -53,8 +53,9 @@ var Declaration = harnessconfig.Declaration{
 	},
 	// The SDK takes effort low to max. It has no verbosity, summary, service
 	// tier, search mode or search setting, and enabling programmatic tool calling
-	// is not wired. Search is off in the fixed tool inventory, so disabled is the
-	// only mode; medium is the official default verbosity and needs no setting.
+	// is not wired. Native search has no cached mode or settings, so disabled is
+	// the only selectable mode and an absent control keeps native search; medium
+	// is the official default verbosity and needs no setting.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled"},
 		ReasoningEfforts:        []string{"low", "medium", "high", "xhigh", "max"},

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: e66771e892b2d9c4a0e4d24a81f0976d3f7db5ca8b9920ea6155199face758f6
+source_hash: 070ba5163d6a897e5fb12fcede93df423bd0d5a5ed6f36c48cadb3e67636b115
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -72,7 +72,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 使用相同 `Idempotency-Key` 重复创建 Session 会返回原 Session；官方服务会创建一个新的 Session。
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
-- Agent 未声明 `web_search` 工具时，会保留 Harness 的原生搜索，Codex 为缓存搜索；固定的官方契约未定义未声明该工具时是否搜索。
+- Agent 未声明 `web_search` 工具时，会保留 Harness 的[原生搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)；固定的官方契约未定义未声明该工具时是否搜索。
+- 工作区位置上的 Claude Code 把 Agent 的 `instructions` 追加到原生系统提示词之后，并运行其[原生工具集](./execution-tools.md#web-search-and-programmatic-tool-calling)。其搜索没有缓存模式，也没有域名、位置和上下文大小设置。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。

@@ -24,13 +24,11 @@ test("selected public Skill names resolve to their native plugin identities", as
     const qualified = `environment-skills-${index}:${name}`;
     for (const skill of [name, qualified]) {
       const input = { skill, args: "fixture argument" };
-      assert.deepEqual(await profile.canUseTool("Skill", input, context),
-        { behavior: "allow", updatedInput: { ...input, skill: qualified } });
       const result = await profile.beforeTool({ hook_event_name: "PreToolUse", tool_use_id: "call", tool_name: "Skill", tool_input: input }, "call", context);
       assert.deepEqual(result.hookSpecificOutput.updatedInput, { ...input, skill: qualified });
     }
   }
   for (const skill of ["unselected", "other:first", "environment-skills-0:second"]) {
-    assert.equal((await profile.canUseTool("Skill", { skill }, context)).behavior, "deny");
+    assert.deepEqual(await profile.beforeTool({ hook_event_name: "PreToolUse", tool_use_id: "call", tool_name: "Skill", tool_input: { skill } }, "call", context), {});
   }
 });

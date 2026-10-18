@@ -63,7 +63,8 @@ export class Subagents {
   options(workspace: boolean): Pick<Options, "agents" | "forwardSubagentText"> {
     return { forwardSubagentText: true, agents: { oac_worker: {
       description: "A subagent for delegated work in this Session.", prompt: "Complete the delegated task using the available tools.", model: "inherit",
-      tools: [...(workspace ? ["Bash"] : []), "Agent", "SendMessage"],
+      // A workspace worker inherits the native tools of its parent.
+      ...(workspace ? {} : { tools: ["Agent", "SendMessage"] }),
     } } };
   }
   consume(message: SDKMessage): void {

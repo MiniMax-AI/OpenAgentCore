@@ -136,7 +136,7 @@ Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-seman
 | `command_execution` | Command, reported output, exit code, duration and working directory |
 | `mcp_call` | Server and tool identity, arguments, structured result or error |
 | `function_call`, `function_call_output` | A linked call and its result. The result always carries `output` and `error`, null when the submission omitted them; stored results keep the submitted field presence. Native file changes appear as an `apply_patch` function call with the changes as arguments and no invented result |
-| `web_search_call` | The supported action fields (`search`, `open_page`, `find_in_page`, `other`) |
+| `web_search_call` | The supported action fields (`search`, `open_page`, `find_in_page`, `other`); Claude Code reports `search` for `WebSearch` and `open_page` for `WebFetch` |
 | `reasoning`, `agent_message` and the Subagent coordination calls | See [Subagents](./subagents.md). `agent_message` has no status; reasoning status can be null |
 
 A failed tool does not fail its Turn. Tool output is readable by the Session's Project and can contain the tool's own diagnostic text.

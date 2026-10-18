@@ -100,7 +100,6 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 		return opts, err
 	}
 	config["permissionMode"] = "bypassPermissions"
-	config["sandbox"] = map[string]bool{"enabled": false}
 	if len(req.LocalEnvironment.Skills) > 0 {
 		selected := config["agents"].(map[string]any)["default"].(map[string]any)
 		names := make([]string, 0, len(req.LocalEnvironment.Skills))
