@@ -73,7 +73,7 @@ test("workspace runs the native tool preset and removes only what cannot run una
   const { dirs, config } = fixture(t);
   const options = new WorkspaceProfile(dirs.workspace, config).options;
   assert.deepEqual(options.tools, { type: "preset", preset: "claude_code" });
-  assert.deepEqual(options.disallowedTools, ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Workflow", "ListAgents", "Agent", "SendMessage"]);
+  assert.deepEqual(options.disallowedTools, ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Monitor", "Workflow", "ListAgents", "Agent", "SendMessage"]);
   assert.equal(options.permissionMode, undefined);
   for (const key of ["allowedTools", "settingSources", "mcpServers", "strictMcpConfig", "persistSession", "sandbox", "settings", "allowDangerouslySkipPermissions"]) {
     assert.equal(options[key], undefined, key);

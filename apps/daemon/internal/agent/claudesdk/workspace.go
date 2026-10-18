@@ -114,8 +114,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			env = append(env, entry)
 		}
 	}
-	// Node's fetch honours the operator's proxy only when asked.
-	env = append(env, "HOME="+w.HomeDir, "TMPDIR="+w.ScratchDir, "CLAUDE_CONFIG_DIR="+config.StateDir, "NODE_USE_ENV_PROXY=1")
+	env = append(env, "HOME="+w.HomeDir, "TMPDIR="+w.ScratchDir, "CLAUDE_CONFIG_DIR="+config.StateDir)
 	seen := map[string]bool{}
 	for _, entry := range config.Env {
 		name, _, ok := strings.Cut(entry, "=")

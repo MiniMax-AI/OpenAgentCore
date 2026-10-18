@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 8fe24c7c4678865f2ba2a10dc9203d8bbe2f84352c073168201835ca0b8ff565
+source_hash: ae8c47681587ccd0e7084c883be63a1f7064c1e780a5516536736943d8d45e08
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -49,7 +49,7 @@ Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `Str
 
 `tool_search` 工具仅包含 `type`；仅适用于 Responses 的执行字段被拒绝。函数 `defer_loading` 标记延迟加载的定义。发现要求两者同时存在：没有延迟函数的 `tool_search`，或没有 `tool_search` 的延迟函数均被拒绝。已保存 Agent 的工具联合类型保留 `tool_search`；固定版本 Session 响应联合类型省略它，因此 Session 与 SSE 资源投影移除它，冻结配置仍保留它。固定版本 Item 联合类型没有 tool-search Item，Core 不自行创建。
 
-Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并启用原生 ToolSearch；函数配置仅允许所声明回调、ToolSearch 与选定的工作区工具。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型与提供商策略；已知冲突模式和 beta 设置在适配器中拒绝，不透明策略改变后，SDK 不提供可靠的输入前信号来确认延迟加载是否生效。
+Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并启用原生 ToolSearch；函数配置仅允许所声明回调、ToolSearch 与工作区的原生工具。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型与提供商策略；已知冲突模式和 beta 设置在适配器中拒绝，不透明策略改变后，SDK 不提供可靠的输入前信号来确认延迟加载是否生效。
 
 ## Web 搜索与程序化工具调用 {#web-search-and-programmatic-tool-calling}
 

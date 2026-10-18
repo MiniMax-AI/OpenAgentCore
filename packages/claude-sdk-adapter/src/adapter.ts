@@ -201,10 +201,10 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
         if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID, !workspace);
         if (workspace) {
-          // Native tools and settings may add servers and tools, but every tool Core declared must still be present.
+          // Native tools and settings may add servers and tools, but every tool and Skill Core declared must still be present.
           const declared = [...names, ...(workspace.skillNames.length ? ["Skill"] : []), ...(request.tool_search ? ["ToolSearch"] : []),
             ...(structured ? ["StructuredOutput"] : []), ...(subagents ? ["Task", "SendMessage"] : [])];
-          if (declared.some(name => !message.tools.includes(name)) ||
+          if (declared.some(name => !message.tools.includes(name)) || workspace.skillNames.some(name => !message.skills?.includes(name)) ||
               definitions.length && !message.mcp_servers.some(server => server.name === "functions" && server.status === "connected")) throw new Error("unexpected native configuration");
         } else if (!profile && (message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
