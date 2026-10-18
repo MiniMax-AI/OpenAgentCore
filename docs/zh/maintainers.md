@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: ed8fc3819a4f16c96a56b4f10c47ca099ce5ca6c42e79700debeddaf913ee0cb
+source_hash: 8f41d8581db31b3a8bac4c54cc2808cf30f70c609c852cd9172d915ad466abf2
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -74,7 +74,7 @@ docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/
 
 该脚本会检查软件包版本，为 Linux amd64 构建 `oac-daemon`，并准备一个仅包含守护进程、未修改的原生可执行文件、相关资源、共用的登录 profile 构建步骤和 `services/core/deploy/codex/Dockerfile` 的上下文。
 
-**Claude Code Runtime 镜像。** 必须使用 Node 20 或更高版本以及 pnpm。
+**Claude Code Runtime 镜像。** 必须使用 Node 22.21 或更高版本以及 pnpm。
 
 ```sh
 make build-claude-sdk-runtime

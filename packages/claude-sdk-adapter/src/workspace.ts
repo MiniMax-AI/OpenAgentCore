@@ -96,9 +96,8 @@ export class WorkspaceProfile {
       disallowedTools: ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Workflow", "ListAgents",
         ...(subagents ? [] : ["Agent", "SendMessage"]), ...(disableWebSearch ? ["WebSearch", "WebFetch"] : [])],
       ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}),
-      // The native CLI refuses permission bypass for root accounts, so the callback approves every tool, and
-      // an explicit default mode keeps a project's plan mode from stopping unattended work.
-      permissionMode: "default", canUseTool: async (_name, input) => ({ behavior: "allow", updatedInput: input }),
+      // The native CLI refuses permission bypass for root accounts, so the callback approves every tool.
+      canUseTool: async (_name, input) => ({ behavior: "allow", updatedInput: input }),
     };
   }
 

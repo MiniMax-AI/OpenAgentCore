@@ -72,7 +72,7 @@ docker build --platform linux/amd64 -t oac-runtime:codex "${OAC_DEV_HOME:-$HOME/
 
 The script checks the package version, builds `oac-daemon` for Linux amd64 and prepares a context with only the daemon, the unmodified native executable, its resources, the shared login-profile build step and `services/core/deploy/codex/Dockerfile`.
 
-**Claude Code Runtime image.** Node 20 or newer and pnpm are required.
+**Claude Code Runtime image.** Node 22.21 or newer and pnpm are required.
 
 ```sh
 make build-claude-sdk-runtime
