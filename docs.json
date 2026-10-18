@@ -18,6 +18,7 @@
               "docs/getting-started/install-options",
               "docs/getting-started/public-address",
               "docs/web/index",
+              "docs/web/console-server",
               "docs/getting-started/sandbox-backends",
               "docs/getting-started/workspace-storage",
               "docs/getting-started/nodes",
@@ -100,7 +101,6 @@
             "pages": [
               "docs/development",
               "docs/maintainers",
-              "docs/web/console-server",
               "docs/web/console-api-usage"
             ]
           }
