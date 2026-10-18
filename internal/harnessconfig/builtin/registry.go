@@ -8,27 +8,4 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
-var registry = harnessconfig.NewRegistry(map[string]harnessconfig.Configuration{
-	"claude_sdk": claudesdk.Configuration(),
-	"codex":      codex.Configuration(),
-	"mcode":      mcode.Configuration(),
-})
-
-func Registry() harnessconfig.Registry { return registry }
-
-// Configuration binds a registered public Harness to its authored declaration.
-func Configuration(kind string) harnessconfig.Configuration {
-	configuration, ok := registry.Lookup(kind)
-	if !ok {
-		panic("unregistered public Harness configuration")
-	}
-	return configuration
-}
-
-// Kinds returns the public identifiers in this build, not Runtime availability.
-func Kinds() []string { return []string{"claude_sdk", "codex", "mcode"} }
-
-func Contains(kind string) bool {
-	_, ok := registry.Lookup(kind)
-	return ok
-}
+var registry = harnessconfig.NewRegistry(claudesdk.Declaration, codex.Declaration, mcode.Declaration)

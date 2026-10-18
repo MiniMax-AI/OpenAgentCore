@@ -8,7 +8,7 @@ import (
 )
 
 func modelProviderConfig(raw any, model string) (map[string]any, error) {
-	provider, err := harnessconfiguration.Configuration().ParseProvider(raw)
+	provider, err := harnessconfiguration.Declaration.Configuration.ParseProvider(raw)
 	if err != nil {
 		return nil, fmt.Errorf("mcode: %w", err)
 	}

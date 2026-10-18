@@ -18,12 +18,12 @@ BOUNDED_PROVIDER_TYPE_SCHEMA = """      provider_type:
 
 
 def harness_enums(document):
-    # Read the authoring catalog, never another independently maintained enum.
+    # Read the Go declarations, never another independently maintained enum.
     spec = importlib.util.spec_from_file_location(
         "harness_catalog", Path(__file__).with_name("generate-harness-catalog.py"))
     catalog = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(catalog)
-    kinds = [entry["kind"] for entry in catalog.load_catalog(catalog.ROOT / catalog.CATALOG)]
+    kinds = [entry["kind"] for entry in catalog.load_declared()["harnesses"]]
     for definition, member in [
         ("v1.AgentsCore", "harness"),
         ("v1.SavedAgentCoreInput", "harness"),

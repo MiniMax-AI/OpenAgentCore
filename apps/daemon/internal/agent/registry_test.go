@@ -45,7 +45,7 @@ func TestRegistryRegisterRejectsFactoriesForUnavailableRuntime(t *testing.T) {
 			t.Fatal("rejected runtime changed registry")
 		}
 	}()
-	registry.Register(agent.Declaration{Info: info}, agent.Runtime{Info: info, Executor: executor})
+	registry.Register(agent.Declaration{Declaration: harnessconfig.Declaration{Kind: "k"}}, agent.Runtime{Info: info, Executor: executor})
 }
 
 func TestRegistrySupportedAgentKindsReportsDescriptors(t *testing.T) {

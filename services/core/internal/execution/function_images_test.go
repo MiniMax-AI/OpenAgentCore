@@ -6,14 +6,14 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 func TestFunctionImageAdmission(t *testing.T) {
 	image := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="
-	profile, _ := (engine.Catalog{}).Lookup("claude_sdk")
+	profile, _ := builtin.Registry().Lookup("claude_sdk")
 	for _, tc := range []struct {
 		name, url      string
 		success, valid bool
@@ -27,7 +27,7 @@ func TestFunctionImageAdmission(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			output := []any{map[string]any{"type": "input_text", "text": "before"}, map[string]any{"type": "input_image", "image_url": tc.url}, map[string]any{"type": "input_text", "text": "after"}}
 			raw, _ := json.Marshal(map[string]any{"call_id": "call", "result": map[string]any{"success": tc.success, "output": output}})
-			err := validateProfileInputs(profile, "none", []sessions.Input{{Kind: "tool_result", Payload: raw}})
+			err := validateDeclaredInputs(profile, []sessions.Input{{Kind: "tool_result", Payload: raw}})
 			if tc.valid && err != nil || !tc.valid && !errors.Is(err, sessions.ErrInvalidInput) {
 				t.Fatal(err)
 			}
@@ -35,10 +35,10 @@ func TestFunctionImageAdmission(t *testing.T) {
 	}
 	for _, placement := range []string{"self_hosted"} {
 		url := image
-		if err := profile.ValidateFunctionResult(placement, proto.FunctionResultPayload{Success: true, Content: []proto.InputContent{{Type: "input_image", ImageURL: &url}}}); err != nil {
+		if err := profile.ValidateFunctionResult(proto.FunctionResultPayload{Success: true, Content: []proto.InputContent{{Type: "input_image", ImageURL: &url}}}); err != nil {
 			t.Fatal("qualified image rejected", placement, err)
 		}
-		if err := profile.ValidateFunctionResult(placement, proto.FunctionResultPayload{Success: true, Content: proto.TextInput("text")[0].Content}); err != nil {
+		if err := profile.ValidateFunctionResult(proto.FunctionResultPayload{Success: true, Content: proto.TextInput("text")[0].Content}); err != nil {
 			t.Fatal("workspace text regressed", err)
 		}
 	}

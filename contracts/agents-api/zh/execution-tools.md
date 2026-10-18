@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: da45f9109c503af19c24ad210ce42e063916e4b8d3ca959c9ed3a37d83dfd03d
+source_hash: 81bcf6708cccd107da81c6fc982ce97273d7fd11f0e200de9e1b1b2bbf643cbe
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -9,7 +9,7 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 ## 准入 {#admission}
 
 - 已保存的 Agent 将所有固定版本工具声明保留为资源数据。保存不代表通过执行资格验证。
-- 创建 Session 时，执行解析器将保存的引用与内联声明解析为不可变 Session 快照，再根据 `services/core/internal/engine` 中所选 Harness 的配置检查组合。不支持的组合在任何写入之前返回 400 `unsupported_or_invalid_configuration`。重复 `web_search` 或 `tool_search`、非对象 schema 根等协议错误使用官方错误字段（[验证](wire-semantics.md#configuration-validation)）。
+- 创建 Session 时，执行解析器将保存的引用与内联声明解析为不可变 Session 快照，再根据 `internal/harnessconfig` 中所选 Harness 的声明检查组合。不支持的组合在任何写入之前返回 400 `unsupported_or_invalid_configuration`。重复 `web_search` 或 `tool_search`、非对象 schema 根等协议错误使用官方错误字段（[验证](wire-semantics.md#configuration-validation)）。
 - 分发之前，所选 Runtime 也必须声明该操作的能力。仅有能力声明不会启用操作。
 - 原生 Harness 运行模型与工具循环。Core 不添加第二个循环、输出修复、schema 强制转换或提示词包装，也不选择原生工具名称。
 

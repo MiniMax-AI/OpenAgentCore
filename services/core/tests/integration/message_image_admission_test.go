@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -25,9 +26,9 @@ func TestUnqualifiedImageAdmissionIsAtomic(t *testing.T) {
 			h := newDispatchHarness(t)
 			// A registered text-only profile must stay closed regardless of the
 			// adapters currently qualified by the built-in catalog.
-			profile, _ := (engine.Catalog{}).Lookup("codex")
-			profile.MessageImages = proto.CapabilityUnsupported
-			h.d.Policy = execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"codex": profile})}
+			declaration, _ := builtin.Registry().Lookup("codex")
+			declaration.Capabilities.MessageImages = proto.CapabilityUnsupported
+			h.d.Policy = execution.Policy{Declarations: harnessconfig.NewRegistry(declaration)}
 			worker := startWorker(t, t.Context(), h.s, h.d)
 			defer func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = worker.Run(ctx) }()
 			configuration := json.RawMessage(`{"agent":{"model":"fixture"},"environment":{"type":"` + placement + `","workspace_directory":"/workspace"}}`)

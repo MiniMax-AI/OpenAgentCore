@@ -2,7 +2,7 @@
 title: "Harness capabilities"
 ---
 
-This page lists what each Harness supports on each placement. Core decides admission from the Harness's engine profile in `services/core/internal/engine`, and the Runtime that runs the Session must also advertise the operation. The linked contracts define each operation; [Harness onboarding](./harness-onboarding.md#qualify-the-adapter) describes how a Harness is qualified.
+This page lists what each Harness supports on each placement. Core decides admission from the Harness's declaration in `internal/harnessconfig/<package>/declaration.go`, and the Runtime that runs the Session must also advertise the operation. The linked contracts define each operation; [Harness onboarding](./harness-onboarding.md#qualify-the-adapter) describes how a Harness is qualified.
 
 | Status | Meaning |
 | --- | --- |
@@ -60,4 +60,4 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, anonymous or HTTPS bearer | Verified: self-hosted; admitted: hosted; anonymous or HTTPS bearer |
 
-External workspace storage additionally requires the selected Harness profile and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.
+External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.

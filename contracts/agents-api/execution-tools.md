@@ -7,7 +7,7 @@ An Agent declares application functions, controls and MCP servers in `tools`, an
 ## Admission
 
 - Saved Agents keep every pinned tool declaration as resource data. Saving never qualifies execution.
-- Session creation resolves saved references and inline declarations with the execution parser into the immutable Session snapshot, then checks the combination against the selected Harness's profile in `services/core/internal/engine`. An unsupported combination returns 400 `unsupported_or_invalid_configuration` before anything is written. Protocol errors, such as a repeated `web_search` or `tool_search` or a non-object schema root, use the official error fields ([validation](./wire-semantics.md#configuration-validation)).
+- Session creation resolves saved references and inline declarations with the execution parser into the immutable Session snapshot, then checks the combination against the selected Harness's declaration in `internal/harnessconfig`. An unsupported combination returns 400 `unsupported_or_invalid_configuration` before anything is written. Protocol errors, such as a repeated `web_search` or `tool_search` or a non-object schema root, use the official error fields ([validation](./wire-semantics.md#configuration-validation)).
 - Before dispatch, the selected Runtime must also advertise the operation's capability. An advertisement alone never enables an operation.
 - The native Harness runs the model and tool loop. Core adds no second loop, output repair, schema coercion or prompt wrapper, and selects no native tool names.
 

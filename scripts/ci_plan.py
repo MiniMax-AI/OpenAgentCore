@@ -110,7 +110,7 @@ IMAGE_INPUTS = ("scripts/build-core", "scripts/build-e2b-provider", "deploy/dist
                 "services/core/deploy/e2b/")
 # Generated outputs retain freshness checks even when the file is documentation.
 GENERATED_OUTPUTS = {"contracts/agents-api/harness-catalog.md", "contracts/agents-api/zh/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
-                     "services/core/internal/engine/catalog_generated.go"}
+                     "internal/harnessconfig/builtin/registry.go", "apps/daemon/internal/cli/harness_declarations.go"}
 
 
 def full(reason):

@@ -19,11 +19,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -132,7 +132,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	c.DefaultHarness = cmp.Or(os.Getenv("OAC_DEFAULT_HARNESS"), defaultHarness)
-	if _, known := (engine.Catalog{}).Lookup(c.DefaultHarness); !known {
+	if !builtin.Contains(c.DefaultHarness) {
 		return Config{}, configError("OAC_DEFAULT_HARNESS is not a known harness")
 	}
 	if c.Harnesses, err = harnesses(c.DefaultHarness); err != nil {
@@ -172,7 +172,7 @@ func (c Config) Settings() []api.InstallationSetting {
 		setting("OAC_LOG_FORMAT", format, "auto", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
 		setting("OAC_LOG_ADD_SOURCE", c.Log.AddSource, false, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
 		setting("OAC_EXECUTION_CONCURRENCY", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []api.InstallationService{api.InstallationCore}),
-		setting("OAC_HARNESSES", c.Harnesses, (engine.Catalog{}).Kinds(), []api.InstallationService{api.InstallationCore}),
+		setting("OAC_HARNESSES", c.Harnesses, builtin.Kinds(), []api.InstallationService{api.InstallationCore}),
 		setting("OAC_DEFAULT_HARNESS", c.DefaultHarness, defaultHarness, []api.InstallationService{api.InstallationCore}),
 		setting("OAC_WRITE_AUDIT_RETENTION", duration(c.WriteAuditRetention), duration(defaultWriteAuditRetention), []api.InstallationService{api.InstallationCore}),
 		setting("OAC_OAUTH_TRUSTED_ORIGINS", origins, []string{}, []api.InstallationService{api.InstallationCore}),
@@ -272,11 +272,11 @@ func harnesses(defaultEngine string) ([]string, error) {
 	if value := os.Getenv("OAC_HARNESSES"); value != "" {
 		kinds = append(kinds, strings.Split(value, ",")...)
 	} else {
-		kinds = append(kinds, (engine.Catalog{}).Kinds()...)
+		kinds = append(kinds, builtin.Kinds()...)
 	}
 	for i, kind := range kinds {
 		kind = strings.TrimSpace(kind)
-		if _, known := (engine.Catalog{}).Lookup(kind); !known {
+		if !builtin.Contains(kind) {
 			return nil, configError("OAC_HARNESSES contains an unknown harness")
 		}
 		kinds[i] = kind

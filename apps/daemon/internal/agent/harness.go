@@ -11,18 +11,19 @@
 // images, structured output and Subagent observations use protocol messages
 // rather than additional Go interfaces; qualify and advertise them separately.
 //
-// Registration: each adapter exports one Declaration. The Runtime discovers the
-// static declaration list and installs each resulting Runtime through Register.
-// Availability and factory selection belong to the adapter. RegisterKind resets
-// the factories, so Register installs it first. RegisterExecutor derives the
-// Preparation capability; the adapter declares WorkspaceReadPreparation.
+// Registration: each adapter exports one Declaration, which binds its shared
+// declaration (internal/harnessconfig/<package>/declaration.go) to Discover.
+// The Runtime discovers the generated declaration list and installs each
+// resulting Runtime through Register. Availability and factory selection belong
+// to the adapter. RegisterKind resets the factories, so Register installs it
+// first. RegisterExecutor derives the Preparation capability.
 //
-// Runtime registration and Core service qualification remain separate. A public
-// Harness also needs a profile in services/core/internal/engine; advertising
-// a capability cannot authorize it. Requests, events and capability descriptors
-// use the existing internal/agentdaemon/proto types. An Environment execution
-// request carries the Runtime's bound workspace directory in
-// LocalEnvironment.WorkspaceRoot; the native Harness runs there.
+// The shared declaration is the only authored statement of what a Harness
+// supports; Core admission reads the same value. Discovery may only narrow its
+// capabilities for the installed host, with Narrow. Requests, events and
+// capability descriptors use the existing internal/agentdaemon/proto types. An
+// Environment execution request carries the Runtime's bound workspace directory
+// in LocalEnvironment.WorkspaceRoot; the native Harness runs there.
 package agent
 
 import (
@@ -33,14 +34,30 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
-// Declaration is the complete startup contract for a Harness implementation.
+// Declaration binds a Harness's shared declaration to its native discovery.
 // Discover returns nil when the adapter is not configured. An unavailable
 // configured adapter returns a Runtime with Available=false and no factories.
-// Discovery owns runtime-specific configuration, readiness and feature gates.
+// Discovery owns runtime-specific configuration and readiness, and narrows the
+// declared capabilities to what the host provides; it never widens them.
 type Declaration struct {
-	Info          proto.SupportedAgentKind
-	Configuration harnessconfig.Configuration
-	Discover      func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
+	harnessconfig.Declaration
+	Discover func(context.Context, DiscoveryOptions, proto.SupportedAgentKind) *Runtime
+}
+
+// Unavailable is the Runtime of a configured adapter the host cannot run. It
+// declares nothing supported and has no factories.
+func Unavailable(info proto.SupportedAgentKind) *Runtime {
+	info.Available, info.Version = false, ""
+	info.Capabilities = proto.UnsupportedCapabilities()
+	return &Runtime{Info: info}
+}
+
+// Narrow withdraws a declared capability the host cannot provide. It never
+// grants one.
+func Narrow(capability *proto.CapabilitySupport, provided bool) {
+	if !provided {
+		*capability = proto.CapabilityUnsupported
+	}
 }
 
 // DiscoveryOptions provides process context without naming an implementation.
@@ -61,7 +78,7 @@ type Runtime struct {
 
 // Register installs a discovered Runtime with its declaration's configuration.
 func (r *Registry) Register(declaration Declaration, runtime Runtime) {
-	if runtime.Info.Kind != declaration.Info.Kind {
+	if runtime.Info.Kind != declaration.Kind {
 		panic("agent.Registry.Register: discovery kind differs from declaration")
 	}
 	if !runtime.Info.Available && runtime.Executor != nil {
@@ -80,8 +97,8 @@ func (r *Registry) Register(declaration Declaration, runtime Runtime) {
 // The declaration belongs to the adapter and is also consumed by Core. Keep
 // adapter field rules and rendering private. That shared contract owns frozen
 // configuration and native application obligations. This file owns execution
-// lifecycle only. Native image/tool/operation support is qualified through proto
-// capabilities and the Core engine profile, not model configuration declarations.
+// lifecycle only. Native image/tool/operation support is declared through the
+// declaration's capabilities, not model configuration.
 //
 // Preparation failure retains unconfirmed native cleanup in a non-nil Executor
 // under the factory ownership contract below.
@@ -145,7 +162,7 @@ type DurableSteerer interface {
 	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
 }
 
-// Steerer delivers non-durable input when qualified; otherwise it explicitly
+// Steerer delivers non-durable input when declared; otherwise it explicitly
 // returns ErrUnsupportedOperation without submitting input.
 type Steerer interface {
 	Steer(context.Context, proto.PromptSteerPayload) error

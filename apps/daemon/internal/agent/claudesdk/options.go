@@ -57,7 +57,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
-	modelConfiguration, err := harnessconfiguration.Configuration().Prepare(req.AgentOptions)
+	modelConfiguration, err := harnessconfiguration.Declaration.Configuration.Prepare(req.AgentOptions)
 	if err != nil {
 		return startRequest{}, nil, err
 	}

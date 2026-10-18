@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 2b4bd6958c7addec906c30ccba8b359d98e267049ff87a6d54fe73be8de16e85
+source_hash: c46df89c43896c27b6c799a22055388161074e613a25c5308adc3fbcfce83a6d
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -55,7 +55,7 @@ wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blo
 
 ## 能力声明 {#capability-declarations}
 
-[`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) 中的 `AgentKindCapabilities` 描述一个 Runtime 与 Harness 组合，独立于 `available` 和 Core 的 engine profile。每个字段都是 `CapabilitySupport`：支持或不支持。零值表示未指定且无效，即使 Harness 不可用也如此。注册在修改 registry 前验证完整声明；不存在隐含的基础 descriptor。
+[`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) 中的 `AgentKindCapabilities` 描述一个 Runtime 与 Harness 组合，独立于 `available`。它以 Harness 声明的能力为起点，即其最大能力范围，发现过程只会把它收窄到该安装已验证的范围。每个字段都是 `CapabilitySupport`：支持或不支持。零值表示未指定且无效，即使 Harness 不可用也如此。注册在修改 registry 前验证完整声明；不存在隐含的基础 descriptor。
 
 wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `false`。不完整声明编码失败。解码拒绝省略、null、无效和未知字段，以及缺失的 capability 对象。无效 heartbeat 会清空连接的 admission snapshot 并关闭 transport；这不证明原生完成或取消结果。
 
@@ -63,7 +63,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 
 新增字段要求每个生产声明都作出明确决定。契约测试为注册、wire 往返和持久化 boolean 投影逐一枚举字段；共享测试 fixture 单独列出字段，不为未来字段提供默认值。[Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md#register-the-adapter)负责各声明的 adapter 侧规则。
 
-声明描述 Runtime 能做什么。Core 仅在 Harness 的 engine profile 也通过资格验证时准入公开功能，并在设备选择及领取 Turn 前的最终检查中检查选定设备的声明：
+声明描述 Runtime 能做什么。Core 仅在 Harness 的声明也准入时准入公开功能，并在设备选择及领取 Turn 前的最终检查中检查选定设备的声明：
 
 | 能力 | Core 何时要求 |
 | --- | --- |
@@ -73,7 +73,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
 | `native_session_recovery` | Session 已启动过 Turn，但未记录原生 Session ID |
 | `retained_native_history` | Environment 使用外部工作区绑定；自带工作区存储不要求此能力 |
-| `web_search_control`, `text_verbosity` | Harness 的 engine profile 声明该控制 |
+| `web_search_control`, `text_verbosity` | Harness 的声明支持该控制 |
 | `structured_output` 和 `message_items` | Agent 请求 `json_schema` 输出 |
 | `subagent_observations` | `multi_agent.enabled` 为 true |
 | `subagent_control` | `multi_agent.enabled` 为 false |

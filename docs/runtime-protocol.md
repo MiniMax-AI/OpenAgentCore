@@ -53,7 +53,7 @@ The wire version is [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCor
 
 ## Capability declarations
 
-`AgentKindCapabilities` in [`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) describes one composed Runtime and Harness, independently of `available` and of Core's engine profile. Every field is a `CapabilitySupport`: supported or unsupported. The zero value is unspecified and invalid, even for an unavailable Harness. Registration validates the complete declaration before changing the registry; there is no implicit basic descriptor.
+`AgentKindCapabilities` in [`inbound.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) describes one composed Runtime and Harness, independently of `available`. It starts from the Harness's declared capabilities, which state the most it can do, and discovery only narrows them to what the installation verified. Every field is a `CapabilitySupport`: supported or unsupported. The zero value is unspecified and invalid, even for an unavailable Harness. Registration validates the complete declaration before changing the registry; there is no implicit basic descriptor.
 
 On the wire each field is a JSON boolean, and every field is present, including `false`. Encoding an incomplete declaration fails. Decoding rejects omitted, null, invalid and unknown fields, and a missing capability object. An invalid heartbeat clears the connection's admission snapshot and closes its transport; that establishes no native completion or cancellation result.
 
@@ -61,7 +61,7 @@ Each admitted Executor and Turn keeps the declaration it was admitted with. A la
 
 A new field requires an explicit decision in every production declaration. Contract tests enumerate every field for registration, wire round trips and the persisted boolean projection; the shared test fixture lists fields individually and supplies no defaults for future ones. The [Harness protocol](../contracts/agents-api/harness-onboarding.md#register-the-adapter) owns the adapter side of each declaration.
 
-A declaration describes what the Runtime can do. Core admits a public feature only when the Harness's engine profile also qualifies it, and checks the declaration of the selected device during device selection and again at the final check before it claims a Turn:
+A declaration describes what the Runtime can do. Core admits a public feature only when the Harness's declaration also admits it, and checks the declaration of the selected device during device selection and again at the final check before it claims a Turn:
 
 | Capability | Core requires it when |
 | --- | --- |
@@ -71,7 +71,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
 | `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
 | `retained_native_history` | The Environment uses an external workspace binding; owned workspace storage does not require this capability |
-| `web_search_control`, `text_verbosity` | The Harness's engine profile declares that control |
+| `web_search_control`, `text_verbosity` | The Harness's declaration supports that control |
 | `structured_output` and `message_items` | The Agent requests `json_schema` output |
 | `subagent_observations` | `multi_agent.enabled` is true |
 | `subagent_control` | `multi_agent.enabled` is false |

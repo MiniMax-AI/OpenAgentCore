@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"slices"
 	"strings"
 	"testing"
@@ -217,7 +217,7 @@ func archiveOperations(t *testing.T, tx *fakeArchiveTx, locked sessions.LockedSe
 		}
 		return apply(ctx, locked, tx)
 	}}
-	operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, engine.Catalog{})
+	operations, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL), storage, builtin.Registry())
 	if err != nil {
 		t.Fatal(err)
 	}

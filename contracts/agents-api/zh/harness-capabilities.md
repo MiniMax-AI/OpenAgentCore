@@ -1,10 +1,10 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 80be524f00965cfa3f7349a65597d9511126f54cbdd8ac8857c6332003db7a01
+source_hash: b136a3c2c7eb583eef88acc2c214ad7e6391c3cf17c95c767e67cc1fe296271e
 ---
 
-本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `services/core/internal/engine` 中 Harness 的引擎配置决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
+本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
 
 | 状态 | 含义 |
 | --- | --- |
@@ -62,4 +62,4 @@ Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，匿名或 HTTPS bearer | 已验证：自托管；已准入：托管；匿名或 HTTPS bearer |
 
-外部工作区存储还要求所选 Harness profile 和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。
+外部工作区存储还要求所选 Harness 声明和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。

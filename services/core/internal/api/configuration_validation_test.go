@@ -265,7 +265,7 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 		{`"tools":[{"type":"web_search"}]`, "Only disabled web_search is qualified for execution."},
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Programmatic tool calling is not qualified for execution."},
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls."},
-		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not qualified for this engine."},
+		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not supported by this engine."},
 		{`"reasoning":{"effort":"max"}`, "Explicit reasoning execution options are not supported by this service yet."},
 		{`"service_tier":"flex"`, "Execution currently supports service_tier=auto only."},
 		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty, unique and at most 512 bytes."},
