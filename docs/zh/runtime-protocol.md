@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 7dee36cd45d967980ed9a6792b6facff9916791046968f7733376033ca963efb
+source_hash: 8c334fe24521cf20a300c447b6b81d4aa0f7bc786bd89bc45722187d0c004acf
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -120,7 +120,7 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 
 Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，含义与 `subagent_turn` 中相同；Run 自身发起的调用两者均为空。Adapter 在调用之前发送该子级的 `subagent_identity` 和 `subagent_turn`，Core 用同一个 `call_id` 的 `function_result` 作答。
 
-`function_call_withdrawn` 携带某个 `function_call` 的 `call_id`、`native_id` 和 `turn_id`，表示原生 Harness 永远不会为它应用结果，例如 Codex Subagent 的 Turn 已结束且原生丢弃了其请求。Core 不再要求回答该调用，并拒绝之后为它提交的结果；已在传输中的 `function_result` 会以未应用确认，adapter 以 `not_pending` 作答。
+`function_call_withdrawn` 携带某个 `function_call` 的 `call_id`、`native_id` 和 `turn_id`，表示原生 Harness 永远不会为它应用结果，例如 Codex Subagent 的 Turn 已结束且原生丢弃了其请求。Core 不再要求回答该调用，并拒绝之后为它提交的结果。adapter 以 `not_pending` 确认已在传输中的 `function_result`，Core 随后等待撤回或 Turn 结束，既不让 Turn 失败，也不重发该结果。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 

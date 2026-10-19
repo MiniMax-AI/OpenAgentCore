@@ -118,7 +118,7 @@ Initial, prepared and active input use the same [ordered MessageInput](https://g
 
 A `function_call` carries `native_id` and `turn_id` when a Subagent made the call, with the meaning they have in `subagent_turn`; both are empty for a call of the Run itself. The adapter sends the child's `subagent_identity` and `subagent_turn` before the call, and Core answers with `function_result` under the same `call_id`.
 
-A `function_call_withdrawn` carries the `call_id`, `native_id` and `turn_id` of a `function_call` and tells that the native Harness will never apply a result for it, for example because a Codex Subagent Turn ended and native dropped its request. Core stops requiring an answer for the call and rejects a later result for it; a `function_result` already in flight is acknowledged as not applied, and the adapter answers it with `not_pending`.
+A `function_call_withdrawn` carries the `call_id`, `native_id` and `turn_id` of a `function_call` and tells that the native Harness will never apply a result for it, for example because a Codex Subagent Turn ended and native dropped its request. Core stops requiring an answer for the call and rejects a later result for it. The adapter acknowledges a `function_result` already in flight with `not_pending`, and Core then waits for the withdrawal or the Turn's end instead of failing the Turn or resending the result.
 
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 
