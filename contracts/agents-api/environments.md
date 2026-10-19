@@ -187,7 +187,7 @@ Core freezes resource versions, metadata and source selections at Session creati
 
 The runner uses only neutral Environment and Session identity and a Runtime peer, with no Provider, deployment or operating-system branch. Harness differences stay in the adapters.
 
-**Portable preparation input.** `self_hosted` input carries only `workspace_directory` and `capability_directories`. A Session with either workspace placement can also send `x_agents_core.environment`, a Core extension with `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins` and `capability_directories`. It uses the same parsers and inheritance rules as `openai_hosted` input. A field supplied both there and in `environment` is rejected, including an explicit null. A `self_hosted` Session names its Template only through this extension and cannot use a Template whose network is not `enabled` (400, param `x_agents_core.environment.environment_template_id`). Machine location, sizing and network policy are not extension fields.
+**Portable preparation input.** `self_hosted` input carries only `workspace_directory` and `capability_directories`. A Session with either workspace placement can also send `x_agents_core.environment`, a Core extension with `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins` and `capability_directories`. It uses the same parsers and inheritance rules as `openai_hosted` input. A field supplied both there and in `environment` is rejected, including an explicit null. A `self_hosted` Session names its Template only through this extension. Machine location, sizing and network policy are not extension fields.
 
 ```json
 {
@@ -392,7 +392,7 @@ A stdio server starts through the daemon's stdio helper, which resolves the inst
 
 [Harness capabilities](./harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
 
-Environment MCP needs enabled network. Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
+Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
 ### Effective bindings
 
@@ -405,7 +405,7 @@ An Agent's HTTP MCP tool ([declaration](./execution-tools.md#http-mcp)) has a `c
 | Origin | Connects from | Allowed placements |
 | --- | --- | --- |
 | `service` | Core's service-side execution host | `none` only |
-| `environment` | The Environment's workspace | `openai_hosted` and `self_hosted` with enabled network |
+| `environment` | The Environment's workspace | `openai_hosted` and `self_hosted` |
 
 Core's Harness profile declares `MCPOrigins`; admission and dispatch check the origin against the placement and the Runtime's advertised HTTP, bearer and required-initialization capabilities, and the Runtime validates the origin again before invoking an adapter. No Harness-name or Provider branch selects a different path.
 

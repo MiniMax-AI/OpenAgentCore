@@ -60,7 +60,6 @@ func TestMCPBindingsRejectRelocationAndAmbiguousInstallation(t *testing.T) {
 	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}}
 	for _, req := range []proto.PromptRequestPayload{
 		{MCPHTTPServers: &public, LocalEnvironment: local},
-		{DisableExecutionEnvironment: true, LocalEnvironment: local},
 		{LocalEnvironment: &proto.LocalEnvironment{MCP: append(local.MCP, local.MCP[0])}},
 		{LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", BearerTokenEnvVar: "MISSING"}}}}},
 	} {

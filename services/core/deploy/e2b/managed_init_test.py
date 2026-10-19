@@ -44,10 +44,8 @@ class ManagedStartupTest(unittest.TestCase):
                 self.assertEqual(valid, case['valid'])
 
     def test_invalid_binding_rejected(self):
-        source = payload()
-        for key, value in [('DeviceID', 'other')]:
-            with self.subTest(key=key), self.assertRaises(ValueError):
-                managed_init.identity(dict(source, **{key: value}))
+        with self.assertRaises(ValueError):
+            managed_init.identity(dict(payload(), DeviceID='other'))
 
     def exercise(self, failed=False):
         with tempfile.TemporaryDirectory() as temporary:

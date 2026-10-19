@@ -8,11 +8,11 @@ import (
 	"strings"
 )
 
-var ErrInvalid = errors.New("invalid hosted network policy")
+var errInvalid = errors.New("invalid hosted network policy")
 
 type Policy struct {
-	Access         string   `json:"access"`
-	AllowedDomains []string `json:"allowed_domains"`
+	Access         string
+	AllowedDomains []string
 }
 
 // Validate accepts the qualified exact ASCII hostname form. It does not rewrite
@@ -25,16 +25,16 @@ func (p Policy) Validate() error {
 		}
 	case "restricted":
 		if len(p.AllowedDomains) < 1 || len(p.AllowedDomains) > 100 {
-			return ErrInvalid
+			return errInvalid
 		}
 		for _, domain := range p.AllowedDomains {
 			if !hostname(domain) {
-				return ErrInvalid
+				return errInvalid
 			}
 		}
 		return nil
 	}
-	return ErrInvalid
+	return errInvalid
 }
 
 func hostname(value string) bool {

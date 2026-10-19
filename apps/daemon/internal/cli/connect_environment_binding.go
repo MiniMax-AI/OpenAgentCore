@@ -60,12 +60,10 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	if bound.WorkspaceDirectory != "/workspace" && bound.WorkspaceDirectory != workspace {
 		return errors.New("connect: enrollment does not match the Runtime workspace")
 	}
-	for key, value := range map[string]string{
-		"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID,
-		"OAC_RUNTIME_SESSION_ID":     bound.SessionID,
-	} {
+	identity := map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bound.SessionID}
+	for key, value := range identity {
 		if previous := os.Getenv(key); previous != "" && previous != value {
-			return errors.New("connect: conflicting Runtime identity or policy")
+			return errors.New("connect: conflicting Runtime identity")
 		}
 	}
 	capabilityDirectory := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
@@ -79,7 +77,7 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	if err = saveEnvironmentBinding(root, want); err != nil {
 		return err
 	}
-	for key, value := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bound.SessionID} {
+	for key, value := range identity {
 		if err = os.Setenv(key, value); err != nil {
 			return errors.New("connect: Runtime identity configuration failed")
 		}

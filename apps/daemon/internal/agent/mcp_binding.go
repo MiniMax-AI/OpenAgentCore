@@ -50,9 +50,6 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 		}
 	}
 	if local := req.LocalEnvironment; local != nil && len(local.MCP) > 0 {
-		if req.DisableExecutionEnvironment {
-			return nil, errors.New("environment MCP requires an execution environment")
-		}
 		for _, installed := range local.MCP {
 			declaration := installed.Server
 			item := MCPBinding{ServerLabel: declaration.Name, ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: declaration.Type, ServerURL: declaration.URL, BearerToken: installed.BearerToken, HTTPHeaders: maps.Clone(declaration.HTTPHeaders)}

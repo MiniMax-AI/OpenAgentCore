@@ -73,7 +73,7 @@ func (l *templateLookup) resolved() environmenttemplates.Resolved {
 }
 
 // Session creation resolves the Template for the caller's tenant and answers
-// with the error of a Template it cannot resolve or cannot apply.
+// with the error of a Template it cannot resolve.
 func TestSessionCreationResolvesTemplateForTenant(t *testing.T) {
 	for _, test := range []struct {
 		body   string
@@ -82,7 +82,6 @@ func TestSessionCreationResolvesTemplateForTenant(t *testing.T) {
 		want   string
 	}{
 		{`{"agent":{"model":"test"},"environment":{"type":"openai_hosted","environment_template_id":"saved"},"input":"Start."}`, environmenttemplates.ErrNotFound, http.StatusNotFound, `"not_found_error"`},
-		{`{"agent":{"model":"test"},"environment":{"type":"self_hosted","workspace_directory":"/work"},"x_agents_core":{"environment":{"environment_template_id":"saved"}}}`, nil, http.StatusBadRequest, `"type":"invalid_request_error","code":"invalid_request_error","param":"x_agents_core.environment.environment_template_id"`},
 	} {
 		var resolved []string
 		h, _, tenant := testHandler(t, func(_ *Dependencies, f *testFakes) {

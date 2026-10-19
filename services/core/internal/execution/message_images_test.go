@@ -33,4 +33,3 @@ func TestMessageImageRulesBelongToTheHarness(t *testing.T) {
 		}
 	}
 }
-
