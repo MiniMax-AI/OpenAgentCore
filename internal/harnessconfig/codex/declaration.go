@@ -88,7 +88,7 @@ func rejectRemoteImages(input proto.MessageInput) error {
 				continue
 			}
 			if scheme, _, ok := strings.Cut(*part.ImageURL, ":"); ok && (strings.EqualFold(scheme, "http") || strings.EqualFold(scheme, "https")) {
-				return errors.New("remote image URLs are not supported; use an inline data URL instead")
+				return harnessconfig.ErrInvalidInput
 			}
 		}
 	}

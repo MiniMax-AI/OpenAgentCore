@@ -2,6 +2,7 @@ package execution
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -29,7 +30,7 @@ func TestFunctionImageAdmission(t *testing.T) {
 			profile, _ := builtin.Registry().Lookup(tc.kind)
 			output := []any{map[string]any{"type": "input_text", "text": "before"}, map[string]any{"type": "input_image", "image_url": tc.url}, map[string]any{"type": "input_text", "text": "after"}}
 			raw, _ := json.Marshal(map[string]any{"call_id": "call", "result": map[string]any{"success": tc.success, "output": output}})
-			if err := validateDeclaredInputs(profile, []sessions.Input{{Kind: "tool_result", Payload: raw}}); (err == nil) != tc.valid {
+			if err := validateDeclaredInputs(profile, []sessions.Input{{Kind: "tool_result", Payload: raw}}); (err == nil) != tc.valid || (err != nil && !errors.Is(err, sessions.ErrInvalidInput)) {
 				t.Fatal(err)
 			}
 		})

@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: fd0abcd2ab5d65d4eb63662d42a2562b8870926069b0255d4de0e014b3cbea06
+source_hash: 346c66fcc23ee4faeed7ee25feb081be2cd37baf69c5982a8792f9228df8d127
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -43,7 +43,7 @@ SSE 仅提供实时事件。重启或流丢失后，读取 Session 的 `required
 
 Core 在 `ExecutionControls.OutputFormat` 中携带 schema，仅对使用该选项的请求要求 Harness 声明支持结构化输出，并要求 Runtime 具有 `structured_output` 和消息观察能力。冻结的 schema 在输入之前送达准备阶段，适用于初次和恢复执行；Start 不能替换它。
 
-Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `StructuredOutput` 终态工具；该工具属于内部，不是额外的调用方函数。原生会在 Subagent、Skill、MCP 和 ToolSearch 之外添加该工具，适配器的精确工具清单会计入它。匹配的实时根工具结果和已归属的成功 SDK 结果确认输出。适配器将原生 `result.result` 字符串原样发布为已完成的 `final_answer` 消息，使用原生 tool-use ID；父 assistant 文本保留自己的 ID。未验证重试和已取消候选不会成为答案，适配器不会把 `structured_output` 重新序列化为 JSON。流遵循官方消息顺序，将整段文本放入一个 `output_text.delta`。桥接层仅在报告 `structured_output` 时声明该操作，工作区 Runtime 还需要 `workspace_structured_output`。
+Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `StructuredOutput` 终态工具；该工具属于内部，不是额外的调用方函数。原生会在 Subagent、Skill、MCP 和 ToolSearch 之外添加该工具；适配器的清单检查将它和 ToolSearch 交给原生决定，缺少结构化调用会使结果失败。匹配的实时根工具结果和已归属的成功 SDK 结果确认输出。适配器将原生 `result.result` 字符串原样发布为已完成的 `final_answer` 消息，使用原生 tool-use ID；父 assistant 文本保留自己的 ID。未验证重试和已取消候选不会成为答案，适配器不会把 `structured_output` 重新序列化为 JSON。流遵循官方消息顺序，将整段文本放入一个 `output_text.delta`。桥接层仅在报告 `structured_output` 时声明该操作，工作区 Runtime 还需要 `workspace_structured_output`。
 
 Codex 适配器在每个根 Turn（包括 resume 或恢复后的 Turn）上将 schema 原样作为原生 `outputSchema` 发送，并原样发布原生最终 agent 消息文本。Codex 无损读取 JSON 数字，因此 Session 准入除通用规则外不附加数字或根类型限制。引导（steer）输入并入正在运行的 Turn 并沿用其 schema，Subagent 线程不接收该 schema。Codex 将 schema 作为 strict 的 Responses `text.format` 传给模型提供商；无法运行它的提供商原样返回自己的错误，忽略它的提供商可能返回与 schema 不符的文本。
 
@@ -51,7 +51,7 @@ Codex 适配器在每个根 Turn（包括 resume 或恢复后的 Turn）上将 s
 
 `tool_search` 工具仅包含 `type`；仅适用于 Responses 的执行字段被拒绝。函数 `defer_loading` 标记延迟加载的定义。发现要求两者同时存在：没有延迟函数的 `tool_search`，或没有 `tool_search` 的延迟函数均被拒绝。已保存 Agent 的工具联合类型保留 `tool_search`；固定版本 Session 响应联合类型省略它，因此 Session 与 SSE 资源投影移除它，冻结配置仍保留它。固定版本 Item 联合类型没有 tool-search Item，Core 不自行创建。
 
-Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并设置 `ENABLE_TOOL_SEARCH=true`；`none` 配置除工作区的原生工具外，允许所声明回调、所声明 MCP 工具和 ToolSearch。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型、提供商与 beta 设置策略；适配器不拒绝其中任何一项，SDK 也不提供可靠的输入前信号来确认延迟加载是否生效。
+Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并设置 `ENABLE_TOOL_SEARCH=true`；`none` 配置只允许所声明回调、所声明 MCP 工具和 ToolSearch。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型、提供商与 beta 设置策略；适配器不拒绝其中任何一项，SDK 也不提供可靠的输入前信号来确认延迟加载是否生效。
 
 ## Web 搜索与程序化工具调用 {#web-search-and-programmatic-tool-calling}
 
