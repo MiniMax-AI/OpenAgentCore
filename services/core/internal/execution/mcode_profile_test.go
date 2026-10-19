@@ -15,7 +15,7 @@ func TestMCodeOperationQualification(t *testing.T) {
 		{"functions", `{"agent":{"model":"real-model","tools":[{"type":"function","name":"f","parameters":{"type":"object"}}]},"environment":{"type":"none"}}`, true},
 		{"functions hosted", `{"agent":{"model":"real-model","tools":[{"type":"function","name":"f","parameters":{"type":"object"}}]},"environment":{"type":"openai_hosted"}}`, true},
 		{"functions with subagents", `{"agent":{"model":"real-model","multi_agent":{"enabled":true},"tools":[{"type":"function","name":"f","parameters":{"type":"object"}}]},"environment":{"type":"none"}}`, false},
-		{"reserved label", `{"agent":{"model":"real-model","tools":[{"type":"mcp","server_label":"functions","connection_origin":"service","transport":{"type":"http","server_url":"https://example.invalid/mcp"}}]},"environment":{"type":"none"}}`, false},
+		{"reserved label", `{"agent":{"model":"real-model","tools":[{"type":"function","name":"f","parameters":{"type":"object"}},{"type":"mcp","server_label":"functions","connection_origin":"service","transport":{"type":"http","server_url":"https://example.invalid/mcp"}}]},"environment":{"type":"none"}}`, false},
 		{"mcp", `{"agent":{"model":"real-model","tools":[{"type":"mcp","server_label":"x","connection_origin":"service","transport":{"type":"http","server_url":"https://example.invalid/mcp"}}]},"environment":{"type":"none"}}`, true},
 		{"effort", `{"agent":{"model":"real-model","reasoning":{"effort":"high"}},"environment":{"type":"none"}}`, true},
 	} {
