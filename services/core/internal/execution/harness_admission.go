@@ -23,10 +23,7 @@ func admissionEnvironment(environment *v1.Environment) *harnessconfig.AdmissionE
 	if environment == nil {
 		return nil
 	}
-	return &harnessconfig.AdmissionEnvironment{
-		Type:       environment.Type,
-		Extensions: len(environment.Skills) != 0 || len(environment.Plugins) != 0 || len(environment.CapabilityDirectories) != 0,
-	}
+	return &harnessconfig.AdmissionEnvironment{Type: environment.Type}
 }
 
 func admissionOf(snapshot Snapshot) harnessconfig.Admission {

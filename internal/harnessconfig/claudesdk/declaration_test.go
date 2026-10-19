@@ -18,11 +18,9 @@ func TestDeclarationAdmitsNativeToolCombinations(t *testing.T) {
 	}
 	for name, admission := range map[string]harnessconfig.Admission{
 		"structured output with multi_agent": {MultiAgent: true, TextFormat: "json_schema"},
-		"structured output with extensions":  {TextFormat: "json_schema", Environment: &harnessconfig.AdmissionEnvironment{Type: "self_hosted", Extensions: true}},
 		"structured output with mcp":         {TextFormat: "json_schema", Tools: tools("mcp")},
 		"structured output with tool_search": {TextFormat: "json_schema", Tools: tools("function", "tool_search")},
 		"tool_search with mcp":               {Tools: tools("function", "tool_search", "mcp")},
-		"tool_search with extensions":        {Tools: tools("function", "tool_search"), Environment: &harnessconfig.AdmissionEnvironment{Type: "self_hosted", Extensions: true}},
 		"tool_search with multi_agent":       {MultiAgent: true, Tools: tools("tool_search")},
 	} {
 		if admission.Environment == nil {
