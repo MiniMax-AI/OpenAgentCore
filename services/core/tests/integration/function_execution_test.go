@@ -143,8 +143,8 @@ func TestExecutionSubagentFunctionCallIsARequiredActionOfTheRootTurn(t *testing.
 	}
 	// The child Turn is not a Session Turn, so only the root Turn answers the call.
 	answer := json.RawMessage(`{"success":true,"output":"saved"}`)
-	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, items.Identity(child.ID, "turn:child-turn"), action.CallID, answer); err == nil {
-		t.Fatal("the child Turn answered the call")
+	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, items.Identity(child.ID, "turn:child-turn"), action.CallID, answer); !errors.Is(err, sessions.ErrFunctionCallTurnMismatch) {
+		t.Fatal("the child Turn answered the call", err)
 	}
 	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, action.CallID, answer); err != nil {
 		t.Fatal(err)
@@ -154,6 +154,32 @@ func TestExecutionSubagentFunctionCallIsARequiredActionOfTheRootTurn(t *testing.
 		t.Fatal(reply, err)
 	}
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: reply.DeliveryID, Applied: true})
+	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
+	h.finished(result, sessions.TurnCompleted)
+}
+
+func TestExecutionWithdrawnFunctionCallStopsBeingARequiredAction(t *testing.T) {
+	h := newFunctionHarnessWith(t, strings.Replace(functionConfiguration, `"tools"`, `"id":"agent_root","multi_agent":{"enabled":true},"tools"`, 1))
+	input := h.message("start", "Run a child")
+	result := h.run(t.Context(), input.TurnID)
+	h.read(testExecutionRequest)
+	h.write(input.TurnID, proto.TypeSubagentIdentity, proto.SubagentIdentityPayload{NativeID: "child", ParentNativeID: "root", NativeCreatedAt: 100, ParentTurnID: "native-turn", SourceItemID: "spawn-item"})
+	h.write(input.TurnID, proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnInProgress, CreatedAtMS: 100000})
+	call := proto.FunctionCallPayload{CallID: "a", NativeID: "child", TurnID: "child-turn", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)}
+	h.write(input.TurnID, proto.TypeFunctionCall, call)
+	action := functionState(t, h, 1).RequiredActions[0]
+	withdrawn := proto.FunctionCallWithdrawnPayload{CallID: call.CallID, NativeID: call.NativeID, TurnID: call.TurnID}
+	for range 2 {
+		h.write(input.TurnID, proto.TypeFunctionCallWithdrawn, withdrawn)
+	}
+	state := functionState(t, h, 0)
+	if state.LastTurn.Status != sessions.TurnInProgress {
+		t.Fatal(state.LastTurn)
+	}
+	answer := json.RawMessage(`{"success":true,"output":"late"}`)
+	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, action.CallID, answer); !errors.Is(err, sessions.ErrTurnConflict) {
+		t.Fatal(err)
+	}
 	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
 	h.finished(result, sessions.TurnCompleted)
 }

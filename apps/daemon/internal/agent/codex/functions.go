@@ -132,6 +132,40 @@ func (s *Session) stopFunctionCalls(rootOnly bool) {
 	}
 }
 
+// withdrawChildCalls removes the pending calls of a child Turn that ended and
+// reports them to Core as withdrawn. Native drops their requests without a
+// reply, so no result can be applied. A call still held was never reported.
+func (s *Session) withdrawChildCalls(ctx context.Context, thread, turn string) error {
+	if s.functions == nil {
+		return nil
+	}
+	var withdrawn []proto.Envelope
+	s.functions.mu.Lock()
+	for id, pending := range s.functions.pending {
+		if pending.thread != thread || pending.turnID != turn {
+			continue
+		}
+		delete(s.functions.pending, id)
+		pending.receipt <- agent.ErrUnknownFunctionCall
+		if pending.held != nil {
+			continue
+		}
+		env, err := proto.NewEnvelope(proto.TypeFunctionCallWithdrawn, s.runID, proto.FunctionCallWithdrawnPayload{CallID: id, NativeID: thread, TurnID: turn})
+		if err != nil {
+			s.functions.mu.Unlock()
+			return err
+		}
+		withdrawn = append(withdrawn, env)
+	}
+	s.functions.mu.Unlock()
+	for _, env := range withdrawn {
+		if !s.sendWithin(ctx, env) {
+			return errors.New("codex: function call withdrawal delivery unavailable")
+		}
+	}
+	return nil
+}
+
 // sendHeldFunctionCalls sends the Subagent calls whose child Turn Core already
 // has, because Core resolves a child's call through its identity.
 func (s *Session) sendHeldFunctionCalls(ctx context.Context) {

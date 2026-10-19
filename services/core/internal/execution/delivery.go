@@ -226,6 +226,11 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					result.ErrorCode = "function_call_invalid"
 					return
 				}
+			case proto.TypeFunctionCallWithdrawn:
+				if err := functions.withdraw(ctx, env); err != nil {
+					result.ErrorCode = "function_call_invalid"
+					return
+				}
 			case proto.TypePromptSteerAck:
 				var ack proto.PromptSteerAckPayload
 				if env.DecodePayload(&ack) != nil {

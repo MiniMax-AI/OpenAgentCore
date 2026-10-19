@@ -39,12 +39,9 @@ func TestMiniMaxMCPPoliciesRejectInsteadOfDropping(t *testing.T) {
 }
 
 func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
-	for _, kind := range []string{"claude_sdk", "codex", "mcode"} {
+	for _, kind := range []string{"claude_sdk", "codex"} {
 		t.Run(kind, func(t *testing.T) {
 			declaration, _ := Registry().Lookup(kind)
-			if declaration.ValidateConfiguration == nil {
-				return // Only the common checks apply.
-			}
 			admission := harnessconfig.Admission{MultiAgent: true}
 			for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
 				admission.Placement = placement
@@ -52,7 +49,7 @@ func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
 					t.Fatal(placement, err)
 				}
 			}
-			// Codex and MiniMax Code admit function and MCP tools with Subagents.
+			// Codex admits function and MCP tools with Subagents; Claude Code does not.
 			admission.Placement = "none"
 			for _, tool := range []string{`{"type":"function","name":"f"}`, `{"type":"mcp","server_label":"s"}`} {
 				admission.Tools = []json.RawMessage{json.RawMessage(tool)}

@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	TypeFunctionCall   = "function_call"
-	TypeFunctionResult = "function_result"
+	TypeFunctionCall          = "function_call"
+	TypeFunctionCallWithdrawn = "function_call_withdrawn"
+	TypeFunctionResult        = "function_result"
 )
 
 type FunctionTool struct {
@@ -46,6 +47,15 @@ type FunctionCallPayload struct {
 	TurnID    string          `json:"turn_id,omitempty"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+}
+
+// FunctionCallWithdrawnPayload tells that the native Harness will never apply a
+// result for the call, which CallID, NativeID and TurnID identify as in
+// FunctionCallPayload.
+type FunctionCallWithdrawnPayload struct {
+	CallID   string `json:"call_id"`
+	NativeID string `json:"native_id,omitempty"`
+	TurnID   string `json:"turn_id,omitempty"`
 }
 
 type FunctionResultPayload struct {

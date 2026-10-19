@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -20,21 +19,7 @@ import (
 // This opt-in test runs the real pinned harness with a model that spawns a
 // Subagent, which calls a function or an MCP tool of the Agent.
 func TestSubagentToolsNative(t *testing.T) {
-	if os.Getenv("OAC_TEST_CODEX_EXECUTOR_NATIVE") != "1" {
-		t.Skip("requires an authorized native model acceptance environment")
-	}
-	binary, root := os.Getenv("OAC_TEST_CODEX_BINARY"), os.Getenv("OAC_TEST_CODEX_LIVE_ROOT")
-	model, endpoint := os.Getenv("OAC_TEST_CODEX_MODEL"), os.Getenv("OAC_TEST_CODEX_BASE_URL")
-	key, err := os.ReadFile(os.Getenv("OAC_TEST_CODEX_KEY_FILE"))
-	if binary == "" || root == "" || model == "" || endpoint == "" || err != nil {
-		t.Fatal("missing explicit native acceptance configuration")
-	}
-	isolated, err := os.MkdirTemp(root, "run-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(isolated) })
-	t.Setenv("OAC_RUNTIME_HOME", isolated)
+	binary, options := nativeAcceptanceConfig(t)
 	mcpServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		var rpc struct {
@@ -70,7 +55,7 @@ func TestSubagentToolsNative(t *testing.T) {
 			req := proto.PromptRequestPayload{
 				AgentKind: "codex", AgentStateKey: "subagent-tools-" + name,
 				DisableExecutionEnvironment: true, ObserveSubagentIdentities: true,
-				AgentOptions:   map[string]any{"model": model, "model_provider": map[string]any{"base_url": endpoint, "protocol": "responses", "api_key": strings.TrimSpace(string(key))}},
+				AgentOptions:   options,
 				FunctionTools:  []proto.FunctionTool{{Name: "lookup", Description: "Return the synthetic verification value.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)}},
 				MCPHTTPServers: &servers,
 			}
@@ -86,7 +71,6 @@ func TestSubagentToolsNative(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var mu sync.Mutex
 			var calls []proto.FunctionCallPayload
 			var childTools []string
 			var answer string
@@ -96,9 +80,7 @@ func TestSubagentToolsNative(t *testing.T) {
 				case proto.TypeFunctionCall:
 					var call proto.FunctionCallPayload
 					_ = event.DecodePayload(&call)
-					mu.Lock()
 					calls = append(calls, call)
-					mu.Unlock()
 					text := "FN-4729"
 					answers.Add(1)
 					go func() {

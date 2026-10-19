@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -74,6 +75,18 @@ func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error
 	return f.unlessCancelling(ctx, err)
 }
 
+func (f *functionExchange) withdraw(ctx context.Context, env proto.Envelope) error {
+	var call proto.FunctionCallWithdrawnPayload
+	if env.ID != f.turn || env.DecodePayload(&call) != nil {
+		return errors.New("invalid function withdrawal")
+	}
+	err := f.sessions.WithdrawFunctionCall(ctx, f.tenant, f.session, f.turn, sessions.FunctionCall{
+		CallID: items.Identity(f.turn, "tool:"+call.CallID), ExecutorCallID: call.CallID,
+		Subagent: call.NativeID, SubagentTurn: call.TurnID,
+	})
+	return f.unlessCancelling(ctx, err)
+}
+
 func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Session) error {
 	if f.reply != nil || len(f.tools) == 0 {
 		return nil
@@ -115,6 +128,14 @@ func (f *functionExchange) confirm(ctx context.Context, reply functionReply) err
 		return reply.err
 	}
 	if !reply.ack.Applied {
+		// A result in flight when the native Harness abandoned the call is moot.
+		calls, err := f.sessions.PendingFunctionCalls(ctx, f.tenant, f.session, f.turn)
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(calls, func(call sessions.FunctionCall) bool { return call.CallID == id }) {
+			return nil
+		}
 		return fmt.Errorf("function result not applied: %s", reply.ack.ErrorCode)
 	}
 	return f.unlessCancelling(ctx, f.sessions.ConfirmFunctionResult(ctx, f.tenant, f.session, f.turn, id))
