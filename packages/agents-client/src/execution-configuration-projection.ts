@@ -40,7 +40,7 @@ export function safeProvider(value: unknown, invalid: Invalid): ModelProviderVie
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
     (value.context_window !== undefined && !isNonnegativeInteger(value.context_window)) ||
     (value.max_output_tokens !== undefined && !isNonnegativeInteger(value.max_output_tokens)) ||
-    Number(value.max_output_tokens ?? 0) > Number(value.context_window ?? 0)) return invalid();
+    (Number(value.context_window ?? 0) > 0 && Number(value.max_output_tokens ?? 0) > Number(value.context_window))) return invalid();
   if (!safeBaseURL(value.base_url)) return invalid();
   return {
     protocol: value.protocol as ModelProviderView["protocol"], base_url: value.base_url, api_key_configured: value.api_key_configured,

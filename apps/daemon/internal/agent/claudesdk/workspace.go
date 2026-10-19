@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
@@ -102,7 +103,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 	env := []string{}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
-		if name != "ANTHROPIC_API_KEY" && name != "ANTHROPIC_AUTH_TOKEN" && name != "CLAUDE_CODE_OAUTH_TOKEN" && name != "CLAUDE_CONFIG_DIR" && name != "HOME" && name != "TMPDIR" {
+		if !slices.Contains([]string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "CLAUDE_CONFIG_DIR", "HOME", "TMPDIR"}, name) {
 			env = append(env, entry)
 		}
 	}
