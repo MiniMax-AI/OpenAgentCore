@@ -132,8 +132,10 @@ func (s *Session) callFunction(ctx context.Context, name string, arguments json.
 		return nil, agent.ErrUnknownFunctionCall
 	case <-ctx.Done():
 		s.functions.mu.Lock()
-		delete(s.functions.pending, id)
-		p.receipt <- agent.ErrUnknownFunctionCall
+		if s.functions.pending[id] == p {
+			delete(s.functions.pending, id)
+			p.receipt <- agent.ErrUnknownFunctionCall
+		}
 		s.functions.mu.Unlock()
 		return nil, ctx.Err()
 	}
