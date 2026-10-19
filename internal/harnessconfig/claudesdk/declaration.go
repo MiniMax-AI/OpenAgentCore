@@ -15,8 +15,6 @@ import (
 
 // Declaration is the only authored description of the Claude Code Harness. The
 // Runtime may narrow Capabilities to the installed bundle, never widen them.
-// Whitespace-only text is unsupported because the bridge and Anthropic-compatible
-// providers reject text without non-whitespace characters.
 var Declaration = harnessconfig.Declaration{
 	Kind:  "claude_sdk",
 	Label: "Claude Code",
@@ -53,10 +51,12 @@ var Declaration = harnessconfig.Declaration{
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
 	},
 	// The SDK takes effort low to max. It has no verbosity, summary or service
-	// tier, and enabling programmatic tool calling is not wired. Native WebSearch
-	// and WebFetch are live and have no cached mode or settings: disabled removes
-	// them, while live and an absent control keep them. Medium is the official
-	// default verbosity and needs no setting.
+	// tier. Native REPL runs tool calls inside model-written code, outside the root
+	// tool_use and tool_result records that function receipts and tool observations
+	// read, so enabling programmatic tool calling is rejected. Native WebSearch and
+	// WebFetch are live and have no cached mode or settings: disabled removes them,
+	// while live and an absent control keep them. Medium is the official default
+	// verbosity and needs no setting.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled", "live"},
 		ReasoningEfforts:        []string{"low", "medium", "high", "xhigh", "max"},
@@ -65,7 +65,7 @@ var Declaration = harnessconfig.Declaration{
 	},
 	Placements:             []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:             []string{"service", "environment"},
-	WhitespaceOnlyText:     proto.CapabilityUnsupported,
+	WhitespaceOnlyText:     proto.CapabilitySupported,
 	ValidateConfiguration:  validateConfiguration,
 	ValidateTools:          validateTools,
 	ValidateMessageInput:   validateMessageInput,
@@ -80,19 +80,6 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 	if admission.TextFormat == "json_schema" {
 		if err := proto.ValidateBinary64Schema(admission.TextSchema); err != nil {
 			return err
-		}
-	}
-	for _, raw := range admission.Tools {
-		var tool struct {
-			Type string `json:"type"`
-			Mode string `json:"mode"`
-		}
-		if json.Unmarshal(raw, &tool) != nil {
-			return harnessconfig.ErrInvalidInput
-		}
-		// environment:none runs no native tools, so live search has no home there.
-		if tool.Type == "web_search" && tool.Mode == "live" && admission.Placement == "none" {
-			return errors.New("Live web search requires a managed or self-hosted execution Environment.")
 		}
 	}
 	return harnessconfig.RejectSubagentTools(admission, "function", "mcp")

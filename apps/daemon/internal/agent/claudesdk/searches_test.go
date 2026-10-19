@@ -45,3 +45,15 @@ func TestSearchObservationLifecycle(t *testing.T) {
 		}
 	}
 }
+
+func TestSearchObservationOnEnvironmentNoneNeedsLiveSearch(t *testing.T) {
+	query := "agents api"
+	event := searchEvent("one", "before", "in_progress", &proto.ToolWebSearchAction{Type: "search", Query: &query})
+	emit := func(string, any) {}
+	for _, mode := range []string{"", "live"} {
+		state := searchState{calls: map[string]proto.ToolObservation{}}
+		if err := state.receive(event, startRequest{WebSearch: mode}, "native-session", emit); (err == nil) != (mode == "live") {
+			t.Fatalf("mode %q: %v", mode, err)
+		}
+	}
+}

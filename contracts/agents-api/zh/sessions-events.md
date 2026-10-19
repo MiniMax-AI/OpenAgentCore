@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: d56933c7152a4ae3fac2f4f4deab4bcd87f81b6e7a4650542d8480d529742c91
+source_hash: a87569d0232231fec4eeefeae610626125162474b3362ca490d2938ca0b8a024
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -78,7 +78,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 | 预留的批次因管理员归档 Session 或重置其部署而被取消 | 409 `environment_input_cancelled` | "The environment input was cancelled before admission." |
 | `openai_hosted` Environment 预配失败后提交新输入 | 409 `conflict_error` | "the hosted environment failed to provision" |
 | `self_hosted` Environment 失败后提交新输入、Environment 失败时输入已在等待，或 Environment 已过期 | 409 `environment_unavailable` | "The environment is no longer available for new input." |
-| Session Harness 无法处理的消息，例如 Claude Code 上仅含空白的文本 | 400 `unsupported_or_invalid_configuration` | 见[仅含空白的文本](message-content.md#whitespace-only-text) |
+| Session Harness 无法处理的消息，例如 MiniMax Code 上仅含空白的文本 | 400 `unsupported_or_invalid_configuration` | 见[仅含空白的文本](message-content.md#whitespace-only-text) |
 
 `turn_id` 为空或 `call_id` 为空白时，会返回通用的 400 `invalid_request`。错误消息绝不会重复调用方输入或内部标识符。
 

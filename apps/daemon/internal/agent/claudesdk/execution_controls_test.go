@@ -29,10 +29,10 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 		t.Fatal(err)
 	}
 	after, _ := json.Marshal(request)
-	if !controlled.DisableWebSearch || ordinary.DisableWebSearch {
+	if controlled.WebSearch != "disabled" || ordinary.WebSearch != "" {
 		t.Fatal("disabled web search did not reach the bridge")
 	}
-	controlled.DisableWebSearch = false
+	controlled.WebSearch = ""
 	if !reflect.DeepEqual(ordinary, controlled) || string(before) != string(after) {
 		t.Fatal("default controls changed native input, instructions, continuation or caller options")
 	}
@@ -44,21 +44,20 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	}
 }
 
-func TestLiveWebSearchKeepsNativeToolsOnlyOnAWorkspace(t *testing.T) {
-	config := workspaceFixture(t)
+func TestLiveWebSearchReachesTheBridgeOnEveryPlacement(t *testing.T) {
+	live := &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}, TextVerbosity: "medium"}
+	root := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", root)
+	none, _, err := prepare(Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}, proto.PromptRequestPayload{
+		RunID: "run", Input: proto.TextInput("Search."), ExecutionControls: live, AgentOptions: map[string]any{"model": "native-model"}})
+	if err != nil || none.WebSearch != "live" {
+		t.Fatal("live search on environment none did not reach the bridge", err)
+	}
 	request := workspaceRequest()
-	ordinary, _, err := prepare(config, request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.ExecutionControls = &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}, TextVerbosity: "medium"}
-	live, _, err := prepare(config, request)
-	if err != nil || !reflect.DeepEqual(ordinary, live) {
-		t.Fatal("live search changed the native web tools", err)
-	}
-	config.Workspace = nil
-	if _, _, err := prepare(config, request); err == nil || !strings.Contains(err.Error(), "live web search requires a dedicated workspace") {
-		t.Fatal("live search without a workspace was accepted", err)
+	request.ExecutionControls = live
+	workspace, _, err := prepare(workspaceFixture(t), request)
+	if err != nil || workspace.WebSearch != "live" {
+		t.Fatal("live search on a workspace did not reach the bridge", err)
 	}
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 79476f748e558bb88e60c7b6d1ff8684824c43b2891b142009343b1319674bd7
+source_hash: 868d7db54a63ab0247b8112e96e9064a233fe52e5b7ce5047f50c7d7c937d0cf
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -22,7 +22,7 @@ source_hash: 79476f748e558bb88e60c7b6d1ff8684824c43b2891b142009343b1319674bd7
 | --- | --- | --- | --- |
 | 文本 Turn、活动输入、取消、重启与继续 | 所有位置已验证 | 所有位置已验证 | 所有位置已验证 |
 | [文件与 Artifact](environment-files.md) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管 |
-| [仅空白消息文本](message-content.md) | 已准入；原样交付 | 已拒绝 | 已拒绝 |
+| [仅空白消息文本](message-content.md) | 已准入；原样交付 | 已准入；原生会丢弃它，全空白消息变为 `(no content)` | 已拒绝 |
 | [消息图像](message-content.md#images) | PNG、JPEG data URL：所有位置已验证；其他 data URL：已准入；远程 URL：已拒绝 | PNG、JPEG data URL：所有位置已验证；远程 URL 及 GIF、WebP data URL：已准入 | 已拒绝 |
 | `reasoning.effort` | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 | `low`、`medium`、`high`、`xhigh`、`max`：已准入 | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 |
 | `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | 已拒绝 | 已拒绝 |
@@ -41,7 +41,7 @@ source_hash: 79476f748e558bb88e60c7b6d1ff8684824c43b2891b142009343b1319674bd7
 | [结构化输出](execution-tools.md#structured-output) | 所有位置已准入 | 所有位置已验证 | 已拒绝 |
 | [延迟函数发现](execution-tools.md#deferred-function-discovery) | 已拒绝 | 已验证：`none`、自托管；已准入：托管 | 已拒绝 |
 | [禁用 Web 搜索与程序化工具调用](execution-tools.md#web-search-and-programmatic-tool-calling) | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 |
-| Web 搜索 `cached` 或 `live`，以及程序化工具调用 `enabled` | 所有位置已准入 | `live` 在托管和自托管已准入，在 `none` 已拒绝；`cached` 和 `enabled` 已拒绝 | 已拒绝 |
+| Web 搜索 `cached` 或 `live`，以及程序化工具调用 `enabled` | 所有位置已准入 | `live` 在所有位置已准入；`cached` 和 `enabled` 已拒绝 | 已拒绝 |
 | [服务端来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：`none`；其他位置拒绝 | 已验证：`none`；其他位置拒绝 | 已验证：`none`，仅 `allowed_tools` null、`required` false；其他位置拒绝 |
 | [Environment 来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管；仅 `allowed_tools` null、`required` false |
 | [HTTP MCP bearer 凭据](execution-tools.md#http-mcp) | 已验证 | 已验证 | 已验证 |

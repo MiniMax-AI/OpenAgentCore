@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 7a64fab978905ee684a1b0e9e05f6b27dd5608614e53e47f47c240d7f6c04564
+source_hash: c5245366827d765316f504f537f8bb360e01d308e2f9668d4debd6fb3c5dab1f
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -74,6 +74,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
 - Agent 未声明 `web_search` 工具时，会保留 Harness 的[原生搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)；固定的官方契约未定义未声明该工具时是否搜索。
 - 工作区位置上的 Claude Code 把 Agent 的 `instructions` 追加到原生系统提示词之后，并运行其[原生工具集](./execution-tools.md#web-search-and-programmatic-tool-calling)。其搜索没有缓存模式，也没有域名、位置和上下文大小设置。
+- Claude Code 在原生层丢弃仅含空白的文本块，全空白消息会发送 `(no content)`；Codex 原样交付仅含空白的文本。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
@@ -161,7 +162,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Subagent 子级 Turns 和待处理的 Environment file 写入是否会阻止 Session 删除。
 - 官方服务在待处理输入错误与未知结果目标之间的先后顺序。
 - npm、initial-file 和 Skill 安装的失败原因没有官方样本。
-- Codex 对文本旁的空文本部分、失败函数结果中的图像或远程引用图像的行为；Claude 对混合消息中仅含空白或空文本块的行为。
+- Codex 对文本旁的空文本部分、失败函数结果中的图像或远程引用图像的行为。
 - 在 Core 返回 405 的路由上，官方服务的 `HEAD` 行为。
 - 精确主机名之外的 Environment 模板主机名形式，以及 `disabled` 与域结合使用的情况。
 - Files 发生变化时的 purpose 筛选和分页；官方 Skill 上传限制和错误时机。

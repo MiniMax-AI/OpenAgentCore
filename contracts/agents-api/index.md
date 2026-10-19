@@ -71,6 +71,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
 - An Agent without a `web_search` tool keeps the Harness's [native search](./execution-tools.md#web-search-and-programmatic-tool-calling); the pinned contract does not define search without the tool.
 - Claude Code on a workspace placement appends the Agent's `instructions` to its native system prompt and runs its [native tool set](./execution-tools.md#web-search-and-programmatic-tool-calling). Its search has no cached mode and no domain, location or context-size settings.
+- Claude Code drops whitespace-only text blocks natively and sends `(no content)` for an all-blank message; Codex delivers whitespace-only text unchanged.
 - An omitted reasoning effort stays null instead of taking the model's default.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - A Session's `agent.tools` omits `tool_search` declarations.
@@ -158,7 +159,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Whether Subagent child Turns and pending Environment file writes block Session deletion.
 - The official order between the pending-input error and an unknown result target.
 - Failure reasons for npm, initial-file and Skill installation have no official sample.
-- Codex behavior for an empty text part beside text, and for images in failed function results or as remote references; Claude behavior for a whitespace-only or empty text block inside a mixed message.
+- Codex behavior for an empty text part beside text, and for images in failed function results or as remote references.
 - Official `HEAD` behavior on the routes where Core returns 405.
 - Environment Template hostname forms beyond exact hosts, and `disabled` combined with domains.
 - Files purpose filtering and pagination while Files change; official Skill upload limits and error timing.
