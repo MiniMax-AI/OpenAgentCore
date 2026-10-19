@@ -39,7 +39,7 @@ func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, error) {
 // pinned native HTTP client can forward them across redirect origins.
 func environmentHTTPMCP(item agent.MCPBinding) (map[string]any, error) {
 	endpoint, err := url.Parse(item.ServerURL)
-	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Opaque != "" || len(item.HTTPHeaders) != 0 {
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || endpoint.Opaque != "" || len(item.HTTPHeaders) != 0 {
 		return nil, fmt.Errorf("mcode: unsupported environment HTTP MCP declaration")
 	}
 	headers := []map[string]string{}

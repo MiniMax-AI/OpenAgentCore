@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: c84b3d24f75bdc6fc608a7944bd0b23e7b9d6f969c12691667c72a5013ea59b9
+source_hash: 204cc23703043518da5b2dfcadfb3521be7cce417cf80d0b4fe7356b4dfdfa02
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -188,7 +188,7 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 | 配置 | 消息 |
 | --- | --- |
 | Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
-| 超过 64 个函数，或函数名称为空或超过 512 字节 | "This service supports at most 64 function tools." 或 "Function names must be nonempty, unique and at most 512 bytes." |
+| 函数名称为空或重复 | "Function names must be nonempty and unique." |
 | 两个使用同一标签的 MCP 服务器 | "Execution requires distinct MCP server labels." |
 
 每 Session 的 `tools` 替换可以允许一个其已保存 tools 原本会被拒绝的 Session。每种工具和 Harness 的支持情况见 [execution and tools](execution-tools.md)。

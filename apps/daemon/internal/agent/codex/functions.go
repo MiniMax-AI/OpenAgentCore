@@ -28,9 +28,6 @@ type functionCalls struct {
 
 func prepareFunctionTools(tools []proto.FunctionTool) (*functionCalls, error) {
 	state := &functionCalls{names: map[string]bool{}, pending: map[string]*pendingFunction{}}
-	if len(tools) > 64 {
-		return nil, errors.New("at most 64 function tools are supported")
-	}
 	for _, tool := range tools {
 		var schema map[string]any
 		if strings.TrimSpace(tool.Name) == "" || state.names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {

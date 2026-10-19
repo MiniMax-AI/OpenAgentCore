@@ -89,7 +89,7 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			}
 		case "http":
 			endpoint, err := url.Parse(item.ServerURL)
-			if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.Fragment != "" || endpoint.Opaque != "" || (item.ConnectionOrigin == "service" && (endpoint.RawQuery != "" || endpoint.ForceQuery)) {
+			if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.Fragment != "" || endpoint.Opaque != "" {
 				return nil, errors.New("invalid MCP endpoint")
 			}
 			if item.BearerToken != nil && (endpoint.Scheme != "https" || !ValidMCPHTTPBearerToken(*item.BearerToken)) {

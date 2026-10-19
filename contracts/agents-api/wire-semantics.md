@@ -186,7 +186,7 @@ A Session's effective configuration must also pass execution admission, which ap
 | Configuration | Message |
 | --- | --- |
 | A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
-| More than 64 functions, or a function name that is blank or longer than 512 bytes | "This service supports at most 64 function tools." or "Function names must be nonempty, unique and at most 512 bytes." |
+| A function name that is blank or repeated | "Function names must be nonempty and unique." |
 | Two MCP servers with one label | "Execution requires distinct MCP server labels." |
 
 A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](./execution-tools.md).

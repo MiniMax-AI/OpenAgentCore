@@ -5,6 +5,15 @@ import (
 	"testing"
 )
 
+func TestMCPExecutionKeepsServerURLQuery(t *testing.T) {
+	const serverURL = "https://mcp.example/mcp?tenant=a%20b&x="
+	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","transport":{"type":"http","server_url":"` + serverURL + `"},"connection_origin":"service"}`)
+	tools, err := executionTools([]json.RawMessage{tool})
+	if err != nil || len(tools.MCP) != 1 || tools.MCP[0].ServerURL != serverURL {
+		t.Fatal(tools.MCP, err)
+	}
+}
+
 func TestMCPRequiresSupportedServicePlacement(t *testing.T) {
 	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","transport":{"type":"http","server_url":"https://mcp.example/mcp"},"connection_origin":"service","allowed_tools":[]}`)
 	for _, profile := range []struct {

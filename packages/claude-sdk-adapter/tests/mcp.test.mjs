@@ -29,12 +29,14 @@ test("invalid remote declarations and wildcard injection fail at the bridge boun
   const start = { type: "start", input: [{ content: [{ type: "input_text", text: "hello" }] }], model: "model", system_prompt: "", cwd: "/tmp" };
   for (const value of [null, {}, [declaration(["*"])], [{ ...declaration(null), server_label: "functions" }],
     [{ ...declaration(null), server_url: "https://user:secret@example.invalid/mcp" }],
-    [{ ...declaration(null), server_url: "https://example.invalid/mcp?" }],
+    [{ ...declaration(null), server_url: "https://example.invalid/mcp#fragment" }],
     [{ ...declaration(null), required: "true" }], [{ ...declaration(null), required: null }], [declaration(null), declaration([])]]) {
     assert.throws(() => parseStart(JSON.stringify({ ...start, mcp_http_servers: value })));
   }
   assert.deepEqual(parseStart(JSON.stringify({ ...start, mcp_http_servers: [declaration(null), { ...declaration([]), server_label: "empty" }] })).mcp_http_servers,
     [declaration(null), { ...declaration([]), server_label: "empty" }]);
+  const withQuery = { ...declaration(null), server_url: "https://example.invalid/mcp?tenant=a" };
+  assert.deepEqual(parseStart(JSON.stringify({ ...start, mcp_http_servers: [withQuery] })).mcp_http_servers, [withQuery]);
 });
 
 test("native tool spelling preserves original identity and rejects ambiguous aliases", () => {

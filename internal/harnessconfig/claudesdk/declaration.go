@@ -129,7 +129,7 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 // resolution still owns URL, transport and credential-binding validation.
 func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) error {
 	for _, server := range servers {
-		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || strings.ContainsAny(server.ServerURL, "?#") {
+		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || strings.Contains(server.ServerURL, "#") {
 			return errors.New("The configured engine does not support this HTTP MCP declaration.")
 		}
 		if server.AllowedTools != nil {

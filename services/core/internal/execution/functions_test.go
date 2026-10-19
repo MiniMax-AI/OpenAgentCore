@@ -2,7 +2,9 @@ package execution
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -22,6 +24,20 @@ func TestFunctionDefinitionsRejectUnsupportedConfiguration(t *testing.T) {
 	}
 	if _, err := functionTools([]json.RawMessage{valid, valid}); err == nil {
 		t.Fatal("duplicate function names")
+	}
+}
+
+func TestFunctionDefinitionsHaveNoCountOrNameLengthLimit(t *testing.T) {
+	var raw []json.RawMessage
+	for i := 0; i < 65; i++ {
+		name := fmt.Sprintf("f%d", i)
+		if i == 0 {
+			name = strings.Repeat("n", 600)
+		}
+		raw = append(raw, json.RawMessage(`{"type":"function","name":"`+name+`","description":"","parameters":{"type":"object"},"defer_loading":false}`))
+	}
+	if tools, err := functionTools(raw); err != nil || len(tools) != 65 {
+		t.Fatal(len(tools), err)
 	}
 }
 

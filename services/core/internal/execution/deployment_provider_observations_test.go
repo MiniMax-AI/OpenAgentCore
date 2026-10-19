@@ -120,7 +120,7 @@ func TestFinishRunObservesOnlyFinalCommittedOutcome(t *testing.T) {
 			if tc.invalid {
 				result.Error = strings.Repeat("x", 513*1024)
 			}
-			turn, err := f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, "fixture-model", result, tc.status)
+			turn, err := f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, result, tc.status)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -136,7 +136,7 @@ func TestFinishRunObservesOnlyFinalCommittedOutcome(t *testing.T) {
 			if _, err = f.pool.Exec(t.Context(), "UPDATE deployment_model_providers SET last_used_at=NULL,last_error_at=NULL,last_error_code=NULL,recovery_pending=false"); err != nil {
 				t.Fatal(err)
 			}
-			_, err = f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, "fixture-model", result, tc.status)
+			_, err = f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, result, tc.status)
 			if !errors.Is(err, sessions.ErrTurnConflict) {
 				t.Fatal("expected completion conflict", err)
 			}
@@ -211,7 +211,7 @@ func TestFinishRunObservationLockTimeoutAndFailureKeepLease(t *testing.T) {
 				defer cleanup()
 			}
 			started := time.Now()
-			turn, err := f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, "fixture-model", Result{AppliedThrough: receipt.Sequence}, sessions.TurnCompleted)
+			turn, err := f.dispatcher.finishRun(f.tenant, f.session.ID, receipt.TurnID, Result{AppliedThrough: receipt.Sequence}, sessions.TurnCompleted)
 			elapsed := time.Since(started)
 			if err != nil || turn.Status != sessions.TurnCompleted {
 				t.Fatal("observation changed commit result", err, turn.Status)
