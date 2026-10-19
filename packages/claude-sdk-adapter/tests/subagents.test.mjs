@@ -153,3 +153,24 @@ test("SendMessage addresses a child by its spawned name and the model is reporte
   assert.equal(facts.find(e => e.fact.kind === "create_subagent_call").fact.model, "sonnet");
   assert.deepEqual(facts.find(e => e.fact.kind === "send_subagent_input_call").fact.recipients, ["child"]);
 });
+
+test("a running child projects its open Turn only; function and MCP calls of a finished child become observations", () => {
+  const { root, children } = fixture(), rows = children[0].rows, tools = new Map([["mcp__docs__find", { server: "docs", name: "find" }]]);
+  rows.splice(1, 0,
+    { ...rows[1], uuid: "calls", timestamp: timestamp(15), message: { id: "calls", content: [
+      { type: "tool_use", id: "fn", name: "mcp__functions__lookup", input: { topic: "sky" } },
+      { type: "tool_use", id: "doc", name: "mcp__docs__find", input: { q: "x" } }] } },
+    { ...rows[0], uuid: "answers", parentUuid: "calls", timestamp: timestamp(16), message: { content: [
+      { type: "tool_result", tool_use_id: "fn", content: [{ type: "text", text: "CODE" }, { type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" } }] }] } },
+    { ...rows[0], uuid: "doc-answer", parentUuid: "answers", timestamp: timestamp(17), toolUseResult: [{ type: "text", text: "7" }], mcpMeta: { structuredContent: { value: 7 } },
+      message: { content: [{ type: "tool_result", tool_use_id: "doc", content: [{ type: "text", text: "7" }] }] } });
+  const observations = facts => facts.filter(e => e.type === "subagent_item" && e.fact.kind === "tool_call").map(e => e.fact.payload.observation);
+  assert.deepEqual(observations(projectHistory("root", root, children, { tools })), [
+    { kind: "function", name: "lookup", arguments: { topic: "sky" }, status: "completed", content: [{ type: "input_text", text: "CODE" }, { type: "input_image", image_url: "data:image/png;base64,AA==" }] },
+    { kind: "mcp", server: "docs", name: "find", arguments: { q: "x" }, status: "completed", output: { content: [{ type: "text", text: "7" }], structuredContent: { value: 7 } } },
+  ]);
+  root.pop(); rows.pop(); rows.pop();
+  const live = projectHistory("root", root, children, { live: new Map([["child", "spawn"]]) });
+  assert.deepEqual(live.map(e => e.type), ["subagent_identity", "subagent_turn"]);
+  assert.deepEqual(live[1].fact, { native_id: "child", turn_id: "child-turn", created_at_ms: 1700000000010, started_at_ms: 1700000000010, status: "in_progress" });
+});

@@ -57,7 +57,7 @@ An `agent.session.input.tool_result` event carries `success`, an optional nullab
 
 Admission (202) does not mean the Harness used the result. The pending call clears when the adapter confirms native application:
 
-- **Claude Code** confirms with a live root native tool result that matches the Session, call ID, success flag, exact text, block count and order, with a native image at every image position. Replayed, synthetic and Subagent records do not confirm it.
+- **Claude Code** confirms with a live root native tool result that matches the Session, call ID, success flag, exact text, block count and order, with a native image at every image position. Replayed and synthetic records do not confirm it. A Subagent call is confirmed only by that child's own live result.
 - **Codex** confirms with the live dynamic-tool `item/completed` observation on the thread and Turn that made the call, which must match the call, function name, status, success flag and the exact ordered content. A write to the Harness alone does not confirm it.
 - **MiniMax Code** confirms with the live native tool update for the `functions` MCP call whose echoed result carries the call ID. A native failure of the call, such as its 120 s timeout, abandons it.
 

@@ -41,23 +41,24 @@ type bridgeEvent struct {
 	Reason          string          `json:"reason"`
 	Protocol        int             `json:"protocol"`
 
-	Fact        json.RawMessage             `json:"fact"`
-	InputID     string                      `json:"input_id"`
-	ResultID    string                      `json:"result_id"`
-	Usage       json.RawMessage             `json:"usage,omitempty"`
-	Type        string                      `json:"type"`
-	Delta       string                      `json:"delta"`
-	SessionID   string                      `json:"session_id"`
-	Text        string                      `json:"text"`
-	Code        string                      `json:"code"`
-	ItemID      string                      `json:"item_id"`
-	Message     *proto.OutputMessagePayload `json:"message"`
-	Call        *proto.FunctionCallPayload  `json:"call"`
-	CallID      string                      `json:"call_id"`
-	DeliveryID  string                      `json:"delivery_id"`
-	ID          string                      `json:"id"`
-	Stage       string                      `json:"stage"`
-	Observation *proto.ToolObservation      `json:"observation"`
+	Fact        json.RawMessage                     `json:"fact"`
+	InputID     string                              `json:"input_id"`
+	ResultID    string                              `json:"result_id"`
+	Usage       json.RawMessage                     `json:"usage,omitempty"`
+	Type        string                              `json:"type"`
+	Delta       string                              `json:"delta"`
+	SessionID   string                              `json:"session_id"`
+	Text        string                              `json:"text"`
+	Code        string                              `json:"code"`
+	ItemID      string                              `json:"item_id"`
+	Message     *proto.OutputMessagePayload         `json:"message"`
+	Call        *proto.FunctionCallPayload          `json:"call"`
+	Withdrawn   *proto.FunctionCallWithdrawnPayload `json:"withdrawn"`
+	CallID      string                              `json:"call_id"`
+	DeliveryID  string                              `json:"delivery_id"`
+	ID          string                              `json:"id"`
+	Stage       string                              `json:"stage"`
+	Observation *proto.ToolObservation              `json:"observation"`
 }
 
 func launch(ctx context.Context, config Config, start startRequest, env []string) (*session, error) {

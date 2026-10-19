@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 0be7a0fb3f65a4a652a9b7eb0cc02e2be1f563fab68ae34aad833dc877226b0e
+source_hash: 1387a015bb94dc885cc6b9b2c9f6a55c9837438a59e86ce9ff371e161ace1499
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -89,7 +89,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 提交给 `none` Session 的输入会同步完成准入；Core 不会模拟官方异步准入窗口。
 - 用于恢复等待中 Turn 的函数结果会发出 `turn.in_progress`；取消正在等待函数结果的 Turn 会发出临时 `agent.session.in_progress`。
-- 原生 Harness 放弃的函数调用（例如根关闭或中断子级时被丢弃的 Codex Subagent 调用，或超过 120 秒超时的 MiniMax Code 调用）会被撤回：它不再是待执行操作，之后为它提交结果会返回 409 `conflict_error`。官方 API 没有撤回机制。
+- 原生 Harness 放弃的函数调用（例如根关闭或中断子级时被丢弃的 Subagent 调用，或超过 120 秒超时的 MiniMax Code 调用）会被撤回：它不再是待执行操作，之后为它提交结果会返回 409 `conflict_error`。官方 API 没有撤回机制。
 - 在 Turn 中途接入流时，不会发送补发 Item 快照。
 - Items 列表会包含进行中和未完成的输出 Items，并保留失败函数结果中已提交的 `output`。
 - 错误消息会省略官方消息包含的 call 和 executor ID。
@@ -161,7 +161,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
-- Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。
+- Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - Subagent 子级 Turns 和待处理的 Environment file 写入是否会阻止 Session 删除。
 - 官方服务在待处理输入错误与未知结果目标之间的先后顺序。
 - npm、initial-file 和 Skill 安装的失败原因没有官方样本。

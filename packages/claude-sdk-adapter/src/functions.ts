@@ -5,7 +5,8 @@ import {
   type Tool, type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 
-export type FunctionCall = { id: string; name: string; arguments: Record<string, unknown> };
+// A call of a Subagent names the native child and its Turn.
+export type FunctionCall = { id: string; name: string; arguments: Record<string, unknown>; child?: { native_id: string; turn_id: string } };
 export type FunctionHandler = (call: FunctionCall, signal: AbortSignal) => Promise<CallToolResult>;
 
 export function createFunctionServer(definitions: (Tool & { deferLoading?: boolean })[], invoke: FunctionHandler): McpSdkServerConfigWithInstance {

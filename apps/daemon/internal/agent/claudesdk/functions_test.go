@@ -139,3 +139,26 @@ func runFunctionHelper(request startRequest, mode string, scanner *bufio.Scanner
 	}
 	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "done"})
 }
+
+func TestSubagentFunctionCallWithdrawal(t *testing.T) {
+	s := &session{functions: functionState{calls: map[string]*pendingFunction{}}}
+	start := startRequest{Functions: []proto.FunctionTool{{Name: "lookup"}}, Subagents: &subagentOptions{}}
+	var emitted []string
+	emit := func(kind string, _ any) { emitted = append(emitted, kind) }
+	call := &proto.FunctionCallPayload{CallID: "a", Name: "lookup", Arguments: json.RawMessage(`{}`), NativeID: "child", TurnID: "child-turn"}
+	if err := s.receiveFunction(bridgeEvent{Type: "function_call", Call: call}, start, emit); err != nil {
+		t.Fatal(err)
+	}
+	receipt := s.functions.calls["a"].receipt
+	withdrawn := &proto.FunctionCallWithdrawnPayload{CallID: "a", NativeID: "child", TurnID: "child-turn"}
+	if err := s.receiveFunction(bridgeEvent{Type: "function_withdrawn", Withdrawn: withdrawn}, start, emit); err != nil {
+		t.Fatal(err)
+	}
+	// A child's call has no root tool observation, and a result in flight learns that it was never applied.
+	if strings.Join(emitted, ",") != proto.TypeFunctionCall+","+proto.TypeFunctionCallWithdrawn || <-receipt != agent.ErrUnknownFunctionCall {
+		t.Fatal(emitted)
+	}
+	if s.receiveFunction(bridgeEvent{Type: "function_withdrawn", Withdrawn: withdrawn}, start, emit) == nil {
+		t.Fatal("repeated withdrawal accepted")
+	}
+}
