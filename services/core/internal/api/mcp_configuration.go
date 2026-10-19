@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 const mcpHTTPOnly = "MCP currently supports HTTP transport only."
@@ -54,6 +55,9 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		if strings.EqualFold(name, "Authorization") {
 			return nil, errors.New("MCP headers cannot carry Authorization; use credential_id.")
 		}
+	}
+	if !agentplugin.ValidHTTPHeaders(transport.Headers) {
+		return nil, errors.New("MCP headers require valid HTTP names and values, with names unique ignoring case.")
 	}
 	var allowed *[]string
 	if input.AllowedTools != nil {

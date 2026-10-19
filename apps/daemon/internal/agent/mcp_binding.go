@@ -12,7 +12,7 @@ import (
 
 // MCPBinding is the Runtime's transient effective declaration. Adapters project
 // it into their native configuration without resolving credentials or packages.
-// Never serialize or log bindings: headers and bearer values may be confidential.
+// Never serialize or log bindings: bearer values are confidential.
 type MCPBinding struct {
 	ServerLabel         string
 	ConnectionOrigin    string

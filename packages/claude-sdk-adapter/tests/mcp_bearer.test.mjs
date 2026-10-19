@@ -44,6 +44,8 @@ test("custom headers reach the native configuration beside the bearer", t => {
   t.after(() => { delete process.env[reference]; });
   const profile = new MCPProfile([{ ...server, headers: { "X-Tenant": "a" } }], []);
   assert.deepEqual(profile.servers.private.headers, { "X-Tenant": "a", Authorization: "Bearer ${" + reference + "}" });
+  const literal = new MCPProfile([{ ...server, bearer_token_env_var: undefined, headers: { authorization: "Bearer literal" } }], []);
+  assert.deepEqual(literal.servers.private.headers, { authorization: "Bearer literal" });
 });
 
 test("missing credential environment fails before the native query", () => {

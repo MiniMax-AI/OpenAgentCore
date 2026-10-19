@@ -386,13 +386,13 @@ Inline and referenced Skills use the same confidential snapshot and installer. T
 
 A Plugin declares MCP servers with `mcpServers: "./.mcp.json"` in `.codex-plugin/plugin.json`, or through a root `.mcp.json` when the path is omitted. The file holds `mcpServers` keyed by server name. Selecting a Plugin root as a capability directory activates its MCP declarations; selecting a parent directory discovers Skills without activating nested MCP servers.
 
-The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_headers`, and stdio `command`, `args`, selected `env_vars` and a package-relative `cwd`. Public `env_http_headers` is unsupported. The Runtime re-parses the frozen installed packages and resolves selected values only from the initialized env; a missing value fails instead of falling back to a model or daemon variable.
+The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_headers`, which are non-secret like public MCP headers, and stdio `command`, `args`, selected `env_vars` and a package-relative `cwd`. Public `env_http_headers` is unsupported. The Runtime re-parses the frozen installed packages and resolves selected values only from the initialized env; a missing value fails instead of falling back to a model or daemon variable.
 
 A stdio server starts through the daemon's stdio helper, which resolves the installed declaration and launches the command with the Harness's permissions. On Unix the helper replaces itself with the server; on Windows it forwards stdio inside the owned process tree. Initialized values override the declaration's variables. Process groups and Windows Jobs own cancellation and descendant cleanup, not isolation.
 
 [Harness capabilities](./harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
 
-Duplicate server identities are rejected. Claude rejects a header value containing `${` ([native differences](./index.md#differences-from-openai)). MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
+Duplicate server identities are rejected. Claude rejects `${` in a URL or header value ([native differences](./index.md#differences-from-openai)). MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
 ### Effective bindings
 

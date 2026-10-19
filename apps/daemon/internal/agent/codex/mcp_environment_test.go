@@ -18,7 +18,7 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/1", BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.com/mcp", HTTPHeaders: map[string]string{"X-Key": "literal-${DO_NOT_EXPAND}"}}},
 	}}
 	servers, env, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local})
-	if err != nil || len(servers) != 2 || len(env) != 2 {
+	if err != nil || len(servers) != 2 || len(env) != 1 {
 		t.Fatal("environment declarations were not projected", err)
 	}
 	executable, _ := os.Executable()
@@ -27,16 +27,15 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 		t.Fatal("native stdio bypasses the packaged launcher")
 	}
 	remote := servers["remote"]
-	if remote.BearerTokenEnvVar == "" || remote.EnvHTTPHeaders["X-Key"] == "" ||
-		!slices.Contains(env, remote.BearerTokenEnvVar+"="+token) ||
-		!slices.Contains(env, remote.EnvHTTPHeaders["X-Key"]+"=literal-${DO_NOT_EXPAND}") {
+	if remote.BearerTokenEnvVar == "" || remote.HTTPHeaders["X-Key"] != "literal-${DO_NOT_EXPAND}" ||
+		!slices.Contains(env, remote.BearerTokenEnvVar+"="+token) {
 		t.Fatal("private header values changed")
 	}
 	fixture := map[string]any{"config": map[string]any{
 		"mcp_oauth_credentials_store": "file",
 		"mcp_servers": map[string]any{
 			"local":  map[string]any{"command": servers["local"].Command, "args": servers["local"].Args, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil},
-			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "bearer_token_env_var": remote.BearerTokenEnvVar, "env_http_headers": remote.EnvHTTPHeaders},
+			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "bearer_token_env_var": remote.BearerTokenEnvVar, "http_headers": remote.HTTPHeaders},
 		},
 	}}
 	raw, _ := json.Marshal(fixture)
@@ -52,8 +51,7 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 func TestSessionMCPHeadersReachNativeConfig(t *testing.T) {
 	req := proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.com/mcp", Headers: map[string]string{"X-Tenant": "a"}}}}
 	servers, env, err := runtimeMCPServers(req)
-	reference := servers["remote"].EnvHTTPHeaders["X-Tenant"]
-	if err != nil || reference == "" || !slices.Contains(env, reference+"=a") {
+	if err != nil || servers["remote"].HTTPHeaders["X-Tenant"] != "a" || len(env) != 0 {
 		t.Fatal("Session headers were not projected", err)
 	}
 }

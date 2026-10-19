@@ -111,6 +111,8 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 		"inline authorization": {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","authorization":"private-marker"}`)},
 		"headers":              {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"Authorization":"private-marker"}}`)},
 		"URL credentials":      {"transport": json.RawMessage(`{"type":"http","server_url":"https://private-marker@mcp.example.test"}`)},
+		"header name":          {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"X Tenant":"private-marker"}}`)},
+		"duplicate headers":    {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"X-A":"private-marker","x-a":"b"}}`)},
 		"stdio":                {"transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
 	} {
 		t.Run(name, func(t *testing.T) {

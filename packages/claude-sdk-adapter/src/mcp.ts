@@ -92,10 +92,11 @@ export class MCPProfile {
       } else {
         const reference = server.bearer_token_env_var;
         if (reference && !process.env[reference]) throw new Error("missing MCP credential environment");
-        // An explicit empty Authorization suppresses native OAuth and automatic auth.
+        // An explicit Authorization, empty unless declared, suppresses native OAuth and automatic auth.
         // Keep bearer references literal: SDK server configuration enters native argv.
+        const declared = Object.keys(server.headers ?? {}).some(name => name.toLowerCase() === "authorization");
         this.servers[server.server_label] = { type: "http", url: server.server_url, alwaysLoad: true,
-          headers: { ...server.headers, Authorization: reference ? `Bearer \${${reference}}` : "" } };
+          headers: { ...server.headers, ...(!declared && { Authorization: reference ? `Bearer \${${reference}}` : "" }) } };
       }
       if (server.allowed_tools === null) this.allowed.push(prefix + "*");
       else if (!server.allowed_tools.length) this.denied.push(prefix + "*");
