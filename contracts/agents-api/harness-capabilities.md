@@ -46,9 +46,9 @@ Native model parameters and provider protocols per Harness are in [model executi
 | [HTTP MCP bearer credentials](./execution-tools.md#mcp) | Verified | Verified | Verified |
 | Required MCP initialization | Verified | Verified | Rejected |
 | [Subagents](./subagents.md) | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted |
-| Subagents together with functions or HTTP MCP | Verified: `none`; admitted: hosted, self-hosted | Rejected | HTTP MCP admitted; functions rejected for every Session |
+| Subagents together with functions or HTTP MCP | Verified: `none`; admitted: hosted, self-hosted | Verified: functions on `none`; admitted: HTTP MCP, hosted, self-hosted | HTTP MCP admitted; functions rejected for every Session |
 
-Claude structured output requires medium verbosity and combines with `multi_agent`, Skills, Plugins, capability directories, MCP and `tool_search`. Claude deferred discovery combines with MCP, Skills, Plugins, capability directories and structured output. Claude Code does not carry function tools into the Subagent profile, so deferred discovery with `multi_agent` stays rejected. Claude Code decides whether `tool_search` takes effect for the configured model, provider and beta settings. Claude on a workspace placement needs the packaged bridge features for each operation (`workspace_functions`, `workspace_structured_output`, `workspace_tool_search`, `workspace_mcp_http`).
+Claude structured output requires medium verbosity and combines with `multi_agent`, Skills, Plugins, capability directories, MCP and `tool_search`. Claude deferred discovery combines with MCP, Skills, Plugins, capability directories and structured output. Claude Subagents inherit the parent's tools, including deferred functions. Claude Code decides whether `tool_search` takes effect for the configured model, provider and beta settings. Claude on a workspace placement needs the packaged bridge features for each operation (`workspace_functions`, `workspace_structured_output`, `workspace_tool_search`, `workspace_mcp_http`).
 
 ## Environment preparation
 

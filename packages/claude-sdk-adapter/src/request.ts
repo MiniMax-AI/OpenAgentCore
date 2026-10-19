@@ -56,8 +56,7 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
       (!!request.tool_search !== deferred)) throw new Error("invalid_request");
   if (request.subagents !== undefined) {
     const value = request.subagents as Record<string, unknown>;
-    if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1 ||
-        (request.functions as unknown[] | undefined)?.length || request.mcp_http_servers !== undefined) throw new Error("invalid_request");
+    if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1) throw new Error("invalid_request");
   }
   if (request.output_format !== undefined) {
     const format = request.output_format as Start["output_format"];
@@ -68,7 +67,6 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
   parseNativeModelOptions(request.native_model_options);
   parseHTTPServers(request.mcp_http_servers);
   const workspace = parseWorkspace(request.workspace, request.cwd);
-  if (request.subagents && workspace?.mcp?.length) throw new Error("invalid_request");
   if (request.require_history && !workspace) throw new Error("invalid_request");
   if ((workspace && "mcp_http_servers" in request) ||
       (request.type === "prepare" && !workspace)) throw new Error("invalid_request");

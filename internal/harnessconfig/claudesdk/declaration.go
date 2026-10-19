@@ -84,7 +84,7 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 			return err
 		}
 	}
-	return harnessconfig.RejectSubagentTools(admission, "function", "mcp")
+	return nil
 }
 
 // validateTools applies execution limits of the packaged adapter. Shared

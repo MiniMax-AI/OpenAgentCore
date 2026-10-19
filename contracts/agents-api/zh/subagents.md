@@ -1,7 +1,7 @@
 ---
 title: "子 Agent"
 source: contracts/agents-api/subagents.md
-source_hash: 735f0570a1c9d5feaebd6b38aacb186c9982aa739f7a835ddb2e02a071fc2196
+source_hash: 4104a821625e205c7ba548adc4cdde82ab26b5a4c41265a6d589aa1e83fef32e
 ---
 
 启用 `multi_agent.enabled` 后，Harness 可以启动原生子 Agent。Core 通过锁定版本的 SDK（见 [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）中的六项 Subagent 读取操作公开它们，并根据适配器观察结果记录它们。当 `multi_agent.enabled=false` 时，Runtime 会移除原生子 Agent 工具。[Harness capabilities](harness-capabilities.md) 列出各 Harness 在哪些组合中支持子 Agent。
@@ -52,11 +52,11 @@ Core 根据已授权的 Session 绑定关系分配合公开 ID 和所有权。�
 
 ## 原生配置 {#native-profiles}
 
-Subagent 像本地运行该 Harness 一样使用 Agent 的函数和 HTTP MCP 工具；其调用如何呈现见 [Functions](execution-tools.md#functions)，各组合见 [Harness capabilities](harness-capabilities.md#tools)。Codex 子级继承 Agent 的 HTTP MCP 服务器；fork 出的子级继承其函数，使用全新历史的子级没有函数。
+Subagent 像本地运行该 Harness 一样使用 Agent 的函数和 HTTP MCP 工具；其调用如何呈现见 [Functions](execution-tools.md#functions)，各组合见 [Harness capabilities](harness-capabilities.md#tools)。Codex 子级继承 Agent 的 HTTP MCP 服务器；fork 出的子级继承其函数，使用全新历史的子级没有函数。Claude Code 子级继承父级的工具，因此原生调用 Agent 的函数（`mcp__functions__<name>`）和 HTTP MCP 工具。
 
 **Codex.** 适配器会启用原生 `multi_agent` 特性，并把并发限制映射到 `agents.max_threads`；嵌套深度和其他原生特性保持 Codex 默认值。如果托管配置要求强制启用代码模式或 `multi_agent_v2`（它们的协作调用不留下持久化回执），则拒绝启动。没有中立 Item 类型的子级 Item（例如图像查看和上下文压缩）不会被投影。关闭和重新打开的事实来自直接工具输出，并与同一次调用的持久化完成记录相关联，因此需要原生持久化回执。原生 Turn 时间具有秒级精度。根级 Turn 完成后，子级文件工作可以在同一所有者下完成。超过调用方截止时间后，取消操作仍会在同一所有者下继续；后续调用可以确认已经收敛，而无需重复执行原生中断。
 
-**Claude Code.** 锁定版本 SDK 的原生 Agent 和 SendMessage 调用会运行原生的 Agent 类型及其原生提示词，支持按次指定 `model`、`name` 和 worktree 隔离；子级继承父级的工具，在 `none` 上即 Agent 和 SendMessage。bridge 的 `subagent_resources` 特性控制是否启用。子级使用原生 Bash，权限继承自父级的启动用户。私有子级记录用于确定父子关系、首次自身输入时间及后续自身 Turns；继承的父级上下文会被排除。查询所有者会在启动前接纳子级，并将子级历史保留至工作收敛。已确认的取消操作会写入不可变的操作回执，因为原生中止可能不会留下终态记录。不存在关闭操作：已完成或已取消的子级保持 active 状态。SendMessage 的 `to` 可以是子级 ID，也可以是创建时给出的 `name`。向运行中的子级发送消息和 remote 隔离会被拒绝，原生设置 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` 会移除后台工作。[Claude SDK adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md#subagents) 记录了详细信息。
+**Claude Code.** 锁定版本 SDK 的原生 Agent 和 SendMessage 调用会运行原生的 Agent 类型及其原生提示词，支持按次指定 `model`、`name` 和 worktree 隔离；子级继承父级的工具，在 `none` 上即 Agent 和 SendMessage。bridge 的 `subagent_resources` 特性控制是否启用。子级使用原生 Bash，权限继承自父级的启动用户。私有子级记录用于确定父子关系、首次自身输入时间及后续自身 Turns；继承的父级上下文会被排除。查询所有者会在启动前接纳子级，并将子级历史保留至工作收敛。子级调用函数前，桥接层会根据其实时记录发送子级的身份和未结束的 Turn；取消根 Turn 会中止子级待处理的调用，该调用随后被撤回。子级的函数和 MCP 调用是 `function_call` 与 `mcp_call` Item；函数 Item 不带 `function_call_output`。已确认的取消操作会写入不可变的操作回执，因为原生中止可能不会留下终态记录。不存在关闭操作：已完成或已取消的子级保持 active 状态。SendMessage 的 `to` 可以是子级 ID，也可以是创建时给出的 `name`。向运行中的子级发送消息和 remote 隔离会被拒绝，原生设置 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS` 会移除后台工作。[Claude SDK adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/packages/claude-sdk-adapter/README.md#subagents) 记录了详细信息。
 
 **MiniMax Code.** 原生 ACP 委派（`task`、`task_append`、`task_stop`）会创建子级。Session 私有 SQLite 记录提供子级身份、已接受的输入、终态时间和自身消息。原生 task-create 事务会在启动前强制执行并发限制，并且原生准备过程必须在任何模型输入前确认该限制并确认后台 Bash 已关闭。不存在关闭或重新打开操作，原生工作器也不会委派嵌套工作。
 

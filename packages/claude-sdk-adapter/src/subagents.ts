@@ -1,5 +1,6 @@
 import type { HookCallback, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { readHistory, type Fact } from "./subagent_history.js";
+import type { ToolIdentity } from "./mcp.js";
 
 const deny = (reason: string) => ({ hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "deny" as const, permissionDecisionReason: reason } });
 export class Subagents {
@@ -10,16 +11,17 @@ export class Subagents {
   private readonly pendingNames = new Map<string, string>();
   private readonly running = new Map<string, string>();
   private readonly admitted = new Map<string, string>();
+  private readonly actors = new Map<string, string>();
   private session = "";
   private transcript = "";
   private hydrated = false;
-  constructor(private readonly cwd: string, private readonly limit: number, private resume: string | undefined) {
+  constructor(private readonly cwd: string, private readonly limit: number, private resume: string | undefined, private readonly tools: ReadonlyMap<string, ToolIdentity> = new Map()) {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("invalid_request");
   }
   get complete(): boolean { return this.pending.size === 0 && this.running.size === 0; }
   beginTurn(): void {
     if (!this.complete) throw new Error("native child work is unsettled");
-    this.observedCalls.clear(); this.admitted.clear();
+    this.observedCalls.clear(); this.admitted.clear(); this.actors.clear();
   }
   expectSession(id: string | undefined): void { this.resume = id; }
   permitsActor(id?: string): boolean { return id === undefined || this.known.has(id); }
@@ -51,6 +53,19 @@ export class Subagents {
     }
     return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" } };
   };
+  // A native MCP request names its tool call but not the agent that made it.
+  readonly noteTool: HookCallback = async input => {
+    if (input.hook_event_name === "PreToolUse" && input.agent_id !== undefined) this.actors.set(input.tool_use_id, input.agent_id);
+    return {};
+  };
+  // The child of a call, with the facts Core needs before it can resolve the call: the child's identity and its open Turn.
+  async child(call: string): Promise<{ native_id: string; turn_id: string; facts: Fact[] } | undefined> {
+    const id = this.actors.get(call);
+    if (id === undefined) return;
+    if (!this.transcript || !this.known.has(id)) throw new Error("native child history is missing");
+    const { facts } = await readHistory(this.session, this.transcript, this.cwd, { child: id, live: this.admitted, tools: this.tools });
+    return { native_id: id, turn_id: facts[facts.length - 1].fact.turn_id as string, facts };
+  }
   readonly stopped: HookCallback = async input => {
     if (input.hook_event_name === "Stop" && input.session_id === this.session && input.agent_id === undefined) this.transcript = input.transcript_path;
     return {};
@@ -92,7 +107,7 @@ export class Subagents {
   async facts(cancelledAt?: number): Promise<Fact[]> {
     if (!this.session || !this.transcript) { if (!this.known.size) return []; throw new Error("native child history is missing"); }
     if (cancelledAt === undefined && (this.pending.size || this.running.size)) throw new Error("native child work is unsettled");
-    const history = await readHistory(this.session, this.transcript, this.cwd, cancelledAt === undefined ? undefined : { at: cancelledAt, admitted: this.admitted });
+    const history = await readHistory(this.session, this.transcript, this.cwd, { tools: this.tools, ...(cancelledAt === undefined ? {} : { cancelled: { at: cancelledAt, admitted: this.admitted } }) });
     if ([...this.known].some(id => !history.ids.includes(id))) throw new Error("native child history is missing");
     return history.facts.filter(event => event.type !== "subagent_coordination" || this.observedCalls.has(event.fact.id as string));
   }

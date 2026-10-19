@@ -74,7 +74,7 @@ export class MCPProfile {
     });
     try {
       if (!signal.aborted && await Promise.race([this.ready, interrupted]) && !signal.aborted && this.admitted &&
-          input.hook_event_name === "PreToolUse" && input.agent_id === undefined && input.session_id === this.sessionID &&
+          input.hook_event_name === "PreToolUse" && this.permitsActor(input.agent_id) && input.session_id === this.sessionID &&
           (id === undefined || id === input.tool_use_id) && !this.unselected(input.tool_name)) return {};
       return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny",
         permissionDecisionReason: "Tool is outside the verified execution profile." } };
@@ -83,7 +83,8 @@ export class MCPProfile {
     }
   };
 
-  constructor(private readonly declarations: (HTTPServer | StdioServer)[], private readonly functions: string[]) {
+  // permitsActor tells whether an agent may call tools: the root always, a Subagent once native has started it.
+  constructor(private readonly declarations: (HTTPServer | StdioServer)[], private readonly functions: string[], private readonly permitsActor: (id?: string) => boolean = id => id === undefined) {
     this.allowed = [...functions];
     for (const server of declarations) {
       const prefix = `mcp__${server.server_label}__`;
@@ -137,7 +138,7 @@ export class MCPProfile {
   }
 
   // With exact inventory the text profile accepts nothing but the declared servers and tools.
-  verify(inventory: string[], statuses: McpServerStatus[], sessionID: string, exact = true): void {
+  verify(inventory: string[], statuses: McpServerStatus[], sessionID: string, exact = true, extra: string[] = []): void {
     // Native status.config can contain expanded headers. Retain only identities;
     // never publish or persist the private SDK control response.
     this.admitted = false;
@@ -171,8 +172,8 @@ export class MCPProfile {
     }
     if (matched !== declared.size + (this.functions.length ? 1 : 0) ||
         !exact && [...expected.keys()].some(name => !inventory.includes(name)) ||
-        exact && (inventory.length !== expected.size + this.functions.length || new Set(inventory).size !== inventory.length ||
-          inventory.some(name => !expected.has(name) && !this.functions.includes(name)))) {
+        exact && (inventory.length !== expected.size + this.functions.length + extra.length || new Set(inventory).size !== inventory.length ||
+          inventory.some(name => !expected.has(name) && !this.functions.includes(name) && !extra.includes(name)))) {
       throw new Error("unexpected native MCP inventory");
     }
     this.identities.clear();

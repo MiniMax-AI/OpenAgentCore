@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: 6652622a46fc054691429d4675d55a3b03beec2ebd54d39529ed8fb5a0dcd783
+source_hash: 743fb8e8ddb2d13fe2dd32f1952e7875b05af241a5dd0ed60c6e3e10a00e8b7a
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -59,7 +59,7 @@ source_hash: 6652622a46fc054691429d4675d55a3b03beec2ebd54d39529ed8fb5a0dcd783
 
 准入（202）不表示 Harness 使用了结果。适配器确认原生应用后，待处理调用清除：
 
-- **Claude Code** 使用实时根原生工具结果确认，要求匹配 Session、调用 ID、成功标志、准确文本、块数和顺序，且每个图像位置都有原生图像。重放、合成和 Subagent 记录不能确认。
+- **Claude Code** 使用实时根原生工具结果确认，要求匹配 Session、调用 ID、成功标志、准确文本、块数和顺序，且每个图像位置都有原生图像。重放和合成记录不能确认。Subagent 的调用只由该子级自己的实时结果确认。
 - **Codex** 使用发起调用的线程和 Turn 上的实时 dynamic-tool `item/completed` 观察确认，要求匹配调用、函数名称、状态、成功标志和准确有序内容。仅写入 Harness 不确认。
 - **MiniMax Code** 使用 `functions` MCP 调用的实时原生工具更新确认，要求其回显的结果带有该调用 ID。原生使调用失败（例如 120 秒超时）时，该调用被放弃。
 

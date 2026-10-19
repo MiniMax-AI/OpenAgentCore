@@ -10,7 +10,7 @@ import { Inputs, type InputEvent } from "./inputs.js";
 import { executorResultUsage, resultUsage, type NativeUsage } from "./usage.js";
 import { spawnNative } from "./native.js";
 import { MessageObserver, type MessageEvent } from "./messages.js";
-import { createFunctionServer } from "./functions.js";
+import { createFunctionServer, type FunctionCall } from "./functions.js";
 import { FunctionBridge, type FunctionEvent } from "./function_bridge.js";
 import { MCPProfile } from "./mcp.js";
 import { MCPObserver, type MCPEvent } from "./mcp_observer.js";
@@ -49,8 +49,8 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   // Environment none runs only the tools Core selects. WebSearch is a provider-side tool; WebFetch would fetch from the Runtime host.
   const selected = [...(request.tool_search ? ["ToolSearch"] : []), ...(request.web_search === "live" ? ["WebSearch"] : [])];
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
-  const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
-  const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
+  const profile: MCPProfile | undefined = declarations === undefined ? undefined : new MCPProfile(declarations, names, id => subagents?.permitsActor(id) ?? id === undefined);
+  const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume, profile?.identities) : undefined;
   const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, profile, subagents, request.web_search === "disabled");
   let commands = workspace ? new CommandObserver() : undefined;
   const observeSearch = workspace !== undefined || request.web_search === "live";
@@ -72,7 +72,13 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   }
   subagents?.expectSession(request.resume);
   const mcpServers: Record<string, McpServerConfig> = Object.create(null);
-  if (definitions.length) mcpServers.functions = createFunctionServer(definitions, (call,signal) => { const target=functions; return turns ? turns.track(()=>target.invoke(call,signal)) : target.invoke(call,signal); });
+  // Core resolves a Subagent's call through the child's identity and open Turn, so those facts precede it.
+  const invoke = async (target: FunctionBridge, call: FunctionCall, signal: AbortSignal) => {
+    const child = await subagents?.child(call.id);
+    for (const fact of child?.facts ?? []) await emit(fact);
+    return target.invoke(child ? { ...call, child: { native_id: child.native_id, turn_id: child.turn_id } } : call, signal);
+  };
+  if (definitions.length) mcpServers.functions = createFunctionServer(definitions, (call,signal) => { const target=functions; return turns ? turns.track(()=>invoke(target,call,signal)) : invoke(target,call,signal); });
   let mcp = profile ? new MCPObserver(profile.identities) : undefined;
   if (profile) Object.assign(mcpServers, profile.servers);
   const children: Promise<number | null>[] = [];
@@ -95,6 +101,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
     const beforeTool: HookCallback = async (input, id, context) => {
       if (input.hook_event_name !== "PreToolUse") return {};
       if (subagents?.isCoordination(input.tool_name)) return subagents.beforeTool(input, id, context);
+      await subagents?.noteTool(input, id, context);
       return profile ? profile.beforeTool(input, id, context) : {};
     };
     const options: Options = {
@@ -202,7 +209,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
         // Native decides whether the selected tools and StructuredOutput join the inventory; a missing structured call fails the result.
         const tools = message.tools.filter(name => name !== "StructuredOutput" && !selected.includes(name));
-        if (profile) profile.verify(tools, await stream.mcpServerStatus(), nativeID, !workspace);
+        if (profile) profile.verify(tools, await stream.mcpServerStatus(), nativeID, !workspace, subagents ? ["Task", "SendMessage"] : []);
         if (workspace) {
           // Native tools and settings may add servers and tools, but every tool and Skill Core declared must still be present.
           const declared = [...names, ...(workspace.skillNames.length ? ["Skill"] : []), ...(subagents ? ["Task", "SendMessage"] : [])];

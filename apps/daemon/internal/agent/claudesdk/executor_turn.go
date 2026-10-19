@@ -122,7 +122,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 				break
 			}
 			emit(proto.TypeOutputMessage, message)
-		case "function_call", "function_applied":
+		case "function_call", "function_withdrawn", "function_applied":
 			if err := s.receiveFunction(event, start, emit); err != nil {
 				failure = err
 				s.invalidate()

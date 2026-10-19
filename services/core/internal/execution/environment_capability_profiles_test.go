@@ -25,8 +25,7 @@ func TestQualifiedClaudeCapabilitiesDoNotDependOnEnvironmentSource(t *testing.T)
 				}
 				agent["multi_agent"] = map[string]bool{"enabled": true}
 				raw, _ = json.Marshal(map[string]any{"agent": agent, "environment": environment})
-				// Structured output is native beside Subagents; function tools are not carried by the Subagent profile.
-				if err := (Policy{}).ValidateSessionConfiguration("claude_sdk", raw); (err == nil) != (feature == "structured") {
+				if err := (Policy{}).ValidateSessionConfiguration("claude_sdk", raw); err != nil {
 					t.Fatalf("%s with Subagents: %v", feature, err)
 				}
 			}

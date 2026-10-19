@@ -1,6 +1,7 @@
 import { readFile, realpath, stat, writeFile, link, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { dirname, join, relative } from "node:path";
+import type { ToolIdentity } from "./mcp.js";
 
 export type Fact = { type: "subagent_identity" | "subagent_turn" | "subagent_item" | "subagent_coordination"; fact: Record<string, unknown> };
 export type NativeRow = {
@@ -12,6 +13,7 @@ type Call = { id: string; name: string; input: Record<string, unknown>; turn: st
 export type Cancellation = { root: string; native_id: string; turn_id: string; source_item_id: string; last_item_id: string; completed_at_ms: number };
 type Entry = { id: string; metadata: Record<string, unknown>; rows: NativeRow[]; cancellations?: Cancellation[] };
 type Child = { id: string; parent: string; call: Call; rows: NativeRow[]; opened: number; cancellations: Cancellation[] };
+const functionPrefix = "mcp__functions__";
 const identity = /^[A-Za-z0-9_-]{1,160}$/;
 function fail(): never { throw new Error("invalid native child history"); }
 const blocks = (r: NativeRow): Record<string, unknown>[] => Array.isArray(r.message?.content) ? r.message.content as Record<string, unknown>[] : [];
@@ -37,7 +39,10 @@ function calls(rows: NativeRow[]): Map<string, Call> {
   return result;
 }
 
-export function projectHistory(root: string, rootRows: NativeRow[], entries: Entry[]): Fact[] {
+// With live, the children are still running: admitted names the ones native started in this Turn, and only their open Turn is projected.
+export type Projection = { live?: ReadonlyMap<string, string>; tools?: ReadonlyMap<string, ToolIdentity> };
+
+export function projectHistory(root: string, rootRows: NativeRow[], entries: Entry[], { live, tools = new Map() }: Projection = {}): Fact[] {
   const facts: Fact[] = [], children = new Map<string, Child>();
   const byParent = new Map<string, Map<string, Call>>([[root, calls(rootRows)]]);
   for (const entry of entries) byParent.set(entry.id, calls(entry.rows));
@@ -54,7 +59,7 @@ export function projectHistory(root: string, rootRows: NativeRow[], entries: Ent
       if (!own || receipt.root !== root || receipt.native_id !== id || receipt.source_item_id !== call.id ||
           !rows.some(r => r.uuid === receipt.last_item_id) || !Number.isSafeInteger(receipt.completed_at_ms) || receipt.completed_at_ms < time(own)) fail();
     }
-    if (call.result?.agentId !== id && !cancellations.some(r => r.turn_id === first.uuid)) fail();
+    if (call.result?.agentId !== id && !(live ? live.has(id) : cancellations.some(r => r.turn_id === first.uuid))) fail();
     children.set(id, { id, parent, call, rows, opened: time(first), cancellations });
   }
   const ordered: Child[] = [], pending = new Map(children);
@@ -68,8 +73,8 @@ export function projectHistory(root: string, rootRows: NativeRow[], entries: Ent
     parent_turn_id: child.call.turn, source_item_id: child.call.id, name: typeof child.call.input.name === "string" ? child.call.input.name : null,
     instructions: null,
   } });
-  for (const child of ordered) facts.push(...projectChild(child, children));
-  for (const call of byParent.get(root)!.values()) {
+  for (const child of ordered) facts.push(...(live ? [openTurn(child)] : projectChild(child, children, tools)));
+  if (!live) for (const call of byParent.get(root)!.values()) {
     const coordination = coordinationFact(call, "", children);
     if (coordination) facts.push({ type: "subagent_coordination", fact: coordination });
   }
@@ -88,7 +93,24 @@ function coordinationFact(call: Call, actor: string, children: Map<string, Child
     model: spawn && typeof call.input.model === "string" ? call.input.model : null, reasoning_effort: null };
 }
 
-function projectChild(child: Child, children: Map<string, Child>): Fact[] {
+// Core resolves a running child's call through its identity and open Turn.
+function openTurn(child: Child): Fact {
+  const first = child.rows.filter(input).at(-1)!, created = time(first);
+  return { type: "subagent_turn", fact: { native_id: child.id, turn_id: first.uuid!, created_at_ms: created, started_at_ms: created, status: "in_progress" } };
+}
+
+// Maps a child's native tool call to its neutral observation; other native tools are not projected.
+function observation(call: Call, tools: ReadonlyMap<string, ToolIdentity>): Record<string, unknown> | undefined {
+  if (call.name === "Bash") {
+    if (typeof call.input.command !== "string") fail();
+    return { kind: "command", command: call.input.command };
+  }
+  if (call.name.startsWith(functionPrefix)) return { kind: "function", name: call.name.slice(functionPrefix.length), arguments: call.input };
+  const mcp = tools.get(call.name);
+  return mcp && { kind: "mcp", server: mcp.server, name: mcp.name, arguments: call.input };
+}
+
+function projectChild(child: Child, children: Map<string, Child>, tools: ReadonlyMap<string, ToolIdentity>): Fact[] {
   const facts: Fact[] = [], turns: NativeRow[][] = [];
   for (const row of child.rows) {
     if (input(row)) turns.push([]);
@@ -140,17 +162,16 @@ function projectChild(child: Child, children: Map<string, Child>): Fact[] {
       const call = toolCalls.get(entry.id)!;
       const coordination = coordinationFact(call, child.id, children);
       if (coordination) { item(call.id, "subagent_coordination", coordination); continue; }
-      if (call.name !== "Bash") continue;
-      if (typeof call.input.command !== "string") fail();
+      const native = observation(call, tools);
+      if (!native) continue;
       const results = rows.flatMap(row => blocks(row)).filter(b => b.type === "tool_result" && b.tool_use_id === call.id);
       if (results.length > 1 || (!results.length && !cancellation)) fail();
-      if (!results.length) {
-        item(call.id, "tool_call", { id: call.id, stage: "after", observation: { kind: "command", status: "failed", command: call.input.command, output: "Native execution was cancelled." } });
-        continue;
-      }
-      const result = results[0], content = result.content;
+      const result = results[0], content = result?.content;
       const output = typeof content === "string" ? content : Array.isArray(content) ? content.filter(b => b.type === "text").map(b => b.text).join("\n") : "";
-      item(call.id, "tool_call", { id: call.id, stage: "after", observation: { kind: "command", status: result.is_error ? "failed" : "completed", command: call.input.command, output } });
+      const status = !result ? native.kind === "command" ? "failed" : "incomplete" : result.is_error ? "failed" : "completed";
+      const outcome = native.kind === "command" ? { output: result ? output : "Native execution was cancelled." }
+        : native.kind === "mcp" && result ? { [result.is_error ? "error" : "output"]: output } : {};
+      item(call.id, "tool_call", { id: call.id, stage: "after", observation: { ...native, status, ...outcome } });
     }
     if (completed !== undefined && cancellation) fail();
     const ended = completed ?? cancellation?.completed_at_ms;
@@ -160,7 +181,10 @@ function projectChild(child: Child, children: Map<string, Child>): Fact[] {
   return facts;
 }
 
-export async function readHistory(root: string, transcript: string, cwd: string, cancelled?: { at: number; admitted: ReadonlyMap<string, string> }): Promise<{ facts: Fact[]; ids: string[] }> {
+// With live, only that running child and its ancestors are read.
+export type Read = Projection & { cancelled?: { at: number; admitted: ReadonlyMap<string, string> }; child?: string };
+
+export async function readHistory(root: string, transcript: string, cwd: string, { cancelled, child, ...projection }: Read = {}): Promise<{ facts: Fact[]; ids: string[] }> {
   if (!identity.test(root) || !process.env.CLAUDE_CONFIG_DIR) fail();
   const state = await realpath(process.env.CLAUDE_CONFIG_DIR!);
   const path = await realpath(transcript);
@@ -178,12 +202,14 @@ export async function readHistory(root: string, transcript: string, cwd: string,
     return lines.map(line => JSON.parse(line) as NativeRow);
   }
   const { getSubagentMessages, listSubagents } = await import("@anthropic-ai/claude-agent-sdk");
-  const ids = await listSubagents(root, { dir: cwd });
+  const location = (id: string) => join(dirname(path), root, "subagents", "agent-" + (identity.test(id) ? id : fail()));
+  let ids: string[], at: string;
+  if (child === undefined) ids = await listSubagents(root, { dir: cwd });
+  else for (ids = [], at = child; at !== root && ids.length <= 64; at = JSON.parse(await read(location(at) + ".meta.json")).parentAgentId ?? root) ids.push(at);
   if (ids.length > 64 || new Set(ids).size !== ids.length) fail();
   const entries: Entry[] = [];
   for (const id of ids) {
-    if (!identity.test(id)) fail();
-    const base = join(dirname(path), root, "subagents", "agent-" + id);
+    const base = location(id);
     const raw = await rows(base + ".jsonl"), metadata = JSON.parse(await read(base + ".meta.json"));
     // The SDK resolves the persisted conversation chain; raw records retain the
     // native ownership and timestamps omitted by its public TypeScript shape.
@@ -192,7 +218,7 @@ export async function readHistory(root: string, transcript: string, cwd: string,
     if (!messages.length || messages.some(m => !own.has(m.uuid))) fail();
     const selected = messages.map(m => own.get(m.uuid)!);
     const cancellations: Cancellation[] = [];
-    const inputs = selected.filter(input);
+    const inputs = projection.live ? [] : selected.filter(input);
     for (let index = 0; index < inputs.length; index++) {
       const own = inputs[index];
       if (!own.uuid || !identity.test(own.uuid)) fail();
@@ -210,7 +236,7 @@ export async function readHistory(root: string, transcript: string, cwd: string,
     }
     entries.push({ id, metadata, rows: selected, cancellations });
   }
-  return { ids, facts: projectHistory(root, await rows(path), entries) };
+  return { ids, facts: projectHistory(root, await rows(path), entries, projection) };
 }
 
 // Link publishes a complete receipt without replacing an earlier effect. Native

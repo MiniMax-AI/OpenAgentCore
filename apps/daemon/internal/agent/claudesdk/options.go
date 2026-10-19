@@ -92,8 +92,8 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		start.OutputFormat = format
 	}
 	if req.ObserveSubagentIdentities {
-		if req.DisableSubagents || len(req.FunctionTools) != 0 || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) != 0) {
-			return fail("subagent execution does not support this tool combination")
+		if req.DisableSubagents {
+			return fail("subagent observation conflicts with disabled subagents")
 		}
 		limit := 6
 		if req.MaxConcurrentSubagents != nil {

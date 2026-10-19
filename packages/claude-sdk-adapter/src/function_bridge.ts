@@ -12,7 +12,8 @@ export type FunctionResult = {
   content: InputContent[];
 };
 export type FunctionEvent =
-  | { type: "function_call"; call: { call_id: string; name: string; arguments: Record<string, unknown> } }
+  | { type: "function_call"; call: { call_id: string; name: string; arguments: Record<string, unknown>; native_id?: string; turn_id?: string } }
+  | { type: "function_withdrawn"; withdrawn: { call_id: string; native_id: string; turn_id: string } }
   | { type: "function_applied"; call_id: string; delivery_id: string };
 type Pending = {
   resolve: (result: CallToolResult) => void;
@@ -20,7 +21,10 @@ type Pending = {
   cleanup: () => void;
   result?: FunctionResult;
   aborted?: boolean;
+  child?: FunctionCall["child"];
 };
+// Native stopped waiting for the call, so no result can be applied.
+class Abandoned extends Error {}
 
 export class FunctionBridge {
   private readonly pending = new Map<string, Pending>();
@@ -33,19 +37,25 @@ export class FunctionBridge {
     this.seen.add(call.id);
     const waiting = new Promise<CallToolResult>((resolve, reject) => {
       const stop = () => {
+        // Native abandons a child's call with the child, so nothing remains to confirm.
         const pending = this.pending.get(call.id);
-        if (pending?.result) pending.aborted = true;
+        if (pending?.result && !call.child) pending.aborted = true;
         else this.pending.delete(call.id);
-        reject(new Error("Native function call aborted."));
+        reject(new Abandoned("Native function call aborted."));
       };
       signal.addEventListener("abort", stop, { once: true });
-      this.pending.set(call.id, { resolve, reject, cleanup: () => signal.removeEventListener("abort", stop) });
+      this.pending.set(call.id, { resolve, reject, cleanup: () => signal.removeEventListener("abort", stop), child: call.child });
     });
-    const [, result] = await Promise.all([
-      this.emit({ type: "function_call", call: { call_id: call.id, name: call.name, arguments: call.arguments } }),
-      waiting,
-    ]);
-    return result;
+    try {
+      const [, result] = await Promise.all([
+        this.emit({ type: "function_call", call: { call_id: call.id, name: call.name, arguments: call.arguments, ...call.child } }),
+        waiting,
+      ]);
+      return result;
+    } catch (error) {
+      if (call.child && error instanceof Abandoned) await this.emit({ type: "function_withdrawn", withdrawn: { call_id: call.id, ...call.child } });
+      throw error;
+    }
   };
 
   submit(line: string): void {
@@ -73,12 +83,12 @@ export class FunctionBridge {
   }
 
   async consume(message: SDKMessage, sessionID: string, cancelled = false): Promise<void> {
-    if (message.type !== "user" || message.parent_tool_use_id !== null || message.session_id !== sessionID ||
+    if (message.type !== "user" || message.session_id !== sessionID ||
         message.isSynthetic || ("isReplay" in message && message.isReplay) || !Array.isArray(message.message.content)) return;
     for (const block of message.message.content) {
       if (block.type !== "tool_result") continue;
       const pending = this.pending.get(block.tool_use_id);
-      if (!pending || pending.aborted) continue;
+      if (!pending || pending.aborted || (message.parent_tool_use_id !== null) !== !!pending.child) continue;
       const result = pending.result;
       if (!result) {
         if (!cancelled || !block.is_error) throw new Error("Native response preceded host result.");
@@ -104,7 +114,7 @@ export class FunctionBridge {
       if (pending.result || (callID !== undefined && id !== callID)) continue;
       pending.cleanup();
       this.pending.delete(id);
-      pending.reject(new Error("Native function call cancelled."));
+      pending.reject(new Abandoned("Native function call cancelled."));
     }
   }
 
