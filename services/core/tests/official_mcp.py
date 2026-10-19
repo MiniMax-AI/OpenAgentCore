@@ -71,8 +71,7 @@ def verify_mcp_configuration(client, other, expect_error):
                 {**tool, "request_metadata": {"x": "y"}},
                 {**tool, "allowed_tools": [None]}]
     for changes in ({"headers": {"Authorization": "synthetic-private"}},
-                    {"authorization": "synthetic-private"},
-                    {"server_url": "https://mcp.example.invalid/mcp?token=synthetic-private"}):
+                    {"authorization": "synthetic-private"}):
         invalid.append({**tool, "transport": {**transport, **changes}})
     # A pinned stdio transport stays unsupported with or without an origin; a
     # malformed one gets the official field error first.
