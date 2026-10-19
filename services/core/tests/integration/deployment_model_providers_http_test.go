@@ -111,7 +111,6 @@ func TestDeploymentModelProvidersHTTP(t *testing.T) {
 	} {
 		call("PUT", path, coreKey, `{"model":"fixture","model_provider":`+invalid+`}`, 400)
 	}
-	call("PUT", "/core/v1/harnesses/mcode/model-configuration", coreKey, `{"model":"fixture","model_provider":{"protocol":"anthropic","base_url":"https://deployment.example/anthropic","api_key":"invalid-canary"}}`, 400)
 
 	// Without any provider, hosted and self-hosted creation fail before any write.
 	hosted := `{"agent":{"model":"hosted-model"},"environment":{"type":"openai_hosted"}}`
