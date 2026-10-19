@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: b6c779b6e8264e04e048394ab2a0f1b470639d0e8fe1f79b2fc0bf5564c2bef1
+source_hash: 7a64fab978905ee684a1b0e9e05f6b27dd5608614e53e47f47c240d7f6c04564
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -84,7 +84,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 提交给 `none` Session 的输入会同步完成准入；Core 不会模拟官方异步准入窗口。
 - 用于恢复等待中 Turn 的函数结果会发出 `turn.in_progress`；取消正在等待函数结果的 Turn 会发出临时 `agent.session.in_progress`。
-- 原生 Harness 放弃的函数调用（例如根关闭或中断子级时被丢弃的 Codex Subagent 调用）会被撤回：它不再是待执行操作，之后为它提交结果会返回 409 `conflict_error`。官方 API 没有撤回机制。
+- 原生 Harness 放弃的函数调用（例如根关闭或中断子级时被丢弃的 Codex Subagent 调用，或超过 120 秒超时的 MiniMax Code 调用）会被撤回：它不再是待执行操作，之后为它提交结果会返回 409 `conflict_error`。官方 API 没有撤回机制。
 - 在 Turn 中途接入流时，不会发送补发 Item 快照。
 - Items 列表会包含进行中和未完成的输出 Items，并保留失败函数结果中已提交的 `output`。
 - 错误消息会省略官方消息包含的 call 和 executor ID。
@@ -102,6 +102,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
+- MiniMax Code 逐个运行公共函数调用，因此应用每次只看到一个 `function_call`。
+- MiniMax Code 通过原生 MCP 服务器提供公共函数，其客户端会在 120 秒后使调用失败且无法更改。120 秒后原生向模型报告失败，该调用被撤回，Turn 继续。
 - Vault 和 Credential 的状态仅在内部保存，默认值为 `active`；由于没有归档操作，未带过滤器的列表会同时包含两种状态。
 - `vault_ids` 中包含未知或属于其他账户的 Vault 时会返回 404 "Resource not found."；官方消息会指出该 ID。
 - 更新时显式为 OAuth `access_token`、`refresh` 或 `token_endpoint_auth` 指定 `null`，会保留已存储的值。
@@ -113,7 +115,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **配置和工具**
 
 - 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions，也不支持图像输入。
+- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 以及 `headers` 中的 `Authorization` 标头也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 

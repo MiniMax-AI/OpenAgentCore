@@ -81,7 +81,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - Input to a `none` Session is admitted synchronously; Core does not emulate the official asynchronous admission window.
 - A function result that resumes a waiting Turn emits `turn.in_progress`, and cancelling a Turn that waits on a function result emits an interim `agent.session.in_progress`.
-- A function call the native Harness abandons, such as a Codex Subagent call dropped when the root closes or interrupts the child, is withdrawn: it stops being a required action and a later result for it returns 409 `conflict_error`. The official API has no withdrawal.
+- A function call the native Harness abandons, such as a Codex Subagent call dropped when the root closes or interrupts the child or a MiniMax Code call past its 120 s timeout, is withdrawn: it stops being a required action and a later result for it returns 409 `conflict_error`. The official API has no withdrawal.
 - Attaching to the stream mid-Turn sends no catch-up Item snapshots.
 - The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
 - Error messages omit the call and executor IDs that official messages include.
@@ -99,6 +99,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Vaults and Credentials** ([Vaults and Credentials](./vaults.md))
 
+- MiniMax Code runs public function calls one at a time, so the application sees one `function_call` at a time.
+- MiniMax Code serves public functions as a native MCP server whose client fails a call after 120 s with no way to change it. After 120 s native reports the failure to the model, the call is withdrawn and the Turn continues.
 - Vault and Credential status is stored privately and defaults to `active`; with no archive operation, lists without a filter include both statuses.
 - An unknown or foreign Vault in `vault_ids` returns 404 "Resource not found."; the official message names the ID.
 - An explicit `null` for OAuth `access_token`, `refresh` or `token_endpoint_auth` in an update keeps the stored value.
@@ -110,7 +112,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Configuration and tools**
 
 - A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions and no image input.
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input.
 - Model-derived reasoning defaults are not resolved.
 - MCP tools support the `http` transport only, so `stdio` is rejected. An inline `authorization` on a Session MCP transport and an `Authorization` entry in `headers` are rejected too ([HTTP MCP](./execution-tools.md#http-mcp)).
 

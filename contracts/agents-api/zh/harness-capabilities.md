@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 6ae7ae05948fe30ce66d86b0a3987c08456392d6a7ed66e71c09ec8b85044843
+source_hash: 79476f748e558bb88e60c7b6d1ff8684824c43b2891b142009343b1319674bd7
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -36,7 +36,7 @@ source_hash: 6ae7ae05948fe30ce66d86b0a3987c08456392d6a7ed66e71c09ec8b85044843
 
 | 操作 | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
-| 文本结果的[公开函数](execution-tools.md#functions) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅对象根 schema | 已拒绝 |
+| 文本结果的[公开函数](execution-tools.md#functions) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅对象根 schema | 已验证：`none`；已准入：托管、自托管；仅对象根 schema；结果须在 120 秒内到达（[差异](index.md#differences-from-openai)） |
 | [含图像函数结果](message-content.md#function-results) | 已验证：`none`、托管；已准入：自托管；远程 URL：已拒绝 | 仅成功结果；PNG、JPEG data URL：所有位置已验证；GIF、WebP：已准入 | 已拒绝 |
 | [结构化输出](execution-tools.md#structured-output) | 所有位置已准入 | 所有位置已验证 | 已拒绝 |
 | [延迟函数发现](execution-tools.md#deferred-function-discovery) | 已拒绝 | 已验证：`none`、自托管；已准入：托管 | 已拒绝 |

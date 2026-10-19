@@ -2,11 +2,15 @@
 package mcode
 
 import (
+	"encoding/json"
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
+
+// FunctionServerLabel is the native MCP server that carries public functions.
+const FunctionServerLabel = "functions"
 
 // Declaration is the only authored description of the MiniMax Code Harness. The
 // Runtime may narrow Capabilities for the installed host, never widen them.
@@ -43,7 +47,7 @@ var Declaration = harnessconfig.Declaration{
 		SubagentControl:          proto.CapabilitySupported,
 		DurableInputReceipts:     proto.CapabilitySupported,
 		DurableTurns:             proto.CapabilitySupported,
-		FunctionTools:            proto.CapabilityUnsupported,
+		FunctionTools:            proto.CapabilitySupported,
 		MCPHTTPTools:             proto.CapabilitySupported,
 		MCPHTTPRequired:          proto.CapabilityUnsupported,
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
@@ -63,15 +67,55 @@ var Declaration = harnessconfig.Declaration{
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
+	ValidateConfiguration: func(admission harnessconfig.Admission) error {
+		return harnessconfig.RejectSubagentTools(admission, "function")
+	},
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
-		if len(functions) > 0 {
-			return errors.New("The configured engine does not support public functions.")
+		if err := harnessconfig.RequireObjectSchemas(functions); err != nil {
+			return err
+		}
+		for _, tool := range functions {
+			// The adapter's MCP server library gives x-mcp-header transport meaning.
+			if hasKey(tool.Parameters, "x-mcp-header") {
+				return errors.New("The configured engine does not support the x-mcp-header keyword in function schemas.")
+			}
 		}
 		for _, server := range mcp {
 			if server.AllowedTools != nil || server.Required {
 				return errors.New("The configured engine requires allowed_tools=null and required=false.")
 			}
+			// The adapter serves public functions under this label.
+			if len(functions) > 0 && server.ServerLabel == FunctionServerLabel {
+				return errors.New("The configured engine reserves the HTTP MCP label functions.")
+			}
 		}
 		return nil
 	},
+}
+
+// hasKey reports whether the JSON document has an object member with this name at any depth.
+func hasKey(raw json.RawMessage, key string) bool {
+	var found func(any) bool
+	found = func(v any) bool {
+		switch v := v.(type) {
+		case map[string]any:
+			if _, ok := v[key]; ok {
+				return true
+			}
+			for _, child := range v {
+				if found(child) {
+					return true
+				}
+			}
+		case []any:
+			for _, child := range v {
+				if found(child) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	var doc any
+	return json.Unmarshal(raw, &doc) == nil && found(doc)
 }

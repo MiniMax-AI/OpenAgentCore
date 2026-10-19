@@ -10,6 +10,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 type mcpToolIdentity struct{ server, tool string }
@@ -24,7 +25,7 @@ func (s *Session) mcpIdentity(name string) (*mcpToolIdentity, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(bindings) == 0 {
+	if len(bindings) == 0 && len(s.req.FunctionTools) == 0 {
 		return nil, nil
 	}
 	raw, err := os.ReadFile(filepath.Join(s.opts.DataDir, "mcp-runtime-names.json"))
@@ -49,6 +50,9 @@ func (s *Session) mcpIdentity(name string) (*mcpToolIdentity, error) {
 			}
 			var key []string
 			declared := 0
+			if server.Raw == declaration.FunctionServerLabel && len(s.req.FunctionTools) > 0 {
+				declared = 1
+			}
 			for _, item := range bindings {
 				if item.ServerLabel == server.Raw {
 					declared++

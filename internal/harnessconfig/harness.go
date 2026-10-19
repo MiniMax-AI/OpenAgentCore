@@ -332,6 +332,19 @@ func (d Declaration) ValidateMCPOrigins(placement string, servers []proto.MCPHTT
 	return nil
 }
 
+// RequireObjectSchemas rejects a function whose parameter schema has no root type object.
+func RequireObjectSchemas(functions []proto.FunctionTool) error {
+	for _, tool := range functions {
+		var schema struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(tool.Parameters, &schema) != nil || schema.Type != "object" {
+			return errors.New("The configured engine requires function schemas with root type object.")
+		}
+	}
+	return nil
+}
+
 // RejectSubagentTools rejects the declared tool types that a Harness cannot
 // combine with Subagents.
 func RejectSubagentTools(admission Admission, unsupported ...string) error {

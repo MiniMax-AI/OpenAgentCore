@@ -81,3 +81,16 @@ func TestWhitespaceOnlyTextQualificationUsesEngineProfiles(t *testing.T) {
 		t.Fatal("non-whitespace text or image rejected", err)
 	}
 }
+
+// A Harness without function-result images rejects them before anything is stored.
+func TestFunctionResultImagesFollowTheDeclaration(t *testing.T) {
+	image := sessions.Input{Kind: "tool_result", Payload: json.RawMessage(`{"turn_id":"t","call_id":"c","result":{"success":true,"output":[{"type":"input_image","image_url":"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="}]}}`)}
+	mcode, _ := builtin.Registry().Lookup("mcode")
+	if err := validateDeclaredInputs(mcode, []sessions.Input{image}); !errors.Is(err, sessions.ErrInvalidInput) {
+		t.Fatal("unsupported function-result image admitted", err)
+	}
+	codex, _ := builtin.Registry().Lookup("codex")
+	if err := validateDeclaredInputs(codex, []sessions.Input{image}); err != nil {
+		t.Fatal(err)
+	}
+}

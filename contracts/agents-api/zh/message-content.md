@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: 71a5c1bb8658f1780631c022a5f28f45b4a55fc4996a428e7372a5920ed693c2
+source_hash: 2afdb754fd8ece63345af69e06fa15e036d1bf81f047b5f7e457f280dc40db2b
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -53,7 +53,7 @@ source_hash: 71a5c1bb8658f1780631c022a5f28f45b4a55fc4996a428e7372a5920ed693c2
 | --- | --- |
 | Codex | 文本与有序文本/图像输出，原样传给 Harness。`http` 或 `https` 图像 URL 返回 400，因为原生 Codex 会把携带此类图像的动态工具结果替换为失败 |
 | Claude Code | 文本输出。仅成功结果可含图像，且只能是规范 base64 的 `image/png`、`image/jpeg`、`image/gif`、`image/webp` data URL，因为原生工具结果不携带 URL；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码，或将无法处理的图像替换为文本说明；公开 Item 保留提交字节 |
-| MiniMax Code | 无公开函数 |
+| MiniMax Code | 文本输出。图像返回 400，因为原生 MCP 图像内容尚未验证能到达模型 |
 
 ### 应用回执 {#application-receipts}
 
@@ -61,8 +61,9 @@ source_hash: 71a5c1bb8658f1780631c022a5f28f45b4a55fc4996a428e7372a5920ed693c2
 
 - **Claude Code** 使用实时根原生工具结果确认，要求匹配 Session、调用 ID、成功标志、准确文本、块数和顺序，且每个图像位置都有原生图像。重放、合成和 Subagent 记录不能确认。
 - **Codex** 使用发起调用的线程和 Turn 上的实时 dynamic-tool `item/completed` 观察确认，要求匹配调用、函数名称、状态、成功标志和准确有序内容。仅写入 Harness 不确认。
+- **MiniMax Code** 使用 `functions` MCP 调用的实时原生工具更新确认，要求其回显的结果带有该调用 ID。原生使调用失败（例如 120 秒超时）时，该调用被放弃。
 
-两适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。原生 Harness 放弃的调用没有回执，会被撤回（[Functions](execution-tools.md#functions)）。
+每个适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。原生 Harness 放弃的调用没有回执，会被撤回（[Functions](execution-tools.md#functions)）。
 
 ## Runtime 边界 {#runtime-boundary}
 
