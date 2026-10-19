@@ -6,7 +6,7 @@ import type { ToolIdentity } from "./mcp.js";
 export type Fact = { type: "subagent_identity" | "subagent_turn" | "subagent_item" | "subagent_coordination"; fact: Record<string, unknown> };
 export type NativeRow = {
   type: string; uuid?: string; parentUuid?: string | null; sessionId?: string; agentId?: string;
-  isSidechain?: boolean; timestamp?: string; toolUseResult?: Record<string, unknown>;
+  isSidechain?: boolean; timestamp?: string; toolUseResult?: Record<string, unknown>; mcpMeta?: Record<string, unknown>;
   message?: { id?: string; role?: string; content?: unknown; stop_reason?: string | null };
 };
 type Call = { id: string; name: string; input: Record<string, unknown>; turn: string; result?: Record<string, unknown>; error?: boolean; finished?: boolean };
@@ -172,13 +172,17 @@ function projectChild(child: Child, children: Map<string, Child>, tools: Readonl
       if (coordination) { item(call.id, "subagent_coordination", coordination); continue; }
       const native = observation(call, tools);
       if (!native) continue;
-      const results = rows.flatMap(row => blocks(row)).filter(b => b.type === "tool_result" && b.tool_use_id === call.id);
+      const owners = rows.filter(row => blocks(row).some(b => b.type === "tool_result" && b.tool_use_id === call.id));
+      const results = owners.flatMap(row => blocks(row)).filter(b => b.type === "tool_result" && b.tool_use_id === call.id);
       if (results.length > 1 || (!results.length && !cancellation)) fail();
-      const result = results[0], content = result?.content;
+      const result = results[0], content = result?.content, owner = owners[0];
+      // The SDK sends a row that answers one call with its native result and MCP metadata, as the root's MCP Items keep it.
+      const mcpResult = owner?.toolUseResult !== undefined && blocks(owner).filter(b => b.type === "tool_result").length === 1
+        ? owner.mcpMeta ? { content: owner.toolUseResult, ...owner.mcpMeta } : owner.toolUseResult : content ?? null;
       const output = typeof content === "string" ? content : Array.isArray(content) ? content.filter(b => b.type === "text").map(b => b.text).join("\n") : "";
       const status = !result ? native.kind === "command" ? "failed" : "incomplete" : result.is_error ? "failed" : "completed";
       const outcome = native.kind === "command" ? { output: result ? output : "Native execution was cancelled." }
-        : native.kind === "mcp" && result ? { [result.is_error ? "error" : "output"]: output }
+        : native.kind === "mcp" && result ? { [result.is_error ? "error" : "output"]: mcpResult }
         : result ? { content: functionContent(content) } : {};
       item(call.id, "tool_call", { id: call.id, stage: "after", observation: { ...native, status, ...outcome } });
     }
