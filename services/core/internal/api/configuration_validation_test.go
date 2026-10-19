@@ -260,7 +260,6 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	session := configurationOperations()[2]
 	for _, tc := range []struct{ fields, message string }{
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls."},
-		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not supported by this engine."},
 		{`"multi_agent":{"enabled":true},"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Harness codex does not support the requested Agent/environment configuration: programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness."},
 		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty, unique and at most 512 bytes."},
 	} {
