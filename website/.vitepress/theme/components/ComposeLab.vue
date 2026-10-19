@@ -56,10 +56,6 @@ const lines = computed<Tok[][]>(() => {
     [{ t: '        ' }, s('x_agents_core'), { t: ': {' }, s('model_provider'), { t: ': {' }],
     [{ t: '            ' }, s('protocol'), { t: ': ' }, pair(protocol.value), { t: ',' }],
     [{ t: '            ' }, s('base_url'), { t: ': BASE_URL, ' }, s('api_key'), { t: ': API_KEY,' }],
-    // MiniMax Code requires positive token limits (contracts/agents-api/model-execution.md).
-    ...(harness.value === 'mcode'
-      ? [[{ t: '            ' }, s('context_window'), { t: ': ' }, { t: '200000' }, { t: ', ' }, s('max_output_tokens'), { t: ': ' }, { t: '8000' }, { t: ',' }]]
-      : []),
     [{ t: '        }},' }],
     [{ t: '    },' }],
     [{ t: ')' }],

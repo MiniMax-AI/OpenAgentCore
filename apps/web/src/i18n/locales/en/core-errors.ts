@@ -18,7 +18,7 @@ export const coreErrors = {
   "model_provider_base_url_invalid": "Use an HTTPS URL without credentials, query parameters or a fragment.",
   "model_provider_protocol_unsupported": "This protocol is not supported by the Harness.",
   "model_provider_api_key_invalid": "Enter a valid API key without control characters.",
-  "model_provider_token_limits_invalid": "Use valid token limits; output cannot exceed context, and required limits must be positive.",
+  "model_provider_token_limits_invalid": "Use valid token limits; output cannot exceed context.",
   "invalid_sandbox_configuration": "Check the sandbox resources and Runtime release.",
   "project_archived": "This Project is archived.",
   "project_exists": "A Project with this name already exists.",

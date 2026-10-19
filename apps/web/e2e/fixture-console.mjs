@@ -554,7 +554,7 @@ function providerProblem(harness, input) {
  * DELETE is 204 and safe to repeat. A disabled harness may still be configured.
  */
 async function harnessRoute(request, response, path) {
-  const support = (id) => ({ protocols: id === "codex" ? ["responses"] : id === "claude_sdk" ? ["anthropic"] : ["anthropic", "responses", "chat_completions"], accepts_harness_config: id === "claude_sdk", token_limits_required: id === "mcode" });
+  const support = (id) => ({ protocols: id === "codex" ? ["responses"] : id === "claude_sdk" ? ["anthropic"] : ["anthropic", "responses", "chat_completions"], accepts_harness_config: id === "claude_sdk" });
   const view = (id) => ({ model_configuration_support: support(id), object: "core.harness", id, enabled: state.harnesses[id].enabled, default: state.harnesses[id].default, model_configuration: state.harnesses[id].provider });
   if (path === "/harnesses" && request.method === "GET") return send(response, 200, { object: "list", data: Object.keys(state.harnesses).map(view) });
   const match = path.match(HARNESS_PROVIDER);

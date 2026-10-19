@@ -45,8 +45,7 @@ import (
 // Provider is deliberately limited to configuration compatibility. Core owns
 // credential admission and endpoint security; native launch options stay private.
 type Provider struct {
-	Protocol            string
-	RequiresTokenLimits bool
+	Protocol string
 }
 
 // Configuration is an adapter-owned declaration, not live provider readiness.
@@ -244,17 +243,6 @@ func (c Configuration) ValidateProtocol(protocol string) error {
 	return nil
 }
 
-func (c Configuration) Validate(protocol string, contextWindow, maxOutputTokens int32) error {
-	if err := c.ValidateProtocol(protocol); err != nil {
-		return err
-	}
-	provider, _ := c.Provider(protocol)
-	if provider.RequiresTokenLimits && (contextWindow <= 0 || maxOutputTokens <= 0) {
-		return errors.New("selected harness requires positive model context_window and max_output_tokens")
-	}
-	return nil
-}
-
 // Registry is an immutable snapshot. Missing declarations remain unknown rather
 // than inheriting another harness's rules.
 type Registry struct {
@@ -295,11 +283,6 @@ func (r Registry) Kinds() []string {
 func (r Registry) ValidateProtocol(kind, protocol string) error {
 	declaration, _ := r.Lookup(kind)
 	return declaration.ValidateProtocol(protocol)
-}
-
-func (r Registry) Validate(kind, protocol string, contextWindow, maxOutputTokens int32) error {
-	declaration, _ := r.Lookup(kind)
-	return declaration.Configuration.Validate(protocol, contextWindow, maxOutputTokens)
 }
 
 func (r Registry) SupportsProtocol(protocol string) bool {

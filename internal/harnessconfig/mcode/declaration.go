@@ -17,9 +17,9 @@ var Declaration = harnessconfig.Declaration{
 	Kind:  "mcode",
 	Label: "MiniMax Code",
 	Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{
-		{Protocol: "anthropic", RequiresTokenLimits: true},
-		{Protocol: "responses", RequiresTokenLimits: true},
-		{Protocol: "chat_completions", RequiresTokenLimits: true},
+		{Protocol: "anthropic"},
+		{Protocol: "responses"},
+		{Protocol: "chat_completions"},
 	}},
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:     proto.CapabilitySupported,

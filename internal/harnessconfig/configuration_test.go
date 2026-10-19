@@ -12,16 +12,16 @@ func testDeclaration(kind string, configuration Configuration) Declaration {
 }
 
 func TestRegistryOwnsDeclarations(t *testing.T) {
-	declaration := testDeclaration("additional-adapter", Configuration{Providers: []Provider{{Protocol: "responses", RequiresTokenLimits: true}}})
+	declaration := testDeclaration("additional-adapter", Configuration{Providers: []Provider{{Protocol: "responses"}}})
 	registry := NewRegistry(declaration)
 	declaration.Providers[0].Protocol = "changed"
 	got, ok := registry.Lookup("additional-adapter")
-	if !ok || got.Validate("responses", 100, 20) != nil || got.Validate("responses", 0, 0) == nil || got.ValidateProtocol("unknown") == nil {
+	if !ok || got.ValidateProtocol("responses") != nil || got.ValidateProtocol("unknown") == nil {
 		t.Fatal("registry did not preserve adapter rules")
 	}
-	got.Providers[0].RequiresTokenLimits = false
+	got.Providers[0].Protocol = "mutated"
 	again, _ := registry.Lookup("additional-adapter")
-	if again.Validate("responses", 0, 0) == nil {
+	if again.ValidateProtocol("responses") != nil {
 		t.Fatal("lookup mutated the registered declaration")
 	}
 	if _, ok := registry.Lookup("unknown"); ok || registry.SupportsProtocol("changed") || !registry.SupportsProtocol("responses") {

@@ -21,12 +21,21 @@ func modelProviderConfig(raw any, model string) (map[string]any, error) {
 	case modelprovider.Responses:
 		api = "openai-responses"
 	}
+	native := map[string]any{"name": model, "tool_call": true}
+	// Absent limits are omitted so the native defaults apply.
+	limit := map[string]any{}
+	if provider.ContextWindow > 0 {
+		limit["context"] = provider.ContextWindow
+	}
+	if provider.MaxOutputTokens > 0 {
+		limit["output"] = provider.MaxOutputTokens
+	}
+	if len(limit) > 0 {
+		native["limit"] = limit
+	}
 	return map[string]any{
 		"name": "Configured provider", "kind": "custom", "enabled": true, "api": api,
 		"options": map[string]any{"baseURL": provider.BaseURL, "apiKey": provider.APIKey},
-		"models": map[string]any{model: map[string]any{
-			"name": model, "tool_call": true,
-			"limit": map[string]any{"context": provider.ContextWindow, "output": provider.MaxOutputTokens},
-		}},
+		"models":  map[string]any{model: native},
 	}, nil
 }

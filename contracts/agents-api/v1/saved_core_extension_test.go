@@ -49,12 +49,12 @@ func TestSavedProviderExplicitHarnessCompatibility(t *testing.T) {
 		}
 	}
 	for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
-		for _, limits := range [][2]int32{{0, 0}, {100, 0}, {0, 20}} {
+		for _, limits := range [][2]int32{{0, 0}, {100, 0}} {
 			x := &SavedAgentCoreInput{Harness: "mcode", ModelProvider: &ModelProviderInput{
 				Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.test", APIKey: "fixture", ContextWindow: limits[0], MaxOutputTokens: limits[1],
 			}}
-			if x.Validate() == nil || x.SafeView().ModelProvider.ValidateHarness("mcode") == nil {
-				t.Fatal("MiniMax limits must be complete for every upstream protocol")
+			if x.Validate() != nil || x.SafeView().ModelProvider.ValidateHarness("mcode") != nil {
+				t.Fatal("MiniMax Code must accept omitted token limits for every upstream protocol")
 			}
 		}
 	}

@@ -406,9 +406,8 @@ export const modelConfigurationInputRequired = ["model", "model_provider"] as co
 export interface ModelConfigurationSupport {
   accepts_harness_config: boolean;
   protocols: string[];
-  token_limits_required: boolean;
 }
-export const modelConfigurationSupportFields = ["accepts_harness_config", "protocols", "token_limits_required"] as const;
+export const modelConfigurationSupportFields = ["accepts_harness_config", "protocols"] as const;
 export interface Node {
   active: number;
   available_disk_bytes: number | null;
