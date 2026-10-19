@@ -39,7 +39,7 @@ func TestModelProviderErrorMessagesAndPrecedence(t *testing.T) {
 	}
 	outputOnly := valid
 	outputOnly.MaxOutputTokens = 32000
-	if err := outputOnly.ValidateHarness("codex"); err != nil {
+	if err := outputOnly.ValidateHarness("mcode"); err != nil {
 		t.Fatal(err) // An omitted context window keeps the native default.
 	}
 	if err := valid.ValidateHarness("codex"); err != nil {
