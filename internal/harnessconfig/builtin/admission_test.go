@@ -47,7 +47,6 @@ func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Codex admits function and MCP tools with Subagents; Claude Code does not.
-			admission.Placement = "none"
 			for _, tool := range []string{`{"type":"function","name":"f"}`, `{"type":"mcp","server_label":"s"}`} {
 				admission.Tools = []json.RawMessage{json.RawMessage(tool)}
 				if err := declaration.ValidateConfiguration(admission); (err != nil) != (kind == "claude_sdk") {
