@@ -31,6 +31,10 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	applyProgrammaticTools(&plan, req.ExecutionControls)
 	if req.LocalEnvironment != nil {
 		plan.Cwd = req.LocalEnvironment.WorkspaceRoot
+		if err := writeWorkspaceTrust(nativeHomeFromPlan(plan), plan.Cwd); err != nil {
+			plan.Cleanup()
+			return SessionPlan{}, nil, err
+		}
 	} else {
 		// environment:none has no workspace; the Session's private home is its cwd.
 		plan.Cwd = nativeHomeFromPlan(plan)

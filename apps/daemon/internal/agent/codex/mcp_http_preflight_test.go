@@ -13,7 +13,9 @@ import (
 func TestPublicMCPHTTPEffectiveConfiguration(t *testing.T) {
 	for _, allowlist := range []*[]string{nil, new([]string), {"lookup", "query"}} {
 		servers := map[string]mcpServerConfig{"docs": {URL: "https://docs.example/mcp", EnabledTools: allowlist}}
-		for _, mutation := range []string{"none", "ambient", "url", "header", "header helper", "env header", "auth", "required", "tools", "disabled", "remote", "plugins", "apps", "keyring", "policy"} {
+		// Only what binds a credential to the declared server is checked; every
+		// other native setting and undeclared server keeps its native value.
+		for _, mutation := range []string{"none", "ambient", "url", "header", "header helper", "env header", "auth", "required", "tools", "disabled", "remote", "plugins", "apps", "keyring", "policy", "timeout"} {
 			t.Run(mutation+"/"+allowlistName(allowlist), func(t *testing.T) {
 				response := mcpHTTPConfigResponse(servers)
 				config := response["config"].(map[string]any)
@@ -41,17 +43,20 @@ func TestPublicMCPHTTPEffectiveConfiguration(t *testing.T) {
 				case "remote":
 					server["environment_id"] = "remote"
 				case "plugins", "apps":
-					config["features"].(map[string]any)[mutation] = true
+					config["features"] = map[string]any{mutation: true}
 				case "keyring":
 					config["mcp_oauth_credentials_store"] = "auto"
 				case "policy":
 					server["tools"] = map[string]any{"lookup": map[string]any{"enabled": false}}
+				case "timeout":
+					server["tool_timeout_sec"] = 5
 				}
 				data, err := json.Marshal(response)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if matchesMCPConfig(data, servers) != (mutation == "none") {
+				rejected := map[string]bool{"url": true, "header": true, "env header": true, "remote": true, "keyring": true, "tools": allowlist != nil}
+				if matchesMCPConfig(data, servers) == rejected[mutation] {
 					t.Fatal("effective configuration decision differed", mutation)
 				}
 			})
@@ -122,7 +127,7 @@ func TestPublicMCPHTTPPreflightRedactsNativeErrors(t *testing.T) {
 }
 
 func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
-	for _, mode := range []string{"new", "resume", "reject", "reject bearer reference"} {
+	for _, mode := range []string{"new", "resume", "extra server", "reject url", "reject bearer reference"} {
 		t.Run(mode, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.AgentOptions = map[string]any{"model": "fixture-model"}
@@ -144,8 +149,11 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 				t.Fatal(err)
 			}
 			response := mcpHTTPConfigResponse(declarations)
-			if mode == "reject" {
+			if mode == "extra server" {
 				response["config"].(map[string]any)["mcp_servers"].(map[string]any)["operator"] = map[string]any{"url": "https://operator.example/private"}
+			}
+			if mode == "reject url" {
+				response["config"].(map[string]any)["mcp_servers"].(map[string]any)["docs"].(map[string]any)["url"] = "https://workspace.example/redirect"
 			}
 			if mode == "reject bearer reference" {
 				response["config"].(map[string]any)["mcp_servers"].(map[string]any)["docs"].(map[string]any)["bearer_token_env_var"] = "OPERATOR_SECRET"
@@ -156,7 +164,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 			e, err := testExecutor(t, "complete", req, cfg)
 			if strings.HasPrefix(mode, "reject") {
 				if err == nil || e != nil {
-					t.Fatal("ambient MCP configuration admitted")
+					t.Fatal("redirected credential binding admitted")
 				}
 				assertPreparationOnly(t, root)
 				waitPreparationMethod(t, root, "config/read")
