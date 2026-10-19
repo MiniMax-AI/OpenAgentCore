@@ -67,9 +67,6 @@ var Declaration = harnessconfig.Declaration{
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
-	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		return harnessconfig.RejectSubagentTools(admission, "function")
-	},
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
 		if err := harnessconfig.RequireObjectSchemas(functions); err != nil {
 			return err

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 7ac90f51707f2ff7473d5417a9b3ad28c7345316628ee89198824f23920af5d1
+source_hash: 1387a015bb94dc885cc6b9b2c9f6a55c9837438a59e86ce9ff371e161ace1499
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -161,7 +161,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
-- Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。与根调用不同，Claude Code 子级的函数 Item 没有 `function_call_output` Item。
+- Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - Subagent 子级 Turns 和待处理的 Environment file 写入是否会阻止 Session 删除。
 - 官方服务在待处理输入错误与未知结果目标之间的先后顺序。
 - npm、initial-file 和 Skill 安装的失败原因没有官方样本。

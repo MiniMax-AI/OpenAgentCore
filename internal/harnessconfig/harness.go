@@ -347,26 +347,6 @@ func RequireObjectSchemas(functions []proto.FunctionTool) error {
 	return nil
 }
 
-// RejectSubagentTools rejects the declared tool types that a Harness cannot
-// combine with Subagents.
-func RejectSubagentTools(admission Admission, unsupported ...string) error {
-	if !admission.MultiAgent {
-		return nil
-	}
-	for _, raw := range admission.Tools {
-		var tool struct {
-			Type string `json:"type"`
-		}
-		if json.Unmarshal(raw, &tool) != nil {
-			return ErrInvalidInput
-		}
-		if slices.Contains(unsupported, tool.Type) {
-			return errors.New("The configured Subagent profile does not support this tool combination.")
-		}
-	}
-	return nil
-}
-
 // ExecutionOptions lists the official execution option values a Harness maps to
 // a native setting. An empty set declares the option unsupported. Absent
 // options need no declaration: they follow the Harness's native default. Auto

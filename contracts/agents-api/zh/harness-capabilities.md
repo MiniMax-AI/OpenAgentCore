@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: aa57316736cb66633f5eb2d2bc32d1d306f9f38a8f26023550cc9e0c7dfad3ef
+source_hash: 8ccea275f1d4bef039b9c4467388374a9bbd987c690c1f435733c6628a834ed4
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -48,7 +48,7 @@ source_hash: aa57316736cb66633f5eb2d2bc32d1d306f9f38a8f26023550cc9e0c7dfad3ef
 | [HTTP MCP bearer 凭据](execution-tools.md#mcp) | 已验证 | 已验证 | 已验证 |
 | 必需 MCP 初始化 | 已验证 | 已验证 | 已拒绝 |
 | [Subagent](subagents.md) | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 |
-| Subagent 与函数或 HTTP MCP 同时使用 | 已验证：`none`；已准入：托管、自托管 | 已验证：`none` 上的函数；已准入：HTTP MCP、托管、自托管 | HTTP MCP 已准入；每个 Session 都拒绝函数 |
+| Subagent 与函数或 HTTP MCP 同时使用 | 已验证：`none`；已准入：托管、自托管 | 已验证：`none` 上的函数；已准入：HTTP MCP、托管、自托管 | 已准入；子级不获得 Session 的函数和 MCP 服务器 |
 
 Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、Plugin、能力目录、MCP 和 `tool_search` 组合。Claude 延迟发现可与 MCP、Skill、Plugin、能力目录和结构化输出组合。Claude Subagent 继承父级的工具，包括延迟加载的函数。`tool_search` 是否对所配置的模型、提供商和 beta 设置生效，由 Claude Code 决定。Claude 在工作区位置需要每种操作的打包桥接功能（`workspace_functions`、`workspace_structured_output`、`workspace_tool_search`、`workspace_mcp_http`）。
 

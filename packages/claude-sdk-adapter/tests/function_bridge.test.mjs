@@ -138,7 +138,7 @@ test("native cancellation preserves a submitted result's missing receipt", async
   bridge.close();
 });
 
-test("a Subagent call carries its child, is confirmed by the child's own result and is withdrawn when native abandons it", { timeout: 5000 }, async () => {
+test("a Subagent call carries its child, is confirmed by the child's own result and is withdrawn when native abandons it unanswered", { timeout: 5000 }, async () => {
   const events = [], child = { native_id: "child", turn_id: "child-turn" };
   const bridge = new FunctionBridge(async event => { events.push(event); });
   const abort = new AbortController();
@@ -156,5 +156,11 @@ test("a Subagent call carries its child, is confirmed by the child's own result 
   abort.abort();
   await droppedCheck;
   assert.deepEqual(events[3], { type: "function_withdrawn", withdrawn: { call_id: "b", ...child } });
+  bridge.submit(JSON.stringify(result("b")));
   bridge.assertComplete();
+  const late = new AbortController(), delivered = bridge.invoke({ ...call("c"), child }, late.signal);
+  bridge.submit(JSON.stringify(result("c")));
+  await delivered;
+  late.abort();
+  assert.throws(() => bridge.assertComplete(), /unconfirmed/);
 });

@@ -110,6 +110,14 @@ function observation(call: Call, tools: ReadonlyMap<string, ToolIdentity>): Reco
   return mcp && { kind: "mcp", server: mcp.server, name: mcp.name, arguments: call.input };
 }
 
+// A native function result holds a string or text and base64 image blocks.
+function functionContent(content: unknown): Record<string, unknown>[] {
+  if (typeof content === "string") return [{ type: "input_text", text: content }];
+  if (!Array.isArray(content)) fail();
+  return content.map(b => b.type === "text" && typeof b.text === "string" ? { type: "input_text", text: b.text }
+    : b.type === "image" && b.source?.type === "base64" ? { type: "input_image", image_url: `data:${b.source.media_type};base64,${b.source.data}` } : fail());
+}
+
 function projectChild(child: Child, children: Map<string, Child>, tools: ReadonlyMap<string, ToolIdentity>): Fact[] {
   const facts: Fact[] = [], turns: NativeRow[][] = [];
   for (const row of child.rows) {
@@ -170,7 +178,8 @@ function projectChild(child: Child, children: Map<string, Child>, tools: Readonl
       const output = typeof content === "string" ? content : Array.isArray(content) ? content.filter(b => b.type === "text").map(b => b.text).join("\n") : "";
       const status = !result ? native.kind === "command" ? "failed" : "incomplete" : result.is_error ? "failed" : "completed";
       const outcome = native.kind === "command" ? { output: result ? output : "Native execution was cancelled." }
-        : native.kind === "mcp" && result ? { [result.is_error ? "error" : "output"]: output } : {};
+        : native.kind === "mcp" && result ? { [result.is_error ? "error" : "output"]: output }
+        : result ? { content: functionContent(content) } : {};
       item(call.id, "tool_call", { id: call.id, stage: "after", observation: { ...native, status, ...outcome } });
     }
     if (completed !== undefined && cancellation) fail();
@@ -210,10 +219,11 @@ export async function readHistory(root: string, transcript: string, cwd: string,
   const entries: Entry[] = [];
   for (const id of ids) {
     const base = location(id);
-    const raw = await rows(base + ".jsonl"), metadata = JSON.parse(await read(base + ".meta.json"));
     // The SDK resolves the persisted conversation chain; raw records retain the
-    // native ownership and timestamps omitted by its public TypeScript shape.
+    // native ownership and timestamps omitted by its public TypeScript shape. A
+    // running child keeps appending, so the raw read follows the SDK read.
     const messages = await getSubagentMessages(root, id, { dir: cwd });
+    const raw = await rows(base + ".jsonl"), metadata = JSON.parse(await read(base + ".meta.json"));
     const own = new Map(raw.filter(r => r.uuid).map(r => [r.uuid, r]));
     if (!messages.length || messages.some(m => !own.has(m.uuid))) fail();
     const selected = messages.map(m => own.get(m.uuid)!);

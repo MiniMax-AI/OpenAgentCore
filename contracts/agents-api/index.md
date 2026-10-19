@@ -158,7 +158,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 ### Unverified against the official service
 
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
-- A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. A Claude Code child's function Item has no `function_call_output` Item, unlike a root call.
+- A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether Subagent child Turns and pending Environment file writes block Session deletion.
 - The official order between the pending-input error and an unknown result target.
 - Failure reasons for npm, initial-file and Skill installation have no official sample.

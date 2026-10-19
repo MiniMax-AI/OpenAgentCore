@@ -29,6 +29,7 @@ class Abandoned extends Error {}
 export class FunctionBridge {
   private readonly pending = new Map<string, Pending>();
   private readonly seen = new Set<string>();
+  private readonly withdrawn = new Set<string>();
   constructor(private readonly emit: (event: FunctionEvent) => Promise<void>) {}
 
   readonly invoke: FunctionHandler = async (call: FunctionCall, signal: AbortSignal) => {
@@ -37,9 +38,8 @@ export class FunctionBridge {
     this.seen.add(call.id);
     const waiting = new Promise<CallToolResult>((resolve, reject) => {
       const stop = () => {
-        // Native abandons a child's call with the child, so nothing remains to confirm.
         const pending = this.pending.get(call.id);
-        if (pending?.result && !call.child) pending.aborted = true;
+        if (pending?.result) pending.aborted = true;
         else this.pending.delete(call.id);
         reject(new Abandoned("Native function call aborted."));
       };
@@ -53,7 +53,10 @@ export class FunctionBridge {
       ]);
       return result;
     } catch (error) {
-      if (call.child && error instanceof Abandoned) await this.emit({ type: "function_withdrawn", withdrawn: { call_id: call.id, ...call.child } });
+      if (call.child && error instanceof Abandoned) {
+        this.withdrawn.add(call.id);
+        await this.emit({ type: "function_withdrawn", withdrawn: { call_id: call.id, ...call.child } });
+      }
       throw error;
     }
   };
@@ -73,6 +76,8 @@ export class FunctionBridge {
       throw new Error("Native error results cannot retain images.");
     }
     const pending = this.pending.get(result.call_id);
+    // The host may send a result before it reads the withdrawal; native no longer waits for it.
+    if (!pending && this.withdrawn.has(result.call_id)) return;
     if (!pending || pending.result) throw new Error("Function result is not pending.");
     pending.result = result;
     pending.resolve({ content: result.content.map(part => {

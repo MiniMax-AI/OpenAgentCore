@@ -74,7 +74,9 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   const mcpServers: Record<string, McpServerConfig> = Object.create(null);
   // Core resolves a Subagent's call through the child's identity and open Turn, so those facts precede it.
   const invoke = async (target: FunctionBridge, call: FunctionCall, signal: AbortSignal) => {
-    const child = await subagents?.child(call.id);
+    let child: Awaited<ReturnType<Subagents["child"]>>;
+    // A call Core cannot attribute fails the execution instead of reaching the model as a tool error.
+    try { child = await subagents?.child(call.id); } catch (error) { failed = true; stream?.close(); throw error; }
     for (const fact of child?.facts ?? []) await emit(fact);
     return target.invoke(child ? { ...call, child: { native_id: child.native_id, turn_id: child.turn_id } } : call, signal);
   };
