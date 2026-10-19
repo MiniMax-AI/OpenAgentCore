@@ -3,8 +3,10 @@ package claudesdk
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"math"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -82,6 +84,20 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 	if admission.TextFormat == "json_schema" {
 		if err := proto.ValidateBinary64Schema(admission.TextSchema); err != nil {
 			return err
+		}
+	}
+	for _, raw := range admission.Tools {
+		var tool struct {
+			Type      string `json:"type"`
+			Transport struct {
+				Type string `json:"type"`
+				Cwd  string `json:"cwd"`
+			} `json:"transport"`
+		}
+		// Native starts stdio servers in the workspace and has no cwd setting.
+		if json.Unmarshal(raw, &tool) == nil && tool.Type == "mcp" && tool.Transport.Type == "stdio" && admission.WorkspaceDirectory != "" &&
+			filepath.Clean(tool.Transport.Cwd) != filepath.Clean(admission.WorkspaceDirectory) {
+			return errors.New("The configured engine starts MCP stdio servers in the workspace directory; set cwd to it.")
 		}
 	}
 	return nil

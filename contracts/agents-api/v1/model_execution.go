@@ -51,7 +51,7 @@ func (p *ModelProviderInput) validate(registry harnessconfig.Registry) error {
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
 		return &ModelProviderError{Code: "model_provider_api_key_invalid", Param: "api_key", message: "invalid model provider API key"}
 	}
-	if p.ContextWindow < 0 || p.MaxOutputTokens < 0 || (p.ContextWindow > 0 && p.MaxOutputTokens > p.ContextWindow) {
+	if !modelprovider.TokenLimitsValid(p.ContextWindow, p.MaxOutputTokens) {
 		param := "max_output_tokens"
 		if p.ContextWindow < 0 {
 			param = "context_window"

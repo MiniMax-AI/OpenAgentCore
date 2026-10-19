@@ -51,3 +51,15 @@ func TestDeclarationRejectsMCPEnvironmentExpansion(t *testing.T) {
 		t.Fatal("URL with ${ admitted")
 	}
 }
+
+func TestDeclarationRequiresWorkspaceStdioCwd(t *testing.T) {
+	stdio := func(cwd string) []json.RawMessage {
+		return []json.RawMessage{json.RawMessage(`{"type":"mcp","transport":{"type":"stdio","command":"x","cwd":"` + cwd + `"}}`)}
+	}
+	if err := Declaration.ValidateConfiguration(harnessconfig.Admission{WorkspaceDirectory: "/workspace", Tools: stdio("/workspace/")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Declaration.ValidateConfiguration(harnessconfig.Admission{WorkspaceDirectory: "/workspace", Tools: stdio("/srv")}); err == nil {
+		t.Fatal("stdio cwd outside the workspace admitted")
+	}
+}

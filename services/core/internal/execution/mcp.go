@@ -89,10 +89,13 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 		server := proto.MCPHTTPServer{ConnectionOrigin: tool.ConnectionOrigin, ServerLabel: tool.ServerLabel, AllowedTools: tool.AllowedTools, Required: tool.Required}
 		switch transport := tool.Transport; transport.Type {
 		case "stdio":
-			if tool.ConnectionOrigin != "environment" || transport.Command == "" || transport.Args == nil || transport.EnvVars == nil || tool.CredentialID != nil {
+			if tool.ConnectionOrigin != "environment" || transport.Args == nil || transport.EnvVars == nil || tool.CredentialID != nil {
 				return executionToolSet{}, errors.New("unsupported execution MCP configuration")
 			}
 			server.Stdio = &proto.MCPStdio{Command: transport.Command, Args: *transport.Args, Cwd: transport.Cwd, EnvVars: *transport.EnvVars}
+			if !server.Stdio.Valid() {
+				return executionToolSet{}, errors.New("unsupported execution MCP configuration")
+			}
 		case "http":
 			u, err := url.Parse(transport.ServerURL)
 			if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" {

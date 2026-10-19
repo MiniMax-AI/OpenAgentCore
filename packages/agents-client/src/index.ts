@@ -10,6 +10,7 @@ export * from "./core-metrics";
 export type { CoreClientOptions } from "./core-request";
 export { isEnvironmentTemplateName, isRecognizedEnvironmentTemplate } from "./environment-template-projection";
 export { isOpenAIHostedSessionEnvironment } from "./session-environment-projection";
+export { tokenLimitsFit } from "./execution-configuration-projection";
 export { compareSkillVersionNumbers, isSkillId, isSkillUploadPath, isSkillVersionId, isSkillVersionNumber } from "./skill-projection";
 export { AdminClient } from "./admin-client";
 // Skill, SkillVersion and SessionArtifact come from ./types; the admin projections use the same shapes.

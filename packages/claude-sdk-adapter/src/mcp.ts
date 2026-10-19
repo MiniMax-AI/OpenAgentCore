@@ -160,8 +160,12 @@ export class MCPProfile {
         if (exact) throw new Error("native MCP server unavailable or undeclared");
         continue;
       }
-      if (status.status !== "connected") throw new Error("native MCP server unavailable or undeclared");
       matched++;
+      // Native runs on without an optional server that did not connect.
+      if (status.status !== "connected") {
+        if ("required" in server && server.required) throw new Error("required native MCP server unavailable");
+        continue;
+      }
       for (const tool of status.tools ?? []) {
         const native = nativeToolName(server.server_label, tool.name);
         if (nativeNames.has(native)) throw new Error("ambiguous native MCP identity");
