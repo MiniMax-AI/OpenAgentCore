@@ -34,7 +34,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 
 | Operation | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
-| [Public functions](./execution-tools.md#functions) with text results | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; object-root schemas only | Verified: `none`, hosted; admitted: self-hosted; object-root schemas only; a result must arrive within 120 s ([difference](./index.md#known-gaps)) |
+| [Public functions](./execution-tools.md#functions) with text results | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; object-root schemas only | Verified: `none`; admitted: hosted, self-hosted; object-root schemas only; a result must arrive within 120 s ([difference](./index.md#differences-from-openai)) |
 | [Function results with images](./message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted; remote URLs: rejected | Successful results only; PNG and JPEG data URLs: verified on all placements; GIF and WebP: admitted | Rejected |
 | [Structured output](./execution-tools.md#structured-output) | Admitted on all placements | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |

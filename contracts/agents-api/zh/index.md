@@ -102,6 +102,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
+- MiniMax Code 逐个运行公共函数调用，因此应用每次只看到一个 `function_call`。
+- MiniMax Code 通过原生 MCP 服务器提供公共函数，其客户端会在 120 秒后使调用失败且无法更改。120 秒后原生向模型报告失败，Turn 继续。在后续协议变更之前，Core 保持该调用为待处理，此后提交的结果会被 Runtime 拒绝，不会被应用。
 - Vault 和 Credential 的状态仅在内部保存，默认值为 `active`；由于没有归档操作，未带过滤器的列表会同时包含两种状态。
 - `vault_ids` 中包含未知或属于其他账户的 Vault 时会返回 404 "Resource not found."；官方消息会指出该 ID。
 - 更新时显式为 OAuth `access_token`、`refresh` 或 `token_endpoint_auth` 指定 `null`，会保留已存储的值。
@@ -114,7 +116,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入。
-- MiniMax Code 通过原生 MCP 服务器提供公共函数，而原生 MCP 客户端会在 120 秒后使调用失败且无法更改，因此函数结果必须在 120 秒内提交。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 以及 `headers` 中的 `Authorization` 标头也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 

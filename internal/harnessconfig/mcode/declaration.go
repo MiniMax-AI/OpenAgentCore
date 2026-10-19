@@ -71,12 +71,13 @@ var Declaration = harnessconfig.Declaration{
 		return harnessconfig.RejectSubagentTools(admission, "function")
 	},
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
+		if err := harnessconfig.RequireObjectSchemas(functions); err != nil {
+			return err
+		}
 		for _, tool := range functions {
-			var schema struct {
-				Type string `json:"type"`
-			}
-			if json.Unmarshal(tool.Parameters, &schema) != nil || schema.Type != "object" {
-				return errors.New("The configured engine requires function schemas with root type object.")
+			// The adapter's MCP server library gives x-mcp-header transport meaning.
+			if hasKey(tool.Parameters, "x-mcp-header") {
+				return errors.New("The configured engine does not support the x-mcp-header keyword in function schemas.")
 			}
 		}
 		for _, server := range mcp {
@@ -90,4 +91,31 @@ var Declaration = harnessconfig.Declaration{
 		}
 		return nil
 	},
+}
+
+// hasKey reports whether the JSON document has an object member with this name at any depth.
+func hasKey(raw json.RawMessage, key string) bool {
+	var found func(any) bool
+	found = func(v any) bool {
+		switch v := v.(type) {
+		case map[string]any:
+			if _, ok := v[key]; ok {
+				return true
+			}
+			for _, child := range v {
+				if found(child) {
+					return true
+				}
+			}
+		case []any:
+			for _, child := range v {
+				if found(child) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	var doc any
+	return json.Unmarshal(raw, &doc) == nil && found(doc)
 }

@@ -66,7 +66,7 @@ func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOpti
 }
 
 func newTurnSession(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, c *connection, out chan<- proto.Envelope) *Session {
-	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), functions: &functionCalls{pending: map[string]*pendingFunction{}}, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
+	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), functions: &functionCalls{pending: map[string]*pendingFunction{}, stopped: make(chan struct{})}, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
 }
 
 func (s *Session) prepareNative() error {

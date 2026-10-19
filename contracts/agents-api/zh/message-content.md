@@ -61,8 +61,9 @@ source_hash: 71a5c1bb8658f1780631c022a5f28f45b4a55fc4996a428e7372a5920ed693c2
 
 - **Claude Code** 使用实时根原生工具结果确认，要求匹配 Session、调用 ID、成功标志、准确文本、块数和顺序，且每个图像位置都有原生图像。重放、合成和 Subagent 记录不能确认。
 - **Codex** 使用发起调用的线程和 Turn 上的实时 dynamic-tool `item/completed` 观察确认，要求匹配调用、函数名称、状态、成功标志和准确有序内容。仅写入 Harness 不确认。
+- **MiniMax Code** 使用 `functions` MCP 调用的实时原生工具更新确认，要求其回显的结果带有该调用 ID。原生使调用失败（例如 120 秒超时）时，该调用被放弃。
 
-两适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。原生 Harness 放弃的调用没有回执，会被撤回（[Functions](execution-tools.md#functions)）。
+每个适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。原生 Harness 放弃的调用没有回执，会被撤回（[Functions](execution-tools.md#functions)）。
 
 ## Runtime 边界 {#runtime-boundary}
 

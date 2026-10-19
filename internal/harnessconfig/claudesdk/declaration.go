@@ -109,15 +109,7 @@ func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) er
 			return errors.New("The configured engine does not support ${ in MCP URLs or header values.")
 		}
 	}
-	for _, tool := range tools {
-		var schema struct {
-			Type string `json:"type"`
-		}
-		if json.Unmarshal(tool.Parameters, &schema) != nil || schema.Type != "object" {
-			return errors.New("The configured engine currently requires function schemas with root type object.")
-		}
-	}
-	return nil
+	return harnessconfig.RequireObjectSchemas(tools)
 }
 
 func validateFunctionResult(result proto.FunctionResultPayload) error {

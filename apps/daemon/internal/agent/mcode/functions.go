@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -22,27 +23,27 @@ import (
 // listens on loopback only and requires a per-Session bearer token, so only the
 // native process that received the ACP server entry can call it.
 type functionServer struct {
-	token    string
-	url      string
-	http     *http.Server
-	done     chan struct{}
-	owner    atomic.Pointer[executor]
-	stopOnce sync.Once
+	token string
+	url   string
+	http  *http.Server
+	done  chan struct{}
+	owner atomic.Pointer[executor]
 }
 
 func serveFunctions(tools []proto.FunctionTool) (*functionServer, error) {
 	if len(tools) == 0 {
 		return nil, nil
 	}
+	f := &functionServer{token: rand.Text(), done: make(chan struct{})}
+	server, err := f.newServer(tools)
+	if err != nil {
+		return nil, err
+	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
-	f := &functionServer{token: rand.Text(), url: "http://" + listener.Addr().String() + "/mcp", done: make(chan struct{})}
-	server := mcp.NewServer(&mcp.Implementation{Name: declaration.FunctionServerLabel, Version: "1"}, nil)
-	for _, tool := range tools {
-		server.AddTool(&mcp.Tool{Name: tool.Name, Description: tool.Description, InputSchema: tool.Parameters}, f.call)
-	}
+	f.url = "http://" + listener.Addr().String() + "/mcp"
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	want := []byte("Bearer " + f.token)
 	f.http = &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +60,21 @@ func serveFunctions(tools []proto.FunctionTool) (*functionServer, error) {
 	return f, nil
 }
 
+// newServer registers the tools before any listener exists. AddTool panics on a
+// schema it rejects, which becomes an error here.
+func (f *functionServer) newServer(tools []proto.FunctionTool) (server *mcp.Server, err error) {
+	defer func() {
+		if recover() != nil {
+			server, err = nil, errors.New("mcode: the MCP server rejected a function schema")
+		}
+	}()
+	server = mcp.NewServer(&mcp.Implementation{Name: declaration.FunctionServerLabel, Version: "1"}, nil)
+	for _, tool := range tools {
+		server.AddTool(&mcp.Tool{Name: tool.Name, Description: tool.Description, InputSchema: tool.Parameters}, f.call)
+	}
+	return server, nil
+}
+
 // mcpServer is the ACP mcpServers entry; the token stays in transient ACP headers.
 func (f *functionServer) mcpServer() map[string]any {
 	return map[string]any{"name": declaration.FunctionServerLabel, "type": "http", "url": f.url,
@@ -70,7 +86,7 @@ func (f *functionServer) close() {
 	if f == nil {
 		return
 	}
-	f.stopOnce.Do(func() { _ = f.http.Close() })
+	_ = f.http.Close()
 	<-f.done
 }
 
@@ -90,13 +106,12 @@ func (f *functionServer) call(ctx context.Context, req *mcp.CallToolRequest) (*m
 }
 
 type pendingFunction struct {
-	call      proto.FunctionCallPayload
-	delivered chan struct{}
-	stopped   chan struct{}
-	receipt   chan error
-	result    *proto.FunctionResultPayload
-	content   []mcp.Content
-	seq       int
+	call proto.FunctionCallPayload
+	// settled closes when the result is delivered or the call is released; a nil result means released.
+	settled chan struct{}
+	receipt chan error
+	result  *proto.FunctionResultPayload
+	content []mcp.Content
 }
 
 // functionCalls is one Turn's pending calls. emit holds the lock so a stopped
@@ -104,41 +119,53 @@ type pendingFunction struct {
 type functionCalls struct {
 	mu      sync.Mutex
 	pending map[string]*pendingFunction
-	next    int
+	stopped chan struct{}
 	closed  bool
 }
 
+// functionCallMeta is the CallToolResult _meta key that native echoes in its tool update.
+const functionCallMeta = "oac_call_id"
+
 func (s *Session) callFunction(ctx context.Context, name string, arguments json.RawMessage) (*mcp.CallToolResult, error) {
-	if len(arguments) == 0 {
-		arguments = json.RawMessage("{}")
-	}
 	id := "call_" + rand.Text()
-	p := &pendingFunction{call: proto.FunctionCallPayload{CallID: id, Name: name, Arguments: arguments}, delivered: make(chan struct{}), stopped: make(chan struct{}), receipt: make(chan error, 1)}
+	p := &pendingFunction{call: proto.FunctionCallPayload{CallID: id, Name: name, Arguments: arguments}, settled: make(chan struct{}), receipt: make(chan error, 1)}
 	s.functions.mu.Lock()
 	if s.functions.closed {
 		s.functions.mu.Unlock()
 		return nil, agent.ErrUnknownFunctionCall
 	}
-	s.functions.next++
-	p.seq = s.functions.next
 	s.functions.pending[id] = p
 	s.emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: name, Stage: "before", Observation: &proto.ToolObservation{Kind: "function", Status: "in_progress", Name: name, Arguments: arguments}})
 	s.emit(proto.TypeFunctionCall, p.call)
 	s.functions.mu.Unlock()
 	select {
-	case <-p.delivered:
-		return &mcp.CallToolResult{Content: p.content, IsError: !p.result.Success}, nil
-	case <-p.stopped:
+	case <-p.settled:
+		if p.result == nil {
+			return nil, agent.ErrUnknownFunctionCall
+		}
+		return &mcp.CallToolResult{Content: p.content, IsError: !p.result.Success, Meta: mcp.Meta{functionCallMeta: id}}, nil
+	case <-s.functions.stopped:
 		return nil, agent.ErrUnknownFunctionCall
 	case <-ctx.Done():
 		s.functions.mu.Lock()
-		if s.functions.pending[id] == p {
-			delete(s.functions.pending, id)
-			p.receipt <- agent.ErrUnknownFunctionCall
-		}
+		s.release(p)
 		s.functions.mu.Unlock()
 		return nil, ctx.Err()
 	}
+}
+
+// release drops a call that native ended without confirming its result and
+// unblocks its waiter. The caller holds s.functions.mu.
+// A later change also withdraws the call from Core here.
+func (s *Session) release(p *pendingFunction) {
+	if s.functions.pending[p.call.CallID] != p {
+		return
+	}
+	delete(s.functions.pending, p.call.CallID)
+	if p.result == nil {
+		close(p.settled)
+	}
+	p.receipt <- agent.ErrUnknownFunctionCall
 }
 
 func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.FunctionResultPayload) error {
@@ -159,8 +186,11 @@ func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 		return agent.ErrUnknownFunctionCall
 	}
 	p.result, p.content = &result, content
-	close(p.delivered)
+	close(p.settled)
 	s.functions.mu.Unlock()
+	// The receive loop calls this inline, so the wait is bounded.
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 	select {
 	case err := <-p.receipt:
 		return err
@@ -169,27 +199,45 @@ func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 	}
 }
 
-// confirmFunction applies the native result: the oldest delivered, unconfirmed
-// call to this function is the one that native reports.
+// confirmFunction applies a terminal native update for a function tool. Native
+// echoes the returned result, with the call ID in its _meta, when it received
+// one; any other end means native gave up on the call, such as its 120 s timeout.
+// Native runs MCP tools one at a time, so at most one call is in flight.
 func (s *Session) confirmFunction(update toolUpdate) {
 	s.functions.mu.Lock()
 	defer s.functions.mu.Unlock()
-	var match *pendingFunction
-	for _, p := range s.functions.pending {
-		if p.result != nil && p.call.Name == update.mcp.tool && (match == nil || p.seq < match.seq) {
-			match = p
+	var echo struct {
+		Details struct {
+			MCP struct {
+				Meta map[string]any `json:"_meta"`
+			} `json:"mcp"`
+		} `json:"details"`
+	}
+	raw, _ := json.Marshal(update.RawOutput)
+	_ = json.Unmarshal(raw, &echo)
+	id, _ := echo.Details.MCP.Meta[functionCallMeta].(string)
+	p := s.functions.pending[id]
+	if p == nil {
+		for _, q := range s.functions.pending {
+			if q.call.Name == update.mcp.tool {
+				p = q
+			}
 		}
 	}
-	if match == nil {
+	if p == nil {
 		return
 	}
-	delete(s.functions.pending, match.call.CallID)
+	if id != p.call.CallID || p.result == nil || update.Status != "completed" && p.result.Success {
+		s.release(p)
+		return
+	}
+	delete(s.functions.pending, id)
 	status := "completed"
-	if !match.result.Success {
+	if !p.result.Success {
 		status = "failed"
 	}
-	s.emit(proto.TypeToolCall, proto.ToolCallPayload{ID: match.call.CallID, Name: match.call.Name, Stage: "after", Observation: &proto.ToolObservation{Kind: "function", Status: status, Name: match.call.Name, Arguments: match.call.Arguments, Content: &match.result.Content}})
-	match.receipt <- nil
+	s.emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: p.call.Name, Stage: "after", Observation: &proto.ToolObservation{Kind: "function", Status: status, Name: p.call.Name, Arguments: p.call.Arguments, Content: &p.result.Content}})
+	p.receipt <- nil
 }
 
 // stopFunctions ends the Turn's calls: native gets an error for each pending
@@ -201,9 +249,8 @@ func (s *Session) stopFunctions() {
 		return
 	}
 	s.functions.closed = true
-	for id, p := range s.functions.pending {
-		close(p.stopped)
-		p.receipt <- agent.ErrUnknownFunctionCall
-		delete(s.functions.pending, id)
+	close(s.functions.stopped)
+	for _, p := range s.functions.pending {
+		s.release(p)
 	}
 }

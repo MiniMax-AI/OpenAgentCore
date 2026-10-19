@@ -3,6 +3,7 @@ package mcode
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -50,7 +52,7 @@ func fakeFunctionTurn(params json.RawMessage, update func(string, map[string]any
 	if os.WriteFile(os.Getenv("OAC_TEST_FN_RESULT"), []byte(text), 0600) != nil {
 		return
 	}
-	update("tool_call_update", map[string]any{"toolCallId": "t1", "status": "completed", "rawOutput": "ignored"})
+	update("tool_call_update", map[string]any{"toolCallId": "t1", "status": "completed", "rawOutput": map[string]any{"details": map[string]any{"mcp": result}}})
 	raw, _ := json.Marshal(map[string]string{"stopReason": "end_turn"})
 	send(rpcFrame{JSONRPC: "2.0", ID: promptID, Result: raw})
 }
@@ -154,5 +156,96 @@ func TestFunctionCallCancellationReleasesPendingCall(t *testing.T) {
 	case <-functions.done:
 	default:
 		t.Fatal("function listener outlived the Session")
+	}
+}
+
+// probeFunction is the native side of one call: it calls the tool over MCP and
+// returns what native received.
+func probeFunction(t *testing.T, functions *functionServer) <-chan *mcp.CallToolResult {
+	t.Helper()
+	client := mcp.NewClient(&mcp.Implementation{Name: "probe", Version: "1"}, nil)
+	connection, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{Endpoint: functions.url, HTTPClient: &http.Client{Transport: bearerTransport{"Bearer " + functions.token}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	received := make(chan *mcp.CallToolResult, 1)
+	go func() {
+		result, _ := connection.CallTool(t.Context(), &mcp.CallToolParams{Name: "lookup", Arguments: map[string]any{}})
+		received <- result
+	}()
+	return received
+}
+
+func submitText(session *Session, callID, text string) error {
+	return session.SubmitFunctionResult(context.Background(), proto.FunctionResultPayload{DeliveryID: "d", CallID: callID, Success: true, Content: []proto.InputContent{{Type: "input_text", Text: &text}}})
+}
+
+func nativeEnd(session *Session, status string, callID string) {
+	output := map[string]any{}
+	if callID != "" {
+		output["details"] = map[string]any{"mcp": map[string]any{"_meta": map[string]any{functionCallMeta: callID}}}
+	}
+	session.confirmFunction(toolUpdate{mcp: &mcpToolIdentity{server: "functions", tool: "lookup"}, Status: status, RawOutput: output})
+}
+
+// Calls of the same function run one after another; each gets its own result
+// and its own receipt.
+func TestFunctionCallsInSequence(t *testing.T) {
+	session, out, _ := functionTurn(t, "cancel-wait")
+	functions := session.executor.opts.Functions
+	for _, answer := range []string{"first", "second"} {
+		received := probeFunction(t, functions)
+		call := waitFunctionCall(t, out)
+		submitted := make(chan error, 1)
+		go func() { submitted <- submitText(session, call.CallID, answer) }()
+		result := <-received
+		if got := result.Content[0].(*mcp.TextContent).Text; got != answer {
+			t.Fatalf("native received %q, want %q", got, answer)
+		}
+		nativeEnd(session, "completed", call.CallID)
+		if err := <-submitted; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// A call that native fails, such as at its call timeout, is released: a late
+// result is refused at once and the next call still works.
+func TestFunctionCallFailedByNativeIsReleased(t *testing.T) {
+	session, out, _ := functionTurn(t, "cancel-wait")
+	functions := session.executor.opts.Functions
+	received := probeFunction(t, functions)
+	late := waitFunctionCall(t, out)
+	nativeEnd(session, "failed", "")
+	if result := <-received; result != nil {
+		t.Fatal("released call returned a result")
+	}
+	if err := submitText(session, late.CallID, "late"); !errors.Is(err, agent.ErrUnknownFunctionCall) {
+		t.Fatalf("late result: %v", err)
+	}
+	received = probeFunction(t, functions)
+	next := waitFunctionCall(t, out)
+	submitted := make(chan error, 1)
+	go func() { submitted <- submitText(session, next.CallID, "next") }()
+	if result := <-received; result.Content[0].(*mcp.TextContent).Text != "next" {
+		t.Fatal("next call did not get its result")
+	}
+	nativeEnd(session, "completed", next.CallID)
+	if err := <-submitted; err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A call still pending when the Turn ends is reported to native and refuses a result.
+func TestFunctionCallPendingAtTurnEnd(t *testing.T) {
+	session, out, _ := functionTurn(t, "cancel-wait")
+	received := probeFunction(t, session.executor.opts.Functions)
+	call := waitFunctionCall(t, out)
+	session.stopFunctions()
+	if result := <-received; result != nil {
+		t.Fatal("pending call returned a result")
+	}
+	if err := submitText(session, call.CallID, "late"); !errors.Is(err, agent.ErrUnknownFunctionCall) {
+		t.Fatalf("result after Turn end: %v", err)
 	}
 }
