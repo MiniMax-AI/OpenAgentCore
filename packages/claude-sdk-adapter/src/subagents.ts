@@ -38,7 +38,7 @@ export class Subagents {
     if (!value || typeof value !== "object") return deny("Invalid subagent call.");
     const spawn = input.tool_name !== "SendMessage";
     // Native decides which agent types, models and modes exist; only a remote run, which needs an account Core does not hold, is refused.
-    const to = spawn ? "" : typeof value.to === "string" ? this.names.get(value.to) ?? value.to : "";
+    const to = spawn ? "" : typeof value.to === "string" ? this.recipient(value.to) : "";
     if (spawn ? typeof value.prompt !== "string" || !value.prompt.trim() || value.isolation === "remote"
       : !this.known.has(to) || (value.type !== undefined && value.type !== "message") ||
         typeof value.message !== "string" || !value.message.trim()) return deny("Unsupported subagent operation.");
@@ -96,4 +96,15 @@ export class Subagents {
     if ([...this.known].some(id => !history.ids.includes(id))) throw new Error("native child history is missing");
     return history.facts.filter(event => event.type !== "subagent_coordination" || this.observedCalls.has(event.fact.id as string));
   }
+
+  // Native resolves an exact name first, then the name in its normalized form.
+  private recipient(to: string): string {
+    const exact = this.names.get(to);
+    if (exact !== undefined) return exact;
+    const name = nativeName(to);
+    for (const [key, id] of this.names) if (nativeName(key) === name) return id;
+    return to;
+  }
 }
+
+const nativeName = (name: string) => name.normalize("NFKC").replace(/[\p{Cc}\p{Cf}]/gu, c => /\s/.test(c) ? c : "").trim().toLowerCase().replace(/\s+/g, "-");

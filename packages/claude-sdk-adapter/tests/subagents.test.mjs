@@ -137,17 +137,18 @@ test("SendMessage addresses a child by its spawned name and the model is reporte
   const profile = new Subagents("/workspace", 6, undefined), context = { signal: new AbortController().signal };
   profile.consume({ type: "system", subtype: "init", session_id: "root" });
   await profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "Agent", tool_use_id: "one",
-    tool_input: { prompt: "work", name: "helper" } }, "one", context);
+    tool_input: { prompt: "work", name: "Helper Bot" } }, "one", context);
   profile.consume({ type: "system", subtype: "task_started", task_type: "local_agent", task_id: "child", session_id: "root", tool_use_id: "one" });
   profile.consume({ type: "system", subtype: "task_notification", task_id: "child", session_id: "root", tool_use_id: "one", status: "completed" });
+  // Native also matches the normalized name.
   const send = await profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "SendMessage", tool_use_id: "send",
-    tool_input: { to: "helper", message: "continue" } }, "send", context);
+    tool_input: { to: " helper-bot ", message: "continue" } }, "send", context);
   assert.equal(send.hookSpecificOutput.permissionDecision, "allow");
 
   const { root, children } = fixture();
   root[1].message.content[0].input = { prompt: "child input", name: "helper", model: "sonnet" };
   root[1].message.content.push({ type: "tool_use", id: "send", name: "SendMessage", input: { to: "helper", message: "continue" } });
-  root.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "send", content: "ok" }] } });
+  root.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "send", content: "ok" }] }, toolUseResult: { pin: { id: "child" } } });
   const facts = projectHistory("root", root, children).filter(e => e.type === "subagent_coordination");
   assert.equal(facts.find(e => e.fact.kind === "create_subagent_call").fact.model, "sonnet");
   assert.deepEqual(facts.find(e => e.fact.kind === "send_subagent_input_call").fact.recipients, ["child"]);

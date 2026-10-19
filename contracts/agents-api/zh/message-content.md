@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: f2f33d3397f0d82d9954808d0f494ddab9749ed69396d4ab0ea114a64cd3906c
+source_hash: e33b8ee25b70fe93691eeb4c84d598fcba0c6703b5e1dfea6c8d5e996e4d098d
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -19,11 +19,11 @@ source_hash: f2f33d3397f0d82d9954808d0f494ddab9749ed69396d4ab0ea114a64cd3906c
 
 ## 图像 {#images}
 
-`input_image` 部分携带非空的 `image_url`，即官方 API 允许的远程 URL 或 base64 data URL。Core 不接受 `file_id` 或 `detail`，其余只检查下表中 Harness 声明的规则；Core 从不下载或改写图像，模型提供商对无法读取的图像返回的错误原样返回。
+`input_image` 部分携带非空白的 `image_url`，即官方 API 允许的远程 URL 或 base64 data URL。Core 不接受 `file_id` 或 `detail`，其余只检查下表中 Harness 声明的规则；Core 从不下载或改写图像，模型提供商对无法读取的图像返回的错误原样返回。
 
 | Harness | 消息图像 |
 | --- | --- |
-| Codex | 接受任意 data URL 并原样传递，适用于 `none`、`openai_hosted`、`self_hosted`。`http` 或 `https` URL 返回 400，因为原生 Codex 拒绝远程图像 URL |
+| Codex | 接受 `http`、`https` 以外的任意 URL 并原样传递，适用于 `none`、`openai_hosted`、`self_hosted`。`http` 或 `https` URL 返回 400，因为原生 Codex 在 Turn 中拒绝远程图像 URL |
 | Claude Code | 非 data URL 的引用成为原生 URL 来源；data URL 必须是规范 base64 的 `image/png`、`image/jpeg`、`image/gif` 或 `image/webp`，其他返回 400。适用于 `none`、`openai_hosted`、`self_hosted` |
 | MiniMax Code | 拒绝 |
 
@@ -51,7 +51,7 @@ source_hash: f2f33d3397f0d82d9954808d0f494ddab9749ed69396d4ab0ea114a64cd3906c
 
 | Harness | 函数结果 |
 | --- | --- |
-| Codex | 文本与有序文本/图像输出，原样传给 Harness。`http` 或 `https` 图像 URL 返回 400，因为原生 Codex 拒绝远程图像 URL |
+| Codex | 文本与有序文本/图像输出，原样传给 Harness。`http` 或 `https` 图像 URL 返回 400，因为原生 Codex 会把携带此类图像的动态工具结果替换为失败 |
 | Claude Code | 文本输出。仅成功结果可含图像，且只能是规范 base64 的 `image/png`、`image/jpeg`、`image/gif`、`image/webp` data URL，因为原生工具结果不携带 URL；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码，或将无法处理的图像替换为文本说明；公开 Item 保留提交字节 |
 | MiniMax Code | 无公开函数 |
 

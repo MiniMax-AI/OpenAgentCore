@@ -17,11 +17,11 @@ An empty text part beside other content, such as `["", "text"]`, is accepted and
 
 ## Images
 
-An `input_image` part carries a nonempty `image_url`, a remote URL or a base64 data URL as the official API allows. Core accepts no `file_id` or `detail` and otherwise checks only the Harness's declared rule below; it never downloads or rewrites an image, and the model provider's own error for an image it cannot read returns unchanged.
+An `input_image` part carries a nonblank `image_url`, a remote URL or a base64 data URL as the official API allows. Core accepts no `file_id` or `detail` and otherwise checks only the Harness's declared rule below; it never downloads or rewrites an image, and the model provider's own error for an image it cannot read returns unchanged.
 
 | Harness | Message images |
 | --- | --- |
-| Codex | Any data URL, passed unchanged, on `none`, `openai_hosted` and `self_hosted`. An `http` or `https` URL returns 400, because native Codex rejects remote image URLs |
+| Codex | Any URL other than `http` or `https`, passed unchanged, on `none`, `openai_hosted` and `self_hosted`. An `http` or `https` URL returns 400, because native Codex rejects remote image URLs in a turn |
 | Claude Code | A reference that is not a data URL becomes a native URL source; a data URL must be canonical base64 of `image/png`, `image/jpeg`, `image/gif` or `image/webp`, and any other returns 400. On `none`, `openai_hosted` and `self_hosted` |
 | MiniMax Code | Rejected |
 
@@ -49,7 +49,7 @@ An `agent.session.input.tool_result` event carries `success`, an optional nullab
 
 | Harness | Function results |
 | --- | --- |
-| Codex | Text and ordered text/image output, passed to the Harness unchanged. An `http` or `https` image URL returns 400, because native Codex rejects remote image URLs |
+| Codex | Text and ordered text/image output, passed to the Harness unchanged. An `http` or `https` image URL returns 400, because native Codex replaces a dynamic tool result that carries one with a failure |
 | Claude Code | Text output. Images only in successful results and only as canonical base64 data URLs of `image/png`, `image/jpeg`, `image/gif` or `image/webp`, because a native tool result carries no URL; an image in a failed result or a remote reference returns 400 before anything is stored, and the pending call stays open. The Harness may resize or re-encode an image, or replace one it cannot process with a text note, in its own history; public Items keep the submitted bytes |
 | MiniMax Code | No public functions |
 

@@ -79,9 +79,9 @@ export function projectHistory(root: string, rootRows: NativeRow[], entries: Ent
 function coordinationFact(call: Call, actor: string, children: Map<string, Child>): Record<string, unknown> | undefined {
   const spawn = ["Agent", "Task"].includes(call.name), send = call.name === "SendMessage";
   if (!spawn && !send) return;
-  // Native resolves a reused name to its latest child and records that child in the send result.
+  // Native records the resolved child in a successful send result.
   const recipient = spawn ? call.result?.agentId ?? [...children.values()].find(c => c.call.id === call.id)?.id
-    : (call.result?.pin as { id?: string } | undefined)?.id ?? (children.has(call.input.to as string) ? call.input.to : [...children.values()].find(c => c.call.input.name === call.input.to)?.id);
+    : (call.result?.pin as { id?: string } | undefined)?.id ?? (children.has(call.input.to as string) ? call.input.to : undefined);
   if (!call.error && (typeof recipient !== "string" || !children.has(recipient))) fail();
   return { id: call.id, kind: spawn ? "create_subagent_call" : "send_subagent_input_call", status: call.error || !call.finished ? "failed" : "completed",
     actor_id: actor, recipients: typeof recipient === "string" ? [recipient] : [], text: typeof (spawn ? call.input.prompt : call.input.message) === "string" ? (spawn ? call.input.prompt : call.input.message) : null,
