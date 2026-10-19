@@ -57,7 +57,7 @@ export class Inputs implements AsyncIterable<SDKUserMessage> {
 
   private enqueue(messages: MessageInput, id?: string): void {
     // Convert the entire batch before admitting any native input.
-    const contents = messages.map(nativeContent);
+    const contents = messages.map(message => nativeContent(message, true));
     const batch: Batch = { id, unapplied: contents.length };
     for (const content of contents) {
       const uuid = randomUUID();

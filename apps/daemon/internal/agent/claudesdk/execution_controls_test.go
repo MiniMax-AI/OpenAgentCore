@@ -44,11 +44,28 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	}
 }
 
+func TestLiveWebSearchKeepsNativeToolsOnlyOnAWorkspace(t *testing.T) {
+	config := workspaceFixture(t)
+	request := workspaceRequest()
+	ordinary, _, err := prepare(config, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.ExecutionControls = &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}, TextVerbosity: "medium"}
+	live, _, err := prepare(config, request)
+	if err != nil || !reflect.DeepEqual(ordinary, live) {
+		t.Fatal("live search changed the native web tools", err)
+	}
+	config.Workspace = nil
+	if _, _, err := prepare(config, request); err == nil || !strings.Contains(err.Error(), "live web search requires a dedicated workspace") {
+		t.Fatal("live search without a workspace was accepted", err)
+	}
+}
+
 func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 	enabled := true
 	cases := map[string]proto.ExecutionControls{
 		"cached-search":     {WebSearch: &proto.WebSearchControl{Mode: "cached", ContextSize: "medium"}},
-		"live-search":       {WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}},
 		"enabled-ptc":       {ProgrammaticToolCalling: &enabled},
 		"low-verbosity":     {TextVerbosity: "low"},
 		"high-verbosity":    {TextVerbosity: "high"},
@@ -124,13 +141,14 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 		t.Fatal("lossy schema accepted")
 	}
 	request.ExecutionControls.OutputFormat.Schema = schema
-	request.DisableSubagents = false
-	if _, _, err := prepare(config, request); err == nil {
-		t.Fatal("unqualified subagent combination accepted")
+	request.DisableExecutionEnvironment = true
+	request.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
+	if start, _, err := prepare(config, request); err != nil || start.OutputFormat == nil {
+		t.Fatal("native structured output was narrowed by MCP", err)
 	}
 }
 
-func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing.T) {
+func TestToolDiscoveryPreservesFrozenFunctionsBesideOtherProfiles(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
@@ -142,11 +160,12 @@ func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing
 	if err != nil || !start.ToolSearch || !reflect.DeepEqual(start.Functions, request.FunctionTools) {
 		t.Fatal("function discovery changed native definitions", err)
 	}
-	request.DisableSubagents = false
-	if _, _, err := prepare(config, request); err == nil {
-		t.Fatal("unqualified combination admitted")
+	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(`{"type":"object"}`)}}
+	request.ObserveMessages = true
+	if start, _, err := prepare(config, request); err != nil || !start.ToolSearch || start.OutputFormat == nil {
+		t.Fatal("native tool search was narrowed by structured output", err)
 	}
-	request.DisableSubagents = true
+	request.ExecutionControls = nil
 	request.ToolSearch = false
 	if _, _, err := prepare(config, request); err == nil {
 		t.Fatal("deferred definitions became eager")

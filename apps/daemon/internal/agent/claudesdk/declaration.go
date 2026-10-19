@@ -69,7 +69,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		if err != nil {
 			return fail(err)
 		}
-		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"))
 		if err != nil {
 			return fail(err)
 		}

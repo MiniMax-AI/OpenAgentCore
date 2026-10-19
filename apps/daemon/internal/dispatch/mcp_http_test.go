@@ -96,7 +96,6 @@ func TestLocalMCPOriginAndCapabilityAdmission(t *testing.T) {
 			req.Configuration.MCPHTTPServers = &servers
 			if strings.HasPrefix(mode, "environment") {
 				servers[0].ConnectionOrigin = "environment"
-				req.Configuration.LocalEnvironment.NetworkAccess = "enabled"
 			}
 			if strings.Contains(mode, "bearer") {
 				token := "synthetic-private-token"

@@ -121,7 +121,7 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   await claudeReplace.getByRole("button", { name: "Cancel" }).click();
   expect(await page.content()).not.toContain(KEY);
 
-  // MiniMax Code needs both limits; the form shows Core's reason. A disabled harness may still be configured.
+  // A disabled harness may still be configured; token limits are optional.
   await mcode.getByRole("button", { name: "Set the default model configuration for MiniMax Code" }).click();
   const limits = page.getByRole("dialog", { name: "Set default model configuration for MiniMax Code" });
   await expect(limits.getByRole("combobox", { name: "Protocol", exact: true })).toHaveText("Anthropic Messages");
@@ -131,7 +131,7 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   await limits.getByLabel("Base URL").fill("https://model.example/anthropic");
   await limits.getByLabel("API key").fill(KEY);
   await limits.getByLabel("Default model ID").fill("fixture-model");
-  await expect(limits.getByRole("button", { name: "Save" })).toBeDisabled();
+  await expect(limits.getByRole("button", { name: "Save" })).toBeEnabled();
   await limits.getByRole("button", { name: "Cancel" }).click();
   await expect(mcode).toContainText("Not set");
 

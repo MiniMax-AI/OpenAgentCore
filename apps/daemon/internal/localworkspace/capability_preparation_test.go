@@ -44,7 +44,6 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	reconnect.networkAccess = b.networkAccess
 	again, err := reconnect.Prepare(t.Context(), configured)
 	if err != nil || len(again.LocalEnvironment.Skills) != 1 {
 		t.Fatalf("reconnection: %v", err)
@@ -209,7 +208,6 @@ func TestPreparationFreezesToolOnlyEnvironmentAcrossReconnect(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			reconnect.networkAccess = b.networkAccess
 			if _, err := reconnect.Prepare(t.Context(), configured); err != nil {
 				t.Fatal(err)
 			}

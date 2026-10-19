@@ -74,7 +74,7 @@ func TestMCPHTTPBearerPreflightMatchesOnlyItsServerReference(t *testing.T) {
 		"second": {URL: "https://second.example/mcp", BearerTokenEnvVar: "OAC_RUNTIME_MCP_BEARER_SECOND"},
 		"public": {URL: "http://public.example/mcp"},
 	}
-	for _, mutation := range []string{"none", "missing", "ambient", "swapped", "extra", "header", "helper"} {
+	for _, mutation := range []string{"none", "missing", "ambient", "swapped", "extra", "header"} {
 		t.Run(mutation, func(t *testing.T) {
 			response := mcpHTTPConfigResponse(servers)
 			entries := response["config"].(map[string]any)["mcp_servers"].(map[string]any)
@@ -90,8 +90,6 @@ func TestMCPHTTPBearerPreflightMatchesOnlyItsServerReference(t *testing.T) {
 				entries["public"].(map[string]any)["bearer_token_env_var"] = servers["first"].BearerTokenEnvVar
 			case "header":
 				first["http_headers"] = map[string]string{"Authorization": "Bearer synthetic-private"}
-			case "helper":
-				first["http_headers_helper"] = "operator-helper"
 			}
 			raw, err := json.Marshal(response)
 			if err != nil || matchesMCPConfig(raw, servers) != (mutation == "none") {

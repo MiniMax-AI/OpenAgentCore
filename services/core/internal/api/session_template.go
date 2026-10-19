@@ -57,9 +57,6 @@ func applyTemplateEnvironment(input *sessionRequest, resolved environmenttemplat
 	if json.Unmarshal(input.templateEnvironment, &fields) != nil {
 		return sessions.ErrInvalidInput
 	}
-	if input.Environment.Type == "self_hosted" && template.NetworkAccess != "enabled" {
-		return &fieldError{param: "x_agents_core.environment.environment_template_id", message: "This template requires a managed network policy; user-managed machines do not enforce it."}
-	}
 	if !templateFieldOverride(fields, "network") {
 		input.Environment.Network = &v1.EnvironmentNetworkInput{Access: template.NetworkAccess, AllowedDomains: append([]string{}, template.AllowedDomains...)}
 	}

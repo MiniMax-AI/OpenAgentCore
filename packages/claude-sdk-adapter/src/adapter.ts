@@ -1,7 +1,6 @@
 import { NativeFailure } from "./native_failure.js";
 import { ExecutorTurns, type ExecutorEvent } from "./executor_protocol.js";
 import { StructuredOutput } from "./structured_output.js";
-import { toolSearchEnvironment } from "./tool_search.js";
 import { Subagents } from "./subagents.js";
 import type { Fact } from "./subagent_history.js";
 import { WorkspaceDirectories, type WorkspaceDirectoryEvent } from "./workspace_directories.js";
@@ -47,7 +46,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   let classifiedFailure: { engine_error_code: string; session_id: string; result_id: string } | undefined;
   const definitions = (request.functions ?? []).map(tool => ({ name: tool.name, description: tool.description, inputSchema: tool.parameters, deferLoading: tool.defer_loading }));
   const names = definitions.map(tool => `mcp__functions__${tool.name}`);
-  const allowed = [...names, ...(request.tool_search ? ["ToolSearch"] : [])];
+  const search = request.tool_search ? ["ToolSearch"] : [];
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
   const profile = declarations === undefined ? undefined : new MCPProfile(declarations, names);
   const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume) : undefined;
@@ -59,13 +58,14 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   if (request.require_history && !request.resume) {
     const recovered = await recoverSession(request.cwd);
     if (!recovered) {
-      await emit({ type: "error", code: "history_unavailable" });
+      // No Turn is bound yet, so the Executor owner reports missing history.
+      await ownerEmit({ type: "error", code: "history_unavailable" });
       return;
     }
     request = { ...request, resume: recovered };
   }
   if (request.resume && !await getSessionInfo(request.resume, { dir: request.cwd })) {
-    await emit({ type: "error", code: "history_unavailable" });
+    await ownerEmit({ type: "error", code: "history_unavailable" });
     return;
   }
   subagents?.expectSession(request.resume);
@@ -116,14 +116,15 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         // Environment none keeps no workspace tools and approves only Core's function and MCP tools. The host's
         // settings, memory files and MCP servers belong to no Session.
         ...(workspace ? {} : {
-          tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed,
+          tools: [...(subagents ? ["Agent", "SendMessage"] : []), ...search],
+          allowedTools: [...(profile?.allowed ?? names), ...search],
           settingSources: [], strictMcpConfig: true,
           canUseTool: async () => ({ behavior: "deny" as const, message: "Tools are unavailable in this execution profile." }),
         }),
         ...(workspace?.options ?? {}),
         disallowedTools: [...(workspace?.options.disallowedTools ?? []), ...(profile?.denied ?? []), ...unselected],
         mcpServers,
-        ...(subagents ? { ...subagents.options(!!workspace), hooks: {
+        ...(subagents ? { forwardSubagentText: true, hooks: {
           Stop: [{ hooks: [subagents.stopped] }], SubagentStart: [{ hooks: [subagents.childStart] }],
           PostToolUseFailure: [{ hooks: [subagents.failedTool] }], PreToolUse: [{ hooks: [beforeTool] }],
         } } : workspace || profile ? { hooks: { PreToolUse: [{ hooks: [beforeTool] }] } } : {}),
@@ -135,7 +136,8 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           return child;
         },
     };
-    if (request.tool_search) options.env = toolSearchEnvironment(options.env ?? process.env, request.model);
+    // ENABLE_TOOL_SEARCH=true is the official mapping of tool_search; native owns discovery and provider policy.
+    if (request.tool_search) options.env = { ...(options.env ?? process.env), ENABLE_TOOL_SEARCH: "true" };
     if(turns) {
       for(const matchers of Object.values(options.hooks ?? {})) for(const matcher of matchers ?? []) {
         matcher.hooks=matcher.hooks.map(hook=>(...args)=>turns.track(()=>hook(...args)));
@@ -199,14 +201,15 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       if (message.type === "system" && message.subtype === "init") {
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
-        if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID, !workspace);
+        // Native decides whether ToolSearch and StructuredOutput join the inventory; a missing structured call fails the result.
+        const tools = message.tools.filter(name => name !== "ToolSearch" && name !== "StructuredOutput");
+        if (profile) profile.verify(tools, await stream.mcpServerStatus(), nativeID, !workspace);
         if (workspace) {
           // Native tools and settings may add servers and tools, but every tool and Skill Core declared must still be present.
-          const declared = [...names, ...(workspace.skillNames.length ? ["Skill"] : []), ...(request.tool_search ? ["ToolSearch"] : []),
-            ...(structured ? ["StructuredOutput"] : []), ...(subagents ? ["Task", "SendMessage"] : [])];
+          const declared = [...names, ...(workspace.skillNames.length ? ["Skill"] : []), ...(subagents ? ["Task", "SendMessage"] : [])];
           if (declared.some(name => !message.tools.includes(name)) || workspace.skillNames.some(name => !message.skills?.includes(name)) ||
               definitions.length && !message.mcp_servers.some(server => server.name === "functions" && server.status === "connected")) throw new Error("unexpected native configuration");
-        } else if (!profile && (message.tools.length !== allowed.length + (subagents ? 2 : 0) + (structured ? 1 : 0) || message.tools.some(name => ![...allowed, ...(subagents ? ["Task", "SendMessage"] : []), ...(structured ? ["StructuredOutput"] : [])].includes(name)) ||
+        } else if (!profile && (tools.length !== names.length + (subagents ? 2 : 0) || tools.some(name => ![...names, ...(subagents ? ["Task", "SendMessage"] : [])].includes(name)) ||
             message.mcp_servers.length !== (definitions.length ? 1 : 0) ||
             message.mcp_servers.some(server => server.name !== "functions" || server.status !== "connected"))) {
           throw new Error("unexpected native configuration");

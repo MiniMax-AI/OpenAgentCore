@@ -46,7 +46,6 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 				"OAC_RUNTIME_ENVIRONMENT_ID": environment,
 				"OAC_RUNTIME_SESSION_ID":     session,
 				"OAC_RUNTIME_WORKSPACE":      workspace,
-				"OAC_RUNTIME_NETWORK_ACCESS": "enabled",
 			} {
 				t.Setenv(key, value)
 			}
@@ -56,7 +55,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			}
 			req.AgentStateKey = "agents-api-" + session
 			req.DisableExecutionEnvironment = false
-			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}}
+			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}
 			registry := agent.NewRegistry()
 			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 			prepared := make(chan *Prepared, 1)

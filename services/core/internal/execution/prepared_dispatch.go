@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -38,7 +37,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		return run, err
 	}
 	var snapshot Snapshot
-	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
+	if json.Unmarshal(session.Configuration, &snapshot) != nil {
 		return run, sessions.ErrInvalidInput
 	}
 	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
@@ -110,12 +109,12 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 	through := run.Reservation.Receipts[len(run.Reservation.Receipts)-1].Sequence
 	releaseDelivery, err := peer.TrackExecutionDelivery(turnID)
 	if err != nil {
-		run.Turn, err = d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
+		run.Turn, err = d.finishRun(tenantID, sessionID, turnID, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 		return run, err
 	}
 	defer releaseDelivery()
 	result, status := d.deliver(owner, tenantID, sessionID, peer, req, turnID, messages, through, prepared)
 	result, status = d.captureCompletedArtifacts(owner, peer, session, environment, bound.Device, turnID, result, status)
-	run.Turn, err = d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
+	run.Turn, err = d.finishRun(tenantID, sessionID, turnID, result, status)
 	return run, err
 }

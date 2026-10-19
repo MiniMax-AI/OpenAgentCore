@@ -45,8 +45,7 @@ import (
 // Provider is deliberately limited to configuration compatibility. Core owns
 // credential admission and endpoint security; native launch options stay private.
 type Provider struct {
-	Protocol            string
-	RequiresTokenLimits bool
+	Protocol string
 }
 
 // Configuration is an adapter-owned declaration, not live provider readiness.
@@ -93,6 +92,8 @@ type Declaration struct {
 	ValidateConfiguration func(Admission) error
 	// ValidateTools adds restrictions on resolved function and MCP tools.
 	ValidateTools func([]proto.FunctionTool, []proto.MCPHTTPServer) error
+	// ValidateMessageInput adds restrictions on messages that carry images.
+	ValidateMessageInput func(proto.MessageInput) error
 	// ValidateFunctionResult adds restrictions on submitted function results.
 	ValidateFunctionResult func(proto.FunctionResultPayload) error
 }
@@ -242,17 +243,6 @@ func (c Configuration) ValidateProtocol(protocol string) error {
 	return nil
 }
 
-func (c Configuration) Validate(protocol string, contextWindow, maxOutputTokens int32) error {
-	if err := c.ValidateProtocol(protocol); err != nil {
-		return err
-	}
-	provider, _ := c.Provider(protocol)
-	if provider.RequiresTokenLimits && (contextWindow <= 0 || maxOutputTokens <= 0) {
-		return errors.New("selected harness requires positive model context_window and max_output_tokens")
-	}
-	return nil
-}
-
 // Registry is an immutable snapshot. Missing declarations remain unknown rather
 // than inheriting another harness's rules.
 type Registry struct {
@@ -295,11 +285,6 @@ func (r Registry) ValidateProtocol(kind, protocol string) error {
 	return declaration.ValidateProtocol(protocol)
 }
 
-func (r Registry) Validate(kind, protocol string, contextWindow, maxOutputTokens int32) error {
-	declaration, _ := r.Lookup(kind)
-	return declaration.Configuration.Validate(protocol, contextWindow, maxOutputTokens)
-}
-
 func (r Registry) SupportsProtocol(protocol string) bool {
 	for _, declaration := range r.declarations {
 		if _, ok := declaration.Provider(protocol); ok {
@@ -317,33 +302,24 @@ var ErrInvalidInput = errors.New("invalid harness configuration")
 // Core projects its public types into it, so declarations stay independent of
 // the public API package.
 type Admission struct {
-	Model      string
 	TextFormat string
 	TextSchema json.RawMessage
 	MultiAgent bool
 	Tools      []json.RawMessage
-	// Environment is nil when the request names none.
-	Environment *AdmissionEnvironment
-}
-
-// AdmissionEnvironment carries the placement and whether the Environment adds
-// Skills, Plugins or capability directories.
-type AdmissionEnvironment struct {
-	Type       string
-	Extensions bool
+	Placement  string
 }
 
 // ValidateMCPOrigins preserves outbound authority independently of Harness names.
 // Workspace connections never stand in for service-network connections.
-func (d Declaration) ValidateMCPOrigins(environment *AdmissionEnvironment, servers []proto.MCPHTTPServer) error {
+func (d Declaration) ValidateMCPOrigins(placement string, servers []proto.MCPHTTPServer) error {
 	for _, server := range servers {
 		switch server.ConnectionOrigin {
 		case "service":
-			if environment == nil || environment.Type != "none" {
+			if placement != "none" {
 				return errors.New("Service-origin MCP requires the service-side environment:none profile.")
 			}
 		case "environment":
-			if environment == nil || (environment.Type != "openai_hosted" && environment.Type != "self_hosted") {
+			if placement != "openai_hosted" && placement != "self_hosted" {
 				return errors.New("Environment-origin MCP requires a managed or self-hosted execution Environment.")
 			}
 		default:

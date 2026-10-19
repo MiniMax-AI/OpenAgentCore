@@ -28,7 +28,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | Implemented. Every pinned setting is saved; Session admission runs a subset | [Agents](./wire-semantics.md#agents) |
 | Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata` only; deletion requires an idle or failed Session | [Sessions](./wire-semantics.md#sessions), [creation streaming](./sessions-events.md#creation-streaming) |
-| Session events | create, stream | Partial: messages with text and inline images, cancellation, function results; the stream is live only | [Sessions, events and history](./sessions-events.md), [message content](./message-content.md) |
+| Session events | create, stream | Partial: messages with text and images, cancellation, function results; the stream is live only | [Sessions, events and history](./sessions-events.md), [message content](./message-content.md) |
 | Turns | retrieve, list | Implemented; Session Turn routes hold root Turns only | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](./environment-files.md) |
@@ -109,7 +109,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Configuration and tools**
 
 - A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions, no service-origin MCP and no image input.
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions and no image input.
 - Model-derived reasoning defaults are not resolved.
 - MCP tools support the `http` transport only; `stdio` is rejected, and so is an inline `authorization` on a Session MCP transport ([HTTP MCP](./execution-tools.md#http-mcp)).
 
@@ -120,13 +120,14 @@ Each item is Core's deliberate or native behavior where the official service beh
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.
 - Claude Code and MiniMax Code report no public usage.
+- MiniMax Code receives a message that starts with `/` with a trailing blank line, because ACP otherwise runs it as an operator command.
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
-- Images must be inline PNG or JPEG data URIs; remote URLs, `file_id` and `detail` are rejected.
+- `file_id` and `detail` on images are rejected; each Harness declares which `image_url` values it accepts ([message content](./message-content.md#images)).
 
 **Environments and Templates**
 
 - Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the existing [input reservation deadline](./environments.md#reservations).
-- Runtimes do not enforce `disabled` or `restricted` networks, so Sessions that need them are rejected ([restricted network policy](./environments.md#restricted-network)).
+- Only `enabled` networking runs, so Sessions that need `disabled` or `restricted` are rejected ([restricted network policy](./environments.md#restricted-network)).
 - `packages.system` is rejected; system packages must be preinstalled.
 - Cold continuation does not restore process memory, background processes or temporary system-disk changes, and completed setup is not replayed ([Environment persistence](./environments.md#runtime-capability-preparation)). On compatible microsandbox nodes with retained NFS storage, Codex and Claude Code are qualified for [checkpoint transfer](../../docs/sandbox-provider.md#checkpoint-transfer) and for continuation after [confirmed compute loss](../../docs/sandbox-provider.md#confirmed-compute-loss). Takeover of an unconfirmed old writer, host-crash durability and arbitrary crash-damaged history are unqualified.
 

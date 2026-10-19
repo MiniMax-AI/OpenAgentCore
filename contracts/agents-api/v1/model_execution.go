@@ -75,12 +75,5 @@ func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registr
 	if err := configuration.ValidateProtocol(string(p.Protocol)); err != nil {
 		return &ModelProviderError{Code: "model_provider_protocol_unsupported", Param: "protocol", message: err.Error()}
 	}
-	if err := configuration.Validate(string(p.Protocol), p.ContextWindow, p.MaxOutputTokens); err != nil {
-		param := "max_output_tokens"
-		if p.ContextWindow <= 0 {
-			param = "context_window"
-		}
-		return &ModelProviderError{Code: "model_provider_token_limits_invalid", Param: param, message: err.Error()}
-	}
 	return nil
 }

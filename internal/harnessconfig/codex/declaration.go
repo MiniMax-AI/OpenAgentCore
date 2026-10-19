@@ -4,6 +4,7 @@ package codex
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -33,7 +34,7 @@ var Declaration = harnessconfig.Declaration{
 		WorkspaceReadPreparation: proto.CapabilitySupported,
 		WorkspaceOutputExport:    proto.CapabilitySupported,
 		ExecutionControls:        proto.CapabilitySupported,
-		StructuredOutput:         proto.CapabilityUnsupported,
+		StructuredOutput:         proto.CapabilitySupported,
 		ToolSearch:               proto.CapabilityUnsupported,
 		MessageImages:            proto.CapabilitySupported,
 		FunctionResultImages:     proto.CapabilitySupported,
@@ -60,9 +61,13 @@ var Declaration = harnessconfig.Declaration{
 		ProgrammaticToolCalling: []bool{true, false},
 		TextVerbosities:         []string{"low", "medium", "high"},
 	},
-	Placements:         []string{"none", "self_hosted", "openai_hosted"},
-	MCPOrigins:         []string{"service", "environment"},
-	WhitespaceOnlyText: proto.CapabilitySupported,
+	Placements:           []string{"none", "self_hosted", "openai_hosted"},
+	MCPOrigins:           []string{"service", "environment"},
+	WhitespaceOnlyText:   proto.CapabilitySupported,
+	ValidateMessageInput: rejectRemoteImages,
+	ValidateFunctionResult: func(result proto.FunctionResultPayload) error {
+		return rejectRemoteImages(proto.MessageInput{{Content: result.Content}})
+	},
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
 		if err := harnessconfig.RejectSubagentTools(admission, "function", "mcp"); err != nil {
 			return err
@@ -73,6 +78,21 @@ var Declaration = harnessconfig.Declaration{
 		}
 		return nil
 	},
+}
+
+// Native Codex rejects http and https image URLs in turns and tool results.
+func rejectRemoteImages(input proto.MessageInput) error {
+	for _, message := range input {
+		for _, part := range message.Content {
+			if part.ImageURL == nil {
+				continue
+			}
+			if scheme, _, ok := strings.Cut(*part.ImageURL, ":"); ok && (strings.EqualFold(scheme, "http") || strings.EqualFold(scheme, "https")) {
+				return errors.New("remote image URLs are not supported; use an inline data URL instead")
+			}
+		}
+	}
+	return nil
 }
 
 func enablesProgrammaticToolCalling(tools []json.RawMessage) bool {

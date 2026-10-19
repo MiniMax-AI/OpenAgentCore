@@ -37,7 +37,7 @@ class AcceptanceSettingsTests(unittest.TestCase):
             with self.subTest(protocol=protocol), self.assertRaisesRegex(
                     acceptance.Failure, "provider_protocol_does_not_match_campaign"):
                 self.settings()
-        expanded = {**acceptance.PROVIDERS, "additional": {"responses": {"requires_token_limits": False}}}
+        expanded = {**acceptance.PROVIDERS, "additional": ["responses"]}
         with mock.patch.object(acceptance, "PROVIDERS", expanded):
             self.models["mcode"]["model_provider"]["protocol"] = "anthropic"
             self.settings()
@@ -53,39 +53,12 @@ class AcceptanceSettingsTests(unittest.TestCase):
                     acceptance.settings(SimpleNamespace())
                 private_file.assert_not_called()
 
-    def test_token_limit_requirements_follow_declarations(self):
+    def test_token_limits_are_optional(self):
         for harness in acceptance.CAMPAIGN:
             models = copy.deepcopy(self.models)
             del models[harness]["model_provider"]["context_window"]
             del models[harness]["model_provider"]["max_output_tokens"]
-            if harness == "mcode":
-                with self.assertRaisesRegex(acceptance.Failure, "harness_requires_positive_model_limits"):
-                    self.settings(models)
-            else:
-                self.settings(models)
-        providers = copy.deepcopy(acceptance.PROVIDERS)
-        providers["codex"]["responses"]["requires_token_limits"] = True
-        del self.models["codex"]["model_provider"]["context_window"]
-        with mock.patch.object(acceptance, "PROVIDERS", providers):
-            with self.assertRaisesRegex(acceptance.Failure, "harness_requires_positive_model_limits"):
-                self.settings()
-
-    def test_model_limit_validation(self):
-        for field in ("context_window", "max_output_tokens"):
-            for value in (False, -1, "100", 1.5, None):
-                models = copy.deepcopy(self.models)
-                models["codex"]["model_provider"][field] = value
-                with self.subTest(field=field, value=value), self.assertRaisesRegex(
-                        acceptance.Failure, "invalid_model_limits"):
-                    self.settings(models)
-        for field in ("context_window", "max_output_tokens"):
-            models = copy.deepcopy(self.models)
-            models["mcode"]["model_provider"][field] = 0
-            with self.assertRaisesRegex(acceptance.Failure, "harness_requires_positive_model_limits"):
-                self.settings(models)
-        self.models["codex"]["model_provider"]["max_output_tokens"] = 64001
-        with self.assertRaisesRegex(acceptance.Failure, "invalid_model_limits"):
-            self.settings()
+            self.settings(models)
 
     def test_provider_validation_is_preserved(self):
         for patch, label in (

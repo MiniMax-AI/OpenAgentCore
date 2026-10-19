@@ -99,7 +99,6 @@ func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request) {
 		support := v1.ModelConfigurationSupport{Protocols: []string{}, AcceptsHarnessConfig: declaration.AcceptsHarnessConfig()}
 		for _, provider := range declaration.Providers {
 			support.Protocols = append(support.Protocols, provider.Protocol)
-			support.TokenLimitsRequired = support.TokenLimitsRequired || provider.RequiresTokenLimits
 		}
 		harness := CoreHarness{ModelConfigurationSupport: support, Object: "core.harness", ID: kind, Enabled: kind == h.Engine || h.harnesses[kind], Default: kind == h.Engine}
 		for _, provider := range providers {

@@ -125,20 +125,14 @@ export class FunctionBridge {
 }
 
 // A matching root call confirms incorporation into native history. Native image
-// decoding/resizing may change bytes; preserve text and ordered image positions.
+// processing may change bytes or replace an unprocessable image with a text note;
+// preserve text and ordered image positions.
 function matchesNativeContent(content: InputContent[], actual: unknown): boolean {
   const expected = nativeContent({ content });
   if (!Array.isArray(expected) || !Array.isArray(actual) || actual.length !== expected.length) return false;
-  return expected.every((part, index) => {
-    const received = actual[index];
-    if (part.type !== "image") return isDeepStrictEqual(part, received);
-    if (!received || received.type !== "image" || received.source?.type !== "base64" ||
-        typeof received.source.media_type !== "string" || typeof received.source.data !== "string") return false;
-    try {
-      imageSource(`data:${received.source.media_type};base64,${received.source.data}`);
-      return true;
-    } catch { return false; }
-  });
+  return expected.every((part, index) => part.type === "image"
+    ? actual[index]?.type === "image" || actual[index]?.type === "text"
+    : isDeepStrictEqual(part, actual[index]));
 }
 
 function isBlankResult(content: InputContent[]): boolean {

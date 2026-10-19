@@ -59,7 +59,6 @@ func ValidateNativeModelConfiguration(harness, model string, raw json.RawMessage
 type ModelConfigurationSupport struct {
 	Protocols            []string `json:"protocols" binding:"required"`
 	AcceptsHarnessConfig bool     `json:"accepts_harness_config" binding:"required"`
-	TokenLimitsRequired  bool     `json:"token_limits_required" binding:"required"`
 }
 
 func (p *ModelProviderInput) ValidateConfiguration(harness string, native json.RawMessage) error {

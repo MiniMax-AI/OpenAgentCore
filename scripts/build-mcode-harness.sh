@@ -32,27 +32,16 @@ if [[ -f "$source/.cache/artifacts/code-0.3.11.tgz" ]]; then
   cp "$source/.cache/artifacts/code-0.3.11.tgz" "$context/upstream/.cache/artifacts/"
 fi
 printf '%s\n' "$revision" > "$context/upstream/.oac-source-revision"
-cp "$package/"*.mjs "$package/"*.ts "$package/"*.json "$context/"
 test "$(node "$native/cli.js" --version)" = 0.4.12
 (
-  cd "$context"
-  MCODE_SOURCE="$context/upstream" node patch-native.mjs
-  cd upstream
+  MCODE_SOURCE="$context/upstream" node "$package/patch-native.mjs"
+  cd "$context/upstream"
   corepack pnpm install --frozen-lockfile
   node scripts/build.mjs
 )
-(
-  cd "$context"
-  npm ci --no-audit --no-fund
-  MCODE_SOURCE="$context/upstream" node build.mjs
-  node dist/worker.mjs /workspace --describe > dist/tools.json
-  npm prune --omit=dev --no-audit --no-fund
-)
 artifact="$context/artifact"
 mkdir "$artifact"
-cp -R "$context/dist" "$context/node_modules" "$artifact/"
-cp "$package/launch.mjs" "$package/bridge.mjs" "$package/check.mjs" "$package/tool-executor.mjs" "$package/source.json" "$artifact/"
-cp "$package/subagent-snapshot.mjs" "$artifact/"
+cp "$package/check.mjs" "$package/subagent-snapshot.mjs" "$package/source.json" "$artifact/"
 mkdir "$artifact/native"
 cp -R "$context/upstream/dist/." "$artifact/native/"
 cp -R "$native/node_modules" "$artifact/native/"

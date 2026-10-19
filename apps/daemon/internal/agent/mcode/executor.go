@@ -32,7 +32,6 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 	var frozen *WorkspaceConfig
 	if config != nil {
 		value := *config
-		value.AllowedDomains = append([]string(nil), config.AllowedDomains...)
 		frozen = &value
 	}
 	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
@@ -46,10 +45,13 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 		var opts launchOptions
 		binary := defaultBinary()
 		if frozen == nil {
-			opts, err = prepareOptions(runtimeRoot, req)
+			opts, err = prepareOptions(runtimeRoot, req, nil)
 		} else {
 			binary = frozen.Binary
 			opts, err = prepareWorkspaceOptions(runtimeRoot, *frozen, req)
+		}
+		if err == nil {
+			opts.MCP, err = runtimeMCP(req)
 		}
 		if err != nil {
 			return nil, err

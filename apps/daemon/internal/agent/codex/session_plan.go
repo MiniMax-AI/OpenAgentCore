@@ -31,6 +31,10 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	applyProgrammaticTools(&plan, req.ExecutionControls)
 	if req.LocalEnvironment != nil {
 		plan.Cwd = req.LocalEnvironment.WorkspaceRoot
+		if err := writeWorkspaceTrust(nativeHomeFromPlan(plan), plan.Cwd); err != nil {
+			plan.Cleanup()
+			return SessionPlan{}, nil, err
+		}
 	} else {
 		// environment:none has no workspace; the Session's private home is its cwd.
 		plan.Cwd = nativeHomeFromPlan(plan)
@@ -65,10 +69,6 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	}
 	var skillRoots []string
 	if req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) > 0 {
-		if err := verifyHostedSkills(req.LocalEnvironment.Skills); err != nil {
-			plan.Cleanup()
-			return SessionPlan{}, nil, err
-		}
 		for _, skill := range req.LocalEnvironment.Skills {
 			skillRoots = append(skillRoots, localworkspace.SkillPath(skill))
 		}

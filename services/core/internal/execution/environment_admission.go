@@ -19,13 +19,13 @@ var (
 
 func preparedEnvironmentConfiguration(configuration json.RawMessage) bool {
 	var snapshot Snapshot
-	return json.Unmarshal(configuration, &snapshot) == nil && snapshot.Environment != nil &&
+	return json.Unmarshal(configuration, &snapshot) == nil &&
 		(snapshot.Environment.Type == "self_hosted" || snapshot.Environment.Type == "openai_hosted")
 }
 
 func (w *Worker) validateEnvironmentAdmission(ctx context.Context, engine string, configuration json.RawMessage) error {
 	var snapshot Snapshot
-	if json.Unmarshal(configuration, &snapshot) != nil || snapshot.Environment == nil {
+	if json.Unmarshal(configuration, &snapshot) != nil {
 		return sessions.ErrInvalidInput
 	}
 	switch snapshot.Environment.Type {

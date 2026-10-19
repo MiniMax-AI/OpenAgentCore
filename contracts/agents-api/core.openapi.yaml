@@ -2541,12 +2541,9 @@ definitions:
         items:
           type: string
         type: array
-      token_limits_required:
-        type: boolean
     required:
       - accepts_harness_config
       - protocols
-      - token_limits_required
     type: object
   v1.ModelProviderInput:
     properties:

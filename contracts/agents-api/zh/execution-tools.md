@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: ae8c47681587ccd0e7084c883be63a1f7064c1e780a5516536736943d8d45e08
+source_hash: fd0abcd2ab5d65d4eb63662d42a2562b8870926069b0255d4de0e014b3cbea06
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -15,7 +15,7 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 
 ## 函数 {#functions}
 
-函数声明要求 `name`、`description` 和 `parameters` 中的 JSON Schema；`defer_loading` 默认为 false，不能为 null。名称必须非空白、唯一且最多 512 字节；每个 Session 最多有 64 个函数定义。保存的引用解析到 Session 快照，定义在原生准备和继续执行期间保持固定。
+函数声明要求 `name`、`description` 和 `parameters` 中的 JSON Schema；`defer_loading` 默认为 false，不能为 null。名称必须非空白且唯一。保存的引用解析到 Session 快照，定义在原生准备和继续执行期间保持固定。
 
 **结果。** 调用方提交 `agent.session.input.tool_result` 事件，包含 `turn_id`、`call_id`、`success`，以及可选且可空的 `error` 和 `output`。输出为字符串或有序文本与图像部分，受 Harness 支持范围约束。批次原子处理并保留字段存在性、原始内容和重试身份；公开结果 Item 与事件始终包含 `output` 和 `error`，未提交时为 null。
 
@@ -43,13 +43,15 @@ SSE 仅提供实时事件。重启或流丢失后，读取 Session 的 `required
 
 Core 在 `ExecutionControls.OutputFormat` 中携带 schema，仅对使用该选项的请求要求 Harness 声明支持结构化输出，并要求 Runtime 具有 `structured_output` 和消息观察能力。冻结的 schema 在输入之前送达准备阶段，适用于初次和恢复执行；Start 不能替换它。
 
-Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `StructuredOutput` 终态工具；该工具属于内部，不是额外的调用方函数。匹配的实时根工具结果和已归属的成功 SDK 结果确认输出。适配器将原生 `result.result` 字符串原样发布为已完成的 `final_answer` 消息，使用原生 tool-use ID；父 assistant 文本保留自己的 ID。未验证重试和已取消候选不会成为答案，适配器不会把 `structured_output` 重新序列化为 JSON。流遵循官方消息顺序，将整段文本放入一个 `output_text.delta`。桥接层仅在报告 `structured_output` 时声明该操作，工作区 Runtime 还需要 `workspace_structured_output`。
+Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `StructuredOutput` 终态工具；该工具属于内部，不是额外的调用方函数。原生会在 Subagent、Skill、MCP 和 ToolSearch 之外添加该工具，适配器的精确工具清单会计入它。匹配的实时根工具结果和已归属的成功 SDK 结果确认输出。适配器将原生 `result.result` 字符串原样发布为已完成的 `final_answer` 消息，使用原生 tool-use ID；父 assistant 文本保留自己的 ID。未验证重试和已取消候选不会成为答案，适配器不会把 `structured_output` 重新序列化为 JSON。流遵循官方消息顺序，将整段文本放入一个 `output_text.delta`。桥接层仅在报告 `structured_output` 时声明该操作，工作区 Runtime 还需要 `workspace_structured_output`。
+
+Codex 适配器在每个根 Turn（包括 resume 或恢复后的 Turn）上将 schema 原样作为原生 `outputSchema` 发送，并原样发布原生最终 agent 消息文本。Codex 无损读取 JSON 数字，因此 Session 准入除通用规则外不附加数字或根类型限制。引导（steer）输入并入正在运行的 Turn 并沿用其 schema，Subagent 线程不接收该 schema。Codex 将 schema 作为 strict 的 Responses `text.format` 传给模型提供商；无法运行它的提供商原样返回自己的错误，忽略它的提供商可能返回与 schema 不符的文本。
 
 ## 延迟函数发现 {#deferred-function-discovery}
 
 `tool_search` 工具仅包含 `type`；仅适用于 Responses 的执行字段被拒绝。函数 `defer_loading` 标记延迟加载的定义。发现要求两者同时存在：没有延迟函数的 `tool_search`，或没有 `tool_search` 的延迟函数均被拒绝。已保存 Agent 的工具联合类型保留 `tool_search`；固定版本 Session 响应联合类型省略它，因此 Session 与 SSE 资源投影移除它，冻结配置仍保留它。固定版本 Item 联合类型没有 tool-search Item，Core 不自行创建。
 
-Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并启用原生 ToolSearch；函数配置仅允许所声明回调、ToolSearch 与工作区的原生工具。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型与提供商策略；已知冲突模式和 beta 设置在适配器中拒绝，不透明策略改变后，SDK 不提供可靠的输入前信号来确认延迟加载是否生效。
+Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoading`，并要求 Harness 声明和 Runtime 均支持 `tool_search`。原生搜索与 schema 延迟加载属于适配器。Claude 适配器的 MCP 服务器将立即加载定义标记为 `anthropic/alwaysLoad:true`，延迟定义标记为 false，并设置 `ENABLE_TOOL_SEARCH=true`；`none` 配置除工作区的原生工具外，允许所声明回调、所声明 MCP 工具和 ToolSearch。工作区 Runtime 从桥接层的 `workspace_tool_search` 功能推导 `tool_search`。原生 Harness 管理模型、提供商与 beta 设置策略；适配器不拒绝其中任何一项，SDK 也不提供可靠的输入前信号来确认延迟加载是否生效。
 
 ## Web 搜索与程序化工具调用 {#web-search-and-programmatic-tool-calling}
 
@@ -69,8 +71,8 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 | Harness | Web 搜索 | 程序化工具调用 |
 | --- | --- | --- |
 | Codex | `disabled`、`cached` 和 `live`，以及 `context_size`、`allowed_domains` 和 `location`，对应原生 `web_search` 与 `tools.web_search` 设置 | `enabled: true` 开启原生 `code_mode`；`false` 关闭 `code_mode`、`code_mode_only` 和 `code_mode_prewarm`，并在启动或恢复线程前检查原生受管要求 |
-| Claude Code | 仅 `disabled`。在工作区位置运行原生 `claude_code` 工具集，但移除向用户提问、定时、工作流、后台和 `ListAgents` 工具，`disabled` 会移除 `WebSearch` 和 `WebFetch`；`environment: none` 不保留内置工具 | 仅 `false` |
-| MiniMax Code | 仅 `disabled`，受限配置没有搜索工具，通过原生 `features.webSearch=false` 实现 | 仅 `false` |
+| Claude Code | `disabled` 和 `live`，需使用 `context_size: "medium"`，且不支持 `allowed_domains` 或 `location`。在工作区位置运行原生 `claude_code` 工具集，但移除向用户提问、定时、工作流、后台和 `ListAgents` 工具；`disabled` 会移除 `WebSearch` 和 `WebFetch`，`live` 保留它们。`environment: none` 不保留内置工具，并拒绝 `live` | 仅 `false` |
+| MiniMax Code | 仅 `disabled`，通过原生 `features.webSearch=false` 实现，因为原生搜索需要 MiniMax 账号凭据。在工作区位置上运行原生工具，`disabled` 还会移除 `web_fetch`，省略该控制项则保留。`environment: none` 没有内置工具 | 仅 `false` |
 
 ## HTTP MCP {#http-mcp}
 
@@ -85,11 +87,11 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 }
 ```
 
-- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据、查询或片段的绝对 HTTP 或 HTTPS URL。非空 `headers`、`request_metadata` 和内联 `authorization` 被拒绝。
+- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `headers`、`request_metadata` 和内联 `authorization` 被拒绝。
 - [公开 MCP 连接来源](environments.md#public-mcp-connection-origin)定义来源默认值、部署位置和凭据权限；[Harness 能力](harness-capabilities.md#tools)定义各 Harness 支持范围。
 - 省略或 null 的 `allowed_tools` 允许所有服务器工具；`[]` 不允许任何工具。
 - `required: true` 使原生线程创建和冷恢复等待服务器初始化；失败会停止执行，不替换保留历史。它要求 Runtime 的 `mcp_http_required` 能力。等待期间公开工作可被接受或排队。
 - Bearer 认证使用附加的静态或 OAuth Vault 凭据。[Vault 凭据](vaults.md)定义选择规则，[MCP 凭据权限](environments.md#public-mcp-connection-origin)定义冻结的 Runtime 绑定。认证执行要求 `mcp_http_bearer_auth`。
 - Runtime 必须声明 `mcp_http_tools`。原生 Harness 管理发现、调用和结果；公开 `mcp_call` Item 使用原始服务器与工具名称，保留观察到的原生结果。
 
-Codex 在启动或恢复线程之前验证准确的有效 MCP 配置，排除未声明服务器，禁用原生 apps 和 plugins，拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；工具名称还可包含点，并要求已连接服务器具有静态工具清单。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。
+Codex 以原生方式信任工作区，因此工作区的项目配置在启动和冷恢复时加载，未声明的服务器、apps 和 plugins 保持原生行为。在任何携带 Core 凭据的原生连接之前，它验证每个已声明服务器保持其 URL 或命令、bearer 引用和请求头，否则启动或恢复以错误失败。它拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；接受任意工具名称（原生客户端会将其规范化，适配器拒绝规范化后的冲突），并要求已连接服务器具有静态工具清单。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。

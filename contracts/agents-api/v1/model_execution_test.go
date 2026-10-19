@@ -17,7 +17,7 @@ func TestModelExecutionValidation(t *testing.T) {
 					t.Fatalf("wrong native protocol admission: %v", err)
 				}
 				p.ContextWindow, p.MaxOutputTokens = 0, 0
-				if err := p.ValidateHarness(harness); (err == nil) != (native && harness != "mcode") {
+				if err := p.ValidateHarness(harness); (err == nil) != native {
 					t.Fatalf("incorrect optional token-limit admission: %v", err)
 				}
 			})
@@ -43,9 +43,6 @@ func TestModelExecutionValidation(t *testing.T) {
 			t.Fatal("valid provider URL rejected", url, err)
 		}
 	}
-	if (&ModelProviderInput{Protocol: "anthropic", BaseURL: "https://example.com", APIKey: "secret"}).ValidateHarness("mcode") == nil {
-		t.Fatal("MiniMax Code accepted unknown model limits")
-	}
 }
 
 func TestProviderDeclarationsAgreeWithAdmission(t *testing.T) {
@@ -56,7 +53,7 @@ func TestProviderDeclarationsAgreeWithAdmission(t *testing.T) {
 				t.Fatal("registered harness has no declaration")
 			}
 			for _, protocol := range []string{"responses", "anthropic", "unknown"} {
-				provider, supported := declared.Provider(protocol)
+				_, supported := declared.Provider(protocol)
 				input := ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.test", APIKey: "private-fixture", ContextWindow: 100, MaxOutputTokens: 20}
 				if (input.ValidateHarness(kind) == nil) != supported {
 					t.Fatalf("protocol %q disagrees with validation", protocol)
@@ -65,14 +62,8 @@ func TestProviderDeclarationsAgreeWithAdmission(t *testing.T) {
 					continue
 				}
 				input.ContextWindow, input.MaxOutputTokens = 0, 0
-				if (input.ValidateHarness(kind) != nil) != provider.RequiresTokenLimits {
-					t.Fatalf("token requirements disagree for %q", protocol)
-				}
-				if provider.RequiresTokenLimits {
-					input.ContextWindow = 100
-					if input.ValidateHarness(kind) == nil {
-						t.Fatal("missing output limit accepted")
-					}
+				if input.ValidateHarness(kind) != nil {
+					t.Fatalf("provider without token limits rejected for %q", protocol)
 				}
 			}
 		})

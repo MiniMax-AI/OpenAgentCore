@@ -12,7 +12,6 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -265,15 +264,13 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	if b.Workspace != nil {
 		return sandbox.Info{Reference: b.Reference}, &providercontract.UnsupportedError{Operation: "Create", Reason: "external_workspace_unsupported"}
 	}
-	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
-	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || policy.Validate() != nil || b.RuntimeConnection().Validate() != nil {
+	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
 		info := sandbox.Info{Reference: b.Reference}
 		if validReference(b.Reference) {
 			info.State, info.CreateSettled = "absent", true
 		}
 		return info, sandbox.ErrInvalid
 	}
-	b.AllowedDomains = policy.Hosts()
 	return p.info(ctx, "create", b.Reference, &b)
 }
 func (p *Provider) GetInfo(ctx context.Context, r sandbox.Reference) (sandbox.Info, error) {

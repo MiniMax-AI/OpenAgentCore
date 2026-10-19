@@ -14,8 +14,8 @@ func TestMCPOriginSupport(t *testing.T) {
 		for _, placement := range []string{"none", "self_hosted", "openai_hosted"} {
 			for _, origin := range []string{"service", "environment", "", "unknown"} {
 				servers := []proto.MCPHTTPServer{{ConnectionOrigin: origin, ServerLabel: "proof", ServerURL: "https://example.test/mcp"}}
-				allowed := origin == "environment" && placement != "none" || origin == "service" && placement == "none" && kind != "mcode"
-				if err := declaration.ValidateMCPOrigins(&harnessconfig.AdmissionEnvironment{Type: placement}, servers); (err == nil) != allowed {
+				allowed := origin == "environment" && placement != "none" || origin == "service" && placement == "none"
+				if err := declaration.ValidateMCPOrigins(placement, servers); (err == nil) != allowed {
 					t.Fatalf("%s/%s/%s: %v", kind, placement, origin, err)
 				}
 			}
@@ -42,9 +42,9 @@ func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
 	for _, kind := range []string{"claude_sdk", "codex", "mcode"} {
 		t.Run(kind, func(t *testing.T) {
 			declaration, _ := Registry().Lookup(kind)
-			admission := harnessconfig.Admission{Model: "real-model", MultiAgent: true}
+			admission := harnessconfig.Admission{MultiAgent: true}
 			for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
-				admission.Environment = &harnessconfig.AdmissionEnvironment{Type: placement}
+				admission.Placement = placement
 				if err := declaration.ValidateConfiguration(admission); err != nil {
 					t.Fatal(placement, err)
 				}
@@ -54,7 +54,7 @@ func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
 			if kind == "mcode" {
 				return
 			} // Its tool declaration rejects both for every Session.
-			admission.Environment = &harnessconfig.AdmissionEnvironment{Type: "none"}
+			admission.Placement = "none"
 			for _, tool := range []string{`{"type":"function","name":"f"}`, `{"type":"mcp","server_label":"s"}`} {
 				admission.Tools = []json.RawMessage{json.RawMessage(tool)}
 				admission.MultiAgent = true
@@ -74,7 +74,7 @@ func TestCodexRejectsCodeModeWithSubagents(t *testing.T) {
 	declaration, _ := Registry().Lookup("codex")
 	tools := []json.RawMessage{json.RawMessage(`{"type":"programmatic_tool_calling","enabled":true}`)}
 	for _, multiAgent := range []bool{false, true} {
-		err := declaration.ValidateConfiguration(harnessconfig.Admission{Model: "real-model", MultiAgent: multiAgent, Tools: tools})
+		err := declaration.ValidateConfiguration(harnessconfig.Admission{MultiAgent: multiAgent, Tools: tools})
 		if (err == nil) == multiAgent {
 			t.Fatalf("multi_agent=%v: %v", multiAgent, err)
 		}

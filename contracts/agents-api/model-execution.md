@@ -23,7 +23,7 @@ Supported protocols by Harness:
 | Claude Code | `anthropic` |
 | MiniMax Code | `anthropic`, `responses`, `chat_completions` |
 
-MiniMax Code requires positive context and output limits. Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. There is no model API proxy, passthrough gateway or cross-protocol conversion, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
+Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. There is no model API proxy, passthrough gateway or cross-protocol conversion, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
 
 ## Harness selection
 
@@ -109,7 +109,7 @@ At dispatch, Core sends the snapshot as one confidential provider bundle over th
 | --- | --- | --- |
 | Codex | Empty object only | Reasoning effort belongs to the public `reasoning.effort` |
 | Claude Code | `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.thinking`; the public `reasoning.effort` becomes `Options.effort` |
-| MiniMax Code | Empty object only | Provider token limits remain required |
+| MiniMax Code | Empty object only | The public `reasoning.effort` becomes the custom model's thinking effort |
 
 Claude `thinking` accepts `display` (`summarized` or `omitted`) for `adaptive` and `enabled`, and a positive integer `budgetTokens` only for `enabled`; `maxThinkingTokens` is rejected. These are native settings, not a shared reasoning vocabulary; model availability and provider support are the Harness's responsibility.
 
@@ -132,7 +132,7 @@ PUT requires `model` and a complete `model_provider`; `harness_config` defaults 
 
 Session creation decrypts the default of the resolved Harness and freezes it in the Session's encrypted snapshot like any other bundle, so changing or removing the default never reaches existing Sessions. The execution-configuration read shows the frozen safe view with source `deployment`. A missing or invalid provider snapshot fails closed, with no fallback to another model or provider.
 
-`model_configuration_support` derives from the adapter declaration that Core and Runtime share: `protocols` lists the selectable native protocols with the default first, `accepts_harness_config` says whether native parameters are accepted and `token_limits_required` whether provider token limits are required. It describes the build, not a live Runtime or a remote model.
+`model_configuration_support` derives from the adapter declaration that Core and Runtime share: `protocols` lists the selectable native protocols with the default first, and `accepts_harness_config` says whether native parameters are accepted. It describes the build, not a live Runtime or a remote model.
 
 ### Deployment default observations
 

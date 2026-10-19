@@ -153,7 +153,7 @@ def main():
                 assert raw.get("/agents/sessions/" + session_id + suffix,
                                headers={"Authorization": "Bearer " + foreign}).status_code == 404
             create = raw.post("/agents/sessions", json={"agent": {"model": "MiniMax-M3"}, "input": [{"role": "user", "content": [
-                              {"type": "input_image", "image_url": "https://example.com/image.png"}]}],
+                              {"type": "input_image", "image_url": ""}]}],
                               "environment": {"type": "self_hosted", "workspace_directory": settings["workspace_directory"]}})
             assert create.status_code == 400
             submit = raw.post("/agents/sessions/" + session_id + "/events", json={"events": [{

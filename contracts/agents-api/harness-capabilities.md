@@ -4,6 +4,8 @@ title: "Harness capabilities"
 
 This page lists what each Harness supports on each placement. Core decides admission from the Harness's declaration in `internal/harnessconfig/<package>/declaration.go`, and the Runtime that runs the Session must also advertise the operation. The linked contracts define each operation; [Harness onboarding](./harness-onboarding.md#qualify-the-adapter) describes how a Harness is qualified.
 
+Anything this page does not list follows the Harness's native behavior with the selected model, as in a local run. Each adapter guide lists the native defaults it overrides for unattended cloud execution ([design rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#core-assembles-harnesses-run-natively)).
+
 | Status | Meaning |
 | --- | --- |
 | Verified | Core admits it, and real-model acceptance through the pinned official client passed on that placement |
@@ -19,9 +21,8 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | Text Turns, active input, cancellation, restart and continuation | Verified on all placements | Verified on all placements | Verified on all placements |
 | [Files and Artifacts](./environment-files.md) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted |
 | [Whitespace-only message text](./message-content.md) | Admitted; delivered unchanged | Rejected | Rejected |
-| [Inline PNG and JPEG message images](./message-content.md) | Verified on all placements | Verified on all placements | Rejected |
-| Remote image URLs | Rejected | Rejected | Rejected |
-| `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | Rejected |
+| [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
+| `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
 | `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | Rejected | Rejected |
 | `service_tier` other than `auto` | `default`, `flex`, `priority`: admitted | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
@@ -34,19 +35,19 @@ Native model parameters and provider protocols per Harness are in [model executi
 | Operation | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | [Public functions](./execution-tools.md#functions) with text results | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; object-root schemas only | Rejected |
-| [Function results with images](./message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; successful inline PNG or JPEG results only | Rejected |
-| [Structured output](./execution-tools.md#structured-output) | Rejected | Verified on all placements | Rejected |
+| [Function results with images](./message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted; remote URLs: rejected | Successful results only; PNG and JPEG data URLs: verified on all placements; GIF and WebP: admitted | Rejected |
+| [Structured output](./execution-tools.md#structured-output) | Admitted on all placements | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |
-| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | Rejected | Rejected |
-| [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Rejected |
+| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | `live` admitted on hosted and self-hosted, rejected on `none`; `cached` and `enabled` rejected | Rejected |
+| [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Verified: `none`, with `allowed_tools` null and `required` false only; rejected elsewhere |
 | [Environment-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted; `allowed_tools` null and `required` false only |
 | [HTTP MCP bearer credentials](./execution-tools.md#http-mcp) | Verified | Verified | Verified |
 | Required MCP initialization | Verified | Verified | Rejected |
 | [Subagents](./subagents.md) | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted |
 | Subagents together with functions or HTTP MCP | Rejected | Rejected | Rejected |
 
-Claude structured output requires a single Agent, medium verbosity and no Skills, Plugins, capability directories, MCP or `tool_search`. Claude deferred discovery requires a single Agent, only function tools besides `tool_search` and the disabled controls, no Skills, Plugins or capability directories and no structured output. Claude on a workspace placement needs the packaged bridge features for each operation (`workspace_functions`, `workspace_structured_output`, `workspace_tool_search`, `workspace_mcp_http`).
+Claude structured output requires medium verbosity and combines with `multi_agent`, Skills, Plugins, capability directories, MCP and `tool_search`. Claude deferred discovery combines with MCP, Skills, Plugins, capability directories and structured output. The Subagent profile does not carry function tools, so deferred discovery with `multi_agent` stays rejected. Claude Code decides whether `tool_search` takes effect for the configured model, provider and beta settings. Claude on a workspace placement needs the packaged bridge features for each operation (`workspace_functions`, `workspace_structured_output`, `workspace_tool_search`, `workspace_mcp_http`).
 
 ## Environment preparation
 

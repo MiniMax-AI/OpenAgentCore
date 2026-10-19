@@ -17,7 +17,7 @@ export const coreErrors = {
   "model_provider_base_url_invalid": "请使用 HTTPS 地址，不要包含凭据、查询参数或片段。",
   "model_provider_protocol_unsupported": "此 Harness 不支持该协议。",
   "model_provider_api_key_invalid": "请输入有效的 API 密钥，不要包含控制字符。",
-  "model_provider_token_limits_invalid": "请填写有效的 token 限制；输出不能超过上下文，必填限制必须大于零。",
+  "model_provider_token_limits_invalid": "请填写有效的 token 限制；输出不能超过上下文。",
   "invalid_sandbox_configuration": "请检查沙箱资源和 Runtime 版本。",
   "project_archived": "此项目已归档。",
   "project_exists": "此项目名称已被使用。",

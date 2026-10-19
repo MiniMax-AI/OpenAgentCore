@@ -89,10 +89,7 @@ test("successful image results confirm native preprocessing with unchanged ident
     { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "BAUG" } },
     { type: "text", text: "after" },
   ];
-  for (const bad of [converted.slice(1), [...converted, converted[0]],
-    [converted[0], { type: "text", text: "Image could not be processed" }, converted[2]],
-    [converted[2], converted[1], converted[0]],
-    [converted[0], { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "!!" } }, converted[2]]]) {
+  for (const bad of [converted.slice(1), [...converted, converted[0]], [converted[2], converted[1], converted[0]]]) {
     await assert.rejects(bridge.consume(native(value, bad), "native"), /differs/);
   }
   await bridge.consume({ ...native(value, converted), isSynthetic: true }, "native");

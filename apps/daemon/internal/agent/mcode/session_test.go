@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -161,7 +162,7 @@ func TestResumeSelectsModelWhenNativeSelectorIsMissing(t *testing.T) {
 }
 
 func TestSessionFailuresAreReported(t *testing.T) {
-	for _, scenario := range []string{"malformed", "exit", "unknown-model"} {
+	for _, scenario := range []string{"malformed", "exit", "unknown-model", "background-bash"} {
 		t.Run(scenario, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
@@ -254,7 +255,10 @@ func TestMCodeProcess(t *testing.T) {
 			if scenario == "unattended" && strings.Contains(string(frame.Params), "elicitation") {
 				os.Exit(7)
 			}
-			result = map[string]int{"protocolVersion": 1}
+			// The patched CLI reports its Subagent limit and whether bash may outlive a Turn.
+			limit, _ := strconv.Atoi(os.Getenv("OAC_RUNTIME_MCODE_MAX_SUBAGENTS"))
+			result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/subagents": map[string]any{
+				"version": 2, "maxConcurrent": limit, "backgroundBash": scenario == "background-bash" || os.Getenv("OAC_RUNTIME_MCODE_BACKGROUND_BASH") != "off"}}}
 		case "session/new", "session/load":
 			if scenario == "prepared-mcp-cancel" {
 				if writeMCPRegistry(os.Getenv("MINIMAX_DATA_DIR"), mcpRegistryEntry("proof.server", "proof_server", "read.status", "read_status")) != nil {
@@ -292,7 +296,7 @@ func TestMCodeProcess(t *testing.T) {
 				Prompt []map[string]string `json:"prompt"`
 			}
 			_ = json.Unmarshal(frame.Params, &input)
-			if len(input.Prompt) != 2 {
+			if len(input.Prompt) != 1 {
 				os.Exit(9)
 			}
 			if strings.HasPrefix(scenario, "executor") {
@@ -306,7 +310,7 @@ func TestMCodeProcess(t *testing.T) {
 					continue
 				}
 				update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": input.Prompt[0]["text"]}})
-				update("tool_call", map[string]any{"toolCallId": "repeated-call", "name": "mcp__oac_workspace__workspace_bash", "status": "in_progress", "rawInput": map[string]any{"command": "true"}})
+				update("tool_call", map[string]any{"toolCallId": "repeated-call", "name": "bash", "status": "in_progress", "rawInput": map[string]any{"command": "true"}})
 				update("tool_call_update", map[string]any{"toolCallId": "repeated-call", "status": "completed"})
 				raw, _ := json.Marshal(map[string]string{"stopReason": "end_turn"})
 				send(rpcFrame{JSONRPC: "2.0", ID: frame.ID, Result: raw})
@@ -345,7 +349,7 @@ func TestMCodeProcess(t *testing.T) {
 			}
 			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "Hello "}})
 			update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "world"}})
-			update("tool_call", map[string]any{"toolCallId": "tool-1", "name": "mcp__oac_workspace__workspace_bash", "status": "in_progress", "rawInput": map[string]any{"command": "cat fixture.txt"}})
+			update("tool_call", map[string]any{"toolCallId": "tool-1", "name": "bash", "status": "in_progress", "rawInput": map[string]any{"command": "cat fixture.txt"}})
 			for range 2 {
 				update("tool_call_update", map[string]any{"toolCallId": "tool-1", "status": "completed", "rawOutput": "fixture"})
 			}

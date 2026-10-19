@@ -198,7 +198,7 @@ def verify_runtime(image, daemon, source):
     files = {"/usr/local/bin/oac-daemon": pathlib.Path(daemon)}
     environment = dict(value.split("=", 1) for value in details["Config"]["Env"] if "=" in value)
     if "OAC_RUNTIME_MCODE_BIN" in environment:
-        for name in ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json"):
+        for name in ("check.mjs", "subagent-snapshot.mjs", "source.json"):
             files["/opt/mcode-harness/" + name] = source / "packages/mcode-harness" / name
     output = subprocess.check_output(
         ["docker", "run", "--rm", "--network", "none", "--entrypoint", "sha256sum", image, *files], text=True

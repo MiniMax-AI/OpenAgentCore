@@ -3,7 +3,6 @@ package execution
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -34,7 +33,7 @@ func TestAdditionalDeclarationUsesCommonAdmission(t *testing.T) {
 	declaration := harnesstest.Declaration("fixture", func(d *harnessconfig.Declaration) {
 		d.ValidateConfiguration = func(admission harnessconfig.Admission) error {
 			configurationChecked = true
-			if admission.Model != "fixture" || admission.Environment == nil {
+			if admission.MultiAgent {
 				return harnessconfig.ErrInvalidInput
 			}
 			return nil
@@ -60,11 +59,11 @@ func TestAdditionalDeclarationUsesCommonAdmission(t *testing.T) {
 	if !ok || !declaration.Accepts("none") || declaration.Accepts("openai_hosted") {
 		t.Fatal("fixture declaration was not selected")
 	}
-	snapshot := Snapshot{Agent: v1.Agent{Model: "fixture", Tools: []json.RawMessage{json.RawMessage(`{"type":"function","name":"echo","parameters":{"type":"object"}}`)}}, Environment: &v1.Environment{Type: "none"}}
+	snapshot := Snapshot{Agent: v1.Agent{Model: "fixture", Tools: []json.RawMessage{json.RawMessage(`{"type":"function","name":"echo","parameters":{"type":"object"}}`)}}, Environment: v1.Environment{Type: "none"}}
 	if err := validateDeclaredConfiguration(declaration, snapshot); err != nil || !configurationChecked || !toolsChecked {
 		t.Fatal("additional engine admission failed", err)
 	}
-	snapshot.Agent.Model = "invalid"
+	snapshot.Agent.MultiAgent.Enabled = true
 	if err := validateDeclaredConfiguration(declaration, snapshot); !errors.Is(err, sessions.ErrInvalidInput) {
 		t.Fatal("declared configuration lost public error mapping", err)
 	}
@@ -85,51 +84,14 @@ func TestClaudeHostedToolsRequireSeparateSupport(t *testing.T) {
 	}
 }
 
-func TestValidatorPrecedencePreservesErrors(t *testing.T) {
-	snapshot := Snapshot{Agent: v1.Agent{Tools: []json.RawMessage{json.RawMessage(`{"type":"unknown"}`)}}}
-	_, decodeErr := executionTools(snapshot.Agent.Tools)
-	if decodeErr == nil {
-		t.Fatal("fixture must fail common tool decoding")
-	}
-	configurationErr := errors.New("configuration restriction")
-	toolsErr := errors.New("tools restriction")
-	for _, hasConfiguration := range []bool{false, true} {
-		for _, rejectConfiguration := range []bool{false, true} {
-			if !hasConfiguration && rejectConfiguration {
-				continue
+func TestClaudeLiveSearchRequiresAWorkspace(t *testing.T) {
+	for _, mode := range []string{"disabled", "cached", "live"} {
+		for _, placement := range []string{"none", "openai_hosted"} {
+			raw := json.RawMessage(`{"agent":{"model":"fixture","tools":[{"type":"web_search","mode":"` + mode + `","context_size":"medium"}]},"environment":{"type":"` + placement + `"}}`)
+			want := mode == "disabled" || (mode == "live" && placement != "none")
+			if err := (Policy{}).ValidateSessionConfiguration("claude_sdk", raw); (err == nil) != want {
+				t.Fatalf("%s/%s: %v", mode, placement, err)
 			}
-			t.Run(fmt.Sprintf("configuration=%t/reject=%t", hasConfiguration, rejectConfiguration), func(t *testing.T) {
-				toolsCalled := false
-				declaration := harnesstest.Declaration("fixture", func(d *harnessconfig.Declaration) {
-					if hasConfiguration {
-						d.ValidateConfiguration = func(harnessconfig.Admission) error {
-							if rejectConfiguration {
-								return configurationErr
-							}
-							return nil
-						}
-					}
-					d.ValidateTools = func([]proto.FunctionTool, []proto.MCPHTTPServer) error {
-						toolsCalled = true
-						return toolsErr
-					}
-				})
-				err := validateDeclaredConfiguration(declaration, snapshot)
-				switch {
-				case rejectConfiguration:
-					if !errors.Is(err, configurationErr) || toolsCalled {
-						t.Fatal("configuration lost precedence", err)
-					}
-				case hasConfiguration:
-					if err == nil || err.Error() != decodeErr.Error() || toolsCalled {
-						t.Fatal("decoding lost precedence", err)
-					}
-				default:
-					if !errors.Is(err, toolsErr) || !toolsCalled {
-						t.Fatal("common-only configuration changed tool error precedence", err)
-					}
-				}
-			})
 		}
 	}
 }
@@ -166,6 +128,16 @@ func TestRetainedNativeHistoryDependsOnExternalWorkspace(t *testing.T) {
 					t.Fatal(external, declared, runtimeSupported, err)
 				}
 			}
+		}
+	}
+}
+
+// Runtime enforces no network policy, so admission runs only enabled networking.
+func TestAdmissionRejectsUnenforcedNetworkPolicy(t *testing.T) {
+	for access, valid := range map[string]bool{"enabled": true, "disabled": false, "restricted": false} {
+		raw := json.RawMessage(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted","network":{"access":"` + access + `"}}}`)
+		if err := (Policy{}).ValidateSessionConfiguration("codex", raw); (err == nil) != valid {
+			t.Fatal(access, err)
 		}
 	}
 }

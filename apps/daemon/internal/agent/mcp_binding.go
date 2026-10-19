@@ -50,9 +50,6 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 		}
 	}
 	if local := req.LocalEnvironment; local != nil && len(local.MCP) > 0 {
-		if req.DisableExecutionEnvironment || local.NetworkAccess != "enabled" {
-			return nil, errors.New("environment MCP requires an enabled workspace network")
-		}
 		for _, installed := range local.MCP {
 			declaration := installed.Server
 			item := MCPBinding{ServerLabel: declaration.Name, ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: declaration.Type, ServerURL: declaration.URL, BearerToken: installed.BearerToken, HTTPHeaders: maps.Clone(declaration.HTTPHeaders)}
@@ -89,7 +86,7 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			}
 		case "http":
 			endpoint, err := url.Parse(item.ServerURL)
-			if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.Fragment != "" || endpoint.Opaque != "" || (item.ConnectionOrigin == "service" && (endpoint.RawQuery != "" || endpoint.ForceQuery)) {
+			if err != nil || endpoint.Hostname() == "" || (endpoint.Scheme != "https" && endpoint.Scheme != "http") || endpoint.User != nil || endpoint.Fragment != "" || endpoint.Opaque != "" {
 				return nil, errors.New("invalid MCP endpoint")
 			}
 			if item.BearerToken != nil && (endpoint.Scheme != "https" || !ValidMCPHTTPBearerToken(*item.BearerToken)) {

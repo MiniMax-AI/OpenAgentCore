@@ -187,7 +187,7 @@ Core freezes resource versions, metadata and source selections at Session creati
 
 The runner uses only neutral Environment and Session identity and a Runtime peer, with no Provider, deployment or operating-system branch. Harness differences stay in the adapters.
 
-**Portable preparation input.** `self_hosted` input carries only `workspace_directory` and `capability_directories`. A Session with either workspace placement can also send `x_agents_core.environment`, a Core extension with `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins` and `capability_directories`. It uses the same parsers and inheritance rules as `openai_hosted` input. A field supplied both there and in `environment` is rejected, including an explicit null. A `self_hosted` Session names its Template only through this extension and cannot use a Template whose network is not `enabled` (400, param `x_agents_core.environment.environment_template_id`). Machine location, sizing and network policy are not extension fields.
+**Portable preparation input.** `self_hosted` input carries only `workspace_directory` and `capability_directories`. A Session with either workspace placement can also send `x_agents_core.environment`, a Core extension with `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins` and `capability_directories`. It uses the same parsers and inheritance rules as `openai_hosted` input. A field supplied both there and in `environment` is rejected, including an explicit null. A `self_hosted` Session names its Template only through this extension. Machine location, sizing and network policy are not extension fields.
 
 ```json
 {
@@ -320,7 +320,7 @@ For comparison, an inline `openai_hosted` Session without a Template treats omit
 
 `restricted` requires 1–100 exact ASCII hostnames in `allowed_domains`; subdomains and redirect targets need their own entries. Wildcards, URL or port syntax, IP literals, Unicode and trailing dots are rejected. Reads return the supplied spelling, order and duplicates; comparison uses a separate lowercase, deduplicated copy.
 
-The Runtime does not enforce `disabled` or `restricted`, and no Provider enforces them for it. Core therefore stores these policies in Templates but rejects any Session whose effective network is not `enabled`, before allocating compute. Initialization and tools use the host's existing network.
+Only `enabled` runs. Core stores the other policies in Templates but rejects any Session whose effective network is not `enabled`, before allocating compute. Initialization and tools use the host's existing network.
 
 ### Env and setup commands
 
@@ -380,7 +380,7 @@ Skills and their immutable versions are Project resources, independent of Sessio
 - Bundles are encrypted with the service cipher, bound to Project, Skill and version. Metadata reads never load or decrypt bundles. Deleting a Skill reclaims its versions without affecting frozen Sessions.
 - References resolve inside the Session creation transaction, after the upsert establishes ownership. Referenced resources are locked in a stable order, and the version, metadata and bytes freeze together. Public reference metadata, unresolved Template intent and the resolved Runtime bundle stay distinct; a reference is never reported as inline.
 
-Inline and referenced Skills use the same confidential snapshot and installer. The Runtime installs them under `skills/<name>` in its capability root before setup and native execution. Adapters register only the selected Skill roots: Codex as explicit extra roots, MiniMax Code through its native catalog, and Claude as one controlled envelope per package with real directories and immutable hard links. Skill roots activate no MCP servers; only [Plugin MCP](#plugin-mcp) does. Codex nested `SKILL.md` discovery, `agents/openai.yaml` dependency configuration and Claude inline shell preprocessing fail adapter preparation. Native Harness configuration is never passed through wholesale.
+Inline and referenced Skills use the same confidential snapshot and installer. The Runtime installs them under `skills/<name>` in its capability root before setup and native execution. Adapters register only the selected Skill roots: Codex as explicit extra roots, MiniMax Code through its native catalog, and Claude as one controlled envelope per package with real directories and immutable hard links. Skill roots activate no MCP servers; only [Plugin MCP](#plugin-mcp) does. Codex scans each Skill root recursively as it does locally, so a nested `SKILL.md` registers another native Skill. Claude inline shell preprocessing fails adapter preparation. Native Harness configuration is never passed through wholesale.
 
 ### Plugin MCP
 
@@ -392,7 +392,7 @@ A stdio server starts through the daemon's stdio helper, which resolves the inst
 
 [Harness capabilities](./harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
 
-Environment MCP needs enabled network. Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
+Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
 ### Effective bindings
 
@@ -405,7 +405,7 @@ An Agent's HTTP MCP tool ([declaration](./execution-tools.md#http-mcp)) has a `c
 | Origin | Connects from | Allowed placements |
 | --- | --- | --- |
 | `service` | Core's service-side execution host | `none` only |
-| `environment` | The Environment's workspace | `openai_hosted` and `self_hosted` with enabled network |
+| `environment` | The Environment's workspace | `openai_hosted` and `self_hosted` |
 
 Core's Harness profile declares `MCPOrigins`; admission and dispatch check the origin against the placement and the Runtime's advertised HTTP, bearer and required-initialization capabilities, and the Runtime validates the origin again before invoking an adapter. No Harness-name or Provider branch selects a different path.
 

@@ -12,9 +12,6 @@ import (
 )
 
 func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
-	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
-		return nil, errors.New("codex: structured output is not qualified")
-	}
 	if req.WorkspaceReadOnly {
 		return nil, errors.New("codex: workspace reads use the local Runtime interface")
 	}
@@ -95,7 +92,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		}
 	}
 	if s.observeSubagentIdentities {
-		if err := verifySubagentObservationProfile(cancelCtx, rpc, plan.Cwd); err != nil {
+		if err := verifySubagentObservationProfile(cancelCtx, rpc); err != nil {
 			return p.preparationFailed(err)
 		}
 	}

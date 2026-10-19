@@ -11,7 +11,7 @@ export const templates: TranslationShape<typeof english> = {
   columns: { name: "名称", network: "网络", packages: "依赖包", files: "文件", skills: "Skill", plugins: "Plugin", updated: "更新时间", actions: "操作" },
   access: { enabled: "已启用", disabled: "已禁用", restricted: "受限" },
   accessHelp: {
-    restricted: "原生工具只能访问列出的主机名。子域名和重定向目标需要单独列出。",
+    restricted: "使用此策略的 Session 会被拒绝，因为 Runtime 不限制网络访问。",
   },
   edit: "编辑", delete: "删除", deleteLabel: "删除 {{name}}", open: "打开 {{name}}", back: "返回",
   unrecognized: "含无法识别的配置",

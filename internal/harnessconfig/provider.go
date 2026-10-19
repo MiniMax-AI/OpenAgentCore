@@ -11,7 +11,7 @@ func (c Configuration) ParseProvider(raw any) (modelprovider.Provider, error) {
 	if err != nil {
 		return modelprovider.Provider{}, err
 	}
-	if err := c.Validate(string(provider.Protocol), provider.ContextWindow, provider.MaxOutputTokens); err != nil {
+	if err := c.ValidateProtocol(string(provider.Protocol)); err != nil {
 		return modelprovider.Provider{}, err
 	}
 	return provider, nil

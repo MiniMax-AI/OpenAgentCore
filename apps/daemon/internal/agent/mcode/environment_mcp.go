@@ -15,13 +15,10 @@ func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var servers []map[string]any
+	servers := []map[string]any{}
 	for _, binding := range bindings {
-		if binding.ServerLabel == "oac_workspace" || binding.ConnectionOrigin != "environment" || binding.AllowedTools != nil || binding.Required {
-			return nil, fmt.Errorf("mcode: unsupported MCP binding")
-		}
 		if binding.Transport == "http" {
-			server, err := environmentHTTPMCP(binding)
+			server, err := httpMCP(binding)
 			if err != nil {
 				return nil, err
 			}
@@ -37,15 +34,15 @@ func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, error) {
 // ACP session servers remain in native memory; credentials never enter argv or
 // persisted native configuration. Custom headers are not qualified because the
 // pinned native HTTP client can forward them across redirect origins.
-func environmentHTTPMCP(item agent.MCPBinding) (map[string]any, error) {
+func httpMCP(item agent.MCPBinding) (map[string]any, error) {
 	endpoint, err := url.Parse(item.ServerURL)
-	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || endpoint.RawQuery != "" || endpoint.ForceQuery || endpoint.Opaque != "" || len(item.HTTPHeaders) != 0 {
-		return nil, fmt.Errorf("mcode: unsupported environment HTTP MCP declaration")
+	if err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil || endpoint.Fragment != "" || endpoint.Opaque != "" || len(item.HTTPHeaders) != 0 {
+		return nil, fmt.Errorf("mcode: unsupported HTTP MCP declaration")
 	}
 	headers := []map[string]string{}
 	if item.BearerToken != nil {
 		if endpoint.Scheme != "https" || !agent.ValidMCPHTTPBearerToken(*item.BearerToken) {
-			return nil, fmt.Errorf("mcode: unsupported environment MCP bearer credential")
+			return nil, fmt.Errorf("mcode: unsupported MCP bearer credential")
 		}
 		headers = append(headers, map[string]string{"name": "Authorization", "value": "Bearer " + *item.BearerToken})
 	}

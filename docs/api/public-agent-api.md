@@ -145,7 +145,7 @@ Core runs several Harnesses and accepts your own model access. Those settings ar
 | Field | Where | Value |
 | --- | --- | --- |
 | `harness` | Agent, or a Session's inline `agent` | `codex`, `claude_sdk` or `mcode` |
-| `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. The protocol must be one of the Harness's native protocols |
+| `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and optionally `context_window` and `max_output_tokens`. The protocol must be one of the Harness's native protocols |
 | `harness_config` | Agent, inline `agent`, or Session creation (top level, wins) | The Harness's native model parameters, such as Claude Code's `thinking` |
 | `environment` | `openai_hosted` or `self_hosted` Session creation (top level) | Portable preparation: `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins`, `capability_directories`. A field may not also appear in `environment`; see [Environments](../../contracts/agents-api/environments.md#preparation-order) |
 | `installation` | Read-only, on `self_hosted` Sessions | Short-lived install commands for your machine; see [Run self-hosted Sessions](../getting-started/self-hosted.md) |
@@ -206,7 +206,7 @@ agents "/agents" -d '{
 
 - **Update** changes only the fields you send. `metadata` replaces all pairs; `null` clears `name` or `instructions`.
 - **Delete** keeps existing Sessions.
-- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search` with `mode: "disabled"`. Support depends on Harness and Environment; see [Execution tools](../../contracts/agents-api/execution-tools.md).
+- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search`. Support depends on Harness and Environment; see [Execution tools](../../contracts/agents-api/execution-tools.md).
 
 ## Sessions
 
@@ -312,7 +312,7 @@ agents "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
 :::
 
 - **When idle,** a message starts a new Turn. **While a Turn runs,** it joins that Turn (steering); it does not start a parallel task.
-- **Content** is `input_text`, plus `input_image` as an inline PNG or JPEG data URI. The whole request is limited to 1 MiB.
+- **Content** is `input_text`, plus `input_image` with an `image_url`; the Harness decides which references it accepts. The whole request is limited to 1 MiB.
 - Full rules: [Message content](../../contracts/agents-api/message-content.md).
 
 ### Cancel

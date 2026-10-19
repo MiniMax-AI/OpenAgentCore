@@ -55,6 +55,12 @@ type SessionPlan struct {
 	// ModelReasoningEffort is frozen for launch and every native Turn.
 	ModelReasoningEffort string
 
+	// OutputSchema is the frozen public JSON Schema sent as outputSchema on every
+	// native root Turn.
+	OutputSchema json.RawMessage
+
+	shellEnvExclude []string
+
 	// Cleanup is the deferred housekeeping the session must run after the child exits.
 	Cleanup func()
 }
@@ -116,7 +122,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		// shell_environment_policy is applied. Do not persist provider credentials.
 		plan.DisableFeatures = append(plan.DisableFeatures, "shell_snapshot")
 		env = append(env, providerAPIKeyEnv+"="+provider.BearerToken)
-		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"shell_environment_policy.exclude", "[" + strconv(providerAPIKeyEnv) + "]"})
+		excludeFromShellEnvironment(&plan, providerAPIKeyEnv)
 	}
 
 	plan.Env = env
@@ -130,6 +136,21 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 			[2]string{"model_provider", strconv(plan.ModelProvider)})
 	}
 	return plan, nil
+}
+
+// excludeFromShellEnvironment keeps a Runtime secret out of native shell tools.
+// The pattern is a native case-insensitive wildcard; one setting holds them all.
+func excludeFromShellEnvironment(plan *SessionPlan, pattern string) {
+	const key = "shell_environment_policy.exclude"
+	plan.shellEnvExclude = append(plan.shellEnvExclude, strconv(pattern))
+	value := "[" + strings.Join(plan.shellEnvExclude, ",") + "]"
+	for i := range plan.ExtraConfig {
+		if plan.ExtraConfig[i][0] == key {
+			plan.ExtraConfig[i][1] = value
+			return
+		}
+	}
+	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value})
 }
 
 // applyExecutionControls maps each official value to its native setting. An
@@ -160,6 +181,9 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 				}
 			}
 		}
+	}
+	if format := controls.OutputFormat; format != nil {
+		plan.OutputSchema = format.Schema
 	}
 	if controls.ReasoningEffort != "" {
 		plan.ModelReasoningEffort = controls.ReasoningEffort

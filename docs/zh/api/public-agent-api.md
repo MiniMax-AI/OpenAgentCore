@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: ad2aea1d04536a7b12079a14f9926fc91b5202d394c1cd132d6c0a004a489451
+source_hash: 83f4c5d7c0e5c748087e6baa51c792a7cd831e217b47980c65db7d04e9222140
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -147,7 +147,7 @@ Core 可以运行多种 Harness，并允许接入你自己的模型访问方式�
 | 字段 | 所在位置 | 值 |
 | --- | --- | --- |
 | `harness` | Agent，或 Session 的内联 `agent` | `codex`、`claude_sdk` 或 `mcode` |
-| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`；对于 `mcode`，还包括 `context_window` 和 `max_output_tokens`。协议必须是该 Harness 的原生协议之一 |
+| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`，以及可选的 `context_window` 和 `max_output_tokens`。协议必须是该 Harness 的原生协议之一 |
 | `harness_config` | Agent、内联 `agent`，或 Session 创建请求（顶层，优先） | Harness 的原生模型参数，例如 Claude Code 的 `thinking` |
 | `environment` | `openai_hosted` 或 `self_hosted` Session 创建请求（顶层） | 可移植的准备配置：`environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins`、`capability_directories`。同一字段不能也出现在 `environment` 中；请参阅 [Environments](../../../contracts/agents-api/zh/environments.md#preparation-order) |
 | `installation` | 只读，适用于 `self_hosted` Session | 在你的计算机上运行的短期安装命令；请参阅 [运行自托管 Session](../getting-started/self-hosted.md) |
@@ -208,7 +208,7 @@ agents "/agents" -d '{
 
 - **更新**只会更改你发送的字段。`metadata` 会替换所有键值对；`null` 会清除 `name` 或 `instructions`。
 - **删除**不会影响现有 Session。
-- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及设置了 `mode: "disabled"` 的 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [执行工具](../../../contracts/agents-api/zh/execution-tools.md)。
+- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [执行工具](../../../contracts/agents-api/zh/execution-tools.md)。
 
 ## Sessions {#sessions}
 
@@ -314,7 +314,7 @@ agents "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
 :::
 
 - **处于空闲状态时，**消息会启动一个新 Turn。**Turn 运行时，**消息会加入该 Turn（进行引导），而不会启动并行任务。
-- **内容**使用 `input_text`，也可以使用 `input_image` 并以内联 PNG 或 JPEG 数据 URI 提供。整个请求限制为 1 MiB。
+- **内容**使用 `input_text`，也可以使用带 `image_url` 的 `input_image`，由 Harness 决定接受哪些引用。整个请求限制为 1 MiB。
 - 完整规则请参阅[消息内容](../../../contracts/agents-api/zh/message-content.md)。
 
 ### 取消 {#cancel}

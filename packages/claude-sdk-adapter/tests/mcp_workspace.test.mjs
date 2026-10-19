@@ -20,7 +20,7 @@ function fixture(t, declarations = [stdio]) {
     const path = join(root, name); mkdirSync(path); return [name, path];
   }));
   const config = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
-    capability_root: dirs.capabilities,  env_names: ["ANTHROPIC_AUTH_TOKEN"], network_access: "enabled", mcp: declarations };
+    capability_root: dirs.capabilities,  env_names: ["ANTHROPIC_AUTH_TOKEN"], mcp: declarations };
   const previous = process.env;
   process.env = { HOME: dirs.home, CLAUDE_CONFIG_DIR: dirs.state, ANTHROPIC_AUTH_TOKEN: "model-secret" };
   t.after(() => { process.env = previous; rmSync(root, { recursive: true, force: true }); });
@@ -31,8 +31,8 @@ function fixture(t, declarations = [stdio]) {
 test("installed MCP projection uses the common Runtime launcher", t => {
   const { request } = fixture(t);
   assert.deepEqual(parseStart(JSON.stringify(request)), request);
-  assert.throws(() => parseStart(JSON.stringify({ ...request, observe_messages: true,
-    output_format: { type: "json_schema", schema: { type: "object" } } })), /invalid_request/);
+  const structured = { ...request, observe_messages: true, output_format: { type: "json_schema", schema: { type: "object" } } };
+  assert.deepEqual(parseStart(JSON.stringify(structured)), structured);
   assert.equal(immediateInput(request), undefined);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
   for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, env: { TOKEN: "secret" } }],
@@ -46,7 +46,6 @@ test("installed MCP projection uses the common Runtime launcher", t => {
       assert.throws(() => parseEnvironmentMCP([{ ...stdio, args }]), /invalid_request/);
     }
   }
-  assert.throws(() => parseStart(JSON.stringify({ ...request, workspace: { ...request.workspace, network_access: "disabled" } })), /invalid_request/);
 });
 
 test("workspace admits declared MCP identities and leaves other native tools alone", async t => {

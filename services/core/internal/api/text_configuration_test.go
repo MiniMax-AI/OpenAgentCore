@@ -43,7 +43,7 @@ func TestTextConfigurationHTTP(t *testing.T) {
 			}
 		})
 	}
-	for _, invalid := range []string{`{"verbosity":""}`, `{"verbosity":"verbose"}`, `{"verbosity":4}`, `{"format":{}}`, `{"format":{"type":"json_schema","schema":{}}}`, `{"format":{"type":"text","extra":true}}`, `{"unknown":true}`} {
+	for _, invalid := range []string{`{"verbosity":""}`, `{"verbosity":"verbose"}`, `{"verbosity":4}`, `{"format":{}}`, `{"format":{"type":"json_schema","schema":{"type":"string"}}}`, `{"format":{"type":"text","extra":true}}`, `{"unknown":true}`} {
 		h, s, _ := testHandler(t)
 		req := httptest.NewRequest(http.MethodPost, "/v1/agents/sessions", strings.NewReader(`{"agent":{"model":"example","text":`+invalid+`},"environment":{"type":"none"},"input":"Describe the configured response format."}`))
 		req.Header.Set("Authorization", "Bearer test-api-key")

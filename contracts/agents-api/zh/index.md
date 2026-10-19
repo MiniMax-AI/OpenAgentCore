@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: dea894611e2067cd7e29198a889ba492c499139b1678c6e32135c3265299f016
+source_hash: 5b97b5d41f986467a6f2f891d2354476e1e3594b494784a203f337f339c64ea3
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -31,7 +31,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | 已实现。所有固定版本设置都会保存；Session 准入只会用到其中一个子集 | [Agents](wire-semantics.md#agents) |
 | Sessions | create (JSON 或流式), retrieve, update, list, delete | 已实现。更新仅接受 `metadata`；删除要求 Session 处于空闲或失败状态 | [Sessions](wire-semantics.md#sessions)、[creation streaming](sessions-events.md#creation-streaming) |
-| Session events | create, stream | 部分实现：支持包含文本和内嵌图像的消息、取消和函数结果；流仅支持实时模式 | [Sessions, events and history](sessions-events.md)、[message content](message-content.md) |
+| Session events | create, stream | 部分实现：支持包含文本和图像的消息、取消和函数结果；流仅支持实时模式 | [Sessions, events and history](sessions-events.md)、[message content](message-content.md) |
 | Turns | retrieve, list | 已实现；Session Turn 路由仅承载根级 Turns | [Turns and Items](sessions-events.md#turns-and-items) |
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
@@ -112,7 +112,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **配置和工具**
 
 - 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions、没有服务源 MCP，也不支持图像输入。
+- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions，也不支持图像输入。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
@@ -123,13 +123,14 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
+- 以 `/` 开头的消息到达 MiniMax Code 时末尾多一个空行，否则 ACP 会将其作为操作员命令执行。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
-- 图像必须是内嵌的 PNG 或 JPEG data URI；远程 URL、`file_id` 和 `detail` 会被拒绝。
+- 图像上的 `file_id` 和 `detail` 会被拒绝；每个 Harness 声明自己接受哪些 `image_url`（[消息内容](message-content.md#images)）。
 
 **Environments 和模板**
 
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
-- Runtime 不会实施 `disabled` 或 `restricted` 网络，因此需要这些网络的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
+- 只有 `enabled` 网络可以运行，因此需要 `disabled` 或 `restricted` 的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
 - `packages.system` 会被拒绝；系统软件包必须预先安装。
 - 冷续接不恢复进程内存、后台进程或临时系统盘修改，已完成的 setup 不会重放（参见 [Environment 持久化](environments.md#runtime-capability-preparation)）。在使用保留 NFS 存储的兼容 microsandbox 节点上，Codex 和 Claude Code 已通过[检查点转移](../../../docs/zh/sandbox-provider.md#checkpoint-transfer)以及[已确认的计算丢失](../../../docs/zh/sandbox-provider.md#confirmed-compute-loss)后续接的资格验证。接管未确认停止的旧写入者、主机崩溃时的持久性及任意崩溃受损历史的完整性仍未通过资格验证。
 

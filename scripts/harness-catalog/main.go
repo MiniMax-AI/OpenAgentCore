@@ -10,25 +10,21 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-type provider struct {
-	RequiresTokenLimits bool `json:"requires_token_limits"`
-}
-
 type harness struct {
-	Kind      string              `json:"kind"`
-	Label     string              `json:"label"`
-	Providers map[string]provider `json:"providers"`
+	Kind      string   `json:"kind"`
+	Label     string   `json:"label"`
+	Protocols []string `json:"protocols"`
 }
 
 func declarations() []harness {
 	var result []harness
 	for _, kind := range builtin.Kinds() {
 		declaration, _ := builtin.Registry().Lookup(kind)
-		providers := make(map[string]provider)
+		protocols := []string{}
 		for _, declared := range declaration.Providers {
-			providers[declared.Protocol] = provider{RequiresTokenLimits: declared.RequiresTokenLimits}
+			protocols = append(protocols, declared.Protocol)
 		}
-		result = append(result, harness{Kind: kind, Label: declaration.Label, Providers: providers})
+		result = append(result, harness{Kind: kind, Label: declaration.Label, Protocols: protocols})
 	}
 	return result
 }

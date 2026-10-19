@@ -12,10 +12,10 @@ func TestExecutionEnvironmentDoesNotDefaultToLocal(t *testing.T) {
 		snapshot Snapshot
 		none     bool
 	}{
-		{"public none", Snapshot{Environment: &v1.Environment{Type: "none"}}, true},
+		{"public none", Snapshot{Environment: v1.Environment{Type: "none"}}, true},
 		{"missing", Snapshot{}, false},
-		{"self-hosted", Snapshot{Environment: &v1.Environment{Type: "self_hosted"}}, false},
-		{"hosted", Snapshot{Environment: &v1.Environment{Type: "openai_hosted"}}, false},
+		{"self-hosted", Snapshot{Environment: v1.Environment{Type: "self_hosted"}}, false},
+		{"hosted", Snapshot{Environment: v1.Environment{Type: "openai_hosted"}}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

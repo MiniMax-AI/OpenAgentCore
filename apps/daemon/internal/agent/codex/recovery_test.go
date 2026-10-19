@@ -158,7 +158,7 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 					t.Fatal(err)
 				}
 				req.DisableExecutionEnvironment = false
-				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", NetworkAccess: "enabled", CapabilitySources: &agentcapabilities.Input{}, WorkspaceRoot: cwd}
+				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}, WorkspaceRoot: cwd}
 			}
 			e, err := testExecutor(t, "complete", req, cfg)
 			if err != nil {

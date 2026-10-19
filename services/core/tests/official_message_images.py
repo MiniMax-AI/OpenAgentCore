@@ -137,7 +137,7 @@ try:
         assert len(sessions.turns.list(session.id).data) == 2
         check_items(session.id)
         before = [t.id for t in sessions.turns.list(session.id).data]
-        invalid = [message_event(messages([text("must not be admitted")])), message_event(messages([{"type": "input_image", "image_url": "https://example.test/image.png"}]))]
+        invalid = [message_event(messages([text("must not be admitted")])), message_event(messages([{"type": "input_image", "image_url": ""}]))]
         response = http.post(base + "/v1/agents/sessions/" + session.id + "/events", headers=headers, json={"events": invalid})
         assert response.status_code == 400
         assert [t.id for t in sessions.turns.list(session.id).data] == before

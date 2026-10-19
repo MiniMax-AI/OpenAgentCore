@@ -7,7 +7,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -18,8 +17,6 @@ type environmentPlacement struct {
 	Skills                []environmentconfig.SkillMetadata `json:"skills,omitempty"`
 	Type                  string                            `json:"type"`
 	ToolEnvironment       bool                              `json:"initialization,omitempty"`
-	NetworkAccess         string                            `json:"-"`
-	AllowedDomains        []string                          `json:"-"`
 	WorkspaceDirectory    string                            `json:"workspace_directory"`
 	CapabilityDirectories []string                          `json:"capability_directories"`
 }
@@ -66,13 +63,6 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	default:
 		return placement, sessions.ErrInvalidInput
 	}
-	placement.NetworkAccess = "enabled"
-	if local.Network != nil {
-		if (agentnetwork.Policy{Access: local.Network.Access, AllowedDomains: local.Network.AllowedDomains}).Validate() != nil {
-			return placement, sessions.ErrInvalidInput
-		}
-		placement.NetworkAccess, placement.AllowedDomains = local.Network.Access, append([]string(nil), local.Network.AllowedDomains...)
-	}
 	return placement, nil
 }
 
@@ -101,8 +91,6 @@ func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, envi
 		Capabilities:      len(sources.Skills)+len(sources.Plugins)+len(sources.Directories) > 0,
 		ToolEnvironment:   placement.ToolEnvironment,
 	}
-	req.LocalEnvironment.NetworkAccess = placement.NetworkAccess
-	req.LocalEnvironment.AllowedDomains = append([]string(nil), placement.AllowedDomains...)
 	return nil
 }
 

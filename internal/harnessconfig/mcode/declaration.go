@@ -3,7 +3,6 @@ package mcode
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -17,9 +16,9 @@ var Declaration = harnessconfig.Declaration{
 	Kind:  "mcode",
 	Label: "MiniMax Code",
 	Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{
-		{Protocol: "anthropic", RequiresTokenLimits: true},
-		{Protocol: "responses", RequiresTokenLimits: true},
-		{Protocol: "chat_completions", RequiresTokenLimits: true},
+		{Protocol: "anthropic"},
+		{Protocol: "responses"},
+		{Protocol: "chat_completions"},
 	}},
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:     proto.CapabilitySupported,
@@ -50,23 +49,21 @@ var Declaration = harnessconfig.Declaration{
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
 	},
 	// Native search needs a MiniMax account credential that Core does not hold, so
-	// features.webSearch stays false and disabled is the only mode. MiniMax Code has
-	// no native home for effort, summary, service tier or programmatic tool calling.
+	// features.webSearch stays false and disabled is the only mode. Effort becomes the
+	// custom model's only thinking option, and none disables native thinking.
+	// MiniMax Code has no native home for summary, service tier or programmatic
+	// tool calling.
 	// Medium is the official default verbosity and needs no setting.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled"},
+		ReasoningEfforts:        []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"},
 		ProgrammaticToolCalling: []bool{false},
 		TextVerbosities:         []string{"medium"},
 	},
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
-	MCPOrigins:         []string{"environment"},
+	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		environment := admission.Environment
-		if environment == nil || (environment.Type != "none" && environment.Type != "openai_hosted" && environment.Type != "self_hosted") ||
-			strings.TrimSpace(admission.Model) == "" || (admission.TextFormat != "" && admission.TextFormat != "text") {
-			return harnessconfig.ErrInvalidInput
-		}
 		return harnessconfig.RejectSubagentTools(admission, "mcp")
 	},
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
@@ -74,8 +71,8 @@ var Declaration = harnessconfig.Declaration{
 			return errors.New("The configured engine does not support public functions.")
 		}
 		for _, server := range mcp {
-			if server.ServerLabel == "oac_workspace" || server.AllowedTools != nil || server.Required {
-				return errors.New("The configured engine requires an unreserved MCP label, allowed_tools=null and required=false.")
+			if server.AllowedTools != nil || server.Required {
+				return errors.New("The configured engine requires allowed_tools=null and required=false.")
 			}
 		}
 		return nil

@@ -35,7 +35,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 			case "url-auth":
 				servers[0].ServerURL = "https://user:secret@example.invalid/mcp"
 			case "query":
-				servers[0].ServerURL += "?"
+				servers[0].ServerURL += "?tenant=a"
 			case "wildcard":
 				tools = []string{"*"}
 				servers[0].AllowedTools = &tools
@@ -47,7 +47,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 				req.DisableExecutionEnvironment = false
 			}
 			start, _, err := prepare(config, req)
-			valid := mode == "unrestricted" || mode == "selected" || mode == "empty" || mode == "nil-slice" || mode == "auth" || mode == "required"
+			valid := mode == "unrestricted" || mode == "selected" || mode == "empty" || mode == "nil-slice" || mode == "auth" || mode == "required" || mode == "query" || mode == "wildcard"
 			if (err == nil) != valid {
 				t.Fatalf("unexpected admission: %v", err)
 			}

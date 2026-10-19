@@ -73,23 +73,21 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if err := req.ValidateToolSearch(true); err != nil {
 		return startRequest{}, nil, err
 	}
-	if req.ToolSearch {
-		if (req.LocalEnvironment != nil && (len(req.LocalEnvironment.Skills) != 0 || len(req.LocalEnvironment.MCP) != 0)) || req.MCPHTTPServers != nil || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
-			return fail("tool discovery requires the single-agent text/function profile")
-		}
-		start.ToolSearch = true
-	}
+	start.ToolSearch = req.ToolSearch
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
 	}
-	// Without a search control Claude Code keeps its native web tools.
+	// Without a search control Claude Code keeps its native web tools, which only a workspace runs.
 	if controls := req.ExecutionControls; controls != nil && controls.WebSearch != nil {
+		if controls.WebSearch.Mode == "live" && config.Workspace == nil {
+			return fail("live web search requires a dedicated workspace")
+		}
 		start.DisableWebSearch = controls.WebSearch.Mode == "disabled"
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && (len(req.LocalEnvironment.MCP) != 0 || len(req.LocalEnvironment.Skills) != 0)) {
-			return fail("structured output requires the qualified message-observing single-agent function profile")
+		if format.Type != "json_schema" || !req.ObserveMessages {
+			return fail("structured output requires message observation")
 		}
 		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
 			return startRequest{}, nil, err

@@ -26,8 +26,7 @@ const workspace = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
       skills: [{ metadata: { type: "inline", name: "fixture", description: "Fixture." }, relative_root: "pkg/skill", package_root: "pkg" }] } : {}) };
 const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: mode === "instructions" ? "Be brief." : "", cwd: dirs.workspace,
   workspace, ...(mode.startsWith("resume") ? { resume: "native" } : {}),
-  ...(mode.startsWith("functions") || mode === "search-missing" ? { functions: [{ name: "lookup", description: "Lookup", parameters: { type: "object" }, defer_loading: mode === "search-missing" }] } : {}),
-  ...(mode === "search-missing" ? { tool_search: true } : {}) };
+  ...(mode.startsWith("functions") ? { functions: [{ name: "lookup", description: "Lookup", parameters: { type: "object" }, defer_loading: false }] } : {}) };
 process.env.HOME = dirs.home;
 process.env.CLAUDE_CONFIG_DIR = dirs.state;
 process.env.ANTHROPIC_API_KEY = "fixture-secret";
@@ -59,7 +58,7 @@ globalThis.queryFixture = ({prompt, options}) => {
   return { close() { child.stdin.end(); }, async *[Symbol.asyncIterator]() {
     const first = (await prompt[Symbol.asyncIterator]().next()).value;
     yield { type: "system", subtype: "init", session_id: "native", mcp_servers: request.functions ? [{ name: "functions", status: "connected" }] : [],
-      tools: ["Bash", "Read", "Edit", ...(mode === "functions" || mode === "search-missing" ? ["mcp__functions__lookup"] : []), ...(mode.startsWith("skills") ? ["Skill"] : [])],
+      tools: ["Bash", "Read", "Edit", ...(mode === "functions" ? ["mcp__functions__lookup"] : []), ...(mode.startsWith("skills") ? ["Skill"] : [])],
       // A project's settings can disable Core's Skill plugin while the Skill tool stays.
       skills: mode === "skills" ? ["environment-skills-0:fixture"] : [] };
     if (mode.startsWith("commands")) {
@@ -100,14 +99,14 @@ try {
           assert.deepEqual(observations.at(-1).observation,{kind:"command",status:"incomplete",command:"printf 'observed'"});
           assert.deepEqual(events.at(-1),{type:"error",code:mode === "commands-cancel"?"cancelled":"execution_failed"});
         }
-      } else if (mode === "functions-missing" || mode === "search-missing" || mode === "skills-missing") assert.deepEqual(events.at(-1), {type:"error",code:"execution_failed"});
+      } else if (mode === "functions-missing" || mode === "skills-missing") assert.deepEqual(events.at(-1), {type:"error",code:"execution_failed"});
       else assert.equal(events.at(-1).type, "result");
     }
   }
 } finally { rmSync(root, {recursive:true,force:true}); }
 `;
 
-for (const mode of ["fresh", "instructions", "resume-existing", "resume-missing", "resume-mismatch", "commands-success", "commands-cancel", "commands-missing", "functions", "functions-missing", "search-missing", "skills", "skills-missing"]) {
+for (const mode of ["fresh", "instructions", "resume-existing", "resume-missing", "resume-mismatch", "commands-success", "commands-cancel", "commands-missing", "functions", "functions-missing", "skills", "skills-missing"]) {
   test(`workspace execution boundary: ${mode}`, { timeout: 15000 }, () => {
     const child = spawnSync(process.execPath, ["--input-type=module", "-e", fixture, mode], { encoding: "utf8", timeout: 10000 });
     assert.equal(child.status, 0, child.stderr || child.error?.message);

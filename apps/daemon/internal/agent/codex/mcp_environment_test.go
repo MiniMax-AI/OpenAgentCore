@@ -13,7 +13,7 @@ import (
 
 func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.T) {
 	token := "user-token"
-	local := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{
+	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "must-not-be-native-command", Args: []string{"private-argument"}}},
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/1", BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.com/mcp", HTTPHeaders: map[string]string{"X-Key": "literal-${DO_NOT_EXPAND}"}}},
 	}}
@@ -22,7 +22,7 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 		t.Fatal("environment declarations were not projected", err)
 	}
 	executable, _ := os.Executable()
-	if servers["local"].Command != executable || !servers["local"].ApproveTools ||
+	if servers["local"].Command != executable ||
 		!slices.Equal(servers["local"].Args, []string{"runtime-mcp-exec", "/private/runtime/capabilities", "plugins/0", "local"}) {
 		t.Fatal("native stdio bypasses the packaged launcher")
 	}
@@ -33,10 +33,10 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 		t.Fatal("private header values changed")
 	}
 	fixture := map[string]any{"config": map[string]any{
-		"mcp_oauth_credentials_store": "file", "features": map[string]bool{"plugins": false, "apps": false},
+		"mcp_oauth_credentials_store": "file",
 		"mcp_servers": map[string]any{
-			"local":  map[string]any{"command": servers["local"].Command, "args": servers["local"].Args, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve"},
-			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve", "bearer_token_env_var": remote.BearerTokenEnvVar, "env_http_headers": remote.EnvHTTPHeaders},
+			"local":  map[string]any{"command": servers["local"].Command, "args": servers["local"].Args, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil},
+			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "bearer_token_env_var": remote.BearerTokenEnvVar, "env_http_headers": remote.EnvHTTPHeaders},
 		},
 	}}
 	raw, _ := json.Marshal(fixture)
@@ -49,15 +49,9 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 	}
 }
 
-func TestEnvironmentMCPRejectsUnqualifiedNetworkAndCredentialChanges(t *testing.T) {
-	for _, access := range []string{"", "restricted", "disabled"} {
-		local := &proto.LocalEnvironment{NetworkAccess: access, MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "local", Type: "stdio"}}}}
-		if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local}); err == nil {
-			t.Errorf("unqualified MCP network accepted: %s", access)
-		}
-	}
+func TestEnvironmentMCPRejectsUnqualifiedCredentialChanges(t *testing.T) {
 	token := "user-token"
-	local := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{{BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "http://example.com/mcp"}}}}
+	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "http://example.com/mcp"}}}}
 	if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local}); err == nil {
 		t.Fatal("plaintext bearer accepted")
 	}
