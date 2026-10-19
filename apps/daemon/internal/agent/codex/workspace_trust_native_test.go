@@ -49,7 +49,7 @@ func TestNativeWorkspaceConfigurationAndDeclaredMCPBinding(t *testing.T) {
 		return newExecutor(ctx, proto.PromptRequestPayload{
 			AgentKind: "codex", AgentStateKey: "workspace-trust", DisableSubagents: true,
 			AgentSessionID: thread, RequireExistingNativeSession: thread != "", MCPHTTPServers: &servers,
-			LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", WorkspaceRoot: workspace},
+			LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: workspace},
 			AgentOptions:     map[string]any{"model": "gpt-5.5", "model_provider": map[string]any{"base_url": "http://127.0.0.1:9/v1", "protocol": "responses", "api_key": "unused"}},
 		}, cfg)
 	}

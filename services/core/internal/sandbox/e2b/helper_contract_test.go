@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -91,8 +90,5 @@ func validManagedExchange(data []byte) bool {
 	delete(fields, "RuntimeBootstrap")
 	data, _ = json.Marshal(fields)
 	var bootstrap sandbox.Bootstrap
-	if json.Unmarshal(data, &bootstrap) != nil || !validReference(bootstrap.Reference) || !validID(bootstrap.DeviceID) || !validID(bootstrap.SessionID) {
-		return false
-	}
-	return (agentnetwork.Policy{Access: bootstrap.NetworkAccess, AllowedDomains: bootstrap.AllowedDomains}).Validate() == nil
+	return json.Unmarshal(data, &bootstrap) == nil && validReference(bootstrap.Reference) && validID(bootstrap.DeviceID) && validID(bootstrap.SessionID)
 }

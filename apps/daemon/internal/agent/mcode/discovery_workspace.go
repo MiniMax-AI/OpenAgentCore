@@ -51,7 +51,7 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		fail(err)
 		return nil
 	}
-	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_COMPANION"), os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_COMPANION"), os.Getenv("OAC_RUNTIME_WORKSPACE"))
 	if err == nil {
 		err = CheckWorkspace(parent, c)
 	}

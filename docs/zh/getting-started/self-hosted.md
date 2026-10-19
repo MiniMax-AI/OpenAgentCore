@@ -1,7 +1,7 @@
 ---
 title: "运行自托管 Session"
 source: docs/getting-started/self-hosted.md
-source_hash: 560d1a1084f74b31d66720bd3a48ab73abb36996c5eff1a53e36f504e883889f
+source_hash: 01c815bcb2a5c7c9eee05574e949cd391a0188be8dc5b3fcfdc84c828071134e
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行，例如工作站、虚拟机或容器，而不是 Core 管理的沙箱。本指南面向用 `oac-daemon` 连接此类机器并保持其运行的应用开发者。
@@ -9,7 +9,7 @@ source_hash: 560d1a1084f74b31d66720bd3a48ab73abb36996c5eff1a53e36f504e883889f
 应用通过 `/v1` 创建 Session，并获得安装 `oac-daemon`、启动它并连接 Core 的命令。Web 在 Session 页面展示同一命令；Web 是可选的。Core 不创建、停止或回收这台机器。
 
 > [!WARNING]
-> 守护进程不是沙箱。工具以启动守护进程的账号权限运行，能访问该账号可访问的所有资源。需要隔离时，请使用容器或虚拟机；参阅 [Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)。要求网络策略的模板会被自托管 Session 拒绝，因为守护进程不限制网络访问。
+> 守护进程不是沙箱。工具以启动守护进程的账号权限运行，能访问该账号可访问的所有资源。需要隔离时，请使用容器或虚拟机；参阅 [Runtime 与外层隔离](../concepts.md#runtime-and-outer-isolation)。
 
 Session 自带模型提供商；安装默认模型不适用（[原因](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)）。机器获得的执行器凭据仅适用于这一个 Environment。
 

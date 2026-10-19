@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 2208cbf1f6bd39e888618323077ac9ce865f2aa412a111b3c040631427f30479
+source_hash: 68f12431a9f5685dd88b04d239d40f28f2390e923397eb0071a1a57ea58666d1
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -189,7 +189,7 @@ Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后
 
 运行器仅使用中立的 Environment 和 Session 身份以及一个 Runtime 对端，不包含提供商、部署或操作系统分支。Harness 差异保留在适配器中。
 
-**可移植的准备输入。** `self_hosted` 输入仅携带 `workspace_directory` 和 `capability_directories`。无论 Session 采用哪种工作区放置方式，还可以发送 `x_agents_core.environment`，这是 Core 扩展，包含 `environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins` 和 `capability_directories`。它使用与 `openai_hosted` 输入相同的解析器和继承规则。若同一字段同时在 `x_agents_core.environment` 和顶层 `environment` 中提供，则会被拒绝，包括显式 null。`self_hosted` Session 只能通过此扩展指定模板，并且不能使用 network 不是 `enabled` 的模板（400，param `x_agents_core.environment.environment_template_id`）。机器位置、规格大小和网络策略不是此扩展的字段。
+**可移植的准备输入。** `self_hosted` 输入仅携带 `workspace_directory` 和 `capability_directories`。无论 Session 采用哪种工作区放置方式，还可以发送 `x_agents_core.environment`，这是 Core 扩展，包含 `environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins` 和 `capability_directories`。它使用与 `openai_hosted` 输入相同的解析器和继承规则。若同一字段同时在 `x_agents_core.environment` 和顶层 `environment` 中提供，则会被拒绝，包括显式 null。`self_hosted` Session 只能通过此扩展指定模板。机器位置、规格大小和网络策略不是此扩展的字段。
 
 ```json
 {
@@ -322,7 +322,7 @@ Session 会先应用模板，然后应用自身字段。组合仅在加密 Sessi
 
 `restricted` 要求在 `allowed_domains` 中提供 1–100 个精确 ASCII 主机名；子域名和重定向目标需要各自的条目。通配符、URL 或端口语法、IP 字面量、Unicode 和尾随点都会被拒绝。读取操作会返回提供的拼写、顺序和重复项；比较操作使用单独的小写去重副本。
 
-Runtime 不会强制执行 `disabled` 或 `restricted`，也没有提供商代为强制执行。因此，Core 会在模板中存储这些策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
+只有 `enabled` 可以运行。Core 会在模板中存储其他策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
 
 ### Env 与设置命令 {#env-and-setup-commands}
 
@@ -394,7 +394,7 @@ stdio 服务器通过 daemon 的 stdio helper 启动；该 helper 会解析已�
 
 [Harness capabilities](harness-capabilities.md#environment-preparation) 负责受支持的 Plugin 传输及每个 Harness 的限制。
 
-Environment MCP 需要启用的网络。重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
+重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
 
 ### 有效绑定 {#effective-bindings}
 
@@ -407,7 +407,7 @@ Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#http-mcp)）具有 
 | 来源 | 连接发起位置 | 允许的放置方式 |
 | --- | --- | --- |
 | `service` | Core 的服务端执行主机 | 仅 `none` |
-| `environment` | Environment 的工作区 | `openai_hosted` 和启用网络的 `self_hosted` |
+| `environment` | Environment 的工作区 | `openai_hosted` 和 `self_hosted` |
 
 Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与放置方式以及 Runtime 公布的 HTTP、bearer 和必需初始化能力进行核对，Runtime 会在调用适配器之前再次验证来源。不存在按 Harness 名称或提供商分支选择不同路径的逻辑。
 

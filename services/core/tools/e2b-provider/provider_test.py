@@ -27,8 +27,7 @@ class ProviderTest(unittest.TestCase):
         self.request = {'Version': 1, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
-                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret',
-                                          NetworkAccess='enabled', AllowedDomains=[])}
+                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret')}
         self.request['RuntimeBootstrap'] = {
             'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],

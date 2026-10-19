@@ -1,5 +1,4 @@
-// Package agentnetwork validates the hosted execution policy without selecting
-// a harness, Provider, native proxy or initialization mechanism.
+// Package agentnetwork validates the public Environment network field.
 package agentnetwork
 
 import (
@@ -9,11 +8,11 @@ import (
 	"strings"
 )
 
-var ErrInvalid = errors.New("invalid hosted network policy")
+var errInvalid = errors.New("invalid hosted network policy")
 
 type Policy struct {
-	Access         string   `json:"access"`
-	AllowedDomains []string `json:"allowed_domains"`
+	Access         string
+	AllowedDomains []string
 }
 
 // Validate accepts the qualified exact ASCII hostname form. It does not rewrite
@@ -26,16 +25,16 @@ func (p Policy) Validate() error {
 		}
 	case "restricted":
 		if len(p.AllowedDomains) < 1 || len(p.AllowedDomains) > 100 {
-			return ErrInvalid
+			return errInvalid
 		}
 		for _, domain := range p.AllowedDomains {
 			if !hostname(domain) {
-				return ErrInvalid
+				return errInvalid
 			}
 		}
 		return nil
 	}
-	return ErrInvalid
+	return errInvalid
 }
 
 func hostname(value string) bool {
@@ -58,9 +57,8 @@ func hostname(value string) bool {
 	return true
 }
 
-// Hosts is the deterministic native allowlist. The caller must validate first.
-// DNS host identity is case-insensitive; public metadata remains untouched.
-func (p Policy) Hosts() []string {
+// hosts is the case-folded, sorted allowlist. The caller must validate first.
+func (p Policy) hosts() []string {
 	hosts := make([]string, len(p.AllowedDomains))
 	for i, host := range p.AllowedDomains {
 		hosts[i] = strings.ToLower(host)
@@ -80,16 +78,11 @@ func (p Policy) Narrows(template Policy) bool {
 	if template.Access != "restricted" || p.Access != "restricted" {
 		return false
 	}
-	hosts := template.Hosts()
-	for _, host := range p.Hosts() {
+	hosts := template.hosts()
+	for _, host := range p.hosts() {
 		if _, ok := slices.BinarySearch(hosts, host); !ok {
 			return false
 		}
 	}
 	return true
-}
-
-// Equal compares validated effective authority, independent of public list order.
-func (p Policy) Equal(other Policy) bool {
-	return p.Access == other.Access && p.Validate() == nil && other.Validate() == nil && slices.Equal(p.Hosts(), other.Hosts())
 }

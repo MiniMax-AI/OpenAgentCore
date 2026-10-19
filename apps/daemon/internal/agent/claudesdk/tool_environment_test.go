@@ -10,14 +10,13 @@ import (
 
 func TestSelfHostedToolEnvironment(t *testing.T) {
 	config := workspaceFixture(t)
-	config.Workspace.NetworkAccess = "enabled"
 	file := filepath.Join(t.TempDir(), "tool-env.json")
 	if err := os.WriteFile(file, []byte(`{"USER_VALUE":"ready"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", file)
 	req := workspaceRequest()
-	req.LocalEnvironment = &proto.LocalEnvironment{NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.Directory}
+	req.LocalEnvironment = &proto.LocalEnvironment{WorkspaceRoot: config.Workspace.Directory}
 	profile, _, err := prepareWorkspace(config, req)
 	if err != nil {
 		t.Fatal(err)

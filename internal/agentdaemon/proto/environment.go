@@ -24,9 +24,6 @@ type LocalEnvironment struct {
 	MCP []EnvironmentMCP `json:"-"`
 	// ToolEnvironment consumes Core-completed confidential initialization.
 	ToolEnvironment bool `json:"tool_environment,omitempty"`
-	// NetworkAccess must match the immutable Runtime policy for execution.
-	NetworkAccess  string   `json:"network_access,omitempty"`
-	AllowedDomains []string `json:"allowed_domains,omitempty"`
 }
 
 // EnvironmentMCP is transient Runtime configuration. Do not log it: HTTP headers

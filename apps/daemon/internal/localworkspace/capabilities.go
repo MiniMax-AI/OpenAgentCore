@@ -57,9 +57,6 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 		}
 	}
 	if len(manifest.MCP) != 0 {
-		if b.NetworkPolicy().Access != "enabled" {
-			return r, agentcapabilities.ErrInvalid
-		}
 		values, readErr := b.ReadToolEnvironment()
 		if readErr != nil {
 			return r, readErr

@@ -1,7 +1,6 @@
 package agentnetwork
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -43,18 +42,5 @@ func TestTemplateNetworkOverrideCannotBroaden(t *testing.T) {
 	}
 	if (Policy{Access: "restricted"}).Narrows(policies[0]) || policies[1].Narrows(Policy{}) {
 		t.Fatal("invalid policy cannot gain authority through an override")
-	}
-}
-
-func TestPolicyIdentityPreservesPublicInput(t *testing.T) {
-	input := []string{"B.example.com", "a.example.com", "B.example.com"}
-	before := append([]string(nil), input...)
-	policy := Policy{Access: "restricted", AllowedDomains: input}
-	other := Policy{Access: "restricted", AllowedDomains: []string{"a.example.com", "b.example.com"}}
-	if !policy.Equal(other) || !reflect.DeepEqual(input, before) {
-		t.Fatal("effective comparison changed caller input or list order affected authority")
-	}
-	if policy.Equal(Policy{Access: "restricted", AllowedDomains: []string{"example.com"}}) {
-		t.Fatal("parent hostname must not grant subdomain authority")
 	}
 }

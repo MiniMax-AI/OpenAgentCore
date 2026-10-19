@@ -18,7 +18,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	r := testRequest(t)
 	r.RunID, r.Input = "", nil
 	r.DisableExecutionEnvironment = false
-	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}
+	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: t.TempDir()}
 	record := filepath.Join(t.TempDir(), "calls")
 	exe, err := os.Executable()
 	if err != nil {
@@ -30,7 +30,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Companion: "/opt/mcode-harness", Directory: r.LocalEnvironment.WorkspaceRoot, Network: "enabled"}, r, record
+	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Companion: "/opt/mcode-harness", Directory: r.LocalEnvironment.WorkspaceRoot}, r, record
 }
 
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {

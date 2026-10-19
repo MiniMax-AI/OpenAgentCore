@@ -12,11 +12,10 @@ import (
 
 func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) {
 	config := workspaceFixture(t)
-	config.Workspace.NetworkAccess = "enabled"
 	req := workspaceRequest()
 	token := "selected-user-token"
 	t.Setenv("MCP_TOKEN", "unselected-native-token")
-	req.LocalEnvironment = &proto.LocalEnvironment{CapabilityRoot: "/private/runtime/capabilities", NetworkAccess: "enabled", WorkspaceRoot: config.Workspace.Directory, MCP: []proto.EnvironmentMCP{
+	req.LocalEnvironment = &proto.LocalEnvironment{CapabilityRoot: "/private/runtime/capabilities", WorkspaceRoot: config.Workspace.Directory, MCP: []proto.EnvironmentMCP{
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/local", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "untrusted-package-command", Args: []string{"package-argument"}, EnvVars: []string{"MCP_TOKEN"}}},
 		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", BearerTokenEnvVar: "MCP_TOKEN"}, BearerToken: &token},
 	}}
@@ -52,7 +51,6 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 
 func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 	for _, mutate := range []func(*proto.LocalEnvironment){
-		func(e *proto.LocalEnvironment) { e.NetworkAccess = "restricted" },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Name = "functions" },
 		func(e *proto.LocalEnvironment) { e.MCP = append(e.MCP, e.MCP[0]) },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Type = "sse" },
@@ -64,7 +62,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 			e.MCP[0].Server.URL = "http://example.invalid/mcp"
 		},
 	} {
-		environment := &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
+		environment := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
 		mutate(environment)
 		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}); err == nil {
 			t.Fatal("unsupported declaration accepted")

@@ -25,7 +25,6 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 	for _, resume := range []bool{false, true} {
 		t.Run(map[bool]string{false: "new", true: "load"}[resume], func(t *testing.T) {
 			c, req, record := workspaceFixture(t)
-			c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
 			if resume {
 				req.AgentSessionID = "native-1"
@@ -72,10 +71,9 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 }
 
 func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T) {
-	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "restricted", "disabled", "duplicate"} {
+	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "duplicate"} {
 		t.Run(name, func(t *testing.T) {
 			c, req, _ := workspaceFixture(t)
-			c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
 			switch name {
 			case "http-headers", "http-bearer-insecure", "http-bearer-missing":
@@ -91,8 +89,6 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 					token := "confidential-http-token"
 					req.LocalEnvironment.MCP[0].BearerToken = &token
 				}
-			case "restricted", "disabled":
-				c.Network, req.LocalEnvironment.NetworkAccess = name, name
 			case "duplicate":
 				req.LocalEnvironment.MCP = append(req.LocalEnvironment.MCP, environmentMCPFixture())
 			}
@@ -105,7 +101,6 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 
 func TestEnvironmentMCPCancelSettlesPendingObservationBeforeDone(t *testing.T) {
 	c, req, _ := workspaceFixture(t)
-	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
 	script, err := os.ReadFile(c.Binary)
 	if err != nil {
@@ -180,7 +175,6 @@ func mcpRegistryEntry(server, segment, tool, toolSegment string) map[string]any 
 func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 	for _, authenticated := range []bool{false, true} {
 		c, req, record := workspaceFixture(t)
-		c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 		item := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}
 		const token = "private-mcp-canary"
 		if authenticated {
@@ -232,7 +226,6 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 
 func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	c, req, _ := workspaceFixture(t)
-	c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
 	token := "selected-public-vault-canary"
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", BearerToken: &token}}
 	opts, err := prepareWorkspaceOptions(testStateRoot(t), c, req)

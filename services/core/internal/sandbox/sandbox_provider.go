@@ -54,8 +54,6 @@ type Bootstrap struct {
 	Workspace *workspacefs.Binding `json:",omitempty"`
 	Reference
 	SessionID, DeviceID, CoreURL, Credential string
-	NetworkAccess                            string
-	AllowedDomains                           []string
 }
 
 // Info describes compute only. Running does not establish daemon authentication,

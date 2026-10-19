@@ -91,7 +91,7 @@ for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "m
         { server_label: "optional", server_url: "https://optional.invalid/mcp", allowed_tools: [], required: false }];
       child.stdin.write(JSON.stringify({ type: "start", model: "fixed", input: [{ content: [{ type: "input_text", text: "one input" }] }], system_prompt: "", cwd,
         ...(mode.includes("history") || mode === "resume" ? { resume: "native" } : {}),
-        ...(mode.startsWith("workspace-") ? {workspace:{home:cwd,state:cwd,scratch:cwd,capability_root:cwd,env_names:[],network_access:"enabled",mcp:servers}} : {mcp_http_servers:servers}) }) + "\n");
+        ...(mode.startsWith("workspace-") ? {workspace:{home:cwd,state:cwd,scratch:cwd,capability_root:cwd,env_names:[],mcp:servers}} : {mcp_http_servers:servers}) }) + "\n");
       const exit = await closed;
       assert.equal(exit.signal, null, stderr);
       assert.equal(exit.code, 0, stderr);
