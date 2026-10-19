@@ -49,11 +49,11 @@ test("native admission reserves before start across the whole tree and releases 
   const profile = new Subagents("/workspace", 1, undefined), context = { signal: new AbortController().signal };
   profile.consume({ type: "system", subtype: "init", session_id: "root" });
   const before = (id, actor) => profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "Agent", tool_use_id: id, agent_id: actor,
-    tool_input: { subagent_type: "oac_worker", prompt: "work" } }, id, context);
+    tool_input: { subagent_type: "general-purpose", prompt: "work" } }, id, context);
   assert.equal((await before("one")).hookSpecificOutput.permissionDecision, "allow");
   assert.equal((await before("two")).hookSpecificOutput.permissionDecision, "deny");
   profile.consume({ type: "system", subtype: "task_started", task_type: "local_agent", task_id: "child", session_id: "root", tool_use_id: "one" });
-  await profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "child", agent_type: "oac_worker" }, undefined, context);
+  await profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "child", agent_type: "general-purpose" }, undefined, context);
   assert.equal((await before("nested", "child")).hookSpecificOutput.permissionDecision, "deny");
   const send = await profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "SendMessage", tool_use_id: "send",
     tool_input: { to: "child", message: "continue" } }, "send", context);
@@ -68,7 +68,7 @@ test("native admission reserves before start across the whole tree and releases 
 test("an unadmitted native start cannot authorize a child tool actor", async () => {
   const profile = new Subagents("/workspace", 1, undefined);
   profile.consume({ type: "system", subtype: "init", session_id: "root" });
-  await assert.rejects(profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "foreign", agent_type: "oac_worker" }), /invalid native child start/);
+  await assert.rejects(profile.childStart({ hook_event_name: "SubagentStart", session_id: "root", agent_id: "foreign", agent_type: "general-purpose" }), /invalid native child start/);
   assert.equal(profile.permitsActor("foreign"), false);
 });
 
@@ -122,4 +122,33 @@ test("child input uses the shared neutral input envelope", () => {
   assert.deepEqual(input.fact.payload, { input: [{ role: "user", content: [{ type: "input_text", text: "child input" }] }] });
   assert.equal(input.fact.item_id, "child-turn");
   assert.equal(input.fact.position, 0);
+});
+
+test("native agent types, model, mode and worktree isolation pass; remote isolation is refused", async () => {
+  const profile = new Subagents("/workspace", 9, undefined), context = { signal: new AbortController().signal };
+  profile.consume({ type: "system", subtype: "init", session_id: "root" });
+  const decide = (id, extra) => profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "Agent", tool_use_id: id,
+    tool_input: { subagent_type: "Explore", prompt: "work", ...extra } }, id, context).then(r => r.hookSpecificOutput.permissionDecision);
+  assert.equal(await decide("a", { model: "sonnet", mode: "plan", run_in_background: true, isolation: "worktree" }), "allow");
+  assert.equal(await decide("b", { isolation: "remote" }), "deny");
+});
+
+test("SendMessage addresses a child by its spawned name and the model is reported", async () => {
+  const profile = new Subagents("/workspace", 6, undefined), context = { signal: new AbortController().signal };
+  profile.consume({ type: "system", subtype: "init", session_id: "root" });
+  await profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "Agent", tool_use_id: "one",
+    tool_input: { prompt: "work", name: "helper" } }, "one", context);
+  profile.consume({ type: "system", subtype: "task_started", task_type: "local_agent", task_id: "child", session_id: "root", tool_use_id: "one" });
+  profile.consume({ type: "system", subtype: "task_notification", task_id: "child", session_id: "root", tool_use_id: "one", status: "completed" });
+  const send = await profile.beforeTool({ hook_event_name: "PreToolUse", session_id: "root", tool_name: "SendMessage", tool_use_id: "send",
+    tool_input: { to: "helper", message: "continue" } }, "send", context);
+  assert.equal(send.hookSpecificOutput.permissionDecision, "allow");
+
+  const { root, children } = fixture();
+  root[1].message.content[0].input = { prompt: "child input", name: "helper", model: "sonnet" };
+  root[1].message.content.push({ type: "tool_use", id: "send", name: "SendMessage", input: { to: "helper", message: "continue" } });
+  root.push({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "send", content: "ok" }] } });
+  const facts = projectHistory("root", root, children).filter(e => e.type === "subagent_coordination");
+  assert.equal(facts.find(e => e.fact.kind === "create_subagent_call").fact.model, "sonnet");
+  assert.deepEqual(facts.find(e => e.fact.kind === "send_subagent_input_call").fact.recipients, ["child"]);
 });
