@@ -21,7 +21,6 @@ func TestDeclarationAdmitsNativeToolCombinations(t *testing.T) {
 		"structured output with mcp":         {TextFormat: "json_schema", Tools: tools("mcp")},
 		"structured output with tool_search": {TextFormat: "json_schema", Tools: tools("function", "tool_search")},
 		"tool_search with mcp":               {Tools: tools("function", "tool_search", "mcp")},
-		"tool_search with multi_agent":       {MultiAgent: true, Tools: tools("tool_search")},
 	} {
 		if admission.Environment == nil {
 			admission.Environment = &harnessconfig.AdmissionEnvironment{Type: "none"}

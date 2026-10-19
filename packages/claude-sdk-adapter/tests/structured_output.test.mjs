@@ -21,7 +21,7 @@ test('unrelated or failed results cannot publish a candidate',()=>{
   const o=new StructuredOutput();o.consume(call('id'),'session');o.consume(receipt('id'),'session');assert.throws(()=>o.complete(r));
  }
 });
-test('output configuration is requires message observation and combines with agents and MCP',()=>{
+test('output configuration requires message observation and combines with agents and MCP',()=>{
  const r={type:'start',input: [{ content: [{ type: "input_text", text: 'hello' }] }],model:'model',system_prompt:'',cwd:'/tmp',observe_messages:true,output_format:{type:'json_schema',schema:{type:'object'}}};
  assert.deepEqual(parseStart(JSON.stringify(r)),r);
  for(const change of [{subagents:{max_concurrent:1}},{mcp_http_servers:[]}]) assert.deepEqual(parseStart(JSON.stringify({...r,...change})),{...r,...change});

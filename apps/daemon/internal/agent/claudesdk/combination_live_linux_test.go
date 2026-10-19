@@ -21,11 +21,10 @@ import (
 // TestLiveClaudeSDKNativeCombinations proves structured output beside multi_agent,
 // a function tool and deferred tool search on the real SDK and provider.
 func TestLiveClaudeSDKNativeCombinations(t *testing.T) {
-	entrypoint := os.Getenv("OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT")
-	keyFile := os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE")
-	proofRoot := os.Getenv("OAC_TEST_CLAUDE_SDK_PROOF_DIR")
-	if entrypoint == "" || keyFile == "" || !filepath.IsAbs(proofRoot) {
-		t.Skip("real SDK/provider acceptance requires an entrypoint, a private key file and an absolute proof directory")
+	entrypoint, keyFile, proofRoot := os.Getenv("OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT"), os.Getenv("OAC_TEST_CLAUDE_SDK_MINIMAX_KEY_FILE"), os.Getenv("OAC_TEST_CLAUDE_SDK_PROOF_DIR")
+	endpoint, model := os.Getenv("OAC_TEST_CLAUDE_SDK_BASE_URL"), os.Getenv("OAC_TEST_CLAUDE_SDK_MODEL")
+	if entrypoint == "" || keyFile == "" || endpoint == "" || model == "" || !filepath.IsAbs(proofRoot) {
+		t.Skip("real SDK/provider acceptance requires an entrypoint, a private key file, an endpoint, a model and an absolute proof directory")
 	}
 	key, err := os.ReadFile(keyFile)
 	if err != nil {
@@ -40,9 +39,9 @@ func TestLiveClaudeSDKNativeCombinations(t *testing.T) {
 	}
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: entrypoint, StateDir: filepath.Join(root, "state"), Env: []string{
-		"ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic", "ANTHROPIC_AUTH_TOKEN=" + strings.TrimSpace(string(key)),
+		"ANTHROPIC_BASE_URL=" + endpoint, "ANTHROPIC_AUTH_TOKEN=" + strings.TrimSpace(string(key)),
 		"ANTHROPIC_API_KEY=", "CLAUDE_CODE_OAUTH_TOKEN=",
-		"ANTHROPIC_DEFAULT_SONNET_MODEL=MiniMax-M3", "ANTHROPIC_DEFAULT_OPUS_MODEL=MiniMax-M3", "ANTHROPIC_DEFAULT_HAIKU_MODEL=MiniMax-M3",
+		"ANTHROPIC_DEFAULT_SONNET_MODEL=" + model, "ANTHROPIC_DEFAULT_OPUS_MODEL=" + model, "ANTHROPIC_DEFAULT_HAIKU_MODEL=" + model,
 	}}
 	schema := json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}`)
 	lookup := func(deferred bool) []proto.FunctionTool {
@@ -96,7 +95,7 @@ func TestLiveClaudeSDKNativeCombinations(t *testing.T) {
 			req := proto.PromptRequestPayload{RunID: uuid.NewString(), ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true,
 				Input:             proto.TextInput("Call the lookup tool if one is available and put its value in answer. Otherwise answer with the word ready."),
 				ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}},
-				AgentOptions:      map[string]any{"model": "MiniMax-M3", "system_prompt": "Reply only through the structured output."}}
+				AgentOptions:      map[string]any{"model": model, "system_prompt": "Reply only through the structured output."}}
 			configure(&req)
 			out := make(chan proto.Envelope, 64)
 			running, err := startSingleTurn(ctx, config, req, out)

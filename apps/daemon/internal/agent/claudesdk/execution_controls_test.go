@@ -148,7 +148,7 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	}
 }
 
-func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing.T) {
+func TestToolDiscoveryPreservesFrozenFunctionsBesideOtherProfiles(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}

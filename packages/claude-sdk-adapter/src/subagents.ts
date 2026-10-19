@@ -36,7 +36,7 @@ export class Subagents {
     if (!value || typeof value !== "object") return deny("Invalid subagent call.");
     const spawn = input.tool_name !== "SendMessage";
     if (spawn ? value.subagent_type !== "oac_worker" || typeof value.prompt !== "string" || !value.prompt.trim() ||
-        value.isolation !== undefined || value.run_in_background === true || value.model !== undefined
+        value.isolation !== undefined || value.run_in_background === true || value.model !== undefined || value.mode !== undefined
       : typeof value.to !== "string" || !this.known.has(value.to) || (value.type !== undefined && value.type !== "message") ||
         typeof value.message !== "string" || !value.message.trim()) return deny("Unsupported subagent operation.");
     if (this.pending.has(input.tool_use_id)) return {};
