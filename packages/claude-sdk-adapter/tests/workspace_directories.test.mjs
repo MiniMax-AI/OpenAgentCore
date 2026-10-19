@@ -41,7 +41,7 @@ test("bounded literal metadata, missing directory, and traversal denial", async 
   assert.deepEqual((await f.list("nested")).entries, []);
   assert.equal((await f.list("", 1)).truncated, true);
   assert.equal((await f.list("absent")).error, "not_found");
-  assert.deepEqual((await f.list("inside")).entries, []);
+  for (const path of ["inside", "outside", "outside/workspace", "binary"]) assert.equal((await f.list(path)).error, "invalid");
   for (const path of ["/", "a//b", ".", "..", "a/../b", "a\\b", "a\n"]) assert.equal((await f.list(path)).error, "invalid");
   for (const limit of [0, -1, 1001, 1.1]) assert.equal((await f.list("", limit)).error, "invalid");
 });

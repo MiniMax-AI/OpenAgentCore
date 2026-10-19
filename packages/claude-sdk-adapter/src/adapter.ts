@@ -59,13 +59,14 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   if (request.require_history && !request.resume) {
     const recovered = await recoverSession(request.cwd);
     if (!recovered) {
-      await emit({ type: "error", code: "history_unavailable" });
+      // No Turn is bound yet, so the Executor owner reports missing history.
+      await ownerEmit({ type: "error", code: "history_unavailable" });
       return;
     }
     request = { ...request, resume: recovered };
   }
   if (request.resume && !await getSessionInfo(request.resume, { dir: request.cwd })) {
-    await emit({ type: "error", code: "history_unavailable" });
+    await ownerEmit({ type: "error", code: "history_unavailable" });
     return;
   }
   subagents?.expectSession(request.resume);
