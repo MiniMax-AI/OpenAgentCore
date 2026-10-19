@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: 2afdb754fd8ece63345af69e06fa15e036d1bf81f047b5f7e457f280dc40db2b
+source_hash: 6652622a46fc054691429d4675d55a3b03beec2ebd54d39529ed8fb5a0dcd783
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -36,10 +36,10 @@ source_hash: 2afdb754fd8ece63345af69e06fa15e036d1bf81f047b5f7e457f280dc40db2b
 | Harness | 无图像且无非空白文本的消息 |
 | --- | --- |
 | Codex | 准入并原样交付 |
-| Claude Code | 400 `unsupported_or_invalid_configuration` |
+| Claude Code | 准入；原生会丢弃仅含空白的文本块，全空白消息变为 `(no content)` |
 | MiniMax Code | 400 `unsupported_or_invalid_configuration` |
 
-拒绝适用于 Session 创建（含流式和 `self_hosted` 创建）及 `events.create`，发生于任何写入、预留或 Turn 之前，因此不会干扰运行 Turn。同一消息中非空白文本旁的空白对所有 Harness 均准入。空白集合为 Go `unicode.IsSpace` 与 ECMAScript `String.prototype.trim` 的并集，例如 U+0085、U+FEFF；Core 准入和 Claude 桥接层使用相同集合。
+拒绝适用于 Session 创建（含流式和 `self_hosted` 创建）及 `events.create`，发生于任何写入、预留或 Turn 之前，因此不会干扰运行 Turn。同一消息中非空白文本旁的空白对所有 Harness 均准入。空白集合为 Go `unicode.IsSpace` 加 U+FEFF。
 
 ## 函数结果 {#function-results}
 

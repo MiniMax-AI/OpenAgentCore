@@ -3,6 +3,7 @@ package execution
 import (
 	"errors"
 	"strings"
+	"unicode"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -35,16 +36,8 @@ func validateMessageText(declaration harnessconfig.Declaration, input proto.Mess
 	return nil
 }
 
-// blankTextRune is the explicit union of Go unicode.IsSpace and ECMAScript
-// String.prototype.trim (WhiteSpace and LineTerminator). The Claude bridge uses
-// the same set, so admission rejects every message the bridge would reject.
-func blankTextRune(r rune) bool {
-	switch r {
-	case '\t', '\n', '\v', '\f', '\r', ' ', '\u0085', '\u00a0', '\u1680', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000', '\ufeff':
-		return true
-	}
-	return r >= '\u2000' && r <= '\u200a'
-}
+// blankTextRune is Go whitespace plus the byte order mark, so the byte order mark alone does not count as text.
+func blankTextRune(r rune) bool { return unicode.IsSpace(r) || r == '\ufeff' }
 
 func validateMessageImages(declaration harnessconfig.Declaration, input proto.MessageInput) error {
 	if !input.HasImages() {

@@ -92,15 +92,6 @@ test("Core declarations remove subagent and search tools only when declared", t 
   assert.ok(disabled.includes("WebSearch") && disabled.includes("WebFetch"));
 });
 
-test("workspace hook rewrites only Skill names", async t => {
-  const { dirs, config } = fixture(t);
-  const profile = new WorkspaceProfile(dirs.workspace, config);
-  const options = { signal: new AbortController().signal, toolUseID: "tool", requestId: "request" };
-  for (const [name, input] of [["Bash", { command: "printf value" }], ["Read", { file_path: "file.txt" }], ["Write", { file_path: "file.txt" }]]) {
-    assert.deepEqual(await profile.beforeTool({ hook_event_name: "PreToolUse", tool_name: name, tool_input: input, tool_use_id: "tool" }, "tool", options), {});
-  }
-});
-
 test("workspace functions are parsed", async t => {
   const { request } = fixture(t);
   const functions = [{ name: "lookup", description: "Lookup", parameters: { type: "object" } }];
@@ -131,8 +122,8 @@ test("workspace discovery keeps the function boundary on the native tool set", t
   assert.deepEqual(parseStart(JSON.stringify(configured)), configured);
 });
 
-test("web search control is a boolean request field", t => {
+test("web search control is the disabled or live mode", t => {
   const { request } = fixture(t);
-  assert.equal(parseStart(JSON.stringify({ ...request, disable_web_search: true })).disable_web_search, true);
-  assert.throws(() => parseStart(JSON.stringify({ ...request, disable_web_search: "disabled" })), /invalid_request/);
+  assert.equal(parseStart(JSON.stringify({ ...request, web_search: "live" })).web_search, "live");
+  assert.throws(() => parseStart(JSON.stringify({ ...request, web_search: true })), /invalid_request/);
 });

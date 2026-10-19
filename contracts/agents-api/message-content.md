@@ -34,10 +34,10 @@ Whitespace-only text such as `"   "` or `"\n\t"` is valid content and is stored 
 | Harness | A message with no image and no non-whitespace text |
 | --- | --- |
 | Codex | Admitted and delivered unchanged |
-| Claude Code | 400 `unsupported_or_invalid_configuration` |
+| Claude Code | Admitted; native drops whitespace-only text blocks, and an all-blank message becomes `(no content)` |
 | MiniMax Code | 400 `unsupported_or_invalid_configuration` |
 
-The rejection applies to Session creation (including streaming and `self_hosted` creation) and to `events.create`, before any write, reservation or Turn, so a running Turn is never disturbed. Whitespace beside non-whitespace text in the same message is admitted for every Harness. Whitespace is the union of Go `unicode.IsSpace` and ECMAScript `String.prototype.trim`, for example U+0085 and U+FEFF; Core admission and the Claude bridge use the same set.
+The rejection applies to Session creation (including streaming and `self_hosted` creation) and to `events.create`, before any write, reservation or Turn, so a running Turn is never disturbed. Whitespace beside non-whitespace text in the same message is admitted for every Harness. Whitespace is Go `unicode.IsSpace` plus U+FEFF.
 
 ## Function results
 

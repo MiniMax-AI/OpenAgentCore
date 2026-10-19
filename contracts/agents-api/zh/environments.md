@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: ed0ee94084a111f2451d363086d23ec56758c1e3e1de2e9ae5bf40e41e4512e1
+source_hash: 4e216b512f4ef62bd092d60c9d773f77485bd9cbc949f4273de23e5390078f34
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -382,7 +382,7 @@ Skills 及其不可变版本是项目资源，独立于 Session 和原生安装�
 - Bundle 使用服务密码进行加密，并绑定到项目、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
 - 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的模板意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
 
-内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则为每个包使用一个受控封装，其中包含实际目录和不可变硬链接。Skill 根目录不会启用 MCP 服务器，只有 [Plugin MCP](#plugin-mcp) 会启用。Codex 与本地运行一样递归扫描每个 Skill 根目录，因此嵌套的 `SKILL.md` 会注册另一个原生 Skill。Claude 内联 shell 预处理会导致适配器准备失败。原生 Harness 配置绝不会整体透传。
+内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则将其作为私有状态路径下的用户 Skills，使原生列出与本地 `~/.claude/skills` 相同的裸名称。Claude 拒绝包含 `.claude-plugin` 的 Skill，因为原生会将其作为插件加载，连同其 hooks 和 MCP 服务器。Skill 根目录不会启用 MCP 服务器，只有 [Plugin MCP](#plugin-mcp) 会启用。Codex 与本地运行一样递归扫描每个 Skill 根目录，因此嵌套的 `SKILL.md` 会注册另一个原生 Skill。原生 Harness 配置绝不会整体透传。
 
 ### Plugin MCP {#plugin-mcp}
 

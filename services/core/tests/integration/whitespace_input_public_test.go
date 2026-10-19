@@ -120,20 +120,22 @@ func TestWhitespaceOnlyTextHarnessAdmissionPostgres(t *testing.T) {
 	const cancel = `{"events":[{"type":"agent.session.input.cancel"}]}`
 	const whitespace = `{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"   "}]},{"role":"user","content":[{"type":"input_text","text":"\n\t"}]}]}]}`
 
-	codex := serve("codex")
-	admitted := codex.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`)
-	if status, body := events(codex, admitted, cancel); status != http.StatusAccepted {
-		t.Fatalf("codex cancel: %d %s", status, body)
-	}
-	if status, body := events(codex, admitted, whitespace); status != http.StatusAccepted {
-		t.Fatalf("codex events: %d %s", status, body)
-	}
-	if got := userTexts(t, codex, token, admitted); !reflect.DeepEqual(got, [][]string{{"   "}, {"   "}, {"\n\t"}}) {
-		t.Errorf("codex Items %q", got)
+	for _, engine := range []string{"codex", "claude_sdk"} {
+		client := serve(engine)
+		admitted := client.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"   "}`)
+		if status, body := events(client, admitted, cancel); status != http.StatusAccepted {
+			t.Fatalf("%s cancel: %d %s", engine, status, body)
+		}
+		if status, body := events(client, admitted, whitespace); status != http.StatusAccepted {
+			t.Fatalf("%s events: %d %s", engine, status, body)
+		}
+		if got := userTexts(t, client, token, admitted); !reflect.DeepEqual(got, [][]string{{"   "}, {"   "}, {"\n\t"}}) {
+			t.Errorf("%s Items %q", engine, got)
+		}
 	}
 
 	const rejection = `{"error":{"message":"This Session's harness does not accept a message whose text is only whitespace. Include non-whitespace text or an image, or use a harness that supports whitespace-only text.","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
-	for _, engine := range []string{"claude_sdk", "mcode"} {
+	for _, engine := range []string{"mcode"} {
 		client := serve(engine)
 		session := client.created(token, "/v1/agents/sessions", `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"Start."}`)
 		if status, body := events(client, session, cancel); status != http.StatusAccepted {
