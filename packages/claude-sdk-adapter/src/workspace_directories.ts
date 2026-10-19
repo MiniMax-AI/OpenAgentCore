@@ -46,7 +46,12 @@ export class WorkspaceDirectories {
   }
 
   private async enumerate(directory: string, maxEntries: number): Promise<{ entries: WorkspaceDirectoryEntry[]; truncated: boolean }> {
-    const path = join(this.root!, ...directory.split("/"));
+    let path = this.root!;
+    // Listings never follow a link: one anywhere in the path is rejected like a regular file.
+    for (const part of directory ? directory.split("/") : []) {
+      path = join(path, part);
+      if (!(await lstat(path)).isDirectory()) throw Object.assign(new Error("not a directory"), { code: "ENOTDIR" });
+    }
     const dir = await opendir(path, { encoding: "buffer" as BufferEncoding });
       try {
         const entries: WorkspaceDirectoryEntry[] = [];

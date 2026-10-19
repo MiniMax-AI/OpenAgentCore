@@ -155,6 +155,12 @@ func TestLiveClaudeWorkspaceFactory(t *testing.T) {
 				t.Fatal("cancellation outcome differs from terminal Done")
 			}
 		}
+		// Native history settles when the executor closes after Done; the next step must not race that close.
+		select {
+		case <-s.process.Done():
+		case <-ctx.Done():
+			t.Fatal("native process did not exit after the Turn")
+		}
 		writeEvidence(name, proof)
 		if proof.Terminals != 1 || (cancelOnEffect && !proof.Cancelled) {
 			t.Fatal("missing actual cancellation or unique completion")
