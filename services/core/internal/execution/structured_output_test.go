@@ -16,7 +16,7 @@ import (
 func TestStructuredOutputNeedsOperationQualification(t *testing.T) {
 	raw := json.RawMessage(`{"agent":{"model":"model","text":{"format":{"type":"json_schema","schema":{"type":"object"}}}},"environment":{"type":"none"}}`)
 	for _, kind := range []string{"codex", "claude_sdk", "mcode"} {
-		if err := (Policy{}).ValidateSessionConfiguration(kind, raw); (err == nil) != (kind == "claude_sdk") {
+		if err := (Policy{}).ValidateSessionConfiguration(kind, raw); (err == nil) != (kind != "mcode") {
 			t.Fatalf("%s: %v", kind, err)
 		}
 	}

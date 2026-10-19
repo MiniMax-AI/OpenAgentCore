@@ -167,6 +167,8 @@ type TurnStartParams struct {
 	ThreadID          string             `json:"threadId"`
 	Input             []UserInput        `json:"input"`
 	CollaborationMode *CollaborationMode `json:"collaborationMode,omitempty"`
+	// OutputSchema constrains this Turn's final assistant message natively.
+	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
 }
 
 type CollaborationModeKind string

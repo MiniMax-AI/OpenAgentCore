@@ -33,7 +33,7 @@ var Declaration = harnessconfig.Declaration{
 		WorkspaceReadPreparation: proto.CapabilitySupported,
 		WorkspaceOutputExport:    proto.CapabilitySupported,
 		ExecutionControls:        proto.CapabilitySupported,
-		StructuredOutput:         proto.CapabilityUnsupported,
+		StructuredOutput:         proto.CapabilitySupported,
 		ToolSearch:               proto.CapabilityUnsupported,
 		MessageImages:            proto.CapabilitySupported,
 		FunctionResultImages:     proto.CapabilitySupported,
