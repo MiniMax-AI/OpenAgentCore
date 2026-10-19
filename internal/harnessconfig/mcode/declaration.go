@@ -3,7 +3,6 @@ package mcode
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -65,11 +64,6 @@ var Declaration = harnessconfig.Declaration{
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		environment := admission.Environment
-		if environment == nil || (environment.Type != "none" && environment.Type != "openai_hosted" && environment.Type != "self_hosted") ||
-			strings.TrimSpace(admission.Model) == "" || (admission.TextFormat != "" && admission.TextFormat != "text") {
-			return harnessconfig.ErrInvalidInput
-		}
 		return harnessconfig.RejectSubagentTools(admission, "mcp")
 	},
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {

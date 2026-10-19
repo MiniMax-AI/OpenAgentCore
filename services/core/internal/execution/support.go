@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -19,30 +18,23 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 		return sessions.ErrInvalidInput
 	}
 	declaration, ok := p.Harnesses().Lookup(engine)
-	if !ok || (snapshot.Environment != nil && !declaration.Accepts(snapshot.Environment.Type)) {
+	if !ok || !declaration.Accepts(snapshot.Environment.Type) {
 		return sessions.ErrInvalidInput
 	}
 	_, err := p.mcpCredentialBindings(engine, snapshot)
 	if err != nil {
 		return err
 	}
-	if snapshot.Environment != nil && snapshot.Environment.Type == "self_hosted" {
-		if strings.TrimSpace(snapshot.Agent.Model) == "" || !validSelfHostedPlacement(environmentPlacement{WorkspaceDirectory: snapshot.Environment.WorkspaceDirectory, CapabilityDirectories: snapshot.Environment.CapabilityDirectories}) {
-			return sessions.ErrInvalidInput
-		}
+	if snapshot.Environment.Type == "self_hosted" && !validSelfHostedPlacement(environmentPlacement{WorkspaceDirectory: snapshot.Environment.WorkspaceDirectory, CapabilityDirectories: snapshot.Environment.CapabilityDirectories}) {
+		return sessions.ErrInvalidInput
 	}
-	if snapshot.Environment != nil && snapshot.Environment.Type == "openai_hosted" {
-		// Only this placement/engine combination is currently declared.
-		// Runtime capability checks still apply before any execution claim.
-		if strings.TrimSpace(snapshot.Agent.Model) == "" {
-			return sessions.ErrInvalidInput
-		}
+	if snapshot.Environment.Type == "openai_hosted" {
 		configuration, err := json.Marshal(snapshot.Environment)
 		if err != nil || !LocalWorkspaceConfiguration(configuration) {
 			return sessions.ErrInvalidInput
 		}
 	}
-	if snapshot.Environment != nil && snapshot.Environment.Type != "none" {
+	if snapshot.Environment.Type != "none" {
 		// Current Runtime adapters cannot execute a restricted network policy.
 		// Admission must reject it before allocating compute. Runtime itself is
 		// not an enforcement boundary; new support needs outer isolation.
@@ -80,7 +72,7 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 		return runtimedevice.KindCapabilities{}, errors.New(message)
 	}
 	declaration, ok := p.Harnesses().Lookup(engine)
-	if !ok || (snapshot.Environment != nil && !declaration.Accepts(snapshot.Environment.Type)) {
+	if !ok || !declaration.Accepts(snapshot.Environment.Type) {
 		return fail("execution engine placement is not supported")
 	}
 	if err := validateDeclaredConfiguration(declaration, snapshot); err != nil {
@@ -122,7 +114,7 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	if _, err := p.mcpExecutionCredentials(engine, snapshot, tools.MCP, caps); err != nil {
 		return runtimedevice.KindCapabilities{}, err
 	}
-	if snapshot.Environment != nil && (snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted") {
+	if snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted" {
 		if !caps.Preparation || !caps.LocalEnvironment || !caps.WorkspaceReadPreparation || !caps.WorkspaceOutputExport {
 			return fail("device must advertise local preparation, workspace reads and output export")
 		}
@@ -141,7 +133,7 @@ func (d *Dispatcher) sessionCapabilities(ctx context.Context, peer *runtimegatew
 	if err != nil {
 		return caps, err
 	}
-	if snapshot.Environment == nil || snapshot.Environment.Type != "openai_hosted" {
+	if snapshot.Environment.Type != "openai_hosted" {
 		return caps, nil
 	}
 	environment, err := d.SessionsReader.GetSessionEnvironment(ctx, session.TenantID, session.ID)

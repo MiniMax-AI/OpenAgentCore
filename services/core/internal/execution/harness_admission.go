@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -19,22 +18,14 @@ func admissionError(err error) error {
 
 // admissionEnvironment projects the public Environment into the view Harness
 // declarations validate.
-func admissionEnvironment(environment *v1.Environment) *harnessconfig.AdmissionEnvironment {
-	if environment == nil {
-		return nil
-	}
-	return &harnessconfig.AdmissionEnvironment{Type: environment.Type}
-}
-
 func admissionOf(snapshot Snapshot) harnessconfig.Admission {
 	agent := snapshot.Agent
 	return harnessconfig.Admission{
-		Model:       agent.Model,
-		TextFormat:  agent.Text.Format.Type,
-		TextSchema:  agent.Text.Format.Schema,
-		MultiAgent:  agent.MultiAgent.Enabled,
-		Tools:       agent.Tools,
-		Environment: admissionEnvironment(snapshot.Environment),
+		TextFormat: agent.Text.Format.Type,
+		TextSchema: agent.Text.Format.Schema,
+		MultiAgent: agent.MultiAgent.Enabled,
+		Tools:      agent.Tools,
+		Placement:  snapshot.Environment.Type,
 	}
 }
 
@@ -50,28 +41,25 @@ func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapsh
 		}
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
-	// Preserve each declaration's admission error precedence when tool decoding fails.
-	if declaration.ValidateConfiguration != nil && err != nil {
+	if err != nil {
 		return err
 	}
-	if err == nil {
-		if err := declaration.ValidateMCPOrigins(admissionEnvironment(snapshot.Environment), tools.MCP); err != nil {
-			return err
-		}
-		if err := declaration.ValidateExecutionControls(executionControls(snapshot.Agent, tools)); err != nil {
-			return err
-		}
-		request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
-		if err := request.ValidateToolSearch(declaration.Capabilities.ToolSearch.IsSupported()); err != nil {
-			return err
-		}
+	if err := declaration.ValidateMCPOrigins(snapshot.Environment.Type, tools.MCP); err != nil {
+		return err
+	}
+	if err := declaration.ValidateExecutionControls(executionControls(snapshot.Agent, tools)); err != nil {
+		return err
+	}
+	request := proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}
+	if err := request.ValidateToolSearch(declaration.Capabilities.ToolSearch.IsSupported()); err != nil {
+		return err
 	}
 	if declaration.ValidateTools != nil {
-		if validationErr := declaration.ValidateTools(tools.Functions, tools.MCP); validationErr != nil {
-			return admissionError(validationErr)
+		if err := declaration.ValidateTools(tools.Functions, tools.MCP); err != nil {
+			return admissionError(err)
 		}
 	}
-	return err
+	return nil
 }
 
 func validateDeclaredInputs(declaration harnessconfig.Declaration, inputs []sessions.Input) error {

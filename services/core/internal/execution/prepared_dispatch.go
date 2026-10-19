@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -38,7 +37,7 @@ func (d *Dispatcher) RunEnvironmentInput(ctx context.Context, lease Ownership, t
 		return run, err
 	}
 	var snapshot Snapshot
-	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
+	if json.Unmarshal(session.Configuration, &snapshot) != nil {
 		return run, sessions.ErrInvalidInput
 	}
 	bound, err := d.SessionsReader.GetSessionExecutionBinding(ctx, tenantID, sessionID)
