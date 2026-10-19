@@ -20,7 +20,6 @@ type mcpServerConfig struct {
 	Required          bool
 	BearerTokenEnvVar string
 	EnvHTTPHeaders    map[string]string
-	ApproveTools      bool
 }
 
 // writeCodexMCPConfig writes a `[mcp_servers.<name>]` TOML table per
@@ -48,9 +47,6 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 		b.WriteString("[mcp_servers.")
 		b.WriteString(tomlQuoteString(name))
 		b.WriteString("]\n")
-		if srv.ApproveTools {
-			b.WriteString("default_tools_approval_mode = \"approve\"\n")
-		}
 		if srv.Required {
 			b.WriteString("required = true\n")
 		}

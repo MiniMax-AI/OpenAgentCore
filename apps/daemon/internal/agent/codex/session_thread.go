@@ -42,12 +42,8 @@ func (s *Session) startThread(plan SessionPlan) error {
 
 func (s *Session) resumeThread(threadID string, plan SessionPlan) error {
 	params := ThreadResumeParams{
-		ThreadID: threadID, ApprovalPolicy: approvalPolicyNever, Sandbox: sandboxDangerFullAccess,
+		ThreadID: threadID, Cwd: plan.Cwd, ApprovalPolicy: approvalPolicyNever, Sandbox: sandboxDangerFullAccess,
 		DeveloperInstructions: plan.SystemPrompt,
-	}
-	if plan.mcpServers != nil {
-		// Resolve the same project configuration checked before native startup.
-		params.Cwd = plan.Cwd
 	}
 	s.usageMu.Lock()
 	s.resumeUsageThreadID = threadID

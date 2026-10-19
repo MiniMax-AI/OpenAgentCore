@@ -22,7 +22,7 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 		t.Fatal("environment declarations were not projected", err)
 	}
 	executable, _ := os.Executable()
-	if servers["local"].Command != executable || !servers["local"].ApproveTools ||
+	if servers["local"].Command != executable ||
 		!slices.Equal(servers["local"].Args, []string{"runtime-mcp-exec", "/private/runtime/capabilities", "plugins/0", "local"}) {
 		t.Fatal("native stdio bypasses the packaged launcher")
 	}
@@ -33,10 +33,10 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 		t.Fatal("private header values changed")
 	}
 	fixture := map[string]any{"config": map[string]any{
-		"mcp_oauth_credentials_store": "file", "features": map[string]bool{"plugins": false, "apps": false},
+		"mcp_oauth_credentials_store": "file",
 		"mcp_servers": map[string]any{
-			"local":  map[string]any{"command": servers["local"].Command, "args": servers["local"].Args, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve"},
-			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "default_tools_approval_mode": "approve", "bearer_token_env_var": remote.BearerTokenEnvVar, "env_http_headers": remote.EnvHTTPHeaders},
+			"local":  map[string]any{"command": servers["local"].Command, "args": servers["local"].Args, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil},
+			"remote": map[string]any{"url": remote.URL, "environment_id": "local", "enabled": true, "tool_timeout_sec": nil, "bearer_token_env_var": remote.BearerTokenEnvVar, "env_http_headers": remote.EnvHTTPHeaders},
 		},
 	}}
 	raw, _ := json.Marshal(fixture)

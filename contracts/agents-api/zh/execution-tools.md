@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: db52d727ddf370a8047089457227584e89faf2132546a164b170e6b475b28abb
+source_hash: b7a4e9408422a272c0c8695f264d1ee9be9b85695b4622a9751c7ead4d3c218c
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -94,4 +94,4 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 - Bearer 认证使用附加的静态或 OAuth Vault 凭据。[Vault 凭据](vaults.md)定义选择规则，[MCP 凭据权限](environments.md#public-mcp-connection-origin)定义冻结的 Runtime 绑定。认证执行要求 `mcp_http_bearer_auth`。
 - Runtime 必须声明 `mcp_http_tools`。原生 Harness 管理发现、调用和结果；公开 `mcp_call` Item 使用原始服务器与工具名称，保留观察到的原生结果。
 
-Codex 在启动或恢复线程之前验证准确的有效 MCP 配置，排除未声明服务器，禁用原生 apps 和 plugins，拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；工具名称还可包含点，并要求已连接服务器具有静态工具清单。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。
+Codex 以原生方式信任工作区，因此工作区的项目配置在启动和冷恢复时加载，未声明的服务器、apps 和 plugins 保持原生行为。在任何携带 Core 凭据的原生连接之前，它验证每个已声明服务器保持其 URL 或命令、bearer 引用和请求头，否则启动或恢复以错误失败。它拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；工具名称还可包含点，并要求已连接服务器具有静态工具清单。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。
