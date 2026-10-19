@@ -306,7 +306,7 @@ Core runs an idle directory read on the Worker's Session scheduling reservation 
 
 ## MCP connection authority
 
-Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
+Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. `MCPHTTPServer.headers` carries non-secret literal headers; credentials travel only in `bearer_token`. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
 
 ## Timeouts and limits
 

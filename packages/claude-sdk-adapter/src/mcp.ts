@@ -9,6 +9,7 @@ export type HTTPServer = {
   allowed_tools: string[] | null;
   required?: boolean;
   bearer_token_env_var?: string;
+  headers?: Record<string, string>;
 };
 export type ToolIdentity = { server: string; name: string };
 
@@ -25,8 +26,10 @@ export function parseHTTPServers(value: unknown): HTTPServer[] | undefined {
   const references = new Set<string>();
   for (const server of value) {
     if (!server || typeof server !== "object" ||
-        Object.keys(server).some(key => !["server_label", "server_url", "allowed_tools", "bearer_token_env_var", "required"].includes(key)) ||
+        Object.keys(server).some(key => !["server_label", "server_url", "allowed_tools", "bearer_token_env_var", "required", "headers"].includes(key)) ||
         (server.required !== undefined && typeof server.required !== "boolean") ||
+        (server.headers !== undefined && (!server.headers || typeof server.headers !== "object" ||
+          Object.values(server.headers).some(value => typeof value !== "string"))) ||
         typeof server.server_label !== "string" || !/^[a-zA-Z0-9_-]+$/.test(server.server_label) ||
         server.server_label === "functions" || labels.has(server.server_label) ||
         typeof server.server_url !== "string" ||
@@ -92,7 +95,7 @@ export class MCPProfile {
         // An explicit empty Authorization suppresses native OAuth and automatic auth.
         // Keep bearer references literal: SDK server configuration enters native argv.
         this.servers[server.server_label] = { type: "http", url: server.server_url, alwaysLoad: true,
-          headers: { Authorization: reference ? `Bearer \${${reference}}` : "" } };
+          headers: { ...server.headers, Authorization: reference ? `Bearer \${${reference}}` : "" } };
       }
       if (server.allowed_tools === null) this.allowed.push(prefix + "*");
       else if (!server.allowed_tools.length) this.denied.push(prefix + "*");
@@ -111,7 +114,7 @@ export class MCPProfile {
       const client = new Client({ name: "oac-claude-sdk-adapter", version: "0.0.0" });
       try {
         await client.connect(new StreamableHTTPClientTransport(new URL(server.server_url),
-          { requestInit: reference ? { headers: { Authorization: `Bearer ${process.env[reference]}` } } : {} }), { signal });
+          { requestInit: { headers: { ...server.headers, ...(reference && { Authorization: `Bearer ${process.env[reference]}` }) } } }), { signal });
         let cursor: string | undefined;
         const cursors = new Set<string>();
         do {

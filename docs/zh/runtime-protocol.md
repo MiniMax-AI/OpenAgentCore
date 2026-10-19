@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: d8e2ef6c37e49d482f9eed39490ce5f20dc892c29667fb71070fe88c1321600f
+source_hash: 5f735aa86ed4ac1e82cfe028eb10eba50d651df844c10d73f739e5764fc6dc82
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -308,7 +308,7 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 
 ## MCP 连接权限 {#mcp-connection-authority}
 
-`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
+`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。`MCPHTTPServer.headers` 携带非机密的字面标头；凭据只通过 `bearer_token` 传递。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
 
 ## 超时与限制 {#timeouts-and-limits}
 

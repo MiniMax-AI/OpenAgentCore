@@ -38,7 +38,7 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			if err := server.ValidateConnectionOrigin(req); err != nil {
 				return nil, err
 			}
-			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken}
+			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken, HTTPHeaders: maps.Clone(server.Headers)}
 			if server.AllowedTools != nil {
 				names := append([]string{}, (*server.AllowedTools)...)
 				item.AllowedTools = &names

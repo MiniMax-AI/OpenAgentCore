@@ -392,7 +392,7 @@ A stdio server starts through the daemon's stdio helper, which resolves the inst
 
 [Harness capabilities](./harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
 
-Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
+Duplicate server identities are rejected. Claude rejects a header value containing `${` ([native differences](./index.md#differences-from-openai)). MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
 ### Effective bindings
 

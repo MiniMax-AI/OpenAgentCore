@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 68f12431a9f5685dd88b04d239d40f28f2390e923397eb0071a1a57ea58666d1
+source_hash: 8433303b1e06c831b272a6714639ff496be24a40e9b1efc8d29b3495a243529c
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -394,7 +394,7 @@ stdio 服务器通过 daemon 的 stdio helper 启动；该 helper 会解析已�
 
 [Harness capabilities](harness-capabilities.md#environment-preparation) 负责受支持的 Plugin 传输及每个 Harness 的限制。
 
-重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
+重复的服务器身份会被拒绝。Claude 会拒绝包含 `${` 的标头值（[原生差异](index.md#differences-from-openai)）。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
 
 ### 有效绑定 {#effective-bindings}
 

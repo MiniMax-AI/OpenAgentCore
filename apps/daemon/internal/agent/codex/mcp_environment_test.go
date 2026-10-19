@@ -49,6 +49,15 @@ func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.
 	}
 }
 
+func TestSessionMCPHeadersReachNativeConfig(t *testing.T) {
+	req := proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.com/mcp", Headers: map[string]string{"X-Tenant": "a"}}}}
+	servers, env, err := runtimeMCPServers(req)
+	reference := servers["remote"].EnvHTTPHeaders["X-Tenant"]
+	if err != nil || reference == "" || !slices.Contains(env, reference+"=a") {
+		t.Fatal("Session headers were not projected", err)
+	}
+}
+
 func TestEnvironmentMCPRejectsUnqualifiedCredentialChanges(t *testing.T) {
 	token := "user-token"
 	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "http://example.com/mcp"}}}}

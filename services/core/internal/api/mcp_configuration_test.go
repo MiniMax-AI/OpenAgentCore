@@ -133,6 +133,19 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 	}
 }
 
+func TestMCPHeadersAreStoredAsGiven(t *testing.T) {
+	for _, saved := range []bool{false, true} {
+		input := `{"type":"mcp","server_label":"records","transport":{"type":"http","server_url":"https://mcp.example.test","headers":{"X-Tenant":"a"}}}`
+		raw, err := resolveMCPTool(json.RawMessage(input), saved)
+		if err != nil || !strings.Contains(string(raw), `"headers":{"X-Tenant":"a"}`) {
+			t.Fatalf("saved=%v: %s, %v", saved, raw, err)
+		}
+		if _, err := resolveMCPTool(json.RawMessage(strings.Replace(input, "X-Tenant", "authorization", 1)), saved); err == nil {
+			t.Fatal("Authorization header accepted")
+		}
+	}
+}
+
 func TestSessionMCPKeepsToolOrderAndStripsSavedHeaders(t *testing.T) {
 	saved, err := resolveMCPTool(json.RawMessage(publicMCP), true)
 	if err != nil {

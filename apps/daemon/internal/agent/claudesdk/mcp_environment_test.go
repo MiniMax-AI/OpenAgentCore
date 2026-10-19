@@ -54,7 +54,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Name = "functions" },
 		func(e *proto.LocalEnvironment) { e.MCP = append(e.MCP, e.MCP[0]) },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Type = "sse" },
-		func(e *proto.LocalEnvironment) { e.MCP[0].Server.HTTPHeaders = map[string]string{"X-Key": "literal"} },
+		func(e *proto.LocalEnvironment) { e.MCP[0].Server.HTTPHeaders = map[string]string{"X-Key": "${HOME}"} },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.BearerTokenEnvVar = "MISSING" },
 		func(e *proto.LocalEnvironment) {
 			token := "token"
