@@ -28,7 +28,7 @@ export function parseMessageInput(value: unknown): MessageInput {
 }
 
 // Function results share content validation but permit empty arrays and empty text.
-// Only user messages may carry a remote image URL; native tool results are base64 only.
+// Only a user message image that is not a data URL becomes a native URL source.
 export function parseInputContent(content: unknown, remote = false): InputContent[] {
   if (!Array.isArray(content)) throw new Error("Invalid input content.");
   for (const part of content) {
@@ -37,28 +37,24 @@ export function parseInputContent(content: unknown, remote = false): InputConten
       continue;
     } else if (part.type === "input_image" && typeof part.image_url === "string" &&
         Object.keys(part).every(key => key === "type" || key === "image_url")) {
-      imageSource(part.image_url, remote);
+      if (!remote || part.image_url.startsWith("data:")) imageSource(part.image_url);
     } else throw new Error("Invalid user content.");
   }
   return content as InputContent[];
 }
 
-type ImageSource =
-  | { type: "base64"; media_type: "image/png" | "image/jpeg" | "image/gif" | "image/webp"; data: string }
-  | { type: "url"; url: string };
+type MediaType = "image/png" | "image/jpeg" | "image/gif" | "image/webp";
 
-// The native image media types of a user message and an MCP tool result.
-export function imageSource(url: string, remote = false): ImageSource {
-  if (remote && /^https?:\/\/\S+$/i.test(url)) return { type: "url", url };
-  const match = /^data:(image\/png|image\/jpeg|image\/gif|image\/webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(url);
+export function imageSource(url: string): { type: "base64"; media_type: MediaType; data: string } {
+  const match = /^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/]+={0,2})$/.exec(url);
   if (!match || Buffer.from(match[2]!, "base64").toString("base64") !== match[2]) throw new Error("Unsupported image reference.");
-  return { type: "base64", media_type: match[1] as Extract<ImageSource, { type: "base64" }>["media_type"], data: match[2]! };
+  return { type: "base64", media_type: match[1] as MediaType, data: match[2]! };
 }
 
 export function nativeContent(message: MessageInput[number], remote = false): SDKUserMessage["message"]["content"] {
   return message.content.map(part => part.type === "input_text"
     ? { type: "text" as const, text: part.text }
-    : { type: "image" as const, source: imageSource(part.image_url, remote) });
+    : { type: "image" as const, source: remote && !part.image_url.startsWith("data:") ? { type: "url" as const, url: part.image_url } : imageSource(part.image_url) });
 }
 
 export function textInput(text: string): MessageInput { return [{ content: [{ type: "input_text", text }] }]; }

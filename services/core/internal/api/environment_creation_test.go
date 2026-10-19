@@ -169,7 +169,6 @@ func TestSelfHostedCreationRejectsBeforePersistence(t *testing.T) {
 		{name: "scalar capabilities", environment: `{"type":"self_hosted","workspace_directory":"/workspace","capability_directories":"/remote/skills"}`},
 		{name: "output field", environment: `{"type":"self_hosted","workspace_directory":"/workspace","remote_url":"https://forged.example"}`},
 		{name: "none extra field", environment: `{"type":"none","workspace_directory":null}`},
-		{name: "initial image", environment: validEnvironment, input: `,"input":[{"role":"user","content":[{"type":"input_image","image_url":"https://example.com/image.png"}]}]`},
 		{name: "initial assistant message", environment: validEnvironment, input: `,"input":[{"role":"assistant","content":[{"type":"input_text","text":"start"}]}]`},
 		{name: "deferred functions", environment: validEnvironment, agentFields: `,"tools":[{"type":"function","name":"lookup","description":"Find a value","parameters":{"type":"object"},"defer_loading":true}]`},
 		{name: "unregistered harness placement", environment: validEnvironment, engine: "unregistered"},

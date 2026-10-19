@@ -104,11 +104,6 @@ func (s *session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 	if err := result.ValidateContent(); err != nil {
 		return err
 	}
-	for _, part := range result.Content {
-		if part.Type == "input_image" && !result.Success {
-			return fmt.Errorf("claudesdk: native error results cannot retain images")
-		}
-	}
 	data, err := json.Marshal(struct {
 		Type   string `json:"type"`
 		TurnID string `json:"turn_id"`

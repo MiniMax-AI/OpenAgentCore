@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 20ec835144a42a1cbd7842cb00b7cf431ea8c4876bd52ad9b8ce8a79588e5eac
+source_hash: c31a323311129a5d005cec014003634c0e4e30ed824798cdda3ee10f2902efd9
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -23,7 +23,7 @@ source_hash: 20ec835144a42a1cbd7842cb00b7cf431ea8c4876bd52ad9b8ce8a79588e5eac
 | 文本 Turn、活动输入、取消、重启与继续 | 所有位置已验证 | 所有位置已验证 | 所有位置已验证 |
 | [文件与 Artifact](environment-files.md) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管 |
 | [仅空白消息文本](message-content.md) | 已准入；原样交付 | 已拒绝 | 已拒绝 |
-| [消息图像](message-content.md#images) | 任意 `image_url`：所有位置已验证 | 远程 URL 及 PNG、JPEG、GIF、WebP data URL：所有位置已验证 | 已拒绝 |
+| [消息图像](message-content.md#images) | PNG、JPEG data URL：所有位置已验证；其他 data URL：已准入；远程 URL：已拒绝 | PNG、JPEG data URL：所有位置已验证；远程 URL 及 GIF、WebP data URL：已准入 | 已拒绝 |
 | `reasoning.effort` | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 | `low`、`medium`、`high`、`xhigh`、`max`：已准入 | 已拒绝 |
 | `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | 已拒绝 | 已拒绝 |
 | 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`：已准入 | 已拒绝 | 已拒绝 |
@@ -37,7 +37,7 @@ source_hash: 20ec835144a42a1cbd7842cb00b7cf431ea8c4876bd52ad9b8ce8a79588e5eac
 | 操作 | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | 文本结果的[公开函数](execution-tools.md#functions) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅对象根 schema | 已拒绝 |
-| [含图像函数结果](message-content.md#function-results) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅成功结果中的 PNG、JPEG、GIF、WebP data URL | 已拒绝 |
+| [含图像函数结果](message-content.md#function-results) | 已验证：`none`、托管；已准入：自托管；远程 URL：已拒绝 | 仅成功结果；PNG、JPEG data URL：所有位置已验证；GIF、WebP：已准入 | 已拒绝 |
 | [结构化输出](execution-tools.md#structured-output) | 所有位置已准入 | 所有位置已验证 | 已拒绝 |
 | [延迟函数发现](execution-tools.md#deferred-function-discovery) | 已拒绝 | 已验证：`none`、自托管；已准入：托管 | 已拒绝 |
 | [禁用 Web 搜索与程序化工具调用](execution-tools.md#web-search-and-programmatic-tool-calling) | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 |

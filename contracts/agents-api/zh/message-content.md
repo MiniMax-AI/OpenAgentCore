@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: 060ece3446877370545151fe25a4f0493eadc6f13aff548cd57dcff7d7ebf5c1
+source_hash: f2f33d3397f0d82d9954808d0f494ddab9749ed69396d4ab0ea114a64cd3906c
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -23,8 +23,8 @@ source_hash: 060ece3446877370545151fe25a4f0493eadc6f13aff548cd57dcff7d7ebf5c1
 
 | Harness | 消息图像 |
 | --- | --- |
-| Codex | 接受任意 `image_url` 并原样传递，适用于 `none`、`openai_hosted`、`self_hosted` |
-| Claude Code | 接受 `http` 或 `https` URL，或规范 base64 的 `image/png`、`image/jpeg`、`image/gif`、`image/webp` data URL，适用于 `none`、`openai_hosted`、`self_hosted`；其他引用返回 400 |
+| Codex | 接受任意 data URL 并原样传递，适用于 `none`、`openai_hosted`、`self_hosted`。`http` 或 `https` URL 返回 400，因为原生 Codex 拒绝远程图像 URL |
+| Claude Code | 非 data URL 的引用成为原生 URL 来源；data URL 必须是规范 base64 的 `image/png`、`image/jpeg`、`image/gif` 或 `image/webp`，其他返回 400。适用于 `none`、`openai_hosted`、`self_hosted` |
 | MiniMax Code | 拒绝 |
 
 任何写入之前，准入检查 Harness；Harness 无法接受的图像返回 400。Runtime 也必须报告消息图像支持：Core 仅将输入含图像的 Session 绑定到此类 Runtime，交付给不支持的 Runtime 会失败。应使用接受图像的模型。
@@ -51,8 +51,8 @@ source_hash: 060ece3446877370545151fe25a4f0493eadc6f13aff548cd57dcff7d7ebf5c1
 
 | Harness | 函数结果 |
 | --- | --- |
-| Codex | 文本与有序文本/图像输出。Core 仅检查各部分格式正确，并将图像引用原样传给 Harness |
-| Claude Code | 文本输出。仅成功结果可含图像，且只能是规范 base64 的 `image/png`、`image/jpeg`、`image/gif`、`image/webp` data URL，因为原生工具结果不携带 URL；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码；公开 Item 保留提交字节 |
+| Codex | 文本与有序文本/图像输出，原样传给 Harness。`http` 或 `https` 图像 URL 返回 400，因为原生 Codex 拒绝远程图像 URL |
+| Claude Code | 文本输出。仅成功结果可含图像，且只能是规范 base64 的 `image/png`、`image/jpeg`、`image/gif`、`image/webp` data URL，因为原生工具结果不携带 URL；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码，或将无法处理的图像替换为文本说明；公开 Item 保留提交字节 |
 | MiniMax Code | 无公开函数 |
 
 ### 应用回执 {#application-receipts}

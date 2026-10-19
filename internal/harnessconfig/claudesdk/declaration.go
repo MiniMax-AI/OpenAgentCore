@@ -155,50 +155,34 @@ func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) er
 
 func validateFunctionResult(result proto.FunctionResultPayload) error {
 	for _, part := range result.Content {
-		if part.Type == "input_image" && !result.Success {
+		if part.Type == "input_image" && (!result.Success || !inlineImage(*part.ImageURL)) {
 			return harnessconfig.ErrInvalidInput
 		}
-	}
-	if !nativeImages(result.Content, false) {
-		return harnessconfig.ErrInvalidInput
 	}
 	return nil
 }
 
+// A user message image that is not a data URL becomes a native URL source.
 func validateMessageInput(input proto.MessageInput) error {
 	for _, message := range input {
-		if !nativeImages(message.Content, true) {
-			return harnessconfig.ErrInvalidInput
+		for _, part := range message.Content {
+			if part.Type == "input_image" && strings.HasPrefix(*part.ImageURL, "data:") && !inlineImage(*part.ImageURL) {
+				return harnessconfig.ErrInvalidInput
+			}
 		}
 	}
 	return nil
 }
 
-var (
-	remoteImage = regexp.MustCompile(`^https?://\S+$`)
-	inlineImage = regexp.MustCompile(`^data:image/(?:png|jpeg|gif|webp);base64,([A-Za-z0-9+/]+={0,2})$`)
-)
-
-// nativeImages reports whether every image maps to a native block: a user
-// message takes a remote URL or inline base64, an MCP tool result only inline
-// base64, in the media types the pinned SDK declares.
-func nativeImages(content []proto.InputContent, remote bool) bool {
-	for _, part := range content {
-		if part.Type != "input_image" || part.ImageURL == nil {
-			continue
-		}
-		if remote && remoteImage.MatchString(*part.ImageURL) {
-			continue
-		}
-		match := inlineImage.FindStringSubmatch(*part.ImageURL)
-		if match == nil {
-			return false
-		}
-		if data, err := base64.StdEncoding.DecodeString(match[1]); err != nil || base64.StdEncoding.EncodeToString(data) != match[1] {
-			return false
-		}
+// inlineImage reports canonical base64 in a media type the pinned SDK declares.
+func inlineImage(url string) bool {
+	header, encoded, _ := strings.Cut(url, ",")
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	switch header {
+	case "data:image/png;base64", "data:image/jpeg;base64", "data:image/gif;base64", "data:image/webp;base64":
+		return err == nil && encoded != "" && base64.StdEncoding.EncodeToString(data) == encoded
 	}
-	return true
+	return false
 }
 
 func validateNativeConfig(config proto.HarnessConfig) bool {

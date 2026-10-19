@@ -6,7 +6,7 @@ import (
 )
 
 func TestNativeInputRetainsImageOrderAndMessageSeparator(t *testing.T) {
-	image := "https://example.com/a.webp"
+	image := "data:image/png;base64,aW1hZ2U="
 	messages := proto.TextInput(" before ")
 	messages[0].Content = append(messages[0].Content, proto.InputContent{Type: "input_image", ImageURL: &image}, proto.TextInput(" after ")[0].Content[0])
 	messages = append(messages, proto.TextInput("next")...)
