@@ -23,9 +23,11 @@ func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, error) {
 				return nil, err
 			}
 			servers = append(servers, server)
-		} else {
+		} else if binding.Stdio != nil {
 			command, args := localworkspace.MCPStdioCommand(*binding.Stdio)
 			servers = append(servers, map[string]any{"name": binding.ServerLabel, "command": command, "args": args, "env": []map[string]string{}})
+		} else {
+			return nil, fmt.Errorf("mcode: public MCP stdio servers are unsupported")
 		}
 	}
 	return servers, nil

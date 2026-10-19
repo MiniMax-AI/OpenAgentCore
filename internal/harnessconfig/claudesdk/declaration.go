@@ -94,6 +94,10 @@ func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) er
 		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || strings.Contains(server.ServerURL, "#") {
 			return errors.New("The configured engine does not support this HTTP MCP declaration.")
 		}
+		// Native hides unselected tools only for HTTP servers, which the adapter lists itself.
+		if server.Stdio != nil && server.AllowedTools != nil {
+			return errors.New("The configured engine requires allowed_tools=null for MCP stdio servers.")
+		}
 		if ExpandsEnvironment(server) {
 			return errors.New("The configured engine does not support ${ in MCP URLs or header values.")
 		}

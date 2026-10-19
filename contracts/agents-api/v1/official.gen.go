@@ -356,18 +356,11 @@ type ItemList struct {
 	HasMore bool    `json:"has_more" binding:"required"`
 }
 
-// MCPHTTPTransport projects PersistedMcpTransportConfigParamHttp.
-type MCPHTTPTransport struct {
-	Type      string             `json:"type" binding:"required" enums:"http"`
-	ServerURL string             `json:"server_url" binding:"required"`
-	Headers   *map[string]string `json:"headers,omitempty" extensions:"x-nullable"`
-}
-
 // MCPTool projects AgentToolResourceMcp.
 type MCPTool struct {
 	Type             string                     `json:"type" binding:"required" enums:"mcp"`
 	ServerLabel      string                     `json:"server_label" binding:"required"`
-	Transport        MCPHTTPTransport           `json:"transport" binding:"required"`
+	Transport        MCPTransport               `json:"transport" binding:"required"`
 	AllowedTools     *[]string                  `json:"allowed_tools" binding:"required" extensions:"x-nullable"`
 	ConnectionOrigin string                     `json:"connection_origin" binding:"required" enums:"service,environment"`
 	CredentialID     *string                    `json:"credential_id" binding:"required" extensions:"x-nullable"`
@@ -385,6 +378,48 @@ type MCPToolInput struct {
 	AllowedTools     []string                   `json:"allowed_tools,omitempty" extensions:"x-nullable"`
 	Required         *bool                      `json:"required,omitempty"`
 	ConnectionOrigin *string                    `json:"connection_origin,omitempty" extensions:"x-nullable" enums:"service,environment"`
+}
+
+// MCPTransport projects PersistedMcpTransportConfigParam.
+type MCPTransport struct {
+	Type      string             `json:"type" binding:"required" enums:"http,stdio"`
+	ServerURL string             `json:"server_url,omitempty"`
+	Headers   *map[string]string `json:"headers,omitempty" extensions:"x-nullable"`
+	Command   string             `json:"command,omitempty"`
+	Args      *[]string          `json:"args,omitempty" extensions:"x-nullable"`
+	Cwd       string             `json:"cwd,omitempty"`
+	EnvVars   *[]string          `json:"env_vars,omitempty" extensions:"x-nullable"`
+}
+
+func (value MCPTransport) MarshalJSON() ([]byte, error) {
+	switch value.Type {
+	case "http":
+		return json.Marshal(struct {
+			Type      string             `json:"type"`
+			ServerURL string             `json:"server_url"`
+			Headers   *map[string]string `json:"headers,omitempty"`
+		}{
+			Type:      value.Type,
+			ServerURL: value.ServerURL,
+			Headers:   value.Headers,
+		})
+	case "stdio":
+		return json.Marshal(struct {
+			Type    string    `json:"type"`
+			Command string    `json:"command"`
+			Args    *[]string `json:"args,omitempty"`
+			Cwd     string    `json:"cwd"`
+			EnvVars *[]string `json:"env_vars,omitempty"`
+		}{
+			Type:    value.Type,
+			Command: value.Command,
+			Args:    value.Args,
+			Cwd:     value.Cwd,
+			EnvVars: value.EnvVars,
+		})
+	default:
+		return nil, fmt.Errorf("invalid MCPTransport type %q", value.Type)
+	}
 }
 
 // MultiAgentConfig projects MultiAgentConfigResource.

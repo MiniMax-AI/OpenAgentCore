@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 8c334fe24521cf20a300c447b6b81d4aa0f7bc786bd89bc45722187d0c004acf
+source_hash: b65ff793e777225c871367f2f48608458acf78104d0f831f2be7633a534e9768
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -79,7 +79,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `tool_search` | Agent 启用 tool search 或延迟 function 加载 |
 | `function_tools` | Agent 声明 function tool |
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
-| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
+| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 MCP server（HTTP 或 stdio）；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
 `retained_native_history` 表示 Runtime 与 Harness 组合可在确认原生进程关闭后，从私有持久状态重新打开同一个原生 Session。它不保证恢复进程内存、后台进程或外部连接。所选文件系统还必须独立提供持久存储。Core 根据旧设备已持久化的声明判断能否释放计算而不终结 Session，并在准入执行前验证新 Runtime。原生历史缺失或无效时明确失败，绝不授权新建原生会话或重放此前输入。
 
@@ -312,7 +312,7 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 
 ## MCP 连接权限 {#mcp-connection-authority}
 
-`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。`MCPHTTPServer.headers` 携带非机密的字面标头；凭据只通过 `bearer_token` 传递。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
+`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。`MCPHTTPServer.headers` 携带非机密的字面标头；凭据只通过 `bearer_token` 传递。`MCPHTTPServer.stdio`（`command`、`args`、`cwd`、`env_vars`）声明 Environment 的进程而非 URL：它要求 `environment` 来源，不带标头或 bearer，`env_vars` 只列进程继承的变量名，不含其值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
 
 ## 超时与限制 {#timeouts-and-limits}
 

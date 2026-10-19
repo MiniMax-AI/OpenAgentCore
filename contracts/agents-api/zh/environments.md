@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 4e216b512f4ef62bd092d60c9d773f77485bd9cbc949f4273de23e5390078f34
+source_hash: 3408e2c811042732d35227150533cf12a85cfcff8a5118d7eb62a5d68549cc8b
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -402,7 +402,7 @@ Runtime 会在适配器投影之前，通过 `agent.ResolveMCPBindings` 解析�
 
 ### 公开 MCP 连接来源 {#public-mcp-connection-origin}
 
-Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#http-mcp)）具有 `connection_origin`。省略或传入 null 表示 `service`，在 `self_hosted` Session 中也是如此。该来源会从已保存配置经过 Session 快照一直保留到 Runtime 请求，后者要求精确的线上版本；`service` 请求绝不会变为 `environment` 连接。
+Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#mcp)）具有 `connection_origin`。省略或传入 null 表示 `service`，在 `self_hosted` Session 中也是如此，`stdio` 服务器除外，其唯一来源是 `environment`。该来源会从已保存配置经过 Session 快照一直保留到 Runtime 请求，后者要求精确的线上版本；`service` 请求绝不会变为 `environment` 连接。
 
 | 来源 | 连接发起位置 | 允许的放置方式 |
 | --- | --- | --- |
@@ -415,4 +415,4 @@ Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与
 
 两种来源都支持匿名 HTTP 和 HTTPS bearer 凭据。所附加 Vault 的选择会冻结凭据身份，包括唯一的隐式 URL 匹配或匿名选择。只有该凭据经项目授权后，才会进入瞬时 Runtime 请求；绝不会搜索 Core 默认值或无关 Vault。解密失败或凭据缺失时，执行会失败且不会回退到匿名。公开 Environment MCP 保留 `project_vault` 权限，Plugin 凭据保留 `environment_configuration` 权限；两者都不会覆盖重复的服务器标签。Bearer 令牌绝不会进入持久化的原生配置或进程参数。
 
-工具允许列表和必需初始化遵循 [HTTP MCP contract](execution-tools.md#http-mcp)。
+工具允许列表和必需初始化遵循 [HTTP MCP contract](execution-tools.md#mcp)。

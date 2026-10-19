@@ -71,11 +71,42 @@ func TestMCPOmittedOriginIsService(t *testing.T) {
 			}
 		}
 	}
-	// Other transports report the transport restriction with any origin.
-	for _, origin := range []string{"", `,"connection_origin":null`, `,"connection_origin":"service"`} {
-		input := `{"type":"mcp","server_label":"records"` + origin + `,"transport":{"type":"stdio","command":"run","cwd":"/"}}`
-		if _, err := resolveMCPTool(json.RawMessage(input), true); err == nil || err.Error() != "MCP currently supports HTTP transport only." {
-			t.Fatalf("stdio origin %q: %v", origin, err)
+}
+
+// A stdio server runs in the Environment: the origin defaults to it, an inline
+// env is rejected, and the saved and effective forms match the pinned resource.
+func TestMCPStdioDeclaration(t *testing.T) {
+	const stdio = `{"type":"stdio","command":"run","args":["-x"],"cwd":"/work","env_vars":["TOKEN"]`
+	input := func(origin, transport string) json.RawMessage {
+		return json.RawMessage(`{"type":"mcp","server_label":"records"` + origin + `,"transport":` + transport + `}`)
+	}
+	for _, saved := range []bool{false, true} {
+		for _, origin := range []string{"", `,"connection_origin":null`, `,"connection_origin":"environment"`} {
+			raw, err := resolveMCPTool(input(origin, stdio+`,"env":{}}`), saved)
+			var tool map[string]any
+			if err != nil || json.Unmarshal(raw, &tool) != nil || tool["connection_origin"] != "environment" ||
+				!reflect.DeepEqual(tool["transport"], map[string]any{"type": "stdio", "command": "run", "args": []any{"-x"}, "cwd": "/work", "env_vars": []any{"TOKEN"}}) {
+				t.Fatalf("saved=%v origin %q: %s, %v", saved, origin, raw, err)
+			}
+		}
+	}
+	raw, err := resolveMCPTool(input("", `{"type":"stdio","command":"run","args":null,"cwd":"/","env_vars":null}`), true)
+	if err != nil || !strings.Contains(string(raw), `"args":[]`) || !strings.Contains(string(raw), `"env_vars":[]`) {
+		t.Fatalf("null lists: %s, %v", raw, err)
+	}
+	for message, raw := range map[string]json.RawMessage{
+		"Inline MCP env is not supported; declare env_vars and set the values in the Environment.": input("", stdio+`,"env":{"TOKEN":"private-marker"}}`),
+		"MCP stdio servers run in the Environment; connection_origin must be environment.":         input(`,"connection_origin":"service"`, stdio+`}`),
+	} {
+		if _, err := resolveMCPTool(raw, false); err == nil || err.Error() != message {
+			t.Fatalf("want %q, got %v", message, err)
+		}
+	}
+	const invalid = "MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters."
+	for _, transport := range []string{`{"type":"stdio","command":" ","cwd":"/"}`, `{"type":"stdio","command":"run","cwd":"work"}`,
+		`{"type":"stdio","command":"run","cwd":"/","env_vars":["A-B"]}`, `{"type":"stdio","command":"run","args":["\u0000"],"cwd":"/"}`} {
+		if _, err := resolveMCPTool(input("", transport), true); err == nil || err.Error() != invalid {
+			t.Fatalf("%s: %v", transport, err)
 		}
 	}
 }
@@ -104,8 +135,6 @@ func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {
 // The pinned shape is checked at decode; these inputs match it.
 func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 	for name, replacement := range map[string]map[string]json.RawMessage{
-		"stdio origin missing": {"connection_origin": nil, "transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
-		"stdio origin null":    {"connection_origin": json.RawMessage("null"), "transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
 		"empty credential":     {"credential_id": json.RawMessage(`""`)},
 		"metadata":             {"request_metadata": json.RawMessage(`{"private-marker":"value"}`)},
 		"inline authorization": {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","authorization":"private-marker"}`)},
@@ -113,7 +142,7 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 		"URL credentials":      {"transport": json.RawMessage(`{"type":"http","server_url":"https://private-marker@mcp.example.test"}`)},
 		"header name":          {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"X Tenant":"private-marker"}}`)},
 		"duplicate headers":    {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"X-A":"private-marker","x-a":"b"}}`)},
-		"stdio":                {"transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
+		"stdio credential":     {"credential_id": json.RawMessage(`"private-marker"`), "transport": json.RawMessage(`{"type":"stdio","command":"run","cwd":"/"}`)},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var input map[string]json.RawMessage

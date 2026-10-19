@@ -30,6 +30,9 @@ func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConf
 		if binding.Stdio != nil {
 			server.Command, server.Args = localworkspace.MCPStdioCommand(*binding.Stdio)
 		}
+		if process := binding.Process; process != nil {
+			server.Command, server.Args, server.Cwd, server.EnvVars = process.Command, process.Args, process.Cwd, process.EnvVars
+		}
 		if binding.BearerToken != nil {
 			server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
 			env = append(env, server.BearerTokenEnvVar+"="+*binding.BearerToken)

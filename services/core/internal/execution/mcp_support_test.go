@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -158,5 +159,32 @@ func TestMCPAnonymousExecutionPreservesFrozenDecision(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A stdio server runs in the Environment, so only workspace placements admit it,
+// and each Harness declaration applies its own limits.
+func TestMCPStdioAdmission(t *testing.T) {
+	tool := `{"type":"mcp","server_label":"local","connection_origin":"environment","allowed_tools":%s,"transport":{"type":"stdio","command":"run","args":[],"cwd":"/work","env_vars":["TOKEN"]}}`
+	for _, tc := range []struct {
+		engine, placement, allowed string
+		admitted                   bool
+	}{
+		{"codex", "self_hosted", "null", true},
+		{"codex", "openai_hosted", `["lookup"]`, true},
+		{"codex", "none", "null", false},
+		{"claude_sdk", "self_hosted", "null", true},
+		{"claude_sdk", "self_hosted", `["lookup"]`, false},
+		{"mcode", "self_hosted", "null", false},
+	} {
+		snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{json.RawMessage(fmt.Sprintf(tool, tc.allowed))}}, Environment: v1.Environment{Type: tc.placement}}
+		declaration, _ := (Policy{}).Harnesses().Lookup(tc.engine)
+		if err := validateDeclaredConfiguration(declaration, snapshot); (err == nil) != tc.admitted {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+	}
+	servers, err := executionTools([]json.RawMessage{json.RawMessage(fmt.Sprintf(tool, "null"))})
+	if err != nil || !reflect.DeepEqual(servers.MCP[0].Stdio, &proto.MCPStdio{Command: "run", Args: []string{}, Cwd: "/work", EnvVars: []string{"TOKEN"}}) {
+		t.Fatal(err, servers.MCP)
 	}
 }

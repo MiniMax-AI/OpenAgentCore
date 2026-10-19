@@ -77,7 +77,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `tool_search` | The Agent enables tool search or defers function loading |
 | `function_tools` | The Agent declares function tools |
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
-| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
+| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares MCP servers (HTTP or stdio); one is `required`; a Vault credential is selected for one |
 
 Core has no admission rule for `usage` and `resume`.
 
@@ -310,7 +310,7 @@ Core runs an idle directory read on the Worker's Session scheduling reservation 
 
 ## MCP connection authority
 
-Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. `MCPHTTPServer.headers` carries non-secret literal headers; credentials travel only in `bearer_token`. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
+Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. `MCPHTTPServer.headers` carries non-secret literal headers; credentials travel only in `bearer_token`. `MCPHTTPServer.stdio` (`command`, `args`, `cwd`, `env_vars`) declares a process of the Environment instead of a URL: it requires origin `environment` and carries no headers or bearer, and `env_vars` names variables the process inherits, never their values. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
 
 ## Timeouts and limits
 

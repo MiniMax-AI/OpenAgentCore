@@ -42,7 +42,8 @@ Native model parameters and provider protocols per Harness are in [model executi
 | Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | `live` admitted on all placements; `cached` and `enabled` rejected | Rejected |
 | [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Verified: `none`, with `allowed_tools` null and `required` false only; rejected elsewhere |
 | [Environment-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted; `allowed_tools` null and `required` false only |
-| [HTTP MCP bearer credentials](./execution-tools.md#http-mcp) | Verified | Verified | Verified |
+| [Stdio MCP](./execution-tools.md#mcp) | Admitted: hosted, self-hosted | Admitted: hosted, self-hosted; `cwd` must be the workspace directory and `allowed_tools` null | Rejected |
+| [HTTP MCP bearer credentials](./execution-tools.md#mcp) | Verified | Verified | Verified |
 | Required MCP initialization | Verified | Verified | Rejected |
 | [Subagents](./subagents.md) | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted | Verified: hosted; admitted: `none`, self-hosted |
 | Subagents together with functions or HTTP MCP | Verified: `none`; admitted: hosted, self-hosted | Rejected | HTTP MCP admitted; functions rejected for every Session |

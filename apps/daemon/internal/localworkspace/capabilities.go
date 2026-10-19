@@ -56,6 +56,15 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 			return r, err
 		}
 	}
+	if r.MCPHTTPServers != nil {
+		values, readErr := b.ReadToolEnvironment()
+		if readErr == nil {
+			readErr = requireDeclaredVariables(*r.MCPHTTPServers, values)
+		}
+		if readErr != nil {
+			return r, readErr
+		}
+	}
 	if len(manifest.MCP) != 0 {
 		values, readErr := b.ReadToolEnvironment()
 		if readErr != nil {

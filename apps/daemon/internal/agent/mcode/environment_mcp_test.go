@@ -280,3 +280,10 @@ func TestServiceOriginMCPOnNonePlacement(t *testing.T) {
 		t.Fatalf("MCP = %v, %v", servers, err)
 	}
 }
+
+func TestPublicMCPStdioIsRejected(t *testing.T) {
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local", Stdio: &proto.MCPStdio{Command: "run", Cwd: "/work"}}}
+	if _, err := runtimeMCP(proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers}); err == nil {
+		t.Fatal("native starts session stdio servers outside the declared cwd")
+	}
+}

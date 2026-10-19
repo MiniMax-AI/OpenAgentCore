@@ -31,6 +31,13 @@ func validateMCP(req proto.PromptRequestPayload) error {
 func validateMCPServers(servers []proto.MCPHTTPServer) error {
 	labels := map[string]bool{}
 	for _, server := range servers {
+		if server.Stdio != nil {
+			if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || labels[server.ServerLabel] {
+				return fmt.Errorf("claudesdk: unsupported MCP stdio declaration")
+			}
+			labels[server.ServerLabel] = true
+			continue
+		}
 		endpoint, err := url.Parse(server.ServerURL)
 		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || labels[server.ServerLabel] ||
 			err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil ||
