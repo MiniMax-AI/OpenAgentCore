@@ -164,26 +164,10 @@ type UserInput struct {
 }
 
 type TurnStartParams struct {
-	ThreadID          string             `json:"threadId"`
-	Input             []UserInput        `json:"input"`
-	CollaborationMode *CollaborationMode `json:"collaborationMode,omitempty"`
+	ThreadID string      `json:"threadId"`
+	Input    []UserInput `json:"input"`
 	// OutputSchema constrains this Turn's final assistant message natively.
 	OutputSchema json.RawMessage `json:"outputSchema,omitempty"`
-}
-
-type CollaborationModeKind string
-
-const CollaborationModeDefault CollaborationModeKind = "default"
-
-type CollaborationMode struct {
-	Mode     CollaborationModeKind     `json:"mode"`
-	Settings CollaborationModeSettings `json:"settings"`
-}
-
-type CollaborationModeSettings struct {
-	ReasoningEffort       string  `json:"reasoning_effort,omitempty"`
-	Model                 string  `json:"model"`
-	DeveloperInstructions *string `json:"developer_instructions"`
 }
 
 type TurnInterruptParams struct {

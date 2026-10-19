@@ -307,6 +307,7 @@ func subagentItemSnapshot(raw json.RawMessage, turnStatus string) (string, json.
 		body, err := json.Marshal(map[string]any{"status": status, "summary": summary})
 		return "reasoning", body, item.ID, err
 	default:
-		return "", nil, "", errors.New("codex: unsupported child Item observation")
+		// Item types without a neutral vocabulary are skipped, as in the root projection.
+		return "", nil, "", nil
 	}
 }
