@@ -22,10 +22,6 @@ func TestDeclarationAdmitsNativeToolCombinations(t *testing.T) {
 		"structured output with tool_search": {TextFormat: "json_schema", Tools: tools("function", "tool_search")},
 		"tool_search with mcp":               {Tools: tools("function", "tool_search", "mcp")},
 	} {
-		if admission.Environment == nil {
-			admission.Environment = &harnessconfig.AdmissionEnvironment{Type: "none"}
-		}
-		admission.Model = "model"
 		admission.TextSchema = json.RawMessage(`{"type":"object"}`)
 		if err := Declaration.ValidateConfiguration(admission); err != nil {
 			t.Errorf("%s: %v", name, err)

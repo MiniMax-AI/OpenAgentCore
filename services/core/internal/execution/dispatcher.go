@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -21,7 +20,7 @@ import (
 type Snapshot struct {
 	ModelProviderConfigured bool                          `json:"model_provider_configured,omitempty"`
 	Agent                   v1.Agent                      `json:"agent"`
-	Environment             *v1.Environment               `json:"environment"`
+	Environment             v1.Environment                `json:"environment"`
 	VaultIDs                []string                      `json:"vault_ids,omitempty"`
 	MCPCredentials          []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
@@ -87,7 +86,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 		return sessions.Turn{}, err
 	}
 	var snapshot Snapshot
-	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
+	if json.Unmarshal(session.Configuration, &snapshot) != nil {
 		return sessions.Turn{}, sessions.ErrInvalidInput
 	}
 	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)

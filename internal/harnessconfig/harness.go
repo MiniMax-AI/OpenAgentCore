@@ -302,31 +302,24 @@ var ErrInvalidInput = errors.New("invalid harness configuration")
 // Core projects its public types into it, so declarations stay independent of
 // the public API package.
 type Admission struct {
-	Model      string
 	TextFormat string
 	TextSchema json.RawMessage
 	MultiAgent bool
 	Tools      []json.RawMessage
-	// Environment is nil when the request names none.
-	Environment *AdmissionEnvironment
-}
-
-// AdmissionEnvironment carries the placement.
-type AdmissionEnvironment struct {
-	Type string
+	Placement  string
 }
 
 // ValidateMCPOrigins preserves outbound authority independently of Harness names.
 // Workspace connections never stand in for service-network connections.
-func (d Declaration) ValidateMCPOrigins(environment *AdmissionEnvironment, servers []proto.MCPHTTPServer) error {
+func (d Declaration) ValidateMCPOrigins(placement string, servers []proto.MCPHTTPServer) error {
 	for _, server := range servers {
 		switch server.ConnectionOrigin {
 		case "service":
-			if environment == nil || environment.Type != "none" {
+			if placement != "none" {
 				return errors.New("Service-origin MCP requires the service-side environment:none profile.")
 			}
 		case "environment":
-			if environment == nil || (environment.Type != "openai_hosted" && environment.Type != "self_hosted") {
+			if placement != "openai_hosted" && placement != "self_hosted" {
 				return errors.New("Environment-origin MCP requires a managed or self-hosted execution Environment.")
 			}
 		default:

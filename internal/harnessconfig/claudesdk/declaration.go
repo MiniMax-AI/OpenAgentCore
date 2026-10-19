@@ -77,16 +77,10 @@ var mcpLabel = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 // validateConfiguration holds the packaged adapter's execution limits on a saved
 // Agent and Environment, not saved-Agent schema rules.
 func validateConfiguration(admission harnessconfig.Admission) error {
-	environment := admission.Environment
-	if environment == nil || (environment.Type != "none" && environment.Type != "openai_hosted" && environment.Type != "self_hosted") || strings.TrimSpace(admission.Model) == "" {
-		return harnessconfig.ErrInvalidInput
-	}
 	if admission.TextFormat == "json_schema" {
 		if err := proto.ValidateBinary64Schema(admission.TextSchema); err != nil {
 			return err
 		}
-	} else if admission.TextFormat != "" && admission.TextFormat != "text" {
-		return harnessconfig.ErrInvalidInput
 	}
 	for _, raw := range admission.Tools {
 		var tool struct {
@@ -97,7 +91,7 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 			return harnessconfig.ErrInvalidInput
 		}
 		// environment:none runs no native tools, so live search has no home there.
-		if tool.Type == "web_search" && tool.Mode == "live" && environment.Type == "none" {
+		if tool.Type == "web_search" && tool.Mode == "live" && admission.Placement == "none" {
 			return errors.New("Live web search requires a managed or self-hosted execution Environment.")
 		}
 	}
