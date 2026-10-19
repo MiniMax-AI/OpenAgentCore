@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: ad2aea1d04536a7b12079a14f9926fc91b5202d394c1cd132d6c0a004a489451
+source_hash: 926187936e4c0aa8ac5298a1156463a15e893add8df2e4665bbc813204e4a6cd
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -208,7 +208,7 @@ agents "/agents" -d '{
 
 - **更新**只会更改你发送的字段。`metadata` 会替换所有键值对；`null` 会清除 `name` 或 `instructions`。
 - **删除**不会影响现有 Session。
-- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及设置了 `mode: "disabled"` 的 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [执行工具](../../../contracts/agents-api/zh/execution-tools.md)。
+- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [执行工具](../../../contracts/agents-api/zh/execution-tools.md)。
 
 ## Sessions {#sessions}
 

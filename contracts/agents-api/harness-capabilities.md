@@ -38,7 +38,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | [Structured output](./execution-tools.md#structured-output) | Rejected | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |
-| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | Rejected | Rejected |
+| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | `live` admitted on hosted and self-hosted, rejected on `none`; `cached` and `enabled` rejected | Rejected |
 | [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Rejected |
 | [Environment-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted; `allowed_tools` null and `required` false only |
 | [HTTP MCP bearer credentials](./execution-tools.md#http-mcp) | Verified | Verified | Verified |

@@ -85,6 +85,18 @@ func TestClaudeHostedToolsRequireSeparateSupport(t *testing.T) {
 	}
 }
 
+func TestClaudeLiveSearchRequiresAWorkspace(t *testing.T) {
+	for _, mode := range []string{"disabled", "cached", "live"} {
+		for _, placement := range []string{"none", "openai_hosted"} {
+			raw := json.RawMessage(`{"agent":{"model":"fixture","tools":[{"type":"web_search","mode":"` + mode + `","context_size":"medium"}]},"environment":{"type":"` + placement + `"}}`)
+			want := mode == "disabled" || (mode == "live" && placement != "none")
+			if err := (Policy{}).ValidateSessionConfiguration("claude_sdk", raw); (err == nil) != want {
+				t.Fatalf("%s/%s: %v", mode, placement, err)
+			}
+		}
+	}
+}
+
 func TestValidatorPrecedencePreservesErrors(t *testing.T) {
 	snapshot := Snapshot{Agent: v1.Agent{Tools: []json.RawMessage{json.RawMessage(`{"type":"unknown"}`)}}}
 	_, decodeErr := executionTools(snapshot.Agent.Tools)

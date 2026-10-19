@@ -51,13 +51,13 @@ var Declaration = harnessconfig.Declaration{
 		MCPHTTPRequired:          proto.CapabilitySupported,
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
 	},
-	// The SDK takes effort low to max. It has no verbosity, summary, service
-	// tier, search mode or search setting, and enabling programmatic tool calling
-	// is not wired. Native search has no cached mode or settings, so disabled is
-	// the only selectable mode and an absent control keeps native search; medium
-	// is the official default verbosity and needs no setting.
+	// The SDK takes effort low to max. It has no verbosity, summary or service
+	// tier, and enabling programmatic tool calling is not wired. Native WebSearch
+	// and WebFetch are live and have no cached mode or settings: disabled removes
+	// them, while live and an absent control keep them. Medium is the official
+	// default verbosity and needs no setting.
 	Execution: harnessconfig.ExecutionOptions{
-		WebSearchModes:          []string{"disabled"},
+		WebSearchModes:          []string{"disabled", "live"},
 		ReasoningEfforts:        []string{"low", "medium", "high", "xhigh", "max"},
 		ProgrammaticToolCalling: []bool{false},
 		TextVerbosities:         []string{"medium"},
@@ -107,9 +107,14 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 	for _, raw := range admission.Tools {
 		var tool struct {
 			Type string `json:"type"`
+			Mode string `json:"mode"`
 		}
 		if json.Unmarshal(raw, &tool) != nil {
 			return harnessconfig.ErrInvalidInput
+		}
+		// environment:none runs no native tools, so live search has no home there.
+		if tool.Type == "web_search" && tool.Mode == "live" && environment.Type == "none" {
+			return errors.New("Live web search requires a managed or self-hosted execution Environment.")
 		}
 		search = search || tool.Type == "tool_search"
 		otherTools = otherTools || (tool.Type != "function" && tool.Type != "tool_search" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling")
