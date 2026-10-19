@@ -41,7 +41,11 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 		if req.RunID != "" || len(req.Input) != 0 {
 			return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
 		}
-		var err error
+		// MCP is checked before any native file is written.
+		mcp, err := runtimeMCP(req)
+		if err != nil {
+			return nil, err
+		}
 		var opts launchOptions
 		binary := defaultBinary()
 		if frozen == nil {
@@ -50,12 +54,10 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 			binary = frozen.Binary
 			opts, err = prepareWorkspaceOptions(runtimeRoot, *frozen, req)
 		}
-		if err == nil {
-			opts.MCP, err = runtimeMCP(req)
-		}
 		if err != nil {
 			return nil, err
 		}
+		opts.MCP = mcp
 		resource, err := newExecutor(ctx, req, opts, binary)
 		if resource == nil {
 			return nil, err

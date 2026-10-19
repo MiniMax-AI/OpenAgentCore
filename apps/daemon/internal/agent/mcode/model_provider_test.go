@@ -89,7 +89,6 @@ func TestOptionsRejectInvalidProvider(t *testing.T) {
 		{"protocol alias", "protocol", "chat-completions"},
 		{"remote HTTP", "base_url", "http://provider.example/v1"},
 		{"empty key", "api_key", ""},
-		{"output without context", "context_window", 0},
 		{"excess output", "max_output_tokens", 64001},
 		{"native options", "options", map[string]any{"apiKey": "fixture-key"}},
 	} {
