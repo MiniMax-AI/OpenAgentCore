@@ -320,7 +320,7 @@ For comparison, an inline `openai_hosted` Session without a Template treats omit
 
 `restricted` requires 1–100 exact ASCII hostnames in `allowed_domains`; subdomains and redirect targets need their own entries. Wildcards, URL or port syntax, IP literals, Unicode and trailing dots are rejected. Reads return the supplied spelling, order and duplicates; comparison uses a separate lowercase, deduplicated copy.
 
-The Runtime does not enforce `disabled` or `restricted`, and no Provider enforces them for it. Core therefore stores these policies in Templates but rejects any Session whose effective network is not `enabled`, before allocating compute. Initialization and tools use the host's existing network.
+Only `enabled` runs. Core stores the other policies in Templates but rejects any Session whose effective network is not `enabled`, before allocating compute. Initialization and tools use the host's existing network.
 
 ### Env and setup commands
 

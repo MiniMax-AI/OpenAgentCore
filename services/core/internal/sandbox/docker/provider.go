@@ -5,13 +5,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/containerd/errdefs"
 	"github.com/google/uuid"
@@ -115,18 +113,13 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 		return sandbox.Info{Reference: b.Reference}, &providercontract.UnsupportedError{Operation: "Create", Reason: "external_workspace_unsupported"}
 	}
 	info := sandbox.Info{Reference: b.Reference}
-	policy := agentnetwork.Policy{Access: b.NetworkAccess, AllowedDomains: b.AllowedDomains}
-	if policy.Validate() != nil || !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
+	if !validReference(b.Reference) || !validID(b.SessionID) || !validID(b.DeviceID) || b.RuntimeConnection().Validate() != nil {
 		return info, sandbox.ErrInvalid
 	}
 	if existing, e := p.GetInfo(ctx, b.Reference); e == nil {
 		return existing, sandbox.ErrExists
 	} else if !errors.Is(e, sandbox.ErrNotFound) {
 		return info, e
-	}
-	domains, err := json.Marshal(policy.Hosts())
-	if err != nil {
-		return info, sandbox.ErrInvalid
 	}
 	name := p.name(b.Reference)
 	// Retained volumes without a container are partial or lost state, not an
@@ -152,7 +145,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 			return info, sandbox.ErrOwnership
 		}
 	}
-	options := runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"OAC_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "OAC_RUNTIME_SESSION_ID=" + b.SessionID, "OAC_RUNTIME_NETWORK_ACCESS=" + policy.Access, "OAC_RUNTIME_ALLOWED_DOMAINS=" + string(domains)})
+	options := runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"OAC_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "OAC_RUNTIME_SESSION_ID=" + b.SessionID})
 	options.Config.Cmd = []string{"connect", "--profile", "default", "--bootstrap-file", "/home/runtime/runtime-bootstrap.json"}
 	v, e := p.client.ContainerCreate(ctx, options)
 	if errdefs.IsConflict(e) {

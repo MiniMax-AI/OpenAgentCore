@@ -7,7 +7,7 @@ import (
 
 // Runtime execution uses the current user; isolation belongs to its outer host.
 func validatePermissionProfile(req proto.PromptRequestPayload) error {
-	if req.LocalEnvironment != nil && (req.DisableExecutionEnvironment || req.WorkspaceReadOnly || req.LocalEnvironment.NetworkAccess != "enabled" || len(req.LocalEnvironment.AllowedDomains) != 0) {
+	if req.LocalEnvironment != nil && (req.DisableExecutionEnvironment || req.WorkspaceReadOnly) {
 		return fmt.Errorf("codex: Runtime execution requires unrestricted host access")
 	}
 	return nil

@@ -37,8 +37,6 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 	t.Setenv("OAC_RUNTIME_SESSION_ID", session)
 	t.Setenv("OAC_RUNTIME_WORKSPACE", config.Directory)
 	t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", t.TempDir())
-	t.Setenv("OAC_RUNTIME_NETWORK_ACCESS", "enabled")
-	t.Setenv("OAC_RUNTIME_ALLOWED_DOMAINS", "")
 	req.AgentStateKey = "agents-api-" + session
 	req.LocalEnvironment.ID, req.LocalEnvironment.WorkspaceDirectory = environment, config.Directory
 	req.LocalEnvironment.Capabilities = true

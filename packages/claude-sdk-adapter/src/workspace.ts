@@ -15,8 +15,6 @@ export type Workspace = {
   skills?: WorkspaceSkill[];
   capability_root?: string;
   mcp?: EnvironmentMCPServer[];
-  network_access?: "enabled" | "disabled" | "restricted";
-  allowed_domains?: string[];
 };
 
 const environmentNames = new Set([
@@ -42,19 +40,14 @@ export function parseWorkspace(value: unknown, cwd: string): Workspace | undefin
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const config = value as Record<string, unknown>;
-  if (Object.keys(config).some(key => !["tool_env", "home", "state", "scratch", "env_names", "network_access", "allowed_domains", "skills", "mcp", "capability_root"].includes(key)) ||
-      (config.network_access !== undefined && config.network_access !== "enabled" && config.network_access !== "disabled" && config.network_access !== "restricted") ||
+  if (Object.keys(config).some(key => !["tool_env", "home", "state", "scratch", "env_names", "skills", "mcp", "capability_root"].includes(key)) ||
       !Array.isArray(config.env_names) ||
       config.env_names.some(name => typeof name !== "string" || !environmentNames.has(name)) ||
       new Set(config.env_names).size !== config.env_names.length) throw new Error("invalid_request");
-  if (config.network_access !== undefined && config.network_access !== "enabled") throw new Error("invalid_request");
   if (config.tool_env !== undefined && (!config.tool_env || typeof config.tool_env !== "object" || Array.isArray(config.tool_env) || Object.values(config.tool_env).some(value => typeof value !== "string"))) throw new Error("invalid_request");
   const mcp = parseEnvironmentMCP(config.mcp);
   if (config.capability_root !== undefined) directory(config.capability_root, false);
   if ((Array.isArray(config.skills) && config.skills.length || mcp?.length) && !config.capability_root) throw new Error("invalid_request");
-  if (mcp?.length && config.network_access !== "enabled") throw new Error("invalid_request");
-  const domains = config.allowed_domains ?? [];
-  if (!Array.isArray(domains) || domains.length !== 0) throw new Error("invalid_request");
   for(const root of [cwd,config.home,config.state,config.scratch]) directory(root,false);
   return { ...config, ...(config.skills === undefined ? {} : { skills: parseSkills(config.skills) }) } as Workspace;
 

@@ -47,7 +47,7 @@ func TestNativeMCodeWorkspaceTools(t *testing.T) {
 		req.DisableSubagents, req.MaxConcurrentSubagents = false, &limit
 		if c != nil {
 			req.DisableExecutionEnvironment = false
-			req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: workspace}
+			req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: workspace}
 		}
 		if search != nil {
 			req.ExecutionControls = &proto.ExecutionControls{WebSearch: search}
@@ -102,7 +102,7 @@ func TestNativeMCodeWorkspaceTools(t *testing.T) {
 		}
 		return r
 	}
-	workspace := &WorkspaceConfig{Binary: binary, Node: node, Companion: companion, Network: "enabled"}
+	workspace := &WorkspaceConfig{Binary: binary, Node: node, Companion: companion}
 	// finished returns the final observation of each command call, keyed by command text.
 	finished := func(calls map[string][]proto.ToolCallPayload) map[string]*proto.ToolObservation {
 		result := map[string]*proto.ToolObservation{}

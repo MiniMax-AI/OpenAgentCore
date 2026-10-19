@@ -63,14 +63,10 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	for key, value := range map[string]string{
 		"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID,
 		"OAC_RUNTIME_SESSION_ID":     bound.SessionID,
-		"OAC_RUNTIME_NETWORK_ACCESS": "enabled",
 	} {
 		if previous := os.Getenv(key); previous != "" && previous != value {
 			return errors.New("connect: conflicting Runtime identity or policy")
 		}
-	}
-	if domains := os.Getenv("OAC_RUNTIME_ALLOWED_DOMAINS"); domains != "" && domains != "[]" {
-		return errors.New("connect: conflicting Runtime network domains")
 	}
 	capabilityDirectory := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
 	if capabilityDirectory == "" {
@@ -83,7 +79,7 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	if err = saveEnvironmentBinding(root, want); err != nil {
 		return err
 	}
-	for key, value := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bound.SessionID, "OAC_RUNTIME_NETWORK_ACCESS": "enabled"} {
+	for key, value := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bound.SessionID} {
 		if err = os.Setenv(key, value); err != nil {
 			return errors.New("connect: Runtime identity configuration failed")
 		}

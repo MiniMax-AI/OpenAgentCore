@@ -50,8 +50,8 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 		}
 	}
 	if local := req.LocalEnvironment; local != nil && len(local.MCP) > 0 {
-		if req.DisableExecutionEnvironment || local.NetworkAccess != "enabled" {
-			return nil, errors.New("environment MCP requires an enabled workspace network")
+		if req.DisableExecutionEnvironment {
+			return nil, errors.New("environment MCP requires an execution environment")
 		}
 		for _, installed := range local.MCP {
 			declaration := installed.Server

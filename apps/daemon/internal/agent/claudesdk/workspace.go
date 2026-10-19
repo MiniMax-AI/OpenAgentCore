@@ -9,7 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
 // WorkspaceConfig binds one trusted private placement. It does not create an
@@ -20,8 +19,6 @@ import (
 type WorkspaceConfig struct {
 	Directory       string
 	PublicDirectory string
-	NetworkAccess   string
-	AllowedDomains  []string
 	HomeDir         string
 	ScratchDir      string
 }
@@ -35,8 +32,6 @@ type workspaceProfile struct {
 	State          string                             `json:"state"`
 	Scratch        string                             `json:"scratch"`
 	EnvNames       []string                           `json:"env_names"`
-	NetworkAccess  string                             `json:"network_access,omitempty"`
-	AllowedDomains []string                           `json:"allowed_domains,omitempty"`
 }
 
 func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspaceProfile, []string, error) {
@@ -45,9 +40,6 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 	}
 	if req.LocalEnvironment != nil && req.LocalEnvironment.WorkspaceRoot != config.Workspace.Directory {
 		return nil, nil, fmt.Errorf("claudesdk: workspace root conflicts with the trusted workspace binding")
-	}
-	if req.LocalEnvironment != nil && !(agentnetwork.Policy{Access: config.Workspace.NetworkAccess, AllowedDomains: config.Workspace.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) {
-		return nil, nil, fmt.Errorf("claudesdk: local Runtime network policy mismatch")
 	}
 	profile, env, err := workspaceEnvironment(config)
 	if err != nil {
@@ -85,7 +77,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 		return nil, nil, fmt.Errorf("claudesdk: invalid trusted workspace configuration")
 	}
 	w := config.Workspace
-	if w == nil || (w.NetworkAccess != "" && w.NetworkAccess != "enabled") || len(w.AllowedDomains) != 0 {
+	if w == nil {
 		return fail()
 	}
 	for _, path := range []string{config.Node, config.Entrypoint, filepath.Join(filepath.Dir(config.Entrypoint), "runtime_check.js")} {
@@ -106,7 +98,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			return fail()
 		}
 	}
-	profile := &workspaceProfile{Home: w.HomeDir, State: config.StateDir, Scratch: w.ScratchDir, EnvNames: []string{}, NetworkAccess: w.NetworkAccess, AllowedDomains: []string{}}
+	profile := &workspaceProfile{Home: w.HomeDir, State: config.StateDir, Scratch: w.ScratchDir, EnvNames: []string{}}
 	env := []string{}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")

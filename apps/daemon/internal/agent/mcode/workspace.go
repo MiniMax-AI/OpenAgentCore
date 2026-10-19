@@ -10,22 +10,17 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
 // WorkspaceConfig is frozen deployment input, separate from public Agent options.
 type WorkspaceConfig struct {
-	Binary, Node, Companion, Directory, Network string
-	AllowedDomains                              []string
+	Binary, Node, Companion, Directory string
 }
 
-func ConfigureLocal(binary, node, companion, workspace string, network agentnetwork.Policy) (WorkspaceConfig, error) {
-	c := WorkspaceConfig{Binary: binary, Node: node, Companion: companion, Directory: workspace, Network: network.Access, AllowedDomains: network.Hosts()}
-	if runtime.GOOS == "windows" || network.Access != "enabled" || len(network.AllowedDomains) != 0 {
-		return c, fmt.Errorf("mcode: native execution requires Linux or macOS and unrestricted host access")
-	}
-	if network.Validate() != nil {
-		return c, fmt.Errorf("mcode: explicit workspace network policy is required")
+func ConfigureLocal(binary, node, companion, workspace string) (WorkspaceConfig, error) {
+	c := WorkspaceConfig{Binary: binary, Node: node, Companion: companion, Directory: workspace}
+	if runtime.GOOS == "windows" {
+		return c, fmt.Errorf("mcode: native execution requires Linux or macOS")
 	}
 	for _, path := range []string{binary, node, companion, workspace} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
@@ -46,10 +41,7 @@ func ConfigureLocal(binary, node, companion, workspace string, network agentnetw
 }
 
 func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.PromptRequestPayload) (launchOptions, error) {
-	if c.Network != "enabled" || len(c.AllowedDomains) != 0 {
-		return launchOptions{}, fmt.Errorf("mcode: Runtime does not implement network isolation")
-	}
-	if req.LocalEnvironment == nil || req.LocalEnvironment.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || !(agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Equal(agentnetwork.Policy{Access: req.LocalEnvironment.NetworkAccess, AllowedDomains: req.LocalEnvironment.AllowedDomains}) || req.WorkspaceReadOnly {
+	if req.LocalEnvironment == nil || req.LocalEnvironment.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
 	servers, err := runtimeMCP(req)

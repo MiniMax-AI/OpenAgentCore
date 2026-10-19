@@ -101,12 +101,6 @@ test("workspace hook rewrites only Skill names", async t => {
   }
 });
 
-test("Runtime rejects network isolation requests", t => {
- const {dirs,config}=fixture(t);
- assert.ok(new WorkspaceProfile(dirs.workspace,{...config,network_access:"enabled"}).options);
- for(const network_access of ["disabled","restricted"]) assert.throws(()=>parseWorkspace({...config,network_access,allowed_domains:network_access==="restricted"?["example.com"]:[]},dirs.workspace),/invalid_request/);
-});
-
 test("workspace functions are parsed", async t => {
   const { request } = fixture(t);
   const functions = [{ name: "lookup", description: "Lookup", parameters: { type: "object" } }];

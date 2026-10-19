@@ -3,7 +3,6 @@ package execution
 import (
 	"bytes"
 	"encoding/json"
-	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -34,9 +33,6 @@ func TestSkillReferenceIdentityStopsAtCoreBoundary(t *testing.T) {
 
 func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T) {
 	for _, configuration := range []string{
-		`{"type":"openai_hosted","network":{}}`,
-		`{"type":"openai_hosted","network":{"access":"restricted"}}`,
-		`{"type":"openai_hosted","network":{"access":"enabled","allowed_domains":["example.com"]}}`,
 		`{"type":"openai_hosted","network":{"access":"disabled","allow":["example.com"]}}`,
 		`{"type":"openai_hosted","network":{"access":"disabled"},"workspace_directory":"/override"}`,
 	} {
@@ -56,23 +52,6 @@ func TestLocalEnvironmentRequiresQualifiedProfileAndExactAuthority(t *testing.T)
 			}
 		} else if err == nil || req.LocalEnvironment != nil {
 			t.Fatal("unscoped or foreign authority accepted")
-		}
-	}
-}
-
-func TestNetworkPolicySurvivesPreparedBinding(t *testing.T) {
-	session := sessions.Session{ID: "session", TenantID: "tenant"}
-	for _, network := range []string{`{"access":"disabled"}`, `{"access":"restricted","allowed_domains":["Example.com","api.example.com"]}`} {
-		environment := sessions.Environment{ID: "environment", SessionID: session.ID, TenantID: session.TenantID,
-			Configuration: []byte(`{"type":"openai_hosted","network":` + network + `}`)}
-		placement, err := parseEnvironmentPlacement(environment.Configuration)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var req proto.PromptRequestPayload
-		err = (&Dispatcher{}).configurePreparedEnvironment(session, environment, sessions.ExecutionDevice{EnvironmentID: environment.ID}, &req)
-		if err != nil || req.LocalEnvironment == nil || req.LocalEnvironment.NetworkAccess != placement.NetworkAccess || !slices.Equal(req.LocalEnvironment.AllowedDomains, placement.AllowedDomains) {
-			t.Fatal("prepared binding lost policy", req.LocalEnvironment, err)
 		}
 	}
 }

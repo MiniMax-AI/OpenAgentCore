@@ -86,8 +86,6 @@ func preparationWorkspace(t *testing.T) *localworkspace.Binding {
 		"OAC_RUNTIME_WORKSPACE":            t.TempDir(),
 		"OAC_RUNTIME_CAPABILITY_DIRECTORY": t.TempDir(),
 		"OAC_RUNTIME_HOME":                 runtimeHome,
-		"OAC_RUNTIME_NETWORK_ACCESS":       "enabled",
-		"OAC_RUNTIME_ALLOWED_DOMAINS":      "",
 	} {
 		t.Setenv(name, value)
 	}
@@ -113,7 +111,7 @@ func localPreparationHarness(t *testing.T) *harness {
 }
 
 func preparationRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, NetworkAccess: "enabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}}
+	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: "agents-api-" + preparationSessionID, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}}
 }
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory preparationFactory) *dispatch.Router {

@@ -17,8 +17,7 @@ def payload():
     value = {key: str(uuid4()) for key in ['InstallationID', 'TenantID', 'EnvironmentID',
                                           'AllocationID', 'SessionID', 'DeviceID']}
     return dict(value, RuntimeBootstrap={'version': 1, 'core_url': 'https://core.example/api/v1',
-                'device_id': value['DeviceID'], 'credential': 'private-managed-token'},
-                NetworkAccess='restricted', AllowedDomains=['example.com'])
+                'device_id': value['DeviceID'], 'credential': 'private-managed-token'})
 
 
 class ManagedStartupTest(unittest.TestCase):
@@ -46,7 +45,7 @@ class ManagedStartupTest(unittest.TestCase):
 
     def test_invalid_binding_rejected(self):
         source = payload()
-        for key, value in [('DeviceID', 'other'), ('NetworkAccess', 'unknown')]:
+        for key, value in [('DeviceID', 'other')]:
             with self.subTest(key=key), self.assertRaises(ValueError):
                 managed_init.identity(dict(source, **{key: value}))
 

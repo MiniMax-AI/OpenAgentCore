@@ -32,7 +32,6 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 	var frozen *WorkspaceConfig
 	if config != nil {
 		value := *config
-		value.AllowedDomains = append([]string(nil), config.AllowedDomains...)
 		frozen = &value
 	}
 	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {

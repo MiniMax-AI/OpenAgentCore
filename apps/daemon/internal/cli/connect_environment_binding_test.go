@@ -23,7 +23,7 @@ func environmentRuntimeFixture(t *testing.T) (root, workspace, credential string
 	}
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	t.Setenv("OAC_RUNTIME_WORKSPACE", workspace)
-	for _, name := range []string{"OAC_RUNTIME_ENVIRONMENT_ID", "OAC_RUNTIME_SESSION_ID", "OAC_RUNTIME_NETWORK_ACCESS", "OAC_RUNTIME_ALLOWED_DOMAINS"} {
+	for _, name := range []string{"OAC_RUNTIME_ENVIRONMENT_ID", "OAC_RUNTIME_SESSION_ID"} {
 		t.Setenv(name, "")
 	}
 	return root, workspace, credential, environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}

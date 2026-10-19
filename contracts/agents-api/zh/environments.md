@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 2208cbf1f6bd39e888618323077ac9ce865f2aa412a111b3c040631427f30479
+source_hash: 5f9945218142953b0df3cdf4f4b4c5aa88f8e8228b603ec6e3744b0118d0168f
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -322,7 +322,7 @@ Session 会先应用模板，然后应用自身字段。组合仅在加密 Sessi
 
 `restricted` 要求在 `allowed_domains` 中提供 1–100 个精确 ASCII 主机名；子域名和重定向目标需要各自的条目。通配符、URL 或端口语法、IP 字面量、Unicode 和尾随点都会被拒绝。读取操作会返回提供的拼写、顺序和重复项；比较操作使用单独的小写去重副本。
 
-Runtime 不会强制执行 `disabled` 或 `restricted`，也没有提供商代为强制执行。因此，Core 会在模板中存储这些策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
+只有 `enabled` 可以运行。Core 会在模板中存储其他策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
 
 ### Env 与设置命令 {#env-and-setup-commands}
 

@@ -75,7 +75,7 @@ func TestActualWorkspaceRefusalKeepsSettledAbsenceOnWire(t *testing.T) {
 	}
 	fsConfig := workspacefs.Configuration{ID: "44444444-4444-4444-8444-444444444444", Adapter: "fixture", Parameters: json.RawMessage(`{}`)}
 	binding := &workspacefs.Binding{Configuration: fsConfig, Attachment: workspacefs.Attachment{Reference: workspacefs.Reference{TenantID: ref.TenantID, EnvironmentID: ref.EnvironmentID, ObjectID: "55555555-5555-4555-8555-555555555555"}, ConfigurationID: fsConfig.ID, Kind: workspacefs.AttachmentHostDirectory, Native: json.RawMessage(`{}`)}}
-	bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", NetworkAccess: "disabled", Workspace: binding}
+	bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", Workspace: binding}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	out := execute(ctx, provider, request{ID: ref.AllocationID, ConnectionID: ref.TenantID, Reference: ref, Operation: "create", TimeoutMillis: 1000, Bootstrap: &bootstrap})
