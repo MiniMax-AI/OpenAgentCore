@@ -41,14 +41,14 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   // Codex accepts no native Harness configuration.
   await set.getByText("Advanced settings", { exact: true }).click();
   await expect(set.getByLabel("Harness configuration (JSON)")).toHaveCount(0);
-  // Limits are Core's 32-bit whole numbers, and max output needs a context window at least as large.
+  // Limits are Core's 32-bit whole numbers, and max output fits a set context window.
   await set.getByLabel("Max output tokens").fill("32000");
+  await expect(set.getByLabel("Context window", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
+  await set.getByLabel("Context window", { exact: true }).fill("1000");
   await expect(set.getByText("Set a context window at least this large.")).toBeVisible();
   await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
   await expect(set.getByLabel("Context window", { exact: true })).toHaveAccessibleDescription(/Set a context window at least this large/);
   await expect(set.getByLabel("Max output tokens", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
-  await set.getByLabel("Context window", { exact: true }).fill("1000");
-  await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
   await set.getByLabel("Context window").fill("2147483648");
   await expect(set.getByText("Enter a whole number up to 2147483647.")).toBeVisible();
   await expect(set.getByRole("button", { name: "Save" })).toBeDisabled();
