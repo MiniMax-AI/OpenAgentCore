@@ -217,17 +217,16 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			case proto.TypeDone:
 				// Done closes the event subscription; application receipts have a separate waiter.
 				done, upstream = true, nil
-			case proto.TypeFunctionCall:
+			case proto.TypeFunctionCall, proto.TypeFunctionCallWithdrawn:
 				if err := journal.flush(ctx); err != nil {
 					result.ErrorCode = "event_persistence_failed"
 					return
 				}
-				if err := functions.record(ctx, env); err != nil {
-					result.ErrorCode = "function_call_invalid"
-					return
+				settle := functions.record
+				if env.Type == proto.TypeFunctionCallWithdrawn {
+					settle = functions.withdraw
 				}
-			case proto.TypeFunctionCallWithdrawn:
-				if err := functions.withdraw(ctx, env); err != nil {
+				if err := settle(ctx, env); err != nil {
 					result.ErrorCode = "function_call_invalid"
 					return
 				}

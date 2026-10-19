@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: ac04fcb9091694b3341ea9c2f2fd8af53363731fd6d55cdd14c08ec914658520
+source_hash: 5e14ecb8add3ada10039f01ccdb0125c8f545c67f759aad74e973b7ac80cf00e
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -21,10 +21,10 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 
 | 情况 | 响应 |
 | --- | --- |
-| 相同重试，包括 Turn 结束之后 | 接受 |
+| 相同重试，包括 Turn 结束或调用被放弃之后 | 接受 |
 | 同一调用提交不同结果 | 409 `conflict_error` |
 | Turn 取消后首次提交结果 | 409 `conflict_error` |
-| 为原生 Harness 已放弃的调用提交结果 | 409 `conflict_error` |
+| 为原生 Harness 已放弃的调用首次提交结果 | 409 `conflict_error` |
 | 调用方 Session 内未知调用或其他 Turn 的调用 | 400 `invalid_request_error`；待执行操作不变 |
 | Session 不存在或属于其他范围 | 404 |
 

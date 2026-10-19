@@ -170,13 +170,15 @@ func TestDecideFunctionResult(t *testing.T) {
 		store bool
 		err   error
 	}{
-		"new result":                    {turnWith(TurnWaiting), FunctionResultMatch{Recorded: true}, true, nil},
-		"identical retry":               {turnWith(TurnWaiting), same, false, nil},
-		"identical retry after end":     {turnWith(TurnCompleted), same, false, nil},
-		"different result":              {turnWith(TurnWaiting), saved, false, ErrFunctionResultConflict},
-		"different result after end":    {turnWith(TurnCancelled), saved, false, ErrFunctionResultConflict},
-		"new result while cancelling":   {cancelling(TurnWaiting), FunctionResultMatch{Recorded: true}, false, ErrTurnConflict},
-		"new result after the Turn end": {turnWith(TurnFailed), FunctionResultMatch{Recorded: true}, false, ErrTurnConflict},
+		"new result":                       {turnWith(TurnWaiting), FunctionResultMatch{Recorded: true}, true, nil},
+		"identical retry":                  {turnWith(TurnWaiting), same, false, nil},
+		"identical retry after end":        {turnWith(TurnCompleted), same, false, nil},
+		"different result":                 {turnWith(TurnWaiting), saved, false, ErrFunctionResultConflict},
+		"different result after end":       {turnWith(TurnCancelled), saved, false, ErrFunctionResultConflict},
+		"new result while cancelling":      {cancelling(TurnWaiting), FunctionResultMatch{Recorded: true}, false, ErrTurnConflict},
+		"new result after the Turn end":    {turnWith(TurnFailed), FunctionResultMatch{Recorded: true}, false, ErrTurnConflict},
+		"identical retry after withdrawal": {turnWith(TurnInProgress), FunctionResultMatch{Recorded: true, Submitted: true, Matches: true, Withdrawn: true}, false, nil},
+		"new result after withdrawal":      {turnWith(TurnInProgress), FunctionResultMatch{Recorded: true, Withdrawn: true}, false, ErrTurnConflict},
 	} {
 		store, err := decideFunctionResult(test.turn, test.match)
 		if store != test.store || !errors.Is(err, test.err) || (test.err == nil && err != nil) {

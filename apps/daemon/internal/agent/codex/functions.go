@@ -121,7 +121,7 @@ type functionContent struct {
 func (s *Session) stopFunctionCalls(rootOnly bool) {
 	if s.functions != nil {
 		s.functions.mu.Lock()
-		s.functions.closed = !rootOnly
+		s.functions.closed = s.functions.closed || !rootOnly
 		for id, pending := range s.functions.pending {
 			if !rootOnly || pending.thread == s.currentThreadID() {
 				pending.receipt <- agent.ErrUnknownFunctionCall

@@ -19,10 +19,10 @@ A function declaration requires `name`, `description` and a JSON Schema in `para
 
 | Case | Response |
 | --- | --- |
-| Identical retry, also after the Turn ends | Accepted |
+| Identical retry, also after the Turn ends or the call is abandoned | Accepted |
 | Different result for the same call | 409 `conflict_error` |
 | First result after the Turn was cancelled | 409 `conflict_error` |
-| Result for a call the native Harness abandoned | 409 `conflict_error` |
+| First result for a call the native Harness abandoned | 409 `conflict_error` |
 | Unknown call, or a call of another Turn, in the caller's Session | 400 `invalid_request_error`; the pending action is unchanged |
 | Missing or foreign Session | 404 |
 

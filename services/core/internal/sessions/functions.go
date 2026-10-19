@@ -65,20 +65,18 @@ type FunctionResultMatch struct {
 }
 
 // decideFunctionResult decides whether to store a submitted result for a call
-// the Turn has. A withdrawn call takes no result. An identical retry of a saved result stores nothing, even after
-// the Turn ended; a different result conflicts with the saved one. A new result
-// needs a Turn that accepts results.
+// the Turn has. An identical retry of a saved result stores nothing, even after
+// the Turn ended or the call was withdrawn; a different result conflicts with
+// the saved one. A new result needs a call that was not withdrawn and a Turn
+// that accepts results.
 func decideFunctionResult(turn Turn, match FunctionResultMatch) (bool, error) {
-	if match.Withdrawn {
-		return false, ErrTurnConflict
-	}
 	if match.Submitted {
 		if !match.Matches {
 			return false, ErrFunctionResultConflict
 		}
 		return false, nil
 	}
-	if !acceptsFunctionResults(turn) {
+	if match.Withdrawn || !acceptsFunctionResults(turn) {
 		return false, ErrTurnConflict
 	}
 	return true, nil
