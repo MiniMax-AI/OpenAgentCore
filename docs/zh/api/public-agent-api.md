@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 926187936e4c0aa8ac5298a1156463a15e893add8df2e4665bbc813204e4a6cd
+source_hash: 47c626b6be9a45d18e566d17556321a484356e825e0d5f0dd07385ccd6e50496
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -314,7 +314,7 @@ agents "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
 :::
 
 - **处于空闲状态时，**消息会启动一个新 Turn。**Turn 运行时，**消息会加入该 Turn（进行引导），而不会启动并行任务。
-- **内容**使用 `input_text`，也可以使用 `input_image` 并以内联 PNG 或 JPEG 数据 URI 提供。整个请求限制为 1 MiB。
+- **内容**使用 `input_text`，也可以使用带 `image_url` 的 `input_image`，由 Harness 决定接受哪些引用。整个请求限制为 1 MiB。
 - 完整规则请参阅[消息内容](../../../contracts/agents-api/zh/message-content.md)。
 
 ### 取消 {#cancel}

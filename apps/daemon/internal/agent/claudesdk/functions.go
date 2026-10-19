@@ -109,9 +109,6 @@ func (s *session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 			return fmt.Errorf("claudesdk: native error results cannot retain images")
 		}
 	}
-	if err := (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages(); err != nil {
-		return err
-	}
 	data, err := json.Marshal(struct {
 		Type   string `json:"type"`
 		TurnID string `json:"turn_id"`

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 070ba5163d6a897e5fb12fcede93df423bd0d5a5ed6f36c48cadb3e67636b115
+source_hash: f91e92737399daba6f269772ac6ceb8427dbf89d9e6198ea4181ff7ac6d88ad5
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -31,7 +31,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | 已实现。所有固定版本设置都会保存；Session 准入只会用到其中一个子集 | [Agents](wire-semantics.md#agents) |
 | Sessions | create (JSON 或流式), retrieve, update, list, delete | 已实现。更新仅接受 `metadata`；删除要求 Session 处于空闲或失败状态 | [Sessions](wire-semantics.md#sessions)、[creation streaming](sessions-events.md#creation-streaming) |
-| Session events | create, stream | 部分实现：支持包含文本和内嵌图像的消息、取消和函数结果；流仅支持实时模式 | [Sessions, events and history](sessions-events.md)、[message content](message-content.md) |
+| Session events | create, stream | 部分实现：支持包含文本和图像的消息、取消和函数结果；流仅支持实时模式 | [Sessions, events and history](sessions-events.md)、[message content](message-content.md) |
 | Turns | retrieve, list | 已实现；Session Turn 路由仅承载根级 Turns | [Turns and Items](sessions-events.md#turns-and-items) |
 | Items | list | 部分实现：支持消息、命令、MCP 调用、functions、web search、reasoning 和 Subagent 协调 Items；其他原生变体不会被投影 | [Turns and Items](sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | 已实现 | [Environment files and Artifacts](environment-files.md) |
@@ -123,7 +123,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
-- 图像必须是内嵌的 PNG 或 JPEG data URI；远程 URL、`file_id` 和 `detail` 会被拒绝。
+- 图像上的 `file_id` 和 `detail` 会被拒绝；每个 Harness 声明自己接受哪些 `image_url`（[消息内容](message-content.md#images)）。
 
 **Environments 和模板**
 

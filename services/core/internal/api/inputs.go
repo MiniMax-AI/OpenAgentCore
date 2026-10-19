@@ -110,7 +110,7 @@ func executionInputs(events []json.RawMessage) ([]sessions.Input, error) {
 				for _, content := range message.Content {
 					converted[0].Content = append(converted[0].Content, proto.InputContent{Type: content.Type, Text: content.Text, ImageURL: content.ImageURL})
 				}
-				if converted.Validate() != nil || converted.ValidateInlineImages() != nil {
+				if converted.Validate() != nil {
 					return nil, sessions.ErrInvalidInput
 				}
 			}

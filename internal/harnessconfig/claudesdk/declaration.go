@@ -2,6 +2,7 @@
 package claudesdk
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"math"
@@ -67,6 +68,7 @@ var Declaration = harnessconfig.Declaration{
 	WhitespaceOnlyText:     proto.CapabilityUnsupported,
 	ValidateConfiguration:  validateConfiguration,
 	ValidateTools:          validateTools,
+	ValidateMessageInput:   validateMessageInput,
 	ValidateFunctionResult: validateFunctionResult,
 }
 
@@ -157,10 +159,46 @@ func validateFunctionResult(result proto.FunctionResultPayload) error {
 			return harnessconfig.ErrInvalidInput
 		}
 	}
-	if (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages() != nil {
+	if !nativeImages(result.Content, false) {
 		return harnessconfig.ErrInvalidInput
 	}
 	return nil
+}
+
+func validateMessageInput(input proto.MessageInput) error {
+	for _, message := range input {
+		if !nativeImages(message.Content, true) {
+			return harnessconfig.ErrInvalidInput
+		}
+	}
+	return nil
+}
+
+var (
+	remoteImage = regexp.MustCompile(`^https?://\S+$`)
+	inlineImage = regexp.MustCompile(`^data:image/(?:png|jpeg|gif|webp);base64,([A-Za-z0-9+/]+={0,2})$`)
+)
+
+// nativeImages reports whether every image maps to a native block: a user
+// message takes a remote URL or inline base64, an MCP tool result only inline
+// base64, in the media types the pinned SDK declares.
+func nativeImages(content []proto.InputContent, remote bool) bool {
+	for _, part := range content {
+		if part.Type != "input_image" || part.ImageURL == nil {
+			continue
+		}
+		if remote && remoteImage.MatchString(*part.ImageURL) {
+			continue
+		}
+		match := inlineImage.FindStringSubmatch(*part.ImageURL)
+		if match == nil {
+			return false
+		}
+		if data, err := base64.StdEncoding.DecodeString(match[1]); err != nil || base64.StdEncoding.EncodeToString(data) != match[1] {
+			return false
+		}
+	}
+	return true
 }
 
 func validateNativeConfig(config proto.HarnessConfig) bool {

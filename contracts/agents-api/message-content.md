@@ -17,12 +17,12 @@ An empty text part beside other content, such as `["", "text"]`, is accepted and
 
 ## Images
 
-An `input_image` part carries `image_url` as an inline data URI: `data:image/png;base64,…` or `data:image/jpeg;base64,…`. The base64 must be canonical and the decoded image must match the declared type. Core accepts no remote URL, `file_id` or `detail`.
+An `input_image` part carries a nonempty `image_url`, a remote URL or a base64 data URL as the official API allows. Core accepts no `file_id` or `detail` and otherwise checks only the Harness's declared rule below; it never downloads or rewrites an image, and the model provider's own error for an image it cannot read returns unchanged.
 
 | Harness | Message images |
 | --- | --- |
-| Codex | Accepted on every placement the Harness supports: `none`, `openai_hosted` and `self_hosted` |
-| Claude Code | Accepted on `none`, `openai_hosted` and `self_hosted` |
+| Codex | Any `image_url`, passed unchanged, on `none`, `openai_hosted` and `self_hosted` |
+| Claude Code | An `http` or `https` URL, or a canonical base64 data URL of `image/png`, `image/jpeg`, `image/gif` or `image/webp`, on `none`, `openai_hosted` and `self_hosted`; any other reference returns 400 |
 | MiniMax Code | Rejected |
 
 Admission checks the Harness before anything is written; an image the Harness cannot take returns 400. The Runtime must also report message image support: Core binds a Session whose input carries images only to such a Runtime, and delivery to a Runtime without it fails. Use a model that accepts images.
@@ -50,7 +50,7 @@ An `agent.session.input.tool_result` event carries `success`, an optional nullab
 | Harness | Function results |
 | --- | --- |
 | Codex | Text and ordered text/image output. Core checks only that each part is well formed and passes image references to the Harness unchanged |
-| Claude Code | Text output. Images only in successful results and only as inline PNG or JPEG; an image in a failed result or a remote reference returns 400 before anything is stored, and the pending call stays open. The Harness may resize or re-encode images in its own history; public Items keep the submitted bytes |
+| Claude Code | Text output. Images only in successful results and only as canonical base64 data URLs of `image/png`, `image/jpeg`, `image/gif` or `image/webp`, because a native tool result carries no URL; an image in a failed result or a remote reference returns 400 before anything is stored, and the pending call stays open. The Harness may resize or re-encode images in its own history; public Items keep the submitted bytes |
 | MiniMax Code | No public functions |
 
 ### Application receipts

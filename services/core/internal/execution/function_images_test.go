@@ -22,7 +22,8 @@ func TestFunctionImageAdmission(t *testing.T) {
 		{"native error drops images", image, false, false},
 		{"remote", "https://example.test/image.png", true, false},
 		{"invalid base64", "data:image/png;base64,?", true, false},
-		{"invalid image", "data:image/png;base64,AQID", true, false},
+		{"unsupported type", "data:image/bmp;base64,AQID", true, false},
+		{"webp", "data:image/webp;base64,AQID", true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			output := []any{map[string]any{"type": "input_text", "text": "before"}, map[string]any{"type": "input_image", "image_url": tc.url}, map[string]any{"type": "input_text", "text": "after"}}

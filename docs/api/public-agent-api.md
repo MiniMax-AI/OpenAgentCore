@@ -312,7 +312,7 @@ agents "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
 :::
 
 - **When idle,** a message starts a new Turn. **While a Turn runs,** it joins that Turn (steering); it does not start a parallel task.
-- **Content** is `input_text`, plus `input_image` as an inline PNG or JPEG data URI. The whole request is limited to 1 MiB.
+- **Content** is `input_text`, plus `input_image` with an `image_url`; the Harness decides which references it accepts. The whole request is limited to 1 MiB.
 - Full rules: [Message content](../../contracts/agents-api/message-content.md).
 
 ### Cancel

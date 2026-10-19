@@ -68,6 +68,7 @@ export class FunctionBridge {
     pending.resolve({ content: result.content.map(part => {
       if (part.type === "input_text") return { type: "text" as const, text: part.text };
       const source = imageSource(part.image_url);
+      if (source.type !== "base64") throw new Error("Unsupported image reference.");
       return { type: "image" as const, mimeType: source.media_type, data: source.data };
     }), isError: !result.success });
   }

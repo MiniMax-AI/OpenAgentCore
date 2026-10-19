@@ -62,7 +62,7 @@ func TestPublicInputRejectsUnsupportedOrMalformedBatch(t *testing.T) {
 		`{"events":[{"type":"agent.session.input.message","input":[{"type":null,"role":"user","content":[{"type":"input_text","text":"x"}]}]}]}`,
 		`null`, `{}`, `{"events":null}`, `{"events":[{"type":"agent.session.input.tool_result","call_id":"x"}]}`,
 		`{"events":[{"type":"agent.session.input.message","input":[{"role":"assistant","content":[{"type":"input_text","text":"x"}]}]}]}`,
-		`{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_image","image_url":"https://example.com/a.png"}]}]}]}`,
+		`{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_image","image_url":" "}]}]}]}`,
 		`{"events":[{"type":"agent.session.input.cancel","input":[]}]}`,
 		`{"events":[{"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":""}]}]}]}`,
 		`{"events":[{"type":"agent.session.input.cancel"}]} {}`,
