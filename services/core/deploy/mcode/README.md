@@ -1,14 +1,14 @@
 # MiniMax Code Runtime
 
-The MiniMax Code adapter ([`agent/mcode`](../../../../apps/daemon/internal/agent/mcode)) runs the native MiniMax Code CLI over ACP inside the daemon. MiniMax Code keeps its own ACP Session, model loop and history. The companion package [`packages/mcode-harness`](../../../../packages/mcode-harness/README.md) owns the workspace tool bridge, the native patch and the Subagent history reader. This page holds the Runtime-level adapter rules and the MiniMax Code Runtime image. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
+The MiniMax Code adapter ([`agent/mcode`](../../../../apps/daemon/internal/agent/mcode)) runs the native MiniMax Code CLI over ACP inside the daemon. MiniMax Code keeps its own ACP Session, model loop and history. The companion package [`packages/mcode-harness`](../../../../packages/mcode-harness/README.md) owns the native patch and the Subagent history reader. This page holds the Runtime-level adapter rules and the MiniMax Code Runtime image. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
-Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
+Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)). The native data directory, including the generated configuration with the provider credential, is readable by those tools, as for [Claude Code](../../../../contracts/agents-api/model-execution.md#session-override).
 
 ## Native pin and readiness
 
 The adapter accepts only `@minimax-ai/code` `0.4.12` ([`version.go`](../../../../apps/daemon/internal/agent/mcode/version.go)), built from the upstream source revision in [`source.json`](../../../../packages/mcode-harness/source.json) and run with Node.js 22. MiniMax Code runs on Linux and macOS.
 
-Workspace execution also requires the companion's readiness report: private protocol 2, the pinned native version and the pinned source revision ([`workspace_readiness.go`](../../../../apps/daemon/internal/agent/mcode/workspace_readiness.go)). An older companion is rejected even when the upstream version matches.
+Workspace execution also requires the companion's readiness report: private protocol 3, the pinned native version and the pinned source revision ([`workspace_readiness.go`](../../../../apps/daemon/internal/agent/mcode/workspace_readiness.go)). An older companion is rejected even when the upstream version matches.
 
 ## Model provider
 
@@ -21,11 +21,11 @@ Each Session has its own native data directory, `$OAC_RUNTIME_HOME/runtime/mcode
 | Profile | Where it runs | Native configuration |
 | --- | --- | --- |
 | Text (`environment: none`) | A private working directory inside the Session's data directory | No native tools, Skills, web search, browser tools, `mcode-tools`, thread goals or user questions. With Subagents enabled, the default agent gets only the task tools (`task`, `task_append`, `task_query`, `task_output`, `task_stop`) and delegation |
-| Workspace | The Environment's workspace directory, for the native process, the ACP Session and the workspace tools | The text configuration plus permission mode `bypassPermissions`, the selected workspace Skills and the `oac_workspace` MCP bridge for file and shell tools |
+| Workspace | The Environment's workspace directory, for the native process, the ACP Session and the native tools | The native `read`, `write`, `edit`, `bash`, `grep`, `glob`, `todowrite` and `web_fetch` tools, permission mode `bypassPermissions`, the selected workspace Skills and the frozen tool environment in the native process environment |
 
 The text profile rejects workspace, function tools and MCP servers. Workspace execution requires Linux or macOS and an unrestricted Environment network policy ([`workspace.go`](../../../../apps/daemon/internal/agent/mcode/workspace.go)); the adapter enforces no network restriction.
 
-In the workspace profile, the frozen installation's Skills are linked into the Session's `skills` directory under their exact names and loaded through the native `skill` tool; external Skill discovery stays off. Public MCP servers use the Environment origin only, as the [MCP origin contract](../../../../contracts/agents-api/environments.md#public-mcp-connection-origin) describes. With Subagents enabled, the Session's native `mcp.json` holds only the `oac_workspace` server, so child agents get the same workspace tools.
+In the workspace profile, the frozen installation's Skills are linked into the Session's `skills` directory under their exact names and loaded through the native `skill` tool; external Skill discovery stays off. Public MCP servers use the Environment origin only, as the [MCP origin contract](../../../../contracts/agents-api/environments.md#public-mcp-connection-origin) describes. With Subagents enabled, child agents use the same native tools. In both profiles the adapter turns off what needs a MiniMax account or outlives a Turn or asks the user: `askUser`, `beta.mcodeTools`, `beta.threadGoal`, `features.mavis`, `features.webSearch`, the Matrix builtin tools and, on the text profile, the bundled Skills, and it leaves `website_deploy` out of `tools`. `web_search: disabled` also removes `web_fetch`. Background Bash is off: the patched CLI gates it on `OAC_RUNTIME_MCODE_BACKGROUND_BASH=off`, and the adapter rejects a CLI that does not report it off.
 
 ## Turns, cancellation and continuation
 
@@ -35,7 +35,7 @@ In the workspace profile, the frozen installation's Skills are linked into the S
 - A Turn that ends with an error, a cancellation, an unknown input outcome, an unfinished tool call or an unanswered permission or question makes the Executor non-reusable. The adapter stops the native process group and waits for it to exit before the Turn settles; later work loads the same native history in a new Executor.
 - Continuation requires the exact recorded native Session ID and the same working directory. Recovery without a recorded ID is rejected.
 - MiniMax Code reports no usage: ACP context occupancy and cumulative cost are not per-Turn usage.
-- Workspace `workspace_bash` calls become command observations with the command text, output text and status; exit code and duration stay unknown. Native task and Skill utilities produce no public Items.
+- Native `bash` calls become command observations with the command, the Session's workspace as the working directory, the output and status; the exit code is reported only when the native result carries one, and duration stays unknown. Native `web_fetch` calls become `web_search` observations with an `open_page` action. Native task and Skill utilities produce no public Items.
 - The adapter attaches no [native failure classification](../../../../docs/runtime-protocol.md#native-failure-classification) to its errors: MiniMax Code `0.4.12` reports a model provider rejection over ACP as JSON-RPC internal error `-32603` whose only detail is prose, so these failures stay unclassified.
 - MiniMax Code `0.4.12` retries a failed model request up to 5 times and stops retrying after 120 seconds, so a model host that does not resolve fails the Turn, unclassified, in about two minutes. Its retries stay inside MiniMax Code and never reach ACP.
 
@@ -46,9 +46,9 @@ In the workspace profile, the frozen installation's Skills are linked into the S
 | Item | Value |
 | --- | --- |
 | Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep` |
-| Programs | `/usr/local/bin/oac-daemon` and the companion at `/opt/mcode-harness` (native CLI at `native/cli.js`, bridge at `bridge.mjs`) |
+| Programs | `/usr/local/bin/oac-daemon` and the companion at `/opt/mcode-harness` (native CLI at `native/cli.js`) |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_COMPANION`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build runs the companion's `check.mjs` and the native `--version`. The combined Runtime image uses this image as its base. Sandboxes run it with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).

@@ -22,22 +22,16 @@ const acpPath = join(root, 'packages/tui/src/acp/agent.ts');
 const acp = readFileSync(acpPath, 'utf8');
 const marker = "      _meta: {\n        'minimax-code/extensions': {";
 if (acp.split(marker).length !== 2) throw new Error('Pinned native ACP initialization changed');
-writeFileSync(acpPath, acp.replace(marker, "      _meta: {\n        'oac/subagents': { version: 1, workspaceTools: process.env.OAC_RUNTIME_MCODE_TOOL_POLICY ?? null, maxConcurrent: Number(process.env.OAC_RUNTIME_MCODE_MAX_SUBAGENTS ?? 0) },\n        'minimax-code/extensions': {"));
-const catalogPath = join(root, 'packages/local-runtime-v2/src/service/turn-system/agent-host/assembly/local-turn-tool-catalog.ts');
-const catalog = readFileSync(catalogPath, 'utf8');
-const gate = "  if (!isFeatureEnabled(ceiling, toolName)) return false;";
-if (catalog.split(gate).length !== 2) throw new Error('Pinned native tool capability gate changed');
-const selectorGate = "  if (!input.selector.allowsTool(input.tool.def.name, input.options.selectorAlias)) return false;\n  if (!isMcpServerAllowed(input.selector, input.options)) return false;";
-if (catalog.split(selectorGate).length !== 2) throw new Error('Pinned native selector gate changed');
-const withWorkspace = catalog.replace(selectorGate, `  const protectedWorkspace = process.env.OAC_RUNTIME_MCODE_TOOL_POLICY === 'protected-mcp-v1' &&
-    input.source === 'configured' && input.options.mcp === true && input.options.serverName === 'oac_workspace';
-  if (!protectedWorkspace && !input.selector.allowsTool(input.tool.def.name, input.options.selectorAlias)) return false;
-  if (!protectedWorkspace && !isMcpServerAllowed(input.selector, input.options)) return false;`);
-writeFileSync(catalogPath, withWorkspace.replace(gate, `  if (process.env.OAC_RUNTIME_MCODE_TOOL_POLICY === 'protected-mcp-v1') {
-    if (source === 'builtin' && toolName !== 'skill' && !DELEGATION_TOOL_NAMES.has(toolName) && !TASK_CONTROL_TOOL_NAMES.has(toolName)) return false;
-    if (source === 'builtin-matrix') return false;
-  }
-${gate}`));
+writeFileSync(acpPath, acp.replace(marker, "      _meta: {\n        'oac/subagents': { version: 2, backgroundBash: process.env.OAC_RUNTIME_MCODE_BACKGROUND_BASH !== 'off', maxConcurrent: Number(process.env.OAC_RUNTIME_MCODE_MAX_SUBAGENTS ?? 0) },\n        'minimax-code/extensions': {"));
+// Background bash outlives the Turn. With the adapter's switch set, bash runs in the foreground only;
+// task_output stays admitted, so Subagent results remain readable.
+const executorPath = join(root, 'packages/local-runtime-v2/src/service/turn-system/agent-host/execution/executor.ts');
+const executor = readFileSync(executorPath, 'utf8');
+const context = "    const toolContext = {\n      ...toolResolution.context,";
+const promotion = "      allowBashAutoPromotion: canConsumeBackgroundBashOutput,\n      canConsumeBackgroundBashOutput,\n";
+if (executor.split(context).length !== 2 || executor.split(promotion).length !== 2) throw new Error('Pinned native background bash gate changed');
+writeFileSync(executorPath, executor.replace(context, "    const backgroundBash =\n      canConsumeBackgroundBashOutput && process.env.OAC_RUNTIME_MCODE_BACKGROUND_BASH !== 'off';\n" + context)
+  .replace(promotion, "      allowBashAutoPromotion: backgroundBash,\n      canConsumeBackgroundBashOutput: backgroundBash,\n"));
 copyFileSync(join(here, 'native-subagent-admission.mjs'), join(root, 'packages/local-runtime/src/background-task/oac-subagent-admission.mjs'));
 const digest = name => createHash('sha256').update(readFileSync(join(here, name))).digest('hex');
 writeFileSync(join(root, '.oac-native-patch.json'), JSON.stringify({ revision: pin.revision,

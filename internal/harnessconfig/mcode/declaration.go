@@ -74,8 +74,8 @@ var Declaration = harnessconfig.Declaration{
 			return errors.New("The configured engine does not support public functions.")
 		}
 		for _, server := range mcp {
-			if server.ServerLabel == "oac_workspace" || server.AllowedTools != nil || server.Required {
-				return errors.New("The configured engine requires an unreserved MCP label, allowed_tools=null and required=false.")
+			if server.AllowedTools != nil || server.Required {
+				return errors.New("The configured engine requires allowed_tools=null and required=false.")
 			}
 		}
 		return nil

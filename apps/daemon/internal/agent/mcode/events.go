@@ -37,18 +37,25 @@ func (s *Session) handle(frame rpcFrame) error {
 	s.mu.Lock()
 	s.steeringReady = true
 	s.mu.Unlock()
+	var chunk struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if kind := event.Update.Kind; (kind == "agent_message_chunk" || kind == "agent_thought_chunk") && json.Unmarshal(event.Update.Content, &chunk) != nil {
+		return fmt.Errorf("mcode: invalid session update")
+	}
 	switch event.Update.Kind {
 	case "agent_message_chunk":
-		if event.Update.Content.Type != "text" {
+		if chunk.Type != "text" {
 			return fmt.Errorf("mcode: unsupported response content")
 		}
-		text := event.Update.Content.Text
+		text := chunk.Text
 		s.content.WriteString(text)
 		s.sequence++
 		s.emit(proto.TypeDelta, proto.DeltaPayload{Delta: text, Sequence: s.sequence})
 	case "agent_thought_chunk":
 		s.sequence++
-		s.emit(proto.TypeThinking, proto.ThinkingPayload{Text: event.Update.Content.Text, Sequence: s.sequence})
+		s.emit(proto.TypeThinking, proto.ThinkingPayload{Text: chunk.Text, Sequence: s.sequence})
 	case "tool_call", "tool_call_update":
 		return s.emitTool(event.Update.toolUpdate)
 	}
@@ -80,7 +87,7 @@ func (s *Session) emitTool(update toolUpdate) error {
 			return err
 		}
 	}
-	if previous.mcp == nil && workspaceToolObservation(previous, "before") == nil {
+	if previous.mcp == nil && s.nativeToolObservation(previous, "before") == nil {
 		if err := s.emitToolStage(update, "before"); err != nil {
 			return err
 		}

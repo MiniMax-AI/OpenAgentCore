@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: ad7fb570c29fc3d346ad406e794b15c7bdabd667634b2ac0e32506e52d964aaa
+source_hash: 6b0ae99f9482a8082d20369ebe1facbc262718426dfc5d697ae63bc47ae39853
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -70,7 +70,7 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 | --- | --- | --- |
 | Codex | `disabled`、`cached` 和 `live`，以及 `context_size`、`allowed_domains` 和 `location`，对应原生 `web_search` 与 `tools.web_search` 设置 | `enabled: true` 开启原生 `code_mode`；`false` 关闭 `code_mode`、`code_mode_only` 和 `code_mode_prewarm`，并在启动或恢复线程前检查原生受管要求 |
 | Claude Code | `disabled` 和 `live`，需使用 `context_size: "medium"`，且不支持 `allowed_domains` 或 `location`。在工作区位置运行原生 `claude_code` 工具集，但移除向用户提问、定时、工作流、后台和 `ListAgents` 工具；`disabled` 会移除 `WebSearch` 和 `WebFetch`，`live` 保留它们。`environment: none` 不保留内置工具，并拒绝 `live` | 仅 `false` |
-| MiniMax Code | 仅 `disabled`，受限配置没有搜索工具，通过原生 `features.webSearch=false` 实现 | 仅 `false` |
+| MiniMax Code | 仅 `disabled`，通过原生 `features.webSearch=false` 实现，因为原生搜索需要 MiniMax 账号凭据。在工作区位置上运行原生工具，`disabled` 还会移除 `web_fetch`，省略该控制项则保留。`environment: none` 没有内置工具 | 仅 `false` |
 
 ## HTTP MCP {#http-mcp}
 

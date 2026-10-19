@@ -72,10 +72,9 @@ func TestSubagentSnapshotRejectsMissingParentProvenance(t *testing.T) {
 // The ACP cancelled response may precede the root native Turn becoming terminal.
 func TestSubagentSettlementIncludesActiveRootTurn(t *testing.T) {
 	dir := t.TempDir()
-	node, bridge := filepath.Join(dir, "node"), filepath.Join(dir, "bridge.mjs")
+	node := filepath.Join(dir, "node")
 	for name, data := range map[string]string{
-		node:   "#!/bin/sh\ncat \"$3/snapshot.json\"\n",
-		bridge: "",
+		node: "#!/bin/sh\ncat \"$3/snapshot.json\"\n",
 		filepath.Join(dir, "subagent-snapshot.mjs"): "",
 	} {
 		if err := os.WriteFile(name, []byte(data), 0700); err != nil {
@@ -83,7 +82,7 @@ func TestSubagentSettlementIncludesActiveRootTurn(t *testing.T) {
 		}
 	}
 	t.Setenv("OAC_RUNTIME_MCODE_NODE", node)
-	t.Setenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE", bridge)
+	t.Setenv("OAC_RUNTIME_MCODE_COMPANION", dir)
 	for _, status := range []string{"accepted", "aborted"} {
 		t.Run(status, func(t *testing.T) {
 			raw := []byte(`{"version":1,"complete":true,"rootSessionId":"root","sessions":[{"id":"root","turns":[{"id":"current","status":"` + status + `"}]}]}`)

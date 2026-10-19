@@ -16,7 +16,7 @@ import (
 func CheckWorkspace(ctx context.Context, c WorkspaceConfig) error {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	p, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: c.Node, Args: []string{filepath.Join(filepath.Dir(c.Bridge), "check.mjs")}, Env: executionEnvironment()})
+	p, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: c.Node, Args: []string{filepath.Join(c.Companion, "check.mjs")}, Env: executionEnvironment()})
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func ValidateWorkspaceReadiness(raw []byte) error {
 		Protocol       int `json:"protocol"`
 		Native, Source string
 	}
-	if len(raw) > 4096 || json.Unmarshal(raw, &info) != nil || info.Protocol != 2 || info.Native != SupportedVersion || info.Source != "33b259bbbeb1c16433390869938191d09bdb0680" {
+	if len(raw) > 4096 || json.Unmarshal(raw, &info) != nil || info.Protocol != 3 || info.Native != SupportedVersion || info.Source != "33b259bbbeb1c16433390869938191d09bdb0680" {
 		return fmt.Errorf("mcode: workspace companion check failed")
 	}
 	return nil

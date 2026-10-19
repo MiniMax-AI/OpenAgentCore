@@ -1,11 +1,12 @@
 package mcode
 
 import (
-	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -14,25 +15,24 @@ import (
 
 // WorkspaceConfig is frozen deployment input, separate from public Agent options.
 type WorkspaceConfig struct {
-	Binary, Node, Bridge, Directory, Network, Scratch string
-	AllowedDomains                                    []string
+	Binary, Node, Companion, Directory, Network string
+	AllowedDomains                              []string
 }
 
-func ConfigureLocal(binary, node, bridge, root, workspace string, network agentnetwork.Policy) (WorkspaceConfig, error) {
-	c := WorkspaceConfig{Binary: binary, Node: node, Bridge: bridge, Directory: workspace, Network: network.Access, AllowedDomains: network.Hosts(),
-		Scratch: filepath.Join(root, "runtime", "mcode-tools", "scratch")}
+func ConfigureLocal(binary, node, companion, workspace string, network agentnetwork.Policy) (WorkspaceConfig, error) {
+	c := WorkspaceConfig{Binary: binary, Node: node, Companion: companion, Directory: workspace, Network: network.Access, AllowedDomains: network.Hosts()}
 	if runtime.GOOS == "windows" || network.Access != "enabled" || len(network.AllowedDomains) != 0 {
 		return c, fmt.Errorf("mcode: native execution requires Linux or macOS and unrestricted host access")
 	}
 	if network.Validate() != nil {
 		return c, fmt.Errorf("mcode: explicit workspace network policy is required")
 	}
-	for _, path := range []string{binary, node, bridge, root, workspace} {
+	for _, path := range []string{binary, node, companion, workspace} {
 		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
 			return c, fmt.Errorf("mcode: canonical absolute deployment paths are required")
 		}
 	}
-	for _, path := range []string{binary, node, bridge} {
+	for _, path := range []string{binary, node} {
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() {
 			return c, fmt.Errorf("mcode: runtime program unavailable")
@@ -41,10 +41,6 @@ func ConfigureLocal(binary, node, bridge, root, workspace string, network agentn
 	bound, err := os.Stat(workspace)
 	if err != nil || !bound.IsDir() {
 		return c, fmt.Errorf("mcode: workspace directory unavailable")
-	}
-
-	if err := os.MkdirAll(c.Scratch, 0700); err != nil {
-		return c, err
 	}
 	return c, nil
 }
@@ -60,13 +56,23 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 	if err != nil {
 		return launchOptions{}, err
 	}
+	values, err := localworkspace.ReadOptionalToolEnvironment()
+	if err != nil {
+		return launchOptions{}, err
+	}
+	// A disabled web_search control removes web_fetch as well; without the control the native default applies.
+	searchDisabled := req.ExecutionControls != nil && req.ExecutionControls.WebSearch != nil && req.ExecutionControls.WebSearch.Mode == "disabled"
+	profile := &workspaceProfile{WebFetch: !searchDisabled}
+	for _, key := range slices.Sorted(maps.Keys(values)) {
+		profile.ToolEnv = append(profile.ToolEnv, key+"="+values[key])
+	}
 	// Reuse public option validation and private Session state provisioning.
-	// The native process, ACP Session and workspace tools share the declared cwd.
+	// The native process runs in the declared workspace.
 	private := req
 	private.LocalEnvironment, private.DisableExecutionEnvironment = nil, true
 	// Public declarations have already been resolved into the transient ACP map.
 	private.MCPHTTPServers = nil
-	opts, err := prepareOptions(runtimeRoot, private)
+	opts, err := prepareOptions(runtimeRoot, private, profile)
 	if err != nil {
 		return opts, err
 	}
@@ -90,72 +96,6 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 			}
 		}
 	}
-
-	raw, err := os.ReadFile(filepath.Join(opts.DataDir, "config.yaml"))
-	if err != nil {
-		return opts, err
-	}
-	var config map[string]any
-	if err = json.Unmarshal(raw, &config); err != nil {
-		return opts, err
-	}
-	config["permissionMode"] = "bypassPermissions"
-	if len(req.LocalEnvironment.Skills) > 0 {
-		selected := config["agents"].(map[string]any)["default"].(map[string]any)
-		names := make([]string, 0, len(req.LocalEnvironment.Skills))
-		for _, skill := range req.LocalEnvironment.Skills {
-			names = append(names, skill.Metadata.Name)
-		}
-		selected["skills"] = names
-		for _, key := range []string{"tools", "builtinTools"} {
-			selected[key] = append(selected[key].([]any), "skill")
-		}
-	}
-	raw, err = json.Marshal(config)
-	if err != nil {
-		return opts, err
-	}
-	if err = os.WriteFile(filepath.Join(opts.DataDir, "config.yaml"), raw, 0600); err != nil {
-		return opts, err
-	}
-	profile := map[string]any{"capabilityRoot": req.LocalEnvironment.CapabilityRoot, "workspace": "/workspace", "scratch": c.Scratch, "network": c.Network, "allowedDomains": (agentnetwork.Policy{Access: c.Network, AllowedDomains: c.AllowedDomains}).Hosts(), "skills": len(req.LocalEnvironment.Skills) > 0}
-
-	profile["workspace"] = c.Directory
-	{
-		file, err := localworkspace.ToolEnvironmentFile()
-		if err != nil {
-			return opts, err
-		}
-		if file != "" {
-			profile["toolEnvFile"] = file
-		}
-	}
-
-	raw, err = json.Marshal(profile)
-	if err != nil {
-		return opts, err
-	}
-	path := filepath.Join(opts.DataDir, "workspace-profile.json")
-	if err = os.WriteFile(path, raw, 0600); err != nil {
-		return opts, err
-	}
-	opts.MCP = []map[string]any{{"name": "oac_workspace", "command": c.Node, "args": []string{c.Bridge, path}, "env": []map[string]string{}}}
-	opts.MCP = append(opts.MCP, servers...)
-	if !req.DisableSubagents {
-		// This native data directory belongs to one public Session and its
-		// descendants. ACP's ephemeral server map otherwise covers only root.
-		configured := map[string]any{}
-		for _, server := range opts.MCP[:1] {
-			name, _ := server["name"].(string)
-			configured[name] = map[string]any{"type": "stdio", "command": server["command"], "args": server["args"], "env": map[string]string{}, "enabled": true}
-		}
-		raw, err := json.Marshal(map[string]any{"mcpServers": configured})
-		if err != nil {
-			return opts, err
-		}
-		if err := os.WriteFile(filepath.Join(opts.DataDir, "mcp.json"), raw, 0o600); err != nil {
-			return opts, err
-		}
-	}
+	opts.MCP = servers
 	return opts, nil
 }

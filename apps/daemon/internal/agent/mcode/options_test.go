@@ -13,7 +13,7 @@ import (
 func TestOptionsRefreshManagedState(t *testing.T) {
 	t.Setenv("MINIMAX_DATA_DIR", "/wrong")
 	req := testRequest(t)
-	opts, err := prepareOptions(testStateRoot(t), req)
+	opts, err := prepareOptions(testStateRoot(t), req, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	}
 	req.AgentOptions["system_prompt"] = ""
 	req.AgentSessionID = "native-1"
-	refreshed, err := prepareOptions(testStateRoot(t), req)
+	refreshed, err := prepareOptions(testStateRoot(t), req, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,6 +56,9 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if cfg["skills"].(map[string]any)["external"].(map[string]any)["enabled"] != false {
 		t.Fatal("external discovery enabled")
 	}
+	if skills, ok := cfg["agents"].(map[string]any)["default"].(map[string]any)["skills"].([]any); !ok || len(skills) != 0 {
+		t.Fatal("text profile selected native Skills")
+	}
 	info, _ := os.Stat(filepath.Join(opts.DataDir, "config.yaml"))
 	if info.Mode().Perm() != 0600 {
 		t.Fatal("native credentials file is not private")
@@ -75,7 +78,7 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req := testRequest(t)
 			tt.edit(&req)
-			if _, err := prepareOptions(testStateRoot(t), req); err == nil {
+			if _, err := prepareOptions(testStateRoot(t), req, nil); err == nil {
 				t.Fatal("expected validation failure")
 			}
 		})

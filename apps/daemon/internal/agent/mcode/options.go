@@ -18,7 +18,17 @@ type launchOptions struct {
 	MCP                 []map[string]any
 }
 
-func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload) (launchOptions, error) {
+// workspaceProfile selects the native tools of a Session that has an Environment.
+type workspaceProfile struct {
+	// ToolEnv is the Runtime's frozen tool environment as KEY=value entries.
+	ToolEnv []string
+	// WebFetch keeps the native web_fetch tool.
+	WebFetch bool
+}
+
+// prepareOptions writes the native configuration. A nil workspace is the none
+// placement: the native process has no builtin file, process or fetch tools.
+func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspace *workspaceProfile) (launchOptions, error) {
 	var result launchOptions
 	if _, err := harnessconfiguration.Declaration.Configuration.PrepareHarnessConfig(req.AgentOptions); err != nil {
 		return result, err
@@ -56,13 +66,14 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload) (launchO
 		return result, err
 	}
 	config["custom_provider"] = map[string]any{"oac": provider}
-	configureTextExecution(config)
-	if !req.DisableSubagents {
-		config["agents"] = map[string]any{"default": map[string]any{
-			"tools":        []string{"task", "task_append", "task_query", "task_output", "task_stop"},
-			"builtinTools": []string{"task", "task_append", "task_query", "task_output", "task_stop"}, "skills": []string{},
-			"features": map[string]bool{"mavis": false, "delegation": true, "webSearch": false},
-		}}
+	config["agents"] = map[string]any{"default": agentCapabilities(req, workspace)}
+	// Unattended: no ask-user. Native mcode-tools needs a MiniMax account sign-in that Core does not hold.
+	// Thread goals schedule continuation Turns after the Turn ends.
+	config["askUser"] = map[string]bool{"enabled": false}
+	config["beta"] = map[string]bool{"mcodeTools": false, "threadGoal": false}
+	if workspace != nil {
+		// Unattended: asks are allowed; the few that bypass cannot lift are answered cancelled and fail the tool call.
+		config["permissionMode"] = "bypassPermissions"
 	}
 	data, err := json.Marshal(config)
 	if err != nil {
@@ -71,7 +82,12 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload) (launchO
 	if err := os.WriteFile(filepath.Join(result.DataDir, "config.yaml"), data, 0o600); err != nil {
 		return result, err
 	}
-	result.Env = append(executionEnvironment(), "OAC_RUNTIME_MCODE_TOOL_POLICY=protected-mcp-v1")
+	result.Env = executionEnvironment()
+	if workspace != nil {
+		result.Env = append(result.Env, workspace.ToolEnv...)
+	}
+	// Background bash outlives the Turn and escapes the process group; Subagent task output stays.
+	result.Env = append(result.Env, "OAC_RUNTIME_MCODE_BACKGROUND_BASH=off")
 	if err := os.WriteFile(filepath.Join(result.DataDir, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
 		return result, err
 	}
@@ -84,6 +100,36 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload) (launchO
 	result.Env = append(result.Env, "MINIMAX_DATA_DIR="+result.DataDir, "HOME="+result.DataDir, "USERPROFILE="+result.DataDir)
 	result.MCP = []map[string]any{}
 	return result, nil
+}
+
+// agentCapabilities is the native agents.default ceiling. A native ID list is
+// all-or-nothing: one unknown ID drops the whole list and enables every tool.
+func agentCapabilities(req proto.PromptRequestPayload, workspace *workspaceProfile) map[string]any {
+	tools := []string{}
+	if workspace != nil {
+		// website_deploy needs a MiniMax account and stays out of the list.
+		tools = append(tools, "read", "write", "edit", "bash", "grep", "glob", "todowrite")
+		if workspace.WebFetch {
+			tools = append(tools, "web_fetch")
+		}
+	}
+	capabilities := map[string]any{
+		"tools": tools,
+		// Builtin Matrix MCP tools call MiniMax's cloud with an account credential that Core does not hold.
+		"builtinTools": []string{},
+		"features": map[string]bool{
+			// Mavis adds cron scheduling and memory that run beyond a Turn, and needs a MiniMax account.
+			"mavis":      false,
+			"delegation": !req.DisableSubagents,
+			// Native web search calls MiniMax's cloud with a MiniMax account credential that Core does not hold.
+			"webSearch": false,
+		},
+	}
+	if workspace == nil {
+		// The none placement reads no Skills; a workspace keeps the native selection with the linked Skills.
+		capabilities["skills"] = []string{}
+	}
+	return capabilities
 }
 
 func optionString(options map[string]any, key string) string {
