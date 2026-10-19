@@ -122,7 +122,8 @@ func writeMCPHeaderMap(b *strings.Builder, field string, values map[string]strin
 
 // tomlQuoteString returns a TOML basic-string literal (double-quoted)
 // with the documented escape set applied — \" \\ \n \r \t plus
-// \uXXXX for control chars. Matches the TOML 1.0 spec for basic strings.
+// \uXXXX for the other control characters, DEL included. Matches the TOML 1.0
+// spec for basic strings.
 func tomlQuoteString(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -139,7 +140,7 @@ func tomlQuoteString(s string) string {
 		case '\t':
 			b.WriteString(`\t`)
 		default:
-			if r < 0x20 {
+			if r < 0x20 || r == 0x7f {
 				fmt.Fprintf(&b, `\u%04X`, r)
 			} else {
 				b.WriteRune(r)

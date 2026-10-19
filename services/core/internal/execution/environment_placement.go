@@ -12,6 +12,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
+const hostedWorkspaceDirectory = "/workspace"
+
 type environmentPlacement struct {
 	Plugins               []agentplugin.Metadata            `json:"plugins,omitempty"`
 	Skills                []environmentconfig.SkillMetadata `json:"skills,omitempty"`
@@ -55,7 +57,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 		if local.WorkspaceDirectory != "" || agentcapabilities.ValidateDirectories(local.CapabilityDirectories) != nil {
 			return placement, sessions.ErrInvalidInput
 		}
-		placement.WorkspaceDirectory = "/workspace"
+		placement.WorkspaceDirectory = hostedWorkspaceDirectory
 	case "self_hosted":
 		if !validSelfHostedPlacement(placement) {
 			return placement, sessions.ErrInvalidInput

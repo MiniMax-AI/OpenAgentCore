@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 6956ecfe568c551e3161eb1fc982d412741846eaa56341ad58ec6511df229df8
+source_hash: d88acdb94153f3974e66adbdb9443706ae47adef280cae71b03fdf896bdfe579
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -102,8 +102,8 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 `stdio` 服务器携带 `command`、`args`、`cwd` 和 `env_vars`，作为 Environment 的进程运行，需要工作区部署位置（`openai_hosted` 或 `self_hosted`）；在 `environment: none` 上，准入返回 400。其 `connection_origin` 默认且只能为 `environment`，不带 `credential_id`。非空的 Session `env` 被拒绝，消息为 "Inline MCP env is not supported; declare env_vars and set the values in the Environment."；`command` 非空，`cwd` 为绝对路径，`env_vars` 只含变量名，且任何部分都不含 NUL。`env_vars` 指定 Environment 中的变量名，其值不会到达 Core；与 [Plugin MCP](environments.md#plugin-mcp) 相同，Environment 未设置其中某个变量时启动失败。Runtime 必须声明 `mcp_http_tools`，它涵盖所有公开 MCP 服务器。
 
 - Codex 把 `command`、`args`、`cwd` 和 `env_vars` 写入其 `[mcp_servers]` 表，并在任何原生连接之前与其余已声明配置一并验证。
-- Claude Code 以 `command` 和 `args` 在其自身进程所在目录（即工作区目录）启动服务器，因此 Runtime 拒绝其他 `cwd`。Core 拒绝 stdio 服务器的非 null `allowed_tools`，因为适配器只能在 HTTP 服务器上隐藏未选工具。
+- Claude Code 以 `command` 和 `args` 在其自身进程所在目录（即工作区目录）启动服务器，因此准入以 "The configured engine starts MCP stdio servers in the workspace directory; set cwd to it." 拒绝其他 `cwd`。Core 拒绝 stdio 服务器的非 null `allowed_tools`，因为适配器只能在 HTTP 服务器上隐藏未选工具。
 - MiniMax Code 在其私有主目录中启动会话 stdio 服务器，任何 `cwd` 都无法指向该目录，因此准入拒绝所有 stdio 服务器，消息为 "The configured engine cannot start MCP stdio servers in the declared cwd."。
-- Codex 把 `env_vars` 交给其受限的原生环境。Claude Code 以整个进程环境启动服务器，因此继承的变量多于 `env_vars` 所列。
+- Codex 把 `env_vars` 交给其受限的原生环境。Claude Code 像启动 Bash 一样以整个进程环境启动服务器，因此服务器也能读到模型提供方密钥和其他 MCP 服务器的 Vault bearer 令牌，适配器设置的变量（如 `HOME`）保持适配器的值。
 
-Codex 以原生方式信任工作区，因此工作区的项目配置在启动和冷恢复时加载，未声明的服务器、apps 和 plugins 保持原生行为。在任何携带 Core 凭据的原生连接之前，它验证每个已声明服务器保持其 URL 或命令、bearer 引用和请求头，否则启动或恢复以错误失败。它拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；接受任意工具名称（原生客户端会将其规范化，适配器拒绝规范化后的冲突），并要求已连接服务器具有静态工具清单。MiniMax Code 以 MCP 服务器 `functions` 提供公共函数，因此声明了函数的 Agent 不能让公共或 Plugin 服务器使用该标签。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。
+Codex 以原生方式信任工作区，因此工作区的项目配置在启动和冷恢复时加载，未声明的服务器、apps 和 plugins 保持原生行为。在任何携带 Core 凭据的原生连接之前，它验证每个已声明服务器保持其 URL 或命令、bearer 引用和请求头，否则启动或恢复以错误失败。它拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；接受任意工具名称（原生客户端会将其规范化，适配器拒绝规范化后的冲突），并要求静态工具清单。与本地一致，可选服务器未连接时 Claude 不带其工具继续运行；必需服务器未连接则启动失败。MiniMax Code 以 MCP 服务器 `functions` 提供公共函数，因此声明了函数的 Agent 不能让公共或 Plugin 服务器使用该标签。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。

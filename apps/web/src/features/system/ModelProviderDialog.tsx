@@ -1,4 +1,4 @@
-import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput } from "@oac/agents-client";
+import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput, tokenLimitsFit } from "@oac/agents-client";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConsoleSelect } from "../../components/console-select";
@@ -87,7 +87,7 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const limitProblem = (limit: ReturnType<typeof tokenLimit>) => (limit.problem === "whole" ? t("models.form.wholeNumber") : limit.problem === "large" ? t("models.form.tooLarge") : null);
   const outputProblem = limitProblem(output);
   // An undersized window is the field the administrator must fix.
-  const contextProblem = limitProblem(context) ?? (!outputProblem && output.value !== undefined && context.value !== undefined && output.value > context.value ? t("models.form.needsContext") : null);
+  const contextProblem = limitProblem(context) ?? (!outputProblem && !tokenLimitsFit(context.value, output.value) ? t("models.form.needsContext") : null);
   const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && model.trim() !== "" && nativeConfig !== null && !configTooLarge && !protocolProblem && !contextProblem && !outputProblem;
 
   function clearNativeConfig() {

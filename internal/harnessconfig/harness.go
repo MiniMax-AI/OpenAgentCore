@@ -309,6 +309,8 @@ type Admission struct {
 	TextSchema json.RawMessage
 	MultiAgent bool
 	Tools      []json.RawMessage
+	// WorkspaceDirectory is the Environment's workspace, empty without one.
+	WorkspaceDirectory string
 }
 
 // ValidateMCPOrigins preserves outbound authority independently of Harness names.

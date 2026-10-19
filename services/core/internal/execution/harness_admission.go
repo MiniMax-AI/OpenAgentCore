@@ -20,11 +20,16 @@ func admissionError(err error) error {
 // declarations validate.
 func admissionOf(snapshot Snapshot) harnessconfig.Admission {
 	agent := snapshot.Agent
+	workspace := snapshot.Environment.WorkspaceDirectory
+	if snapshot.Environment.Type == "openai_hosted" {
+		workspace = hostedWorkspaceDirectory
+	}
 	return harnessconfig.Admission{
-		TextFormat: agent.Text.Format.Type,
-		TextSchema: agent.Text.Format.Schema,
-		MultiAgent: agent.MultiAgent.Enabled,
-		Tools:      agent.Tools,
+		TextFormat:         agent.Text.Format.Type,
+		TextSchema:         agent.Text.Format.Schema,
+		MultiAgent:         agent.MultiAgent.Enabled,
+		Tools:              agent.Tools,
+		WorkspaceDirectory: workspace,
 	}
 }
 
