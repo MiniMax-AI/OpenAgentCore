@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
 // fakeExecutionStorage is strict lease-bound Session storage: a method whose
@@ -179,6 +180,20 @@ func TestRecordFunctionCall(t *testing.T) {
 			}
 			assertCalls(t, f.fakeTx, "MatchFunctionCall "+testTurn+" call")
 		}
+	})
+	t.Run("a Subagent call takes the identity of the child's function Item", func(t *testing.T) {
+		call := testCall
+		call.Subagent, call.SubagentTurn = "child", "child-turn"
+		hidden := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadNativeSubagent: native(NativeSubagent{ID: testSubagent})}}
+		if err := functionOperations(t, hidden, turnWith(TurnInProgress)).RecordFunctionCall(t.Context(), testTenant, testSession, testTurn, call); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("hidden child: %v", err)
+		}
+		want := items.Identity(items.Identity(testSubagent, "turn:child-turn"), "tool:native-call")
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadNativeSubagent: native(NativeSubagent{ID: testSubagent, Visible: true})}, matchFunctionCall: returns(FunctionCallMatch{Recorded: true, Matches: true})}
+		if err := functionOperations(t, f, turnWith(TurnWaiting)).RecordFunctionCall(t.Context(), testTenant, testSession, testTurn, call); err != nil {
+			t.Fatal(err)
+		}
+		assertCalls(t, f.fakeTx, "LoadNativeSubagent child", "MatchFunctionCall "+testTurn+" "+want)
 	})
 	t.Run("an invalid call reaches no storage", func(t *testing.T) {
 		call := testCall

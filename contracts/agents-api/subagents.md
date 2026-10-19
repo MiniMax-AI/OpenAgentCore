@@ -50,7 +50,7 @@ An adapter freezes root output before child settlement, keeps its native owner a
 
 ## Native profiles
 
-[Harness capabilities](./harness-capabilities.md#tools) lists rejected tool combinations.
+A Subagent uses the Agent's function and HTTP MCP tools as the Harness would in a local run, and [Harness capabilities](./harness-capabilities.md#tools) lists each combination. A child's function call is a required action of the root Turn ([Functions](./execution-tools.md#functions)); a child's MCP call is an `mcp_call` Item in its history. Codex children inherit the Agent's HTTP MCP servers, and a forked child inherits its functions while a child with fresh history has none. MiniMax Code projects its children's MCP calls and rejects public functions for the Harness as a whole. Claude Code rejects functions and HTTP MCP with Subagents.
 
 **Codex.** The adapter enables the native `multi_agent` feature and maps the concurrency limit to `agents.max_threads`; nesting depth and other native features keep their Codex defaults. It refuses to start if managed requirements force code mode or `multi_agent_v2`, whose collaboration calls leave no persisted receipt. Child Items without a neutral Item type, such as image views and context compaction, are not projected. Close and reopen facts come from direct tool output correlated with the same call's persisted completion, so they need native persisted receipts. Native Turn times have second precision. Child file work can finish under the same owner after the root Turn finishes. Cancellation continues under the same owner after a caller deadline; a later call can confirm settlement without repeating the native interrupt.
 

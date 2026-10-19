@@ -18,16 +18,21 @@ const functionConfiguration = `{"agent":{"model":"gpt-5.5","tools":[{"type":"fun
 
 func newFunctionHarness(t *testing.T) *dispatchHarness {
 	t.Helper()
+	return newFunctionHarnessWith(t, functionConfiguration)
+}
+
+func newFunctionHarnessWith(t *testing.T, configuration string) *dispatchHarness {
+	t.Helper()
 	h := newDispatchHarness(t)
 	var err error
-	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(functionConfiguration)})
+	h.session, err = h.s.CreateSession(t.Context(), h.tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "functions", Configuration: json.RawMessage(configuration)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, FunctionResultImages: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, SubagentObservations: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(time.Second)
 	for {
 		peer, _ := h.registry.LookupDevice(h.device.ID)
@@ -113,6 +118,43 @@ func TestExecutionFunctionsWaitForEveryApplicationReceipt(t *testing.T) {
 		t.Fatal(prompt)
 	}
 	h.write(next.TurnID, proto.TypeDone, proto.DonePayload{Content: "resumed"})
+	h.finished(result, sessions.TurnCompleted)
+}
+
+func TestExecutionSubagentFunctionCallIsARequiredActionOfTheRootTurn(t *testing.T) {
+	h := newFunctionHarnessWith(t, strings.Replace(functionConfiguration, `"tools"`, `"id":"agent_root","multi_agent":{"enabled":true},"tools"`, 1))
+	input := h.message("start", "Run a child")
+	result := h.run(t.Context(), input.TurnID)
+	h.read(testExecutionRequest)
+	h.write(input.TurnID, proto.TypeSubagentIdentity, proto.SubagentIdentityPayload{NativeID: "child", ParentNativeID: "root", NativeCreatedAt: 100, ParentTurnID: "native-turn", SourceItemID: "spawn-item"})
+	h.write(input.TurnID, proto.TypeSubagentTurn, proto.SubagentTurnPayload{NativeID: "child", TurnID: "child-turn", Status: sessions.TurnInProgress, CreatedAtMS: 100000})
+	h.write(input.TurnID, proto.TypeSubagentItem, proto.SubagentItemPayload{NativeID: "child", TurnID: "child-turn", ItemID: "a", Position: 0, Kind: proto.TypeToolCall,
+		Payload: json.RawMessage(`{"id":"a","stage":"before","observation":{"status":"in_progress","kind":"function","name":"lookup_ticket","arguments":{"ticket":"42"}}}`)})
+	h.write(input.TurnID, proto.TypeFunctionCall, proto.FunctionCallPayload{CallID: "a", NativeID: "child", TurnID: "child-turn", Name: "lookup_ticket", Arguments: json.RawMessage(`{"ticket":"42"}`)})
+	state := functionState(t, h, 1)
+	child, err := h.s.GetSubagentIdentity(t.Context(), h.tenant, h.session.ID, "child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	action := state.RequiredActions[0]
+	childItems, err := sessionAdapter(h.s).ListSubagentItems(t.Context(), h.tenant, h.session.ID, child.ID, "", 20, true)
+	if err != nil || state.LastTurn.ID != input.TurnID || state.LastTurn.Status != sessions.TurnWaiting || len(childItems.Data) != 1 || childItems.Data[0].CallID != action.CallID {
+		t.Fatal(state, childItems, err)
+	}
+	// The child Turn is not a Session Turn, so only the root Turn answers the call.
+	answer := json.RawMessage(`{"success":true,"output":"saved"}`)
+	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, items.Identity(child.ID, "turn:child-turn"), action.CallID, answer); err == nil {
+		t.Fatal("the child Turn answered the call")
+	}
+	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, action.CallID, answer); err != nil {
+		t.Fatal(err)
+	}
+	var reply proto.FunctionResultPayload
+	if err := h.read(proto.TypeFunctionResult).DecodePayload(&reply); err != nil || reply.CallID != "a" {
+		t.Fatal(reply, err)
+	}
+	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: reply.DeliveryID, Applied: true})
+	h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
 	h.finished(result, sessions.TurnCompleted)
 }
 

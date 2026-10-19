@@ -1,7 +1,7 @@
 ---
 title: "子 Agent"
 source: contracts/agents-api/subagents.md
-source_hash: 9257e25d1b4d10de9643157510f6695c0a16cc7ee1b21393cf9589f985c577f8
+source_hash: c70156da39cb9eac2a6e86e7b6807ef4fef0315c59c84cc84f506f8dcf905ec6
 ---
 
 启用 `multi_agent.enabled` 后，Harness 可以启动原生子 Agent。Core 通过锁定版本的 SDK（见 [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）中的六项 Subagent 读取操作公开它们，并根据适配器观察结果记录它们。当 `multi_agent.enabled=false` 时，Runtime 会移除原生子 Agent 工具。[Harness capabilities](harness-capabilities.md) 列出各 Harness 在哪些组合中支持子 Agent。
@@ -52,7 +52,7 @@ Core 根据已授权的 Session 绑定关系分配合公开 ID 和所有权。�
 
 ## 原生配置 {#native-profiles}
 
-[Harness capabilities](harness-capabilities.md#tools) 列出被拒绝的工具组合。
+Subagent 像本地运行该 Harness 一样使用 Agent 的函数和 HTTP MCP 工具，各组合见 [Harness capabilities](harness-capabilities.md#tools)。子级的函数调用是根 Turn 的待执行操作（[Functions](execution-tools.md#functions)）；子级的 MCP 调用是其历史中的 `mcp_call` Item。Codex 子级继承 Agent 的 HTTP MCP 服务器；fork 出的子级继承其函数，使用全新历史的子级没有函数。MiniMax Code 会投影其子级的 MCP 调用，并对整个 Harness 拒绝公开函数。Claude Code 在使用 Subagent 时拒绝函数和 HTTP MCP。
 
 **Codex.** 适配器会启用原生 `multi_agent` 特性，并把并发限制映射到 `agents.max_threads`；嵌套深度和其他原生特性保持 Codex 默认值。如果托管配置要求强制启用代码模式或 `multi_agent_v2`（它们的协作调用不留下持久化回执），则拒绝启动。没有中立 Item 类型的子级 Item（例如图像查看和上下文压缩）不会被投影。关闭和重新打开的事实来自直接工具输出，并与同一次调用的持久化完成记录相关联，因此需要原生持久化回执。原生 Turn 时间具有秒级精度。根级 Turn 完成后，子级文件工作可以在同一所有者下完成。超过调用方截止时间后，取消操作仍会在同一所有者下继续；后续调用可以确认已经收敛，而无需重复执行原生中断。
 

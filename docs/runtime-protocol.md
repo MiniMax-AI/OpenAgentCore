@@ -116,6 +116,8 @@ The linked source files define the required fields, validators, limits and finit
 
 Initial, prepared and active input use the same [ordered MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
 
+A `function_call` carries `native_id` and `turn_id` when a Subagent made the call, with the meaning they have in `subagent_turn`; both are empty for a call of the Run itself. The adapter sends the child's `subagent_identity` and `subagent_turn` before the call, and Core answers with `function_result` under the same `call_id`.
+
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 
 ## Preparation and execution order

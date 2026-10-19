@@ -63,9 +63,6 @@ var Declaration = harnessconfig.Declaration{
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
-	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		return harnessconfig.RejectSubagentTools(admission, "mcp")
-	},
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
 		if len(functions) > 0 {
 			return errors.New("The configured engine does not support public functions.")

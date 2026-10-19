@@ -69,6 +69,7 @@ func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error
 	}
 	err := f.sessions.RecordFunctionCall(ctx, f.tenant, f.session, f.turn, sessions.FunctionCall{
 		CallID: items.Identity(f.turn, "tool:"+call.CallID), ExecutorCallID: call.CallID, Name: call.Name, Arguments: call.Arguments,
+		Subagent: call.NativeID, SubagentTurn: call.TurnID,
 	})
 	return f.unlessCancelling(ctx, err)
 }

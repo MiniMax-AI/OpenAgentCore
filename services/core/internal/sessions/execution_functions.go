@@ -3,6 +3,8 @@ package sessions
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
 // FunctionCallMatch is what a Turn's stored call shows about a reported call.
@@ -20,6 +22,9 @@ type FunctionCallMatch struct {
 type FunctionTx interface {
 	JournalTx
 	PendingFunctionCallsTx
+	// LoadNativeSubagent reads the Session's native Subagent and reports
+	// whether the Session has it.
+	LoadNativeSubagent(ctx context.Context, native string) (NativeSubagent, bool, error)
 	// MatchFunctionCall compares call with the Turn's call of the same public
 	// identity.
 	MatchFunctionCall(ctx context.Context, turn string, call FunctionCall) (FunctionCallMatch, error)
@@ -76,13 +81,24 @@ func decideFunctionConfirmation(turn Turn, call FunctionCall) (bool, error) {
 }
 
 // RecordFunctionCall records a call an executor reported for its Turn and
-// journals the Turn's required actions with it. A retry of the recorded call
+// journals the Turn's required actions with it. A call a Subagent made takes
+// the identity of the child's function Item. A retry of the recorded call
 // changes nothing.
 func (o *ExecutionOperations) RecordFunctionCall(ctx context.Context, tenant, session, turn string, call FunctionCall) error {
 	if err := validateFunctionCall(call); err != nil {
 		return err
 	}
 	return o.storage.WithFunctionTurn(ctx, tenant, session, turn, func(ctx context.Context, tx FunctionTx, current Turn) error {
+		if call.Subagent != "" || call.SubagentTurn != "" {
+			child, found, err := tx.LoadNativeSubagent(ctx, call.Subagent)
+			if err != nil {
+				return err
+			}
+			if !found || !child.Visible || !validNativeIdentity(call.SubagentTurn) {
+				return ErrInvalidInput
+			}
+			call.CallID = items.Identity(items.Identity(child.ID, "turn:"+call.SubagentTurn), "tool:"+call.ExecutorCallID)
+		}
 		match, err := tx.MatchFunctionCall(ctx, current.ID, call)
 		if err != nil {
 			return err

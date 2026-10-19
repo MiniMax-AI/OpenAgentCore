@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 5f735aa86ed4ac1e82cfe028eb10eba50d651df844c10d73f739e5764fc6dc82
+source_hash: dfd5005d5d5a51df20d1407fe897237302c7e16f0ad6e6decd0910d181e3f039
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -117,6 +117,8 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [暂停 fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
 
 初始、已准备和活动输入使用同一[有序 MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go)。Adapter 保留消息与内容顺序，并明确拒绝不支持的内容；仅文本 transport 拒绝图像内容而不丢弃它。[消息输入契约](../../contracts/agents-api/zh/message-content.md)负责公开图像 profile、空白规则和各 Harness 的原生转换。
+
+Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，含义与 `subagent_turn` 中相同；Run 自身发起的调用两者均为空。Adapter 在调用之前发送该子级的 `subagent_identity` 和 `subagent_turn`，Core 用同一个 `call_id` 的 `function_result` 作答。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 
