@@ -2,10 +2,10 @@ package mcode
 
 import (
 	"bytes"
-	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
@@ -64,21 +64,14 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 		if err != nil {
 			t.Fatal(err)
 		}
-		raw, err := os.ReadFile(filepath.Join(opts.DataDir, "workspace-profile.json"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		var profile struct {
-			ToolEnvFile string `json:"toolEnvFile"`
-		}
-		if err := json.Unmarshal(raw, &profile); err != nil {
-			t.Fatal(err)
-		}
-		if profile.ToolEnvFile != filepath.Join(initialization, "tool-env.json") {
-			t.Fatal("native profile did not retain the Runtime snapshot reference")
+		// The native process, and so its tools, sees the Runtime snapshot, not a later change to the source.
+		for _, want := range []string{"MCP_TEST_TOKEN=fixture-bearer-canary", "TOOL_SECRET=fixture-tool-canary"} {
+			if !slices.Contains(opts.Env, want) {
+				t.Fatal("native environment lacks the frozen tool environment", want)
+			}
 		}
 		// Assert the actual env-selected HTTP credential, not a manually injected token.
-		headers, ok := opts.MCP[1]["headers"].([]map[string]string)
+		headers, ok := opts.MCP[0]["headers"].([]map[string]string)
 		if !ok || len(headers) != 1 || headers[0]["name"] != "Authorization" || headers[0]["value"] != "Bearer fixture-bearer-canary" {
 			t.Fatal("frozen MCP credential was lost or replaced")
 		}

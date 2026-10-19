@@ -231,7 +231,6 @@ jobs:
         with:
           lockfiles: |
             packages/claude-sdk-adapter/pnpm-lock.yaml
-            packages/mcode-harness/package-lock.json
       - name: Test and package Harness adapters
         run: make check-claude-sdk check-mcode-harness
 

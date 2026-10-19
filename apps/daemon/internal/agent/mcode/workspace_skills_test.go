@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
@@ -42,17 +42,16 @@ func TestWorkspaceSkillsUseSelectedSnapshotAndNativeLoader(t *testing.T) {
 		}
 		var config struct {
 			Agents map[string]struct {
-				Skills, Tools, BuiltinTools []string
+				Skills, Tools []string
 			}
 		}
 		if err := json.Unmarshal(raw, &config); err != nil {
 			t.Fatal(err)
 		}
 		selected := config.Agents["default"]
-		if !reflect.DeepEqual(selected.Skills, []string{"proof"}) ||
-			!reflect.DeepEqual(selected.Tools, []string{"skill"}) ||
-			!reflect.DeepEqual(selected.BuiltinTools, []string{"skill"}) {
-			t.Fatalf("native selection lost the installed Skill: %+v", selected)
+		// Skill names are not native IDs, so the selection stays open and no tool list carries "skill".
+		if selected.Skills != nil || slices.Contains(selected.Tools, "skill") || !slices.Contains(selected.Tools, "bash") {
+			t.Fatalf("native selection does not leave the installed Skill available: %+v", selected)
 		}
 	}
 }

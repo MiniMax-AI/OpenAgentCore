@@ -18,7 +18,7 @@ type mcpToolIdentity struct{ server, tool string }
 // Read its exact mapping instead of reversing lossy native name normalization.
 func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) {
 	if s.req.LocalEnvironment == nil ||
-		!strings.HasPrefix(name, "mcp__") || strings.HasPrefix(name, "mcp__oac_workspace__") {
+		!strings.HasPrefix(name, "mcp__") {
 		return nil, nil
 	}
 	bindings, err := agent.ResolveMCPBindings(s.req)
@@ -55,7 +55,7 @@ func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) 
 					declared++
 				}
 			}
-			if found != nil || declared != 1 || server.Raw == "oac_workspace" || tool.Raw == "" ||
+			if found != nil || declared != 1 || tool.Raw == "" ||
 				json.Unmarshal([]byte(server.Key), &key) != nil || len(key) != 2 || key[0] != "configured" || key[1] != server.Raw {
 				return nil, fmt.Errorf("mcode: ambiguous or undeclared native MCP identity")
 			}

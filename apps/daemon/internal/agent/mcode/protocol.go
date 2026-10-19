@@ -42,11 +42,9 @@ type toolUpdate struct {
 type sessionUpdate struct {
 	SessionID string `json:"sessionId"`
 	Update    struct {
-		Kind    string `json:"sessionUpdate"`
-		Content struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
-		} `json:"content"`
+		Kind string `json:"sessionUpdate"`
+		// Message chunks carry one content block; native tool updates carry a list, which is not read.
+		Content json.RawMessage `json:"content"`
 		toolUpdate
 	} `json:"update"`
 }

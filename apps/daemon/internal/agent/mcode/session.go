@@ -74,7 +74,7 @@ func (s *Session) prepareNative() error {
 		Meta            struct {
 			Subagents struct {
 				Version, MaxConcurrent int
-				WorkspaceTools         string
+				BackgroundBash         *bool
 			} `json:"oac/subagents"`
 		} `json:"_meta"`
 	}
@@ -84,8 +84,11 @@ func (s *Session) prepareNative() error {
 	if initialized.ProtocolVersion != 1 {
 		return fmt.Errorf("mcode: unsupported ACP protocol version %d", initialized.ProtocolVersion)
 	}
-	if !s.req.DisableSubagents && (initialized.Meta.Subagents.Version != 1 || initialized.Meta.Subagents.WorkspaceTools != "protected-mcp-v1" || s.req.MaxConcurrentSubagents == nil || initialized.Meta.Subagents.MaxConcurrent != *s.req.MaxConcurrentSubagents) {
-		return fmt.Errorf("mcode: native Subagent admission is unavailable")
+	// Only the patched CLI reports that background bash is off; an unpatched one would leave work after a Turn.
+	meta := initialized.Meta.Subagents
+	if meta.Version != 2 || meta.BackgroundBash == nil || *meta.BackgroundBash ||
+		(!s.req.DisableSubagents && (s.req.MaxConcurrentSubagents == nil || meta.MaxConcurrent != *s.req.MaxConcurrentSubagents)) {
+		return fmt.Errorf("mcode: patched native CLI is unavailable")
 	}
 	params := map[string]any{"cwd": s.opts.Dir, "mcpServers": s.opts.MCP}
 	method := "session/new"

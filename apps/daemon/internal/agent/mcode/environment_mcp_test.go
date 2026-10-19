@@ -50,15 +50,15 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 					Env           []map[string]string
 				} `json:"mcpServers"`
 			}
-			if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 || params.MCP[0].Name != "oac_workspace" {
-				t.Fatal("environment MCP displaced workspace tools")
+			if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 1 {
+				t.Fatal("native Session did not receive exactly the declared MCP server")
 			}
 			cwd, err := os.ReadFile(record + ".cwd")
 			workspace, pathErr := filepath.EvalSymlinks(req.LocalEnvironment.WorkspaceRoot)
 			if err != nil || pathErr != nil || string(cwd) != workspace || params.Cwd != req.LocalEnvironment.WorkspaceRoot {
 				t.Fatalf("native process and ACP Session must use the declared workspace: process=%q ACP=%q", cwd, params.Cwd)
 			}
-			server := params.MCP[1]
+			server := params.MCP[0]
 			executable, _ := os.Executable()
 			if server.Name != "proof.server" || server.Command != executable || server.Env == nil || len(server.Env) != 0 ||
 				!reflect.DeepEqual(server.Args, []string{"runtime-mcp-exec", "/private/runtime/capabilities", "plugins/fixture", "proof.server"}) {
@@ -72,7 +72,7 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 }
 
 func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T) {
-	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "restricted", "disabled", "duplicate", "reserved"} {
+	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "restricted", "disabled", "duplicate"} {
 		t.Run(name, func(t *testing.T) {
 			c, req, _ := workspaceFixture(t)
 			c.Network, req.LocalEnvironment.NetworkAccess = "enabled", "enabled"
@@ -95,8 +95,6 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 				c.Network, req.LocalEnvironment.NetworkAccess = name, name
 			case "duplicate":
 				req.LocalEnvironment.MCP = append(req.LocalEnvironment.MCP, environmentMCPFixture())
-			case "reserved":
-				req.LocalEnvironment.MCP[0].Server.Name = "oac_workspace"
 			}
 			if _, err := prepareWorkspaceOptions(testStateRoot(t), c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")
@@ -205,10 +203,10 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 				Headers         []map[string]string
 			} `json:"mcpServers"`
 		}
-		if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 2 {
-			t.Fatal("HTTP MCP displaced workspace tools")
+		if json.Unmarshal(raw, &params) != nil || len(params.MCP) != 1 {
+			t.Fatal("native Session did not receive exactly the declared MCP server")
 		}
-		server := params.MCP[1]
+		server := params.MCP[0]
 		if server.Name != "remote" || server.Type != "http" || server.URL != item.Server.URL || server.Headers == nil {
 			t.Fatal("invalid native HTTP projection")
 		}
@@ -220,7 +218,7 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 			t.Fatal("anonymous MCP inherited credentials")
 		}
 		dataDir := resource.(*executor).opts.DataDir
-		for _, name := range []string{"config.yaml", "mcp.json", "workspace-profile.json"} {
+		for _, name := range []string{"config.yaml", "mcp.json"} {
 			body, err := os.ReadFile(filepath.Join(dataDir, name))
 			if err != nil && !os.IsNotExist(err) {
 				t.Fatal(err)

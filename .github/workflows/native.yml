@@ -57,7 +57,6 @@ jobs:
           node-version: '22.22.0'
           lockfiles: |
             packages/claude-sdk-adapter/pnpm-lock.yaml
-            packages/mcode-harness/package-lock.json
       - name: Build the native daemon and test bundle boundaries
         id: build
         run: |

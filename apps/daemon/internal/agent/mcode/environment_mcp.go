@@ -17,7 +17,7 @@ func runtimeMCP(req proto.PromptRequestPayload) ([]map[string]any, error) {
 	}
 	var servers []map[string]any
 	for _, binding := range bindings {
-		if binding.ServerLabel == "oac_workspace" || binding.ConnectionOrigin != "environment" || binding.AllowedTools != nil || binding.Required {
+		if binding.ConnectionOrigin != "environment" || binding.AllowedTools != nil || binding.Required {
 			return nil, fmt.Errorf("mcode: unsupported MCP binding")
 		}
 		if binding.Transport == "http" {

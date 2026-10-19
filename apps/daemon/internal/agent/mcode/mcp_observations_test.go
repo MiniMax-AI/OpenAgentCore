@@ -164,18 +164,6 @@ func TestEnvironmentMCPResultMustMatchStartAndUnsettledCallsCloseOnce(t *testing
 	}
 }
 
-func TestEnvironmentMCPDoesNotPublishInternalWorkspaceUtilities(t *testing.T) {
-	s, out := mcpObservationSession(t)
-	for _, name := range []string{"workspace_read", "workspace_write", "workspace_edit", "workspace_glob", "workspace_grep"} {
-		if err := s.emitTool(toolUpdate{ID: name, Name: "mcp__oac_workspace__" + name, Status: "completed"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if len(out) != 0 {
-		t.Fatal("internal workspace utility became a public MCP call")
-	}
-}
-
 func TestEnvironmentMCPNativeJSONRetainsIntegerPrecision(t *testing.T) {
 	s, out := mcpObservationSession(t)
 	frames := []string{

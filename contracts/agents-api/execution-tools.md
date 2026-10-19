@@ -68,7 +68,7 @@ Execution carries the resolved values to the Harness and validates them against 
 | --- | --- | --- |
 | Codex | `disabled`, `cached` and `live`, with `context_size`, `allowed_domains` and `location`, as native `web_search` and `tools.web_search` settings | `enabled: true` turns on native `code_mode`; `false` turns off `code_mode`, `code_mode_only` and `code_mode_prewarm` and checks native managed requirements before a thread starts or resumes |
 | Claude Code | `disabled` and `live`, with `context_size: "medium"` and no `allowed_domains` or `location`. On a workspace placement the native `claude_code` tool set runs without ask-user, scheduling, workflow, background and `ListAgents` tools; `disabled` removes `WebSearch` and `WebFetch`, and `live` keeps them. `environment: none` keeps no built-in tools and rejects `live` | `false` only |
-| MiniMax Code | `disabled` only, through the native `features.webSearch=false` because the restricted profile has no search tool | `false` only |
+| MiniMax Code | `disabled` only, through the native `features.webSearch=false` because native search needs a MiniMax account credential. On a workspace placement the native tools run, and `disabled` also removes `web_fetch` while an omitted control keeps it. `environment: none` has no built-in tools | `false` only |
 
 ## HTTP MCP
 

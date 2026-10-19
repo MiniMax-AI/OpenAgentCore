@@ -72,7 +72,7 @@ func (s *Session) projectSubagentMessages(session nativeSubagentSession, turn na
 				status = "failed"
 			}
 			update := toolUpdate{ID: tool.ID, Name: tool.Name, Status: status, RawInput: args, RawOutput: result}
-			observation := workspaceToolObservation(update, "after")
+			observation := s.nativeToolObservation(update, "after")
 			if observation == nil {
 				var err error
 				update.mcp, err = s.environmentMCPIdentity(update.Name)

@@ -33,7 +33,6 @@ jobs:
           node-version: '22.22.0'
           lockfiles: |
             packages/claude-sdk-adapter/pnpm-lock.yaml
-            packages/mcode-harness/package-lock.json
       - run: pnpm --dir packages/claude-sdk-adapter fetch
       - uses: ./.github/actions/mcode-companion
 

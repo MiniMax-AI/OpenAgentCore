@@ -29,16 +29,6 @@ func validateExecutionRequest(req proto.PromptRequestPayload) error {
 	return nil
 }
 
-func configureTextExecution(config map[string]any) {
-	config["agents"] = map[string]any{"default": map[string]any{
-		"tools": []string{}, "builtinTools": []string{}, "skills": []string{},
-		// Native web search calls MiniMax's cloud with a MiniMax account credential that Core does not hold.
-		"features": map[string]bool{"mavis": false, "delegation": false, "webSearch": false},
-	}}
-	config["askUser"] = map[string]bool{"enabled": false}
-	config["beta"] = map[string]bool{"browserUseTooling": false, "mcodeTools": false, "threadGoal": false}
-}
-
 // Harness children use the daemon user's ordinary environment.
 func executionEnvironment() []string { return os.Environ() }
 
