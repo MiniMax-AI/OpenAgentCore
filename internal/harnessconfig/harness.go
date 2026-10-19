@@ -54,6 +54,9 @@ type Provider struct {
 // only for direct adapters whose model connection remains native-owned.
 type Configuration struct {
 	Providers []Provider
+	// MaxOutputTokens reports that the adapter maps a provider's
+	// max_output_tokens to a native setting. Every adapter maps context_window.
+	MaxOutputTokens bool
 	// ValidateNativeConfig belongs to the selected adapter, never Core.
 	ValidateNativeConfig func(proto.HarnessConfig) bool
 }

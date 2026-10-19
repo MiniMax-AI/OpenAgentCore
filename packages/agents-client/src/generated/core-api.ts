@@ -405,9 +405,10 @@ export const modelConfigurationInputFields = ["harness_config", "model", "model_
 export const modelConfigurationInputRequired = ["model", "model_provider"] as const;
 export interface ModelConfigurationSupport {
   accepts_harness_config: boolean;
+  accepts_max_output_tokens: boolean;
   protocols: string[];
 }
-export const modelConfigurationSupportFields = ["accepts_harness_config", "protocols"] as const;
+export const modelConfigurationSupportFields = ["accepts_harness_config", "accepts_max_output_tokens", "protocols"] as const;
 export interface Node {
   active: number;
   available_disk_bytes: number | null;

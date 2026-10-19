@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const savedProviderFixture = `{"protocol":"responses","base_url":"https://example.test/v1","api_key":"saved-provider-secret","context_window":100000,"max_output_tokens":8000}`
+const savedProviderFixture = `{"protocol":"responses","base_url":"https://example.test/v1","api_key":"saved-provider-secret","context_window":100000}`
 
 type savedProviderStore struct {
 	saved    agents.Agent
@@ -139,7 +139,7 @@ func TestSavedProviderInvalidInput(t *testing.T) {
 		`{"model_provider":{"protocol":"responses","base_url":"https://example.test","api_key":"saved-provider-secret","API_KEY":"secret"}}`,
 		`{"model_provider":{"protocol":"responses","base_url":"https://example.test","api_key":"saved-provider-secret","api_key":"other"}}`,
 		`{"harness":"claude_sdk","model_provider":` + strings.Replace(savedProviderFixture, `"responses"`, `"unknown"`, 1) + `}`,
-		`{"model_provider":` + strings.Replace(savedProviderFixture, `"max_output_tokens":8000`, `"max_output_tokens":100001`, 1) + `}`,
+		`{"model_provider":` + strings.Replace(savedProviderFixture, `"context_window":100000`, `"context_window":-1`, 1) + `}`,
 	} {
 		for _, path := range []string{"/v1/agents", "/v1/agents/" + uuid.NewString()} {
 			h, s := validationHandler(t)

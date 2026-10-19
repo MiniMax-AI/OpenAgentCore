@@ -15,13 +15,15 @@ A Harness receives one frozen model provider bundle, defined by [`modelprovider.
 | `api_key` | Nonempty, at most 16 KiB, without NUL, CR or LF |
 | `context_window`, `max_output_tokens` | Optional nonnegative integers, with output no larger than context. Use the real model's limits |
 
-Supported protocols by Harness:
+Supported protocols and native token limits by Harness:
 
-| Harness | Supported protocols, default first |
-| --- | --- |
-| Codex | `responses` |
-| Claude Code | `anthropic` |
-| MiniMax Code | `anthropic`, `responses`, `chat_completions` |
+| Harness | Supported protocols, default first | Native token limits |
+| --- | --- | --- |
+| Codex | `responses` | `model_context_window`; no output limit |
+| Claude Code | `anthropic` | `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, which native uses only for a model it does not know, and `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, which native caps at the model's limit |
+| MiniMax Code | `anthropic`, `responses`, `chat_completions` | The custom model's `limit.context` and `limit.output` |
+
+A set limit with no native setting returns `model_provider_token_limits_invalid`.
 
 Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. There is no model API proxy, passthrough gateway or cross-protocol conversion, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
 
@@ -132,7 +134,7 @@ PUT requires `model` and a complete `model_provider`; `harness_config` defaults 
 
 Session creation decrypts the default of the resolved Harness and freezes it in the Session's encrypted snapshot like any other bundle, so changing or removing the default never reaches existing Sessions. The execution-configuration read shows the frozen safe view with source `deployment`. A missing or invalid provider snapshot fails closed, with no fallback to another model or provider.
 
-`model_configuration_support` derives from the adapter declaration that Core and Runtime share: `protocols` lists the selectable native protocols with the default first, and `accepts_harness_config` says whether native parameters are accepted. It describes the build, not a live Runtime or a remote model.
+`model_configuration_support` derives from the adapter declaration that Core and Runtime share: `protocols` lists the selectable native protocols with the default first, `accepts_harness_config` says whether native parameters are accepted, and `accepts_max_output_tokens` whether `max_output_tokens` has a native setting. It describes the build, not a live Runtime or a remote model.
 
 ### Deployment default observations
 

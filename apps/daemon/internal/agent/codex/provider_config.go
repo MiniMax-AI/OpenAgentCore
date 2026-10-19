@@ -42,6 +42,8 @@ type providerConfig struct {
 	// WireAPI is "responses" (codex Responses API) or "chat" (rejected
 	// upstream since codex-rs 0.140). Empty defaults to "responses".
 	WireAPI string
+	// ContextWindow is the native model_context_window when set.
+	ContextWindow int32
 }
 
 // writeCodexProviderConfig writes (or appends to) <codexHome>/config.toml

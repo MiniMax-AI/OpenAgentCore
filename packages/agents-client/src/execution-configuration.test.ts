@@ -35,6 +35,8 @@ describe("frozen execution configuration", () => {
       value.model_provider.configuration!.context_window = 200000;
       value.model_provider.configuration!.max_output_tokens = 8000;
       expect(await clientReturning(value).retrieveSessionExecutionConfiguration(projectId, id)).toEqual(value);
+      delete value.model_provider.configuration!.context_window;
+      expect(await clientReturning(value).retrieveSessionExecutionConfiguration(projectId, id)).toEqual(value);
     }
   });
   it.each([

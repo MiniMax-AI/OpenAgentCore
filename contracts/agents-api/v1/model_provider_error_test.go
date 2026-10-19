@@ -20,6 +20,7 @@ func TestModelProviderErrorMessagesAndPrecedence(t *testing.T) {
 		{"key", "claude_sdk", "model_provider_api_key_invalid", "api_key", "invalid model provider API key", func(p *ModelProviderInput) { p.Protocol = "anthropic"; p.APIKey = "" }},
 		{"context before output", "codex", "model_provider_token_limits_invalid", "context_window", "invalid model token limits", func(p *ModelProviderInput) { p.ContextWindow = -1; p.MaxOutputTokens = -2 }},
 		{"output", "codex", "model_provider_token_limits_invalid", "max_output_tokens", "invalid model token limits", func(p *ModelProviderInput) { p.ContextWindow = 1; p.MaxOutputTokens = 2 }},
+		{"no native output limit", "codex", "model_provider_token_limits_invalid", "max_output_tokens", "The selected harness has no native max_output_tokens setting.", func(p *ModelProviderInput) { p.ContextWindow = 10; p.MaxOutputTokens = 1 }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := valid
@@ -38,7 +39,7 @@ func TestModelProviderErrorMessagesAndPrecedence(t *testing.T) {
 	}
 	outputOnly := valid
 	outputOnly.MaxOutputTokens = 32000
-	if err := outputOnly.ValidateHarness("codex"); err != nil {
+	if err := outputOnly.ValidateHarness("mcode"); err != nil {
 		t.Fatal(err) // An omitted context window keeps the native default.
 	}
 	if err := valid.ValidateHarness("codex"); err != nil {

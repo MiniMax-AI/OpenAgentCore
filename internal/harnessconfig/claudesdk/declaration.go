@@ -20,6 +20,8 @@ var Declaration = harnessconfig.Declaration{
 	Configuration: harnessconfig.Configuration{
 		ValidateNativeConfig: validateNativeConfig,
 		Providers:            []harnessconfig.Provider{{Protocol: "anthropic"}},
+		// CLAUDE_CODE_MAX_OUTPUT_TOKENS, which native caps at the model's limit.
+		MaxOutputTokens: true,
 	},
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:     proto.CapabilitySupported,
