@@ -47,9 +47,9 @@ source_hash: 6ae7ae05948fe30ce66d86b0a3987c08456392d6a7ed66e71c09ec8b85044843
 | [HTTP MCP bearer 凭据](execution-tools.md#http-mcp) | 已验证 | 已验证 | 已验证 |
 | 必需 MCP 初始化 | 已验证 | 已验证 | 已拒绝 |
 | [Subagent](subagents.md) | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 |
-| Subagent 与函数或 HTTP MCP 同时使用 | 已验证：`none`；已准入：hosted、self-hosted | 已拒绝 | HTTP MCP 已准入；每个 Session 都拒绝函数 |
+| Subagent 与函数或 HTTP MCP 同时使用 | 已验证：`none`；已准入：托管、自托管 | 已拒绝 | HTTP MCP 已准入；每个 Session 都拒绝函数 |
 
-Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、Plugin、能力目录、MCP 和 `tool_search` 组合。Claude 延迟发现可与 MCP、Skill、Plugin、能力目录和结构化输出组合。Subagent 配置不携带函数工具，因此延迟发现与 `multi_agent` 的组合仍被拒绝。`tool_search` 是否对所配置的模型、提供商和 beta 设置生效，由 Claude Code 决定。Claude 在工作区位置需要每种操作的打包桥接功能（`workspace_functions`、`workspace_structured_output`、`workspace_tool_search`、`workspace_mcp_http`）。
+Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、Plugin、能力目录、MCP 和 `tool_search` 组合。Claude 延迟发现可与 MCP、Skill、Plugin、能力目录和结构化输出组合。Claude Code 不会把函数工具带入 Subagent 配置，因此延迟发现与 `multi_agent` 的组合仍被拒绝。`tool_search` 是否对所配置的模型、提供商和 beta 设置生效，由 Claude Code 决定。Claude 在工作区位置需要每种操作的打包桥接功能（`workspace_functions`、`workspace_structured_output`、`workspace_tool_search`、`workspace_mcp_http`）。
 
 ## Environment 准备 {#environment-preparation}
 

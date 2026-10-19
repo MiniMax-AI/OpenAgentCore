@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: e33b8ee25b70fe93691eeb4c84d598fcba0c6703b5e1dfea6c8d5e996e4d098d
+source_hash: 71a5c1bb8658f1780631c022a5f28f45b4a55fc4996a428e7372a5920ed693c2
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -60,9 +60,9 @@ source_hash: e33b8ee25b70fe93691eeb4c84d598fcba0c6703b5e1dfea6c8d5e996e4d098d
 准入（202）不表示 Harness 使用了结果。适配器确认原生应用后，待处理调用清除：
 
 - **Claude Code** 使用实时根原生工具结果确认，要求匹配 Session、调用 ID、成功标志、准确文本、块数和顺序，且每个图像位置都有原生图像。重放、合成和 Subagent 记录不能确认。
-- **Codex** 使用实时根 dynamic-tool `item/completed` 观察确认，要求匹配线程、Turn、调用、函数名称、状态、成功标志和准确有序内容。仅写入 Harness 不确认。
+- **Codex** 使用发起调用的线程和 Turn 上的实时 dynamic-tool `item/completed` 观察确认，要求匹配调用、函数名称、状态、成功标志和准确有序内容。仅写入 Harness 不确认。
 
-两适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。
+两适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。原生 Harness 放弃的调用没有回执，会被撤回（[Functions](execution-tools.md#functions)）。
 
 ## Runtime 边界 {#runtime-boundary}
 

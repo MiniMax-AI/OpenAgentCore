@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: dfd5005d5d5a51df20d1407fe897237302c7e16f0ad6e6decd0910d181e3f039
+source_hash: 7dee36cd45d967980ed9a6792b6facff9916791046968f7733376033ca963efb
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -112,13 +112,15 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
 | `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
-| `function_result` | `function_call`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
+| `function_result` | `function_call`, `function_call_withdrawn`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | 对应的 `*_result` | [读取](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go)、[写入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go)、[导出](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [暂停 fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
 
 初始、已准备和活动输入使用同一[有序 MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go)。Adapter 保留消息与内容顺序，并明确拒绝不支持的内容；仅文本 transport 拒绝图像内容而不丢弃它。[消息输入契约](../../contracts/agents-api/zh/message-content.md)负责公开图像 profile、空白规则和各 Harness 的原生转换。
 
 Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，含义与 `subagent_turn` 中相同；Run 自身发起的调用两者均为空。Adapter 在调用之前发送该子级的 `subagent_identity` 和 `subagent_turn`，Core 用同一个 `call_id` 的 `function_result` 作答。
+
+`function_call_withdrawn` 携带某个 `function_call` 的 `call_id`、`native_id` 和 `turn_id`，表示原生 Harness 永远不会为它应用结果，例如 Codex Subagent 的 Turn 已结束且原生丢弃了其请求。Core 不再要求回答该调用，并拒绝之后为它提交的结果；已在传输中的 `function_result` 会以未应用确认，adapter 以 `not_pending` 作答。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 
