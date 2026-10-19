@@ -1,7 +1,10 @@
 package api
 
 import (
+	"fmt"
+
 	"encoding/json"
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"reflect"
 	"strings"
 	"testing"
@@ -108,7 +111,6 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 		"inline authorization": {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","authorization":"private-marker"}`)},
 		"headers":              {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"Authorization":"private-marker"}}`)},
 		"URL credentials":      {"transport": json.RawMessage(`{"type":"http","server_url":"https://private-marker@mcp.example.test"}`)},
-		"URL query":            {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test/?token=private-marker"}`)},
 		"stdio":                {"transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -162,5 +164,27 @@ func TestPublicEnvironmentMCPPreservesDeclaration(t *testing.T) {
 				t.Fatal("public declaration changed")
 			}
 		}
+	}
+}
+
+func TestMCPServerURLKeepsQuery(t *testing.T) {
+	const serverURL = "https://mcp.example.test/tools?tenant=a%20b"
+	saved, err := resolveMCPTool(json.RawMessage(strings.Replace(publicMCP, "https://mcp.example.test/tools", serverURL, 1)), true)
+	if err != nil || !strings.Contains(string(saved), serverURL) {
+		t.Fatalf("query URL was rejected or changed: %s, %v", saved, err)
+	}
+}
+
+func TestFunctionsHaveNoCountOrNameLengthLimit(t *testing.T) {
+	var input []v1.FunctionToolInput
+	for i := 0; i < 65; i++ {
+		name := fmt.Sprintf("f%d", i)
+		if i == 0 {
+			name = strings.Repeat("n", 600)
+		}
+		input = append(input, v1.FunctionToolInput{Name: name, Parameters: json.RawMessage(`{"type":"object"}`)})
+	}
+	if tools, err := resolveFunctions(input); err != nil || len(tools) != 65 {
+		t.Fatal(len(tools), err)
 	}
 }

@@ -80,7 +80,7 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 			return executionToolSet{}, errors.New("unsupported execution MCP configuration")
 		}
 		u, err := url.Parse(tool.Transport.ServerURL)
-		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery {
+		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" {
 			return executionToolSet{}, errors.New("unsupported execution MCP URL")
 		}
 		if tool.AllowedTools != nil {

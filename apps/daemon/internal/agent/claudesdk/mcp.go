@@ -34,7 +34,7 @@ func validateMCPServers(servers []proto.MCPHTTPServer) error {
 		endpoint, err := url.Parse(server.ServerURL)
 		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || labels[server.ServerLabel] ||
 			err != nil || (endpoint.Scheme != "http" && endpoint.Scheme != "https") || endpoint.Hostname() == "" || endpoint.User != nil ||
-			strings.ContainsAny(server.ServerURL, "?#") || endpoint.Opaque != "" {
+			strings.Contains(server.ServerURL, "#") || endpoint.Opaque != "" {
 			return fmt.Errorf("claudesdk: unsupported HTTP MCP declaration")
 		}
 		if server.BearerToken != nil && (endpoint.Scheme != "https" || !agent.ValidMCPHTTPBearerToken(*server.BearerToken)) {

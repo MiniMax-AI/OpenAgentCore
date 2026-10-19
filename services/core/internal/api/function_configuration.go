@@ -10,13 +10,10 @@ import (
 
 func resolveFunctions(input []v1.FunctionToolInput) ([]json.RawMessage, error) {
 	tools := make([]json.RawMessage, 0, len(input))
-	if len(input) > 64 {
-		return nil, errors.New("This service supports at most 64 function tools.")
-	}
 	names := make(map[string]bool, len(input))
 	for _, tool := range input {
-		if strings.TrimSpace(tool.Name) == "" || len(tool.Name) > 512 || names[tool.Name] {
-			return nil, errors.New("Function names must be nonempty, unique and at most 512 bytes.")
+		if strings.TrimSpace(tool.Name) == "" || names[tool.Name] {
+			return nil, errors.New("Function names must be nonempty and unique.")
 		}
 		value, err := resolveFunction(tool)
 		if err != nil {

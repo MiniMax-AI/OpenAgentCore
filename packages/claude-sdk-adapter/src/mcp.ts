@@ -36,7 +36,7 @@ export function parseHTTPServers(value: unknown): HTTPServer[] | undefined {
     }
     const url = new URL(server.server_url);
     if (!["http:", "https:"].includes(url.protocol) || !url.hostname || url.username || url.password ||
-        server.server_url.includes("?") || server.server_url.includes("#")) throw new Error("invalid_request");
+        server.server_url.includes("#")) throw new Error("invalid_request");
     if (server.bearer_token_env_var !== undefined) {
       const reference = server.bearer_token_env_var;
       if (url.protocol !== "https:" || typeof reference !== "string" ||

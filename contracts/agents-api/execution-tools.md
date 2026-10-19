@@ -13,7 +13,7 @@ An Agent declares application functions, controls and MCP servers in `tools`, an
 
 ## Functions
 
-A function declaration requires `name`, `description` and a JSON Schema in `parameters`; `defer_loading` defaults to false and cannot be null. Names are nonblank, unique and at most 512 bytes; a Session holds at most 64 function definitions. Saved references resolve into the Session snapshot, and the definitions stay fixed through native preparation and continuation.
+A function declaration requires `name`, `description` and a JSON Schema in `parameters`; `defer_loading` defaults to false and cannot be null. Names are nonblank and unique. Saved references resolve into the Session snapshot, and the definitions stay fixed through native preparation and continuation.
 
 **Results.** A caller submits `agent.session.input.tool_result` events with `turn_id`, `call_id` and `success`, and optional nullable `error` and `output`. Output is a string or ordered text and image parts, subject to the Harness. Batches are atomic and keep field presence, original content and retry identity; public result Items and events always carry `output` and `error`, null when not submitted.
 
@@ -85,7 +85,7 @@ Execution carries the resolved values to the Harness and validates them against 
 }
 ```
 
-- `server_label` is nonempty and unique within the Session. Only the `http` transport is accepted; `server_url` is an absolute HTTP or HTTPS URL without credentials, query or fragment. Nonempty `headers` and `request_metadata` and an inline `authorization` are rejected.
+- `server_label` is nonempty and unique within the Session. Only the `http` transport is accepted; `server_url` is an absolute HTTP or HTTPS URL without credentials or fragment. Nonempty `headers` and `request_metadata` and an inline `authorization` are rejected.
 - [Public MCP connection origin](./environments.md#public-mcp-connection-origin) owns origin defaults, placement and credential authority; [Harness capabilities](./harness-capabilities.md#tools) owns per-Harness support.
 - Omitted or null `allowed_tools` permits every server tool; `[]` permits none.
 - `required: true` makes native thread creation and cold resume wait for the server to initialize; a failure stops execution without replacing retained history. It needs the Runtime's `mcp_http_required` capability. Public work can be accepted or queued during the wait.

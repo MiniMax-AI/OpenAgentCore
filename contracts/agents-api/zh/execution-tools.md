@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 7608c08f707c1970f1365d9b5d5f0979a71af35c4b9ca82d64ec6d2d95344a2a
+source_hash: db52d727ddf370a8047089457227584e89faf2132546a164b170e6b475b28abb
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -15,7 +15,7 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 
 ## 函数 {#functions}
 
-函数声明要求 `name`、`description` 和 `parameters` 中的 JSON Schema；`defer_loading` 默认为 false，不能为 null。名称必须非空白、唯一且最多 512 字节；每个 Session 最多有 64 个函数定义。保存的引用解析到 Session 快照，定义在原生准备和继续执行期间保持固定。
+函数声明要求 `name`、`description` 和 `parameters` 中的 JSON Schema；`defer_loading` 默认为 false，不能为 null。名称必须非空白且唯一。保存的引用解析到 Session 快照，定义在原生准备和继续执行期间保持固定。
 
 **结果。** 调用方提交 `agent.session.input.tool_result` 事件，包含 `turn_id`、`call_id`、`success`，以及可选且可空的 `error` 和 `output`。输出为字符串或有序文本与图像部分，受 Harness 支持范围约束。批次原子处理并保留字段存在性、原始内容和重试身份；公开结果 Item 与事件始终包含 `output` 和 `error`，未提交时为 null。
 
@@ -87,7 +87,7 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 }
 ```
 
-- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据、查询或片段的绝对 HTTP 或 HTTPS URL。非空 `headers`、`request_metadata` 和内联 `authorization` 被拒绝。
+- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `headers`、`request_metadata` 和内联 `authorization` 被拒绝。
 - [公开 MCP 连接来源](environments.md#public-mcp-connection-origin)定义来源默认值、部署位置和凭据权限；[Harness 能力](harness-capabilities.md#tools)定义各 Harness 支持范围。
 - 省略或 null 的 `allowed_tools` 允许所有服务器工具；`[]` 不允许任何工具。
 - `required: true` 使原生线程创建和冷恢复等待服务器初始化；失败会停止执行，不替换保留历史。它要求 Runtime 的 `mcp_http_required` 能力。等待期间公开工作可被接受或排队。

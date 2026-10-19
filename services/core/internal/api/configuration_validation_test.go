@@ -261,7 +261,7 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	for _, tc := range []struct{ fields, message string }{
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls."},
 		{`"multi_agent":{"enabled":true},"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Harness codex does not support the requested Agent/environment configuration: programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness."},
-		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty, unique and at most 512 bytes."},
+		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty and unique."},
 	} {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, session.path, session.body(tc.fields)), "unsupported_or_invalid_configuration", nil, tc.message)
 	}

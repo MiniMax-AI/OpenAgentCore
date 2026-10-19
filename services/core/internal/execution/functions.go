@@ -17,9 +17,6 @@ import (
 func functionTools(raw []json.RawMessage) ([]proto.FunctionTool, error) {
 	tools := make([]proto.FunctionTool, 0, len(raw))
 	names := map[string]bool{}
-	if len(raw) > 64 {
-		return nil, errors.New("at most 64 function tools are supported")
-	}
 	for _, value := range raw {
 		var tool struct {
 			Type         string          `json:"type"`
@@ -34,7 +31,7 @@ func functionTools(raw []json.RawMessage) ([]proto.FunctionTool, error) {
 			return nil, err
 		}
 		var schema map[string]json.RawMessage
-		if tool.Type != "function" || strings.TrimSpace(tool.Name) == "" || len(tool.Name) > 512 || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
+		if tool.Type != "function" || strings.TrimSpace(tool.Name) == "" || names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
 			return nil, errors.New("execution requires unique functions with object schemas")
 		}
 		names[tool.Name] = true
