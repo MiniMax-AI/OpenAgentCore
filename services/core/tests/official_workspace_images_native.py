@@ -135,7 +135,7 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
         before = items()
         if validate:
             if kind == "claude_sdk":
-                invalid = [{**result, "success": False}, {**result, "output": [{"type": "input_image", "image_url": "https://example.test/image.png"}]}]
+                invalid = [{**result, "success": False}, {**result, "output": [{"type": "input_image", "image_url": ""}]}]
                 for bad in invalid:
                     assert post([bad], key).status_code == 400
                     assert items() == before
@@ -200,7 +200,7 @@ def verify_workspace_images(client, foreign, http, model, kind, restart, evidenc
         check("large_function_image_result_receipt_retry_isolation_and_artifact")
 
         before = history()
-        invalid = [event(messages([text("must not persist")])), event(messages([{"type": "input_image", "image_url": "https://example.test/image.png"}]))]
+        invalid = [event(messages([text("must not persist")])), event(messages([{"type": "input_image", "image_url": ""}]))]
         assert post(invalid).status_code == 400
         assert history() == before
         for suffix in ("", "/items", "/turns", "/artifacts"):

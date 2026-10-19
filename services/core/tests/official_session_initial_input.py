@@ -90,7 +90,7 @@ def main():
         for fields in [{"input": [{"type": None, "role": "user", "content": [{"type": "input_text", "text": "x"}]}]}, {"input": 0}, {"input": {}}, {"input": []}, {"input": ""},
                        {"input": [{"role": "user", "content": []}]}, {"input": [{"role": "user", "content": [{"type": "input_text", "text": ""}]}]},
                        {"input": [{"role": "assistant", "content": [{"type": "input_text", "text": "x"}]}]},
-                       {"input": [{"role": "user", "content": [{"type": "input_image", "image_url": "https://example.com/x.png"}]}]}]:
+                       {"input": [{"role": "user", "content": [{"type": "input_image", "image_url": ""}]}]}]:
             reply = raw.post(base + "/v1/agents/sessions", headers=headers, json={**spec, **fields})
             assert reply.status_code == 400, (fields, reply.status_code)
         reply = raw.post(unsupported + "/v1/agents/sessions", headers=headers, json={**spec, "input": "x"})
