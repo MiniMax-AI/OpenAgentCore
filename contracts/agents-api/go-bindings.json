@@ -223,6 +223,18 @@
     },
     "order": ["type", "server_label", "transport", "allowed_tools", "connection_origin", "credential_id", "request_metadata", "required"]
   },
+  "MCPTransport": {
+    "marshal_union": true,
+    "sources": ["#/components/schemas/PersistedMcpTransportConfigParam"],
+    "fields": {
+      "server_url": {"type": "string"},
+      "headers": {"type": "*map[string]string"},
+      "command": {"type": "string"},
+      "args": {"type": "*[]string"},
+      "cwd": {"type": "string"},
+      "env_vars": {"type": "*[]string"}
+    }
+  },
   "MCPToolInput": {
     "sources": ["#/components/schemas/AgentToolConfigParamMcp"]
   },

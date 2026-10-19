@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 1a66fd9faa3f2477ae301eb117c31545137573a0767535730df8f2452942f69d
+source_hash: cf4c1fa4611afd0d238206e9e87f08079f1d1a1bbcef64d08c2174d28668abb5
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -92,18 +92,18 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 }
 ```
 
-- `server_label` 非空且在 Session 中唯一。接受 `http` 和 `stdio` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `request_metadata` 和内联 `authorization` 被拒绝，消息为 "Inline MCP authorization is not supported; use credential_id."。`headers` 为非机密标头，名称和值须为有效的 HTTP 名称和值，且名称不区分大小写唯一，会与 bearer 一同原样传给原生 Harness；`Authorization` 标头被拒绝，因为凭据只通过 Vault 凭据进入。Claude 会拒绝 `server_url` 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。
+- `server_label` 非空且在 Session 中唯一。接受 `http` 和 `stdio` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `request_metadata` 被拒绝，消息为 "Nonempty MCP request_metadata is not supported yet."；内联 `authorization` 被拒绝，消息为 "Inline MCP authorization is not supported; use credential_id."。`headers` 为非机密标头，名称和值须为有效的 HTTP 名称和值，且名称不区分大小写唯一，会与 bearer 一同原样传给原生 Harness；`Authorization` 标头被拒绝，因为凭据只通过 Vault 凭据进入。Claude 会拒绝 `server_url` 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。
 - [公开 MCP 连接来源](environments.md#public-mcp-connection-origin)定义来源默认值、部署位置和凭据权限；[Harness 能力](harness-capabilities.md#tools)定义各 Harness 支持范围。
 - 省略或 null 的 `allowed_tools` 允许所有服务器工具；`[]` 不允许任何工具。
 - `required: true` 使原生线程创建和冷恢复等待服务器初始化；失败会停止执行，不替换保留历史。它要求 Runtime 的 `mcp_http_required` 能力。等待期间公开工作可被接受或排队。
 - Bearer 认证使用附加的静态或 OAuth Vault 凭据。[Vault 凭据](vaults.md)定义选择规则，[MCP 凭据权限](environments.md#public-mcp-connection-origin)定义冻结的 Runtime 绑定。认证执行要求 `mcp_http_bearer_auth`。
 - Runtime 必须声明 `mcp_http_tools`。原生 Harness 管理发现、调用和结果；公开 `mcp_call` Item 使用原始服务器与工具名称，保留观察到的原生结果。
 
-`stdio` 服务器携带 `command`、`args`、`cwd` 和 `env_vars`，作为 Environment 的进程运行，需要工作区部署位置（`openai_hosted` 或 `self_hosted`）；在 `environment: none` 上，准入返回 400。其 `connection_origin` 默认且只能为 `environment`，不带 `credential_id`。非空的 Session `env` 被拒绝，消息为 "Inline MCP env is not supported; declare env_vars and set the values in the Environment."；`env_vars` 指定 Environment 中的变量名，其值不会到达 Core。Runtime 必须声明 `mcp_http_tools`，它涵盖所有公开 MCP 服务器。
+`stdio` 服务器携带 `command`、`args`、`cwd` 和 `env_vars`，作为 Environment 的进程运行，需要工作区部署位置（`openai_hosted` 或 `self_hosted`）；在 `environment: none` 上，准入返回 400。其 `connection_origin` 默认且只能为 `environment`，不带 `credential_id`。非空的 Session `env` 被拒绝，消息为 "Inline MCP env is not supported; declare env_vars and set the values in the Environment."；`command` 非空，`cwd` 为绝对路径，`env_vars` 只含变量名，且任何部分都不含 NUL。`env_vars` 指定 Environment 中的变量名，其值不会到达 Core；与 [Plugin MCP](environments.md#plugin-mcp) 相同，Environment 未设置其中某个变量时启动失败。Runtime 必须声明 `mcp_http_tools`，它涵盖所有公开 MCP 服务器。
 
 - Codex 把 `command`、`args`、`cwd` 和 `env_vars` 写入其 `[mcp_servers]` 表，并在任何原生连接之前与其余已声明配置一并验证。
 - Claude Code 以 `command` 和 `args` 在其自身进程所在目录（即工作区目录）启动服务器，因此 Runtime 拒绝其他 `cwd`。Core 拒绝 stdio 服务器的非 null `allowed_tools`，因为适配器只能在 HTTP 服务器上隐藏未选工具。
 - MiniMax Code 在其私有主目录中启动会话 stdio 服务器，任何 `cwd` 都无法指向该目录，因此准入拒绝所有 stdio 服务器，消息为 "The configured engine cannot start MCP stdio servers in the declared cwd."。
-- Codex 把 `env_vars` 交给其受限的原生环境。Claude Code 和 MiniMax Code 以整个进程环境启动服务器，因此继承的变量多于 `env_vars` 所列。
+- Codex 把 `env_vars` 交给其受限的原生环境。Claude Code 以整个进程环境启动服务器，因此继承的变量多于 `env_vars` 所列。
 
 Codex 以原生方式信任工作区，因此工作区的项目配置在启动和冷恢复时加载，未声明的服务器、apps 和 plugins 保持原生行为。在任何携带 Core 凭据的原生连接之前，它验证每个已声明服务器保持其 URL 或命令、bearer 引用和请求头，否则启动或恢复以错误失败。它拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；接受任意工具名称（原生客户端会将其规范化，适配器拒绝规范化后的冲突），并要求已连接服务器具有静态工具清单。MiniMax Code 以 MCP 服务器 `functions` 提供公共函数，因此声明了函数的 Agent 不能让公共或 Plugin 服务器使用该标签。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。

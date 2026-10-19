@@ -13,8 +13,9 @@ import (
 // transport projection crosses this private bridge, never package configuration.
 type environmentMCPServer struct {
 	mcpHTTPServer
-	Command string   `json:"command,omitempty"`
-	Args    []string `json:"args,omitempty"`
+	Command string `json:"command,omitempty"`
+	// A pointer keeps an empty stdio argument list, which the bridge requires.
+	Args *[]string `json:"args,omitempty"`
 	// Declared marks a public stdio server: its command is the caller's, not the installed launcher.
 	Declared bool `json:"declared,omitempty"`
 }
@@ -35,12 +36,13 @@ func prepareRuntimeMCP(req proto.PromptRequestPayload, cwd string) ([]environmen
 			if filepath.Clean(process.Cwd) != cwd {
 				return nil, nil, fmt.Errorf("claudesdk: MCP stdio cwd must be the workspace directory")
 			}
-			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel, Required: binding.Required}, Command: process.Command, Args: process.Args, Declared: true})
+			args := append([]string{}, process.Args...)
+			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel, Required: binding.Required}, Command: process.Command, Args: &args, Declared: true})
 			continue
 		}
 		if binding.Stdio != nil {
 			command, args := localworkspace.MCPStdioCommand(*binding.Stdio)
-			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}, Command: command, Args: args})
+			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}, Command: command, Args: &args})
 			continue
 		}
 		declarations := []proto.MCPHTTPServer{{ServerLabel: binding.ServerLabel, ServerURL: binding.ServerURL, AllowedTools: binding.AllowedTools, Required: binding.Required, BearerToken: binding.BearerToken, Headers: binding.HTTPHeaders}}

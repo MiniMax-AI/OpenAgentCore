@@ -3,6 +3,7 @@ package claudesdk
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 	}
 	stdio := start.Workspace.MCP[0]
 	executable, _ := os.Executable()
-	if stdio.Command != executable || len(stdio.Args) != 4 || stdio.Args[0] != "runtime-mcp-exec" || stdio.Args[1] != "/private/runtime/capabilities" || stdio.Args[2] != "plugins/local" || stdio.Args[3] != "local" {
+	if stdio.Command != executable || stdio.Args == nil || !slices.Equal(*stdio.Args, []string{"runtime-mcp-exec", "/private/runtime/capabilities", "plugins/local", "local"}) {
 		t.Fatal("stdio bypassed the shared installed entry")
 	}
 	raw, _ := json.Marshal(start)
@@ -93,11 +94,12 @@ func TestEnvironmentMCPObservationsUseInstalledDeclarations(t *testing.T) {
 // declared cwd must be that workspace directory.
 func TestPublicMCPStdioStartsInTheWorkspaceDirectory(t *testing.T) {
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local",
-		Stdio: &proto.MCPStdio{Command: "run", Args: []string{"-x"}, Cwd: "/work/", EnvVars: []string{"TOKEN"}}}}
+		Stdio: &proto.MCPStdio{Command: "run", Cwd: "/work", EnvVars: []string{"TOKEN"}}}}
 	req := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers}
 	projected, _, err := prepareRuntimeMCP(req, "/work")
-	if err != nil || len(projected) != 1 || projected[0].Command != "run" || !projected[0].Declared || projected[0].ServerLabel != "local" {
-		t.Fatal("public stdio server was not projected", projected, err)
+	raw, _ := json.Marshal(projected)
+	if err != nil || string(raw) != `[{"server_label":"local","allowed_tools":null,"command":"run","args":[],"declared":true}]` {
+		t.Fatal("public stdio server was not projected", string(raw), err)
 	}
 	if _, _, err := prepareRuntimeMCP(req, "/elsewhere"); err == nil {
 		t.Fatal("stdio cwd outside the workspace directory was accepted")

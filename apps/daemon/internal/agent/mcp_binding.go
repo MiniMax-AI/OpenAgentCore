@@ -4,7 +4,6 @@ import (
 	"errors"
 	"maps"
 	"net/url"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -103,7 +102,7 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			if (item.Stdio == nil) == (item.Process == nil) || item.BearerToken != nil || len(item.HTTPHeaders) > 0 || item.ServerURL != "" {
 				return nil, errors.New("invalid MCP stdio transport")
 			}
-			if process := item.Process; process != nil && !validMCPProcess(*process) {
+			if process := item.Process; process != nil && !process.Valid() {
 				return nil, errors.New("invalid MCP stdio declaration")
 			}
 		case "http":
@@ -119,23 +118,4 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 		}
 	}
 	return bindings, nil
-}
-
-var mcpEnvironmentVariable = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-
-func validMCPProcess(process proto.MCPStdio) bool {
-	if strings.TrimSpace(process.Command) == "" || strings.ContainsAny(process.Command+process.Cwd, "\x00") {
-		return false
-	}
-	for _, arg := range process.Args {
-		if strings.ContainsRune(arg, 0) {
-			return false
-		}
-	}
-	for _, name := range process.EnvVars {
-		if !mcpEnvironmentVariable.MatchString(name) {
-			return false
-		}
-	}
-	return true
 }

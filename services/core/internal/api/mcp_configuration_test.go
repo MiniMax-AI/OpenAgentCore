@@ -102,6 +102,13 @@ func TestMCPStdioDeclaration(t *testing.T) {
 			t.Fatalf("want %q, got %v", message, err)
 		}
 	}
+	const invalid = "MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters."
+	for _, transport := range []string{`{"type":"stdio","command":" ","cwd":"/"}`, `{"type":"stdio","command":"run","cwd":"work"}`,
+		`{"type":"stdio","command":"run","cwd":"/","env_vars":["A-B"]}`, `{"type":"stdio","command":"run","args":["\u0000"],"cwd":"/"}`} {
+		if _, err := resolveMCPTool(input("", transport), true); err == nil || err.Error() != invalid {
+			t.Fatalf("%s: %v", transport, err)
+		}
+	}
 }
 
 func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {

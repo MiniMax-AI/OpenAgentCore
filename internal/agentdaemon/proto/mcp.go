@@ -1,6 +1,12 @@
 package proto
 
-import "errors"
+import (
+	"errors"
+	"regexp"
+	"strings"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+)
 
 // MCPHTTPServer declares public MCP tools with an explicit outbound connection origin. It is an HTTP
 // server by ServerURL, or a process in the Environment when Stdio is set (origin "environment",
@@ -26,6 +32,23 @@ type MCPStdio struct {
 	Args    []string `json:"args"`
 	Cwd     string   `json:"cwd"`
 	EnvVars []string `json:"env_vars"`
+}
+
+var mcpEnvironmentVariable = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// Valid reports a startable declaration: a nonempty command, an absolute cwd,
+// variable names in EnvVars and no NUL in the command or its arguments.
+func (s MCPStdio) Valid() bool {
+	if strings.TrimSpace(s.Command) == "" || strings.ContainsRune(s.Command+strings.Join(s.Args, ""), 0) ||
+		agentcapabilities.ValidateSourceDirectories([]string{s.Cwd}) != nil {
+		return false
+	}
+	for _, name := range s.EnvVars {
+		if !mcpEnvironmentVariable.MatchString(name) {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateConnectionOrigin rejects relocation before dispatch and adapter setup.

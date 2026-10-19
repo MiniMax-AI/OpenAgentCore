@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
@@ -67,10 +68,10 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		if len(transport.Env) != 0 {
 			return nil, errors.New("Inline MCP env is not supported; declare env_vars and set the values in the Environment.")
 		}
-		if strings.TrimSpace(transport.Command) == "" {
-			return nil, errors.New("MCP stdio servers require a nonempty command.")
-		}
 		args, envVars := append([]string{}, transport.Args...), append([]string{}, transport.EnvVars...)
+		if !(proto.MCPStdio{Command: transport.Command, Args: args, Cwd: transport.Cwd, EnvVars: envVars}).Valid() {
+			return nil, errors.New("MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters.")
+		}
 		tool.Transport = v1.MCPTransport{Type: "stdio", Command: transport.Command, Args: &args, Cwd: transport.Cwd, EnvVars: &envVars}
 		return json.Marshal(tool)
 	}
