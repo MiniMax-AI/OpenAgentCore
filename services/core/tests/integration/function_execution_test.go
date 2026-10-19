@@ -202,7 +202,7 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 			if reply.Success || len(reply.Content) != 1 || *reply.Content[0].Text != "tool failed" {
 				t.Fatal(reply)
 			}
-			status := sessions.TurnFailed
+			status := sessions.TurnCompleted
 			if cancel {
 				if _, err := requestCancel(t.Context(), h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 					t.Fatal(err)
@@ -219,6 +219,8 @@ func TestExecutionFunctionsCancellationAndUnconfirmedResults(t *testing.T) {
 				status = sessions.TurnCancelled
 			} else {
 				h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: reply.DeliveryID, ErrorCode: "not_pending"})
+				h.write(input.TurnID, proto.TypeFunctionCallWithdrawn, proto.FunctionCallWithdrawnPayload{CallID: "a"})
+				h.write(input.TurnID, proto.TypeDone, proto.DonePayload{Content: "done"})
 			}
 			h.finished(result, status)
 			if cancel {

@@ -6,4 +6,6 @@ DROP INDEX function_calls_pending_idx;
 CREATE INDEX function_calls_pending_idx ON function_calls(session_id, turn_id) WHERE NOT applied AND NOT withdrawn;
 
 -- +goose Down
-SELECT 1;
+DROP INDEX function_calls_pending_idx;
+CREATE INDEX function_calls_pending_idx ON function_calls(session_id, turn_id) WHERE NOT applied;
+ALTER TABLE function_calls DROP COLUMN withdrawn;
