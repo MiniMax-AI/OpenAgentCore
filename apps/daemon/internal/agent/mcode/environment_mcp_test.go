@@ -92,12 +92,13 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 			case "duplicate":
 				req.LocalEnvironment.MCP = append(req.LocalEnvironment.MCP, environmentMCPFixture())
 			}
-			_, err := prepareWorkspaceOptions(testStateRoot(t), c, req)
-			if err == nil {
-				_, err = runtimeMCP(req)
-			}
+			root := t.TempDir()
+			_, err := NewExecutorFactory(root, &c)(context.Background(), req)
 			if err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")
+			}
+			if entries, _ := os.ReadDir(root); len(entries) != 0 {
+				t.Fatalf("native files written before MCP was rejected: %v", entries)
 			}
 		})
 	}

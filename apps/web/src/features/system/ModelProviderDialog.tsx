@@ -86,8 +86,8 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const output = tokenLimit(maxOutputTokens);
   const limitProblem = (limit: ReturnType<typeof tokenLimit>) => (limit.problem === "whole" ? t("models.form.wholeNumber") : limit.problem === "large" ? t("models.form.tooLarge") : null);
   const outputProblem = limitProblem(output);
-  // The missing or undersized window is the field the administrator must fix.
-  const contextProblem = limitProblem(context) ?? (!outputProblem && output.value !== undefined && output.value > (context.value ?? 0) ? t("models.form.needsContext") : null);
+  // An undersized window is the field the administrator must fix.
+  const contextProblem = limitProblem(context) ?? (!outputProblem && output.value !== undefined && context.value !== undefined && output.value > context.value ? t("models.form.needsContext") : null);
   const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && model.trim() !== "" && nativeConfig !== null && !configTooLarge && !protocolProblem && !contextProblem && !outputProblem;
 
   function clearNativeConfig() {

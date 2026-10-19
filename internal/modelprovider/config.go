@@ -70,7 +70,7 @@ func (p Provider) Validate() error {
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
 		return ErrConfiguration
 	}
-	if p.ContextWindow < 0 || p.MaxOutputTokens < 0 || p.MaxOutputTokens > p.ContextWindow {
+	if p.ContextWindow < 0 || p.MaxOutputTokens < 0 || (p.ContextWindow > 0 && p.MaxOutputTokens > p.ContextWindow) {
 		return ErrConfiguration
 	}
 	return nil

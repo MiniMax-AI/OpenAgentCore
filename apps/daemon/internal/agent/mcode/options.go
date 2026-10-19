@@ -114,7 +114,7 @@ func agentCapabilities(req proto.PromptRequestPayload, workspace *workspaceProfi
 			tools = append(tools, "web_fetch")
 		}
 	}
-	capabilities := map[string]any{
+	return map[string]any{
 		"tools": tools,
 		"features": map[string]bool{
 			// The mavis tool carries cron scheduling that runs beyond a Turn, plus session send, agent create and MCP create.
@@ -124,7 +124,6 @@ func agentCapabilities(req proto.PromptRequestPayload, workspace *workspaceProfi
 			"webSearch": false,
 		},
 	}
-	return capabilities
 }
 
 func optionString(options map[string]any, key string) string {
