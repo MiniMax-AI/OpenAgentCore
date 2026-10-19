@@ -24,8 +24,6 @@ type workspaceProfile struct {
 	ToolEnv []string
 	// WebFetch keeps the native web_fetch tool.
 	WebFetch bool
-	// Skills leaves the native Skill selection open for the linked Skills.
-	Skills bool
 }
 
 // prepareOptions writes the native configuration. A nil workspace is the none
@@ -126,12 +124,10 @@ func agentCapabilities(req proto.PromptRequestPayload, workspace *workspaceProfi
 			// Native web search calls MiniMax's cloud with a MiniMax account credential that Core does not hold.
 			"webSearch": false,
 		},
-		// Bundled Skills drive MiniMax account products such as website deploy and Lark.
-		"skills": []string{},
 	}
-	if workspace != nil && workspace.Skills {
-		// Native Skill names cannot list linked Skills; leaving the list out selects all.
-		delete(capabilities, "skills")
+	if workspace == nil {
+		// The none placement reads no Skills; a workspace keeps the native selection with the linked Skills.
+		capabilities["skills"] = []string{}
 	}
 	return capabilities
 }

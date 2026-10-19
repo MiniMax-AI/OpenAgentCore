@@ -62,7 +62,7 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 	}
 	// A disabled web_search control removes web_fetch as well; without the control the native default applies.
 	searchDisabled := req.ExecutionControls != nil && req.ExecutionControls.WebSearch != nil && req.ExecutionControls.WebSearch.Mode == "disabled"
-	profile := &workspaceProfile{WebFetch: !searchDisabled, Skills: len(req.LocalEnvironment.Skills) > 0}
+	profile := &workspaceProfile{WebFetch: !searchDisabled}
 	for _, key := range slices.Sorted(maps.Keys(values)) {
 		profile.ToolEnv = append(profile.ToolEnv, key+"="+values[key])
 	}

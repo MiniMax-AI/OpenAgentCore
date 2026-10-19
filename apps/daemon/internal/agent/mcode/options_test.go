@@ -56,6 +56,9 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if cfg["skills"].(map[string]any)["external"].(map[string]any)["enabled"] != false {
 		t.Fatal("external discovery enabled")
 	}
+	if skills, ok := cfg["agents"].(map[string]any)["default"].(map[string]any)["skills"].([]any); !ok || len(skills) != 0 {
+		t.Fatal("text profile selected native Skills")
+	}
 	info, _ := os.Stat(filepath.Join(opts.DataDir, "config.yaml"))
 	if info.Mode().Perm() != 0600 {
 		t.Fatal("native credentials file is not private")

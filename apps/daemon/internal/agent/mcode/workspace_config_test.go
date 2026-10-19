@@ -58,7 +58,7 @@ func TestWorkspaceRunsNativeToolsWithoutExtraServers(t *testing.T) {
 			}
 			config, capabilities := readNativeCapabilities(t, opts.DataDir)
 			features := capabilities["features"].(map[string]any)
-			if !reflect.DeepEqual(capabilities["tools"], test.tools) || features["delegation"] != test.subagents ||
+			if _, ok := capabilities["skills"]; ok || !reflect.DeepEqual(capabilities["tools"], test.tools) || features["delegation"] != test.subagents ||
 				config["permissionMode"] != "bypassPermissions" || len(opts.MCP) != 0 || opts.Dir != c.Directory {
 				t.Fatalf("unexpected native configuration: %v %v", config, opts.MCP)
 			}
