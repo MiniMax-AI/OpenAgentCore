@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 346c66fcc23ee4faeed7ee25feb081be2cd37baf69c5982a8792f9228df8d127
+source_hash: ada5752faa24616f4fa75c6559028e3b24be0a4db92b77c7baf936d68021b8df
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -87,7 +87,7 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 }
 ```
 
-- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `headers`、`request_metadata` 和内联 `authorization` 被拒绝。
+- `server_label` 非空且在 Session 中唯一。仅接受 `http` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `request_metadata` 和内联 `authorization` 被拒绝。`headers` 为非机密标头，名称和值须为有效的 HTTP 名称和值，且名称不区分大小写唯一，会与 bearer 一同原样传给原生 Harness；`Authorization` 标头被拒绝，因为凭据只通过 Vault 凭据进入。Claude 会拒绝 `server_url` 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。
 - [公开 MCP 连接来源](environments.md#public-mcp-connection-origin)定义来源默认值、部署位置和凭据权限；[Harness 能力](harness-capabilities.md#tools)定义各 Harness 支持范围。
 - 省略或 null 的 `allowed_tools` 允许所有服务器工具；`[]` 不允许任何工具。
 - `required: true` 使原生线程创建和冷恢复等待服务器初始化；失败会停止执行，不替换保留历史。它要求 Runtime 的 `mcp_http_required` 能力。等待期间公开工作可被接受或排队。

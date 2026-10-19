@@ -82,14 +82,13 @@ func (s *MCPServer) validate() error {
 			(s.BearerTokenEnvVar != "" && !environmentVariable.MatchString(s.BearerTokenEnvVar)) {
 			return ErrInvalid
 		}
-		seen := map[string]bool{}
-		for name, value := range s.HTTPHeaders {
-			lower := strings.ToLower(name)
-			if !httpguts.ValidHeaderFieldName(name) || !httpguts.ValidHeaderFieldValue(value) || seen[lower] ||
-				(lower == "authorization" && s.BearerTokenEnvVar != "") {
+		if !ValidHTTPHeaders(s.HTTPHeaders) {
+			return ErrInvalid
+		}
+		for name := range s.HTTPHeaders {
+			if strings.EqualFold(name, "Authorization") && s.BearerTokenEnvVar != "" {
 				return ErrInvalid
 			}
-			seen[lower] = true
 		}
 	case "stdio":
 		if strings.TrimSpace(s.Command) == "" || strings.ContainsRune(s.Command, 0) || s.URL != "" || s.BearerTokenEnvVar != "" || s.HTTPHeaders != nil {
@@ -119,4 +118,18 @@ func (s *MCPServer) validate() error {
 		return ErrInvalid
 	}
 	return nil
+}
+
+// ValidHTTPHeaders reports whether every MCP header has a valid HTTP name and
+// value, with names unique ignoring case.
+func ValidHTTPHeaders(headers map[string]string) bool {
+	seen := map[string]bool{}
+	for name, value := range headers {
+		lower := strings.ToLower(name)
+		if !httpguts.ValidHeaderFieldName(name) || !httpguts.ValidHeaderFieldValue(value) || seen[lower] {
+			return false
+		}
+		seen[lower] = true
+	}
+	return true
 }

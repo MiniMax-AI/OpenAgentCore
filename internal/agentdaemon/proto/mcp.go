@@ -13,6 +13,8 @@ type MCPHTTPServer struct {
 	AllowedTools     *[]string `json:"allowed_tools"`
 	Required         bool      `json:"required,omitempty"`
 	BearerToken      *string   `json:"bearer_token,omitempty"`
+	// Headers are non-secret; credentials travel only in BearerToken.
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // ValidateConnectionOrigin rejects relocation before dispatch and adapter setup.

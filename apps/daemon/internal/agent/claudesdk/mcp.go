@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
 var mcpLabel = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
@@ -39,19 +40,23 @@ func validateMCPServers(servers []proto.MCPHTTPServer) error {
 		if server.BearerToken != nil && (endpoint.Scheme != "https" || !agent.ValidMCPHTTPBearerToken(*server.BearerToken)) {
 			return fmt.Errorf("claudesdk: unsupported HTTPS MCP bearer credential")
 		}
+		if declaration.ExpandsEnvironment(server) {
+			return fmt.Errorf("claudesdk: MCP URLs and header values cannot contain ${")
+		}
 		labels[server.ServerLabel] = true
 	}
 	return nil
 }
 
-// Only generated references cross the private bridge; secrets stay in the owned
-// process environment and are expanded by the native HTTP client.
+// Bearer tokens cross the private bridge only as generated references; they stay
+// in the owned process environment and are expanded by the native HTTP client.
 type mcpHTTPServer struct {
-	ServerLabel       string    `json:"server_label"`
-	ServerURL         string    `json:"server_url,omitempty"`
-	AllowedTools      *[]string `json:"allowed_tools"`
-	Required          bool      `json:"required,omitempty"`
-	BearerTokenEnvVar string    `json:"bearer_token_env_var,omitempty"`
+	ServerLabel       string            `json:"server_label"`
+	ServerURL         string            `json:"server_url,omitempty"`
+	AllowedTools      *[]string         `json:"allowed_tools"`
+	Required          bool              `json:"required,omitempty"`
+	BearerTokenEnvVar string            `json:"bearer_token_env_var,omitempty"`
+	Headers           map[string]string `json:"headers,omitempty"`
 }
 
 func prepareMCPHTTP(declarations *[]proto.MCPHTTPServer) (*[]mcpHTTPServer, []string) {
@@ -61,7 +66,7 @@ func prepareMCPHTTP(declarations *[]proto.MCPHTTPServer) (*[]mcpHTTPServer, []st
 	servers := make([]mcpHTTPServer, len(*declarations))
 	var env []string
 	for i, declaration := range *declarations {
-		server := mcpHTTPServer{ServerLabel: declaration.ServerLabel, ServerURL: declaration.ServerURL, Required: declaration.Required}
+		server := mcpHTTPServer{ServerLabel: declaration.ServerLabel, ServerURL: declaration.ServerURL, Required: declaration.Required, Headers: declaration.Headers}
 		if declaration.AllowedTools != nil {
 			tools := append([]string{}, (*declaration.AllowedTools)...)
 			server.AllowedTools = &tools

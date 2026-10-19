@@ -32,11 +32,20 @@ test("bearer references remain literal in native configuration and private statu
 test("untrusted header expressions, raw tokens and non-HTTPS authenticated declarations are rejected", () => {
   for (const invalid of [
     { ...server, bearer_token: "fixture-secret" },
-    { ...server, headers: { Authorization: "Bearer fixture-secret" } },
+    { ...server, headers: { "X-Tenant": 1 } },
     { ...server, server_url: "http://example.invalid/mcp" },
     ...[null, "", "ANTHROPIC_AUTH_TOKEN", "OAC_RUNTIME_MCP_BEARER_", "${OPERATOR_TOKEN}", reference + ":-fallback"].map(bearer_token_env_var => ({ ...server, bearer_token_env_var })),
   ]) assert.throws(() => parseStart(JSON.stringify(start([invalid]))));
   assert.throws(() => parseStart(JSON.stringify(start([server, { ...server, server_label: "other" }]))));
+});
+
+test("custom headers reach the native configuration beside the bearer", t => {
+  process.env[reference] = "fixture-private-bearer";
+  t.after(() => { delete process.env[reference]; });
+  const profile = new MCPProfile([{ ...server, headers: { "X-Tenant": "a" } }], []);
+  assert.deepEqual(profile.servers.private.headers, { "X-Tenant": "a", Authorization: "Bearer ${" + reference + "}" });
+  const literal = new MCPProfile([{ ...server, bearer_token_env_var: undefined, headers: { authorization: "Bearer literal" } }], []);
+  assert.deepEqual(literal.servers.private.headers, { authorization: "Bearer literal" });
 });
 
 test("missing credential environment fails before the native query", () => {

@@ -105,6 +105,9 @@ func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) er
 		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || strings.Contains(server.ServerURL, "#") {
 			return errors.New("The configured engine does not support this HTTP MCP declaration.")
 		}
+		if ExpandsEnvironment(server) {
+			return errors.New("The configured engine does not support ${ in MCP URLs or header values.")
+		}
 	}
 	for _, tool := range tools {
 		var schema struct {
@@ -189,4 +192,18 @@ func validThinking(thinking map[string]any) bool {
 		}
 	}
 	return true
+}
+
+// ExpandsEnvironment reports a URL or header value the native client would
+// expand from its own environment, which holds Core-held credentials.
+func ExpandsEnvironment(server proto.MCPHTTPServer) bool {
+	if strings.Contains(server.ServerURL, "${") {
+		return true
+	}
+	for _, value := range server.Headers {
+		if strings.Contains(value, "${") {
+			return true
+		}
+	}
+	return false
 }

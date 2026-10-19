@@ -71,16 +71,13 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 }
 
 func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T) {
-	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "duplicate"} {
+	for _, name := range []string{"http-bearer-insecure", "http-bearer-missing", "duplicate"} {
 		t.Run(name, func(t *testing.T) {
 			c, req, _ := workspaceFixture(t)
 			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
 			switch name {
-			case "http-headers", "http-bearer-insecure", "http-bearer-missing":
+			case "http-bearer-insecure", "http-bearer-missing":
 				req.LocalEnvironment.MCP[0].Server = agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
-				if name == "http-headers" {
-					req.LocalEnvironment.MCP[0].Server.HTTPHeaders = map[string]string{"X-Private": "secret"}
-				}
 				if name == "http-bearer-missing" {
 					req.LocalEnvironment.MCP[0].Server.BearerTokenEnvVar = "SELECTED_TOKEN"
 				}
@@ -263,6 +260,16 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMCPHeadersReachACPHeaders(t *testing.T) {
+	req := testRequest(t)
+	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://mcp.example/mcp", Headers: map[string]string{"X-Tenant": "a"}}}
+	servers, err := runtimeMCP(req)
+	want := []map[string]string{{"name": "X-Tenant", "value": "a"}}
+	if err != nil || len(servers) != 1 || !reflect.DeepEqual(servers[0]["headers"], want) {
+		t.Fatalf("MCP = %v, %v", servers, err)
 	}
 }
 

@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 68f12431a9f5685dd88b04d239d40f28f2390e923397eb0071a1a57ea58666d1
+source_hash: ed0ee94084a111f2451d363086d23ec56758c1e3e1de2e9ae5bf40e41e4512e1
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -388,13 +388,13 @@ Skills 及其不可变版本是项目资源，独立于 Session 和原生安装�
 
 Plugin 可以在 `.codex-plugin/plugin.json` 中通过 `mcpServers: "./.mcp.json"` 声明 MCP 服务器，也可以在省略路径时使用根目录下的 `.mcp.json`。该文件包含以服务器名称为键的 `mcpServers`。将 Plugin 根目录选为能力目录会激活其 MCP 声明；选择父目录则会发现 Skills，但不会激活嵌套 MCP 服务器。
 
-共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`，以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 daemon 变量。
+共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`（与公开 MCP 标头一样为非机密），以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 daemon 变量。
 
 stdio 服务器通过 daemon 的 stdio helper 启动；该 helper 会解析已安装的声明，并以 Harness 的权限启动命令。在 Unix 上，helper 会将自身替换为服务器；在 Windows 上，它会在所属进程树内部转发 stdio。已初始化的值会覆盖声明中的变量。进程组和 Windows Jobs 负责取消及后代进程清理，而不负责隔离。
 
 [Harness capabilities](harness-capabilities.md#environment-preparation) 负责受支持的 Plugin 传输及每个 Harness 的限制。
 
-重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
+重复的服务器身份会被拒绝。Claude 会拒绝 URL 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
 
 ### 有效绑定 {#effective-bindings}
 

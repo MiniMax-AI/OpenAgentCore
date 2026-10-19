@@ -156,7 +156,7 @@ Agent create requires `model`. Core saves and returns these values for omitted f
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
 | `web_search` | Every pinned mode is saved; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
-| HTTP MCP transport | Saved with `headers: {}`; nonempty headers are rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
+| HTTP MCP transport | Saved with `headers: {}`; nonempty headers are stored as given and an `Authorization` header is rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
 
 Saving a value does not make it executable. Session creation admits a smaller set; see [Session admission](#session-admission).
 

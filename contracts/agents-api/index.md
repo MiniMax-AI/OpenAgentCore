@@ -74,6 +74,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - An omitted reasoning effort stays null instead of taking the model's default.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - A Session's `agent.tools` omits `tool_search` declarations.
+- Claude rejects an MCP `server_url` or `headers` value containing `${`, because the native client expands `${VAR}` in both from a process environment that holds Core-held credentials.
 - Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returned 200.
 
 **Input, events and history** ([Sessions, events and history](./sessions-events.md), [message content](./message-content.md))
@@ -110,7 +111,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions and no image input.
 - Model-derived reasoning defaults are not resolved.
-- MCP tools support the `http` transport only; `stdio` is rejected, and so is an inline `authorization` on a Session MCP transport ([HTTP MCP](./execution-tools.md#http-mcp)).
+- MCP tools support the `http` transport only, so `stdio` is rejected. An inline `authorization` on a Session MCP transport and an `Authorization` entry in `headers` are rejected too ([HTTP MCP](./execution-tools.md#http-mcp)).
 
 **Execution and history**
 

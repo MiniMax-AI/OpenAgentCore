@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 const mcpHTTPOnly = "MCP currently supports HTTP transport only."
@@ -50,8 +51,13 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 	if transport.Authorization != nil {
 		return nil, errors.New("Inline MCP authorization is not supported yet.")
 	}
-	if len(transport.Headers) != 0 {
-		return nil, errors.New("Nonempty MCP headers are not supported yet.")
+	for name := range transport.Headers {
+		if strings.EqualFold(name, "Authorization") {
+			return nil, errors.New("MCP headers cannot carry Authorization; use credential_id.")
+		}
+	}
+	if !agentplugin.ValidHTTPHeaders(transport.Headers) {
+		return nil, errors.New("MCP headers require valid HTTP names and values, with names unique ignoring case.")
 	}
 	var allowed *[]string
 	if input.AllowedTools != nil {
@@ -65,9 +71,10 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 	tool := v1.MCPTool{Type: "mcp", ServerLabel: input.ServerLabel,
 		Transport:    v1.MCPHTTPTransport{Type: "http", ServerURL: transport.ServerURL},
 		AllowedTools: allowed, Required: input.Required != nil && *input.Required, ConnectionOrigin: origin, CredentialID: input.CredentialID, RequestMetadata: map[string]json.RawMessage{}}
-	if saved {
-		headers := map[string]string{}
-		tool.Transport.Headers = &headers
+	if len(transport.Headers) != 0 {
+		tool.Transport.Headers = &transport.Headers
+	} else if saved {
+		tool.Transport.Headers = &map[string]string{}
 	}
 	return json.Marshal(tool)
 }

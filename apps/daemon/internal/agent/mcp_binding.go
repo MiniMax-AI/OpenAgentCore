@@ -12,7 +12,7 @@ import (
 
 // MCPBinding is the Runtime's transient effective declaration. Adapters project
 // it into their native configuration without resolving credentials or packages.
-// Never serialize or log bindings: headers and bearer values may be confidential.
+// Never serialize or log bindings: bearer values are confidential.
 type MCPBinding struct {
 	ServerLabel         string
 	ConnectionOrigin    string
@@ -38,7 +38,7 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			if err := server.ValidateConnectionOrigin(req); err != nil {
 				return nil, err
 			}
-			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken}
+			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken, HTTPHeaders: maps.Clone(server.Headers)}
 			if server.AllowedTools != nil {
 				names := append([]string{}, (*server.AllowedTools)...)
 				item.AllowedTools = &names

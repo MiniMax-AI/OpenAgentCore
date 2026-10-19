@@ -26,21 +26,13 @@ func runtimeMCPServers(req proto.PromptRequestPayload) (map[string]mcpServerConf
 		if binding.ServerLabel == "codex_apps" {
 			return nil, nil, errors.New("codex: reserved MCP server label")
 		}
-		server := mcpServerConfig{Name: binding.ServerLabel, URL: binding.ServerURL, Required: binding.Required, EnabledTools: binding.AllowedTools}
+		server := mcpServerConfig{Name: binding.ServerLabel, URL: binding.ServerURL, Required: binding.Required, EnabledTools: binding.AllowedTools, HTTPHeaders: binding.HTTPHeaders}
 		if binding.Stdio != nil {
 			server.Command, server.Args = localworkspace.MCPStdioCommand(*binding.Stdio)
 		}
 		if binding.BearerToken != nil {
 			server.BearerTokenEnvVar = "OAC_RUNTIME_MCP_BEARER_" + rand.Text()
 			env = append(env, server.BearerTokenEnvVar+"="+*binding.BearerToken)
-		}
-		if len(binding.HTTPHeaders) > 0 {
-			server.EnvHTTPHeaders = map[string]string{}
-			for name, value := range binding.HTTPHeaders {
-				reference := "OAC_RUNTIME_MCP_HEADER_" + rand.Text()
-				server.EnvHTTPHeaders[name] = reference
-				env = append(env, reference+"="+value)
-			}
 		}
 		servers[server.Name] = server
 	}

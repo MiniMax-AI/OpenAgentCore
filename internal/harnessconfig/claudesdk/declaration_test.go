@@ -36,3 +36,18 @@ func TestDeclarationAdmitsAnyMCPToolName(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDeclarationRejectsMCPEnvironmentExpansion(t *testing.T) {
+	servers := []proto.MCPHTTPServer{{ServerLabel: "docs", ServerURL: "https://example.test/mcp", Headers: map[string]string{"X-Tenant": "a"}}}
+	if err := Declaration.ValidateTools(nil, servers); err != nil {
+		t.Fatal(err)
+	}
+	servers[0].Headers["X-Tenant"] = "${ANTHROPIC_API_KEY}"
+	if err := Declaration.ValidateTools(nil, servers); err == nil {
+		t.Fatal("header value with ${ admitted")
+	}
+	servers[0].Headers["X-Tenant"], servers[0].ServerURL = "a", "https://example.test/${ANTHROPIC_API_KEY}"
+	if err := Declaration.ValidateTools(nil, servers); err == nil {
+		t.Fatal("URL with ${ admitted")
+	}
+}

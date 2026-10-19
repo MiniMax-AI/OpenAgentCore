@@ -19,7 +19,7 @@ type mcpServerConfig struct {
 	EnabledTools      *[]string
 	Required          bool
 	BearerTokenEnvVar string
-	EnvHTTPHeaders    map[string]string
+	HTTPHeaders       map[string]string
 }
 
 // writeCodexMCPConfig writes a `[mcp_servers.<name>]` TOML table per
@@ -69,7 +69,7 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 				}
 				b.WriteString("]\n")
 			}
-			writeMCPHeaderMap(&b, "env_http_headers", srv.EnvHTTPHeaders)
+			writeMCPHeaderMap(&b, "http_headers", srv.HTTPHeaders)
 			b.WriteByte('\n')
 			continue
 		}

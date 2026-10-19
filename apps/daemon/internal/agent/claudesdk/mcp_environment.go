@@ -32,12 +32,7 @@ func prepareRuntimeMCP(req proto.PromptRequestPayload) ([]environmentMCPServer, 
 			servers = append(servers, environmentMCPServer{mcpHTTPServer: mcpHTTPServer{ServerLabel: binding.ServerLabel}, Command: command, Args: args})
 			continue
 		}
-		// Native header interpolation and redirect behavior cannot preserve literal
-		// custom-header authority. Reject this unqualified combination explicitly.
-		if len(binding.HTTPHeaders) != 0 {
-			return nil, nil, fmt.Errorf("claudesdk: literal MCP HTTP headers are not supported")
-		}
-		declarations := []proto.MCPHTTPServer{{ServerLabel: binding.ServerLabel, ServerURL: binding.ServerURL, AllowedTools: binding.AllowedTools, Required: binding.Required, BearerToken: binding.BearerToken}}
+		declarations := []proto.MCPHTTPServer{{ServerLabel: binding.ServerLabel, ServerURL: binding.ServerURL, AllowedTools: binding.AllowedTools, Required: binding.Required, BearerToken: binding.BearerToken, Headers: binding.HTTPHeaders}}
 		if err := validateMCPServers(declarations); err != nil {
 			return nil, nil, err
 		}

@@ -111,6 +111,8 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 		"inline authorization": {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","authorization":"private-marker"}`)},
 		"headers":              {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"Authorization":"private-marker"}}`)},
 		"URL credentials":      {"transport": json.RawMessage(`{"type":"http","server_url":"https://private-marker@mcp.example.test"}`)},
+		"header name":          {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"X Tenant":"private-marker"}}`)},
+		"duplicate headers":    {"transport": json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test","headers":{"X-A":"private-marker","x-a":"b"}}`)},
 		"stdio":                {"transport": json.RawMessage(`{"type":"stdio","command":"private-marker","cwd":"/"}`)},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -130,6 +132,19 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 				t.Fatalf("unsupported MCP input was accepted or disclosed: %v", err)
 			}
 		})
+	}
+}
+
+func TestMCPHeadersAreStoredAsGiven(t *testing.T) {
+	for _, saved := range []bool{false, true} {
+		input := `{"type":"mcp","server_label":"records","transport":{"type":"http","server_url":"https://mcp.example.test","headers":{"X-Tenant":"a"}}}`
+		raw, err := resolveMCPTool(json.RawMessage(input), saved)
+		if err != nil || !strings.Contains(string(raw), `"headers":{"X-Tenant":"a"}`) {
+			t.Fatalf("saved=%v: %s, %v", saved, raw, err)
+		}
+		if _, err := resolveMCPTool(json.RawMessage(strings.Replace(input, "X-Tenant", "authorization", 1)), saved); err == nil {
+			t.Fatal("Authorization header accepted")
+		}
 	}
 }
 

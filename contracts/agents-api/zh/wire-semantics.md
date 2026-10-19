@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 204cc23703043518da5b2dfcadfb3521be7cce417cf80d0b4fe7356b4dfdfa02
+source_hash: 50998ccc26430755f2a81e634d33def91e96cfe377149aec66dc04909d972cb4
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -158,7 +158,7 @@ Agent 创建要求提供 `model`。对于省略的字段，Core 会保存并返�
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
 | `web_search` | 保存每个已锁定模式；请参阅 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
-| HTTP MCP 传输方式 | 以 `headers: {}` 保存；拒绝非空标头。Origin 和 allowlist 默认值见 [public MCP connection origin](environments.md#public-mcp-connection-origin) |
+| HTTP MCP 传输方式 | 以 `headers: {}` 保存；非空标头按给定值存储，`Authorization` 标头被拒绝。Origin 和 allowlist 默认值见 [public MCP connection origin](environments.md#public-mcp-connection-origin) |
 
 保存某个值并不会使其可执行。Session 创建允许的配置集合更小；请参阅 [Session admission](#session-admission)。
 

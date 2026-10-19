@@ -66,8 +66,8 @@ func matchesMCPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) 
 			}
 		}
 		if server["bearer_token_env_var"] != nilIfEmpty(expected.BearerTokenEnvVar) ||
-			!matchesMCPHeaderMap(server, "env_http_headers", expected.EnvHTTPHeaders) ||
-			!matchesMCPHeaderMap(server, "http_headers", nil) {
+			!matchesMCPHeaderMap(server, "http_headers", expected.HTTPHeaders) ||
+			!matchesMCPHeaderMap(server, "env_http_headers", nil) {
 			return false
 		}
 		if expected.Required && server["required"] != true {
