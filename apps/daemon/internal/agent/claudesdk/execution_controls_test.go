@@ -44,11 +44,28 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	}
 }
 
+func TestLiveWebSearchKeepsNativeToolsOnlyOnAWorkspace(t *testing.T) {
+	config := workspaceFixture(t)
+	request := workspaceRequest()
+	ordinary, _, err := prepare(config, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.ExecutionControls = &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}, TextVerbosity: "medium"}
+	live, _, err := prepare(config, request)
+	if err != nil || !reflect.DeepEqual(ordinary, live) {
+		t.Fatal("live search changed the native web tools", err)
+	}
+	config.Workspace = nil
+	if _, _, err := prepare(config, request); err == nil || !strings.Contains(err.Error(), "live web search requires a dedicated workspace") {
+		t.Fatal("live search without a workspace was accepted", err)
+	}
+}
+
 func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 	enabled := true
 	cases := map[string]proto.ExecutionControls{
 		"cached-search":     {WebSearch: &proto.WebSearchControl{Mode: "cached", ContextSize: "medium"}},
-		"live-search":       {WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}},
 		"enabled-ptc":       {ProgrammaticToolCalling: &enabled},
 		"low-verbosity":     {TextVerbosity: "low"},
 		"high-verbosity":    {TextVerbosity: "high"},

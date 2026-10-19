@@ -206,7 +206,7 @@ agents "/agents" -d '{
 
 - **Update** changes only the fields you send. `metadata` replaces all pairs; `null` clears `name` or `instructions`.
 - **Delete** keeps existing Sessions.
-- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search` with `mode: "disabled"`. Support depends on Harness and Environment; see [Execution tools](../../contracts/agents-api/execution-tools.md).
+- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search`. Support depends on Harness and Environment; see [Execution tools](../../contracts/agents-api/execution-tools.md).
 
 ## Sessions
 

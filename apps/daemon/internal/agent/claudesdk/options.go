@@ -82,8 +82,11 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
 	}
-	// Without a search control Claude Code keeps its native web tools.
+	// Without a search control Claude Code keeps its native web tools, which only a workspace runs.
 	if controls := req.ExecutionControls; controls != nil && controls.WebSearch != nil {
+		if controls.WebSearch.Mode == "live" && config.Workspace == nil {
+			return fail("live web search requires a dedicated workspace")
+		}
 		start.DisableWebSearch = controls.WebSearch.Mode == "disabled"
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
