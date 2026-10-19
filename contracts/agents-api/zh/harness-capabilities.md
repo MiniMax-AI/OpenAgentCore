@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: c471671c3e4518b2968fc36fd5310edf449de5684fc976ebf0c015996aca3b6c
+source_hash: 818fecdaf4bca14f5d37b6135af4eed6c13b48c801e4dd1034317a86ef5a247c
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -39,7 +39,7 @@ source_hash: c471671c3e4518b2968fc36fd5310edf449de5684fc976ebf0c015996aca3b6c
 | --- | --- | --- | --- |
 | 文本结果的[公开函数](execution-tools.md#functions) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅对象根 schema | 已拒绝 |
 | [含图像函数结果](message-content.md#function-results) | 已验证：`none`、托管；已准入：自托管 | 所有位置已验证；仅成功结果中的内联 PNG 或 JPEG | 已拒绝 |
-| [结构化输出](execution-tools.md#structured-output) | 已拒绝 | 所有位置已验证 | 已拒绝 |
+| [结构化输出](execution-tools.md#structured-output) | 所有位置已准入 | 所有位置已验证 | 已拒绝 |
 | [延迟函数发现](execution-tools.md#deferred-function-discovery) | 已拒绝 | 已验证：`none`、自托管；已准入：托管 | 已拒绝 |
 | [禁用 Web 搜索与程序化工具调用](execution-tools.md#web-search-and-programmatic-tool-calling) | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 |
 | Web 搜索 `cached` 或 `live`，以及程序化工具调用 `enabled` | 所有位置已准入 | `live` 在托管和自托管已准入，在 `none` 已拒绝；`cached` 和 `enabled` 已拒绝 | 已拒绝 |

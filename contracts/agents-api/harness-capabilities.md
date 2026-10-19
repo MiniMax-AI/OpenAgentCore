@@ -37,7 +37,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | --- | --- | --- | --- |
 | [Public functions](./execution-tools.md#functions) with text results | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; object-root schemas only | Rejected |
 | [Function results with images](./message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; successful inline PNG or JPEG results only | Rejected |
-| [Structured output](./execution-tools.md#structured-output) | Rejected | Verified on all placements | Rejected |
+| [Structured output](./execution-tools.md#structured-output) | Admitted on all placements | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |
 | Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | `live` admitted on hosted and self-hosted, rejected on `none`; `cached` and `enabled` rejected | Rejected |

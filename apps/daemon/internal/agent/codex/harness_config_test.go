@@ -97,3 +97,52 @@ func TestReasoningEffortReachesEveryNativeTurn(t *testing.T) {
 		})
 	}
 }
+
+func TestOutputSchemaReachesEveryNativeTurn(t *testing.T) {
+	for _, resumeID := range []string{"", "fixture-native-thread"} {
+		t.Run("resume="+resumeID, func(t *testing.T) {
+			req, cfg, root := preparationFixture(t)
+			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
+			req.AgentSessionID = resumeID
+			schema := json.RawMessage(`{"type":"object","properties":{"answer":{"type":"string"}},"required":["answer"],"additionalProperties":false}`)
+			req.ExecutionControls = &proto.ExecutionControls{OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}
+			ownerCtx, cancelOwner := context.WithCancel(context.Background())
+			t.Cleanup(cancelOwner)
+			e, err := newExecutor(ownerCtx, req, cfg)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := e.Close(ctx); err != nil {
+					t.Error(err)
+				}
+			})
+			for _, id := range []string{"one", "two"} {
+				out := make(chan proto.Envelope, 20)
+				turn, err := e.StartTurn(t.Context(), id, proto.TextInput("answer"), out)
+				if err != nil {
+					t.Fatal(err)
+				}
+				awaitExecutorTurn(t, turn, out)
+			}
+			turns := 0
+			for _, frame := range preparationFrames(t, root) {
+				if frame.Method != "turn/start" {
+					continue
+				}
+				turns++
+				var wire struct {
+					OutputSchema json.RawMessage `json:"outputSchema"`
+				}
+				if json.Unmarshal(frame.Params, &wire) != nil || string(wire.OutputSchema) != string(schema) {
+					t.Fatal("Turn lost the frozen output schema", string(frame.Params))
+				}
+			}
+			if turns != 2 {
+				t.Fatal("expected two Turns", turns)
+			}
+		})
+	}
+}

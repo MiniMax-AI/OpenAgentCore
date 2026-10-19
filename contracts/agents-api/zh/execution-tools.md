@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: 6b0ae99f9482a8082d20369ebe1facbc262718426dfc5d697ae63bc47ae39853
+source_hash: 7608c08f707c1970f1365d9b5d5f0979a71af35c4b9ca82d64ec6d2d95344a2a
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -44,6 +44,8 @@ SSE 仅提供实时事件。重启或流丢失后，读取 Session 的 `required
 Core 在 `ExecutionControls.OutputFormat` 中携带 schema，仅对使用该选项的请求要求 Harness 声明支持结构化输出，并要求 Runtime 具有 `structured_output` 和消息观察能力。冻结的 schema 在输入之前送达准备阶段，适用于初次和恢复执行；Start 不能替换它。
 
 Claude 适配器将 `outputFormat` 传给固定版本 SDK，并允许原生 `StructuredOutput` 终态工具；该工具属于内部，不是额外的调用方函数。匹配的实时根工具结果和已归属的成功 SDK 结果确认输出。适配器将原生 `result.result` 字符串原样发布为已完成的 `final_answer` 消息，使用原生 tool-use ID；父 assistant 文本保留自己的 ID。未验证重试和已取消候选不会成为答案，适配器不会把 `structured_output` 重新序列化为 JSON。流遵循官方消息顺序，将整段文本放入一个 `output_text.delta`。桥接层仅在报告 `structured_output` 时声明该操作，工作区 Runtime 还需要 `workspace_structured_output`。
+
+Codex 适配器在每个根 Turn（包括 resume 或恢复后的 Turn）上将 schema 原样作为原生 `outputSchema` 发送，并原样发布原生最终 agent 消息文本。Codex 无损读取 JSON 数字，因此 Session 准入除通用规则外不附加数字或根类型限制。引导（steer）输入并入正在运行的 Turn 并沿用其 schema，Subagent 线程不接收该 schema。Codex 将 schema 作为 strict 的 Responses `text.format` 传给模型提供商；无法运行它的提供商原样返回自己的错误，忽略它的提供商可能返回与 schema 不符的文本。
 
 ## 延迟函数发现 {#deferred-function-discovery}
 

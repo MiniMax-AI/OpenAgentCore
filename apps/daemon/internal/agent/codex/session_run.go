@@ -21,8 +21,9 @@ func (s *Session) startNative(ctx context.Context, plan SessionPlan, req proto.P
 		return err
 	}
 	turnParams := TurnStartParams{
-		ThreadID: s.currentThreadID(),
-		Input:    input,
+		ThreadID:     s.currentThreadID(),
+		Input:        input,
+		OutputSchema: plan.OutputSchema,
 	}
 	model := strings.TrimSpace(s.resolvedModel)
 	if model == "" {

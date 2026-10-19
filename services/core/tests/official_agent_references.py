@@ -59,7 +59,6 @@ def verify_agent_references(client, other, expect_error):
     # Configuration storage is broader than execution. Never silently drop an
     # unsupported saved option, but admit a supported whole-field replacement.
     for field, value, replacement in (
-        ("text", {"format": {"type": "json_schema", "schema": {"type": "object"}}}, {"verbosity": "medium"}),
         ("tools", [dict(tool, defer_loading=True)], None),
         ("tools", [{"type": "tool_search"}], []),
     ):
@@ -78,6 +77,7 @@ def verify_agent_references(client, other, expect_error):
         ("reasoning", {"effort": "high"}, {"effort": "low"}),
         ("reasoning", {"summary": "auto"}, {"summary": "concise"}),
         ("service_tier", "fast", "auto"),
+        ("text", {"format": {"type": "json_schema", "schema": {"type": "object"}}, "verbosity": "medium"}, {"format": {"type": "text"}, "verbosity": "medium"}),
     ):
         supported = agents.create(model="model", **{field: value})
         reference = {"input": "Verify agent references fixture admission.", "agent_id": supported.id, "environment": {"type": "none"}}

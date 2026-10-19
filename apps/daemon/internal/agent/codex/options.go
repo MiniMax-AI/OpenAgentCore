@@ -55,6 +55,10 @@ type SessionPlan struct {
 	// ModelReasoningEffort is frozen for launch and every native Turn.
 	ModelReasoningEffort string
 
+	// OutputSchema is the frozen public JSON Schema sent as outputSchema on every
+	// native root Turn.
+	OutputSchema json.RawMessage
+
 	// Cleanup is the deferred housekeeping the session must run after the child exits.
 	Cleanup func()
 }
@@ -160,6 +164,9 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 				}
 			}
 		}
+	}
+	if format := controls.OutputFormat; format != nil {
+		plan.OutputSchema = format.Schema
 	}
 	if controls.ReasoningEffort != "" {
 		plan.ModelReasoningEffort = controls.ReasoningEffort
