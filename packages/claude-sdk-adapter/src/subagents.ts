@@ -1,4 +1,4 @@
-import type { HookCallback, Options, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { HookCallback, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { readHistory, type Fact } from "./subagent_history.js";
 
 const deny = (reason: string) => ({ hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "deny" as const, permissionDecisionReason: reason } });
@@ -64,7 +64,6 @@ export class Subagents {
     if (input.hook_event_name === "PostToolUseFailure") { this.pending.delete(input.tool_use_id); this.pendingNames.delete(input.tool_use_id); }
     return {};
   };
-  options(): Pick<Options, "forwardSubagentText"> { return { forwardSubagentText: true }; }
   consume(message: SDKMessage): void {
     if (message.type === "assistant" && message.parent_tool_use_id === null) {
       for (const block of message.message.content) if (block.type === "tool_use") this.observedCalls.add(block.id);
