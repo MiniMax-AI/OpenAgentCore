@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 6ae7ae05948fe30ce66d86b0a3987c08456392d6a7ed66e71c09ec8b85044843
+source_hash: 79476f748e558bb88e60c7b6d1ff8684824c43b2891b142009343b1319674bd7
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。

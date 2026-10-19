@@ -209,14 +209,23 @@ func TestFunctionCallsInSequence(t *testing.T) {
 	}
 }
 
-// A call that native fails, such as at its call timeout, is released: a late
+// A call that native fails, such as at its call timeout, is withdrawn: a late
 // result is refused at once and the next call still works.
-func TestFunctionCallFailedByNativeIsReleased(t *testing.T) {
+func TestFunctionCallFailedByNativeIsWithdrawn(t *testing.T) {
 	session, out, _ := functionTurn(t, "cancel-wait")
 	functions := session.executor.opts.Functions
 	received := probeFunction(t, functions)
 	late := waitFunctionCall(t, out)
 	nativeEnd(session, "failed", "")
+	for event := range out {
+		if event.Type == proto.TypeFunctionCallWithdrawn {
+			var withdrawn proto.FunctionCallWithdrawnPayload
+			if json.Unmarshal(event.Payload, &withdrawn) != nil || withdrawn.CallID != late.CallID {
+				t.Fatalf("withdrawn = %s", event.Payload)
+			}
+			break
+		}
+	}
 	if result := <-received; result != nil {
 		t.Fatal("released call returned a result")
 	}

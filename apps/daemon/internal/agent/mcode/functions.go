@@ -154,14 +154,17 @@ func (s *Session) callFunction(ctx context.Context, name string, arguments json.
 	}
 }
 
-// release drops a call that native ended without confirming its result and
-// unblocks its waiter. The caller holds s.functions.mu.
-// A later change also withdraws the call from Core here.
+// release drops a call that native ended without confirming its result,
+// withdraws it from a live Turn and unblocks its waiter. The caller holds
+// s.functions.mu.
 func (s *Session) release(p *pendingFunction) {
 	if s.functions.pending[p.call.CallID] != p {
 		return
 	}
 	delete(s.functions.pending, p.call.CallID)
+	if !s.functions.closed {
+		s.emit(proto.TypeFunctionCallWithdrawn, proto.FunctionCallWithdrawnPayload{CallID: p.call.CallID})
+	}
 	if p.result == nil {
 		close(p.settled)
 	}
