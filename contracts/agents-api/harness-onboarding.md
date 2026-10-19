@@ -49,7 +49,7 @@ Implement the mandatory text lifecycle and handle every extension explicitly. Qu
 
 ## Architecture rules
 
-[Complexity stays in the adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter) applies to every Harness. These rules are Harness-specific:
+[Complexity stays in the adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter) and [Core assembles, Harnesses run natively](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#core-assembles-harnesses-run-natively) apply to every Harness. These rules are Harness-specific:
 - Keep required lifecycle declarations, extension interfaces and registration methods in `agent/harness.go`. Result types, errors and Registry storage may stay in focused files.
 - Use the existing `proto.SupportedAgentKind` and `AgentKindCapabilities` schema. Do not add a second capability descriptor or a combined optional interface.
 - Onboarding does not require feature equality. Harnesses need not match each other's optional features, and MCP, functions, images or verbosity control are not required to register. Verify the common lifecycle obligations and use the same public assertions for each declared operation. An omitted declaration or a missing extension implementation blocks onboarding; a native difference does not.

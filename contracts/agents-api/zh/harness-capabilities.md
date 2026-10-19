@@ -1,10 +1,12 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: c76b7f62749647860c2623546574eadf28552aa4e525dad072dfc637091bb4b0
+source_hash: c471671c3e4518b2968fc36fd5310edf449de5684fc976ebf0c015996aca3b6c
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
+
+本页未列出的行为遵循 Harness 在所选模型下的原生行为，与本地运行一致。每个适配器指南列出它为云端无人值守执行而覆盖的原生默认值（[设计规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#core-assembles-harnesses-run-natively)）。
 
 | 状态 | 含义 |
 | --- | --- |
