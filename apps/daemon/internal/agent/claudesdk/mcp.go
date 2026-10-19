@@ -15,7 +15,6 @@ import (
 )
 
 var mcpLabel = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-var mcpTool = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 
 func validateMCP(req proto.PromptRequestPayload) error {
 	if req.MCPHTTPServers == nil {
@@ -41,13 +40,6 @@ func validateMCPServers(servers []proto.MCPHTTPServer) error {
 			return fmt.Errorf("claudesdk: unsupported HTTPS MCP bearer credential")
 		}
 		labels[server.ServerLabel] = true
-		if server.AllowedTools != nil {
-			for _, name := range *server.AllowedTools {
-				if !mcpTool.MatchString(name) {
-					return fmt.Errorf("claudesdk: unsupported MCP tool allowlist")
-				}
-			}
-		}
 	}
 	return nil
 }

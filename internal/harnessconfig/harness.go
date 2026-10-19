@@ -328,11 +328,9 @@ type Admission struct {
 	Environment *AdmissionEnvironment
 }
 
-// AdmissionEnvironment carries the placement and whether the Environment adds
-// Skills, Plugins or capability directories.
+// AdmissionEnvironment carries the placement.
 type AdmissionEnvironment struct {
-	Type       string
-	Extensions bool
+	Type string
 }
 
 // ValidateMCPOrigins preserves outbound authority independently of Harness names.

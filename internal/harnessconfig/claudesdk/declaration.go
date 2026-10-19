@@ -72,10 +72,7 @@ var Declaration = harnessconfig.Declaration{
 	ValidateFunctionResult: validateFunctionResult,
 }
 
-var (
-	mcpLabel = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-	mcpTool  = regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
-)
+var mcpLabel = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // validateConfiguration holds the packaged adapter's execution limits on a saved
 // Agent and Environment, not saved-Agent schema rules.
@@ -88,24 +85,9 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 		if err := proto.ValidateBinary64Schema(admission.TextSchema); err != nil {
 			return err
 		}
-		if admission.MultiAgent {
-			return errors.New("Structured output requires a single Agent.")
-		}
-		if environment.Extensions {
-			return errors.New("Structured output with environment Skills or Plugins is not supported.")
-		}
-		for _, raw := range admission.Tools {
-			var tool struct {
-				Type string `json:"type"`
-			}
-			if json.Unmarshal(raw, &tool) != nil || (tool.Type != "function" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling") {
-				return harnessconfig.ErrInvalidInput
-			}
-		}
 	} else if admission.TextFormat != "" && admission.TextFormat != "text" {
 		return harnessconfig.ErrInvalidInput
 	}
-	search, otherTools := false, false
 	for _, raw := range admission.Tools {
 		var tool struct {
 			Type string `json:"type"`
@@ -118,11 +100,6 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 		if tool.Type == "web_search" && tool.Mode == "live" && environment.Type == "none" {
 			return errors.New("Live web search requires a managed or self-hosted execution Environment.")
 		}
-		search = search || tool.Type == "tool_search"
-		otherTools = otherTools || (tool.Type != "function" && tool.Type != "tool_search" && tool.Type != "web_search" && tool.Type != "programmatic_tool_calling")
-	}
-	if search && (admission.MultiAgent || otherTools || environment.Extensions || admission.TextFormat == "json_schema") {
-		return errors.New("Tool discovery requires a single-agent function profile without Skills or Plugins.")
 	}
 	return harnessconfig.RejectSubagentTools(admission, "function", "mcp")
 }
@@ -133,13 +110,6 @@ func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) er
 	for _, server := range servers {
 		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || strings.Contains(server.ServerURL, "#") {
 			return errors.New("The configured engine does not support this HTTP MCP declaration.")
-		}
-		if server.AllowedTools != nil {
-			for _, name := range *server.AllowedTools {
-				if !mcpTool.MatchString(name) {
-					return errors.New("The configured engine does not support this MCP tool name.")
-				}
-			}
 		}
 	}
 	for _, tool := range tools {
