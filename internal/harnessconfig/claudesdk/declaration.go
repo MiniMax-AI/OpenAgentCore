@@ -55,8 +55,9 @@ var Declaration = harnessconfig.Declaration{
 	// tool_use and tool_result records that function receipts and tool observations
 	// read, so enabling programmatic tool calling is rejected. Native WebSearch and
 	// WebFetch are live and have no cached mode or settings: disabled removes them,
-	// while live and an absent control keep them. Medium is the official default
-	// verbosity and needs no setting.
+	// and live and an absent control keep them on workspace placements. On none,
+	// live adds only WebSearch. Medium is the official default verbosity and needs
+	// no setting.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled", "live"},
 		ReasoningEfforts:        []string{"low", "medium", "high", "xhigh", "max"},

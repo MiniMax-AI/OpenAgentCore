@@ -306,7 +306,6 @@ type Admission struct {
 	TextSchema json.RawMessage
 	MultiAgent bool
 	Tools      []json.RawMessage
-	Placement  string
 }
 
 // ValidateMCPOrigins preserves outbound authority independently of Harness names.

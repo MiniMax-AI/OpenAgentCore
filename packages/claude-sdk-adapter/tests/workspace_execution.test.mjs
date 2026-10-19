@@ -59,7 +59,7 @@ globalThis.queryFixture = ({prompt, options}) => {
     const first = (await prompt[Symbol.asyncIterator]().next()).value;
     yield { type: "system", subtype: "init", session_id: "native", mcp_servers: request.functions ? [{ name: "functions", status: "connected" }] : [],
       tools: ["Bash", "Read", "Edit", ...(mode === "functions" ? ["mcp__functions__lookup"] : []), ...(mode.startsWith("skills") ? ["Skill"] : [])],
-      // A project's settings can disable Core's Skill plugin while the Skill tool stays.
+      // A project's settings can disable a user Skill while the Skill tool stays.
       skills: mode === "skills" ? ["fixture"] : [] };
     if (mode.startsWith("commands")) {
       const call = id => ({type:"assistant",session_id:"native",parent_tool_use_id:null,

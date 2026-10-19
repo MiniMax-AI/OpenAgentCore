@@ -16,7 +16,7 @@ test('Runtime Skill paths remain inside the declared package; public metadata is
   assert.throws(() => parseSkills([skill, skill]), /invalid_request/);
 });
 
-test('Skills install as bare-named user Skills under the private state path, inline shell included', async t => {
+test('Skills install as bare-named user Skills under the private state path', async t => {
   const { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
@@ -32,4 +32,6 @@ test('Skills install as bare-named user Skills under the private state path, inl
   assert.deepEqual(installSkills([skill], root, state), ['proof']);
   assert.deepEqual(installSkills([skill], root, state), ['proof']);
   assert.equal(realpathSync(join(state, 'skills/proof')), source);
+  mkdirSync(join(source, '.claude-plugin'));
+  assert.throws(() => installSkills([{ ...skill, metadata: { ...skill.metadata, name: 'plugin' } }], root, state), /invalid_request/);
 });

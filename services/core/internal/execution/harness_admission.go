@@ -25,7 +25,6 @@ func admissionOf(snapshot Snapshot) harnessconfig.Admission {
 		TextSchema: agent.Text.Format.Schema,
 		MultiAgent: agent.MultiAgent.Enabled,
 		Tools:      agent.Tools,
-		Placement:  snapshot.Environment.Type,
 	}
 }
 

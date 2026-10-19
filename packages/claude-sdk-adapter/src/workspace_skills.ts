@@ -1,4 +1,4 @@
-import { mkdirSync, readlinkSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readlinkSync, symlinkSync } from "node:fs";
 import { join, posix } from "node:path";
 
 export type WorkspaceSkill = {
@@ -37,7 +37,10 @@ export function installSkills(skills: readonly WorkspaceSkill[], capabilityRoot:
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   for (const skill of skills) {
     const link = join(directory, skill.metadata.name), target = join(capabilityRoot, skill.relative_root);
-    try { symlinkSync(target, link, "dir"); }
+    // Native loads a user Skill with a plugin manifest as a plugin, with its hooks and MCP servers.
+    if (existsSync(join(target, ".claude-plugin"))) throw new Error("invalid_request");
+    // A junction needs no Windows symlink privilege; POSIX ignores the type.
+    try { symlinkSync(target, link, "junction"); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST" || readlinkSync(link) !== target) throw error; }
   }
   return skills.map(skill => skill.metadata.name);

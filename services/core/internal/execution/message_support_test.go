@@ -45,7 +45,6 @@ func TestMessageImageQualificationIsOperationSpecific(t *testing.T) {
 
 // Whitespace-only text is a declared per-harness qualification, not rewritten input.
 func TestWhitespaceOnlyTextQualificationUsesEngineProfiles(t *testing.T) {
-	url := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aXioAAAAASUVORK5CYII="
 	message := func(messages ...string) sessions.Input {
 		raw, _ := json.Marshal(map[string]any{"input": func() []any {
 			var input []any
@@ -66,17 +65,15 @@ func TestWhitespaceOnlyTextQualificationUsesEngineProfiles(t *testing.T) {
 		}
 	}
 	mcode, _ := builtin.Registry().Lookup("mcode")
-	claude, _ := builtin.Registry().Lookup("claude_sdk")
 	for _, input := range whitespace {
 		if err := validateDeclaredInputs(mcode, []sessions.Input{input}); !errors.Is(err, ErrWhitespaceOnlyText) {
 			t.Fatalf("mcode %s: %v", input.Payload, err)
 		}
 	}
 	mixed, _ := json.Marshal(map[string]any{"input": []any{map[string]any{"role": "user", "content": []any{
-		map[string]any{"type": "input_text", "text": " "}, map[string]any{"type": "input_text", "text": "text"}}},
-		map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_text", "text": " "}, map[string]any{"type": "input_image", "image_url": url}}}}})
-	if err := validateDeclaredInputs(claude, []sessions.Input{{Kind: "message", Payload: mixed}}); err != nil {
-		t.Fatal("non-whitespace text or image rejected", err)
+		map[string]any{"type": "input_text", "text": " "}, map[string]any{"type": "input_text", "text": "text"}}}}})
+	if err := validateDeclaredInputs(mcode, []sessions.Input{{Kind: "message", Payload: mixed}}); err != nil {
+		t.Fatal("non-whitespace text rejected", err)
 	}
 }
 

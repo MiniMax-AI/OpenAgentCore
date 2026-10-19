@@ -72,6 +72,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 - An Agent without a `web_search` tool keeps the Harness's [native search](./execution-tools.md#web-search-and-programmatic-tool-calling); the pinned contract does not define search without the tool.
 - Claude Code on a workspace placement appends the Agent's `instructions` to its native system prompt and runs its [native tool set](./execution-tools.md#web-search-and-programmatic-tool-calling). Its search has no cached mode and no domain, location or context-size settings.
 - Claude Code drops whitespace-only text blocks natively and sends `(no content)` for an all-blank message; Codex delivers whitespace-only text unchanged.
+- Claude Code runs a Skill's inline shell inside the Skill expansion, so the command produces no tool observation.
+- Claude Code with live search on `environment: none` has only `WebSearch`, so search yields `search` actions and no page opens ([web search](./execution-tools.md#web-search-and-programmatic-tool-calling)).
 - An omitted reasoning effort stays null instead of taking the model's default.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - A Session's `agent.tools` omits `tool_search` declarations.
