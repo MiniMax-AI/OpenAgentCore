@@ -81,6 +81,10 @@ var Declaration = harnessconfig.Declaration{
 			}
 		}
 		for _, server := range mcp {
+			// Native starts session stdio servers in its home directory, which is private state, never the cwd a declaration names.
+			if server.Stdio != nil {
+				return errors.New("The configured engine cannot start MCP stdio servers in the declared cwd.")
+			}
 			if server.AllowedTools != nil || server.Required {
 				return errors.New("The configured engine requires allowed_tools=null and required=false.")
 			}

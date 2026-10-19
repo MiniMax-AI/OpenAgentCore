@@ -6,6 +6,9 @@ export type StdioServer = {
   command: string;
   args: string[];
   allowed_tools: null;
+  required?: boolean;
+  // A public stdio server runs the caller's command; installed servers run the Runtime launcher.
+  declared?: true;
 };
 export type EnvironmentMCPServer = HTTPServer | StdioServer;
 
@@ -17,13 +20,18 @@ export function parseEnvironmentMCP(value: unknown): EnvironmentMCPServer[] | un
   for (const server of value) {
     if (!server || typeof server !== "object" || labels.has(server.server_label)) throw new Error("invalid_request");
     if ("command" in server) {
-        if (Object.keys(server).some(key => !["server_label", "command", "args", "allowed_tools"].includes(key)) ||
+        const declared = server.declared === true;
+        if (Object.keys(server).some(key => !["server_label", "command", "args", "allowed_tools", ...(declared ? ["declared", "required"] : [])].includes(key)) ||
+            (server.declared !== undefined && !declared) || (server.required !== undefined && typeof server.required !== "boolean") ||
             typeof server.server_label !== "string" || !/^[a-zA-Z0-9_-]+$/.test(server.server_label) || server.server_label === "functions" || server.allowed_tools !== null ||
-            typeof server.command !== "string" || !isAbsolute(server.command) || normalize(server.command) !== server.command ||
-            !Array.isArray(server.args) || server.args.length !== 4 || server.args[0] !== "runtime-mcp-exec" ||
-            typeof server.args[1] !== "string" || !isAbsolute(server.args[1]) || normalize(server.args[1]) !== server.args[1] || server.args[1] === parse(server.args[1]).root ||
-            typeof server.args[2] !== "string" || !server.args[2] || /[\\]/.test(server.args[2]) || server.args[2].split("/").some((part: string) => !part || part === "." || part === "..") ||
-            server.args[3] !== server.server_label || [server.command, ...server.args].some((part: string) => /[\x00-\x1f\x7f]/.test(part))) throw new Error("invalid_request");
+            typeof server.command !== "string" || !Array.isArray(server.args) ||
+            [server.command, ...server.args].some((part: unknown) => typeof part !== "string" || (declared ? part.includes("\0") : /[\x00-\x1f\x7f]/.test(part)))) throw new Error("invalid_request");
+        if (!declared && (!isAbsolute(server.command) || normalize(server.command) !== server.command ||
+            server.args.length !== 4 || server.args[0] !== "runtime-mcp-exec" ||
+            !isAbsolute(server.args[1]) || normalize(server.args[1]) !== server.args[1] || server.args[1] === parse(server.args[1]).root ||
+            !server.args[2] || /[\\]/.test(server.args[2]) || server.args[2].split("/").some((part: string) => !part || part === "." || part === "..") ||
+            server.args[3] !== server.server_label)) throw new Error("invalid_request");
+        if (declared && !server.command.trim()) throw new Error("invalid_request");
         labels.add(server.server_label);
 
     } else {

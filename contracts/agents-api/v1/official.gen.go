@@ -356,18 +356,11 @@ type ItemList struct {
 	HasMore bool    `json:"has_more" binding:"required"`
 }
 
-// MCPHTTPTransport projects PersistedMcpTransportConfigParamHttp.
-type MCPHTTPTransport struct {
-	Type      string             `json:"type" binding:"required" enums:"http"`
-	ServerURL string             `json:"server_url" binding:"required"`
-	Headers   *map[string]string `json:"headers,omitempty" extensions:"x-nullable"`
-}
-
 // MCPTool projects AgentToolResourceMcp.
 type MCPTool struct {
 	Type             string                     `json:"type" binding:"required" enums:"mcp"`
 	ServerLabel      string                     `json:"server_label" binding:"required"`
-	Transport        MCPHTTPTransport           `json:"transport" binding:"required"`
+	Transport        MCPTransport               `json:"transport" binding:"required"`
 	AllowedTools     *[]string                  `json:"allowed_tools" binding:"required" extensions:"x-nullable"`
 	ConnectionOrigin string                     `json:"connection_origin" binding:"required" enums:"service,environment"`
 	CredentialID     *string                    `json:"credential_id" binding:"required" extensions:"x-nullable"`

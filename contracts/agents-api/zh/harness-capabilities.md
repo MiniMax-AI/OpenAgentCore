@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 868d7db54a63ab0247b8112e96e9064a233fe52e5b7ce5047f50c7d7c937d0cf
+source_hash: aa7386a79b936f3415f12e394740fbbe538c6e41c32835a67cb2fbd2694dad9f
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -44,7 +44,8 @@ source_hash: 868d7db54a63ab0247b8112e96e9064a233fe52e5b7ce5047f50c7d7c937d0cf
 | Web 搜索 `cached` 或 `live`，以及程序化工具调用 `enabled` | 所有位置已准入 | `live` 在所有位置已准入；`cached` 和 `enabled` 已拒绝 | 已拒绝 |
 | [服务端来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：`none`；其他位置拒绝 | 已验证：`none`；其他位置拒绝 | 已验证：`none`，仅 `allowed_tools` null、`required` false；其他位置拒绝 |
 | [Environment 来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管；仅 `allowed_tools` null、`required` false |
-| [HTTP MCP bearer 凭据](execution-tools.md#http-mcp) | 已验证 | 已验证 | 已验证 |
+| [stdio MCP](execution-tools.md#mcp) | 已准入：托管、自托管 | 已准入：托管、自托管；`cwd` 须为工作区目录，`allowed_tools` 须为 null | 已拒绝 |
+| [HTTP MCP bearer 凭据](execution-tools.md#mcp) | 已验证 | 已验证 | 已验证 |
 | 必需 MCP 初始化 | 已验证 | 已验证 | 已拒绝 |
 | [Subagent](subagents.md) | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 |
 | Subagent 与函数或 HTTP MCP 同时使用 | 已验证：`none`；已准入：托管、自托管 | 已拒绝 | HTTP MCP 已准入；每个 Session 都拒绝函数 |

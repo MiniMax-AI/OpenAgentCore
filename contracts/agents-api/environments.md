@@ -400,7 +400,7 @@ The Runtime resolves public HTTP declarations and installed Plugin MCP through `
 
 ### Public MCP connection origin
 
-An Agent's HTTP MCP tool ([declaration](./execution-tools.md#http-mcp)) has a `connection_origin`. Omitted or null means `service`, including on `self_hosted` Sessions. The origin is kept from saved configuration through the Session snapshot to the Runtime request, which requires the exact wire version; a `service` request never becomes an `environment` connection.
+An Agent's HTTP MCP tool ([declaration](./execution-tools.md#mcp)) has a `connection_origin`. Omitted or null means `service`, including on `self_hosted` Sessions, except for a `stdio` server, whose only origin is `environment`. The origin is kept from saved configuration through the Session snapshot to the Runtime request, which requires the exact wire version; a `service` request never becomes an `environment` connection.
 
 | Origin | Connects from | Allowed placements |
 | --- | --- | --- |
@@ -413,4 +413,4 @@ Core's Harness profile declares `MCPOrigins`; admission and dispatch check the o
 
 Both origins support anonymous HTTP and HTTPS bearer credentials. The attached-Vault selection freezes the credential identity, including a unique implicit URL match or an anonymous selection. Only that Project-authorized credential enters the transient Runtime request; Core defaults and unrelated Vaults are never searched. A decryption failure or missing credential fails execution without an anonymous fallback. Public Environment MCP keeps `project_vault` authority and Plugin credentials keep `environment_configuration` authority; neither overrides a duplicate server label. Bearers never enter persisted native configuration or process arguments.
 
-Tool allowlists and required initialization follow the [HTTP MCP contract](./execution-tools.md#http-mcp).
+Tool allowlists and required initialization follow the [HTTP MCP contract](./execution-tools.md#mcp).

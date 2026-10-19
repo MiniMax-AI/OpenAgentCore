@@ -136,3 +136,12 @@ test("public workspace HTTP preserves required startup and null versus empty all
     mcp.close();
   }
 });
+
+test("declared stdio MCP runs the caller's command natively", () => {
+  const declared = { server_label: "local", command: "run", args: ["-c", "a\nb"], allowed_tools: null, required: true, declared: true };
+  assert.deepEqual(parseEnvironmentMCP([declared]), [declared]);
+  for (const value of [{ ...declared, allowed_tools: ["x"] }, { ...declared, declared: false }, { ...declared, command: " " }, { ...declared, env: {} }]) {
+    assert.throws(() => parseEnvironmentMCP([value]), /invalid_request/);
+  }
+  assert.deepEqual(new MCPProfile([declared], []).servers.local, { type: "stdio", command: "run", args: ["-c", "a\nb"], env: {}, alwaysLoad: true });
+});

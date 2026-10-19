@@ -215,16 +215,10 @@
     "sources": ["#/components/schemas/SessionItemListResource"],
     "order": ["object", "first_id", "last_id", "data", "has_more"]
   },
-  "MCPHTTPTransport": {
-    "sources": ["#/components/schemas/PersistedMcpTransportConfigParamHttp"],
-    "fields": {
-      "headers": {"type": "*map[string]string"}
-    }
-  },
   "MCPTool": {
     "sources": ["#/components/schemas/AgentToolResourceMcp"],
     "fields": {
-      "transport": {"type": "MCPHTTPTransport"},
+      "transport": {"type": "MCPTransport"},
       "allowed_tools": {"type": "*[]string"}
     },
     "order": ["type", "server_label", "transport", "allowed_tools", "connection_origin", "credential_id", "request_metadata", "required"]

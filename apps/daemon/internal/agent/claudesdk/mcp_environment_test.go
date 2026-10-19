@@ -64,7 +64,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 	} {
 		environment := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
 		mutate(environment)
-		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}); err == nil {
+		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}, ""); err == nil {
 			t.Fatal("unsupported declaration accepted")
 		}
 	}
@@ -86,5 +86,20 @@ func TestEnvironmentMCPObservationsUseInstalledDeclarations(t *testing.T) {
 	observation.Server = "undeclared"
 	if err := state.receive(bridgeEvent{ID: "other", Stage: "before", Observation: &observation}, start, emit); err == nil {
 		t.Fatal("undeclared observation accepted")
+	}
+}
+
+// Native starts a stdio server in the directory of its own process, so the
+// declared cwd must be that workspace directory.
+func TestPublicMCPStdioStartsInTheWorkspaceDirectory(t *testing.T) {
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local",
+		Stdio: &proto.MCPStdio{Command: "run", Args: []string{"-x"}, Cwd: "/work/", EnvVars: []string{"TOKEN"}}}}
+	req := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers}
+	projected, _, err := prepareRuntimeMCP(req, "/work")
+	if err != nil || len(projected) != 1 || projected[0].Command != "run" || !projected[0].Declared || projected[0].ServerLabel != "local" {
+		t.Fatal("public stdio server was not projected", projected, err)
+	}
+	if _, _, err := prepareRuntimeMCP(req, "/elsewhere"); err == nil {
+		t.Fatal("stdio cwd outside the workspace directory was accepted")
 	}
 }

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -100,5 +101,29 @@ func TestPublicEnvironmentMCPRetainsVaultAuthority(t *testing.T) {
 	req.LocalEnvironment = nil
 	if _, err := ResolveMCPBindings(req); err == nil {
 		t.Fatal("unprepared environment accepted")
+	}
+}
+
+func TestMCPBindingsPublicStdio(t *testing.T) {
+	stdio := proto.MCPStdio{Command: "run", Args: []string{"-x"}, Cwd: "/work", EnvVars: []string{"TOKEN"}}
+	resolve := func(origin string, stdio proto.MCPStdio) ([]MCPBinding, error) {
+		servers := []proto.MCPHTTPServer{{ConnectionOrigin: origin, ServerLabel: "local", Stdio: &stdio}}
+		return ResolveMCPBindings(proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers})
+	}
+	got, err := resolve("environment", stdio)
+	if err != nil || len(got) != 1 || got[0].Transport != "stdio" || got[0].Stdio != nil || !reflect.DeepEqual(*got[0].Process, stdio) {
+		t.Fatal("public stdio binding unavailable", got, err)
+	}
+	got[0].Process.Args[0] = "mutated"
+	if stdio.Args[0] != "-x" {
+		t.Fatal("binding shares the declaration")
+	}
+	for name, invalid := range map[string]proto.MCPStdio{"command": {Command: " "}, "variable": {Command: "run", EnvVars: []string{"1=2"}}} {
+		if _, err := resolve("environment", invalid); err == nil {
+			t.Fatal("invalid stdio declaration accepted: " + name)
+		}
+	}
+	if _, err := resolve("service", stdio); err == nil {
+		t.Fatal("service-origin stdio accepted")
 	}
 }

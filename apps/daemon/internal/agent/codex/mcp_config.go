@@ -16,6 +16,8 @@ type mcpServerConfig struct {
 	URL               string
 	Command           string
 	Args              []string
+	Cwd               string
+	EnvVars           []string
 	EnabledTools      *[]string
 	Required          bool
 	BearerTokenEnvVar string
@@ -59,38 +61,44 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 				b.WriteString(tomlQuoteString(srv.BearerTokenEnvVar))
 				b.WriteByte('\n')
 			}
-			if srv.EnabledTools != nil {
-				b.WriteString("enabled_tools = [")
-				for i, name := range *srv.EnabledTools {
-					if i > 0 {
-						b.WriteString(", ")
-					}
-					b.WriteString(tomlQuoteString(name))
-				}
-				b.WriteString("]\n")
-			}
 			writeMCPHeaderMap(&b, "http_headers", srv.HTTPHeaders)
+		} else {
+			b.WriteString(`command = `)
+			b.WriteString(tomlQuoteString(srv.Command))
 			b.WriteByte('\n')
-			continue
-		}
-		b.WriteString(`command = `)
-		b.WriteString(tomlQuoteString(srv.Command))
-		b.WriteByte('\n')
-		if len(srv.Args) > 0 {
-			b.WriteString("args = [")
-			for i, a := range srv.Args {
-				if i > 0 {
-					b.WriteString(", ")
-				}
-				b.WriteString(tomlQuoteString(a))
+			writeMCPList(&b, "args", srv.Args)
+			if srv.Cwd != "" {
+				b.WriteString("cwd = " + tomlQuoteString(srv.Cwd) + "\n")
 			}
-			b.WriteString("]\n")
+			writeMCPList(&b, "env_vars", srv.EnvVars)
+		}
+		if srv.EnabledTools != nil {
+			b.WriteString("enabled_tools = ")
+			writeMCPList(&b, "", *srv.EnabledTools)
 		}
 		b.WriteByte('\n')
 	}
 
 	path := filepath.Join(codexHome, "config.toml")
 	return appendConfigTOML(path, b.String())
+}
+
+// writeMCPList writes a TOML string array, as a "name = " line unless name is empty.
+func writeMCPList(b *strings.Builder, name string, values []string) {
+	if name != "" {
+		if len(values) == 0 {
+			return
+		}
+		b.WriteString(name + " = ")
+	}
+	b.WriteByte('[')
+	for i, value := range values {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(tomlQuoteString(value))
+	}
+	b.WriteString("]\n")
 }
 
 func writeMCPHeaderMap(b *strings.Builder, field string, values map[string]string) {

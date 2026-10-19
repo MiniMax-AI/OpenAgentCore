@@ -4,6 +4,7 @@ import (
 	"errors"
 	"maps"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -25,6 +26,8 @@ type MCPBinding struct {
 	HTTPHeaders         map[string]string
 	// Stdio retains the installed package identity for the fixed Runtime launcher.
 	Stdio *proto.EnvironmentMCP
+	// Process is a public stdio declaration, started natively by the Harness.
+	Process *proto.MCPStdio
 }
 
 // ResolveMCPBindings combines public declarations with the frozen installation.
@@ -38,7 +41,16 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			if err := server.ValidateConnectionOrigin(req); err != nil {
 				return nil, err
 			}
-			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: "http", ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken, HTTPHeaders: maps.Clone(server.Headers)}
+			transport := "http"
+			if server.Stdio != nil {
+				transport = "stdio"
+			}
+			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: transport, ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken, HTTPHeaders: maps.Clone(server.Headers)}
+			if server.Stdio != nil {
+				process := *server.Stdio
+				process.Args, process.EnvVars = slices.Clone(process.Args), slices.Clone(process.EnvVars)
+				item.Process = &process
+			}
 			if server.AllowedTools != nil {
 				names := append([]string{}, (*server.AllowedTools)...)
 				item.AllowedTools = &names
@@ -79,10 +91,20 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			value := *item.BearerToken
 			item.BearerToken = &value
 		}
+		if item.AllowedTools != nil {
+			for _, name := range *item.AllowedTools {
+				if name == "" || strings.TrimSpace(name) != name {
+					return nil, errors.New("invalid MCP tool allowlist")
+				}
+			}
+		}
 		switch item.Transport {
 		case "stdio":
-			if item.Stdio == nil || item.BearerToken != nil || len(item.HTTPHeaders) > 0 || item.ServerURL != "" {
-				return nil, errors.New("invalid installed MCP transport")
+			if (item.Stdio == nil) == (item.Process == nil) || item.BearerToken != nil || len(item.HTTPHeaders) > 0 || item.ServerURL != "" {
+				return nil, errors.New("invalid MCP stdio transport")
+			}
+			if process := item.Process; process != nil && !validMCPProcess(*process) {
+				return nil, errors.New("invalid MCP stdio declaration")
 			}
 		case "http":
 			endpoint, err := url.Parse(item.ServerURL)
@@ -92,16 +114,28 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			if item.BearerToken != nil && (endpoint.Scheme != "https" || !ValidMCPHTTPBearerToken(*item.BearerToken)) {
 				return nil, errors.New("invalid HTTPS MCP bearer credential")
 			}
-			if item.AllowedTools != nil {
-				for _, name := range *item.AllowedTools {
-					if name == "" || strings.TrimSpace(name) != name {
-						return nil, errors.New("invalid MCP tool allowlist")
-					}
-				}
-			}
 		default:
 			return nil, errors.New("unsupported MCP transport")
 		}
 	}
 	return bindings, nil
+}
+
+var mcpEnvironmentVariable = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validMCPProcess(process proto.MCPStdio) bool {
+	if strings.TrimSpace(process.Command) == "" || strings.ContainsAny(process.Command+process.Cwd, "\x00") {
+		return false
+	}
+	for _, arg := range process.Args {
+		if strings.ContainsRune(arg, 0) {
+			return false
+		}
+	}
+	for _, name := range process.EnvVars {
+		if !mcpEnvironmentVariable.MatchString(name) {
+			return false
+		}
+	}
+	return true
 }

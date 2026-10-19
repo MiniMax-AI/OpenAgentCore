@@ -164,7 +164,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
 	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"))
-	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
+	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req, "")
 	if err != nil {
 		return startRequest{}, nil, err
 	}
