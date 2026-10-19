@@ -123,16 +123,16 @@ test("sets, replaces and clears a harness's default model configuration, and kee
 
   // A disabled harness may still be configured; token limits are optional.
   await mcode.getByRole("button", { name: "Set the default model configuration for MiniMax Code" }).click();
-  const mcodeSet = page.getByRole("dialog", { name: "Set default model configuration for MiniMax Code" });
-  await expect(mcodeSet.getByRole("combobox", { name: "Protocol", exact: true })).toHaveText("Anthropic Messages");
-  await mcodeSet.getByRole("combobox", { name: "Protocol", exact: true }).click();
+  const limits = page.getByRole("dialog", { name: "Set default model configuration for MiniMax Code" });
+  await expect(limits.getByRole("combobox", { name: "Protocol", exact: true })).toHaveText("Anthropic Messages");
+  await limits.getByRole("combobox", { name: "Protocol", exact: true }).click();
   await expect(page.getByRole("option")).toHaveText(["Anthropic Messages", "OpenAI Responses", "OpenAI Chat Completions"]);
   await page.getByRole("option", { name: "OpenAI Responses", exact: true }).click();
-  await mcodeSet.getByLabel("Base URL").fill("https://model.example/anthropic");
-  await mcodeSet.getByLabel("API key").fill(KEY);
-  await mcodeSet.getByLabel("Default model ID").fill("fixture-model");
-  await expect(mcodeSet.getByRole("button", { name: "Save" })).toBeEnabled();
-  await mcodeSet.getByRole("button", { name: "Cancel" }).click();
+  await limits.getByLabel("Base URL").fill("https://model.example/anthropic");
+  await limits.getByLabel("API key").fill(KEY);
+  await limits.getByLabel("Default model ID").fill("fixture-model");
+  await expect(limits.getByRole("button", { name: "Save" })).toBeEnabled();
+  await limits.getByRole("button", { name: "Cancel" }).click();
   await expect(mcode).toContainText("Not set");
 
   expect(await writes(request)).toEqual([

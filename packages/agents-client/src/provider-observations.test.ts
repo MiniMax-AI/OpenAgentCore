@@ -32,8 +32,7 @@ describe("adapter model configuration support", () => {
       { ...support, protocols: "responses" }, { ...support, protocols: [] }, { ...support, protocols: ["unknown"] },
       { ...support, protocols: [null] }, { ...support, protocols: ["responses", "responses"] },
       { ...support, native_protocols: ["responses"] }, { ...support, accepts_harness_config: "true" },
-      { ...support, accepts_harness_config: undefined }, { ...support, token_limits_required: false },
-      { ...support, ready: true }]) {
+      { ...support, accepts_harness_config: undefined }, { ...support, ready: true }]) {
       expect(() => projectCoreHarnessList({ object: "list", data: [{ ...harness, model_configuration_support: value }] })).toThrow();
     }
   });

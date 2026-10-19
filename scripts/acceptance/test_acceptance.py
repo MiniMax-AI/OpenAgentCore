@@ -60,18 +60,6 @@ class AcceptanceSettingsTests(unittest.TestCase):
             del models[harness]["model_provider"]["max_output_tokens"]
             self.settings(models)
 
-    def test_model_limit_validation(self):
-        for field in ("context_window", "max_output_tokens"):
-            for value in (False, -1, "100", 1.5, None):
-                models = copy.deepcopy(self.models)
-                models["codex"]["model_provider"][field] = value
-                with self.subTest(field=field, value=value), self.assertRaisesRegex(
-                        acceptance.Failure, "invalid_model_limits"):
-                    self.settings(models)
-        self.models["codex"]["model_provider"]["max_output_tokens"] = 64001
-        with self.assertRaisesRegex(acceptance.Failure, "invalid_model_limits"):
-            self.settings()
-
     def test_provider_validation_is_preserved(self):
         for patch, label in (
             ({"unknown": "value"}, "invalid_model_provider_fields"),

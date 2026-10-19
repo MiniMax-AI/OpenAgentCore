@@ -83,7 +83,7 @@ The installer selects no sandbox backend. [Choose a sandbox backend](./sandbox-b
 Core-hosted Sessions that bring no model provider use their Harness's default model. See [default models](../configuration.md#default-models).
 
 1. Open **Settings → Models and credentials**. Under **Default model configuration**, the Harness marked **Default** shows **Model provider not set**. It is Codex unless you changed `OAC_DEFAULT_HARNESS`; see [settings](../configuration.md#settings).
-2. Choose **Set** and enter the model ID, the protocol, and the provider's base URL and API key. MiniMax Code also needs the context window and the maximum output tokens.
+2. Choose **Set** and enter the model ID, the protocol, and the provider's base URL and API key.
 3. Save. The Harness shows **Ready**.
 
 ## Issue a Project API key

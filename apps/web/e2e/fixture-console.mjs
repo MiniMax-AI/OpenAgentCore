@@ -541,7 +541,6 @@ function providerProblem(harness, input) {
   if (!["anthropic", "responses", "chat_completions"].includes(input.protocol)) return "unsupported model provider protocol";
   if (!input.api_key.trim() || Buffer.byteLength(input.api_key) > 16384 || /[\0\r\n]/.test(input.api_key)) return "invalid model provider API key";
   if ((input.max_output_tokens ?? 0) > (input.context_window ?? 0)) return "invalid model token limits";
-  if (harness === "mcode" && !(input.context_window > 0 && input.max_output_tokens > 0)) return "selected harness requires positive model context_window and max_output_tokens";
   return null;
 }
 
@@ -550,7 +549,7 @@ function providerProblem(harness, input) {
  * (services/core/internal/api/harness_model_providers.go): the list
  * reflects every write; an unknown harness or an unset provider is 404; PUT
  * takes a JSON object of at most 32 KiB, is a full replacement that needs the
- * key every time (mcode also both limits) and answers with the safe view;
+ * key every time and answers with the safe view;
  * DELETE is 204 and safe to repeat. A disabled harness may still be configured.
  */
 async function harnessRoute(request, response, path) {

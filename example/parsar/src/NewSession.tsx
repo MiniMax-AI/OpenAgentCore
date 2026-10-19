@@ -140,14 +140,12 @@ export function NewSession({
               {restriction}
             </p>
           )}
-          {!restriction &&
-            runtime &&
-            (runtime.environment === "none" || agent.harness === "mcode") && (
-              <p className="text-base">
-                此组合使用 Core 部署的模型连接；这里选择的 Provider
-                仅用于模型分组。
-              </p>
-            )}
+          {!restriction && runtime && runtime.environment === "none" && (
+            <p className="text-base">
+              此组合使用 Core 部署的模型连接；这里选择的 Provider
+              仅用于模型分组。
+            </p>
+          )}
           <ErrorNotice error={save.error || runtimes.error} />
           {uncertain && (
             <p>如请求结果未确定，可关闭弹窗，在会话列表中恢复同一次创建。</p>
