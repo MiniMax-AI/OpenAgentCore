@@ -56,7 +56,7 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 	if err := os.WriteFile(filepath.Join(result.DataDir, "AGENTS.md"), []byte(prompt), 0o600); err != nil {
 		return result, err
 	}
-	config := map[string]any{"logLevel": "error", "skills": map[string]any{"external": map[string]any{"enabled": false}}}
+	config := map[string]any{"logLevel": "error"}
 	result.Model = optionString(opts, "model")
 	if result.Model == "" {
 		return result, fmt.Errorf("mcode: model is required")

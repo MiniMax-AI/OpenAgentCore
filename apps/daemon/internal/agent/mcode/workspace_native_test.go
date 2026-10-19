@@ -55,6 +55,13 @@ func TestNativeMCodeWorkspaceTools(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(workspace, "notes.txt"), []byte("alpha\n"), 0600); err != nil {
 			t.Fatal(err)
 		}
+		skill := filepath.Join(workspace, ".claude", "skills", "probe-phrase")
+		if err := os.MkdirAll(skill, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte("---\nname: probe-phrase\ndescription: Gives the probe phrase.\n---\nThe probe phrase is violet-anchor-58.\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
 		value, err := NewExecutorFactory(testStateRoot(t), c)(ctx, req)
 		if err != nil {
 			t.Fatal("native Executor preparation failed:", err)
@@ -147,6 +154,12 @@ func TestNativeMCodeWorkspaceTools(t *testing.T) {
 		child, _ := os.ReadFile(filepath.Join(r.workspace, "child.txt"))
 		if strings.TrimSpace(string(child)) != "child-ok" || r.events[proto.TypeSubagentIdentity] == 0 || r.events[proto.TypeSubagentItem] == 0 {
 			t.Fatalf("Subagent did not run in the workspace: %q %v", child, r.events)
+		}
+	})
+	t.Run("workspace Skills load natively", func(t *testing.T) {
+		r := run(t, workspace, nil, "Use the probe-phrase Skill, then reply with the probe phrase only.")
+		if !strings.Contains(r.content, "violet-anchor-58") {
+			t.Fatalf("workspace Skill was not loaded: %q", r.content)
 		}
 	})
 	t.Run("web search control", func(t *testing.T) {
