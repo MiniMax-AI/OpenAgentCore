@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 8799a6f1ba80217f77e7adac3412e60482be731fcea665dfb9ec19fad92a8d54
+source_hash: 814b5faa5534df0814f8037a947c24bc1f4d78960aff9f5c5bf42fe4d1ad11ec
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -63,7 +63,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS，且不得包含凭据、查询或片段 |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` 和 `allowed_protocols`，来自该构建的适配器目录 | 协议未知，或所选 Harness 不支持该协议 |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`：16384 | 密钥为空、过长或包含禁止字符 |
-| `model_provider_token_limits_invalid` | `context_window` 或 `max_output_tokens` | 省略 | 限制为负数，或 `max_output_tokens` 超过已设置的 `context_window` |
+| `model_provider_token_limits_invalid` | `context_window` 或 `max_output_tokens` | 省略 | 限制为负数、`max_output_tokens` 超过已设置的 `context_window`，或 Harness 没有已设置限制的原生设置 |
 | `model_configuration_model_invalid` | `model` | 省略 | 部署默认配置的 model 不是非空模型标识符 |
 | `harness_config_invalid` | `harness_config` | 省略 | 部署默认配置的原生参数不受支持或无效 |
 | `invalid_sandbox_configuration` | `resources.cpus` | `min`：1，`max`：255 | CPU 数量超出支持范围 |

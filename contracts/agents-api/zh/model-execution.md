@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 5486e6c406aa220d5897a2e1980b4f432bd62fe4718317842370d89f66736b0c
+source_hash: 5ebda69322721893a97cb6814ea72df3ca8c02d1fc9b59724e5392f8e2583db9
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -17,13 +17,15 @@ Harness 接收一个冻结的模型提供商配置包，其定义见 [`modelprov
 | `api_key` | 不得为空，最长 16 KiB，不得包含 NUL、CR 或 LF |
 | `context_window`、`max_output_tokens` | 可选的非负整数，输出限制不得大于上下文限制。请使用真实模型的限制 |
 
-各 Harness 支持的协议：
+各 Harness 支持的协议和原生 token 限制：
 
-| Harness | 支持的协议（默认项在前） |
-| --- | --- |
-| Codex | `responses` |
-| Claude Code | `anthropic` |
-| MiniMax Code | `anthropic`、`responses`、`chat_completions` |
+| Harness | 支持的协议（默认项在前） | 原生 token 限制 |
+| --- | --- | --- |
+| Codex | `responses` | `model_context_window`；无输出限制 |
+| Claude Code | `anthropic` | `CLAUDE_CODE_MAX_CONTEXT_TOKENS`（原生仅对其不认识的模型使用）和 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`（原生将其限制在模型上限内） |
+| MiniMax Code | `anthropic`、`responses`、`chat_completions` | 自定义模型的 `limit.context` 和 `limit.output` |
+
+已设置但没有原生设置的限制返回 `model_provider_token_limits_invalid`。
 
 Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。不存在模型 API 代理、直通网关或跨协议转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
 
@@ -134,7 +136,7 @@ PUT 要求提供 `model` 和完整的 `model_provider`；`harness_config` 默认
 
 创建 Session 时，Core 会解密解析后 Harness 的默认值，并像处理其他配置包一样将其冻结在 Session 的加密快照中，因此更改或移除默认值绝不会影响现有 Session。execution-configuration 读取结果会显示冻结的安全视图，其来源为 `deployment`。提供商快照缺失或无效时会安全失败，并且不会回退到其他模型或提供商。
 
-`model_configuration_support` 派生自 Core 和 Runtime 共享的适配器声明：`protocols` 列出可选择的原生协议，并将默认项放在首位；`accepts_harness_config` 表示是否接受原生参数。它描述的是构建版本，而不是实时 Runtime 或远程模型。
+`model_configuration_support` 派生自 Core 和 Runtime 共享的适配器声明：`protocols` 列出可选择的原生协议，并将默认项放在首位；`accepts_harness_config` 表示是否接受原生参数；`accepts_max_output_tokens` 表示 `max_output_tokens` 是否有原生设置。它描述的是构建版本，而不是实时 Runtime 或远程模型。
 
 ### 部署默认值观测 {#deployment-default-observations}
 

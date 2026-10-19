@@ -96,7 +96,7 @@ func (h *Handler) listHarnesses(w http.ResponseWriter, r *http.Request) {
 	list := CoreHarnessList{Object: "list", Data: []CoreHarness{}}
 	for _, kind := range builtin.Kinds() {
 		declaration, _ := builtin.Registry().Lookup(kind)
-		support := v1.ModelConfigurationSupport{Protocols: []string{}, AcceptsHarnessConfig: declaration.AcceptsHarnessConfig()}
+		support := v1.ModelConfigurationSupport{Protocols: []string{}, AcceptsHarnessConfig: declaration.AcceptsHarnessConfig(), AcceptsMaxOutputTokens: declaration.MaxOutputTokens}
 		for _, provider := range declaration.Providers {
 			support.Protocols = append(support.Protocols, provider.Protocol)
 		}

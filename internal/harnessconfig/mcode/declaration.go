@@ -23,7 +23,7 @@ var Declaration = harnessconfig.Declaration{
 		{Protocol: "anthropic"},
 		{Protocol: "responses"},
 		{Protocol: "chat_completions"},
-	}},
+	}, MaxOutputTokens: true},
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:     proto.CapabilitySupported,
 		Streaming:                proto.CapabilitySupported,

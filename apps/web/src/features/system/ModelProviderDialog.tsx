@@ -83,7 +83,7 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const url = baseUrl.trim();
   const urlProblem = url && !isProviderUrl(url) ? t("models.form.baseUrlInvalid") : null;
   const context = tokenLimit(contextWindow);
-  const output = tokenLimit(maxOutputTokens);
+  const output = tokenLimit(support?.accepts_max_output_tokens ? maxOutputTokens : "");
   const limitProblem = (limit: ReturnType<typeof tokenLimit>) => (limit.problem === "whole" ? t("models.form.wholeNumber") : limit.problem === "large" ? t("models.form.tooLarge") : null);
   const outputProblem = limitProblem(output);
   // An undersized window is the field the administrator must fix.
@@ -220,7 +220,7 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
             </div> : null}
             <div className="system-model-limits">
               {limitField("context", contextWindow, setContextWindow, contextProblem)}
-              {limitField("output", maxOutputTokens, setMaxOutputTokens, outputProblem)}
+              {support?.accepts_max_output_tokens ? limitField("output", maxOutputTokens, setMaxOutputTokens, outputProblem) : null}
             </div>
           </div>
         </details>

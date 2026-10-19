@@ -13,7 +13,7 @@ func TestModelExecutionValidation(t *testing.T) {
 			t.Run(harness+"/"+protocol, func(t *testing.T) {
 				p := ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "secret", ContextWindow: 200000, MaxOutputTokens: 8000}
 				native := harness == "mcode" || (harness == "codex" && protocol == "responses") || (harness == "claude_sdk" && protocol == "anthropic")
-				if err := p.ValidateHarness(harness); (err == nil) != native {
+				if err := p.ValidateHarness(harness); (err == nil) != (native && harness != "codex") {
 					t.Fatalf("wrong native protocol admission: %v", err)
 				}
 				p.ContextWindow, p.MaxOutputTokens = 0, 0
@@ -55,7 +55,7 @@ func TestProviderDeclarationsAgreeWithAdmission(t *testing.T) {
 			for _, protocol := range []string{"responses", "anthropic", "unknown"} {
 				_, supported := declared.Provider(protocol)
 				input := ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.test", APIKey: "private-fixture", ContextWindow: 100, MaxOutputTokens: 20}
-				if (input.ValidateHarness(kind) == nil) != supported {
+				if (input.ValidateHarness(kind) == nil) != (supported && declared.MaxOutputTokens) {
 					t.Fatalf("protocol %q disagrees with validation", protocol)
 				}
 				if !supported {

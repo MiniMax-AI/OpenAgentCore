@@ -2,6 +2,7 @@ package codex
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -33,5 +34,19 @@ func TestPlanRejectsIncompleteExplicitProvider(t *testing.T) {
 		if _, err := BuildSessionPlan(testStateRoot(t), "state", options, nil); err == nil {
 			t.Fatal("explicit provider fell back to native defaults")
 		}
+	}
+}
+
+func TestPlanMapsTheContextWindowNatively(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	provider := map[string]any{"protocol": "responses", "base_url": "https://model.example/v1", "api_key": "fixture", "context_window": 64000}
+	plan, err := BuildSessionPlan(testStateRoot(t), "limits", map[string]any{"model": "m", "model_provider": provider}, nil)
+	if err != nil || !slices.Contains(plan.ExtraConfig, [2]string{"model_context_window", "64000"}) {
+		t.Fatalf("context window not native: %v %v", plan.ExtraConfig, err)
+	}
+	plan.Cleanup()
+	provider["max_output_tokens"] = 4096
+	if _, err := BuildSessionPlan(testStateRoot(t), "limits", map[string]any{"model": "m", "model_provider": provider}, nil); err == nil {
+		t.Fatal("max_output_tokens without a native home accepted")
 	}
 }

@@ -16,6 +16,8 @@ var Declaration = harnessconfig.Declaration{
 	Kind:  "codex",
 	Label: "Codex",
 	Configuration: harnessconfig.Configuration{
+		// context_window maps to model_context_window; Codex has no native
+		// max_output_tokens setting.
 		Providers: []harnessconfig.Provider{{Protocol: "responses"}},
 	},
 	Capabilities: proto.AgentKindCapabilities{
