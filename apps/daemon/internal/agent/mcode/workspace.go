@@ -44,10 +44,6 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 	if req.LocalEnvironment == nil || req.LocalEnvironment.WorkspaceRoot != c.Directory || req.DisableExecutionEnvironment || req.WorkspaceReadOnly {
 		return launchOptions{}, fmt.Errorf("mcode: execution does not match the dedicated workspace")
 	}
-	servers, err := runtimeMCP(req)
-	if err != nil {
-		return launchOptions{}, err
-	}
 	values, err := localworkspace.ReadOptionalToolEnvironment()
 	if err != nil {
 		return launchOptions{}, err
@@ -62,8 +58,6 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 	// The native process runs in the declared workspace.
 	private := req
 	private.LocalEnvironment, private.DisableExecutionEnvironment = nil, true
-	// Public declarations have already been resolved into the transient ACP map.
-	private.MCPHTTPServers = nil
 	opts, err := prepareOptions(runtimeRoot, private, profile)
 	if err != nil {
 		return opts, err
@@ -88,6 +82,5 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 			}
 		}
 	}
-	opts.MCP = servers
 	return opts, nil
 }

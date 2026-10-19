@@ -109,7 +109,7 @@ At dispatch, Core sends the snapshot as one confidential provider bundle over th
 | --- | --- | --- |
 | Codex | Empty object only | Reasoning effort belongs to the public `reasoning.effort` |
 | Claude Code | `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.thinking`; the public `reasoning.effort` becomes `Options.effort` |
-| MiniMax Code | Empty object only | No native model parameters |
+| MiniMax Code | Empty object only | The public `reasoning.effort` becomes the custom model's thinking effort |
 
 Claude `thinking` accepts `display` (`summarized` or `omitted`) for `adaptive` and `enabled`, and a positive integer `budgetTokens` only for `enabled`; `maxThinkingTokens` is rejected. These are native settings, not a shared reasoning vocabulary; model availability and provider support are the Harness's responsibility.
 

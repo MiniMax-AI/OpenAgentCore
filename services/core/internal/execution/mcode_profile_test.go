@@ -13,7 +13,8 @@ func TestMCodeOperationQualification(t *testing.T) {
 		{"verbosity", `{"agent":{"model":"real-model","text":{"verbosity":"high"}},"environment":{"type":"none"}}`, false},
 		{"subagents", `{"agent":{"model":"real-model","multi_agent":{"enabled":true}},"environment":{"type":"none"}}`, true},
 		{"functions", `{"agent":{"model":"real-model","tools":[{"type":"function","name":"f","parameters":{"type":"object"}}]},"environment":{"type":"none"}}`, false},
-		{"mcp", `{"agent":{"model":"real-model","tools":[{"type":"mcp","server_label":"x","server_url":"https://example.invalid/mcp"}]},"environment":{"type":"none"}}`, false},
+		{"mcp", `{"agent":{"model":"real-model","tools":[{"type":"mcp","server_label":"x","connection_origin":"service","transport":{"type":"http","server_url":"https://example.invalid/mcp"}}]},"environment":{"type":"none"}}`, true},
+		{"effort", `{"agent":{"model":"real-model","reasoning":{"effort":"high"}},"environment":{"type":"none"}}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := p.ValidateSessionConfiguration("mcode", []byte(tc.body))

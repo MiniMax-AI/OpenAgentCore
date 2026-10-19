@@ -108,7 +108,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Configuration and tools**
 
 - A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions, no service-origin MCP and no image input.
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions and no image input.
 - Model-derived reasoning defaults are not resolved.
 - MCP tools support the `http` transport only; `stdio` is rejected, and so is an inline `authorization` on a Session MCP transport ([HTTP MCP](./execution-tools.md#http-mcp)).
 
@@ -119,6 +119,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.
 - Claude Code and MiniMax Code report no public usage.
+- MiniMax Code receives a message that starts with `/` with a trailing blank line, because ACP otherwise runs it as an operator command.
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
 - `file_id` and `detail` on images are rejected; each Harness declares which `image_url` values it accepts ([message content](./message-content.md#images)).
 

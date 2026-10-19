@@ -75,11 +75,11 @@ func (s *Session) projectSubagentMessages(session nativeSubagentSession, turn na
 			observation := s.nativeToolObservation(update, "after")
 			if observation == nil {
 				var err error
-				update.mcp, err = s.environmentMCPIdentity(update.Name)
+				update.mcp, err = s.mcpIdentity(update.Name)
 				if err != nil {
 					return err
 				}
-				observation, err = environmentMCPObservation(update, "after")
+				observation, err = mcpObservation(update, "after")
 				if err != nil {
 					return err
 				}

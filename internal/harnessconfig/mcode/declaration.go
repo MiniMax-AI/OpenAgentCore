@@ -50,16 +50,19 @@ var Declaration = harnessconfig.Declaration{
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
 	},
 	// Native search needs a MiniMax account credential that Core does not hold, so
-	// features.webSearch stays false and disabled is the only mode. MiniMax Code has
-	// no native home for effort, summary, service tier or programmatic tool calling.
+	// features.webSearch stays false and disabled is the only mode. Effort becomes the
+	// custom model's only thinking option, and none disables native thinking.
+	// MiniMax Code has no native home for summary, service tier or programmatic
+	// tool calling.
 	// Medium is the official default verbosity and needs no setting.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled"},
+		ReasoningEfforts:        []string{"none", "minimal", "low", "medium", "high", "xhigh", "max"},
 		ProgrammaticToolCalling: []bool{false},
 		TextVerbosities:         []string{"medium"},
 	},
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
-	MCPOrigins:         []string{"environment"},
+	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
 		environment := admission.Environment

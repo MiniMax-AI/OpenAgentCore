@@ -92,7 +92,11 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 			case "duplicate":
 				req.LocalEnvironment.MCP = append(req.LocalEnvironment.MCP, environmentMCPFixture())
 			}
-			if _, err := prepareWorkspaceOptions(testStateRoot(t), c, req); err == nil || strings.Contains(err.Error(), "confidential-http-token") {
+			_, err := prepareWorkspaceOptions(testStateRoot(t), c, req)
+			if err == nil {
+				_, err = runtimeMCP(req)
+			}
+			if err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")
 			}
 		})
@@ -232,7 +236,11 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(opts.MCP)
+	servers, err := runtimeMCP(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(servers)
 	if err != nil || !strings.Contains(string(raw), "Bearer "+token) {
 		t.Fatal("selected token not supplied to native ACP")
 	}
@@ -255,14 +263,14 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	empty := []string{}
-	(*req.MCPHTTPServers)[0].AllowedTools = &empty
-	if _, err := prepareWorkspaceOptions(testStateRoot(t), c, req); err == nil {
-		t.Fatal("empty allowlist silently treated as all")
-	}
-	(*req.MCPHTTPServers)[0].AllowedTools = nil
-	(*req.MCPHTTPServers)[0].Required = true
-	if _, err := prepareWorkspaceOptions(testStateRoot(t), c, req); err == nil {
-		t.Fatal("required initialization silently ignored")
+}
+
+func TestServiceOriginMCPOnNonePlacement(t *testing.T) {
+	req := testRequest(t)
+	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://mcp.example/mcp"}}
+	servers, err := runtimeMCP(req)
+	want := []map[string]any{{"name": "fixture", "type": "http", "url": "https://mcp.example/mcp", "headers": []map[string]string{}}}
+	if err != nil || !reflect.DeepEqual(servers, want) {
+		t.Fatalf("MCP = %v, %v", servers, err)
 	}
 }

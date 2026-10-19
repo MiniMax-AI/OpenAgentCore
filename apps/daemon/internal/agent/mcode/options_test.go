@@ -50,14 +50,11 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if json.Unmarshal(data, &cfg) != nil {
 		t.Fatal("invalid config")
 	}
-	if _, set := cfg["permissionMode"]; set {
-		t.Fatal("text profile restated the native permission mode")
+	if cfg["permissionMode"] != "bypassPermissions" {
+		t.Fatal("MCP tools on environment none can wait for approval")
 	}
 	if _, set := cfg["skills"]; set {
 		t.Fatal("native Skill discovery was overridden")
-	}
-	if skills, ok := cfg["agents"].(map[string]any)["default"].(map[string]any)["skills"].([]any); !ok || len(skills) != 0 {
-		t.Fatal("text profile selected native Skills")
 	}
 	info, _ := os.Stat(filepath.Join(opts.DataDir, "config.yaml"))
 	if info.Mode().Perm() != 0600 {

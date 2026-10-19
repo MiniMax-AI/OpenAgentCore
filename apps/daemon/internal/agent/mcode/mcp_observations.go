@@ -16,9 +16,8 @@ type mcpToolIdentity struct{ server, tool string }
 
 // MiniMax 0.4.12 atomically writes these assignments before exposing tools.
 // Read its exact mapping instead of reversing lossy native name normalization.
-func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) {
-	if s.req.LocalEnvironment == nil ||
-		!strings.HasPrefix(name, "mcp__") {
+func (s *Session) mcpIdentity(name string) (*mcpToolIdentity, error) {
+	if !strings.HasPrefix(name, "mcp__") {
 		return nil, nil
 	}
 	bindings, err := agent.ResolveMCPBindings(s.req)
@@ -68,7 +67,7 @@ func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) 
 	return found, nil
 }
 
-func environmentMCPObservation(update toolUpdate, stage string) (*proto.ToolObservation, error) {
+func mcpObservation(update toolUpdate, stage string) (*proto.ToolObservation, error) {
 	if update.mcp == nil {
 		return nil, nil
 	}

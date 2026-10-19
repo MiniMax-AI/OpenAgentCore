@@ -14,7 +14,7 @@ func TestMCPOriginSupport(t *testing.T) {
 		for _, placement := range []string{"none", "self_hosted", "openai_hosted"} {
 			for _, origin := range []string{"service", "environment", "", "unknown"} {
 				servers := []proto.MCPHTTPServer{{ConnectionOrigin: origin, ServerLabel: "proof", ServerURL: "https://example.test/mcp"}}
-				allowed := origin == "environment" && placement != "none" || origin == "service" && placement == "none" && kind != "mcode"
+				allowed := origin == "environment" && placement != "none" || origin == "service" && placement == "none"
 				if err := declaration.ValidateMCPOrigins(&harnessconfig.AdmissionEnvironment{Type: placement}, servers); (err == nil) != allowed {
 					t.Fatalf("%s/%s/%s: %v", kind, placement, origin, err)
 				}
