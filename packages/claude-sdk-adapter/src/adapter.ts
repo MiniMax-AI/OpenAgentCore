@@ -124,7 +124,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         ...(workspace?.options ?? {}),
         disallowedTools: [...(workspace?.options.disallowedTools ?? []), ...(profile?.denied ?? []), ...unselected],
         mcpServers,
-        ...(subagents ? { ...subagents.options(!!workspace), hooks: {
+        ...(subagents ? { ...subagents.options(), hooks: {
           Stop: [{ hooks: [subagents.stopped] }], SubagentStart: [{ hooks: [subagents.childStart] }],
           PostToolUseFailure: [{ hooks: [subagents.failedTool] }], PreToolUse: [{ hooks: [beforeTool] }],
         } } : workspace || profile ? { hooks: { PreToolUse: [{ hooks: [beforeTool] }] } } : {}),

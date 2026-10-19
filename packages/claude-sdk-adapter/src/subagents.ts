@@ -6,6 +6,8 @@ export class Subagents {
   readonly known = new Set<string>();
   private readonly observedCalls = new Set<string>();
   private readonly pending = new Map<string, string>();
+  private readonly names = new Map<string, string>();
+  private readonly pendingNames = new Map<string, string>();
   private readonly running = new Map<string, string>();
   private readonly admitted = new Map<string, string>();
   private session = "";
@@ -35,15 +37,17 @@ export class Subagents {
     const value = input.tool_input as Record<string, unknown>;
     if (!value || typeof value !== "object") return deny("Invalid subagent call.");
     const spawn = input.tool_name !== "SendMessage";
-    if (spawn ? value.subagent_type !== "oac_worker" || typeof value.prompt !== "string" || !value.prompt.trim() ||
-        value.isolation !== undefined || value.run_in_background === true || value.model !== undefined || value.mode !== undefined
-      : typeof value.to !== "string" || !this.known.has(value.to) || (value.type !== undefined && value.type !== "message") ||
+    // Native decides which agent types, models and modes exist; only a remote run, which needs an account Core does not hold, is refused.
+    const to = spawn ? "" : typeof value.to === "string" ? this.names.get(value.to) ?? value.to : "";
+    if (spawn ? typeof value.prompt !== "string" || !value.prompt.trim() || value.isolation === "remote"
+      : !this.known.has(to) || (value.type !== undefined && value.type !== "message") ||
         typeof value.message !== "string" || !value.message.trim()) return deny("Unsupported subagent operation.");
     if (this.pending.has(input.tool_use_id)) return {};
-    if (!spawn && (this.running.has(value.to as string) || [...this.pending.values()].includes(value.to as string))) return deny("The subagent is still running.");
+    if (!spawn && (this.running.has(to) || [...this.pending.values()].includes(to))) return deny("The subagent is still running.");
     {
       if (this.pending.size + this.running.size >= this.limit) return deny("The concurrent subagent limit has been reached.");
-      this.pending.set(input.tool_use_id, spawn ? "" : value.to as string);
+      this.pending.set(input.tool_use_id, to);
+      if (spawn && typeof value.name === "string") this.pendingNames.set(input.tool_use_id, value.name);
     }
     return { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" } };
   };
@@ -52,21 +56,15 @@ export class Subagents {
     return {};
   };
   readonly childStart: HookCallback = async input => {
-    if (input.hook_event_name !== "SubagentStart" || input.session_id !== this.session || input.agent_type !== "oac_worker" || !this.running.has(input.agent_id)) throw new Error("invalid native child start");
+    if (input.hook_event_name !== "SubagentStart" || input.session_id !== this.session || !this.running.has(input.agent_id)) throw new Error("invalid native child start");
     this.known.add(input.agent_id);
     return {};
   };
   readonly failedTool: HookCallback = async input => {
-    if (input.hook_event_name === "PostToolUseFailure") this.pending.delete(input.tool_use_id);
+    if (input.hook_event_name === "PostToolUseFailure") { this.pending.delete(input.tool_use_id); this.pendingNames.delete(input.tool_use_id); }
     return {};
   };
-  options(workspace: boolean): Pick<Options, "agents" | "forwardSubagentText"> {
-    return { forwardSubagentText: true, agents: { oac_worker: {
-      description: "A subagent for delegated work in this Session.", prompt: "Complete the delegated task using the available tools.", model: "inherit",
-      // A workspace worker inherits the native tools of its parent.
-      ...(workspace ? {} : { tools: ["Agent", "SendMessage"] }),
-    } } };
-  }
+  options(): Pick<Options, "forwardSubagentText"> { return { forwardSubagentText: true }; }
   consume(message: SDKMessage): void {
     if (message.type === "assistant" && message.parent_tool_use_id === null) {
       for (const block of message.message.content) if (block.type === "tool_use") this.observedCalls.add(block.id);
@@ -80,6 +78,8 @@ export class Subagents {
       const recipient = this.pending.get(message.tool_use_id);
       if (recipient && recipient !== message.task_id) throw new Error("mismatched native continuation target");
       if (!this.pending.delete(message.tool_use_id) && !this.running.has(message.task_id)) throw new Error("unadmitted native child task");
+      const name = this.pendingNames.get(message.tool_use_id);
+      if (name !== undefined) { this.pendingNames.delete(message.tool_use_id); this.names.set(name, message.task_id); }
       this.known.add(message.task_id);
       this.running.set(message.task_id, message.tool_use_id);
       this.admitted.set(message.task_id, message.tool_use_id);
@@ -87,7 +87,7 @@ export class Subagents {
       if (this.running.get(message.task_id) !== message.tool_use_id) throw new Error("unmatched native child completion");
       this.running.delete(message.task_id);
     } else if (message.type === "user" && Array.isArray(message.message.content)) {
-      for (const block of message.message.content) if (block.type === "tool_result") this.pending.delete(block.tool_use_id);
+      for (const block of message.message.content) if (block.type === "tool_result") { this.pending.delete(block.tool_use_id); this.pendingNames.delete(block.tool_use_id); }
     }
   }
   async facts(cancelledAt?: number): Promise<Fact[]> {
