@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -40,7 +41,7 @@ func TestHarnessConfigConflictFailsBeforePreparation(t *testing.T) {
 	}
 }
 
-func TestReasoningEffortReachesEveryNativeTurn(t *testing.T) {
+func TestNativeTurnsCarryNoCollaborationMode(t *testing.T) {
 	for _, resumeID := range []string{"", "fixture-native-thread"} {
 		t.Run("resume="+resumeID, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
@@ -78,13 +79,8 @@ func TestReasoningEffortReachesEveryNativeTurn(t *testing.T) {
 				if frame.Method != "turn/start" {
 					continue
 				}
-				var wire struct {
-					CollaborationMode struct {
-						Settings map[string]any `json:"settings"`
-					} `json:"collaborationMode"`
-				}
-				if json.Unmarshal(frame.Params, &wire) != nil || wire.CollaborationMode.Settings["reasoning_effort"] != "high" {
-					t.Fatal("Turn lost the frozen native reasoning effort", string(frame.Params))
+				if strings.Contains(string(frame.Params), "ollaborationMode") {
+					t.Fatal("turn/start must not carry a collaboration mode", string(frame.Params))
 				}
 			}
 			method := "thread/start"

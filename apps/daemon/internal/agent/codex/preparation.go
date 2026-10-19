@@ -92,7 +92,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		}
 	}
 	if s.observeSubagentIdentities {
-		if err := verifySubagentObservationProfile(cancelCtx, rpc, plan.Cwd); err != nil {
+		if err := verifySubagentObservationProfile(cancelCtx, rpc); err != nil {
 			return p.preparationFailed(err)
 		}
 	}
