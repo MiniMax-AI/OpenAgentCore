@@ -50,6 +50,9 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 			binary = frozen.Binary
 			opts, err = prepareWorkspaceOptions(runtimeRoot, *frozen, req)
 		}
+		if err == nil {
+			opts.MCP, err = runtimeMCP(req)
+		}
 		if err != nil {
 			return nil, err
 		}

@@ -9,6 +9,4 @@ export function sessionRestriction(agent, runtime) {
   }
   if (runtime.environment === "none" && agent.skill_ids.length)
     return "Skills 需要托管运行环境，请选择托管沙箱或移除 Skill 绑定。";
-  if (agent.harness === "mcode" && agent.mcp_ids.length)
-    return "MiniMax Code 暂不支持此处的 HTTP MCP，请选择 Claude Code 或 Codex。";
 }

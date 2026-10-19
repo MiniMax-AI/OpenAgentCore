@@ -439,17 +439,3 @@ test("model editing and moving retain unique IDs within each Provider", async (t
   });
   assert.equal(renamed.model, "three");
 });
-
-
-test("MiniMax MCP bindings reject before Core for text-only and hosted placements", async (t) => {
-  const store = openStore(":memory:");
-  t.after(() => store.close());
-  let calls = 0;
-  const { put, agent } = await setup(store, async () => { calls++; return { id: randomUUID() }; });
-  const config = await put("agents", { ...agent, harness: "mcode", skill_ids: [] }, agent.id);
-  for (const environment of ["none", "openai_hosted"]) {
-    const runtime = await put("runtimes", { name: environment, environment });
-    await assert.rejects(put("sessions", { name: "Rejected", input: "hello", agent_id: config.id, runtime_id: runtime.id }), /MiniMax Code.*MCP/);
-  }
-  assert.equal(calls, 0);
-});

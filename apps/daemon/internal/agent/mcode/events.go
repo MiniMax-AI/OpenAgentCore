@@ -82,7 +82,7 @@ func (s *Session) emitTool(update toolUpdate) error {
 	}
 	if update.mcp == nil {
 		var err error
-		update.mcp, err = s.environmentMCPIdentity(update.Name)
+		update.mcp, err = s.mcpIdentity(update.Name)
 		if err != nil {
 			return err
 		}

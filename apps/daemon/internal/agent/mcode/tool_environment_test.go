@@ -69,7 +69,11 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 			}
 		}
 		// Assert the actual env-selected HTTP credential, not a manually injected token.
-		headers, ok := opts.MCP[0]["headers"].([]map[string]string)
+		servers, err := runtimeMCP(prepared)
+		if err != nil {
+			t.Fatal(err)
+		}
+		headers, ok := servers[0]["headers"].([]map[string]string)
 		if !ok || len(headers) != 1 || headers[0]["name"] != "Authorization" || headers[0]["value"] != "Bearer fixture-bearer-canary" {
 			t.Fatal("frozen MCP credential was lost or replaced")
 		}

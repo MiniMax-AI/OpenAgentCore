@@ -16,7 +16,7 @@ func (s *Session) emitToolStage(update toolUpdate, stage string) error {
 	payload.Observation = s.nativeToolObservation(update, stage)
 	if payload.Observation == nil {
 		var err error
-		payload.Observation, err = environmentMCPObservation(update, stage)
+		payload.Observation, err = mcpObservation(update, stage)
 		if err != nil {
 			return err
 		}

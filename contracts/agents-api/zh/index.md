@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 128b6ec019f014381fe4220afb9399340702294db4c5d260b34887b9a547d384
+source_hash: 7665dc7621643822f5144aa2de85f37128f76a44f5b9fe300441634ca37dc347
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -111,7 +111,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **配置和工具**
 
 - 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions、没有服务源 MCP，也不支持图像输入。
+- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions，也不支持图像输入。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
@@ -122,6 +122,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
+- 以 `/` 开头的消息到达 MiniMax Code 时末尾多一个空行，否则 ACP 会将其作为操作员命令执行。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
 - 图像上的 `file_id` 和 `detail` 会被拒绝；每个 Harness 声明自己接受哪些 `image_url`（[消息内容](message-content.md#images)）。
 

@@ -22,7 +22,7 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | [Files and Artifacts](./environment-files.md) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted |
 | [Whitespace-only message text](./message-content.md) | Admitted; delivered unchanged | Rejected | Rejected |
 | [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
-| `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | Rejected |
+| `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
 | `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | Rejected | Rejected |
 | `service_tier` other than `auto` | `default`, `flex`, `priority`: admitted | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
@@ -40,7 +40,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |
 | Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | `live` admitted on hosted and self-hosted, rejected on `none`; `cached` and `enabled` rejected | Rejected |
-| [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Rejected |
+| [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Verified: `none`, with `allowed_tools` null and `required` false only; rejected elsewhere |
 | [Environment-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted; `allowed_tools` null and `required` false only |
 | [HTTP MCP bearer credentials](./execution-tools.md#http-mcp) | Verified | Verified | Verified |
 | Required MCP initialization | Verified | Verified | Rejected |

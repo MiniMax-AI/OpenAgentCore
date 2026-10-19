@@ -32,7 +32,7 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 				"name": "Configured provider", "kind": "custom", "enabled": true, "api": tc.api,
 				"options": map[string]any{"baseURL": "https://provider.example/v1", "apiKey": "fixture-key"},
 				"models": map[string]any{"chosen-model": map[string]any{
-					"name": "chosen-model", "tool_call": true,
+					"name":  "chosen-model",
 					"limit": map[string]any{"context": float64(64000), "output": float64(4096)},
 				}},
 			}}
@@ -116,5 +116,32 @@ func TestOptionsAllowLoopbackProviderFixture(t *testing.T) {
 	req.AgentOptions["model_provider"].(map[string]any)["base_url"] = "http://127.0.0.1:4321/v1"
 	if _, err := prepareOptions(testStateRoot(t), req, nil); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOptionsWriteNativeThinkingEffort(t *testing.T) {
+	req := testRequest(t)
+	req.ExecutionControls.ReasoningEffort = "high"
+	opts, err := prepareOptions(testStateRoot(t), req, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(opts.DataDir, "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		CustomProvider map[string]struct {
+			Models map[string]struct {
+				Thinking map[string]any `json:"thinking"`
+			} `json:"models"`
+		} `json:"custom_provider"`
+	}
+	if err := json.Unmarshal(body, &config); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]any{"effortOptions": []any{"high"}}
+	if got := config.CustomProvider["oac"].Models["fixture"].Thinking; !reflect.DeepEqual(got, want) {
+		t.Fatalf("thinking = %v", got)
 	}
 }

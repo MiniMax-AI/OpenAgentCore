@@ -296,7 +296,7 @@ func TestMCodeProcess(t *testing.T) {
 				Prompt []map[string]string `json:"prompt"`
 			}
 			_ = json.Unmarshal(frame.Params, &input)
-			if len(input.Prompt) != 2 {
+			if len(input.Prompt) != 1 {
 				os.Exit(9)
 			}
 			if strings.HasPrefix(scenario, "executor") {

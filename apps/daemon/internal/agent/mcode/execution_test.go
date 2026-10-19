@@ -43,7 +43,6 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 		func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },
 		func(r *proto.PromptRequestPayload) { r.DisableSubagents = false },
 		func(r *proto.PromptRequestPayload) { r.RequireExistingNativeSession = true },
-		func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "f"}} },
 		func(r *proto.PromptRequestPayload) {
 			r.ExecutionControls.WebSearch = &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}
 		},
@@ -57,9 +56,9 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 }
 
 func TestPublicTextDoesNotInvokeACPCommands(t *testing.T) {
-	for _, text := range []string{"/model", "/compact", "hello"} {
+	for text, want := range map[string]int{"/model": 2, "/compact": 2, "hello": 1} {
 		blocks := promptContent(text)
-		if len(blocks) != 2 || blocks[0]["text"] != text || blocks[1]["text"] != "" {
+		if len(blocks) != want || blocks[0]["text"] != text || (want == 2 && blocks[1]["text"] != "") {
 			t.Fatal(blocks)
 		}
 	}

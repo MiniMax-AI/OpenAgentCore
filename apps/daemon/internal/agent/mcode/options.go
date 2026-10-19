@@ -56,12 +56,16 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 	if err := os.WriteFile(filepath.Join(result.DataDir, "AGENTS.md"), []byte(prompt), 0o600); err != nil {
 		return result, err
 	}
-	config := map[string]any{"logLevel": "error"}
+	config := map[string]any{}
+	effort := ""
+	if req.ExecutionControls != nil {
+		effort = req.ExecutionControls.ReasoningEffort
+	}
 	result.Model = optionString(opts, "model")
 	if result.Model == "" {
 		return result, fmt.Errorf("mcode: model is required")
 	}
-	provider, err := modelProviderConfig(opts["model_provider"], result.Model)
+	provider, err := modelProviderConfig(opts["model_provider"], result.Model, effort)
 	if err != nil {
 		return result, err
 	}
@@ -71,10 +75,8 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 	// Thread goals schedule continuation Turns after the Turn ends.
 	config["askUser"] = map[string]bool{"enabled": false}
 	config["beta"] = map[string]bool{"mcodeTools": false, "threadGoal": false}
-	if workspace != nil {
-		// Unattended: asks are allowed; the few that bypass cannot lift are answered cancelled and fail the tool call.
-		config["permissionMode"] = "bypassPermissions"
-	}
+	// Unattended: tools, including MCP tools on environment none, run without approval prompts.
+	config["permissionMode"] = "bypassPermissions"
 	data, err := json.Marshal(config)
 	if err != nil {
 		return result, err
@@ -98,7 +100,6 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 	}
 	// The adapter owns the native state location, including after cold resume.
 	result.Env = append(result.Env, "MINIMAX_DATA_DIR="+result.DataDir, "HOME="+result.DataDir, "USERPROFILE="+result.DataDir)
-	result.MCP = []map[string]any{}
 	return result, nil
 }
 
@@ -115,19 +116,13 @@ func agentCapabilities(req proto.PromptRequestPayload, workspace *workspaceProfi
 	}
 	capabilities := map[string]any{
 		"tools": tools,
-		// Builtin Matrix MCP tools call MiniMax's cloud with an account credential that Core does not hold.
-		"builtinTools": []string{},
 		"features": map[string]bool{
-			// Mavis adds cron scheduling and memory that run beyond a Turn, and needs a MiniMax account.
+			// The mavis tool carries cron scheduling that runs beyond a Turn, plus session send, agent create and MCP create.
 			"mavis":      false,
 			"delegation": !req.DisableSubagents,
 			// Native web search calls MiniMax's cloud with a MiniMax account credential that Core does not hold.
 			"webSearch": false,
 		},
-	}
-	if workspace == nil {
-		// The none placement reads no Skills; a workspace keeps the native selection with the linked Skills.
-		capabilities["skills"] = []string{}
 	}
 	return capabilities
 }

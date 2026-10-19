@@ -109,10 +109,15 @@ func (s *Session) prepareNative() error {
 	s.mu.Lock()
 	s.sessionID = session.SessionID
 	s.mu.Unlock()
-	model, err := advertisedModel(session.ConfigOptions, s.opts.Model)
+	// A model with effort options is advertised only with its "thinking" variant.
+	variant := ""
+	if s.req.ExecutionControls != nil && s.req.ExecutionControls.ReasoningEffort != "" {
+		variant = "thinking"
+	}
+	model, err := advertisedModel(session.ConfigOptions, s.opts.Model, variant)
 	if err != nil && s.req.AgentSessionID != "" && !slices.ContainsFunc(session.ConfigOptions, func(option configOption) bool { return option.ID == "model" }) {
 		// Native load omits the selector when its persisted model was removed; selection still validates against the current catalog.
-		model = "m:custom_provider%3Aoac:" + strings.ReplaceAll(url.QueryEscape(s.opts.Model), "+", "%20") + ":v:"
+		model = "m:custom_provider%3Aoac:" + strings.ReplaceAll(url.QueryEscape(s.opts.Model), "+", "%20") + ":v:" + variant
 		err = nil
 	}
 	if err != nil {
@@ -121,6 +126,10 @@ func (s *Session) prepareNative() error {
 	s.nativeModel = model
 	if err := s.call("session/set_config_option", map[string]any{"sessionId": session.SessionID, "configId": "model", "value": model}, nil, false); err != nil {
 		return err
+	}
+	if variant != "" {
+		// A selected variant takes no model default, so the Session's effort is set explicitly.
+		return s.call("session/set_config_option", map[string]any{"sessionId": session.SessionID, "configId": "thinkingEffort", "value": s.req.ExecutionControls.ReasoningEffort}, nil, false)
 	}
 	return nil
 }
@@ -151,7 +160,7 @@ func (s *Session) executePrompt(prompt string) error {
 }
 
 // Select the advertised custom model, rather than using mcode's native default.
-func advertisedModel(options []configOption, model string) (string, error) {
+func advertisedModel(options []configOption, model, variant string) (string, error) {
 	for _, option := range options {
 		if option.ID != "model" {
 			continue
@@ -169,7 +178,7 @@ func advertisedModel(options []configOption, model string) (string, error) {
 			if err != nil {
 				continue
 			}
-			if provider == "custom_provider:oac" && id == model && (parts[3] == "u" || (len(parts) == 5 && parts[3] == "v" && parts[4] == "")) {
+			if provider == "custom_provider:oac" && id == model && (parts[3] == "u" || (len(parts) == 5 && parts[3] == "v" && parts[4] == variant)) {
 				return candidate.Value, nil
 			}
 		}

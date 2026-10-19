@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 4beae38b5287fd8d50509d057e92062f6acf9011cf02170fd8f83ed5e2df5f4f
+source_hash: 5486e6c406aa220d5897a2e1980b4f432bd62fe4718317842370d89f66736b0c
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -111,7 +111,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 | --- | --- | --- |
 | Codex | 仅空对象 | 推理强度属于公开的 `reasoning.effort` |
 | Claude Code | `thinking`：SDK 的 `adaptive`、`enabled` 或 `disabled` 对象 | SDK `Options.thinking`；公开的 `reasoning.effort` 对应 `Options.effort` |
-| MiniMax Code | 仅空对象 | 没有原生模型参数 |
+| MiniMax Code | 仅空对象 | 公开的 `reasoning.effort` 成为自定义模型的思考强度 |
 
 对于 `adaptive` 和 `enabled`，Claude `thinking` 接受 `display`（`summarized` 或 `omitted`）；只有 `enabled` 接受正整数 `budgetTokens`；拒绝 `maxThinkingTokens`。这些是原生设置，而不是通用推理词汇表；模型可用性和提供商支持均由 Harness 负责。
 
