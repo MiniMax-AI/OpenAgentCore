@@ -44,6 +44,17 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 - Fix shared lifecycle, admission, cancellation, reuse and performance problems in the common flow, never in a branch selected by Harness, Runtime or vendor name. Core preparation and execution never branch on operating system or Environment source; platform support requires native CI builds and automated tests.
 - Each Harness runs its own model and tool loop through a maintained upstream SDK or native protocol, in the Environment's declared workspace directory. Its native history or configuration directory is never the workspace. Never build a second executor, a hand-written model/tool loop or a compatibility framework to fabricate parity. The public API and persistence never depend on one engine's native item types.
 
+### Core assembles, Harnesses run natively
+
+Choosing a Harness and a model behaves like running that Harness locally with that model. The only differences are the cloud Environment, isolation, credentials and unattended operation.
+
+- Core assembles configuration and passes it through. When a Harness or model natively supports what an official field expresses, the adapter maps the field to the native setting and the native side runs it. If the provider cannot run it, the provider's own error returns unchanged. Core qualifies nothing on a provider's behalf. It adds nothing to model input and has no fallback, retry or substitute path. Authentication, isolation and credential protection are assembly and stay in Core.
+- A Harness joins through one declaration file, `internal/harnessconfig/<package>/declaration.go`, plus its adapter code ([declare the Harness](contracts/agents-api/harness-onboarding.md#declare-the-harness)). The declaration is the only source of support facts, and every other projection is generated from it.
+- An official field with no native home returns a typed error. Dropping it silently would be a fallback.
+- A default defined by the pinned official API applies. Everything else follows the native default, and Core sends nothing for it.
+- An adapter overrides a native default only when the Harness cannot otherwise run unattended in the cloud. The allowed reasons are: tools run without approval prompts, no ask-the-user tool, the workspace and state paths, credential isolation, bounded failure instead of waiting, no work that outlives its Turn, and no feature that needs an account credential Core does not hold. Each override has a one-line reason beside it, and the adapter guide lists it.
+- Never branch on the model or provider. When a model lacks a feature, the Harness handles it as it would locally.
+
 ### Public API
 
 - The target is the complete OpenAI Agents API (`openai/openai-python` `beta/agents`) as pinned in [`contracts/agents-api/upstream.json`](contracts/agents-api/upstream.json): paths, methods, headers, field presence, nullability, discriminators, defaults, status transitions, pagination, errors and streaming. Engine limitations are gaps to close, never grounds to narrow or redefine the contract. Operations or fields newer than the pinned baseline wait for a protocol upgrade.

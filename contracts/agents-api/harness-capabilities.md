@@ -4,6 +4,8 @@ title: "Harness capabilities"
 
 This page lists what each Harness supports on each placement. Core decides admission from the Harness's declaration in `internal/harnessconfig/<package>/declaration.go`, and the Runtime that runs the Session must also advertise the operation. The linked contracts define each operation; [Harness onboarding](./harness-onboarding.md#qualify-the-adapter) describes how a Harness is qualified.
 
+Anything this page does not list follows the Harness's native behavior with the selected model, as in a local run. Each adapter guide lists the native defaults it overrides for unattended cloud execution ([design rule](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#core-assembles-harnesses-run-natively)).
+
 | Status | Meaning |
 | --- | --- |
 | Verified | Core admits it, and real-model acceptance through the pinned official client passed on that placement |
