@@ -2,11 +2,15 @@
 package mcode
 
 import (
+	"encoding/json"
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
+
+// FunctionServerLabel is the native MCP server that carries public functions.
+const FunctionServerLabel = "functions"
 
 // Declaration is the only authored description of the MiniMax Code Harness. The
 // Runtime may narrow Capabilities for the installed host, never widen them.
@@ -43,7 +47,7 @@ var Declaration = harnessconfig.Declaration{
 		SubagentControl:          proto.CapabilitySupported,
 		DurableInputReceipts:     proto.CapabilitySupported,
 		DurableTurns:             proto.CapabilitySupported,
-		FunctionTools:            proto.CapabilityUnsupported,
+		FunctionTools:            proto.CapabilitySupported,
 		MCPHTTPTools:             proto.CapabilitySupported,
 		MCPHTTPRequired:          proto.CapabilityUnsupported,
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
@@ -63,13 +67,25 @@ var Declaration = harnessconfig.Declaration{
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
+	ValidateConfiguration: func(admission harnessconfig.Admission) error {
+		return harnessconfig.RejectSubagentTools(admission, "function")
+	},
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
-		if len(functions) > 0 {
-			return errors.New("The configured engine does not support public functions.")
+		for _, tool := range functions {
+			var schema struct {
+				Type string `json:"type"`
+			}
+			if json.Unmarshal(tool.Parameters, &schema) != nil || schema.Type != "object" {
+				return errors.New("The configured engine requires function schemas with root type object.")
+			}
 		}
 		for _, server := range mcp {
 			if server.AllowedTools != nil || server.Required {
 				return errors.New("The configured engine requires allowed_tools=null and required=false.")
+			}
+			// The adapter serves public functions under this label.
+			if server.ServerLabel == FunctionServerLabel {
+				return errors.New("The configured engine reserves the HTTP MCP label functions.")
 			}
 		}
 		return nil

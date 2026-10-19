@@ -51,7 +51,7 @@ An `agent.session.input.tool_result` event carries `success`, an optional nullab
 | --- | --- |
 | Codex | Text and ordered text/image output, passed to the Harness unchanged. An `http` or `https` image URL returns 400, because native Codex replaces a dynamic tool result that carries one with a failure |
 | Claude Code | Text output. Images only in successful results and only as canonical base64 data URLs of `image/png`, `image/jpeg`, `image/gif` or `image/webp`, because a native tool result carries no URL; an image in a failed result or a remote reference returns 400 before anything is stored, and the pending call stays open. The Harness may resize or re-encode an image, or replace one it cannot process with a text note, in its own history; public Items keep the submitted bytes |
-| MiniMax Code | No public functions |
+| MiniMax Code | Text output. An image returns 400, because native MCP image content is not qualified to reach the model |
 
 ### Application receipts
 

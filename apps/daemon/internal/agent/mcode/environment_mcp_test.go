@@ -214,14 +214,12 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 			t.Fatal("anonymous MCP inherited credentials")
 		}
 		dataDir := resource.(*executor).opts.DataDir
-		for _, name := range []string{"config.yaml", "mcp.json"} {
-			body, err := os.ReadFile(filepath.Join(dataDir, name))
-			if err != nil && !os.IsNotExist(err) {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(body), token) {
-				t.Fatal("MCP credential persisted in native configuration")
-			}
+		body, err := os.ReadFile(filepath.Join(dataDir, "config.yaml"))
+		if err != nil || strings.Contains(string(body), token) {
+			t.Fatal("MCP credential persisted in native configuration", err)
+		}
+		if _, err := os.Stat(filepath.Join(dataDir, "mcp.json")); !os.IsNotExist(err) {
+			t.Fatal("adapter wrote a native MCP file")
 		}
 	}
 }

@@ -6,9 +6,17 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 func (s *Session) emitToolStage(update toolUpdate, stage string) error {
+	// Public functions report through the function call, not as MCP observations.
+	if update.mcp != nil && update.mcp.server == declaration.FunctionServerLabel {
+		if stage == "after" && update.Status != "incomplete" {
+			s.confirmFunction(update)
+		}
+		return nil
+	}
 	payload := proto.ToolCallPayload{ID: update.ID, Name: update.Name, Stage: stage, Args: update.RawInput}
 	if stage == "after" {
 		payload.Result = map[string]any{"output": update.RawOutput, "status": update.Status}

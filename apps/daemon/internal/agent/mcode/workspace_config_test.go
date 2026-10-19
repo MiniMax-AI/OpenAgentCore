@@ -65,8 +65,8 @@ func TestWorkspaceRunsNativeToolsWithoutExtraServers(t *testing.T) {
 			if !slices.Contains(opts.Env, "OAC_RUNTIME_MCODE_BACKGROUND_BASH=off") {
 				t.Fatal("background bash is not disabled")
 			}
-			if mcp, err := os.ReadFile(filepath.Join(opts.DataDir, "mcp.json")); err != nil || string(mcp) != `{"mcpServers":{}}` {
-				t.Fatalf("native MCP configuration: %s %v", mcp, err)
+			if _, err := os.Stat(filepath.Join(opts.DataDir, "mcp.json")); !os.IsNotExist(err) {
+				t.Fatalf("adapter wrote a native MCP file: %v", err)
 			}
 		})
 	}

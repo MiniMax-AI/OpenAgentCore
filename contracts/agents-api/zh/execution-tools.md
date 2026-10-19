@@ -99,4 +99,4 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 - Bearer 认证使用附加的静态或 OAuth Vault 凭据。[Vault 凭据](vaults.md)定义选择规则，[MCP 凭据权限](environments.md#public-mcp-connection-origin)定义冻结的 Runtime 绑定。认证执行要求 `mcp_http_bearer_auth`。
 - Runtime 必须声明 `mcp_http_tools`。原生 Harness 管理发现、调用和结果；公开 `mcp_call` Item 使用原始服务器与工具名称，保留观察到的原生结果。
 
-Codex 以原生方式信任工作区，因此工作区的项目配置在启动和冷恢复时加载，未声明的服务器、apps 和 plugins 保持原生行为。在任何携带 Core 凭据的原生连接之前，它验证每个已声明服务器保持其 URL 或命令、bearer 引用和请求头，否则启动或恢复以错误失败。它拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；接受任意工具名称（原生客户端会将其规范化，适配器拒绝规范化后的冲突），并要求已连接服务器具有静态工具清单。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。
+Codex 以原生方式信任工作区，因此工作区的项目配置在启动和冷恢复时加载，未声明的服务器、apps 和 plugins 保持原生行为。在任何携带 Core 凭据的原生连接之前，它验证每个已声明服务器保持其 URL 或命令、bearer 引用和请求头，否则启动或恢复以错误失败。它拒绝原生保留标签和已存储原生 MCP 凭据。Claude 接受 ASCII 字母、数字、下划线和连字符组成的标签，但不允许 `functions`；接受任意工具名称（原生客户端会将其规范化，适配器拒绝规范化后的冲突），并要求已连接服务器具有静态工具清单。MiniMax Code 以 MCP 服务器 `functions` 提供公共函数，因此拒绝公共服务器使用该标签。匿名 Claude 请求发送空 Authorization 头以阻止原生 OAuth 注入。不支持原生 OAuth 登录。

@@ -58,6 +58,12 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 			return nil, err
 		}
 		opts.MCP = mcp
+		if opts.Functions, err = serveFunctions(req.FunctionTools); err != nil {
+			return nil, err
+		}
+		if opts.Functions != nil {
+			opts.MCP = append(opts.MCP, opts.Functions.mcpServer())
+		}
 		resource, err := newExecutor(ctx, req, opts, binary)
 		if resource == nil {
 			return nil, err
@@ -69,9 +75,13 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*executor, error) {
 	bootstrap, err := launch(ctx, req, opts, binary)
 	if err != nil {
+		opts.Functions.close()
 		return nil, err
 	}
 	e := &executor{connection: bootstrap.connection, req: req, opts: opts}
+	if opts.Functions != nil {
+		opts.Functions.owner.Store(e)
+	}
 	err = bootstrap.prepareNative()
 	e.connection.setCurrent(nil)
 	close(bootstrap.finished)
@@ -164,6 +174,7 @@ func (e *executor) Close(ctx context.Context) error {
 	}
 	e.connection.process.Cancel()
 	e.mu.Unlock()
+	e.opts.Functions.close()
 	select {
 	case <-e.connection.exited:
 	case <-ctx.Done():

@@ -53,7 +53,7 @@ source_hash: 71a5c1bb8658f1780631c022a5f28f45b4a55fc4996a428e7372a5920ed693c2
 | --- | --- |
 | Codex | 文本与有序文本/图像输出，原样传给 Harness。`http` 或 `https` 图像 URL 返回 400，因为原生 Codex 会把携带此类图像的动态工具结果替换为失败 |
 | Claude Code | 文本输出。仅成功结果可含图像，且只能是规范 base64 的 `image/png`、`image/jpeg`、`image/gif`、`image/webp` data URL，因为原生工具结果不携带 URL；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码，或将无法处理的图像替换为文本说明；公开 Item 保留提交字节 |
-| MiniMax Code | 无公开函数 |
+| MiniMax Code | 文本输出。图像返回 400，因为原生 MCP 图像内容尚未验证能到达模型 |
 
 ### 应用回执 {#application-receipts}
 

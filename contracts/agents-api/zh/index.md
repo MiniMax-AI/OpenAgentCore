@@ -113,7 +113,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **配置和工具**
 
 - 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions，也不支持图像输入。
+- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入。
+- MiniMax Code 通过原生 MCP 服务器提供公共函数，而原生 MCP 客户端会在 120 秒后使调用失败且无法更改，因此函数结果必须在 120 秒内提交。
 - 由模型推导出的推理默认值不会被解析确定。
 - MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 以及 `headers` 中的 `Authorization` 标头也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
