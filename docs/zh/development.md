@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: b3296dd624ef1cd6f4fc474c664d37380762b095a8ef4ed2bfa57cc77c5a6bad
+source_hash: 1e525c548fb44a07bcd8331b3b3768fd144c1bf029bcdc1ac9d38f9c48435b9d
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[概览](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -40,7 +40,7 @@ export OAC_TEST_OFFICIAL_SDK_PYTHON="$PWD/.venv/bin/python"
 
 ### Node 依赖边界 {#node-dependency-boundaries}
 
-每个 pnpm 模块在 `package.json` 旁拥有自己的 `pnpm-lock.yaml`。Website 和 Claude Code adapter 是独立 pnpm 项目，各自拥有工作区边界。Web/example/client 工作区使用 `sharedWorkspaceLockfile: false`：链接已声明的工作区依赖，但不共享依赖解析或虚拟存储。根脚本仅编排模块命令，不安装工具依赖。构建与测试工具应在导入或执行它们的模块中声明。MiniMax companion 使用自己的 npm manifest 和 `package-lock.json`，位于 pnpm 工作区之外。
+每个 pnpm 模块在 `package.json` 旁拥有自己的 `pnpm-lock.yaml`。Website 和 Claude Code adapter 是独立 pnpm 项目，各自拥有工作区边界。Web/example/client 工作区使用 `sharedWorkspaceLockfile: false`：链接已声明的工作区依赖，但不共享依赖解析或虚拟存储。根脚本仅编排模块命令，不安装工具依赖。构建与测试工具应在导入或执行它们的模块中声明。MiniMax companion 没有依赖，位于 pnpm 工作区之外。
 
 使用 `pnpm --dir website install --frozen-lockfile` 安装一个模块，或使用 `pnpm --filter @oac/web... install --frozen-lockfile` 连同工作区依赖一起安装。通过同一 package filter 添加或更新依赖，并提交该模块的 manifest 与 lockfile。`make node-deps` 安装所有 pnpm 模块，用于完整本地验证。Web 和示例通过明确的 `workspace:*` 依赖共享 `packages/agents-client`；它们的检查也安装该 client。组件 Make target 使用过滤后的安装与检查。CI 缓存仅使用该作业的依赖锁；[CI 选择策略](maintainers.md#continuous-integration) 负责决定修改选择哪些检查。
 

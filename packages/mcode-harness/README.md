@@ -28,4 +28,4 @@ MCODE_NATIVE_SOURCE=/absolute/upstream/checkout MCODE_CLI_DIR=/absolute/pinned/p
 
 ## Tests
 
-`make check-mcode-harness` runs the package's Node tests and syntax checks. Set `OAC_TEST_MCODE_SOURCE` to a checkout of the pinned source to also run the patch test. Qualify changes with the [Harness acceptance checklist](../../contracts/agents-api/harness-onboarding.md#qualify-the-adapter); synthetic probes and native model runs do not complete public Files/Artifacts or independent Core acceptance.
+`make check-mcode-harness` runs the package's Node tests and syntax checks. The build applies the patch and fails when the pinned source no longer matches it. Qualify changes with the [Harness acceptance checklist](../../contracts/agents-api/harness-onboarding.md#qualify-the-adapter); synthetic probes and native model runs do not complete public Files/Artifacts or independent Core acceptance.

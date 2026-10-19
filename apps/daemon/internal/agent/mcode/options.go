@@ -72,7 +72,7 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 	config["askUser"] = map[string]bool{"enabled": false}
 	config["beta"] = map[string]bool{"mcodeTools": false, "threadGoal": false}
 	if workspace != nil {
-		// Unattended: every permission ask is allowed, so no prompt can hang the Turn.
+		// Unattended: asks are allowed; the few that bypass cannot lift are answered cancelled and fail the tool call.
 		config["permissionMode"] = "bypassPermissions"
 	}
 	data, err := json.Marshal(config)
