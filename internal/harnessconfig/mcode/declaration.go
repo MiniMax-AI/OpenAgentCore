@@ -85,7 +85,7 @@ var Declaration = harnessconfig.Declaration{
 				return errors.New("The configured engine requires allowed_tools=null and required=false.")
 			}
 			// The adapter serves public functions under this label.
-			if server.ServerLabel == FunctionServerLabel {
+			if len(functions) > 0 && server.ServerLabel == FunctionServerLabel {
 				return errors.New("The configured engine reserves the HTTP MCP label functions.")
 			}
 		}

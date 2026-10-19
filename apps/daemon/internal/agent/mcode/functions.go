@@ -203,8 +203,9 @@ func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 }
 
 // confirmFunction applies a terminal native update for a function tool. Native
-// echoes the returned result, with the call ID in its _meta, when it received
-// one; any other end means native gave up on the call, such as its 120 s timeout.
+// echoes the returned result, with the call ID in its _meta, only when it
+// received one; any other end means native gave up on the call, such as its
+// 120 s timeout.
 // Native runs MCP tools one at a time, so at most one call is in flight.
 func (s *Session) confirmFunction(update toolUpdate) {
 	s.functions.mu.Lock()
@@ -230,13 +231,13 @@ func (s *Session) confirmFunction(update toolUpdate) {
 	if p == nil {
 		return
 	}
-	if id != p.call.CallID || p.result == nil || update.Status != "completed" && p.result.Success {
+	if id != p.call.CallID || p.result == nil {
 		s.release(p)
 		return
 	}
 	delete(s.functions.pending, id)
 	status := "completed"
-	if !p.result.Success {
+	if update.Status != "completed" || !p.result.Success {
 		status = "failed"
 	}
 	s.emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: p.call.Name, Stage: "after", Observation: &proto.ToolObservation{Kind: "function", Status: status, Name: p.call.Name, Arguments: p.call.Arguments, Content: &p.result.Content}})

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 var errTurnCancelled = errors.New("mcode: Turn cancelled before submission")
@@ -58,6 +60,9 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 			return nil, err
 		}
 		opts.MCP = mcp
+		if len(req.FunctionTools) > 0 && slices.ContainsFunc(mcp, func(server map[string]any) bool { return server["name"] == declaration.FunctionServerLabel }) {
+			return nil, fmt.Errorf("mcode: a Plugin MCP server uses the reserved label %s", declaration.FunctionServerLabel)
+		}
 		if opts.Functions, err = serveFunctions(req.FunctionTools); err != nil {
 			return nil, err
 		}

@@ -77,7 +77,7 @@ func validateDeclaredInputs(declaration harnessconfig.Declaration, inputs []sess
 			}
 			continue
 		}
-		if input.Kind != "tool_result" || declaration.ValidateFunctionResult == nil {
+		if input.Kind != "tool_result" {
 			continue
 		}
 		var value sessions.FunctionResultInput
@@ -88,8 +88,13 @@ func validateDeclaredInputs(declaration harnessconfig.Declaration, inputs []sess
 		if err != nil {
 			return sessions.ErrInvalidInput
 		}
-		if err := declaration.ValidateFunctionResult(result); err != nil {
-			return admissionError(err)
+		if !declaration.Capabilities.FunctionResultImages.IsSupported() && (proto.MessageInput{{Content: result.Content}}).HasImages() {
+			return sessions.ErrInvalidInput
+		}
+		if declaration.ValidateFunctionResult != nil {
+			if err := declaration.ValidateFunctionResult(result); err != nil {
+				return admissionError(err)
+			}
 		}
 	}
 	return nil
