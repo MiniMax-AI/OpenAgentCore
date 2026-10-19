@@ -2,6 +2,7 @@
 package claudesdk
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"math"
@@ -67,6 +68,7 @@ var Declaration = harnessconfig.Declaration{
 	WhitespaceOnlyText:     proto.CapabilityUnsupported,
 	ValidateConfiguration:  validateConfiguration,
 	ValidateTools:          validateTools,
+	ValidateMessageInput:   validateMessageInput,
 	ValidateFunctionResult: validateFunctionResult,
 }
 
@@ -153,14 +155,34 @@ func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) er
 
 func validateFunctionResult(result proto.FunctionResultPayload) error {
 	for _, part := range result.Content {
-		if part.Type == "input_image" && !result.Success {
+		if part.Type == "input_image" && (!result.Success || !inlineImage(*part.ImageURL)) {
 			return harnessconfig.ErrInvalidInput
 		}
 	}
-	if (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages() != nil {
-		return harnessconfig.ErrInvalidInput
+	return nil
+}
+
+// A user message image that is not a data URL becomes a native URL source.
+func validateMessageInput(input proto.MessageInput) error {
+	for _, message := range input {
+		for _, part := range message.Content {
+			if part.Type == "input_image" && strings.HasPrefix(*part.ImageURL, "data:") && !inlineImage(*part.ImageURL) {
+				return harnessconfig.ErrInvalidInput
+			}
+		}
 	}
 	return nil
+}
+
+// inlineImage reports canonical base64 in a media type the pinned SDK declares.
+func inlineImage(url string) bool {
+	header, encoded, _ := strings.Cut(url, ",")
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	switch header {
+	case "data:image/png;base64", "data:image/jpeg;base64", "data:image/gif;base64", "data:image/webp;base64":
+		return err == nil && encoded != "" && base64.StdEncoding.EncodeToString(data) == encoded
+	}
+	return false
 }
 
 func validateNativeConfig(config proto.HarnessConfig) bool {

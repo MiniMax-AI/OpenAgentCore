@@ -121,3 +121,18 @@ test("report whitespace-only steering as a rejected input", () => {
   assert.throws(() => inputs.submit({ type: "steer", input_id: "no-content", input: [{ content: [] }] }), /Invalid/);
   inputs.close();
 });
+
+test("a user message maps a remote URL and any native base64 type; a tool result takes base64 only", async () => {
+  const { nativeContent, parseInputContent } = await import("../dist/message_input.js");
+  const content = [
+    { type: "input_image", image_url: "https://example.com/a.webp" },
+    { type: "input_image", image_url: "data:image/gif;base64,AQID" },
+  ];
+  assert.deepEqual(nativeContent({ content }, true), [
+    { type: "image", source: { type: "url", url: "https://example.com/a.webp" } },
+    { type: "image", source: { type: "base64", media_type: "image/gif", data: "AQID" } },
+  ]);
+  assert.throws(() => parseInputContent([content[0]]), /Unsupported image/);
+  assert.throws(() => parseInputContent([{ type: "input_image", image_url: "data:image/bmp;base64,AQID" }], true), /Unsupported image/);
+  assert.equal(parseInputContent([content[1]]).length, 1);
+});

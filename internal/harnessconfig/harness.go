@@ -93,6 +93,8 @@ type Declaration struct {
 	ValidateConfiguration func(Admission) error
 	// ValidateTools adds restrictions on resolved function and MCP tools.
 	ValidateTools func([]proto.FunctionTool, []proto.MCPHTTPServer) error
+	// ValidateMessageInput adds restrictions on messages that carry images.
+	ValidateMessageInput func(proto.MessageInput) error
 	// ValidateFunctionResult adds restrictions on submitted function results.
 	ValidateFunctionResult func(proto.FunctionResultPayload) error
 }

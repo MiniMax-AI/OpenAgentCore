@@ -21,8 +21,7 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | Text Turns, active input, cancellation, restart and continuation | Verified on all placements | Verified on all placements | Verified on all placements |
 | [Files and Artifacts](./environment-files.md) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted |
 | [Whitespace-only message text](./message-content.md) | Admitted; delivered unchanged | Rejected | Rejected |
-| [Inline PNG and JPEG message images](./message-content.md) | Verified on all placements | Verified on all placements | Rejected |
-| Remote image URLs | Rejected | Rejected | Rejected |
+| [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
 | `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | Rejected |
 | `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | Rejected | Rejected |
 | `service_tier` other than `auto` | `default`, `flex`, `priority`: admitted | Rejected | Rejected |
@@ -36,7 +35,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | Operation | Codex | Claude Code | MiniMax Code |
 | --- | --- | --- | --- |
 | [Public functions](./execution-tools.md#functions) with text results | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; object-root schemas only | Rejected |
-| [Function results with images](./message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted | Verified on all placements; successful inline PNG or JPEG results only | Rejected |
+| [Function results with images](./message-content.md#function-results) | Verified: `none`, hosted; admitted: self-hosted; remote URLs: rejected | Successful results only; PNG and JPEG data URLs: verified on all placements; GIF and WebP: admitted | Rejected |
 | [Structured output](./execution-tools.md#structured-output) | Admitted on all placements | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |

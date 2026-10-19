@@ -28,7 +28,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | --- | --- | --- | --- |
 | Agents | create, retrieve, update, list, delete | Implemented. Every pinned setting is saved; Session admission runs a subset | [Agents](./wire-semantics.md#agents) |
 | Sessions | create (JSON or stream), retrieve, update, list, delete | Implemented. Update takes `metadata` only; deletion requires an idle or failed Session | [Sessions](./wire-semantics.md#sessions), [creation streaming](./sessions-events.md#creation-streaming) |
-| Session events | create, stream | Partial: messages with text and inline images, cancellation, function results; the stream is live only | [Sessions, events and history](./sessions-events.md), [message content](./message-content.md) |
+| Session events | create, stream | Partial: messages with text and images, cancellation, function results; the stream is live only | [Sessions, events and history](./sessions-events.md), [message content](./message-content.md) |
 | Turns | retrieve, list | Implemented; Session Turn routes hold root Turns only | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Items | list | Partial: messages, commands, MCP calls, functions, web search, reasoning and Subagent coordination Items; other native variants are not projected | [Turns and Items](./sessions-events.md#turns-and-items) |
 | Artifacts | retrieve, list, delete, content | Implemented | [Environment files and Artifacts](./environment-files.md) |
@@ -120,7 +120,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Pinned Codex can lose command output emitted before its stream subscription.
 - Claude Code and MiniMax Code report no public usage.
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
-- Images must be inline PNG or JPEG data URIs; remote URLs, `file_id` and `detail` are rejected.
+- `file_id` and `detail` on images are rejected; each Harness declares which `image_url` values it accepts ([message content](./message-content.md#images)).
 
 **Environments and Templates**
 

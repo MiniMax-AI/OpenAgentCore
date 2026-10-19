@@ -50,8 +50,11 @@ func validateMessageImages(declaration harnessconfig.Declaration, input proto.Me
 	if !input.HasImages() {
 		return nil
 	}
-	if !declaration.Capabilities.MessageImages.IsSupported() || input.ValidateInlineImages() != nil {
+	if !declaration.Capabilities.MessageImages.IsSupported() {
 		return sessions.ErrInvalidInput
+	}
+	if declaration.ValidateMessageInput != nil {
+		return admissionError(declaration.ValidateMessageInput(input))
 	}
 	return nil
 }
