@@ -31,7 +31,7 @@ export function parseHTTPServers(value: unknown): HTTPServer[] | undefined {
         server.server_label === "functions" || labels.has(server.server_label) ||
         typeof server.server_url !== "string" ||
         (server.allowed_tools !== null && (!Array.isArray(server.allowed_tools) ||
-          server.allowed_tools.some((name: unknown) => typeof name !== "string" || !/^[a-zA-Z0-9_.-]+$/.test(name))))) {
+          server.allowed_tools.some((name: unknown) => typeof name !== "string")))) {
       throw new Error("invalid_request");
     }
     const url = new URL(server.server_url);

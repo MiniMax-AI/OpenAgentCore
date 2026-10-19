@@ -47,7 +47,7 @@ func TestHTTPMCPDeclaration(t *testing.T) {
 				req.DisableExecutionEnvironment = false
 			}
 			start, _, err := prepare(config, req)
-			valid := mode == "unrestricted" || mode == "selected" || mode == "empty" || mode == "nil-slice" || mode == "auth" || mode == "required" || mode == "query"
+			valid := mode == "unrestricted" || mode == "selected" || mode == "empty" || mode == "nil-slice" || mode == "auth" || mode == "required" || mode == "query" || mode == "wildcard"
 			if (err == nil) != valid {
 				t.Fatalf("unexpected admission: %v", err)
 			}

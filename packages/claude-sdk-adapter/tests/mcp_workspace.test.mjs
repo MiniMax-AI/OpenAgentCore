@@ -31,8 +31,8 @@ function fixture(t, declarations = [stdio]) {
 test("installed MCP projection uses the common Runtime launcher", t => {
   const { request } = fixture(t);
   assert.deepEqual(parseStart(JSON.stringify(request)), request);
-  assert.throws(() => parseStart(JSON.stringify({ ...request, observe_messages: true,
-    output_format: { type: "json_schema", schema: { type: "object" } } })), /invalid_request/);
+  const structured = { ...request, observe_messages: true, output_format: { type: "json_schema", schema: { type: "object" } } };
+  assert.deepEqual(parseStart(JSON.stringify(structured)), structured);
   assert.equal(immediateInput(request), undefined);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
   for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, env: { TOKEN: "secret" } }],

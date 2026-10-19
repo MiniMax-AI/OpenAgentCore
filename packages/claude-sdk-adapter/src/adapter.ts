@@ -117,7 +117,8 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         // Environment none keeps no workspace tools and approves only Core's function and MCP tools. The host's
         // settings, memory files and MCP servers belong to no Session.
         ...(workspace ? {} : {
-          tools: subagents ? ["Agent", "SendMessage"] : request.tool_search ? ["ToolSearch"] : [], allowedTools: profile?.allowed ?? allowed,
+          tools: [...(subagents ? ["Agent", "SendMessage"] : []), ...(request.tool_search ? ["ToolSearch"] : [])],
+          allowedTools: [...(profile?.allowed ?? allowed), ...(profile && request.tool_search ? ["ToolSearch"] : [])],
           settingSources: [], strictMcpConfig: true,
           canUseTool: async () => ({ behavior: "deny" as const, message: "Tools are unavailable in this execution profile." }),
         }),
@@ -136,7 +137,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
           return child;
         },
     };
-    if (request.tool_search) options.env = toolSearchEnvironment(options.env ?? process.env, request.model);
+    if (request.tool_search) options.env = toolSearchEnvironment(options.env ?? process.env);
     if(turns) {
       for(const matchers of Object.values(options.hooks ?? {})) for(const matcher of matchers ?? []) {
         matcher.hooks=matcher.hooks.map(hook=>(...args)=>turns.track(()=>hook(...args)));
@@ -200,7 +201,12 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       if (message.type === "system" && message.subtype === "init") {
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
-        if (profile) profile.verify(message.tools, await stream.mcpServerStatus(), nativeID, !workspace);
+        if (profile) {
+          // Native ToolSearch and StructuredOutput are added beside the declared MCP inventory.
+          const native = [...(request.tool_search ? ["ToolSearch"] : []), ...(structured ? ["StructuredOutput"] : [])];
+          if (native.some(name => !message.tools.includes(name))) throw new Error("unexpected native MCP inventory");
+          profile.verify(message.tools.filter(name => !native.includes(name)), await stream.mcpServerStatus(), nativeID, !workspace);
+        }
         if (workspace) {
           // Native tools and settings may add servers and tools, but every tool and Skill Core declared must still be present.
           const declared = [...names, ...(workspace.skillNames.length ? ["Skill"] : []), ...(request.tool_search ? ["ToolSearch"] : []),

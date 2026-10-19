@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: c31a323311129a5d005cec014003634c0e4e30ed824798cdda3ee10f2902efd9
+source_hash: 4cea6f45872bd29a38f800f58801a4d271142612fb853a023952323895d6eed3
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -49,7 +49,7 @@ source_hash: c31a323311129a5d005cec014003634c0e4e30ed824798cdda3ee10f2902efd9
 | [Subagent](subagents.md) | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 | 已验证：托管；已准入：`none`、自托管 |
 | Subagent 与函数或 HTTP MCP 同时使用 | 已拒绝 | 已拒绝 | 已拒绝 |
 
-Claude 结构化输出要求单 Agent、medium verbosity，且无 Skill、Plugin、能力目录、MCP 或 `tool_search`。Claude 延迟发现要求单 Agent，除 `tool_search` 与禁用控制项外仅函数工具，无 Skill、Plugin 或能力目录，也无结构化输出。Claude 在工作区位置需要每种操作的打包桥接功能（`workspace_functions`、`workspace_structured_output`、`workspace_tool_search`、`workspace_mcp_http`）。
+Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、Plugin、能力目录、MCP 和 `tool_search` 组合。Claude 延迟发现可与 MCP、Skill、Plugin、能力目录和结构化输出组合。Subagent 配置不携带函数工具，因此延迟发现与 `multi_agent` 的组合仍被拒绝。`tool_search` 是否对所配置的模型、提供商和 beta 设置生效，由 Claude Code 决定。Claude 在工作区位置需要每种操作的打包桥接功能（`workspace_functions`、`workspace_structured_output`、`workspace_tool_search`、`workspace_mcp_http`）。
 
 ## Environment 准备 {#environment-preparation}
 

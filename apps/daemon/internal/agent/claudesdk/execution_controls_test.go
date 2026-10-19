@@ -141,9 +141,10 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 		t.Fatal("lossy schema accepted")
 	}
 	request.ExecutionControls.OutputFormat.Schema = schema
-	request.DisableSubagents = false
-	if _, _, err := prepare(config, request); err == nil {
-		t.Fatal("unqualified subagent combination accepted")
+	request.DisableExecutionEnvironment = true
+	request.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
+	if start, _, err := prepare(config, request); err != nil || start.OutputFormat == nil {
+		t.Fatal("native structured output was narrowed by MCP", err)
 	}
 }
 
@@ -159,11 +160,12 @@ func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing
 	if err != nil || !start.ToolSearch || !reflect.DeepEqual(start.Functions, request.FunctionTools) {
 		t.Fatal("function discovery changed native definitions", err)
 	}
-	request.DisableSubagents = false
-	if _, _, err := prepare(config, request); err == nil {
-		t.Fatal("unqualified combination admitted")
+	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(`{"type":"object"}`)}}
+	request.ObserveMessages = true
+	if start, _, err := prepare(config, request); err != nil || !start.ToolSearch || start.OutputFormat == nil {
+		t.Fatal("native tool search was narrowed by structured output", err)
 	}
-	request.DisableSubagents = true
+	request.ExecutionControls = nil
 	request.ToolSearch = false
 	if _, _, err := prepare(config, request); err == nil {
 		t.Fatal("deferred definitions became eager")
