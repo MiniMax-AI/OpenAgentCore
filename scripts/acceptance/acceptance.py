@@ -112,14 +112,6 @@ def settings(args):
         key = provider["api_key"]
         require(isinstance(key, str) and key and len(key) <= 16384
                 and not any(c in key for c in "\r\n\0"), "invalid_model_provider_key")
-        for name in ("context_window", "max_output_tokens"):
-            require(type(provider.get(name, 0)) is int and provider.get(name, 0) >= 0,
-                    "invalid_model_limits")
-        if PROVIDERS[harness][protocol]["requires_token_limits"]:
-            require(provider.get("context_window", 0) > 0 and provider.get("max_output_tokens", 0) > 0,
-                    "harness_requires_positive_model_limits")
-        if provider.get("context_window") and provider.get("max_output_tokens"):
-            require(provider["max_output_tokens"] <= provider["context_window"], "invalid_model_limits")
         secrets.append(key)
     return token, models, secrets
 

@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 47c626b6be9a45d18e566d17556321a484356e825e0d5f0dd07385ccd6e50496
+source_hash: 83f4c5d7c0e5c748087e6baa51c792a7cd831e217b47980c65db7d04e9222140
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -147,7 +147,7 @@ Core 可以运行多种 Harness，并允许接入你自己的模型访问方式�
 | 字段 | 所在位置 | 值 |
 | --- | --- | --- |
 | `harness` | Agent，或 Session 的内联 `agent` | `codex`、`claude_sdk` 或 `mcode` |
-| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`；对于 `mcode`，还包括 `context_window` 和 `max_output_tokens`。协议必须是该 Harness 的原生协议之一 |
+| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`，以及可选的 `context_window` 和 `max_output_tokens`。协议必须是该 Harness 的原生协议之一 |
 | `harness_config` | Agent、内联 `agent`，或 Session 创建请求（顶层，优先） | Harness 的原生模型参数，例如 Claude Code 的 `thinking` |
 | `environment` | `openai_hosted` 或 `self_hosted` Session 创建请求（顶层） | 可移植的准备配置：`environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins`、`capability_directories`。同一字段不能也出现在 `environment` 中；请参阅 [Environments](../../../contracts/agents-api/zh/environments.md#preparation-order) |
 | `installation` | 只读，适用于 `self_hosted` Session | 在你的计算机上运行的短期安装命令；请参阅 [运行自托管 Session](../getting-started/self-hosted.md) |

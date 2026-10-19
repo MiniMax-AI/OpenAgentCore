@@ -62,7 +62,7 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 
 func TestSessionModelOptionsValidateAdmission(t *testing.T) {
 	provider := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://example.com/v1", APIKey: "private-key"}
-	for _, engine := range []string{"mcode", "unknown", ""} {
+	for _, engine := range []string{"unknown", ""} {
 		if _, err := resolvedSessionModelOptions(provider, engine); err == nil {
 			t.Fatalf("invalid provider/harness configuration accepted for %q", engine)
 		}

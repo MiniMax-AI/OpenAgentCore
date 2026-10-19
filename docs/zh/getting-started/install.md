@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 6bde0267753b797a6ada321509d9ac4ab2270021069308f4f07bb33c9d3e03cd
+source_hash: e638457e86e53dac6f049c96e1a1dbd91646a26b1b6179f90c5b39f8750425b5
 ---
 
 本指南带运维人员从一台空主机到可用的安装：在 Docker 下运行的 Core、Web 控制台和 PostgreSQL，一个沙箱提供商，一个默认模型和第一个项目 API 密钥。Web 的 **概览** 通过 **新手引导** 清单跟踪同样的步骤。
@@ -85,7 +85,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 没有自带模型提供商的 Core 托管 Session 使用其 Harness 的默认模型。参阅[默认模型](../configuration.md#default-models)。
 
 1. 打开 **设置 → 模型与凭据**。在 **默认模型配置** 下，标记为 **默认** 的 Harness 显示 **未设置模型提供商**。除非修改了 `OAC_DEFAULT_HARNESS`，否则为 Codex，参阅[设置](../configuration.md#settings)。
-2. 选择 **设置**，输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。MiniMax Code 还需要上下文窗口和最大输出 token 数。
+2. 选择 **设置**，输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。
 3. 保存。该 Harness 显示 **就绪**。
 
 ## 签发项目 API 密钥 {#issue-a-project-api-key}

@@ -13,12 +13,12 @@ func TestProjectionMatchesEveryDeclaration(t *testing.T) {
 	}
 	for _, projected := range got {
 		declaration, ok := builtin.Registry().Lookup(projected.Kind)
-		if !ok || projected.Label != declaration.Label || len(projected.Providers) != len(declaration.Providers) {
+		if !ok || projected.Label != declaration.Label || len(projected.Protocols) != len(declaration.Providers) {
 			t.Fatalf("%s: projection differs from its declaration", projected.Kind)
 		}
-		for _, declared := range declaration.Providers {
-			if projected.Providers[declared.Protocol].RequiresTokenLimits != declared.RequiresTokenLimits {
-				t.Fatalf("%s/%s: configuration rule differs", projected.Kind, declared.Protocol)
+		for i, declared := range declaration.Providers {
+			if projected.Protocols[i] != declared.Protocol {
+				t.Fatalf("%s: protocol order differs", projected.Kind)
 			}
 		}
 	}

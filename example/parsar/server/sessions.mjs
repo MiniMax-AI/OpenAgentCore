@@ -18,7 +18,7 @@ function requestFor(store, id, body) {
   const restriction = sessionRestriction(agent, runtime);
   if (restriction) throw new AppError(400, restriction);
   let modelProvider;
-  if (environment.type !== "none" && agent.harness !== "mcode") {
+  if (environment.type !== "none") {
     const provider = store.get("providers", model.provider_id);
     if (!provider?.base_url?.startsWith("https://") || !provider.api_key)
       throw new AppError(

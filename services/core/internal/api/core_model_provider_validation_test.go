@@ -54,8 +54,6 @@ func TestCoreModelProviderValidationFields(t *testing.T) {
 		{"protocol", "codex", `{"protocol":"private-protocol","base_url":"https://example.test","api_key":"private-key"}`, "model_provider_protocol_unsupported", "protocol", map[string]any{"harness": "codex", "allowed_protocols": []any{"responses"}}},
 		{"key", "codex", `{"protocol":"responses","base_url":"https://example.test","api_key":"private-key\n"}`, "model_provider_api_key_invalid", "api_key", map[string]any{"max_length": float64(16384)}},
 		{"output", "codex", `{"protocol":"responses","base_url":"https://example.test","api_key":"private-key","context_window":1,"max_output_tokens":2}`, "model_provider_token_limits_invalid", "max_output_tokens", nil},
-		{"context required", "mcode", `{"protocol":"anthropic","base_url":"https://example.test","api_key":"private-key"}`, "model_provider_token_limits_invalid", "context_window", nil},
-		{"output required", "mcode", `{"protocol":"anthropic","base_url":"https://example.test","api_key":"private-key","context_window":2}`, "model_provider_token_limits_invalid", "max_output_tokens", nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := projectKeyHTTP(h, http.MethodPut, "/core/v1/harnesses/"+tc.harness+"/model-configuration", "admin", `{"model":"fixture","model_provider":`+tc.body+`}`)

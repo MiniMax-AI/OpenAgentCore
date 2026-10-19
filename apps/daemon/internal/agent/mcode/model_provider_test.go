@@ -43,6 +43,43 @@ func TestOptionsModelProviderProtocols(t *testing.T) {
 	}
 }
 
+func TestOptionsOmitAbsentTokenLimits(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		unset []string
+		want  any
+	}{
+		{"none", []string{"context_window", "max_output_tokens"}, nil},
+		{"context only", []string{"max_output_tokens"}, map[string]any{"context": float64(64000)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := testRequest(t)
+			for _, field := range tc.unset {
+				delete(req.AgentOptions["model_provider"].(map[string]any), field)
+			}
+			opts, err := prepareOptions(testStateRoot(t), req, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := os.ReadFile(filepath.Join(opts.DataDir, "config.yaml"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var config struct {
+				CustomProvider map[string]struct {
+					Models map[string]map[string]any `json:"models"`
+				} `json:"custom_provider"`
+			}
+			if err := json.Unmarshal(body, &config); err != nil {
+				t.Fatal(err)
+			}
+			if got := config.CustomProvider["oac"].Models[opts.Model]["limit"]; !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("limit = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestOptionsRejectInvalidProvider(t *testing.T) {
 	for _, tc := range []struct {
 		name, field string
@@ -52,8 +89,7 @@ func TestOptionsRejectInvalidProvider(t *testing.T) {
 		{"protocol alias", "protocol", "chat-completions"},
 		{"remote HTTP", "base_url", "http://provider.example/v1"},
 		{"empty key", "api_key", ""},
-		{"missing context", "context_window", 0},
-		{"missing output", "max_output_tokens", 0},
+		{"output without context", "context_window", 0},
 		{"excess output", "max_output_tokens", 64001},
 		{"native options", "options", map[string]any{"apiKey": "fixture-key"}},
 	} {

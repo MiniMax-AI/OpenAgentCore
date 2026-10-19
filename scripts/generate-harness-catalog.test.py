@@ -22,11 +22,10 @@ schema = module("schema", "patch-agents-openapi.py")
 
 class HarnessCatalogTests(unittest.TestCase):
     def test_installer_projection_includes_every_declaration(self):
-        providers = {"additional": {"responses": {"requires_token_limits": True},
-                                    "anthropic": {"requires_token_limits": False}}, "native": {}}
+        protocols = {"additional": ["responses", "anthropic"], "native": []}
         namespace = {}
-        exec(catalog.render_installer(providers), namespace)
-        self.assertEqual(namespace["PROVIDERS"], providers)
+        exec(catalog.render_installer(protocols), namespace)
+        self.assertEqual(namespace["PROVIDERS"], protocols)
 
     def test_new_declaration_reaches_all_projections(self):
         harnesses = [{"kind": "example", "label": "Example", "package": "example"}]
