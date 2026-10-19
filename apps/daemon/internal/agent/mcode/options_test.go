@@ -53,8 +53,8 @@ func TestOptionsRefreshManagedState(t *testing.T) {
 	if _, set := cfg["permissionMode"]; set {
 		t.Fatal("text profile restated the native permission mode")
 	}
-	if cfg["skills"].(map[string]any)["external"].(map[string]any)["enabled"] != false {
-		t.Fatal("external discovery enabled")
+	if _, set := cfg["skills"]; set {
+		t.Fatal("native Skill discovery was overridden")
 	}
 	if skills, ok := cfg["agents"].(map[string]any)["default"].(map[string]any)["skills"].([]any); !ok || len(skills) != 0 {
 		t.Fatal("text profile selected native Skills")
