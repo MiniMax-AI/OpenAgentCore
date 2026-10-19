@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
 // fakeExecutionStorage is strict lease-bound Session storage: a method whose
@@ -180,6 +181,20 @@ func TestRecordFunctionCall(t *testing.T) {
 			assertCalls(t, f.fakeTx, "MatchFunctionCall "+testTurn+" call")
 		}
 	})
+	t.Run("a Subagent call takes the identity of the child's function Item", func(t *testing.T) {
+		call := testCall
+		call.Subagent, call.SubagentTurn = "child", "child-turn"
+		hidden := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadNativeSubagent: native(NativeSubagent{ID: testSubagent})}}
+		if err := functionOperations(t, hidden, turnWith(TurnInProgress)).RecordFunctionCall(t.Context(), testTenant, testSession, testTurn, call); !errors.Is(err, ErrInvalidInput) {
+			t.Errorf("hidden child: %v", err)
+		}
+		want := items.Identity(items.Identity(testSubagent, "turn:child-turn"), "tool:native-call")
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadNativeSubagent: native(NativeSubagent{ID: testSubagent, Visible: true})}, matchFunctionCall: returns(FunctionCallMatch{Recorded: true, Matches: true})}
+		if err := functionOperations(t, f, turnWith(TurnWaiting)).RecordFunctionCall(t.Context(), testTenant, testSession, testTurn, call); err != nil {
+			t.Fatal(err)
+		}
+		assertCalls(t, f.fakeTx, "LoadNativeSubagent child", "MatchFunctionCall "+testTurn+" "+want)
+	})
 	t.Run("an invalid call reaches no storage", func(t *testing.T) {
 		call := testCall
 		call.Name = ""
@@ -269,4 +284,44 @@ func TestPendingFunctionCalls(t *testing.T) {
 	if calls, err := functionOperations(t, failing, turnWith(TurnWaiting)).PendingFunctionCalls(t.Context(), testTenant, testSession, testTurn); !errors.Is(err, errStorage) || calls != nil {
 		t.Fatal(calls, err)
 	}
+}
+
+func TestWithdrawFunctionCall(t *testing.T) {
+	stored := FunctionCall{CallID: "call"}
+	t.Run("last withdrawal resumes the Turn", func(t *testing.T) {
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t, loadUsage: returns(json.RawMessage(`{}`)), appendChanges: func([]SessionChange) error { return nil },
+			applyTurnStatus: func(TurnStatusChange) (Turn, error) { return turnWith(TurnInProgress), nil }},
+			loadFunctionCall: func() (FunctionCall, bool, error) { return stored, true, nil }, withdrawFunctionCall: done,
+			loadPendingFunctionCalls: returns([]FunctionCall{})}
+		if err := functionOperations(t, f, turnWith(TurnWaiting)).WithdrawFunctionCall(t.Context(), testTenant, testSession, testTurn, testCall); err != nil {
+			t.Fatal(err)
+		}
+		assertCalls(t, f.fakeTx, "LoadFunctionCall "+testTurn+" call", "WithdrawFunctionCall "+testTurn+" call", "LoadPendingFunctionCalls "+testTurn,
+			"ApplyTurnStatus "+testTurn+" waiting in_progress {}", "AppendChanges agent.session.turn.in_progress", "LoadUsage", "AppendChanges agent.session.in_progress")
+	})
+	t.Run("repeated withdrawal records nothing", func(t *testing.T) {
+		withdrawn := stored
+		withdrawn.Withdrawn = true
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}, loadFunctionCall: func() (FunctionCall, bool, error) { return withdrawn, true, nil }}
+		if err := functionOperations(t, f, turnWith(TurnInProgress)).WithdrawFunctionCall(t.Context(), testTenant, testSession, testTurn, testCall); err != nil {
+			t.Fatal(err)
+		}
+		assertCalls(t, f.fakeTx, "LoadFunctionCall "+testTurn+" call")
+	})
+	t.Run("an applied call conflicts", func(t *testing.T) {
+		applied := stored
+		applied.Applied = true
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}, loadFunctionCall: func() (FunctionCall, bool, error) { return applied, true, nil }}
+		if err := functionOperations(t, f, turnWith(TurnWaiting)).WithdrawFunctionCall(t.Context(), testTenant, testSession, testTurn, testCall); !errors.Is(err, ErrTurnConflict) {
+			t.Fatal(err)
+		}
+	})
+	t.Run("a malformed Subagent identity is invalid input", func(t *testing.T) {
+		call := testCall
+		call.Subagent, call.SubagentTurn = "child\n", "child-turn"
+		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}}
+		if err := functionOperations(t, f, turnWith(TurnWaiting)).WithdrawFunctionCall(t.Context(), testTenant, testSession, testTurn, call); !errors.Is(err, ErrInvalidInput) {
+			t.Fatal(err)
+		}
+	})
 }

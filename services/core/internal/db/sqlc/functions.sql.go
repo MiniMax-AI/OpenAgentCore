@@ -74,7 +74,7 @@ func (q *Queries) FunctionItemResult(ctx context.Context, arg FunctionItemResult
 }
 
 const getFunctionCall = `-- name: GetFunctionCall :one
-SELECT f.session_id, f.turn_id, f.call_id, f.executor_call_id, f.name, f.arguments, f.result, f.applied, f.created_at FROM function_calls f JOIN sessions s ON s.id = f.session_id
+SELECT f.session_id, f.turn_id, f.call_id, f.executor_call_id, f.name, f.arguments, f.result, f.applied, f.created_at, f.withdrawn FROM function_calls f JOIN sessions s ON s.id = f.session_id
 WHERE s.tenant_id = $1 AND f.session_id = $2 AND f.turn_id = $3 AND f.call_id = $4
 `
 
@@ -103,13 +103,14 @@ func (q *Queries) GetFunctionCall(ctx context.Context, arg GetFunctionCallParams
 		&i.Result,
 		&i.Applied,
 		&i.CreatedAt,
+		&i.Withdrawn,
 	)
 	return i, err
 }
 
 const listPendingFunctionCalls = `-- name: ListPendingFunctionCalls :many
-SELECT f.session_id, f.turn_id, f.call_id, f.executor_call_id, f.name, f.arguments, f.result, f.applied, f.created_at FROM function_calls f JOIN turns t ON t.session_id = f.session_id AND t.id = f.turn_id
-WHERE f.session_id = $1 AND f.turn_id = $2 AND NOT f.applied
+SELECT f.session_id, f.turn_id, f.call_id, f.executor_call_id, f.name, f.arguments, f.result, f.applied, f.created_at, f.withdrawn FROM function_calls f JOIN turns t ON t.session_id = f.session_id AND t.id = f.turn_id
+WHERE f.session_id = $1 AND f.turn_id = $2 AND NOT f.applied AND NOT f.withdrawn
     AND t.status IN ('in_progress', 'waiting') AND t.cancel_requested_at IS NULL
 ORDER BY f.created_at, f.call_id
 `
@@ -138,6 +139,7 @@ func (q *Queries) ListPendingFunctionCalls(ctx context.Context, arg ListPendingF
 			&i.Result,
 			&i.Applied,
 			&i.CreatedAt,
+			&i.Withdrawn,
 		); err != nil {
 			return nil, err
 		}
@@ -180,7 +182,8 @@ func (q *Queries) MatchFunctionCall(ctx context.Context, arg MatchFunctionCallPa
 }
 
 const matchFunctionResult = `-- name: MatchFunctionResult :one
-SELECT (result IS NOT NULL)::boolean AS submitted, COALESCE(result = $1::jsonb, false)::boolean AS matches
+SELECT (result IS NOT NULL)::boolean AS submitted, COALESCE(result = $1::jsonb, false)::boolean AS matches,
+    withdrawn
 FROM function_calls
 WHERE session_id = $2 AND turn_id = $3 AND call_id = $4
 `
@@ -195,6 +198,7 @@ type MatchFunctionResultParams struct {
 type MatchFunctionResultRow struct {
 	Submitted bool `json:"submitted"`
 	Matches   bool `json:"matches"`
+	Withdrawn bool `json:"withdrawn"`
 }
 
 func (q *Queries) MatchFunctionResult(ctx context.Context, arg MatchFunctionResultParams) (MatchFunctionResultRow, error) {
@@ -205,7 +209,7 @@ func (q *Queries) MatchFunctionResult(ctx context.Context, arg MatchFunctionResu
 		arg.CallID,
 	)
 	var i MatchFunctionResultRow
-	err := row.Scan(&i.Submitted, &i.Matches)
+	err := row.Scan(&i.Submitted, &i.Matches, &i.Withdrawn)
 	return i, err
 }
 
@@ -245,5 +249,20 @@ func (q *Queries) SubmitFunctionResult(ctx context.Context, arg SubmitFunctionRe
 		arg.CallID,
 		arg.Result,
 	)
+	return err
+}
+
+const withdrawFunctionCall = `-- name: WithdrawFunctionCall :exec
+UPDATE function_calls SET withdrawn = true WHERE session_id = $1 AND turn_id = $2 AND call_id = $3 AND NOT applied
+`
+
+type WithdrawFunctionCallParams struct {
+	SessionID pgtype.UUID `json:"session_id"`
+	TurnID    pgtype.UUID `json:"turn_id"`
+	CallID    string      `json:"call_id"`
+}
+
+func (q *Queries) WithdrawFunctionCall(ctx context.Context, arg WithdrawFunctionCallParams) error {
+	_, err := q.db.Exec(ctx, withdrawFunctionCall, arg.SessionID, arg.TurnID, arg.CallID)
 	return err
 }

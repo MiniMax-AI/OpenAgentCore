@@ -336,7 +336,7 @@ func (s *Session) emitDoneAt(content string, usage *TurnUsage, completedAt *int6
 		return
 	}
 	s.stopSteering()
-	s.stopFunctionCalls()
+	s.stopFunctionCalls(s.subagents != nil)
 	doneMeta := map[string]any{}
 	if tid := s.currentThreadID(); tid != "" {
 		doneMeta[proto.DoneMetaAgentSessionID] = tid
@@ -376,7 +376,7 @@ func (s *Session) emitTerminalFailure(message string, asError bool, failure prot
 		return
 	}
 	s.stopSteering()
-	s.stopFunctionCalls()
+	s.stopFunctionCalls(s.subagents != nil)
 	// Always log: this is the only place the daemon decides "the prompt is
 	// over, here's what went wrong (if anything)". Without this, post-
 	// mortem requires correlating server-side TypeError frames against

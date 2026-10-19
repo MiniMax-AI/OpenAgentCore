@@ -69,9 +69,6 @@ var Declaration = harnessconfig.Declaration{
 		return rejectRemoteImages(proto.MessageInput{{Content: result.Content}})
 	},
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		if err := harnessconfig.RejectSubagentTools(admission, "function", "mcp"); err != nil {
-			return err
-		}
 		// Subagent observation turns native code_mode off.
 		if admission.MultiAgent && enablesProgrammaticToolCalling(admission.Tools) {
 			return errors.New("programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness.")

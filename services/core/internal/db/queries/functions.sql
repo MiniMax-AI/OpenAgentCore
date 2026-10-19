@@ -14,7 +14,7 @@ WHERE s.tenant_id = $1 AND f.session_id = $2 AND f.turn_id = $3 AND f.call_id = 
 
 -- name: ListPendingFunctionCalls :many
 SELECT f.* FROM function_calls f JOIN turns t ON t.session_id = f.session_id AND t.id = f.turn_id
-WHERE f.session_id = $1 AND f.turn_id = $2 AND NOT f.applied
+WHERE f.session_id = $1 AND f.turn_id = $2 AND NOT f.applied AND NOT f.withdrawn
     AND t.status IN ('in_progress', 'waiting') AND t.cancel_requested_at IS NULL
 ORDER BY f.created_at, f.call_id;
 
@@ -24,7 +24,8 @@ SELECT EXISTS (
 )::boolean AS found;
 
 -- name: MatchFunctionResult :one
-SELECT (result IS NOT NULL)::boolean AS submitted, COALESCE(result = sqlc.arg(result)::jsonb, false)::boolean AS matches
+SELECT (result IS NOT NULL)::boolean AS submitted, COALESCE(result = sqlc.arg(result)::jsonb, false)::boolean AS matches,
+    withdrawn
 FROM function_calls
 WHERE session_id = sqlc.arg(session_id) AND turn_id = sqlc.arg(turn_id) AND call_id = sqlc.arg(call_id);
 
@@ -33,6 +34,9 @@ UPDATE function_calls SET result = $4 WHERE session_id = $1 AND turn_id = $2 AND
 
 -- name: ApplyFunctionResult :exec
 UPDATE function_calls SET applied = true WHERE session_id = $1 AND turn_id = $2 AND call_id = $3;
+
+-- name: WithdrawFunctionCall :exec
+UPDATE function_calls SET withdrawn = true WHERE session_id = $1 AND turn_id = $2 AND call_id = $3 AND NOT applied;
 
 -- name: FunctionItemResult :one
 SELECT result FROM function_calls

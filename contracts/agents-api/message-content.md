@@ -58,9 +58,9 @@ An `agent.session.input.tool_result` event carries `success`, an optional nullab
 Admission (202) does not mean the Harness used the result. The pending call clears when the adapter confirms native application:
 
 - **Claude Code** confirms with a live root native tool result that matches the Session, call ID, success flag, exact text, block count and order, with a native image at every image position. Replayed, synthetic and Subagent records do not confirm it.
-- **Codex** confirms with the live root dynamic-tool `item/completed` observation that matches thread, Turn, call, function name, status, success flag and the exact ordered content. A write to the Harness alone does not confirm it.
+- **Codex** confirms with the live dynamic-tool `item/completed` observation on the thread and Turn that made the call, which must match the call, function name, status, success flag and the exact ordered content. A write to the Harness alone does not confirm it.
 
-Both adapters wait at most 10 seconds for a receipt. A timeout or native release without confirmation leaves application uncertain. Confirmation means the Harness recorded the result, not that the model provider consumed it. Core never replays a result automatically; the submission stays stored for recovery reads.
+Both adapters wait at most 10 seconds for a receipt. A timeout or native release without confirmation leaves application uncertain. Confirmation means the Harness recorded the result, not that the model provider consumed it. Core never replays a result automatically; the submission stays stored for recovery reads. A call the native Harness abandons gets no receipt and is withdrawn ([Functions](./execution-tools.md#functions)).
 
 ## Runtime boundary
 

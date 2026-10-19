@@ -218,6 +218,9 @@ func (s *Session) publishSubagentHistory(ctx context.Context, h subagentHistory,
 			if err := s.sendSubagentFact(ctx, proto.TypeSubagentTurn, key, payload); err != nil {
 				return false, err
 			}
+			if err := s.withdrawChildCalls(ctx, h.ID, turn.ID); err != nil {
+				return false, err
+			}
 		}
 	}
 	return busy || nativeStatus.Type == "active", nil

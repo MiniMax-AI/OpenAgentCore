@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: ada5752faa24616f4fa75c6559028e3b24be0a4db92b77c7baf936d68021b8df
+source_hash: 5e14ecb8add3ada10039f01ccdb0125c8f545c67f759aad74e973b7ac80cf00e
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -21,13 +21,18 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 
 | 情况 | 响应 |
 | --- | --- |
-| 相同重试，包括 Turn 结束之后 | 接受 |
+| 相同重试，包括 Turn 结束或调用被放弃之后 | 接受 |
 | 同一调用提交不同结果 | 409 `conflict_error` |
 | Turn 取消后首次提交结果 | 409 `conflict_error` |
+| 为原生 Harness 已放弃的调用首次提交结果 | 409 `conflict_error` |
 | 调用方 Session 内未知调用或其他 Turn 的调用 | 400 `invalid_request_error`；待执行操作不变 |
 | Session 不存在或属于其他范围 | 404 |
 
-[Session 输入冲突](sessions-events.md#input-errors)记录准确消息。无效或不支持的内容不能消耗待处理调用。准入与应用结果分离：只有匹配的原生工具结果出现在实时根 Turn 中，适配器才确认结果（[回执契约](message-content.md#function-results)）。传输写入本身不确认任何事实，确认也不代表提供商已消费结果或外部副作用恰好发生一次。Core 不自动重放结果。
+[Session 输入冲突](sessions-events.md#input-errors)记录准确消息。无效或不支持的内容不能消耗待处理调用。准入与应用结果分离：只有匹配的原生工具结果出现在发起调用的实时 Turn 中，适配器才确认结果（[回执契约](message-content.md#function-results)）。传输写入本身不确认任何事实，确认也不代表提供商已消费结果或外部副作用恰好发生一次。Core 不自动重放结果。
+
+原生 Harness 可能在应用结果之前放弃调用，例如根 Turn 关闭或中断了发起该调用的 Subagent。该调用随即不再是待执行操作，Turn 继续运行，并在没有待执行操作时回到 `in_progress`；之后为它提交的 `function_call_output` 会像取消后的结果一样被拒绝。被放弃的调用没有应用回执。
+
+Subagent 发起的函数调用是运行该子级的根 Turn 的待执行操作：`turn_id` 是该根 Turn，`call_id` 等于 [Subagent 路由](subagents.md#public-reads)上该子级 `function_call` Item 的 `call_id`。使用该 `call_id` 和根 Turn ID，以 `function_call_output` / `tool_result` 作答；子级的 Turn ID 不是 Session Turn，会得到“另一个 Turn 的调用”的 400。Subagent 的 HTTP MCP 调用是该子级历史中的 `mcp_call` Item。
 
 ### 待执行操作与恢复 {#required-actions-and-recovery}
 

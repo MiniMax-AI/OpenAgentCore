@@ -81,6 +81,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - Input to a `none` Session is admitted synchronously; Core does not emulate the official asynchronous admission window.
 - A function result that resumes a waiting Turn emits `turn.in_progress`, and cancelling a Turn that waits on a function result emits an interim `agent.session.in_progress`.
+- A function call the native Harness abandons, such as a Codex Subagent call dropped when the root closes or interrupts the child, is withdrawn: it stops being a required action and a later result for it returns 409 `conflict_error`. The official API has no withdrawal.
 - Attaching to the stream mid-Turn sends no catch-up Item snapshots.
 - The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
 - Error messages omit the call and executor IDs that official messages include.
@@ -151,6 +152,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 ### Unverified against the official service
 
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
+- A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item.
 - Whether Subagent child Turns and pending Environment file writes block Session deletion.
 - The official order between the pending-input error and an unknown result target.
 - Failure reasons for npm, initial-file and Skill installation have no official sample.

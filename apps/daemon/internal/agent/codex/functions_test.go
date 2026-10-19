@@ -109,11 +109,61 @@ func TestFunctionCallRejectsUnregisteredAndClosedRuns(t *testing.T) {
 			t.Fatal("unexpected call accepted", params)
 		}
 	}
-	s.stopFunctionCalls()
+	s.stopFunctionCalls(false)
 	if _, err := s.handleFunctionCall(json.RawMessage(`{"threadId":"thread","turnId":"turn","callId":"a","tool":"lookup","arguments":{}}`), "rpc"); err == nil {
 		t.Fatal("closed run accepted call")
 	}
 	if err := s.SubmitFunctionResult(context.Background(), proto.FunctionResultPayload{CallID: "a", Content: []proto.InputContent{}}); !errors.Is(err, agent.ErrUnknownFunctionCall) {
+		t.Fatal(err)
+	}
+}
+
+func TestSubagentFunctionCallWaitsForChildTurnAndOutlivesRoot(t *testing.T) {
+	tc, srv, cleanup := NewTestClient()
+	defer cleanup()
+	s, out := newFunctionTestSession(tc.JSONRPCClient)
+	s.subagents = &subagentObservations{wake: make(chan struct{}, 1), sent: map[string]string{}}
+	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)}})
+	s.setThreadID("root")
+	s.startSteering("root", "turn")
+	if err := SendServerRequest(srv, "rpc-call", "item/tool/call", map[string]any{"threadId": "child", "turnId": "child-turn", "callId": "call", "tool": "lookup", "arguments": map[string]string{}}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.subagents.wake:
+	case <-time.After(time.Second):
+		t.Fatal("child call did not wake the observer")
+	}
+	// The root Turn ends while the child still waits for its answer.
+	s.terminal.Store(true)
+	s.stopFunctionCalls(true)
+	s.sendHeldFunctionCalls(t.Context())
+	select {
+	case env := <-out:
+		t.Fatal("call sent before its child Turn fact", env)
+	default:
+	}
+	s.subagents.sent[proto.TypeSubagentTurn+":child:child-turn"] = "{}"
+	s.sendHeldFunctionCalls(t.Context())
+	var call proto.FunctionCallPayload
+	if env := <-out; env.DecodePayload(&call) != nil || call.CallID != "call" || call.NativeID != "child" || call.TurnID != "child-turn" {
+		t.Fatal(env)
+	}
+	text := "answer"
+	finished := make(chan error, 1)
+	go func() {
+		finished <- s.SubmitFunctionResult(t.Context(), proto.FunctionResultPayload{CallID: "call", Success: true, Content: []proto.InputContent{{Type: "input_text", Text: &text}}})
+	}()
+	var reply struct {
+		Result map[string]any `json:"result"`
+	}
+	if err := json.NewDecoder(srv.FromClient).Decode(&reply); err != nil {
+		t.Fatal(err)
+	}
+	reply.Result["type"], reply.Result["id"], reply.Result["tool"], reply.Result["status"] = "dynamicToolCall", "call", "lookup", "completed"
+	native, _ := json.Marshal(map[string]any{"threadId": "child", "turnId": "child-turn", "item": reply.Result})
+	s.onItemCompleted(native)
+	if err := <-finished; err != nil {
 		t.Fatal(err)
 	}
 }
@@ -128,5 +178,36 @@ func TestFunctionToolDefinitionsRejectAmbiguousInput(t *testing.T) {
 		if _, err := prepareFunctionTools(tools); err == nil {
 			t.Fatal("invalid function accepted", tools)
 		}
+	}
+}
+
+func TestEndedChildTurnWithdrawsItsPendingCall(t *testing.T) {
+	tc, srv, cleanup := NewTestClient()
+	defer cleanup()
+	s, out := newFunctionTestSession(tc.JSONRPCClient)
+	s.subagents = &subagentObservations{wake: make(chan struct{}, 1), sent: map[string]string{proto.TypeSubagentTurn + ":child:child-turn": "{}"}}
+	s.functions, _ = prepareFunctionTools([]proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)}})
+	s.setThreadID("root")
+	s.startSteering("root", "turn")
+	if err := SendServerRequest(srv, "rpc-call", "item/tool/call", map[string]any{"threadId": "child", "turnId": "child-turn", "callId": "call", "tool": "lookup", "arguments": map[string]string{}}); err != nil {
+		t.Fatal(err)
+	}
+	<-s.subagents.wake
+	s.sendHeldFunctionCalls(t.Context())
+	<-out
+	if err := s.withdrawChildCalls(t.Context(), "child", "child-turn"); err != nil {
+		t.Fatal(err)
+	}
+	var withdrawn proto.FunctionCallWithdrawnPayload
+	if env := <-out; env.Type != proto.TypeFunctionCallWithdrawn || env.DecodePayload(&withdrawn) != nil || withdrawn != (proto.FunctionCallWithdrawnPayload{CallID: "call", NativeID: "child", TurnID: "child-turn"}) {
+		t.Fatal(env)
+	}
+	if err := s.SubmitFunctionResult(t.Context(), proto.FunctionResultPayload{CallID: "call", Success: true, Content: []proto.InputContent{}}); !errors.Is(err, agent.ErrUnknownFunctionCall) {
+		t.Fatal(err)
+	}
+	select {
+	case <-s.rpc.Done():
+		t.Fatal("a late result closed the native process")
+	default:
 	}
 }

@@ -19,13 +19,18 @@ A function declaration requires `name`, `description` and a JSON Schema in `para
 
 | Case | Response |
 | --- | --- |
-| Identical retry, also after the Turn ends | Accepted |
+| Identical retry, also after the Turn ends or the call is abandoned | Accepted |
 | Different result for the same call | 409 `conflict_error` |
 | First result after the Turn was cancelled | 409 `conflict_error` |
+| First result for a call the native Harness abandoned | 409 `conflict_error` |
 | Unknown call, or a call of another Turn, in the caller's Session | 400 `invalid_request_error`; the pending action is unchanged |
 | Missing or foreign Session | 404 |
 
-[Session input conflicts](./sessions-events.md#input-errors) records the exact messages. Invalid or unsupported content cannot consume a pending call. Admission is separate from application: the adapter confirms a result only when the matching native tool result appears in the live root Turn ([receipt contract](./message-content.md#function-results)). A transport write alone confirms nothing, and a confirmation says nothing about provider consumption or exactly-once external effects. Core never replays a result automatically.
+[Session input conflicts](./sessions-events.md#input-errors) records the exact messages. Invalid or unsupported content cannot consume a pending call. Admission is separate from application: the adapter confirms a result only when the matching native tool result appears in the live Turn that made the call ([receipt contract](./message-content.md#function-results)). A transport write alone confirms nothing, and a confirmation says nothing about provider consumption or exactly-once external effects. Core never replays a result automatically.
+
+The native Harness can abandon a call before it applies a result, for example when the root Turn closes or interrupts the Subagent that made it. The call then stops being a required action, the Turn continues and returns to `in_progress` when no required action is left, and a later `function_call_output` for it is rejected like a result after cancellation. An abandoned call has no application receipt.
+
+A function call made by a Subagent is a required action of the root Turn that runs the child. Its `turn_id` is that root Turn, and its `call_id` equals the `call_id` of the child's `function_call` Item on the [Subagent routes](./subagents.md#public-reads). Answer it with `function_call_output` / `tool_result` under that `call_id` and the root Turn ID; the child's Turn ID is not a Session Turn and gets the 400 for a call of another Turn. A Subagent's HTTP MCP calls are `mcp_call` Items in the child's history.
 
 ### Required actions and recovery
 
