@@ -76,12 +76,8 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 		var tool v1.MCPTool
 		decoder := json.NewDecoder(bytes.NewReader(value))
 		decoder.DisallowUnknownFields()
-		if decoder.Decode(&tool) != nil || strings.TrimSpace(tool.ServerLabel) == "" || names[tool.ServerLabel] || (tool.ConnectionOrigin != "service" && tool.ConnectionOrigin != "environment") || len(tool.RequestMetadata) != 0 || tool.Transport.Type != "http" || tool.Transport.Headers != nil {
+		if decoder.Decode(&tool) != nil || strings.TrimSpace(tool.ServerLabel) == "" || names[tool.ServerLabel] || (tool.ConnectionOrigin != "service" && tool.ConnectionOrigin != "environment") || len(tool.RequestMetadata) != 0 {
 			return executionToolSet{}, errors.New("unsupported execution MCP configuration")
-		}
-		u, err := url.Parse(tool.Transport.ServerURL)
-		if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" {
-			return executionToolSet{}, errors.New("unsupported execution MCP URL")
 		}
 		if tool.AllowedTools != nil {
 			for _, name := range *tool.AllowedTools {
@@ -90,9 +86,30 @@ func executionTools(raw []json.RawMessage) (executionToolSet, error) {
 				}
 			}
 		}
+		server := proto.MCPHTTPServer{ConnectionOrigin: tool.ConnectionOrigin, ServerLabel: tool.ServerLabel, AllowedTools: tool.AllowedTools, Required: tool.Required}
+		switch transport := tool.Transport; transport.Type {
+		case "stdio":
+			if tool.ConnectionOrigin != "environment" || transport.Args == nil || transport.EnvVars == nil || tool.CredentialID != nil {
+				return executionToolSet{}, errors.New("unsupported execution MCP configuration")
+			}
+			server.Stdio = &proto.MCPStdio{Command: transport.Command, Args: *transport.Args, Cwd: transport.Cwd, EnvVars: *transport.EnvVars}
+			if !server.Stdio.Valid() {
+				return executionToolSet{}, errors.New("unsupported execution MCP configuration")
+			}
+		case "http":
+			u, err := url.Parse(transport.ServerURL)
+			if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" {
+				return executionToolSet{}, errors.New("unsupported execution MCP URL")
+			}
+			server.ServerURL = transport.ServerURL
+			if transport.Headers != nil {
+				server.Headers = *transport.Headers
+			}
+		default:
+			return executionToolSet{}, errors.New("unsupported execution MCP configuration")
+		}
 		names[tool.ServerLabel] = true
-		servers = append(servers, proto.MCPHTTPServer{ConnectionOrigin: tool.ConnectionOrigin, ServerLabel: tool.ServerLabel,
-			ServerURL: tool.Transport.ServerURL, AllowedTools: tool.AllowedTools, Required: tool.Required})
+		servers = append(servers, server)
 	}
 	resolved, err := functionTools(functions)
 	return executionToolSet{Functions: resolved, MCP: servers, Search: search, WebSearch: webSearch, ProgrammaticToolCalling: programmatic}, err

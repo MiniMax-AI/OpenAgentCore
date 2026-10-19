@@ -3,6 +3,7 @@ package claudesdk
 import (
 	"encoding/json"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 	}
 	stdio := start.Workspace.MCP[0]
 	executable, _ := os.Executable()
-	if stdio.Command != executable || len(stdio.Args) != 4 || stdio.Args[0] != "runtime-mcp-exec" || stdio.Args[1] != "/private/runtime/capabilities" || stdio.Args[2] != "plugins/local" || stdio.Args[3] != "local" {
+	if stdio.Command != executable || stdio.Args == nil || !slices.Equal(*stdio.Args, []string{"runtime-mcp-exec", "/private/runtime/capabilities", "plugins/local", "local"}) {
 		t.Fatal("stdio bypassed the shared installed entry")
 	}
 	raw, _ := json.Marshal(start)
@@ -54,7 +55,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Name = "functions" },
 		func(e *proto.LocalEnvironment) { e.MCP = append(e.MCP, e.MCP[0]) },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.Type = "sse" },
-		func(e *proto.LocalEnvironment) { e.MCP[0].Server.HTTPHeaders = map[string]string{"X-Key": "literal"} },
+		func(e *proto.LocalEnvironment) { e.MCP[0].Server.HTTPHeaders = map[string]string{"X-Key": "${HOME}"} },
 		func(e *proto.LocalEnvironment) { e.MCP[0].Server.BearerTokenEnvVar = "MISSING" },
 		func(e *proto.LocalEnvironment) {
 			token := "token"
@@ -64,7 +65,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 	} {
 		environment := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
 		mutate(environment)
-		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}); err == nil {
+		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}, ""); err == nil {
 			t.Fatal("unsupported declaration accepted")
 		}
 	}
@@ -86,5 +87,21 @@ func TestEnvironmentMCPObservationsUseInstalledDeclarations(t *testing.T) {
 	observation.Server = "undeclared"
 	if err := state.receive(bridgeEvent{ID: "other", Stage: "before", Observation: &observation}, start, emit); err == nil {
 		t.Fatal("undeclared observation accepted")
+	}
+}
+
+// Native starts a stdio server in the directory of its own process, so the
+// declared cwd must be that workspace directory.
+func TestPublicMCPStdioStartsInTheWorkspaceDirectory(t *testing.T) {
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local",
+		Stdio: &proto.MCPStdio{Command: "run", Cwd: "/work", EnvVars: []string{"TOKEN"}}}}
+	req := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers}
+	projected, _, err := prepareRuntimeMCP(req, "/work")
+	raw, _ := json.Marshal(projected)
+	if err != nil || string(raw) != `[{"server_label":"local","allowed_tools":null,"command":"run","args":[],"declared":true}]` {
+		t.Fatal("public stdio server was not projected", string(raw), err)
+	}
+	if _, _, err := prepareRuntimeMCP(req, "/elsewhere"); err == nil {
+		t.Fatal("stdio cwd outside the workspace directory was accepted")
 	}
 }

@@ -11,7 +11,7 @@ import (
 func TestSavedProviderSafeView(t *testing.T) {
 	input := &SavedAgentCoreInput{Harness: "codex", ModelProvider: &ModelProviderInput{
 		Protocol: "responses", BaseURL: "https://example.test/v1", APIKey: "write-only-fixture",
-		ContextWindow: 200000, MaxOutputTokens: 8000,
+		ContextWindow: 200000,
 	}}
 	if err := input.Validate(); err != nil {
 		t.Fatal(err)
@@ -34,7 +34,7 @@ func TestSavedProviderExplicitHarnessCompatibility(t *testing.T) {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(harness+"/"+protocol, func(t *testing.T) {
 				x := &SavedAgentCoreInput{Harness: harness, ModelProvider: &ModelProviderInput{
-					Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.test", APIKey: "fixture", ContextWindow: 100, MaxOutputTokens: 20,
+					Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.test", APIKey: "fixture", ContextWindow: 100,
 				}}
 				native := harness == "" || harness == "mcode" || (harness == "codex" && protocol == "responses") || (harness == "claude_sdk" && protocol == "anthropic")
 				if err := x.Validate(); (err == nil) != native {

@@ -12,7 +12,7 @@ import turnResources from "./fixtures/parsar-0438880a/turn-resources.json";
 import toolProfiles from "./fixtures/parsar-2b34ea46/tool-profiles.json";
 import type {
   AnonymousHttpMcpToolInput,
-  ServiceHttpMcpToolInput,
+  McpToolInput,
   AgentsCoreSelection,
   SavedAgentCoreInput,
   SavedAgentCore,
@@ -159,8 +159,8 @@ describe("Parsar 2b34ea46 bounded tool profiles", () => {
   });
 
   it("accepts the minimal pinned MCP tool whose omitted origin Core saves as service", () => {
-    expectTypeOf<ServiceHttpMcpToolInput["connection_origin"]>().toEqualTypeOf<"service" | null | undefined>();
-    const minimal: ServiceHttpMcpToolInput = {
+    expectTypeOf<McpToolInput["connection_origin"]>().toEqualTypeOf<"service" | "environment" | null | undefined>();
+    const minimal: McpToolInput = {
       type: "mcp",
       server_label: "docs",
       transport: { type: "http", server_url: "https://mcp.example/tools" },

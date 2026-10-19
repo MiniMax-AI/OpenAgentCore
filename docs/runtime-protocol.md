@@ -77,7 +77,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `tool_search` | The Agent enables tool search or defers function loading |
 | `function_tools` | The Agent declares function tools |
 | `message_images`, `function_result_images` | A message, or a function result, carries an image |
-| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares HTTP MCP servers; one is `required`; a Vault credential is selected for one |
+| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | The Agent declares MCP servers (HTTP or stdio); one is `required`; a Vault credential is selected for one |
 
 Core has no admission rule for `usage` and `resume`.
 
@@ -110,11 +110,15 @@ The linked source files define the required fields, validators, limits and finit
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [Execution admission](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
 | `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [Requests](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go), [events and capabilities](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [Active input receipts](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
-| `function_result` | `function_call`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
+| `function_result` | `function_call`, `function_call_withdrawn`, `interaction_decision_ack` | [Function calls](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | Matching `*_result` | [Read](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go), [write](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go), [export](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [Suspension fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
 
 Initial, prepared and active input use the same [ordered MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go). Adapters keep message and content order and reject unsupported content explicitly; a text-only transport rejects image content rather than dropping it. The [message input contract](../contracts/agents-api/message-content.md) owns the public image profile, whitespace rules and each Harness's native conversion.
+
+A `function_call` carries `native_id` and `turn_id` when a Subagent made the call, with the meaning they have in `subagent_turn`; both are empty for a call of the Run itself. The adapter sends the child's `subagent_identity` and `subagent_turn` before the call, and Core answers with `function_result` under the same `call_id`.
+
+A `function_call_withdrawn` carries the `call_id`, `native_id` and `turn_id` of a `function_call` and tells that the native Harness will never apply a result for it, for example because a Codex Subagent Turn ended and native dropped its request. Core stops requiring an answer for the call and rejects a later result for it. The adapter acknowledges a `function_result` already in flight with `not_pending`, and Core then waits for the withdrawal or the Turn's end instead of failing the Turn or resending the result.
 
 Usage frames and the final usage snapshot each carry the cumulative measurement of the current execution and replace the previous snapshot; never add them. An absent measurement is unknown, not zero.
 
@@ -306,7 +310,7 @@ Core runs an idle directory read on the Worker's Session scheduling reservation 
 
 ## MCP connection authority
 
-Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
+Every public `MCPHTTPServer` in an `execution_prepare` configuration carries an explicit `connection_origin`; a missing or unknown value rejects rather than selecting a default, and Core freezes the public default before dispatch. `MCPHTTPServer.headers` carries non-secret literal headers; credentials travel only in `bearer_token`. `MCPHTTPServer.stdio` (`command`, `args`, `cwd`, `env_vars`) declares a process of the Environment instead of a URL: it requires origin `environment` and carries no headers or bearer, and `env_vars` names variables the process inherits, never their values. The Runtime validates the origin with the common validator before selecting a factory and resolves public and installed MCP into transient effective bindings. The [Environment contract](../contracts/agents-api/environments.md#public-mcp-connection-origin) owns the supported combinations, native limits and failure ownership.
 
 ## Timeouts and limits
 

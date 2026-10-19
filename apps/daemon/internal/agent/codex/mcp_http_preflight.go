@@ -59,15 +59,14 @@ func matchesMCPConfig(raw json.RawMessage, declared map[string]mcpServerConfig) 
 				return false
 			}
 		} else {
-			args, err := json.Marshal(expected.Args)
-			var want any
-			if err != nil || json.Unmarshal(args, &want) != nil || server["command"] != expected.Command || !reflect.DeepEqual(server["args"], want) {
+			if server["command"] != expected.Command || !matchesMCPList(server["args"], expected.Args) ||
+				server["cwd"] != nilIfEmpty(expected.Cwd) || !matchesMCPList(server["env_vars"], expected.EnvVars) {
 				return false
 			}
 		}
 		if server["bearer_token_env_var"] != nilIfEmpty(expected.BearerTokenEnvVar) ||
-			!matchesMCPHeaderMap(server, "env_http_headers", expected.EnvHTTPHeaders) ||
-			!matchesMCPHeaderMap(server, "http_headers", nil) {
+			!matchesMCPHeaderMap(server, "http_headers", expected.HTTPHeaders) ||
+			!matchesMCPHeaderMap(server, "env_http_headers", nil) {
 			return false
 		}
 		if expected.Required && server["required"] != true {
@@ -116,6 +115,18 @@ func matchesMCPHeaderMap(server map[string]any, field string, expected map[strin
 	want := make(map[string]any, len(expected))
 	for key, value := range expected {
 		want[key] = value
+	}
+	return reflect.DeepEqual(actual, want)
+}
+
+// matchesMCPList compares an ordered string list; native omits an empty one.
+func matchesMCPList(actual any, expected []string) bool {
+	if len(expected) == 0 {
+		return actual == nil || reflect.DeepEqual(actual, []any{})
+	}
+	want := make([]any, len(expected))
+	for i, value := range expected {
+		want[i] = value
 	}
 	return reflect.DeepEqual(actual, want)
 }

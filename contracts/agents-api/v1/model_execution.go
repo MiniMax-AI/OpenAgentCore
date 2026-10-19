@@ -51,7 +51,7 @@ func (p *ModelProviderInput) validate(registry harnessconfig.Registry) error {
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
 		return &ModelProviderError{Code: "model_provider_api_key_invalid", Param: "api_key", message: "invalid model provider API key"}
 	}
-	if p.ContextWindow < 0 || p.MaxOutputTokens < 0 || (p.MaxOutputTokens > p.ContextWindow) {
+	if !modelprovider.TokenLimitsValid(p.ContextWindow, p.MaxOutputTokens) {
 		param := "max_output_tokens"
 		if p.ContextWindow < 0 {
 			param = "context_window"
@@ -74,6 +74,9 @@ func (p *ModelProviderInput) ValidateHarnessWithRegistry(harness string, registr
 	configuration, _ := registry.Lookup(harness)
 	if err := configuration.ValidateProtocol(string(p.Protocol)); err != nil {
 		return &ModelProviderError{Code: "model_provider_protocol_unsupported", Param: "protocol", message: err.Error()}
+	}
+	if err := configuration.ValidateMaxOutputTokens(p.MaxOutputTokens); err != nil {
+		return &ModelProviderError{Code: "model_provider_token_limits_invalid", Param: "max_output_tokens", message: err.Error()}
 	}
 	return nil
 }

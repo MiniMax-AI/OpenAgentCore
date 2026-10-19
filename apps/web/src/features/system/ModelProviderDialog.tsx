@@ -1,4 +1,4 @@
-import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput } from "@oac/agents-client";
+import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput, tokenLimitsFit } from "@oac/agents-client";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConsoleSelect } from "../../components/console-select";
@@ -83,11 +83,11 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const url = baseUrl.trim();
   const urlProblem = url && !isProviderUrl(url) ? t("models.form.baseUrlInvalid") : null;
   const context = tokenLimit(contextWindow);
-  const output = tokenLimit(maxOutputTokens);
+  const output = tokenLimit(support?.accepts_max_output_tokens ? maxOutputTokens : "");
   const limitProblem = (limit: ReturnType<typeof tokenLimit>) => (limit.problem === "whole" ? t("models.form.wholeNumber") : limit.problem === "large" ? t("models.form.tooLarge") : null);
   const outputProblem = limitProblem(output);
-  // The missing or undersized window is the field the administrator must fix.
-  const contextProblem = limitProblem(context) ?? (!outputProblem && output.value !== undefined && output.value > (context.value ?? 0) ? t("models.form.needsContext") : null);
+  // An undersized window is the field the administrator must fix.
+  const contextProblem = limitProblem(context) ?? (!outputProblem && !tokenLimitsFit(context.value, output.value) ? t("models.form.needsContext") : null);
   const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && model.trim() !== "" && nativeConfig !== null && !configTooLarge && !protocolProblem && !contextProblem && !outputProblem;
 
   function clearNativeConfig() {
@@ -220,7 +220,7 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
             </div> : null}
             <div className="system-model-limits">
               {limitField("context", contextWindow, setContextWindow, contextProblem)}
-              {limitField("output", maxOutputTokens, setMaxOutputTokens, outputProblem)}
+              {support?.accepts_max_output_tokens ? limitField("output", maxOutputTokens, setMaxOutputTokens, outputProblem) : null}
             </div>
           </div>
         </details>

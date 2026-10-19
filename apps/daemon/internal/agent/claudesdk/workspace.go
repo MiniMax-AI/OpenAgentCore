@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
@@ -56,7 +57,7 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 		profile.Skills = req.LocalEnvironment.Skills
 		profile.CapabilityRoot = req.LocalEnvironment.CapabilityRoot
 	}
-	servers, credentials, err := prepareRuntimeMCP(req)
+	servers, credentials, err := prepareRuntimeMCP(req, workspaceCwd(config.Workspace))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -102,7 +103,7 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 	env := []string{}
 	for _, entry := range os.Environ() {
 		name, _, _ := strings.Cut(entry, "=")
-		if name != "ANTHROPIC_API_KEY" && name != "ANTHROPIC_AUTH_TOKEN" && name != "CLAUDE_CODE_OAUTH_TOKEN" && name != "CLAUDE_CONFIG_DIR" && name != "HOME" && name != "TMPDIR" {
+		if !slices.Contains([]string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "CLAUDE_CODE_MAX_OUTPUT_TOKENS", "CLAUDE_CONFIG_DIR", "HOME", "TMPDIR"}, name) {
 			env = append(env, entry)
 		}
 	}
@@ -124,7 +125,8 @@ func workspaceEnvName(name string) bool {
 	switch name {
 	case "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
 		"ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-		"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY":
+		"CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+		"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY":
 		return true
 	default:
 		return false

@@ -36,3 +36,30 @@ func TestDeclarationAdmitsAnyMCPToolName(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDeclarationRejectsMCPEnvironmentExpansion(t *testing.T) {
+	servers := []proto.MCPHTTPServer{{ServerLabel: "docs", ServerURL: "https://example.test/mcp", Headers: map[string]string{"X-Tenant": "a"}}}
+	if err := Declaration.ValidateTools(nil, servers); err != nil {
+		t.Fatal(err)
+	}
+	servers[0].Headers["X-Tenant"] = "${ANTHROPIC_API_KEY}"
+	if err := Declaration.ValidateTools(nil, servers); err == nil {
+		t.Fatal("header value with ${ admitted")
+	}
+	servers[0].Headers["X-Tenant"], servers[0].ServerURL = "a", "https://example.test/${ANTHROPIC_API_KEY}"
+	if err := Declaration.ValidateTools(nil, servers); err == nil {
+		t.Fatal("URL with ${ admitted")
+	}
+}
+
+func TestDeclarationRequiresWorkspaceStdioCwd(t *testing.T) {
+	stdio := func(cwd string) []json.RawMessage {
+		return []json.RawMessage{json.RawMessage(`{"type":"mcp","transport":{"type":"stdio","command":"x","cwd":"` + cwd + `"}}`)}
+	}
+	if err := Declaration.ValidateConfiguration(harnessconfig.Admission{WorkspaceDirectory: "/workspace", Tools: stdio("/workspace/")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Declaration.ValidateConfiguration(harnessconfig.Admission{WorkspaceDirectory: "/workspace", Tools: stdio("/srv")}); err == nil {
+		t.Fatal("stdio cwd outside the workspace admitted")
+	}
+}

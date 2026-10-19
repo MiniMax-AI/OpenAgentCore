@@ -71,15 +71,22 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Omitted programmatic tool calling keeps the Harness's native behavior; the official default is on.
 - An Agent without a `web_search` tool keeps the Harness's [native search](./execution-tools.md#web-search-and-programmatic-tool-calling); the pinned contract does not define search without the tool.
 - Claude Code on a workspace placement appends the Agent's `instructions` to its native system prompt and runs its [native tool set](./execution-tools.md#web-search-and-programmatic-tool-calling). Its search has no cached mode and no domain, location or context-size settings.
+- Claude Code drops whitespace-only text blocks natively and sends `(no content)` for an all-blank message; Codex delivers whitespace-only text unchanged.
+- Claude Code runs a Skill's inline shell inside the Skill expansion, so the command produces no tool observation.
+- Claude Code with live search on `environment: none` has only `WebSearch`, so search yields `search` actions and no page opens ([web search](./execution-tools.md#web-search-and-programmatic-tool-calling)).
 - An omitted reasoning effort stays null instead of taking the model's default.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - A Session's `agent.tools` omits `tool_search` declarations.
+- Core rejects an inline `authorization` on a Session MCP transport, an `Authorization` entry in `headers` and a nonempty stdio `env`: credentials come only from Vaults (`credential_id`) and environment values only from the Environment (`env_vars`) ([MCP](./execution-tools.md#mcp)).
+- A `stdio` MCP server needs a workspace placement and the origin `environment`. Claude Code starts the server in its workspace directory, so `cwd` must equal it, with its whole process environment, which also holds the model provider key and other servers' Vault bearer tokens, and it needs `allowed_tools` null. MiniMax Code starts the server in its private home directory, so it rejects every `stdio` server ([MCP](./execution-tools.md#mcp)).
+- Claude rejects an MCP `server_url` or `headers` value containing `${`, because the native client expands `${VAR}` in both from a process environment that holds Core-held credentials.
 - Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returned 200.
 
 **Input, events and history** ([Sessions, events and history](./sessions-events.md), [message content](./message-content.md))
 
 - Input to a `none` Session is admitted synchronously; Core does not emulate the official asynchronous admission window.
 - A function result that resumes a waiting Turn emits `turn.in_progress`, and cancelling a Turn that waits on a function result emits an interim `agent.session.in_progress`.
+- A function call the native Harness abandons, such as a Subagent call dropped when the root closes or interrupts the child or a MiniMax Code call past its 120 s timeout, is withdrawn: it stops being a required action and a later result for it returns 409 `conflict_error`. The official API has no withdrawal.
 - Attaching to the stream mid-Turn sends no catch-up Item snapshots.
 - The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
 - Error messages omit the call and executor IDs that official messages include.
@@ -98,6 +105,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Vaults and Credentials** ([Vaults and Credentials](./vaults.md))
 
+- MiniMax Code runs public function calls one at a time, so the application sees one `function_call` at a time.
+- MiniMax Code serves public functions as a native MCP server whose client fails a call after 120 s with no way to change it. After 120 s native reports the failure to the model, the call is withdrawn and the Turn continues.
 - Vault and Credential status is stored privately and defaults to `active`; with no archive operation, lists without a filter include both statuses.
 - An unknown or foreign Vault in `vault_ids` returns 404 "Resource not found."; the official message names the ID.
 - An explicit `null` for OAuth `access_token`, `refresh` or `token_endpoint_auth` in an update keeps the stored value.
@@ -109,9 +118,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Configuration and tools**
 
 - A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no public functions and no image input.
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input.
 - Model-derived reasoning defaults are not resolved.
-- MCP tools support the `http` transport only; `stdio` is rejected, and so is an inline `authorization` on a Session MCP transport ([HTTP MCP](./execution-tools.md#http-mcp)).
 
 **Execution and history**
 
@@ -151,10 +159,11 @@ Each item is Core's deliberate or native behavior where the official service beh
 ### Unverified against the official service
 
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
+- A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether Subagent child Turns and pending Environment file writes block Session deletion.
 - The official order between the pending-input error and an unknown result target.
 - Failure reasons for npm, initial-file and Skill installation have no official sample.
-- Codex behavior for an empty text part beside text, and for images in failed function results or as remote references; Claude behavior for a whitespace-only or empty text block inside a mixed message.
+- Codex behavior for an empty text part beside text, and for images in failed function results or as remote references.
 - Official `HEAD` behavior on the routes where Core returns 405.
 - Environment Template hostname forms beyond exact hosts, and `disabled` combined with domains.
 - Files purpose filtering and pagination while Files change; official Skill upload limits and error timing.

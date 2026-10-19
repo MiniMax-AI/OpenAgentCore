@@ -19,7 +19,7 @@ export type Start = {
   observe_messages?: boolean;
   subagents?: { max_concurrent: number };
   tool_search?: boolean;
-  disable_web_search?: boolean;
+  web_search?: "disabled" | "live";
   functions?: { name: string; description: string; parameters: Tool["inputSchema"]; defer_loading?: boolean }[];
   mcp_http_servers?: HTTPServer[];
   workspace?: Workspace;
@@ -36,7 +36,7 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
   const value: unknown = JSON.parse(line);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
   const request = value as Record<string, unknown>;
-  const allowed = new Set(["native_model_options", "type", "input", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "output_format", "subagents", "functions", "tool_search", "disable_web_search", "mcp_http_servers", "workspace"]);
+  const allowed = new Set(["native_model_options", "type", "input", "model", "system_prompt", "cwd", "resume", "require_history", "observe_messages", "output_format", "subagents", "functions", "tool_search", "web_search", "mcp_http_servers", "workspace"]);
   if (Object.keys(request).some(key => !allowed.has(key)) ||
       (request.type !== "start" && request.type !== "prepare" && request.type !== "executor_prepare") ||
       (request.type === "start" ? !Array.isArray(request.input) : "input" in request) ||
@@ -44,7 +44,7 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
       typeof request.system_prompt !== "string" ||
       typeof request.cwd !== "string" || !isAbsolute(request.cwd) ||
       (request.observe_messages !== undefined && typeof request.observe_messages !== "boolean") ||
-      (request.disable_web_search !== undefined && typeof request.disable_web_search !== "boolean") ||
+      (request.web_search !== undefined && request.web_search !== "disabled" && request.web_search !== "live") ||
       (request.require_history !== undefined && typeof request.require_history !== "boolean") ||
       (request.resume !== undefined && (typeof request.resume !== "string" || !request.resume))) throw new Error("invalid_request");
   if (request.functions !== undefined && (!Array.isArray(request.functions) || request.functions.some(tool =>
@@ -56,8 +56,7 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
       (!!request.tool_search !== deferred)) throw new Error("invalid_request");
   if (request.subagents !== undefined) {
     const value = request.subagents as Record<string, unknown>;
-    if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1 ||
-        (request.functions as unknown[] | undefined)?.length || request.mcp_http_servers !== undefined) throw new Error("invalid_request");
+    if (!value || typeof value !== "object" || Object.keys(value).length !== 1 || !Number.isSafeInteger(value.max_concurrent) || (value.max_concurrent as number) < 1) throw new Error("invalid_request");
   }
   if (request.output_format !== undefined) {
     const format = request.output_format as Start["output_format"];
@@ -68,7 +67,6 @@ export function parseRequest(line: string): Start | Prepare | ExecutorPrepare {
   parseNativeModelOptions(request.native_model_options);
   parseHTTPServers(request.mcp_http_servers);
   const workspace = parseWorkspace(request.workspace, request.cwd);
-  if (request.subagents && workspace?.mcp?.length) throw new Error("invalid_request");
   if (request.require_history && !workspace) throw new Error("invalid_request");
   if ((workspace && "mcp_http_servers" in request) ||
       (request.type === "prepare" && !workspace)) throw new Error("invalid_request");

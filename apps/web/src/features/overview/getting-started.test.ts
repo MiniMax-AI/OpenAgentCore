@@ -12,7 +12,7 @@ const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployme
 const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({ status: "ready", snapshot: { deployment: value, nodes, allocations: [], loadedAt: 0 }, targetGeneration: value.generation, refreshing: false, error: null });
 const sandboxes = (state: FleetState) => gettingStartedSteps({ sandboxReset: false, fleet: state, localOnly: false, projects: [], sessions: 0, harnesses: [] }).sandboxes;
 const provider = { object: "core.model_configuration", model: "fixture-model", harness_config: {}, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true }, last_used_at: null, last_error_code: null, last_error_at: null, updated_at: "2026-09-25T00:00:00Z" } as const;
-const harness = (id: CoreHarness["id"], fields: Partial<CoreHarness> = {}): CoreHarness => ({ object: "core.harness", model_configuration_support: { protocols: ["responses"], accepts_harness_config: true }, id, enabled: true, default: false, model_configuration: null, ...fields });
+const harness = (id: CoreHarness["id"], fields: Partial<CoreHarness> = {}): CoreHarness => ({ object: "core.harness", model_configuration_support: { protocols: ["responses"], accepts_harness_config: true, accepts_max_output_tokens: false }, id, enabled: true, default: false, model_configuration: null, ...fields });
 
 describe("Getting started steps", () => {
   it("uses live provider readiness independently of target state or a durable pin", () => {

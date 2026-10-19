@@ -71,16 +71,13 @@ func TestEnvironmentMCPUsesFixedLauncherForNewAndLoadedSessions(t *testing.T) {
 }
 
 func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T) {
-	for _, name := range []string{"http-headers", "http-bearer-insecure", "http-bearer-missing", "duplicate"} {
+	for _, name := range []string{"http-bearer-insecure", "http-bearer-missing", "duplicate"} {
 		t.Run(name, func(t *testing.T) {
 			c, req, _ := workspaceFixture(t)
 			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
 			switch name {
-			case "http-headers", "http-bearer-insecure", "http-bearer-missing":
+			case "http-bearer-insecure", "http-bearer-missing":
 				req.LocalEnvironment.MCP[0].Server = agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
-				if name == "http-headers" {
-					req.LocalEnvironment.MCP[0].Server.HTTPHeaders = map[string]string{"X-Private": "secret"}
-				}
 				if name == "http-bearer-missing" {
 					req.LocalEnvironment.MCP[0].Server.BearerTokenEnvVar = "SELECTED_TOKEN"
 				}
@@ -92,12 +89,13 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 			case "duplicate":
 				req.LocalEnvironment.MCP = append(req.LocalEnvironment.MCP, environmentMCPFixture())
 			}
-			_, err := prepareWorkspaceOptions(testStateRoot(t), c, req)
-			if err == nil {
-				_, err = runtimeMCP(req)
-			}
+			root := t.TempDir()
+			_, err := NewExecutorFactory(root, &c)(context.Background(), req)
 			if err == nil || strings.Contains(err.Error(), "confidential-http-token") {
 				t.Fatal("unqualified declaration accepted or credential exposed")
+			}
+			if entries, _ := os.ReadDir(root); len(entries) != 0 {
+				t.Fatalf("native files written before MCP was rejected: %v", entries)
 			}
 		})
 	}
@@ -216,14 +214,12 @@ func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 			t.Fatal("anonymous MCP inherited credentials")
 		}
 		dataDir := resource.(*executor).opts.DataDir
-		for _, name := range []string{"config.yaml", "mcp.json"} {
-			body, err := os.ReadFile(filepath.Join(dataDir, name))
-			if err != nil && !os.IsNotExist(err) {
-				t.Fatal(err)
-			}
-			if strings.Contains(string(body), token) {
-				t.Fatal("MCP credential persisted in native configuration")
-			}
+		body, err := os.ReadFile(filepath.Join(dataDir, "config.yaml"))
+		if err != nil || strings.Contains(string(body), token) {
+			t.Fatal("MCP credential persisted in native configuration", err)
+		}
+		if _, err := os.Stat(filepath.Join(dataDir, "mcp.json")); !os.IsNotExist(err) {
+			t.Fatal("adapter wrote a native MCP file")
 		}
 	}
 }
@@ -265,6 +261,16 @@ func TestPublicEnvironmentHTTPMCPKeepsCredentialTransient(t *testing.T) {
 	}
 }
 
+func TestMCPHeadersReachACPHeaders(t *testing.T) {
+	req := testRequest(t)
+	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://mcp.example/mcp", Headers: map[string]string{"X-Tenant": "a"}}}
+	servers, err := runtimeMCP(req)
+	want := []map[string]string{{"name": "X-Tenant", "value": "a"}}
+	if err != nil || len(servers) != 1 || !reflect.DeepEqual(servers[0]["headers"], want) {
+		t.Fatalf("MCP = %v, %v", servers, err)
+	}
+}
+
 func TestServiceOriginMCPOnNonePlacement(t *testing.T) {
 	req := testRequest(t)
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://mcp.example/mcp"}}
@@ -272,5 +278,12 @@ func TestServiceOriginMCPOnNonePlacement(t *testing.T) {
 	want := []map[string]any{{"name": "fixture", "type": "http", "url": "https://mcp.example/mcp", "headers": []map[string]string{}}}
 	if err != nil || !reflect.DeepEqual(servers, want) {
 		t.Fatalf("MCP = %v, %v", servers, err)
+	}
+}
+
+func TestPublicMCPStdioIsRejected(t *testing.T) {
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local", Stdio: &proto.MCPStdio{Command: "run", Cwd: "/work"}}}
+	if _, err := runtimeMCP(proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers}); err == nil {
+		t.Fatal("native starts session stdio servers outside the declared cwd")
 	}
 }

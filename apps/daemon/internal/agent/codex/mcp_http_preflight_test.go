@@ -212,3 +212,32 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 		})
 	}
 }
+
+func TestPublicMCPStdioReachesNativeConfiguration(t *testing.T) {
+	tools := []string{"lookup"}
+	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local", AllowedTools: &tools,
+		Stdio: &proto.MCPStdio{Command: "run", Args: []string{"-x"}, Cwd: "/work", EnvVars: []string{"TOKEN"}}}}
+	declared, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := t.TempDir()
+	if err := writeCodexMCPConfig(home, declared); err != nil {
+		t.Fatal(err)
+	}
+	config, err := os.ReadFile(filepath.Join(home, "config.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, expected := range []string{`command = "run"`, `args = ["-x"]`, `cwd = "/work"`, `env_vars = ["TOKEN"]`, `enabled_tools = ["lookup"]`} {
+		if !strings.Contains(string(config), expected) {
+			t.Fatalf("missing native config %q", expected)
+		}
+	}
+	read := func(cwd string) json.RawMessage {
+		return json.RawMessage(`{"config":{"mcp_oauth_credentials_store":"file","mcp_servers":{"local":{"environment_id":"local","command":"run","args":["-x"],"cwd":"` + cwd + `","env_vars":["TOKEN"],"enabled_tools":["lookup"]}}}}`)
+	}
+	if !matchesMCPConfig(read("/work"), declared) || matchesMCPConfig(read("/elsewhere"), declared) {
+		t.Fatal("effective native stdio configuration was not verified")
+	}
+}

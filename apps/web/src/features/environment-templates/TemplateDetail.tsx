@@ -9,7 +9,7 @@ import type {
   EnvironmentTemplateSkill,
 } from "@oac/agents-client";
 
-import { PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
+import { HelpTip, PageBody, PageHeader, RefreshButton, Section, StatusDot } from "../../components/console-ui";
 import { formatBytes, formatDateTime, MISSING } from "../../lib/format";
 import { CopyableId, CopyIdButton } from "../../components/list-ui";
 import { templateName } from "./template-name";
@@ -169,12 +169,12 @@ export function TemplateDetailPage({
           <div><dt>{t("detail.updated")}</dt><dd>{formatDateTime(template.updated_at, locale)}</dd></div>
           <div>
             <dt>{t("detail.network")}</dt>
-            <dd>{network ? t(`access.${network.access}`) : <StatusDot tone="warning" label={t("unrecognizedValue")} />}</dd>
+            <dd>{network ? <>{t(`access.${network.access}`)}{network.access !== "enabled" ? <HelpTip>{t("accessHelp")}</HelpTip> : null}</> : <StatusDot tone="warning" label={t("unrecognizedValue")} />}</dd>
           </div>
         </dl>
 
         {network?.access === "restricted" ? (
-          <Section headingId="template-domains-heading" title={<>{t("detail.allowedDomains")} <Count value={network.allowed_domains.length} /></>} help={t("accessHelp.restricted")}>
+          <Section headingId="template-domains-heading" title={<>{t("detail.allowedDomains")} <Count value={network.allowed_domains.length} /></>}>
             <Values values={network.allowed_domains} />
           </Section>
         ) : null}

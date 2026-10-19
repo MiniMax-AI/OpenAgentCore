@@ -26,7 +26,7 @@ func TestMCodeExecutionFollowsAvailability(t *testing.T) {
 			if info.Available != available || info.Capabilities.EnvironmentNone.IsSupported() != available || info.Capabilities.DurableInputReceipts.IsSupported() != available || info.Capabilities.SubagentObservations.IsSupported() != available {
 				t.Fatalf("capabilities=%+v", info.Capabilities)
 			}
-			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.LocalEnvironment.IsSupported() || info.Capabilities.FunctionTools.IsSupported() {
+			if info.Capabilities.NativeSessionRecovery.IsSupported() || info.Capabilities.LocalEnvironment.IsSupported() {
 				t.Fatal("unqualified capability advertised")
 			}
 		})

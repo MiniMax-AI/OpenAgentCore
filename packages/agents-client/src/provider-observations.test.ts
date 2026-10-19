@@ -16,11 +16,11 @@ describe("deployment default observations", () => {
 });
 
 describe("adapter model configuration support", () => {
-  const support = { protocols: ["responses"], accepts_harness_config: true };
+  const support = { protocols: ["responses"], accepts_harness_config: true, accepts_max_output_tokens: false };
   const harness = { object: "core.harness", id: "codex", enabled: false, default: false, model_configuration: null, model_configuration_support: support };
   it("preserves build declarations and native default order without inferring readiness", () => {
     const claude = { ...harness, id: "claude_sdk", model_configuration_support: { ...support, protocols: ["anthropic"] } };
-    const minimax = { ...harness, id: "mcode", model_configuration_support: { protocols: ["anthropic", "responses", "chat_completions"], accepts_harness_config: false } };
+    const minimax = { ...harness, id: "mcode", model_configuration_support: { protocols: ["anthropic", "responses", "chat_completions"], accepts_harness_config: false, accepts_max_output_tokens: true } };
     const value = { object: "list", data: [harness, claude, minimax] };
     expect(projectCoreHarnessList(value)).toEqual(value);
     const projected = projectCoreHarnessList(value).data[2]!.model_configuration_support.protocols;

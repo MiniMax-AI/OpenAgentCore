@@ -7,7 +7,7 @@ import type {
   EnvironmentParamSelfHosted, EnvironmentResourceSelfHosted, EnvironmentStatusResource, FunctionCallStatusResource,
   HostedEnvironmentFileParam, InputContentParam, InputContentParamInputText, InputMessageParam, ListOrderParam,
   McpOauthRefreshResource, MultiAgentConfigCurrentParam, MultiAgentConfigResource, NetworkAccessResource,
-  NetworkPolicyResource, PersistedAgentToolConfigParamFunction, PersistedAgentToolConfigParamProgrammaticToolCalling,
+  NetworkPolicyResource, PersistedAgentToolConfigParamFunction, PersistedAgentToolConfigParamMcp, PersistedAgentToolConfigParamProgrammaticToolCalling,
   PersistedAgentToolConfigParamToolSearch, PersistedAgentToolConfigParamWebSearch, ReasoningEffortResource,
   ReasoningParam, ReasoningResource, ReasoningSummaryResource, RotateVaultCredentialAuthParamStaticBearer,
   RotateVaultCredentialParams, ServiceTierResource, SessionEnvironmentStateResource, SessionEnvironmentStatusResource,
@@ -58,25 +58,14 @@ export type MultiAgentInput = MultiAgentConfigCurrentParam;
 
 export type FunctionToolInput = PersistedAgentToolConfigParamFunction;
 
-/** The service-origin HTTP MCP profile accepted by current Core. */
-export interface ServiceHttpMcpToolInput {
-  type: "mcp";
-  server_label: string;
-  transport: {
-    type: "http";
-    server_url: string;
-  };
-  /** null or omitted permits every advertised tool; [] permits none. */
-  allowed_tools?: string[] | null;
-  /** null or omitted is saved as "service", as the official service does. */
-  connection_origin?: "service" | null;
-  /** Saving a reference does not authorize it; Session vault_ids must attach its owner. */
-  credential_id?: string | null;
-  required?: boolean;
-}
+/**
+ * The persisted MCP profile, without inline secrets. Omitted `connection_origin` is saved
+ * as "service"; a `credential_id` reference is authorized only by a Session vault that owns it.
+ */
+export type McpToolInput = PersistedAgentToolConfigParamMcp;
 
 /** Anonymous is an explicit subset that cannot name a stored Credential. */
-export type AnonymousHttpMcpToolInput = Omit<ServiceHttpMcpToolInput, "credential_id"> & {
+export type AnonymousHttpMcpToolInput = Omit<McpToolInput, "credential_id"> & {
   credential_id?: null;
 };
 
@@ -96,13 +85,13 @@ export type WebSearchToolInput = PersistedAgentToolConfigParamWebSearch;
 // The tool profiles Core saves, narrowed from the schema's tool params.
 export type SavedAgentToolInput =
   | FunctionToolInput
-  | ServiceHttpMcpToolInput
+  | McpToolInput
   | ToolSearchInput
   | ProgrammaticToolCallingInput
   | WebSearchToolInput;
 // Session function tools load eagerly.
 export type SessionFunctionToolInput = Omit<FunctionToolInput, "defer_loading"> & { defer_loading?: false };
-export type ConfigurableAgentToolInput = SessionFunctionToolInput | ServiceHttpMcpToolInput;
+export type ConfigurableAgentToolInput = SessionFunctionToolInput | McpToolInput;
 
 export type VaultStatus = VaultStatusParam;
 

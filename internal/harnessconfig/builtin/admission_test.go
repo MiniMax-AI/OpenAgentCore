@@ -39,31 +39,18 @@ func TestMiniMaxMCPPoliciesRejectInsteadOfDropping(t *testing.T) {
 }
 
 func TestSubagentDeclarationsPreserveSupportedBoundaries(t *testing.T) {
-	for _, kind := range []string{"claude_sdk", "codex", "mcode"} {
+	for _, kind := range []string{"claude_sdk", "codex"} {
 		t.Run(kind, func(t *testing.T) {
 			declaration, _ := Registry().Lookup(kind)
 			admission := harnessconfig.Admission{MultiAgent: true}
-			for _, placement := range []string{"none", "openai_hosted", "self_hosted"} {
-				admission.Placement = placement
-				if err := declaration.ValidateConfiguration(admission); err != nil {
-					t.Fatal(placement, err)
-				}
+			if err := declaration.ValidateConfiguration(admission); err != nil {
+				t.Fatal(err)
 			}
-			// Public functions and MCP stay independent capabilities: Subagent
-			// support does not admit their combinations.
-			if kind == "mcode" {
-				return
-			} // Its tool declaration rejects both for every Session.
-			admission.Placement = "none"
+			// Subagents use the Agent's function and MCP tools.
 			for _, tool := range []string{`{"type":"function","name":"f"}`, `{"type":"mcp","server_label":"s"}`} {
 				admission.Tools = []json.RawMessage{json.RawMessage(tool)}
-				admission.MultiAgent = true
-				if err := declaration.ValidateConfiguration(admission); err == nil {
-					t.Fatal("unsupported multi-agent combination accepted", tool)
-				}
-				admission.MultiAgent = false
 				if err := declaration.ValidateConfiguration(admission); err != nil {
-					t.Fatal("single-agent declaration changed", err)
+					t.Fatal(kind, tool, err)
 				}
 			}
 		})

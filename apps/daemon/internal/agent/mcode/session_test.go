@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -205,7 +206,10 @@ func TestMCodeProcess(t *testing.T) {
 		return
 	}
 	encoder := json.NewEncoder(os.Stdout)
+	var sendMu sync.Mutex
 	send := func(value any) {
+		sendMu.Lock()
+		defer sendMu.Unlock()
 		if err := encoder.Encode(value); err != nil {
 			os.Exit(2)
 		}
@@ -215,7 +219,7 @@ func TestMCodeProcess(t *testing.T) {
 		send(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "native-1", "update": fields}})
 	}
 	scanner := bufio.NewScanner(os.Stdin)
-	var promptID json.RawMessage
+	var promptID, sessionParams json.RawMessage
 	prompts, configurations := 0, 0
 	for scanner.Scan() {
 		var frame rpcFrame
@@ -260,6 +264,7 @@ func TestMCodeProcess(t *testing.T) {
 			result = map[string]any{"protocolVersion": 1, "_meta": map[string]any{"oac/subagents": map[string]any{
 				"version": 2, "maxConcurrent": limit, "backgroundBash": scenario == "background-bash" || os.Getenv("OAC_RUNTIME_MCODE_BACKGROUND_BASH") != "off"}}}
 		case "session/new", "session/load":
+			sessionParams = frame.Params
 			if scenario == "prepared-mcp-cancel" {
 				if writeMCPRegistry(os.Getenv("MINIMAX_DATA_DIR"), mcpRegistryEntry("proof.server", "proof_server", "read.status", "read_status")) != nil {
 					os.Exit(12)
@@ -319,6 +324,11 @@ func TestMCodeProcess(t *testing.T) {
 				for range 100 {
 					update("agent_message_chunk", map[string]any{"content": map[string]string{"type": "text", "text": "OLD"}})
 				}
+				continue
+			}
+			if scenario == "functions" {
+				promptID = frame.ID
+				go fakeFunctionTurn(sessionParams, update, send, promptID)
 				continue
 			}
 			if scenario == "prepared-mcp-cancel" {

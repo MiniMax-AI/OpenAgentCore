@@ -61,7 +61,7 @@ Each code returns HTTP 400 with `type: "invalid_request_error"`. A missing, malf
 | `model_provider_base_url_invalid` | `base_url` | omitted | Requires HTTPS without credentials, query or fragment |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` and `allowed_protocols`, from the build's adapter catalog | The protocol is unknown or unsupported by the selected Harness |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`: 16384 | The key is empty, too long or contains a prohibited character |
-| `model_provider_token_limits_invalid` | `context_window` or `max_output_tokens` | omitted | A limit is negative, or `max_output_tokens` exceeds `context_window` (0 when omitted) |
+| `model_provider_token_limits_invalid` | `context_window` or `max_output_tokens` | omitted | A limit is negative, `max_output_tokens` exceeds a set `context_window`, or the Harness has no native setting for a set limit |
 | `model_configuration_model_invalid` | `model` | omitted | The deployment default's model is not a nonempty model identifier |
 | `harness_config_invalid` | `harness_config` | omitted | The deployment default's native parameters are unsupported or invalid |
 | `invalid_sandbox_configuration` | `resources.cpus` | `min`: 1, `max`: 255 | The CPU count is outside the supported bounds |

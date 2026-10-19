@@ -34,6 +34,7 @@ func (s *Session) runExecutorTurn(prompt string) {
 	if len(s.tools) > 0 {
 		reusable = false
 	}
+	s.stopFunctions()
 	s.finishEnvironmentMCP()
 	s.mu.Lock()
 	// ACP and native history cancellation do not prove detached tool cleanup.
@@ -121,6 +122,7 @@ func (s *Session) Cancel(ctx context.Context) error {
 	// context. After native settlement, cancellation retires and drains the owner.
 	s.outputCancel()
 	e.mu.Unlock()
+	s.stopFunctions()
 	var err error
 	if first {
 		raw, _ := json.Marshal(map[string]string{"sessionId": s.sessionID})

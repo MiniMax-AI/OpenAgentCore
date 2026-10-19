@@ -123,6 +123,9 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		plan.DisableFeatures = append(plan.DisableFeatures, "shell_snapshot")
 		env = append(env, providerAPIKeyEnv+"="+provider.BearerToken)
 		excludeFromShellEnvironment(&plan, providerAPIKeyEnv)
+		if provider.ContextWindow > 0 {
+			plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_context_window", fmt.Sprint(provider.ContextWindow)})
+		}
 	}
 
 	plan.Env = env
@@ -258,7 +261,7 @@ func normaliseProviderConfig(raw any) (providerConfig, bool, error) {
 	if err != nil {
 		return providerConfig{}, false, err
 	}
-	return providerConfig{BaseURL: provider.BaseURL, BearerToken: provider.APIKey, WireAPI: "responses"}, true, nil
+	return providerConfig{BaseURL: provider.BaseURL, BearerToken: provider.APIKey, WireAPI: "responses", ContextWindow: provider.ContextWindow}, true, nil
 }
 
 func stringOpt(opts map[string]any, key string) string {

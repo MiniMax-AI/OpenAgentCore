@@ -70,8 +70,14 @@ func (p Provider) Validate() error {
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
 		return ErrConfiguration
 	}
-	if p.ContextWindow < 0 || p.MaxOutputTokens < 0 || p.MaxOutputTokens > p.ContextWindow {
+	if !TokenLimitsValid(p.ContextWindow, p.MaxOutputTokens) {
 		return ErrConfiguration
 	}
 	return nil
+}
+
+// TokenLimitsValid holds the token-limit rule: unset is zero, and an output
+// limit never exceeds a set context window.
+func TokenLimitsValid(contextWindow, maxOutputTokens int32) bool {
+	return contextWindow >= 0 && maxOutputTokens >= 0 && (contextWindow == 0 || maxOutputTokens <= contextWindow)
 }

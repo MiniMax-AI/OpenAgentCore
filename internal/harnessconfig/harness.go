@@ -54,6 +54,9 @@ type Provider struct {
 // only for direct adapters whose model connection remains native-owned.
 type Configuration struct {
 	Providers []Provider
+	// MaxOutputTokens reports that the adapter maps a provider's
+	// max_output_tokens to a native setting. Every adapter maps context_window.
+	MaxOutputTokens bool
 	// ValidateNativeConfig belongs to the selected adapter, never Core.
 	ValidateNativeConfig func(proto.HarnessConfig) bool
 }
@@ -306,7 +309,8 @@ type Admission struct {
 	TextSchema json.RawMessage
 	MultiAgent bool
 	Tools      []json.RawMessage
-	Placement  string
+	// WorkspaceDirectory is the Environment's workspace, empty without one.
+	WorkspaceDirectory string
 }
 
 // ValidateMCPOrigins preserves outbound authority independently of Harness names.
@@ -332,21 +336,14 @@ func (d Declaration) ValidateMCPOrigins(placement string, servers []proto.MCPHTT
 	return nil
 }
 
-// RejectSubagentTools rejects the declared tool types that a Harness cannot
-// combine with Subagents.
-func RejectSubagentTools(admission Admission, unsupported ...string) error {
-	if !admission.MultiAgent {
-		return nil
-	}
-	for _, raw := range admission.Tools {
-		var tool struct {
+// RequireObjectSchemas rejects a function whose parameter schema has no root type object.
+func RequireObjectSchemas(functions []proto.FunctionTool) error {
+	for _, tool := range functions {
+		var schema struct {
 			Type string `json:"type"`
 		}
-		if json.Unmarshal(raw, &tool) != nil {
-			return ErrInvalidInput
-		}
-		if slices.Contains(unsupported, tool.Type) {
-			return errors.New("The configured Subagent profile does not support this tool combination.")
+		if json.Unmarshal(tool.Parameters, &schema) != nil || schema.Type != "object" {
+			return errors.New("The configured engine requires function schemas with root type object.")
 		}
 	}
 	return nil

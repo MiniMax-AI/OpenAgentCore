@@ -2537,12 +2537,16 @@ definitions:
     properties:
       accepts_harness_config:
         type: boolean
+      accepts_max_output_tokens:
+        description: AcceptsMaxOutputTokens reports that the Harness maps max_output_tokens natively.
+        type: boolean
       protocols:
         items:
           type: string
         type: array
     required:
       - accepts_harness_config
+      - accepts_max_output_tokens
       - protocols
     type: object
   v1.ModelProviderInput:

@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: d8e2ef6c37e49d482f9eed39490ce5f20dc892c29667fb71070fe88c1321600f
+source_hash: b65ff793e777225c871367f2f48608458acf78104d0f831f2be7633a534e9768
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -79,7 +79,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `tool_search` | Agent 启用 tool search 或延迟 function 加载 |
 | `function_tools` | Agent 声明 function tool |
 | `message_images`, `function_result_images` | 消息或 function result 携带图像 |
-| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 HTTP MCP server；其中一个为 `required`；其中一个选用了 Vault 凭据 |
+| `mcp_http_tools`, `mcp_http_required`, `mcp_http_bearer_auth` | Agent 声明 MCP server（HTTP 或 stdio）；其中一个为 `required`；其中一个选用了 Vault 凭据 |
 
 `retained_native_history` 表示 Runtime 与 Harness 组合可在确认原生进程关闭后，从私有持久状态重新打开同一个原生 Session。它不保证恢复进程内存、后台进程或外部连接。所选文件系统还必须独立提供持久存储。Core 根据旧设备已持久化的声明判断能否释放计算而不终结 Session，并在准入执行前验证新 Runtime。原生历史缺失或无效时明确失败，绝不授权新建原生会话或重放此前输入。
 
@@ -112,11 +112,15 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
 | `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
-| `function_result` | `function_call`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
+| `function_result` | `function_call`, `function_call_withdrawn`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | 对应的 `*_result` | [读取](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go)、[写入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go)、[导出](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [暂停 fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
 
 初始、已准备和活动输入使用同一[有序 MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go)。Adapter 保留消息与内容顺序，并明确拒绝不支持的内容；仅文本 transport 拒绝图像内容而不丢弃它。[消息输入契约](../../contracts/agents-api/zh/message-content.md)负责公开图像 profile、空白规则和各 Harness 的原生转换。
+
+Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，含义与 `subagent_turn` 中相同；Run 自身发起的调用两者均为空。Adapter 在调用之前发送该子级的 `subagent_identity` 和 `subagent_turn`，Core 用同一个 `call_id` 的 `function_result` 作答。
+
+`function_call_withdrawn` 携带某个 `function_call` 的 `call_id`、`native_id` 和 `turn_id`，表示原生 Harness 永远不会为它应用结果，例如 Codex Subagent 的 Turn 已结束且原生丢弃了其请求。Core 不再要求回答该调用，并拒绝之后为它提交的结果。adapter 以 `not_pending` 确认已在传输中的 `function_result`，Core 随后等待撤回或 Turn 结束，既不让 Turn 失败，也不重发该结果。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 
@@ -308,7 +312,7 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 
 ## MCP 连接权限 {#mcp-connection-authority}
 
-`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
+`execution_prepare` 配置中每个公开 `MCPHTTPServer` 都携带明确的 `connection_origin`；值缺失或未知时拒绝，不选择默认值，Core 在 dispatch 前冻结公开默认值。`MCPHTTPServer.headers` 携带非机密的字面标头；凭据只通过 `bearer_token` 传递。`MCPHTTPServer.stdio`（`command`、`args`、`cwd`、`env_vars`）声明 Environment 的进程而非 URL：它要求 `environment` 来源，不带标头或 bearer，`env_vars` 只列进程继承的变量名，不含其值。Runtime 在选择 factory 前用公共 validator 验证 origin，并将公开和已安装 MCP 解析为临时 effective binding。[Environment 契约](../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)负责支持的组合、原生限制和故障所有权。
 
 ## 超时与限制 {#timeouts-and-limits}
 

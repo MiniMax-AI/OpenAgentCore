@@ -18,8 +18,11 @@ type functionReply struct {
 }
 
 type pendingFunction struct {
-	rpcID   any
-	turnID  string
+	rpcID  any
+	thread string
+	turnID string
+	// held is the Subagent call that waits for its child Turn fact.
+	held    *proto.Envelope
 	name    string
 	reply   *functionReply
 	receipt chan error
@@ -51,7 +54,7 @@ func (s *Session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 	}
 	s.functions.mu.Lock()
 	pending := s.functions.pending[result.CallID]
-	if pending == nil || pending.reply != nil || s.functions.closed || s.cancelled.Load() || s.terminal.Load() {
+	if pending == nil || pending.reply != nil || s.functions.closed || s.cancelled.Load() || (pending.thread == s.currentThreadID() && s.terminal.Load()) {
 		s.functions.mu.Unlock()
 		return agent.ErrUnknownFunctionCall
 	}
@@ -129,13 +132,13 @@ func (s *Session) confirmFunctionResult(raw json.RawMessage) {
 		TurnID   string                `json:"turnId"`
 		Item     toolObservationSource `json:"item"`
 	}
-	if json.Unmarshal(raw, &event) != nil || event.Item.Type != "dynamicToolCall" || !s.isRootTurn(event.ThreadID, event.TurnID) {
+	if json.Unmarshal(raw, &event) != nil || event.Item.Type != "dynamicToolCall" {
 		return
 	}
 	s.functions.mu.Lock()
 	defer s.functions.mu.Unlock()
 	pending := s.functions.pending[event.Item.ID]
-	if pending == nil || pending.reply == nil || s.functions.closed || s.cancelled.Load() {
+	if pending == nil || pending.thread != event.ThreadID || pending.turnID != event.TurnID || pending.reply == nil || s.functions.closed || s.cancelled.Load() {
 		return
 	}
 	item := event.Item
@@ -144,7 +147,7 @@ func (s *Session) confirmFunctionResult(raw json.RawMessage) {
 		status = "failed"
 	}
 	var err error
-	if pending.turnID != event.TurnID || pending.name != item.Tool || item.Namespace != "" || item.Status != status || item.Success == nil || *item.Success != pending.reply.Success || item.ContentItems == nil || !reflect.DeepEqual(*item.ContentItems, pending.reply.ContentItems) {
+	if pending.name != item.Tool || item.Namespace != "" || item.Status != status || item.Success == nil || *item.Success != pending.reply.Success || item.ContentItems == nil || !reflect.DeepEqual(*item.ContentItems, pending.reply.ContentItems) {
 		err = errors.New("codex: native function receipt does not match submitted result")
 	}
 	delete(s.functions.pending, item.ID)

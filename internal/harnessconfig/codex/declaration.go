@@ -16,6 +16,8 @@ var Declaration = harnessconfig.Declaration{
 	Kind:  "codex",
 	Label: "Codex",
 	Configuration: harnessconfig.Configuration{
+		// context_window maps to model_context_window; Codex has no native
+		// max_output_tokens setting.
 		Providers: []harnessconfig.Provider{{Protocol: "responses"}},
 	},
 	Capabilities: proto.AgentKindCapabilities{
@@ -69,9 +71,6 @@ var Declaration = harnessconfig.Declaration{
 		return rejectRemoteImages(proto.MessageInput{{Content: result.Content}})
 	},
 	ValidateConfiguration: func(admission harnessconfig.Admission) error {
-		if err := harnessconfig.RejectSubagentTools(admission, "function", "mcp"); err != nil {
-			return err
-		}
 		// Subagent observation turns native code_mode off.
 		if admission.MultiAgent && enablesProgrammaticToolCalling(admission.Tools) {
 			return errors.New("programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness.")
@@ -88,7 +87,7 @@ func rejectRemoteImages(input proto.MessageInput) error {
 				continue
 			}
 			if scheme, _, ok := strings.Cut(*part.ImageURL, ":"); ok && (strings.EqualFold(scheme, "http") || strings.EqualFold(scheme, "https")) {
-				return errors.New("remote image URLs are not supported; use an inline data URL instead")
+				return harnessconfig.ErrInvalidInput
 			}
 		}
 	}

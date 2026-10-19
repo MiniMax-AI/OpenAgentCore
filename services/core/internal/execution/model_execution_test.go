@@ -35,7 +35,10 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 	for _, engine := range []string{"codex", "claude_sdk", "mcode"} {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(engine+"/"+protocol, func(t *testing.T) {
-				provider := &v1.ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000, MaxOutputTokens: 8000}
+				provider := &v1.ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000}
+				if engine != "codex" {
+					provider.MaxOutputTokens = 8000 // Codex has no native output limit.
+				}
 				got, err := resolvedSessionModelOptions(provider, engine)
 				native := engine == "mcode" || engine == "codex" && protocol == "responses" || engine == "claude_sdk" && protocol == "anthropic"
 				if !native {

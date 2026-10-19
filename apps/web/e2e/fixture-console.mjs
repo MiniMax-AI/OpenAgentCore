@@ -540,7 +540,7 @@ function providerProblem(harness, input) {
   if (!httpsBase(input.base_url)) return "model provider requires an HTTPS base_url without credentials, query or fragment";
   if (!["anthropic", "responses", "chat_completions"].includes(input.protocol)) return "unsupported model provider protocol";
   if (!input.api_key.trim() || Buffer.byteLength(input.api_key) > 16384 || /[\0\r\n]/.test(input.api_key)) return "invalid model provider API key";
-  if ((input.max_output_tokens ?? 0) > (input.context_window ?? 0)) return "invalid model token limits";
+  if (input.context_window && (input.max_output_tokens ?? 0) > input.context_window) return "invalid model token limits";
   return null;
 }
 
@@ -553,7 +553,7 @@ function providerProblem(harness, input) {
  * DELETE is 204 and safe to repeat. A disabled harness may still be configured.
  */
 async function harnessRoute(request, response, path) {
-  const support = (id) => ({ protocols: id === "codex" ? ["responses"] : id === "claude_sdk" ? ["anthropic"] : ["anthropic", "responses", "chat_completions"], accepts_harness_config: id === "claude_sdk" });
+  const support = (id) => ({ protocols: id === "codex" ? ["responses"] : id === "claude_sdk" ? ["anthropic"] : ["anthropic", "responses", "chat_completions"], accepts_harness_config: id === "claude_sdk", accepts_max_output_tokens: id !== "codex" });
   const view = (id) => ({ model_configuration_support: support(id), object: "core.harness", id, enabled: state.harnesses[id].enabled, default: state.harnesses[id].default, model_configuration: state.harnesses[id].provider });
   if (path === "/harnesses" && request.method === "GET") return send(response, 200, { object: "list", data: Object.keys(state.harnesses).map(view) });
   const match = path.match(HARNESS_PROVIDER);

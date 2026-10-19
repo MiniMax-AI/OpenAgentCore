@@ -380,19 +380,19 @@ Skills and their immutable versions are Project resources, independent of Sessio
 - Bundles are encrypted with the service cipher, bound to Project, Skill and version. Metadata reads never load or decrypt bundles. Deleting a Skill reclaims its versions without affecting frozen Sessions.
 - References resolve inside the Session creation transaction, after the upsert establishes ownership. Referenced resources are locked in a stable order, and the version, metadata and bytes freeze together. Public reference metadata, unresolved Template intent and the resolved Runtime bundle stay distinct; a reference is never reported as inline.
 
-Inline and referenced Skills use the same confidential snapshot and installer. The Runtime installs them under `skills/<name>` in its capability root before setup and native execution. Adapters register only the selected Skill roots: Codex as explicit extra roots, MiniMax Code through its native catalog, and Claude as one controlled envelope per package with real directories and immutable hard links. Skill roots activate no MCP servers; only [Plugin MCP](#plugin-mcp) does. Codex scans each Skill root recursively as it does locally, so a nested `SKILL.md` registers another native Skill. Claude inline shell preprocessing fails adapter preparation. Native Harness configuration is never passed through wholesale.
+Inline and referenced Skills use the same confidential snapshot and installer. The Runtime installs them under `skills/<name>` in its capability root before setup and native execution. Adapters register only the selected Skill roots: Codex as explicit extra roots, MiniMax Code through its native catalog, and Claude as user Skills under its private state path, so native lists the bare names a local `~/.claude/skills` gives. Claude rejects a Skill that contains `.claude-plugin`, because native would load it as a plugin with its hooks and MCP servers. Skill roots activate no MCP servers; only [Plugin MCP](#plugin-mcp) does. Codex scans each Skill root recursively as it does locally, so a nested `SKILL.md` registers another native Skill. Native Harness configuration is never passed through wholesale.
 
 ### Plugin MCP
 
 A Plugin declares MCP servers with `mcpServers: "./.mcp.json"` in `.codex-plugin/plugin.json`, or through a root `.mcp.json` when the path is omitted. The file holds `mcpServers` keyed by server name. Selecting a Plugin root as a capability directory activates its MCP declarations; selecting a parent directory discovers Skills without activating nested MCP servers.
 
-The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_headers`, and stdio `command`, `args`, selected `env_vars` and a package-relative `cwd`. Public `env_http_headers` is unsupported. The Runtime re-parses the frozen installed packages and resolves selected values only from the initialized env; a missing value fails instead of falling back to a model or daemon variable.
+The shared parser accepts HTTP `url`, `bearer_token_env_var` and literal `http_headers`, which are non-secret like public MCP headers, and stdio `command`, `args`, selected `env_vars` and a package-relative `cwd`. Public `env_http_headers` is unsupported. The Runtime re-parses the frozen installed packages and resolves selected values only from the initialized env; a missing value fails instead of falling back to a model or daemon variable.
 
 A stdio server starts through the daemon's stdio helper, which resolves the installed declaration and launches the command with the Harness's permissions. On Unix the helper replaces itself with the server; on Windows it forwards stdio inside the owned process tree. Initialized values override the declaration's variables. Process groups and Windows Jobs own cancellation and descendant cleanup, not isolation.
 
 [Harness capabilities](./harness-capabilities.md#environment-preparation) owns the supported Plugin transports and per-Harness limits.
 
-Duplicate server identities are rejected. Claude rejects literal headers because the pinned client expands them again and forwards custom headers across origins. MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
+Duplicate server identities are rejected. Claude rejects `${` in a URL or header value ([native differences](./index.md#differences-from-openai)). MiniMax ACP HTTP declarations stay in session-local native memory; tokens never enter native configuration files or process arguments. Required initialization and tool allowlists cannot be set through the Plugin manifest.
 
 ### Effective bindings
 
@@ -400,7 +400,7 @@ The Runtime resolves public HTTP declarations and installed Plugin MCP through `
 
 ### Public MCP connection origin
 
-An Agent's HTTP MCP tool ([declaration](./execution-tools.md#http-mcp)) has a `connection_origin`. Omitted or null means `service`, including on `self_hosted` Sessions. The origin is kept from saved configuration through the Session snapshot to the Runtime request, which requires the exact wire version; a `service` request never becomes an `environment` connection.
+An Agent's HTTP MCP tool ([declaration](./execution-tools.md#mcp)) has a `connection_origin`. Omitted or null means `service`, including on `self_hosted` Sessions, except for a `stdio` server, whose only origin is `environment`. The origin is kept from saved configuration through the Session snapshot to the Runtime request, which requires the exact wire version; a `service` request never becomes an `environment` connection.
 
 | Origin | Connects from | Allowed placements |
 | --- | --- | --- |
@@ -413,4 +413,4 @@ Core's Harness profile declares `MCPOrigins`; admission and dispatch check the o
 
 Both origins support anonymous HTTP and HTTPS bearer credentials. The attached-Vault selection freezes the credential identity, including a unique implicit URL match or an anonymous selection. Only that Project-authorized credential enters the transient Runtime request; Core defaults and unrelated Vaults are never searched. A decryption failure or missing credential fails execution without an anonymous fallback. Public Environment MCP keeps `project_vault` authority and Plugin credentials keep `environment_configuration` authority; neither overrides a duplicate server label. Bearers never enter persisted native configuration or process arguments.
 
-Tool allowlists and required initialization follow the [HTTP MCP contract](./execution-tools.md#http-mcp).
+Tool allowlists and required initialization follow the [HTTP MCP contract](./execution-tools.md#mcp).

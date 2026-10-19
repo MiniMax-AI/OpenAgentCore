@@ -53,6 +53,9 @@ type functionExchange struct {
 	tools                 []proto.FunctionTool
 	callID                string
 	reply                 <-chan functionReply
+	// abandoned holds the calls whose result the native Harness no longer
+	// waited for. Their withdrawal, or the Turn's end, settles them.
+	abandoned map[string]bool
 }
 
 func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error {
@@ -69,6 +72,19 @@ func (f *functionExchange) record(ctx context.Context, env proto.Envelope) error
 	}
 	err := f.sessions.RecordFunctionCall(ctx, f.tenant, f.session, f.turn, sessions.FunctionCall{
 		CallID: items.Identity(f.turn, "tool:"+call.CallID), ExecutorCallID: call.CallID, Name: call.Name, Arguments: call.Arguments,
+		Subagent: call.NativeID, SubagentTurn: call.TurnID,
+	})
+	return f.unlessCancelling(ctx, err)
+}
+
+func (f *functionExchange) withdraw(ctx context.Context, env proto.Envelope) error {
+	var call proto.FunctionCallWithdrawnPayload
+	if env.ID != f.turn || env.DecodePayload(&call) != nil {
+		return errors.New("invalid function withdrawal")
+	}
+	err := f.sessions.WithdrawFunctionCall(ctx, f.tenant, f.session, f.turn, sessions.FunctionCall{
+		CallID: items.Identity(f.turn, "tool:"+call.CallID), ExecutorCallID: call.CallID,
+		Subagent: call.NativeID, SubagentTurn: call.TurnID,
 	})
 	return f.unlessCancelling(ctx, err)
 }
@@ -82,7 +98,7 @@ func (f *functionExchange) start(ctx context.Context, peer *runtimegateway.Sessi
 		return err
 	}
 	for _, call := range calls {
-		if len(call.Result) == 0 {
+		if len(call.Result) == 0 || f.abandoned[call.CallID] {
 			continue
 		}
 		result, err := functionResult(call)
@@ -114,7 +130,12 @@ func (f *functionExchange) confirm(ctx context.Context, reply functionReply) err
 		return reply.err
 	}
 	if !reply.ack.Applied {
-		return fmt.Errorf("function result not applied: %s", reply.ack.ErrorCode)
+		if reply.ack.ErrorCode != "not_pending" {
+			return fmt.Errorf("function result not applied: %s", reply.ack.ErrorCode)
+		}
+		// The withdrawal can reach this loop after the acknowledgement.
+		f.abandoned[id] = true
+		return nil
 	}
 	return f.unlessCancelling(ctx, f.sessions.ConfirmFunctionResult(ctx, f.tenant, f.session, f.turn, id))
 }

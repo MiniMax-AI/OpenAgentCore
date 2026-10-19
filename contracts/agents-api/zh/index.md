@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 5b97b5d41f986467a6f2f891d2354476e1e3594b494784a203f337f339c64ea3
+source_hash: 050403bd0008b17cbe601b3b7cbbe171df15fc1a046e4a30030ab5a19d02133a
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -74,15 +74,22 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 未指定程序化工具调用时，会保留 Harness 的原生行为；官方默认值为启用。
 - Agent 未声明 `web_search` 工具时，会保留 Harness 的[原生搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)；固定的官方契约未定义未声明该工具时是否搜索。
 - 工作区位置上的 Claude Code 把 Agent 的 `instructions` 追加到原生系统提示词之后，并运行其[原生工具集](./execution-tools.md#web-search-and-programmatic-tool-calling)。其搜索没有缓存模式，也没有域名、位置和上下文大小设置。
+- Claude Code 在原生层丢弃仅含空白的文本块，全空白消息会发送 `(no content)`；Codex 原样交付仅含空白的文本。
+- Claude Code 在 Skill 展开时运行其内联 shell，因此该命令不产生工具观测。
+- Claude Code 在 `environment: none` 上启用 live 搜索时只有 `WebSearch`，因此搜索只产生 `search` 动作，不会打开页面（[网页搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)）。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
+- Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
+- `stdio` MCP 服务器需要工作区部署位置和 `environment` 来源。Claude Code 在其工作区目录中启动服务器，因此 `cwd` 必须与之相同；服务器继承整个进程环境，其中也有模型提供方密钥和其他服务器的 Vault bearer 令牌；且 `allowed_tools` 须为 null。MiniMax Code 在其私有主目录中启动服务器，因此拒绝所有 `stdio` 服务器（[MCP](execution-tools.md#mcp)）。
+- Claude 会拒绝包含 `${` 的 MCP `server_url` 或 `headers` 值，因为原生客户端会从持有 Core 所持凭据的进程环境中展开这两处的 `${VAR}`。
 - 在 events 202 之后立即删除 Session 会返回 409，因为 Core 会在同一事务中准入该 Turn；官方服务返回 200。
 
 **输入、事件和历史**（[Sessions, events and history](sessions-events.md)、[message content](message-content.md)）
 
 - 提交给 `none` Session 的输入会同步完成准入；Core 不会模拟官方异步准入窗口。
 - 用于恢复等待中 Turn 的函数结果会发出 `turn.in_progress`；取消正在等待函数结果的 Turn 会发出临时 `agent.session.in_progress`。
+- 原生 Harness 放弃的函数调用（例如根关闭或中断子级时被丢弃的 Subagent 调用，或超过 120 秒超时的 MiniMax Code 调用）会被撤回：它不再是待执行操作，之后为它提交结果会返回 409 `conflict_error`。官方 API 没有撤回机制。
 - 在 Turn 中途接入流时，不会发送补发 Item 快照。
 - Items 列表会包含进行中和未完成的输出 Items，并保留失败函数结果中已提交的 `output`。
 - 错误消息会省略官方消息包含的 call 和 executor ID。
@@ -101,6 +108,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
+- MiniMax Code 逐个运行公共函数调用，因此应用每次只看到一个 `function_call`。
+- MiniMax Code 通过原生 MCP 服务器提供公共函数，其客户端会在 120 秒后使调用失败且无法更改。120 秒后原生向模型报告失败，该调用被撤回，Turn 继续。
 - Vault 和 Credential 的状态仅在内部保存，默认值为 `active`；由于没有归档操作，未带过滤器的列表会同时包含两种状态。
 - `vault_ids` 中包含未知或属于其他账户的 Vault 时会返回 404 "Resource not found."；官方消息会指出该 ID。
 - 更新时显式为 OAuth `access_token`、`refresh` 或 `token_endpoint_auth` 指定 `null`，会保留已存储的值。
@@ -112,9 +121,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **配置和工具**
 
 - 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不提供公共 functions，也不支持图像输入。
+- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入。
 - 由模型推导出的推理默认值不会被解析确定。
-- MCP 工具仅支持 `http` 传输，`stdio` 会被拒绝，Session MCP 传输中的内联 `authorization` 也会被拒绝（[HTTP MCP](execution-tools.md#http-mcp)）。
 
 **执行和历史**
 
@@ -154,10 +162,11 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
+- Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
 - Subagent 子级 Turns 和待处理的 Environment file 写入是否会阻止 Session 删除。
 - 官方服务在待处理输入错误与未知结果目标之间的先后顺序。
 - npm、initial-file 和 Skill 安装的失败原因没有官方样本。
-- Codex 对文本旁的空文本部分、失败函数结果中的图像或远程引用图像的行为；Claude 对混合消息中仅含空白或空文本块的行为。
+- Codex 对文本旁的空文本部分、失败函数结果中的图像或远程引用图像的行为。
 - 在 Core 返回 405 的路由上，官方服务的 `HEAD` 行为。
 - 精确主机名之外的 Environment 模板主机名形式，以及 `disabled` 与域结合使用的情况。
 - Files 发生变化时的 purpose 筛选和分页；官方 Skill 上传限制和错误时机。

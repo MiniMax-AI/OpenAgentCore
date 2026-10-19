@@ -79,5 +79,9 @@ func (p *ModelProviderView) ValidateHarnessWithRegistry(harness string, registry
 	if p == nil {
 		return errors.New("model_provider is required")
 	}
-	return registry.ValidateProtocol(harness, string(p.Protocol))
+	if err := registry.ValidateProtocol(harness, string(p.Protocol)); err != nil {
+		return err
+	}
+	configuration, _ := registry.Lookup(harness)
+	return configuration.ValidateMaxOutputTokens(p.MaxOutputTokens)
 }

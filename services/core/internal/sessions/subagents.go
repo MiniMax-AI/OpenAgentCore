@@ -92,14 +92,19 @@ type ChildItem struct {
 	Output             bool
 }
 
-// SubagentProjectionTx loads and applies what projecting Subagent observations
-// reads and writes.
-type SubagentProjectionTx interface {
-	// LoadRootAgent reads the Session's Agent ID.
-	LoadRootAgent(ctx context.Context) (string, error)
+// NativeSubagents reads the Session's native Subagents.
+type NativeSubagents interface {
 	// LoadNativeSubagent reads the Session's native Subagent and reports whether
 	// the Session has it.
 	LoadNativeSubagent(ctx context.Context, native string) (NativeSubagent, bool, error)
+}
+
+// SubagentProjectionTx loads and applies what projecting Subagent observations
+// reads and writes.
+type SubagentProjectionTx interface {
+	NativeSubagents
+	// LoadRootAgent reads the Session's Agent ID.
+	LoadRootAgent(ctx context.Context) (string, error)
 	// PutSubagentIdentity binds a native Subagent to the Session, or finds the
 	// same binding, and returns its ID. A different binding of the native ID,
 	// or a parent the Session does not know, is ErrIdempotencyConflict.
@@ -138,7 +143,7 @@ func validNativeIdentity(value string) bool {
 
 // visibleSubagent reads the public native Subagent an observation names; one
 // the Session does not have or has not published is ErrInvalidInput.
-func visibleSubagent(ctx context.Context, tx SubagentProjectionTx, native string) (NativeSubagent, error) {
+func visibleSubagent(ctx context.Context, tx NativeSubagents, native string) (NativeSubagent, error) {
 	child, found, err := tx.LoadNativeSubagent(ctx, native)
 	if err != nil {
 		return NativeSubagent{}, err

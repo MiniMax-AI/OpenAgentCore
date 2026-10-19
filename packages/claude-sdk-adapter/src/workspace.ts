@@ -1,8 +1,8 @@
 import type { Subagents } from "./subagents.js";
 import type { MCPProfile } from "./mcp.js";
 import { parseEnvironmentMCP, type EnvironmentMCPServer } from "./mcp_environment.js";
-import { parseSkills, workspaceSkills, type WorkspaceSkill } from "./workspace_skills.js";
-import type { HookCallback, Options } from "@anthropic-ai/claude-agent-sdk";
+import { installSkills, parseSkills, type WorkspaceSkill } from "./workspace_skills.js";
+import type { Options } from "@anthropic-ai/claude-agent-sdk";
 import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, parse } from "node:path";
 
@@ -20,7 +20,8 @@ export type Workspace = {
 const environmentNames = new Set([
   "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
   "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-  "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+  "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "CLAUDE_CODE_MAX_CONTEXT_TOKENS", "CLAUDE_CODE_MAX_OUTPUT_TOKENS",
+  "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
 ]);
 const invalidPath = /[\x00-\x1f\x7f]/;
 
@@ -80,31 +81,15 @@ export class WorkspaceProfile {
       if (!process.env[reference]) throw new Error("invalid_request");
       env[reference] = process.env[reference]!;
     }
-    const skills = workspaceSkills(config.skills ?? [], config.capability_root ?? "");
-    this.skillNames = skills?.names ?? [];
+    this.skillNames = installSkills(config.skills ?? [], config.capability_root ?? "", config.state);
     this.options = {
       env, tools: { type: "preset", preset: "claude_code" },
       // Nobody answers a question, no Turn leaves scheduled, monitoring or workflow work behind, ListAgents
       // would reach other Sessions' processes on the host, and Core declares subagents and search.
       disallowedTools: ["AskUserQuestion", "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Monitor", "Workflow", "ListAgents",
         ...(subagents ? [] : ["Agent", "SendMessage"]), ...(disableWebSearch ? ["WebSearch", "WebFetch"] : [])],
-      ...(skills ? { plugins: skills.paths.map(path => ({ type: "local" as const, path, skipMcpDiscovery: true })) } : {}),
       // The native CLI refuses permission bypass for root accounts, so the callback approves every tool.
       canUseTool: async (_name, input) => ({ behavior: "allow", updatedInput: input }),
     };
-  }
-
-  // Public Skill names resolve to their namespaced native plugin identities.
-  readonly beforeTool: HookCallback = async input => {
-    if (input.hook_event_name !== "PreToolUse" || input.tool_name !== "Skill") return {};
-    const skill = this.skillName((input.tool_input as { skill?: unknown } | null)?.skill);
-    return skill === undefined ? {} : { hookSpecificOutput: { hookEventName: "PreToolUse",
-      updatedInput: { ...(input.tool_input as object), skill } } };
-  };
-
-  private skillName(value: unknown): string | undefined {
-    if (typeof value !== "string") return undefined;
-    // Public names are unique in the installed snapshot; native plugins add a namespace.
-    return this.skillNames.find(name => name === value || name.endsWith(":" + value));
   }
 }

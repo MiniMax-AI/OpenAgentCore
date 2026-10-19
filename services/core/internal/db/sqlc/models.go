@@ -170,6 +170,7 @@ type FunctionCall struct {
 	Result         []byte             `json:"result"`
 	Applied        bool               `json:"applied"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	Withdrawn      bool               `json:"withdrawn"`
 }
 
 type InitialEnvironmentFile struct {

@@ -41,21 +41,15 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   // Codex accepts no native Harness configuration.
   await set.getByText("Advanced settings", { exact: true }).click();
   await expect(set.getByLabel("Harness configuration (JSON)")).toHaveCount(0);
-  // Limits are Core's 32-bit whole numbers, and max output needs a context window at least as large.
-  await set.getByLabel("Max output tokens").fill("32000");
-  await expect(set.getByText("Set a context window at least this large.")).toBeVisible();
-  await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
-  await expect(set.getByLabel("Context window", { exact: true })).toHaveAccessibleDescription(/Set a context window at least this large/);
-  await expect(set.getByLabel("Max output tokens", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
-  await set.getByLabel("Context window", { exact: true }).fill("1000");
-  await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  // Codex has no native output limit; limits are Core's 32-bit whole numbers.
+  await expect(set.getByLabel("Max output tokens")).toHaveCount(0);
   await set.getByLabel("Context window").fill("2147483648");
   await expect(set.getByText("Enter a whole number up to 2147483647.")).toBeVisible();
   await expect(set.getByRole("button", { name: "Save" })).toBeDisabled();
   await set.getByLabel("Context window").fill("200000");
   await set.getByRole("button", { name: "Save" }).click();
   await expect(set).toBeHidden();
-  for (const text of ["Ready", "OpenAI Responses", "https://model.example/v1", "Configured", "200,000", "32,000"]) await expect(codex).toContainText(text);
+  for (const text of ["Ready", "OpenAI Responses", "https://model.example/v1", "Configured", "200,000"]) await expect(codex).toContainText(text);
   expect(await page.content()).not.toContain(KEY);
 
   // Replacing starts from the saved fields but never from the key; closing the form forgets a typed key.
@@ -131,6 +125,15 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   await limits.getByLabel("Base URL").fill("https://model.example/anthropic");
   await limits.getByLabel("API key").fill(KEY);
   await limits.getByLabel("Default model ID").fill("fixture-model");
+  // Max output alone is valid and must fit a set context window.
+  await limits.getByText("Advanced settings", { exact: true }).click();
+  await limits.getByLabel("Max output tokens").fill("32000");
+  await expect(limits.getByLabel("Context window", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
+  await limits.getByLabel("Context window", { exact: true }).fill("1000");
+  await expect(limits.getByText("Set a context window at least this large.")).toBeVisible();
+  await expect(limits.getByLabel("Context window", { exact: true })).toHaveAccessibleDescription(/Set a context window at least this large/);
+  await expect(limits.getByLabel("Max output tokens", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
+  await limits.getByLabel("Context window", { exact: true }).fill("");
   await expect(limits.getByRole("button", { name: "Save" })).toBeEnabled();
   await limits.getByRole("button", { name: "Cancel" }).click();
   await expect(mcode).toContainText("Not set");

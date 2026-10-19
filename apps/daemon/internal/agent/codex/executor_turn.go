@@ -43,7 +43,7 @@ func (s *Session) settleExecutorTurn(startErr error) {
 	s.operationsClosed = true
 	s.operationMu.Unlock()
 	s.stopSteering()
-	s.stopFunctionCalls()
+	s.stopFunctionCalls(false)
 	if !s.nativeSettled.Load() || startErr != nil || !s.rpc.Alive() {
 		s.cancelFn()
 		s.settlementErr = errors.Join(s.settlementErr, s.rpc.Close())
@@ -117,7 +117,7 @@ func (s *Session) cancelExecutorTurn(ctx context.Context) error {
 		s.cancelReady = make(chan struct{})
 		go func() {
 			defer close(s.cancelReady)
-			s.stopFunctionCalls()
+			s.stopFunctionCalls(false)
 			turnID, active := s.stopSteering()
 			if !s.terminal.Load() && active {
 				if turnID == "" {
@@ -148,19 +148,8 @@ func (s *Session) cancelExecutorTurn(ctx context.Context) error {
 
 var _ agent.Turn = (*Session)(nil)
 
-// Server callbacks retain their originating Turn, whose ID must match exactly.
 func (s *Session) onServerRequest(method string, handler ServerRequestHandler) {
 	s.rpc.OnServerRequest(method, func(raw json.RawMessage, id any) (any, error) {
-		if s.executor != nil {
-			var scope struct {
-				ThreadID string `json:"threadId"`
-				TurnID   string `json:"turnId"`
-			}
-			if json.Unmarshal(raw, &scope) != nil || !s.isRootThread(scope.ThreadID) || s.terminal.Load() ||
-				scope.TurnID == "" || !s.isRootTurn(scope.ThreadID, scope.TurnID) {
-				return nil, errors.New("codex: request does not belong to the active turn")
-			}
-		}
 		if !s.beginOperation() {
 			return nil, errors.New("codex: turn has settled")
 		}

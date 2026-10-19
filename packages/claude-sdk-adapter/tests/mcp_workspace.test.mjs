@@ -77,7 +77,6 @@ test("workspace inventory tolerates native tools and servers, but not unavailabl
   mcp.close();
   for (const [tools, servers] of [
     [[...nativePreset, native], [{ ...statuses[0], tools: [{ name: "echo.v1" }, { name: "echo_v1" }] }]],
-    [[...nativePreset, native], [{ ...statuses[0], status: "pending" }]],
     [nativePreset, []],
   ]) {
     const declared = new MCPProfile([stdio], []);
@@ -87,6 +86,14 @@ test("workspace inventory tolerates native tools and servers, but not unavailabl
   const exact = new MCPProfile([stdio], []);
   assert.throws(() => exact.verify([...nativePreset, native], statuses, "session"));
   exact.close();
+  // An optional server that did not connect contributes no tools; a required one fails.
+  const optional = new MCPProfile([stdio], []);
+  optional.verify(nativePreset, [{ ...statuses[0], status: "failed" }], "session", false);
+  assert.equal(optional.identities.size, 0);
+  optional.close();
+  const required = new MCPProfile([{ ...stdio, required: true }], []);
+  assert.throws(() => required.verify(nativePreset, [{ ...statuses[0], status: "pending" }], "session", false), /required/);
+  required.close();
 });
 
 test("workspace bearer references reach native HTTP without leaking values into the request", t => {
@@ -135,4 +142,13 @@ test("public workspace HTTP preserves required startup and null versus empty all
     mcp.verify([...nativePreset,...selected.map(name=>"mcp__remote__"+name)],statuses,"session",false);
     mcp.close();
   }
+});
+
+test("declared stdio MCP runs the caller's command natively", () => {
+  const declared = { server_label: "local", command: "run", args: ["-c", "a\nb"], allowed_tools: null, required: true, declared: true };
+  assert.deepEqual(parseEnvironmentMCP([declared]), [declared]);
+  for (const value of [{ ...declared, allowed_tools: ["x"] }, { ...declared, declared: false }, { ...declared, command: " " }, { ...declared, env: {} }]) {
+    assert.throws(() => parseEnvironmentMCP([value]), /invalid_request/);
+  }
+  assert.deepEqual(new MCPProfile([declared], []).servers.local, { type: "stdio", command: "run", args: ["-c", "a\nb"], env: {}, alwaysLoad: true });
 });

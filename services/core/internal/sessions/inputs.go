@@ -373,7 +373,10 @@ type FunctionCall struct {
 	CallID, ExecutorCallID, Name string
 	Arguments                    json.RawMessage
 	Result                       json.RawMessage
-	Applied                      bool
+	Applied, Withdrawn           bool
+	// Subagent and SubagentTurn are the native child and Turn that made the
+	// call. They are inputs only and are not stored.
+	Subagent, SubagentTurn string
 }
 
 // FunctionResultInput identifies a persisted call; Result is validated by the API.

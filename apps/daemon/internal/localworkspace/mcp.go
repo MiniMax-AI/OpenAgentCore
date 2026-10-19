@@ -45,3 +45,19 @@ func resolveEnvironmentMCP(installed []agentcapabilities.InstalledMCP, values ma
 	}
 	return result, nil
 }
+
+// requireDeclaredVariables fails a public stdio server that names a variable the
+// initialized env does not set, as resolveEnvironmentMCP does for installed servers.
+func requireDeclaredVariables(servers []proto.MCPHTTPServer, values map[string]string) error {
+	for _, server := range servers {
+		if server.Stdio == nil {
+			continue
+		}
+		for _, name := range server.Stdio.EnvVars {
+			if _, exists := values[name]; !exists {
+				return errors.New("declared environment MCP variable unavailable")
+			}
+		}
+	}
+	return nil
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -15,14 +16,14 @@ import (
 
 // Declaration is the only authored description of the Claude Code Harness. The
 // Runtime may narrow Capabilities to the installed bundle, never widen them.
-// Whitespace-only text is unsupported because the bridge and Anthropic-compatible
-// providers reject text without non-whitespace characters.
 var Declaration = harnessconfig.Declaration{
 	Kind:  "claude_sdk",
 	Label: "Claude Code",
 	Configuration: harnessconfig.Configuration{
 		ValidateNativeConfig: validateNativeConfig,
 		Providers:            []harnessconfig.Provider{{Protocol: "anthropic"}},
+		// CLAUDE_CODE_MAX_OUTPUT_TOKENS, which native caps at the model's limit.
+		MaxOutputTokens: true,
 	},
 	Capabilities: proto.AgentKindCapabilities{
 		SubagentObservations:     proto.CapabilitySupported,
@@ -53,10 +54,13 @@ var Declaration = harnessconfig.Declaration{
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
 	},
 	// The SDK takes effort low to max. It has no verbosity, summary or service
-	// tier, and enabling programmatic tool calling is not wired. Native WebSearch
-	// and WebFetch are live and have no cached mode or settings: disabled removes
-	// them, while live and an absent control keep them. Medium is the official
-	// default verbosity and needs no setting.
+	// tier. Native REPL runs tool calls inside model-written code, outside the root
+	// tool_use and tool_result records that function receipts and tool observations
+	// read, so enabling programmatic tool calling is rejected. Native WebSearch and
+	// WebFetch are live and have no cached mode or settings: disabled removes them,
+	// and live and an absent control keep them on workspace placements. On none,
+	// live adds only WebSearch. Medium is the official default verbosity and needs
+	// no setting.
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled", "live"},
 		ReasoningEfforts:        []string{"low", "medium", "high", "xhigh", "max"},
@@ -65,7 +69,7 @@ var Declaration = harnessconfig.Declaration{
 	},
 	Placements:             []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:             []string{"service", "environment"},
-	WhitespaceOnlyText:     proto.CapabilityUnsupported,
+	WhitespaceOnlyText:     proto.CapabilitySupported,
 	ValidateConfiguration:  validateConfiguration,
 	ValidateTools:          validateTools,
 	ValidateMessageInput:   validateMessageInput,
@@ -84,18 +88,19 @@ func validateConfiguration(admission harnessconfig.Admission) error {
 	}
 	for _, raw := range admission.Tools {
 		var tool struct {
-			Type string `json:"type"`
-			Mode string `json:"mode"`
+			Type      string `json:"type"`
+			Transport struct {
+				Type string `json:"type"`
+				Cwd  string `json:"cwd"`
+			} `json:"transport"`
 		}
-		if json.Unmarshal(raw, &tool) != nil {
-			return harnessconfig.ErrInvalidInput
-		}
-		// environment:none runs no native tools, so live search has no home there.
-		if tool.Type == "web_search" && tool.Mode == "live" && admission.Placement == "none" {
-			return errors.New("Live web search requires a managed or self-hosted execution Environment.")
+		// Native starts stdio servers in the workspace and has no cwd setting.
+		if json.Unmarshal(raw, &tool) == nil && tool.Type == "mcp" && tool.Transport.Type == "stdio" && admission.WorkspaceDirectory != "" &&
+			filepath.Clean(tool.Transport.Cwd) != filepath.Clean(admission.WorkspaceDirectory) {
+			return errors.New("The configured engine starts MCP stdio servers in the workspace directory; set cwd to it.")
 		}
 	}
-	return harnessconfig.RejectSubagentTools(admission, "function", "mcp")
+	return nil
 }
 
 // validateTools applies execution limits of the packaged adapter. Shared
@@ -105,16 +110,15 @@ func validateTools(tools []proto.FunctionTool, servers []proto.MCPHTTPServer) er
 		if !mcpLabel.MatchString(server.ServerLabel) || server.ServerLabel == "functions" || strings.Contains(server.ServerURL, "#") {
 			return errors.New("The configured engine does not support this HTTP MCP declaration.")
 		}
-	}
-	for _, tool := range tools {
-		var schema struct {
-			Type string `json:"type"`
+		// Native hides unselected tools only for HTTP servers, which the adapter lists itself.
+		if server.Stdio != nil && server.AllowedTools != nil {
+			return errors.New("The configured engine requires allowed_tools=null for MCP stdio servers.")
 		}
-		if json.Unmarshal(tool.Parameters, &schema) != nil || schema.Type != "object" {
-			return errors.New("The configured engine currently requires function schemas with root type object.")
+		if ExpandsEnvironment(server) {
+			return errors.New("The configured engine does not support ${ in MCP URLs or header values.")
 		}
 	}
-	return nil
+	return harnessconfig.RequireObjectSchemas(tools)
 }
 
 func validateFunctionResult(result proto.FunctionResultPayload) error {
@@ -189,4 +193,18 @@ func validThinking(thinking map[string]any) bool {
 		}
 	}
 	return true
+}
+
+// ExpandsEnvironment reports a URL or header value the native client would
+// expand from its own environment, which holds Core-held credentials.
+func ExpandsEnvironment(server proto.MCPHTTPServer) bool {
+	if strings.Contains(server.ServerURL, "${") {
+		return true
+	}
+	for _, value := range server.Headers {
+		if strings.Contains(value, "${") {
+			return true
+		}
+	}
+	return false
 }

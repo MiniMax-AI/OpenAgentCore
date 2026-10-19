@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 var errTurnCancelled = errors.New("mcode: Turn cancelled before submission")
@@ -41,7 +43,11 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 		if req.RunID != "" || len(req.Input) != 0 {
 			return nil, fmt.Errorf("mcode: Executor configuration cannot contain Turn input")
 		}
-		var err error
+		// MCP is checked before any native file is written.
+		mcp, err := runtimeMCP(req)
+		if err != nil {
+			return nil, err
+		}
 		var opts launchOptions
 		binary := defaultBinary()
 		if frozen == nil {
@@ -50,11 +56,18 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 			binary = frozen.Binary
 			opts, err = prepareWorkspaceOptions(runtimeRoot, *frozen, req)
 		}
-		if err == nil {
-			opts.MCP, err = runtimeMCP(req)
-		}
 		if err != nil {
 			return nil, err
+		}
+		opts.MCP = mcp
+		if len(req.FunctionTools) > 0 && slices.ContainsFunc(mcp, func(server map[string]any) bool { return server["name"] == declaration.FunctionServerLabel }) {
+			return nil, fmt.Errorf("mcode: a Plugin MCP server uses the reserved label %s", declaration.FunctionServerLabel)
+		}
+		if opts.Functions, err = serveFunctions(req.FunctionTools); err != nil {
+			return nil, err
+		}
+		if opts.Functions != nil {
+			opts.MCP = append(opts.MCP, opts.Functions.mcpServer())
 		}
 		resource, err := newExecutor(ctx, req, opts, binary)
 		if resource == nil {
@@ -67,9 +80,13 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*executor, error) {
 	bootstrap, err := launch(ctx, req, opts, binary)
 	if err != nil {
+		opts.Functions.close()
 		return nil, err
 	}
 	e := &executor{connection: bootstrap.connection, req: req, opts: opts}
+	if opts.Functions != nil {
+		opts.Functions.owner.Store(e)
+	}
 	err = bootstrap.prepareNative()
 	e.connection.setCurrent(nil)
 	close(bootstrap.finished)
@@ -162,6 +179,7 @@ func (e *executor) Close(ctx context.Context) error {
 	}
 	e.connection.process.Cancel()
 	e.mu.Unlock()
+	e.opts.Functions.close()
 	select {
 	case <-e.connection.exited:
 	case <-ctx.Done():

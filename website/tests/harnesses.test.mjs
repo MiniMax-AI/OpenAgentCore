@@ -17,7 +17,7 @@ test('harness protocols match Model execution, default first', () => {
   const doc = readFileSync(resolve(repoRoot, 'contracts/agents-api/model-execution.md'), 'utf8')
   const table = doc.split('| Harness | Supported protocols, default first |')[1].split('\n\n')[0]
   const rows = Object.fromEntries(
-    [...table.matchAll(/^\| ([^|]+) \| (.+) \|$/gm)]
+    [...table.matchAll(/^\| ([^|]+) \| ([^|]+) \|/gm)]
       .filter(([, name]) => !name.startsWith('---'))
       .map(([, name, protocols]) => [name.trim(), [...protocols.matchAll(/`([a-z_]+)`/g)].map((m) => m[1])]),
   )

@@ -16,6 +16,7 @@ type launchOptions struct {
 	Dir, DataDir, Model string
 	Env                 []string
 	MCP                 []map[string]any
+	Functions           *functionServer
 }
 
 // workspaceProfile selects the native tools of a Session that has an Environment.
@@ -90,9 +91,6 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 	}
 	// Background bash outlives the Turn and escapes the process group; Subagent task output stays.
 	result.Env = append(result.Env, "OAC_RUNTIME_MCODE_BACKGROUND_BASH=off")
-	if err := os.WriteFile(filepath.Join(result.DataDir, "mcp.json"), []byte(`{"mcpServers":{}}`), 0o600); err != nil {
-		return result, err
-	}
 	if !req.DisableSubagents {
 		result.Env = append(result.Env, "OAC_RUNTIME_MCODE_MAX_SUBAGENTS="+strconv.Itoa(*req.MaxConcurrentSubagents))
 	} else {
@@ -114,7 +112,7 @@ func agentCapabilities(req proto.PromptRequestPayload, workspace *workspaceProfi
 			tools = append(tools, "web_fetch")
 		}
 	}
-	capabilities := map[string]any{
+	return map[string]any{
 		"tools": tools,
 		"features": map[string]bool{
 			// The mavis tool carries cron scheduling that runs beyond a Turn, plus session send, agent create and MCP create.
@@ -124,7 +122,6 @@ func agentCapabilities(req proto.PromptRequestPayload, workspace *workspaceProfi
 			"webSearch": false,
 		},
 	}
-	return capabilities
 }
 
 func optionString(options map[string]any, key string) string {

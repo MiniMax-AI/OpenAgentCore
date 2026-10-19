@@ -2,6 +2,7 @@ package execution
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
@@ -28,7 +29,7 @@ func TestMessageImageRulesBelongToTheHarness(t *testing.T) {
 		profile, _ := builtin.Registry().Lookup(tc.kind)
 		payload, _ := json.Marshal(map[string]any{"input": []any{map[string]any{"role": "user", "content": []any{map[string]any{"type": "input_image", "image_url": tc.url}}}}})
 		err := validateDeclaredInputs(profile, []sessions.Input{{Kind: "message", Payload: payload}})
-		if (err == nil) != tc.want {
+		if (err == nil) != tc.want || (err != nil && !errors.Is(err, sessions.ErrInvalidInput)) {
 			t.Fatalf("%s %s: %v", tc.kind, tc.url, err)
 		}
 	}

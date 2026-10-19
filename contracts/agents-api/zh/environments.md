@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 68f12431a9f5685dd88b04d239d40f28f2390e923397eb0071a1a57ea58666d1
+source_hash: 3408e2c811042732d35227150533cf12a85cfcff8a5118d7eb62a5d68549cc8b
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -382,19 +382,19 @@ Skills 及其不可变版本是项目资源，独立于 Session 和原生安装�
 - Bundle 使用服务密码进行加密，并绑定到项目、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
 - 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的模板意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
 
-内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则为每个包使用一个受控封装，其中包含实际目录和不可变硬链接。Skill 根目录不会启用 MCP 服务器，只有 [Plugin MCP](#plugin-mcp) 会启用。Codex 与本地运行一样递归扫描每个 Skill 根目录，因此嵌套的 `SKILL.md` 会注册另一个原生 Skill。Claude 内联 shell 预处理会导致适配器准备失败。原生 Harness 配置绝不会整体透传。
+内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则将其作为私有状态路径下的用户 Skills，使原生列出与本地 `~/.claude/skills` 相同的裸名称。Claude 拒绝包含 `.claude-plugin` 的 Skill，因为原生会将其作为插件加载，连同其 hooks 和 MCP 服务器。Skill 根目录不会启用 MCP 服务器，只有 [Plugin MCP](#plugin-mcp) 会启用。Codex 与本地运行一样递归扫描每个 Skill 根目录，因此嵌套的 `SKILL.md` 会注册另一个原生 Skill。原生 Harness 配置绝不会整体透传。
 
 ### Plugin MCP {#plugin-mcp}
 
 Plugin 可以在 `.codex-plugin/plugin.json` 中通过 `mcpServers: "./.mcp.json"` 声明 MCP 服务器，也可以在省略路径时使用根目录下的 `.mcp.json`。该文件包含以服务器名称为键的 `mcpServers`。将 Plugin 根目录选为能力目录会激活其 MCP 声明；选择父目录则会发现 Skills，但不会激活嵌套 MCP 服务器。
 
-共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`，以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 daemon 变量。
+共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`（与公开 MCP 标头一样为非机密），以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 daemon 变量。
 
 stdio 服务器通过 daemon 的 stdio helper 启动；该 helper 会解析已安装的声明，并以 Harness 的权限启动命令。在 Unix 上，helper 会将自身替换为服务器；在 Windows 上，它会在所属进程树内部转发 stdio。已初始化的值会覆盖声明中的变量。进程组和 Windows Jobs 负责取消及后代进程清理，而不负责隔离。
 
 [Harness capabilities](harness-capabilities.md#environment-preparation) 负责受支持的 Plugin 传输及每个 Harness 的限制。
 
-重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
+重复的服务器身份会被拒绝。Claude 会拒绝 URL 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
 
 ### 有效绑定 {#effective-bindings}
 
@@ -402,7 +402,7 @@ Runtime 会在适配器投影之前，通过 `agent.ResolveMCPBindings` 解析�
 
 ### 公开 MCP 连接来源 {#public-mcp-connection-origin}
 
-Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#http-mcp)）具有 `connection_origin`。省略或传入 null 表示 `service`，在 `self_hosted` Session 中也是如此。该来源会从已保存配置经过 Session 快照一直保留到 Runtime 请求，后者要求精确的线上版本；`service` 请求绝不会变为 `environment` 连接。
+Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#mcp)）具有 `connection_origin`。省略或传入 null 表示 `service`，在 `self_hosted` Session 中也是如此，`stdio` 服务器除外，其唯一来源是 `environment`。该来源会从已保存配置经过 Session 快照一直保留到 Runtime 请求，后者要求精确的线上版本；`service` 请求绝不会变为 `environment` 连接。
 
 | 来源 | 连接发起位置 | 允许的放置方式 |
 | --- | --- | --- |
@@ -415,4 +415,4 @@ Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与
 
 两种来源都支持匿名 HTTP 和 HTTPS bearer 凭据。所附加 Vault 的选择会冻结凭据身份，包括唯一的隐式 URL 匹配或匿名选择。只有该凭据经项目授权后，才会进入瞬时 Runtime 请求；绝不会搜索 Core 默认值或无关 Vault。解密失败或凭据缺失时，执行会失败且不会回退到匿名。公开 Environment MCP 保留 `project_vault` 权限，Plugin 凭据保留 `environment_configuration` 权限；两者都不会覆盖重复的服务器标签。Bearer 令牌绝不会进入持久化的原生配置或进程参数。
 
-工具允许列表和必需初始化遵循 [HTTP MCP contract](execution-tools.md#http-mcp)。
+工具允许列表和必需初始化遵循 [HTTP MCP contract](execution-tools.md#mcp)。

@@ -3,26 +3,13 @@ import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 export type InputContent = { type: "input_text"; text: string } | { type: "input_image"; image_url: string };
 export type MessageInput = { content: InputContent[] }[];
 
-// Core admission declares whitespace-only text unqualified for this harness.
-export class EmptyUserMessageError extends Error {
-  constructor() { super("Empty user message."); }
-}
-
-// The explicit union of ECMAScript trim (WhiteSpace and LineTerminator) and Go
-// unicode.IsSpace. Core admission uses the same set for this harness.
-const blankText = /^[\t\n\v\f\r \u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]*$/u;
-
-export function isBlankText(text: string): boolean { return blankText.test(text); }
-
 // This is the common Runtime representation; native image blocks stay here.
 export function parseMessageInput(value: unknown): MessageInput {
   if (!Array.isArray(value) || !value.length) throw new Error("Invalid user messages.");
   for (const message of value) {
     if (!message || typeof message !== "object" || Object.keys(message).some(key => key !== "content") ||
         !Array.isArray(message.content) || !message.content.length) throw new Error("Invalid user message.");
-    const content = parseInputContent(message.content, true);
-    const meaningful = content.some(part => part.type === "input_image" || !isBlankText(part.text));
-    if (!meaningful) throw new EmptyUserMessageError();
+    parseInputContent(message.content, true);
   }
   return value as MessageInput;
 }
