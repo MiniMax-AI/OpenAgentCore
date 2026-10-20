@@ -34,21 +34,6 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 			}
 		}
 	}
-	for _, tc := range []struct {
-		provider string
-		runtime  *sandbox.RuntimeRelease
-		message  string
-	}{
-		{"docker", nil, "managed nodes require a pinned Runtime release"},
-		{"docker", &sandbox.RuntimeRelease{}, "Runtime must reference one immutable distribution"},
-		{"e2b", &sandbox.RuntimeRelease{}, "E2B Runtime is selected by its immutable template build"},
-	} {
-		err := registry.ValidateSpecification(tc.provider, sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}, Runtime: tc.runtime})
-		var field *sandbox.ValidationError
-		if !errors.As(err, &field) || field.Param != "runtime" || err.Error() != sandbox.ErrInvalid.Error()+": "+tc.message || !errors.Is(err, sandbox.ErrInvalid) {
-			t.Fatal(err)
-		}
-	}
 	if err := registry.ValidateResources("docker", sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}); err != nil {
 		t.Fatal(err)
 	}

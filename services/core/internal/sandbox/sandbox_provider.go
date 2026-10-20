@@ -289,14 +289,11 @@ type ConfigurationRequirements struct {
 }
 
 // DeploymentPolicy is the deployment declaration. Disk declares independent
-// disk limits; Runtime requires a pinned Runtime release, and RuntimeError is
-// the fixed reason for rejecting one otherwise. DefaultResources is the size
-// setup proposes, or nil when the Provider's configuration selects it.
+// disk limits. DefaultResources is the size setup proposes, or nil when the
+// Provider's configuration selects it.
 type DeploymentPolicy struct {
 	Workspace        *workspacefs.Requirements `json:"workspace,omitempty"`
-	RuntimeError     string                    `json:"-"`
 	Disk             bool                      `json:"disk"`
-	Runtime          bool                      `json:"runtime"`
 	DefaultResources *Resources                `json:"default_resources"`
 }
 
@@ -343,8 +340,8 @@ type DirectConfig struct {
 
 // NodeConfig is a node's configuration for one deployment generation. Native
 // holds only the selected adapter's node-local settings, such as host paths;
-// that adapter alone decodes it, strictly. Resources and the Runtime release
-// are read from Specification, never copied into Native.
+// that adapter alone decodes it, strictly. Resources are read from
+// Specification, never copied into Native.
 type NodeConfig struct {
 	Specification  DeploymentSpec  `json:"specification"`
 	Generation     uint64          `json:"generation"`

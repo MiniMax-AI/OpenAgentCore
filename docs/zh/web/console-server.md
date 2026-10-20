@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 6e2f860b4f43159b1dcb691ea0343745c82e170b8fb9670247036753a9acd733
+source_hash: 2c8b3bfed09d29c70cfee4b3381a248befd722c8336c4964a079e20c073f1a4a
 ---
 
 控制台服务器（`oac-web`）提供 Web，使用 Core 密钥认证管理员，并将浏览器的 `/core/v1` 请求转发到 Core。本参考面向不使用安装程序运行 Web 的运维人员，以及评审其安全边界的人员。
@@ -94,11 +94,11 @@ flowchart LR
 | --- | --- |
 | `node_installer` | 控制台是否提供节点安装文件 |
 | `node_installer_sha256` | 文件中 `node-install.pyz` 的 SHA-256；**添加节点** 命令执行安装程序前验证它 |
-| `node_artifacts` | 文件中包含节点资产的提供商（`docker`、`microsandbox`），资产在本地或通过固定发行下载提供。每次请求都读取，因此重新运行安装程序新增的资产无需重启即可出现 |
+| `node_artifacts` | 文件中包含节点资产的提供商（`docker`、`microsandbox`），资产在本地或通过发行下载提供。每次请求都读取，因此重新运行安装程序新增的资产无需重启即可出现 |
 
 ## 节点安装文件 {#node-installation-payload}
 
-设置 `OAC_WEB_NODE_PAYLOAD_DIR` 后，控制台在 `/node-install/` 无需登录地提供匹配发行版的节点文件：`node-install.pyz`、`manifest.json`、`SHA256SUMS`、`runtime/seccomp.json`，以及清单声明的 `artifacts/` 下节点资产。本地缺失的资产重定向（307）到固定发行下载地址。节点安装和卸载命令从 `<public_url>/node-install/` 下载，因此反向代理必须将该路径发给控制台。节点自行验证每个校验和。
+设置 `OAC_WEB_NODE_PAYLOAD_DIR` 后，控制台在 `/node-install/` 无需登录地提供匹配发行版的节点文件：`node-install.pyz`、`manifest.json`、`SHA256SUMS`、`runtime/seccomp.json`，以及清单声明的 `artifacts/` 下节点资产。本地缺失的资产重定向（307）到其发行下载地址。节点安装和卸载命令从 `<public_url>/node-install/` 下载，因此反向代理必须将该路径发给控制台。节点自行验证每个校验和。
 
 ## 公开地址 {#public-address}
 

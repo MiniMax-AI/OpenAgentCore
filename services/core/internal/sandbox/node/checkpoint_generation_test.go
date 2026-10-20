@@ -6,50 +6,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"github.com/google/uuid"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
-
-func TestStaticNodeReportsExactCheckpointGeneration(t *testing.T) {
-	id := identity()
-	compatibility := &sandbox.CheckpointCompatibility{ArtifactDomain: "private-store", ExecutionClass: "native-class"}
-	status := sandbox.GenerationStatus{Generation: id.DeploymentGeneration, SpecificationDigest: id.SpecificationDigest, State: "ready", Checkpoint: compatibility}
-	seen := false
-	hub := NewHub(HubOptions{Heartbeat: func(_ context.Context, _ Identity, _ string, _ uint64, health Health) error {
-		seen = true
-		if len(health.Generations) != 1 || *health.Generations[0].Checkpoint != *compatibility {
-			t.Fatal("qualification lost")
-		}
-		return nil
-	}})
-	p := &peer{identity: id}
-	health := Health{ProviderReady: true, Generations: []sandbox.GenerationStatus{status}}
-	if err := hub.recordHealth(t.Context(), p, health); err != nil || !seen {
-		t.Fatal(err, seen)
-	}
-	for _, mutation := range []string{"generation", "digest", "readiness", "extra"} {
-		t.Run(mutation, func(t *testing.T) {
-			changed := health
-			changed.Generations = append([]sandbox.GenerationStatus(nil), health.Generations...)
-			switch mutation {
-			case "generation":
-				changed.Generations[0].Generation++
-			case "digest":
-				changed.Generations[0].SpecificationDigest = strings.Repeat("f", 64)
-			case "readiness":
-				changed.ProviderReady = false
-			case "extra":
-				changed.Generations = append(changed.Generations, status)
-			}
-			seen = false
-			if err := hub.recordHealth(t.Context(), p, changed); err == nil || seen {
-				t.Fatal("invalid static qualification reached persistence")
-			}
-		})
-	}
-}
 
 type closedRestoreProvider struct{ fakeProvider }
 
@@ -62,7 +22,7 @@ func (*closedRestoreProvider) Resume(_ context.Context, q sandbox.ResumeRequest)
 func TestClosedRestoreEvidenceSurvivesNodeTransport(t *testing.T) {
 	id := identity()
 	var credential string
-	hub := NewHub(HubOptions{Authenticate: func(_ context.Context, node, token string) (Identity, error) {
+	hub := newTestHub(HubOptions{Authenticate: func(_ context.Context, node, token string) (Identity, error) {
 		if node != id.NodeID || token != credential {
 			return Identity{}, ErrAuthentication
 		}
@@ -80,7 +40,7 @@ func TestClosedRestoreEvidenceSurvivesNodeTransport(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: directory, Identity: id, Credential: credential, Provider: &closedRestoreProvider{}, Probe: probe})
+		done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: directory, Identity: id, Credential: credential}, &closedRestoreProvider{}, probe)
 	}()
 	defer func() {
 		cancel()

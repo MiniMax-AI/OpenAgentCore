@@ -26,7 +26,7 @@ func readyCheckpointNode(t *testing.T, f fixture, node deployment.Enrollment, vi
 	if err := f.service.ConnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.HeartbeatGenerations(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &compatibility}}); err != nil {
+	if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &compatibility}}); err != nil {
 		t.Fatal(err)
 	}
 }

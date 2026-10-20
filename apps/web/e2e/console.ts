@@ -55,7 +55,7 @@ export async function failNext(request: APIRequestContext, failure: { method: st
 }
 
 /** Registers a node, or changes one, as a host running the last enrollment command (or, with its `enrollment_id`, another one) would. */
-export async function setNode(request: APIRequestContext, node: { id: string; name?: string; online?: boolean; provider_ready?: boolean; diagnostic?: string; enrollment_id?: string; rollout?: SandboxNodeRollout }) {
+export async function setNode(request: APIRequestContext, node: { id: string; name?: string; online?: boolean; provider_ready?: boolean; enrollment_id?: string; rollout?: SandboxNodeRollout }) {
   await request.post(`${fixture}/__fixture/node`, { data: node });
 }
 

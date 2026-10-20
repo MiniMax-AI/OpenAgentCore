@@ -20,7 +20,7 @@ func TestGenerationWireRoutesOldOwnershipAndCurrentTargetSeparately(t *testing.T
 	original := manager.values[1].value.Provider.(*fakeProvider)
 	current := manager.values[17].value.Provider.(*fakeProvider)
 	ninth := manager.values[9].value.Provider.(*fakeProvider)
-	hub := NewHub(HubOptions{
+	hub := newTestHub(HubOptions{
 		Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil },
 		OwnerEpoch:   func(context.Context) (uint64, error) { return 7, nil },
 		Generations: func(_ context.Context, _ Identity, _ string, _ uint64, h Health) error {

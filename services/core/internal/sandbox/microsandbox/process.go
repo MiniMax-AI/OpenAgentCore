@@ -142,10 +142,8 @@ func (p *ProcessCaller) acquireLease() (*os.File, error) {
 	if err := p.verifyLeaseIdentity(stat); err != nil {
 		return fail(err)
 	}
-	for _, suffix := range []string{".preparing", ".collecting", ".dropped"} {
-		if _, err := os.Lstat(strings.TrimSuffix(p.LeasePath, ".lease") + suffix); !os.IsNotExist(err) {
-			return fail(errors.New("generation is not finalized and usable"))
-		}
+	if _, err := os.Lstat(strings.TrimSuffix(p.LeasePath, ".lease") + ".dropped"); !os.IsNotExist(err) {
+		return fail(errors.New("generation is not finalized and usable"))
 	}
 	if err := p.verifyFinalizedGeneration(); err != nil {
 		return fail(err)

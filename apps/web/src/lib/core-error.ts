@@ -18,7 +18,6 @@ export function knownCoreError(error: unknown, t: TFunction<"common">, nameUnit:
   const min = number("min"), max = number("max");
   if (error.code === "invalid_node_capacity" && min !== undefined && max !== undefined && min <= max) return t("coreErrorDetails.capacityRange", { min, max });
   if (error.code === "invalid_sandbox_configuration") {
-    if (error.param === "runtime") return t("coreErrorDetails.runtime");
     if (resourceParams.has(error.param) && min !== undefined) {
       if (max !== undefined && min <= max) return t("coreErrorDetails.resourceRange", { min, max });
       if (max === undefined) return t("coreErrorDetails.resourceMin", { min });

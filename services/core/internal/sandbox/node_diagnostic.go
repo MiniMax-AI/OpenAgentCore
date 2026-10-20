@@ -16,10 +16,8 @@ var (
 	ErrHostUnsupported = errors.New("host lacks a capability the sandbox provider requires")
 	// A pinned native artifact is missing or fails its integrity check.
 	ErrArtifactsUnavailable = errors.New("pinned provider artifacts are unavailable")
-	// The exact Runtime artifacts could not be transferred or verified.
-	ErrRuntimeDownloadFailed = errors.New("Runtime preparation failed")
-	// The pinned Runtime image is not available to the Provider.
-	ErrRuntimeImageUnavailable = errors.New("pinned Runtime image is unavailable")
+	// The Runtime image installed on the node is not available to the Provider.
+	ErrRuntimeImageUnavailable = errors.New("installed Runtime image is unavailable")
 	// The host cannot hold one sandbox of the deployment specification.
 	ErrCapacityInsufficient = errors.New("node cannot provide one sandbox of the deployment specification")
 )
@@ -38,7 +36,6 @@ const (
 	NodeProviderUnavailable     NodeDiagnosticCode = "provider_unavailable"
 	NodeHostUnsupported         NodeDiagnosticCode = "host_unsupported"
 	NodeArtifactsUnavailable    NodeDiagnosticCode = "artifacts_unavailable"
-	NodeRuntimeDownloadFailed   NodeDiagnosticCode = "runtime_download_failed"
 	NodeRuntimeImageUnavailable NodeDiagnosticCode = "runtime_image_unavailable"
 	NodeCapacityInsufficient    NodeDiagnosticCode = "capacity_insufficient"
 )
@@ -50,7 +47,6 @@ var nodeDiagnostics = []struct {
 	{ErrProviderUnavailable, NodeProviderUnavailable},
 	{ErrHostUnsupported, NodeHostUnsupported},
 	{ErrArtifactsUnavailable, NodeArtifactsUnavailable},
-	{ErrRuntimeDownloadFailed, NodeRuntimeDownloadFailed},
 	{ErrRuntimeImageUnavailable, NodeRuntimeImageUnavailable},
 	{ErrCapacityInsufficient, NodeCapacityInsufficient},
 }

@@ -9,7 +9,7 @@ test("keeps rollout summary brief and opens all Core observations in details", a
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
     const response = await route.fetch();
     const deployment = await response.json();
-    await route.fulfill({ response, json: { ...deployment, generation: 4, resources: { allocations: 8, pending: 0 }, rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, update_required: 3, unknown: 4 } } } });
+    await route.fulfill({ response, json: { ...deployment, generation: 4, resources: { allocations: 8, pending: 0 }, rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, unknown: 4 } } } });
   });
   await openConsole(page, request, "settings?id=sandbox");
   const summary = page.getByRole("region", { name: "Configuration rollout", exact: true });
@@ -23,7 +23,6 @@ test("keeps rollout summary brief and opens all Core observations in details", a
   await expect(fact(dialog, "Target generation")).toHaveText("4");
   await expect(fact(dialog, "Previous-generation sandboxes")).toHaveText("8");
   await expect(fact(dialog, "Preparation failed")).toHaveText("2");
-  await expect(fact(dialog, "Node software incompatible")).toHaveText("3");
   await expect(fact(dialog, "Target readiness unknown")).toHaveText("4");
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
@@ -35,7 +34,7 @@ test("labels unknown target readiness without declaring settled nodes ready", as
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
     const response = await route.fetch();
     const deployment = await response.json();
-    await route.fulfill({ response, json: { ...deployment, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 1 } } } });
+    await route.fulfill({ response, json: { ...deployment, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 1 } } } });
   });
   await openConsole(page, request, "settings?id=sandbox");
   const summary = page.getByRole("region", { name: "Configuration rollout", exact: true });

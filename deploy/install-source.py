@@ -181,7 +181,6 @@ def install(bundle, destination, host, port, public_url):
                     run(f'{step} failed; no service was changed. See the output above.', *compose, *check, cwd=destination)
             else:
                 run('Compose configuration check failed; see the output above. Nothing was installed.', *compose, 'config', '--quiet', cwd=destination)
-            node_payload.activate(payload, revision)
             if not existing and native.is_dir():
                 os.replace(stage / 'native-installers', destination / 'native-installers')
             # compose.yaml goes last: it marks the directory as an installation.

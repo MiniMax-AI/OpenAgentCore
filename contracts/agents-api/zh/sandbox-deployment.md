@@ -1,10 +1,10 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: cd4ce6e40836fbf598d368b1b448e13e2f853f9ad111ef122292d10d7fb1bce9
+source_hash: 7e94d713fd7de92996f17717201c8da58bf8e538dc78e18334f5c43a76802e86
 ---
 
-沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
+沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
 
 本契约负责下列 Core API 路由及其语义。[节点指南](../../../docs/zh/getting-started/nodes.md)负责操作员工作流，[机器连接 API](machine-api.md#node-routes)负责节点调用的路由，[沙箱节点协议](node-generation-protocol.md)负责节点连接。
 
@@ -16,7 +16,7 @@ source_hash: cd4ce6e40836fbf598d368b1b448e13e2f853f9ad111ef122292d10d7fb1bce9
 | --- | --- |
 | `GET /core/v1/sandbox/deployment` | 读取安全的当前配置、推出、重置和资源计数 |
 | `PATCH /core/v1/sandbox/deployment` | 更新整个部署的空闲挂起策略，不改变配置代次 |
-| `POST /core/v1/sandbox/deployment` | 选择初始提供商、资源和 Runtime |
+| `POST /core/v1/sandbox/deployment` | 选择初始提供商和资源 |
 | `PUT /core/v1/sandbox/deployment` | 在线更改同一提供商的目标 |
 | `POST /core/v1/sandbox/deployment/reset` | 启动托管资源的持久清除或将其升级为持久清除 |
 | `DELETE /core/v1/sandbox/deployment/reset?expected_generation=N` | 取消剩余清除 |
@@ -38,7 +38,6 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `expected_generation` | 必填的非负整数，来自 GET；绝不会自动刷新并重放 |
 | `provider` | 必须是 `docker`、`microsandbox`、`e2b` 中恰好一个 |
 | `resources` | 每个沙箱的限制，见下文；Docker 和 microsandbox 必填，E2B 可选 |
-| `runtime` | 不可变的 [Runtime 发行版](#runtime-release)；Docker 和 microsandbox 必填，E2B 必须省略 |
 | `configuration` | 提供商的公开选择器。E2B：不可变的 `template` 构建以及可选且配套的 `api_url` 和 `domain`。Docker 和 microsandbox 仅接受 `{}` 或省略 |
 | `credential` | 提供商的只写凭据。E2B：`{api_key}`，首次设置时必填，在 PUT 中省略以保留当前密钥；null 或空密钥无效。Docker 和 microsandbox 拒绝该字段 |
 
@@ -64,21 +63,6 @@ microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environme
 
 为现有自有磁盘部署启用外部存储时，先选择文件系统配置，再使用兼容资源更新 Sandbox 部署（不支持配额的文件系统使用 `environment_disk_mib: 0`）。选择文件系统不会改变现有代次或 allocation。下一次 Sandbox 更新派生外部能力回执；旧的自有磁盘 allocation 保留原磁盘。文件系统选择必须支持提供商声明的要求。已采用外部存储的部署要求相同的 `attachment` 和 `user_xattr`；选择可以更改 `capacity_quota`，此后在 Sandbox 更新设置相匹配的 `environment_disk_mib` 之前拒绝新工作区。既有工作区保持其获准时的容量。
 
-### Runtime 发行版 {#runtime-release}
-
-Docker 和 microsandbox 使用一个经过验证发行包中的每个字段：
-
-| 字段 | 标识 |
-| --- | --- |
-| `source_commit` | 由 40 个字符组成的小写提交 SHA |
-| `image_id` | Docker 镜像配置 ID：`sha256:` 加 64 个小写十六进制字符 |
-| `image_manifest_digest` | OCI 镜像清单摘要，格式相同 |
-| `microsandbox_ref` | `oac-runtime@sha256:` 加 64 个小写十六进制字符 |
-| `runtime_sha256` | 原生 microsandbox Runtime 二进制文件的 SHA-256 |
-| `firmware_sha256` | 匹配固件的 SHA-256 |
-
-请从匹配的发行清单中复制这些标识。镜像配置 ID 和 OCI 清单摘要标识不同的对象，绝不能相互替代。节点安装程序会在注册前根据载荷验证已保存的发行版，并保留其导入的精确本地镜像标识。
-
 ### E2B 配置 {#e2b-configuration}
 
 E2B 使用 `template-id:build-uuid` 形式的 `configuration.template`；构建 UUID 必须是规范形式且非零，仅提供可变模板别名将被拒绝。API 密钥在 PostgreSQL 中加密，绝不会出现在响应、引导配置、命令参数或日志中。默认情况下，Core 使用 `https://api.e2b.app` 和 `e2b.app`。对于兼容服务，请同时设置 `configuration.api_url`（一个不含路径、端口、查询、片段或凭据的 HTTPS 源地址）和 `configuration.domain`（沙箱数据平面 DNS 后缀）；API 主机必须等于该域名或其子域。Core 会在发送守护进程凭据或使用 envd 之前，拒绝数据平面域名位于所选后缀之外的沙箱。
@@ -98,9 +82,9 @@ GET 和成功的写入操作会返回 `installation_id`、`provider`、`core_url
 - 请求中的 `resources` 和响应中的 `specification.resources` 是每个沙箱的限制。响应中的 `resources.allocations` 和 `resources.pending` 分别计算尚未释放的分配，以及尚未分配沙箱的待处理托管 Environment。
 - 未配置的部署具有空的提供商且没有 specification。Docker 和 microsandbox 使用 `mode: nodes`；E2B 使用 `mode: direct`，且没有合成节点。
 - `generation` 标识已保存的选择。`owner_epoch` 用于对执行所有者和节点连接进行栅栏隔离；它不能替代 `expected_generation`。
-- `specification_digest` 是服务器对提供商、限制和 Runtime 发行版的标识；注册过程会原样回显该值。
+- `specification_digest` 是服务器对提供商、限制和派生的工作区能力回执的标识；注册过程会原样回显该值。
 
-`packages/agents-client` 中类型化的 `SandboxAdminClient` 会根据准确的这些结构检查部署、节点列表、节点详情和分配响应。未知成员、缺少成员或类型错误都会拒绝整个响应，并产生 502 `invalid_admin_response` 错误。节点的 `diagnostic` 可能不存在，也可能是一个代码，但绝不会为空；客户端会将未知代码读取为 `provider_unavailable`。
+`packages/agents-client` 中类型化的 `SandboxAdminClient` 会根据准确的这些结构检查部署、节点列表、节点详情和分配响应。未知成员、缺少成员或类型错误都会拒绝整个响应，并产生 502 `invalid_admin_response` 错误。节点的 `rollout.diagnostic` 可能不存在，也可能是一个代码，但绝不会为空；客户端会将未知代码读取为 `provider_unavailable`。
 
 ## 初始设置与同提供商更改 {#initial-setup-and-same-provider-changes}
 
@@ -142,27 +126,24 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 "rollout": {"state": "settled", "previous_generation_sandboxes": 3, "nodes": null}
 ```
 
-`previous_generation_sandboxes` 使用与资源总数相同的快照，统计旧代次中尚未释放的分配以及没有分配的待处理放置，绝不会重复计算同一资源。E2B 和未配置的部署返回 null `nodes`。节点部署将 `nodes` 返回为计数 `{ready, preparing, failed, update_required, unknown}`，每个尚未移除的节点恰好归入一个类别：
+`previous_generation_sandboxes` 使用与资源总数相同的快照，统计旧代次中尚未释放的分配以及没有分配的待处理放置，绝不会重复计算同一资源。E2B 和未配置的部署返回 null `nodes`。节点部署将 `nodes` 返回为计数 `{ready, preparing, failed, unknown}`，每个尚未移除的节点恰好归入一个类别：
 
 - 在当前连接上离线的节点为 `unknown`；
-- 不具备代次管理且在较旧目标上注册的在线节点为 `update_required`；
 - 否则，当前连接和所有者 epoch 上的精确目标观测会给出 `ready`、`preparing` 或 `failed`，缺少观测则给出 `unknown`。
 
 ```mermaid
 flowchart TD
     A{"Online on its current connection?"} -- no --> U["unknown"]
-    A -- yes --> B{"Generation management?"}
-    B -- "no, older target" --> UR["update_required"]
-    B -- otherwise --> C{"Target observation on this connection and epoch"}
+    A -- yes --> C{"Target observation on this connection and epoch"}
     C -- ready --> R["ready"]
     C -- preparing --> P["preparing"]
     C -- failed --> F["failed"]
     C -- missing --> U
 ```
 
-节点在当前所有者 epoch 下保持连接且心跳未过期时，即为[在线](node-generation-protocol.md#connection)。目标推出与服务就绪状态相互独立：`unknown`、`preparing`、`failed` 或 `update_required` 不会移除已独立确认的较旧服务代次。`provider_ready` 要求节点在线，并且在该连接和 epoch 上观测到精确的服务代次；不具备代次管理的节点仅能使其注册时的代次满足此条件。固定状态本身绝不表示就绪。
+节点在当前所有者 epoch 下保持连接且心跳未过期时，即为[在线](node-generation-protocol.md#connection)。目标推出与服务就绪状态相互独立：`unknown`、`preparing` 或 `failed` 不会移除已独立确认的较旧服务代次。`provider_ready` 要求节点在线，并且在该连接和 epoch 上观测到精确的服务代次。固定状态本身绝不表示就绪。
 
-每个节点会添加 `rollout: {state, ready_generation, diagnostic?}`，其中 `ready_generation` 是可为 null 的持久服务固定状态，`diagnostic` 是目标代次的固定代码；分配项会添加 `deployment_generation`。仅当 `rollout.state` 为 `preparing` 或 `reset` 非 null 时，才每五秒轮询一次；旧 Session 以及失败、需要更新或离线的节点本身均不会使轮询保持活动状态。
+每个节点会添加 `rollout: {state, ready_generation, diagnostic?}`，其中 `ready_generation` 是可为 null 的持久服务固定状态，`diagnostic` 是目标代次的固定代码；分配项会添加 `deployment_generation`。仅当 `rollout.state` 为 `preparing` 或 `reset` 非 null 时，才每五秒轮询一次；旧 Session 以及失败或离线的节点本身均不会使轮询保持活动状态。
 
 节点模式创建先验证目标部署，提交 Session、pending Environment 及初始输入，但不预留计算资源。节点全部已满、离线或准备中时，已接受的工作继续等待；未配置部署、reset 或不支持的组合仍拒绝准入。共同调度器对尚未放置的需求进行有界循环扫描，分页按需求记录时间和 Environment ID 排序，每轮使用固定时间上界，避免持续的新需求阻止重新访问较早的工作。它检查在线状态、精确服务代次就绪情况、地址、共享容量和所选代次的 Harness/文件系统兼容性，然后优先选择最新的合格固定代次。预留后的 placement 保持不可变，直到确认释放或已结清的检查点转移。有界扫描跳过暂时不可调度的需求，并在重启后继续。已有 suspended allocation 按[检查点转移契约](../../../docs/zh/sandbox-provider.md#checkpoint-transfer)，通过同一容量锁预留符合条件的检查点容量；这不构成热恢复和未放置工作之间的全局公平性保证。输入保留[原始五分钟期限](./environments.md#reservations)，等待容量的时间也计入其中。
 
@@ -216,9 +197,9 @@ stateDiagram-v2
 
 节点容量由管理员批准，独立于部署 specification。`POST /core/v1/sandbox/enrollment-tokens` 接受可选的 `max_active` 和 `max_retained`，默认分别为 2 和 8，并返回 `{token, expires_at, enrollment_id}`；`enrollment_id` 是该命令的公共句柄，绝不是凭据。microsandbox 会使用两个限制。Docker 绝不暂停，因此 Core 会在此处和 PATCH 中用 `max_active` 替换其 `max_retained`。E2B 没有节点，并返回 409 `sandbox_deployment_conflict`。Core 将批准值与令牌一同存储，并复制到其注册的节点；节点不能提交容量，其本地检查可以拒绝其无法运行的部署，但绝不会提高限制。[节点容量](../../../docs/zh/configuration.md#node-capacity)为操作员说明了这些限制。
 
-`GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、`diagnostic`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`enrollment_id` 和 `core_url`。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。请移除该节点并重新添加。
+`GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`enrollment_id` 和 `core_url`。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。请移除该节点并重新添加。
 
-不具备代次管理的节点会自行报告其提供商的就绪状态：`provider_ready`，未就绪时则报告一个固定的 `diagnostic` 代码。通过 Web 的命令添加的节点会管理代次，因此其就绪状态取决于服务代次，而目标代次的固定代码会出现在 `rollout.diagnostic` 中。节点会对首次失败的就绪检查进行分类，并且只发送代码；携带任何其他值的帧均无效，且 Core 绝不存储或返回探测文本或主机路径。这些代码是与提供商无关的类别：`provider_unavailable`、`host_unsupported`、`artifacts_unavailable`、`runtime_download_failed`、`runtime_image_unavailable` 和 `capacity_insufficient`。`runtime_download_failed` 表示无法传输或验证精确的 Runtime 制品；它绝不会包含制品 URL、凭据或传输输出。[就绪代码](../../../docs/zh/getting-started/nodes.md#readiness-codes)给出了原因和操作员应采取的措施。Core 和节点必须来自同一发行包。
+节点管理代次，因此其 `provider_ready` 取决于服务代次，目标代次的固定代码会出现在 `rollout.diagnostic` 中。节点会对首次失败的就绪检查进行分类，并且只发送代码；携带任何其他值的帧均无效，且 Core 绝不存储或返回探测文本或主机路径。这些代码是与提供商无关的类别：`provider_unavailable`、`host_unsupported`、`artifacts_unavailable`、`runtime_image_unavailable` 和 `capacity_insufficient`。[就绪代码](../../../docs/zh/getting-started/nodes.md#readiness-codes)给出了原因和操作员应采取的措施。Core 和节点必须来自同一发行包。
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` 接受 `{name, max_active, max_retained}`；降低限制不会停止任何正在运行的沙箱。当节点仍持有分配、快照、预留或待处理清理时，包括节点离线期间，`DELETE /core/v1/sandbox/nodes/{node_id}` 会拒绝操作并返回 409 `runtime_node_in_use`。移除操作不会删除任何计算资源，并且会停用该节点的身份；该主机只能作为新节点重新加入。不存在节点排空过程。
 
@@ -232,7 +213,6 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | 独立工作区文件系统 | [Kernel NFS adapter](../../../docs/zh/workspace-provider.md#kernel-nfs-adapter)；与计算资源分开配置 | 不支持 | 不支持 |
 | 部署 `specification.resources` | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 |
-| 部署 `specification.runtime` | 完整的[发行版](#runtime-release)；节点必须与 `microsandbox_ref`、`runtime_sha256` 和 `firmware_sha256` 匹配 | 不存在；`configuration.template` 用于选择构建 | 完整的[发行版](#runtime-release)；节点必须与 `image_id` 或 `image_manifest_digest` 匹配 |
 | 部署 `metadata.template_build` | 不存在：`metadata` 为空 | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 |
 | 部署 `suspension` | `{idle_seconds, retention_seconds}` | `null`；Core 不暂停 E2B 沙箱 | `null` |
 | 部署 `resources.allocations`、`resources.pending` | 所有节点的总数 | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 |
@@ -264,8 +244,8 @@ stateDiagram-v2
 
 ## 规范的节点规格 {#canonical-node-specification}
 
-`sandbox/deployment_contract.go`负责资源边界、发行版模式和规范字段顺序，每个已注册提供商的 `sandbox.DeploymentPolicy` 声明其要求；`sandbox/deployment.go`在 Core 中应用这些规则。安装程序会使用 `deploy/node/node_spec.py` 中生成的声明，TypeScript 客户端和 Web 使用 `packages/agents-client/src/deployment-contract.ts` 中生成的边界、模式和提供商声明，因此不存在第二套限制、模式或提供商列表。请在仓库根目录运行 `go run ./services/core/cmd/specification-contract -write` 重新生成两者；作为 `make check` 一部分的沙箱 Go 测试会拒绝过时的投影。
+`sandbox/deployment_contract.go`负责资源边界和规范字段顺序，每个已注册提供商的 `sandbox.DeploymentPolicy` 声明其要求；`sandbox/deployment.go`在 Core 中应用这些规则。安装程序会使用 `deploy/node/node_spec.py` 中生成的声明，TypeScript 客户端和 Web 使用 `packages/agents-client/src/deployment-contract.ts` 中生成的边界和提供商声明，因此不存在第二套限制或提供商列表。请在仓库根目录运行 `go run ./services/core/cmd/specification-contract -write` 重新生成两者；作为 `make check` 一部分的沙箱 Go 测试会拒绝过时的投影。
 
-规范摘要是紧凑 UTF-8 JSON 的 SHA-256，其中 `provider` 位于首位，其次是 `resources`，然后在提供商需要时放置 `runtime`。资源和 Runtime 字段遵循契约的声明顺序；值为零的可选磁盘字段会被省略，必填字段则保持存在。发行版标识采用小写 ASCII，摘要绝不会受传入字段顺序或空白字符影响。`services/core/internal/sandbox/testdata/deployment-contract.json`保存共享验收用例、精确的规范字节和摘要，Go 与 Python 测试都会使用这些内容。
+规范摘要是紧凑 UTF-8 JSON 的 SHA-256，其中 `provider` 位于首位，其次是 `resources`。资源字段遵循契约的声明顺序；值为零的可选磁盘字段会被省略，必填字段则保持存在。摘要绝不会受传入字段顺序或空白字符影响。`services/core/internal/sandbox/testdata/deployment-contract.json`保存共享验收用例、精确的规范字节和摘要，Go 与 Python 测试都会使用这些内容。
 
-规范摘要的 JSON 在 `runtime` 后包含可选的 `workspace`，字段按文件系统声明顺序排列：`attachment`、`user_xattr`、`capacity_quota`，布尔字段始终保留。该回执参与不可变 specification digest。
+规范摘要的 JSON 在 `resources` 后包含可选的 `workspace`，字段按文件系统声明顺序排列：`attachment`、`user_xattr`、`capacity_quota`，布尔字段始终保留。该回执参与不可变 specification digest。

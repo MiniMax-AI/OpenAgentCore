@@ -1,4 +1,4 @@
-import { AgentCoreError, deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
+import { AgentCoreError, deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxSpecification } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
@@ -15,10 +15,10 @@ import { formatBytes } from "../../lib/format";
 import { installationQuery } from "../../lib/installation";
 import type { ParseKeys } from "i18next";
 import { sandboxConfigurationRejection, sandboxProviderLabel } from "../../lib/sandbox-labels";
-import { defaultSandboxResources, isRuntimeRelease, isRuntimeReleaseField, RUNTIME_RELEASE_FIELDS, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
 import { workspaceStorageQuery } from "../settings/workspace-storage";
 import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
-import { distributionRuntimeQuery, sandboxAdmin } from "./sandbox-queries";
+import { sandboxAdmin } from "./sandbox-queries";
 import "./sandbox-wizard.css";
 
 type Where = "nodes" | "direct";
@@ -82,15 +82,6 @@ function presets(provider: SandboxProvider, workspace?: SandboxSpecification["wo
   return { small: scale(0.5), standard, large: scale(2) };
 }
 
-const releaseLabels: Record<keyof SandboxRuntimeRelease, ParseKeys<"sandbox">> = {
-  source_commit: "Source commit",
-  image_id: "Image ID",
-  image_manifest_digest: "Image manifest digest",
-  microsandbox_ref: "microsandbox reference",
-  runtime_sha256: "Runtime SHA-256",
-  firmware_sha256: "Firmware SHA-256",
-};
-
 function presetOf(provider: SandboxProvider, resources: SandboxResources, workspace?: SandboxSpecification["workspace"]): Preset | null {
   const same = (a: SandboxResources, b: SandboxResources) => a.cpus === b.cpus && a.memory_mib === b.memory_mib
     && (a.root_disk_mib ?? 0) === (b.root_disk_mib ?? 0) && (a.environment_disk_mib ?? 0) === (b.environment_disk_mib ?? 0);
@@ -103,12 +94,11 @@ function presetOf(provider: SandboxProvider, resources: SandboxResources, worksp
  * which backend (own machines, microsandbox preselected) or the E2B account,
  * how big each sandbox is (only for a Provider that declares a default size:
  * E2B sandboxes take the template build's size), then a review. The Provider's
- * declarations decide the size, disk and Runtime inputs. Advanced settings
- * hold the complete form. The Runtime release comes from this console's
- * distribution manifest when it serves one.
+ * declarations decide the size and disk inputs. Advanced settings hold the
+ * complete form.
  * `current` pre-selects the saved choices when a deployment changes. Keeping
- * the backend keeps its saved size and Runtime; another backend starts from its
- * defaults and this console's Runtime. E2B updates can retain the saved key.
+ * the backend keeps its saved size; another backend starts from its defaults.
+ * E2B updates can retain the saved key.
  * Docker isolates less than microsandbox, so choosing it takes a confirmation,
  * once per wizard session; a saved Docker deployment has already made it.
  * Core's address is config.json's `public_url`: the review only shows it, and
@@ -119,18 +109,16 @@ type WizardProps = {
   expectedGeneration: number;
   current?: { provider: SandboxProvider; specification?: SandboxSpecification; e2bTemplate?: string; e2bAPIURL?: string; e2bDomain?: string };
   disabled: boolean;
-  /** A Runtime release an update proposes; the wizard opens on its review. */
-  proposedRuntime?: SandboxRuntimeRelease;
 } & ({ editing: true; onSubmit: (input: UpdateSandboxDeployment) => Promise<void> } |
   { editing?: false; onSubmit: (input: InitializeSandboxDeployment) => Promise<void> });
 
-export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disabled, editing, proposedRuntime, onSubmit }: WizardProps) {
+export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disabled, editing, onSubmit }: WizardProps) {
   const { t, i18n } = useTranslation("sandbox");
   const { t: tCommon } = useTranslation("common");
   const id = useId();
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const currentMode: Where | null = current ? deploymentContract.providers[current.provider].mode : null;
-  const [step, setStep] = useState<Step>(proposedRuntime ? "review" : editing ? currentMode === "direct" ? "e2b" : "size" : "where");
+  const [step, setStep] = useState<Step>(editing ? currentMode === "direct" ? "e2b" : "size" : "where");
   const [where, setWhere] = useState<Where | null>(currentMode);
   const [provider, setProvider] = useState<SandboxProvider | null>(current?.provider ?? null);
   const policy = provider ? deploymentContract.providers[provider] : null;
@@ -155,7 +143,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const [discovery, setDiscovery] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [buildDiscovery, setBuildDiscovery] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [discoveryRetry, setDiscoveryRetry] = useState(0);
-  const [runtime, setRuntime] = useState<Partial<SandboxRuntimeRelease>>(proposedRuntime ?? {});
   const [busy, setBusy] = useState(false);
   const [dockerConfirmed, setDockerConfirmed] = useState(current?.provider === "docker");
   const [confirmingDocker, setConfirmingDocker] = useState(false);
@@ -199,13 +186,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
     setTemplate(""); setSelectedTemplate(""); setTemplates([]); setBuilds([]);
   }
 
-  // A release the administrator entered or an update proposes comes first, then the saved one of the same backend,
-  // then the one this console distributes (the release its node installer verifies).
-  const matched = useQuery(distributionRuntimeQuery);
-  const release: Partial<SandboxRuntimeRelease> = Object.keys(runtime).length ? runtime : saved?.runtime ?? matched.data ?? {};
-
-  const needsRuntime = policy?.runtime ?? false;
-  const runtimeReady = !needsRuntime || isRuntimeRelease(release);
   // Initial setup requires a key; an update may retain the committed key.
   const keyReady = e2bKeyReady(Boolean(editing), replacementRequested, apiKey);
   const connectionChanged = Boolean(editing && (apiURL.trim() !== (current?.e2bAPIURL || E2B_PRESETS.official.apiURL) || domain.trim() !== (current?.e2bDomain || E2B_PRESETS.official.domain)));
@@ -213,13 +193,13 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   // A Provider without a declared default size takes it from its configuration, so the selection sends no resources.
   const sized = Boolean(policy?.default_resources);
   const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources, workspace));
-  const ready = provider !== null && runtimeReady && e2bReady && sizeReady && !disabled && !busy;
+  const ready = provider !== null && e2bReady && sizeReady && !disabled && !busy;
 
   const order: Step[] = editing ? where === "direct" ? ["e2b", "review"] : ["size", "review"] : where === "direct" ? ["where", "e2b", "review"] : ["where", "backend", "size", "review"];
   const index = Math.max(0, order.indexOf(step === "advanced" ? "review" : step));
   const back = () => setStep(step === "advanced" ? "review" : order[Math.max(0, index - 1)]!);
 
-  // The saved backend keeps its size and Runtime; another starts from its declared default size and this console's Runtime.
+  // The saved backend keeps its size; another starts from its declared default size.
   function choose(next: SandboxProvider) {
     if (next !== provider) {
       setRejection(null);
@@ -227,7 +207,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       const proposed = kept?.resources ?? defaultSandboxResources(next, selectedWorkspace(next, storage));
       if (proposed) setResources(proposed);
       setSize(kept ? presetOf(next, kept.resources, kept.workspace) ?? "current" : "standard");
-      setRuntime({});
     }
     setProvider(next);
   }
@@ -247,7 +226,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       const selection = {
         provider, expected_generation: expectedGeneration,
         ...(sized ? { resources } : {}),
-        ...(needsRuntime ? { runtime: release as SandboxRuntimeRelease } : {}),
       };
       if (editing) await onSubmit({ ...selection, ...(provider === "e2b" ? { ...e2bUpdateSelection(template, apiKey), configuration: { template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
       else await onSubmit({ ...selection, ...(provider === "e2b" ? { credential: { api_key: apiKey.trim() }, configuration: { template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
@@ -259,7 +237,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       setFieldRejection(error);
       if (error instanceof AgentCoreError && error.param) {
         if (["credential", "configuration", "e2b.api_url", "e2b.domain"].includes(error.param) && error.code !== "sandbox_credential_ownership") setStep("e2b");
-        else if (error.param === "runtime" || error.param.startsWith("resources.")) setStep("advanced");
+        else if (error.param.startsWith("resources.")) setStep("advanced");
       }
       setResetRequired(error instanceof AgentCoreError && ["sandbox_credential_ownership", "sandbox_reset_required"].includes(error.code ?? ""));
       setAddressRejected(error instanceof AgentCoreError && error.code === "sandbox_configuration_error");
@@ -383,12 +361,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           {provider === "e2b" ? <div><dt>{t("Sandbox API URL")}</dt><dd><code>{apiURL || "https://api.e2b.app"}</code></dd></div> : null}
           {provider === "e2b" ? <div><dt>{t("Sandbox data-plane domain")}</dt><dd><code>{domain || "e2b.app"}</code></dd></div> : null}
           {provider === "e2b" && editing ? <div><dt>{t("E2B credential")}</dt><dd>{t(replacementRequested ? "Replace saved key" : "Keep saved key")}</dd></div> : null}
-          {needsRuntime ? (
-            <div>
-              <dt>{t("Runtime")}<HelpTip>{t("The target Runtime release. Existing sandboxes keep their owned release while nodes prepare the target.")}</HelpTip></dt>
-              <dd>{runtimeReady ? <code>{release.source_commit!.slice(0, 12)}</code> : <span className="wizard-missing">{t("Runtime release needed")}<HelpTip>{t("This console serves no Runtime manifest. Enter the release under advanced settings.")}</HelpTip></span>}</dd>
-            </div>
-          ) : null}
           <div>
             <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
             <dd>
@@ -439,20 +411,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
               </> : null}
             </div>
           </fieldset> : null}
-          {needsRuntime ? (
-            <fieldset className="wizard-group">
-              <legend>{t("Runtime release")}<HelpTip>{t("Filled in from this console's distribution when it serves one. Otherwise copy these from the distribution manifest that matches your nodes; image configuration IDs and manifest digests are different values.")}</HelpTip></legend>
-              {fieldError("runtime") ? <p id={`${id}-runtime-error`} className="field-error" role="alert">{fieldError("runtime")}</p> : null}
-              {RUNTIME_RELEASE_FIELDS.map((field) => {
-                const value = release[field] ?? "";
-                return (
-                  <Field key={field} id={`${id}-${field}`} label={t(releaseLabels[field])} error={value && !isRuntimeReleaseField(field, value) ? t("Check this value") : null}>
-                    <input id={`${id}-${field}`} value={value} spellCheck={false} autoComplete="off" aria-invalid={Boolean(fieldError("runtime"))} aria-describedby={fieldError("runtime") ? `${id}-runtime-error` : undefined} onChange={(event) => { setRuntime({ ...release, [field]: event.target.value.trim() }); setFieldRejection(null); }} />
-                  </Field>
-                );
-              })}
-            </fieldset>
-          ) : null}
           {provider === "e2b" ? (
             <Field id={`${id}-template-advanced`} label={t("Template build")} error={fieldError("configuration") ?? (template && !validTemplate(template.trim()) ? t("Enter a template ID and build UUID separated by a colon.") : null)}>
               <input id={`${id}-template-advanced`} value={template} onChange={(event) => { setTemplate(event.target.value); setFieldRejection(null); }} autoComplete="off" spellCheck={false} />

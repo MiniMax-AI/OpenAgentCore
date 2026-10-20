@@ -32,8 +32,7 @@ func (s *Service) ListNodes(ctx context.Context) ([]Node, error) {
 func nodeView(n NodeRecord) Node {
 	health := n.Health
 	health.Host = nil
-	health.ProviderReady = n.Online && n.ServingReady
-	return Node{Rollout: nodeRollout(n), NodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: n.ID, Name: n.Name, CoreURL: n.CoreURL, EnrollmentID: n.EnrollmentID, Provider: n.Provider, Online: n.Online, LastSeenAt: n.LastSeenAt, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained, Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt}
+	return Node{Rollout: nodeRollout(n), NodeHealth: health, ProviderReady: n.Online && n.ServingReady, Running: n.Running, Snapshots: n.Snapshots, ID: n.ID, Name: n.Name, CoreURL: n.CoreURL, EnrollmentID: n.EnrollmentID, Provider: n.Provider, Online: n.Online, LastSeenAt: n.LastSeenAt, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained, Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt}
 }
 
 // NodeDetail returns one node with its last host observation and its host
@@ -495,22 +494,12 @@ func (s *Service) NodeRetention(ctx context.Context, nodeID, connectionID string
 	return deployment, grants, nil
 }
 
-// Heartbeat records a protocol 1 node's health, which reports readiness of its
-// enrollment generation only.
+// Heartbeat records a node's health and the preparation state of the
+// generations it reports.
 func (s *Service) Heartbeat(ctx context.Context, nodeID, connectionID string, epoch uint64, health NodeHealth, statuses []sandbox.GenerationStatus) error {
-	return s.heartbeat(ctx, nodeID, connectionID, epoch, health, statuses, 1)
-}
-
-// HeartbeatGenerations records a node's health and the preparation state of
-// the generations it reports.
-func (s *Service) HeartbeatGenerations(ctx context.Context, nodeID, connectionID string, epoch uint64, health NodeHealth, statuses []sandbox.GenerationStatus) error {
 	if len(statuses) > maxReportedGenerations {
 		return ErrInvalidInput
 	}
-	return s.heartbeat(ctx, nodeID, connectionID, epoch, health, statuses, 2)
-}
-
-func (s *Service) heartbeat(ctx context.Context, nodeID, connectionID string, epoch uint64, health NodeHealth, statuses []sandbox.GenerationStatus, protocol int) error {
 	id, err := parseID(nodeID)
 	if err != nil {
 		return err
@@ -539,23 +528,11 @@ func (s *Service) heartbeat(ctx context.Context, nodeID, connectionID string, ep
 		if !current {
 			return ErrNodeCredential
 		}
-		if protocol == 1 && len(statuses) > 0 {
-			if len(statuses) != 1 || statuses[0].Generation != n.DeploymentGeneration || statuses[0].SpecificationDigest != n.SpecificationDigest || (statuses[0].State == "ready") != health.ProviderReady {
-				return ErrInvalidInput
-			}
-		}
-		if protocol == 1 && len(statuses) == 0 {
-			state := "failed"
-			if health.ProviderReady {
-				state = "ready"
-			}
-			statuses = []sandbox.GenerationStatus{{Generation: n.DeploymentGeneration, SpecificationDigest: n.SpecificationDigest, State: state, Diagnostic: string(health.Diagnostic)}}
-		}
-		return s.recordGenerations(tx, d, n, statuses, protocol)
+		return s.recordGenerations(tx, d, n, statuses)
 	})
 }
 
-func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses []sandbox.GenerationStatus, protocol int) error {
+func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses []sandbox.GenerationStatus) error {
 	adapter, err := s.registry.Lookup(d.Provider)
 	if err != nil {
 		return err
@@ -595,7 +572,7 @@ func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses 
 			}
 		}
 	}
-	return tx.RefreshServingReadiness(n.ID, protocol)
+	return nil
 }
 
 // ConnectNode records a node connection for the owner epoch.

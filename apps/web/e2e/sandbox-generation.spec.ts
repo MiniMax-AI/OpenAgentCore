@@ -105,22 +105,6 @@ test("online configuration retains existing resources and stops rapid polling wh
   expect(await writes(request)).toEqual([`PUT ${deploymentPath}`]);
 });
 
-test("a saved Runtime moves to the one this installation serves through the reviewed update", async ({ page, request }) => {
-  await openConsole(page, request, "settings?id=sandbox");
-  const served = await (await page.request.get(new URL("/node-install/manifest.json", page.url()).href)).json() as { source_commit: string; images: { runtime: string } };
-  const hex = (c: string) => c.repeat(64);
-  const saved = { source_commit: "a".repeat(40), image_id: `sha256:${hex("a")}`, image_manifest_digest: `sha256:${hex("b")}`, microsandbox_ref: `oac-runtime@sha256:${hex("c")}`, runtime_sha256: hex("d"), firmware_sha256: hex("e") };
-  await setDeployment(request, { specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: saved } });
-  await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
-  await expect(page.getByText(`Saved ${saved.source_commit.slice(0, 12)} · this installation serves ${served.source_commit.slice(0, 12)}`)).toBeVisible();
-  const use = page.getByRole("button", { name: "Use this installation's Runtime", exact: true });
-  await use.click();
-  const sent = await saveConfiguration(page);
-  expect(sent.input.runtime).toMatchObject({ source_commit: served.source_commit, image_id: served.images.runtime });
-  await expect(use).toHaveCount(0);
-  await inspectRollout(page, { "Core preparation": "Preparing configuration", "Target generation": "2" });
-});
-
 test("unknown target preparation preserves live old-generation service while an offline pin stays offline", async ({ page, request }, info) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
@@ -128,9 +112,9 @@ test("unknown target preparation preserves live old-generation service while an 
   await setDeployment(request, { generation: 2 });
   await setNode(request, { id: "node-local", online: true, provider_ready: true, rollout: { state: "unknown", ready_generation: 1 } });
   await setNode(request, { id: "node-edge", online: false, provider_ready: true, rollout: { state: "unknown", ready_generation: 1 } });
-  await setNode(request, { id: "node-gpu", rollout: { state: "update_required", ready_generation: 1 } });
+  await setNode(request, { id: "node-gpu", rollout: { state: "failed", ready_generation: 1 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
-  await inspectRollout(page, { "Node software incompatible": "1" });
+  await inspectRollout(page, { "Preparation failed": "1" });
   await page.getByRole("button", { name: "Nodes", exact: true }).click();
   const serving = page.getByRole("row", { name: /core-01/ });
   await expect(serving).toContainText("Available");
@@ -149,7 +133,7 @@ test("unknown target preparation preserves live old-generation service while an 
   await expect(setup).toContainText("Done");
   await expect(rollout(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await inspectRollout(page, { "Target generation": "2", "Target readiness unknown": "2", "Node software incompatible": "1" });
+  await inspectRollout(page, { "Target generation": "2", "Target readiness unknown": "2", "Preparation failed": "1" });
   await capture(page, info, "generation-configuration-summary-en", rollout(page));
   expect(await writes(request)).toEqual([]);
 });

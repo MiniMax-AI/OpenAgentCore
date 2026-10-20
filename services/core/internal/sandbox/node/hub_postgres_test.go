@@ -56,7 +56,7 @@ func TestHubPostgresBlockedOpeningIsBounded(t *testing.T) {
 			}
 			pids, results := make(chan uint32, 1), make(chan error, 1)
 			var attempts atomic.Int32
-			hub := NewHub(HubOptions{
+			hub := newTestHub(HubOptions{
 				Authenticate: func(_ context.Context, id, _ string) (Identity, error) {
 					if id == slow.NodeID {
 						return slow, nil

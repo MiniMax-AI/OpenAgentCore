@@ -12,17 +12,13 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// The host's image store decides which release digest names the loaded image.
-func TestNativeImageIsAReleaseIdentity(t *testing.T) {
-	release := sandbox.RuntimeRelease{ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64)}
-	config := sandbox.NodeConfig{Specification: sandbox.DeploymentSpec{Runtime: &release}}
-	for _, image := range []string{release.ImageID, release.ImageManifestDigest} {
-		config.Native = json.RawMessage(`{"image":"` + image + `"}`)
-		if entry, err := decodeNative(config); err != nil || entry.Image != image {
-			t.Fatalf("rejected release image %s: %v", image, err)
-		}
+func TestNativeRequiresTheInstalledImage(t *testing.T) {
+	image := "sha256:" + strings.Repeat("b", 64)
+	config := sandbox.NodeConfig{Native: json.RawMessage(`{"image":"` + image + `"}`)}
+	if entry, err := decodeNative(config); err != nil || entry.Image != image {
+		t.Fatalf("rejected the installed image: %v", err)
 	}
-	for _, native := range []string{`{"image":"sha256:` + strings.Repeat("a", 64) + `"}`, `{"image":"` + release.ImageID + `","cpus":2}`, `{"image":null}`} {
+	for _, native := range []string{`{"image":"` + image + `","cpus":2}`, `{"image":null}`, `{}`} {
 		config.Native = json.RawMessage(native)
 		if _, err := decodeNative(config); err == nil {
 			t.Fatalf("accepted native %s", native)

@@ -23,7 +23,7 @@ func beginRawNode(t *testing.T, origin string, id Identity) *websocket.Conn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { conn.Close() })
-	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
+	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ObservedAt: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 	return conn
@@ -77,7 +77,7 @@ func TestHubCloseCancelsEveryOpeningCallback(t *testing.T) {
 				close(returned)
 			}
 			var cleanups atomic.Int32
-			hub := NewHub(HubOptions{
+			hub := newTestHub(HubOptions{
 				Authenticate: func(ctx context.Context, _, _ string) (Identity, error) {
 					if stage == "authenticate" {
 						block(ctx)
@@ -96,7 +96,7 @@ func TestHubCloseCancelsEveryOpeningCallback(t *testing.T) {
 					}
 					return nil
 				},
-				Heartbeat: func(ctx context.Context, _ Identity, _ string, _ uint64, _ Health) error {
+				Generations: func(ctx context.Context, _ Identity, _ string, _ uint64, _ Health) error {
 					if stage == "heartbeat" {
 						block(ctx)
 					}
@@ -126,7 +126,7 @@ func TestHubCloseCancelsEveryOpeningCallback(t *testing.T) {
 					return
 				}
 				defer conn.Close()
-				_ = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}})
+				_ = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ObservedAt: time.Now().UTC()}})
 				if f, err := readFrame(conn); err == nil {
 					t.Errorf("canceled opening published welcome: %s", f.Type)
 				}
@@ -167,7 +167,7 @@ func TestSlowOpeningAndClosingLeaveOtherNodesResponsive(t *testing.T) {
 	opening, closing, finish := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var release sync.Once
 	defer release.Do(func() { close(finish) })
-	hub := NewHub(HubOptions{
+	hub := newTestHub(HubOptions{
 		Authenticate: func(_ context.Context, id, _ string) (Identity, error) {
 			if id == slow.NodeID {
 				return slow, nil
@@ -228,7 +228,7 @@ func TestHubCleansPresenceAfterPartialOpeningFailure(t *testing.T) {
 			var mu sync.Mutex
 			persisted := ""
 			var connects, cleanups int
-			hub := NewHub(HubOptions{
+			hub := newTestHub(HubOptions{
 				Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil },
 				OwnerEpoch:   func(context.Context) (uint64, error) { return 11, nil },
 				Connected: func(_ context.Context, _ Identity, connection string, _ uint64) error {
@@ -241,7 +241,7 @@ func TestHubCleansPresenceAfterPartialOpeningFailure(t *testing.T) {
 					}
 					return nil
 				},
-				Heartbeat: func(context.Context, Identity, string, uint64, Health) error { return errors.New("heartbeat failed") },
+				Generations: func(context.Context, Identity, string, uint64, Health) error { return errors.New("heartbeat failed") },
 				Disconnected: func(_ context.Context, _ Identity, connection string, epoch uint64) {
 					mu.Lock()
 					defer mu.Unlock()
@@ -270,7 +270,7 @@ func TestHubCleansPresenceAfterPartialOpeningFailure(t *testing.T) {
 
 func TestHubSendQueueRespectsCallerCancellation(t *testing.T) {
 	id := identity()
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
 	server := httptest.NewServer(hub)
 	defer server.Close()
 	defer hub.Close()
@@ -312,7 +312,7 @@ func TestHubSendQueueRespectsCallerCancellation(t *testing.T) {
 
 func TestHubCallBoundsOwnershipBeforeDispatch(t *testing.T) {
 	entered := make(chan struct{})
-	hub := NewHub(HubOptions{OwnerEpoch: func(ctx context.Context) (uint64, error) {
+	hub := newTestHub(HubOptions{OwnerEpoch: func(ctx context.Context) (uint64, error) {
 		deadline, ok := ctx.Deadline()
 		if !ok || time.Until(deadline) > callbackTimeout {
 			t.Error("ownership callback unbounded")
@@ -347,7 +347,7 @@ func TestHubRetainsOpeningReservationUntilCanceledCallbackReturns(t *testing.T) 
 	var mu sync.Mutex
 	persisted := ""
 	cleanups := 0
-	hub := NewHub(HubOptions{
+	hub := newTestHub(HubOptions{
 		Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil },
 		OwnerEpoch:   func(context.Context) (uint64, error) { return 4, nil },
 		Connected: func(ctx context.Context, _ Identity, connection string, _ uint64) error {
@@ -403,10 +403,10 @@ func TestHubDisconnectCancelsPeriodicHeartbeatCallback(t *testing.T) {
 	id := identity()
 	entered := make(chan struct{})
 	var heartbeats atomic.Int32
-	hub := NewHub(HubOptions{
+	hub := newTestHub(HubOptions{
 		Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil },
 		OwnerEpoch:   func(context.Context) (uint64, error) { return 2, nil },
-		Heartbeat: func(ctx context.Context, _ Identity, _ string, _ uint64, _ Health) error {
+		Generations: func(ctx context.Context, _ Identity, _ string, _ uint64, _ Health) error {
 			if heartbeats.Add(1) == 1 {
 				return nil
 			}
@@ -427,7 +427,7 @@ func TestHubDisconnectCancelsPeriodicHeartbeatCallback(t *testing.T) {
 	hub.mu.Lock()
 	connection := hub.peers[id.NodeID].id
 	hub.mu.Unlock()
-	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: connection, OwnerEpoch: 2, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
+	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: connection, OwnerEpoch: 2, Health: &Health{ObservedAt: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 	select {

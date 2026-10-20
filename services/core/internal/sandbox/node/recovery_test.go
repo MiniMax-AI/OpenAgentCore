@@ -24,8 +24,8 @@ func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T)
 	options := func(epoch uint64) HubOptions {
 		return HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return epoch, nil }}
 	}
-	first := NewHub(options(4))
-	second := NewHub(options(5))
+	first := newTestHub(options(4))
+	second := newTestHub(options(5))
 	defer first.Close()
 	defer second.Close()
 	var mu sync.Mutex
@@ -42,7 +42,7 @@ func TestCoreRestartFencesOldConnectionAndNodeRestartKeepsIdentity(t *testing.T)
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() {
-			done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential, Provider: &fakeProvider{}, Probe: probe})
+			done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential}, &fakeProvider{}, probe)
 		}()
 		return cancel, done
 	}
@@ -90,7 +90,7 @@ func TestAgentRejectsOwnerEpochRollback(t *testing.T) {
 		}
 		defer conn.Close()
 		_, _ = readFrame(conn)
-		_ = writeFrame(conn, frame{Type: "welcome", ConnectionID: uuid.NewString(), OwnerEpoch: 3})
+		_ = writeFrame(conn, frame{Type: "welcome", ConnectionID: uuid.NewString(), OwnerEpoch: 3, Deployment: testDeployment()})
 		_, _ = readFrame(conn)
 	}))
 	defer server.Close()
@@ -105,7 +105,7 @@ func TestAgentRejectsOwnerEpochRollback(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	err = Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: &fakeProvider{}, Probe: probe})
+	err = runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential}, &fakeProvider{}, probe)
 	if !errors.Is(err, sandbox.ErrOwnership) {
 		t.Fatalf("stale owner = %v", err)
 	}
@@ -115,7 +115,7 @@ func TestHeartbeatAcknowledgementKeepsIdleConnectionAlive(t *testing.T) {
 	id := identity()
 	beats := make(chan Health, 1)
 	var heartbeats int
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }, Heartbeat: func(ctx context.Context, id Identity, connection string, epoch uint64, h Health) error {
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }, Generations: func(ctx context.Context, id Identity, connection string, epoch uint64, h Health) error {
 		heartbeats++
 		if heartbeats == 1 {
 			return nil
@@ -137,7 +137,7 @@ func TestHeartbeatAcknowledgementKeepsIdleConnectionAlive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: &fakeProvider{}, Probe: probe})
+		done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential}, &fakeProvider{}, probe)
 	}()
 	defer func() {
 		cancel()
@@ -147,7 +147,7 @@ func TestHeartbeatAcknowledgementKeepsIdleConnectionAlive(t *testing.T) {
 	}()
 	select {
 	case h := <-beats:
-		if !h.ProviderReady || h.ObservedAt.IsZero() {
+		if len(h.Generations) != 1 || h.Generations[0].State != "ready" || h.ObservedAt.IsZero() {
 			t.Fatal("invalid heartbeat")
 		}
 	case <-time.After(12 * time.Second):
@@ -166,7 +166,7 @@ func TestHubExpiresSilentNode(t *testing.T) {
 		t.Skip("real heartbeat timeout")
 	}
 	id := identity()
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
 	server := httptest.NewServer(hub)
 	defer server.Close()
 	defer hub.Close()
@@ -176,7 +176,7 @@ func TestHubExpiresSilentNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
+	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ObservedAt: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = readFrame(conn); err != nil {
@@ -198,7 +198,7 @@ func TestHubExpiresSilentNode(t *testing.T) {
 func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 	id := identity()
 	health := make(chan Health, 1)
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }, Heartbeat: func(ctx context.Context, id Identity, connection string, epoch uint64, h Health) error {
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }, Generations: func(ctx context.Context, id Identity, connection string, epoch uint64, h Health) error {
 		select {
 		case health <- h:
 		default:
@@ -217,7 +217,9 @@ func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: p, Probe: func(context.Context) (Health, error) { return Health{}, errors.New("private backend detail") }})
+		done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential}, p, func(context.Context) (*sandbox.CheckpointCompatibility, error) {
+			return nil, errors.New("private backend detail")
+		})
 	}()
 	defer func() {
 		cancel()
@@ -228,7 +230,7 @@ func TestDegradedNodeRetainsObservationAndCleanup(t *testing.T) {
 	wait(t, func() bool { return hub.Online(id.NodeID) })
 	select {
 	case h := <-health:
-		if h.ProviderReady || h.Diagnostic != "provider_unavailable" {
+		if len(h.Generations) != 1 || h.Generations[0].State != "failed" || h.Generations[0].Diagnostic != "provider_unavailable" {
 			t.Fatalf("unsafe health: %+v", h)
 		}
 	case <-time.After(time.Second):

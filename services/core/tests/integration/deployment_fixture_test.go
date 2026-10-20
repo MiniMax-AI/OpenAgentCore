@@ -53,15 +53,22 @@ func deploymentExecution(t testing.TB, w *Store) *deployment.ExecutionOperations
 	return operations
 }
 
-func fixtureNodeHeartbeat(ctx context.Context, store *Store, service *deployment.Service, nodeID, connection string, epoch uint64, health deployment.NodeHealth) error {
+func fixtureNodeHeartbeat(ctx context.Context, store *Store, service *deployment.Service, nodeID, connection string, epoch uint64, ready bool) error {
 	var generation uint64
 	var digest, provider string
 	if err := store.pool.QueryRow(ctx, "SELECT n.deployment_generation,n.specification_digest,d.provider_kind FROM runtime_nodes n CROSS JOIN runtime_deployment d WHERE n.id=$1", nodeID).Scan(&generation, &digest, &provider); err != nil {
 		return err
 	}
 	var statuses []sandbox.GenerationStatus
-	if health.ProviderReady && provider == "microsandbox" {
-		statuses = []sandbox.GenerationStatus{{Generation: generation, SpecificationDigest: digest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}
+	{
+		status := sandbox.GenerationStatus{Generation: generation, SpecificationDigest: digest, State: "ready"}
+		if !ready {
+			status.State = "failed"
+		}
+		if provider == "microsandbox" && ready {
+			status.Checkpoint = &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}
+		}
+		statuses = []sandbox.GenerationStatus{status}
 	}
-	return service.Heartbeat(ctx, nodeID, connection, epoch, health, statuses)
+	return service.Heartbeat(ctx, nodeID, connection, epoch, deployment.NodeHealth{}, statuses)
 }

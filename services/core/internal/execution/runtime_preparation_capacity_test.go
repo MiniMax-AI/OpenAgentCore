@@ -212,7 +212,7 @@ func TestUnsettledFilesystemPreparationYieldsOnlyCompute(t *testing.T) {
 	if err := r.deployments.ConnectNode(t.Context(), newer.NodeID, connection, epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.deployments.Heartbeat(t.Context(), newer.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
+	if err := r.deployments.Heartbeat(t.Context(), newer.NodeID, connection, epoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
 		t.Fatal(err)
 	}
 	demands, _, err := r.reader.PlacementDemand(t.Context(), deployment.PlacementDemandCursor{})

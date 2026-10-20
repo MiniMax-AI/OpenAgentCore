@@ -56,7 +56,7 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
 | Sandbox backend: Docker, microsandbox or E2B | **Settings** → **Sandbox and scheduling**: the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per installation, chosen after the first sign-in. Another backend needs **Reset deployment** first; see [change the sandbox configuration](./getting-started/nodes.md#change-the-sandbox-configuration) |
-| Sandbox size, Runtime release, E2B key and template build | **Settings** → **Sandbox and scheduling** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
+| Sandbox size, E2B key and template build | **Settings** → **Sandbox and scheduling** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size. The E2B key is write-only and encrypted |
 | Nodes and their capacity | **Nodes**: **Add node**, **Edit node** and removal | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and [Add and manage nodes](./getting-started/nodes.md) |
 | Idle suspension | **Settings** → **Sandbox and scheduling** → **Automatic suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | Deployment-wide; see [suspension policy](../contracts/agents-api/sandbox-deployment.md#suspension-policy) |
 | Independent workspace storage and tenant capacity | **Settings → Workspace storage** | `/core/v1/workspace-storage` | See [Set up workspace storage](./getting-started/workspace-storage.md); existing workspaces retain their configuration |
@@ -107,12 +107,12 @@ The named Docker volume `<project>_data` contains these paths. Docker manages Li
 
 ## Docker node configuration
 
-The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources, the Runtime release and capacity remain in [Core’s database](#runtime-settings-web).
+The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources and capacity remain in [Core’s database](#runtime-settings-web).
 
 | Field | Installer value | Meaning |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
-| `image` | The Runtime image’s local ID after loading | The release’s `image_id` or `image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
+| `image` | The Runtime image’s local ID after loading | The installation’s Runtime image. The host’s image store decides whether its local ID is the manifest’s `image_id` or `image_manifest_digest`, so the value is node-local |
 | `network` | `oac-node-<installation-id>` | Runtime container network |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
 | `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |

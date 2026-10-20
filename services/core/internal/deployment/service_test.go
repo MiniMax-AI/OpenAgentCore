@@ -57,7 +57,6 @@ func operations(t *testing.T, publicURL string, tx *fakeDeploymentTx) *Execution
 // testSpecification is a valid deployment specification for provider.
 func testSpecification(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
-	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
 		s.Resources.EnvironmentDiskMiB = 8192
@@ -150,10 +149,6 @@ func TestSandboxValidationWrapperPreservesClassification(t *testing.T) {
 	}
 	if errors.Is(err, sandbox.ErrInvalid) {
 		t.Fatal("wrapper changed sentinel identity")
-	}
-	_, err = service.SetupForSelection(installation, sandbox.Selection{Provider: "e2b", DeploymentSpec: sandbox.DeploymentSpec{Runtime: &sandbox.RuntimeRelease{}}})
-	if !errors.As(err, &configuration) || configuration.Validation == nil || configuration.Validation.Param != "runtime" || err.Error() != "invalid sandbox configuration: E2B Runtime is selected by its immutable template build" {
-		t.Fatal("pending E2B validation order changed", err)
 	}
 }
 

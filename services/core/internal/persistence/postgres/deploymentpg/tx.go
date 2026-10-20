@@ -216,7 +216,7 @@ func (t *nodeTx) HeartbeatNode(heartbeat deployment.Heartbeat) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	changed, err := t.q.HeartbeatRuntimeNode(t.ctx, sqlc.HeartbeatRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(heartbeat.Epoch), ProviderReady: heartbeat.Health.ProviderReady, Health: raw})
+	changed, err := t.q.HeartbeatRuntimeNode(t.ctx, sqlc.HeartbeatRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(heartbeat.Epoch), Health: raw})
 	return changed == 1, translate(err)
 }
 
@@ -253,14 +253,6 @@ func (t *nodeTx) PromoteServingGeneration(nodeID string, generation uint64) erro
 		return err
 	}
 	return t.q.PromoteNodeServingGeneration(t.ctx, sqlc.PromoteNodeServingGenerationParams{ID: id, ReadyGeneration: pgtype.Int8{Int64: int64(generation), Valid: true}})
-}
-
-func (t *nodeTx) RefreshServingReadiness(nodeID string, protocol int) error {
-	id, err := parseID(nodeID)
-	if err != nil {
-		return err
-	}
-	return t.q.RefreshNodeServingReadiness(t.ctx, sqlc.RefreshNodeServingReadinessParams{ID: id, ProtocolVersion: int32(protocol)})
 }
 
 // deploymentTx is one leased deployment change.

@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 6830daa88320510b51e74909169d4e49c7fa9017b344ba12a1456097cad29991
+source_hash: 48515be4243404bb45d5fb93ffe9836580e37f01efb495c1e06e2722d6183165
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -60,7 +60,7 @@ Core 安装的每项设置、其归属位置以及修改方式。安装程序写
 | 设置 | Web 中的位置 | Core API | 注意事项 |
 | --- | --- | --- | --- |
 | 沙箱提供商：Docker、microsandbox 或 E2B | **设置** → **沙箱与调度**：设置向导，最后点击 **保存配置** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个沙箱提供商，在首次登录后选择。要改用其他提供商，必须先执行 **重置部署**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
-| 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **设置** → **沙箱与调度** → **修改资源** | `/core/v1/sandbox/deployment` | Web 会推荐 [提供商声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
+| 沙箱大小、E2B 密钥和模板构建 | **设置** → **沙箱与调度** → **修改资源** | `/core/v1/sandbox/deployment` | Web 会推荐 [提供商声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小。E2B 密钥仅可写入，并且已加密 |
 | 节点及其容量 | **节点**：**添加节点**、**编辑节点** 和移除 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[添加和管理节点](getting-started/nodes.md) |
 | 空闲挂起 | **设置** → **沙箱与调度** → **自动挂起** → **空闲多久后挂起（秒）** → **保存** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
 | 独立工作区存储和租户容量 | **设置 → 工作区存储** | `/core/v1/workspace-storage` | 参阅[设置工作区存储](getting-started/workspace-storage.md)；现有工作区保留自身配置 |
@@ -111,12 +111,12 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 
 ## Docker 节点配置 {#docker-node-configuration}
 
-节点安装程序会将 Docker 的主机设置写入节点配置文件的 `native` 对象，只有 Docker 适配器读取它。部署资源、Runtime 发行版本和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
+节点安装程序会将 Docker 的主机设置写入节点配置文件的 `native` 对象，只有 Docker 适配器读取它。部署资源和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
 
 | 字段 | 安装程序设置的值 | 含义 |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | 显式 Docker Engine 套接字 |
-| `image` | 加载后 Runtime 镜像的本地 ID | 发行版本的 `image_id` 或 `image_manifest_digest`。主机的镜像存储决定由哪个 digest 指代已加载的镜像，因此该值属于节点本地；适配器只接受这两个值 |
+| `image` | 加载后 Runtime 镜像的本地 ID | 本安装的 Runtime 镜像。主机的镜像存储决定其本地 ID 是清单中的 `image_id` 还是 `image_manifest_digest`，因此该值属于节点本地 |
 | `network` | `oac-node-<installation-id>` | Runtime 容器网络 |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | 所匹配发行版的 seccomp 配置文件 |
 | `nested_sandbox` | `true` | 启用 Docker 适配器的 init 进程和 proc-mask 配置 |

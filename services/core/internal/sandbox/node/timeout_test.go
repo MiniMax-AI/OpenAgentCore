@@ -77,7 +77,7 @@ func TestRequestBudgetBounds(t *testing.T) {
 
 func TestQueuedMutationExpiresWithoutExecution(t *testing.T) {
 	id := identity()
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
 	server := httptest.NewServer(hub)
 	defer server.Close()
 	defer hub.Close()
@@ -90,7 +90,7 @@ func TestQueuedMutationExpiresWithoutExecution(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: p, Probe: probe})
+		done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential}, p, probe)
 	}()
 	released := false
 	defer func() {

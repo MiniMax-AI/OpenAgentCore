@@ -68,7 +68,7 @@ class SourceInstallTest(unittest.TestCase):
         return [args[args.index('--project-directory') + 2:] if '--project-directory' in args else args[2:] for args, _ in self.calls]
 
     def snapshot(self):
-        return {name: (self.destination / name).read_bytes() for name in ('compose.yaml', 'compose.override.yaml', '.env', 'oac', 'node-payload/active.json')}
+        return {name: (self.destination / name).read_bytes() for name in ('compose.yaml', 'compose.override.yaml', '.env', 'oac', 'node-payload/manifest.json')}
 
     def test_complete_compose_preserves_secrets_and_serves_whole_payload(self):
         self.install()
@@ -84,8 +84,7 @@ class SourceInstallTest(unittest.TestCase):
         self.assertTrue(mounts['/node-payload']['read_only'])
         self.assertEqual(services['init']['environment']['OAC_REVISION'], self.revision)
         self.assertEqual(services['web']['environment']['OAC_PUBLIC_URL'], 'http://127.0.0.1:19873')
-        self.assertEqual(json.loads((self.destination / 'node-payload/active.json').read_text()), {'source_commit': self.revision})
-        self.assertTrue((self.destination / 'node-payload/releases' / self.revision / 'node-install.pyz').is_file())
+        self.assertTrue((self.destination / 'node-payload/node-install.pyz').is_file())
         self.assertEqual(os.stat(self.destination / '.env').st_mode & 0o777, 0o600)
         self.assertIn('--pull', self.calls[-2][0])
         self.assertIn('never', self.calls[-2][0])

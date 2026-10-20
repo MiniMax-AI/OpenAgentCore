@@ -136,22 +136,17 @@ func TestInitializeRefusesChangedOrMissingFiles(t *testing.T) {
 	}
 }
 
-func TestInitializeHealsTheReleasePointerAfterACrash(t *testing.T) {
-	root, release, files := initFixture(t)
-	if err := initialize(root, release, fixed(files)); err != nil {
+func readReceipt(t *testing.T, root string) installReceipt {
+	t.Helper()
+	var receipt installReceipt
+	raw, err := os.ReadFile(filepath.Join(root, "installation.json"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	pointer := filepath.Join(root, "node-payload", "active.json")
-	if err := os.WriteFile(pointer, []byte("{}"), 0o600); err != nil {
+	if err := json.Unmarshal(raw, &receipt); err != nil {
 		t.Fatal(err)
 	}
-	if err := initialize(root, release, refuseDownload(t)); err != nil {
-		t.Fatal(err)
-	}
-	want := `{"source_commit":"` + release.revision + `"}`
-	if healed, _ := os.ReadFile(pointer); string(healed) != want {
-		t.Fatalf("pointer = %s", healed)
-	}
+	return receipt
 }
 
 func TestInitializeRefusesDataOfAnotherRelease(t *testing.T) {

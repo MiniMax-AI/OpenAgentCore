@@ -178,16 +178,16 @@ func TestGenerationUpdateSerializesWithAllocationAdmission(t *testing.T) {
 }
 
 func TestSandboxSnapshotRolloutEquivalence(t *testing.T) {
-	s, w, view, input := webSpecificationFixture(t, "docker")
+	s, _, view, _ := webSpecificationFixture(t, "docker")
 	node := specificationNode(t, s, view)
 	deployments := deploymentService(t, s)
 	heartbeat := func(connection, state string) {
 		t.Helper()
-		if err := deployments.HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}}); err != nil {
+		if err := deployments.Heartbeat(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, state := range []string{"ready", "preparing", "failed", "unconfirmed", "offline", "update_required"} {
+	for _, state := range []string{"ready", "preparing", "failed", "unconfirmed", "offline"} {
 		t.Run(state, func(t *testing.T) {
 			connection := onlineManagerNode(t, s, node.NodeID)
 			want := deployment.RolloutNodes{}
@@ -207,24 +207,13 @@ func TestSandboxSnapshotRolloutEquivalence(t *testing.T) {
 				if err := deployments.ConnectNode(t.Context(), node.NodeID, connection, view.OwnerEpoch); err != nil {
 					t.Fatal(err)
 				}
-				if err := deployments.HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, nil); err != nil {
+				if err := deployments.Heartbeat(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, nil); err != nil {
 					t.Fatal(err)
 				}
 				want.Unknown = 1
 			case "offline":
 				runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET last_seen_at=clock_timestamp()-interval '46 seconds',health='{"diagnostic":"provider_unavailable"}' WHERE id=$1`, node.NodeID)
 				want.Unknown = 1
-			case "update_required":
-				// Change the target on the same backend so the node's enrolled
-				// generation falls behind.
-				change := input
-				change.Resources.CPUs++
-				change.ExpectedGeneration = view.Generation
-				next, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, change)
-				if err != nil || next.Generation != view.Generation+1 || next.OwnerEpoch != view.OwnerEpoch {
-					t.Fatal("target change replaced execution ownership", next, err)
-				}
-				want.UpdateRequired = 1
 			}
 			assertSandboxSnapshotEquivalent(t, s.pool)
 			got, err := deployments.View(t.Context())
