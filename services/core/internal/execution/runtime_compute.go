@@ -284,7 +284,7 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 		return err
 	}
 	if !activity.Busy && !activity.WakeRequested {
-		return r.expireForDemand(ctx, owner, state)
+		return r.expireForDemand(ctx, owner)
 	}
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership
@@ -311,10 +311,7 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 // expireForDemand lets capacity pressure end an idle checkpoint's retention
 // early. Core decides eligibility and demand; a refusal changes nothing, and
 // the expired allocation is observed and cleaned up as at its deadline.
-func (r *runtimeLifecycle) expireForDemand(ctx context.Context, owner deployment.Allocation, state runtimeCompute) error {
-	if state.Snapshot == nil || state.Target != nil || state.RestoreID != "" || state.Rollback {
-		return nil
-	}
+func (r *runtimeLifecycle) expireForDemand(ctx context.Context, owner deployment.Allocation) error {
 	err := r.deployment.ExpireCheckpointForDemand(ctx, owner)
 	if errors.Is(err, deployment.ErrNotIdle) || errors.Is(err, deployment.ErrAllocationConflict) {
 		return nil

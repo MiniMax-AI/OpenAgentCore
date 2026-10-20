@@ -91,6 +91,7 @@ func TestRetentionPressureKeepsIneligibleCheckpoints(t *testing.T) {
 		damage string
 	}{
 		{"no demand", false, ""},
+		{"wake requested", true, `UPDATE runtime_allocations SET compute_wake_requested=true WHERE id=$1`},
 		{"owned workspace storage", true, `DELETE FROM environment_workspaces WHERE environment_id=(SELECT environment_id FROM runtime_allocations WHERE id=$1)`},
 		{"no retained native history", true, `UPDATE devices SET supported_agent_kinds='[]' WHERE id=(SELECT device_id FROM runtime_allocations WHERE id=$1)`},
 	} {
