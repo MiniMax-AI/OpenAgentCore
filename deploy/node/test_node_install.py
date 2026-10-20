@@ -375,12 +375,12 @@ class NodeInstallTests(unittest.TestCase):
         for field, value in (("provider", "microsandbox"), ("core_url", "https://other.example")):
             before = getattr(self.args, field)
             setattr(self.args, field, value)
-            with self.assertRaisesRegex((installer.InstallError, node_spec.SpecificationError), "differs|prepares the changed|belongs to another installation"):
+            with self.assertRaisesRegex((installer.InstallError, node_spec.SpecificationError), "differs|prepares the changed|added with another Core address"):
                 self.install()
             setattr(self.args, field, before)
         self.manifest["source_commit"] = "f" * 40
         self.refresh_manifest()
-        with self.assertRaisesRegex((installer.InstallError, node_spec.SpecificationError), "differs|prepares the changed|belongs to another installation"):
+        with self.assertRaisesRegex((installer.InstallError, node_spec.SpecificationError), "differs|prepares the changed|added with another Core address"):
             self.install()
         self.assertEqual((self.root / "provider.json").read_bytes(), original)
 
@@ -969,7 +969,7 @@ class NodeInstallTests(unittest.TestCase):
         self.manifest["source_commit"] = "f" * 40
         self.payloads[program.relative_to(self.root).as_posix()] = b"program of another installation"
         self.refresh_manifest()
-        with self.assertRaisesRegex(installer.InstallError, "belongs to another installation.*Remove node on the Nodes page.*Add node"):
+        with self.assertRaisesRegex(installer.InstallError, "added with another Core address.*Remove node on the Nodes page.*Add node"):
             self.install()
         self.assertEqual(program.read_bytes(), saved)
 

@@ -42,10 +42,6 @@ class InstallError(Exception):
     pass
 
 
-class RuntimeDownloadError(InstallError):
-    """A fixed private helper exit category for transfer/provenance failures."""
-
-
 MICRO = provider_assets.artifacts("microsandbox", ("runtime",))
 DOCKER = ("docker", "--host", "unix:///var/run/docker.sock")
 DOCKER_SOCKET = Path("/var/run/docker.sock")
@@ -176,14 +172,14 @@ def fetch(source, name):
                 # A body cut short by the connection reads as a normal end; the declared length tells.
                 declared = getattr(response, "headers", {}).get("Content-Length", "")
             if len(raw) > 1024 * 1024:
-                raise RuntimeDownloadError("Node bootstrap metadata is too large: " + name)
+                raise InstallError("Node bootstrap metadata is too large: " + name)
             if declared.isdigit() and int(declared) != len(raw):
                 raise http.client.IncompleteRead(raw, int(declared) - len(raw))
             return io.BytesIO(raw)
         except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
             if not transient(error) or attempt == 2:
                 status = " (HTTP " + str(error.code) + ")" if isinstance(error, urllib.error.HTTPError) else ""
-                raise RuntimeDownloadError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
+                raise InstallError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
             time.sleep(attempt + 1)
 
 
@@ -192,27 +188,27 @@ def metadata(source):
     with read("SHA256SUMS") as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024:
-        raise RuntimeDownloadError("Invalid distribution checksum list")
+        raise InstallError("Invalid distribution checksum list")
     sums = {}
     try:
         for line in raw.decode().splitlines():
             checksum, name = line.split("  ", 1)
             if name in sums or not re.fullmatch(r"[0-9a-f]{64}", checksum):
-                raise RuntimeDownloadError("Invalid distribution checksum entry")
+                raise InstallError("Invalid distribution checksum entry")
             sums[name] = checksum
     except ValueError:
-        raise RuntimeDownloadError("Invalid distribution checksum list") from None
+        raise InstallError("Invalid distribution checksum list") from None
     with read("manifest.json") as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024 or hashlib.sha256(raw).hexdigest() != sums.get("manifest.json"):
-        raise RuntimeDownloadError("Distribution manifest checksum mismatch")
+        raise InstallError("Distribution manifest checksum mismatch")
     try:
         manifest = json.loads(raw)
     except (ValueError, TypeError):
-        raise RuntimeDownloadError("Invalid distribution manifest") from None
+        raise InstallError("Invalid distribution manifest") from None
     if (not isinstance(manifest, dict) or manifest.get("platform") != "linux/amd64" or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("source_commit", ""))
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
-        raise RuntimeDownloadError("Unsupported node distribution")
+        raise InstallError("Unsupported node distribution")
     distribution.image_identities(manifest, "runtime")
     for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items if item["role"] != "policy"):
         distribution.artifact(manifest, name)
@@ -273,14 +269,14 @@ def download(source, name, root, expected, replace=False):
         if file_digest(target) == expected:
             return
         if not replace:
-            raise RuntimeDownloadError("Installed node payload differs; refusing to overwrite it")
+            raise InstallError("Installed node payload differs; refusing to overwrite it")
         target.unlink()
     with distribution.temporary_file(target) as temporary:
         with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output, fetch(source, name) as response:
             for block in iter(lambda: response.read(1024 * 1024), b""):
                 output.write(block)
         if file_digest(Path(temporary)) != expected:
-            raise RuntimeDownloadError("Node payload checksum mismatch: " + name)
+            raise InstallError("Node payload checksum mismatch: " + name)
         os.replace(temporary, target)
     if name.startswith("native/"):
         os.chmod(target, 0o700)
@@ -463,7 +459,7 @@ def install_lock(root):
         yield
 
 
-NOT_THIS_INSTALLATION = ("This host's node belongs to another installation of Core. Nothing was changed. To use it with this Core, "
+NOT_THIS_INSTALLATION = ("This host's node was added with another Core address, release or provider. Nothing was changed. To use it with this Core, "
                          "choose Remove node on the Nodes page, uninstall it on this host, then add the host again with Add node.")
 
 GIB = 1024 ** 3

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// This contract owns numeric bounds, and canonical field order.
+// This contract owns numeric bounds and canonical field order.
 // The node installer (node_spec.py) and the TypeScript client
 // (deployment-contract.ts) consume its generated projections.
 const minimumDiskMiB uint32 = 1024

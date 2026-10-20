@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 3097ac3d069a1be6df64fb4fdf37cba0801831584140ff2ffd20e7355162afe8
+source_hash: 7e94d713fd7de92996f17717201c8da58bf8e538dc78e18334f5c43a76802e86
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -84,7 +84,7 @@ GET 和成功的写入操作会返回 `installation_id`、`provider`、`core_url
 - `generation` 标识已保存的选择。`owner_epoch` 用于对执行所有者和节点连接进行栅栏隔离；它不能替代 `expected_generation`。
 - `specification_digest` 是服务器对提供商、限制和派生的工作区能力回执的标识；注册过程会原样回显该值。
 
-`packages/agents-client` 中类型化的 `SandboxAdminClient` 会根据准确的这些结构检查部署、节点列表、节点详情和分配响应。未知成员、缺少成员或类型错误都会拒绝整个响应，并产生 502 `invalid_admin_response` 错误。节点的 `diagnostic` 可能不存在，也可能是一个代码，但绝不会为空；客户端会将未知代码读取为 `provider_unavailable`。
+`packages/agents-client` 中类型化的 `SandboxAdminClient` 会根据准确的这些结构检查部署、节点列表、节点详情和分配响应。未知成员、缺少成员或类型错误都会拒绝整个响应，并产生 502 `invalid_admin_response` 错误。节点的 `rollout.diagnostic` 可能不存在，也可能是一个代码，但绝不会为空；客户端会将未知代码读取为 `provider_unavailable`。
 
 ## 初始设置与同提供商更改 {#initial-setup-and-same-provider-changes}
 

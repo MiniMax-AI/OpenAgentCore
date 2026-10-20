@@ -1,7 +1,7 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: 098aaf41f4568311833281887bf0891d438d158ddcbd6e1421f7fbe428416ce6
+source_hash: b57b7719fd48f61d1a10077eaca44efc89a58b7d2d68d4a5ce96bf537ba6680e
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
@@ -44,7 +44,7 @@ source_hash: 098aaf41f4568311833281887bf0891d438d158ddcbd6e1421f7fbe428416ce6
 
 microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务器，Harness 停止重试后 Turn 失败。沙箱的 DNS 查询发往主机 `/etc/resolv.conf` 中列出的域名服务器，而 DNS rebind 保护会丢弃任何包含私有地址的应答。因此，这些域名服务器解析为私有地址的名称在沙箱内根本无法解析，即使是云 VPC 解析器之后的公共模型 API 这类公共服务也是如此。
 
-安装程序添加的节点没有更改此行为的设置。请让这些域名服务器返回该服务的公共地址。microsandbox 不读取主机的 `/etc/hosts`，因此只有当 `/etc/resolv.conf` 指向提供该条目的本地存根解析器（例如 `127.0.0.53` 上的 systemd-resolved）时，那里的条目才有用。否则，请使用不过滤沙箱流量的 Docker 节点，或[手动注册节点](./nodes.md#register-a-node-manually)，并设置同样在不带端口的规则中放行该私有网段的 `network` 策略，因为 rebind 保护会忽略限定端口的规则。
+节点没有更改此行为的设置。请让这些域名服务器返回该服务的公共地址。microsandbox 不读取主机的 `/etc/hosts`，因此只有当 `/etc/resolv.conf` 指向提供该条目的本地存根解析器（例如 `127.0.0.53` 上的 systemd-resolved）时，那里的条目才有用。否则，请使用不过滤沙箱流量的 Docker 节点。
 
 ### 连接失败 {#connection-failures}
 
@@ -65,7 +65,7 @@ microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务�
 | `The enrollment command expired or was already used` | 在 Web 生成新命令并在 1 小时内执行 |
 | `Core rejected the node configuration read (HTTP …)` | 检查 Core URL 及其前面的反向代理后重试 |
 | `Not enough disk space under …` 或 `The disk is full` | 按提示释放空间后重试，下载会继续 |
-| This host's node belongs to another installation of Core | 该节点由另一个 Core 安装添加。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
+| This host's node was added with another Core address, release or provider | 该节点由另一个 Core 地址、版本或提供商添加。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
 | Another node installation is running, or this node is preparing a new sandbox configuration | 待 **节点** 不再显示 **正在准备目标配置** 后重试 |
 | 注册前的沙箱提供商检查失败，例如 `This host lacks a capability …` | 修复提示的问题（参阅[就绪状态码](./nodes.md#readiness-codes)）后重试；令牌未被使用 |
 | Core's public URL changed after this command was generated | 在 Web 生成并执行新命令 |

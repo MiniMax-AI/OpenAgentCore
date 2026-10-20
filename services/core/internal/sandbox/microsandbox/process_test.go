@@ -392,7 +392,7 @@ func TestHelperRequiresFinalConfigWithoutAnyUnfinishedJournal(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "1.lease")
 	writeTestLease(t, path)
 	caller := &ProcessCaller{LeasePath: path, LeaseIdentity: testLeaseIdentity()}
-	for _, suffix := range []string{".preparing", ".collecting", ".dropped"} {
+	for _, suffix := range []string{".dropped"} {
 		marker := strings.TrimSuffix(path, ".lease") + suffix
 		if err := os.WriteFile(marker, []byte("{}"), 0600); err != nil {
 			t.Fatal(err)

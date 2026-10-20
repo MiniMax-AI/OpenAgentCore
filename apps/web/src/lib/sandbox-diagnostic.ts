@@ -22,12 +22,12 @@ const diagnostics: Record<string, { label: ParseKeys<"sandbox">; advice: ParseKe
   },
   provider_unavailable: {
     label: "Sandbox provider unavailable",
-    advice: "Restore the provider on the assigned node, then refresh. Running the install command again on the host checks its requirements and names the fix; a manually registered node logs the local error.",
+    advice: "Restore the provider on the assigned node, then refresh. Running the install command again on the host checks its requirements and names the fix.",
   },
   // Provider-neutral readiness classes; Core sends only the code, and the node keeps the local detail.
   host_unsupported: {
     label: "Host unsupported",
-    advice: "The host lacks a capability its sandbox provider requires. Running the install command again on the host checks its requirements and names the fix; a manually registered node logs the local error.",
+    advice: "The host lacks a capability its sandbox provider requires. Running the install command again on the host checks its requirements and names the fix.",
   },
   artifacts_unavailable: {
     label: "Provider files missing",

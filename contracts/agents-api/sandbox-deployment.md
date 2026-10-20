@@ -81,7 +81,7 @@ GET and successful writes return `installation_id`, `provider`, `core_url` (read
 - `generation` identifies the saved selection. `owner_epoch` fences the execution owner and node connections; it does not replace `expected_generation`.
 - `specification_digest` is the server's identity of the provider, limits and derived workspace capability receipt; enrollment echoes it unchanged.
 
-The typed `SandboxAdminClient` in `packages/agents-client` checks the deployment, node list, node detail and allocation responses against exactly these shapes. An unknown or missing member, or a wrong type, rejects the whole response with a 502 `invalid_admin_response` error. A node's `diagnostic` is absent or a code, never empty, and the client reads an unknown code as `provider_unavailable`.
+The typed `SandboxAdminClient` in `packages/agents-client` checks the deployment, node list, node detail and allocation responses against exactly these shapes. An unknown or missing member, or a wrong type, rejects the whole response with a 502 `invalid_admin_response` error. A node's `rollout.diagnostic` is absent or a code, never empty, and the client reads an unknown code as `provider_unavailable`.
 
 ## Initial setup and same-provider changes
 

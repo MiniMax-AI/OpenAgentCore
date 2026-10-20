@@ -42,7 +42,7 @@ Add node shows no command: see [Before you add a node](./nodes.md#before-you-add
 
 A microsandbox sandbox cannot reach a model provider or MCP server at a private address, and the Turn fails once the Harness stops retrying. Sandbox DNS queries go to the nameservers listed in the host's `/etc/resolv.conf`, and DNS rebind protection discards any answer that contains a private address. A name those nameservers resolve to a private address therefore does not resolve in the sandbox at all, even for a public service such as a model API behind a cloud VPC resolver.
 
-Installer-added nodes have no setting to change this. Make those nameservers return the service's public addresses. microsandbox does not read the host's `/etc/hosts`, so an entry there helps only when `/etc/resolv.conf` points at a local stub resolver that serves it, such as systemd-resolved at `127.0.0.53`. Otherwise use a Docker node, which does not filter sandbox traffic, or [register the node manually](./nodes.md#register-a-node-manually) with a `network` policy that also allows the private range in a rule without a port, because rebind protection ignores port-scoped rules.
+Nodes have no setting to change this. Make those nameservers return the service's public addresses. microsandbox does not read the host's `/etc/hosts`, so an entry there helps only when `/etc/resolv.conf` points at a local stub resolver that serves it, such as systemd-resolved at `127.0.0.53`. Otherwise use a Docker node, which does not filter sandbox traffic.
 
 ### Connection failures
 
@@ -63,7 +63,7 @@ A registered node that can't connect to Core says why in its [log](./nodes.md#lo
 | `The enrollment command expired or was already used` | Generate a new command in Web and run it within an hour |
 | `Core rejected the node configuration read (HTTP …)` | Check the Core URL and the reverse proxy in front of it, then rerun |
 | `Not enough disk space under …` or `The disk is full` | Free the space it names, then rerun; the download resumes |
-| This host's node belongs to another installation of Core | The node was added by another installation of Core. Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |
+| This host's node was added with another Core address, release or provider | Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |
 | Another node installation is running, or this node is preparing a new sandbox configuration | Retry once **Nodes** no longer shows **Preparing target** |
 | A sandbox provider check failed before registering, such as `This host lacks a capability …` | Fix what it names (see [Readiness codes](./nodes.md#readiness-codes)) and rerun; the token was not used |
 | Core's public URL changed after this command was generated | Generate a new command in Web and run it |

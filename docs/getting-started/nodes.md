@@ -70,7 +70,7 @@ The node service keeps the proxy settings of the latest run, so it reaches Core 
 | Docker | The Runtime image, imported once, and a network `oac-node-<installation-id>` |
 | microsandbox network policy | Sandboxes may reach Core, DNS on the host and public addresses, and nothing else: no inbound connections and no private networks |
 
-Root only prepares the account, the group and the unit; everything else, the Docker network included, runs as `oac-node`, in its own session without a terminal. The installer never installs Docker, KVM or packages, never starts Docker, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts.
+Root only prepares the account, the group and the unit; everything else, the Docker network included, runs as `oac-node`, in its own session without a terminal. The installer never installs Docker, KVM or packages, never starts Docker, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts. The node connects out to Core; Core needs no SSH or Docker TCP access to the host.
 
 > [!CAUTION]
 > Docker mode is root-equivalent. Membership in the `docker` group lets `oac-node`, and so anything that controls the node, act as root on the host, and containers share the host kernel. Add Docker nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm` group and run each sandbox in its own microVM.
@@ -123,35 +123,6 @@ Uninstall first asks Core, at the address the node enrolled with, whether the no
 
 It never deletes Docker images or volumes. It keeps the Runtime image and prints the `sudo docker image rm` command. For microsandbox, once Core has confirmed the removal, it also deletes the node's store under `/var/lib/oac-node/.oac/m/` (about 1.5 GB), and with it the created account. With `--force` Core isn't asked, so the store is kept and the output prints the command that deletes it (`sudo -u oac-node rm -rf <store>`); microVMs may still use it, so check `pgrep -u oac-node` first, then rerun uninstall to finish removing the account. The output lists what was deleted and what was kept. Uninstall can be rerun until it completes.
 
-## Register a node manually
-
-Use manual registration when you manage the node's files and service yourself instead of running Web's command.
-
-1. Take `oac-node` from the same release as Core.
-2. Get an enrollment token: the token in a command from **Add node**, or `POST /core/v1/sandbox/enrollment-tokens` with the Core key. It is single-use and carries the node's approved capacity; the response's `expires_at` says when it expires. Save it in a `0600` file on the host.
-3. Read the node configuration with the token, which does not consume it: `GET /api/v1/sandbox-node/configuration` with `Authorization: Bearer <token>`.
-4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add a `native` object with the host settings of that provider. The adapter reads sandbox size from `specification` and the Runtime from `native`:
-   - Docker: the [Docker node configuration](../configuration.md#docker-node-configuration) fields, with `host` an explicit Unix socket, `image` the local ID of the imported Runtime image and `seccomp_file` absolute.
-   - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, `image` (the manifest's `runtime_ref`), `runtime_sha256` and `firmware_sha256` from the installation's manifest, a `network` policy, an explicit `checkpoint_root` for private checkpoint archives, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
-   Before the first microsandbox registration, initialize the empty `checkpoint_root` as the node service account using the same release's source checkout: `PYTHONPATH=deploy/node python3 -c 'from node_install import prepare_checkpoint_root; prepare_checkpoint_root("/absolute/private/checkpoints")'`. This reuses the installer's exclusive UUID-marker initialization and ownership checks. Initialize a shared store once; other nodes use the existing marker. Never replace the marker or initialize over restored or nonempty unowned storage.
-5. Register, then run the node under the host's service supervisor, with real absolute paths:
-
-   ```sh
-   oac-node register \
-     --config /var/lib/oac/provider.json \
-     --state-dir /var/lib/oac/node \
-     --core-url https://core.example \
-     --name worker-1 \
-     --enrollment-token-file /var/lib/oac/enrollment-token
-   oac-node run \
-     --config /var/lib/oac/provider.json \
-     --state-dir /var/lib/oac/node
-   ```
-
-`oac-node run` exits with status 78 once Core rejects its credential, after the node is removed; configure the supervisor not to restart it then (systemd: `RestartPreventExitStatus=78`).
-
-The node connects out to Core; Core needs no SSH or Docker TCP access to the host. Registration writes the node's identity to the state directory before contacting Core, so a lost response can be retried under the same identity. Keep the state directory on persistent storage, private to the node's account and used by one process at a time. Never copy it to another directory or host: Core refuses a second connection for a node while the first is open. The provider file can't change the node's capacity or sandbox configuration. Core compares its digest at registration and on every connection, and a node whose file differs takes no work until the approved configuration is restored.
-
 ## When a node host fails
 
 A restarted node service keeps its identity and finds its existing sandboxes again. Core does not take over an active or unconfirmed writer merely because its node is unreachable or its sandbox is missing: those resources show as **Node disconnected** or **Sandbox resource missing** while ownership remains unresolved. Restart a crashed or hung host rather than removing its node: after the node reconnects, a running sandbox that the node confirms gone is released under the [confirmed compute loss](../sandbox-provider.md#confirmed-compute-loss) rules, and the Session's next input continues on new compute; any other missing sandbox keeps **Sandbox resource missing**. A host that never returns keeps its Sessions' compute ownership. A settled retained checkpoint can follow the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer), and confirmed release can permit [cold replacement](../sandbox-provider.md#cold-replacement-after-checkpoint-retention). A lost node state directory is a recovery incident: restore it from its [backup](./operations.md#back-up) together with the database and the provider storage, rather than registering the host again over existing resources.
@@ -170,8 +141,8 @@ A node reports only its first failed check, in this order: the Docker daemon or 
 
 | Code | Help tip | Cause | Fix |
 | --- | --- | --- | --- |
-| `provider_unavailable` | Sandbox provider unavailable | The provider's service is unreachable or fails a request, such as a stopped Docker daemon, or a failure without a class | Rerun the node's command, or read a manually registered node's log |
-| `host_unsupported` | Host unsupported | The host lacks a capability the provider requires, such as Docker CPU and memory limits (cgroup v2) or read-write access to `/dev/kvm` | Rerun the node's command, or read a manually registered node's log |
+| `provider_unavailable` | Sandbox provider unavailable | The provider's service is unreachable or fails a request, such as a stopped Docker daemon, or a failure without a class | Rerun the node's command |
+| `host_unsupported` | Host unsupported | The host lacks a capability the provider requires, such as Docker CPU and memory limits (cgroup v2) or read-write access to `/dev/kvm` | Rerun the node's command |
 | `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
 | `runtime_image_unavailable` | Runtime image missing | The provider does not have the installation's Runtime image | Rerun the node's command to download it again; otherwise load the image from the matching release |
 | `artifacts_unavailable` | Provider files missing | A pinned provider file, such as the microsandbox Runtime, firmware or helper, is missing or fails its SHA-256 check | Rerun the node's command to download the missing files; otherwise restore them from the matching release |

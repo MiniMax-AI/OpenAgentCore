@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 7662f8778de5728b21f722f2028037b355563a2cb001d1c7ecfbaf95945636a3
+source_hash: 35a964412b5cd64d552df2e10295dc23cb91e8ba43794a932957269f546b1125
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -70,7 +70,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `invalid_sandbox_configuration` | `resources.memory_mib` | `min`：512，`max`：1048576 | 内存超出支持范围 |
 | `invalid_sandbox_configuration` | `resources.root_disk_mib` 或 `resources.environment_disk_mib` | `min`：microsandbox 为 1024；Docker 和 E2B 的 `min`：0，`max`：0 | 磁盘容量缺失或提供商不支持 |
 
-这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；项目名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、限制，然后是 Harness 协议；沙箱资源依次为 CPU、内存、磁盘，然后是 Runtime。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
+这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；项目名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、限制，然后是 Harness 协议；沙箱资源依次为 CPU、内存，然后是磁盘。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
 
 ## 其他管理错误 {#other-administration-errors}
 
