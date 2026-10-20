@@ -110,8 +110,6 @@ export const metrics = {
     loading: "Reading Core metrics…",
     failed: "Core metrics could not be read. {{reason}}",
     stale: "Refresh failed; showing the last metrics read. {{reason}}",
-    missingTitle: "Core does not report its own metrics yet",
-    missingDescription: "Core needs to provide /core/v1/metrics before execution, database and background jobs can show.",
     kpiLabel: "Core summary",
     meta: "{{status}} · {{revision}} · up {{uptime}}",
     notOwner: "Does not hold the execution lease",

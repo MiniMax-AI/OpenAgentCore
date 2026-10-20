@@ -6,7 +6,7 @@ import { defineConfig, type SiteConfig } from 'vitepress'
 import { mermaidFences } from './mermaid.mts'
 import { repositoryLinks } from './repository-links.mts'
 import { siteBase } from './site-base.mts'
-import { docsNav, docsSidebar, legacyRedirects, pageTitle, readDocsJson, repoRoot, summary } from './docs-nav.mts'
+import { docsNav, docsSidebar, pageTitle, readDocsJson, repoRoot, summary } from './docs-nav.mts'
 
 // Pages outside this package resolve Vue from here, not from the repository root.
 const require = createRequire(import.meta.url)
@@ -129,7 +129,6 @@ export default defineConfig({
 
   buildEnd: (site) => {
     writeMarkdownCopies(site)
-    writeLegacyRedirects(site)
     copyFileSync(resolve(repoRoot, 'website/install.sh'), resolve(site.outDir, 'install.sh'))
   },
 })
@@ -157,17 +156,4 @@ function writeMarkdownCopies(site: SiteConfig) {
     }
   }
   writeFileSync(resolve(site.outDir, 'llms.txt'), lines.join('\n'))
-}
-
-/** Writes static redirects for the non-Markdown legacy paths declared in docs.json. */
-function writeLegacyRedirects(site: SiteConfig) {
-  for (const { from, to } of legacyRedirects()) {
-    const target = resolve(site.outDir, `${from}.html`)
-    const url = `${site.site.base}${to.replace(/^\//, '')}`
-    mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(
-      target,
-      `<!doctype html><meta charset="utf-8"><title>Redirecting…</title><link rel="canonical" href="${url}"><meta http-equiv="refresh" content="0; url=${url}"><a href="${url}">${url}</a>\n`,
-    )
-  }
 }

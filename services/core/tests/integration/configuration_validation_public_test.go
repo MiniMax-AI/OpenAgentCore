@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agents"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/google/uuid"
 )
@@ -32,15 +31,6 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 	client := pathIDClient{t: t, server: server}
 	const lookup = `{"type":"function","name":"lookup","description":"Look up a value.","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}`
 	agent := client.created(owner, "/v1/agents", `{"model":"config-model","tools":[`+lookup+`]}`)
-	// A record saved before the protocol checks existed.
-	saved := func(tools string) string {
-		return `{"model":"config-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":` + tools + `}`
-	}
-	_, agentService := fixtureAgents(t, s)
-	legacy, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(saved(`[{"type":"function","name":"lookup","description":"","parameters":{"type":"string"},"defer_loading":false}]`))})
-	if err != nil {
-		t.Fatal(err)
-	}
 	before := databaseDigest(t, pool)
 
 	const tools = `'function', 'tool_search', 'programmatic_tool_calling', 'mcp', and 'web_search'.`
@@ -109,14 +99,6 @@ func TestAgentConfigurationValidationRejectsWithoutWritesPostgres(t *testing.T) 
 				t.Errorf("%s %s: %d %s", tc.name, request.path, status, body)
 			}
 		}
-	}
-	// A saved record from before the checks cannot execute; another tenant cannot see it.
-	schema := `{"error":{"message":"Invalid schema for function 'lookup': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"string\"'.","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
-	if status, body := client.do(owner, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(`{"agent_id":"`+legacy.ID+`","environment":{"type":"none"},"input":"hi"}`)); status != http.StatusBadRequest || body != schema {
-		t.Errorf("legacy saved Agent: %d %s", status, body)
-	}
-	if status, body := client.do(foreign, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(`{"agent_id":"`+legacy.ID+`","environment":{"type":"none"},"input":"hi"}`)); status != http.StatusNotFound {
-		t.Errorf("foreign legacy saved Agent: %d %s", status, body)
 	}
 	// K2 keeps the local configuration code; saved enabled web_search (TV-05) is
 	// covered by TestSavedWebSearchPostgres.

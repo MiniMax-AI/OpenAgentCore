@@ -1,11 +1,6 @@
 import { coreHarnessNames } from "@oac/agents-client";
 
-/**
- * Session log and one Session's read-only history (Monitor › Session log).
- * `validation` and `actions.errors` serve the retired Session-creation and
- * metadata helpers that the orphaned API workbench still imports; remove them
- * together with that code.
- */
+/** Session log and one Session's read-only history (Monitor › Session log). */
 export const sessions = {
   common: {
     agent: "Agent", session: "Session", status: "Status", unknown: "Unknown", unavailable: "Unavailable", untitledAgent: "Unnamed Agent",
@@ -271,26 +266,5 @@ export const sessions = {
     itemDetails: "Trace item details", closeDetails: "Close trace details", detailView: "Trace detail view", tabs: { summary: "Summary", preview: "Preview", payload: "Payload", result: "Result", schema: "Schema", timing: "Timing", raw: "Raw" },
     toolDurationSentence: "Tool-reported duration: {{duration}}.", toolDuration: "Tool-reported duration: {{duration}}", durationUnknown: "Reported duration is unknown.", durationInvalid: "The reported duration could not be interpreted.", perItemNotProvided: "Per-item timing not provided by Core.", perItemTimingMissing: "Core does not provide per-item timing.",
     turnDuration: "Turn {{duration}}", turnTimeUnknown: "Turn time unknown", turnTimeNotProvided: "Turn time not provided", payloadAvailable: "Payload available", resultAvailable: "Result available", noPreview: "No preview available", configuredInstructions: "Configured instructions", userMessage: "User message", assistantMessage: "Assistant message", unsupportedItem: "Unsupported Item", agentConfiguration: "Agent configuration", turnNumber: "Turn {{number}}", unassociatedItemsNumber: "Unassociated Items {{number}}", unknownCount: "{{count}} unknown",
-  },
-  actions: {
-    errors: {
-      metadataConflict: "Metadata changed in OpenAgentCore while you were editing: {{keys}}. Your draft was kept; review the latest values before saving again.",
-      metadataValidJson: "Metadata must be valid JSON.", metadataObject: "Metadata must be a JSON object.", metadataStringValues: "Every metadata value must be a string.",
-      metadataTitleField: "Edit title in the Title field, not in additional metadata.", metadataMaxPairs: "Session metadata supports at most 16 pairs, including title.", metadataLength: "Metadata keys must be at most 64 characters and values at most 512 characters.",
-      invalidRetrieval: "OpenAgentCore returned an invalid Session retrieval response. The Web kept its current durable view and did not send a write.",
-      updateLabel: "update", deletionLabel: "deletion", notFound: "This Session was not found in OpenAgentCore. The Web kept its current durable view; refresh Sessions before trying again.",
-      busyDelete: "OpenAgentCore deletes a Session only when it is idle or failed without required actions. This Session still has queued, running or waiting work or pending input, so nothing was changed. Choose Cancel work and delete to cancel it, wait until it is idle and then delete it.",
-      readLifecycleConflict: "The latest Session could not be retrieved because this compatible Core returned a lifecycle conflict (409), so no update request was sent. Your draft and current durable view were kept.",
-      writeLifecycleConflict: "This compatible Core rejected the Session {{action}} because it conflicts with the current lifecycle state. The Web did not retry.",
-      noUpdateSent: "No update request was sent.", unknownWriteSuffix: "The write result is unknown. The Web kept its current durable view and did not retry; refresh before deciding whether to try again.",
-      coreUnavailable: "OpenAgentCore could not complete the Session {{action}} ({{status}}). {{suffix}}", uncertainStatus: "The Session {{action}} result is uncertain after OpenAgentCore returned {{status}}. The Web kept its current durable view and did not retry; refresh before deciding whether to try again.",
-      readFailureWithDetail: "{{detail}} No update request was sent; your draft and current durable view were kept.", writeFailureWithDetail: "{{detail}} The Web kept its current durable view and did not retry.",
-      latestReadFailure: "The latest Session could not be retrieved, so no update request was sent. Your draft and the current durable view were kept.", unknownConnection: "The Session {{action}} result is unknown because the connection ended before Core confirmed it. The Web kept its current durable view and did not retry; refresh before deciding whether to try again.",
-      invalidUpdateConfirmation: "OpenAgentCore returned an invalid Session update confirmation. The write result is unknown; the Web kept its current durable view and did not retry.",
-      inputPending: "OpenAgentCore deletes a Session only when it is idle or failed without required actions. This Session has input waiting to start in its Environment, which cannot be cancelled, so nothing was changed. Delete it after that input starts, expires or fails; once it starts, cancel its work first.",
-      invalidDeletionConfirmation: "OpenAgentCore returned an invalid deletion confirmation. The Web kept the Session; refresh durable state before taking another action.",
-      cancelRejected: "OpenAgentCore rejected the cancellation ({{status}}): {{detail}}", cancelUnknown: "The cancellation result is unknown because the connection ended before Core confirmed it.", cancelDeleteKept: "{{detail}} The Session was not deleted and the Web did not retry.",
-      waitReadFailure: "Cancellation was requested, but the Session could not be read while waiting for it to become idle. It was not deleted.", waitTimeout: "Cancellation was requested, but the Session was still {{status}} after {{seconds}} seconds. It was not deleted; try again once it is idle.",
-    },
   },
 } as const;

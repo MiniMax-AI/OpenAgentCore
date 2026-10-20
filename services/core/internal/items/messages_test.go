@@ -34,7 +34,7 @@ func TestMessageSnapshotsReplaceDeltasAndDoNotRegress(t *testing.T) {
 	}
 }
 
-func TestLegacyDoneDoesNotConfirmSuccessfulAnswer(t *testing.T) {
+func TestDoneDoesNotConfirmSuccessfulAnswer(t *testing.T) {
 	var previous v1.Item
 	for _, event := range []struct{ kind, body string }{
 		{"delta", `{"delta":"partial answer"}`},

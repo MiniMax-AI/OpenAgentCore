@@ -12,34 +12,6 @@ const kinds = new Set([
   "sessions",
 ]);
 export function productAPI(store, core, fetchImpl = fetch) {
-  // Preserve earlier example configurations without fabricating execution records.
-  for (const kind of ["templates", "instances"]) {
-    for (const row of store.list(kind)) {
-      if (!store.get("agents", row.id)) {
-        const {
-          id,
-          name,
-          revision,
-          model_id,
-          harness,
-          instructions,
-          skill_ids,
-          mcp_ids,
-        } = row;
-        store.put("agents", {
-          id,
-          name,
-          revision,
-          model_id,
-          harness,
-          instructions,
-          skill_ids,
-          mcp_ids,
-        });
-      }
-      store.remove(kind, row.id);
-    }
-  }
   const sessions = sessionAPI(store, core);
   const publicRow = (kind, row) => {
     if (kind === "providers") return publicProvider(row);

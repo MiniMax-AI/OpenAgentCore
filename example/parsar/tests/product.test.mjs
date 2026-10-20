@@ -299,10 +299,10 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
   assert.equal(store.get("sessions", pending).request, undefined);
   assert.equal(receipts.size, 3);
 });
-test("compatibility validation precedes execution, and old configurations migrate without fake Sessions", async (t) => {
+test("compatibility validation precedes execution", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
-  const { api, put, agent, input } = await setup(store, () => {
+  const { api, put, input } = await setup(store, () => {
     throw new Error("must not execute");
   });
   const runtime = await put("runtimes", { name: "Text", environment: "none" });
@@ -318,13 +318,6 @@ test("compatibility validation precedes execution, and old configurations migrat
     }),
     /不含凭据/,
   );
-  const legacy = { ...agent, id: randomUUID(), runtime_id: runtime.id };
-  store.put("instances", legacy);
-  productAPI(store, () => {});
-  assert.equal(store.get("agents", legacy.id).name, agent.name);
-  assert.equal(store.get("agents", legacy.id).runtime_id, undefined);
-  assert.equal(store.list("sessions").length, 0);
-  assert.equal(store.list("instances").length, 0);
   assert.notEqual(
     dataPath({ target: "https://core.example", key: "a" }),
     dataPath({ target: "https://core.example", key: "b" }),

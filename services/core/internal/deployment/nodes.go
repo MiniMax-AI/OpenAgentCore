@@ -24,24 +24,16 @@ func (s *Service) ListNodes(ctx context.Context) ([]Node, error) {
 	}
 	out := make([]Node, 0, len(records))
 	for _, n := range records {
-		value, err := s.node(n)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, value)
+		out = append(out, nodeView(n))
 	}
 	return out, nil
 }
 
-func (s *Service) node(n NodeRecord) (Node, error) {
-	retained, err := s.registry.RetainedLimit(n.Provider, n.MaxActive, n.MaxRetained)
-	if err != nil {
-		return Node{}, err
-	}
+func nodeView(n NodeRecord) Node {
 	health := n.Health
 	health.Host = nil
 	health.ProviderReady = n.Online && n.ServingReady
-	return Node{Rollout: nodeRollout(n), NodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: n.ID, Name: n.Name, CoreURL: n.CoreURL, EnrollmentID: n.EnrollmentID, Provider: n.Provider, Online: n.Online, LastSeenAt: n.LastSeenAt, MaxActive: n.MaxActive, MaxRetained: retained, Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt}, nil
+	return Node{Rollout: nodeRollout(n), NodeHealth: health, Running: n.Running, Snapshots: n.Snapshots, ID: n.ID, Name: n.Name, CoreURL: n.CoreURL, EnrollmentID: n.EnrollmentID, Provider: n.Provider, Online: n.Online, LastSeenAt: n.LastSeenAt, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained, Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt}
 }
 
 // NodeDetail returns one node with its last host observation and its host
@@ -62,11 +54,7 @@ func (s *Service) NodeDetail(ctx context.Context, id, window string) (NodeDetail
 	if err != nil {
 		return NodeDetail{}, err
 	}
-	node, err := s.node(record)
-	if err != nil {
-		return NodeDetail{}, err
-	}
-	result := NodeDetail{Node: node, History: HostHistory{ResolutionSeconds: span.ResolutionSeconds, Points: historyPoints(span, samples)}}
+	result := NodeDetail{Node: nodeView(record), History: HostHistory{ResolutionSeconds: span.ResolutionSeconds, Points: historyPoints(span, samples)}}
 	if record.Health.Host != nil {
 		result.Host = *record.Health.Host
 	}
@@ -240,8 +228,8 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 		if !consumed {
 			return ErrNodeCredential
 		}
-		result, err = s.identity(n, d.Provider)
-		return err
+		result = identity(n, d.Provider)
+		return nil
 	})
 	if err != nil {
 		return NodeIdentity{}, err
@@ -249,12 +237,8 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 	return result, nil
 }
 
-func (s *Service) identity(n StoredNode, provider string) (NodeIdentity, error) {
-	retained, err := s.registry.RetainedLimit(provider, n.MaxActive, n.MaxRetained)
-	if err != nil {
-		return NodeIdentity{}, err
-	}
-	return NodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: n.DeploymentGeneration, NodeID: n.ID, InstallationID: n.InstallationID, Provider: provider, BackendFingerprint: n.BackendFingerprint, MaxActive: n.MaxActive, MaxRetained: retained}, nil
+func identity(n StoredNode, provider string) NodeIdentity {
+	return NodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: n.DeploymentGeneration, NodeID: n.ID, InstallationID: n.InstallationID, Provider: provider, BackendFingerprint: n.BackendFingerprint, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained}
 }
 
 // AuthenticateNode checks a node credential and returns the node's identity.
@@ -288,8 +272,8 @@ func (s *Service) AuthenticateNode(ctx context.Context, nodeID, credential strin
 		// Reset retires nodes before another backend lineage can be selected.
 		// Enrollment generation and digest remain immutable identity history; the
 		// current target and per-generation readiness do not replace that history.
-		result, err = s.identity(n, d.Provider)
-		return err
+		result = identity(n, d.Provider)
+		return nil
 	})
 	if err != nil {
 		return NodeIdentity{}, err
@@ -424,11 +408,7 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		if err != nil {
 			return err
 		}
-		limit, err := s.registry.RetainedLimit(d.Provider, active, retained)
-		if err != nil {
-			return err
-		}
-		result = NodeConfiguration{MaxActive: active, MaxRetained: limit, InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.Provider)}
+		result = NodeConfiguration{MaxActive: active, MaxRetained: retained, InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.Provider)}
 		return nil
 	})
 	if err != nil {

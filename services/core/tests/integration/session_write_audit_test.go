@@ -209,16 +209,16 @@ func TestSessionWriteAuditInitialInputAndHistoricalReplay(t *testing.T) {
 				t.Fatal(created, err)
 			}
 			sessionAuditCount(t, s, tenant, 1)
-			input.IdempotencyKey = "legacy"
-			legacy, err := s.CreateSession(t.Context(), tenant, input)
+			input.IdempotencyKey = "second"
+			second, err := s.CreateSession(t.Context(), tenant, input)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := sessionService(t, s).AuditSessionOperation(sessionAuditContext(t, tenant, "b"), sessions.AuditSessionOperationCommand{TenantID: tenant, SessionID: legacy.ID, Action: "create"}); err != nil {
+			if err := sessionService(t, s).AuditSessionOperation(sessionAuditContext(t, tenant, "b"), sessions.AuditSessionOperationCommand{TenantID: tenant, SessionID: second.ID, Action: "create"}); err != nil {
 				t.Fatal(err)
 			}
 			var owners int
-			if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM write_audit_owners WHERE tenant_id=$1 AND resource_id=$2", tenant, legacy.ID).Scan(&owners); err != nil || owners != 0 {
+			if err := s.pool.QueryRow(t.Context(), "SELECT count(*) FROM write_audit_owners WHERE tenant_id=$1 AND resource_id=$2", tenant, second.ID).Scan(&owners); err != nil || owners != 0 {
 				t.Fatal("replay attributed historical resource", owners, err)
 			}
 			sessionAuditCount(t, s, tenant, 2)

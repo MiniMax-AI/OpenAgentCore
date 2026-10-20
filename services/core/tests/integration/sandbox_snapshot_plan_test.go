@@ -83,23 +83,23 @@ func TestSandboxSnapshotFreshPlan(t *testing.T) {
 func assertSandboxSnapshotEquivalent(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	query := sandboxSnapshotSQL(t)
-	legacy := strings.Replace(query, "WITH deployment AS MATERIALIZED (SELECT * FROM runtime_deployment WHERE singleton = true LIMIT 1),\nobserved AS", "WITH observed AS", 1)
-	legacy = strings.ReplaceAll(legacy, "CROSS JOIN deployment d", "CROSS JOIN runtime_deployment d")
-	legacy = strings.TrimSuffix(legacy, "\nWHERE d.singleton = true\nLIMIT 1")
+	direct := strings.Replace(query, "WITH deployment AS MATERIALIZED (SELECT * FROM runtime_deployment WHERE singleton = true LIMIT 1),\nobserved AS", "WITH observed AS", 1)
+	direct = strings.ReplaceAll(direct, "CROSS JOIN deployment d", "CROSS JOIN runtime_deployment d")
+	direct = strings.TrimSuffix(direct, "\nWHERE d.singleton = true\nLIMIT 1")
 	query = strings.Replace(query, "clock_timestamp() AS as_of", "(SELECT as_of FROM snapshot_time) AS as_of", 1)
-	legacy = strings.Replace(legacy, "clock_timestamp() AS as_of", "(SELECT as_of FROM snapshot_time) AS as_of", 1)
+	direct = strings.Replace(direct, "clock_timestamp() AS as_of", "(SELECT as_of FROM snapshot_time) AS as_of", 1)
 	tx, err := pool.Begin(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(t.Context())
-	// Avoid paying the legacy planner's JIT cost in this result-equivalence check.
+	// Avoid paying the direct planner's JIT cost in this result-equivalence check.
 	// The separate fresh-plan test keeps JIT enabled.
 	if _, err = tx.Exec(t.Context(), "SET LOCAL jit=off"); err != nil {
 		t.Fatal(err)
 	}
 	var same bool
-	err = tx.QueryRow(t.Context(), "WITH snapshot_time AS MATERIALIZED (SELECT clock_timestamp() AS as_of) SELECT (SELECT to_jsonb(s) FROM ("+query+") s) IS NOT DISTINCT FROM (SELECT to_jsonb(s) FROM ("+legacy+") s)").Scan(&same)
+	err = tx.QueryRow(t.Context(), "WITH snapshot_time AS MATERIALIZED (SELECT clock_timestamp() AS as_of) SELECT (SELECT to_jsonb(s) FROM ("+query+") s) IS NOT DISTINCT FROM (SELECT to_jsonb(s) FROM ("+direct+") s)").Scan(&same)
 	if err != nil || !same {
 		t.Fatal("singleton annotation changed snapshot", same, err)
 	}

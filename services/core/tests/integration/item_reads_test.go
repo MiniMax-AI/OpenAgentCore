@@ -121,7 +121,7 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	s, _ := testStore(t)
 	journal := executionOwner(t, s).Sessions
 	tenant := uuid.NewString()
-	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "legacy"})
+	session, _ := s.CreateSession(ctx, tenant, sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: "aggregate"})
 	input, err := sendMessage(ctx, s, tenant, session.ID, "input", messageText("test"))
 	if err != nil {
 		t.Fatal(err)
@@ -142,12 +142,12 @@ func TestItemProjectionFailureRollsBackJournalAndAggregateRecovers(t *testing.T)
 	if err != nil || len(page.Items) != 1 {
 		t.Fatal(page, err)
 	}
-	_, err = transitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted, Outcome: json.RawMessage(`{"done":{"content":"legacy answer","metadata":{"private":"SECRET"}}}`)})
+	_, err = transitionTurn(ctx, s, tenant, session.ID, input.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnInProgress, Status: sessions.TurnCompleted, Outcome: json.RawMessage(`{"done":{"content":"aggregate answer","metadata":{"private":"SECRET"}}}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	current, err := sessionAdapter(s).ListItems(ctx, tenant, session.ID, "", 100, true)
-	if err != nil || len(current.Items) != 2 || *current.Items[1].Content[0].Text != "legacy answer" {
+	if err != nil || len(current.Items) != 2 || *current.Items[1].Content[0].Text != "aggregate answer" {
 		t.Fatal(current, err)
 	}
 }
@@ -184,7 +184,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 	}
 }
 
-func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
+func TestFailedTurnRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, _ := testStore(t)
 	journal := executionOwner(t, s).Sessions

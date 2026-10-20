@@ -67,7 +67,7 @@ func TestCredentialSecretsKeepTheirSealedFormat(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	legacy, err := json.Marshal(storedGrant{Version: 1, Metadata: metadata, AccessToken: "old-access", RefreshToken: "refresh"})
+	grant, err := json.Marshal(storedGrant{Version: 1, Metadata: metadata, AccessToken: "old-access", RefreshToken: "refresh"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestCredentialSecretsKeepTheirSealedFormat(t *testing.T) {
 		return bearerToken(t.Context(), service, tenant, []string{vault.ID}, oauthBinding(credential))
 	}
 	write(static, []byte("old-static"), scope(static))
-	write(oauth, legacy, scope(oauth))
+	write(oauth, grant, scope(oauth))
 	for _, tc := range []struct {
 		credential  vaults.Credential
 		want, fails string
@@ -103,7 +103,7 @@ func TestCredentialSecretsKeepTheirSealedFormat(t *testing.T) {
 	wrongID.CredentialID = oauth.ID
 	wrongDestination.Destination += "/other"
 	write(static, []byte("old-static"), wrongID)
-	write(oauth, legacy, wrongDestination)
+	write(oauth, grant, wrongDestination)
 	for _, tc := range []struct {
 		credential vaults.Credential
 		message    string
