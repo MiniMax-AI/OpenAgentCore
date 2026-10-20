@@ -43,9 +43,10 @@ const diagnostics: Record<string, { label: ParseKeys<"sandbox">; advice: ParseKe
   },
 };
 
-/** The fixed code for an online node whose serving generation is not ready; empty otherwise. */
-export function nodeProviderDiagnostic(node: Pick<SandboxNode, "online" | "provider_ready">): string {
-  return node.online && !node.provider_ready ? "provider_unavailable" : "";
+/** Why an online node is not ready: its target generation's fixed code, else provider_unavailable; empty otherwise. */
+export function nodeProviderDiagnostic(node: Pick<SandboxNode, "online" | "provider_ready" | "rollout">): string {
+  if (!node.online || node.provider_ready) return "";
+  return node.rollout.diagnostic ?? "provider_unavailable";
 }
 
 export function sandboxDiagnosticMessage(value?: string, locale: SupportedLanguage = "en"): SandboxDiagnosticMessage | null {

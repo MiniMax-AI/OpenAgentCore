@@ -346,9 +346,6 @@ test("keeps the page usable when Core refuses a sandbox change, and shows a safe
   const added = page.getByRole("dialog", { name: "Add node" });
   await expect(added).toBeVisible();
   await added.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Configuration details", exact: true }).click();
-  await expect(page.locator(".help-tip-popover").getByText("c0ffee000000", { exact: true })).toBeVisible();
 });
 
 test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {

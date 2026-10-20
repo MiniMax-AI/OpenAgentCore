@@ -16,10 +16,13 @@ describe("sandbox diagnostics", () => {
     expect(sandboxDiagnosticMessage("ownership_mismatch")?.label).toBe("Sandbox ownership mismatch");
     expect(sandboxDiagnosticMessage("provider_unavailable")?.label).toBe("Sandbox provider unavailable");
   });
-  it("reads an online node that is not ready as provider_unavailable and hides an offline one", () => {
-    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false }))?.label).toBe("Sandbox provider unavailable");
-    expect(nodeProviderDiagnostic({ online: true, provider_ready: true })).toBe("");
-    expect(nodeProviderDiagnostic({ online: false, provider_ready: false })).toBe("");
+  it("names an online node's readiness class from its rollout and hides an offline one", () => {
+    const failed = { state: "failed", ready_generation: null, diagnostic: "host_unsupported" } as const;
+    const unknown = { state: "unknown", ready_generation: null } as const;
+    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, rollout: failed }))?.label).toBe("Host unsupported");
+    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, rollout: unknown }))?.label).toBe("Sandbox provider unavailable");
+    expect(nodeProviderDiagnostic({ online: true, provider_ready: true, rollout: failed })).toBe("");
+    expect(nodeProviderDiagnostic({ online: false, provider_ready: false, rollout: unknown })).toBe("");
   });
   it("does not expose an unknown raw error or turn it into a healthy state", () => {
     const message = sandboxDiagnosticMessage("private-provider-error-with-secret");
