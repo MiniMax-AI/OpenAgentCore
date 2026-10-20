@@ -137,8 +137,12 @@ def install(bundle, destination, host, port, public_url, upgrade):
             root = destination if existing else stage
             payload = root / 'node-payload'
             node_payload.publish(payload, bundle)
-            # These files contain only public distribution bytes and must be readable by Web.
-            for directory, dirs, files in os.walk(payload):
+            # Core's image carries only the native installer catalog; Core serves the archives from here.
+            native = bundle / 'native-installers'
+            if native.is_dir():
+                shutil.copytree(native, root / 'native-installers' / revision, dirs_exist_ok=True)
+            # These files contain only public distribution bytes and must be readable by Web and Core.
+            for directory, dirs, files in [*os.walk(payload), *os.walk(root / 'native-installers')]:
                 os.chmod(directory, 0o755)
                 for name in files:
                     os.chmod(Path(directory) / name, 0o644)
@@ -149,7 +153,7 @@ def install(bundle, destination, host, port, public_url, upgrade):
             for name in ('core', 'web', 'database'):
                 template = template.replace('__OAC_' + name.upper() + '_IMAGE__', images[name])
             (stage / 'compose.yaml').write_text(template)
-            # The installer owns only the service images and Web's payload bind; other entries are the operator's.
+            # The installer owns only the service images and the payload binds; other entries are the operator's.
             saved = destination / 'compose.override.yaml'
             try:
                 override = json.loads(saved.read_text()) if saved.is_file() else {}
@@ -162,6 +166,10 @@ def install(bundle, destination, host, port, public_url, upgrade):
             web = services['web']
             web['volumes'] = [volume for volume in web.get('volumes', []) if not (isinstance(volume, dict) and volume.get('target') == '/node-payload')]
             web['volumes'].append({'type': 'bind', 'source': str(destination / 'node-payload'), 'target': '/node-payload', 'read_only': True})
+            core = services['core']
+            core['volumes'] = [volume for volume in core.get('volumes', []) if not (isinstance(volume, dict) and volume.get('target') == '/opt/oac/native-installers')]
+            if native.is_dir():
+                core['volumes'].append({'type': 'bind', 'source': str(destination / 'native-installers' / revision), 'target': '/opt/oac/native-installers', 'read_only': True})
             (stage / 'compose.override.yaml').write_text(json.dumps(override, indent=2) + '\n')
             os.chmod(stage / 'compose.override.yaml', 0o600)
             shutil.copyfile(bundle / 'oac', stage / 'oac')
@@ -182,6 +190,8 @@ def install(bundle, destination, host, port, public_url, upgrade):
             else:
                 run('Compose configuration check failed; see the output above. Nothing was installed.', *compose, 'config', '--quiet', cwd=destination)
             node_payload.activate(payload, revision)
+            if not existing and native.is_dir():
+                os.replace(stage / 'native-installers', destination / 'native-installers')
             # compose.yaml goes last: it marks the directory as an installation.
             for name in ('oac', 'compose.override.yaml', 'compose.yaml') if existing else ('node-payload', '.env', 'oac', 'compose.override.yaml', 'compose.yaml'):
                 os.replace(stage / name, destination / name)
@@ -198,6 +208,10 @@ def install(bundle, destination, host, port, public_url, upgrade):
         published = docker('docker', 'compose', 'port', 'web', '8080', cwd=destination)
         if published.returncode or not published.stdout.strip():
             raise ValueError(f"Web is running without its published port {web_port}; something else holds it.{port_holder_hint(web_port)}\nFree the port, then rerun the same command.")
+        # Only the running release's native installers are served.
+        for other in (destination / 'native-installers').glob('*'):
+            if other.name != revision:
+                shutil.rmtree(other)
         print(f"Console: {settings.get('OAC_PUBLIC_URL') or 'http://localhost:' + web_port}")
         if previous and previous != revision:
             print(f"Upgraded from {previous[:12]} to {revision[:12]}. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.")

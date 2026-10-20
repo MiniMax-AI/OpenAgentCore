@@ -182,6 +182,27 @@ class SourceInstallTest(unittest.TestCase):
         self.assertEqual(json.loads((payload / 'active.json').read_text()), {'source_commit': upgraded})
         self.assertEqual(sorted(path.name for path in (payload / 'releases').iterdir()), [self.revision, upgraded])
 
+    def test_core_serves_the_bundled_native_installers_of_the_running_release(self):
+        native = self.bundle / 'native-installers'
+        native.mkdir()
+        (native / 'catalog.json').write_text('{}')
+        (native / 'linux-amd64.tar.gz').write_bytes(b'native')
+        self.install()
+        served = self.destination / 'native-installers' / self.revision
+        config = json.loads(subprocess.check_output(['docker', 'compose', 'config', '--format', 'json'], cwd=self.destination, text=True))
+        mount = {v['target']: v for v in config['services']['core']['volumes']}['/opt/oac/native-installers']
+        self.assertEqual((mount['type'], mount['source'], mount['read_only']), ('bind', str(served), True))
+        self.assertEqual((served / 'linux-amd64.tar.gz').read_bytes(), b'native')
+        self.assertEqual(os.stat(served / 'linux-amd64.tar.gz').st_mode & 0o777, 0o644)
+        upgraded = 'b' * 40
+        self.manifest['source_commit'] = upgraded
+        (self.bundle / 'manifest.json').write_text(json.dumps(self.manifest))
+        self.write_sums()
+        self.install(upgrade=True)
+        self.assertEqual([path.name for path in (self.destination / 'native-installers').iterdir()], [upgraded])
+        core = json.loads((self.destination / 'compose.override.yaml').read_text())['services']['core']
+        self.assertEqual([volume['source'] for volume in core['volumes']], [str(self.destination / 'native-installers' / upgraded)])
+
     def test_thin_bundle_rejected_before_creating_installation(self):
         self.manifest['artifacts'] = {'native/bin/node': {'filename': 'missing'}}
         (self.bundle / 'manifest.json').write_text(json.dumps(self.manifest))
