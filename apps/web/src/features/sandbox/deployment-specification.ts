@@ -12,7 +12,13 @@ interface Manifest {
 /** The size the Provider declares for setup to propose; null when its configuration selects the size. */
 export function defaultSandboxResources(provider: SandboxProvider, workspace?: SandboxSpecification["workspace"]): SandboxResources | null {
   const size: SandboxResources | null = deploymentContract.providers[provider].default_resources;
-  return size && { ...size, ...(workspace ? { environment_disk_mib: 0 } : {}) };
+  return size && { ...size, ...(workspace && !workspace.capacity_quota ? { environment_disk_mib: 0 } : {}) };
+}
+
+/** The workspace requirement a Provider takes from the selected storage; none when it owns its workspaces or no storage is selected. */
+export function selectedWorkspace(provider: SandboxProvider, storage: { tenant_capacity_mib: number } | null | undefined): SandboxSpecification["workspace"] {
+  const policy = deploymentContract.providers[provider];
+  return storage && "workspace" in policy ? { ...policy.workspace, capacity_quota: storage.tenant_capacity_mib > 0 } : undefined;
 }
 
 /** Core keeps owned disk limits; external workspace capacity is optional and requires real quota support. */
