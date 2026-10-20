@@ -36,6 +36,17 @@ async function resources(page: Page) {
   await page.getByLabel("显示名称", { exact: true }).fill("Kimi");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("link", { name: "执行配置", exact: true }).click();
+  await page.getByRole("button", { name: "添加执行配置" }).click();
+  await page.getByLabel("名称", { exact: true }).fill("Kimi 默认");
+  await page.getByLabel("执行引擎", { exact: true }).click();
+  await page.getByRole("option", { name: "Claude Code", exact: true }).click();
+  await page.getByRole("button", { name: "模型", exact: true }).click();
+  await page
+    .getByRole("radio", { name: "Moonshot / Kimi", exact: true })
+    .click();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await navigate(page, "运行时");
   await page.getByRole("button", { name: "添加环境模板" }).click();
   await page.getByLabel("名称", { exact: true }).fill("开发沙箱");
@@ -61,10 +72,8 @@ async function resources(page: Page) {
 async function agent(page: Page, name = "审查助手") {
   await page.goto("/#/agents/new");
   await page.getByLabel("名称", { exact: true }).fill(name);
-  await page.getByRole("button", { name: "模型", exact: true }).click();
-  await page
-    .getByRole("radio", { name: "Moonshot / Kimi", exact: true })
-    .click();
+  await page.getByRole("button", { name: "执行配置", exact: true }).click();
+  await page.getByRole("radio", { name: "Kimi 默认", exact: true }).click();
   await page.getByRole("button", { name: "环境模板", exact: true }).click();
   await page.getByRole("radio", { name: "开发沙箱", exact: true }).click();
   await page
@@ -117,6 +126,7 @@ test.beforeEach(async ({ request }) => {
     "feishu_threads",
     "feishu_health",
     "agents",
+    "profiles",
     "models",
     "providers",
     "mcps",
@@ -194,9 +204,13 @@ test("model edits persist and bound resources cannot be removed", async ({
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("heading", { name: "常用 Kimi" })).toBeVisible();
   await page.reload();
-  page.on("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "移除 常用 Kimi" }).click();
-  await expect(page.getByRole("alert")).toContainText("仍被引用");
+  await expect(page.getByRole("button", { name: "移除 常用 Kimi" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "移除 常用 Kimi" })).toHaveAttribute(
+    "title",
+    "仍在使用中，不能移除",
+  );
+  await page.getByRole("link", { name: "执行配置", exact: true }).click();
+  await expect(page.getByRole("button", { name: "移除 Kimi 默认" })).toBeDisabled();
 });
 
 test("Skill version upload and default selection", async ({ page }) => {
@@ -465,10 +479,8 @@ test("Agents are listed as cards, duplicated without sharing state and require a
   expect(agents[0].skill_ids).toEqual(agents[1].skill_ids);
   await page.goto("/#/agents/new");
   await page.getByLabel("名称", { exact: true }).fill("No environment");
-  await page.getByRole("button", { name: "模型", exact: true }).click();
-  await page
-    .getByRole("radio", { name: "Moonshot / Kimi", exact: true })
-    .click();
+  await page.getByRole("button", { name: "执行配置", exact: true }).click();
+  await page.getByRole("radio", { name: "Kimi 默认", exact: true }).click();
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByText("请选择环境模板", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "环境模板", exact: true })).toBeFocused();
@@ -887,22 +899,37 @@ test("Agent resource selectors enforce the shared capability budget before savin
   expect(saved.capability_ids).toEqual(ids.slice(1));
 });
 
-test("Agents turn on web search and choose reasoning effort for new conversations", async ({
+test("execution profiles narrow options to the engine and reach new conversations", async ({
   page,
   request,
 }) => {
   await resources(page);
   await agent(page);
-  await page.getByLabel("执行引擎", { exact: true }).click();
-  await page.getByRole("option", { name: "MiniMax Code", exact: true }).click();
-  await expect(page.getByRole("switch", { name: /网页搜索/ })).toBeDisabled();
+  await page.getByRole("link", { name: "执行配置", exact: true }).click();
+  await page.getByRole("button", { name: "编辑 Kimi 默认" }).click();
   await page.getByLabel("执行引擎", { exact: true }).click();
   await page.getByRole("option", { name: "Codex", exact: true }).click();
-  await page.getByRole("switch", { name: /网页搜索/ }).check({ force: true });
+  await page.getByLabel("推理强度", { exact: true }).click();
+  await page.getByRole("option", { name: "极少", exact: true }).click();
+  await page.getByLabel("网页搜索", { exact: true }).click();
+  await page.getByRole("option", { name: "实时搜索", exact: true }).click();
+  await page.getByLabel("执行引擎", { exact: true }).click();
+  await page.getByRole("option", { name: "MiniMax Code", exact: true }).click();
+  await page.getByLabel("执行引擎", { exact: true }).click();
+  await page.getByRole("option", { name: "Claude Code", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("推理强度");
+  await expect(page.getByLabel("网页搜索", { exact: true })).toContainText("关闭");
+  await page.getByLabel("执行引擎", { exact: true }).click();
+  await page.getByRole("option", { name: "Codex", exact: true }).click();
   await page.getByLabel("推理强度", { exact: true }).click();
   await page.getByRole("option", { name: "高", exact: true }).click();
+  await page.getByLabel("网页搜索", { exact: true }).click();
+  await page.getByRole("option", { name: "实时搜索", exact: true }).click();
+  await page.getByText("高级", { exact: true }).click();
+  await page.getByLabel("推理摘要", { exact: true }).click();
+  await page.getByRole("option", { name: "自动", exact: true }).click();
   await page.getByRole("button", { name: "保存", exact: true }).click();
-  await expect(page.getByRole("button", { name: "已保存" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await converse(page);
   await expect(
     page.getByRole("heading", { name: "Review code", exact: true }),
@@ -911,8 +938,10 @@ test("Agents turn on web search and choose reasoning effort for new conversation
     await request.get("http://127.0.0.1:18181/counts")
   ).json();
   const sent = core.sessions.at(-1).agent;
+  expect(sent.x_agents_core.harness).toBe("codex");
   expect(sent.tools).toContainEqual({ type: "web_search", mode: "live" });
-  expect(sent.reasoning.effort).toBe("high");
+  expect(sent.reasoning).toMatchObject({ effort: "high", summary: "auto" });
   await page.getByRole("button", { name: "会话详情" }).click();
-  await expect(page.getByRole("dialog")).toContainText("网页搜索开启");
+  await expect(page.getByRole("dialog")).toContainText("执行配置Kimi 默认");
+  await expect(page.getByRole("dialog")).toContainText("网页搜索实时搜索");
 });

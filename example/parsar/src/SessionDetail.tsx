@@ -4,6 +4,7 @@ import {
   useActiveTurnKey,
 } from "./components/ui/turn-nav-rail";
 import { tr } from "./lib/i18n";
+import { optionValue } from "./Profiles";
 import { Questions } from "./Questions";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -33,6 +34,7 @@ import { SessionFiles } from "./SessionFiles";
 import {
   harnessNames,
   useAgents,
+  useProfiles,
   useRuntimes,
   type SessionRecord,
 } from "./lib/product";
@@ -52,6 +54,7 @@ export function SessionDetail({
   );
   const followOutput = useRef(true);
   const agents = useAgents(),
+    profiles = useProfiles(),
     runtimes = useRuntimes();
   const query = useQuery({
     queryKey: ["session", id],
@@ -94,12 +97,17 @@ export function SessionDetail({
   const configuration = record.configuration;
   const agent = agents.data?.find((row) => row.id === record.agent_id);
   const runtime = runtimes.data?.find((row) => row.id === record.runtime_id);
+  const profile = profiles.data?.find((row) => row.id === agent?.profile_id);
   const outdated =
     configuration?.agent_revision !== undefined &&
     !!agent &&
     (agent.revision !== configuration.agent_revision ||
       agent.runtime_id !== record.runtime_id ||
-      (!!runtime && runtime.revision !== configuration.runtime_revision));
+      (!!runtime && runtime.revision !== configuration.runtime_revision) ||
+      (!!profile &&
+        configuration.profile_revision !== undefined &&
+        (profile.name !== configuration.profile_name ||
+          profile.revision !== configuration.profile_revision)));
   return (
     <>
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-muted px-6">
@@ -248,22 +256,21 @@ export function SessionDetail({
                   ? harnessNames[configuration.harness]
                   : session.agent.x_agents_core?.harness || tr("部署默认")}
               </Property>
+              {configuration?.profile_name && (
+                <Property label={tr("执行配置")}>
+                  {configuration.profile_name}
+                </Property>
+              )}
               <Property label={tr("推理强度")}>
-                {(
-                  { low: tr("低"), medium: tr("中"), high: tr("高") } as Record<
-                    string,
-                    string
-                  >
-                )[session.agent.reasoning?.effort || ""] ||
-                  session.agent.reasoning?.effort ||
-                  tr("默认")}
+                {optionValue("reasoning_effort", session.agent.reasoning?.effort || "")}
               </Property>
               <Property label={tr("网页搜索")}>
-                {(session.agent.tools as { type: string; mode?: string }[])?.some(
-                  (tool) => tool.type === "web_search" && tool.mode !== "disabled",
-                )
-                  ? tr("开启")
-                  : tr("关闭")}
+                {optionValue(
+                  "web_search",
+                  (session.agent.tools as { type: string; mode?: string }[])?.find(
+                    (tool) => tool.type === "web_search",
+                  )?.mode || "disabled",
+                )}
               </Property>
               {configuration && (
                 <Property label={tr("环境模板")}>

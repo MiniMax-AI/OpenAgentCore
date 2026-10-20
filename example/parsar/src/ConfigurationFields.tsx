@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { ModelEditor } from "./ModelEditor";
 import { ResourceEditor } from "./Resources";
+import { ProfileEditor, emptyProfile, profileSummary } from "./Profiles";
 import { SkillCreate, SkillDetail, useSkills } from "./Skills";
 import { useQuery } from "@tanstack/react-query";
 import { api, readHistory } from "./lib/api";
@@ -12,8 +12,8 @@ import {
 } from "./Capabilities";
 import {
   useModels,
-  useProviders,
   useMCPs,
+  useProfiles,
   useRuntimes,
   type AgentProfile,
 } from "./lib/product";
@@ -24,8 +24,7 @@ import { ErrorNotice, Field, Section, Toggle } from "./components/shared";
 import { randomUuid } from "@oac/agents-client";
 export type Configuration = Pick<
   AgentProfile,
-  | "model_id"
-  | "harness"
+  | "profile_id"
   | "instructions"
   | "skill_ids"
   | "skill_versions"
@@ -33,14 +32,11 @@ export type Configuration = Pick<
   | "runtime_id"
   | "enabled"
   | "ask_user"
-  | "web_search"
-  | "reasoning_effort"
   | "capability_ids"
   | "capability_versions"
 >;
 export const emptyConfiguration: Configuration = {
-  model_id: "",
-  harness: "claude_sdk",
+  profile_id: "",
   instructions: "",
   skill_ids: [],
   mcp_ids: [],
@@ -52,12 +48,12 @@ export function ConfigurationFields({
 }: {
   value: Configuration;
   change: (value: Configuration) => void;
-  errors?: { model_id?: string; runtime_id?: string };
+  errors?: { profile_id?: string; runtime_id?: string };
 }) {
   const capabilities = useCapabilities(),
     runtimes = useRuntimes(),
     models = useModels(),
-    providers = useProviders(),
+    profiles = useProfiles(),
     skills = useSkills(),
     mcps = useMCPs();
   const [editor, setEditor] = useState<{
@@ -134,60 +130,24 @@ export function ConfigurationFields({
   );
   return (
     <div className="space-y-6">
-      <Section title={tr("模型与环境")}>
+      <Section title={tr("执行与环境")}>
         <ResourceField
-          label={tr("模型")}
+          label={tr("执行配置")}
           required
-          error={errors.model_id}
-          loading={models.isPending || providers.isPending}
-          options={(models.data || []).map((row) => ({
+          error={errors.profile_id}
+          loading={profiles.isPending || models.isPending}
+          options={(profiles.data || []).map((row) => ({
             id: row.id,
-            name: `${providers.data?.find((provider) => provider.id === row.provider_id)?.name || "Provider"} / ${row.name}`,
-            description: row.model,
-            disabled: row.enabled === false,
+            name: row.name,
+            description: profileSummary(row, models.data),
           }))}
-          selected={value.model_id ? [value.model_id] : []}
-          change={(ids) => change({ ...value, model_id: ids[0] || "" })}
-          empty={tr("选择模型")}
-          create={() => add("models")}
-          createLabel={tr("添加模型")}
-          inspect={inspect("models")}
+          selected={value.profile_id ? [value.profile_id] : []}
+          change={(ids) => change({ ...value, profile_id: ids[0] || "" })}
+          empty={tr("选择执行配置")}
+          create={() => add("profiles")}
+          createLabel={tr("添加执行配置")}
+          inspect={inspect("profiles")}
         />
-        <Field label={tr("执行引擎")} id="config-harness">
-          <Select
-            id="config-harness"
-            value={value.harness}
-            onValueChange={(harness) =>
-              change({
-                ...value,
-                harness: harness as Configuration["harness"],
-                web_search: harness === "mcode" ? false : value.web_search,
-              })
-            }
-          >
-            <SelectOption value="claude_sdk">Claude Code</SelectOption>
-            <SelectOption value="codex">Codex</SelectOption>
-            <SelectOption value="mcode">MiniMax Code</SelectOption>
-          </Select>
-        </Field>
-        <Field label={tr("推理强度")} id="config-reasoning">
-          <Select
-            id="config-reasoning"
-            value={value.reasoning_effort || ""}
-            onValueChange={(reasoning_effort) =>
-              change({
-                ...value,
-                reasoning_effort:
-                  reasoning_effort as Configuration["reasoning_effort"],
-              })
-            }
-          >
-            <SelectOption value="">{tr("默认")}</SelectOption>
-            <SelectOption value="low">{tr("低")}</SelectOption>
-            <SelectOption value="medium">{tr("中")}</SelectOption>
-            <SelectOption value="high">{tr("高")}</SelectOption>
-          </Select>
-        </Field>
         <ResourceField
           label={tr("环境模板")}
           required
@@ -217,18 +177,7 @@ export function ConfigurationFields({
         </Field>
         {capabilityField("prompt", tr("指令片段"))}
       </Section>
-      <Section title={tr("工具与知识")}>
-        <Toggle
-          label={tr("网页搜索")}
-          checked={!!value.web_search}
-          disabled={value.harness === "mcode"}
-          hint={
-            value.harness === "mcode"
-              ? tr("MiniMax Code 暂不支持网页搜索")
-              : undefined
-          }
-          onChange={(web_search) => change({ ...value, web_search })}
-        />
+      <Section title={tr("能力")}>
         <ResourceField
           label="Skills"
           multiple
@@ -308,21 +257,15 @@ export function ConfigurationFields({
           />
         </div>
       </Section>
-      {editor?.kind === "models" && (
-        <ModelEditor
+      {editor?.kind === "profiles" && (
+        <ProfileEditor
           value={
             editor.creating
-              ? {
-                  id: editor.id,
-                  revision: 0,
-                  name: "",
-                  model: "",
-                  provider_id: "",
-                }
-              : models.data!.find((row) => row.id === editor.id)!
+              ? { ...emptyProfile(), id: editor.id }
+              : profiles.data!.find((row) => row.id === editor.id)!
           }
           close={close}
-          onSaved={(model_id) => change({ ...value, model_id })}
+          onSaved={(profile_id) => change({ ...value, profile_id })}
         />
       )}
       {editor?.kind === "skills" &&
@@ -396,7 +339,7 @@ export function ConfigurationFields({
       )}
       <ErrorNotice
         error={
-          providers.error ||
+          profiles.error ||
           models.error ||
           skills.error ||
           mcps.error ||

@@ -15,7 +15,9 @@ import { ProviderEditor } from "./ProviderEditor";
 import { ErrorNotice } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
 import { randomUuid } from "@oac/agents-client";
+import { useUsage } from "./lib/usage";
 export function Models() {
+  const usage = useUsage();
   const models = useModels();
   const providers = useProviders();
   const cache = useQueryClient();
@@ -77,11 +79,19 @@ export function Models() {
                 aria-label={tr("移除 Provider {{value0}}", {
                   value0: group.name,
                 })}
-                disabled={remove.isPending}
+                title={
+                  models.data?.some((model) => model.provider_id === group.id)
+                    ? tr("请先移除其中的模型")
+                    : undefined
+                }
+                disabled={
+                  remove.isPending ||
+                  !!models.data?.some((model) => model.provider_id === group.id)
+                }
                 onClick={() => {
                   if (
                     confirm(
-                      tr("移除 Provider {{value0}}？请先移除其中的模型。", {
+                      tr("移除 Provider {{value0}}？", {
                         value0: group.name,
                       }),
                     )
@@ -122,7 +132,12 @@ export function Models() {
                       variant="ghost"
                       size="icon"
                       aria-label={tr("移除 {{value0}}", { value0: model.name })}
-                      disabled={remove.isPending}
+                      title={
+                        usage.model(model.id)
+                          ? tr("仍在使用中，不能移除")
+                          : undefined
+                      }
+                      disabled={remove.isPending || !!usage.model(model.id)}
                       onClick={() => {
                         if (
                           confirm(

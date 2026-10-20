@@ -5,10 +5,11 @@ import {
   useAgents,
   useFeishuBots,
   useModels,
+  useProfiles,
   useRuntimes,
-  harnessNames,
   type AgentProfile,
 } from "./lib/product";
+import { profileSummary } from "./Profiles";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { ErrorNotice, PageHeader } from "./components/shared";
@@ -41,6 +42,7 @@ export function Chip({
 export function Agents() {
   const agents = useAgents(),
     models = useModels(),
+    profiles = useProfiles(),
     runtimes = useRuntimes(),
     bots = useFeishuBots();
   const [search, setSearch] = useState("");
@@ -92,7 +94,10 @@ export function Agents() {
               <AgentCard
                 key={agent.id}
                 agent={agent}
-                model={models.data?.find((m) => m.id === agent.model_id)?.name}
+                engine={profileSummary(
+                  profiles.data?.find((row) => row.id === agent.profile_id),
+                  models.data,
+                )}
                 runtime={runtimes.data?.find((r) => r.id === agent.runtime_id)?.name}
                 bot={bots.data?.find((b) => b.agent_id === agent.id)?.name}
               />
@@ -106,12 +111,12 @@ export function Agents() {
 
 function AgentCard({
   agent,
-  model,
+  engine,
   runtime,
   bot,
 }: {
   agent: AgentProfile;
-  model?: string;
+  engine: string;
   runtime?: string;
   bot?: string;
 }) {
@@ -130,7 +135,7 @@ function AgentCard({
             </a>
           </h2>
           <p className="mt-0.5 truncate text-sm text-fg-muted">
-            {[model || tr("模型不可用"), harnessNames[agent.harness]].join(" · ")}
+            {engine}
           </p>
         </div>
         {disabled && <Chip muted>{tr("已停用")}</Chip>}

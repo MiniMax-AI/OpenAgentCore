@@ -7,6 +7,7 @@ import type { VaultCredential } from "@oac/agents-client";
 import { api, readHistory } from "./lib/api";
 import { ErrorNotice, Field } from "./components/shared";
 import { Ledger, LedgerHeader, LedgerRow } from "./components/ui/ledger";
+import { useUsage } from "./lib/usage";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Select, SelectOption } from "./components/ui/select";
@@ -24,6 +25,7 @@ export const useVaults = () =>
       readHistory((options) => api.listVaults(options), signal),
   });
 export function Credentials() {
+  const usage = useUsage();
   const vaults = useVaults(),
     cache = useQueryClient(),
     [vaultId, setVaultId] = useState(""),
@@ -161,6 +163,10 @@ export function Credentials() {
                 variant="ghost"
                 size="icon"
                 aria-label={tr("删除凭据 {{value0}}", { value0: row.name })}
+                title={
+                  usage.credential(row.id) ? tr("仍在使用中，不能移除") : undefined
+                }
+                disabled={!!usage.credential(row.id)}
                 onClick={() => {
                   if (
                     confirm(tr("删除凭据 {{value0}}？", { value0: row.name }))

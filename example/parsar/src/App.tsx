@@ -8,6 +8,7 @@ import {
   Sun,
   Send,
   Settings2,
+  SlidersHorizontal,
   SquarePen,
   type LucideIcon,
 } from "lucide-react";
@@ -19,6 +20,7 @@ import { product, useSessions } from "./lib/product";
 import { Feishu } from "./Feishu";
 import { Runtimes } from "./Resources";
 import { Agents } from "./Agents";
+import { Profiles } from "./Profiles";
 import { AgentPage } from "./AgentPage";
 import { SessionPage } from "./SessionPage";
 import { Home } from "./Home";
@@ -121,6 +123,12 @@ export function App() {
     prefixes.some((prefix) => path === prefix || path!.startsWith(`${prefix}/`));
   const build = [
     { href: "/agents", label: tr("Agent"), icon: Bot, match: ["/agents"] },
+    {
+      href: "/profiles",
+      label: tr("执行配置"),
+      icon: SlidersHorizontal,
+      match: ["/profiles"],
+    },
     { href: "/runtimes", label: tr("环境模板"), icon: Server, match: ["/runtimes"] },
     {
       href: "/capabilities",
@@ -152,6 +160,8 @@ export function App() {
       <AgentPage key={agentId} id={agentId} />
     ) : path === "/agents" ? (
       <Agents />
+    ) : path === "/profiles" ? (
+      <Profiles />
     ) : path === "/runtimes" ? (
       <Runtimes />
     ) : path === "/feishu" ? (

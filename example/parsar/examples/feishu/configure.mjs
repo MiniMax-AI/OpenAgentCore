@@ -41,20 +41,25 @@ async function api(path, method, body) {
 const read = async (name) =>
   JSON.parse(await readFile(new URL(name, import.meta.url), "utf8"));
 const environment = await read("./environment.json"),
+  profile = await read("./profile.json"),
   agent = await read("./agent.json");
 environment.setup_script = await readFile(
   new URL("./setup.sh", import.meta.url),
   "utf8",
 );
 const environmentId = randomUUID(),
+  profileId = randomUUID(),
   agentId = randomUUID();
-agent.model_id = args.get("--model");
+profile.model_id = args.get("--model");
+agent.profile_id = profileId;
 agent.skill_ids = args.get("--skills").split(",");
 agent.runtime_id = environmentId;
 await api(`/app/runtimes/${environmentId}`, "PUT", environment);
 try {
+  await api(`/app/profiles/${profileId}`, "PUT", profile);
   await api(`/app/agents/${agentId}`, "PUT", agent);
 } catch (error) {
+  await api(`/app/profiles/${profileId}`, "DELETE").catch(() => {});
   await api(`/app/runtimes/${environmentId}`, "DELETE");
   throw error;
 }
@@ -65,6 +70,7 @@ await api(botPath, "PUT", { ...bot, agent_id: agentId });
 console.log(
   JSON.stringify({
     agent_id: agentId,
+    profile_id: profileId,
     environment_id: environmentId,
     agent_url: `${base.origin}/#/agents/${agentId}`,
   }),

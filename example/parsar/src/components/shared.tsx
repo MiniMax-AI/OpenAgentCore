@@ -82,14 +82,12 @@ export function ErrorNotice({
 export function Field({
   label,
   id,
-  hint,
   required,
   error,
   children,
 }: {
   label: string;
   id?: string;
-  hint?: string;
   required?: boolean;
   /** Shown under the field after a failed save attempt. */
   error?: string;
@@ -106,11 +104,7 @@ export function Field({
         )}
       </div>
       {children}
-      {error ? (
-        <p className="text-sm text-danger">{error}</p>
-      ) : (
-        hint && <p className="text-sm text-fg-muted">{hint}</p>
-      )}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
   );
 }
@@ -201,14 +195,11 @@ export function Toggle({
   checked,
   onChange,
   disabled,
-  hint,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
-  /** One short line shown under the label, e.g. why the switch is unavailable. */
-  hint?: string;
 }) {
   return (
     <label
@@ -217,10 +208,7 @@ export function Toggle({
         disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
       )}
     >
-      <span>
-        {label}
-        {hint && <span className="mt-0.5 block text-fg-muted">{hint}</span>}
-      </span>
+      <span>{label}</span>
       <span className="relative inline-flex shrink-0">
         <input
           type="checkbox"

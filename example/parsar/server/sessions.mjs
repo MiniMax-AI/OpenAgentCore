@@ -1,5 +1,6 @@
 import { runtimeEnvironment } from "./runtime-profile.mjs";
 import { AppError, text, uuid } from "./store.mjs";
+import { harnessOptions } from "../shared/harness-options.mjs";
 
 export function sessionBot(store, agentId) {
   return store.list("feishu_bots").find((bot) => bot.agent_id === agentId);
@@ -12,7 +13,9 @@ export function prepareSession(store, id, body, origin = {}) {
     throw new AppError(400, "Agent 已停用，请先启用。");
   const runtime = store.get("runtimes", agent.runtime_id || "");
   if (!runtime) throw new AppError(400, "Agent 未配置环境模板。");
-  const model = store.get("models", agent.model_id);
+  const profile = store.get("profiles", agent.profile_id || "");
+  if (!profile) throw new AppError(400, "Agent 未配置执行配置。");
+  const model = store.get("models", profile.model_id);
   const mcps = agent.mcp_ids.map((id) => store.get("mcps", id));
   if (!model || model.enabled === false || mcps.some((mcp) => !mcp))
     throw new AppError(400, "Agent 绑定的资源已不可用。");
@@ -35,12 +38,12 @@ export function prepareSession(store, id, body, origin = {}) {
       "请先在模型页面配置所选 Provider 的 HTTPS Base URL 和 API Key。",
     );
   const modelProvider = {
-    protocol: agent.harness === "codex" ? "responses" : "anthropic",
+    protocol: harnessOptions[profile.harness].protocol,
     base_url: provider.base_url,
     api_key: provider.api_key,
   };
   const tools = [
-    { type: "web_search", mode: agent.web_search ? "live" : "disabled" },
+    { type: "web_search", mode: profile.web_search || "disabled" },
   ];
   if (agent.ask_user)
     tools.push({
@@ -64,7 +67,8 @@ export function prepareSession(store, id, body, origin = {}) {
       server_label: mcp.label,
       transport: { type: "http", server_url: mcp.url },
       connection_origin: "environment",
-      required: true,
+      // MiniMax Code admits only optional MCP initialization.
+      required: profile.harness !== "mcode",
       ...(mcp.credential_id ? { credential_id: mcp.credential_id } : {}),
     })),
   );
@@ -91,7 +95,7 @@ export function prepareSession(store, id, body, origin = {}) {
     JSON.stringify(images).length > 900000
   )
     throw new AppError(400, "图片格式或大小无效。");
-  if (images.length && agent.harness === "mcode")
+  if (images.length && profile.harness === "mcode")
     throw new AppError(
       400,
       "当前运行配置不支持图片输入，请使用托管 Codex 或 Claude Code。",
@@ -180,8 +184,10 @@ export function prepareSession(store, id, body, origin = {}) {
       agent_revision: agent.revision,
       runtime_revision: runtime.revision,
       bot_name: botEnv.length ? bot.name : undefined,
+      profile_name: profile.name,
+      profile_revision: profile.revision,
       model: model.model,
-      harness: agent.harness,
+      harness: profile.harness,
       environment: runtime.environment,
       environment_name: runtime.name,
       packages: runtime.packages || { npm: [], python: [] },
@@ -207,12 +213,22 @@ export function prepareSession(store, id, body, origin = {}) {
       agent: {
         model: model.model,
         instructions,
-        ...(agent.reasoning_effort
-          ? { reasoning: { effort: agent.reasoning_effort } }
+        ...(profile.reasoning_effort || profile.reasoning_summary
+          ? {
+              reasoning: {
+                ...(profile.reasoning_effort
+                  ? { effort: profile.reasoning_effort }
+                  : {}),
+                ...(profile.reasoning_summary
+                  ? { summary: profile.reasoning_summary }
+                  : {}),
+              },
+            }
           : {}),
-        x_agents_core: { harness: agent.harness },
+        ...(profile.service_tier ? { service_tier: profile.service_tier } : {}),
+        x_agents_core: { harness: profile.harness },
         multi_agent: { enabled: false },
-        text: { verbosity: "medium" },
+        text: { verbosity: profile.verbosity || "medium" },
         tools,
       },
       environment,

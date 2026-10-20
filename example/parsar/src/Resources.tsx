@@ -25,6 +25,7 @@ import {
 import { Field, ErrorNotice, PageHeader } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
 import { randomUuid } from "@oac/agents-client";
+import { useUsage } from "./lib/usage";
 export function MCPs() {
   const query = useMCPs();
   return (
@@ -64,6 +65,9 @@ function ResourceList({
   const [directory, setDirectory] = useState(false),
     [search, setSearch] = useState("");
   const cache = useQueryClient();
+  const usage = useUsage();
+  const used = (id: string) =>
+    kind === "mcps" ? usage.mcp(id) : usage.runtime(id);
   const remove = useMutation({
     mutationFn: (id: string) => product(`${kind}/${id}`, "DELETE"),
     onSuccess: () => cache.invalidateQueries({ queryKey: [kind] }),
@@ -210,7 +214,8 @@ function ResourceList({
                     variant="ghost"
                     size="icon"
                     aria-label={tr("移除 {{value0}}", { value0: row.name })}
-                    disabled={remove.isPending}
+                    title={used(row.id) ? tr("仍在使用中，不能移除") : undefined}
+                    disabled={remove.isPending || !!used(row.id)}
                     onClick={() => {
                       if (confirm(tr("移除 {{value0}}？", { value0: row.name })))
                         remove.mutate(row.id);

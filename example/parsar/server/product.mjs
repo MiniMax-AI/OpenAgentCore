@@ -8,12 +8,25 @@ import { runtimeProfile, publicRuntime } from "./runtime-profile.mjs";
 import { feishuAPI } from "./feishu.mjs";
 import { sessionAPI } from "./sessions.mjs";
 import { AppError, text, uuid } from "./store.mjs";
+import {
+  harnessOptions,
+  profileOptionFields,
+  unsupportedOption,
+} from "../shared/harness-options.mjs";
 
+const optionLabels = {
+  reasoning_effort: "推理强度",
+  reasoning_summary: "推理摘要",
+  web_search: "网页搜索方式",
+  verbosity: "输出详细度",
+  service_tier: "服务层级",
+};
 const kinds = new Set([
   "providers",
   "models",
   "mcps",
   "runtimes",
+  "profiles",
   "agents",
   "sessions",
 ]);
@@ -142,11 +155,12 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       const used =
         store.list("feishu_bots").some((row) => row.agent_id === id) ||
         store.list("models").some((row) => row.provider_id === id) ||
+        store.list("profiles").some((row) => row.model_id === id) ||
         store
           .list("agents")
           .some(
             (row) =>
-              row.model_id === id ||
+              row.profile_id === id ||
               row.runtime_id === id ||
               row.mcp_ids.includes(id),
           ) ||
@@ -234,21 +248,29 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     if (kind === "runtimes") {
       Object.assign(value, runtimeProfile(body, previous));
     }
-    if (kind === "agents") {
-      value.model_id = requireReference("models", body.model_id);
-      if (!["codex", "claude_sdk", "mcode"].includes(body.harness))
+    if (kind === "profiles") {
+      if (!harnessOptions[body.harness])
         throw new AppError(400, "请选择执行引擎。");
+      value.description = text(body.description || "", "描述", 500);
       value.harness = body.harness;
+      value.model_id = requireReference("models", body.model_id);
+      for (const field of profileOptionFields)
+        value[field] = typeof body[field] === "string" ? body[field] : "";
+      value.web_search ||= "disabled";
+      const unsupported = unsupportedOption(value);
+      if (unsupported)
+        throw new AppError(
+          400,
+          `${harnessOptions[value.harness].label} 不支持所选的${optionLabels[unsupported]}。`,
+        );
+    }
+    if (kind === "agents") {
+      if (!body.profile_id) throw new AppError(400, "请选择执行配置。");
+      value.profile_id = requireReference("profiles", body.profile_id);
       value.description = text(body.description || "", "描述", 500);
       value.instructions = text(body.instructions, "指令", 100000);
       value.enabled = body.enabled !== false;
       value.ask_user = body.ask_user === true;
-      value.web_search = body.web_search === true;
-      if (value.web_search && body.harness === "mcode")
-        throw new AppError(400, "MiniMax Code 暂不支持网页搜索。");
-      if (!["", "low", "medium", "high"].includes(body.reasoning_effort || ""))
-        throw new AppError(400, "推理强度无效。");
-      value.reasoning_effort = body.reasoning_effort || "";
       if (!body.runtime_id) throw new AppError(400, "请选择环境模板。");
       value.runtime_id = requireReference("runtimes", body.runtime_id);
       value.capability_ids = references(

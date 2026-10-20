@@ -97,7 +97,7 @@ function AgentEditor({
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   const missing = {
     name: form.name.trim() ? undefined : tr("请填写名称"),
-    model_id: form.model_id ? undefined : tr("请选择模型"),
+    profile_id: form.profile_id ? undefined : tr("请选择执行配置"),
     runtime_id: form.runtime_id ? undefined : tr("请选择环境模板"),
   };
   const errors: Partial<typeof missing> = attempted ? missing : {};
@@ -195,7 +195,7 @@ function AgentEditor({
         <ErrorNotice error={save.error || remove.error} className="my-0" />
         {restored && dirty && (
           <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-subtle px-4 py-3 text-sm">
-            <span className="text-fg-muted">{tr("已恢复上次未保存的修改。")}</span>
+            <span className="text-fg">{tr("已恢复上次未保存的修改。")}</span>
             <button
               type="button"
               className="shrink-0 font-medium text-fg underline-offset-4 hover:underline"

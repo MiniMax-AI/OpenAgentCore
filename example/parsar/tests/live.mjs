@@ -59,13 +59,21 @@ try {
       "Read changed files. Report actionable correctness issues with file locations and explain the verification performed.",
     );
   await save();
-  await page.goto(`${base}/#/agents/new`);
-  await page.getByLabel("名称", { exact: true }).fill(agentName);
+  await go("执行配置");
+  await page.getByRole("button", { name: "添加执行配置" }).click();
+  await page.getByLabel("名称", { exact: true }).fill(`Profile ${suffix}`);
+  await page.getByLabel("执行引擎", { exact: true }).click();
+  await page.getByRole("option", { name: "Claude Code", exact: true }).click();
   await page.getByRole("button", { name: "模型", exact: true }).click();
   await page
     .getByRole("radio", { name: `Moonshot ${suffix} / ${modelName}`, exact: true })
     .click();
-  await page.getByRole("button", { name: /^环境模板/ }).click();
+  await save();
+  await page.goto(`${base}/#/agents/new`);
+  await page.getByLabel("名称", { exact: true }).fill(agentName);
+  await page.getByRole("button", { name: "执行配置", exact: true }).click();
+  await page.getByRole("radio", { name: `Profile ${suffix}`, exact: true }).click();
+  await page.getByRole("button", { name: "环境模板", exact: true }).click();
   await page.getByRole("radio", { name: runtimeName, exact: true }).click();
   await page
     .getByLabel("主指令", { exact: true })

@@ -1,0 +1,10 @@
+{
+  "name": "Codex · 飞书工作",
+  "description": "飞书工作助手使用的 Codex 执行配置。",
+  "harness": "codex",
+  "reasoning_effort": "",
+  "reasoning_summary": "",
+  "web_search": "disabled",
+  "verbosity": "",
+  "service_tier": ""
+}

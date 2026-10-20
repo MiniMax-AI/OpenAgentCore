@@ -21,13 +21,14 @@ Open http://127.0.0.1:18180. `OPENAI_BASE_URL` ends in `/v1`; remote endpoints r
 
 | Object | What it is |
 | --- | --- |
-| **资源库** | Models, Skills, MCP servers, Plugins, instruction fragments, knowledge and credentials. Resources are shared: editing one affects every Agent that uses it. |
+| **资源库** | Building blocks, grouped by what uses them: models for execution profiles; Skills, MCP servers, Plugins, knowledge and instruction fragments for Agents; credentials for MCP. Resources are shared: editing one affects everything that uses it, and an item in use cannot be removed. |
+| **执行配置** | How an Agent runs, like a local Codex profile: Harness, model, reasoning effort, web search and, under **高级**, reasoning summary, verbosity and service tier. Only values the selected Harness declares are offered. |
 | **环境模板** | The prepared workspace: npm and Python packages, a Bash setup script, environment variables, Feishu bot variables and initial files. |
-| **Agent** | What people talk to: name, description, model and Harness, instructions, resource bindings, one required environment template and behavior switches. **复制** creates an independent copy. |
+| **Agent** | What people talk to: name, description, instructions, one required execution profile, one required environment template, capabilities and behavior switches. **复制** creates an independent copy. |
 | **飞书机器人** | One bot is bound to at most one Agent. It routes its chats to that Agent and is the Agent’s Feishu identity in every conversation, including Web chats. |
 | **对话** | One public Core Session with its own Environment. It freezes the Agent and environment configuration when it starts. |
 
-Agent edits affect only new conversations. When the Agent or its environment template changes, an existing conversation says so and offers **用新配置开始新对话**.
+Configuration lives only in templates and Agents; a conversation never overrides it. Edits affect only new conversations. When the Agent, its execution profile or its environment template changes, an existing conversation says so and offers **用新配置开始新对话**.
 
 ## Web chat
 
@@ -41,7 +42,7 @@ Optional business questions use the declared `ask_user` function. They appear in
 
 ## Agents and resources
 
-**Agent** lists Agents as cards with their model, Harness, environment template and bound Feishu bot. The Agent page groups **基本信息**, **指令**, **模型与环境**, **工具与知识** and **行为**. **主指令** is the Agent’s own instruction text; optional **指令片段** are appended in selection order to produce one system prompt. Instruction fragments, Plugins and knowledge share an eight-resource limit; selectors prevent exceeding it. **推理强度** sends `reasoning.effort` (low, medium or high) or leaves the Harness default. **网页搜索** sends `web_search` with `live` for Codex and Claude Code and `disabled` otherwise; MiniMax Code cannot enable it. Web conversations and Feishu step records show searches as **搜索网页**. Creating or editing a model, Skill, MCP, environment template or capability from the Agent page keeps unsaved fields, and a newly created resource is selected automatically. Unsaved Agent edits are restored when you return to the page in the same browser tab, and **保存** points to any missing required field.
+**Agent** lists Agents as cards with their execution profile, environment template and bound Feishu bot. The Agent page groups **基本信息**, **执行与环境**, **指令**, **能力** and **行为**. **主指令** is the Agent’s own instruction text; optional **指令片段** are appended in selection order to produce one system prompt. Instruction fragments, Plugins and knowledge share an eight-resource limit; selectors prevent exceeding it. In **执行配置**, the Harness narrows every option to its declared values ([Harness capabilities](../../contracts/agents-api/harness-capabilities.md)); switching Harness resets values the new one does not accept and says which. Empty options keep the Harness default; web search defaults to **关闭**. Web conversations and Feishu step records show searches as **搜索网页**. Creating or editing an execution profile, model, Skill, MCP, environment template or capability from the Agent page keeps unsaved fields, and a newly created resource is selected automatically. Unsaved Agent edits are restored when you return to the page in the same browser tab, and **保存** points to any missing required field.
 
 **模型** groups model IDs under Providers. Fetch a Provider’s OpenAI-shaped `GET /v1/models` catalog or enter IDs manually. Keys remain server-side; blank edits preserve the saved key. Discovery sends only that Provider’s key and never follows redirects. Every Harness uses the selected HTTPS Provider: Responses for Codex, Anthropic for Claude Code and MiniMax Code. Unsupported combinations fail explicitly; consult the [Harness coverage ledger](../../contracts/agents-api/index.md).
 
@@ -70,13 +71,13 @@ The Agent acts as its bound bot. With **飞书机器人变量**, Parsar puts the
 
 ### Feishu workspace case
 
-[The Feishu workspace](examples/feishu/) is assembled from ordinary templates. [environment.json](examples/feishu/environment.json) declares packages, bot variables and files, [setup.sh](examples/feishu/setup.sh) installs the checksum-verified official CLI binary and configures it with the bot credentials, and [agent.json](examples/feishu/agent.json) defines a Codex Agent. Configure a model, import the official `lark-shared` Skill and the business Skills you need, add a bot, then run:
+[The Feishu workspace](examples/feishu/) is assembled from ordinary templates. [environment.json](examples/feishu/environment.json) declares packages, bot variables and files, [setup.sh](examples/feishu/setup.sh) installs the checksum-verified official CLI binary and configures it with the bot credentials, [profile.json](examples/feishu/profile.json) defines a Codex execution profile and [agent.json](examples/feishu/agent.json) the Agent. Configure a model, import the official `lark-shared` Skill and the business Skills you need, add a bot, then run:
 
 ```bash
 node example/parsar/examples/feishu/configure.mjs --url http://localhost:3001 --model MODEL_ID --bot BOT_ID --skills SHARED_SKILL_ID,DOMAIN_SKILL_ID
 ```
 
-`--bot` is the Parsar bot ID, not the Feishu App ID. The script creates the environment template and Agent through the same `/app/runtimes` and `/app/agents` operations as the UI, binds the bot and prints the Agent link. The first message can ask for `lark-cli api GET /open-apis/bot/v3/info --as bot --json`. The node must resolve and reach the Feishu open platform; templates cannot repair node DNS or network policy.
+`--bot` is the Parsar bot ID, not the Feishu App ID. The script creates the environment template, execution profile and Agent through the same `/app/runtimes`, `/app/profiles` and `/app/agents` operations as the UI, binds the bot and prints the Agent link. The first message can ask for `lark-cli api GET /open-apis/bot/v3/info --as bot --json`. The node must resolve and reach the Feishu open platform; templates cannot repair node DNS or network policy.
 
 ## Ownership and local API
 
@@ -84,7 +85,7 @@ Core’s Project key stays server-side. Successful conversation creation leaves 
 
 | Product route family | Caller and credential |
 | --- | --- |
-| `/app/providers`, `/app/models`, `/app/agents`, `/app/runtimes`, `/app/mcps`, `/app/sessions` | Same-origin local UI; the Feishu worker reuses Session creation in-process |
+| `/app/providers`, `/app/models`, `/app/profiles`, `/app/agents`, `/app/runtimes`, `/app/mcps`, `/app/sessions` | Same-origin local UI; the Feishu worker reuses Session creation in-process |
 | `/app/feishu/bots`, `/app/feishu/provision`, `/app/feishu/deliveries` | Same-origin local UI; credentials never returned |
 | `/app/capabilities`, `/app/skills/registry/preview` | Same-origin local UI |
 | `/app/mcp-oauth/<operation-id>`, `/oauth/callback` | Local OAuth flow; random state, PKCE and same-origin completion POST |

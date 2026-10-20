@@ -49,6 +49,19 @@ export function Capabilities({
   initialTab?: string;
 }) {
   const [tab, setTab] = useState(initialTab);
+  // Building blocks are grouped by what composes them: execution profiles,
+  // Agents, and MCP authentication.
+  const groups: [string, string][][] = [
+    [["models", tr("模型")]],
+    [
+      ["skills", "Skills"],
+      ["mcps", "MCP"],
+      ["plugin", "Plugins"],
+      ["knowledge", tr("知识")],
+      ["prompt", tr("指令片段")],
+    ],
+    [["credentials", tr("凭据")]],
+  ];
   return (
     <>
       <PageHeader title={tr("资源库")} />
@@ -58,28 +71,25 @@ export function Capabilities({
           role="tablist"
           aria-label={tr("能力类型")}
         >
-          {[
-            ["models", tr("模型")],
-            ["skills", "Skills"],
-            ["mcps", "MCP"],
-            ["plugin", "Plugins"],
-            ["prompt", tr("指令片段")],
-            ["knowledge", tr("知识")],
-            ["credentials", tr("凭据")],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              role="tab"
-              aria-selected={tab === key}
-              className={
-                tab === key
-                  ? "-mb-px h-10 shrink-0 border-b-2 border-fg text-sm font-medium text-fg"
-                  : "-mb-px h-10 shrink-0 border-b-2 border-transparent text-sm text-fg-muted hover:text-fg"
-              }
-              onClick={() => setTab(key!)}
-            >
-              {label}
-            </button>
+          {groups.map((group, index) => (
+            <div key={group[0]![0]} className="flex shrink-0 items-center gap-6">
+              {index > 0 && <span aria-hidden className="h-4 w-px bg-line" />}
+              {group.map(([key, label]) => (
+                <button
+                  key={key}
+                  role="tab"
+                  aria-selected={tab === key}
+                  className={
+                    tab === key
+                      ? "-mb-px h-10 shrink-0 border-b-2 border-fg text-sm font-medium text-fg"
+                      : "-mb-px h-10 shrink-0 border-b-2 border-transparent text-sm text-fg-muted hover:text-fg"
+                  }
+                  onClick={() => setTab(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       </div>
