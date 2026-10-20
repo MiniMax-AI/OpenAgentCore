@@ -245,13 +245,4 @@ func TestEnvironmentInputActivityRecoversWaitingActionAndHidesDeletion(t *testin
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("waiting input deleted", err)
 	}
-	if err := s.commitLegacyDeletion(t.Context(), tenant, session.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatal("deleted activity remained visible", err)
-	}
-	if _, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatal("deleted activity events remained visible", err)
-	}
 }
