@@ -86,7 +86,7 @@ RULES = (
     (("scripts/generate-harness-catalog", "scripts/harness-catalog/", "scripts/openapi-split/", "scripts/patch-agents-openapi.py",
       "scripts/generate-public-api"), SCRIPTS, JOBS),
     (("scripts/check-sqlc.py", "scripts/go-test-shard.py"), (".py",), ("backend",)),
-    (("scripts/check-names", "scripts/name-allowlist.json", "scripts/ci_"), (".py", ".json"), ("hygiene",)),
+    (("scripts/ci_",), (".py",), ("hygiene",)),
     ((".github/workflows/", ".github/actions/"), (".yml", ".yaml"), JOBS),
 )
 # Embedded files and test fixtures are executable inputs regardless of suffix.

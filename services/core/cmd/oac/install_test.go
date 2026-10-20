@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -212,7 +211,6 @@ func TestDownloadRetriesTransientFailures(t *testing.T) {
 }
 
 func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
-	// The same release resumes with or without --upgrade.
 	f := newInstallFixture(t)
 	f.failure = "compose up"
 	if err := f.run(); err == nil {
@@ -230,7 +228,6 @@ func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
 		return nil, nil
 	}
 	f.options.publicURL = "https://replacement.invalid"
-	f.options.upgrade = true
 	if err := f.run(); err != nil {
 		t.Fatal(err)
 	}
@@ -247,94 +244,24 @@ func TestInstallResumePreservesConfigAndUsesCachedImages(t *testing.T) {
 	assertCallsInOrder(t, f.calls, "compose "+strings.Join(initVolume, " "), "compose "+strings.Join(checkConfig, " "), "compose "+strings.Join(startServices, " "))
 }
 
-func TestInstallUpgradesAnotherReleaseOnlyWhenRequested(t *testing.T) {
+func TestInstallRefusesAnotherRelease(t *testing.T) {
 	f := newInstallFixture(t)
 	setBuildRevision(t, "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0")
 	if err := f.run(); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(f.options.dir, "compose-sha256sums.txt"), []byte("previous release"), 0o600)
 	before := installationFiles(t, f.options.dir)
 	setBuildRevision(t, "development")
-	os.WriteFile(f.executable, []byte("upgraded binary"), 0o700)
-
 	f.calls = nil
 	err := f.run()
-	if err == nil || err.Error() != "This installation runs release a1b2c3d4e5f6; this installer is development. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade." {
+	if err == nil || err.Error() != "This installation runs release a1b2c3d4e5f6; this installer is development. Reinstall to use this release." {
 		t.Fatal(err)
 	}
 	if len(f.calls) != 3 {
 		t.Fatalf("refusal ran Docker beyond its checks: %v", f.calls)
 	}
-
-	f.options.upgrade = true
-	f.failure = "staged compose run --rm --no-deps init"
-	if err := f.run(); err == nil || !strings.HasPrefix(err.Error(), "Upgrade stopped; the running services are unchanged") {
-		t.Fatal(err)
-	}
 	if after := installationFiles(t, f.options.dir); !maps.Equal(before, after) {
-		t.Fatal("refused upgrade changed the installation directory")
-	}
-	if _, err := os.Stat(f.options.dir + ".staging"); !os.IsNotExist(err) {
-		t.Fatal("refused upgrade left its stage")
-	}
-
-	f.failure = ""
-	f.calls = nil
-	if err := f.run(); err != nil {
-		t.Fatal(err)
-	}
-	assertCallsInOrder(t, f.calls,
-		"pull example/core:latest",
-		"staged compose "+strings.Join(checkConfig, " "),
-		"staged compose run --rm --no-deps init",
-		"compose up -d --wait --wait-timeout 180 --pull never --remove-orphans")
-	after := installationFiles(t, f.options.dir)
-	if after[cliName()] != "upgraded binary" || after[".env"] != before[".env"] || f.installedRevision() != "development" {
-		t.Fatal("upgrade did not publish the release with the saved settings")
-	}
-	if _, ok := after["compose-sha256sums.txt"]; ok {
-		t.Fatal("upgrade kept the previous release checksum")
-	}
-}
-
-func TestUpgradeDropsTheOfflinePayloadBinds(t *testing.T) {
-	f := newInstallFixture(t)
-	setBuildRevision(t, "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0")
-	if err := f.run(); err != nil {
-		t.Fatal(err)
-	}
-	payload, native := filepath.Join(f.options.dir, "node-payload"), filepath.Join(f.options.dir, "native-installers")
-	os.Mkdir(payload, 0o755)
-	os.Mkdir(native, 0o755)
-	source, _ := json.Marshal(payload)
-	override := `{"services":{"web":{"volumes":[{"type":"bind","source":` + string(source) + `,"target":"/node-payload","read_only":true},{"type":"bind","source":"/srv/ca","target":"/ca"}]},"core":{"volumes":[{"type":"bind","source":"/srv/native","target":"/opt/oac/native-installers","read_only":true}]}}}`
-	path := filepath.Join(f.options.dir, "compose.override.yaml")
-	os.WriteFile(path, []byte(override), 0o600)
-	setBuildRevision(t, "development")
-	f.options.upgrade = true
-	f.failure = "staged compose run --rm --no-deps init"
-	if err := f.run(); err == nil {
-		t.Fatal("upgrade should have stopped")
-	}
-	if raw, _ := os.ReadFile(path); string(raw) != override {
-		t.Fatal("a stopped upgrade changed the override")
-	}
-	if _, err := os.Stat(payload); err != nil {
-		t.Fatal("a stopped upgrade removed the node payload")
-	}
-	f.failure = ""
-	if err := f.run(); err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := os.ReadFile(path)
-	if strings.Contains(string(raw), "/node-payload") || strings.Contains(string(raw), "/opt/oac/native-installers") || !strings.Contains(string(raw), "/srv/ca") {
-		t.Fatalf("override after upgrade: %s", raw)
-	}
-	for _, directory := range []string{payload, native} {
-		if _, err := os.Stat(directory); !os.IsNotExist(err) {
-			t.Fatalf("upgrade kept %s", directory)
-		}
+		t.Fatal("refusal changed the installation directory")
 	}
 }
 
@@ -483,7 +410,6 @@ func captureOutput(t *testing.T, fn func()) string {
 
 func TestFreshInstallStartsLikeApplyAndPrintsTheKeyOnce(t *testing.T) {
 	f := newInstallFixture(t)
-	f.options.upgrade = false
 	var err error
 	out := captureOutput(t, func() { err = f.run() })
 	if err != nil {

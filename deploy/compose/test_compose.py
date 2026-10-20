@@ -82,7 +82,6 @@ class ComposeTests(unittest.TestCase):
             self.assertEqual(services['core']['environment'][name], '', name)
 
     def test_database_stays_on_postgresql_16_pinned_by_digest(self):
-        # An upgrade keeps the data volume only within one PostgreSQL major version.
         self.assertRegex(render_compose.DATABASE_PIN, r'^postgres:16-alpine@sha256:[0-9a-f]{64}$')
 
     def test_public_url_can_be_configured_after_initial_startup(self):

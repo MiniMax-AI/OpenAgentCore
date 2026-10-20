@@ -354,39 +354,3 @@ func TestReplacementWaitsForAWinningObservationAndClearsIt(t *testing.T) {
 	}
 	o.observe(t, turn, 0)
 }
-
-func TestObservationMigrationRoundTrip(t *testing.T) {
-	o := newObserved(t)
-	old := o.resolve(t).Revision
-	var secret, sessionBundle []byte
-	if err := o.pool.QueryRow(t.Context(), "SELECT (SELECT encrypted_config FROM deployment_model_providers), (SELECT encrypted_config FROM session_model_execution WHERE session_id=$1)", o.session.ID).Scan(&secret, &sessionBundle); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := os.ReadFile("../../../../migrations/000084_deployment_provider_observations.sql")
-	if err != nil {
-		t.Fatal(err)
-	}
-	parts := strings.Split(string(raw), "-- +goose Down")
-	if _, err = o.pool.Exec(t.Context(), parts[1]); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = o.pool.Exec(t.Context(), parts[0]); err != nil {
-		t.Fatal(err)
-	}
-	var revision uuid.UUID
-	var frozen pgtype.UUID
-	var preserved, preservedSession []byte
-	if err = o.pool.QueryRow(t.Context(), "SELECT revision, encrypted_config FROM deployment_model_providers").Scan(&revision, &preserved); err != nil {
-		t.Fatal(err)
-	}
-	if err = o.pool.QueryRow(t.Context(), "SELECT c.deployment_provider_revision, e.encrypted_config FROM session_execution_configuration c JOIN session_model_execution e USING (session_id) WHERE c.session_id=$1", o.session.ID).Scan(&frozen, &preservedSession); err != nil {
-		t.Fatal(err)
-	}
-	if revision == old || frozen.Valid || string(secret) != string(preserved) {
-		t.Fatal("migration recreated historical identity or changed ciphertext")
-	}
-	if string(sessionBundle) != string(preservedSession) {
-		t.Fatal("migration changed the Session bundle")
-	}
-	o.observe(t, o.terminal(t, o.session.ID, "completed", "", ""), 0)
-}

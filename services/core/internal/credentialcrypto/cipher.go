@@ -15,7 +15,7 @@ import (
 
 const (
 	formatVersion byte = 1
-	bindingDomain      = "parsar.agents-api.credential"
+	bindingDomain      = "oac.credential"
 )
 
 var (
@@ -55,7 +55,7 @@ func New(key []byte) (*Cipher, error) {
 		return nil, errUnavailable
 	}
 	derive := hmac.New(sha256.New, key)
-	derive.Write([]byte("parsar.agents-api.credential-fingerprint.v1"))
+	derive.Write([]byte("oac.credential-fingerprint.v1"))
 	return &Cipher{aead: aead, fingerprint: derive.Sum(nil)}, nil
 }
 

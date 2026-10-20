@@ -9,7 +9,7 @@ func modelExecutionData(tenantID, sessionID string) ([]byte, error) {
 	if tenantID == "" || sessionID == "" || !utf8.ValidString(tenantID) || !utf8.ValidString(sessionID) {
 		return nil, errInvalidBinding
 	}
-	return json.Marshal([]string{"parsar.agents-api.session-model-execution.v1", tenantID, sessionID})
+	return json.Marshal([]string{"oac.session-model-execution.v1", tenantID, sessionID})
 }
 
 func (c *Cipher) SealModelExecution(plaintext []byte, tenantID, sessionID string) ([]byte, error) {

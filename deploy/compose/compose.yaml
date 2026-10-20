@@ -22,8 +22,8 @@ services:
     depends_on:
       init: {condition: service_completed_successfully}
     environment:
-      POSTGRES_USER: agents_api
-      POSTGRES_DB: agents_api
+      POSTGRES_USER: oac
+      POSTGRES_DB: oac
       POSTGRES_PASSWORD_FILE: /run/database/password
     volumes:
       - type: volume
@@ -36,7 +36,7 @@ services:
         volume: {nocopy: true, subpath: secrets/database}
         read_only: true
     healthcheck:
-      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U agents_api -d agents_api"]
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U oac -d oac"]
       interval: 2s
       timeout: 5s
       retries: 30
@@ -54,7 +54,7 @@ services:
     environment:
       OAC_PUBLIC_URL: &public-url ${OAC_PUBLIC_URL:-http://localhost:${OAC_WEB_PORT:-8080}}
       OAC_INSTALLATION_ID_FILE: /run/oac/installation.id
-      OAC_DATABASE_URL: postgres://agents_api@database:5432/agents_api?sslmode=disable
+      OAC_DATABASE_URL: postgres://oac@database:5432/oac?sslmode=disable
       OAC_DATABASE_PASSWORD_FILE: /run/database/password
       OAC_CREDENTIAL_KEY_FILE: /run/oac/credential.key
       OAC_CORE_KEY_DIGESTS_FILE: /run/oac/core-key-digests.json

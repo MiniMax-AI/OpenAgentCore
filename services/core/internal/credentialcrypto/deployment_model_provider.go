@@ -12,7 +12,7 @@ func deploymentModelProviderData(harness string) ([]byte, error) {
 	if harness == "" || !utf8.ValidString(harness) {
 		return nil, errInvalidBinding
 	}
-	return json.Marshal([]string{"parsar.agents-api.deployment-model-provider.v1", harness})
+	return json.Marshal([]string{"oac.deployment-model-provider.v1", harness})
 }
 
 func (c *Cipher) SealDeploymentModelProvider(plaintext []byte, harness string) ([]byte, error) {

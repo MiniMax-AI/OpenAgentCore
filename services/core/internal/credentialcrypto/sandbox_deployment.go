@@ -10,7 +10,7 @@ func sandboxDeploymentData(installation string, generation uint64) ([]byte, erro
 	if installation == "" || !utf8.ValidString(installation) || generation == 0 {
 		return nil, errInvalidBinding
 	}
-	return json.Marshal([]string{"parsar.agents-api.sandbox-deployment.v1", installation, strconv.FormatUint(generation, 10)})
+	return json.Marshal([]string{"oac.sandbox-deployment.v1", installation, strconv.FormatUint(generation, 10)})
 }
 
 func (c *Cipher) SealSandboxDeployment(plaintext []byte, installation string, generation uint64) ([]byte, error) {

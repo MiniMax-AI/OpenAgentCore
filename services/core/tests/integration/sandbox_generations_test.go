@@ -1,16 +1,12 @@
 package integration
 
 import (
-	"database/sql"
-	"os"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 )
 
 func TestE2BGenerationsRetainOwnershipAndUseCurrentCredential(t *testing.T) {
@@ -146,103 +142,6 @@ func TestPendingPlacementGenerationSurvivesRepeatedUpdates(t *testing.T) {
 	}
 	if _, err = s.pool.Exec(t.Context(), `UPDATE runtime_placements SET deployment_generation=3 WHERE environment_id=$1`, owner.EnvironmentID); err == nil {
 		t.Fatal("placement generation changed")
-	}
-}
-
-func TestGenerationMigrationBackfillsAndRejectsLossyDowngrade(t *testing.T) {
-	db, migrations := runtimeNamesMigrationSchema(t)
-	ctx := t.Context()
-	if _, err := migrations.UpTo(ctx, 80); err != nil {
-		t.Fatal(err)
-	}
-	installation, node := uuid.NewString(), uuid.NewString()
-	if _, err := db.ExecContext(ctx, `UPDATE runtime_deployment SET installation_id=$1,backend_fingerprint=repeat('a',64),provider_kind='docker',mode='nodes',generation=1`, installation); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.ExecContext(ctx, `INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,deployment_generation) VALUES($1,$2,'old',repeat('a',64),repeat('b',64),1,1,1)`, node, installation); err != nil {
-		t.Fatal(err)
-	}
-	session, tenant, environment, device, allocation := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
-	exec := func(query string, args ...any) {
-		t.Helper()
-		if _, err := db.ExecContext(ctx, query, args...); err != nil {
-			t.Fatal(err)
-		}
-	}
-	exec(`INSERT INTO sessions(id,tenant_id,engine,idempotency_key,request_hash,configuration) VALUES($1,$2,'codex','old','old','{}')`, session, tenant)
-	exec(`INSERT INTO environments(id,session_id) VALUES($1,$2)`, environment, session)
-	exec(`INSERT INTO devices(id,tenant_id,name,credential_hash) VALUES($1,$2,'old',repeat('b',64))`, device, tenant)
-	exec(`INSERT INTO runtime_placements(environment_id,node_id) VALUES($1,$2)`, environment, node)
-	exec(`INSERT INTO runtime_allocations(id,environment_id,device_id,provider_key,node_id) VALUES($1,$2,$3,$4,$5)`, allocation, environment, device, installation, node)
-	if _, err := migrations.UpTo(ctx, 81); err != nil {
-		t.Fatal(err)
-	}
-	for _, table := range []string{"runtime_allocations", "runtime_placements"} {
-		var generation int64
-		if err := db.QueryRowContext(ctx, `SELECT deployment_generation FROM `+table).Scan(&generation); err != nil || generation != 1 {
-			t.Fatal("inexact migration backfill", table, generation, err)
-		}
-	}
-	var pin int64
-	if err := db.QueryRowContext(ctx, `SELECT ready_generation FROM runtime_nodes WHERE id=$1`, node).Scan(&pin); err != nil || pin != 1 {
-		t.Fatal(pin, err)
-	}
-	if _, err := db.ExecContext(ctx, `UPDATE runtime_deployment SET generation=2`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := migrations.DownTo(ctx, 80); err == nil {
-		t.Fatal("downgrade erased offline serving pin")
-	}
-	if _, err := db.ExecContext(ctx, `UPDATE runtime_nodes SET removed_at=clock_timestamp(),ready_generation=NULL`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := migrations.DownTo(ctx, 80); err == nil {
-		t.Fatal("downgrade discarded held allocation/placement after pin removal")
-	}
-	exec(`UPDATE runtime_allocations SET state='released',released_at=clock_timestamp(),create_settled=true`)
-	if _, err := migrations.DownTo(ctx, 80); err == nil {
-		t.Fatal("downgrade discarded unreleased placement")
-	}
-	exec(`UPDATE runtime_placements SET released_at=clock_timestamp()`)
-	if _, err := migrations.DownTo(ctx, 80); err != nil {
-		t.Fatal("settled downgrade failed", err)
-	}
-}
-
-func TestGenerationDowngradeRefusesOldAllocation(t *testing.T) {
-	s, w, view, input := webSpecificationFixture(t, "e2b")
-	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
-	owner := archiveAllocation(t, w, tenant, session, view.InstallationID)
-	input.Configuration.(*e2b.DeploymentConfiguration).Template = "next:" + uuid.NewString()
-	input.ExpectedGeneration = 1
-	if _, err := deploymentExecution(t, w).Update(SandboxResetTestContext(t.Context()), view.InstallationID, input); err != nil {
-		t.Fatal(err)
-	}
-	db := sql.OpenDB(stdlib.GetConnector(*s.pool.Config().ConnConfig))
-	defer db.Close()
-	migrations, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../migrations"), goose.WithTableName("agents_api_schema_version"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = migrations.DownTo(t.Context(), 80); err == nil {
-		t.Fatal("downgrade erased old owned allocation")
-	}
-	// Earlier down migrations can commit before the generation guard vetoes
-	// downgrade. Restore the current schema before invoking current Store code.
-	if _, err = migrations.Up(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = deploymentExecution(t, w).RequestCleanup(t.Context(), owner); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = deploymentExecution(t, w).SettleCreation(t.Context(), owner); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = deploymentExecution(t, w).ReleaseAllocation(t.Context(), owner); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = migrations.DownTo(t.Context(), 80); err != nil {
-		t.Fatal("released history prevented safe downgrade", err)
 	}
 }
 

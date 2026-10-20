@@ -171,14 +171,3 @@ func TestInstallPortHintOffersDeletionOnlyForAMissingDirectory(t *testing.T) {
 		}
 	}
 }
-
-func TestUpgradeWithoutAnInstallationRefuses(t *testing.T) {
-	f := newInstallFixture(t)
-	f.options.upgrade = true
-	if err := f.run(); err == nil || !strings.Contains(err.Error(), "No installation in "+f.options.dir) {
-		t.Fatal(err)
-	}
-	if exists(f.options.dir) || exists(f.options.dir+".staging") {
-		t.Fatal("a refused upgrade left files")
-	}
-}

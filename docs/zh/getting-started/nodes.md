@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 86f0ce968eff1d82b31620be4c216e44741ad6a0536ef9dfde3d5a96c6bd0675
+source_hash: 6581acc433887f6006933cbacdf4eee0810d1d1e96871b31c968612ced3b74de
 ---
 
 节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 或 Docker 时添加、修改和移除节点的运维人员；E2B 不需要节点。
@@ -82,7 +82,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 **每台主机只服务一个 Core。** 节点共享 `oac-node` 账号，因此主机只服务一个 Core；第二个 Core 的命令会被拒绝。
 
-**节点程序。** 节点保留添加它的控制台所提供的主机程序；升级 Core 不会替换它。更改节点协议的版本会列出所需操作；参阅[协议变更](operations.md#protocol-changes)。
+**节点程序。** 节点保留添加它的控制台所提供的主机程序。要让节点使用另一个版本，请[移除节点](#remove-a-node)后重新添加。
 
 ## 重新运行、过期与慢速网络 {#rerun-expiry-and-slow-links}
 

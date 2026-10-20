@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: 1e525c548fb44a07bcd8331b3b3768fd144c1bf029bcdc1ac9d38f9c48435b9d
+source_hash: f0e015b4f13aeafa5ec486c42a5d4210f6dd9a9ce40b34112cdef1ed3aad28ba
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[概览](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -130,7 +130,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | Claude Code adapter 与产物 | `make check-claude-sdk` |
 | Web UI 与 client | `make check-web` |
 | 发行或安装程序 | `make check-distribution` |
-| 文档 | `make check-docs`（Markdown 链接与锚点）、`make check-names`，以及用于中文镜像的 `pnpm --dir website check-translations` |
+| 文档 | `make check-docs`（Markdown 链接与锚点），以及用于中文镜像的 `pnpm --dir website check-translations` |
 
 Fixture 浏览器验收使用 loopback 端口 18092 和 4174。并行验证时通过 `AGENTS_FIXTURE_PORT` 和 `AGENTS_WEB_PORT` 选择空闲端口。验证 worker 之间使用独立数据库、端口和容器。编译、fixture 成功和真实模型/提供商验收分别证明不同事实；应明确报告跳过或不可用的检查。验证后遵循[审查流程](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
 

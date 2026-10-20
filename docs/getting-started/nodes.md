@@ -80,7 +80,7 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 
-**Node software.** A node keeps the host program of the console that added it; an upgrade of Core doesn't replace it. A release that changes the node protocol lists the actions it requires; see [protocol changes](./operations.md#protocol-changes).
+**Node software.** A node keeps the host program of the console that added it. To move a node to another release, [remove it](#remove-a-node) and add it again.
 
 ## Rerun, expiry and slow links
 

@@ -27,9 +27,8 @@ On Windows, `irm … | iex` cannot pass flags and the default execution policy b
 | `--public-url` | Derived from the host's private address, or `http://localhost:<web port>`; see [Choose the public URL](./public-address.md#choose-the-public-url) | `OAC_PUBLIC_URL` | The origin applications, nodes and executors use |
 | `--host` | `0.0.0.0` | `OAC_HOST` | The address Web binds; see [Listeners and access](./public-address.md#listeners-and-access) |
 | `--web-port` | `8080` | `OAC_WEB_PORT` | The host port of Web; see [Ports](./public-address.md#ports) |
-| `--install-dir` | `~/.oac/core` | | Absolute installation directory. Use an empty or missing directory for a new installation, or an existing one to [retry](./install.md#install) or upgrade |
+| `--install-dir` | `~/.oac/core` | | Absolute installation directory. Use an empty or missing directory for a new installation, or an existing one to [retry](./install.md#install) |
 | `--version` | `latest` | | A published release tag |
-| `--upgrade` | | | Upgrade the existing installation in `--install-dir` to the installer's release; see [Upgrade](./operations.md#upgrade) |
 
 The flags that map to `.env` are written once. After installation, edit that file and run `oac apply`. Rerunning the installer on an existing installation ignores them, names those that differ from the saved settings, and starts it with the saved settings.
 
@@ -77,7 +76,7 @@ On either platform, open its server terminal and run `docker compose ls` to find
 
 After signing in, [choose a sandbox backend](./sandbox-backends.md) and add nodes using [Add and manage nodes](./nodes.md). The Compose stack deploys the control plane; execution machines remain separate.
 
-Stop with `docker compose stop` using the same files and environment. Back up the data volume and configuration together while the services are stopped. To upgrade, back up first, then deploy the new release's `compose.yaml` with the same project, environment and data volume: initialization upgrades the volume and Core migrates the database. [Upgrade](./operations.md#upgrade) describes what is kept and why an older release is refused.
+Stop with `docker compose stop` using the same files and environment. Back up the data volume and configuration together while the services are stopped. To move to another release, [reinstall](./install.md#install).
 
 ## Offline hosts
 
@@ -97,11 +96,10 @@ python3 oac-<commit>-linux-amd64/install.py --install-dir "$HOME/.oac/local" --h
 | `--host` | `127.0.0.1` | The address Web binds. Unlike `oac install`, `install.py` defaults to loopback: pass `0.0.0.0` for access from other machines |
 | `--web-port` | `8080` | The host port of Web |
 | `--public-url` | | The origin browsers and nodes use. Required for a new installation |
-| `--upgrade` | | Upgrade an existing installation to this bundle's release; see [Upgrade](./operations.md#upgrade) |
 
 Replace `YOUR_CORE_HOST` with an address your browser and sandbox nodes can reach, or use your HTTPS origin behind a reverse proxy. A new installation prints the Core key; a rerun prints the command that shows it. The installation is the standard Compose installation plus a read-only `node-payload` directory holding the bundle's public node artifacts. Allow disk space for both the extracted bundle and the installed copy.
 
-Rerunning the same bundle's `install.py` on its installation directory resumes the installation with the saved settings. A bundle from another commit refuses an existing installation unless you pass `--upgrade`. If a new installation fails before it starts the services, it leaves the installation directory as it found it; fix the cause and rerun the same command.
+Rerunning the same bundle's `install.py` on its installation directory resumes the installation with the saved settings. A bundle from another commit refuses an existing installation. If a new installation fails before it starts the services, it leaves the installation directory as it found it; fix the cause and rerun the same command.
 
 For a startup failure or a stopped installation, use the saved configuration instead of reinstalling:
 

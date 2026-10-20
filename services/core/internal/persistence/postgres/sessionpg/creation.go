@@ -27,7 +27,7 @@ import (
 
 // modelProviderKeyPurpose keys the provider-key fingerprint in creation
 // identities. Changing it changes every stored identity.
-const modelProviderKeyPurpose = "parsar.agents-api.model-provider-api-key.v1"
+const modelProviderKeyPurpose = "oac.model-provider-api-key.v1"
 
 var _ sessions.CreationTx = (*creationTx)(nil)
 
