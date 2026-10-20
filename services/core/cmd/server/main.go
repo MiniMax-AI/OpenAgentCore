@@ -137,17 +137,17 @@ func run(config processconfig.Config) error {
 	err := migrations.Apply(migrating, config.DatabaseURL)
 	cancelMigration()
 	if err != nil {
-		return fmt.Errorf("Agents API database migration failed: %w", err)
+		return fmt.Errorf("OpenAgentCore database migration failed: %w", err)
 	}
 	pool, err := pgxpool.New(ctx, config.DatabaseURL)
 	if err != nil {
-		return errors.New("invalid Agents API database configuration")
+		return errors.New("invalid OpenAgentCore database configuration")
 	}
 	defer pool.Close()
 	ready, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := pool.Ping(ready); err != nil {
-		return errors.New("Agents API database connection failed")
+		return errors.New("OpenAgentCore database connection failed")
 	}
 	oauthClient, err := oauthrefresh.NewClient(config.OAuthTrustedOrigins)
 	if err != nil {

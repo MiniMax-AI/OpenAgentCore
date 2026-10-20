@@ -1,7 +1,7 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: c562ed30e22adc12c0be5dbfbcbf740aaa977c467d38bf6c2f1f5bc961d90ccc
+source_hash: 468c8cbd13ee2a736db07f9239f56a49afad2916036a375260b59e377fc3a1e3
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
@@ -15,8 +15,8 @@ source_hash: c562ed30e22adc12c0be5dbfbcbf740aaa977c467d38bf6c2f1f5bc961d90ccc
 | `Web port unavailable; choose --web-port` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口。如果消息点名了 Compose 项目 `oac-…`，说明目录已不存在的早期安装仍在运行：按[卸载](./operations.md#uninstall)移除它 |
 | `incomplete installation: preserve … and choose another directory` | 保留目录内容，选择另一个 `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
-| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷已被更新的版本升级。参阅[降级](./operations.md#downgrades) |
-| `This installation runs release …` | 安装程序或初始化属于另一个版本。要换到更新的版本，请按[升级](./operations.md#upgrade)操作；降级会被拒绝 |
+| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷属于另一个版本（`existing data belongs to release …`）。要使用此版本，请[卸载](./operations.md#uninstall)该安装（这会删除其数据），然后重新安装 |
+| `This installation runs release …` | 安装程序或初始化属于另一个版本。要使用此版本，请[卸载](./operations.md#uninstall)该安装（这会删除其数据），然后重新安装 |
 | `This account cannot use Docker` | 将该账号加入 `docker` 组后重新登录，或使用 Docker Desktop 或 rootless Docker。不要用 `sudo` 运行安装程序 |
 | `This account cannot access …` | 之前用 `sudo` 运行留下了属于 root 的文件。运行消息给出的 `sudo chown` 命令，再以自己的账号重新运行 |
 | `Docker Compose 2.26 or newer is required` | 安装或更新 Docker Compose 插件 |
@@ -56,7 +56,7 @@ microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务�
 | 其他状态码，例如 `HTTP 404 on the WebSocket upgrade` 或 `HTTP 502 …` | 反向代理没有将 `/api/v1` 转发到 Core 或没有保留 Host，或者 Core 未运行 |
 | `dial tcp: …`，例如 `connection refused`、`i/o timeout` 或 `no such host` | 主机无法通过公开 URL 访问 Core。检查 DNS 和防火墙；节点服务使用安装程序运行时的[代理](./nodes.md#download-through-a-proxy)，代理变化后请用正确的设置重新执行命令 |
 | `tls: …`，或 `TLS certificate expired or not yet valid` | 主机不信任 Core 的证书，或公开 URL 对不提供 HTTPS 的端口使用了 `https` |
-| `Core did not accept the node: …` | 节点自我介绍后 Core 关闭了连接。Core 升级后，执行该发行版的[协议变更](./operations.md#protocol-changes)；否则查看 Core 日志 |
+| `Core did not accept the node: …` | 节点自我介绍后 Core 关闭了连接。查看 Core 日志 |
 
 ### 安装程序消息 {#installer-messages}
 
@@ -65,7 +65,7 @@ microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务�
 | `The enrollment command expired or was already used` | 在 Web 生成新命令并在 1 小时内执行 |
 | `Core rejected the node configuration read (HTTP …)` | 检查 Core URL 及其前面的反向代理后重试 |
 | `Not enough disk space under …` 或 `The disk is full` | 按提示释放空间后重试，下载会继续 |
-| This host's node program differs from the one this console serves | 节点添加后 Core 已升级。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
+| This host's node program differs from the one this console serves | 节点添加后 Core 已重新安装。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
 | Another node installation is running, or this node is preparing a new sandbox configuration | 待 **节点** 不再显示 **正在准备目标配置** 后重试 |
 | 注册前的沙箱提供商检查失败，例如 `This host lacks a capability …` | 修复提示的问题（参阅[就绪状态码](./nodes.md#readiness-codes)）后重试；令牌未被使用 |
 | Core's public URL changed after this command was generated | 在 Web 生成并执行新命令 |

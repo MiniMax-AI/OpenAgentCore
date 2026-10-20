@@ -3,8 +3,7 @@
 
 Core, Web and the ingress image are built from this checkout, with node
 metadata for this commit. Web serves a placeholder page instead of the console
-build. A second phase starts the published release pinned in
-deploy/compose/smoke-pins.json and upgrades it in place to this checkout.
+build.
 """
 
 import hashlib
@@ -24,7 +23,6 @@ import urllib.request
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASES = 'https://github.com/MiniMax-AI/OpenAgentCore/releases/download/'
 
 
 def load(name, path):
@@ -49,7 +47,7 @@ def prepare_payload(destination, revision, source_time):
         shutil.copyfile(sources / 'node-install.pyz', destination / 'node-install.pyz')
     shutil.copyfile(ROOT / 'services/core/deploy/codex/seccomp.json', destination / 'runtime/seccomp.json')
     (destination / 'manifest.json').write_text(json.dumps(
-        {'source_commit': revision, 'source_time': int(source_time), 'platform': 'linux/amd64'}))
+        {'source_commit': revision, 'platform': 'linux/amd64'}))
     distribution.checksums(destination)
 
 
@@ -240,52 +238,6 @@ def main():
         assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == rotated, 'Rotated key was not retained'
         private_logs(key, rotated, project_key)
         print('PASS: startup, origin validation, sign-in, API, upload, node installer, key rotation and persistent installation', flush=True)
-
-        pins = json.loads((ROOT / 'deploy/compose/smoke-pins.json').read_text())
-        print(f'Starting the published {pins["tag"]} release in a new installation and upgrading it to this checkout', flush=True)
-        compose('down', '--volumes')
-        published = directory / 'published-compose.yaml'
-        urllib.request.urlretrieve(RELEASES + pins['tag'] + '/compose.yaml', published)
-        if hashlib.sha256(published.read_bytes()).hexdigest() != pins['compose_sha256']:
-            raise ValueError('Pinned release compose.yaml checksum mismatch')
-        env.pop('OAC_PUBLIC_URL')
-        released = runner([published], {name: value for name, value in env.items() if not name.startswith('OAC_IMAGE_')})
-        released('up', '-d', '--wait', '--wait-timeout', '600', timeout=900)
-        address = 'http://' + released('port', 'web', '8080').decode().strip()
-        origin = 'http://localhost:8080'
-        browser = client()
-        key = released('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip()
-        request('/console/auth/login', {'core_key': key})
-        facts = get('/core/v1/installation')
-        project_data = get('/core/v1/projects', body={'name': 'Upgrade smoke'}, status=201)
-        project_key = get('/core/v1/projects/' + project_data['id'] + '/keys', body={'name': 'smoke'}, status=201)['key']
-        api = {'Authorization': 'Bearer ' + project_key}
-        content = b'upgrade smoke\n'
-        uploaded = upload(api, content)
-
-        # The installer's preflight with the new release's images, then its start.
-        compose('run', '--rm', '--no-deps', '--entrypoint', '/usr/local/bin/oac-core', 'core', 'check-config')
-        compose('run', '--rm', '--no-deps', 'init')
-        compose('up', '-d', '--wait', '--wait-timeout', '180', '--pull', 'never', '--remove-orphans', timeout=240)
-        address = 'http://' + compose('port', 'web', '8080').decode().strip()
-        # The release's default origin ignored the Web port; this checkout's follows it.
-        origin = 'http://localhost:' + port
-        browser = client()
-        assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == key, 'Upgrade changed the Core key'
-        request('/console/auth/login', {'core_key': key})
-        upgraded = get('/core/v1/installation')
-        assert upgraded['installation_id'] == facts['installation_id'], 'Upgrade changed the installation identity'
-        assert upgraded['public_url'] == origin, 'The upgraded default origin does not follow the Web port'
-        assert upgraded['source_commit'] == revision, 'Core does not run this checkout'
-        assert json.loads(request('/node-install/manifest.json'))['source_commit'] == revision, 'Web serves another release'
-        assert any(p['id'] == project_data['id'] for p in get('/core/v1/projects')['data']), 'Upgrade lost the Project'
-        assert get('/v1/files/' + uploaded['id'], headers=api)['bytes'] == len(content), 'Upgrade lost the Project key or file'
-        schema = compose('exec', '-T', 'database', 'psql', '-U', 'agents_api', '-d', 'agents_api', '-Atc',
-                         'SELECT max(version_id) FROM agents_api_schema_version').decode().strip()
-        latest = max(int(path.name.split('_', 1)[0]) for path in (ROOT / 'services/core/migrations').glob('*.sql'))
-        assert int(schema) == latest, 'Upgrade did not migrate the schema'
-        private_logs(key, project_key)
-        print(f'PASS: in-place upgrade from {pins["tag"]} keeps the installation, Core key, Project, Project key and file', flush=True)
     except BaseException:
         # Service status identifies failed containers without dumping secret-bearing logs.
         status = subprocess.run(['docker', 'compose', '-p', project, 'ps', '--all'], env=env, capture_output=True, timeout=30)

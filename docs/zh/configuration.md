@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 676250762ae38625aef9f3aeda80427424d97342b3aeaf52dcc61661142d7b36
+source_hash: 6830daa88320510b51e74909169d4e49c7fa9017b344ba12a1456097cad29991
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -130,8 +130,8 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 | 路径 | 内容 | 修改者 |
 | --- | --- | --- |
 | `.env` | 进程设置和固定的 Compose 项目名 | 用户修改后运行 `oac apply` |
-| `compose.yaml` | 已校验的发行版服务定义 | 安装程序，在安装或[升级](getting-started/operations.md#upgrade)时 |
-| `compose.override.yaml` | 可选的本地 Compose 条目。源码包安装中它是 JSON，还保存四个服务镜像和 Web 的 `/node-payload` 绑定 | 用户。`install.py` 只替换自己的条目，并要求 JSON 格式。`oac install --upgrade` 会删除 `/node-payload` 绑定和主机上的 `node-payload/` 目录，因为发布版本从数据卷提供该载荷 |
+| `compose.yaml` | 已校验的发行版服务定义 | 安装程序，在安装时 |
+| `compose.override.yaml` | 可选的本地 Compose 条目。源码包安装中它是 JSON，还保存 Web 的 `/node-payload` 绑定和 Core 的原生安装程序绑定 | 用户。`install.py` 只替换自己的条目，并要求 JSON 格式 |
 | `oac`（Windows 为 `oac.exe`） | 原生管理命令 | 安装程序 |
 
 同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。

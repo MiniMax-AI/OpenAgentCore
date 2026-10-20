@@ -9,7 +9,7 @@ func agentModelExecutionData(tenantID, agentID string) ([]byte, error) {
 	if tenantID == "" || agentID == "" || !utf8.ValidString(tenantID) || !utf8.ValidString(agentID) {
 		return nil, errInvalidBinding
 	}
-	return json.Marshal([]string{"parsar.agents-api.agent-model-execution.v1", tenantID, agentID})
+	return json.Marshal([]string{"oac.agent-model-execution.v1", tenantID, agentID})
 }
 
 func (c *Cipher) SealAgentModelExecution(plaintext []byte, tenantID, agentID string) ([]byte, error) {

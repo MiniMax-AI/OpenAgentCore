@@ -70,7 +70,7 @@ if MISSING:
     def test_version_forms_and_dangling_version(self):
         for arguments in [('--version=v1.2.3',), ('--version', 'v1.2.3')]:
             self.assertEqual(self.run_launcher(arguments=arguments).returncode, 0)
-        result = self.run_launcher(arguments=('--upgrade', '--version'))
+        result = self.run_launcher(arguments=('--install-dir', '--version'))
         self.assertEqual(result.returncode, 1)
         self.assertIn('Missing release tag', result.stderr)
 

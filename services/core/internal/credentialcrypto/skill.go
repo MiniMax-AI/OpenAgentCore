@@ -48,5 +48,5 @@ func skillData(binding SkillBinding) ([]byte, error) {
 		Domain  string       `json:"domain"`
 		Version byte         `json:"version"`
 		Binding SkillBinding `json:"binding"`
-	}{"parsar.agents-api.skill", formatVersion, binding})
+	}{"oac.skill", formatVersion, binding})
 }

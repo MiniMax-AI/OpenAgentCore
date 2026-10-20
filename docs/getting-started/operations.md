@@ -2,7 +2,7 @@
 title: "Operations"
 ---
 
-Day-to-day tasks for the operator of a Core installation: the `oac` command, service health, the Core key, backups, upgrades and uninstalling. Nodes have [their own guide](./nodes.md), and [Troubleshooting](./troubleshooting.md) lists installer and access messages. Settings are in the [Configuration reference](../configuration.md).
+Day-to-day tasks for the operator of a Core installation: the `oac` command, service health, the Core key, backups and uninstalling. Nodes have [their own guide](./nodes.md), and [Troubleshooting](./troubleshooting.md) lists installer and access messages. Settings are in the [Configuration reference](../configuration.md).
 
 ## The oac command
 
@@ -10,7 +10,7 @@ Each installation has its own `oac` command in its directory (`oac.exe` on Windo
 
 | Command | What it does |
 | --- | --- |
-| `oac install` | Installs, resumes or [upgrades](#upgrade) an installation; the installer scripts run it |
+| `oac install` | Installs an installation or resumes one that stopped before it started; the installer scripts run it |
 | `oac apply` | Checks the data volume and `.env`, then starts the services and recreates those whose configuration changed; see [how oac apply works](../configuration.md#how-oac-apply-works). A failed check changes no service. On success it prints `Services are running with the current settings.` |
 | `oac core-key [--show]` | Identifies the key location in the data volume, or prints the key with `--show` |
 | `oac rotate-core-key` | Replaces the Core key and restarts Core and Web, then says how to read the new key |
@@ -125,7 +125,7 @@ Core records which key made each public resource write; the retention of that hi
 
 ## Back up
 
-A recoverable backup contains one consistent, stopped-write set. A database dump or Core volume export alone does not include independent workspace storage or node compute state. Restore the data volume together with the installation directory from the same backup, which holds the release that wrote it; a newer release can [upgrade](#upgrade) the restored installation afterward.
+A recoverable backup contains one consistent, stopped-write set. A database dump or Core volume export alone does not include independent workspace storage or node compute state. Restore the data volume together with the installation directory from the same backup, which holds the release that wrote it.
 
 ### Single-host backup and restore {#single-host-backup}
 
@@ -181,7 +181,7 @@ For a logical database copy during the stopped-write window, leave only the data
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
-  pg_dump -U agents_api agents_api > oac-backup.sql
+  pg_dump -U oac oac > oac-backup.sql
 ```
 
 A logical dump still needs the matching secrets, state, independent filesystems and required node resources. Docker Desktop's **Volumes** export is a way to copy a stopped data volume; it does not coordinate these other components.
@@ -195,53 +195,6 @@ Restore matching secrets and database state, the complete independent filesystem
 The cold released baseline resumes only qualified native history after new compute admission. A backup containing retained checkpoints also depends on the matching native runtime, node identity, provider store and external filesystem identities. File-level restore can change inode identity and prevent strict checkpoint restore even when file bytes match. This procedure does not promise portable memory snapshots or restoration onto an arbitrary replacement node; preserve unresolved ownership rather than substituting a new sandbox.
 
 Start the database, Core and node services only after their restored dependencies are complete; keep ingress restricted while checking them. In an isolated rehearsal, verify a retained Session's files and native continuation on fresh compute where qualified, confirm that deleted objects cannot be reopened, and check that no old writer can access the restored namespace. Record the results before relying on the backup for recovery.
-
-## Upgrade {#upgrade}
-
-An installation of v0.0.10 or later upgrades in place to a newer release. It keeps its database, data volume, `.env`, secrets, Core key, installation ID and the entries you added to `compose.override.yaml`. An older installation can't upgrade: install the new release into a new directory. Downgrades are refused.
-
-> [!IMPORTANT]
-> Before you upgrade, read the target release's notes for [protocol changes](#protocol-changes) and the actions they require, and [back up](#single-host-backup) the installation. The upgrade takes no backup, and after it the backup is the only way back to the previous release.
-
-1. Run the target release's installer with `--upgrade` and the installation directory:
-
-   ```sh
-   curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
-   ```
-
-   `--version TAG` selects a release other than the latest. On Windows, run `& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --upgrade --install-dir "$HOME\.oac\core"`. For an installation from a [source bundle](../development.md#install-a-checkout-without-publishing-a-release), run the new bundle's installer: `python3 <bundle>/install.py --install-dir <dir> --upgrade`.
-2. When you are ready, [apply the release's Runtime](#runtime-after-an-upgrade).
-
-Without `--upgrade`, another release's installer changes nothing and stops with `This installation runs release <old>; this installer is <new>. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.` (`install.py` says `this bundle is`). The installed release's installer resumes the installation, with or without the flag. Installation and mutating `oac` commands share the [installation lock](../configuration.md#installation-directory); if another command is running, wait for it to finish before retrying.
-
-### What the upgrade does
-
-The installer downloads the release's `compose.yaml` and pulls missing images. Before it replaces any file, it runs the new release's configuration check and initialization with the installation's `.env` and Compose overrides. Initialization upgrades the data volume, or refuses a downgrade. The installer then puts the new `compose.yaml` and `oac` in place and starts the services, recreating those that changed; Core migrates the database as it starts. [Deployment](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation) describes each step. The restart interrupts work as any [Core restart](#stop-and-restart) does; nodes and sandboxes keep running and reconnect.
-
-On success the installer prints the console address, `oac core-key --show` in place of the key, and the line `Upgraded from <old> to <new>. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.`
-
-If a check fails, the installer prints `Upgrade stopped; the running services are unchanged` with Docker's output, and the previous release keeps serving. Fix the cause and rerun the command. Once initialization has upgraded the data volume, the previous release can no longer start on it: if a later step fails, for example with `startup failed; data retained, rerun the installer`, rerun the same command, which repeats every step safely, or [roll back](#roll-back).
-
-### Runtime after an upgrade
-
-The upgrade leaves the sandbox configuration unchanged: nodes keep serving the saved Runtime, and new Sessions use it. To move to the release's Runtime, open **Settings** → **Sandbox and scheduling**, choose **Use this installation's Runtime** in the **Runtime** row, review the change and choose **Save configuration**. Nodes then prepare the new generation, and existing sandboxes keep theirs until they are released; see [Change the sandbox configuration](./nodes.md#change-the-sandbox-configuration). An E2B deployment has no **Runtime** row; its template keeps working unless the release changes the Core–Runtime protocol.
-
-### Protocol changes
-
-Three connections require the same protocol version on both sides: Core and its nodes, a node and its microsandbox helper, and Core and the Runtime. The upgrade changes no node host and no running sandbox. A release that changes one of these protocols says so in its release notes and names which of these actions it requires:
-
-- reinstall each node: [remove it](./nodes.md#remove-a-node), clean up the host, then add the host again with **Add node**. Core refuses to remove a node that still holds sandboxes, so archive those Sessions before you upgrade;
-- apply the release's Runtime right after the upgrade; sandboxes on earlier generations stop working;
-- [build a new E2B template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template) and select it in [the sandbox configuration](./nodes.md#change-the-sandbox-configuration);
-- reconnect [self-hosted machines](./self-hosted.md#reconnect-an-existing-session).
-
-### Downgrades
-
-Initialization refuses a release that is not newer than the installed one, with `This installation runs release <installed> (<date>); this release, <own> (<date>), is not newer. Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade.` The installer reports it as a stopped upgrade, and the installation keeps running. Core refuses a database that a newer release migrated, with `Agents API database schema version N is newer than this Core supports (M). Downgrades are not supported: run the release that upgraded this database or a newer one, or restore the backup taken before the upgrade.` To return to an earlier release, [roll back](#roll-back).
-
-### Roll back
-
-A rollback restores the backup taken before the upgrade: stop the services, [restore](#restore-and-rehearse) the data volume and the installation directory, then start them. Restore before you apply the release's Runtime if you can: once nodes have prepared it, the restored database doesn't know their new generation, so also [remove every node](./nodes.md#remove-a-node) and add it again. Sessions and data created after the backup are lost.
 
 ## Uninstall
 

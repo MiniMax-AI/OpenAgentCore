@@ -13,8 +13,8 @@ For a failing request or Turn, start with Web's **Monitor → Request log** and 
 | `Web port unavailable; choose --web-port` | Another program holds that port. Stop it, or choose another `--web-port`. The installer does not move to a different port. When the message names a Compose project `oac-…`, an earlier installation whose directory is gone still runs: remove it as in [Uninstall](./operations.md#uninstall) |
 | `incomplete installation: preserve … and choose another directory` | Preserve the directory and choose another `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` has a value Core rejects. The message names the variable and not the value. Fix `.env` and run `oac apply` again |
-| `data volume check failed; no service was changed` | Initialization refused the data volume; the message names the cause, such as a volume a newer release upgraded. See [downgrades](./operations.md#downgrades) |
-| `This installation runs release …` | The installer or initialization belongs to another release. To move to a newer one, follow [Upgrade](./operations.md#upgrade); downgrades are refused |
+| `data volume check failed; no service was changed` | Initialization refused the data volume; the message names the cause, such as a volume that belongs to another release (`existing data belongs to release …`). To use this release, [uninstall](./operations.md#uninstall) the installation, which deletes its data, then install again |
+| `This installation runs release …` | The installer or initialization belongs to another release. To use this release, [uninstall](./operations.md#uninstall) the installation, which deletes its data, then install again |
 | `This account cannot use Docker` | Add the account to the `docker` group and log in again, or use Docker Desktop or rootless Docker. Do not run the installer with `sudo` |
 | `This account cannot access …` | An earlier run with `sudo` left files owned by root. Run the `sudo chown` command the message prints, then rerun as your own account |
 | `Docker Compose 2.26 or newer is required` | Install or update the Docker Compose plugin |
@@ -54,7 +54,7 @@ A registered node that can't connect to Core says why in its [log](./nodes.md#lo
 | Another status, such as `HTTP 404 on the WebSocket upgrade` or `HTTP 502 …` | The reverse proxy doesn't route `/api/v1` to Core or doesn't preserve Host, or Core is not running |
 | `dial tcp: …`, such as `connection refused`, `i/o timeout` or `no such host` | The host can't reach Core at the public URL. Check DNS and firewalls; the node service uses the [proxy](./nodes.md#download-through-a-proxy) the installer ran with, so rerun the command with the right settings if the proxy changed |
 | `tls: …`, or `TLS certificate expired or not yet valid` | The host doesn't trust Core's certificate, or the public URL uses `https` on a port that doesn't serve it |
-| `Core did not accept the node: …` | Core closed the connection after the node introduced itself. After a Core upgrade, apply the release's [protocol changes](./operations.md#protocol-changes); otherwise read Core's log |
+| `Core did not accept the node: …` | Core closed the connection after the node introduced itself. Read Core's log |
 
 ### Installer messages
 
@@ -63,7 +63,7 @@ A registered node that can't connect to Core says why in its [log](./nodes.md#lo
 | `The enrollment command expired or was already used` | Generate a new command in Web and run it within an hour |
 | `Core rejected the node configuration read (HTTP …)` | Check the Core URL and the reverse proxy in front of it, then rerun |
 | `Not enough disk space under …` or `The disk is full` | Free the space it names, then rerun; the download resumes |
-| This host's node program differs from the one this console serves | Core was upgraded after the node was added. Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |
+| This host's node program differs from the one this console serves | Core was reinstalled after the node was added. Choose **Remove node**, uninstall it on the host, then add it again with **Add node** |
 | Another node installation is running, or this node is preparing a new sandbox configuration | Retry once **Nodes** no longer shows **Preparing target** |
 | A sandbox provider check failed before registering, such as `This host lacks a capability …` | Fix what it names (see [Readiness codes](./nodes.md#readiness-codes)) and rerun; the token was not used |
 | Core's public URL changed after this command was generated | Generate a new command in Web and run it |

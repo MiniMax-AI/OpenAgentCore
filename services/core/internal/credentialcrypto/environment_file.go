@@ -42,5 +42,5 @@ func environmentFileData(binding EnvironmentFileBinding) ([]byte, error) {
 		Domain  string                 `json:"domain"`
 		Version byte                   `json:"version"`
 		Binding EnvironmentFileBinding `json:"binding"`
-	}{"parsar.agents-api.environment-file", formatVersion, binding})
+	}{"oac.environment-file", formatVersion, binding})
 }

@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: de599bae1dc932f9f1c25f06c2b67bee8b90d2287ebd9e45157141128ac9fec1
+source_hash: 432e372bf9bb4729edf27df889d4e45526c87fc39b9baa43c9b0e16d3fa54036
 ---
 
 本页是安装程序参数的参考，并说明如何用默认方式以外的方式安装：在已有反向代理之后、在托管平台上使用 Docker Compose，或在无法访问互联网的主机上。[默认安装](./install.md)无需任何选项。
@@ -29,9 +29,8 @@ Windows 上 `irm … | iex` 无法传参，默认执行策略也会拦截下载�
 | `--public-url` | 由主机的私网地址推导，或 `http://localhost:<web port>`；参阅[选择公开 URL](./public-address.md#choose-the-public-url) | `OAC_PUBLIC_URL` | 应用、节点和执行器使用的源地址 |
 | `--host` | `0.0.0.0` | `OAC_HOST` | Web 绑定的地址；参阅[监听器与访问](./public-address.md#listeners-and-access) |
 | `--web-port` | `8080` | `OAC_WEB_PORT` | Web 的主机端口；参阅[端口](./public-address.md#ports) |
-| `--install-dir` | `~/.oac/core` | | 绝对安装目录。新安装使用空目录或不存在的目录；[重试](./install.md#install)或升级时使用已有安装目录 |
+| `--install-dir` | `~/.oac/core` | | 绝对安装目录。新安装使用空目录或不存在的目录；[重试](./install.md#install)时使用已有安装目录 |
 | `--version` | `latest` | | 已发布的版本标签 |
-| `--upgrade` | | | 将 `--install-dir` 中的已有安装升级到安装程序所属的版本；参阅[升级](./operations.md#upgrade) |
 
 映射到 `.env` 的参数只会写入一次。安装完成后，编辑该文件并运行 `oac apply`。对已有安装重新运行安装程序时，这些参数会被忽略，安装程序会指出与已保存设置不同的参数，并以已保存的设置启动。
 
@@ -79,7 +78,7 @@ docker compose exec web oac-web core-key
 
 登录后，[选择沙箱提供商](./sandbox-backends.md)，并按[添加和管理节点](./nodes.md)添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
 
-使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，一并备份数据卷和配置。升级时先备份，再使用相同的项目、环境和数据卷部署新版本的 `compose.yaml`：初始化会升级数据卷，Core 会迁移数据库。[升级](./operations.md#upgrade)说明会保留哪些内容，以及为何拒绝较旧的版本。
+使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，一并备份数据卷和配置。要换到另一个版本，请连同数据卷一起移除该栈（`docker compose down --volumes`），然后部署新版本。
 
 ## 离线主机 {#offline-hosts}
 
@@ -99,11 +98,10 @@ python3 oac-<commit>-linux-amd64/install.py --install-dir "$HOME/.oac/local" --h
 | `--host` | `127.0.0.1` | Web 绑定的地址。与 `oac install` 不同，`install.py` 默认使用回环地址：需要从其他机器访问时传入 `0.0.0.0` |
 | `--web-port` | `8080` | Web 的主机端口 |
 | `--public-url` | | 浏览器和节点使用的源地址。新安装必须提供 |
-| `--upgrade` | | 将已有安装升级到此安装包所属的版本；参阅[升级](./operations.md#upgrade) |
 
 将 `YOUR_CORE_HOST` 替换为浏览器和沙箱节点都能访问的地址，或在反向代理之后使用你的 HTTPS 源地址。新安装会打印 Core 密钥；重新运行则打印显示它的命令。该安装是标准的 Compose 安装，外加一个只读的 `node-payload` 目录，其中保存安装包的公开节点制品。请为解压后的安装包和已安装的副本都预留磁盘空间。
 
-在其安装目录上重新运行同一安装包的 `install.py`，会以已保存的设置继续安装。来自其他提交的安装包会拒绝已有安装，除非传入 `--upgrade`。如果新安装在启动服务之前失败，它会保持安装目录原样；修复原因后重新运行同一命令。
+在其安装目录上重新运行同一安装包的 `install.py`，会以已保存的设置继续安装。来自其他提交的安装包会拒绝已有安装。如果新安装在启动服务之前失败，它会保持安装目录原样；修复原因后重新运行同一命令。
 
 启动失败或安装中断时，使用已保存的配置，而不是重新安装：
 
