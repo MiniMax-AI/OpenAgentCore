@@ -65,7 +65,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 	} {
 		environment := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
 		mutate(environment)
-		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}, ""); err == nil {
+		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}); err == nil {
 			t.Fatal("unsupported declaration accepted")
 		}
 	}
@@ -91,17 +91,18 @@ func TestEnvironmentMCPObservationsUseInstalledDeclarations(t *testing.T) {
 }
 
 // Native starts a stdio server in the directory of its own process, so the
-// declared cwd must be that workspace directory.
+// declared cwd must be the declared workspace directory.
 func TestPublicMCPStdioStartsInTheWorkspaceDirectory(t *testing.T) {
 	servers := []proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "local",
-		Stdio: &proto.MCPStdio{Command: "run", Cwd: "/work", EnvVars: []string{"TOKEN"}}}}
-	req := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{}, MCPHTTPServers: &servers}
-	projected, _, err := prepareRuntimeMCP(req, "/work")
+		Stdio: &proto.MCPStdio{Command: "run", Cwd: "/workspace", EnvVars: []string{"TOKEN"}}}}
+	req := proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{WorkspaceDirectory: "/workspace", WorkspaceRoot: "/environment/workspace"}, MCPHTTPServers: &servers}
+	projected, _, err := prepareRuntimeMCP(req)
 	raw, _ := json.Marshal(projected)
 	if err != nil || string(raw) != `[{"server_label":"local","allowed_tools":null,"command":"run","args":[],"declared":true}]` {
 		t.Fatal("public stdio server was not projected", string(raw), err)
 	}
-	if _, _, err := prepareRuntimeMCP(req, "/elsewhere"); err == nil {
+	req.LocalEnvironment.WorkspaceDirectory = "/elsewhere"
+	if _, _, err := prepareRuntimeMCP(req); err == nil {
 		t.Fatal("stdio cwd outside the workspace directory was accepted")
 	}
 }

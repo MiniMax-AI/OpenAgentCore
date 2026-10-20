@@ -57,7 +57,7 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 		profile.Skills = req.LocalEnvironment.Skills
 		profile.CapabilityRoot = req.LocalEnvironment.CapabilityRoot
 	}
-	servers, credentials, err := prepareRuntimeMCP(req, workspaceCwd(config.Workspace))
+	servers, credentials, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return nil, nil, err
 	}
