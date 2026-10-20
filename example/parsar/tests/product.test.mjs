@@ -302,7 +302,7 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
 test("compatibility validation precedes execution", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
-  const { api, put, agent, input } = await setup(store, () => {
+  const { api, put, input } = await setup(store, () => {
     throw new Error("must not execute");
   });
   const runtime = await put("runtimes", { name: "Text", environment: "none" });

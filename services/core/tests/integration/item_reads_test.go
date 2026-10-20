@@ -184,7 +184,7 @@ func TestReceiptOnlyTextRecoversWithoutInventingCompletion(t *testing.T) {
 	}
 }
 
-func TestLegacyFailureRetainsPartialAnswerAcrossRecovery(t *testing.T) {
+func TestFailedTurnRetainsPartialAnswerAcrossRecovery(t *testing.T) {
 	ctx := context.Background()
 	s, _ := testStore(t)
 	journal := executionOwner(t, s).Sessions

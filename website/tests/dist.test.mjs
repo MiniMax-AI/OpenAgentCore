@@ -1,6 +1,6 @@
 // Checks a finished build: run `pnpm build` first. Every docs.json page has
-// an HTML page and a raw Markdown copy, legacy paths redirect, both landing
-// pages exist and llms.txt lists every page.
+// an HTML page and a raw Markdown copy, both landing pages exist and llms.txt
+// lists every page.
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'

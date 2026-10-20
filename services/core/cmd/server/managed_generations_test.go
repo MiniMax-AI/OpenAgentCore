@@ -109,6 +109,7 @@ func TestE2BReplacementRequiresCommittedOwnershipAnchor(t *testing.T) {
 		want                                                                   error
 		reset                                                                  bool
 	}{
+		{name: "committed template outside its key's team", committedKey: "team-a", committedTemplate: "public-b", candidateKey: "team-b", candidateTemplate: "public-b", reset: true},
 		{name: "revoked committed key", committedKey: "revoked", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a", reset: true},
 		{name: "unknown committed ownership", committedKey: "unconfirmed", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a", want: sandbox.ErrConfigurationUnconfirmed},
 		{name: "proven different team", committedKey: "team-a", committedTemplate: "owned-a", candidateKey: "team-b", candidateTemplate: "public-b", want: sandbox.ErrCredentialOwnership},

@@ -45,7 +45,7 @@ sequenceDiagram
 - The first heartbeat is sent at once, then at the interval that bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
 - Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
-Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core fences the owner lease and evicts the old Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
+Each physical connection has fresh routing, admission handles and transfer state. A newer connection for the same device replaces the previous one: Core evicts the old Run routes, and the new connection inherits none of them. A valid credential and connection are never authority to choose another Session or Environment binding.
 
 ## Versioning
 

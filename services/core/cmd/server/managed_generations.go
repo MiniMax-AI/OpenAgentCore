@@ -131,9 +131,10 @@ func (s *managedSetup) routeGenerations(candidate execution.PreparedRuntimeDeplo
 			return &deployment.ResetRequiredError{CurrentProvider: current.Provider, RequestedProvider: setup.Provider}
 		}
 		if err := verify(current, nil); err != nil {
-			if errors.Is(err, sandbox.ErrCredentialRejected) {
-				// A revoked committed key cannot anchor ownership. This says nothing
-				// about the candidate key's validity.
+			if errors.Is(err, sandbox.ErrCredentialRejected) || errors.Is(err, sandbox.ErrCredentialOwnership) {
+				// A revoked committed key, or a committed template its own key no
+				// longer owns, cannot anchor ownership. This says nothing about the
+				// candidate key's validity.
 				return &deployment.ResetRequiredError{CurrentProvider: setup.Provider, RequestedProvider: setup.Provider}
 			}
 			return err
