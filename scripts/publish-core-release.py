@@ -269,7 +269,7 @@ def publish(assets, repository, revision, tag, mode):
     if catalog["version"] != revision or not catalog["artifacts"]:
         raise ValueError("Native installer catalog does not match the release")
     for name, entry in catalog["artifacts"].items():
-        if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)(-[a-z]+)?", name):
+        if not distribution.NATIVE_ARTIFACT.fullmatch(name):
             raise ValueError("Invalid native installer artifact")
         path = assets / f"oac-native-{revision}-{name}.tar.gz"
         if (distribution.sha256(path) != entry["sha256"]

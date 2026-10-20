@@ -18,7 +18,7 @@ function Get-NativeFile([string]$Uri, [string]$Destination) {
     try { Invoke-WebRequest -UseBasicParsing -Uri $Uri -OutFile $Destination -ErrorAction Stop; return }
     catch {
       if ($_.Exception.Response -and [int]$_.Exception.Response.StatusCode -eq 404) { throw 'This Core has no qualified installer for this platform.' }
-      if ($attempt -eq 3) { throw 'Installer download failed. Check the network to Core and GitHub (set HTTPS_PROXY if a proxy is required), then rerun the command.' }
+      if ($attempt -eq 3) { throw 'Installer download failed. Check the network to Core and GitHub (and the Windows proxy settings), then rerun the command.' }
       Write-Host "Download interrupted; retrying ($attempt/2)..."
       Start-Sleep -Seconds $attempt
     }

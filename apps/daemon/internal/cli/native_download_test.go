@@ -8,7 +8,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -124,8 +126,10 @@ func writeBundle(t *testing.T, bundle string, components map[string]nativeCompon
 func TestNativeInstallDownloadsOnlySelectedComponentsOnceAndResumes(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", home)
+	oldDelay, oldProbe := nativeRetryDelay, probeNativeInstallation
 	nativeRetryDelay = time.Millisecond
 	probeNativeInstallation = func(context.Context, string, []string) error { return nil }
+	t.Cleanup(func() { nativeRetryDelay, probeNativeInstallation = oldDelay, oldProbe })
 	core, _ := newFakeCore(t, t.TempDir())
 	components := map[string]nativeComponent{}
 	for _, name := range []string{"node", "codex", "claude"} {
@@ -194,8 +198,20 @@ func TestNativeInstallFromDistributionNamesMissingArchive(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := runInstall(rc, args)
-	want := fmt.Sprintf("oac-native-%s-%s-%s-codex.tar.gz", Version, runtime.GOOS, runtime.GOARCH)
+	want := fmt.Sprintf("extract %s-%s-codex.tar.gz", runtime.GOOS, runtime.GOARCH)
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("expected an error naming %s, got %v", want, err)
+	}
+}
+
+func TestNativeDownloadFailsClearlyWhenCoreStopsAnswering(t *testing.T) {
+	oldStall, oldDelay := nativeStall, nativeRetryDelay
+	nativeStall, nativeRetryDelay = 50*time.Millisecond, time.Millisecond
+	t.Cleanup(func() { nativeStall, nativeRetryDelay = oldStall, oldDelay })
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	t.Cleanup(func() { close(release); server.Close() })
+	if _, err := fetchNativeChecksum(context.Background(), io.Discard, server.URL+"/linux-amd64-codex.sha256"); !errors.Is(err, errNativeStall) {
+		t.Fatal(err)
 	}
 }

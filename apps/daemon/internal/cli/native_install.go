@@ -3,8 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -145,6 +143,10 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	if err = cleanNativeTemporaryFiles(o.Directory); err != nil {
 		return err
 	}
+	// Download before claiming the credential, so a failed download leaves the Session's credential unclaimed.
+	if err = obtainNativeComponents(ctx, rc.stdout, o, selected); err != nil {
+		return err
+	}
 	if o.OnboardURL != "" {
 		if runtimefs.ValidateLocalPath(o.Workspace) != nil {
 			return errors.New("install: Session workspace is invalid on this platform")
@@ -184,9 +186,6 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 		}
 	}
 	slices.Sort(all)
-	if err = obtainNativeComponents(ctx, rc.stdout, o, selected); err != nil {
-		return err
-	}
 	// Verify existing components before adding any new one; never repair or
 	// upgrade an installed dependency as a side effect of adding a Harness.
 	if len(previous.Harnesses) > 0 {
@@ -250,21 +249,11 @@ func installNativeBinary(ctx context.Context, root string, existing bool) error 
 		return err
 	}
 	dest := filepath.Join(dir, nativeExe("oac-daemon"))
-	digest := func(name string) (string, error) {
-		f, e := os.Open(name)
-		if e != nil {
-			return "", e
-		}
-		defer f.Close()
-		h := sha256.New()
-		_, e = nativeCopy(ctx, h, f)
-		return hex.EncodeToString(h.Sum(nil)), e
-	}
-	want, err := digest(exe)
+	want, err := nativeFileDigest(ctx, exe)
 	if err != nil {
 		return err
 	}
-	if got, e := digest(dest); e == nil {
+	if got, e := nativeFileDigest(ctx, dest); e == nil {
 		if got != want {
 			return errors.New("install: existing daemon binary differs; in-place upgrades are unsupported")
 		}

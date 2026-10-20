@@ -8,7 +8,7 @@ unset OAC_INSTALL_GRANT
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 case "$(uname -s)" in Linux) os=linux;; Darwin) os=darwin;; *) fail 'Unsupported operating system.';; esac
 case "$(uname -m)" in x86_64) arch=amd64;; arm64|aarch64) arch=arm64;; *) fail 'Unsupported processor architecture.';; esac
-for tool in curl tar; do command -v "$tool" >/dev/null || fail "Required command missing: $tool"; done
+for tool in curl tar gzip; do command -v "$tool" >/dev/null || fail "Required command missing: $tool"; done
 if command -v sha256sum >/dev/null; then hash=(sha256sum); else hash=(shasum -a 256); command -v shasum >/dev/null || fail 'Required command missing: shasum'; fi
 umask 077
 root=${OAC_RUNTIME_HOME:-${HOME:?HOME must be set}/.oac}
@@ -18,6 +18,8 @@ root=$(cd "$root" && pwd -P)
 cache=$root/native-download
 [ ! -L "$cache" ] || fail 'Native download directory must not be a symbolic link.'
 mkdir -p "$cache"
+[ -d "$cache" ] && [ -O "$cache" ] || fail 'Native download directory must belong to the current account.'
+chmod 700 "$cache"
 # The installer downloads the Harness archives into this directory and extracts them beside the executable.
 work=$(mktemp -d "$cache/bundle.XXXXXX") || fail 'Cannot write the native download directory.'
 active=

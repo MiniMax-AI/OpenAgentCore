@@ -37,7 +37,7 @@ The machine needs:
 - Python and pip when the Session's packages need them;
 - any system packages your setup needs. The daemon never runs apt, sudo or another elevation command, so install them through the host's normal administration.
 
-No administrator privileges or Docker are needed. The Unix download command also uses `curl`, `tar` and a SHA-256 tool. Windows needs its system `tar.exe`; the command checks for it before downloading. The Runtime home must allow executable files to run. On a Unix `noexec` mount, choose another absolute directory with `OAC_RUNTIME_HOME` before running the command.
+No administrator privileges or Docker are needed. The Unix download command also uses `curl`, `tar`, `gzip` and a SHA-256 tool. Windows needs its system `tar.exe`; the command checks for it before downloading. The Runtime home must allow executable files to run. On a Unix `noexec` mount, choose another absolute directory with `OAC_RUNTIME_HOME` before running the command.
 
 ## Connect a machine
 

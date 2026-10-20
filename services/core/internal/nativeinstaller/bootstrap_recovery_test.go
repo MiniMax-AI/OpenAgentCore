@@ -196,3 +196,25 @@ func TestBootstrapGivesGrantOnlyToInstaller(t *testing.T) {
 		t.Fatal("a download tool received the grant")
 	}
 }
+
+func TestWindowsBootstrapChecksArchiveToolBeforeDownload(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows archive prerequisite")
+	}
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.WriteHeader(500) }))
+	defer server.Close()
+	home := filepath.Join(t.TempDir(), "runtime")
+	command := bootstrapCommand(t, server.URL, home)
+	quote := func(value string) string { return "'" + strings.ReplaceAll(value, "'", "''") + "'" }
+	// Keep the real SystemRoot while PowerShell itself loads.
+	command.Args = []string{command.Path, "-NoProfile", "-NonInteractive", "-Command",
+		"$env:SystemRoot = " + quote(t.TempDir()) + "; & './assets/bootstrap.ps1' -Base " + quote(server.URL) + ""}
+	output, err := command.CombinedOutput()
+	if err == nil || !bytes.Contains(output, []byte("tar.exe is required")) || requests.Load() != 0 {
+		t.Fatalf("%v: %s", err, output)
+	}
+	if _, err := os.Stat(home); !os.IsNotExist(err) {
+		t.Fatal("home created before prerequisite check")
+	}
+}

@@ -94,10 +94,12 @@ try {
   assert.equal(saved.executor_token, secret, 'Secret must survive a lost response');
   const script = resolve(`services/core/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
   const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base] : [script, base];
-  const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], '\n\n');
+  // Select every Harness of this platform so each Harness archive passes the installer's extraction and readiness checks.
+  const harnesses = windows ? ['codex', 'claude'] : ['codex', 'claude', 'minimax'];
+  const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], harnesses.join(',') + '\n\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);
   assert.match(result.output, /Daemon connection: connected/);
-  assert.deepEqual([...downloaded].sort(), [platform, `${platform}-codex`, `${platform}-node`], 'Only the base, Node and the Session Harness may be downloaded');
+  assert.deepEqual([...downloaded].sort(), [platform, ...['node', ...harnesses].map(name => `${platform}-${name}`)].sort(), 'Only the base, Node and the selected Harnesses may be downloaded');
   assert.match(result.output, /Model configuration: not checked/);
   assert.equal(connections, 1);
   const repeat = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation, '--non-interactive', '--harness', 'codex']);

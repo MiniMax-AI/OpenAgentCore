@@ -136,7 +136,11 @@ jobs:
           node scripts/build-native-installer-ci.mjs
       - name: Bootstrap, authenticate, install and connect natively
         id: onboarding
-        run: node scripts/native-onboarding-smoke.mjs
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
+          fi
+          node scripts/native-onboarding-smoke.mjs
       - name: Verify native Harness protocols without model requests
         id: protocol
         run: |

@@ -1,7 +1,7 @@
 ---
 title: "运行自托管 Session"
 source: docs/getting-started/self-hosted.md
-source_hash: dd09af89f5c98bb1b0bf3dfef5f85c9c9068ef3d490b2e1f03fd7691b43d0fb0
+source_hash: 3d3ec2e1374094c63bb7946440c50654bc5265bd0ef3808ecefbc0b014ee461f
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行，例如工作站、虚拟机或容器，而不是 Core 管理的沙箱。本指南面向用 `oac-daemon` 连接此类机器并保持其运行的应用开发者。
@@ -39,7 +39,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 - Session 的软件包需要时，安装 Python 和 pip；
 - 环境设置所需的系统软件包。守护进程不运行 apt、sudo 或其他提权命令，请通过主机的常规管理方式安装。
 
-不需要管理员权限或 Docker。Unix 下载命令还使用 `curl`、`tar` 和 SHA-256 工具。Windows 需要系统自带的 `tar.exe`，命令会在下载前检查。Runtime 主目录必须允许执行文件。如果 Unix 挂载点设为 `noexec`，请先用 `OAC_RUNTIME_HOME` 指定另一个允许执行的绝对目录，再运行命令。
+不需要管理员权限或 Docker。Unix 下载命令还使用 `curl`、`tar`、`gzip` 和 SHA-256 工具。Windows 需要系统自带的 `tar.exe`，命令会在下载前检查。Runtime 主目录必须允许执行文件。如果 Unix 挂载点设为 `noexec`，请先用 `OAC_RUNTIME_HOME` 指定另一个允许执行的绝对目录，再运行命令。
 
 ## 连接机器 {#connect-a-machine}
 

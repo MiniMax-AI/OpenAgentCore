@@ -21,15 +21,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
-const (
-	nativeStall    = 60 * time.Second
-	nativeAttempts = 5
-)
+const nativeAttempts = 5
 
 var (
+	nativeStall        = 60 * time.Second
 	nativeRetryDelay   = time.Second
 	nativeDigest       = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	errNativeRedirect  = errors.New("install: a download redirect must use HTTPS without credentials")
+	errNativeStall     = errors.New("install: download stalled (no data for 60 seconds)")
 	errNativeNoArchive = errors.New("install: this Core has no qualified archive for this component and platform")
 )
 
@@ -61,7 +60,7 @@ func obtainNativeComponents(ctx context.Context, out io.Writer, o *nativeInstall
 		return nil
 	}
 	if o.OnboardURL == "" {
-		return fmt.Errorf("install: component %s is missing from %s; extract oac-native-%s-%s-%s-%s.tar.gz into it and retry", missing[0], o.Bundle, Version, runtime.GOOS, runtime.GOARCH, missing[0])
+		return fmt.Errorf("install: component %s is missing from %s; extract %s-%s-%s.tar.gz into it and retry", missing[0], o.Bundle, runtime.GOOS, runtime.GOARCH, missing[0])
 	}
 	return fetchNativeComponents(ctx, out, o.OnboardURL, o.Bundle, missing)
 }
@@ -83,9 +82,9 @@ func fetchNativeComponents(ctx context.Context, out io.Writer, onboardURL, bundl
 		return err
 	}
 	defer held.Close()
-	unlock, err := lockNativeDownloads(ctx, out, held)
+	unlock, err := runtimefs.LockDirectory(held)
 	if err != nil {
-		return err
+		return errors.New("install: another native download is running; wait for it to finish and retry")
 	}
 	defer unlock()
 	pruneNativeDownloads(cache)
@@ -104,22 +103,6 @@ func fetchNativeComponents(ctx context.Context, out io.Writer, onboardURL, bundl
 		}
 	}
 	return nil
-}
-
-func lockNativeDownloads(ctx context.Context, out io.Writer, held *os.Root) (func(), error) {
-	for waiting := false; ; waiting = true {
-		if unlock, err := runtimefs.LockDirectory(held); err == nil {
-			return unlock, nil
-		}
-		if !waiting {
-			fmt.Fprintln(out, "Waiting for another native download to finish...")
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(500 * time.Millisecond):
-		}
-	}
 }
 
 // pruneNativeDownloads keeps the current version and recent distribution directories of running
@@ -178,15 +161,17 @@ func fetchNativeArchive(ctx context.Context, out io.Writer, url, dir, file strin
 func fetchNativeChecksum(ctx context.Context, out io.Writer, url string) (string, error) {
 	var digest string
 	err := retryNativeDownload(ctx, out, func() (bool, error) {
+		ctx, cancel := context.WithTimeoutCause(ctx, nativeStall, errNativeStall)
+		defer cancel()
 		response, retry, err := getNative(ctx, url, 0)
 		if err != nil {
-			return retry, err
+			return retry, stalled(ctx, err)
 		}
 		defer response.Body.Close()
 		raw, err := io.ReadAll(io.LimitReader(response.Body, 1025))
 		digest = strings.TrimSpace(string(raw))
 		if err != nil {
-			return true, err
+			return true, stalled(ctx, err)
 		}
 		if !nativeDigest.MatchString(digest) {
 			return false, errors.New("install: Core returned an invalid archive checksum")
@@ -253,13 +238,13 @@ func downloadNativeFile(ctx context.Context, out io.Writer, url, dest, label str
 	if info, err := os.Stat(dest); err == nil {
 		offset = info.Size()
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	stall := time.AfterFunc(nativeStall, cancel)
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	stall := time.AfterFunc(nativeStall, func() { cancel(errNativeStall) })
 	defer stall.Stop()
 	response, retry, err := getNative(ctx, url, offset)
 	if err != nil {
-		return retry, err
+		return retry, stalled(ctx, err)
 	}
 	defer response.Body.Close()
 	flags := os.O_WRONLY | os.O_CREATE | os.O_APPEND
@@ -286,7 +271,15 @@ func downloadNativeFile(ctx context.Context, out io.Writer, url, dest, label str
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
-	return err != nil, err
+	return err != nil, stalled(ctx, err)
+}
+
+// stalled reports a stall instead of the cancellation it caused.
+func stalled(ctx context.Context, err error) error {
+	if err != nil && errors.Is(context.Cause(ctx), errNativeStall) {
+		return errNativeStall
+	}
+	return err
 }
 
 type nativeBody struct {
