@@ -127,6 +127,11 @@ type AllocationTx interface {
 	LoadActivity(current Allocation) (Activity, error)
 	// LoadSuspensionDemand locks the deployment and reads demand and capacity.
 	LoadSuspensionDemand(current Allocation) (SuspensionDemand, error)
+	// OldestIdleCheckpoint reports whether current has the earliest retention
+	// deadline among its node's idle suspended allocations that can be retained.
+	OldestIdleCheckpoint(current Allocation) (bool, error)
+	// ExpireCheckpoint ends the suspended allocation's retention now.
+	ExpireCheckpoint(current Allocation) (Allocation, error)
 	// PlacementDemand reads one qualified page; next advances past all inspected
 	// rows, including ineligible receipts. An empty next.EnvironmentID ends the scan.
 	PlacementDemand(after PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error)

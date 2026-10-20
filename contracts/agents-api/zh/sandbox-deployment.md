@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: d33d04510af1786ec0682c4853c961df54e0ce98800674da7735f0797cb55dce
+source_hash: cd4ce6e40836fbf598d368b1b448e13e2f853f9ad111ef122292d10d7fb1bce9
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商、每个沙箱的资源以及不可变的 Runtime 发行版。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源或 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -128,7 +128,7 @@ POST 会在持久保存候选配置之前对其进行验证，并且不会创建
 
 `PATCH /core/v1/sandbox/deployment` 接受 `{"idle_seconds": 300}`。`idle_seconds` 是必填整数，范围为 30–86400 秒，默认为 300。该设置保存在 Core 的数据库中。只有已配置且声明 checkpoint 支持的提供商可修改；未配置、不支持或正在重置的部署拒绝写入。成功返回当前部署视图，`suspension.idle_seconds` 反映已保存的值。
 
-变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可提前挂起空闲的分配。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级策略；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
+变更从下一轮生命周期检查起作用于现有和新建的运行中分配，不重启 Core、不推进配置代次，也不重新部署节点。已经开始的挂起不撤销；现有快照和 24 小时快照保留期不变。[容量压力回收](../../../docs/zh/sandbox-provider.md#suspension)仍可提前挂起空闲的分配，并在 retained slot 已满时[提前结束符合条件的检查点的保留期](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)。Web 在 **设置** → **沙箱与调度** → **自动挂起** 管理此部署级策略；各节点的容量上限仍属于节点，在 **节点** 中通过 **编辑节点** 编辑。
 
 ## 代次所有权与推出 {#generation-ownership-and-rollout}
 
