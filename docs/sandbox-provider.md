@@ -240,7 +240,7 @@ sequenceDiagram
 
 ### Suspension
 
-Core suspends an allocation after initialization completes, when no root or Subagent Turn is queued, in progress or waiting, no input or file operation is pending, and real activity has been idle for the policy's idle timeout. A Session need not have run a Turn. Capacity pressure can suspend an already idle node allocation earlier, after the inactivity grace in [Timeouts and limits](#timeouts-and-limits), when compatible waiting demand exists. It never interrupts an active Turn or releases capacity before the ordinary quiesce, capture and source-stop proofs complete. If suspension cannot make capacity usable, the waiting request keeps its original deadline. When retained slots are full, pressure can instead [release an idle checkpoint](#cold-replacement-after-checkpoint-retention).
+Core suspends an allocation after initialization completes, when no root or Subagent Turn is queued, in progress or waiting, no input or file operation is pending, and real activity has been idle for the policy's idle timeout. A Session need not have run a Turn. Capacity pressure can suspend an already idle node allocation earlier, after the inactivity grace in [Timeouts and limits](#timeouts-and-limits), when compatible waiting demand exists. It never interrupts an active Turn or releases capacity before the ordinary quiesce, capture and source-stop proofs complete. If suspension cannot make capacity usable, the waiting request keeps its original deadline. When retained slots are full, pressure can [release an idle checkpoint](#cold-replacement-after-checkpoint-retention), and it suspends an allocation only if that allocation's checkpoint could then be released.
 
 A Provider relies on these rules:
 

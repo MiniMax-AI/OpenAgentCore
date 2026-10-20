@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: e8fe32e265b90a6afb8898eed636c7deabf6b90cff8d07bb37ad7198c298f9c4
+source_hash: 90b575c1ba7ab3e5ff9525c81643f93472e6f4f1cee214f96d2c174437258068
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -241,7 +241,7 @@ sequenceDiagram
 
 ### 暂停 {#suspension}
 
-Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中或等待状态、没有待处理的 input 或文件操作，并且真实活动已空闲达到策略的空闲超时之后暂停 allocation。Session 不必运行过 Turn。存在兼容的等待需求时，容量压力可以在[超时与限制](#timeouts-and-limits)所列的无活动宽限期之后，提前暂停已经空闲的 node allocation。它从不打断活动 Turn，也不会在常规 quiesce、capture 和 source-stop 证明完成之前释放容量。如果暂停无法让容量可用，等待中的请求保留原有期限。retained slot 已满时，容量压力可以改为[释放空闲检查点](#cold-replacement-after-checkpoint-retention)。
+Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中或等待状态、没有待处理的 input 或文件操作，并且真实活动已空闲达到策略的空闲超时之后暂停 allocation。Session 不必运行过 Turn。存在兼容的等待需求时，容量压力可以在[超时与限制](#timeouts-and-limits)所列的无活动宽限期之后，提前暂停已经空闲的 node allocation。它从不打断活动 Turn，也不会在常规 quiesce、capture 和 source-stop 证明完成之前释放容量。如果暂停无法让容量可用，等待中的请求保留原有期限。retained slot 已满时，容量压力可以[释放空闲检查点](#cold-replacement-after-checkpoint-retention)，并且只暂停其检查点随后可被释放的 allocation。
 
 提供商依赖以下规则：
 

@@ -74,10 +74,16 @@ func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocat
 			return false, err
 		}
 	}
+	release := func(n *placement.Node) { n.Active-- }
 	if source.Retained >= int64(source.MaxRetained) {
-		return false, nil
+		// A full node frees a retained slot only by releasing a checkpoint
+		// after this suspension, so the owner must itself be releasable.
+		if retain, err := tx.CanRetainEnvironment(owner); err != nil || !retain {
+			return false, err
+		}
+		release = func(n *placement.Node) { n.Active--; n.Retained-- }
 	}
-	return e.placementNeedsCapacity(tx, pressure, owner.NodeID, func(n *placement.Node) { n.Active-- })
+	return e.placementNeedsCapacity(tx, pressure, owner.NodeID, release)
 }
 
 // ExpireCheckpointForDemand ends the retention of an idle suspended
