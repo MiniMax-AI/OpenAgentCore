@@ -161,7 +161,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 		input.InitialFiles = []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
 	}
 	// Placement is automatic and generation readiness is current-connection
-	// authority. Do not merely change the legacy provider_ready projection.
+	// authority. Do not merely change the provider_ready projection.
 	type presence struct {
 		id, connection string
 		epoch          uint64

@@ -10,7 +10,7 @@ import (
 
 func TestWaitForDevice_FastPath(t *testing.T) {
 	reg := NewRegistry()
-	sess := NewSession(newFakeConn(), "dev-warm", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(newFakeConn(), "dev-warm", "wks-1", "0.1.0", reg, nil)
 	reg.Register(sess)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -27,7 +27,7 @@ func TestWaitForDevice_FastPath(t *testing.T) {
 
 func TestWaitForDevice_SignalledByRegister(t *testing.T) {
 	reg := NewRegistry()
-	sess := NewSession(newFakeConn(), "dev-cold", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(newFakeConn(), "dev-cold", "wks-1", "0.1.0", reg, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -114,7 +114,7 @@ func TestWaitForDevice_EmptyDeviceID(t *testing.T) {
 // the post-race shape.
 func TestWaitForDevice_DoubleCheckAfterLock(t *testing.T) {
 	reg := NewRegistry()
-	sess := NewSession(newFakeConn(), "dev-race", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(newFakeConn(), "dev-race", "wks-1", "0.1.0", reg, nil)
 	reg.Register(sess)
 
 	got, err := reg.WaitForDevice(context.Background(), "dev-race", 100*time.Millisecond)
@@ -137,7 +137,7 @@ func TestWaitForDevice_DoubleCheckAfterLock(t *testing.T) {
 // unblock with the same session.
 func TestWaitForDevice_MultipleWaitersSameDevice(t *testing.T) {
 	reg := NewRegistry()
-	sess := NewSession(newFakeConn(), "dev-shared", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(newFakeConn(), "dev-shared", "wks-1", "0.1.0", reg, nil)
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -181,7 +181,7 @@ func TestWatchDeviceImmediateDeferredAndUnwatch(t *testing.T) {
 	if len(r.PendingWaiters("late")) != 1 {
 		t.Fatal("rearming duplicated watch")
 	}
-	s := NewSession(newFakeConn(), "late", "workspace", "0.1.0", r, nil)
+	s := newTestSession(newFakeConn(), "late", "workspace", "0.1.0", r, nil)
 	r.Register(s)
 	if got := <-ch; got != s {
 		t.Fatal("wrong registration")
@@ -196,7 +196,7 @@ func TestWatchDeviceImmediateDeferredAndUnwatch(t *testing.T) {
 	r.WatchDevice("removed", ch)
 	r.UnwatchDevice("removed", ch)
 	r.UnwatchDevice("removed", ch)
-	r.Register(NewSession(newFakeConn(), "removed", "workspace", "0.1.0", r, nil))
+	r.Register(newTestSession(newFakeConn(), "removed", "workspace", "0.1.0", r, nil))
 	select {
 	case <-ch:
 		t.Fatal("removed watch fired")
@@ -211,7 +211,7 @@ func TestWatchDeviceSharedChannelCoalescesWithoutBlockingRegistration(t *testing
 		r.WatchDevice(id, ch)
 	}
 	for _, id := range []string{"a", "b"} {
-		r.Register(NewSession(newFakeConn(), id, "workspace", "0.1.0", r, nil))
+		r.Register(newTestSession(newFakeConn(), id, "workspace", "0.1.0", r, nil))
 	}
 	if len(ch) != 1 || len(r.PendingWaiters("a")) != 0 || len(r.PendingWaiters("b")) != 0 {
 		t.Fatal("coalesced registrations retained waiter state")

@@ -567,7 +567,7 @@ html[data-theme="dark"] .brand-mark {
   color: var(--fg-muted);
 }
 
-/* Shared ledger primitives and legacy Agent detail styles. */
+/* Shared ledger primitives. */
 
 .ledger {
   min-height: 0;
@@ -711,13 +711,6 @@ html[data-theme="dark"] .brand-mark {
 }
 
 /* Sessions — conversation list and 48rem thread. */
-
-.status-label {
-  color: var(--fg-muted);
-  font-size: 12px;
-  line-height: 16px;
-  text-transform: capitalize;
-}
 
 .trace-workbench {
   display: flex;
@@ -1288,50 +1281,6 @@ html[data-theme="dark"] .brand-mark {
   padding-left: 0;
 }
 
-.thread-content {
-  display: flex;
-  width: 100%;
-  max-width: 768px;
-  min-height: 100%;
-  flex-direction: column;
-  margin: 0 auto;
-  padding: 24px 16px;
-}
-
-.message-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.message-row {
-  display: flex;
-  width: 100%;
-}
-
-.message-row.user {
-  justify-content: flex-end;
-}
-
-.message-body {
-  display: flex;
-  min-width: 0;
-  max-width: 85%;
-  flex-direction: column;
-  color: var(--fg);
-}
-
-.message-row.user .message-body {
-  align-items: flex-end;
-}
-
-.message-byline {
-  margin-bottom: 4px;
-  color: var(--fg-muted);
-  font-size: 12px;
-  line-height: 16px;
-}
-
 .message-copy {
   color: var(--fg);
   font-size: 14px;
@@ -1643,12 +1592,6 @@ html[data-theme="dark"] .brand-mark {
 .message-markdown h3 code {
   color: inherit;
   font-size: 13.5px;
-}
-
-.message-row.user .message-copy {
-  padding: 8px 12px;
-  background: var(--surface-muted);
-  border-radius: 6px;
 }
 
 .work-trace {

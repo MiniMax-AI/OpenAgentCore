@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { legacyRedirects, listedPages } from '../.vitepress/docs-nav.mts'
+import { listedPages } from '../.vitepress/docs-nav.mts'
 
 const dist = fileURLToPath(new URL('../.vitepress/dist/', import.meta.url))
 const pages = listedPages()
@@ -49,14 +49,6 @@ test('generated navigation and assets stay under the site base and resolve to fi
     }
   }
   assert.ok(checked > 0, 'generated pages must contain local navigation and assets')
-})
-
-test('legacy paths redirect', () => {
-  for (const { from, to } of legacyRedirects()) {
-    const source = readFileSync(resolve(dist, `${from}.html`), 'utf8')
-    const target = `${base}${to.replace(/^\//, '')}`
-    assert.ok(source.includes(`content="0; url=${target}"`), `${from} → ${target}`)
-  }
 })
 
 test('llms.txt lists every page', () => {

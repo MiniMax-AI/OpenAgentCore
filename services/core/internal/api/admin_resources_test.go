@@ -109,7 +109,7 @@ func TestAdminResourcesHaveExplicitTargetWithoutCallerImpersonation(t *testing.T
 	}
 	for _, path := range []string{"/core/v1/project-api-keys/" + key.TokenSHA256, "/core/v1/resource-owners", "/core/v1/write-operations"} {
 		if w := projectKeyHTTP(h, "GET", path, "admin", ""); w.Code != 404 {
-			t.Fatal("retired route still served", path, w.Code)
+			t.Fatal("removed route still served", path, w.Code)
 		}
 	}
 }

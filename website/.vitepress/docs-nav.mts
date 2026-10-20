@@ -16,7 +16,6 @@ interface DocsTab {
 
 interface DocsJson {
   navigation: { tabs: DocsTab[] }
-  redirects?: { source: string; destination: string }[]
 }
 
 export function readDocsJson(): DocsJson {
@@ -105,14 +104,4 @@ export function summary(page: string): string {
     .replace(/\s+/g, ' ')
   const sentence = /^(.+?(?:[。！？]|[.!?](?=\s|$)))/.exec(text)?.[1] ?? text
   return sentence.length > 180 ? `${sentence.slice(0, 177).trimEnd()}…` : sentence
-}
-
-/**
- * Redirects in docs.json that point a legacy path (such as `README`) at a page.
- * `.md` sources are served by the raw Markdown copies, so they are skipped.
- */
-export function legacyRedirects(): { from: string; to: string }[] {
-  return (readDocsJson().redirects ?? [])
-    .filter((r) => !r.source.endsWith('.md'))
-    .map((r) => ({ from: r.source.replace(/^\//, ''), to: pageLink(r.destination.replace(/^\//, '')) }))
 }

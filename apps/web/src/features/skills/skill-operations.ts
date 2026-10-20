@@ -3,25 +3,10 @@ import { AgentCoreError, type Skill, type SkillVersion } from "@oac/agents-clien
 import type { ProjectClient } from "../../lib/projects";
 import { appendCollectionPage } from "../../lib/collection-pagination";
 
-/**
- * Skill navigation support, from the first Skill list request:
- * - `supported`: the list succeeded;
- * - `unsupported`: 404 or 405, an older Core without Skills (hide the entry);
- * - `error`: anything else (show the entry with a retry).
- */
-export type SkillsSupport = "supported" | "unsupported" | "error";
-
 export const SKILLS_PAGE_SIZE = 20;
 
 export function isAbortError(error: unknown): boolean {
   return (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
-}
-
-export function classifySkillsError(error: unknown): Exclude<SkillsSupport, "supported"> {
-  if (error instanceof AgentCoreError) {
-    if (error.status === 404 || error.status === 405) return "unsupported";
-  }
-  return "error";
 }
 
 /** Core rejects deleting the default while other versions remain (400 invalid_value on `version`). */

@@ -157,16 +157,12 @@ func TestSandboxValidationWrapperPreservesClassification(t *testing.T) {
 	}
 }
 
-// A stored provider the registry no longer holds fails every read and change
-// that consults it.
+// A stored provider the registry no longer holds fails every read that consults it.
 func TestRegistryLookupFailuresPropagate(t *testing.T) {
 	stored := webDeployment(t, uuid.NewString(), "retired", 1)
 	reader := &fakeReader{t: t,
 		snapshot:   func(context.Context) (Snapshot, error) { return Snapshot{Record: stored}, nil },
 		deployment: func(context.Context) (Record, error) { return stored, nil },
-		nodes: func(context.Context) ([]NodeRecord, error) {
-			return []NodeRecord{{ID: uuid.NewString(), Provider: "retired", MaxActive: 1, MaxRetained: 1}}, nil
-		},
 	}
 	service := newService(t, &fakeStorage{t: t}, reader, testPublicURL)
 	// View decodes the stored configuration first, and reports that failure as a conflict.
@@ -175,9 +171,6 @@ func TestRegistryLookupFailuresPropagate(t *testing.T) {
 	}
 	if _, err := service.Setup(t.Context()); !errors.Is(err, providers.ErrUnknownProvider) {
 		t.Errorf("Setup = %v", err)
-	}
-	if _, err := service.ListNodes(t.Context()); !errors.Is(err, providers.ErrUnknownProvider) {
-		t.Errorf("ListNodes = %v", err)
 	}
 }
 
@@ -195,17 +188,6 @@ func TestSetupReportsDeclarationsAndStoredConfigurationConflicts(t *testing.T) {
 	stored.Configuration.Public = json.RawMessage(`{"retired":true}`)
 	if _, err := service.Setup(t.Context()); !errors.Is(err, ErrConflict) {
 		t.Fatal("an undecodable stored configuration was not a conflict", err)
-	}
-}
-
-// Docker never suspends, so its nodes retain at most their active capacity.
-func TestListNodesAppliesTheRetainedLimit(t *testing.T) {
-	reader := &fakeReader{t: t, nodes: func(context.Context) ([]NodeRecord, error) {
-		return []NodeRecord{{Provider: "docker", MaxActive: 2, MaxRetained: 5}, {Provider: "microsandbox", MaxActive: 2, MaxRetained: 5}}, nil
-	}}
-	nodes, err := newService(t, &fakeStorage{t: t}, reader, testPublicURL).ListNodes(t.Context())
-	if err != nil || len(nodes) != 2 || nodes[0].MaxRetained != 2 || nodes[1].MaxRetained != 5 {
-		t.Fatalf("ListNodes = %+v, %v", nodes, err)
 	}
 }
 

@@ -28,7 +28,7 @@ func (p *Provider) Observe(ctx context.Context, target runtimeobs.Target) (runti
 		Current Compute `json:"current"`
 	}
 	if json.Unmarshal(target.Instance.ProviderState, &state) != nil || state.Current.ID == "" {
-		// Suspension-disabled allocations predate durable compute receipts. A
+		// A disabled allocation has no compute receipt yet. A
 		// deterministic name is not an incarnation fence, so do not sample it.
 		if target.Instance.ComputePhase == "disabled" {
 			return runtimeobs.Sample{}, runtimeobs.ErrUnavailable

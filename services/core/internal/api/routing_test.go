@@ -561,9 +561,9 @@ func TestHeadRequests(t *testing.T) {
 	}
 }
 
-// Retired Core extensions are unknown /v1 paths; the administrator reads stay
+// Core extensions are unknown /v1 paths; the administrator reads stay
 // under /core/v1.
-func TestRetiredV1ExtensionsAreNotFound(t *testing.T) {
+func TestV1ExtensionsAreNotFound(t *testing.T) {
 	handler, _, _ := routingFixture(t)
 	session := "/v1/agents/sessions/" + uuid.NewString()
 	unknown := serve(handler, http.MethodGet, session+"/unknown", "", withHeaders(project, beta))

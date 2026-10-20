@@ -96,7 +96,7 @@ func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 			t.Fatal(test.path, response.Code, response.Body.String())
 		}
 	}
-	// Node routes moved to /api/v1/sandbox-node; the old /core paths are gone.
+	// Node routes are served under /api/v1/sandbox-node, never under /core.
 	for _, test := range []struct{ method, path string }{{"POST", "/core/v1/sandbox/enroll"}, {"GET", "/core/v1/sandbox/node/identity"}, {"GET", "/core/v1/sandbox/node/configuration"}} {
 		request := httptest.NewRequest(test.method, test.path, nil)
 		request.Header.Set("Authorization", "Bearer administrator")

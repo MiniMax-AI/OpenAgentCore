@@ -14,8 +14,8 @@ type Update struct {
 	Item               v1.Item
 	AppendText         bool
 	CommandOutputDelta *string
-	// A legacy aggregate is used only when no native message identity was recorded.
-	LegacyFinal bool
+	// An aggregate answer is used only when no native message identity was recorded.
+	AggregateFinal bool
 }
 
 func Identity(turn, key string) string {
@@ -42,7 +42,7 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 		}
 		key := "message:" + p.ItemID
 		if p.ItemID == "" {
-			key = "legacy-message"
+			key = "aggregate-message"
 		}
 		return []Update{{Item: message(turn, key, "assistant", p.Delta, "in_progress"), AppendText: true}}, nil
 	case proto.TypeOutputMessage:
@@ -63,7 +63,7 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 		}
 		return []Update{{Item: item, AppendText: p.Text == nil}}, nil
 	case proto.TypeDone, "execution_failed":
-		// Legacy Done may contain adapter diagnostics. Only a successful Turn
+		// Done may contain adapter diagnostics. Only a successful Turn
 		// confirms aggregate answer text; failures retain observed message deltas.
 		return nil, nil
 	case "cancel_receipt", "execution_completed", "execution_cancelled":
@@ -89,7 +89,7 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 		if kind == "execution_completed" {
 			status = "completed"
 		}
-		return []Update{{Item: message(turn, "legacy-message", "assistant", final.Content, status), LegacyFinal: true}}, nil
+		return []Update{{Item: message(turn, "aggregate-message", "assistant", final.Content, status), AggregateFinal: true}}, nil
 	case proto.TypeToolCall:
 		return projectTool(turn, raw)
 	case proto.TypeCommandOutput:
@@ -107,7 +107,7 @@ func Merge(update Update, previous v1.Item) (v1.Item, error) {
 	if previous.ID == "" {
 		return item, nil
 	}
-	if previous.Status != "in_progress" && !(update.LegacyFinal && previous.Status == "incomplete") {
+	if previous.Status != "in_progress" && !(update.AggregateFinal && previous.Status == "incomplete") {
 		return previous, nil
 	}
 	if (item.Type == "function_call") && (item.Arguments == nil || string(encoded(item.Arguments)) == "null") {

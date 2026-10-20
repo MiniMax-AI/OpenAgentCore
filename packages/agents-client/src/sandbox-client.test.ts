@@ -301,7 +301,7 @@ describe("hosted provider configuration", () => {
     expect((shown as AgentCoreError).errorType).toBeUndefined();
     await expect(client.initializeDeployment({ expected_generation: 0, provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key } })).rejects.toMatchObject({ status: 409, code: "sandbox_configuration_error", message: rejection.message, param: null });
   });
-  it("keeps legacy E2B ownership reset actionable without reflecting either key", async () => {
+  it("keeps E2B ownership reset actionable without reflecting either key", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: {
       code: "sandbox_reset_required", message: "revoked-old-key " + e2b.api_key,
       param: "revoked-old-key", details: { current_provider: "e2b", requested_provider: "e2b", secret: e2b.api_key },

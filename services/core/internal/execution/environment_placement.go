@@ -23,7 +23,7 @@ type environmentPlacement struct {
 	CapabilityDirectories []string                          `json:"capability_directories"`
 }
 
-// LocalWorkspaceConfiguration recognizes the qualified stored V1 profile. It
+// LocalWorkspaceConfiguration recognizes a stored V1 profile. It
 // does not provision a Runtime, validate live authority, or admit hosted creation.
 func LocalWorkspaceConfiguration(configuration json.RawMessage) bool {
 	placement, err := parseEnvironmentPlacement(configuration)

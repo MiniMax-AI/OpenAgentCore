@@ -107,23 +107,5 @@
         ]
       }
     ]
-  },
-  "redirects": [
-    {
-      "source": "/docs/getting-started/README",
-      "destination": "/docs/getting-started/index"
-    },
-    {
-      "source": "/docs/api/README",
-      "destination": "/docs/api/index"
-    },
-    {
-      "source": "/docs/web/README",
-      "destination": "/docs/web/index"
-    },
-    {
-      "source": "/contracts/agents-api/README",
-      "destination": "/contracts/agents-api/index"
-    }
-  ]
+  }
 }

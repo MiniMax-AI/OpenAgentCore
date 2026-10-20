@@ -114,17 +114,17 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		readBack(tc.name, updated, body)
 	}
 
-	// A disabled record saved before this batch reads unchanged and is admitted with
-	// the same frozen Session tool (W7).
+	// A saved disabled search reads unchanged and is admitted with the same frozen
+	// Session tool (W7).
 	_, agentService := fixtureAgents(t, s)
-	legacy, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(
+	savedDisabled, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(
 		`{"model":"search-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":[{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}]}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, body := client.do(owner, http.MethodGet, "/v1/agents/"+legacy.ID, "", nil)
-	legacyTool := tools("legacy", status, body, http.StatusOK, `{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}`)
-	readBack("legacy", legacy.ID, body)
+	status, body := client.do(owner, http.MethodGet, "/v1/agents/"+savedDisabled.ID, "", nil)
+	disabledTool := tools("disabled", status, body, http.StatusOK, `{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}`)
+	readBack("disabled", savedDisabled.ID, body)
 	// sessionTool returns the first frozen Session tool in canonical form; Session
 	// snapshots keep their own key order.
 	sessionTool := func(name, session string) string {
@@ -141,8 +141,8 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		}
 		return canonicalTool(t, value.Agent.Tools[0])
 	}
-	if got := sessionTool("legacy", client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+legacy.ID+`","environment":{"type":"none"},"input":"hi"}`)); got != canonicalTool(t, json.RawMessage(legacyTool)) {
-		t.Fatalf("legacy Session tool %s, want %s", got, legacyTool)
+	if got := sessionTool("disabled", client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+savedDisabled.ID+`","environment":{"type":"none"},"input":"hi"}`)); got != canonicalTool(t, json.RawMessage(disabledTool)) {
+		t.Fatalf("disabled Session tool %s, want %s", got, disabledTool)
 	}
 
 	// A same-key retry of a Session that recorded its creation request recovers it
@@ -183,7 +183,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	for tool, want := range map[string]string{`{"type":"web_search"}`: live, `{"type":"web_search","mode":null}`: live, `{"type":"web_search","mode":"cached"}`: cached} {
 		for _, request := range []string{
 			`{"agent":{"model":"m","tools":[` + tool + `]},"environment":{"type":"none"},"input":"hi"}`,
-			`{"agent_id":"` + legacy.ID + `","agent":{"tools":[` + tool + `]},"environment":{"type":"none"},"input":"hi"}`,
+			`{"agent_id":"` + savedDisabled.ID + `","agent":{"tools":[` + tool + `]},"environment":{"type":"none"},"input":"hi"}`,
 		} {
 			if got := sessionTool(request, client.created(owner, "/v1/agents/sessions", request)); got != canonicalTool(t, json.RawMessage(want)) {
 				t.Errorf("inline %s: Session tool %s, want %s", request, got, want)

@@ -67,7 +67,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 	request := input
 	request.ExpectedGeneration = 1
 	audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "test", RequestID: "test", TraceID: "test"})
-	for _, failure := range []string{"preliminary", "final", "unanchored legacy or revoked committed key", "unknown ownership", "commit"} {
+	for _, failure := range []string{"preliminary", "final", "revoked committed key", "unknown ownership", "commit"} {
 		verifyCalls = 0
 		rejectAt = 0
 		ctx := audit
@@ -76,7 +76,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 			rejectAt = 1
 		case "final":
 			rejectAt = 2
-		case "unanchored legacy or revoked committed key":
+		case "revoked committed key":
 			rejectAt = 1
 			rejection = &deployment.ResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}
 		case "unknown ownership":

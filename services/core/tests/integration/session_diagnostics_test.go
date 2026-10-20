@@ -52,7 +52,7 @@ func TestDiagnosticItemReceiptSettlementAndReplay(t *testing.T) {
 	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 2, []sessions.ExecutionEvent{after}); err != nil {
 		t.Fatal(err)
 	}
-	// A terminal legacy Item with unknown settlement must remain unknown even on a repeated upsert.
+	// A terminal Item with unknown settlement must remain unknown even on a repeated upsert.
 	runtimeSuspensionSQL(t, s.pool, "UPDATE session_items SET settled_at=NULL WHERE id=$1", item.ItemID)
 	if err := journal.AppendTurnEvents(t.Context(), tenant, session.ID, receipt.TurnID, 3, []sessions.ExecutionEvent{after}); err != nil {
 		t.Fatal(err)

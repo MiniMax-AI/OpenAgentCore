@@ -9,7 +9,7 @@ import (
 
 func TestSuspendAcknowledgementSurvivesImmediateConnectionClose(t *testing.T) {
 	for range 100 {
-		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+		s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
 			result, err := s.SuspendControl(t.Context(), proto.TypeEnvironmentQuiesce, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
@@ -33,7 +33,7 @@ func TestSuspendControlRejectsForeignIdentityAndDoesNotReplay(t *testing.T) {
 		{EnvironmentID: "env", SuspendID: "old", Accepted: true},
 		{EnvironmentID: "env", SuspendID: "attempt", Accepted: true, ErrorCode: "resource_busy"},
 	} {
-		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+		s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
 			_, err := s.SuspendControl(t.Context(), proto.TypeEnvironmentResume, proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "attempt"})
@@ -54,7 +54,7 @@ func TestSuspendControlRejectsForeignIdentityAndDoesNotReplay(t *testing.T) {
 	}
 }
 func TestSuspendObserverCancellationRetainsUnknownOutcome(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)

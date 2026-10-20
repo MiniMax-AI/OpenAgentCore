@@ -81,8 +81,7 @@ func TestEnrollmentApprovedCapacity(t *testing.T) {
 	}
 }
 
-// Docker never suspends a sandbox, so every read reports its retained limit as its
-// active limit, including for a token or node stored before Core applied that rule.
+// Docker never suspends a sandbox, so every write stores its retained limit as its active limit.
 func TestDockerRetainedLimitFollowsActive(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
@@ -95,40 +94,12 @@ func TestDockerRetainedLimitFollowsActive(t *testing.T) {
 	if identity, err := f.service.Enroll(t.Context(), token.Token, current); err != nil || identity.MaxRetained != 3 {
 		t.Fatal("enrollment kept a separate Docker retained limit", identity, err)
 	}
-	legacyToken, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 8})
-	if err != nil {
-		t.Fatal(err)
-	}
-	nodesExec(t, f.pool, "UPDATE runtime_node_enrollments SET max_retained=8 WHERE token_sha256=$1", nodesTokenDigest(legacyToken.Token))
-	if config, err := f.service.NodeConfiguration(t.Context(), "", legacyToken.Token, 0); err != nil || config.MaxRetained != 2 {
-		t.Fatal("bootstrap reported a legacy Docker retained limit", config, err)
-	}
-	legacy := nodesEnrollment(view, "Legacy", "l")
-	if _, err := f.service.Enroll(t.Context(), legacyToken.Token, legacy); err != nil {
-		t.Fatal(err)
-	}
-	var stored int32
-	if err := f.pool.QueryRow(t.Context(), "SELECT max_retained FROM runtime_nodes WHERE id=$1", legacy.NodeID).Scan(&stored); err != nil || stored != 2 {
-		t.Fatal("enrollment stored a legacy Docker retained limit", stored, err)
-	}
-	nodesExec(t, f.pool, "UPDATE runtime_nodes SET max_retained=8 WHERE id=$1", legacy.NodeID)
-	if identity, err := f.service.AuthenticateNode(t.Context(), legacy.NodeID, legacy.Credential); err != nil || identity.MaxRetained != 2 {
-		t.Fatal("node identity reported a legacy Docker retained limit", identity, err)
-	}
-	if config, err := f.service.NodeConfiguration(t.Context(), legacy.NodeID, legacy.Credential, 0); err != nil || config.MaxRetained != 2 {
-		t.Fatal("node configuration reported a legacy Docker retained limit", config, err)
-	}
 	if err := f.service.UpdateNode(t.Context(), current.NodeID, deployment.NodeUpdate{Name: "Docker", MaxActive: 5, MaxRetained: 12}); err != nil {
 		t.Fatal(err)
 	}
 	nodes, err := f.service.ListNodes(t.Context())
-	if err != nil || len(nodes) != 2 {
-		t.Fatal(nodes, err)
-	}
-	for _, n := range nodes {
-		if n.MaxRetained != n.MaxActive || (n.ID == current.NodeID && n.MaxActive != 5) {
-			t.Fatal("node list kept a separate Docker retained limit", n)
-		}
+	if err != nil || len(nodes) != 1 || nodes[0].MaxActive != 5 || nodes[0].MaxRetained != 5 {
+		t.Fatal("node list kept a separate Docker retained limit", nodes, err)
 	}
 }
 

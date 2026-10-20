@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { translatedSource } from '../.vitepress/locales.mts'
-import { docsNav, docsSidebar, legacyRedirects, listedPages, pageLink, pageTitle, readDocsJson, repoRoot, summary, unquote } from '../.vitepress/docs-nav.mts'
+import { docsNav, docsSidebar, listedPages, pageLink, pageTitle, readDocsJson, repoRoot, summary, unquote } from '../.vitepress/docs-nav.mts'
 
 test('page ids map to clean routes', () => {
   assert.equal(pageLink('docs/getting-started/index'), '/docs/getting-started/')
@@ -66,13 +66,4 @@ test('each page shows only its own tab in the sidebar, labelled by page titles',
 test('summaries are one sentence taken from the page opening', () => {
   assert.ok(summary('docs/architecture').length > 0)
   for (const page of listedPages()) assert.ok(summary(page).length > 0, `${page} has a summary`)
-})
-
-test('legacy README paths redirect to section indexes', () => {
-  const redirects = legacyRedirects()
-  assert.ok(redirects.length > 0)
-  for (const { from, to } of redirects) {
-    assert.ok(!from.endsWith('.md'), `${from} is not a Markdown copy`)
-    assert.ok(to.startsWith('/'), `${to} is a site route`)
-  }
 })

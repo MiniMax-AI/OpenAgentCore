@@ -1,6 +1,5 @@
-import { AgentCoreError, type CoreJobStatus, type CoreMetrics, type CoreMetricsRange } from "@oac/agents-client";
+import { type CoreJobStatus, type CoreMetrics, type CoreMetricsRange } from "@oac/agents-client";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Network } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -55,17 +54,14 @@ export function CoreMetricsPage() {
   const [range, setRange] = useState<CoreMetricsRange>("1h");
   const query = useQuery({ ...coreMetricsQuery(range), placeholderData: keepPreviousData, refetchInterval: REFRESH_MS, refetchIntervalInBackground: false });
   const metrics = query.data ?? null;
-  const missing = query.error instanceof AgentCoreError && (query.error.status === 404 || query.error.status === 501);
   const error = query.isError ? coreError(query.error, tCommon) : "";
   useFailureToast(metrics !== null && query.isError, t("core.stale", { reason: error }), "core-metrics-refresh");
 
   let body: ReactNode;
   if (!metrics) {
-    body = missing
-      ? <EmptyState icon={Network} title={t("core.missingTitle")} hint={t("core.missingDescription")} />
-      : query.isError
-        ? <p className="page-status" role="alert">{t("core.failed", { reason: error })}</p>
-        : <DashboardSkeleton label={t("core.loading")} figures={5} />;
+    body = query.isError
+      ? <p className="page-status" role="alert">{t("core.failed", { reason: error })}</p>
+      : <DashboardSkeleton label={t("core.loading")} figures={5} />;
   } else {
     body = <CoreMetricsBody metrics={metrics} />;
   }

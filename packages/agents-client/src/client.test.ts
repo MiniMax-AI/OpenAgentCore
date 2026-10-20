@@ -2285,7 +2285,7 @@ describe("OpenAIAgentsClient", () => {
     }
   });
 
-  it("keeps the three legacy single-event helpers on the public batch wire", async () => {
+  it("maps the single-event helpers on the public batch wire", async () => {
     const calls: FetchCall[] = [];
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
 

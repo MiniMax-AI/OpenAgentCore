@@ -45,18 +45,6 @@ type HandlerConfig struct {
 	// the externally-reachable URL.
 	PublicWSURL string
 
-	// OwnerStore enables multi-pod WebSocket ownership. When set, every
-	// successful daemon WS dial-in claims device_id -> owner_pod_id in
-	// Postgres and receives a generation fencing token. nil preserves
-	// the legacy single-pod in-memory Registry behavior.
-	OwnerStore DeviceOwnerStore
-	OwnerPodID string
-	OwnerURL   string
-
-	// OwnerLeaseTTL controls how long the owner row stays valid without
-	// a renewing inbound daemon frame. Zero uses the package default.
-	OwnerLeaseTTL time.Duration
-
 	// HeartbeatInterval overrides DefaultHeartbeatInterval. Zero -> default.
 	HeartbeatInterval time.Duration
 
@@ -83,7 +71,6 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	if cfg.HeartbeatInterval <= 0 {
 		cfg.HeartbeatInterval = DefaultHeartbeatInterval
 	}
-	cfg.OwnerLeaseTTL = normalizeOwnerTTL(cfg.OwnerLeaseTTL)
 	if cfg.Log == nil {
 		cfg.Log = func(string, ...any) {}
 	}
@@ -140,37 +127,12 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 			h.cfg.Log("agentdaemon gateway: heartbeat on connect: %v", hbErr)
 		}
 	}
-	var lease *ownerLease
-	if h.cfg.OwnerStore != nil {
-		now := time.Now().UTC()
-		owner, ownerErr := h.cfg.OwnerStore.ClaimAgentDaemonDeviceOwner(r.Context(), runtimedevice.ClaimOwner{
-			DeviceID:       auth.DeviceID,
-			WorkspaceID:    auth.WorkspaceID,
-			OwnerPodID:     h.cfg.OwnerPodID,
-			OwnerURL:       h.cfg.OwnerURL,
-			Now:            now,
-			LeaseExpiresAt: now.Add(h.cfg.OwnerLeaseTTL),
-		})
-		if ownerErr != nil {
-			h.cfg.Log("agentdaemon gateway: owner claim failed: %v", ownerErr)
-			_ = conn.Close()
-			return
-		}
-		lease = &ownerLease{
-			store:      h.cfg.OwnerStore,
-			deviceID:   auth.DeviceID,
-			ownerPodID: owner.OwnerPodID,
-			ownerURL:   owner.OwnerURL,
-			generation: owner.Generation,
-			ttl:        h.cfg.OwnerLeaseTTL,
-		}
-	}
-	sess := NewSessionWithOwner(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log, lease)
+	sess := NewSession(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log)
 	sess.heartbeat = h.cfg.Heartbeat
 	sess.archivedCancellations = h.cfg.ArchivedCancellations
 	sess.credentialHash = runtimedevice.HashCredential(token)
-	h.cfg.Log("agentdaemon gateway: ws upgrade ok, registering device_id=%s owner_pod=%s waiters=%d",
-		auth.DeviceID, h.cfg.OwnerPodID, len(h.cfg.Registry.PendingWaiters(auth.DeviceID)))
+	h.cfg.Log("agentdaemon gateway: ws upgrade ok, registering device_id=%s waiters=%d",
+		auth.DeviceID, len(h.cfg.Registry.PendingWaiters(auth.DeviceID)))
 	if prev := h.cfg.Registry.Register(sess); prev != nil {
 		// Latest dial-in wins; close the zombie out-of-band.
 		prev.Close("preempted by newer connection from same device_id")
@@ -222,54 +184,6 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// DeviceStatus is a lightweight liveness probe the daemon hits before
-// the WS dial.
-func (h *Handler) DeviceStatus(w http.ResponseWriter, r *http.Request) {
-	bearer := bearerFromAuthHeader(r)
-	if bearer == "" {
-		writeAuthError(w, http.StatusUnauthorized, "missing_bearer", "")
-		return
-	}
-	deviceID := r.URL.Query().Get("device_id")
-	if deviceID == "" {
-		writeAuthError(w, http.StatusBadRequest, "missing_device_id", "device_id query param required")
-		return
-	}
-	auth, err := h.cfg.Authenticator.AuthenticateBearer(r.Context(), deviceID, bearer)
-	if err != nil {
-		status, code := mapAuthError(err)
-		h.cfg.Log("agentdaemon gateway: device-status auth rejected device_id=%s code=%s status=%d err=%v",
-			deviceID, code, status, err)
-		writeAuthError(w, status, code, err.Error())
-		return
-	}
-	_, regErr := h.cfg.Registry.LookupDevice(auth.DeviceID)
-	online := regErr == nil
-	var owner map[string]any
-	if h.cfg.OwnerStore != nil {
-		if current, ok, ownerErr := h.cfg.OwnerStore.GetAgentDaemonDeviceOwner(r.Context(), auth.DeviceID); ownerErr != nil {
-			h.cfg.Log("agentdaemon gateway: device-status owner lookup failed: %v", ownerErr)
-		} else if ok {
-			leaseOnline := current.Status == runtimedevice.OwnerStatusConnected && current.LeaseExpiresAt.After(time.Now().UTC())
-			online = online || leaseOnline
-			owner = map[string]any{
-				"owner_pod_id":     current.OwnerPodID,
-				"owner_url":        current.OwnerURL,
-				"generation":       current.Generation,
-				"status":           current.Status,
-				"lease_expires_at": current.LeaseExpiresAt,
-			}
-		}
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"device_id": auth.DeviceID,
-		"online":    online,
-		"owner":     owner,
-	})
 }
 
 // ----------------------------------------------------------------------

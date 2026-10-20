@@ -3,7 +3,7 @@
  * (src/app/beautifui/foundation.css): cool canvas, white cards drawn by a
  * hairline ring and a smooth shadow, an ink ramp for text, pill buttons with an
  * ink primary, filled fields with a hairline ring, dark tooltips, and
- * indigo as the only accent. Loaded after the legacy stylesheets, so every
+ * indigo as the only accent. Loaded after the base stylesheets, so every
  * shared atom is defined here once; feature stylesheets only arrange them.
  */
 
