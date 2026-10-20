@@ -245,6 +245,23 @@ export function SessionDetail({
                   ? harnessNames[configuration.harness]
                   : session.agent.x_agents_core?.harness || tr("部署默认")}
               </Property>
+              <Property label={tr("推理强度")}>
+                {(
+                  { low: tr("低"), medium: tr("中"), high: tr("高") } as Record<
+                    string,
+                    string
+                  >
+                )[session.agent.reasoning?.effort || ""] ||
+                  session.agent.reasoning?.effort ||
+                  tr("默认")}
+              </Property>
+              <Property label={tr("网页搜索")}>
+                {(session.agent.tools as { type: string; mode?: string }[])?.some(
+                  (tool) => tool.type === "web_search" && tool.mode !== "disabled",
+                )
+                  ? tr("开启")
+                  : tr("关闭")}
+              </Property>
               {configuration && (
                 <Property label={tr("环境模板")}>
                   {configuration.environment_name}

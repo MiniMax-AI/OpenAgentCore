@@ -318,9 +318,9 @@ createServer(async (req, res) => {
     const saved = {
       id: randomUUID(),
       name: null,
-      reasoning: { effort: null, summary: null },
       service_tier: "auto",
       ...body.agent,
+      reasoning: { effort: null, summary: null, ...body.agent?.reasoning },
       multi_agent: { enabled: false, max_concurrent_subagents: null },
       text: { format: { type: "text" }, verbosity: "medium" },
     };

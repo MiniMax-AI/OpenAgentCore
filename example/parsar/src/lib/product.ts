@@ -34,6 +34,8 @@ export interface AgentProfile extends NamedResource {
   description?: string;
   enabled?: boolean;
   ask_user?: boolean;
+  web_search?: boolean;
+  reasoning_effort?: "" | "low" | "medium" | "high";
   runtime_id?: string;
   capability_ids?: string[];
   capability_versions?: Record<string, string>;

@@ -33,6 +33,8 @@ export type Configuration = Pick<
   | "runtime_id"
   | "enabled"
   | "ask_user"
+  | "web_search"
+  | "reasoning_effort"
   | "capability_ids"
   | "capability_versions"
 >;
@@ -167,12 +169,34 @@ export function ConfigurationFields({
             id="config-harness"
             value={value.harness}
             onValueChange={(harness) =>
-              change({ ...value, harness: harness as Configuration["harness"] })
+              change({
+                ...value,
+                harness: harness as Configuration["harness"],
+                web_search: harness === "mcode" ? false : value.web_search,
+              })
             }
           >
             <SelectOption value="claude_sdk">Claude Code</SelectOption>
             <SelectOption value="codex">Codex</SelectOption>
             <SelectOption value="mcode">MiniMax Code</SelectOption>
+          </Select>
+        </Field>
+        <Field label={tr("推理强度")} id="config-reasoning">
+          <Select
+            id="config-reasoning"
+            value={value.reasoning_effort || ""}
+            onValueChange={(reasoning_effort) =>
+              change({
+                ...value,
+                reasoning_effort:
+                  reasoning_effort as Configuration["reasoning_effort"],
+              })
+            }
+          >
+            <SelectOption value="">{tr("默认")}</SelectOption>
+            <SelectOption value="low">{tr("低")}</SelectOption>
+            <SelectOption value="medium">{tr("中")}</SelectOption>
+            <SelectOption value="high">{tr("高")}</SelectOption>
           </Select>
         </Field>
         <ResourceField
@@ -189,6 +213,17 @@ export function ConfigurationFields({
         />
       </Section>
       <Section title={tr("工具与知识")}>
+        <Toggle
+          label={tr("网页搜索")}
+          checked={!!value.web_search}
+          disabled={value.harness === "mcode"}
+          hint={
+            value.harness === "mcode"
+              ? tr("MiniMax Code 暂不支持网页搜索")
+              : undefined
+          }
+          onChange={(web_search) => change({ ...value, web_search })}
+        />
         <ResourceField
           label="Skills"
           multiple

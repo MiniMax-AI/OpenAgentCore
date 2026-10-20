@@ -186,19 +186,33 @@ export function Toggle({
   label,
   checked,
   onChange,
+  disabled,
+  hint,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
+  /** One short line shown under the label, e.g. why the switch is unavailable. */
+  hint?: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-6 py-1 text-sm text-fg">
-      {label}
+    <label
+      className={cn(
+        "flex items-center justify-between gap-6 py-1 text-sm text-fg",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      )}
+    >
+      <span>
+        {label}
+        {hint && <span className="mt-0.5 block text-fg-muted">{hint}</span>}
+      </span>
       <span className="relative inline-flex shrink-0">
         <input
           type="checkbox"
           role="switch"
           className="peer sr-only"
+          disabled={disabled}
           checked={checked}
           onChange={(event) => onChange(event.target.checked)}
         />

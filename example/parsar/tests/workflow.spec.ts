@@ -872,3 +872,33 @@ test("Agent resource selectors enforce the shared capability budget before savin
   const saved = await (await request.get(`/app/agents/${a.id}`)).json();
   expect(saved.capability_ids).toEqual(ids.slice(1));
 });
+
+test("Agents turn on web search and choose reasoning effort for new conversations", async ({
+  page,
+  request,
+}) => {
+  await resources(page);
+  await agent(page);
+  await page.getByLabel("执行引擎", { exact: true }).click();
+  await page.getByRole("option", { name: "MiniMax Code", exact: true }).click();
+  await expect(page.getByRole("switch", { name: /网页搜索/ })).toBeDisabled();
+  await page.getByLabel("执行引擎", { exact: true }).click();
+  await page.getByRole("option", { name: "Codex", exact: true }).click();
+  await page.getByRole("switch", { name: /网页搜索/ }).check({ force: true });
+  await page.getByLabel("推理强度", { exact: true }).click();
+  await page.getByRole("option", { name: "高", exact: true }).click();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByRole("button", { name: "已保存" })).toBeVisible();
+  await converse(page);
+  await expect(
+    page.getByRole("heading", { name: "Review code", exact: true }),
+  ).toBeVisible();
+  const core = await (
+    await request.get("http://127.0.0.1:18181/counts")
+  ).json();
+  const sent = core.sessions.at(-1).agent;
+  expect(sent.tools).toContainEqual({ type: "web_search", mode: "live" });
+  expect(sent.reasoning.effort).toBe("high");
+  await page.getByRole("button", { name: "会话详情" }).click();
+  await expect(page.getByRole("dialog")).toContainText("网页搜索开启");
+});

@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 3d8be6274433e5495e9f6a05f43bcd5e776396c5126b26cf6d15488b04220bd6
+source_hash: f7e632d99f51f07875dd4ddd206627a5081b2dc06fae1942621a63c816b59659
 ---
 
 # Parsar 工作空间
@@ -46,7 +46,7 @@ pnpm --filter @oac/parsar-example dev
 
 ## Agent 与资源 {#agents-and-resources}
 
-**Agent** 以卡片列出 Agent，展示模型、Harness、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**指令**、**模型与环境**、**工具与知识** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。指令片段、Plugins 和知识合计最多 8 个，选择器会阻止超出。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。
+**Agent** 以卡片列出 Agent，展示模型、Harness、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**指令**、**模型与环境**、**工具与知识** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。指令片段、Plugins 和知识合计最多 8 个，选择器会阻止超出。**推理强度** 发送 `reasoning.effort`（低、中或高），或保留 Harness 默认值。**网页搜索** 为 Codex 和 Claude Code 发送 `live` 模式的 `web_search`，关闭时发送 `disabled`；MiniMax Code 无法开启。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。
 
 **模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
 

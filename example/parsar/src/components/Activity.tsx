@@ -125,6 +125,10 @@ export function Activity({ item }: { item: SessionItem }) {
   const name =
     item.type === "command_execution"
       ? item.command
+      : item.type === "web_search_call"
+        ? [tr("搜索网页"), item.action?.query || item.action?.url]
+            .filter(Boolean)
+            .join(" · ")
       : item.type === "reasoning"
         ? tr("思考过程")
         : item.name || item.type;

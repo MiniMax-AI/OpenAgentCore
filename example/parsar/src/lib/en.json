@@ -417,5 +417,14 @@
   "记录": "Records",
   "新建": "New",
   "完成": "Done",
-  "对话与记录": "Conversations and records"
+  "对话与记录": "Conversations and records",
+  "推理强度": "Reasoning effort",
+  "默认": "Default",
+  "低": "Low",
+  "高": "High",
+  "网页搜索": "Web search",
+  "MiniMax Code 暂不支持网页搜索": "MiniMax Code does not support web search yet",
+  "开启": "On",
+  "关闭": "Off",
+  "搜索网页": "Web search"
 }

@@ -243,6 +243,12 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       value.instructions = text(body.instructions, "指令", 100000);
       value.enabled = body.enabled !== false;
       value.ask_user = body.ask_user === true;
+      value.web_search = body.web_search === true;
+      if (value.web_search && body.harness === "mcode")
+        throw new AppError(400, "MiniMax Code 暂不支持网页搜索。");
+      if (!["", "low", "medium", "high"].includes(body.reasoning_effort || ""))
+        throw new AppError(400, "推理强度无效。");
+      value.reasoning_effort = body.reasoning_effort || "";
       if (!body.runtime_id) throw new AppError(400, "请选择环境模板。");
       value.runtime_id = requireReference("runtimes", body.runtime_id);
       value.capability_ids = references(

@@ -256,7 +256,8 @@ function step(item) {
     return ["调用工具", [item.server_label, item.name].filter(Boolean).join(" · ")];
   if (item.type === "function_call")
     return [item.name === "ask_user" ? "向你提问" : "调用函数", item.name || ""];
-  if (item.type === "web_search") return ["搜索网页", ""];
+  if (item.type === "web_search_call")
+    return ["搜索网页", item.action?.query || item.action?.url || ""];
   if (item.type === "file_change") return ["修改文件", ""];
   return ["执行步骤", item.name || item.type || ""];
 }

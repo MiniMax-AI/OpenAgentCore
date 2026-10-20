@@ -1376,3 +1376,21 @@ test("failed turns turn the card red, keep the error visible and mark failed ste
   assert.equal(plain.body.elements[0].content, "已请求取消，等待 Agent 确认停止。");
   assert.equal(feishuCard("执行失败\n\n环境准备失败").header.template, "red");
 });
+
+test("web searches appear as readable steps in the Feishu record", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const card = JSON.parse(
+    formatTurnCard("completed", [
+      {
+        type: "web_search_call",
+        status: "completed",
+        action: { type: "search", query: "OpenAgentCore release" },
+      },
+      { type: "message", role: "assistant", content: [{ type: "output_text", text: "Done" }] },
+    ]),
+  );
+  assert.match(
+    card.body.elements[2].elements[0].content,
+    /✓<\/font> 搜索网页 `OpenAgentCore release`/,
+  );
+});

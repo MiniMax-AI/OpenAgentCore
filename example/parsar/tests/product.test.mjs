@@ -721,3 +721,44 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
   assert.ok(!JSON.stringify(await api("GET", "/app/feishu/bots")).includes("bot-secret"));
   await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
 });
+
+test("Agents carry web search and reasoning effort into the Session request", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const sent = [];
+  const { put, agent, input } = await setup(store, async (_path, _method, body) => {
+    sent.push(body);
+    return { id: randomUUID() };
+  });
+  const searching = await put(
+    "agents",
+    { ...agent, harness: "codex", web_search: true, reasoning_effort: "high" },
+    agent.id,
+  );
+  assert.equal(searching.web_search, true);
+  await put("sessions", input);
+  assert.deepEqual(
+    sent[0].agent.tools.find((tool) => tool.type === "web_search"),
+    { type: "web_search", mode: "live" },
+  );
+  assert.deepEqual(sent[0].agent.reasoning, { effort: "high" });
+  const quiet = await put(
+    "agents",
+    { ...searching, web_search: false, reasoning_effort: "" },
+    agent.id,
+  );
+  await put("sessions", { ...input, name: "Quiet" });
+  assert.equal(
+    sent[1].agent.tools.find((tool) => tool.type === "web_search").mode,
+    "disabled",
+  );
+  assert.equal(sent[1].agent.reasoning, undefined);
+  await assert.rejects(
+    put("agents", { ...quiet, harness: "mcode", web_search: true }, agent.id),
+    /MiniMax Code 暂不支持网页搜索/,
+  );
+  await assert.rejects(
+    put("agents", { ...quiet, reasoning_effort: "extreme" }, agent.id),
+    /推理强度无效/,
+  );
+});

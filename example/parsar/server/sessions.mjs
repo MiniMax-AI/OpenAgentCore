@@ -39,7 +39,9 @@ export function prepareSession(store, id, body, origin = {}) {
     base_url: provider.base_url,
     api_key: provider.api_key,
   };
-  const tools = [{ type: "web_search", mode: "disabled" }];
+  const tools = [
+    { type: "web_search", mode: agent.web_search ? "live" : "disabled" },
+  ];
   if (agent.ask_user)
     tools.push({
       type: "function",
@@ -205,6 +207,9 @@ export function prepareSession(store, id, body, origin = {}) {
       agent: {
         model: model.model,
         instructions,
+        ...(agent.reasoning_effort
+          ? { reasoning: { effort: agent.reasoning_effort } }
+          : {}),
         x_agents_core: { harness: agent.harness },
         multi_agent: { enabled: false },
         text: { verbosity: "medium" },
