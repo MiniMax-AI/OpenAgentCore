@@ -117,7 +117,7 @@ func TestPreparationRejectsInputAndUnavailableProfilesBeforeLaunch(t *testing.T)
 			case "mcp":
 				req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
 			case "controls":
-				req.ExecutionControls = &proto.ExecutionControls{WebSearch: "enabled", TextVerbosity: "medium"}
+				req.ExecutionControls = &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "cached", ContextSize: "medium"}}
 			}
 			if _, err := NewExecutorFactory(config)(t.Context(), req); err == nil {
 				t.Fatal("invalid preparation was accepted")

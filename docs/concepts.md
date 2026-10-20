@@ -2,13 +2,13 @@
 title: "Concepts"
 ---
 
-A Project is the execution tenant in OpenAgentCore. Applications use its API keys; operators manage the installation with a separate Core key. The [API index](./api/index.md) maps each caller to its namespace and credential.
+A Project is the execution tenant in OpenAgentCore. Applications use its API keys; operators manage the installation with a separate Core key. [API namespaces and credentials](./api/index.md) maps each caller to its namespace and credential.
 
 ## Projects own assets
 
 A Project owns its Agents, Sessions, Environments, Skills, Files and Vaults. Its named API keys share the same principal, permissions and resources. Core has no product users, roles, memberships or read-only keys. Names are labels; stable IDs identify Projects and keys.
 
-Projects and keys live in PostgreSQL. Core returns a key's plaintext once, when it is issued. To rotate a key, issue a new one in the same Project, then revoke the old one. Revocation preserves assets, write provenance and accepted work. Archiving a Project revokes all its keys and prevents new keys; administrators retain access to inspect and delete its resources. The [administration contract](../contracts/agents-api/admin-api.md#projects-and-keys) defines these operations.
+Projects and keys live in PostgreSQL. Core returns a key's plaintext once, when it is issued; [Projects and API keys](./getting-started/operations.md#projects-and-api-keys) gives the rotation steps. Revocation preserves assets, write provenance and accepted work. Archiving a Project revokes all its keys and prevents new keys; administrators retain access to inspect and delete its resources. The [Core administration API](../contracts/agents-api/admin-api.md#projects-and-keys) defines these operations.
 
 The [Core key](./getting-started/operations.md#core-key) is a separate deployment credential. An administrator who needs to use the application API issues a Project key and uses that Project's authority. Product users, workspaces and business permissions belong to the application.
 
@@ -20,7 +20,7 @@ Application reads, writes and references are scoped to the key's Project. A reso
 
 Administrators manage Projects and keys, sandbox deployments, nodes, executor credentials and deployment default models. They inspect resources, execution history, operational counts and usage, and delete resources under their deletion rules. Archiving a hosted Session requests cancellation and sandbox reclamation; see [Session archive](../contracts/agents-api/admin-api.md#session-archive).
 
-Creating or editing application assets, starting Sessions and submitting input require a Project API key. The Core key gives no application identity and cannot read stored secrets. The [administration API](../contracts/agents-api/admin-api.md) defines its operations; the [console server](./web/console-server.md) owns Web sign-in and credential handling.
+Creating or editing application assets, starting Sessions and submitting input require a Project API key. The Core key gives no application identity and cannot read stored secrets. The [Core administration API](../contracts/agents-api/admin-api.md) defines its operations; the [Console server](./web/console-server.md) owns Web sign-in and credential handling.
 
 ## Runtime and outer isolation
 

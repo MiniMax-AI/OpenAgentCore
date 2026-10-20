@@ -1,8 +1,8 @@
 ---
-title: "Core wire behavior"
+title: "API behavior"
 ---
 
-The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)) defines the `/v1` routes, fields and types. This page states what Core does where those types are silent, such as status codes, error fields, defaults and list bounds, and where Core behaves differently from the official service. The [coverage ledger](./index.md) lists the differences and open gaps; [Sessions, events and history](./sessions-events.md), [message content](./message-content.md), [Vaults](./vaults.md), [source Files and Skills](./source-files.md) and [Environment files and Artifacts](./environment-files.md) own the rules of their resources.
+The pinned OpenAI Python SDK ([upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)) defines the `/v1` routes, fields and types. This page states what Core does where those types are silent, such as status codes, error fields, defaults and list bounds, and where Core behaves differently from the official service. The [OpenAI compatibility](./index.md) lists the differences and open gaps; [Sessions, events and history](./sessions-events.md), [message content](./message-content.md), [Vaults](./vaults.md), [source Files and Skills](./source-files.md) and [Environment files and Artifacts](./environment-files.md) own the rules of their resources.
 
 "Beta routes" below are the routes under `/v1/agents` and `/v1/vaults`. "Files and Skills" are the routes under `/v1/files` and `/v1/skills`, which ignore `OpenAI-Beta`.
 
@@ -156,7 +156,7 @@ Agent create requires `model`. Core saves and returns these values for omitted f
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
 | `web_search` | Every pinned mode is saved; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
-| HTTP MCP transport | Saved with `headers: {}`; nonempty headers are rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
+| HTTP MCP transport | Saved with `headers: {}`; nonempty headers are stored as given and an `Authorization` header is rejected. Origin and allowlist defaults are in [public MCP connection origin](./environments.md#public-mcp-connection-origin) |
 
 Saving a value does not make it executable. Session creation admits a smaller set; see [Session admission](#session-admission).
 
@@ -177,7 +177,7 @@ Agent create and update bodies and the inline `agent` of Session create are chec
 
 Within one object Core reports a union's `type` first, then unknown members, then member values in document order, then missing members in the pinned schema's order; tools before `text`, and the whole object before the duplicate and schema-root checks. Schemas without a string root `type` are not checked. Function and output schemas, `request_metadata` and `x_agents_core` keep their own parsers. Update bodies and the inline Session agent are validated before the Agent lookup, so owned, foreign, missing and malformed Agent IDs give the same response.
 
-Core saves values the pinned shapes allow even when it cannot run them: function names of any length, enabled programmatic tool calling, reasoning effort `max` and service tier `flex`.
+Core saves values the pinned shapes allow even when the selected Harness cannot run them: function names of any length and the reasoning, service tier, web search and programmatic tool calling values a Harness does not declare.
 
 ### Session admission
 
@@ -185,15 +185,13 @@ A Session's effective configuration must also pass execution admission, which ap
 
 | Configuration | Message |
 | --- | --- |
-| Explicit `reasoning.effort` or `reasoning.summary` | "Explicit reasoning execution options are not supported by this service yet." |
-| `service_tier` other than `auto` | "Execution currently supports service_tier=auto only." |
-| Enabled or omitted-mode `web_search`, enabled `programmatic_tool_calling` | See [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) |
-| More than 64 functions, or a function name that is blank or longer than 512 bytes | "This service supports at most 64 function tools." or "Function names must be nonempty, unique and at most 512 bytes." |
-| Two `programmatic_tool_calling` declarations, two MCP servers with one label | "Execution requires distinct tool controls.", "Execution requires distinct MCP server labels." |
+| A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
+| A function name that is blank or repeated | "Function names must be nonempty and unique." |
+| Two MCP servers with one label | "Execution requires distinct MCP server labels." |
 
 A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](./execution-tools.md).
 
-Omitted, null and explicit `medium` text verbosity give the same Session configuration. For a model whose native catalog declares no verbosity support, the Codex adapter drops a `medium` setting and uses the model's default, and rejects `low` or `high`.
+Omitted, null and explicit `medium` text verbosity give the same Session configuration.
 
 ### Update, delete and list
 
@@ -246,4 +244,4 @@ Subagent child Turns and pending Environment file writes do not block deletion. 
 
 ### Response fields
 
-A Session's `agent.tools` omits `tool_search` declarations, which the pinned Session tool union does not include; the frozen configuration keeps them. On `self_hosted` Sessions, `environment.remote_url` is Core's daemon WebSocket URL, `/api/v1/agent-daemon/ws` under the public URL, which only OpenAgentCore's Runtime daemon speaks; requests cannot set it. Other Session fields follow the pinned types; `x_agents_core` is described in the [Agents API guide](../../docs/api/public-agent-api.md#core-extensions-x_agents_core).
+A Session's `agent.tools` omits `tool_search` declarations, which the pinned Session tool union does not include; the frozen configuration keeps them. On `self_hosted` Sessions, `environment.remote_url` is Core's daemon WebSocket URL, `/api/v1/agent-daemon/ws` under the public URL, which only OpenAgentCore's Runtime daemon speaks; requests cannot set it. Other Session fields follow the pinned types; `x_agents_core` is described in the [Agents API guide](../../docs/api/public-agent-api.md#core-extensions).

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fill the Compose template with one release's node metadata.
 
-The template is deploy/compose/compose.yaml. Initialization, Core and Web images are pinned to the release. A release publishes the rendered file; this script does not run Docker.
+The template is deploy/compose/compose.yaml. Initialization, Core and Web images are pinned to the release, and PostgreSQL to the digest in deploy/compose/database-image.txt, which a release mirrors to GHCR. A release publishes the rendered file; this script does not run Docker.
 """
 import hashlib
 import pathlib
@@ -10,7 +10,9 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "deploy/compose/compose.yaml"
-TOKENS = ("REVISION", "INIT_IMAGE", "CORE_IMAGE", "WEB_IMAGE")
+TOKENS = ("REVISION", "INIT_IMAGE", "CORE_IMAGE", "WEB_IMAGE", "DATABASE_IMAGE")
+# The one home of the PostgreSQL pin: the official upstream multi-platform index.
+DATABASE_PIN = (ROOT / "deploy/compose/database-image.txt").read_text().strip()
 
 
 def render(values):
@@ -20,9 +22,11 @@ def render(values):
         raise ValueError("Missing Compose values: " + ", ".join(missing))
     if not re.fullmatch(r"[0-9a-f]{40}", values["REVISION"]):
         raise ValueError("REVISION must be a full source commit SHA")
-    for name in TOKENS[1:]:
+    for name in TOKENS[1:-1]:
         if not re.fullmatch(r"ghcr\.io/[a-z0-9._/-]+@sha256:[0-9a-f]{64}", values[name]):
             raise ValueError(name + " must be an immutable GHCR image reference")
+    if not re.fullmatch(r"[a-z0-9._/:-]+@sha256:[0-9a-f]{64}", values["DATABASE_IMAGE"]):
+        raise ValueError("DATABASE_IMAGE must be an immutable image reference")
     text = TEMPLATE.read_text()
     for name in TOKENS:
         token = "__OAC_" + name + "__"

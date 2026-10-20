@@ -9,7 +9,7 @@ const reset: SandboxReset = {
   remaining: { busy: 1, idle: 0, cleanup: 1, on_offline_nodes: 1, offline_nodes: [{ node_id: "node-a", name: "Offline host", resources: 1 }] },
 };
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({ credential_configured: false, configuration: {}, metadata: {},
-  rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "installation-a", provider: "docker", core_url: "https://core.example", reset,
+  rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "installation-a", provider: "docker", core_url: "https://core.example", reset,
   owner_epoch: 1, generation: 2, mode: "nodes", resources: { allocations: 2, pending: 0 }, suspension: null, ...overrides,
 });
 const clients: QueryClient[] = [];
@@ -18,7 +18,7 @@ afterEach(() => { for (const client of clients.splice(0)) client.clear(); vi.res
 
 describe("sandbox reset reads", () => {
   it("polls only Core preparation or reset, never settled old resources or failed/unknown nodes", () => {
-    const settled = deployment({ reset: null, rollout: { state: "settled", previous_generation_sandboxes: 9, nodes: { ready: 0, preparing: 0, failed: 2, update_required: 1, unknown: 3 } } });
+    const settled = deployment({ reset: null, rollout: { state: "settled", previous_generation_sandboxes: 9, nodes: { ready: 0, preparing: 0, failed: 2, unknown: 3 } } });
     expect(sandboxResetPollInterval(settled)).toBe(false);
     expect(sandboxResetPollInterval({ ...settled, rollout: { ...settled.rollout, state: "preparing" } })).toBe(5000);
     expect(sandboxResetPollInterval({ ...settled, reset })).toBe(5000);

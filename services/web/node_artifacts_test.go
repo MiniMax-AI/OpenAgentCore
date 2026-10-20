@@ -14,7 +14,6 @@ import (
 func TestOnlineNodeArtifactsRedirectWithoutLocalPayload(t *testing.T) {
 	root := t.TempDir()
 	revision := strings.Repeat("a", 40)
-	prefix := "releases/" + revision + "/"
 	write := func(name string, data []byte) {
 		t.Helper()
 		full := filepath.Join(root, name)
@@ -31,8 +30,7 @@ func TestOnlineNodeArtifactsRedirectWithoutLocalPayload(t *testing.T) {
 		manifest.Artifacts[logical] = nodeArtifact{Filename: "oac-" + revision + "-" + strings.ReplaceAll(logical, "/", "-"), Size: 9, SHA256: hex.EncodeToString(sum[:])}
 	}
 	raw, _ := json.Marshal(manifest)
-	write(prefix+"manifest.json", raw)
-	write("active.json", []byte(`{"source_commit":"`+revision+`"}`))
+	write("manifest.json", raw)
 	payload, err := os.OpenRoot(root)
 	if err != nil {
 		t.Fatal(err)
@@ -45,31 +43,31 @@ func TestOnlineNodeArtifactsRedirectWithoutLocalPayload(t *testing.T) {
 	name := manifest.Artifacts["images/runtime.tar.gz"].Filename
 	for _, method := range []string{"GET", "HEAD"} {
 		w := httptest.NewRecorder()
-		h.serveNodePayload(w, httptest.NewRequest(method, "/node-install/"+prefix+"artifacts/"+name, nil))
+		h.serveNodePayload(w, httptest.NewRequest(method, "/node-install/artifacts/"+name, nil))
 		if w.Code != 307 || w.Header().Get("Location") != manifest.ArtifactBaseURL+"/"+name {
 			t.Fatal(w.Code, w.Header())
 		}
 	}
-	if _, err := os.Stat(filepath.Join(root, prefix, "artifacts")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "artifacts")); !os.IsNotExist(err) {
 		t.Fatal("Web cached execution artifacts", err)
 	}
 	for _, name := range []string{"unknown", "../manifest.json", "private-key"} {
 		w := httptest.NewRecorder()
-		h.serveNodePayload(w, httptest.NewRequest("GET", "/node-install/"+prefix+"artifacts/"+name, nil))
+		h.serveNodePayload(w, httptest.NewRequest("GET", "/node-install/artifacts/"+name, nil))
 		if w.Code != 404 {
 			t.Fatal(w.Code, name)
 		}
 	}
-	write(prefix+"artifacts/"+name, []byte("node-data"))
+	write("artifacts/"+name, []byte("node-data"))
 	w := httptest.NewRecorder()
-	request := httptest.NewRequest("GET", "/node-install/"+prefix+"artifacts/"+name, nil)
+	request := httptest.NewRequest("GET", "/node-install/artifacts/"+name, nil)
 	request.Header.Set("Range", "bytes=5-")
 	h.serveNodePayload(w, request)
 	if w.Code != 206 || w.Body.String() != "data" {
 		t.Fatal("offline artifact did not take precedence", w.Code, w.Body.String())
 	}
 	// A damaged local file must not be hidden by a remote availability fallback.
-	write(prefix+"artifacts/"+name, []byte("bad"))
+	write("artifacts/"+name, []byte("bad"))
 	if len(h.nodeArtifacts()) != 0 {
 		t.Fatal("damaged local Runtime was advertised")
 	}

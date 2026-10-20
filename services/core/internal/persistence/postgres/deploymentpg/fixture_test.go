@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/deploymentpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
@@ -77,7 +77,7 @@ func (f fixture) execution(t *testing.T) (*deployment.ExecutionOperations, *pgun
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = lease.Close(context.Background()) })
-	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher), engine.Catalog{})
+	operations, err := deployment.NewExecutionOperations(f.service, deploymentpg.NewExecution(lease, f.cipher), builtin.Registry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,10 +92,6 @@ func admin(t *testing.T) context.Context {
 // testSpecification is a valid deployment specification for provider.
 func testSpecification(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
-	if provider == "e2b" {
-		return s
-	}
-	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
 		s.Resources.EnvironmentDiskMiB = 8192
@@ -145,22 +141,29 @@ func (f fixture) connect(t *testing.T, nodeID string) string {
 	if err := f.service.ConnectNode(t.Context(), nodeID, connection, epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
+	if err := f.heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{}, true); err != nil {
 		t.Fatal(err)
 	}
 	return connection
 }
 
 // heartbeat reports the fixture's verified generation alongside static readiness.
-func (f fixture) heartbeat(ctx context.Context, nodeID, connection string, epoch uint64, health deployment.NodeHealth, _ []sandbox.GenerationStatus) error {
+func (f fixture) heartbeat(ctx context.Context, nodeID, connection string, epoch uint64, health deployment.NodeHealth, ready bool) error {
 	var generation uint64
 	var digest, provider string
 	if err := f.pool.QueryRow(ctx, "SELECT n.deployment_generation, n.specification_digest, d.provider_kind FROM runtime_nodes n CROSS JOIN runtime_deployment d WHERE n.id=$1", nodeID).Scan(&generation, &digest, &provider); err != nil {
 		return err
 	}
 	var statuses []sandbox.GenerationStatus
-	if health.ProviderReady && provider == "microsandbox" {
-		statuses = []sandbox.GenerationStatus{{Generation: generation, SpecificationDigest: digest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}
+	{
+		status := sandbox.GenerationStatus{Generation: generation, SpecificationDigest: digest, State: "ready"}
+		if !ready {
+			status.State = "failed"
+		}
+		if provider == "microsandbox" && ready {
+			status.Checkpoint = &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}
+		}
+		statuses = []sandbox.GenerationStatus{status}
 	}
 	return f.service.Heartbeat(ctx, nodeID, connection, epoch, health, statuses)
 }

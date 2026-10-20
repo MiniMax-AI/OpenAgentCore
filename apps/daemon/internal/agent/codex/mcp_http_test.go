@@ -26,8 +26,10 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer plan.Cleanup()
-	if !slices.Contains(plan.DisableFeatures, "apps") || !slices.Contains(plan.DisableFeatures, "plugins") || !slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) {
-		t.Fatal("native profile was not pinned")
+	if slices.Contains(plan.DisableFeatures, "apps") || slices.Contains(plan.DisableFeatures, "plugins") ||
+		!slices.Contains(plan.ExtraConfig, [2]string{"mcp_oauth_credentials_store", `"file"`}) ||
+		!slices.Contains(plan.ExtraConfig, [2]string{"shell_environment_policy.exclude", `["OAC_RUNTIME_MCP_*"]`}) {
+		t.Fatal("native profile kept only credential isolation")
 	}
 	home, err := allocCodexHome(testStateRoot(t), req.AgentStateKey)
 	if err != nil {
@@ -81,7 +83,6 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 	for _, server := range []proto.MCPHTTPServer{
 		{ConnectionOrigin: "service", ServerLabel: "codex_apps", ServerURL: "https://docs.example/mcp"},
 		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://user:synthetic-secret@docs.example/mcp"},
-		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "https://docs.example/mcp?token=synthetic-secret"},
 		{ConnectionOrigin: "service", ServerLabel: "docs", ServerURL: "file:///tmp/mcp"},
 	} {
 		servers := []proto.MCPHTTPServer{server}
@@ -121,7 +122,7 @@ func mcpHTTPConfigResponse(servers map[string]mcpServerConfig) map[string]any {
 		}
 		entries[name] = entry
 	}
-	return map[string]any{"config": map[string]any{"mcp_servers": entries, "features": map[string]any{"plugins": false, "apps": false}, "mcp_oauth_credentials_store": "file"}}
+	return map[string]any{"config": map[string]any{"mcp_servers": entries, "mcp_oauth_credentials_store": "file"}}
 }
 
 func writeMCPHTTPConfigResponse(t *testing.T, path string, response any) {

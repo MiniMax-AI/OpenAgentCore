@@ -3,7 +3,6 @@
 package node
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -187,11 +186,11 @@ func TestHealthCgroupMountPaths(t *testing.T) {
 func TestHostHealthReadOnly(t *testing.T) {
 	dir := t.TempDir()
 	sampler := new(hostHealthSampler)
-	a := agent{config: AgentConfig{StateDirectory: dir, Probe: probe}}
+	a := agent{config: AgentConfig{StateDirectory: dir, Generations: generationFixture(0)}}
 	before := time.Now().UTC()
-	h, err := a.health(context.Background(), sampler)
-	if err != nil || h.ObservedAt.Before(before) || h.ObservedAt.After(time.Now()) || h.ObservedAt.Location() != time.UTC {
-		t.Fatalf("invalid sample identity: %+v, %v", h, err)
+	h := a.health(sampler)
+	if h.ObservedAt.Before(before) || h.ObservedAt.After(time.Now()) || h.ObservedAt.Location() != time.UTC {
+		t.Fatalf("invalid sample identity: %+v", h)
 	}
 	if h.CPUUtilization != nil || h.TotalMemoryBytes == nil || *h.TotalMemoryBytes <= 0 || h.AvailableMemoryBytes == nil || *h.AvailableMemoryBytes < 0 || h.CPUCount == nil || *h.CPUCount <= 0 {
 		t.Fatalf("invalid initial host observation: %+v", h)
@@ -211,15 +210,15 @@ func TestHostHealthReadOnly(t *testing.T) {
 		t.Log(string(data))
 	}
 	time.Sleep(100 * time.Millisecond)
-	h, err = a.health(context.Background(), sampler)
-	if err != nil || h.CPUUtilization == nil || *h.CPUUtilization < 0 || *h.CPUUtilization > 1 || !h.ObservedAt.After(before) {
-		t.Fatalf("invalid follow-up observation: %+v, %v", h, err)
+	h = a.health(sampler)
+	if h.CPUUtilization == nil || *h.CPUUtilization < 0 || *h.CPUUtilization > 1 || !h.ObservedAt.After(before) {
+		t.Fatalf("invalid follow-up observation: %+v", h)
 	}
 	if os.Getenv("OAC_TEST_NODE_HEALTH_PROBE") == "1" {
 		data, _ := json.Marshal(h)
 		t.Log(string(data))
 	}
-	if fresh, _ := a.health(context.Background(), new(hostHealthSampler)); fresh.CPUUtilization != nil {
+	if fresh := a.health(new(hostHealthSampler)); fresh.CPUUtilization != nil {
 		t.Fatal("new connection reused a CPU baseline")
 	}
 	sampler.fill(&h, filepath.Join(dir, "missing"))

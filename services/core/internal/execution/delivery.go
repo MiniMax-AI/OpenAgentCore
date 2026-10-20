@@ -99,7 +99,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 	var pending *pendingInput
 	var cancelSent time.Time
 	var cancelReply <-chan cancellationResult
-	functions := &functionExchange{kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools}
+	functions := &functionExchange{kind: request.AgentKind, turns: d.SessionsReader, sessions: d.sessionExecution, tenant: tenantID, session: sessionID, turn: runID, tools: request.FunctionTools, abandoned: map[string]bool{}}
 	done := false
 	cancelCtx, stopCancellation := context.WithCancel(ctx)
 	defer stopCancellation()
@@ -217,12 +217,16 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 			case proto.TypeDone:
 				// Done closes the event subscription; application receipts have a separate waiter.
 				done, upstream = true, nil
-			case proto.TypeFunctionCall:
+			case proto.TypeFunctionCall, proto.TypeFunctionCallWithdrawn:
 				if err := journal.flush(ctx); err != nil {
 					result.ErrorCode = "event_persistence_failed"
 					return
 				}
-				if err := functions.record(ctx, env); err != nil {
+				settle := functions.record
+				if env.Type == proto.TypeFunctionCallWithdrawn {
+					settle = functions.withdraw
+				}
+				if err := settle(ctx, env); err != nil {
 					result.ErrorCode = "function_call_invalid"
 					return
 				}
@@ -329,7 +333,7 @@ func (d *Dispatcher) deliver(ctx context.Context, tenantID, sessionID string, pe
 					result.ErrorCode = "message_input_unsupported"
 					return
 				}
-				if send(ctx, peer, proto.TypePromptSteer, runID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input, DurableReceipt: true}) != nil {
+				if send(ctx, peer, proto.TypePromptSteer, runID, proto.PromptSteerPayload{InputID: strconv.FormatInt(pending.sequence, 10), Input: pending.input}) != nil {
 					result.ErrorCode = "input_outcome_unknown"
 					return
 				}

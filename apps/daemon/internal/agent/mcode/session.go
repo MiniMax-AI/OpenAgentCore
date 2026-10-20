@@ -48,6 +48,7 @@ type Session struct {
 	previousNativeTurns  map[string]bool
 	rootCompletedAtMS    *int64
 	subagentHistoryReady bool
+	functions            *functionCalls
 }
 
 var _ agent.Session = (*Session)(nil)
@@ -65,7 +66,7 @@ func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOpti
 }
 
 func newTurnSession(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, c *connection, out chan<- proto.Envelope) *Session {
-	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
+	return &Session{ctx: ctx, req: req, opts: opts, connection: c, out: out, frames: make(chan rpcFrame, 32), finished: make(chan struct{}), functions: &functionCalls{pending: map[string]*pendingFunction{}, stopped: make(chan struct{})}, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}}
 }
 
 func (s *Session) prepareNative() error {
@@ -74,7 +75,7 @@ func (s *Session) prepareNative() error {
 		Meta            struct {
 			Subagents struct {
 				Version, MaxConcurrent int
-				WorkspaceTools         string
+				BackgroundBash         *bool
 			} `json:"oac/subagents"`
 		} `json:"_meta"`
 	}
@@ -84,8 +85,11 @@ func (s *Session) prepareNative() error {
 	if initialized.ProtocolVersion != 1 {
 		return fmt.Errorf("mcode: unsupported ACP protocol version %d", initialized.ProtocolVersion)
 	}
-	if !s.req.DisableSubagents && (initialized.Meta.Subagents.Version != 1 || initialized.Meta.Subagents.WorkspaceTools != "protected-mcp-v1" || s.req.MaxConcurrentSubagents == nil || initialized.Meta.Subagents.MaxConcurrent != *s.req.MaxConcurrentSubagents) {
-		return fmt.Errorf("mcode: native Subagent admission is unavailable")
+	// Only the patched CLI reports that background bash is off; an unpatched one would leave work after a Turn.
+	meta := initialized.Meta.Subagents
+	if meta.Version != 2 || meta.BackgroundBash == nil || *meta.BackgroundBash ||
+		(!s.req.DisableSubagents && (s.req.MaxConcurrentSubagents == nil || meta.MaxConcurrent != *s.req.MaxConcurrentSubagents)) {
+		return fmt.Errorf("mcode: patched native CLI is unavailable")
 	}
 	params := map[string]any{"cwd": s.opts.Dir, "mcpServers": s.opts.MCP}
 	method := "session/new"
@@ -106,10 +110,15 @@ func (s *Session) prepareNative() error {
 	s.mu.Lock()
 	s.sessionID = session.SessionID
 	s.mu.Unlock()
-	model, err := advertisedModel(session.ConfigOptions, s.opts.Model)
+	// A model with effort options is advertised only with its "thinking" variant.
+	variant := ""
+	if s.req.ExecutionControls != nil && s.req.ExecutionControls.ReasoningEffort != "" {
+		variant = "thinking"
+	}
+	model, err := advertisedModel(session.ConfigOptions, s.opts.Model, variant)
 	if err != nil && s.req.AgentSessionID != "" && !slices.ContainsFunc(session.ConfigOptions, func(option configOption) bool { return option.ID == "model" }) {
 		// Native load omits the selector when its persisted model was removed; selection still validates against the current catalog.
-		model = "m:custom_provider%3Aoac:" + strings.ReplaceAll(url.QueryEscape(s.opts.Model), "+", "%20") + ":v:"
+		model = "m:custom_provider%3Aoac:" + strings.ReplaceAll(url.QueryEscape(s.opts.Model), "+", "%20") + ":v:" + variant
 		err = nil
 	}
 	if err != nil {
@@ -118,6 +127,10 @@ func (s *Session) prepareNative() error {
 	s.nativeModel = model
 	if err := s.call("session/set_config_option", map[string]any{"sessionId": session.SessionID, "configId": "model", "value": model}, nil, false); err != nil {
 		return err
+	}
+	if variant != "" {
+		// A selected variant takes no model default, so the Session's effort is set explicitly.
+		return s.call("session/set_config_option", map[string]any{"sessionId": session.SessionID, "configId": "thinkingEffort", "value": s.req.ExecutionControls.ReasoningEffort}, nil, false)
 	}
 	return nil
 }
@@ -148,7 +161,7 @@ func (s *Session) executePrompt(prompt string) error {
 }
 
 // Select the advertised custom model, rather than using mcode's native default.
-func advertisedModel(options []configOption, model string) (string, error) {
+func advertisedModel(options []configOption, model, variant string) (string, error) {
 	for _, option := range options {
 		if option.ID != "model" {
 			continue
@@ -166,7 +179,7 @@ func advertisedModel(options []configOption, model string) (string, error) {
 			if err != nil {
 				continue
 			}
-			if provider == "custom_provider:oac" && id == model && (parts[3] == "u" || (len(parts) == 5 && parts[3] == "v" && parts[4] == "")) {
+			if provider == "custom_provider:oac" && id == model && (parts[3] == "u" || (len(parts) == 5 && parts[3] == "v" && parts[4] == variant)) {
 				return candidate.Value, nil
 			}
 		}

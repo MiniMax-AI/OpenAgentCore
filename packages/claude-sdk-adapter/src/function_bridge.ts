@@ -12,7 +12,8 @@ export type FunctionResult = {
   content: InputContent[];
 };
 export type FunctionEvent =
-  | { type: "function_call"; call: { call_id: string; name: string; arguments: Record<string, unknown> } }
+  | { type: "function_call"; call: { call_id: string; name: string; arguments: Record<string, unknown>; native_id?: string; turn_id?: string } }
+  | { type: "function_withdrawn"; withdrawn: { call_id: string; native_id: string; turn_id: string } }
   | { type: "function_applied"; call_id: string; delivery_id: string };
 type Pending = {
   resolve: (result: CallToolResult) => void;
@@ -20,11 +21,15 @@ type Pending = {
   cleanup: () => void;
   result?: FunctionResult;
   aborted?: boolean;
+  child?: FunctionCall["child"];
 };
+// Native stopped waiting for the call, so no result can be applied.
+class Abandoned extends Error {}
 
 export class FunctionBridge {
   private readonly pending = new Map<string, Pending>();
   private readonly seen = new Set<string>();
+  private readonly withdrawn = new Set<string>();
   constructor(private readonly emit: (event: FunctionEvent) => Promise<void>) {}
 
   readonly invoke: FunctionHandler = async (call: FunctionCall, signal: AbortSignal) => {
@@ -36,16 +41,24 @@ export class FunctionBridge {
         const pending = this.pending.get(call.id);
         if (pending?.result) pending.aborted = true;
         else this.pending.delete(call.id);
-        reject(new Error("Native function call aborted."));
+        reject(new Abandoned("Native function call aborted."));
       };
       signal.addEventListener("abort", stop, { once: true });
-      this.pending.set(call.id, { resolve, reject, cleanup: () => signal.removeEventListener("abort", stop) });
+      this.pending.set(call.id, { resolve, reject, cleanup: () => signal.removeEventListener("abort", stop), child: call.child });
     });
-    const [, result] = await Promise.all([
-      this.emit({ type: "function_call", call: { call_id: call.id, name: call.name, arguments: call.arguments } }),
-      waiting,
-    ]);
-    return result;
+    try {
+      const [, result] = await Promise.all([
+        this.emit({ type: "function_call", call: { call_id: call.id, name: call.name, arguments: call.arguments, ...call.child } }),
+        waiting,
+      ]);
+      return result;
+    } catch (error) {
+      if (call.child && error instanceof Abandoned) {
+        this.withdrawn.add(call.id);
+        await this.emit({ type: "function_withdrawn", withdrawn: { call_id: call.id, ...call.child } });
+      }
+      throw error;
+    }
   };
 
   submit(line: string): void {
@@ -63,6 +76,8 @@ export class FunctionBridge {
       throw new Error("Native error results cannot retain images.");
     }
     const pending = this.pending.get(result.call_id);
+    // The host may send a result before it reads the withdrawal; native no longer waits for it.
+    if (!pending && this.withdrawn.has(result.call_id)) return;
     if (!pending || pending.result) throw new Error("Function result is not pending.");
     pending.result = result;
     pending.resolve({ content: result.content.map(part => {
@@ -73,12 +88,12 @@ export class FunctionBridge {
   }
 
   async consume(message: SDKMessage, sessionID: string, cancelled = false): Promise<void> {
-    if (message.type !== "user" || message.parent_tool_use_id !== null || message.session_id !== sessionID ||
+    if (message.type !== "user" || message.session_id !== sessionID ||
         message.isSynthetic || ("isReplay" in message && message.isReplay) || !Array.isArray(message.message.content)) return;
     for (const block of message.message.content) {
       if (block.type !== "tool_result") continue;
       const pending = this.pending.get(block.tool_use_id);
-      if (!pending || pending.aborted) continue;
+      if (!pending || pending.aborted || (message.parent_tool_use_id !== null) !== !!pending.child) continue;
       const result = pending.result;
       if (!result) {
         if (!cancelled || !block.is_error) throw new Error("Native response preceded host result.");
@@ -104,7 +119,7 @@ export class FunctionBridge {
       if (pending.result || (callID !== undefined && id !== callID)) continue;
       pending.cleanup();
       this.pending.delete(id);
-      pending.reject(new Error("Native function call cancelled."));
+      pending.reject(new Abandoned("Native function call cancelled."));
     }
   }
 
@@ -122,18 +137,12 @@ export class FunctionBridge {
 }
 
 // A matching root call confirms incorporation into native history. Native image
-// decoding/resizing may change bytes; preserve text and ordered image positions.
+// processing may change bytes or replace an unprocessable image with a text note;
+// preserve text and ordered image positions.
 function matchesNativeContent(content: InputContent[], actual: unknown): boolean {
   const expected = nativeContent({ content });
   if (!Array.isArray(expected) || !Array.isArray(actual) || actual.length !== expected.length) return false;
-  return expected.every((part, index) => {
-    const received = actual[index];
-    if (part.type !== "image") return isDeepStrictEqual(part, received);
-    if (!received || received.type !== "image" || received.source?.type !== "base64" ||
-        typeof received.source.media_type !== "string" || typeof received.source.data !== "string") return false;
-    try {
-      imageSource(`data:${received.source.media_type};base64,${received.source.data}`);
-      return true;
-    } catch { return false; }
-  });
+  return expected.every((part, index) => part.type === "image"
+    ? actual[index]?.type === "image" || actual[index]?.type === "text"
+    : isDeepStrictEqual(part, actual[index]));
 }

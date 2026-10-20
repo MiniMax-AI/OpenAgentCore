@@ -27,14 +27,20 @@ test("native selection composes unrestricted, selected and empty servers with ho
 
 test("invalid remote declarations and wildcard injection fail at the bridge boundary", () => {
   const start = { type: "start", input: [{ content: [{ type: "input_text", text: "hello" }] }], model: "model", system_prompt: "", cwd: "/tmp" };
-  for (const value of [null, {}, [declaration(["*"])], [{ ...declaration(null), server_label: "functions" }],
+  for (const value of [null, {}, [{ ...declaration(null), server_label: "functions" }],
     [{ ...declaration(null), server_url: "https://user:secret@example.invalid/mcp" }],
-    [{ ...declaration(null), server_url: "https://example.invalid/mcp?" }],
+    [{ ...declaration(null), server_url: "https://example.invalid/mcp#fragment" }],
     [{ ...declaration(null), required: "true" }], [{ ...declaration(null), required: null }], [declaration(null), declaration([])]]) {
     assert.throws(() => parseStart(JSON.stringify({ ...start, mcp_http_servers: value })));
   }
   assert.deepEqual(parseStart(JSON.stringify({ ...start, mcp_http_servers: [declaration(null), { ...declaration([]), server_label: "empty" }] })).mcp_http_servers,
     [declaration(null), { ...declaration([]), server_label: "empty" }]);
+  const withQuery = { ...declaration(null), server_url: "https://example.invalid/mcp?tenant=a" };
+  assert.deepEqual(parseStart(JSON.stringify({ ...start, mcp_http_servers: [withQuery] })).mcp_http_servers, [withQuery]);
+  // Native normalization turns any tool name into a literal identity, so a wildcard cannot widen the allowlist.
+  const wildcard = declaration(["*", "a/b"]);
+  assert.deepEqual(parseStart(JSON.stringify({ ...start, mcp_http_servers: [wildcard] })).mcp_http_servers, [wildcard]);
+  assert.deepEqual(new MCPProfile([wildcard], []).allowed, [native("_"), native("a_b")]);
 });
 
 test("native tool spelling preserves original identity and rejects ambiguous aliases", () => {

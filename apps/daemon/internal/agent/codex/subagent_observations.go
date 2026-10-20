@@ -113,6 +113,7 @@ func (s *Session) collectSubagentFacts() {
 			return
 		}
 		firstFailure = time.Time{}
+		s.sendHeldFunctionCalls(o.ctx)
 		if terminal != nil && !busy {
 			s.publishSubagentTerminal(terminal, nil)
 			return
@@ -129,6 +130,7 @@ func (s *Session) publishSubagentTerminal(events []proto.Envelope, cause error) 
 	for _, event := range events {
 		s.trySend(event)
 	}
+	s.stopFunctionCalls(false)
 	s.closeOut()
 }
 

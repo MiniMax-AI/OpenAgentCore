@@ -17,8 +17,8 @@ export const coreErrors = {
   "model_provider_base_url_invalid": "请使用 HTTPS 地址，不要包含凭据、查询参数或片段。",
   "model_provider_protocol_unsupported": "此 Harness 不支持该协议。",
   "model_provider_api_key_invalid": "请输入有效的 API 密钥，不要包含控制字符。",
-  "model_provider_token_limits_invalid": "请填写有效的 token 限制；输出不能超过上下文，必填限制必须大于零。",
-  "invalid_sandbox_configuration": "请检查沙箱资源和 Runtime 版本。",
+  "model_provider_token_limits_invalid": "请填写有效的 token 限制；输出不能超过上下文。",
+  "invalid_sandbox_configuration": "请检查沙箱资源。",
   "project_archived": "此项目已归档。",
   "project_exists": "此项目名称已被使用。",
   "project_api_key_exists": "此名称已被使用中的 API 密钥占用。",
@@ -55,6 +55,5 @@ export const coreErrorDetails = {
   "protocols": "支持的协议：{{protocols}}。",
   "keyLimit": "请输入有效的 API 密钥，长度最多 {{max}} 个字符。",
   "resourceRange": "请输入 {{min}} 到 {{max}} 的整数。",
-  "resourceMin": "请输入不小于 {{min}} 的整数。",
-  "runtime": "请使用适用于此沙箱提供商的有效不可变 Runtime 版本。"
+  "resourceMin": "请输入不小于 {{min}} 的整数。"
 } as const;

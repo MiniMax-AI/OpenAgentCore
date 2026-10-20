@@ -2,8 +2,27 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { createServer } from "node:http";
 import { join } from "node:path";
 import test from "node:test";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+
+// Stateless MCP server with a selected and an unselected tool.
+async function listen() {
+  const server = createServer(async (req, res) => {
+    if (req.method !== "POST") return void res.writeHead(405).end();
+    const mcp = new McpServer({ name: "fixture", version: "0" });
+    for (const name of ["echo", "extra"]) mcp.registerTool(name, {}, async () => ({ content: [] }));
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await mcp.connect(transport);
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    await transport.handleRequest(req, res, JSON.parse(body));
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  return { url: `http://127.0.0.1:${server.address().port}/mcp`, close: () => server.close() };
+}
 
 // Run the production entrypoint: its explicitly supplied Inputs must also be held.
 const fixture = `
@@ -15,10 +34,11 @@ const baseline=workspace?["Bash","Read","Edit"]:[];
 const sdk='export function startup(args){return globalThis.startup(args);} export function query(args){return globalThis.direct(args);} export async function getSessionInfo(){return process.argv[1]==="missing-history"?undefined:{sessionId:"native"};}';
 registerHooks({resolve(s,c,next){return s==="@anthropic-ai/claude-agent-sdk"?{url:"data:text/javascript,"+encodeURIComponent(sdk),shortCircuit:true}:next(s,c);}});
 function create(options){
- assert.deepEqual(options.tools,baseline);
- assert.equal(options.agent,"oac_root");
- assert.deepEqual(options.agents.oac_root.tools,[...baseline,...(mode==="workspace-empty"?[]:["mcp__fixture__echo"])]);
- assert.deepEqual(options.disallowedTools,mode==="workspace-empty"?["mcp__fixture__*","mcp__optional__*"]:["mcp__optional__*"]);assert.equal(options.strictMcpConfig,true);assert.equal(options.hooks.PreToolUse.length,1);
+ assert.deepEqual(options.tools,workspace?{type:"preset",preset:"claude_code"}:[]);
+ assert.equal(options.agent,undefined);assert.equal(options.agents,undefined);
+ assert.deepEqual(options.disallowedTools.filter(name=>name.startsWith("mcp__")),mode==="workspace-empty"?["mcp__fixture__*","mcp__optional__*"]:["mcp__optional__*","mcp__fixture__extra"]);
+ assert.equal(options.disallowedTools.includes("AskUserQuestion"),workspace);
+ assert.equal(options.strictMcpConfig,workspace?undefined:true);assert.deepEqual(options.settingSources,workspace?undefined:[]);assert.equal(options.hooks.PreToolUse.length,1);
  assert.equal(options.mcpServers.fixture.alwaysLoad,true);
  const child=options.spawnClaudeCodeProcess({command:process.execPath,args:["-e","process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"],env:options.env,signal:options.abortController.signal});
  process.send({kind:"spawn"});
@@ -54,9 +74,10 @@ await import(${JSON.stringify(new URL("../dist/main.js", import.meta.url).href)}
 process.disconnect();
 `;
 
-for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "missing-hooks", "cancelled", "resume", "wrong-history", "missing-history", "optional", "workspace-connected", "workspace-empty"]) {
+for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "missing-hooks", "cancelled", "resume", "wrong-history", "missing-history", "optional", "workspace-connected", "workspace-empty", "unlistable"]) {
   test(`required MCP entrypoint holds input through readiness: ${mode}`, async () => {
     const cwd = mkdtempSync(join(tmpdir(), "oac-required-"));
+    const remote = await listen();
     const child = spawn(process.execPath, ["--input-type=module", "-e", fixture, mode], { stdio: ["pipe", "pipe", "pipe", "ipc"], env: {...process.env,HOME:cwd,CLAUDE_CONFIG_DIR:cwd} });
     const observations = [];
     let stdout = "", stderr = "";
@@ -66,11 +87,11 @@ for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "m
     const closed = new Promise(resolve => child.once("close", (code, signal) => resolve({ code, signal })));
     const timer = setTimeout(() => child.kill("SIGKILL"), 8000);
     try {
-      const servers = [{ server_label: "fixture", server_url: "https://example.invalid/mcp", allowed_tools: mode === "workspace-empty" ? [] : ["echo"], required: mode !== "optional" },
+      const servers = [{ server_label: "fixture", server_url: mode === "unlistable" ? "http://127.0.0.1:1/mcp" : remote.url, allowed_tools: mode === "workspace-empty" ? [] : ["echo"], required: mode !== "optional" },
         { server_label: "optional", server_url: "https://optional.invalid/mcp", allowed_tools: [], required: false }];
       child.stdin.write(JSON.stringify({ type: "start", model: "fixed", input: [{ content: [{ type: "input_text", text: "one input" }] }], system_prompt: "", cwd,
         ...(mode.includes("history") || mode === "resume" ? { resume: "native" } : {}),
-        ...(mode.startsWith("workspace-") ? {workspace:{home:cwd,state:cwd,scratch:cwd,capability_root:cwd,env_names:[],network_access:"enabled",mcp:servers}} : {mcp_http_servers:servers}) }) + "\n");
+        ...(mode.startsWith("workspace-") ? {workspace:{home:cwd,state:cwd,scratch:cwd,capability_root:cwd,env_names:[],mcp:servers}} : {mcp_http_servers:servers}) }) + "\n");
       const exit = await closed;
       assert.equal(exit.signal, null, stderr);
       assert.equal(exit.code, 0, stderr);
@@ -83,7 +104,7 @@ for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "m
       if (mode === "missing-history") assert.equal(observations.length, 0);
       if (mode === "cancelled") assert.equal(events.at(-1).code, "cancelled");
     } finally {
-      clearTimeout(timer);child.kill("SIGKILL");await closed;rmSync(cwd, { recursive: true, force: true });
+      remote.close();clearTimeout(timer);child.kill("SIGKILL");await closed;rmSync(cwd, { recursive: true, force: true });
     }
   });
 }

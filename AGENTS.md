@@ -28,37 +28,48 @@ Do not multiply entities without necessity. The long-term goal is minimal code, 
 | Application–Core (`/v1`) | Official schema pinned by `contracts/agents-api/upstream.json` plus Go-owned `x_agents_core` extensions; `make openapi` generates public Go types and `contracts/agents-api/openapi.yaml` | [Agents API guide](docs/api/public-agent-api.md) |
 | Web and operators–Core (`/core/v1`) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/core.openapi.yaml` | [Core administration API](contracts/agents-api/admin-api.md) |
 | Nodes and daemons–Core (`/api/v1` HTTP routes; the node and daemon wire protocols are separate rows) | Route annotations in `services/core/internal/api/`; `make openapi` generates `contracts/agents-api/runtime.openapi.yaml` | [Machine connection API](contracts/agents-api/machine-api.md) |
-| Core and sandbox nodes–Workspace filesystem | `services/core/internal/workspacefs/workspacefs.go` | [Workspace filesystem providers](docs/workspace-provider.md) |
-| Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider guide](docs/sandbox-provider.md) |
+| Core and sandbox nodes–Workspace filesystem | `services/core/internal/workspacefs/workspacefs.go` | [Workspace filesystem protocol](docs/workspace-provider.md) |
+| Core–Sandbox Provider | `services/core/internal/sandbox/sandbox_provider.go` | [Sandbox Provider protocol](docs/sandbox-provider.md) |
 | Core–sandbox node | `services/core/internal/sandbox/node/wire.go` | [Sandbox node protocol](contracts/agents-api/node-generation-protocol.md) |
 | Provider–Runtime startup | `internal/runtimebootstrap/bootstrap.go` | [Runtime bootstrap](docs/runtime-bootstrap.md) |
 | Core–Runtime wire | `internal/agentdaemon/proto/` | [Core–Runtime protocol](docs/runtime-protocol.md) |
-| Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness onboarding](contracts/agents-api/harness-onboarding.md) |
+| Runtime–Harness | `apps/daemon/internal/agent/harness.go` | [Harness protocol](contracts/agents-api/harness-onboarding.md) |
 | Harness–Model provider | `internal/modelprovider/config.go` | [Model execution](contracts/agents-api/model-execution.md) |
 
 ### Complexity stays in the adapter
 
-- A new Sandbox Provider, Harness, model provider or vendor feature changes only its adapter. It adds no Core execution path, store table or column, migration, deployment or configuration field, API field or Web UI specific to one vendor or Harness. The [Sandbox Provider guide](docs/sandbox-provider.md) and [Harness onboarding](contracts/agents-api/harness-onboarding.md) describe how to add an adapter.
+- A new Sandbox Provider, Harness, model provider or vendor feature changes only its adapter. It adds no Core execution path, store table or column, migration, deployment or configuration field, API field or Web UI specific to one vendor or Harness. The [Sandbox Provider protocol](docs/sandbox-provider.md) and [Harness protocol](contracts/agents-api/harness-onboarding.md) describe how to add an adapter.
 - When the protocol cannot express what an adapter needs, change the protocol. Never add an optional side interface for one implementation.
 - Implementing the declared checkpoint lifecycle in one vendor's Provider is an adapter change. A vendor-only pause interface, a Core path for that vendor, vendor receipts in the store or a vendor idle setting in the deployment is not.
 - Fix shared lifecycle, admission, cancellation, reuse and performance problems in the common flow, never in a branch selected by Harness, Runtime or vendor name. Core preparation and execution never branch on operating system or Environment source; platform support requires native CI builds and automated tests.
 - Each Harness runs its own model and tool loop through a maintained upstream SDK or native protocol, in the Environment's declared workspace directory. Its native history or configuration directory is never the workspace. Never build a second executor, a hand-written model/tool loop or a compatibility framework to fabricate parity. The public API and persistence never depend on one engine's native item types.
 
+### Core assembles, Harnesses run natively
+
+Choosing a Harness and a model behaves like running that Harness locally with that model. The only differences are the cloud Environment, isolation, credentials and unattended operation.
+
+- Core assembles configuration and passes it through. When a Harness or model natively supports what an official field expresses, the adapter maps the field to the native setting and the native side runs it. If the provider cannot run it, the provider's own error returns unchanged. Core qualifies nothing on a provider's behalf. It adds nothing to model input and has no fallback, retry or substitute path. Authentication, isolation and credential protection are assembly and stay in Core.
+- A Harness joins through one declaration file, `internal/harnessconfig/<package>/declaration.go`, plus its adapter code ([declare the Harness](contracts/agents-api/harness-onboarding.md#declare-the-harness)). The declaration is the only source of support facts, and every other projection is generated from it.
+- An official field with no native home returns a typed error. Dropping it silently would be a fallback.
+- A default defined by the pinned official API applies. Everything else follows the native default, and Core sends nothing for it.
+- An adapter overrides a native default only when the Harness cannot otherwise run unattended in the cloud. The allowed reasons are: tools run without approval prompts, no ask-the-user tool, the workspace and state paths, credential isolation, bounded failure instead of waiting, no work that outlives its Turn, and no feature that needs an account credential Core does not hold. Each override has a one-line reason beside it, and the adapter guide lists it.
+- Never branch on the model or provider. When a model lacks a feature, the Harness handles it as it would locally.
+
 ### Public API
 
 - The target is the complete OpenAI Agents API (`openai/openai-python` `beta/agents`) as pinned in [`contracts/agents-api/upstream.json`](contracts/agents-api/upstream.json): paths, methods, headers, field presence, nullability, discriminators, defaults, status transitions, pagination, errors and streaming. Engine limitations are gaps to close, never grounds to narrow or redefine the contract. Operations or fields newer than the pinned baseline wait for a protocol upgrade.
-- Record each native Harness difference, and any unspecified or unverified behavior, in the [coverage ledger](contracts/agents-api/index.md). Reject explicit enablement of an unsupported feature and never invent official semantics. When a material difference has no clear mapping, stop and ask before changing its semantics. Native differences never relax authentication, isolation, credential protection or data consistency.
+- Record each native Harness difference, and any unspecified or unverified behavior, in the [OpenAI compatibility](contracts/agents-api/index.md). Reject explicit enablement of an unsupported feature and never invent official semantics. When a material difference has no clear mapping, stop and ask before changing its semantics. Native differences never relax authentication, isolation, credential protection or data consistency.
 - Applications, including the Parsar product, reach Core only through the public contract, with no privileged endpoint and no shared tables. Core never interprets their product payloads.
 
 ### One home for each setting and datum
 
 Each setting and each piece of data is written in one place and read from that place: no second copy, no environment-variable or file fallback and no alias. A new setting joins its category and lives beside its peers.
 
-The categories are [process settings](docs/configuration.md#process-settings), [secrets](docs/configuration.md#compose-installations), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration](docs/configuration.md) owns the installation layout and the settings themselves.
+The categories are [process settings](docs/configuration.md#process-settings), [secrets](docs/configuration.md#compose-installations), and Core's database for [runtime settings](docs/configuration.md#runtime-settings-web) and execution data. [Configuration reference](docs/configuration.md) owns the installation layout and the settings themselves.
 
 ### Pre-release: no compatibility layers
 
-OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and files outright. Keep no version fallback, compatibility shim or migration for superseded behavior unless an explicit upgrade contract requires it. Keep the pinned official public protocol, valid data and still-used, verified infrastructure. Do not rewrite working infrastructure only to rename it.
+OpenAgentCore has had no public release. Replace superseded interfaces, execution paths and files outright. Keep no version fallback, compatibility shim or migration for superseded behavior. An installation of another release is reinstalled, never upgraded. A schema change adds a forward migration, so existing development and test databases follow it; the migrations may be folded into one baseline at any time. Keep the pinned official public protocol, valid data and still-used, verified infrastructure. Do not rewrite working infrastructure only to rename it.
 
 ## Documentation
 
@@ -75,6 +86,8 @@ OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and
 
 - For each new task, create a new Git worktree. Name its directory after that change's commit subject, in kebab-case, beside the checkout. Run `git pull --ff-only` on the base branch, and create the feature branch in that worktree before development.
 - After every push to a pull request, wait 60 seconds, then run `gh pr checks` and confirm CI passes. Fix any failure before reporting the work as done.
+- When documents conflict, apply the latest explicit user decision and update the affected current guidance; recorded evidence does not override it.
+- Review the complete diff with a fresh independent subagent that receives only the requirements, acceptance criteria, boundaries, repository path and comparison baseline, with no implementation summary, self-assessment or earlier findings. Explain these criteria to the user. Do not use `codex exec` as a substitute reviewer. [CONTRIBUTING.md](CONTRIBUTING.md#review) states the review contract.
 - [CONTRIBUTING.md](CONTRIBUTING.md): documentation ownership, repository boundary, workflow, independent review, required checks and naming.
 - [Develop OpenAgentCore](docs/development.md): setup, the repository map, focused checks and [each extension boundary](docs/development.md#choose-an-extension-boundary).
-- [API index](docs/api/index.md): each route's caller and credential.
+- [API namespaces and credentials](docs/api/index.md): each route's caller and credential.

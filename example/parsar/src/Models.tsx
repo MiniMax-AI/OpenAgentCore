@@ -14,6 +14,7 @@ import { Button } from "./components/ui/button";
 import { ProviderEditor } from "./ProviderEditor";
 import { ErrorNotice } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
+import { randomUuid } from "@oac/agents-client";
 export function Models() {
   const models = useModels();
   const providers = useProviders();
@@ -34,7 +35,7 @@ export function Models() {
         <div className="flex items-center gap-2">
           <Button
             onClick={() =>
-              setProvider({ id: crypto.randomUUID(), name: "", revision: 0 })
+              setProvider({ id: randomUuid(), name: "", revision: 0 })
             }
           >
             <Plus />

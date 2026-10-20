@@ -93,7 +93,7 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 	case errors.Is(err, deployment.ErrNodeAddressMismatch):
 		writeError(w, http.StatusConflict, "sandbox_node_address_mismatch", "This node uses a different Core address than the installation public URL. Generate a new command on the Nodes page and run it on the host.")
 	case errors.Is(err, deployment.ErrSpecificationMismatch):
-		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits or Runtime release do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
+		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
 	case errors.Is(err, deployment.ErrNodeExists):
 		writeError(w, http.StatusConflict, "idempotency_conflict", "This idempotency key was used with different input.")
 	case errors.Is(err, deployment.ErrConflict):

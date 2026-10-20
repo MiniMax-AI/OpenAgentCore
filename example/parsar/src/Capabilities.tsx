@@ -21,6 +21,7 @@ import {
   DialogFooter,
 } from "./components/ui/dialog";
 import { EmptyState } from "./components/ui/empty-state";
+import { randomUuid } from "@oac/agents-client";
 export interface Capability {
   id: string;
   name: string;
@@ -114,7 +115,7 @@ function CapabilityList({ kind }: { kind: Capability["kind"] }) {
         <Button
           onClick={() =>
             setEditing({
-              id: crypto.randomUUID(),
+              id: randomUuid(),
               name: "",
               description: "",
               kind,

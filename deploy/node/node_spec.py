@@ -1,4 +1,4 @@
-"""Read the Core-owned node specification and verify its matched release."""
+"""Read the Core-owned node specification."""
 import hashlib
 import http.client
 import json
@@ -12,28 +12,25 @@ class SpecificationError(Exception):
     pass
 
 
+class UnrecordedIdentity(SpecificationError):
+    """Core rejects the retained identity of a node that never registered, so it never recorded it."""
+
+
 PUBLIC_URL_CHANGED = ("Core's public URL changed after this command was generated. Generate a new command on the "
                       "Nodes page and run it on this host.")
-
-
-def release(manifest):
-    return {"source_commit": manifest["source_commit"],
-            "image_id": manifest["images"]["runtime"],
-            "image_manifest_digest": manifest["image_manifest_digests"]["runtime"],
-            "microsandbox_ref": manifest["runtime_ref"],
-            "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
-            "firmware_sha256": manifest["microsandbox"]["firmware_sha256"]}
+ENROLLMENT_EXPIRED = ("The enrollment command expired or was already used. Generate a new command on the Nodes page "
+                      "and run it on this host.")
 
 
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"runtime\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
 
 def canonical_spec(provider, specification, validate=True):
     rules = _CONTRACT["providers"][provider]
-    if validate and (not isinstance(specification, dict) or set(specification) - {"workspace"} != ({"resources", "runtime"} if rules["runtime"] else {"resources"})):
+    if validate and (not isinstance(specification, dict) or set(specification) - {"workspace"} != {"resources"}):
         raise ValueError("Invalid specification fields")
     workspace = specification.get("workspace")
     requirements = rules.get("workspace")
@@ -63,17 +60,6 @@ def canonical_spec(provider, specification, validate=True):
         if value or not rule["omit_zero"]:
             ordered[name] = value
     result = {"provider": provider, "resources": ordered}
-    if rules["runtime"]:
-        runtime = specification["runtime"]
-        if validate and (not isinstance(runtime, dict) or set(runtime) != {rule["name"] for rule in _CONTRACT["runtime"]}):
-            raise ValueError("Invalid release fields")
-        ordered_runtime = {}
-        for rule in _CONTRACT["runtime"]:
-            value = runtime[rule["name"]]
-            if validate and (not isinstance(value, str) or not re.fullmatch(rule["pattern"], value)):
-                raise ValueError("Invalid release identity")
-            ordered_runtime[rule["name"]] = value
-        result["runtime"] = ordered_runtime
     if workspace is not None:
         result["workspace"] = {field: workspace[field] if field == "attachment" else bool(workspace.get(field, False)) for field in _CONTRACT["workspace_fields"]}
     return result
@@ -92,7 +78,7 @@ def validate(data, args):
         if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
-                or set(spec) - {"workspace"} != {"resources", "runtime"}
+                or set(spec) - {"workspace"} != {"resources"}
                 or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
                 or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
             raise ValueError()
@@ -128,9 +114,7 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
                 raise
             # Identity is persisted before enrollment. A failed first registration
             # may therefore have no durable credential on Core yet.
-            request = urllib.request.Request(args.core_url + "/api/v1/sandbox-node/configuration",
-                                             headers={"Authorization": "Bearer " + token})
-            response = open_request(request)
+            raise UnrecordedIdentity("Core has no record of the retained node identity") from None
         with response:
             raw = response.read(16385)
         if len(raw) > 16384:
@@ -139,13 +123,15 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
     except urllib.error.HTTPError as error:
         if error.code == 401 and retained is not None and not allow_enrollment:
             raise SpecificationError("Core no longer accepts this node: it was removed on the Nodes page, or a sandbox "
-                                     "deployment change retired it. Uninstall it with node-install.pyz --uninstall "
-                                     "--installation-id " + args.installation_id + ", then add the host with a new command.") from None
+                                     "deployment change retired it. Uninstall it with the command from Clean up a host on the Nodes page, "
+                                     "then add the host with a new command.") from None
         if error.code == 404:
             raise SpecificationError("Core node configuration was not found (HTTP 404); route /api/v1 on the Core origin directly to Core, not to Web") from None
         if error.code == 409:
             raise SpecificationError("Core refused node configuration (HTTP 409): the deployment is resetting or conflicts with this node's retained specification; inspect the deployment before retrying") from None
-        raise SpecificationError("Core rejected the node configuration read (HTTP " + str(error.code) + "); verify the retained or enrollment credential") from None
+        if error.code == 401:
+            raise SpecificationError(ENROLLMENT_EXPIRED) from None
+        raise SpecificationError("Core rejected the node configuration read (HTTP " + str(error.code) + "); check the Core URL and the reverse proxy in front of it, then rerun the command") from None
     except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
         raise SpecificationError("Cannot reach Core node configuration; verify the Core origin and that the reverse proxy routes /api/v1 to Core") from None
     except (ValueError, AttributeError):
@@ -155,15 +141,11 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
         if (identity.get("provider") != data["provider"]
                 or not allow_selection_change and (identity.get("specification_digest") != data["specification_digest"]
                 or identity.get("deployment_generation") != data["generation"])):
-            raise SpecificationError("Retained node specification differs from Core; preserve its state and follow the deployment change procedure")
+            raise SpecificationError("This node is registered and prepares the changed sandbox configuration itself; the Nodes page "
+                                     "shows its progress. Nothing was changed.")
     if generation is not None and data["generation"] != generation:
         raise SpecificationError("Core returned a different generation")
     return data
-
-
-def verify_release(configuration, manifest):
-    if configuration["specification"]["runtime"] != release(manifest):
-        raise SpecificationError("Core Runtime release differs from this distribution; use the matched installation artifacts")
 
 
 def verify_provider(stored, configuration, runtime_image):

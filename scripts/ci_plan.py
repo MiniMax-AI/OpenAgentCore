@@ -56,7 +56,7 @@ RULES = (
     (("services/web/",), (*GO, "Dockerfile"), ("distribution", "compose", "web", "web-acceptance")),
     (("example/",), WEB + (".sh",), ("example",)),
     (("docs/", "contracts/"), ("",), ("website",)),
-    (("website/",), (*WEB, ".vue", ".md"), ("website",)),
+    (("website/",), (*WEB, ".vue", ".md", ".sh"), ("website",)),
     (("services/core/",), CORE, ("backend", "api", "compose")),
     (("services/core/cmd/oac/",), GO, ("native", "distribution")),
     (("deploy/install.sh", "deploy/install.ps1", "deploy/test_install.ps1"), (".sh", ".ps1"), ("native", "distribution")),
@@ -70,7 +70,7 @@ RULES = (
     (("packages/claude-sdk-adapter/", "packages/mcode-harness/"), WEB, ("harness", "native", "backend", "distribution")),
     (("packages/tsconfig/",), (".json",), ("harness", "native")),
     (("deploy/node/", "scripts/acceptance/"), (".py", ".json", ".sh"), ("distribution",)),
-    (("deploy/compose/",), (".yaml", ".toml", ".json"), ("distribution", "compose")),
+    (("deploy/compose/",), (".yaml", ".toml", ".json", ".txt"), ("distribution", "compose")),
     (("scripts/compose-smoke.py", "scripts/render-compose.py", "deploy/compose/test_compose.py"), (".py",), ("distribution", "compose")),
     (("deploy/install.sh", "deploy/install-source.py", "deploy/test_install.py", "scripts/publish-core-release.",
       "scripts/core-distribution-manifest.", "scripts/build-core-distribution.sh",
@@ -86,7 +86,7 @@ RULES = (
     (("scripts/generate-harness-catalog", "scripts/harness-catalog/", "scripts/openapi-split/", "scripts/patch-agents-openapi.py",
       "scripts/generate-public-api"), SCRIPTS, JOBS),
     (("scripts/check-sqlc.py", "scripts/go-test-shard.py"), (".py",), ("backend",)),
-    (("scripts/check-names", "scripts/name-allowlist.json", "scripts/ci_"), (".py", ".json"), ("hygiene",)),
+    (("scripts/ci_",), (".py",), ("hygiene",)),
     ((".github/workflows/", ".github/actions/"), (".yml", ".yaml"), JOBS),
 )
 # Embedded files and test fixtures are executable inputs regardless of suffix.
@@ -110,7 +110,7 @@ IMAGE_INPUTS = ("scripts/build-core", "scripts/build-e2b-provider", "deploy/dist
                 "services/core/deploy/e2b/")
 # Generated outputs retain freshness checks even when the file is documentation.
 GENERATED_OUTPUTS = {"contracts/agents-api/harness-catalog.md", "contracts/agents-api/zh/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
-                     "services/core/internal/engine/catalog_generated.go"}
+                     "internal/harnessconfig/builtin/registry.go", "apps/daemon/internal/cli/harness_declarations.go"}
 
 
 def full(reason):

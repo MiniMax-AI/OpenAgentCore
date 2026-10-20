@@ -24,7 +24,7 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	// A none device without a frozen provider uses its own provider environment:
 	// Core sends only the Agent's model and instructions.
 	instructions := "Keep this instruction."
-	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: &v1.Environment{Type: "none"}}
+	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: v1.Environment{Type: "none"}}
 	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{})
 	if err != nil || !reflect.DeepEqual(request.AgentOptions, map[string]any{"model": "device-model", "system_prompt": &instructions}) {
 		t.Fatal("none Session received adapter options Core does not own", request.AgentOptions, err)
@@ -35,7 +35,10 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 	for _, engine := range []string{"codex", "claude_sdk", "mcode"} {
 		for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
 			t.Run(engine+"/"+protocol, func(t *testing.T) {
-				provider := &v1.ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000, MaxOutputTokens: 8000}
+				provider := &v1.ModelProviderInput{Protocol: modelprovider.Protocol(protocol), BaseURL: "https://example.com/v1", APIKey: "private-key", ContextWindow: 200000}
+				if engine != "codex" {
+					provider.MaxOutputTokens = 8000 // Codex has no native output limit.
+				}
 				got, err := resolvedSessionModelOptions(provider, engine)
 				native := engine == "mcode" || engine == "codex" && protocol == "responses" || engine == "claude_sdk" && protocol == "anthropic"
 				if !native {
@@ -62,7 +65,7 @@ func TestSessionModelOptionsPreserveUpstreamBundleForEveryHarness(t *testing.T) 
 
 func TestSessionModelOptionsValidateAdmission(t *testing.T) {
 	provider := &v1.ModelProviderInput{Protocol: "responses", BaseURL: "https://example.com/v1", APIKey: "private-key"}
-	for _, engine := range []string{"mcode", "unknown", ""} {
+	for _, engine := range []string{"unknown", ""} {
 		if _, err := resolvedSessionModelOptions(provider, engine); err == nil {
 			t.Fatalf("invalid provider/harness configuration accepted for %q", engine)
 		}

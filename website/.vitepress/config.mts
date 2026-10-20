@@ -6,14 +6,14 @@ import { defineConfig, type SiteConfig } from 'vitepress'
 import { mermaidFences } from './mermaid.mts'
 import { repositoryLinks } from './repository-links.mts'
 import { siteBase } from './site-base.mts'
-import { docsSidebar, legacyRedirects, pageTitle, readDocsJson, repoRoot } from './docs-nav.mts'
+import { docsNav, docsSidebar, pageTitle, readDocsJson, repoRoot, summary } from './docs-nav.mts'
 
 // Pages outside this package resolve Vue from here, not from the repository root.
 const require = createRequire(import.meta.url)
 const vueDir = dirname(require.resolve('vue/package.json'))
 
 const repo = 'https://github.com/MiniMax-AI/OpenAgentCore'
-const description = 'An open-source, self-hosted implementation of the OpenAI Agents API with multiple native Harnesses.'
+const description = 'The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or MiniMax Code on your own machines with your own models, through the official OpenAI SDK.'
 
 const base = siteBase(process.env.WEBSITE_URL)
 
@@ -21,18 +21,11 @@ const base = siteBase(process.env.WEBSITE_URL)
 const logoSvg = readFileSync(resolve(repoRoot, 'docs/assets/openagentcore-logo.svg'), 'utf8')
 const favicon = `data:image/svg+xml,${encodeURIComponent(logoSvg.replace('currentColor', '#4ADE80'))}`
 
-const docsNav = [
-  { text: 'Docs', link: '/docs/getting-started/', activeMatch: '^/docs/(getting-started|examples|configuration|web)' },
-  { text: 'API', link: '/docs/api/public-agent-api', activeMatch: '^/(docs/api|contracts)/' },
-  { text: 'Architecture', link: '/docs/architecture', activeMatch: '^/docs/(architecture|concepts|runtime|sandbox|development)' },
-]
-
 export default defineConfig({
   title: 'OpenAgentCore',
   description,
   base,
   cleanUrls: true,
-  lastUpdated: true,
   appearance: 'dark',
 
   // The existing documentation is published in place: the repository root is
@@ -65,31 +58,26 @@ export default defineConfig({
     ['meta', { name: 'theme-color', content: '#0a0d0c' }],
     ['meta', { property: 'og:title', content: 'OpenAgentCore — One core. Many agents.' }],
     ['meta', { property: 'og:description', content: description }],
-    ['meta', { property: 'og:image', content: 'https://raw.githubusercontent.com/MiniMax-AI/OpenAgentCore/main/docs/assets/openagentcore-banner.jpeg' }],
+    ['meta', { property: 'og:image', content: 'https://raw.githubusercontent.com/MiniMax-AI/OpenAgentCore/main/docs/assets/og-image.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:image', content: 'https://raw.githubusercontent.com/MiniMax-AI/OpenAgentCore/main/docs/assets/og-image.png' }],
   ],
 
   locales: {
     root: {
       label: 'English',
       lang: 'en',
-      themeConfig: { nav: docsNav },
+      themeConfig: { nav: docsNav() },
     },
     zh: {
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
-      description: '开源、可自部署的 OpenAI Agents API 实现，支持多种原生 Harness。',
+      description: '开源、可自部署的 OpenAI Agents API。用官方 OpenAI SDK，在你自己的机器上用你自己的模型运行 Codex、Claude Code 或 MiniMax Code。',
       themeConfig: {
-        nav: docsNav.map((item, index) => ({
-          ...item,
-          text: ['文档', 'API', '架构'][index],
-          link: `/zh${item.link}`,
-          activeMatch: item.activeMatch.replace('^/', '^/zh/'),
-        })),
+        nav: docsNav('zh'),
         langMenuLabel: '切换语言',
-        lastUpdatedText: '最后更新',
-        footer: { message: '基于 MIT 许可证发布。', copyright: 'One core. Many agents.' },
+        footer: { message: '基于 MIT 许可证发布。© 2026 MiniMax-AI' },
         returnToTopLabel: '返回顶部',
         sidebarMenuLabel: '目录',
         darkModeSwitchLabel: '主题',
@@ -107,22 +95,14 @@ export default defineConfig({
     logo: { src: favicon, alt: '' },
     siteTitle: 'OpenAgentCore',
     socialLinks: [{ icon: 'github', link: repo }],
-    sidebar: {
-      '/docs/': docsSidebar(),
-      '/contracts/': docsSidebar(),
-      '/zh/docs/': docsSidebar('zh'),
-      '/zh/contracts/': docsSidebar('zh'),
-    },
+    sidebar: { ...docsSidebar(), ...docsSidebar('zh') },
     outline: { level: [2, 3] },
     search: { provider: 'local', options: { locales: { zh: { translations: { button: { buttonText: '搜索文档', buttonAriaLabel: '搜索文档' }, modal: { noResultsText: '没有找到相关内容', resetButtonTitle: '清除搜索', displayDetails: '显示详细内容', footer: { selectText: '选择', navigateText: '切换', closeText: '关闭' } } } } } } },
     editLink: {
       pattern: `${repo}/edit/main/:path`,
       text: 'Edit this page on GitHub',
     },
-    footer: {
-      message: 'Released under the MIT License.',
-      copyright: 'One core. Many agents.',
-    },
+    footer: { message: 'Released under the MIT License. © 2026 MiniMax-AI' },
   },
 
   markdown: {
@@ -149,7 +129,7 @@ export default defineConfig({
 
   buildEnd: (site) => {
     writeMarkdownCopies(site)
-    writeLegacyRedirects(site)
+    copyFileSync(resolve(repoRoot, 'website/install.sh'), resolve(site.outDir, 'install.sh'))
   },
 })
 
@@ -168,23 +148,12 @@ function writeMarkdownCopies(site: SiteConfig) {
 
   const origin = site.site.base
   const lines = ['# OpenAgentCore', '', `> ${description}`, '']
-  for (const group of readDocsJson().navigation.groups) {
-    lines.push(`## ${group.group}`, '')
-    for (const page of group.pages) lines.push(`- [${pageTitle(page)}](${origin}${page}.md)`)
-    lines.push('')
+  for (const tab of readDocsJson().navigation.tabs) {
+    for (const group of tab.groups) {
+      lines.push(`## ${tab.tab} › ${group.group}`, '')
+      for (const page of group.pages) lines.push(`- [${pageTitle(page)}](${origin}${page}.md): ${summary(page)}`)
+      lines.push('')
+    }
   }
   writeFileSync(resolve(site.outDir, 'llms.txt'), lines.join('\n'))
-}
-
-/** Writes static redirects for the non-Markdown legacy paths declared in docs.json. */
-function writeLegacyRedirects(site: SiteConfig) {
-  for (const { from, to } of legacyRedirects()) {
-    const target = resolve(site.outDir, `${from}.html`)
-    const url = `${site.site.base}${to.replace(/^\//, '')}`
-    mkdirSync(dirname(target), { recursive: true })
-    writeFileSync(
-      target,
-      `<!doctype html><meta charset="utf-8"><title>Redirecting…</title><link rel="canonical" href="${url}"><meta http-equiv="refresh" content="0; url=${url}"><a href="${url}">${url}</a>\n`,
-    )
-  }
 }

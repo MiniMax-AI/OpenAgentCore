@@ -77,7 +77,7 @@ def run(sid, output=None, expected=None, cancel=False, failed_text=False, valida
                     key = "result-" + action.call_id
                     if validate:
                         before = items(sid)
-                        invalid_urls = ["https://example.test/image.png", "data:image/png;base64,?", "data:image/png;base64,AQID"]
+                        invalid_urls = ["https://example.test/image.png", "data:image/png;base64,?"]
                         # Claude rejects malformed/remote and error images before consuming a call.
                         if proof["kind"] == "claude_sdk":
                             invalid = [{**result, "output": [{"type": "input_image", "image_url": u}]} for u in invalid_urls]

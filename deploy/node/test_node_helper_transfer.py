@@ -21,8 +21,8 @@ class HelperTransferTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "node-install.pyz"
-            source.write_bytes(node_generations.helper_archive(SimpleNamespace(bundle=None), installer))
-            args = SimpleNamespace(bundle=None, source_url="https://core.example", core_url="https://core.example")
+            source.write_bytes(node_generations.helper_archive(SimpleNamespace(), installer))
+            args = SimpleNamespace(source_url="https://core.example", core_url="https://core.example")
             with mock.patch.object(sys, "argv", [str(source)]):
                 captured = node_generations.helper_archive(args, installer)
                 source.unlink()
@@ -32,7 +32,6 @@ class HelperTransferTests(unittest.TestCase):
             self.assertEqual(stat.S_IMODE(helper.stat().st_mode), 0o600)
             with zipfile.ZipFile(helper) as archive:
                 self.assertEqual(set(archive.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"})
-            self.assertEqual(json.loads((root / "preparation.json").read_text()), {"source_url": "https://core.example"})
 
     @unittest.skipUnless(hasattr(os, "fork") and os.geteuid() == 0, "requires a disposable Linux root test environment")
     def test_real_service_uid_cannot_read_private_download_but_can_install_snapshot(self):
@@ -45,9 +44,9 @@ class HelperTransferTests(unittest.TestCase):
             uid = gid = 65534
             os.chown(root, uid, gid)
             source = download / "node-install.pyz"
-            source.write_bytes(node_generations.helper_archive(SimpleNamespace(bundle=None), installer))
+            source.write_bytes(node_generations.helper_archive(SimpleNamespace(), installer))
             source.chmod(0o600)
-            args = SimpleNamespace(bundle=None, source_url="https://core.example", core_url="https://core.example")
+            args = SimpleNamespace(source_url="https://core.example", core_url="https://core.example")
             with mock.patch.object(sys, "argv", [str(source)]):
                 captured = node_generations.helper_archive(args, installer)
                 pid = os.fork()

@@ -93,7 +93,7 @@ func TestDialPassesAuthOnlyInHeader(t *testing.T) {
 
 	headers := http.Header{"Authorization": {"Bearer obsolete"}, "X-Test": {"preserved"}}
 	conn, err := transport.Dial(context.Background(), transport.DialOptions{
-		WSURL:         httpToWS(srv.URL) + "/agent-daemon/ws?token=legacy",
+		WSURL:         httpToWS(srv.URL) + "/agent-daemon/ws",
 		HTTPHeader:    headers,
 		DeviceID:      "rt_abc",
 		Credential:    "shh-secret",

@@ -1,11 +1,9 @@
 package agent_test
 
 import (
-	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -20,7 +18,6 @@ func TestPublicHarnessContractDeclarations(t *testing.T) {
 		"Turn":                     {"session"},
 		"Session":                  {"session"},
 		"DurableSteerer":           {"session"},
-		"Steerer":                  {"session"},
 		"FunctionResultSubmitter":  {"session"},
 		"WorkspaceReader":          {"executor", "session"},
 		"WorkspaceDirectoryLister": {"executor", "session"},
@@ -58,17 +55,12 @@ func TestPublicHarnessContractDeclarations(t *testing.T) {
 			t.Fatalf("unclassified interface %s", name)
 		}
 	}
-	data, err := os.ReadFile("../../../../internal/harnessconfig/builtin/catalog.json")
-	if err != nil {
-		t.Fatal(err)
+	declarations, err := filepath.Glob("../../../../internal/harnessconfig/*/declaration.go")
+	if err != nil || len(declarations) == 0 {
+		t.Fatal("no Harness declarations", err)
 	}
-	var catalog []struct {
-		Configuration string `json:"configuration"`
-	}
-	if err := json.Unmarshal(data, &catalog); err != nil {
-		t.Fatal(err)
-	}
-	for _, entry := range catalog {
+	for _, declaration := range declarations {
+		entry := struct{ Configuration string }{filepath.Base(filepath.Dir(declaration))}
 		t.Run(entry.Configuration, func(t *testing.T) {
 			f, err := parser.ParseFile(token.NewFileSet(), filepath.Join(entry.Configuration, "contracts.go"), nil, 0)
 			if err != nil {

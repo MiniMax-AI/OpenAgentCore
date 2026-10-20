@@ -13,7 +13,7 @@ describe("sandbox localization", () => {
   });
   it("localizes all diagnostic labels and advice", () => {
     for (const code of ["node_unavailable", "resource_missing", "compute_unconfirmed", "ownership_mismatch", "provider_unavailable", "host_unsupported",
-      "artifacts_unavailable", "runtime_download_failed", "runtime_image_unavailable", "capacity_insufficient", "unknown"]) {
+      "artifacts_unavailable", "runtime_image_unavailable", "capacity_insufficient", "unknown"]) {
       const message = sandboxDiagnosticMessage(code, "zh-CN");
       expect(message?.label).toMatch(/[\u4e00-\u9fff]/);
       expect(message?.advice).toMatch(/[\u4e00-\u9fff]/);

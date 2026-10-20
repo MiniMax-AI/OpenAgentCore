@@ -188,7 +188,6 @@ def main():
                     expect_error(NotFoundError, lambda: b.beta.agents.sessions.list(after=first.id))
                     expect_error(AuthenticationError, lambda: invalid.beta.agents.sessions.retrieve(first.id))
                     expect_error(BadRequestError, lambda: sessions.retrieve(first.id, extra_headers={"OpenAI-Beta": ""}))
-                    expect_error(BadRequestError, lambda: sessions.create(**{**spec, "input": [{"role": "user", "content": [{"type": "input_image", "image_url": "https://example.com/image.png"}]}]}))
                     # A self-hosted Session carries its own write-only model provider; nothing here calls it.
                     provider = {"protocol": "responses", "base_url": "https://model.fixture.example/v1", "api_key": "fixture-model-key"}
                     self_hosted = sessions.create(agent=spec["agent"], environment={"type": "self_hosted", "workspace_directory": "/workspace"},

@@ -14,6 +14,7 @@ import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { EmptyState } from "./components/ui/empty-state";
 import { ErrorNotice, Field, PageHeader, Section } from "./components/shared";
+import { randomUuid } from "@oac/agents-client";
 
 export function AgentPage({
   id,
@@ -34,13 +35,13 @@ export function AgentPage({
       : source
         ? {
             ...source,
-            id: crypto.randomUUID(),
+            id: randomUuid(),
             name: tr("{{value0}} 副本", { value0: source.name }),
             revision: 0,
           }
         : {
             ...emptyConfiguration,
-            id: crypto.randomUUID(),
+            id: randomUuid(),
             name: "",
             description: "",
             ask_user: true,

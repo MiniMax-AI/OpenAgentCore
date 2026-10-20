@@ -14,9 +14,9 @@ func TestMCPFrozenCredentialAdmission(t *testing.T) {
 	vault, credential := uuid.NewString(), uuid.NewString()
 	for _, mode := range []string{"implicit", "explicit", "oauth implicit", "oauth explicit", "anonymous", "missing", "unattached", "wrong URL", "wrong auth", "changed selection", "HTTP", "self-hosted explicit", "self-hosted implicit", "self-hosted anonymous"} {
 		t.Run(mode, func(t *testing.T) {
-			tool := v1.MCPTool{Type: "mcp", ServerLabel: "tools", ConnectionOrigin: "service", Transport: v1.MCPHTTPTransport{Type: "http", ServerURL: "https://mcp.example/tools"}}
+			tool := v1.MCPTool{Type: "mcp", ServerLabel: "tools", ConnectionOrigin: "service", Transport: v1.MCPTransport{Type: "http", ServerURL: "https://mcp.example/tools"}}
 			binding := vaults.MCPCredentialBinding{ServerLabel: "tools", ServerURL: tool.Transport.ServerURL, VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}
-			snapshot := Snapshot{Agent: v1.Agent{Model: "model"}, Environment: &v1.Environment{Type: "none"}, VaultIDs: []string{vault}}
+			snapshot := Snapshot{Agent: v1.Agent{Model: "model"}, Environment: v1.Environment{Type: "none"}, VaultIDs: []string{vault}}
 			switch mode {
 			case "explicit", "oauth explicit", "missing", "changed selection", "self-hosted explicit":
 				tool.CredentialID = &credential
@@ -35,7 +35,7 @@ func TestMCPFrozenCredentialAdmission(t *testing.T) {
 				binding.AuthType = "mcp_oauth"
 			}
 			if strings.HasPrefix(mode, "self-hosted") {
-				snapshot.Environment = &v1.Environment{Type: "self_hosted", WorkspaceDirectory: "/workspace"}
+				snapshot.Environment = v1.Environment{Type: "self_hosted", WorkspaceDirectory: "/workspace"}
 			}
 			if mode == "changed selection" {
 				binding.CredentialID = uuid.NewString()

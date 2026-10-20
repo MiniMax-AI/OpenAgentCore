@@ -1,7 +1,5 @@
 package claudesdk
 
-import configuration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
-
 import (
 	"context"
 	"fmt"
@@ -13,43 +11,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
 const claudeSDKEntrypointEnv = "OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT"
 const claudeSDKNodeEnv = "OAC_RUNTIME_CLAUDE_SDK_NODE"
 
-// Declaration owns Claude SDK discovery, configuration and execution factories.
-var Declaration = agent.Declaration{Info: proto.SupportedAgentKind{Kind: "claude_sdk", Capabilities: proto.AgentKindCapabilities{
-	SubagentObservations:           proto.CapabilityUnsupported,
-	Streaming:                      proto.CapabilitySupported,
-	Usage:                          proto.CapabilitySupported,
-	Resume:                         proto.CapabilitySupported,
-	RetainedNativeHistory:          proto.CapabilityUnsupported,
-	NativeSessionRecovery:          proto.CapabilityUnsupported,
-	Steering:                       proto.CapabilitySupported,
-	MessageItems:                   proto.CapabilitySupported,
-	ToolObservations:               proto.CapabilitySupported,
-	EnvironmentNone:                proto.CapabilitySupported,
-	LocalEnvironment:               proto.CapabilityUnsupported,
-	Preparation:                    proto.CapabilityUnsupported,
-	WorkspaceReadPreparation:       proto.CapabilityUnsupported,
-	WorkspaceOutputExport:          proto.CapabilityUnsupported,
-	ProgrammaticToolCallingDisable: proto.CapabilitySupported,
-	WebSearchControl:               proto.CapabilityUnsupported,
-	ExecutionControls:              proto.CapabilitySupported,
-	TextVerbosity:                  proto.CapabilityUnsupported,
-	StructuredOutput:               proto.CapabilityUnsupported,
-	ToolSearch:                     proto.CapabilityUnsupported,
-	MessageImages:                  proto.CapabilityUnsupported,
-	FunctionResultImages:           proto.CapabilityUnsupported,
-	SubagentControl:                proto.CapabilitySupported,
-	DurableInputReceipts:           proto.CapabilitySupported,
-	DurableTurns:                   proto.CapabilitySupported,
-	FunctionTools:                  proto.CapabilitySupported,
-	MCPHTTPTools:                   proto.CapabilityUnsupported,
-	MCPHTTPRequired:                proto.CapabilityUnsupported,
-	MCPHTTPBearerAuth:              proto.CapabilityUnsupported,
-}}, Configuration: configuration.Configuration(), Discover: discover}
+// Declaration binds the shared Claude Code declaration to discovery and execution factories.
+var Declaration = agent.Declaration{Declaration: declaration.Declaration, Discover: discover}
 
 func discover(ctx context.Context, options agent.DiscoveryOptions, info proto.SupportedAgentKind) *agent.Runtime {
 	return discoverWithCheck(ctx, options, info, CheckRuntime)
@@ -64,7 +33,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 
 	fail := func(err error) *agent.Runtime {
 		fmt.Fprintf(options.Stderr, "oac-daemon: configured Claude SDK runtime unavailable: %v\n", err)
-		return out
+		return agent.Unavailable(descriptor)
 	}
 	if !filepath.IsAbs(entrypoint) {
 		return fail(fmt.Errorf("%s must be absolute", claudeSDKEntrypointEnv))
@@ -100,7 +69,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		if err != nil {
 			return fail(err)
 		}
-		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"))
 		if err != nil {
 			return fail(err)
 		}
@@ -109,35 +78,28 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	if err != nil {
 		return fail(err)
 	}
-	if config.Workspace != nil {
-		if !info.SupportsLocalRuntime() {
-			return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
-		}
-		caps := &out.Info.Capabilities
-		caps.EnvironmentNone, caps.FunctionTools = proto.CapabilityUnsupported, proto.CapabilityFromBool(info.SupportsWorkspaceFunctions())
-		caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
-		caps.NativeSessionRecovery = proto.CapabilitySupported
-		caps.RetainedNativeHistory = proto.CapabilityFromBool(info.SDK == "0.3.269" && info.Native == "2.1.269 (Claude Code)")
+	local := config.Workspace != nil
+	if local && !info.SupportsLocalRuntime() {
+		return fail(fmt.Errorf("Claude SDK bundle does not support the local Runtime contract"))
 	}
 	out.Info.Available, out.Info.Version = true, info.SDK
-	out.Info.Capabilities.MessageImages = proto.CapabilityFromBool(info.SupportsMessageImages())
-	out.Info.Capabilities.FunctionResultImages = proto.CapabilityFromBool(info.SupportsFunctionResultImages())
-	out.Info.Capabilities.ToolSearch = proto.CapabilityFromBool(info.SupportsToolSearch())
-	if config.Workspace != nil {
-		out.Info.Capabilities.ToolSearch = proto.CapabilityFromBool(info.SupportsWorkspaceToolSearch())
+	caps := &out.Info.Capabilities
+	// The local workspace layout replaces environment:none.
+	agent.Narrow(&caps.EnvironmentNone, !local)
+	for _, capability := range []*proto.CapabilitySupport{&caps.LocalEnvironment, &caps.WorkspaceReadPreparation, &caps.WorkspaceOutputExport, &caps.NativeSessionRecovery} {
+		agent.Narrow(capability, local)
 	}
-	out.Info.Capabilities.StructuredOutput = proto.CapabilityFromBool(info.SupportsStructuredOutput())
-	if config.Workspace != nil {
-		out.Info.Capabilities.StructuredOutput = proto.CapabilityFromBool(info.SupportsWorkspaceStructuredOutput())
-	}
-	out.Info.Capabilities.SubagentObservations = proto.CapabilityFromBool(info.SupportsSubagents())
-	out.Info.Capabilities.MCPHTTPTools = proto.CapabilityFromBool(info.SupportsHTTPMCP())
-	out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityFromBool(info.SupportsHTTPMCPBearer())
-	out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityFromBool(info.SupportsHTTPMCPRequired())
-	if config.Workspace != nil && !info.SupportsWorkspaceMCP() {
-		out.Info.Capabilities.MCPHTTPTools, out.Info.Capabilities.MCPHTTPBearerAuth = proto.CapabilityUnsupported, proto.CapabilityUnsupported
-		out.Info.Capabilities.MCPHTTPRequired = proto.CapabilityUnsupported
-	}
+	agent.Narrow(&caps.RetainedNativeHistory, local && info.SDK == "0.3.269" && info.Native == "2.1.269 (Claude Code)")
+	agent.Narrow(&caps.FunctionTools, !local || info.SupportsWorkspaceFunctions())
+	agent.Narrow(&caps.MessageImages, info.SupportsMessageImages())
+	agent.Narrow(&caps.FunctionResultImages, info.SupportsFunctionResultImages())
+	agent.Narrow(&caps.ToolSearch, info.SupportsToolSearch() && (!local || info.SupportsWorkspaceToolSearch()))
+	agent.Narrow(&caps.StructuredOutput, info.SupportsStructuredOutput() && (!local || info.SupportsWorkspaceStructuredOutput()))
+	agent.Narrow(&caps.SubagentObservations, info.SupportsSubagents())
+	mcp := !local || info.SupportsWorkspaceMCP()
+	agent.Narrow(&caps.MCPHTTPTools, mcp && info.SupportsHTTPMCP())
+	agent.Narrow(&caps.MCPHTTPBearerAuth, mcp && info.SupportsHTTPMCPBearer())
+	agent.Narrow(&caps.MCPHTTPRequired, mcp && info.SupportsHTTPMCPRequired())
 	out.Executor = NewExecutorFactory(config)
 
 	fmt.Fprintf(options.Stdout, "Claude SDK preflight ok (SDK %s, %s)\n", info.SDK, info.Native)

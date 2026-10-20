@@ -81,7 +81,7 @@ func runConnect(ctx *runContext, args []string) error {
 		}
 		connectCtx, stop := daemonize.NotifyContext(context.Background())
 		defer stop()
-		return runEnvironmentConnect(connectCtx, ctx, *profile, *background, *remote, *environment, *credentialFile)
+		return runEnvironmentConnect(connectCtx, ctx, *profile, *background, false, *remote, *environment, *credentialFile)
 	}
 
 	// -b mode: parent forks, child re-enters with sentinel env set
@@ -245,13 +245,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 			DaemonVersion: proto.Version,
 		})
 		if remote != "" && err != nil {
-			if errors.Is(err, transport.ErrIncompatibleVersion) {
-				return nil, fmt.Errorf("Environment connection rejected: %w: %w", transport.ErrPermanent, transport.ErrIncompatibleVersion)
-			}
-			if errors.Is(err, transport.ErrPermanent) {
-				return nil, fmt.Errorf("Environment connection rejected: %w", transport.ErrPermanent)
-			}
-			return nil, errors.New("Environment connection failed")
+			return nil, environmentDialError(err)
 		}
 		return conn, err
 	}
@@ -319,6 +313,16 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 // conn.Recv(), heartbeats every boot.HeartbeatInterval(), and a
 // confirmed router.Shutdown before returning ownership to the reconnect loop.
 // Failed cleanup keeps this exact Router alive, including after a shutdown signal.
+// advertisedKinds withdraws workspace export when this host cannot provide it now.
+func advertisedKinds(registry *agent.Registry, canExport bool) []proto.SupportedAgentKind {
+	kinds := registry.SupportedAgentKinds()
+	for i := range kinds {
+		caps := &kinds[i].Capabilities
+		agent.Narrow(&caps.WorkspaceOutputExport, canExport && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
+	}
+	return kinds
+}
+
 func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, boot *transport.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
 	local, err := localworkspace.Load()
 	if err != nil {
@@ -339,11 +343,7 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 	}()
 
 	conn.StartHeartbeats(parentCtx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
-		kinds := registry.SupportedAgentKinds()
-		for i := range kinds {
-			caps := &kinds[i].Capabilities
-			caps.WorkspaceOutputExport = proto.CapabilityFromBool(local.CanExport() && caps.LocalEnvironment.IsSupported() && caps.WorkspaceReadPreparation.IsSupported())
-		}
+		kinds := advertisedKinds(registry, local.CanExport())
 		return proto.HeartbeatPayload{
 			Timestamp:           time.Now().Unix(),
 			ActiveRequests:      router.ActiveRuns(),
@@ -374,4 +374,16 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 			}
 		}
 	}
+}
+
+// environmentDialError wraps a Dial failure for connect.log. The credential
+// travels only in a request header, so the transport's cause is safe to keep.
+func environmentDialError(err error) error {
+	if errors.Is(err, transport.ErrIncompatibleVersion) {
+		return fmt.Errorf("Environment connection rejected: %w: %w", transport.ErrPermanent, transport.ErrIncompatibleVersion)
+	}
+	if errors.Is(err, transport.ErrPermanent) {
+		return fmt.Errorf("Environment connection rejected: %w", transport.ErrPermanent)
+	}
+	return fmt.Errorf("Environment connection failed: %w", err)
 }

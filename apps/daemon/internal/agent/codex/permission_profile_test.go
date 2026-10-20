@@ -11,7 +11,7 @@ import (
 func TestRuntimeUsesHostPermissions(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	{
-		req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}}
+		req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: t.TempDir()}}
 		plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)})
 		if err != nil {
 			t.Fatal(err)
@@ -25,12 +25,6 @@ func TestRuntimeUsesHostPermissions(t *testing.T) {
 			}
 		}
 		plan.Cleanup()
-		for _, network := range []string{"disabled", "restricted"} {
-			req.LocalEnvironment.NetworkAccess = network
-			if _, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)}); err == nil {
-				t.Fatal("unsupported network admitted")
-			}
-		}
 	}
 }
 
@@ -45,10 +39,10 @@ func TestSelfHostedToolEnvironmentCannotRedirectNativeHistory(t *testing.T) {
 	if err := os.WriteFile(config, []byte(`{"CODEX_HOME":"wrong","HOME":"wrong","USERPROFILE":"wrong","USER_VALUE":"ready"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for key, value := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": "b3d154b8-543b-4248-97b1-665f9f418d52", "OAC_RUNTIME_SESSION_ID": "33e02e0d-6fc8-4904-9d7a-4b61b9094ae0", "OAC_RUNTIME_WORKSPACE": workspace, "OAC_RUNTIME_CAPABILITY_DIRECTORY": filepath.Join(root, "capabilities"), "OAC_RUNTIME_NETWORK_ACCESS": "enabled", "OAC_RUNTIME_TOOL_ENV_FILE": config} {
+	for key, value := range map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": "b3d154b8-543b-4248-97b1-665f9f418d52", "OAC_RUNTIME_SESSION_ID": "33e02e0d-6fc8-4904-9d7a-4b61b9094ae0", "OAC_RUNTIME_WORKSPACE": workspace, "OAC_RUNTIME_CAPABILITY_DIRECTORY": filepath.Join(root, "capabilities"), "OAC_RUNTIME_TOOL_ENV_FILE": config} {
 		t.Setenv(key, value)
 	}
-	req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled"}}
+	req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{}}
 	plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)})
 	if err != nil {
 		t.Fatal(err)

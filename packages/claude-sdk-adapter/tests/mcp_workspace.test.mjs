@@ -12,7 +12,7 @@ const stdio = { server_label: "installed", command: process.execPath, allowed_to
   args: ["runtime-mcp-exec", join(process.cwd(), "capabilities"), "plugins/installed", "installed"] };
 const native = "mcp__installed__echo_v1";
 const statuses = [{ name: "installed", status: "connected", tools: [{ name: "echo.v1" }] }];
-const baseline = ["Bash", "Read", "Edit"];
+const nativePreset = ["Bash", "Read", "Edit", "Write"];
 
 function fixture(t, declarations = [stdio]) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "oac-mcp-workspace-")));
@@ -20,7 +20,7 @@ function fixture(t, declarations = [stdio]) {
     const path = join(root, name); mkdirSync(path); return [name, path];
   }));
   const config = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
-    capability_root: dirs.capabilities,  env_names: ["ANTHROPIC_AUTH_TOKEN"], network_access: "enabled", mcp: declarations };
+    capability_root: dirs.capabilities,  env_names: ["ANTHROPIC_AUTH_TOKEN"], mcp: declarations };
   const previous = process.env;
   process.env = { HOME: dirs.home, CLAUDE_CONFIG_DIR: dirs.state, ANTHROPIC_AUTH_TOKEN: "model-secret" };
   t.after(() => { process.env = previous; rmSync(root, { recursive: true, force: true }); });
@@ -31,8 +31,8 @@ function fixture(t, declarations = [stdio]) {
 test("installed MCP projection uses the common Runtime launcher", t => {
   const { request } = fixture(t);
   assert.deepEqual(parseStart(JSON.stringify(request)), request);
-  assert.throws(() => parseStart(JSON.stringify({ ...request, observe_messages: true,
-    output_format: { type: "json_schema", schema: { type: "object" } } })), /invalid_request/);
+  const structured = { ...request, output_format: { type: "json_schema", schema: { type: "object" } } };
+  assert.deepEqual(parseStart(JSON.stringify(structured)), structured);
   assert.equal(immediateInput(request), undefined);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
   for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, env: { TOKEN: "secret" } }],
@@ -46,50 +46,54 @@ test("installed MCP projection uses the common Runtime launcher", t => {
       assert.throws(() => parseEnvironmentMCP([{ ...stdio, args }]), /invalid_request/);
     }
   }
-  assert.throws(() => parseStart(JSON.stringify({ ...request, workspace: { ...request.workspace, network_access: "disabled" } })), /invalid_request/);
 });
 
-test("combined inventory admits exact MCP identities with host file authority", async t => {
+test("workspace admits declared MCP identities and leaves other native tools alone", async t => {
   const { dirs, config } = fixture(t);
   const mcp = new MCPProfile([stdio], []);
-  const workspace = new WorkspaceProfile(dirs.work, config, [], mcp);
+  const workspace = new WorkspaceProfile(dirs.work, config, mcp);
   const signal = new AbortController().signal;
   const input = { hook_event_name: "PreToolUse", session_id: "session", tool_use_id: "call", tool_name: native, tool_input: {} };
   let ready = false;
-  const waiting = workspace.beforeTool(input, "call", { signal }).then(value => { ready = true; return value; });
+  const waiting = mcp.beforeTool(input, "call", { signal }).then(value => { ready = true; return value; });
   await Promise.resolve();
   assert.equal(ready, false);
-  workspace.verify([...baseline, native], statuses, "session");
+  mcp.verify([...nativePreset, native], statuses, "session", false);
   assert.deepEqual(await waiting, {});
   assert.deepEqual(mcp.identities.get(native), { server: "installed", name: "echo.v1" });
-  assert.equal((await workspace.canUseTool(native, {}, { signal })).behavior, "allow");
-  assert.equal((await workspace.canUseTool("mcp__installed__undeclared", {}, { signal })).behavior, "deny");
-  assert.equal((await workspace.canUseTool("Read", { file_path: join(dirs.secrets, "model.key") }, { signal })).behavior, "allow");
-  assert.equal((await workspace.canUseTool("Bash", { command: "pwd", dangerouslyDisableSandbox: true }, { signal })).behavior, "allow");
-  assert.equal((await workspace.beforeTool({ ...input, tool_name: "Read", tool_input: { file_path: "ok.txt" } }, "call", { signal })).hookSpecificOutput.updatedInput.file_path, join(dirs.work, "ok.txt"));
-  for (const fields of [{ session_id: "other" }, { agent_id: "child" }, { tool_name: "mcp__ambient__echo" }]) {
-    assert.equal((await workspace.beforeTool({ ...input, ...fields }, "call", { signal })).hookSpecificOutput.permissionDecision, "deny");
+  for (const tool_name of ["Read", "Write", "Bash"]) assert.deepEqual(await mcp.beforeTool({ ...input, tool_name }, "call", { signal }), {});
+  for (const fields of [{ session_id: "other" }, { agent_id: "child" }, { tool_name: "mcp__installed__undeclared" }]) {
+    assert.equal((await mcp.beforeTool({ ...input, ...fields }, "call", { signal })).hookSpecificOutput.permissionDecision, "deny");
   }
-  assert.deepEqual(workspace.options.allowedTools, ["mcp__installed__*"]);
   assert.equal(mcp.servers.installed.alwaysLoad, true);
-  assert.deepEqual(workspace.options.tools, baseline);
-  assert.deepEqual(workspace.options.sandbox, {enabled:false});
+  assert.deepEqual(workspace.options.tools, { type: "preset", preset: "claude_code" });
   mcp.close();
-  assert.equal((await workspace.canUseTool(native, {}, { signal })).behavior, "deny");
+  assert.equal((await mcp.beforeTool(input, "call", { signal })).hookSpecificOutput.permissionDecision, "deny");
 });
 
-test("combined inventory rejects extra servers, tools and normalized identity collisions", t => {
-  const { dirs, config } = fixture(t);
+test("workspace inventory tolerates native tools and servers, but not unavailable or ambiguous declared ones", t => {
+  const mcp = new MCPProfile([stdio], []);
+  mcp.verify([...nativePreset, native, "mcp__ambient__echo"], [...statuses, { name: "ambient", status: "connected", tools: [{ name: "echo" }] }], "session", false);
+  mcp.close();
   for (const [tools, servers] of [
-    [[...baseline, native, "Write"], statuses],
-    [[...baseline, native], [...statuses, { name: "ambient", status: "connected", tools: [] }]],
-    [[...baseline, native], [{ ...statuses[0], tools: [{ name: "echo.v1" }, { name: "echo_v1" }] }]],
-    [[...baseline, native], [{ ...statuses[0], status: "pending" }]],
+    [[...nativePreset, native], [{ ...statuses[0], tools: [{ name: "echo.v1" }, { name: "echo_v1" }] }]],
+    [nativePreset, []],
   ]) {
-    const mcp = new MCPProfile([stdio], []);
-    assert.throws(() => new WorkspaceProfile(dirs.work, config, [], mcp).verify(tools, servers, "session"));
-    mcp.close();
+    const declared = new MCPProfile([stdio], []);
+    assert.throws(() => declared.verify(tools, servers, "session", false));
+    declared.close();
   }
+  const exact = new MCPProfile([stdio], []);
+  assert.throws(() => exact.verify([...nativePreset, native], statuses, "session"));
+  exact.close();
+  // An optional server that did not connect contributes no tools; a required one fails.
+  const optional = new MCPProfile([stdio], []);
+  optional.verify(nativePreset, [{ ...statuses[0], status: "failed" }], "session", false);
+  assert.equal(optional.identities.size, 0);
+  optional.close();
+  const required = new MCPProfile([{ ...stdio, required: true }], []);
+  assert.throws(() => required.verify(nativePreset, [{ ...statuses[0], status: "pending" }], "session", false), /required/);
+  required.close();
 });
 
 test("workspace bearer references reach native HTTP without leaking values into the request", t => {
@@ -99,26 +103,26 @@ test("workspace bearer references reach native HTTP without leaking values into 
   process.env[reference] = "selected-user-token";
   process.env.OAC_RUNTIME_MCP_BEARER_UNSELECTED = "other-token";
   const mcp = new MCPProfile([http], []);
-  const workspace = new WorkspaceProfile(dirs.work, config, [], mcp);
+  const workspace = new WorkspaceProfile(dirs.work, config, mcp);
   assert.equal(workspace.options.env[reference], "selected-user-token");
   assert.equal(workspace.options.env.OAC_RUNTIME_MCP_BEARER_UNSELECTED, "other-token");
   assert.deepEqual(mcp.servers.remote.headers, { Authorization: `Bearer \${${reference}}` });
   assert.equal(JSON.stringify(mcp.servers).includes("selected-user-token"), false);
   delete process.env[reference];
-  assert.throws(() => new WorkspaceProfile(dirs.work, config, [], mcp), /invalid_request/);
+  assert.throws(() => new WorkspaceProfile(dirs.work, config, mcp), /invalid_request/);
 });
 
 test("MCP identity validation preserves host functions and ordinary child environment", async t => {
   const { dirs, config } = fixture(t);
   const functions = ["mcp__functions__lookup"];
   const mcp = new MCPProfile([stdio], functions);
-  const workspace = new WorkspaceProfile(dirs.work, { ...config, tool_env: { USER_VALUE: "initialized" } }, functions, mcp);
-  workspace.verify([...baseline, native, ...functions], [...statuses, { name: "functions", status: "connected" }], "session");
+  const workspace = new WorkspaceProfile(dirs.work, { ...config, tool_env: { USER_VALUE: "initialized" } }, mcp);
+  mcp.verify([...nativePreset, native, ...functions], [...statuses, { name: "functions", status: "connected" }], "session", false);
   const signal = new AbortController().signal;
   const input = { hook_event_name: "PreToolUse", session_id: "session", tool_use_id: "call", tool_name: "Bash", tool_input: { command: "printf ok" } };
-  assert.deepEqual(await workspace.beforeTool(input, "call", { signal }), {});
+  assert.deepEqual(await mcp.beforeTool(input, "call", { signal }), {});
   assert.equal(workspace.options.env.USER_VALUE, "initialized");
-  assert.equal((await workspace.canUseTool(functions[0], {}, { signal })).behavior, "allow");
+  assert.deepEqual(await mcp.beforeTool({ ...input, tool_name: functions[0] }, "call", { signal }), {});
   mcp.close();
 });
 
@@ -130,14 +134,21 @@ test("public workspace HTTP preserves required startup and null versus empty all
     const declaration={...http,allowed_tools};
     assert.deepEqual(parseEnvironmentMCP([declaration]),[declaration]);
     const mcp=new MCPProfile([declaration],[]);
-    const workspace=new WorkspaceProfile(dirs.work,{...config,mcp:[declaration]},[],mcp);
+    const workspace=new WorkspaceProfile(dirs.work,{...config,mcp:[declaration]},mcp);
     assert.throws(()=>mcp.verifyRequired([{name:"remote",status:"pending"}]),/required/);
     const statuses=[{name:"remote",status:"connected",tools:[{name:"prove"},{name:"other"}]}];
     mcp.verifyRequired(statuses);
     const selected=allowed_tools===null?["prove","other"]:allowed_tools;
-    workspace.verify([...baseline,...selected.map(name=>"mcp__remote__"+name)],statuses,"session");
-    assert.equal(mcp.permits("mcp__remote__prove"),allowed_tools===null||allowed_tools.includes("prove"));
-    assert.equal(mcp.permits("mcp__remote__other"),allowed_tools===null);
+    mcp.verify([...nativePreset,...selected.map(name=>"mcp__remote__"+name)],statuses,"session",false);
     mcp.close();
   }
+});
+
+test("declared stdio MCP runs the caller's command natively", () => {
+  const declared = { server_label: "local", command: "run", args: ["-c", "a\nb"], allowed_tools: null, required: true, declared: true };
+  assert.deepEqual(parseEnvironmentMCP([declared]), [declared]);
+  for (const value of [{ ...declared, allowed_tools: ["x"] }, { ...declared, declared: false }, { ...declared, command: " " }, { ...declared, env: {} }]) {
+    assert.throws(() => parseEnvironmentMCP([value]), /invalid_request/);
+  }
+  assert.deepEqual(new MCPProfile([declared], []).servers.local, { type: "stdio", command: "run", args: ["-c", "a\nb"], env: {}, alwaysLoad: true });
 });

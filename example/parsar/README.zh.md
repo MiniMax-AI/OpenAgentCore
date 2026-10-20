@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 3943730e13986a3b39beb9fd1b7f81bdd1aa4c10b7eb20fc502c5aae9fb6fbbc
+source_hash: 3d8be6274433e5495e9f6a05f43bcd5e776396c5126b26cf6d15488b04220bd6
 ---
 
 # Parsar 工作空间
@@ -48,7 +48,7 @@ pnpm --filter @oac/parsar-example dev
 
 **Agent** 以卡片列出 Agent，展示模型、Harness、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**指令**、**模型与环境**、**工具与知识** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。指令片段、Plugins 和知识合计最多 8 个，选择器会阻止超出。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。
 
-**模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。Codex 和 Claude Code 使用所选的 HTTPS Provider；MiniMax Code 使用 Core 配置的模型连接。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
+**模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
 
 - **Skills** 支持创建 SKILL.md、上传 ZIP、版本管理、默认版本选择、按 Agent 固定版本以及有限的文件预览。**浏览目录** 搜索 skills.sh 索引；预览在临时目录中使用固定版本的 `skills@1.5.23` CLI，再走常规公开 Skill 上传。这需要 Parsar 主机具备 `npx` 和网络访问。导入的压缩包限制为 32 MiB 和 1,000 个文件。
 - **MCP** 提供静态服务目录和 HTTPS 端点配置。可选的 Vault 凭据使用官方公开 MCP 工具，连接来源为 environment。

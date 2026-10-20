@@ -71,7 +71,7 @@ func TextLifecycle(t *testing.T, fixture TextFixture) {
 		t.Fatal("public text Turn must implement DurableSteerer")
 	}
 	var written atomic.Int32
-	if err := steerer.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "contract-input", Input: fixture.SteeringInput, DurableReceipt: true}, func() { written.Add(1) }); err != nil {
+	if err := steerer.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "contract-input", Input: fixture.SteeringInput}, func() { written.Add(1) }); err != nil {
 		t.Fatalf("active input after stale cancellation: %v", err)
 	}
 	if written.Load() != 1 {
@@ -167,4 +167,13 @@ func settled(t *testing.T, ctx context.Context, turn agent.Turn, output *capture
 
 func sameTurn(a, b agent.Turn) bool {
 	return reflect.ValueOf(a).Comparable() && a == b
+}
+
+// RequireNarrowed fails when discovery grants a capability its declaration does
+// not make: discovery may only withdraw support the installed host cannot give.
+func RequireNarrowed(t *testing.T, declared, discovered proto.AgentKindCapabilities) {
+	t.Helper()
+	if widened := agent.Widened(declared, discovered); len(widened) > 0 {
+		t.Errorf("discovery widened %v", widened)
+	}
 }

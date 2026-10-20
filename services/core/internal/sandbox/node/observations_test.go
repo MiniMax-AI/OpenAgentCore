@@ -50,7 +50,9 @@ func runObservationNode(t *testing.T, hub *Hub, url string, id Identity, provide
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, AgentConfig{CoreURL: url, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: provider, Probe: func(context.Context) (Health, error) { return Health{}, errors.New("provider not ready for creation") }})
+		done <- runProvider(ctx, AgentConfig{CoreURL: url, StateDirectory: dir, Identity: id, Credential: stored.Credential}, provider, func(context.Context) (*sandbox.CheckpointCompatibility, error) {
+			return nil, errors.New("provider not ready for creation")
+		})
 	}()
 	t.Cleanup(func() {
 		cancel()
@@ -69,7 +71,7 @@ func runObservationNode(t *testing.T, hub *Hub, url string, id Identity, provide
 func TestObservationsRouteThroughAssignedNodeWithoutLifecycleCalls(t *testing.T) {
 	first, second := identity(), identity()
 	second.InstallationID = first.InstallationID
-	hub := NewHub(HubOptions{Authenticate: func(_ context.Context, id, _ string) (Identity, error) {
+	hub := newTestHub(HubOptions{Authenticate: func(_ context.Context, id, _ string) (Identity, error) {
 		switch id {
 		case first.NodeID:
 			return first, nil

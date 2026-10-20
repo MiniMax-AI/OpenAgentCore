@@ -1,6 +1,7 @@
 package deployment
 
 import (
+	"context"
 	"errors"
 	"slices"
 
@@ -73,16 +74,80 @@ func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocat
 			return false, err
 		}
 	}
+	release := func(n *placement.Node) { n.Active-- }
 	if source.Retained >= int64(source.MaxRetained) {
-		return false, nil
+		// A full node frees a retained slot only by releasing a checkpoint
+		// after this suspension, so the owner must itself be releasable.
+		if retain, err := tx.CanRetainEnvironment(owner); err != nil || !retain {
+			return false, err
+		}
+		release = func(n *placement.Node) { n.Active--; n.Retained-- }
 	}
-	return e.placementNeedsCapacity(tx, pressure, owner.NodeID)
+	return e.placementNeedsCapacity(tx, pressure, owner.NodeID, release)
+}
+
+// ExpireCheckpointForDemand ends the retention of an idle suspended
+// allocation, exactly as if its deadline had passed, when compatible waiting
+// demand is blocked only by the node's retained slots. It acts only on the
+// node's oldest allocation whose Session can continue on new compute, so the
+// ordinary expiry cleanup keeps files and native history. A refusal is
+// ErrNotIdle.
+func (e *ExecutionOperations) ExpireCheckpointForDemand(ctx context.Context, owner Allocation) error {
+	_, err := e.change(ctx, owner, true, func(tx AllocationTx, current Allocation) (Allocation, error) {
+		if current.State != "running" || current.ComputePhase != "suspended" || current.Expired || current.ComputeRevision != owner.ComputeRevision || current.NodeID == "" {
+			return Allocation{}, ErrAllocationConflict
+		}
+		activity, err := tx.LoadActivity(current)
+		if err != nil {
+			return Allocation{}, err
+		}
+		if activity.Busy || activity.WakeRequested {
+			return Allocation{}, ErrNotIdle
+		}
+		retain, err := tx.CanRetainEnvironment(current)
+		if err != nil {
+			return Allocation{}, err
+		}
+		if !retain {
+			return Allocation{}, ErrNotIdle
+		}
+		oldest, err := tx.OldestIdleCheckpoint(current)
+		if err != nil {
+			return Allocation{}, err
+		}
+		if !oldest {
+			return Allocation{}, ErrNotIdle
+		}
+		pressure, err := tx.LoadSuspensionDemand(current)
+		if err != nil {
+			return Allocation{}, err
+		}
+		var source *placement.Node
+		for i := range pressure.Nodes {
+			if pressure.Nodes[i].ID == current.NodeID {
+				source = &pressure.Nodes[i]
+			}
+		}
+		if pressure.Deployment.Resetting || pressure.Deployment.Mode != string(sandbox.DeploymentNodes) || pressure.Deployment.InstallationID != current.ProviderKey || source == nil || !source.Online || source.Retained < int64(source.MaxRetained) {
+			return Allocation{}, ErrNotIdle
+		}
+		needed, err := e.placementNeedsCapacity(tx, pressure, current.NodeID, func(n *placement.Node) { n.Retained-- })
+		if err != nil {
+			return Allocation{}, err
+		}
+		if !needed {
+			return Allocation{}, ErrNotIdle
+		}
+		return tx.ExpireCheckpoint(current)
+	})
+	return err
 }
 
 // placementNeedsCapacity scans bounded pages under the caller's deployment
-// lock and transaction deadline. Suspension must make active capacity usable
-// without releasing a retained slot; an ineligible receipt supplies no pressure.
-func (e *ExecutionOperations) placementNeedsCapacity(tx AllocationTx, pressure SuspensionDemand, nodeID string) (bool, error) {
+// lock and transaction deadline. It reports whether waiting demand would place
+// on nodeID once release frees the slot the caller may reclaim; an ineligible
+// receipt supplies no pressure.
+func (e *ExecutionOperations) placementNeedsCapacity(tx AllocationTx, pressure SuspensionDemand, nodeID string, release func(*placement.Node)) (bool, error) {
 	var after PlacementDemandCursor
 	for {
 		demands, next, err := tx.PlacementDemand(after)
@@ -109,7 +174,7 @@ func (e *ExecutionOperations) placementNeedsCapacity(tx AllocationTx, pressure S
 			}
 			for i := range nodes {
 				if nodes[i].ID == nodeID {
-					nodes[i].Active--
+					release(&nodes[i])
 				}
 			}
 			chosen, err := e.service.rules.DecidePlacement(pressure.Deployment, nodes)

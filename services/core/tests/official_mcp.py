@@ -71,13 +71,12 @@ def verify_mcp_configuration(client, other, expect_error):
                 {**tool, "request_metadata": {"x": "y"}},
                 {**tool, "allowed_tools": [None]}]
     for changes in ({"headers": {"Authorization": "synthetic-private"}},
-                    {"authorization": "synthetic-private"},
-                    {"server_url": "https://mcp.example.invalid/mcp?token=synthetic-private"}):
+                    {"authorization": "synthetic-private"}):
         invalid.append({**tool, "transport": {**transport, **changes}})
-    # A pinned stdio transport stays unsupported with or without an origin; a
+    # A stdio server runs in the Environment, so a service origin is rejected; a
     # malformed one gets the official field error first.
     stdio, malformed = {"type": "stdio", "command": "synthetic-private", "cwd": "/"}, {"type": "stdio", "command": "synthetic-private"}
-    invalid += [{**minimal, "transport": stdio}, {**tool, "transport": stdio}, {**tool, "transport": malformed}]
+    invalid += [{**tool, "transport": stdio}, {**tool, "transport": malformed}]
     for declaration in invalid:
         for prefix, operation in (
             ("", lambda: agents.create(model="requested-model", tools=[declaration])),
@@ -87,7 +86,7 @@ def verify_mcp_configuration(client, other, expect_error):
             error = expect_error(BadRequestError, operation)
             assert "synthetic-private" not in str(error.body)
             if declaration["transport"] is stdio:
-                assert error.body["message"] == "MCP currently supports HTTP transport only."
+                assert error.body["message"] == "MCP stdio servers run in the Environment; connection_origin must be environment."
             if declaration["transport"] is malformed:
                 assert error.body["message"] == f"Missing required parameter: '{prefix}tools[0].transport.cwd'."
     assert {item.id for item in sessions.list()} == before

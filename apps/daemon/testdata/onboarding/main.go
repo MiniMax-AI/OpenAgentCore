@@ -126,9 +126,6 @@ func (s *session) Cancel(context.Context) error {
 func (s *session) CancellationOutcome() proto.DonePayload {
 	return proto.DonePayload{Content: "cancelled", Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}}
 }
-func (s *session) Steer(ctx context.Context, p proto.PromptSteerPayload) error {
-	return s.SteerWithReceipt(ctx, p, func() {})
-}
 func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload, written func()) error {
 	text, err := p.Input.TextOnly()
 	if err != nil {
@@ -162,7 +159,7 @@ func run() error {
 	registry := agent.NewRegistry()
 	h := &harness{history: map[string]string{}}
 	registry.RegisterKind(proto.SupportedAgentKind{Kind: "fixture_harness", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{
-		Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported,
+		Streaming: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported,
 	})}, harnessconfig.Configuration{})
 	registry.RegisterExecutor("fixture_harness", h.prepare)
 	sink := &sender{encoder: json.NewEncoder(os.Stdout)}

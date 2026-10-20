@@ -33,6 +33,11 @@ function safeBaseURL(value: string): boolean {
   return !authority.includes("@") && host !== "" && query === "" && fragment === "";
 }
 
+/** Core's token-limit rule: an output limit never exceeds a set context window. */
+export function tokenLimitsFit(contextWindow?: number, maxOutputTokens?: number): boolean {
+  return !contextWindow || (maxOutputTokens ?? 0) <= contextWindow;
+}
+
 /** The safe provider view shared by frozen Session configuration and saved Agent reads. */
 export function safeProvider(value: unknown, invalid: Invalid): ModelProviderView {
   if (!isRecord(value) || !onlyFields(value, modelProviderViewFields) ||
@@ -40,7 +45,7 @@ export function safeProvider(value: unknown, invalid: Invalid): ModelProviderVie
     typeof value.base_url !== "string" || typeof value.api_key_configured !== "boolean" ||
     (value.context_window !== undefined && !isNonnegativeInteger(value.context_window)) ||
     (value.max_output_tokens !== undefined && !isNonnegativeInteger(value.max_output_tokens)) ||
-    Number(value.max_output_tokens ?? 0) > Number(value.context_window ?? 0)) return invalid();
+    !tokenLimitsFit(value.context_window as number | undefined, value.max_output_tokens as number | undefined)) return invalid();
   if (!safeBaseURL(value.base_url)) return invalid();
   return {
     protocol: value.protocol as ModelProviderView["protocol"], base_url: value.base_url, api_key_configured: value.api_key_configured,

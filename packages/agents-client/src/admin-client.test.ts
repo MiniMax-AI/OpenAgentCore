@@ -154,15 +154,15 @@ describe("AdminClient transport boundary", () => {
   });
 
   it("manages deployment default model providers without ever reading a key", async () => {
-    const provider = { last_used_at: null, last_error_code: null, last_error_at: null, object: "core.model_configuration", harness: "codex", model: "test-model", harness_config: { model_reasoning_effort: "high" }, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true }, updated_at: "2026-09-26T08:00:00Z" };
+    const provider = { last_used_at: null, last_error_code: null, last_error_at: null, object: "core.model_configuration", harness: "codex", model: "test-model", harness_config: {}, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key_configured: true }, updated_at: "2026-09-26T08:00:00Z" };
     const harnesses = { object: "list", data: [
-      { object: "core.harness", id: "claude_sdk", enabled: false, default: false, model_configuration: null, model_configuration_support: { protocols: ["anthropic"], accepts_harness_config: true, token_limits_required: false } },
-      { object: "core.harness", id: "codex", enabled: true, default: true, model_configuration: provider, model_configuration_support: { protocols: ["responses"], accepts_harness_config: true, token_limits_required: false } },
+      { object: "core.harness", id: "claude_sdk", enabled: false, default: false, model_configuration: null, model_configuration_support: { protocols: ["anthropic"], accepts_harness_config: true, accepts_max_output_tokens: true } },
+      { object: "core.harness", id: "codex", enabled: true, default: true, model_configuration: provider, model_configuration_support: { protocols: ["responses"], accepts_harness_config: true, accepts_max_output_tokens: false } },
     ] };
     expect(await clientWith(harnesses).client.listHarnesses()).toEqual(harnesses);
     expect(await clientWith(provider).client.retrieveHarnessModelConfiguration("codex")).toEqual(provider);
     const { client, fetch } = clientWith(provider);
-    const input = { model: "test-model", harness_config: { model_reasoning_effort: "high" }, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key: "write-only", context_window: 200000, max_output_tokens: 8000 } } as const;
+    const input = { model: "test-model", harness_config: {}, model_provider: { protocol: "responses", base_url: "https://model.example/v1", api_key: "write-only", context_window: 200000, max_output_tokens: 8000 } } as const;
     expect(await client.setHarnessModelConfiguration("codex", input)).toEqual(provider);
     expect(JSON.parse(fetch.mock.calls[0]![1]!.body as string)).toEqual(input);
     for (const unsafe of [{ ...provider, api_key: "leak" }, { ...provider, harness: "mcode" }, { ...provider, model_provider: { ...provider.model_provider, api_key_configured: false } }, { ...provider, model_provider: { ...provider.model_provider, base_url: "http://model.example/v1" } }, { ...provider, model_provider: { ...provider.model_provider, api_key: "leak" } }, { ...provider, model: "" }, { ...provider, harness_config: [] }, { ...provider, extra: 1 }]) {

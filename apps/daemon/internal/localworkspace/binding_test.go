@@ -24,8 +24,7 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b.networkAccess = "disabled"
-	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: "agents-api-" + session}
+	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: session}
 }
 
 func TestBindingRejectsScopeOverrides(t *testing.T) {
@@ -39,7 +38,7 @@ func TestBindingRejectsScopeOverrides(t *testing.T) {
 		"other Environment": func(r *proto.PromptRequestPayload) {
 			r.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString()}
 		},
-		"other Session": func(r *proto.PromptRequestPayload) { r.AgentStateKey = "agents-api-" + uuid.NewString() },
+		"other Session": func(r *proto.PromptRequestPayload) { r.AgentStateKey = uuid.NewString() },
 		"none":          func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = true },
 	} {
 		t.Run(name, func(t *testing.T) {

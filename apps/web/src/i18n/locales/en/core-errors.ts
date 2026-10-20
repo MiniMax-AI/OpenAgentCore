@@ -18,8 +18,8 @@ export const coreErrors = {
   "model_provider_base_url_invalid": "Use an HTTPS URL without credentials, query parameters or a fragment.",
   "model_provider_protocol_unsupported": "This protocol is not supported by the Harness.",
   "model_provider_api_key_invalid": "Enter a valid API key without control characters.",
-  "model_provider_token_limits_invalid": "Use valid token limits; output cannot exceed context, and required limits must be positive.",
-  "invalid_sandbox_configuration": "Check the sandbox resources and Runtime release.",
+  "model_provider_token_limits_invalid": "Use valid token limits; output cannot exceed context.",
+  "invalid_sandbox_configuration": "Check the sandbox resources.",
   "project_archived": "This Project is archived.",
   "project_exists": "A Project with this name already exists.",
   "project_api_key_exists": "An active API key with this name already exists.",
@@ -57,6 +57,5 @@ export const coreErrorDetails = {
   "protocols": "Allowed protocols: {{protocols}}.",
   "keyLimit": "Enter a valid API key of at most {{max}} characters.",
   "resourceRange": "Enter a whole number from {{min}} to {{max}}.",
-  "resourceMin": "Enter a whole number of at least {{min}}.",
-  "runtime": "Use a valid immutable Runtime release for this backend."
+  "resourceMin": "Enter a whole number of at least {{min}}."
 } as const;

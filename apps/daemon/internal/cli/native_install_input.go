@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 type nativeInstallOptions struct {
@@ -22,16 +23,18 @@ type nativeInstallOptions struct {
 
 func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, error) {
 	var o nativeInstallOptions
+	// Take the grant first and drop it from the environment, which start, the daemon and Harnesses inherit.
+	o.Authorization = os.Getenv(v1.NativeInstallGrantEnv)
+	_ = os.Unsetenv(v1.NativeInstallGrantEnv)
 	flags := newFlagSet("install")
 	flags.StringVar(&o.OnboardURL, "onboard-url", "", "Core installation endpoint")
-	flags.StringVar(&o.Authorization, "authorization", "", "short-lived installation authorization (never an executor credential)")
 	flags.StringVar(&o.Remote, "remote", "", "Environment remote_url from Core")
 	flags.StringVar(&o.Environment, "environment-id", "", "Environment ID from Core")
 	flags.StringVar(&o.Workspace, "workspace", "", "existing absolute workspace directory")
 	flags.StringVar(&o.Credential, "credential-file", "", "absolute executor credential JSON file (never the token)")
 	flags.StringVar(&o.CapabilityDirectory, "capability-directory", "", "capability snapshot destination")
 	flags.StringVar(&o.ToolEnvironmentFile, "tool-env-file", "", "optional tool environment JSON file")
-	flags.StringVar(&o.Directory, "install-dir", "", "installation directory (default OAC_RUNTIME_HOME or ~/.oac)")
+	flags.StringVar(&o.Directory, "install-dir", "", "installation directory (default <Runtime home>/environments/<environment-id>; Runtime home is OAC_RUNTIME_HOME or ~/.oac)")
 	flags.StringVar(&o.Bundle, "bundle-dir", "", "native distribution directory (defaults beside the executable)")
 	flags.StringVar(&o.Harness, "harness", "", "comma-separated codex,claude,minimax")
 	flags.BoolVar(&o.Interactive, "interactive", false, "ask for missing installation options")
@@ -51,12 +54,8 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 	if err := prepareOnboarding(&o); err != nil {
 		return o, err
 	}
-	if o.Directory == "" {
-		var err error
-		o.Directory, err = paths.Root()
-		if err != nil {
-			return o, err
-		}
+	if err := o.defaultDirectory(); err != nil {
+		return o, err
 	}
 	if o.Bundle == "" {
 		exe, err := os.Executable()
@@ -78,8 +77,25 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 		if err := promptNativeInstall(input, rc.stdout, &o); err != nil {
 			return o, err
 		}
+		if err := o.defaultDirectory(); err != nil {
+			return o, err
+		}
 	}
 	return o, nil
+}
+
+// defaultDirectory is the one definition of where an installation goes unless
+// --install-dir says otherwise: its own directory in the Runtime home.
+func (o *nativeInstallOptions) defaultDirectory() error {
+	if o.Directory != "" || o.Environment == "" {
+		return nil
+	}
+	root, err := paths.Root()
+	if err != nil {
+		return err
+	}
+	o.Directory = filepath.Join(root, "environments", o.Environment)
+	return nil
 }
 
 func promptNativeInstall(input io.Reader, output io.Writer, o *nativeInstallOptions) error {
@@ -95,7 +111,7 @@ func promptNativeInstall(input io.Reader, output io.Writer, o *nativeInstallOpti
 		optional bool
 	}{
 		{"Harnesses (comma-separated codex,claude,minimax)", &o.Harness, false},
-		{"Installation directory (Enter uses current default)", &o.Directory, true},
+		{"Installation directory (Enter uses <Runtime home>/environments/<environment-id>)", &o.Directory, true},
 		{"Distribution directory (Enter uses current default)", &o.Bundle, true},
 		{"Environment remote URL", &o.Remote, false},
 		{"Environment ID", &o.Environment, false},

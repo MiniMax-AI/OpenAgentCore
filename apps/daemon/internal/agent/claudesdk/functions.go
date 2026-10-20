@@ -41,8 +41,11 @@ func validateFunctions(tools []proto.FunctionTool) error {
 
 func (s *session) receiveFunction(event bridgeEvent, start startRequest, emit func(string, any)) error {
 	var call *proto.FunctionCallPayload
+	var withdrawn *proto.FunctionCallWithdrawnPayload
 	var observation *proto.ToolObservation
 	var receipt chan error
+	// A Subagent's call is Core's to resolve through the child; the root's tool observation does not describe it.
+	child := false
 	err := func() error {
 		s.functions.mu.Lock()
 		defer s.functions.mu.Unlock()
@@ -61,16 +64,31 @@ func (s *session) receiveFunction(event bridgeEvent, start startRequest, emit fu
 					}
 				}
 			}
-			if !declared || call.CallID == "" || !json.Valid(call.Arguments) || s.functions.calls[call.CallID] != nil {
+			child = call != nil && call.NativeID != ""
+			if !declared || call.CallID == "" || !json.Valid(call.Arguments) || s.functions.calls[call.CallID] != nil ||
+				(call.NativeID == "") != (call.TurnID == "") || child && start.Subagents == nil {
 				return fmt.Errorf("claudesdk: invalid function call")
 			}
 			s.functions.calls[call.CallID] = &pendingFunction{call: *call, receipt: make(chan error, 1)}
 			observation = &proto.ToolObservation{Kind: "function", Status: "in_progress", Name: call.Name, Arguments: call.Arguments}
+		case "function_withdrawn":
+			withdrawn = event.Withdrawn
+			var pending *pendingFunction
+			if withdrawn != nil {
+				pending = s.functions.calls[withdrawn.CallID]
+			}
+			if pending == nil || pending.applied || pending.call.NativeID == "" || pending.call.NativeID != withdrawn.NativeID || pending.call.TurnID != withdrawn.TurnID {
+				return fmt.Errorf("claudesdk: invalid function withdrawal")
+			}
+			// Native stopped waiting for the child's call, so a result in flight is never applied.
+			delete(s.functions.calls, withdrawn.CallID)
+			pending.receipt <- agent.ErrUnknownFunctionCall
 		case "function_applied":
 			pending := s.functions.calls[event.CallID]
 			if pending == nil || pending.result == nil || pending.applied || pending.result.DeliveryID != event.DeliveryID {
 				return fmt.Errorf("claudesdk: invalid native function receipt")
 			}
+			child = pending.call.NativeID != ""
 			pending.applied = true
 			receipt = pending.receipt
 			status := "completed"
@@ -84,11 +102,17 @@ func (s *session) receiveFunction(event bridgeEvent, start startRequest, emit fu
 	if err != nil {
 		return err
 	}
+	if withdrawn != nil {
+		emit(proto.TypeFunctionCallWithdrawn, withdrawn)
+		return nil
+	}
 	id, stage := event.CallID, "after"
 	if call != nil {
 		id, stage = call.CallID, "before"
 	}
-	emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: observation.Name, Stage: stage, Observation: observation})
+	if !child {
+		emit(proto.TypeToolCall, proto.ToolCallPayload{ID: id, Name: observation.Name, Stage: stage, Observation: observation})
+	}
 	if call != nil {
 		emit(proto.TypeFunctionCall, call)
 	} else {
@@ -102,14 +126,6 @@ func (s *session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 		return fmt.Errorf("claudesdk: function result identities are required")
 	}
 	if err := result.ValidateContent(); err != nil {
-		return err
-	}
-	for _, part := range result.Content {
-		if part.Type == "input_image" && !result.Success {
-			return fmt.Errorf("claudesdk: native error results cannot retain images")
-		}
-	}
-	if err := (proto.MessageInput{{Content: result.Content}}).ValidateInlineImages(); err != nil {
 		return err
 	}
 	data, err := json.Marshal(struct {

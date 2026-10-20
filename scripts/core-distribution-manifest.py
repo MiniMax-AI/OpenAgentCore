@@ -42,18 +42,25 @@ BUNDLED_DOCS = (
     "docs/getting-started/install-options.md",
     "docs/getting-started/nodes.md",
     "docs/getting-started/operations.md",
+    "docs/getting-started/public-address.md",
     "docs/getting-started/quickstart.md",
+    "docs/getting-started/sandbox-backends.md",
     "docs/getting-started/self-hosted.md",
+    "docs/getting-started/troubleshooting.md",
+    "docs/getting-started/workspace-storage.md",
     "contracts/agents-api/environment-executor-credentials.md",
 )
 # Files the bundled docs show, copied as they are, so they work offline.
 BUNDLED_FILES = (
-    "docs/assets/openagentcore-banner.jpeg",
+    "docs/assets/openagentcore-wordmark-light.svg",
+    "docs/assets/openagentcore-wordmark-dark.svg",
     "docs/assets/architecture.svg",
+    "docs/assets/architecture-dark.svg",
     "docs/assets/console-overview-en.webp",
     "docs/assets/console-overview-zh.webp",
     "docs/assets/console-agent-metrics-en.webp",
     "docs/assets/console-agent-metrics-zh.webp",
+    "docs/assets/console-connect-host-en.webp",
 )
 REPOSITORY_URL = "https://github.com/MiniMax-AI/OpenAgentCore"
 MARKDOWN_LINK = re.compile(r"(!?)\[((?:[^\[\]]|\[[^\]]*\])*)\]\(([^)\s]+)((?:\s+\"[^\"]*\")?)\)")
@@ -191,7 +198,7 @@ def verify_runtime(image, daemon, source):
     files = {"/usr/local/bin/oac-daemon": pathlib.Path(daemon)}
     environment = dict(value.split("=", 1) for value in details["Config"]["Env"] if "=" in value)
     if "OAC_RUNTIME_MCODE_BIN" in environment:
-        for name in ("launch.mjs", "bridge.mjs", "check.mjs", "tool-executor.mjs", "subagent-snapshot.mjs", "source.json"):
+        for name in ("check.mjs", "subagent-snapshot.mjs", "source.json"):
             files["/opt/mcode-harness/" + name] = source / "packages/mcode-harness" / name
     output = subprocess.check_output(
         ["docker", "run", "--rm", "--network", "none", "--entrypoint", "sha256sum", image, *files], text=True

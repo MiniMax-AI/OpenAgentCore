@@ -1,73 +1,74 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 9b8c548e48923c2ee6e51deaebb85422db2b568f36a6718af6b44ff13099ff2a
+source_hash: ec59f9762d21e486cf84108e4dda087c9640095196527bb8059c6833279df8ec
 ---
 
-一条命令即可在 Linux、macOS 或 Windows 上安装 Core、Web 控制台和 PostgreSQL。用 Core 密钥登录 Web，设置默认模型并签发项目 API 密钥。应用使用这些密钥调用 Core。Session 在你添加的节点上的沙箱中运行，也可以在 E2B 上运行。
+本指南带运维人员从一台空主机到可用的安装：在 Docker 下运行的 Core、Web 控制台和 PostgreSQL，一个沙箱提供商，一个默认模型和第一个项目 API 密钥。Web 的 **概览** 通过 **新手引导** 清单跟踪同样的步骤。
 
 1. [检查前置条件](#prerequisites)。
 2. [运行安装程序](#install)。
 3. [登录 Web](#sign-in-to-web)。
-4. [配置公开地址](#configure-the-domain-and-https)。
+4. [添加沙箱容量](#add-sandbox-capacity)。
 5. [设置默认模型](#set-a-default-model)。
 6. [签发项目 API 密钥](#issue-a-project-api-key)。
-7. [添加沙箱容量](#add-sandbox-capacity)。
 
-本页介绍默认流程。完整参数、已有反向代理和离线主机请参阅[安装选项](install-options.md)。
+全部安装程序参数、已有反向代理和离线主机见[安装选项](./install-options.md)。
 
 ## 前置条件 {#prerequisites}
 
-- Linux amd64/arm64 或 macOS Intel/Apple Silicon，需安装 curl；Windows x64 需 PowerShell。
-- Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。macOS 和 Windows 使用已启动的 Docker Desktop，并选择 Linux 容器。
-- 能运行 `docker` 并向自己的主目录写入文件的账号。普通用户和 root 均可；安装程序不会调用 sudo。
-- Web 的 8080 端口空闲。参阅[端口](install-options.md#ports)。Docker 必须能发布该端口；安装程序不会修改主机策略。
-- 本机以外的访问要求 `OAC_PUBLIC_URL` 就是浏览器、节点和执行器使用的地址。可以先在本机登录。
+| | Linux | macOS | Windows |
+| --- | --- | --- | --- |
+| 主机 | amd64 或 arm64，需安装 curl | Intel 或 Apple Silicon，需安装 curl | x64，需 PowerShell |
+| Docker | Docker Engine，已启动 | Docker Desktop，已启动 | Docker Desktop，运行 Linux 容器 |
+| 账号 | `docker` 组成员，或使用 rootless Docker | 你的用户 | 你的用户 |
 
-沙箱节点运行在 Linux amd64 上。在 macOS 或 Windows 上部署 Core 时，可连接 Linux 节点，或使用 E2B。
+- 所有平台都需要 Docker Engine 26 或更高版本，以及 Docker Compose 2.26.0 或更高版本。Docker Desktop 的版本需足够新，已包含它们。
+- Docker 守护进程能访问容器注册表。它不使用当前 shell 的代理变量，参阅[离线主机](./install-options.md#offline-hosts)。下载发行制品还需要能访问 GitHub。
+- 8080 端口空闲，且 Docker 能发布该端口，参阅[端口](./public-address.md#ports)。安装程序不会修改主机策略。
+
+> [!WARNING]
+> 以该账号运行安装程序和 `oac`，不要使用 `sudo`。`sudo` 运行会在 `~/.oac` 中留下属于 root 的文件，导致之后的运行失败。
 
 ## 安装 {#install}
 
-Linux 和 macOS：
+::: code-group
 
-```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash
+```sh [macOS / Linux]
+curl -fsSL https://openagentcore.dev/install.sh | bash
 ```
 
-Windows PowerShell：
-
-```powershell
+```powershell [Windows]
 irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1 | iex
 ```
 
-绑定所有 IPv4 地址时，安装器会使用默认路由的私网地址；如果没有可用私网地址，则使用 `http://localhost:8080`。也可以通过 `--public-url` 指定可访问的源地址；如果已有反向代理，就使用它的 HTTPS 地址：
+:::
 
-```sh
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --public-url https://core.example
+安装程序检查 Docker 和端口，写入[安装目录](../configuration.md#installation-directory) `~/.oac/core`，其中包含 `.env` 和 `oac` 命令（Windows 为 `oac.exe`），然后启动服务。Web 在 8080 端口提供控制台，并[把 API 请求转发到 Core](./public-address.md#listeners-and-access)。下载和配置检查在创建安装目录之前完成，因此全新安装失败时不会留下任何文件。安装程序会打印控制台地址；仅在全新安装时打印 Core 密钥，重新运行则打印 `oac core-key --show`。
+
+控制台地址默认是本机默认路由上的私网 IP；没有时为 `http://localhost:8080`。浏览器必须打开这个确切的地址。要自行指定，例如已有反向代理的 HTTPS 地址，请传入 `--public-url`。Windows 上传参的方式见[传入参数](./install-options.md#pass-flags)。
+
+::: code-group
+
+```sh [macOS / Linux]
+curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https://core.example
 ```
 
-脚本下载该发布版的 Compose 文件，校验 SHA-256，然后：
-
-1. 检查 Docker 使用 Linux 容器、符合版本要求，并确认所选端口空闲；
-2. 准备[安装目录](../configuration.md#installation-directory) `~/.oac/core`，写入 `.env` 和原生 `oac` 命令（Windows 为 `oac.exe`）；
-3. 用 Docker Compose 启动服务。Web 在 8080 端口提供控制台，并把 `/v1`、`/api/v1` 和 `/docs` 转发到 Core。Core 和 PostgreSQL 不发布端口。
-
-安装器会打印控制台地址和 Core 密钥。登录后，在 Web 中配置执行资源并创建项目。
-
-安装目录就位前，先完成下载和配置检查。之后的失败会保留配置与数据，并报告失败步骤；在安装目录运行 `docker compose logs --tail 100` 查看日志。修复报错后，重新执行同一命令，或指定安装目录即可继续：
-
-```bash
-curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.sh | bash -s -- --install-dir "$HOME/.oac/core"
+```powershell [Windows]
+& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --public-url https://core.example
 ```
 
-如果使用了其他目录，请替换路径。重新执行时沿用已保存的 Compose 文件和设置；安装参数只对新目录生效。已有镜像和容器直接复用，缺失镜像会重新下载。修改设置请编辑 `.env` 并运行 `oac apply`。新发布版使用新目录；见[版本策略](operations.md#installation-version-policy)。
+:::
 
-空间或配额不足时，请释放错误信息所指文件系统的空间。加载镜像失败还可能需要释放 Docker 存储空间，该存储可能位于另一个文件系统。
+> [!TIP]
+> 可以放心重新运行。如果安装程序因检查失败、服务三分钟内未变为健康或按 Ctrl-C 而停止，修复提示信息所指的问题后重新执行同一命令。重新运行会保留配置和数据，并复用已有镜像。`--public-url`、`--host` 和 `--web-port` 只对全新安装生效；之后要修改它们，请编辑 `.env` 并运行 `oac apply`。在 Linux 和 macOS 上，启动脚本还会继续未完成的下载。[故障排查](./troubleshooting.md#installation)列出了这些提示信息。
+
+要换到更新的发布版本，请重新安装：先[卸载](./operations.md#uninstall)现有安装，再运行安装程序。
 
 ## 登录 Web {#sign-in-to-web}
 
 1. 打开安装程序输出的控制台地址，即公开 URL。Web 只接受这个主机名。
-2. 使用 [Core 密钥](operations.md#core-key)登录，这是安装的管理员凭据。Web 没有用户账号。
+2. 使用 [Core 密钥](./operations.md#core-key)登录，这是安装的管理员凭据。Web 没有用户账号。
 
    ```sh
    ~/.oac/core/oac core-key --show
@@ -75,30 +76,32 @@ curl -fsSL https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/
 
    Windows 使用 `& "$HOME/.oac/core/oac.exe" core-key --show`。各平台的命令参数相同。
 
-## 配置公开地址 {#configure-the-domain-and-https}
+## 添加沙箱容量 {#add-sandbox-capacity}
 
-应用、节点和沙箱通过同一个地址访问 Core，即公开 URL。局域网上用 HTTP 即可。对外暴露时，在前面放反向代理，并把公开 URL 设为它提供的 HTTPS 源地址。E2B 客户机从互联网访问 Core，因此需要非回环的公开 URL。
-
-1. 把反向代理指向 Web。
-2. 把 `OAC_PUBLIC_URL` 设为反向代理提供的 HTTPS 源地址，然后运行 `oac apply`。见[修改公开 URL](../configuration.md#changing-the-public-url)。
+安装程序不选择沙箱提供商。请[选择沙箱提供商](./sandbox-backends.md)：在自有 Linux 节点上运行 microsandbox，并使用[设置工作区存储](./workspace-storage.md)中的工作区存储，是推荐的自管部署；E2B 不需要节点。应用也可以在自己的机器上运行[自托管 Session](./self-hosted.md)。
 
 ## 设置默认模型 {#set-a-default-model}
 
-没有自带模型提供商的 Core 托管 Session 使用其 Harness 的默认模型。在 **设置 → 模型与凭据** 的 **默认模型配置** 下，找到标记为 **默认** 的 Harness（除非修改了 `OAC_DEFAULT_HARNESS`，否则为 Codex），它显示 **未设置模型提供商**。选择 **设置**，输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。MiniMax Code 还需要上下文窗口和最大输出 token 数。之后该 Harness 显示 **就绪**。参阅[默认模型](../configuration.md#default-models)。
+没有自带模型提供商的 Core 托管 Session 使用其 Harness 的默认模型。参阅[默认模型](../configuration.md#default-models)。
+
+1. 打开 **设置 → 模型与凭据**。在 **默认模型配置** 下，标记为 **默认** 的 Harness 显示 **未设置模型提供商**。除非修改了 `OAC_DEFAULT_HARNESS`，否则为 Codex，参阅[设置](../configuration.md#settings)。
+2. 选择 **设置**，输入模型 ID、协议以及提供商的基础 URL 和 API 密钥。
+3. 保存。该 Harness 显示 **就绪**。
 
 ## 签发项目 API 密钥 {#issue-a-project-api-key}
 
 1. 在 **项目与密钥** 中选择 **创建项目**，然后选择 **签发密钥**。对话框只显示一次密钥：复制并妥善保存。**如何调用** 卡片展示 API 基础 URL 和示例请求。
-2. 将密钥和 API 基础 URL 交给应用开发者，他们可以继续阅读[快速开始](quickstart.md)。
+2. 将密钥和 API 基础 URL 交给应用开发者，他们可以继续阅读[运行第一个 Session](./quickstart.md)。
 
-Web 的 **概览** 通过 **新手引导** 清单跟踪这些步骤。
+## 从其他机器访问 Core {#configure-the-domain-and-https}
 
-## 添加沙箱容量 {#add-sandbox-capacity}
+在一台机器上试用时，此步骤可选。应用、节点和沙箱通过同一个地址访问 Core，即公开 URL。局域网上用 HTTP 即可；超出局域网时，在前面放反向代理，并把公开 URL 设为它提供的 HTTPS 源地址。反向代理、端口以及之后如何修改地址，见[配置公开地址](./public-address.md)。
 
-安装程序不选择沙箱提供商。根据你的基础设施选择部署方案：
+## 后续步骤 {#next-steps}
 
-- **推荐：microsandbox 配合独立工作区存储。** 先准备 [NFS 文件系统和服务账户](../configuration.md#independent-workspace-storage)，再在 **设置** → **沙箱与调度** 选择 **自有机器** 和 **microsandbox**，通过 **节点** [添加 Linux 节点](./nodes.md)。[节点指南](./nodes.md#before-you-add-a-node)同时说明了跨兼容节点恢复内存所需的私有检查点存储。
-- **托管计算：E2B。** 在同一个沙箱配置流程中选择 E2B 并配置凭据和模板。不需要执行节点；参阅[部署设置](../../../contracts/agents-api/zh/sandbox-deployment.md#initial-setup-and-same-provider-changes)。
-- **其他支持的执行位置。** Docker 节点仍然可用，应用也可以连接[自托管机器](./self-hosted.md)。[提供商对照表](../../../contracts/agents-api/zh/sandbox-deployment.md#what-each-field-means-per-sandbox-provider)区分各方案的文件系统和挂起支持。
-
-日常操作、备份和升级见[运维](operations.md)。
+| 下一步 | 位置 |
+| --- | --- |
+| 发起 API 调用 | [运行第一个 Session](./quickstart.md) |
+| 添加 Linux 节点 | [添加和管理节点](./nodes.md) |
+| 备份和卸载 | [运维](./operations.md) |
+| 参数、Compose 和离线主机 | [安装选项](./install-options.md) |

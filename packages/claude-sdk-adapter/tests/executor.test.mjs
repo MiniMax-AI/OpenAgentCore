@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-const sdk = "export async function startup(args){return globalThis.startupFixture(args)} export function query(){throw new Error('one warm query required')} export async function getSessionInfo(){return {sessionId:'native'}}";
+const sdk = "export async function startup(args){return globalThis.startupFixture(args)} export function query(){throw new Error('one warm query required')} export async function getSessionInfo(){return process.argv[1]==='missing-history' ? undefined : {sessionId:'native'}}";
 registerHooks({resolve(specifier,context,next){if(specifier==='@anthropic-ai/claude-agent-sdk') return {url:'data:text/javascript,'+encodeURIComponent(sdk),shortCircuit:true};return next(specifier,context)}});
 globalThis.startupFixture=async({options})=>{
  const child=options.spawnClaudeCodeProcess({command:process.execPath,args:['-e',"process.stdin.resume();process.stdin.on('end',()=>process.exit(0))"],env:options.env,signal:options.abortController.signal});
@@ -78,7 +78,7 @@ async function launch(t,mode="normal") {
  const send=value=>child.stdin.write(JSON.stringify(value)+"\n");
  const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}]});
  send({type:"executor_prepare",cwd:"/tmp",model:"fixture",system_prompt:"",
- ...(mode==="features" || mode.startsWith("pending-function") ? {observe_messages:true,functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
+ ...(mode==="features" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
  await wait(()=>events.some(event=>event.type==="executor_ready"));
  assert.equal(observations.filter(event=>event.type==="input").length,0);
  return {child,events,observations,closed,wait,send,start};
@@ -192,4 +192,13 @@ for (const mode of ["pending-function-result", "pending-function-terminal", "pen
   child.stdin.end();
  }
  assert.deepEqual(await closed,{code:0,signal:null});
+});
+
+test("executor preparation reports missing native history before readiness",{timeout:10000},async()=>{
+ const child=spawn(process.execPath,["--input-type=module","-e",fixture,"missing-history"],{stdio:["pipe","pipe","pipe","ipc"]});
+ let stdout="";child.stdout.setEncoding("utf8");child.stdout.on("data",data=>{stdout+=data});
+ const closed=new Promise(resolve=>child.once("close",code=>resolve(code)));
+ child.stdin.end(JSON.stringify({type:"executor_prepare",cwd:"/tmp",model:"fixture",system_prompt:"",resume:"native"})+"\n");
+ assert.equal(await closed,0);
+ assert.deepEqual(stdout.trim().split("\n").map(line=>JSON.parse(line)),[{type:"error",code:"history_unavailable"}]);
 });

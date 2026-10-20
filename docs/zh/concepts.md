@@ -1,16 +1,16 @@
 ---
 title: "概念"
 source: docs/concepts.md
-source_hash: 2d65b520ffc8ccce8836d6196fb9daa217a438e4f79ae2aee70d4cb77da4c606
+source_hash: 378b3621d64bbe1d70057c048c5bac457361dea628a30c5e60704d69d17277ca
 ---
 
-项目是 OpenAgentCore 的执行租户。应用使用其 API 密钥；运维人员使用独立的 Core 密钥管理安装实例。[API 索引](api/index.md) 将每类调用方映射到对应命名空间和凭据。
+项目是 OpenAgentCore 的执行租户。应用使用其 API 密钥；运维人员使用独立的 Core 密钥管理安装实例。[API 命名空间和凭据](api/index.md)将每类调用方映射到对应命名空间和凭据。
 
 ## 项目拥有资产 {#projects-own-assets}
 
 项目拥有自己的 Agent、Session、Environment、Skill、File 和 Vault。其命名 API 密钥共用相同的主体、权限和资源。Core 不提供产品用户、角色、成员关系或只读密钥。名称是标签；稳定 ID 标识项目和密钥。
 
-项目和密钥存储在 PostgreSQL 中。Core 仅在签发时返回一次密钥明文。轮换密钥时，在同一项目中签发新密钥，再撤销旧密钥。撤销保留资产、写入来源和已接受的工作。归档项目会撤销所有密钥并禁止签发新密钥；管理员仍可检查和删除其资源。[管理契约](../../contracts/agents-api/zh/admin-api.md#projects-and-keys) 定义这些操作。
+项目和密钥存储在 PostgreSQL 中。Core 仅在签发时返回一次密钥明文；轮换步骤见[项目和 API 密钥](getting-started/operations.md#projects-and-api-keys)。撤销保留资产、写入来源和已接受的工作。归档项目会撤销所有密钥并禁止签发新密钥；管理员仍可检查和删除其资源。[管理契约](../../contracts/agents-api/zh/admin-api.md#projects-and-keys) 定义这些操作。
 
 [Core 密钥](getting-started/operations.md#core-key) 是独立的部署凭据。管理员需要使用应用 API 时，应签发项目 API 密钥并使用该项目的权限。产品用户、工作区和业务权限属于应用。
 
@@ -22,7 +22,7 @@ source_hash: 2d65b520ffc8ccce8836d6196fb9daa217a438e4f79ae2aee70d4cb77da4c606
 
 管理员管理项目和密钥、沙箱部署、节点、执行器凭据及部署默认模型。他们可以检查资源、执行历史、运行计数与用量，并按删除规则删除资源。归档托管 Session 会请求取消和沙箱回收；参见 [Session 归档](../../contracts/agents-api/zh/admin-api.md#session-archive)。
 
-创建或编辑应用资产、启动 Session 和提交输入都需要项目 API 密钥。Core 密钥不提供应用身份，不能读取已保存的秘密。[管理 API](../../contracts/agents-api/zh/admin-api.md) 定义其操作；[控制台服务端](web/console-server.md) 负责 Web 登录与凭据处理。
+创建或编辑应用资产、启动 Session 和提交输入都需要项目 API 密钥。Core 密钥不提供应用身份，不能读取已保存的秘密。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 定义其操作；[控制台服务器](web/console-server.md) 负责 Web 登录与凭据处理。
 
 ## Runtime 与外层隔离 {#runtime-and-outer-isolation}
 

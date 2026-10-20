@@ -22,27 +22,57 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	request.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}
+	request.ExecutionControls = &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "disabled", ContextSize: "medium"}, TextVerbosity: "medium"}
 	before, _ := json.Marshal(request)
 	controlled, _, err := prepare(config, request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	after, _ := json.Marshal(request)
+	if controlled.WebSearch != "disabled" || ordinary.WebSearch != "" {
+		t.Fatal("disabled web search did not reach the bridge")
+	}
+	controlled.WebSearch = ""
 	if !reflect.DeepEqual(ordinary, controlled) || string(before) != string(after) {
 		t.Fatal("default controls changed native input, instructions, continuation or caller options")
+	}
+	// Without a search control Claude Code keeps its native web tools.
+	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium"}
+	absent, _, err := prepare(config, request)
+	if err != nil || !reflect.DeepEqual(ordinary, absent) {
+		t.Fatal("absent search control changed the native configuration", err)
+	}
+}
+
+func TestLiveWebSearchReachesTheBridgeOnEveryPlacement(t *testing.T) {
+	live := &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}, TextVerbosity: "medium"}
+	root := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", root)
+	none, _, err := prepare(Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}, proto.PromptRequestPayload{
+		RunID: "run", Input: proto.TextInput("Search."), ExecutionControls: live, AgentOptions: map[string]any{"model": "native-model"}})
+	if err != nil || none.WebSearch != "live" {
+		t.Fatal("live search on environment none did not reach the bridge", err)
+	}
+	request := workspaceRequest()
+	request.ExecutionControls = live
+	workspace, _, err := prepare(workspaceFixture(t), request)
+	if err != nil || workspace.WebSearch != "live" {
+		t.Fatal("live search on a workspace did not reach the bridge", err)
 	}
 }
 
 func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
+	enabled := true
 	cases := map[string]proto.ExecutionControls{
-		"empty": {}, "missing-search": {TextVerbosity: "medium"}, "missing-verbosity": {WebSearch: "disabled"},
-		"cached-search":     {WebSearch: "cached", TextVerbosity: "medium"},
-		"live-search":       {WebSearch: "live", TextVerbosity: "medium"},
-		"unknown-search":    {WebSearch: "invalid", TextVerbosity: "medium"},
-		"low-verbosity":     {WebSearch: "disabled", TextVerbosity: "low"},
-		"high-verbosity":    {WebSearch: "disabled", TextVerbosity: "high"},
-		"unknown-verbosity": {WebSearch: "disabled", TextVerbosity: "invalid"},
+		"cached-search":     {WebSearch: &proto.WebSearchControl{Mode: "cached", ContextSize: "medium"}},
+		"enabled-ptc":       {ProgrammaticToolCalling: &enabled},
+		"low-verbosity":     {TextVerbosity: "low"},
+		"high-verbosity":    {TextVerbosity: "high"},
+		"unknown-verbosity": {TextVerbosity: "invalid"},
+		"no-effort":         {ReasoningEffort: "none"},
+		"minimal-effort":    {ReasoningEffort: "minimal"},
+		"summary":           {ReasoningSummary: "auto"},
+		"service-tier":      {ServiceTier: "priority"},
 	}
 	for name, controls := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -51,13 +81,29 @@ func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 			config := Config{Node: "must-not-run", Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ExecutionControls: &controls, AgentOptions: map[string]any{"model": "native-model"}}
 			_, err := startSingleTurn(t.Context(), config, request, make(chan proto.Envelope, 1))
-			if err == nil || !strings.Contains(err.Error(), "execution controls require") {
+			if err == nil || !strings.Contains(err.Error(), "not supported by this Harness") {
 				t.Fatal("unsupported controls did not fail at admission", err)
 			}
 			if _, err := os.Stat(config.StateDir); !os.IsNotExist(err) {
 				t.Fatal("unsupported controls reached native setup", err)
 			}
 		})
+	}
+}
+
+func TestReasoningEffortReachesNativeOptions(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", root)
+	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
+	for _, effort := range []string{"low", "medium", "high", "xhigh", "max"} {
+		request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", ReasoningEffort: effort}, AgentOptions: map[string]any{"model": "native-model", "harness_config": map[string]any{"thinking": map[string]any{"type": "adaptive"}}}}
+		start, _, err := prepare(config, request)
+		if err != nil {
+			t.Fatal(effort, err)
+		}
+		if start.NativeModelOptions == nil || start.NativeModelOptions.Effort != effort || start.NativeModelOptions.Thinking["type"] != "adaptive" {
+			t.Fatalf("effort %s: %+v", effort, start.NativeModelOptions)
+		}
 	}
 }
 
@@ -81,7 +127,7 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	schema := json.RawMessage(`{"type":"object","properties":{"n":{"const":9007199254740992}}}`)
-	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ObserveMessages: true, DisableSubagents: true, AgentOptions: map[string]any{"model": "model", "system_prompt": "Original instructions."}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
+	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), DisableSubagents: true, AgentOptions: map[string]any{"model": "model", "system_prompt": "Original instructions."}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
 	start, _, err := prepare(config, request)
 	if err != nil {
 		t.Fatal(err)
@@ -94,13 +140,14 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 		t.Fatal("lossy schema accepted")
 	}
 	request.ExecutionControls.OutputFormat.Schema = schema
-	request.DisableSubagents = false
-	if _, _, err := prepare(config, request); err == nil {
-		t.Fatal("unqualified subagent combination accepted")
+	request.DisableExecutionEnvironment = true
+	request.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
+	if start, _, err := prepare(config, request); err != nil || start.OutputFormat == nil {
+		t.Fatal("native structured output was narrowed by MCP", err)
 	}
 }
 
-func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing.T) {
+func TestToolDiscoveryPreservesFrozenFunctionsBesideOtherProfiles(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
@@ -112,11 +159,11 @@ func TestToolDiscoveryPreservesFrozenFunctionsAndRejectsOtherProfiles(t *testing
 	if err != nil || !start.ToolSearch || !reflect.DeepEqual(start.Functions, request.FunctionTools) {
 		t.Fatal("function discovery changed native definitions", err)
 	}
-	request.DisableSubagents = false
-	if _, _, err := prepare(config, request); err == nil {
-		t.Fatal("unqualified combination admitted")
+	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(`{"type":"object"}`)}}
+	if start, _, err := prepare(config, request); err != nil || !start.ToolSearch || start.OutputFormat == nil {
+		t.Fatal("native tool search was narrowed by structured output", err)
 	}
-	request.DisableSubagents = true
+	request.ExecutionControls = nil
 	request.ToolSearch = false
 	if _, _, err := prepare(config, request); err == nil {
 		t.Fatal("deferred definitions became eager")

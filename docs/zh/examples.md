@@ -1,18 +1,14 @@
 ---
 title: "示例"
 source: docs/examples.md
-source_hash: 5df5471e3ed43e59bbdc337c9a16a0434ae92f7508ba712849c813c0faf3b913
+source_hash: 99d9e955b20c81fea35ba28915e0bd96619afa94b6fc224b8b7a2a1047cce4a4
 ---
 
-基于 [Agents API](api/public-agent-api.md)构建的完整应用。每个示例都使用项目 API 密钥连接真实的 Core 安装。
-
-| 示例 | 展示内容 |
-| --- | --- |
-| [Parsar Agent 工作台](#parsar-agent-workbench) | 用可复用 Agent、环境模板和资源库，在网页聊天和飞书中对话 |
+基于 [Agents API 指南](api/public-agent-api.md)构建的完整应用，每个都使用项目 API 密钥连接真实的 Core 安装。
 
 ## Parsar Agent 工作台 {#parsar-agent-workbench}
 
-基于 Core 构建的对话工作空间。从资源库和环境模板组装 Agent，然后在本地网页聊天中对话，或通过以 Agent 身份工作的飞书机器人对话。两个入口都创建普通的公开 Session。执行使用 bypass 模式；不包含产品账号和细粒度权限。
+基于 Core 构建的对话工作空间。从资源库和环境模板组装 Agent，然后在本地网页聊天中对话，或通过以 Agent 身份工作的飞书机器人对话。两个入口都创建普通的公开 Session。
 
 源码：[`example/parsar`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/README.md)。
 
@@ -24,9 +20,9 @@ source_hash: 5df5471e3ed43e59bbdc337c9a16a0434ae92f7508ba712849c813c0faf3b913
 
 | 功能 | 使用的 API | 指南 | 代码 |
 | --- | --- | --- | --- |
-| 网页与飞书对话 | 公开 Session 创建、输入事件、Turns 和 Items | [发送输入](api/public-agent-api.md#send-input) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs)、[`server/feishu.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/feishu.mjs) |
 | 服务端密钥和请求头 | Bearer 密钥、`OpenAI-Beta`、路由允许列表 | [开始前](api/public-agent-api.md#before-you-start) | [`server.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server.mjs) |
-| 带 Harness 和模型的 Agent | `x_agents_core.harness`、`model_provider` | [Core 扩展](api/public-agent-api.md#core-extensions-x-agents-core) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
+| 带 Harness 和模型的 Agent | `x_agents_core.harness`、`model_provider` | [Core 扩展](api/public-agent-api.md#core-extensions) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
+| 网页与飞书对话 | 公开 Session 创建、输入事件、Turns 和 Items | [发送输入](api/public-agent-api.md#send-input) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs)、[`server/feishu.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/feishu.mjs) |
 | 基于模板的托管 Environment | 带软件包、文件、`env` 和 `setup_commands` 的 `openai_hosted` | [创建 Session](api/public-agent-api.md#create-a-session) | [`server/runtime-profile.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/runtime-profile.mjs) |
 | 可在崩溃后恢复的 Session 创建 | `Idempotency-Key`、响应丢失后的恢复 | [幂等性](api/public-agent-api.md#idempotency) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
 | 实时回复 | 事件流、文本增量、重连与状态协调 | [流式事件](api/public-agent-api.md#stream-events) | [`src/lib/live-session.ts`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/lib/live-session.ts) |
@@ -34,6 +30,4 @@ source_hash: 5df5471e3ed43e59bbdc337c9a16a0434ae92f7508ba712849c813c0faf3b913
 | 历史 | 分页读取 Turns 和 Items | [分页](api/public-agent-api.md#pagination) | [`src/lib/api.ts`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/lib/api.ts) |
 | Skills 和版本 | `/skills`、默认版本 | [Skills](api/public-agent-api.md#skills) | [`src/Skills.tsx`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/Skills.tsx) |
 
-## 添加示例 {#add-an-example}
-
-在 `example/` 下创建目录，用 README 说明运行方式及展示的 API 功能，然后在本索引添加一行。遵循[应用示例边界](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#optional-application-example)。
+要贡献示例，请遵循[应用示例边界](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#optional-application-example)。

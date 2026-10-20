@@ -4,5 +4,5 @@ package execution
 // admission: only environment:none Sessions do. Managed and self-hosted
 // Environments run through RunEnvironmentInput.
 func environmentNone(snapshot Snapshot) bool {
-	return snapshot.Environment != nil && snapshot.Environment.Type == "none"
+	return snapshot.Environment.Type == "none"
 }

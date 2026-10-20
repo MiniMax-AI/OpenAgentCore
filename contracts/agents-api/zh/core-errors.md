@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 71088f9154793bd72bdccb199f1ac6da6da4097da05bed828299011eb5dfe12d
+source_hash: 35a964412b5cd64d552df2e10295dc23cb91e8ba43794a932957269f546b1125
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -63,15 +63,14 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS，且不得包含凭据、查询或片段 |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` 和 `allowed_protocols`，来自该构建的适配器目录 | 协议未知，或所选 Harness 不支持该协议 |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`：16384 | 密钥为空、过长或包含禁止字符 |
-| `model_provider_token_limits_invalid` | `context_window` 或 `max_output_tokens` | 省略 | 限制无效，或 Harness 要求的正数限制缺失 |
+| `model_provider_token_limits_invalid` | `context_window` 或 `max_output_tokens` | 省略 | 限制为负数、`max_output_tokens` 超过已设置的 `context_window`，或 Harness 没有已设置限制的原生设置 |
 | `model_configuration_model_invalid` | `model` | 省略 | 部署默认配置的 model 不是非空模型标识符 |
 | `harness_config_invalid` | `harness_config` | 省略 | 部署默认配置的原生参数不受支持或无效 |
 | `invalid_sandbox_configuration` | `resources.cpus` | `min`：1，`max`：255 | CPU 数量超出支持范围 |
 | `invalid_sandbox_configuration` | `resources.memory_mib` | `min`：512，`max`：1048576 | 内存超出支持范围 |
 | `invalid_sandbox_configuration` | `resources.root_disk_mib` 或 `resources.environment_disk_mib` | `min`：microsandbox 为 1024；Docker 和 E2B 的 `min`：0，`max`：0 | 磁盘容量缺失或提供商不支持 |
-| `invalid_sandbox_configuration` | `runtime` | 省略 | Runtime 版本缺失、可变、无效或 E2B 不允许 |
 
-这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；项目名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、常规限制、Harness 协议，然后是 Harness 的必需限制；沙箱资源依次为 CPU、内存、磁盘，然后是 Runtime。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
+这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；项目名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、限制，然后是 Harness 协议；沙箱资源依次为 CPU、内存，然后是磁盘。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
 
 ## 其他管理错误 {#other-administration-errors}
 
@@ -108,7 +107,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 ## 诊断失败类别 {#diagnostic-failure-categories}
 
-[Session and Turn diagnostics reads](session-diagnostics.md) 会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误保持不变。除非表格另有说明，否则 `params` 为 `{}`。
+[Session 诊断](session-diagnostics.md)接口会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误保持不变。除非表格另有说明，否则 `params` 为 `{}`。
 
 | 代码 | 存储原因或安全含义 |
 | --- | --- |

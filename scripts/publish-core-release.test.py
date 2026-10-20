@@ -54,7 +54,7 @@ class PublicationTests(unittest.TestCase):
         self.addCleanup(stack.close)
         self.images = stack.enter_context(mock.patch.object(publisher, "publish_images", return_value={
             name: {"digest": "ghcr.io/minimax-ai/openagentcore/" + name + "@sha256:" + "ab" * 32}
-            for name in ("core", "web", "runtime", "ingress")}))
+            for name in ("core", "web", "runtime", "ingress", "database")}))
         self.api = stack.enter_context(mock.patch.object(publisher, "api", side_effect=self.response))
 
     def test_registry_failure_leaves_release_draft(self):
@@ -170,6 +170,7 @@ class PublicationTests(unittest.TestCase):
                 for name in ("core", "web", "ingress"):
                     self.assertIn("${OAC_IMAGE_" + name.upper() + ":-" +
                                   self.images.return_value[name]["digest"] + "}", compose)
+                self.assertIn("image: " + self.images.return_value["database"]["digest"] + "\n", compose)
                 self.assertNotIn(":latest", compose)
                 self.assertNotIn("__OAC_", compose)
 
@@ -362,6 +363,7 @@ class RegistryTests(unittest.TestCase):
         self.configs = {'amd64': 'sha256:' + '1' * 64, 'arm64': 'sha256:' + '2' * 64}
         self.digests = {'amd64': 'sha256:' + '3' * 64, 'arm64': 'sha256:' + '4' * 64}
         self.index_digest = 'sha256:' + '5' * 64
+        self.database_digest = publisher.render_compose.DATABASE_PIN.rsplit('@', 1)[1]
         self.remote_images = {}
         for arch in ('amd64', 'arm64'):
             names = publisher.IMAGE_NAMES if arch == 'amd64' else ('core', 'web', 'ingress')
@@ -403,6 +405,8 @@ class RegistryTests(unittest.TestCase):
         if command[1] == 'buildx':
             # Buildx versions used by hosted runners treat templates beginning
             # with {{.Manifest as a request for human-readable manifest output.
+            if '/postgres:' in command[4]:
+                return json.dumps({'digest': self.database_digest})
             if command[-1].startswith('{{.Manifest'):
                 return 'Name: example/core:v1.2.3\nDigest: ' + self.index_digest + '\n'
             self.assertEqual(command[-2:], ['--format', '{{json .Manifest}}'])
@@ -425,6 +429,23 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(len(self.remote_images['ghcr.io/minimax-ai/openagentcore/core:v1.2.3']['manifests']), 2)
         self.run.reset_mock(); self.publish(); self.assertEqual(self.pushes(), [])
 
+    def mirrors(self):
+        return [c.args[0] for c in self.run.call_args_list if c.args[0][-2].endswith('/postgres:v1.2.3')]
+
+    def test_mirrors_the_pinned_postgresql_index_to_ghcr_by_digest(self):
+        result = self.publish()
+        pin = publisher.render_compose.DATABASE_PIN
+        self.assertRegex(pin, r'^postgres:16-alpine@sha256:[0-9a-f]{64}$')
+        self.assertEqual(self.mirrors(), [['docker', 'buildx', 'imagetools', 'create', '--tag',
+                                           'ghcr.io/minimax-ai/openagentcore/postgres:v1.2.3', pin]])
+        self.assertEqual(result['database']['digest'], 'ghcr.io/minimax-ai/openagentcore/postgres@' + self.database_digest)
+        self.run.reset_mock(); self.publish(); self.assertEqual(self.mirrors(), [])
+
+    def test_changed_postgresql_digest_in_the_registry_is_refused(self):
+        self.database_digest = 'sha256:' + '9' * 64
+        with self.assertRaisesRegex(ValueError, 'different PostgreSQL image'):
+            self.publish()
+
     def test_invalid_index_digest_prevents_floating_tag_updates(self):
         for digest in ('', 'not-a-digest'):
             with self.subTest(digest=digest):
@@ -439,8 +460,8 @@ class RegistryTests(unittest.TestCase):
     def test_latest_updates_after_all_version_indexes(self):
         self.publish(floating_latest=True)
         creates = [c.args[0][5] for c in self.run.call_args_list if c.args[0][1:4] == ['buildx', 'imagetools', 'create']]
-        self.assertTrue(all(ref.endswith(':v1.2.3') for ref in creates[:4]))
-        self.assertTrue(all(ref.endswith(':latest') for ref in creates[4:]))
+        self.assertTrue(all(ref.endswith(':v1.2.3') for ref in creates[:5]))
+        self.assertTrue(all(ref.endswith(':latest') for ref in creates[5:]))
 
     def test_conflicting_platform_prevents_every_push(self):
         self.remote_images['ghcr.io/minimax-ai/openagentcore/web:v1.2.3-arm64'] = {'config': {'digest': 'different'}}

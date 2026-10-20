@@ -17,12 +17,11 @@ Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons and the self-
 | `POST agent-daemon/enroll` | Self-hosted daemon | Executor credential | [Enroll a self-hosted daemon](#enroll-a-self-hosted-daemon) |
 | `GET agent-daemon/connection?environment_id=` | Self-hosted installer | Executor credential | [Private connection confirmation](./environment-executor-credentials.md#private-connection-confirmation) |
 | `POST agent-daemon/bootstrap` | Runtime daemon | Daemon credential | [Daemon bootstrap](#daemon-bootstrap) |
-| `GET agent-daemon/device-status?device_id=` | Runtime daemon | Daemon credential | [Device status](#device-status) |
 | WebSocket `GET agent-daemon/ws?device_id=&version=` | Runtime daemon | Daemon credential | [Core–Runtime protocol](../../docs/runtime-protocol.md) |
 
 Every credential travels in an `Authorization: Bearer` header, never in a URL.
 
-The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes and the two installation routes. The two WebSockets and the daemon bootstrap, device-status, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
+The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only the sandbox-node configuration, enroll and identity routes and the two installation routes. The two WebSockets and the daemon bootstrap, enroll and connection routes are served outside the API router and have no generated schema; this document and the linked contracts are their only definition.
 
 ## Credentials
 
@@ -31,9 +30,9 @@ The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only th
 | Enrollment token | `POST /core/v1/sandbox/enrollment-tokens` (Web **Add node**), with the node's approved capacity. One use; it expires at the response's `expires_at` | `sandbox-node/configuration` without a node ID, `sandbox-node/enroll` |
 | Node credential | The node itself: it generates a secret of 32 to 256 characters without whitespace and registers it at enrollment | `sandbox-node/configuration` with `X-OAC-Node-ID`, `sandbox-node/identity`, `sandbox-node/connect` |
 | Installation grant | The `x_agents_core.installation` command of a `self_hosted` Session; short-lived | `agent-daemon/installation` and its `claim` |
-| Executor credential | The installation claim, or the Core-key [executor credential routes](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
-| Daemon credential of a hosted sandbox | Core, for each managed allocation, delivered in the [bootstrap file](../../docs/runtime-bootstrap.md) | `agent-daemon/bootstrap`, `device-status` and `ws` |
-| Operator device profile | `oac-core-device`, run by an operator with database access | `agent-daemon/bootstrap`, `device-status` and `ws` |
+| Executor credential | The installation claim, or the Core-key routes in [Executor credentials](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
+| Daemon credential of a hosted sandbox | Core, for each managed allocation, delivered in the [bootstrap file](../../docs/runtime-bootstrap.md) | `agent-daemon/bootstrap` and `ws` |
+| Operator device profile | `oac-core-device`, run by an operator with database access | `agent-daemon/bootstrap` and `ws` |
 
 Core keeps only a SHA-256 digest of each token and credential it stores; installation grants are signed and not stored. Credentials are not interchangeable: each works only on its own routes.
 
@@ -102,11 +101,7 @@ The credential is checked before any deployment state, so a rejected credential,
 
 `POST /api/v1/agent-daemon/bootstrap` with the daemon credential and `{"device_id": "…"}` returns `device_id`, `workspace_id`, `ws_url` (derived from `OAC_PUBLIC_URL`, never from request headers), `heartbeat_seconds` and `protocol_version`. The daemon then dials `ws_url` as the [Core–Runtime protocol](../../docs/runtime-protocol.md#ownership-and-connection) describes.
 
-### Device status
-
-`GET /api/v1/agent-daemon/device-status?device_id=` with the daemon credential returns `device_id`, `online` and `owner`: the current connection owner's `owner_pod_id`, `owner_url`, `generation`, `status` and `lease_expires_at`, or null.
-
-The bootstrap, device-status and WebSocket routes share one error body, `{"error": code, "detail": text}`: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
+The bootstrap and WebSocket routes share one error body, `{"error": code, "detail": text}`: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
 
 ### Enroll a self-hosted daemon
 

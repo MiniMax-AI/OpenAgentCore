@@ -227,7 +227,7 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 	}
 	saved := append([]string{
 		`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`,
-		// TV-05: every pinned web_search mode is saved; admission still qualifies only disabled.
+		// TV-05: every pinned web_search mode is saved.
 		`"tools":[{"type":"web_search"}]`, `"tools":[{"type":"web_search","mode":null}]`,
 		`"tools":[{"type":"web_search","mode":"live","allowed_domains":[]}]`,
 		`"tools":[{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"country":"FR","city":"Paris"}}]`,
@@ -253,22 +253,15 @@ func TestAgentConfigurationAcceptedValuesUnchanged(t *testing.T) {
 	}
 }
 
-// K2: execution admission limits keep their codes. Enabled or omitted-mode
-// web_search is saved (TV-05) but still rejected at Session admission.
+// K2: execution admission limits keep their codes, and a value the selected
+// Harness does not declare is rejected with the field named.
 func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	h, s := configurationHandler(t, nil)
 	session := configurationOperations()[2]
 	for _, tc := range []struct{ fields, message string }{
-		{`"tools":[{"type":"web_search","mode":"live"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search","mode":"cached"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search","mode":null}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"web_search"}]`, "Only disabled web_search is qualified for execution."},
-		{`"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Programmatic tool calling is not qualified for execution."},
 		{`"tools":[{"type":"programmatic_tool_calling","enabled":false},{"type":"programmatic_tool_calling","enabled":false}]`, "Execution requires distinct tool controls."},
-		{`"text":{"format":{"type":"json_schema","schema":{"type":"object"}}}`, "Harness codex does not support the requested Agent/environment configuration: Structured output is not qualified for this engine."},
-		{`"reasoning":{"effort":"max"}`, "Explicit reasoning execution options are not supported by this service yet."},
-		{`"service_tier":"flex"`, "Execution currently supports service_tier=auto only."},
-		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty, unique and at most 512 bytes."},
+		{`"multi_agent":{"enabled":true},"tools":[{"type":"programmatic_tool_calling","enabled":true}]`, "Harness codex does not support the requested Agent/environment configuration: programmatic_tool_calling.enabled=true is not supported with multi_agent by this Harness."},
+		{`"tools":[{"type":"function","name":"","description":"","parameters":{}}]`, "Function names must be nonempty and unique."},
 	} {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, session.path, session.body(tc.fields)), "unsupported_or_invalid_configuration", nil, tc.message)
 	}
@@ -276,7 +269,7 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"multi_agent":{"enabled":true,"max_concurrent_subagents":4294967296}`)), "unsupported_or_invalid_configuration", nil, "max_concurrent_subagents must be an integer from 1 to 4294967295.")
 	}
 	for _, op := range configurationOperations()[:3] {
-		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"tools":[{"type":"mcp","server_label":"x","transport":{"type":"stdio","command":"run","cwd":"/"}}]`)), "unsupported_or_invalid_configuration", nil, "MCP currently supports HTTP transport only.")
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"tools":[{"type":"mcp","server_label":"x","connection_origin":"service","transport":{"type":"stdio","command":"run","cwd":"/"}}]`)), "unsupported_or_invalid_configuration", nil, "MCP stdio servers run in the Environment; connection_origin must be environment.")
 	}
 	if s.writes != 0 {
 		t.Fatal("rejected configuration reached storage")
@@ -286,8 +279,8 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 // C4 and SES-33: only configuration errors precede the input requirement;
 // accepted configurations and saved-Agent lookup keep their order.
 func TestSessionConfigurationValidationOrder(t *testing.T) {
-	legacy := uuid.NewString()
-	h, s := configurationHandler(t, map[string]string{legacy: `{"model":"m","tools":[{"type":"web_search","mode":"disabled"}]}`})
+	saved := uuid.NewString()
+	h, s := configurationHandler(t, map[string]string{saved: `{"model":"m","tools":[{"type":"web_search","mode":"disabled"}]}`})
 	const input = "conversation-only sessions currently require initial input"
 	for _, body := range []string{
 		`{"agent":{"model":"m","tools":[{"type":"web_search","mode":"live"}]},"environment":{"type":"none"}}`,
@@ -295,7 +288,7 @@ func TestSessionConfigurationValidationOrder(t *testing.T) {
 		`{"agent":{"model":"m","reasoning":{"effort":"max"}},"environment":{"type":"none"}}`,
 		`{"agent":{"instructions":"x"},"environment":{"type":"none"}}`,
 		`{"agent_id":"` + uuid.NewString() + `","environment":{"type":"none"}}`,
-		`{"agent_id":"` + legacy + `","agent":{"tools":[{"type":"tool_search"}]},"environment":{"type":"none"}}`,
+		`{"agent_id":"` + saved + `","agent":{"tools":[{"type":"tool_search"}]},"environment":{"type":"none"}}`,
 	} {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, "/v1/agents/sessions", body), "invalid_request_error", nil, input)
 	}
@@ -304,7 +297,7 @@ func TestSessionConfigurationValidationOrder(t *testing.T) {
 		t.Fatal(w.Code, w.Body)
 	}
 	// An invalid inline override is reported before the saved-Agent lookup.
-	for _, id := range []string{missing, legacy} {
+	for _, id := range []string{missing, saved} {
 		for _, suffix := range []string{``, `,"input":"x"`} {
 			w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+id+`","agent":{"tools":[{"type":"tool_search"},{"type":"tool_search"}]},"environment":{"type":"none"}`+suffix+`}`)
 			assertConfigurationError(t, w, "invalid_request_error", nil, "duplicate tool_search tool")
@@ -312,46 +305,6 @@ func TestSessionConfigurationValidationOrder(t *testing.T) {
 	}
 	if s.writes != 0 {
 		t.Fatal("rejected configuration reached storage")
-	}
-}
-
-// Saved records that predate the conflict checks cannot execute.
-func TestSessionAdmissionRejectsSavedConfigurationConflicts(t *testing.T) {
-	saved := func(fields string) string {
-		return `{"model":"m","multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},` + fields + `}`
-	}
-	records := map[string]struct{ configuration, message string }{
-		uuid.NewString(): {saved(`"tools":[{"type":"function","name":"lookup","description":"","parameters":{"type":"string"},"defer_loading":false}]`), `Invalid schema for function 'lookup': schema must be a JSON Schema of 'type: "object"', got 'type: "string"'.`},
-		uuid.NewString(): {saved(`"tools":[{"type":"function","name":"f","description":"","parameters":{},"defer_loading":false},{"type":"function","name":"f","description":"","parameters":{},"defer_loading":false}]`), "duplicate function tool name: f"},
-		uuid.NewString(): {saved(`"tools":[{"type":"tool_search"},{"type":"tool_search"}]`), "duplicate tool_search tool"},
-		uuid.NewString(): {saved(`"tools":[],"text":{"format":{"type":"json_schema","schema":{"type":"array"}},"verbosity":"medium"}`), `agent.text.format.schema must have top-level type "object"; got "array"`},
-	}
-	agents := map[string]string{}
-	for id, record := range records {
-		agents[id] = record.configuration
-	}
-	valid := uuid.NewString()
-	agents[valid] = saved(`"tools":[{"type":"function","name":"f","description":"","parameters":{"type":"object"},"defer_loading":false}]`)
-	h, s := configurationHandler(t, agents)
-	for id, record := range records {
-		w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+id+`","environment":{"type":"none"},"input":"x"}`)
-		assertConfigurationError(t, w, "invalid_request_error", nil, record.message)
-	}
-	if s.writes != 0 {
-		t.Fatal("rejected configuration reached storage")
-	}
-	// A replacement of the conflicting field admits the saved record.
-	for id, record := range records {
-		field := `"tools":[]`
-		if strings.Contains(record.configuration, "json_schema") {
-			field = `"text":{"format":{"type":"text"}}`
-		}
-		if w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+id+`","agent":{`+field+`},"environment":{"type":"none"},"input":"x"}`); w.Code != http.StatusCreated {
-			t.Fatal(id, w.Code, w.Body)
-		}
-	}
-	if w := credentialRequest(h, http.MethodPost, "/v1/agents/sessions", `{"agent_id":"`+valid+`","environment":{"type":"none"},"input":"x"}`); w.Code != http.StatusCreated {
-		t.Fatal(w.Code, w.Body)
 	}
 }
 

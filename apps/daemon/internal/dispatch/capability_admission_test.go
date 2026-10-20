@@ -23,11 +23,11 @@ func TestSteeringUsesAdmittedDeclarationAndDoesNotReplayUnsupportedImplementatio
 					return fmt.Errorf("%w: fixture has no active input", agent.ErrUnsupportedOperation)
 				}}, nil
 			})
-			info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilityFromBool(supported)})}
+			info := proto.SupportedAgentKind{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(supported)})}
 			registerExecutorKind(h.reg, info, factory)
 			startRun(t, h.router, h.sender, "run", proto.PromptRequestPayload{AgentKind: "fixture"})
 			// A new registration cannot rewrite the already admitted owner's contract.
-			info.Capabilities.Steering = proto.CapabilityFromBool(!supported)
+			info.Capabilities.DurableInputReceipts = proto.CapabilityFromBool(!supported)
 			registerExecutorKind(h.reg, info, factory)
 			for range 2 {
 				if err := handleSteeringAndWait(t, h, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("hello")})); err != nil {

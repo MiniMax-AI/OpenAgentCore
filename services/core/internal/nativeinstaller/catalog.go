@@ -16,7 +16,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -118,6 +120,8 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if c.local[platform] {
+		// An archive outlives the server-wide write timeout on a slow link.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 		http.ServeFile(w, r, filepath.Join(c.directory, name))
 		return
 	}
@@ -132,9 +136,11 @@ func (c *Catalog) Commands(installerBase, authorization string) map[string]strin
 	base := installerBase + c.Version
 	// Hold the small bootstrap in memory so an interrupted fetch leaves no file.
 	// Only execute a complete successful response; preserve interactive stdin.
-	posix := `set -e; script=; for attempt in 1 2 3; do if script=$(curl -fsS --connect-timeout 15 --max-time 60 --max-filesize 1048576 ` + shellQuote(base+"/bootstrap.sh") + `); then break; fi; [ "$attempt" -lt 3 ] || exit 1; sleep "$attempt"; done; bash -c "$script" -- "$@"`
+	// The grant leaves the environment of the fetch and reaches only the bootstrap.
+	posix := `set -e; grant=$` + v1.NativeInstallGrantEnv + `; unset ` + v1.NativeInstallGrantEnv + `; script=; for attempt in 1 2 3; do if script=$(curl -fsS --connect-timeout 15 --max-time 60 --max-filesize 1048576 ` + shellQuote(base+"/bootstrap.sh") + `); then break; fi; [ "$attempt" -lt 3 ] || exit 1; sleep "$attempt"; done; ` + v1.NativeInstallGrantEnv + `=$grant bash -c "$script" -- "$@"`
 	return map[string]string{
-		"posix":      "bash -c " + shellQuote(posix) + " -- " + shellQuote(base) + " " + shellQuote(authorization),
-		"powershell": "& { $source=$null; for ($attempt=1; $attempt -le 3; $attempt++) { try { $source=(Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -TimeoutSec 60 -ErrorAction Stop).Content; break } catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds $attempt } }; & ([scriptblock]::Create($source)) -Base " + psQuote(base) + " -Authorization " + psQuote(authorization) + " @args }",
+		// The grant travels in the environment, never in an argument; the leading space keeps it out of shell history where the shell supports that.
+		"posix":      " " + v1.NativeInstallGrantEnv + "=" + shellQuote(authorization) + " bash -c " + shellQuote(posix) + " -- " + shellQuote(base),
+		"powershell": "& { $env:" + v1.NativeInstallGrantEnv + "=" + psQuote(authorization) + "; try { $source=$null; for ($attempt=1; $attempt -le 3; $attempt++) { try { $source=(Invoke-WebRequest -UseBasicParsing " + psQuote(base+"/bootstrap.ps1") + " -TimeoutSec 60 -ErrorAction Stop).Content; break } catch { if ($attempt -eq 3) { throw }; Start-Sleep -Seconds $attempt } }; & ([scriptblock]::Create($source)) -Base " + psQuote(base) + " @args } finally { Remove-Item Env:" + v1.NativeInstallGrantEnv + " -ErrorAction SilentlyContinue } }",
 	}
 }

@@ -1,10 +1,33 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: d26140f4fdaa6d0c68dbeff52a2318ed213799966b224302eb04b9ec718f5fc3
+source_hash: 1ceb0a7799a57aa1e53b6354b0c4c6acd1002e328430c7a98dd0713f9f7a334b
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
+
+## 模型提供商配置包 {#model-provider-bundle}
+
+Harness 接收一个冻结的模型提供商配置包，其定义见 [`modelprovider.Provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go)。Core 在创建 Session 时验证它，Harness 原样使用。
+
+| 字段 | 含义 |
+| --- | --- |
+| `protocol` | 上游 API：`anthropic`、`responses` 或 `chat_completions`，而不是引擎。所选 Harness 必须原生支持它 |
+| `base_url` | 带有效主机名的 HTTPS URL，不得包含凭据、查询参数或片段 |
+| `api_key` | 不得为空，最长 16 KiB，不得包含 NUL、CR 或 LF |
+| `context_window`、`max_output_tokens` | 可选的非负整数，输出限制不得大于上下文限制。请使用真实模型的限制 |
+
+各 Harness 支持的协议和原生 token 限制：
+
+| Harness | 支持的协议（默认项在前） | 原生 token 限制 |
+| --- | --- | --- |
+| Codex | `responses` | `model_context_window`；无输出限制 |
+| Claude Code | `anthropic` | `CLAUDE_CODE_MAX_CONTEXT_TOKENS`（原生仅对其不认识的模型使用）和 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`（原生将其限制在模型上限内） |
+| MiniMax Code | `anthropic`、`responses`、`chat_completions` | 自定义模型的 `limit.context` 和 `limit.output` |
+
+已设置但没有原生设置的限制返回 `model_provider_token_limits_invalid`。
+
+Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。不存在模型 API 代理、直通网关或跨协议转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
 
 ## Harness 选择 {#harness-selection}
 
@@ -28,15 +51,7 @@ Session 的 `environment` 和 Environment 模板用于选择准备流程，而�
 
 创建 Session 时，Core 会先解析每个显式的模型或 Harness 覆盖值，再应用已保存默认值；未选择 Harness 时，应用部署默认值。已保存 Agent 必须指定模型。内联 `openai_hosted` 或 `none` Session 可以省略模型，以使用解析后 Harness 的部署模型；`self_hosted` 绝不会使用部署模型设置。Core 绝不会根据模型名称推断模型。
 
-提供商配置的优先级依次为：完整的 Session 配置包、完整的已保存配置包，以及解析后 Harness 的部署默认值。Core 绝不会将替换后的端点与继承的密钥合并；仅覆盖模型时会复用整个继承的配置包。每个 Harness 仅通过其原生协议连接：
-
-| Harness | 支持的协议（默认项在前） |
-| --- | --- |
-| Codex | `responses` |
-| Claude SDK | `anthropic` |
-| MiniMax Code | `anthropic`、`responses`、`chat_completions` |
-
-MiniMax Code 要求上下文限制和输出限制均为正数。Core 会在写入 Session 前验证解析后的组合。Core 和 Runtime 读取 `internal/harnessconfig` 中相同的有序 `protocols` 声明。不存在模型 API 代理、直通网关或跨协议转换，Harness 内部也不例外。不受支持的已保存配置和 Session 快照一旦使用便会失败；它们绝不会在何处被重写、创建别名或迁移。
+提供商配置的优先级依次为：完整的 Session 配置包、完整的已保存配置包，以及解析后 Harness 的部署默认值。Core 绝不会将替换后的端点与继承的密钥合并；仅覆盖模型时会复用整个继承的配置包。每个 Harness 仅通过其原生协议连接（见[模型提供商配置包](#model-provider-bundle)）。
 
 适用来源取决于接收密钥的计算资源由谁拥有：
 
@@ -81,10 +96,6 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 }
 ```
 
-- `protocol` 指定上游 API（`anthropic`、`responses` 或 `chat_completions`），而不是引擎。所选 Harness 必须原生支持它。
-- `base_url` 使用 HTTPS 和有效主机名，且不得包含凭据、查询参数或片段。
-- `api_key` 不得为空，最长为 16 KiB，并且不得包含 NUL、CR 或 LF。
-- `context_window` 和 `max_output_tokens` 是可选的非负整数，输出限制不得大于上下文限制；对于 MiniMax Code，两者都必须为正数。请使用真实模型的限制。
 - `agent.model` 是准确的提供商模型 ID；只要提供该值，就始终会替换部署模型。
 - Session 的 `x_agents_core` 接受 `model_provider`、`harness_config` 和 `environment`（[Environments](environments.md#preparation-order)）；任何其他成员，例如 `sandbox_node_id`，都会以 400 拒绝。托管节点放置自动完成。
 
@@ -92,7 +103,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 解析后的提供商配置会在 Session 创建事务中被冻结并加密，使用自己的加密用途，并绑定到项目和 Session。创建重试会将其纳入请求哈希，因此使用相同 Idempotency-Key 时，更改密钥或端点会产生冲突；密钥进入任何存储哈希时，只会表现为由部署凭据密钥加键控的指纹。任何公开的 Session、Agent、Environment、事件或常规配置均不包含该密钥。顶层扩展仅可写入，无法更新。
 
-在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器会原生应用该配置并直接连接提供商。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。执行器主机将该配置包存放在其原生 Harness home 中，与托管 Runtime 的做法相同。原生工具以启动账户的权限运行，并且可以读取该账户有权读取的内容；吊销凭据不会擦除已经交付的配置包。
+在分派时，Core 会通过绑定到 Session 的 daemon 连接，将快照作为一个机密提供商配置包发送出去；适配器会原生应用该配置并直接连接提供商。快照缺失或无法解密时，Core 绝不会回退到其他凭据。对于 `self_hosted`，接收方 daemon 是为该 Session 自身 Environment 注册的执行器，并持有 Session 创建者主体的当前执行器凭据；凭据轮换或吊销会在继续分派前关闭套接字。执行器主机将该配置包存放在其原生 Harness home 中，与托管 Runtime 的做法相同。原生工具以启动账户的权限运行，并且可以读取该账户有权读取的内容。工作区的原生配置（例如 Claude Code 的项目设置和 hooks）会像在本机一样生效，并且可以使用提供商密钥，因此只能附加可以接触该密钥的可信仓库。吊销凭据不会擦除已经交付的配置包。
 
 ## 原生模型参数 {#native-model-parameters}
 
@@ -100,13 +111,13 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 
 | Harness | 接受的字段 | 应用方式 |
 | --- | --- | --- |
-| Codex | `model_reasoning_effort`：`none`、`minimal`、`low`、`medium`、`high`、`xhigh` | App-server `-c model_reasoning_effort=...` 以及每个 Turn 的 `collaborationMode.settings.reasoning_effort` |
-| Claude SDK | `effort`：`low`、`medium`、`high`、`xhigh`、`max`；`thinking`：SDK 的 `adaptive`、`enabled` 或 `disabled` 对象 | SDK `Options.effort` 和 `Options.thinking` |
-| MiniMax Code | 仅空对象 | 仍必须给出提供商 token 限制 |
+| Codex | 仅空对象 | 推理强度属于公开的 `reasoning.effort` |
+| Claude Code | `thinking`：SDK 的 `adaptive`、`enabled` 或 `disabled` 对象 | SDK `Options.thinking`；公开的 `reasoning.effort` 对应 `Options.effort` |
+| MiniMax Code | 仅空对象 | 公开的 `reasoning.effort` 成为自定义模型的思考强度 |
 
 对于 `adaptive` 和 `enabled`，Claude `thinking` 接受 `display`（`summarized` 或 `omitted`）；只有 `enabled` 接受正整数 `budgetTokens`；拒绝 `maxThinkingTokens`。这些是原生设置，而不是通用推理词汇表；模型可用性和提供商支持均由 Harness 负责。
 
-提供对象时会替换整个对象；`{}` 会清除它，null 则无效。Session 在选择模型或提供商但未提供原生参数时，会使用 `{}`，而不会继承另一个模型的参数。否则，使用已保存 Agent 提供的对象；使用部署模型的内联 Session 使用部署对象。更改 Harness 会清除继承的参数；对模型、提供商或 Harness 的 Agent 更新如果未提供 `harness_config`，也会清除继承的参数。不进行深度合并。仅设置原生参数的内联扩展会保留已保存的 Harness。该对象和部署默认值都不会启用公开的 `reasoning` 选项。
+提供对象时会替换整个对象；`{}` 会清除它，null 则无效。Session 在选择模型或提供商但未提供原生参数时，会使用 `{}`，而不会继承另一个模型的参数。否则，使用已保存 Agent 提供的对象；使用部署模型的内联 Session 使用部署对象。更改 Harness 会清除继承的参数；对模型、提供商或 Harness 的 Agent 更新如果未提供 `harness_config`，也会清除继承的参数。不进行深度合并。仅设置原生参数的内联扩展会保留已保存的 Harness。
 
 Core 会在写入 Session 前验证解析后的配置，并将其冻结在 Session 的 Agent 配置中；管理员的 execution-configuration 读取结果会显示其值和来源。原生参数不属于机密信息；提供商密钥保存在单独加密的配置包中。重新连接会使用冻结的配置，无法更改提供商、协议或参数；不兼容的冻结配置会导致失败。仅仅支持某种协议，并不能说明结构化输出、工具发现、Web 搜索、详细程度或图像输入是否可用；连接受支持也不能证明远程模型接受某个参数。
 
@@ -125,7 +136,7 @@ PUT 要求提供 `model` 和完整的 `model_provider`；`harness_config` 默认
 
 创建 Session 时，Core 会解密解析后 Harness 的默认值，并像处理其他配置包一样将其冻结在 Session 的加密快照中，因此更改或移除默认值绝不会影响现有 Session。execution-configuration 读取结果会显示冻结的安全视图，其来源为 `deployment`。提供商快照缺失或无效时会安全失败，并且不会回退到其他模型或提供商。
 
-`model_configuration_support` 派生自 Core 和 Runtime 共享的适配器声明：`protocols` 列出可选择的原生协议，并将默认项放在首位；`accepts_harness_config` 表示是否接受原生参数；`token_limits_required` 表示是否必须给出提供商 token 限制。它描述的是构建版本，而不是实时 Runtime 或远程模型。
+`model_configuration_support` 派生自 Core 和 Runtime 共享的适配器声明：`protocols` 列出可选择的原生协议，并将默认项放在首位；`accepts_harness_config` 表示是否接受原生参数；`accepts_max_output_tokens` 表示 `max_output_tokens` 是否有原生设置。它描述的是构建版本，而不是实时 Runtime 或远程模型。
 
 ### 部署默认值观测 {#deployment-default-observations}
 

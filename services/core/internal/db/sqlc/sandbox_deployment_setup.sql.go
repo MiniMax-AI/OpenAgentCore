@@ -82,7 +82,7 @@ func (q *Queries) RetireSandboxEnrollments(ctx context.Context) error {
 }
 
 const retireSandboxNodes = `-- name: RetireSandboxNodes :exec
-UPDATE runtime_nodes SET removed_at=clock_timestamp(),connection_id=NULL,provider_ready=false,ready_generation=NULL WHERE removed_at IS NULL
+UPDATE runtime_nodes SET removed_at=clock_timestamp(),connection_id=NULL,ready_generation=NULL WHERE removed_at IS NULL
 `
 
 func (q *Queries) RetireSandboxNodes(ctx context.Context) error {

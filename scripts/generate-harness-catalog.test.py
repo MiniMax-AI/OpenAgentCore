@@ -2,7 +2,6 @@
 """Verify catalog extension and generated contract freshness without live models."""
 
 import importlib.util
-import copy
 import json
 from pathlib import Path
 import tempfile
@@ -23,30 +22,33 @@ schema = module("schema", "patch-agents-openapi.py")
 
 class HarnessCatalogTests(unittest.TestCase):
     def test_installer_projection_includes_every_declaration(self):
-        providers = {"additional": {"responses": {"requires_token_limits": True},
-                                    "anthropic": {"requires_token_limits": False}}, "native": {}}
+        protocols = {"additional": ["responses", "anthropic"], "native": []}
         namespace = {}
-        exec(catalog.render_installer(providers), namespace)
-        self.assertEqual(namespace["PROVIDERS"], providers)
+        exec(catalog.render_installer(protocols), namespace)
+        self.assertEqual(namespace["PROVIDERS"], protocols)
 
-    def test_new_registration_reaches_all_projections(self):
-        entries = [{"kind": "example", "label": "Example",
-                    "configuration": "example", "profile": "exampleProfile"}]
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "catalog.json"
-            path.write_text(json.dumps(entries))
-            loaded = catalog.load_catalog(path)
-            generated = catalog.render(loaded)
-        generated["client"] = catalog.render_client(loaded, ["responses"])
+    def test_new_declaration_reaches_all_projections(self):
+        harnesses = [{"kind": "example", "label": "Example", "package": "example"}]
+        generated = {**catalog.render_registrations(["example"]), **catalog.render_docs(harnesses)}
+        generated["client"] = catalog.render_client(harnesses, ["responses"])
         for content in generated.values():
             self.assertIn("example", content)
             for old in ("codex", "claude_sdk", "mcode"):
                 self.assertNotIn(old, content)
-        self.assertIn('"example": example.Configuration()', generated[Path("internal/harnessconfig/builtin/registry.go")])
-        self.assertIn('"example": exampleProfile()', generated[Path("services/core/internal/engine/catalog_generated.go")])
+        self.assertIn("harnessconfig.NewRegistry(example.Declaration)", generated[Path("internal/harnessconfig/builtin/registry.go")])
+        self.assertIn("[]agent.Declaration{example.Declaration}", generated[Path("apps/daemon/internal/cli/harness_declarations.go")])
+
+    def test_declaration_directory_is_the_registration(self):
+        self.assertEqual(catalog.packages(), ["claudesdk", "codex", "mcode"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "internal/harnessconfig/bad").mkdir(parents=True)
+            (root / "internal/harnessconfig/bad/declaration.go").write_text("package bad\n")
+            with self.assertRaises(ValueError):
+                catalog.packages(root)
 
     def test_checked_in_openapi_enums_match_catalog(self):
-        expected = [entry["kind"] for entry in catalog.load_catalog(catalog.ROOT / catalog.CATALOG)]
+        expected = [entry["kind"] for entry in catalog.load_declared()["harnesses"]]
         surfaces = {
             "openapi.yaml": [("v1.AgentsCore", "harness"), ("v1.SavedAgentCoreInput", "harness"),
                              ("v1.SavedAgentCore", "harness")],
@@ -68,20 +70,6 @@ class HarnessCatalogTests(unittest.TestCase):
                     self.assertEqual(re.findall(r"^ +- ([a-z][a-z0-9_]*)$", field.group(1), re.M), expected,
                                      "stale Harness enum; run make openapi")
 
-    def test_invalid_or_duplicate_registration_is_rejected(self):
-        entry = {"kind": "example", "label": "Example",
-                 "configuration": "example", "profile": "exampleProfile"}
-        candidates = [[], [entry, entry], [{**entry, "kind": "bad/kind"}],
-                      [{**entry, "configuration": "../example"}],
-                      [{**entry, "profile": "bad()"}],
-                      [{**entry, "unknown": True}]]
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "catalog.json"
-            for value in candidates:
-                path.write_text(json.dumps(value))
-                with self.subTest(value=value), self.assertRaises(ValueError):
-                    catalog.load_catalog(path)
-
     def test_openapi_projection_keeps_every_harness_constraint(self):
         document = "definitions:\n"
         fields = [("v1.AgentsCore", "harness"), ("v1.SavedAgentCoreInput", "harness"),
@@ -93,7 +81,7 @@ class HarnessCatalogTests(unittest.TestCase):
         for method in ("get", "put", "delete"):
             document += f"  /{method}:\n    parameters:\n      - description: Harness\n        in: path\n        name: harness\n        type: string\n"
         result = schema.harness_enums(document)
-        kinds = catalog.load_catalog(catalog.ROOT / catalog.CATALOG)
+        kinds = catalog.load_declared()["harnesses"]
         for entry in kinds:
             self.assertEqual(result.count("        - " + entry["kind"] + "\n"), 8)
         self.assertIn("type: string", result)

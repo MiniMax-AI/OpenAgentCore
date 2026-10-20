@@ -43,7 +43,7 @@ func TestNodeCarriesCreationSettlementWithoutConvertingFailureToSuccess(t *testi
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			id := identity()
-			hub := NewHub(HubOptions{
+			hub := newTestHub(HubOptions{
 				Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil },
 				OwnerEpoch:   func(context.Context) (uint64, error) { return 1, nil },
 			})
@@ -58,8 +58,8 @@ func TestNodeCarriesCreationSettlementWithoutConvertingFailureToSuccess(t *testi
 			ctx, cancel := context.WithCancel(t.Context())
 			done := make(chan error, 1)
 			go func() {
-				done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential,
-					Provider: &settledProvider{info: test.info, err: test.err}, Probe: probe})
+				done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential},
+					&settledProvider{info: test.info, err: test.err}, probe)
 			}()
 			defer func() {
 				cancel()

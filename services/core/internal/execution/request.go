@@ -35,18 +35,9 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 		}
 		options["harness_config"] = native
 	}
-	verbosity := snapshot.Agent.Text.Verbosity
-	if verbosity == "" {
-		verbosity = "medium"
-	}
-	controls := &proto.ExecutionControls{DisableProgrammaticToolCalling: tools.DisableProgrammatic, WebSearch: "disabled", TextVerbosity: verbosity}
-	if snapshot.Agent.Text.Format.Type == "json_schema" {
-		controls.OutputFormat = &proto.OutputFormat{Type: "json_schema", Schema: snapshot.Agent.Text.Format.Schema}
-	}
 	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: tools.Functions, ToolSearch: tools.Search,
-		AgentOptions: options, ExecutionControls: controls, AgentStateKey: "agents-api-" + session.ID,
+		AgentOptions: options, ExecutionControls: executionControls(snapshot.Agent, tools), AgentStateKey: session.ID,
 		AgentSessionID: bound.NativeSessionID, RequireExistingNativeSession: recoverNativeSession,
-		ObserveMessages:           caps.MessageItems,
 		ObserveSubagentIdentities: snapshot.Agent.MultiAgent.Enabled,
 		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,
 		DisableSubagents:          !snapshot.Agent.MultiAgent.Enabled}

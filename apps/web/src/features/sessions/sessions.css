@@ -595,6 +595,12 @@
   line-clamp: 1;
 }
 
+/* A phone's status column leaves the clamped line a character or two, and touch
+   has no tooltip; the Session page shows the reason in full. */
+@media (max-width: 640px) {
+  .session-status-truncated .session-status-reason { display: none; }
+}
+
 /* The Session page's failure, under its facts: the reason, then its next step,
    at reading width. */
 .session-failure {

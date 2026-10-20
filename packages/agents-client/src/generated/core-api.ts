@@ -190,10 +190,9 @@ export interface DeploymentResources {
 export const deploymentResourcesFields = ["allocations", "pending"] as const;
 export interface DeploymentSpec {
   resources: SandboxResources;
-  runtime?: RuntimeRelease;
   workspace?: Declaration;
 }
-export const deploymentSpecFields = ["resources", "runtime", "workspace"] as const;
+export const deploymentSpecFields = ["resources", "workspace"] as const;
 export const deploymentSpecRequired = ["resources"] as const;
 export interface DeploymentView {
   configuration?: Record<string, unknown>;
@@ -405,10 +404,10 @@ export const modelConfigurationInputFields = ["harness_config", "model", "model_
 export const modelConfigurationInputRequired = ["model", "model_provider"] as const;
 export interface ModelConfigurationSupport {
   accepts_harness_config: boolean;
+  accepts_max_output_tokens: boolean;
   protocols: string[];
-  token_limits_required: boolean;
 }
-export const modelConfigurationSupportFields = ["accepts_harness_config", "protocols", "token_limits_required"] as const;
+export const modelConfigurationSupportFields = ["accepts_harness_config", "accepts_max_output_tokens", "protocols"] as const;
 export interface Node {
   active: number;
   available_disk_bytes: number | null;
@@ -417,7 +416,6 @@ export interface Node {
   core_url: string;
   cpu_count: number | null;
   created_at: string;
-  diagnostic?: NodeDiagnosticCode;
   enrollment_id: string | null;
   id: string;
   last_seen_at: string | null;
@@ -433,8 +431,7 @@ export interface Node {
   running: number;
   snapshots: number;
 }
-export const nodeFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "diagnostic", "enrollment_id", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
-export const nodeRequired = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
+export const nodeFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
 export interface NodeAllocation {
   compute_phase: string;
   compute_phase_changed_at: string | null;
@@ -460,7 +457,6 @@ export interface NodeDetail {
   core_url: string;
   cpu_count: number | null;
   created_at: string;
-  diagnostic?: NodeDiagnosticCode;
   enrollment_id: string | null;
   history: HostHistory;
   host: NodeHost;
@@ -478,9 +474,8 @@ export interface NodeDetail {
   running: number;
   snapshots: number;
 }
-export const nodeDetailFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "diagnostic", "enrollment_id", "history", "host", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
-export const nodeDetailRequired = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "history", "host", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
-export const nodeDiagnosticCodeValues = ["provider_unavailable", "host_unsupported", "artifacts_unavailable", "runtime_download_failed", "runtime_image_unavailable", "capacity_insufficient"] as const;
+export const nodeDetailFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "history", "host", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
+export const nodeDiagnosticCodeValues = ["provider_unavailable", "host_unsupported", "artifacts_unavailable", "runtime_image_unavailable", "capacity_insufficient"] as const;
 export type NodeDiagnosticCode = (typeof nodeDiagnosticCodeValues)[number];
 export interface NodeHost {
   available_disk_bytes: number | null;
@@ -498,7 +493,7 @@ export interface NodeRollout {
 }
 export const nodeRolloutFields = ["diagnostic", "ready_generation", "state"] as const;
 export const nodeRolloutRequired = ["ready_generation", "state"] as const;
-export const nodeRolloutStateValues = ["ready", "preparing", "failed", "update_required", "unknown"] as const;
+export const nodeRolloutStateValues = ["ready", "preparing", "failed", "unknown"] as const;
 export type NodeRolloutState = (typeof nodeRolloutStateValues)[number];
 export interface NodeUpdate {
   max_active: number;
@@ -649,9 +644,8 @@ export interface RolloutNodes {
   preparing: number;
   ready: number;
   unknown: number;
-  update_required: number;
 }
-export const rolloutNodesFields = ["failed", "preparing", "ready", "unknown", "update_required"] as const;
+export const rolloutNodesFields = ["failed", "preparing", "ready", "unknown"] as const;
 export const rolloutStateValues = ["settled", "preparing"] as const;
 export type RolloutState = (typeof rolloutStateValues)[number];
 export interface RuntimeCPUObservation {
@@ -788,15 +782,6 @@ export const runtimeObservationReasonValues = ["runtime_mode_not_observable", "a
 export type RuntimeObservationReason = (typeof runtimeObservationReasonValues)[number];
 export const runtimeObservationStatusValues = ["observed", "unsupported", "unavailable"] as const;
 export type RuntimeObservationStatus = (typeof runtimeObservationStatusValues)[number];
-export interface RuntimeRelease {
-  firmware_sha256: string;
-  image_id: string;
-  image_manifest_digest: string;
-  microsandbox_ref: string;
-  runtime_sha256: string;
-  source_commit: string;
-}
-export const runtimeReleaseFields = ["firmware_sha256", "image_id", "image_manifest_digest", "microsandbox_ref", "runtime_sha256", "source_commit"] as const;
 export interface SandboxAllocationList {
   data: NodeAllocation[];
 }
@@ -807,9 +792,8 @@ export interface SandboxDeploymentChangeInput {
   expected_generation: number;
   provider?: string;
   resources?: SandboxResources;
-  runtime?: RuntimeRelease;
 }
-export const sandboxDeploymentChangeInputFields = ["configuration", "credential", "expected_generation", "provider", "resources", "runtime"] as const;
+export const sandboxDeploymentChangeInputFields = ["configuration", "credential", "expected_generation", "provider", "resources"] as const;
 export const sandboxDeploymentChangeInputRequired = ["expected_generation"] as const;
 export interface SandboxDeploymentInput {
   configuration?: Record<string, unknown>;
@@ -817,9 +801,8 @@ export interface SandboxDeploymentInput {
   expected_generation: number;
   provider?: string;
   resources?: SandboxResources;
-  runtime?: RuntimeRelease;
 }
-export const sandboxDeploymentInputFields = ["configuration", "credential", "expected_generation", "provider", "resources", "runtime"] as const;
+export const sandboxDeploymentInputFields = ["configuration", "credential", "expected_generation", "provider", "resources"] as const;
 export const sandboxDeploymentInputRequired = ["expected_generation"] as const;
 export interface SandboxEnrollmentToken {
   enrollment_id: string;

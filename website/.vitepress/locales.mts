@@ -28,7 +28,21 @@ export function translationRewrites(): Record<string, string> {
   return Object.fromEntries(authoredPages().map((page) => [translatedSource(page), `zh/${page}`]))
 }
 
-export function groupLabel(group: string, lang: 'en' | 'zh'): string {
-  const labels: Record<string, string> = { 'Get started': '开始使用', 'Operate': '部署与运维', 'API guides': 'API 指南', 'Architecture and extensions': '架构与扩展' }
-  return lang === 'zh' ? labels[group] ?? group : group
+const zhLabels: Record<string, string> = {
+  Docs: '文档',
+  API: 'API',
+  Extend: '扩展',
+  'Get started': '开始使用',
+  Operate: '部署与运维',
+  Concepts: '概念',
+  'Build on the API': '基于 API 开发',
+  'Agents API reference': 'Agents API 参考',
+  'Core API reference': 'Core API 参考',
+  Protocols: '协议',
+  Contribute: '参与贡献',
+}
+
+/** The Chinese label of a tab or group; English labels are the docs.json names. */
+export function navLabel(name: string, lang: 'en' | 'zh'): string {
+  return lang === 'zh' ? zhLabels[name] ?? name : name
 }

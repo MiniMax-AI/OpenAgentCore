@@ -79,7 +79,7 @@ func TestParseOptionsRequiresEveryIdentityFlag(t *testing.T) {
 		})
 	}
 	if _, err := parseOptions([]string{"--tenant", testTenant, "--environment", testEnvironment}, io.Discard); err == nil {
-		t.Fatal("legacy exact-Environment arguments were accepted")
+		t.Fatal("exact-Environment arguments were accepted")
 	}
 }
 

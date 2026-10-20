@@ -14,7 +14,7 @@ import (
 )
 
 func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
-	for _, action := range []string{"cancel", "expire", "delete", "prepare-failure", "disconnect"} {
+	for _, action := range []string{"cancel", "expire", "prepare-failure", "disconnect"} {
 		t.Run(action, func(t *testing.T) {
 			h, pending := preparedDispatchHarness(t)
 			_, pool := testStore(t)
@@ -28,13 +28,6 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 				}
 			case "expire":
 				if _, err := pool.Exec(t.Context(), "UPDATE environment_input_reservations SET deadline=clock_timestamp()-interval '1 second' WHERE id=$1", pending.ID); err != nil {
-					t.Fatal(err)
-				}
-			case "delete":
-				if err := sessionService(t, h.s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
-					t.Fatal("pending input deleted", err)
-				}
-				if err := h.s.commitLegacyDeletion(t.Context(), h.tenant, h.session.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "prepare-failure":
@@ -56,9 +49,6 @@ func TestPreparedDispatchSettlesOnlyReadyInput(t *testing.T) {
 				}
 			} else if got.err == nil {
 				t.Fatal("preparation failure was hidden")
-			}
-			if action == "delete" && !errors.Is(got.err, sessions.ErrNotFound) {
-				t.Fatal("deleted reservation remained accessible", got.err)
 			}
 			if action != "disconnect" {
 				assertPreparationReleased(t, h, frame.ID, handle)

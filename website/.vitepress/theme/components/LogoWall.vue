@@ -8,8 +8,8 @@ const props = defineProps<{ lang: Lang }>()
 const t = computed(() => copy[props.lang].ecosystem)
 const paused = ref(false)
 const rows = computed(() => [
-  { label: t.value.agents, logos: agentLogos },
-  { label: t.value.compute, logos: computeLogos },
+  { label: 'Harnesses and models', logos: agentLogos },
+  { label: 'Cloud and compute', logos: computeLogos },
 ])
 </script>
 
@@ -23,7 +23,6 @@ const rows = computed(() => [
       </button>
     </header>
     <div v-for="(row, index) in rows" :key="index" class="logo-row" :class="{ reverse: index === 1 }">
-      <p class="logo-row-label">{{ row.label }}</p>
       <div class="logo-viewport" tabindex="0" role="region" :aria-label="row.label">
         <div class="logo-track">
           <ul v-for="run in 2" :key="run" class="logo-run" :aria-hidden="run === 2 ? true : undefined">
@@ -41,9 +40,9 @@ const rows = computed(() => [
 <style scoped>
 .logo-wall {
   position: relative;
-  padding: 20px 0;
+  padding: 56px 0 24px;
   background: transparent;
-  color: #fff;
+  color: var(--l-text);
 }
 .logo-wall-heading {
   max-width: 1200px;
@@ -58,32 +57,24 @@ const rows = computed(() => [
   margin: 0;
   font: 500 clamp(20px, 2.5vw, 28px) / 1.3 var(--l-display);
   letter-spacing: -0.035em;
-  color: #fff;
+  color: var(--l-text);
 }
 .logo-wall-heading button {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  padding: 10px 14px;
+  border: 1px solid var(--l-line-strong);
   border-radius: 3px;
-  color: #fff;
-  font: 11px var(--l-mono);
+  color: var(--l-text);
+  font: 14px var(--l-mono);
   cursor: pointer;
 }
-.logo-wall-heading button:hover { background: rgba(255, 255, 255, 0.08); }
+.logo-wall-heading button:hover { background: var(--l-hover); }
 .logo-wall-heading button:focus-visible,
-.logo-viewport:focus-visible { outline: 2px solid #4ade80; outline-offset: -2px; }
+.logo-viewport:focus-visible { outline: 2px solid var(--l-accent); outline-offset: -2px; }
 .logo-row + .logo-row { margin-top: 18px; }
-.logo-row-label {
-  margin: 0 0 6px;
-  text-align: center;
-  color: #9aaba0;
-  font: 10px / 1.5 var(--l-mono);
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-}
 .logo-viewport {
   overflow-x: auto;
   scrollbar-width: none;
@@ -121,8 +112,9 @@ const rows = computed(() => [
   width: 36px;
   height: 36px;
   object-fit: contain;
-  filter: brightness(0) invert(1);
+  filter: brightness(0);
 }
+.dark .logo-item img { filter: brightness(0) invert(1); }
 .logo-wall.paused .logo-track,
 .logo-wall:hover .logo-track,
 .logo-viewport:focus-within .logo-track { animation-play-state: paused; }

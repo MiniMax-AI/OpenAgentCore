@@ -8,8 +8,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/harnesstest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -17,8 +17,8 @@ import (
 func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	h := newDispatchHarness(t)
 	configuration := json.RawMessage(`{"agent":{"model":"fixture","text":{"format":{"type":"json_schema","schema":{"type":"object"}}}},"environment":{"type":"none"}}`)
-	profile := enginetest.Profile(func(p *engine.Profile) { p.StructuredOutput = proto.CapabilitySupported })
-	policy := execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"fixture_harness": profile})}
+	declaration := harnesstest.Declaration("fixture_harness", func(d *harnessconfig.Declaration) { d.Capabilities.StructuredOutput = proto.CapabilitySupported })
+	policy := execution.Policy{Declarations: harnessconfig.NewRegistry(declaration)}
 	if err := policy.ValidateSessionConfiguration("fixture_harness", configuration); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +30,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	if err = bindSessionDevice(t, h.s, h.tenant, h.session.ID, h.device.ID); err != nil {
 		t.Fatal(err)
 	}
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, StructuredOutput: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture_harness", Available: true, Capabilities: caps}}})
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	for deadline := time.Now().Add(3 * time.Second); ; {
@@ -46,8 +46,8 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	input := h.message("start", "Run")
 	// A restart can remove qualification while admitted work remains queued.
 	// Runtime advertisements cannot qualify an operation on their own.
-	profile.StructuredOutput = proto.CapabilityUnsupported
-	h.d.Policy = execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"fixture_harness": profile})}
+	declaration.Capabilities.StructuredOutput = proto.CapabilityUnsupported
+	h.d.Policy = execution.Policy{Declarations: harnessconfig.NewRegistry(declaration)}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
 	if result := <-h.run(ctx, input.TurnID); result.err == nil {

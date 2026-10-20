@@ -56,10 +56,16 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 			return r, err
 		}
 	}
-	if len(manifest.MCP) != 0 {
-		if b.NetworkPolicy().Access != "enabled" {
-			return r, agentcapabilities.ErrInvalid
+	if r.MCPHTTPServers != nil {
+		values, readErr := b.ReadToolEnvironment()
+		if readErr == nil {
+			readErr = requireDeclaredVariables(*r.MCPHTTPServers, values)
 		}
+		if readErr != nil {
+			return r, readErr
+		}
+	}
+	if len(manifest.MCP) != 0 {
 		values, readErr := b.ReadToolEnvironment()
 		if readErr != nil {
 			return r, readErr
@@ -151,7 +157,7 @@ func (b *Binding) loadCapabilitySnapshot(root *os.Root, input agentcapabilities.
 }
 
 func (b *Binding) capabilityIdentity() agentcapabilities.Identity {
-	return agentcapabilities.Identity{EnvironmentID: b.environment, SessionID: strings.TrimPrefix(b.stateKey, "agents-api-")}
+	return agentcapabilities.Identity{EnvironmentID: b.environment, SessionID: b.stateKey}
 }
 
 // The current Linux Runtime layout is shared by user-owned and managed hosts.

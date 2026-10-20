@@ -10,14 +10,11 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
 )
 
 // Binding freezes operator-owned identity and paths for one Runtime lifetime.
 type Binding struct {
 	environment    string
-	networkAccess  string
-	allowedDomains []string
 	stateKey       string
 	workspace      string
 	writer         *fileWriter
@@ -42,13 +39,8 @@ func NewWithCapabilityDirectory(environment, session, workspace, directory strin
 
 func Load() (*Binding, error) {
 	values := []string{os.Getenv("OAC_RUNTIME_ENVIRONMENT_ID"), os.Getenv("OAC_RUNTIME_SESSION_ID"), os.Getenv("OAC_RUNTIME_WORKSPACE")}
-	policy, err := RuntimeNetworkPolicy()
-	if err != nil {
-		return nil, err
-	}
-	network := policy.Access
 	capabilityDirectory := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
-	if strings.Join(values, "") == "" && network == "" && capabilityDirectory == "" {
+	if strings.Join(values, "") == "" && capabilityDirectory == "" {
 		return nil, nil
 	}
 	if capabilityDirectory == "" {
@@ -58,9 +50,6 @@ func Load() (*Binding, error) {
 	if err != nil {
 		return nil, err
 	}
-	b.networkAccess = network
-	b.allowedDomains = policy.Hosts()
-
 	return b, nil
 }
 
@@ -72,12 +61,6 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 	if b == nil || r.LocalEnvironment == nil || r.LocalEnvironment.ID != b.environment || r.AgentStateKey != b.stateKey ||
 		r.DisableExecutionEnvironment {
 		return r, errors.New("request does not match the dedicated local Environment")
-	}
-	if !r.WorkspaceReadOnly || r.LocalEnvironment.NetworkAccess != "" || len(r.LocalEnvironment.AllowedDomains) > 0 {
-		requested := agentnetwork.Policy{Access: r.LocalEnvironment.NetworkAccess, AllowedDomains: r.LocalEnvironment.AllowedDomains}
-		if !b.NetworkPolicy().Equal(requested) {
-			return r, errors.New("request does not match the local Runtime network policy")
-		}
 	}
 	if !r.WorkspaceReadOnly {
 		local := *r.LocalEnvironment
@@ -100,5 +83,5 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 }
 
 func (b *Binding) Matches(environment, session string) bool {
-	return b != nil && b.environment == environment && b.stateKey == "agents-api-"+session
+	return b != nil && b.environment == environment && b.stateKey == session
 }

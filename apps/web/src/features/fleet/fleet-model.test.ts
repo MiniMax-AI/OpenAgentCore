@@ -15,7 +15,7 @@ describe("fleet model", () => {
 
   it("classifies node health", () => {
     expect(nodeHealth(node("a"))).toBe("available");
-    expect(nodeHealth(node("a", { diagnostic: "provider_unavailable" }))).toBe("degraded");
+    expect(nodeHealth(node("a", { provider_ready: false }))).toBe("degraded");
     expect(nodeHealth(node("a", { online: false }))).toBe("offline");
   });
 

@@ -113,11 +113,27 @@ test("native UUID capacity rejects a whole batch and partial consumption does no
   assert.equal(partial.complete, false);
 });
 
-test("report whitespace-only steering as a rejected input", () => {
+test("whitespace-only steering reaches native content unchanged", async () => {
   const inputs = new Inputs([{ content: [{ type: "input_text", text: "first" }] }]);
-  inputs.start("native");
-  assert.deepEqual(inputs.submit(steer("blank", " \n\t")), [{ type: "input_rejected", input_id: "blank" }]);
-  assert.deepEqual(inputs.submit(steer("after")), []);
+  const stream = inputs[Symbol.asyncIterator]();
+  await stream.next(); inputs.start("native");
+  assert.deepEqual(inputs.submit(steer("blank", " \n\t")), []);
+  assert.deepEqual((await stream.next()).value.message.content, [{ type: "text", text: " \n\t" }]);
   assert.throws(() => inputs.submit({ type: "steer", input_id: "no-content", input: [{ content: [] }] }), /Invalid/);
   inputs.close();
+});
+
+test("a user message maps a remote URL and any native base64 type; a tool result takes base64 only", async () => {
+  const { nativeContent, parseInputContent } = await import("../dist/message_input.js");
+  const content = [
+    { type: "input_image", image_url: "https://example.com/a.webp" },
+    { type: "input_image", image_url: "data:image/gif;base64,AQID" },
+  ];
+  assert.deepEqual(nativeContent({ content }, true), [
+    { type: "image", source: { type: "url", url: "https://example.com/a.webp" } },
+    { type: "image", source: { type: "base64", media_type: "image/gif", data: "AQID" } },
+  ]);
+  assert.throws(() => parseInputContent([content[0]]), /Unsupported image/);
+  assert.throws(() => parseInputContent([{ type: "input_image", image_url: "data:image/bmp;base64,AQID" }], true), /Unsupported image/);
+  assert.equal(parseInputContent([content[1]]).length, 1);
 });

@@ -1,15 +1,15 @@
 // Checks a finished build: run `pnpm build` first. Every docs.json page has
-// an HTML page and a raw Markdown copy, legacy paths redirect, both landing
-// pages exist and llms.txt lists every page.
+// an HTML page and a raw Markdown copy, both landing pages exist and llms.txt
+// lists every page.
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { legacyRedirects, readDocsJson } from '../.vitepress/docs-nav.mts'
+import { listedPages } from '../.vitepress/docs-nav.mts'
 
 const dist = fileURLToPath(new URL('../.vitepress/dist/', import.meta.url))
-const pages = readDocsJson().navigation.groups.flatMap((g) => g.pages)
+const pages = listedPages()
 const basePath = new URL(process.env.WEBSITE_URL ?? 'http://localhost/').pathname
 const base = basePath.endsWith('/') ? basePath : `${basePath}/`
 
@@ -51,17 +51,23 @@ test('generated navigation and assets stay under the site base and resolve to fi
   assert.ok(checked > 0, 'generated pages must contain local navigation and assets')
 })
 
-test('legacy paths redirect', () => {
-  for (const { from, to } of legacyRedirects()) {
-    const source = readFileSync(resolve(dist, `${from}.html`), 'utf8')
-    const target = `${base}${to.replace(/^\//, '')}`
-    assert.ok(source.includes(`content="0; url=${target}"`), `${from} → ${target}`)
-  }
-})
-
 test('llms.txt lists every page', () => {
   const llms = readFileSync(resolve(dist, 'llms.txt'), 'utf8')
   for (const page of pages) assert.ok(llms.includes(`](${base}${page}.md)`), `${page} in llms.txt uses ${base}`)
+})
+
+test('llms.txt describes each page and groups pages by tab', () => {
+  const llms = readFileSync(resolve(dist, 'llms.txt'), 'utf8')
+  assert.match(llms, /^## Docs › Get started$/m)
+  assert.match(llms, /^## Extend › Protocols$/m)
+  for (const line of llms.split('\n').filter((l) => l.startsWith('- ['))) assert.match(line, /\.md\): \S/, `${line} has a summary`)
+})
+
+test('each tab shows its own sidebar', () => {
+  const sidebar = (file) => [...readFileSync(html(file), 'utf8').matchAll(/class="VPSidebarItem level-0[^"]*"/g)].length
+  assert.equal(sidebar('docs/getting-started/install'), 3)
+  assert.equal(sidebar('contracts/agents-api/environments'), 3)
+  assert.equal(sidebar('docs/sandbox-provider'), 2)
 })
 
 test('Mermaid fences become diagrams, not code blocks', () => {
@@ -86,5 +92,13 @@ test('Chinese landing and top navigation link to Chinese documentation', () => {
   const source = readFileSync(resolve(dist, 'zh/index.html'), 'utf8')
   for (const page of ['docs/getting-started/', 'docs/api/public-agent-api', 'docs/architecture', 'contracts/agents-api/harness-capabilities']) {
     assert.ok(source.includes(`href="${base}zh/${page}"`), page)
+  }
+})
+
+test('domain installer is published as shell source, not an HTML redirect', () => {
+  const script = readFileSync(new URL('../install.sh', import.meta.url), 'utf8')
+  assert.equal(readFileSync(resolve(dist, 'install.sh'), 'utf8'), script)
+  for (const page of ['index.html', 'zh/index.html']) {
+    assert.ok(readFileSync(resolve(dist, page), 'utf8').includes('https://openagentcore.dev/install.sh'))
   }
 })

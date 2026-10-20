@@ -1,5 +1,5 @@
 ---
-title: "Core operational metrics"
+title: "Core metrics"
 ---
 
 `GET /core/v1/metrics?range=1h|6h|24h|7d` reports Core's own health: its process, execution queue and slots, PostgreSQL and background jobs. It requires the Core key ([Core administration API](./admin-api.md)).

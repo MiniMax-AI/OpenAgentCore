@@ -24,6 +24,10 @@ func TestBootstrapParentDeathKeepsActiveDownloadLocked(t *testing.T) {
 	release := make(chan struct{})
 	var downloads atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/installation") {
+			w.WriteHeader(404)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, ".sha256") {
 			fmt.Fprintf(w, "%x\n", sha256.Sum256(archive))
 			return
@@ -36,7 +40,7 @@ func TestBootstrapParentDeathKeepsActiveDownloadLocked(t *testing.T) {
 			<-release
 			return
 		}
-		w.Write(archive)
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(archive))
 	}))
 	defer server.Close()
 	defer close(release)
@@ -63,8 +67,8 @@ func TestBootstrapParentDeathKeepsActiveDownloadLocked(t *testing.T) {
 	if err == nil || !bytes.Contains(retry, []byte("Another native download")) {
 		t.Fatalf("active download was not protected: %v %s", err, retry)
 	}
-	if _, err := os.Stat(filepath.Join(home, "native-download", "staging", "bundle.tar.gz")); err != nil {
-		t.Fatal("active staging removed")
+	if _, err := os.Stat(filepath.Join(home, "native-download", fmt.Sprintf("%x.tar.gz.part", sha256.Sum256(archive)))); err != nil {
+		t.Fatal("active download removed")
 	}
 	syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 	_ = command.Wait()
@@ -106,5 +110,47 @@ func TestBootstrapCommandDiscardsTimedOutResponse(t *testing.T) {
 	output, err := command.CombinedOutput()
 	if err != nil || !bytes.Contains(output, []byte("entry-success")) || bytes.Contains(output, []byte("incomplete response")) || requests.Load() != 2 {
 		t.Fatalf("partial bootstrap executed: %v requests=%d %s", err, requests.Load(), output)
+	}
+}
+
+func TestBootstrapInterruptSaysHowToContinue(t *testing.T) {
+	archive := bootstrapFixtureArchive(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/installation"):
+			w.WriteHeader(404)
+		case strings.HasSuffix(r.URL.Path, ".sha256"):
+			fmt.Fprintf(w, "%x\n", sha256.Sum256(archive))
+		default:
+			w.Header().Set("Content-Length", fmt.Sprint(len(archive)))
+			w.Write(archive[:1])
+			w.(http.Flusher).Flush()
+			close(started)
+			<-release
+		}
+	}))
+	defer server.Close()
+	defer close(release)
+	command := bootstrapCommand(t, server.URL, t.TempDir())
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	var output bytes.Buffer
+	command.Stdout = &output
+	command.Stderr = &output
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("download did not start")
+	}
+	if err := command.Process.Signal(syscall.SIGINT); err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Wait(); err == nil || !strings.Contains(output.String(), "Interrupted; rerun the same command to continue.") {
+		t.Fatalf("interrupt message missing: %v %s", err, output.String())
 	}
 }

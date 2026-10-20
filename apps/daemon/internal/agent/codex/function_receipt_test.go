@@ -137,7 +137,7 @@ func TestFunctionReceiptResultIsFrozenAndSubmittedOnce(t *testing.T) {
 	if err := s.SubmitFunctionResult(t.Context(), result); err == nil {
 		t.Fatal("settled result admitted again")
 	}
-	s.stopFunctionCalls()
+	s.stopFunctionCalls(false)
 }
 
 func TestFunctionReceiptShutdownDoesNotConfirmApplication(t *testing.T) {
@@ -151,7 +151,7 @@ func TestFunctionReceiptShutdownDoesNotConfirmApplication(t *testing.T) {
 			case "run cancellation":
 				s.cancelFn()
 			case "terminal":
-				s.stopFunctionCalls()
+				s.stopFunctionCalls(false)
 			}
 			select {
 			case err := <-done:
@@ -161,7 +161,7 @@ func TestFunctionReceiptShutdownDoesNotConfirmApplication(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("shutdown did not settle receipt")
 			}
-			s.stopFunctionCalls()
+			s.stopFunctionCalls(false)
 		})
 	}
 }
@@ -199,7 +199,7 @@ func TestFunctionReceiptDeadlineEndsUncertainExecution(t *testing.T) {
 	if s.cancelCtx.Err() == nil {
 		t.Fatal("uncertain native execution remains active")
 	}
-	s.stopFunctionCalls()
+	s.stopFunctionCalls(false)
 }
 
 // The receipt and deadline are both ready when the waiter resumes. Either select
@@ -211,7 +211,7 @@ func TestFunctionReceiptWinsSimultaneousDeadline(t *testing.T) {
 		s.setThreadID("thread")
 		s.startSteering("thread", "turn")
 		s.functions, _ = prepareFunctionTools(nil)
-		pending := &pendingFunction{turnID: "turn", name: "lookup", reply: &functionReply{Success: true, ContentItems: []functionContent{}}, receipt: make(chan error, 1)}
+		pending := &pendingFunction{thread: "thread", turnID: "turn", name: "lookup", reply: &functionReply{Success: true, ContentItems: []functionContent{}}, receipt: make(chan error, 1)}
 		s.functions.pending["call"] = pending
 		s.confirmFunctionResult(nativeFunctionReceipt("thread", "turn", "call", "lookup", "true", "completed", "[]"))
 		ctx, cancel := context.WithCancel(t.Context())
@@ -254,11 +254,11 @@ func TestFunctionReceiptSurvivesObservationBackpressure(t *testing.T) {
 				cancel()
 			case "cancel":
 				s.cancelled.Store(true)
-				s.stopFunctionCalls()
+				s.stopFunctionCalls(false)
 				s.cancelFn()
 			case "terminal":
 				s.terminal.Store(true)
-				s.stopFunctionCalls()
+				s.stopFunctionCalls(false)
 			}
 			select {
 			case err := <-receipt:

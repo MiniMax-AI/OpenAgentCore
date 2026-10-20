@@ -57,7 +57,6 @@ jobs:
           node-version: '22.22.0'
           lockfiles: |
             packages/claude-sdk-adapter/pnpm-lock.yaml
-            packages/mcode-harness/package-lock.json
       - name: Build the native daemon and test bundle boundaries
         id: build
         run: |
@@ -67,9 +66,18 @@ jobs:
         run: |
           go build -o "$RUNNER_TEMP/oac${{ runner.os == 'Windows' && '.exe' || '' }}" ./services/core/cmd/oac
           go test ./services/core/cmd/oac -count=1 -timeout=3m
-      - name: Exercise the Windows Core launcher
+      - name: Exercise the Unix Core launchers with the system bash
+        if: runner.os != 'Windows'
+        run: |
+          python3 deploy/test_install.py
+          node --test website/tests/install.test.mjs
+      - name: Exercise the Windows Core launcher in PowerShell 7
         if: runner.os == 'Windows'
         shell: pwsh
+        run: ./deploy/test_install.ps1 -Binary "$env:RUNNER_TEMP/oac.exe"
+      - name: Exercise the Windows Core launcher in Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
         run: ./deploy/test_install.ps1 -Binary "$env:RUNNER_TEMP/oac.exe"
       - name: Verify native download bootstrap and recovery
         run: go test ./services/core/internal/nativeinstaller -count=1 -timeout=3m
@@ -137,6 +145,7 @@ jobs:
           fi
           node scripts/native-harness-smoke.mjs --codex-binary "$RUNNER_TEMP/native-installer/components/codex/bin/codex${{ runner.os == 'Windows' && '.exe' || '' }}" --claude-runtime "$RUNNER_TEMP/native-installer/components/claude"
       - name: Archive the native distribution
+        if: inputs.upload-artifacts
         run: |
           cd "$RUNNER_TEMP"
           tar -C native-installer -czf "oac-native-installer-${{ runner.os }}-${{ runner.arch }}.tar.gz" .

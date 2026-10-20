@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/publicorigin"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +26,7 @@ import (
 )
 
 func TestWebSetupCreatesManagerWithoutLocalProvider(t *testing.T) {
-	origin, err := deployment.NewPublicOrigin("https://core.example")
+	origin, err := publicorigin.New("https://core.example")
 	if err != nil {
 		t.Fatal(err)
 	}

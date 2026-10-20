@@ -20,7 +20,6 @@ type HubOptions struct {
 	OwnerEpoch   func(context.Context) (uint64, error)
 	Connected    func(context.Context, Identity, string, uint64) error
 	Disconnected func(context.Context, Identity, string, uint64)
-	Heartbeat    func(context.Context, Identity, string, uint64, Health) error
 }
 
 type Hub struct {
@@ -35,22 +34,20 @@ type Hub struct {
 }
 
 type peer struct {
-	generationManagement bool
-	version              int
-	generations          map[uint64]sandbox.GenerationStatus
-	controlSequence      uint64
-	identity             Identity
-	id                   string
-	epoch                uint64
-	conn                 *websocket.Conn
-	send                 chan struct{}
-	mu                   sync.Mutex
-	sequence             uint64
-	ready                bool
-	pending              map[string]chan response
-	done                 chan struct{}
-	once                 sync.Once
-	cancel               context.CancelFunc
+	version         int
+	generations     map[uint64]sandbox.GenerationStatus
+	controlSequence uint64
+	identity        Identity
+	id              string
+	epoch           uint64
+	conn            *websocket.Conn
+	send            chan struct{}
+	mu              sync.Mutex
+	sequence        uint64
+	pending         map[string]chan response
+	done            chan struct{}
+	once            sync.Once
+	cancel          context.CancelFunc
 }
 
 func NewHub(options HubOptions) *Hub {
@@ -159,7 +156,7 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = conn.Close()
 		return
 	}
-	p := &peer{generationManagement: hello.GenerationManagement, version: hello.Version, generations: map[uint64]sandbox.GenerationStatus{}, identity: identity, id: uuid.NewString(), epoch: epoch, conn: conn, cancel: cancel, send: make(chan struct{}, 1), pending: map[string]chan response{}, ready: hello.Health.ProviderReady, done: make(chan struct{})}
+	p := &peer{version: hello.Version, generations: map[uint64]sandbox.GenerationStatus{}, identity: identity, id: uuid.NewString(), epoch: epoch, conn: conn, cancel: cancel, send: make(chan struct{}, 1), pending: map[string]chan response{}, done: make(chan struct{})}
 	stopPeerClose := context.AfterFunc(ctx, p.close)
 	defer stopPeerClose()
 	presenceAttempted := false
@@ -191,14 +188,11 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err = h.recordHealth(ctx, p, *hello.Health); err != nil {
 		return
 	}
-	welcome := frame{Version: p.version, Type: "welcome", ConnectionID: p.id, OwnerEpoch: epoch}
-	if p.generationManagement {
-		deployment, _, err := h.retention(ctx, p, nil)
-		if err != nil {
-			return
-		}
-		welcome.Deployment = &deployment
+	deployment, _, err := h.retention(ctx, p, nil)
+	if err != nil {
+		return
 	}
+	welcome := frame{Version: p.version, Type: "welcome", ConnectionID: p.id, OwnerEpoch: epoch, Deployment: &deployment}
 	if ctx.Err() != nil || writeFrame(conn, welcome) != nil {
 		return
 	}
@@ -251,22 +245,18 @@ func (h *Hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if e = p.lockSend(ctx); e != nil {
 				return
 			}
-			ack := frame{Version: p.version, Type: "heartbeat_ack", ConnectionID: p.id, OwnerEpoch: p.epoch}
-			if p.generationManagement {
-				deployment, _, readErr := h.retention(ctx, p, nil)
-				if readErr != nil {
-					p.unlockSend()
-					return
-				}
-				ack.Deployment = &deployment
+			deployment, _, readErr := h.retention(ctx, p, nil)
+			if readErr != nil {
+				p.unlockSend()
+				return
 			}
-			e = writeFrame(conn, ack)
+			e = writeFrame(conn, frame{Version: p.version, Type: "heartbeat_ack", ConnectionID: p.id, OwnerEpoch: p.epoch, Deployment: &deployment})
 			p.unlockSend()
 			if e != nil {
 				return
 			}
 		case "retention":
-			if !p.generationManagement || f.Control == nil {
+			if f.Control == nil {
 				return
 			}
 			c := f.Control
@@ -329,14 +319,8 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 		return response{}, uncertain(q.Operation, ErrUnavailable)
 	}
 	p.mu.Lock()
-	ready := p.ready
-	if p.generationManagement {
-		status, ok := p.generations[q.DeploymentGeneration]
-		ready = ok && status.State == "ready"
-	} else if q.DeploymentGeneration != p.identity.DeploymentGeneration {
-		p.mu.Unlock()
-		return response{}, uncertain(q.Operation, ErrUnavailable)
-	}
+	status, ok := p.generations[q.DeploymentGeneration]
+	ready := ok && status.State == "ready"
 	p.mu.Unlock()
 	if requiresReady(q) && !ready {
 		return response{}, uncertain(q.Operation, ErrUnavailable)
@@ -391,52 +375,36 @@ func (h *Hub) call(ctx context.Context, id string, q request) (response, error) 
 }
 
 func (h *Hub) recordHealth(ctx context.Context, p *peer, health Health) error {
-	if !p.generationManagement && len(health.Generations) > 0 {
-		if len(health.Generations) != 1 || health.Generations[0].Generation != p.identity.DeploymentGeneration || health.Generations[0].SpecificationDigest != p.identity.SpecificationDigest || (health.Generations[0].State == "ready") != health.ProviderReady {
-			return sandbox.ErrInvalid
-		}
+	if h.options.Generations == nil {
+		return sandbox.ErrInvalid
 	}
-	if p.generationManagement {
-		if h.options.Generations == nil {
-			return sandbox.ErrInvalid
-		}
-		if err := callback(ctx, func(ctx context.Context) error { return h.options.Generations(ctx, p.identity, p.id, p.epoch, health) }); err != nil {
-			return err
-		}
-		refs := make([]sandbox.GenerationReference, 0, len(health.Generations))
-		for _, g := range health.Generations {
-			refs = append(refs, sandbox.GenerationReference{Generation: g.Generation, SpecificationDigest: g.SpecificationDigest})
-		}
-		_, grants, err := h.retention(ctx, p, refs)
-		if err != nil {
-			return err
-		}
-		if len(grants) != len(refs) {
-			return sandbox.ErrInvalid
-		}
-		for i, grant := range grants {
-			if grant.GenerationReference != refs[i] {
-				return sandbox.ErrInvalid
-			}
-		}
-		p.mu.Lock()
-		for i, g := range health.Generations {
-			if grants[i].Keep {
-				p.generations[g.Generation] = g
-			} else {
-				delete(p.generations, g.Generation)
-			}
-		}
-		p.mu.Unlock()
-		return nil
+	if err := callback(ctx, func(ctx context.Context) error { return h.options.Generations(ctx, p.identity, p.id, p.epoch, health) }); err != nil {
+		return err
 	}
-	if h.options.Heartbeat != nil {
-		if err := callback(ctx, func(ctx context.Context) error { return h.options.Heartbeat(ctx, p.identity, p.id, p.epoch, health) }); err != nil {
-			return err
+	refs := make([]sandbox.GenerationReference, 0, len(health.Generations))
+	for _, g := range health.Generations {
+		refs = append(refs, sandbox.GenerationReference{Generation: g.Generation, SpecificationDigest: g.SpecificationDigest})
+	}
+	_, grants, err := h.retention(ctx, p, refs)
+	if err != nil {
+		return err
+	}
+	if len(grants) != len(refs) {
+		return sandbox.ErrInvalid
+	}
+	for i, grant := range grants {
+		if grant.GenerationReference != refs[i] {
+			return sandbox.ErrInvalid
 		}
 	}
 	p.mu.Lock()
-	p.ready = health.ProviderReady
+	for i, g := range health.Generations {
+		if grants[i].Keep {
+			p.generations[g.Generation] = g
+		} else {
+			delete(p.generations, g.Generation)
+		}
+	}
 	p.mu.Unlock()
 	return nil
 }

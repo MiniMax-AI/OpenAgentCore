@@ -1,7 +1,7 @@
 ---
 title: "消息内容"
 source: contracts/agents-api/message-content.md
-source_hash: 5d0d5ba2710d1a91db22b66054701b863739d54f36d8c62df0b667ad9acb900e
+source_hash: 743fb8e8ddb2d13fe2dd32f1952e7875b05af241a5dd0ed60c6e3e10a00e8b7a
 ---
 
 用户消息和函数结果共享同一内容模型：由 `input_text` 与 `input_image` 部分组成的有序列表。Core 按发送形式准确存储消息边界、部分顺序和图像引用，并在用户 Item 中原样返回。不下载、转码或修复媒体。Session 创建的 `input` 与 `events.create` 消息共享验证和准入；[Session、事件与历史](sessions-events.md#send-input)定义准入、请求限制和错误。
@@ -19,27 +19,27 @@ source_hash: 5d0d5ba2710d1a91db22b66054701b863739d54f36d8c62df0b667ad9acb900e
 
 ## 图像 {#images}
 
-`input_image` 部分通过内联 data URI 携带 `image_url`：`data:image/png;base64,…` 或 `data:image/jpeg;base64,…`。base64 必须为规范形式，解码图像必须匹配声明类型。Core 不接受远程 URL、`file_id` 或 `detail`。
+`input_image` 部分携带非空白的 `image_url`，即官方 API 允许的远程 URL 或 base64 data URL。Core 不接受 `file_id` 或 `detail`，其余只检查下表中 Harness 声明的规则；Core 从不下载或改写图像，模型提供商对无法读取的图像返回的错误原样返回。
 
 | Harness | 消息图像 |
 | --- | --- |
-| Codex | 在 Harness 支持的所有位置接受：`none`、`openai_hosted`、`self_hosted` |
-| Claude Code | 在 `none`、`openai_hosted`、`self_hosted` 接受 |
+| Codex | 接受 `http`、`https` 以外的任意 URL 并原样传递，适用于 `none`、`openai_hosted`、`self_hosted`。`http` 或 `https` URL 返回 400，因为原生 Codex 在 Turn 中拒绝远程图像 URL |
+| Claude Code | 非 data URL 的引用成为原生 URL 来源；data URL 必须是规范 base64 的 `image/png`、`image/jpeg`、`image/gif` 或 `image/webp`，其他返回 400。适用于 `none`、`openai_hosted`、`self_hosted` |
 | MiniMax Code | 拒绝 |
 
 任何写入之前，准入检查 Harness；Harness 无法接受的图像返回 400。Runtime 也必须报告消息图像支持：Core 仅将输入含图像的 Session 绑定到此类 Runtime，交付给不支持的 Runtime 会失败。应使用接受图像的模型。
 
 ## 仅空白文本 {#whitespace-only-text}
 
-`"   "` 或 `"\n\t"` 等仅含空白的文本为有效内容，原样存储和返回。Harness 能否运行由引擎配置声明：
+`"   "` 或 `"\n\t"` 等仅含空白的文本为有效内容，原样存储和返回。Harness 能否运行由其[声明](harness-onboarding.md#declare-the-harness)指定：
 
 | Harness | 无图像且无非空白文本的消息 |
 | --- | --- |
 | Codex | 准入并原样交付 |
-| Claude Code | 400 `unsupported_or_invalid_configuration` |
+| Claude Code | 准入；原生会丢弃仅含空白的文本块，全空白消息变为 `(no content)` |
 | MiniMax Code | 400 `unsupported_or_invalid_configuration` |
 
-拒绝适用于 Session 创建（含流式和 `self_hosted` 创建）及 `events.create`，发生于任何写入、预留或 Turn 之前，因此不会干扰运行 Turn。同一消息中非空白文本旁的空白对所有 Harness 均准入。空白集合为 Go `unicode.IsSpace` 与 ECMAScript `String.prototype.trim` 的并集，例如 U+0085、U+FEFF；Core 准入和 Claude 桥接层使用相同集合。
+拒绝适用于 Session 创建（含流式和 `self_hosted` 创建）及 `events.create`，发生于任何写入、预留或 Turn 之前，因此不会干扰运行 Turn。同一消息中非空白文本旁的空白对所有 Harness 均准入。空白集合为 Go `unicode.IsSpace` 加 U+FEFF。
 
 ## 函数结果 {#function-results}
 
@@ -51,18 +51,19 @@ source_hash: 5d0d5ba2710d1a91db22b66054701b863739d54f36d8c62df0b667ad9acb900e
 
 | Harness | 函数结果 |
 | --- | --- |
-| Codex | 文本与有序文本/图像输出。Core 仅检查各部分格式正确，并将图像引用原样传给 Harness |
-| Claude Code | 文本输出。仅成功结果可含内联 PNG 或 JPEG 图像；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码；公开 Item 保留提交字节 |
-| MiniMax Code | 无公开函数 |
+| Codex | 文本与有序文本/图像输出，原样传给 Harness。`http` 或 `https` 图像 URL 返回 400，因为原生 Codex 会把携带此类图像的动态工具结果替换为失败 |
+| Claude Code | 文本输出。仅成功结果可含图像，且只能是规范 base64 的 `image/png`、`image/jpeg`、`image/gif`、`image/webp` data URL，因为原生工具结果不携带 URL；失败结果图像或远程引用在任何存储前返回 400，待处理调用保持开放。Harness 可在原生历史中调整图像尺寸或重新编码，或将无法处理的图像替换为文本说明；公开 Item 保留提交字节 |
+| MiniMax Code | 文本输出。图像返回 400，因为原生 MCP 图像内容尚未验证能到达模型 |
 
 ### 应用回执 {#application-receipts}
 
 准入（202）不表示 Harness 使用了结果。适配器确认原生应用后，待处理调用清除：
 
-- **Claude Code** 使用实时根原生工具结果确认，要求匹配 Session、调用 ID、成功标志、准确文本、块数和顺序，且每个图像位置都有原生图像。重放、合成和 Subagent 记录不能确认。
-- **Codex** 使用实时根 dynamic-tool `item/completed` 观察确认，要求匹配线程、Turn、调用、函数名称、状态、成功标志和准确有序内容。仅写入 Harness 不确认。
+- **Claude Code** 使用实时根原生工具结果确认，要求匹配 Session、调用 ID、成功标志、准确文本、块数和顺序，且每个图像位置都有原生图像。重放和合成记录不能确认。Subagent 的调用只由该子级自己的实时结果确认。
+- **Codex** 使用发起调用的线程和 Turn 上的实时 dynamic-tool `item/completed` 观察确认，要求匹配调用、函数名称、状态、成功标志和准确有序内容。仅写入 Harness 不确认。
+- **MiniMax Code** 使用 `functions` MCP 调用的实时原生工具更新确认，要求其回显的结果带有该调用 ID。原生使调用失败（例如 120 秒超时）时，该调用被放弃。
 
-两适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。
+每个适配器等待回执最多 10 秒。超时或原生释放且未确认时，应用保持不确定。确认表示 Harness 记录了结果，不表示模型提供商消费了结果。Core 不自动重放结果；提交仍保留用于恢复读取。原生 Harness 放弃的调用没有回执，会被撤回（[Functions](execution-tools.md#functions)）。
 
 ## Runtime 边界 {#runtime-boundary}
 

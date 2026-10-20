@@ -5,6 +5,7 @@ import { tr } from "./lib/i18n";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { ErrorNotice, Field } from "./components/shared";
+import { randomUuid } from "@oac/agents-client";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +23,7 @@ export function OAuthCredentialDialog({
 }) {
   const [name, setName] = useState("");
   const [url, setURL] = useState("");
-  const [id] = useState(() => crypto.randomUUID());
+  const [id] = useState(() => randomUuid());
   const begin = useMutation({
     mutationFn: () =>
       product<{ authorization_url: string }>(`mcp-oauth/${id}`, "POST", {

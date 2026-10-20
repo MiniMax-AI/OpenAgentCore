@@ -34,7 +34,7 @@ func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 		case "tool_search":
 			value, _ = json.Marshal(kind)
 		case "programmatic_tool_calling":
-			resolved, _, err := resolveProgrammaticTool(raw)
+			resolved, err := resolveProgrammaticTool(raw)
 			if err != nil {
 				return nil, err
 			}
@@ -46,7 +46,7 @@ func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			}
 			value = resolved
 		case "web_search":
-			resolved, err := resolveSavedWebSearch(raw)
+			resolved, err := resolveWebSearch(raw)
 			if err != nil {
 				return nil, err
 			}

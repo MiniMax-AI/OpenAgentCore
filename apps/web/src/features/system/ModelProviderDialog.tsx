@@ -1,4 +1,4 @@
-import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput } from "@oac/agents-client";
+import { AgentCoreError, type CoreHarness, type CoreHarnessKind, type ModelProviderInput, tokenLimitsFit } from "@oac/agents-client";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ConsoleSelect } from "../../components/console-select";
@@ -56,7 +56,6 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const configuration = harness?.model_configuration ?? null;
   const current = configuration?.model_provider ?? null;
   const support = harness?.model_configuration_support;
-  const limitsRequired = support?.token_limits_required ?? false;
   const protocolOptions = (support?.protocols ?? []).map((value) => ({ value, label: protocolNames[value] }));
   const [protocol, setProtocol] = useState<Protocol | "">(current?.protocol ?? support?.protocols[0] ?? "");
   const [baseUrl, setBaseUrl] = useState(current?.base_url ?? "");
@@ -64,7 +63,7 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const [model, setModel] = useState(configuration?.model ?? "");
   const [configText, setConfigText] = useState(JSON.stringify(configuration?.harness_config ?? {}, null, 2));
   const [configTouched, setConfigTouched] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(Boolean(configuration && (Object.keys(configuration.harness_config ?? {}).length || current?.context_window || current?.max_output_tokens)) || limitsRequired);
+  const [advancedOpen, setAdvancedOpen] = useState(Boolean(configuration && (Object.keys(configuration.harness_config ?? {}).length || current?.context_window || current?.max_output_tokens)));
   let nativeConfig: Record<string, unknown> | null = null;
   try {
     const parsed: unknown = configText.trim() ? JSON.parse(configText) : {};
@@ -84,12 +83,12 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
   const url = baseUrl.trim();
   const urlProblem = url && !isProviderUrl(url) ? t("models.form.baseUrlInvalid") : null;
   const context = tokenLimit(contextWindow);
-  const output = tokenLimit(maxOutputTokens);
+  const output = tokenLimit(support?.accepts_max_output_tokens ? maxOutputTokens : "");
   const limitProblem = (limit: ReturnType<typeof tokenLimit>) => (limit.problem === "whole" ? t("models.form.wholeNumber") : limit.problem === "large" ? t("models.form.tooLarge") : null);
   const outputProblem = limitProblem(output);
-  // The missing or undersized window is the field the administrator must fix.
-  const contextProblem = limitProblem(context) ?? (!outputProblem && output.value !== undefined && output.value > (context.value ?? 0) ? t("models.form.needsContext") : null);
-  const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && model.trim() !== "" && nativeConfig !== null && !configTooLarge && !protocolProblem && (!limitsRequired || Boolean(context.value && output.value)) && !contextProblem && !outputProblem;
+  // An undersized window is the field the administrator must fix.
+  const contextProblem = limitProblem(context) ?? (!outputProblem && !tokenLimitsFit(context.value, output.value) ? t("models.form.needsContext") : null);
+  const ready = harness !== null && !busy && url !== "" && !urlProblem && apiKey.trim() !== "" && model.trim() !== "" && nativeConfig !== null && !configTooLarge && !protocolProblem && !contextProblem && !outputProblem;
 
   function clearNativeConfig() {
     setConfigText("{}");
@@ -133,7 +132,7 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
       <div className="field">
         <span className="field-label-row">
           <label htmlFor={inputId}>{t(field === "context" ? "models.contextWindow" : "models.maxOutputTokens")}</label>
-          <HelpTip id={`${inputId}-help`}>{t(`models.form.${field}Help${limitsRequired ? "Required" : ""}`)}</HelpTip>
+          <HelpTip id={`${inputId}-help`}>{t(`models.form.${field}Help`)}</HelpTip>
         </span>
         <input
           id={inputId}
@@ -141,7 +140,6 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
           autoComplete="off"
           value={value}
           onChange={(event) => { setValue(event.target.value); setRejection(null); setError(null); }}
-          aria-required={limitsRequired}
           aria-invalid={problem ? true : undefined}
           aria-describedby={`${inputId}-help${problem ? ` ${inputId}-problem` : ""}`}
         />
@@ -222,7 +220,7 @@ export function ModelProviderDialog({ harness, onClose, onSaved, onReread }: {
             </div> : null}
             <div className="system-model-limits">
               {limitField("context", contextWindow, setContextWindow, contextProblem)}
-              {limitField("output", maxOutputTokens, setMaxOutputTokens, outputProblem)}
+              {support?.accepts_max_output_tokens ? limitField("output", maxOutputTokens, setMaxOutputTokens, outputProblem) : null}
             </div>
           </div>
         </details>

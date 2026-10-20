@@ -226,10 +226,11 @@ function projectModelConfigurationSupport(value: unknown): CoreHarness["model_co
   const protocols = support.protocols;
   if (!Array.isArray(protocols) || protocols.length === 0 || !protocols.every((protocol) => isOneOf(modelProviderProtocols, protocol)) ||
     new Set(protocols).size !== protocols.length ||
-    typeof support.accepts_harness_config !== "boolean" || typeof support.token_limits_required !== "boolean") return invalidAdminResponse();
+    typeof support.accepts_harness_config !== "boolean" || typeof support.accepts_max_output_tokens !== "boolean") return invalidAdminResponse();
   return {
     protocols: [...protocols],
-    accepts_harness_config: support.accepts_harness_config, token_limits_required: support.token_limits_required,
+    accepts_harness_config: support.accepts_harness_config,
+    accepts_max_output_tokens: support.accepts_max_output_tokens,
   };
 }
 export function projectCoreHarnessList(value: unknown): { object: "list"; data: CoreHarness[] } {

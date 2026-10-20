@@ -347,8 +347,6 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 	t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", t.TempDir())
 	t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", environment)
 	t.Setenv("OAC_RUNTIME_SESSION_ID", session)
-	t.Setenv("OAC_RUNTIME_NETWORK_ACCESS", "disabled")
-	t.Setenv("OAC_RUNTIME_ALLOWED_DOMAINS", "")
 	peers := make(chan *websocket.Conn, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
@@ -385,7 +383,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 		t.Fatal("no connection")
 	}
 	defer peer.Close()
-	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-" + session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, NetworkAccess: "disabled", WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}})
+	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

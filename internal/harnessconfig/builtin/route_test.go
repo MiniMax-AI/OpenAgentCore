@@ -21,11 +21,11 @@ func TestNativeProviderDeclarationIsSharedWithRuntime(t *testing.T) {
 			if !reflect.DeepEqual(protocols, declared) {
 				t.Fatalf("protocols: %v", declared)
 			}
-			if config.AcceptsHarnessConfig() != (kind != "mcode") {
+			if config.AcceptsHarnessConfig() != (kind == "claude_sdk") {
 				t.Fatal("native configuration support drift")
 			}
 			for _, protocol := range []string{"anthropic", "responses", "chat_completions"} {
-				raw := map[string]any{"protocol": protocol, "base_url": "https://model.example/v1", "api_key": "key-canary", "context_window": 64000, "max_output_tokens": 4096}
+				raw := map[string]any{"protocol": protocol, "base_url": "https://model.example/v1", "api_key": "key-canary", "context_window": 64000}
 				p, err := config.ParseProvider(raw)
 				accepted := kind == "mcode" || (kind == "codex" && protocol == "responses") || (kind == "claude_sdk" && protocol == "anthropic")
 				if (err == nil) != accepted || (config.ValidateProtocol(protocol) == nil) != accepted {

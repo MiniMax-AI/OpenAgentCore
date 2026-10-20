@@ -277,7 +277,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	started := time.Now()
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
-		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token, NetworkAccess: placement.NetworkAccess, AllowedDomains: placement.AllowedDomains,
+		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token,
 	})
 	logComputeStep(ctx, owner, "create", started, err)
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {

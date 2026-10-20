@@ -15,10 +15,9 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine/enginetest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/harnesstest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -27,22 +26,21 @@ import (
 
 func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	h := newDispatchHarness(t)
-	profile := enginetest.Profile(nil)
-	profile.ConfigurationValidation = engine.AdditionalValidation
-	profile.ToolsValidation = engine.AdditionalValidation
-	profile.ValidateConfiguration = func(a v1.Agent, _ *v1.Environment) error {
-		if a.Text.Verbosity != "medium" || a.Text.Format.Type != "text" || a.MultiAgent.Enabled || a.Reasoning.Effort != nil || a.Reasoning.Summary != nil || a.ServiceTier != "auto" {
-			return engine.ErrInvalidInput
+	fixture := harnesstest.Declaration("fixture_harness", func(d *harnessconfig.Declaration) {
+		d.ValidateConfiguration = func(a harnessconfig.Admission) error {
+			if a.TextFormat != "text" || a.MultiAgent {
+				return harnessconfig.ErrInvalidInput
+			}
+			return nil
 		}
-		return nil
-	}
-	profile.ValidateTools = func(_ *v1.Environment, f []proto.FunctionTool, m []proto.MCPHTTPServer) error {
-		if len(f)+len(m) > 0 {
-			return engine.ErrInvalidInput
+		d.ValidateTools = func(f []proto.FunctionTool, m []proto.MCPHTTPServer) error {
+			if len(f)+len(m) > 0 {
+				return harnessconfig.ErrInvalidInput
+			}
+			return nil
 		}
-		return nil
-	}
-	policy := execution.Policy{Engines: engine.NewCatalog(map[string]engine.Profile{"fixture_harness": profile})}
+	})
+	policy := execution.Policy{Declarations: harnessconfig.NewRegistry(fixture)}
 	h.d.Policy = policy
 	// The fixture only supplies an adapter and registration to the real daemon router.
 	// Core sees its ordinary authenticated gateway connection and neutral frames.

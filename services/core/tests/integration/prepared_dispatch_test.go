@@ -94,7 +94,7 @@ func TestPreparedDispatchPromotesOriginalBatchAndPersistsCompletion(t *testing.T
 	h.write(frame.ID, proto.TypePreparationStatus, proto.PreparationStatusPayload{Handle: handle, Revision: 3, State: "started", RunID: start.RunID})
 	steering := h.read(proto.TypePromptSteer)
 	var steer proto.PromptSteerPayload
-	if steering.ID != start.RunID || steering.DecodePayload(&steer) != nil || inputTextForTest(t, steer.Input) != "third" || !steer.DurableReceipt {
+	if steering.ID != start.RunID || steering.DecodePayload(&steer) != nil || inputTextForTest(t, steer.Input) != "third" {
 		t.Fatal("later input bypassed ordinary steering", steer)
 	}
 	h.write(start.RunID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: steer.InputID, Accepted: true})

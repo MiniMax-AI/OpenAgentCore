@@ -57,6 +57,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 	terminal := false
 	mcp := mcpState{calls: map[string]proto.ToolObservation{}}
 	commands := commandState{calls: map[string]proto.ToolObservation{}}
+	searches := searchState{calls: map[string]proto.ToolObservation{}}
 	settlementReceived := false
 	settlementConfirmed := false
 	cancelled := false
@@ -92,13 +93,18 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 				failure = err
 				s.invalidate()
 			}
+		case "search_observation":
+			if err := searches.receive(event, start, s.inputSessionID(), emit); err != nil {
+				failure = err
+				s.invalidate()
+			}
 		case "mcp_observation":
 			if err := mcp.receive(event, start, emit); err != nil {
 				failure = err
 				s.invalidate()
 			}
 		case "delta":
-			if start.ObserveMessages && event.ItemID == "" || !start.ObserveMessages && event.ItemID != "" {
+			if event.ItemID == "" {
 				failure = fmt.Errorf("claudesdk: invalid message delta identity")
 				s.invalidate()
 				break
@@ -108,7 +114,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 			emit(proto.TypeDelta, proto.DeltaPayload{ItemID: event.ItemID, Delta: event.Delta, Sequence: sequence})
 		case "output_message":
 			message := event.Message
-			if !start.ObserveMessages || message == nil || message.ID == "" ||
+			if message == nil || message.ID == "" ||
 				(message.Status != "in_progress" && message.Status != "completed") ||
 				(message.Status == "completed") != (message.Text != nil) {
 				failure = fmt.Errorf("claudesdk: invalid message observation")
@@ -116,7 +122,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 				break
 			}
 			emit(proto.TypeOutputMessage, message)
-		case "function_call", "function_applied":
+		case "function_call", "function_withdrawn", "function_applied":
 			if err := s.receiveFunction(event, start, emit); err != nil {
 				failure = err
 				s.invalidate()
@@ -159,7 +165,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 			}
 			emit(proto.TypeUsage, proto.UsagePayload{Usage: usage})
 		case "result":
-			if !s.matchesInputSession(event.SessionID) || event.SessionID == "" || start.Resume != "" && event.SessionID != start.Resume || usageSession != "" && event.SessionID != usageSession || !s.functionsComplete(false) || !s.steeringComplete() || !mcp.complete() || !commands.complete() {
+			if !s.matchesInputSession(event.SessionID) || event.SessionID == "" || start.Resume != "" && event.SessionID != start.Resume || usageSession != "" && event.SessionID != usageSession || !s.functionsComplete(false) || !s.steeringComplete() || !mcp.complete() || !commands.complete() || !searches.complete() {
 				failure = fmt.Errorf("claudesdk: invalid native completion or unconfirmed input/result")
 				s.settlementErr = failure
 				s.invalidate()
@@ -194,11 +200,12 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 	}
 	// Close result admission before deciding which unanswered calls cancellation settled.
 	s.stopFunctions()
-	if !s.functionsComplete(cancelled && settlementConfirmed) || !s.steeringComplete() || !mcp.complete() || !commands.complete() {
+	if !s.functionsComplete(cancelled && settlementConfirmed) || !s.steeringComplete() || !mcp.complete() || !commands.complete() || !searches.complete() {
 		settlementConfirmed, reusable, reason = false, false, "unsettled_native_operations"
 	}
 	mcp.close(emit)
 	commands.close(emit)
+	searches.close(emit)
 	s.stopSteering()
 	metadata := map[string]any{proto.DoneMetaAgentSessionType: "claude_session"}
 	if id := s.inputSessionID(); id != "" {
@@ -223,7 +230,6 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 	}
 	close(s.settled)
 	if failure != nil {
-		// A valid Turn boundary replaces the former process-exit boundary.
 		// A native diagnostic does not itself confirm cancellation or reuse.
 		if failure != classifiedFailure || !settlementReceived {
 			engineCode = ""

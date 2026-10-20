@@ -28,9 +28,6 @@ func validateVersionFrame(f frame, size int) error {
 	if f.Version != ProtocolVersion {
 		return sandbox.ErrInvalid
 	}
-	if f.GenerationManagement && f.Type != "hello" {
-		return sandbox.ErrInvalid
-	}
 	if f.Type != "request" && f.Type != "response" && size > MaxControlFrameBytes {
 		return sandbox.ErrInvalid
 	}
@@ -110,9 +107,6 @@ func validateVersionFrame(f frame, size int) error {
 
 func validGenerationHealth(h Health) bool {
 	if h.ObservedAt.IsZero() || h.ObservedAt.Year() < 1970 || h.ObservedAt.Year() > 9999 || h.ActiveOperations < 0 || h.ActiveOperations > maxPending {
-		return false
-	}
-	if len(h.Diagnostic) > 64 || sandbox.NormalizeNodeDiagnostic(h.Diagnostic) != h.Diagnostic {
 		return false
 	}
 	for _, value := range []*int64{h.CPUCount, h.TotalMemoryBytes, h.AvailableMemoryBytes, h.AvailableDiskBytes} {

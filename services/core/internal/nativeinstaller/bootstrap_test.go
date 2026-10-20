@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 // Exercise the shipped script against two actual TLS origins. The downloaded
@@ -67,6 +69,10 @@ func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
 	for _, valid := range []bool{true, false} {
 		t.Run(fmt.Sprint(valid), func(t *testing.T) {
 			core := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasSuffix(r.URL.Path, "/installation") {
+					w.WriteHeader(404)
+					return
+				}
 				if strings.HasSuffix(r.URL.Path, ".sha256") {
 					checksum := hex.EncodeToString(hash[:])
 					if !valid {
@@ -82,8 +88,8 @@ func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
 			}))
 			defer core.Close()
 			result := filepath.Join(t.TempDir(), "result")
-			command := exec.Command("bash", "assets/bootstrap.sh", core.URL+"/api/v1/agent-daemon/install/build", "private-grant", "--harness", "codex")
-			command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+t.TempDir(), "CURL_CA_BUNDLE="+ca, "OAC_BOOTSTRAP_TEST_RESULT="+result, "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
+			command := exec.Command("bash", "assets/bootstrap.sh", core.URL+"/api/v1/agent-daemon/install/build", "--harness", "codex")
+			command.Env = append(os.Environ(), "OAC_RUNTIME_HOME="+t.TempDir(), v1.NativeInstallGrantEnv+"=private-grant", "CURL_CA_BUNDLE="+ca, "OAC_BOOTSTRAP_TEST_RESULT="+result, "NO_PROXY=127.0.0.1", "no_proxy=127.0.0.1")
 			output, err := command.CombinedOutput()
 			if valid {
 				if err != nil {
@@ -93,7 +99,7 @@ func TestBootstrapDownloadsVerifiedPlatformAcrossHTTPSRedirect(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !strings.Contains(string(args), core.URL+"/api/v1/agent-daemon/installation\n--authorization\nprivate-grant\n--harness\ncodex") {
+				if !strings.Contains(string(args), core.URL+"/api/v1/agent-daemon/installation\n--harness\ncodex") {
 					t.Fatalf("incorrect install handoff: %s", args)
 				}
 			} else {

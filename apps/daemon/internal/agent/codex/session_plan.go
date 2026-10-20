@@ -28,9 +28,13 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		plan.Cleanup()
 		return SessionPlan{}, nil, err
 	}
-	disableProgrammaticTools(&plan, req.ExecutionControls)
+	applyProgrammaticTools(&plan, req.ExecutionControls)
 	if req.LocalEnvironment != nil {
 		plan.Cwd = req.LocalEnvironment.WorkspaceRoot
+		if err := writeWorkspaceTrust(nativeHomeFromPlan(plan), plan.Cwd); err != nil {
+			plan.Cleanup()
+			return SessionPlan{}, nil, err
+		}
 	} else {
 		// environment:none has no workspace; the Session's private home is its cwd.
 		plan.Cwd = nativeHomeFromPlan(plan)
@@ -60,22 +64,11 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 		}
 	}
 
-	if req.ExecutionControls != nil {
-		if err := prepareModelVerbosity(ctx, cfg.codexBinary, &plan); err != nil {
-			plan.Cleanup()
-			return SessionPlan{}, nil, err
-		}
-	}
-
 	if req.DisableExecutionEnvironment {
 		plan.Env = append(plan.Env, "CODEX_EXEC_SERVER_URL=none")
 	}
 	var skillRoots []string
 	if req.LocalEnvironment != nil && len(req.LocalEnvironment.Skills) > 0 {
-		if err := verifyHostedSkills(req.LocalEnvironment.Skills); err != nil {
-			plan.Cleanup()
-			return SessionPlan{}, nil, err
-		}
 		for _, skill := range req.LocalEnvironment.Skills {
 			skillRoots = append(skillRoots, localworkspace.SkillPath(skill))
 		}

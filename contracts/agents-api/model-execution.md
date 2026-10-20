@@ -4,6 +4,29 @@ title: "Model execution"
 
 Each Session runs one Harness with one model provider. Core selects them through three Core extensions that the pinned upstream protocol does not define: `x_agents_core.harness` chooses the Harness, `x_agents_core.model_provider` supplies the endpoint and key, and `x_agents_core.harness_config` carries native model parameters. Core has no provider catalog, model alias resolution or product permission model; besides Session and saved-Agent bundles, the only stored bundle is one [deployment default](#deployment-defaults) per Harness. This document is the Harness–model provider protocol: [`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) validates the frozen provider connection, and each Harness declares its protocols and native parameters through [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go).
 
+## Model provider bundle
+
+A Harness receives one frozen model provider bundle, defined by [`modelprovider.Provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go). Core validates it at Session creation and the Harness uses it unchanged.
+
+| Field | Meaning |
+| --- | --- |
+| `protocol` | The upstream API: `anthropic`, `responses` or `chat_completions`, not an engine. The selected Harness must support it natively |
+| `base_url` | An HTTPS URL with a valid host, without credentials, query or fragment |
+| `api_key` | Nonempty, at most 16 KiB, without NUL, CR or LF |
+| `context_window`, `max_output_tokens` | Optional nonnegative integers, with output no larger than context. Use the real model's limits |
+
+Supported protocols and native token limits by Harness:
+
+| Harness | Supported protocols, default first | Native token limits |
+| --- | --- | --- |
+| Codex | `responses` | `model_context_window`; no output limit |
+| Claude Code | `anthropic` | `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, which native uses only for a model it does not know, and `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, which native caps at the model's limit |
+| MiniMax Code | `anthropic`, `responses`, `chat_completions` | The custom model's `limit.context` and `limit.output` |
+
+A set limit with no native setting returns `model_provider_token_limits_invalid`.
+
+Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. There is no model API proxy, passthrough gateway or cross-protocol conversion, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
+
 ## Harness selection
 
 ```json
@@ -26,15 +49,7 @@ A saved Agent is editable configuration, not a bound runtime. Create or update i
 
 Session creation resolves each explicit model or Harness override before saved defaults; without a selected Harness, the deployment default applies. Saved Agents require a model. An inline `openai_hosted` or `none` Session may omit its model to use the deployment model of the resolved Harness; `self_hosted` never uses deployment model settings. Core never infers a model from its name.
 
-Provider precedence is: a complete Session bundle, then a complete saved bundle, then the deployment default for the resolved Harness. Core never merges a replacement endpoint with an inherited key; a model-only override reuses the whole inherited bundle. Each Harness connects only through its native protocols:
-
-| Harness | Supported protocols, default first |
-| --- | --- |
-| Codex | `responses` |
-| Claude SDK | `anthropic` |
-| MiniMax Code | `anthropic`, `responses`, `chat_completions` |
-
-MiniMax Code requires positive context and output limits. Core validates the resolved combination before writing the Session. Core and Runtime read the same ordered `protocols` declaration in `internal/harnessconfig`. There is no model API proxy, passthrough gateway or cross-protocol conversion, including inside a Harness. Unsupported saved configurations and Session snapshots fail when used; they are never rewritten, aliased or migrated.
+Provider precedence is: a complete Session bundle, then a complete saved bundle, then the deployment default for the resolved Harness. Core never merges a replacement endpoint with an inherited key; a model-only override reuses the whole inherited bundle. Each Harness connects only through its native protocols ([Model provider bundle](#model-provider-bundle)).
 
 Which sources apply depends on who owns the compute that receives the key:
 
@@ -79,10 +94,6 @@ New hosted requests, and requests that omit the inline model, record caller inte
 }
 ```
 
-- `protocol` names the upstream API (`anthropic`, `responses` or `chat_completions`), not an engine. The selected Harness must support it natively.
-- `base_url` uses HTTPS with a valid host, without credentials, query or fragment.
-- `api_key` is nonempty, at most 16 KiB and contains no NUL, CR or LF.
-- `context_window` and `max_output_tokens` are optional nonnegative integers, with output no larger than context; both must be positive for MiniMax Code. Use the real model's limits.
 - `agent.model` is the exact provider model ID; a supplied value always replaces the deployment model.
 - The Session's `x_agents_core` accepts `model_provider`, `harness_config` and `environment` ([Environments](./environments.md#preparation-order)); any other member, such as `sandbox_node_id`, is rejected with 400. Hosted node placement is automatic.
 
@@ -90,7 +101,7 @@ Unsupported protocol, Harness or Environment combinations are rejected before th
 
 The resolved provider configuration is frozen and encrypted in the Session creation transaction, with its own encryption purpose and Project and Session binding. Creation retries include it in their request hash, so a changed key or endpoint under the same Idempotency-Key conflicts; a key enters any stored hash only as a fingerprint keyed by the deployment credential key. No public Session, Agent, Environment, event or ordinary configuration contains the key. The top-level extension is write-only and cannot be updated.
 
-At dispatch, Core sends the snapshot as one confidential provider bundle over the daemon connection bound to the Session, and the adapter applies it natively and connects directly to the provider. Core never falls back to other credentials when a snapshot is missing or cannot be decrypted. For `self_hosted`, the receiving daemon is the executor enrolled for the Session's own Environment with a current executor credential of the Session creator's principal; rotation or revocation closes the socket before further dispatch. The executor host stores the bundle in its native Harness home, as hosted Runtimes do. Native tools run with the starting account's permissions and can read what that account can read, and revocation does not erase a bundle already delivered.
+At dispatch, Core sends the snapshot as one confidential provider bundle over the daemon connection bound to the Session, and the adapter applies it natively and connects directly to the provider. Core never falls back to other credentials when a snapshot is missing or cannot be decrypted. For `self_hosted`, the receiving daemon is the executor enrolled for the Session's own Environment with a current executor credential of the Session creator's principal; rotation or revocation closes the socket before further dispatch. The executor host stores the bundle in its native Harness home, as hosted Runtimes do. Native tools run with the starting account's permissions and can read what that account can read. The workspace's native configuration, such as Claude Code project settings and hooks, applies as it does locally and can use the provider key, so attach only repositories trusted with that key. Revocation does not erase a bundle already delivered.
 
 ## Native model parameters
 
@@ -98,13 +109,13 @@ At dispatch, Core sends the snapshot as one confidential provider bundle over th
 
 | Harness | Accepted fields | Applied as |
 | --- | --- | --- |
-| Codex | `model_reasoning_effort`: `none`, `minimal`, `low`, `medium`, `high`, `xhigh` | App-server `-c model_reasoning_effort=...` and each Turn's `collaborationMode.settings.reasoning_effort` |
-| Claude SDK | `effort`: `low`, `medium`, `high`, `xhigh`, `max`; `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.effort` and `Options.thinking` |
-| MiniMax Code | Empty object only | Provider token limits remain required |
+| Codex | Empty object only | Reasoning effort belongs to the public `reasoning.effort` |
+| Claude Code | `thinking`: the SDK's `adaptive`, `enabled` or `disabled` object | SDK `Options.thinking`; the public `reasoning.effort` becomes `Options.effort` |
+| MiniMax Code | Empty object only | The public `reasoning.effort` becomes the custom model's thinking effort |
 
 Claude `thinking` accepts `display` (`summarized` or `omitted`) for `adaptive` and `enabled`, and a positive integer `budgetTokens` only for `enabled`; `maxThinkingTokens` is rejected. These are native settings, not a shared reasoning vocabulary; model availability and provider support are the Harness's responsibility.
 
-A supplied object replaces the whole object; `{}` clears it and null is invalid. A Session that selects a model or provider without supplying native parameters uses `{}` instead of inheriting another model's parameters. Otherwise a saved Agent supplies its object, and an inline Session using the deployment model uses the deployment object. Changing the Harness clears inherited parameters, and so does an Agent update of model, provider or Harness that does not supply `harness_config`. There is no deep merge. An inline extension that sets only native parameters keeps the saved Harness. Neither this object nor a deployment default enables public `reasoning` options.
+A supplied object replaces the whole object; `{}` clears it and null is invalid. A Session that selects a model or provider without supplying native parameters uses `{}` instead of inheriting another model's parameters. Otherwise a saved Agent supplies its object, and an inline Session using the deployment model uses the deployment object. Changing the Harness clears inherited parameters, and so does an Agent update of model, provider or Harness that does not supply `harness_config`. There is no deep merge. An inline extension that sets only native parameters keeps the saved Harness.
 
 Core validates the resolved configuration before writing the Session and freezes it in the Session's Agent configuration; the administrator execution-configuration read shows its value and source. Native parameters are not confidential; provider keys stay in the separate encrypted bundle. Reconnection uses the frozen configuration and cannot change the provider, protocol or parameters; an incompatible frozen configuration fails. Protocol support does not qualify structured output, tool discovery, web search, verbosity or image input by itself, and a supported connection does not prove that the remote model accepts a parameter.
 
@@ -123,7 +134,7 @@ PUT requires `model` and a complete `model_provider`; `harness_config` defaults 
 
 Session creation decrypts the default of the resolved Harness and freezes it in the Session's encrypted snapshot like any other bundle, so changing or removing the default never reaches existing Sessions. The execution-configuration read shows the frozen safe view with source `deployment`. A missing or invalid provider snapshot fails closed, with no fallback to another model or provider.
 
-`model_configuration_support` derives from the adapter declaration that Core and Runtime share: `protocols` lists the selectable native protocols with the default first, `accepts_harness_config` says whether native parameters are accepted and `token_limits_required` whether provider token limits are required. It describes the build, not a live Runtime or a remote model.
+`model_configuration_support` derives from the adapter declaration that Core and Runtime share: `protocols` lists the selectable native protocols with the default first, `accepts_harness_config` says whether native parameters are accepted, and `accepts_max_output_tokens` whether `max_output_tokens` has a native setting. It describes the build, not a live Runtime or a remote model.
 
 ### Deployment default observations
 

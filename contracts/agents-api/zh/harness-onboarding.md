@@ -1,61 +1,61 @@
 ---
-title: "添加 Harness"
+title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a1db7d464a42cc82bbe285b12a3290d76d0535c5a6a8fb2563586631c6b9136c
+source_hash: 8beb6af27e99a4bf25a2e828d1b2c1c51adcd7b597f3cd64a211396a506a09c0
 ---
 
-**Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）。**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。本文档定义 Runtime–Harness 协议：适配器接口及其生命周期义务、注册、Core 资格认定和验收。[Harness capabilities](harness-capabilities.md) 记录了当前每个 Harness 支持的功能。
+**Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
 
-从两个入口开始：
-
-- [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go)：共享模型配置契约（声明和准备）。
-- [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go)：执行生命周期、扩展契约和注册方法。
+| 属性 | 内容 |
+| --- | --- |
+| 调用方 | Runtime（[dispatch](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch)） |
+| 实现方 | Codex、Claude Code 和 MiniMax Code 适配器（[原生参考](#native-references)）。[Harness capabilities](harness-capabilities.md) 记录了每个 Harness 支持的功能。 |
+| 代码 | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go)：执行生命周期、扩展契约和注册方法。[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go)：每个 Harness 提供的 `Declaration`、声明注册表以及共享模型配置契约。 |
+| 传输 | 进程内 Go 接口。Runtime 通过 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md)与 Core 通信。 |
+| 版本规则 | 接口变更须在同一次变更中修改本文和每个适配器。 |
 
 ## 所有权 {#ownership}
 
-```text
-Core: Session, Turn, immutable configuration, durable events
-                         |
-              common Runtime protocol
-                         |
-Runtime: Executor preparation, reuse, idle expiry, recovery
-                         |
-               Harness adapter package
-                         |
-          native SDK, process or connection
+```mermaid
+flowchart TB
+    Core["Core<br/>Session, Turn, immutable configuration, durable events"]
+    Runtime["Runtime<br/>Executor preparation, reuse, idle expiry, recovery"]
+    Adapter["Harness adapter package"]
+    Native["Native SDK, process or connection"]
+    Core -->|"Core-Runtime protocol"| Runtime
+    Runtime -->|"Executor and Turn interfaces"| Adapter
+    Adapter --> Native
 ```
 
 | 组件 | 职责 | 位置 |
 | --- | --- | --- |
 | Core | 公共 API、控制权、持久状态、调度和配置快照 | `services/core` |
 | Runtime | 经身份验证的连接、共享能力准备以及通用 Executor 和 Turn 生命周期 | `apps/daemon/internal/dispatch` |
-| Adapter | 原生配置、资源、API 调用、事件转换和限制 | `apps/daemon/internal/agent/<kind>` |
+| Adapter | 原生配置、资源、API 调用、事件转换和限制 | `apps/daemon/internal/agent/<package>` |
 | Harness | 原生模型和工具循环以及历史记录 | 锁定版本的 SDK 或可执行文件 |
-| 服务 profile | 对已认定合格的操作和放置位置进行纯验证 | `services/core/internal/engine` |
-| 注册 | 适配器声明、已安装工厂和已验证能力 | `apps/daemon/internal/agent/<kind>/declaration.go`；`apps/daemon/internal/cli/agent_discovery.go` 中的静态列表 |
+| 声明 | Harness 的最大能力、放置位置、配置和纯准入限制，由 Core 准入和 Runtime 共同读取 | `internal/harnessconfig/<package>/declaration.go` |
+| Runtime 绑定 | 声明加上发现、已安装工厂和已验证能力 | `apps/daemon/internal/agent/<package>/declaration.go` |
 
 Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管提供商仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型提供商负责模型通信设置，而不负责 Turn 调度或原生进程所有权。
 
 ## 步骤 {#steps}
 
 1. **锁定原生来源。** 记录上游包版本和源修订版本，并在适配器旁记录原生入口点。
-2. **实现适配器**，位置为 `apps/daemon/internal/agent/<kind>`：实现 `ExecutorFactory`、`Executor` 和 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)）。复用共享的进程、凭据、配置和本地工作区辅助函数。
-3. **在适配器中声明 kind**，并将其声明添加到 `apps/daemon/internal/cli/agent_discovery.go` 中 Runtime 的静态列表（[register the adapter](#register-the-adapter)）。
-4. **添加服务 profile 和一个目录条目**（[add the engine to Core](#add-the-engine-to-core)）。
-5. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
-6. **启用并选择引擎**，通过 `OAC_HARNESSES` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
-7. **认定其资格**（[qualify the adapter](#qualify-the-adapter)），并将结果记录到 [Harness capabilities](harness-capabilities.md)。
+2. **实现适配器**，位置为 `apps/daemon/internal/agent/<package>`，其中 `<package>` 是去掉下划线的 kind：实现 `ExecutorFactory`、`Executor` 和 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)）。复用共享的进程、凭据、配置和本地工作区辅助函数。
+3. **编写声明**：在 `internal/harnessconfig/<package>/declaration.go` 中编写声明，并将其绑定到适配器的发现函数（[declare the Harness](#declare-the-harness)、[register the adapter](#register-the-adapter)）。运行 `make generate-harness-catalog` 完成两处注册。
+4. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
+5. **启用并选择引擎**，通过 `OAC_HARNESSES` 设置和 [Harness selection](model-execution.md#harness-selection) 完成。
+6. **认定其资格**（[qualify the adapter](#qualify-the-adapter)），并将结果记录到 [Harness capabilities](harness-capabilities.md)。
 
 实现强制的文本生命周期，并明确处理每一种扩展。逐个认定受支持扩展的资格；未认定资格的扩展返回 `agent.ErrUnsupportedOperation`，且不会产生原生副作用。原生取消可能要求退役而非复用：`Reusable=false` 会携带原因，调用方必须确认 `Executor.Close`。不要为了适配测试辅助函数而强制复用，也不要将适配器的原生限制复制到共享 Core 协议中。
 
 ## 架构规则 {#architecture-rules}
 
-- Codex、Claude Code 和未来的 Harness 地位平等。通用 Runtime 线协议以及 Executor 和 Turn 接口负责生命周期、输入回执、取消、恢复和资源访问；每个适配器保留其原生实现以及模型和工具循环。
-- 新引擎需要提供适配器、已认定合格的 profile、注册以及经过独立验证的部署。它不得在 API 处理程序、持久化、调度、调度器或 Environment 提供商中添加按引擎名称分支的实现，也不得为契约已经涵盖的能力添加处理程序、存储表、调度器、事件投影器或模型循环。
+[Complexity stays in the adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter) 和 [Core assembles, Harnesses run natively](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#core-assembles-harnesses-run-natively) 适用于每个 Harness。以下规则为 Harness 专有：
 - 将必需的生命周期声明、扩展接口和注册方法保留在 `agent/harness.go` 中。结果类型、错误和 Registry 存储可以保留在聚焦的文件中。
 - 使用现有的 `proto.SupportedAgentKind` 和 `AgentKindCapabilities` schema。不要添加第二套能力描述符或组合式可选接口。
 - 接入不要求功能完全一致。Harness 不必匹配彼此的可选功能，并且注册时不强制要求 MCP、函数、图像或详细程度控制。验证通用生命周期义务，并对每个声明的操作使用相同的公共断言。缺少声明或扩展实现会阻止接入；原生差异不会。
-- 服务 profile 目录是资格认定边界。未知 profile 以关闭方式失败，并且 Runtime 心跳无法授权新的公共功能。Schema 有效性、服务资格认定和可用 Runtime 是相互独立的检查。
+- 声明是支持边界。未注册的 kind 以关闭方式失败，Runtime 心跳无法授权新的公共功能，也无法扩大声明：发现过程只能收窄。Schema 有效性、声明的支持范围和可用 Runtime 是相互独立的检查。
 - 绝不能将已接受的参数等同于已实际应用的原生行为。
 
 ## 必需的适配器接口 {#required-adapter-interfaces}
@@ -69,7 +69,6 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 | `ExecutorFactory`、`Executor.StartTurn`、`Executor.Close` | 真实实现 | 在没有模型输入的情况下准备；保留失败或不确定资源的所有权；确认清理 |
 | `Session`、`Turn`、`CancellationOutcome`、`AwaitSettlement` | 真实实现 | 取消精确的 Turn，保留已观察结果，并独立于取消请求确认结算 |
 | `DurableSteerer` | 每个 Turn 上真实实现 | 区分完整写入与原生应用回执；保留重试身份 |
-| `Steerer` | 明确实现或 Unsupported | 额外的非持久化活动 Turn 输入 |
 | `FunctionResultSubmitter` | 明确实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
 | `WorkspaceReader`、`WorkspaceDirectoryLister`、`WorkspaceWriter` | 在 Turn 和 Executor 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
 | 中立消息、图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
@@ -90,7 +89,7 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 
 工作区能力描述实际 Runtime 与资源所有者的组合。Codex 和 MiniMax 资源对象拒绝原生工作区访问，而通用的授权 `localworkspace` 所有者提供该访问；Claude 可以公开原生读取和列举访问，通用所有者提供写入。仅仅存在相应接口绝不会选择某个资源或宣称支持。
 
-服务 profile 对公共组合进行资格认定，Runtime 宣称已安装的组合；二者都不能替代 schema 验证或项目授权。原生行为测试必须与声明一致。已宣称但返回 Unsupported 的操作属于契约违规，既不是成功，也不能作为重放的依据。
+声明对公共组合进行准入，Runtime 宣称已安装的组合；二者都不能替代 schema 验证或项目授权。原生行为测试必须与声明一致。已宣称但返回 Unsupported 的操作属于契约违规，既不是成功，也不能作为重放的依据。
 
 ## Executor 和 Turn 生命周期 {#executor-and-turn-lifetimes}
 
@@ -103,6 +102,20 @@ func (s *Session) SubmitFunctionResult(context.Context, proto.FunctionResultPayl
 | Turn | 由 Runtime 跟踪的适配器 `Turn` | `AwaitSettlement` 确认结算完成 |
 
 Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn 拥有一次输入执行、其输出流和其取消操作。`agent.ExecutorFactory` 在没有模型输入的情况下准备固定配置，而 `Executor.StartTurn` 创建新的 `agent.Turn`，不替换健康的原生资源。正常完成仅结算 Turn。`Executor.Close` 在空闲过期、Environment 关闭或确认失效时释放原生资源；它既不释放 Environment 分配，也不释放工作区。Core 不保留第二套 Executor 缓存。相同的生命周期适用于托管、自托管和 `none` 放置方式。
+
+Executor 按下列状态转移。每个 Turn 在 `StartTurn` 与 `AwaitSettlement` 之间运行。
+
+```mermaid
+stateDiagram-v2
+    [*] --> Idle: prepared
+    Idle --> Running: StartTurn
+    Running --> Idle: reusable
+    Running --> Closing: not reusable or shutdown
+    Idle --> Closing: idle expiry, shutdown or invalidation
+    Closing --> Closing: Close failed, retry
+    Closing --> Closed: Close confirmed
+    Closed --> [*]
+```
 
 **绑定。** Runtime 将其 Executor 记录绑定到 Session、Environment、连接和不可变执行配置。恢复身份和先前 Turn 恢复标志是连续性断言，而不是配置更改。提供的原生身份必须与保留的所有者匹配；当需要现有历史时，恢复绝不能启动新的根。配置冲突属于错误，而不是热切换。普通连接丢失会让其所有者和句柄退役；[计划性挂起](../../../docs/zh/runtime-protocol.md#preparation-and-execution-order) 则保留已结算的空闲所有者，直至精确匹配且已认证的恢复完成。旧计时器、输出和取消操作不能影响替代所有者。
 
@@ -119,7 +132,7 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 - 每个 `Session` 都要声明 `CancellationOutcome`。`Turn` 继承该声明。快照保留已观察到的原生身份、Usage 和输出，并在取消后仍可读取。缺失的证据保持未设置；空的 `DonePayload` 表示未观察到任何内容，而不是表示取消成功或不受支持。读取快照不会等待结算。
 - `Session.Cancel` 请求取消；输出关闭表示拆卸开始。Turn 结算仍需要 `AwaitSettlement` 和所需的任何 `Executor.Close`；取消请求成功或其快照都不能替代这些等待。
 
-**Runtime 在 Turn 前后执行的工作。** 一个输出消费者会在原生 Start 之前启动，耗尽有界的 64 帧通道，并将终态观察保留到 Start 发布、Turn 结算和已准入操作回执完成为止。正常完成绝不调用 Cancel。输入和函数准入会在结算前关闭；已准入的操作会持有其屏障，直至原生回执和出站确认完成。Runtime 会在等待该屏障之前向 Turn 发送取消，因为已写入的输入可能需要原生中断才能生成回执。Runtime 会汇合原生结算、所需的已确认 Executor 关闭、输出耗尽和所有已准入操作，然后应用确认或执行复用，之后才会转发 Done 或已应用的取消回执。Close 失败可以报告失败，同时保留同一 Run 和未完成操作以供重试；已关闭的调用方等待无法凭空生成已应用输入回执。Runtime 会在发布 Done 前提交原生连续性状态并释放旧 Run 的准入，因为接收方可能立即启动另一个 Turn；迟到的终态发送失败属于旧 Run，不能使已拥有 Executor 的后继对象失效。连接关闭负责传输丢失清理。结算等待时间为十秒，回执发送预算为五秒；超时不能证明已达到静默状态。
+**Runtime 在 Turn 前后执行的工作。** 一个输出消费者会在原生 Start 之前启动，耗尽有界的输出通道，并将终态观察保留到 Start 发布、Turn 结算和已准入操作回执完成为止。正常完成绝不调用 Cancel。输入和函数准入会在结算前关闭；已准入的操作会持有其屏障，直至原生回执和出站确认完成。Runtime 会在等待该屏障之前向 Turn 发送取消，因为已写入的输入可能需要原生中断才能生成回执。Runtime 会汇合原生结算、所需的已确认 Executor 关闭、输出耗尽和所有已准入操作，然后应用确认或执行复用，之后才会转发 Done 或已应用的取消回执。Close 失败可以报告失败，同时保留同一 Run 和未完成操作以供重试；已关闭的调用方等待无法凭空生成已应用输入回执。Runtime 会在发布 Done 前提交原生连续性状态并释放旧 Run 的准入，因为接收方可能立即启动另一个 Turn；迟到的终态发送失败属于旧 Run，不能使已拥有 Executor 的后继对象失效。连接关闭负责传输丢失清理。结算等待时间和回执发送预算均有上限（见[超时与限制](../../../docs/zh/runtime-protocol.md#timeouts-and-limits)）；超时不能证明已达到静默状态。
 
 ## 事件、输入和可选能力 {#events-inputs-and-optional-capabilities}
 
@@ -129,17 +142,17 @@ Session 在其已连接的 Runtime 中拥有一个可复用的 Executor；Turn �
 
 ### 必需操作和扩展操作 {#required-and-extension-operations}
 
-公共文本路径要求持久化 Turn、已应用输入回执、有序观察、取消，以及执行已禁用的执行控制；`execution.Policy.engineCapabilities` 保存精确要求。没有原生工具的引擎可以保证这些工具不存在；具有工具的引擎在收到要求时必须实际禁用它们。接受某项配置不能证明其已得到执行。
+公共文本路径要求持久化 Turn、已应用输入回执、有序观察、取消，以及执行已禁用的执行控制；`execution.Policy` 保存精确要求。没有原生工具的引擎可以保证这些工具不存在；具有工具的引擎在收到要求时必须实际禁用它们。接受某项配置不能证明其已得到执行。
 
 MCP、公共函数、延迟函数发现、结构化输出、图像输入、详细程度控制和其他可选操作不必匹配另一个引擎。使用 Unsupported 拒绝未认定资格的组合并记录差距；绝不能宣称某项能力来绕过选择。
 
-- 结构化输出：读取 `ExecutionControls.OutputFormat`，并通过 Message 契约发布已确认的原生输出（[execution tools](execution-tools.md#structured-output)）。公共资格认定与 Runtime 能力分别注册。
-- 图像：分别注册 Runtime 的 `MessageImages` 并认定 profile 的 `MessageImages` 资格（[message input](message-content.md)）。
+- 结构化输出：读取 `ExecutionControls.OutputFormat`，并通过 Message 契约发布已确认的原生输出（[execution tools](execution-tools.md#structured-output)）。声明的 `StructuredOutput` 能力负责准入；Runtime 单独宣称其已安装的能力。
+- 图像：声明 `MessageImages`；Runtime 单独宣称其已安装的能力（[message input](message-content.md)）。
 - 工作区放置方式还需要经过验证的准备过程、工作区读取和输出导出，以及使用共享 Files 辅助函数的专用 Runtime 绑定。只有在展示其生命周期行为后才能启用放置方式。
 
 ### MCP 来源和原生限制 {#mcp-origin-and-native-limits}
 
-在引擎 profile 的 `MCPOrigins` 中声明受支持的公共来源，并在 `MCPBearer` 中声明 bearer 支持。Runtime 宣称其实际 HTTP、bearer 和必需初始化能力。共享准入负责验证来源和放置位置；适配器验证负责保留原生标签、允许列表和初始化限制。
+在声明的 `MCPOrigins` 中声明受支持的公共来源，并在 `MCPHTTPBearerAuth` 能力中声明 bearer 支持。Runtime 宣称其实际 HTTP、bearer 和必需初始化能力。共享准入负责验证来源和放置位置；适配器验证负责保留原生标签、允许列表和初始化限制。
 
 使用 `agent.ResolveMCPBindings` 处理公共声明和已安装声明，并保留来源、凭据权限、`null` 与空允许列表之间的区别以及必需启动过程。不要将令牌复制到原生 profile 中，也不要将服务请求重新解释为 Environment 请求。拒绝不受支持的原生策略，而不是将其丢弃。遵循 [MCP origin contract](environments.md#public-mcp-connection-origin)，并对每个宣称的组合执行公共客户端、失败、取消和冷恢复资格认定。模型能力与 Harness 传输支持相互独立；绝不能从模型名称推断模型能力，也绝不能静默降低输入质量。
 
@@ -149,7 +162,7 @@ MCP、公共函数、延迟函数发现、结构化输出、图像输入、详�
 
 ## 注册适配器 {#register-the-adapter}
 
-注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<kind>/declaration.go` 导出一个 `agent.Declaration`，然后将其添加到 [`cli/agent_discovery.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/cli/agent_discovery.go) 的 `harnessDeclarations` 中。声明包含 kind、完整能力描述符、共享模型 `Configuration` 和 `Discover` 函数。发现过程接收 profile、诊断写入器以及 Runtime 解析后的 `DiscoveryOptions.StateRoot` 和实例私有的 `DiscoveryOptions.RuntimeRoot`，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。将版本门控和工厂选择条件保留在适配器内部。
+注册是静态的，并且需要构建。从 `apps/daemon/internal/agent/<package>/declaration.go` 导出一个 `agent.Declaration`，然后运行 `make generate-harness-catalog`，它会把该声明列入生成的 `harnessDeclarations`。绑定由共享的 `harnessconfig.Declaration` 加上 `Discover` 函数组成。发现过程接收 profile、诊断写入器以及 Runtime 解析后的 `DiscoveryOptions.StateRoot` 和实例私有的 `DiscoveryOptions.RuntimeRoot`，负责原生配置和可用性检查，并返回已安装的 `agent.Runtime` 及其描述符和 Executor 工厂。未配置适配器时返回 nil；已配置的前置条件失败时，返回不带工厂的不可用描述符。发现过程只用 `agent.Narrow` 收窄声明的能力，绝不扩大；不可用的描述符来自 `agent.Unavailable`。将版本门控和工厂选择条件保留在适配器内部。
 
 Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-resource-directories)，并显式传给每个适配器。支持保留原生历史的适配器在该根目录下按各自的命名空间布局存放历史，不从环境变量选择回退根目录，也不把历史放进工作区。不支持该能力的适配器将原生状态保持为实例私有，不能仅因收到状态根目录就宣称历史可迁移。私有启动主目录、临时数据及实例私有原生状态使用传入的 `DiscoveryOptions.RuntimeRoot`。设备凭据和连接身份必须留在保留状态之外。仅有状态路径并不意味着计算资源替换后的原生续接已通过资格验证：适配器必须保持原生所有权，在提交模型输入之前拒绝缺失或外来历史，并在另一个写入者挂载前完成原生关闭。
 
@@ -160,57 +173,72 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 | 1 | `RegisterKind(proto.SupportedAgentKind, harnessconfig.Configuration)` | Kind、可用性、版本、`AgentKindCapabilities` 和模型配置声明。它会重置其他注册项，因此必须首先调用。 |
 | 2 | `RegisterExecutor(kind, agent.ExecutorFactory)` | 执行所用的 Executor 和 Turn 生命周期；据此派生 `Preparation` 能力 |
 
-每个 `proto.AgentKindCapabilities` 字段都必须显式设为 `proto.CapabilitySupported` 或 `proto.CapabilityUnsupported`，即使 Harness 不可用也是如此。`proto.CapabilityUnspecified` 无效：零值和省略字段绝不表示 Unsupported。安装探测可以使用 `proto.CapabilityFromBool` 设置单个字段；但不得填充未提及字段或未来字段。可用性通过 `SupportedAgentKind.Available` 单独表示。注册会在更改 registry 之前验证完整声明；线协议会为每个字段携带显式布尔值，因此省略字段和 null 字段均无效。添加新字段时，每个生产声明都必须作出决定。Runtime 使用者应调用 `IsSupported()`，并在原生操作前拒绝不受支持的请求；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致；[Core–Runtime protocol](../../../docs/zh/runtime-protocol.md#capability-declarations) 负责声明的传输方式和冻结方式。
+显式填写声明中 `proto.AgentKindCapabilities` 的每个字段；[能力声明](../../../docs/zh/runtime-protocol.md#capability-declarations)定义声明的编码、验证和冻结方式。安装探测可以使用 `agent.Narrow` 撤回已声明的字段，但绝不授予新字段；`Registry.Register` 会拒绝授予了新字段的探测结果。可用性通过 `SupportedAgentKind.Available` 单独表示。读取声明的代码应调用 `IsSupported()`；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致。
 
-准入映射是显式的。`Steering` 控制非持久化 `Steerer` 输入。`DurableInputReceipts` 控制 `DurableSteerer` 输入，并且还要求 Turn 结算契约；二者互不隐含，而且 Core 的公共文本 profile 要求同时具备二者。工作区声明描述授权资源所有者，包括通用 Runtime 工作区实现。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`。Runtime 自行就绪该 preparation，并从绑定的本地工作区目录提供读取，不调用 Executor 工厂；因此仅当该 kind 的 Environment 工作区就是该本地目录时，adapter 才声明它。注册过程不会派生它。Runtime 注册不会授予 Core 资格；服务 profile 才会授予。
+准入映射是显式的。`DurableInputReceipts` 控制 `DurableSteerer` 输入，并且还要求 Turn 结算契约。工作区声明描述授权资源所有者，包括通用 Runtime 工作区实现。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`。Runtime 自行就绪该 preparation，并从绑定的本地工作区目录提供读取，不调用 Executor 工厂；因此仅当该 kind 的 Environment 工作区就是该本地目录时，adapter 才声明它。注册过程不会派生它。Runtime 注册不会授予 Core 准入；声明才会授予。
 
 可运行的仅测试示例 [`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/testdata/onboarding/main.go) 会注册一个仅支持文本的合成 Harness。它展示 Session 所有的 Executor、全新的 Turn、持久化引导、取消和历史绑定，并且绝不会发布。
 
-## 将引擎添加到 Core {#add-the-engine-to-core}
+## 声明 Harness {#declare-the-harness}
 
-Core 会识别[内置 Harness 注册项](harness-catalog.md)。向 `internal/harnessconfig/builtin/catalog.json` 添加一个条目，其中包含：
+每个 Harness 是 `internal/harnessconfig/<package>/declaration.go` 中的一个 `var Declaration = harnessconfig.Declaration{...}`。包名是去掉下划线的 kind。创建该文件即注册 Harness：`make generate-harness-catalog` 生成 Core 注册表、Runtime 的 `harnessDeclarations`、客户端标识符和显示名称以及[注册参考](harness-catalog.md)，`make check-harness-catalog` 拒绝过期的投影。`make openapi` 从同一批声明派生 Harness 枚举，因此不要在 DTO 标签或路由注解中手写枚举。没有动态插件加载器，声明也不能表示机器的可用性。
 
-- 公共 `kind` 和显示 `label`；
-- `internal/harnessconfig` 下的模型 `configuration` 包；
-- `services/core/internal/engine` 下的 `profile` 构造函数。
+声明包含：
 
-实现 profile 构造函数，然后运行 `make generate-harness-catalog`。它会生成模型配置 registry、Core profile 目录、客户端标识符和显示名称以及注册参考；公共输入验证器读取生成的 registry。`make openapi` 从同一目录派生 Harness 枚举，因此不要在 DTO 标签或路由注解中添加手写枚举。`make check-harness-catalog` 会拒绝过时的投影。
+- 公共 `Kind` 和显示用的 `Label`；
+- 模型 `Configuration`（[原生模型配置](#native-model-configuration)）；
+- `Capabilities`，即 `proto.AgentKindCapabilities`，表示 Harness 在能力完备的主机上最多能做什么；每个字段都是 `Supported` 或 `Unsupported`，零值无效（[能力声明](../../../docs/zh/runtime-protocol.md#capability-declarations)）；
+- 受支持的 `Placements` 和公共 `MCPOrigins`，以及是否接受仅含空白的文本；
+- `Execution`，即适配器映射到原生设置的官方执行选项取值：web search 模式及是否接受搜索设置、推理强度和摘要、服务层级、程序化工具调用取值和文本详细程度。Core 准入和 Runtime 用同一检查拒绝未声明的取值（[工具策略](execution-tools.md#web-search-and-programmatic-tool-calling)）。Core 总会发送官方默认文本详细程度，因此 `TextVerbosities` 必须包含 `medium`；
+- 可选的纯限制 `ValidateConfiguration`、`ValidateTools`、`ValidateMessageInput` 和 `ValidateFunctionResult`，在通用检查之外添加原生限制。`ValidateMessageInput` 仅对携带图像的消息运行，在 `MessageImages` 能力检查之后、任何存储之前执行，决定 Harness 接受哪些 `image_url`；Core 只检查引用不为空白。验证函数为 nil 表示通用检查已足够。它们不能查询业务数据、解密凭据或控制原生进程。配置限制最先执行，工具解码错误先于 `ValidateTools`。
 
-每个 Runtime 声明都引用生成的目录所使用的同一个 `internal/harnessconfig/<kind>.Configuration()`，并负责其原生工厂、探测和已安装能力证据。目录不能声明某台机器的可用性，也不存在动态插件加载器。
+`harnessconfig.NewRegistry` 会验证每个声明，对无效或重复的声明触发 panic：kind 和 label 必须非空，放置位置必须至少列出一个受支持的位置，MCP 来源必须是非 nil 列表，未知或重复的选项以及没有对应放置位置的来源会被拒绝，bearer 支持要求存在 MCP 来源，`Execution` 必须声明文本详细程度 `medium`。共享调度检查能力组合，绝不检查引擎名称。
 
-profile 是纯逻辑：它使用现有的公共类型和协议类型，声明受支持的放置方式、公共配置、结果限制和必需的 Runtime 控制。Profile 回调不能查询业务数据、解密凭据或控制原生进程。共享调度检查能力组合，而不是引擎名称允许列表。
+`apps/daemon/internal/agent/<package>/declaration.go` 中的 Runtime 绑定内嵌同一份声明并添加 `Discover`；它负责原生可用性探测和工厂，并且只把声明的能力收窄到该安装已验证的范围。绑定测试 `TestDiscoveryOnlyNarrowsDeclaration` 检查发现结果不超出声明。`harnessconfig/harnesstest.Declaration` 为测试构造合成声明。
 
-### 显式服务资格认定 {#explicit-service-qualification}
+运行 `harnessconfig` 和 `execution` 测试以覆盖验证、组合和错误优先级，并运行 `services/core/tests/integration` 中的公共接入测试以覆盖准入和 Runtime 调度。
 
-`engine.Profile` 是服务的资格声明，独立于 Runtime 的 `AgentKindCapabilities`。其能力字段复用小型 `proto.CapabilitySupport` 值类型：每个字段都必须显式选择 `CapabilitySupported` 或 `CapabilityUnsupported`。`CapabilityUnspecified`（包括省略字段）会被拒绝。复用此值类型并不意味着 Runtime 的宣称可以授予服务授权。
-
-`ConfigurationValidation`、`ToolsValidation` 和 `FunctionResultValidation` 分别选择以下两种策略之一：
-
-- `CommonValidationOnly`：通用 schema 和准入检查已足够。相应回调必须为 nil；不需要提供成功的占位回调。
-- `AdditionalValidation`：相应的 `ValidateConfiguration`、`ValidateTools` 或 `ValidateFunctionResult` 回调为必需项，并添加纯 Harness 限制。
-
-省略或未知策略、缺少必需回调，或者将回调与仅通用策略搭配，均无效。准入遵循声明的策略，而不依据方法是否存在。保留现有错误优先级：配置限制最先执行；选择额外配置验证时，工具解码错误先于工具限制。对于仅通用的配置验证，额外工具限制仍保持其相对于解码错误的现有优先级。仅通用的函数结果验证不会添加原生结果限制。
-
-`engine.NewCatalog` 会在发布不可变快照之前验证每个条目，并对无效静态注册触发 `engine.ErrInvalidDeclaration` panic。Kind 必须非空且前后不得包含空白字符。放置方式必须显式列出至少一个受支持的放置方式；MCP 来源必须是非 nil 列表（空列表表示不认定任何来源合格）。未知或重复选项、没有对应放置方式的来源，以及没有 MCP 来源的 bearer 支持均会被拒绝。错误应标识已编写的字段，但不回显声明值。未来 profile 字段必须由完整性验证器分类，并由每个 profile 显式决定；不存在生产用默认填充构造函数。
-
-运行 `engine` 和 `execution` 测试以覆盖遗漏、策略、组合和错误优先级，并运行 `services/core/tests/integration` 中的公共接入测试以覆盖准入和 Runtime 调度。测试夹具使用 `engine/enginetest`，其穷尽式字面量在添加字段时也要求作出决定；它不是生产 profile。
-
-`execution.Policy` 向 HTTP 准入、Worker 设备选择和最终调度提供不可变服务资格认定。自定义组合将同一个 Policy 提供给 `api.Dependencies.Policy` 和 Core 调度器的 `Policy`。零值使用内置 profile；显式空目录不授权任何内容。不存在可变全局注册。
+`execution.Policy` 向 HTTP 准入、Worker 设备选择和最终调度提供注册表。自定义组合把同一个 Policy 交给 `api.Dependencies.Policy` 和 Core 调度器的 `Policy`。零值使用内置声明；显式的空注册表不授权任何 Harness。没有可变的全局注册。
 
 ## 原生模型配置 {#native-model-configuration}
 
-[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 负责共享配置声明和纯准备契约。每个适配器在 `internal/harnessconfig/<kind>` 中提供一个 `Configuration`，供 Core 组合和 Runtime 的 `RegisterKind` 使用。Executor 路径会在产生原生副作用之前通过该声明进行验证。线协议对象是 `proto.HarnessConfig`。[Model execution](model-execution.md#native-model-parameters) 列出了每个 Harness 接受的字段。
+[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 负责共享配置声明和纯准备契约。每个声明携带一个 `Configuration`，Core 组合和 Runtime 的 `RegisterKind` 都使用它。Executor 路径会在产生原生副作用之前通过该声明进行验证。线协议对象是 `proto.HarnessConfig`。[Model execution](model-execution.md#native-model-parameters) 列出了每个 Harness 接受的字段。
 
 提供的 `model` 必须是非空字符串，并且显式指定 `model_provider` 时必须提供它。原生所有权连接路径可以省略二者；显式 null 无效。显式为空的声明不接受任何提供商或非空原生参数，也不宣称支持提供商。未知协议格式和重复协议声明会导致注册失败。
 
 声明中的有序 `protocols` 列表是接受协议及默认协议（第一个条目）的唯一来源；它还为 Core 的配置支持描述符提供数据，Core 和 Runtime 通过它拒绝不受支持的组合。适配器通过原生配置直接连接；它们绝不引入模型 API 代理或协议转换器、第二套模型能力 registry，也不会从模型名称推断能力。Claude 的私有 bridge 接收编译后的原生选项，并且只执行结构检查，而不是声明规则的第二份副本。
+
+## 原生安装程序参与 {#native-installer-participation}
+
+适配器可以从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本、受支持平台、激活环境和有界就绪探测。在 `cli/native_harness.go` 中注册它，并将其锁定组件添加到原生分发构建器。此可选契约不会改变 Executor 和 Turn 语义。Runtime 负责校验和、复制、锁和增量安装；适配器负责原生布局和探测。必须在每个宣称的平台上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。
+
+## 原生进程所有权 {#native-process-ownership}
+
+daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启动（Windows 上为 Job 对象）；其他主机会拒绝启动。显式取消和父上下文取消共享 TERM 宽限期以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令在限定时间内等待确认关闭，该时间涵盖该宽限期以及之后的管道和所有者清理。
+
+所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
+
+适配器以启动用户的权限无人值守运行原生工具，Harness 从不询问人类。Codex 使用批准策略 `never` 和完全访问权限，在该策略下 Codex 自行处理 MCP elicitation，不会发给客户端；适配器还禁用其阻塞式 `request_user_input` 工具。Claude 通过适配器的工具回调运行，回调直接允许或拒绝、不会询问。MiniMax 绕过权限；适配器禁用 `askUser`、不声明 elicitation，并以 ACP `cancelled` 结果答复 `session/request_permission`，MiniMax 将其视为拒绝。原生权限或问题请求都不会到达 Core：需要人工介入时通过 function 工具完成，Session 读取 [`requires_action`](./sessions-events.md#session-status)，由应用提交 function 结果。不要添加权限 profile、bubblewrap 包装器或原生 sandbox 设置；每种 Environment 来源都只有一条执行路径。资源路径属于操作员配置，而不是权限边界。
+
+模型主机不可达时不能让 Turn 一直挂起。适配器通过原生设置让 Harness 自身的连接重试保持有界；Harness 以结构化数据报告最终连接错误时，该错误归为 `connection_failed`（[原生失败分类](../../../docs/zh/runtime-protocol.md#native-failure-classification)）。Core 不另设模型超时。各适配器指南写明其 Harness 的上限。
+
+网络准入遵循 [Restricted network](environments.md#restricted-network)。
+
+## 超时与限制 {#timeouts-and-limits}
+
+Runtime 对每个 Turn 的限制（结算等待、回执发送预算和输出通道）见 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#timeouts-and-limits)。原生子进程的限制如下：
+
+| 数值 | 适用对象 | 到期时 |
+| --- | --- | --- |
+| 3 秒（默认） | 显式取消或父上下文取消时，原生子进程的 TERM 宽限期 | Runtime 升级为有界的 KILL。 |
+| 10 秒 | daemon 的 `stop` 命令等待确认关闭，涵盖该宽限期及之后的管道和所有者清理 | 关闭未得到确认。 |
 
 ## 认定适配器资格 {#qualify-the-adapter}
 
 开始前，记录操作集、预期结果、排除项和停止条件。当其声明的操作通过时，资格认定即结束；它不会扩展为匹配另一个 Harness 的功能列表。
 
 1. **契约测试。** 在名为 `TestSharedTextLifecycle` 的测试中，使用适配器准备好的 Executor 和确定性的原生夹具调用 `agent/contracttest.TextLifecycle`；`claudesdk/executor_test.go` 是参考实现。它检查独立的 Turn 流、原生所有者和历史连续性、持久化写入与应用回执、过期取消，以及取消后的健康继续执行。`make check-runtime-contract` 会将它与共享线协议、gateway、传输层和调度器测试、声明完整性检查以及每个适配器的 `TestUnsupportedExtensionsHaveNoNativeEffects` 一起运行。适配器测试还覆盖两个普通 Turn 共享一个原生进程或连接和历史、取消后执行另一个 Turn、过期取消和迟到事件、原生退出、清理失败、输入写入与应用回执、未知结果，以及每 Turn 新鲜的 usage、函数、输入和子项观察状态。必须说明夹具是受控夹具还是真实提供商。
-2. **共享集成。** `TestThirdHarnessPublicOnboarding` 让合成 Harness 通过公共 Session 和输入准入、Worker 设备选择、真实 WebSocket gateway、daemon Registry 和 Router、中立事件以及持久化终态投影运行。它在与 API 处理程序和调度器相同的 `execution.Policy` 中使用自定义不可变 `engine.Catalog`，并检查已应用输入回执、已保存原生身份、继续执行、取消、不受支持的可选请求以及缺少强制 Runtime 支持。该夹具没有工作区、MCP 或公共函数，其注册仅保留在测试本地。它证明的是集成路径，而不是原生执行。
+2. **共享集成。** `TestThirdHarnessPublicOnboarding` 让合成 Harness 通过公共 Session 和输入准入、Worker 设备选择、真实 WebSocket gateway、daemon Registry 和 Router、中立事件以及持久化终态投影运行。它在与 API 处理程序和调度器相同的 `execution.Policy` 中使用自定义不可变注册表，并检查已应用输入回执、已保存原生身份、继续执行、取消、不受支持的可选请求以及缺少强制 Runtime 支持。该夹具没有工作区、MCP 或公共函数，其注册仅保留在测试本地。它证明的是集成路径，而不是原生执行。
 3. **真实验收。** 使用锁定的官方 Python SDK 和针对 Core 的原始 HTTP、真实提供商 API、原生 Harness 以及专用数据库。验证初始执行、热后续执行、取消以及带继续执行的重启；记录原生所有者身份以及相同条件下的冷启动和热运行时间。对于工作区放置方式，还要验证 Files 和 Artifacts、工作区身份、公开响应中未出现凭据，以及外部历史会被拒绝。`services/core/tests/official_hosted_functions_native.py` 保存共享函数断言：成功和错误、原生文件输出和公共 Artifact 字节、重启后的同历史继续执行、外部结果拒绝以及待处理调用取消。合成运行或失败运行绝不计入。下面的选择性测试会在 `services/core/tests` 中针对真实 daemon 和模型运行锁定 SDK 夹具；设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`、`OAC_TEST_NATIVE_DAEMON_BIN`、`OAC_TEST_NATIVE_PROOF_DIR` 及其私有选项文件后，每项测试才会运行。选项文件是一个 JSON 对象，恰好包含 `model` 和 `model_provider`（即 `x_agents_core.model_provider` 的字段）；测试会将其设置为部署默认模型提供商，而夹具的 `environment: none` Session 会在创建时将其冻结。
 4. **回归。** 现有 Harness 必须继续正常工作。先运行定向测试，然后运行 `make check`；API 更改后运行 `make openapi`，查询更改后运行 `make sqlc-generate`。
 5. **审查。** 遵循 [blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
@@ -237,22 +265,6 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 | MiniMax 取消退役、Start 失败和清理重试 | `mcode/executor_test.go`、`executor_backpressure_test.go` |
 | MiniMax 原生历史绑定 | `mcode/session_test.go` |
 | 无原生副作用或伪造结果的明确拒绝 | 每个适配器的 `unsupported_test.go` |
-
-## 原生安装器参与 {#native-installer-participation}
-
-适配器可以从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本、受支持平台、激活环境和有界就绪探测。在 `cli/native_harness.go` 中注册它，并将其锁定组件添加到原生分发构建器。此可选契约不会改变 Executor 和 Turn 语义。Runtime 负责校验和、复制、锁和增量安装；适配器负责原生布局和探测。必须在每个宣称的平台上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。
-
-## 原生进程所有权 {#native-process-ownership}
-
-daemon 的 `clirunner` 让每个原生子进程在自己的 Unix 进程组中启动（Windows 上为 Job 对象）；其他主机会拒绝启动。显式取消和父上下文取消共享 TERM 宽限期（默认为三秒）以及有界的 KILL 升级过程。当直接进程退出时，内部回收器也会清理进程组的剩余成员，即使某个后代进程仍保持 stdout 打开；在取消过程中，主进程退出后，存活的后代进程仍会保留剩余宽限时间。daemon 的 `stop` 命令最多等待十秒以确认关闭，这涵盖该宽限期以及之后的管道和所有者清理。
-
-所属输出管道在主进程退出后仍可读取。消费者在调用 `Wait` 之前耗尽 stdout 和 stderr；`Wait` 会汇合缓存的进程结果并关闭读取器。`Done` 报告主进程回收和进程组清理信号；它不是原生执行回执，也不是历史已持久化的证据。SDK 适配器会结算每个 Turn，并在发布完成状态前耗尽其观察结果；Executor 关闭还会关闭 Query 并等待原生子进程。进程组用于生命周期监管，而不是隔离或遏制离开进程组的后代进程。
-
-适配器以启动用户的权限无人值守运行原生工具，Harness 从不询问人类。Codex 使用批准策略 `never` 和完全访问权限，在该策略下 Codex 自行处理 MCP elicitation，不会发给客户端；适配器还禁用其阻塞式 `request_user_input` 工具。Claude 通过适配器的工具回调运行，回调直接允许或拒绝、不会询问，使用原生 `default` 权限模式并禁用 SDK sandbox。MiniMax 绕过权限并禁用 sandbox；适配器禁用 `askUser`、不声明 elicitation，并以 ACP `cancelled` 结果答复 `session/request_permission`，MiniMax 将其视为拒绝。原生权限或问题请求都不会到达 Core：需要人工介入时通过 function 工具完成，Session 读取 [`requires_action`](./sessions-events.md#session-status)，由应用提交 function 结果。不要添加权限 profile、bubblewrap 包装器或原生 sandbox 设置；每种 Environment 来源都只有一条执行路径。资源路径属于操作员配置，而不是权限边界。
-
-模型主机不可达时不能让 Turn 一直挂起。适配器通过原生设置让 Harness 自身的连接重试保持有界；Harness 以结构化数据报告最终连接错误时，该错误归为 `connection_failed`（[原生失败分类](../../../docs/zh/runtime-protocol.md#native-failure-classification)）。Core 不另设模型超时。各适配器指南写明其 Harness 的上限。
-
-网络准入遵循 [Restricted network](environments.md#restricted-network)。
 
 ## 原生参考 {#native-references}
 

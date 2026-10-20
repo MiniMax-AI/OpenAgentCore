@@ -14,15 +14,15 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
-// NewSession builds an unowned Session over a test connection.
-func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
+// newTestSession builds a Session over a test connection, defaulting the log and Registry.
+func newTestSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
 	if log == nil {
 		log = func(string, ...any) {}
 	}
 	if reg == nil {
 		reg = NewRegistry()
 	}
-	return NewSessionWithOwner(conn, deviceID, workspaceID, daemonVersion, reg, log, nil)
+	return NewSession(conn, deviceID, workspaceID, daemonVersion, reg, log)
 }
 
 // fakeConn is the WSConn implementation used by session + registry
@@ -158,7 +158,7 @@ func (f *fakeHeartbeatStore) waitDaemonHeartbeat(t *testing.T) runtimedevice.Hea
 
 func TestRegistry_RegisterAndLookup(t *testing.T) {
 	reg := NewRegistry()
-	sess := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	if prev := reg.Register(sess); prev != nil {
 		t.Fatalf("first Register returned non-nil prev")
 	}
@@ -170,11 +170,11 @@ func TestRegistry_RegisterAndLookup(t *testing.T) {
 
 func TestRegistry_RegisterReplacesAndEvictsRuns(t *testing.T) {
 	reg := NewRegistry()
-	old := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
+	old := newTestSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	reg.Register(old)
 	reg.AttachRun("run-1", old)
 
-	new := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
+	new := newTestSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	prev := reg.Register(new)
 	if prev != old {
 		t.Fatalf("expected old session as displaced previous, got %p", prev)
@@ -188,9 +188,9 @@ func TestRegistry_RegisterReplacesAndEvictsRuns(t *testing.T) {
 
 func TestRegistry_DeregisterPreservesNewer(t *testing.T) {
 	reg := NewRegistry()
-	old := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
+	old := newTestSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	reg.Register(old)
-	new := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
+	new := newTestSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	reg.Register(new)
 	// A stale Deregister from the old session (e.g. its read loop
 	// wakes after preemption) must NOT remove the new session.
@@ -206,7 +206,7 @@ func TestRegistry_DeregisterPreservesNewer(t *testing.T) {
 func TestSession_DispatchDeliversToSubscriber(t *testing.T) {
 	reg := NewRegistry()
 	conn := newFakeConn()
-	sess := NewSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
 	sess.Start()
 	defer sess.Close("test done")
 
@@ -232,7 +232,7 @@ func TestSession_DispatchDeliversToSubscriber(t *testing.T) {
 func TestSession_DoneFrameAutoUnsubscribes(t *testing.T) {
 	reg := NewRegistry()
 	conn := newFakeConn()
-	sess := NewSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
 	sess.Start()
 	defer sess.Close("test done")
 
@@ -265,7 +265,7 @@ func TestSession_DoneFrameAutoUnsubscribes(t *testing.T) {
 }
 
 func TestSession_CloseReportsUnknownWithoutExecutionEvents(t *testing.T) {
-	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
+	sess := newTestSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
 	sub, err := sess.SubscribeDurable("run")
 	if err != nil {
 		t.Fatal(err)
@@ -280,7 +280,7 @@ func TestSession_CloseReportsUnknownWithoutExecutionEvents(t *testing.T) {
 }
 
 func TestSession_NoCapabilitiesBeforeHeartbeat(t *testing.T) {
-	sess := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
+	sess := newTestSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
 	defer sess.Close("test done")
 	for _, kind := range []string{"fake_alpha", "codex", "contract"} {
 		if info, found, known := sess.AgentKindStatus(kind); found || known || info.Available {
@@ -291,7 +291,7 @@ func TestSession_NoCapabilitiesBeforeHeartbeat(t *testing.T) {
 
 func TestSession_SendOnClosedReturnsError(t *testing.T) {
 	reg := NewRegistry()
-	sess := NewSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(newFakeConn(), "dev-1", "wks-1", "0.1.0", reg, nil)
 	sess.Close("never started")
 	env, _ := proto.NewEnvelope(proto.TypePromptCancel, "run-1", nil)
 	err := sess.Send(context.Background(), env)
@@ -303,7 +303,7 @@ func TestSession_SendOnClosedReturnsError(t *testing.T) {
 func TestSession_SendWritesToWire(t *testing.T) {
 	reg := NewRegistry()
 	conn := newFakeConn()
-	sess := NewSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
 	sess.Start()
 	defer sess.Close("test done")
 
@@ -332,7 +332,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	reg := NewRegistry()
 	conn := newFakeConn()
 	heartbeat := newFakeHeartbeatStore()
-	sess := NewSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
+	sess := newTestSession(conn, "dev-1", "wks-1", "0.1.0", reg, nil)
 	sess.heartbeat = heartbeat
 	sess.Start()
 	defer sess.Close("test done")
@@ -363,7 +363,7 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 			{
 				Kind:         "codex",
 				Available:    true,
-				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, Steering: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported}),
+				Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{MCPHTTPTools: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported}),
 			},
 		},
 	})
@@ -389,15 +389,15 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	if fake_beta.Available || fake_beta.Version != "missing" || !fake_beta.Capabilities.Streaming {
 		t.Fatalf("fake_beta descriptor not converted: %#v", fake_beta)
 	}
-	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || fake_beta.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || fake_beta.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || fake_beta.Capabilities.SubagentControl || !byKind["codex"].Capabilities.TextVerbosity || claude.Capabilities.TextVerbosity || fake_beta.Capabilities.TextVerbosity || !byKind["codex"].Capabilities.WebSearchControl || claude.Capabilities.WebSearchControl || fake_beta.Capabilities.WebSearchControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || fake_beta.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems || !byKind["codex"].Capabilities.Steering || claude.Capabilities.Steering || fake_beta.Capabilities.Steering {
-		t.Fatalf("steering capability not preserved: %#v", byKind)
+	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || fake_beta.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || fake_beta.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || fake_beta.Capabilities.SubagentControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || fake_beta.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems {
+		t.Fatalf("capabilities not preserved: %#v", byKind)
 	}
 	if !byKind["codex"].Capabilities.MCPHTTPTools || claude.Capabilities.MCPHTTPTools || fake_beta.Capabilities.MCPHTTPTools {
 		t.Fatalf("HTTP MCP capability not preserved: %#v", byKind)
 	}
 	codex, found, known := sess.AgentKindStatus("codex")
-	if !found || !known || !codex.Capabilities.Steering || !codex.Capabilities.MCPHTTPTools {
-		t.Fatalf("steering capability absent from live session: %#v", codex)
+	if !found || !known || !codex.Capabilities.MCPHTTPTools {
+		t.Fatalf("capabilities absent from live session: %#v", codex)
 	}
 }
 
@@ -405,7 +405,7 @@ func TestSession_HeartbeatDoesNotInferCapabilities(t *testing.T) {
 	reg := NewRegistry()
 	conn := newFakeConn()
 	heartbeat := newFakeHeartbeatStore()
-	sess := NewSession(conn, "device", "tenant", proto.Version, reg, nil)
+	sess := newTestSession(conn, "device", "tenant", proto.Version, reg, nil)
 	sess.heartbeat = heartbeat
 	sess.Start()
 	defer sess.Close("test done")

@@ -6,21 +6,19 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 )
 
-func TestProjectionMatchesEveryAdapterDeclaration(t *testing.T) {
+func TestProjectionMatchesEveryDeclaration(t *testing.T) {
 	got := declarations()
 	if len(got) != len(builtin.Kinds()) {
-		t.Fatal("projection membership differs from catalog")
+		t.Fatal("projection membership differs from the registry")
 	}
-	for _, kind := range builtin.Kinds() {
-		configuration := builtin.Configuration(kind)
-		providers, ok := got[kind]
-		if !ok || len(providers) != len(configuration.Providers) {
-			t.Fatalf("%s: missing provider declarations", kind)
+	for _, projected := range got {
+		declaration, ok := builtin.Registry().Lookup(projected.Kind)
+		if !ok || projected.Label != declaration.Label || len(projected.Protocols) != len(declaration.Providers) {
+			t.Fatalf("%s: projection differs from its declaration", projected.Kind)
 		}
-		for _, declaration := range configuration.Providers {
-			projected, ok := providers[declaration.Protocol]
-			if !ok || projected.RequiresTokenLimits != declaration.RequiresTokenLimits {
-				t.Fatalf("%s/%s: configuration rule differs", kind, declaration.Protocol)
+		for i, declared := range declaration.Providers {
+			if projected.Protocols[i] != declared.Protocol {
+				t.Fatalf("%s: protocol order differs", projected.Kind)
 			}
 		}
 	}

@@ -38,7 +38,7 @@ def main():
         fresh = sessions.create(**spec)
         assert fresh.agent.model == "changed-model" and fresh.agent.instructions == "changed"
         assert first.agent.model == "original-model" and first.agent.instructions == "frozen"
-        mutate(patch={"service_tier":"priority"})
+        mutate(patch={"tools":[{"type":"tool_search"}]})
         expect(BadRequestError, lambda:sessions.create(**spec))
         assert sessions.create(**spec, extra_headers=headers) == first
         for changed in ({"input":"different"}, {"metadata":{"changed":"yes"}}, {"agent":{"instructions":"frozen"}}, {"agent_id":fresh.id}):

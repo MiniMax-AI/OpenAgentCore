@@ -127,6 +127,11 @@ type AllocationTx interface {
 	LoadActivity(current Allocation) (Activity, error)
 	// LoadSuspensionDemand locks the deployment and reads demand and capacity.
 	LoadSuspensionDemand(current Allocation) (SuspensionDemand, error)
+	// OldestIdleCheckpoint reports whether current has the earliest retention
+	// deadline among its node's idle suspended allocations that can be retained.
+	OldestIdleCheckpoint(current Allocation) (bool, error)
+	// ExpireCheckpoint ends the suspended allocation's retention now.
+	ExpireCheckpoint(current Allocation) (Allocation, error)
 	// PlacementDemand reads one qualified page; next advances past all inspected
 	// rows, including ineligible receipts. An empty next.EnvironmentID ends the scan.
 	PlacementDemand(after PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error)
@@ -307,7 +312,7 @@ type NodeTx interface {
 	InsertNode(node NewNode) (StoredNode, error)
 	UpdateNode(id string, limits NodeLimits) error
 	RemoveNode(id string) error
-	// CreateEnrollment stores a token that expires in ten minutes and returns
+	// CreateEnrollment stores a token that expires in one hour and returns
 	// its expiry.
 	CreateEnrollment(enrollment NewEnrollment) (time.Time, error)
 	// ConsumeEnrollment marks an unexpired, unconsumed token of the current
@@ -319,7 +324,6 @@ type NodeTx interface {
 	DeleteGenerationStatus(nodeID string, generation uint64) error
 	UpsertGenerationStatus(status GenerationStatusRecord) error
 	PromoteServingGeneration(nodeID string, generation uint64) error
-	RefreshServingReadiness(nodeID string, protocol int) error
 }
 
 // DeploymentTx is one leased deployment change.
@@ -458,9 +462,6 @@ type NodeRecord struct {
 	LastSeenAt                  *time.Time
 	Health                      NodeHealth
 	Online, ServingReady        bool
-	ProtocolVersion             int
-	DeploymentGeneration        uint64
-	TargetGeneration            uint64
 	ReadyGeneration             *uint64
 	TargetState                 string
 	TargetDiagnostic            string

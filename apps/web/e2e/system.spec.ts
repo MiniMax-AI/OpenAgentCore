@@ -38,31 +38,18 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   }
   expect(await writes(request)).toEqual([]);
   await set.getByLabel("Base URL").fill("https://model.example/v1");
-  await expect(set.getByLabel("Harness configuration (JSON)")).toBeHidden();
+  // Codex accepts no native Harness configuration.
   await set.getByText("Advanced settings", { exact: true }).click();
-  const config = set.getByLabel("Harness configuration (JSON)");
-  await config.fill("[]");
-  await config.blur();
-  await expect(set.getByText("Enter a valid JSON object, such as {}.")).toBeVisible();
-  await expect(set.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
-  await config.fill('{"model_reasoning_effort":"high"}');
-  await set.getByRole("button", { name: "Format JSON" }).click();
-  await expect(config).toHaveValue('{\n  "model_reasoning_effort": "high"\n}');
-  // Limits are Core's 32-bit whole numbers, and max output needs a context window at least as large.
-  await set.getByLabel("Max output tokens").fill("32000");
-  await expect(set.getByText("Set a context window at least this large.")).toBeVisible();
-  await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
-  await expect(set.getByLabel("Context window", { exact: true })).toHaveAccessibleDescription(/Set a context window at least this large/);
-  await expect(set.getByLabel("Max output tokens", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
-  await set.getByLabel("Context window", { exact: true }).fill("1000");
-  await expect(set.getByLabel("Context window", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(set.getByLabel("Harness configuration (JSON)")).toHaveCount(0);
+  // Codex has no native output limit; limits are Core's 32-bit whole numbers.
+  await expect(set.getByLabel("Max output tokens")).toHaveCount(0);
   await set.getByLabel("Context window").fill("2147483648");
   await expect(set.getByText("Enter a whole number up to 2147483647.")).toBeVisible();
   await expect(set.getByRole("button", { name: "Save" })).toBeDisabled();
   await set.getByLabel("Context window").fill("200000");
   await set.getByRole("button", { name: "Save" }).click();
   await expect(set).toBeHidden();
-  for (const text of ["Ready", "OpenAI Responses", "https://model.example/v1", "Configured", "200,000", "32,000"]) await expect(codex).toContainText(text);
+  for (const text of ["Ready", "OpenAI Responses", "https://model.example/v1", "Configured", "200,000"]) await expect(codex).toContainText(text);
   expect(await page.content()).not.toContain(KEY);
 
   // Replacing starts from the saved fields but never from the key; closing the form forgets a typed key.
@@ -70,30 +57,19 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   let replace = page.getByRole("dialog", { name: "Replace default model configuration for Codex" });
   await expect(replace.getByRole("combobox", { name: "Protocol", exact: true })).toHaveText("OpenAI Responses");
   await expect(replace.getByLabel("Default model ID")).toHaveValue("fixture-model");
-  await expect(replace.getByLabel("Harness configuration (JSON)")).toHaveValue(/model_reasoning_effort/);
   await expect(replace.getByLabel("Base URL")).toHaveValue("https://model.example/v1");
   await expect(replace.getByLabel("API key")).toHaveValue("");
   await expect(replace.getByRole("button", { name: "Save" })).toBeDisabled();
   await replace.getByLabel("API key").fill(KEY);
-  const nativeSettings = replace.getByLabel("Harness configuration (JSON)");
-  await expect(nativeSettings).toHaveValue(/model_reasoning_effort/);
-  await replace.getByLabel("Default model ID").fill("different-model");
-  await expect(nativeSettings).toHaveValue("{}");
-  await nativeSettings.fill('{"model_reasoning_effort":"low"}');
-  await replace.getByLabel("Base URL").fill("https://another-model.example/v1");
-  await expect(nativeSettings).toHaveValue("{}");
-  await nativeSettings.fill('{"model_reasoning_effort":"high"}');
   await replace.getByRole("button", { name: "Cancel" }).click();
   expect(await page.content()).not.toContain(KEY);
   await codex.getByRole("button", { name: "Replace the default model configuration for Codex" }).click();
   replace = page.getByRole("dialog", { name: "Replace default model configuration for Codex" });
   await expect(replace.getByRole("combobox", { name: "Protocol", exact: true })).toHaveText("OpenAI Responses");
   await expect(replace.getByLabel("Default model ID")).toHaveValue("fixture-model");
-  await expect(replace.getByLabel("Harness configuration (JSON)")).toHaveValue(/model_reasoning_effort/);
   await expect(replace.getByLabel("API key")).toHaveValue("");
   await replace.getByLabel("Base URL").fill("https://model.example/v2");
   await replace.getByLabel("API key").fill(KEY);
-  await expect(replace.getByLabel("Harness configuration (JSON)")).toHaveValue("{}");
   // Enter saves.
   await replace.getByLabel("API key").press("Enter");
   await expect(replace).toBeHidden();
@@ -106,7 +82,40 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   await expect(confirm).toBeHidden();
   await expect(codex).toContainText("Model provider not set");
 
-  // MiniMax Code needs both limits; the form shows Core's reason. A disabled harness may still be configured.
+  // Claude Code accepts the native `thinking` configuration: invalid JSON blocks saving, and the values follow the model and URL they were set for.
+  await section.getByRole("article", { name: "Claude Code" }).getByRole("button", { name: "Set the default model configuration for Claude Code" }).click();
+  const claude = page.getByRole("dialog", { name: "Set default model configuration for Claude Code" });
+  await claude.getByRole("combobox", { name: "Protocol", exact: true }).click();
+  await page.getByRole("option", { name: "Anthropic Messages", exact: true }).click();
+  await claude.getByLabel("Base URL").fill("https://model.example/anthropic");
+  await claude.getByLabel("API key").fill(KEY);
+  await claude.getByLabel("Default model ID").fill("fixture-model");
+  await expect(claude.getByLabel("Harness configuration (JSON)")).toBeHidden();
+  await claude.getByText("Advanced settings", { exact: true }).click();
+  const config = claude.getByLabel("Harness configuration (JSON)");
+  await config.fill("[]");
+  await config.blur();
+  await expect(claude.getByText("Enter a valid JSON object, such as {}.")).toBeVisible();
+  await expect(claude.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await config.fill('{"thinking":{"type":"adaptive"}}');
+  await claude.getByRole("button", { name: "Format JSON" }).click();
+  await expect(config).toHaveValue('{\n  "thinking": {\n    "type": "adaptive"\n  }\n}');
+  await claude.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(claude).toBeHidden();
+  await section.getByRole("article", { name: "Claude Code" }).getByRole("button", { name: "Replace the default model configuration for Claude Code" }).click();
+  const claudeReplace = page.getByRole("dialog", { name: "Replace default model configuration for Claude Code" });
+  const saved = claudeReplace.getByLabel("Harness configuration (JSON)");
+  await expect(saved).toHaveValue(/adaptive/);
+  await claudeReplace.getByLabel("API key").fill(KEY);
+  await claudeReplace.getByLabel("Default model ID").fill("different-model");
+  await expect(saved).toHaveValue("{}");
+  await saved.fill('{"thinking":{"type":"disabled"}}');
+  await claudeReplace.getByLabel("Base URL").fill("https://another-model.example/anthropic");
+  await expect(saved).toHaveValue("{}");
+  await claudeReplace.getByRole("button", { name: "Cancel" }).click();
+  expect(await page.content()).not.toContain(KEY);
+
+  // A disabled harness may still be configured; token limits are optional.
   await mcode.getByRole("button", { name: "Set the default model configuration for MiniMax Code" }).click();
   const limits = page.getByRole("dialog", { name: "Set default model configuration for MiniMax Code" });
   await expect(limits.getByRole("combobox", { name: "Protocol", exact: true })).toHaveText("Anthropic Messages");
@@ -116,7 +125,16 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   await limits.getByLabel("Base URL").fill("https://model.example/anthropic");
   await limits.getByLabel("API key").fill(KEY);
   await limits.getByLabel("Default model ID").fill("fixture-model");
-  await expect(limits.getByRole("button", { name: "Save" })).toBeDisabled();
+  // Max output alone is valid and must fit a set context window.
+  await limits.getByText("Advanced settings", { exact: true }).click();
+  await limits.getByLabel("Max output tokens").fill("32000");
+  await expect(limits.getByLabel("Context window", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
+  await limits.getByLabel("Context window", { exact: true }).fill("1000");
+  await expect(limits.getByText("Set a context window at least this large.")).toBeVisible();
+  await expect(limits.getByLabel("Context window", { exact: true })).toHaveAccessibleDescription(/Set a context window at least this large/);
+  await expect(limits.getByLabel("Max output tokens", { exact: true })).not.toHaveAttribute("aria-invalid", "true");
+  await limits.getByLabel("Context window", { exact: true }).fill("");
+  await expect(limits.getByRole("button", { name: "Save" })).toBeEnabled();
   await limits.getByRole("button", { name: "Cancel" }).click();
   await expect(mcode).toContainText("Not set");
 
@@ -124,6 +142,7 @@ test("sets, replaces and clears a harness's default model configuration, and kee
     "PUT /core/v1/harnesses/codex/model-configuration",
     "PUT /core/v1/harnesses/codex/model-configuration",
     "DELETE /core/v1/harnesses/codex/model-configuration",
+    "PUT /core/v1/harnesses/claude_sdk/model-configuration",
   ]);
   const browserState = await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, url: location.href, cookie: document.cookie }));
   expect(browserState).not.toContain(KEY);
@@ -154,7 +173,6 @@ test("requires an explicit supported protocol choice for an older default config
     const data = await response.json();
     const codex = data.data.find((harness: { id: string }) => harness.id === "codex");
     codex.model_configuration.model_provider.protocol = "chat_completions";
-    codex.model_configuration.harness_config = { model_reasoning_effort: "high" };
     await route.fulfill({ response, json: data });
   });
   await openConsole(page, request, "settings?id=models");
@@ -173,7 +191,7 @@ test("requires an explicit supported protocol choice for an older default config
   await expect(page.getByRole("option")).toHaveText(["OpenAI Responses"]);
   await page.getByRole("option", { name: "OpenAI Responses", exact: true }).click();
   await expect(dialog.getByRole("alert")).toHaveCount(0);
-  await expect(dialog.getByLabel("Harness configuration (JSON)")).toHaveValue("{}");
+  await expect(dialog.getByLabel("Harness configuration (JSON)")).toHaveCount(0);
   await expect(dialog.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   expect(await writes(request)).toEqual([]);
 });

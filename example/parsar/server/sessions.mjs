@@ -28,25 +28,17 @@ export function prepareSession(store, id, body, origin = {}) {
   const environment = runtimeEnvironment(runtime);
   for (const [name, field] of botEnv)
     environment.env[name] = field === "brand" ? bot.brand || "feishu" : bot[field];
-  if (agent.harness === "mcode" && agent.mcp_ids.length)
+  const provider = store.get("providers", model.provider_id);
+  if (!provider?.base_url?.startsWith("https://") || !provider.api_key)
     throw new AppError(
       400,
-      "MiniMax Code 暂不支持此处的 HTTP MCP，请选择 Claude Code 或 Codex。",
+      "请先在模型页面配置所选 Provider 的 HTTPS Base URL 和 API Key。",
     );
-  let modelProvider;
-  if (agent.harness !== "mcode") {
-    const provider = store.get("providers", model.provider_id);
-    if (!provider?.base_url?.startsWith("https://") || !provider.api_key)
-      throw new AppError(
-        400,
-        "请先在模型页面配置所选 Provider 的 HTTPS Base URL 和 API Key。",
-      );
-    modelProvider = {
-      protocol: agent.harness === "codex" ? "responses" : "anthropic",
-      base_url: provider.base_url,
-      api_key: provider.api_key,
-    };
-  }
+  const modelProvider = {
+    protocol: agent.harness === "codex" ? "responses" : "anthropic",
+    base_url: provider.base_url,
+    api_key: provider.api_key,
+  };
   const tools = [{ type: "web_search", mode: "disabled" }];
   if (agent.ask_user)
     tools.push({
@@ -244,9 +236,7 @@ export function prepareSession(store, id, body, origin = {}) {
               : input,
           }
         : {}),
-      ...(modelProvider
-        ? { x_agents_core: { model_provider: modelProvider } }
-        : {}),
+      x_agents_core: { model_provider: modelProvider },
       metadata: {
         application: "parsar-example",
         agent_id: agent.id,

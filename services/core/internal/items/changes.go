@@ -33,9 +33,9 @@ type Change struct {
 }
 
 // NeedsNativeMessage reports whether Observe reads Stored.NativeMessage for u:
-// a legacy aggregate applies only when the Turn recorded no native message.
+// an aggregate answer applies only when the Turn recorded no native message.
 func (u Update) NeedsNativeMessage() bool {
-	return u.LegacyFinal
+	return u.AggregateFinal
 }
 
 // ResultCall returns the call whose saved result Observe reads for u, a
@@ -48,7 +48,7 @@ func (u Update) ResultCall() (string, bool) {
 // its stored Item. It reports false when the Update is superseded and writes
 // nothing.
 func Observe(kind string, update Update, stored Stored) (Change, bool, error) {
-	if update.LegacyFinal && stored.NativeMessage {
+	if update.AggregateFinal && stored.NativeMessage {
 		return Change{}, false, nil
 	}
 	item, err := Merge(update, stored.Item)

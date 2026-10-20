@@ -103,9 +103,6 @@ func (t *receiptCancelTurn) AwaitSettlement(ctx context.Context) (agent.TurnSett
 func (t *receiptCancelTurn) CancellationOutcome() proto.DonePayload {
 	return proto.DonePayload{Content: "observed", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
 }
-func (t *receiptCancelTurn) Steer(ctx context.Context, input proto.PromptSteerPayload) error {
-	return t.SteerWithReceipt(ctx, input, nil)
-}
 func (t *receiptCancelTurn) SteerWithReceipt(ctx context.Context, _ proto.PromptSteerPayload, written func()) error {
 	written()
 	close(t.written)
@@ -156,7 +153,7 @@ func TestExecutorCancellationReachesNativeBeforeDurableReceiptJoin(t *testing.T)
 			p := executorAdmission(t, r, sender.recSender, "first", executorRequest())
 			startExecutorTurn(t, r, sender.recSender, "first", "run", p)
 			turn := <-owner.turn
-			input := proto.PromptSteerPayload{InputID: "pending", Input: proto.TextInput("second input"), DurableReceipt: true}
+			input := proto.PromptSteerPayload{InputID: "pending", Input: proto.TextInput("second input")}
 			if err := r.Handle(t.Context(), mustEnv(t, proto.TypePromptSteer, "run", input)); err != nil {
 				t.Fatal(err)
 			}

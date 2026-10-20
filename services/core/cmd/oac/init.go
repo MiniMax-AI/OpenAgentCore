@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -30,6 +31,12 @@ var chown = os.Chown
 
 type releaseIdentity struct {
 	revision string
+}
+
+// releaseManifest holds the node manifest fields initialization reads.
+type releaseManifest struct {
+	SourceCommit string `json:"source_commit"`
+	Platform     string `json:"platform"`
 }
 
 func initCommand() error {
@@ -83,10 +90,7 @@ func readRelease(root string, release releaseIdentity) (map[string][]byte, error
 			return nil, errors.New("release metadata checksum mismatch")
 		}
 	}
-	var manifest struct {
-		SourceCommit string `json:"source_commit"`
-		Platform     string `json:"platform"`
-	}
+	var manifest releaseManifest
 	if err := json.Unmarshal(files["manifest.json"], &manifest); err != nil {
 		return nil, err
 	}
@@ -175,15 +179,27 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 
 		nextStep("verify_existing_installation")
 		marker := filepath.Join(root, "installation.json")
-		if raw, err := os.ReadFile(marker); err == nil {
-			var receipt installReceipt
-			if err := json.Unmarshal(raw, &receipt); err != nil {
+		var previous installReceipt
+		raw, err := os.ReadFile(marker)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			nextStep("verify_empty_data")
+			for _, name := range []string{"database", "state"} {
+				entries, err := os.ReadDir(filepath.Join(root, name))
+				if err != nil {
+					return err
+				}
+				if len(entries) > 0 {
+					return errors.New("existing data requires its original installation files")
+				}
+			}
+		case err != nil:
+			return err
+		default:
+			if err := json.Unmarshal(raw, &previous); err != nil {
 				return err
 			}
-			if receipt.SourceCommit != release.revision {
-				return errors.New("this data directory belongs to another release; create a new installation")
-			}
-			for name, checksum := range receipt.Files {
+			for name, checksum := range previous.Files {
 				actual, err := fileDigest(filepath.Join(root, name))
 				if err != nil {
 					return err
@@ -192,23 +208,14 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 					return errors.New("installation files changed; restore the matching data directory")
 				}
 			}
-			if err := syncCoreKeyDigest(root); err != nil {
-				return err
+			if previous.SourceCommit == release.revision {
+				if err := syncCoreKeyDigest(root); err != nil {
+					return err
+				}
+				logger.InfoContext(ctx, "Existing installation verified", "file_count", len(previous.Files))
+				return nil
 			}
-			logger.InfoContext(ctx, "Existing installation verified", "file_count", len(receipt.Files))
-			return nil
-		} else if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		nextStep("verify_empty_data")
-		for _, name := range []string{"database", "state"} {
-			entries, err := os.ReadDir(filepath.Join(root, name))
-			if err != nil {
-				return err
-			}
-			if len(entries) > 0 {
-				return errors.New("existing data requires its original installation files")
-			}
+			return fmt.Errorf("existing data belongs to release %.12s; to use release %.12s, uninstall the installation, which deletes its data, then install again", previous.SourceCommit, release.revision)
 		}
 		nextStep("verify_bundled_metadata")
 		files, err := fetch()
@@ -217,18 +224,14 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 		}
 		logger.InfoContext(ctx, "Bundled node installation metadata verified", "file_count", len(files))
 		nextStep("publish_node_metadata")
-		prefix := "node-payload/releases/" + release.revision + "/"
 		names := []string{}
+		prefix := "node-payload/"
 		for _, name := range releaseMembers {
 			if err := writeOwned(filepath.Join(root, prefix+name), files[name]); err != nil {
 				return err
 			}
 			logger.InfoContext(ctx, "Node metadata file copied", "file", name)
 			names = append(names, prefix+name)
-		}
-		active, _ := json.Marshal(map[string]string{"source_commit": release.revision})
-		if err := writeOwned(filepath.Join(root, "node-payload", "active.json"), active); err != nil {
-			return err
 		}
 		if err := filepath.WalkDir(filepath.Join(root, "node-payload"), func(path string, entry fs.DirEntry, err error) error {
 			if err != nil || !entry.IsDir() {
@@ -277,7 +280,6 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			return err
 		}
 
-		names = append(names, "node-payload/active.json")
 		nextStep("write_installation_receipt")
 		receipt := installReceipt{SourceCommit: release.revision, Files: map[string]string{}}
 		for _, name := range names {
@@ -287,7 +289,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			}
 			receipt.Files[name] = checksum
 		}
-		raw, _ := json.Marshal(receipt)
+		raw, _ = json.Marshal(receipt)
 		if err := writeOwned(marker, raw); err != nil {
 			return err
 		}

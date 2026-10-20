@@ -5,7 +5,7 @@ import (
 )
 
 func Policy() sandbox.DeploymentPolicy {
-	return sandbox.DeploymentPolicy{Runtime: true, DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
+	return sandbox.DeploymentPolicy{DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 }
 
 func ValidateResources(r sandbox.Resources) error { return r.ValidatePolicy("docker", Policy()) }

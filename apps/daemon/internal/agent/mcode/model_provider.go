@@ -7,8 +7,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-func modelProviderConfig(raw any, model string) (map[string]any, error) {
-	provider, err := harnessconfiguration.Configuration().ParseProvider(raw)
+func modelProviderConfig(raw any, model, effort string) (map[string]any, error) {
+	provider, err := harnessconfiguration.Declaration.Configuration.ParseProvider(raw)
 	if err != nil {
 		return nil, fmt.Errorf("mcode: %w", err)
 	}
@@ -21,12 +21,25 @@ func modelProviderConfig(raw any, model string) (map[string]any, error) {
 	case modelprovider.Responses:
 		api = "openai-responses"
 	}
+	native := map[string]any{"name": model}
+	// Absent limits are omitted so the native defaults apply.
+	limit := map[string]any{}
+	if provider.ContextWindow > 0 {
+		limit["context"] = provider.ContextWindow
+	}
+	if provider.MaxOutputTokens > 0 {
+		limit["output"] = provider.MaxOutputTokens
+	}
+	if len(limit) > 0 {
+		native["limit"] = limit
+	}
+	if effort != "" {
+		// The Session selects this effort through ACP thinkingEffort.
+		native["thinking"] = map[string]any{"effortOptions": []string{effort}}
+	}
 	return map[string]any{
 		"name": "Configured provider", "kind": "custom", "enabled": true, "api": api,
 		"options": map[string]any{"baseURL": provider.BaseURL, "apiKey": provider.APIKey},
-		"models": map[string]any{model: map[string]any{
-			"name": model, "tool_call": true,
-			"limit": map[string]any{"context": provider.ContextWindow, "output": provider.MaxOutputTokens},
-		}},
+		"models":  map[string]any{model: native},
 	}, nil
 }

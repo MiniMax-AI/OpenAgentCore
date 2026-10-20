@@ -39,7 +39,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	var credential string
-	hub := NewHub(HubOptions{Authenticate: func(ctx context.Context, node, token string) (Identity, error) {
+	hub := newTestHub(HubOptions{Authenticate: func(ctx context.Context, node, token string) (Identity, error) {
 		if node != id.NodeID || token != credential {
 			return Identity{}, ErrAuthentication
 		}
@@ -58,10 +58,10 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() {
-			done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential, Provider: provider, Probe: func(ctx context.Context) (Health, error) {
+			done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential}, provider, func(ctx context.Context) (*sandbox.CheckpointCompatibility, error) {
 				_, err := dockerClient.Ping(ctx, client.PingOptions{})
-				return Health{}, err
-			}})
+				return nil, err
+			})
 		}()
 		return cancel, done
 	}
@@ -87,7 +87,7 @@ func TestDockerNodeTransportLifecycle(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-node-transport-credential", NetworkAccess: "enabled"}
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "http://core.invalid/api/v1", Credential: "synthetic-node-transport-credential"}
 	callCtx, callCancel := context.WithTimeout(ctx, 25*time.Second)
 	info, err := proxy.Create(callCtx, b)
 	callCancel()

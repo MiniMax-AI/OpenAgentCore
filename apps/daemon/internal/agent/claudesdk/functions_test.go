@@ -51,11 +51,6 @@ func TestFunctionFactoryNativeReceipts(t *testing.T) {
 					if err := submitter.SubmitFunctionResult(ctx, invalid); err == nil {
 						t.Fatal("missing content consumed call")
 					}
-					image := "https://example.invalid/image"
-					invalid.Content = []proto.InputContent{{Type: "input_image", ImageURL: &image}}
-					if err := submitter.SubmitFunctionResult(ctx, invalid); err == nil {
-						t.Fatal("image should fail before delivery")
-					}
 					first, second := "first-"+call.CallID, "second-"+call.CallID
 					value := proto.FunctionResultPayload{DeliveryID: "delivery-" + call.CallID, CallID: call.CallID, Success: call.CallID == "b", Content: []proto.InputContent{{Type: "input_text", Text: &first}, {Type: "input_text", Text: &second}}}
 					go func() { submissions <- submitter.SubmitFunctionResult(ctx, value) }()
@@ -126,7 +121,7 @@ func runFunctionHelper(request startRequest, mode string, scanner *bufio.Scanner
 		results[value.CallID] = value
 	}
 	if mode == "functions-cancel" {
-		emit(bridgeEvent{Type: "delta", Delta: "waiting for confirmation"})
+		emit(bridgeEvent{Type: "delta", ItemID: "item", Delta: "waiting for confirmation"})
 		if scanner.Scan() {
 			emit(bridgeEvent{Type: "error", Code: "cancelled"})
 		}
@@ -143,4 +138,27 @@ func runFunctionHelper(request startRequest, mode string, scanner *bufio.Scanner
 		emit(bridgeEvent{Type: "function_applied", CallID: id, DeliveryID: delivery})
 	}
 	emit(bridgeEvent{Type: "result", SessionID: request.Resume, Text: "done"})
+}
+
+func TestSubagentFunctionCallWithdrawal(t *testing.T) {
+	s := &session{functions: functionState{calls: map[string]*pendingFunction{}}}
+	start := startRequest{Functions: []proto.FunctionTool{{Name: "lookup"}}, Subagents: &subagentOptions{}}
+	var emitted []string
+	emit := func(kind string, _ any) { emitted = append(emitted, kind) }
+	call := &proto.FunctionCallPayload{CallID: "a", Name: "lookup", Arguments: json.RawMessage(`{}`), NativeID: "child", TurnID: "child-turn"}
+	if err := s.receiveFunction(bridgeEvent{Type: "function_call", Call: call}, start, emit); err != nil {
+		t.Fatal(err)
+	}
+	receipt := s.functions.calls["a"].receipt
+	withdrawn := &proto.FunctionCallWithdrawnPayload{CallID: "a", NativeID: "child", TurnID: "child-turn"}
+	if err := s.receiveFunction(bridgeEvent{Type: "function_withdrawn", Withdrawn: withdrawn}, start, emit); err != nil {
+		t.Fatal(err)
+	}
+	// A child's call has no root tool observation, and a result in flight learns that it was never applied.
+	if strings.Join(emitted, ",") != proto.TypeFunctionCall+","+proto.TypeFunctionCallWithdrawn || <-receipt != agent.ErrUnknownFunctionCall {
+		t.Fatal(emitted)
+	}
+	if s.receiveFunction(bridgeEvent{Type: "function_withdrawn", Withdrawn: withdrawn}, start, emit) == nil {
+		t.Fatal("repeated withdrawal accepted")
+	}
 }

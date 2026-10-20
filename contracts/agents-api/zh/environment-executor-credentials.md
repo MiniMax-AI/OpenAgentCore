@@ -1,14 +1,14 @@
 ---
-title: "Environment 执行器凭据"
+title: "执行器凭据"
 source: contracts/agents-api/environment-executor-credentials.md
-source_hash: c929752dc1113b777308855ab416bc12aef07ae2d26df71c2e691cbef2832b8b
+source_hash: b97d92cb23ad4c7abd5ab71aa768b3b733ab8912c35f7cfbfb73e0c1b7dc028c
 ---
 
 执行器凭据允许 `oac-daemon` 为一个 `self_hosted` Environment 注册并连接。它只授权该 Environment 的私有 daemon 传输（`/api/v1/agent-daemon/*`），不授权 `/v1`、`/core/v1`、sandbox node 注册或项目资源。项目的 principal 是其执行 principal。Core 只保存密钥摘要。
 
 凭据有两个来源：
 
-- **安装授权。** `self_hosted` Session 返回安装命令。安装器使用命令中的短期 grant 领取一个凭据，不需要 Web 或 Core 密钥。[自托管指南](../../../docs/zh/getting-started/self-hosted.md)介绍操作步骤。
+- **安装授权。** `self_hosted` Session 返回安装命令。安装程序使用命令中的短期 grant 领取一个凭据，不需要 Web 或 Core 密钥。[自托管指南](../../../docs/zh/getting-started/self-hosted.md)介绍操作步骤。
 - **Core-key 路由。** 管理员通过 Web 或 `/core/v1` 签发、轮换和撤销凭据。
 
 Core 不创建、停止或回收机器。断开连接、撤销凭据或删除 Session 都不能证明所有原生进程已停止；机器所有者负责停止并清理自己的计算资源。
@@ -19,25 +19,25 @@ Core 不创建、停止或回收机器。断开连接、撤销凭据或删除 Se
 
 | 字段 | 含义 |
 | --- | --- |
-| `status` | `available`；当 Core 没有匹配的原生安装器时为 `unavailable`，此时 `message` 说明原因 |
+| `status` | `available`；当 Core 没有匹配的原生安装程序时为 `unavailable`，此时 `message` 说明原因 |
 | `version` | 命令安装的 Core 构建版本 |
 | `expires_at` | grant 到期的 Unix 时间，为响应生成后 30 分钟 |
 | `commands.posix`, `commands.powershell` | Linux/macOS 和 Windows PowerShell 的安装命令 |
 
-grant 绑定 Environment、Session 创建者的 principal 和 Core 构建版本。在到期、Session 被删除、项目被归档或 Core 运行另一构建版本时失效。重新读取 Session 会获得新 grant。Core 不存储 grant：每个响应重新签名，存储的事件从不包含它。将命令视为临时秘密：它能领取凭据，但不能执行工作或读取文件。
+grant 绑定 Environment、Session 创建者的 principal 和 Core 构建版本。在到期、Session 被删除、项目被归档或 Core 运行另一构建版本时失效。重新读取 Session 会获得新 grant。Core 不存储 grant：每个响应重新签名，存储的事件从不包含它。命令通过环境变量 `OAC_INSTALL_GRANT` 传递 grant，从不放在进程参数中。引导脚本只把它交给安装程序，安装程序在启动守护进程或任何 Harness 之前先从自身环境中移除该变量。将命令视为临时秘密：它能领取凭据，但不能执行工作或读取文件。
 
-安装器生成密钥，在领取前将其私密保存到安装目录的 `daemon/executor-credential.json`。Core 将摘要保存在 key ID 等于 Environment ID 的记录中。响应丢失后可以安全重试，但必须提交同一个密钥。grant 不替换或恢复凭据。如果 Environment 已有不同、已轮换或已撤销的凭据，领取返回 409 `executor_credential_exists`。
+安装程序生成密钥，在领取前将其私密保存到安装目录的 `daemon/executor-credential.json`。Core 将摘要保存在 key ID 等于 Environment ID 的记录中。响应丢失后可以安全重试，但必须提交同一个密钥。grant 不替换或恢复凭据。如果 Environment 已有不同、已轮换或已撤销的凭据，领取返回 409 `executor_credential_exists`。
 
-安装器调用 Core 的以下机器路由：
+安装程序调用 Core 的以下机器路由：
 
 | 路由 | 授权 | 用途 |
 | --- | --- | --- |
 | `GET /api/v1/agent-daemon/install/{version}/bootstrap.sh`, `bootstrap.ps1` | 无 | 平台 bootstrap 脚本 |
-| `GET /api/v1/agent-daemon/install/{version}/{os}-{arch}.sha256`, `{os}-{arch}.tar.gz` | 无 | 安装器校验和与归档；Core 提供本地副本，或以 307 重定向到目录中的版本化发布 URL |
+| `GET /api/v1/agent-daemon/install/{version}/{os}-{arch}.sha256`, `{os}-{arch}.tar.gz` | 无 | 安装程序校验和与归档；Core 提供本地副本，或以 307 重定向到目录中的版本化发布 URL |
 | `POST /api/v1/agent-daemon/installation` | Grant | 固定绑定：`version`、`protocol_version`、`environment_id`、`remote_url`、`workspace_directory`、`harness` |
 | `POST /api/v1/agent-daemon/installation/claim` | Grant | `{"executor_token":"SECRET"}`；204 |
 
-无效或过期的 grant 返回 401 `installation_authorization_invalid`。没有匹配安装器时，grant 路由返回 503 `installation_unavailable`。Core 用安装的 [`secrets/core/credential.key`](../../../docs/zh/configuration.md#compose-installations) 签名每个 grant。格式错误的密钥返回 400。产物路由不携带凭据，grant 只发送给 Core，不发送给产物主机。
+无效或过期的 grant 返回 401 `installation_authorization_invalid`。没有匹配安装程序时，grant 路由返回 503 `installation_unavailable`。Core 用安装的 [`secrets/core/credential.key`](../../../docs/zh/configuration.md#compose-installations) 签名每个 grant。格式错误的密钥返回 400。产物路由不携带凭据，grant 只发送给 Core，不发送给产物主机。
 
 ## Core-key 路由 {#core-key-routes}
 
@@ -87,11 +87,11 @@ Connected 表示 Environment 已连接，其设备和执行器凭据仍有当前
 
 无效、已撤销、其他范围或已删除 Session 的权限返回 401；已绑定 Environment 使用不同凭据返回 409。响应不暴露实际绑定或数据库诊断。
 
-安装器从返回的 `remote_url` 推导此路由，不跟随重定向。启动 daemon 后，每秒轮询一次，最多 45 秒。401 或 409 立即失败。超时后打印 daemon 的 `connect.log` 路径，请求重新执行同一命令；daemon 继续重连，安装、凭据和历史保留。连接确认只证明认证成功，不证明模型访问、Harness 能力或执行完成。
+安装程序从返回的 `remote_url` 推导此路由，不跟随重定向。启动 daemon 后，每秒轮询一次，最多 45 秒。401 或 409 立即失败。超时后打印 daemon 的 `connect.log` 路径，请求重新执行同一命令；daemon 继续重连，安装、凭据和历史保留。连接确认只证明认证成功，不证明模型访问、Harness 能力或执行完成。
 
 ## 已撤销或轮换的凭据 {#revoked-or-rotated-credential}
 
-Core 永久拒绝 daemon 时（注册 401/409、永久 WebSocket 拒绝，或 daemon 版本来自其他 Core 分发），daemon 只打印一次原因，停止发请求直到被停止；随后成功退出，避免按退出重启的 supervisor 循环。再次启动时只尝试一次注册，然后再次停驻。临时故障保持正常重连行为，不重放执行。
+Core 永久拒绝 daemon 时（注册 401/409、永久 WebSocket 拒绝，或 daemon 版本来自其他 Core 分发），由 `oac-daemon start` 启动的 daemon 只打印一次原因并以错误退出，再次启动时只尝试一次注册，然后再次退出。Docker Runtime（`oac-daemon connect`）只打印一次原因，停止发请求直到被停止，随后成功退出，避免按退出重启的 supervisor 循环；再次启动时只尝试一次注册，然后再次停驻。临时故障保持正常重连行为，不重放执行。
 
 机器只能使用绑定的 `key_id` 重连，轮换新密钥后替换配置路径的凭据文件；[自托管指南](../../../docs/zh/getting-started/self-hosted.md#rotate-or-revoke)提供步骤。新 `key_id` 无法重新连接已绑定的 Environment：签发成功，但用它注册返回 409。轮换不重装 Harness、不改变工作区、不替换原生历史；不要为恢复凭据创建新 Session 历史。
 

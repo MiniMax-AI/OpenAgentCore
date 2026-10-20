@@ -96,7 +96,7 @@ func TestLiveMCPBearerGatewayColdContinuation(t *testing.T) {
 		turn := &mcpBearerTurn{}
 		turns = append(turns, turn)
 		runID, prepareID := uuid.NewString(), uuid.NewString()
-		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "agents-api-mcp-bearer-acceptance", AgentSessionID: resume, ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium"}}
+		request := proto.PromptRequestPayload{AgentKind: "codex", AgentStateKey: "mcp-bearer-acceptance", AgentSessionID: resume, DisableExecutionEnvironment: true, DisableSubagents: true, MCPHTTPServers: &servers, AgentOptions: map[string]any{"model": "MiniMax-M3"}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"}}
 		send := func(kind, id string, payload any) {
 			t.Helper()
 			envelope, err := proto.NewEnvelope(kind, id, payload)

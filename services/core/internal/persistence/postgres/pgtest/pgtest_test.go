@@ -4,9 +4,9 @@ import "testing"
 
 func TestDatabaseGuardUsesEffectiveDatabase(t *testing.T) {
 	for _, dsn := range []string{
-		"postgres://localhost/oac_local_tests?dbname=agents_api",
-		"host=localhost dbname=agents_api",
-		"postgres://localhost/agents_api",
+		"postgres://localhost/oac_local_tests?dbname=oac",
+		"host=localhost dbname=oac",
+		"postgres://localhost/oac",
 	} {
 		if _, err := databaseConfig(dsn); err == nil {
 			t.Fatalf("unsafe database accepted: %s", dsn)

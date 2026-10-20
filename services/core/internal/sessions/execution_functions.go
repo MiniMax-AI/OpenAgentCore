@@ -3,6 +3,8 @@ package sessions
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
 // FunctionCallMatch is what a Turn's stored call shows about a reported call.
@@ -20,6 +22,7 @@ type FunctionCallMatch struct {
 type FunctionTx interface {
 	JournalTx
 	PendingFunctionCallsTx
+	NativeSubagents
 	// MatchFunctionCall compares call with the Turn's call of the same public
 	// identity.
 	MatchFunctionCall(ctx context.Context, turn string, call FunctionCall) (FunctionCallMatch, error)
@@ -31,6 +34,8 @@ type FunctionTx interface {
 	// ApplyFunctionResult records the application receipt of the call's
 	// result.
 	ApplyFunctionResult(ctx context.Context, turn, call string) error
+	// WithdrawFunctionCall records that the native Harness abandoned the call.
+	WithdrawFunctionCall(ctx context.Context, turn, call string) error
 	// ApplyTurnStatus moves the Turn as change decides and returns it as
 	// stored. A Turn no longer in the expected status is ErrTurnConflict.
 	ApplyTurnStatus(ctx context.Context, turn string, change TurnStatusChange) (Turn, error)
@@ -64,25 +69,62 @@ func decideFunctionCall(turn Turn, match FunctionCallMatch) (bool, error) {
 
 // decideFunctionConfirmation decides whether to record the native application
 // of a call's result: an applied call records nothing, and a call without a
-// result or on a Turn that no longer accepts results conflicts.
+// result, a withdrawn call or a call on a Turn that no longer accepts results
+// conflicts.
 func decideFunctionConfirmation(turn Turn, call FunctionCall) (bool, error) {
 	if call.Applied {
 		return false, nil
 	}
-	if len(call.Result) == 0 || !acceptsFunctionResults(turn) {
+	if len(call.Result) == 0 || call.Withdrawn || !acceptsFunctionResults(turn) {
 		return false, ErrTurnConflict
 	}
 	return true, nil
 }
 
+// decideFunctionWithdrawal decides whether to record that the native Harness
+// abandoned a call: a withdrawn call records nothing, and an applied call or a
+// Turn that no longer accepts results conflicts.
+func decideFunctionWithdrawal(turn Turn, call FunctionCall) (bool, error) {
+	if call.Withdrawn {
+		return false, nil
+	}
+	if call.Applied || !acceptsFunctionResults(turn) {
+		return false, ErrTurnConflict
+	}
+	return true, nil
+}
+
+// resolveFunctionCall gives a call a Subagent made the identity of the child's
+// function Item. A child the Session has not published, or a malformed native
+// identity, is ErrInvalidInput.
+func resolveFunctionCall(ctx context.Context, tx NativeSubagents, call FunctionCall) (FunctionCall, error) {
+	if call.Subagent == "" && call.SubagentTurn == "" {
+		return call, nil
+	}
+	if !validNativeIdentity(call.Subagent) || !validNativeIdentity(call.SubagentTurn) {
+		return call, ErrInvalidInput
+	}
+	child, err := visibleSubagent(ctx, tx, call.Subagent)
+	if err != nil {
+		return call, err
+	}
+	call.CallID = items.Identity(items.Identity(child.ID, "turn:"+call.SubagentTurn), "tool:"+call.ExecutorCallID)
+	return call, nil
+}
+
 // RecordFunctionCall records a call an executor reported for its Turn and
-// journals the Turn's required actions with it. A retry of the recorded call
+// journals the Turn's required actions with it. A call a Subagent made takes
+// the identity of the child's function Item. A retry of the recorded call
 // changes nothing.
 func (o *ExecutionOperations) RecordFunctionCall(ctx context.Context, tenant, session, turn string, call FunctionCall) error {
 	if err := validateFunctionCall(call); err != nil {
 		return err
 	}
 	return o.storage.WithFunctionTurn(ctx, tenant, session, turn, func(ctx context.Context, tx FunctionTx, current Turn) error {
+		call, err := resolveFunctionCall(ctx, tx, call)
+		if err != nil {
+			return err
+		}
 		match, err := tx.MatchFunctionCall(ctx, current.ID, call)
 		if err != nil {
 			return err
@@ -133,6 +175,36 @@ func (o *ExecutionOperations) ConfirmFunctionResult(ctx context.Context, tenant,
 			return err
 		}
 		if err := tx.ApplyFunctionResult(ctx, current.ID, call); err != nil {
+			return err
+		}
+		return settleFunctionState(ctx, tx, current)
+	})
+}
+
+// WithdrawFunctionCall records that the native Harness will never apply a
+// result for the call, which stops being a required action, and journals the
+// Turn's remaining required actions. A repeated withdrawal changes nothing.
+func (o *ExecutionOperations) WithdrawFunctionCall(ctx context.Context, tenant, session, turn string, call FunctionCall) error {
+	if !validFunctionIdentity(call.CallID) || !validFunctionIdentity(call.ExecutorCallID) {
+		return ErrInvalidInput
+	}
+	return o.storage.WithFunctionTurn(ctx, tenant, session, turn, func(ctx context.Context, tx FunctionTx, current Turn) error {
+		call, err := resolveFunctionCall(ctx, tx, call)
+		if err != nil {
+			return err
+		}
+		stored, found, err := tx.LoadFunctionCall(ctx, current.ID, call.CallID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return ErrNotFound
+		}
+		withdraw, err := decideFunctionWithdrawal(current, stored)
+		if err != nil || !withdraw {
+			return err
+		}
+		if err := tx.WithdrawFunctionCall(ctx, current.ID, call.CallID); err != nil {
 			return err
 		}
 		return settleFunctionState(ctx, tx, current)

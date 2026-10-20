@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { nodeInstallCommand, nodeLogCommand, nodeUninstallCommand } from "./enrollment-command";
@@ -12,7 +12,7 @@ describe("sandbox connection and enrollment", () => {
     expect(nodeLogCommand("a b")).toBe("sudo journalctl -u 'oac-node-a b.service'");
   });
   // "as root": a root shell runs the sudo command without sudo.
-  it.each(["success", "download failure", "checksum mismatch", "installer failure", "as root", "no color", "uppercase proxy", "lowercase proxy", "empty proxy", "root proxy", "unsupported platform", "old python", "uninstall", "killed download"])("executes safely, passes the token only on stdin and cleans private downloads after %s", (scenario) => {
+  it.each(["success", "download failure", "checksum mismatch", "installer failure", "as root", "no color", "uppercase proxy", "lowercase proxy", "empty proxy", "root proxy", "unsupported platform", "old python", "linked directory", "uninstall", "killed download"])("executes safely, passes the token only on stdin and cleans private downloads after %s", (scenario) => {
     const parent = join(homedir(), ".oac", "tests");
     mkdirSync(parent, { recursive: true });
     const root = mkdtempSync(join(parent, "node-command-"));
@@ -63,7 +63,15 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
       if (scenario === "lowercase proxy") Object.assign(proxyEnv, { http_proxy: proxy, https_proxy: proxy, no_proxy: "core.example,localhost", HTTP_PROXY: "http://wrong.invalid" });
       if (scenario === "empty proxy") proxyEnv.http_proxy = "";
       const options = { env: { ...process.env, ...proxyEnv, HOME: root, NO_COLOR: scenario === "no color" ? "" : undefined, PATH: `${bin}:${process.env.PATH}`, TMPDIR: temporary, SCENARIO: scenario, FIXTURE: fixture, REPORT: report, SUDO_REPORT: sudoReport, PRINTF_REPORT: printfReport }, encoding: "utf8" as const };
+      if (scenario === "linked directory") { mkdirSync(join(root, ".oac")); symlinkSync(temporary, join(root, ".oac/node-bootstrap")); }
       let result = spawnSync("sh", ["-c", command], options);
+      if (scenario === "linked directory") {
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain(`${join(root, ".oac/node-bootstrap")} is a symbolic link`);
+        expect(result.stdout).not.toContain("Downloading");
+        expect(readdirSync(temporary)).toEqual([]);
+        return;
+      }
       if (scenario === "killed download") {
         expect(result.signal === "SIGKILL" || result.status === 137).toBe(true);
         expect(readdirSync(join(root, ".oac/node-bootstrap"))).toContain("download.partial");

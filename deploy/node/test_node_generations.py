@@ -1,8 +1,7 @@
-"""Collection retains bytes until local helper ownership settles."""
+"""Generation preparation copies the installation's Runtime; collection retains identity until local helper ownership settles."""
 import fcntl
 import os
 import json
-import hashlib
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -14,23 +13,20 @@ import node_install as installer
 import node_spec
 
 
-class CollectionTests(unittest.TestCase):
+class GenerationTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
         self.directory = self.root / "state/node/generations"
         self.directory.mkdir(parents=True, mode=0o700)
-        self.value = {"installation_id": "test-installation", "generation": 1, "provider": "docker", "native": {"image": "sha256:" + "a" * 64},
-                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}, "runtime": {"source_commit": "b" * 40, "image_id": "sha256:" + "a" * 64, "image_manifest_digest": "sha256:" + "c" * 64, "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64, "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}}
+        self.value = {"installation_id": "test-installation", "generation": 1, "provider": "docker", "core_url": "https://core.example/api/v1",
+                      "native": {"image": "sha256:" + "a" * 64, "seccomp_file": str(self.root / "runtime/seccomp.json")},
+                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}}}
         self.args = SimpleNamespace(installation_id="test-installation", generation=1, specification_digest=node_spec.digest("docker", self.value["specification"]))
-        self.release = self.root / "releases" / ("b" * 40)
-        self.value["native"]["seccomp_file"] = str(self.release / "runtime/seccomp.json")
-        self.release.mkdir(parents=True)
-        (self.release / "artifact").write_bytes(b"immutable bytes")
         node_generations.atomic_json(self.root / "provider.json", self.value)
         self.initialize_lease()
-        for patch in (mock.patch.object(node_generations, "owned_root", return_value=(self.root, {})),
+        for patch in (mock.patch.object(node_generations, "owned_root", return_value=(self.root, {"core_url": "https://core.example"})),
                       mock.patch.object(installer, "checked", return_value="")):
             patch.start()
             self.addCleanup(patch.stop)
@@ -40,7 +36,37 @@ class CollectionTests(unittest.TestCase):
                                                node_generations.marker_identity(self.args), initialize=True):
             pass
 
-    def test_busy_helper_refuses_all_mutations_then_same_inode_collects(self):
+    def next_generation(self, resources):
+        specification = {"resources": resources}
+        configuration = {"installation_id": "test-installation", "provider": "docker", "core_url": "https://core.example", "generation": 2, "specification": specification, "specification_digest": node_spec.digest("docker", specification)}
+        self.args.generation, self.args.specification_digest = 2, configuration["specification_digest"]
+        return configuration
+
+    def test_prepare_publishes_the_installation_runtime_under_the_authorized_specification(self):
+        configuration = self.next_generation({"cpus": 2, "memory_mib": 2048})
+        with mock.patch.object(node_spec, "fetch", return_value=configuration), mock.patch.object(node_generations, "image_available", return_value=True):
+            node_generations.prepare(self.args, installer)
+            published = json.loads((self.directory / "2.json").read_text())
+            self.assertEqual(published, dict(self.value, generation=2, specification=configuration["specification"]))
+            node_generations.prepare(self.args, installer)
+        self.assertEqual(json.loads((self.directory / "2.json").read_text()), published)
+        self.assertEqual(json.loads((self.root / "provider.json").read_text()), self.value)
+
+    def test_prepare_refuses_an_unauthorized_dropped_or_unavailable_generation(self):
+        configuration = self.next_generation({"cpus": 2, "memory_mib": 2048})
+        with mock.patch.object(node_spec, "fetch", return_value=dict(configuration, specification_digest="0" * 64)):
+            with self.assertRaisesRegex(installer.InstallError, "differs from its authorization"):
+                node_generations.prepare(self.args, installer)
+        with mock.patch.object(node_spec, "fetch", return_value=configuration), mock.patch.object(node_generations, "image_available", return_value=False):
+            with self.assertRaisesRegex(installer.InstallError, "Runtime is missing"):
+                node_generations.prepare(self.args, installer)
+        self.assertFalse((self.directory / "2.json").exists())
+        node_generations.atomic_json(self.directory / "2.dropped", node_generations.marker_identity(self.args))
+        with mock.patch.object(node_spec, "fetch", return_value=configuration):
+            with self.assertRaisesRegex(installer.InstallError, "dropped generation"):
+                node_generations.prepare(self.args, installer)
+
+    def test_busy_helper_refuses_collection_then_same_inode_collects(self):
         lease = self.directory / "1.lease"
         descriptor = os.open(lease, os.O_CREAT | os.O_RDWR, 0o600)
         self.addCleanup(os.close, descriptor)
@@ -48,31 +74,25 @@ class CollectionTests(unittest.TestCase):
         fcntl.flock(descriptor, fcntl.LOCK_SH)
         with self.assertRaisesRegex(installer.InstallError, "helper is still active"):
             node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertEqual((self.release / "artifact").read_bytes(), b"immutable bytes")
         self.assertFalse((self.directory / "1.dropped").exists())
         fcntl.flock(descriptor, fcntl.LOCK_UN)
         node_generations.collect(self.args, installer)
-        self.assertFalse(self.release.exists())
         self.assertTrue((self.directory / "1.dropped").exists())
+        self.assertEqual(node_generations.retained_configs(self.root, installer), {})
         node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
         final = lease.stat()
         self.assertEqual((original.st_dev, original.st_ino), (final.st_dev, final.st_ino))
 
-    def test_collection_holds_exclusive_lease_during_deletion(self):
-        lease = self.directory / "1.lease"
-        original = node_generations.shutil.rmtree
-        def remove(path):
-            descriptor = os.open(lease, os.O_RDWR)
-            try:
-                with self.assertRaises(BlockingIOError):
-                    fcntl.flock(descriptor, fcntl.LOCK_SH | fcntl.LOCK_NB)
-            finally:
-                os.close(descriptor)
-            return original(path)
-        with mock.patch.object(node_generations.shutil, "rmtree", side_effect=remove):
-            node_generations.collect(self.args, installer)
+    def test_collection_leaves_the_installations_runtime_and_other_generations(self):
+        other = dict(self.value, generation=2)
+        node_generations.atomic_json(self.directory / "2.json", other)
+        seccomp = self.root / "runtime/seccomp.json"
+        seccomp.parent.mkdir()
+        seccomp.write_text("{}")
+        node_generations.collect(self.args, installer)
+        installer.checked.assert_not_called()
+        self.assertTrue(seccomp.exists())
+        self.assertEqual(node_generations.retained_configs(self.root, installer), {2: other})
 
     def test_symlink_and_shared_inode_are_not_collection_authority(self):
         lease = self.directory / "1.lease"
@@ -85,38 +105,11 @@ class CollectionTests(unittest.TestCase):
             try:
                 with self.assertRaises((OSError, installer.InstallError)):
                     node_generations.collect(self.args, installer)
-                installer.checked.assert_not_called()
-                self.assertTrue((self.release / "artifact").exists())
+                self.assertFalse((self.directory / "1.dropped").exists())
             finally:
                 lease.unlink()
 
-    def test_native_inventory_failure_and_unknown_output_retain_every_byte(self):
-        self.micro_fixture()
-        for failure in (installer.InstallError("daemon unavailable"), "not a verified image ID"):
-            installer.checked.side_effect = failure if isinstance(failure, Exception) else None
-            installer.checked.return_value = failure
-            with self.assertRaises(installer.InstallError):
-                node_generations.collect(self.args, installer)
-            self.assertTrue((self.release / "artifact").exists())
-            self.assertFalse((self.directory / "1.dropped").exists())
-            self.assertFalse(json.loads((self.directory / "1.collecting").read_text())["native_complete"])
-
-    def test_restart_after_partial_file_cleanup_skips_native_and_finishes(self):
-        def interrupted(path):
-            (path / "artifact").unlink()
-            raise OSError("interrupted file cleanup")
-        with mock.patch.object(node_generations.shutil, "rmtree", side_effect=interrupted):
-            with self.assertRaises(OSError):
-                node_generations.collect(self.args, installer)
-        self.assertTrue(json.loads((self.directory / "1.collecting").read_text())["native_complete"])
-        self.assertFalse((self.directory / "1.dropped").exists())
-        installer.checked.reset_mock()
-        node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertFalse(self.release.exists())
-        self.assertEqual(node_generations.retained_configs(self.root, installer), {})
-
-    def test_restart_after_files_removed_before_final_marker(self):
+    def test_restart_after_an_interrupted_final_marker_finishes(self):
         original = node_generations.atomic_json
         def interrupt(path, value):
             if path.suffix == ".dropped":
@@ -125,124 +118,22 @@ class CollectionTests(unittest.TestCase):
         with mock.patch.object(node_generations, "atomic_json", side_effect=interrupt):
             with self.assertRaises(OSError):
                 node_generations.collect(self.args, installer)
-        self.assertFalse(self.release.exists())
-        installer.checked.reset_mock()
+        self.assertFalse((self.directory / "1.dropped").exists())
         node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
         self.assertTrue((self.directory / "1.dropped").exists())
 
-    def test_invalid_journal_never_authorizes_deletion_or_hides_configuration(self):
-        for suffix in (".collecting", ".dropped", ".preparing"):
-            path = self.directory / ("1" + suffix)
-            value = node_generations.marker_identity(self.args)
-            if suffix == ".collecting": value["native_complete"] = True
-            if suffix == ".preparing": value["import_started"] = False
-            for field, invalid in (("installation_id", "foreign"), ("generation", 2), ("specification_digest", "a" * 64)):
-                node_generations.atomic_json(path, dict(value, **{field: invalid}))
-                with self.assertRaises(installer.InstallError):
-                    node_generations.collect(self.args, installer)
-                self.assertTrue(self.release.exists())
-                path.unlink()
-        installer.checked.assert_not_called()
-
-    def test_shared_image_and_release_survive_until_last_generation(self):
-        other = dict(self.value, generation=2)
-        node_generations.atomic_json(self.directory / "2.json", other)
-        node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertTrue((self.release / "artifact").exists())
-        self.args.generation = 2
-        self.initialize_lease()
-        node_generations.collect(self.args, installer)
-        self.assertFalse(self.release.exists())
-
-    def test_never_imported_generation_can_collect_missing_executable(self):
-        runtime, _, _ = self.micro_fixture()
-        runtime.unlink()
-        node_generations.atomic_json(self.directory / "1.preparing", dict(node_generations.marker_identity(self.args), import_started=False))
-        node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertFalse(self.release.exists())
-
-    def micro_fixture(self):
-        self.value["provider"] = "microsandbox"
-        home = self.root / "micro-store"
-        home.mkdir(mode=0o700)
-        node_generations.atomic_json(home / "oac-installation.json", {"installation_id": self.args.installation_id})
-        runtime = self.release / "msb"
-        runtime.write_bytes(b"verified native executable")
-        runtime.chmod(0o700)
-        image = self.value["specification"]["runtime"]["microsandbox_ref"]
-        self.value["specification"]["runtime"]["runtime_sha256"] = hashlib.sha256(runtime.read_bytes()).hexdigest()
-        self.value["native"] = {"helper_path": str(self.release / "helper"), "runtime_home": str(home), "checkpoint_root": str(self.root / "checkpoints"), "runtime_path": str(runtime), "firmware_path": str(self.release / "firmware")}
-        self.args.specification_digest = node_spec.digest("microsandbox", self.value["specification"])
-        node_generations.atomic_json(self.root / "provider.json", self.value)
-        # This fixture changes provider before any helper exists.
-        for suffix in (".lease", ".lease-identity"):
-            (self.directory / ("1" + suffix)).unlink()
-        self.initialize_lease()
-        return runtime, image, home
-
-    def test_micro_interrupted_native_removal_and_missing_runtime_fail_closed(self):
-        runtime, image, home = self.micro_fixture()
-        present = [True]
-        def native(command, *_args, **_kwargs):
-            if command[1:3] == ["image", "list"]: return image + "\n" if present[0] else ""
-            if command[1:3] == ["image", "remove"]:
-                present[0] = False
-                raise installer.InstallError("interrupted native removal")
-            if command[1:3] == ["sandbox", "list"]: return "[]"
-            raise AssertionError(command)
-        installer.checked.side_effect = native
-        with self.assertRaises(installer.InstallError): node_generations.collect(self.args, installer)
-        raw = runtime.read_bytes()
-        runtime.unlink()
-        installer.checked.reset_mock()
-        with self.assertRaisesRegex(installer.InstallError, "executable"):
-            node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertTrue(self.release.exists())
-        runtime.write_bytes(raw)
-        runtime.chmod(0o700)
-        node_generations.collect(self.args, installer)
-        self.assertFalse(self.release.exists())
-        self.assertTrue((home / "oac-installation.json").exists())
-
-    def test_docker_collection_preserves_another_installations_idle_serving_image(self):
-        second = self.root.parent / (self.root.name + "-second")
-        second.mkdir(mode=0o700)
-        self.addCleanup(lambda: node_generations.shutil.rmtree(second))
-        # The second installation's enrolled generation still backs an idle
-        # serving pin. No container is needed to protect its daemon-level image.
-        other = dict(self.value, installation_id="second-installation")
-        node_generations.atomic_json(second / "provider.json", other)
-        before = (second / "provider.json").read_bytes()
-        host_images = {self.value["native"]["image"]}
-        def docker(command, *_args, **_kwargs):
-            if "rm" in command or "prune" in command: host_images.clear()
-            raise AssertionError("generation GC must not manage shared Docker images")
-        installer.checked.side_effect = docker
-        node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertEqual(host_images, {other["native"]["image"]})
-        self.assertEqual((second / "provider.json").read_bytes(), before)
-        self.assertFalse(self.release.exists())
-        self.assertEqual(node_generations.retained_configs(self.root, installer), {})
+    def test_invalid_journal_never_authorizes_collection(self):
+        path = self.directory / "1.dropped"
+        for field, invalid in (("installation_id", "foreign"), ("generation", 2), ("specification_digest", "a" * 64)):
+            node_generations.atomic_json(path, dict(node_generations.marker_identity(self.args), **{field: invalid}))
+            with self.assertRaises(installer.InstallError):
+                node_generations.collect(self.args, installer)
+            path.unlink()
 
     def test_fifo_journal_is_refused_without_blocking(self):
-        path = self.directory / "1.collecting"
-        os.mkfifo(path, 0o600)
-        with self.assertRaises(installer.InstallError): node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertTrue(self.release.exists())
-
-    def test_release_path_conflict_is_refused_before_native_mutation(self):
-        foreign = self.root / "foreign"
-        self.release.rename(foreign)
-        self.release.symlink_to(foreign, target_is_directory=True)
-        with self.assertRaises(installer.InstallError): node_generations.collect(self.args, installer)
-        installer.checked.assert_not_called()
-        self.assertTrue((foreign / "artifact").exists())
+        os.mkfifo(self.directory / "1.dropped", 0o600)
+        with self.assertRaises(installer.InstallError):
+            node_generations.collect(self.args, installer)
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createIdempotencyKey, type AgentSession } from "@oac/agents-client";
+import { randomUuid, type AgentSession } from "@oac/agents-client";
 import { api } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { Textarea } from "./components/ui/textarea";
@@ -61,7 +61,7 @@ function Question({
   const send = useMutation({
     mutationFn: async () => {
       const operation = pending || {
-        key: createIdempotencyKey(),
+        key: randomUuid(),
         text: answer,
       };
       sessionStorage.setItem(storageKey, JSON.stringify(operation));

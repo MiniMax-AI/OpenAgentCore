@@ -1,6 +1,6 @@
 # Core service
 
-`services/core` is Core: one Go service that serves the Agents API (`/v1`), the Core API (`/core/v1`) and the machine connection routes (`/api/v1`), owns its PostgreSQL schema, and runs the execution Worker that dispatches Turns to Runtimes. [Architecture](../../docs/architecture.md) describes its role, and the [API index](../../docs/api/index.md) its namespaces and credentials. This guide is for contributors who build, run and test Core from source; operators install it with the [installer](../../docs/getting-started/install.md). The [implementation constraints](IMPLEMENTATION.md) hold the code-level rules.
+`services/core` is Core: one Go service that serves the Agents API (`/v1`), the Core API (`/core/v1`) and the machine connection routes (`/api/v1`), owns its PostgreSQL schema, and runs the execution Worker that dispatches Turns to Runtimes. [Architecture](../../docs/architecture.md) describes its role, and [API namespaces and credentials](../../docs/api/index.md) lists its namespaces and the credential each accepts. This guide is for contributors who build, run and test Core from source; operators install it with the [installer](../../docs/getting-started/install.md). The [implementation constraints](IMPLEMENTATION.md) hold the code-level rules.
 
 ## Commands
 
@@ -16,7 +16,7 @@
 
 ## Database
 
-Core uses its own PostgreSQL database and account and shares no tables with an application. Its migrations are embedded goose migrations in [`migrations/`](migrations), tracked in `agents_api_schema_version`; a migration is never edited after it lands. Queries live in `internal/db/queries` and generate typed code with sqlc: run `make sqlc-generate` after changing a query and commit the generated files, which `make check-sqlc` compares.
+Core uses its own PostgreSQL database and account and shares no tables with an application. Its schema is the embedded goose migrations in [`migrations/`](migrations), tracked in `oac_schema_version`; [AGENTS.md](../../AGENTS.md#pre-release-no-compatibility-layers) states how schema changes land. Core applies the migrations when it starts. Queries live in `internal/db/queries` and generate typed code with sqlc: run `make sqlc-generate` after changing a query and commit the generated files, which `make check-sqlc` compares.
 
 ## Run from source
 
@@ -66,4 +66,4 @@ It checks the upstream and generated response schemas, retries, ordering, tenant
 
 ## Generated contracts
 
-Run `make openapi` after changing the pinned public schema, Go bindings, Core extensions or internal handler annotations. The [contract generation guide](../../contracts/agents-api/index.md#pinned-baseline) owns the inputs, generated files and checks. Review and commit the generated diffs. `make check-openapi` verifies freshness; contract tests check all three documents against registered routes.
+Run `make openapi` after changing the pinned public schema, Go bindings, Core extensions or internal handler annotations. [Contract and schema rules](../../CONTRIBUTING.md#contract-and-schema-rules) owns the inputs, generated files and checks. Review and commit the generated diffs. `make check-openapi` verifies freshness; contract tests check all three documents against registered routes.

@@ -48,7 +48,6 @@ type PromptRequestPayload struct {
 	WorkspaceReadOnly            bool           `json:"workspace_read_only,omitempty"`
 	AgentStateKey                string         `json:"agent_state_key,omitempty"`
 	RequireExistingNativeSession bool           `json:"require_existing_native_session,omitempty"`
-	ObserveMessages              bool           `json:"observe_messages,omitempty"`
 	ObserveSubagentIdentities    bool           `json:"observe_subagent_identities,omitempty"`
 	FunctionTools                []FunctionTool `json:"function_tools,omitempty"`
 	ToolSearch                   bool           `json:"tool_search,omitempty"`
@@ -61,13 +60,37 @@ type PromptCancelPayload struct {
 	DeliveryID string `json:"delivery_id,omitempty"`
 }
 
-// ExecutionControls requires both values when supplied; omitting the block preserves agent options.
-// Send only to a peer advertising execution_controls, independently of older option capabilities.
+// ExecutionControls carries the official execution options the Session sets or
+// whose official default applies. An absent member means the Harness's native
+// default: Core never sends a value the official configuration does not define.
+// Send only to a peer advertising execution_controls.
 type ExecutionControls struct {
-	DisableProgrammaticToolCalling bool          `json:"disable_programmatic_tool_calling,omitempty"`
-	WebSearch                      string        `json:"web_search"`
-	TextVerbosity                  string        `json:"text_verbosity"`
-	OutputFormat                   *OutputFormat `json:"output_format,omitempty"`
+	WebSearch *WebSearchControl `json:"web_search,omitempty"`
+	// ProgrammaticToolCalling is the official programmatic_tool_calling.enabled value.
+	ProgrammaticToolCalling *bool  `json:"programmatic_tool_calling,omitempty"`
+	ReasoningEffort         string `json:"reasoning_effort,omitempty"`
+	ReasoningSummary        string `json:"reasoning_summary,omitempty"`
+	// ServiceTier is never "auto": auto means unset.
+	ServiceTier   string        `json:"service_tier,omitempty"`
+	TextVerbosity string        `json:"text_verbosity,omitempty"`
+	OutputFormat  *OutputFormat `json:"output_format,omitempty"`
+}
+
+// WebSearchControl is the resolved official web_search tool. A nil
+// AllowedDomains is the official null; an empty list is kept distinct.
+type WebSearchControl struct {
+	Mode           string          `json:"mode"`
+	ContextSize    string          `json:"context_size"`
+	AllowedDomains []string        `json:"allowed_domains"`
+	Location       *SearchLocation `json:"location,omitempty"`
+}
+
+// SearchLocation carries only the keys the Session set.
+type SearchLocation struct {
+	City     *string `json:"city,omitempty"`
+	Country  *string `json:"country,omitempty"`
+	Region   *string `json:"region,omitempty"`
+	Timezone *string `json:"timezone,omitempty"`
 }
 
 // OutputFormat passes the public schema unchanged to a qualified native adapter.

@@ -74,7 +74,7 @@ func (h *Handler) prepareSessionModelConfiguration(ctx context.Context, input *s
 		source = v1.ExecutionSourceSession
 	} else if saved != nil {
 		source = v1.ExecutionSourceAgent
-		// Changing the harness also discards the former adapter's parameters.
+		// Changing the harness also discards the previous adapter's parameters.
 		if _, overridden := input.agentFields["x_agents_core"]; !overridden && saved.XAgentsCore != nil {
 			raw = v1.ResolvedHarnessConfig(saved.XAgentsCore.HarnessConfig)
 		}

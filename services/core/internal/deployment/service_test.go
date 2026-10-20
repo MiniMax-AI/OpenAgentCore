@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"strings"
 	"testing"
 	"time"
@@ -47,7 +47,7 @@ func operations(t *testing.T, publicURL string, tx *fakeDeploymentTx) *Execution
 	if tx != nil {
 		storage.withDeployment = func(_ context.Context, apply func(DeploymentTx) error) error { return apply(tx) }
 	}
-	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL), storage, engine.Catalog{})
+	result, err := NewExecutionOperations(newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, publicURL), storage, builtin.Registry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,6 @@ func operations(t *testing.T, publicURL string, tx *fakeDeploymentTx) *Execution
 // testSpecification is a valid deployment specification for provider.
 func testSpecification(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
-	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
 		s.Resources.EnvironmentDiskMiB = 8192
@@ -90,10 +89,10 @@ func TestNewServiceAndOperationsRejectNilDependencies(t *testing.T) {
 		}
 	}
 	service := newService(t, storage, reader, testPublicURL)
-	if result, err := NewExecutionOperations(nil, &fakeExecutionStorage{t: t}, engine.Catalog{}); result != nil || err == nil {
+	if result, err := NewExecutionOperations(nil, &fakeExecutionStorage{t: t}, builtin.Registry()); result != nil || err == nil {
 		t.Errorf("NewExecutionOperations without the service = %v, %v", result, err)
 	}
-	if result, err := NewExecutionOperations(service, nil, engine.Catalog{}); result != nil || err == nil {
+	if result, err := NewExecutionOperations(service, nil, builtin.Registry()); result != nil || err == nil {
 		t.Errorf("NewExecutionOperations without storage = %v, %v", result, err)
 	}
 }
@@ -151,22 +150,14 @@ func TestSandboxValidationWrapperPreservesClassification(t *testing.T) {
 	if errors.Is(err, sandbox.ErrInvalid) {
 		t.Fatal("wrapper changed sentinel identity")
 	}
-	_, err = service.SetupForSelection(installation, sandbox.Selection{Provider: "e2b", DeploymentSpec: sandbox.DeploymentSpec{Runtime: &sandbox.RuntimeRelease{}}})
-	if !errors.As(err, &configuration) || configuration.Validation == nil || configuration.Validation.Param != "runtime" || err.Error() != "invalid sandbox configuration: E2B Runtime is selected by its immutable template build" {
-		t.Fatal("pending E2B validation order changed", err)
-	}
 }
 
-// A stored provider the registry no longer holds fails every read and change
-// that consults it.
+// A stored provider the registry no longer holds fails every read that consults it.
 func TestRegistryLookupFailuresPropagate(t *testing.T) {
 	stored := webDeployment(t, uuid.NewString(), "retired", 1)
 	reader := &fakeReader{t: t,
 		snapshot:   func(context.Context) (Snapshot, error) { return Snapshot{Record: stored}, nil },
 		deployment: func(context.Context) (Record, error) { return stored, nil },
-		nodes: func(context.Context) ([]NodeRecord, error) {
-			return []NodeRecord{{ID: uuid.NewString(), Provider: "retired", MaxActive: 1, MaxRetained: 1}}, nil
-		},
 	}
 	service := newService(t, &fakeStorage{t: t}, reader, testPublicURL)
 	// View decodes the stored configuration first, and reports that failure as a conflict.
@@ -175,9 +166,6 @@ func TestRegistryLookupFailuresPropagate(t *testing.T) {
 	}
 	if _, err := service.Setup(t.Context()); !errors.Is(err, providers.ErrUnknownProvider) {
 		t.Errorf("Setup = %v", err)
-	}
-	if _, err := service.ListNodes(t.Context()); !errors.Is(err, providers.ErrUnknownProvider) {
-		t.Errorf("ListNodes = %v", err)
 	}
 }
 
@@ -195,17 +183,6 @@ func TestSetupReportsDeclarationsAndStoredConfigurationConflicts(t *testing.T) {
 	stored.Configuration.Public = json.RawMessage(`{"retired":true}`)
 	if _, err := service.Setup(t.Context()); !errors.Is(err, ErrConflict) {
 		t.Fatal("an undecodable stored configuration was not a conflict", err)
-	}
-}
-
-// Docker never suspends, so its nodes retain at most their active capacity.
-func TestListNodesAppliesTheRetainedLimit(t *testing.T) {
-	reader := &fakeReader{t: t, nodes: func(context.Context) ([]NodeRecord, error) {
-		return []NodeRecord{{Provider: "docker", MaxActive: 2, MaxRetained: 5}, {Provider: "microsandbox", MaxActive: 2, MaxRetained: 5}}, nil
-	}}
-	nodes, err := newService(t, &fakeStorage{t: t}, reader, testPublicURL).ListNodes(t.Context())
-	if err != nil || len(nodes) != 2 || nodes[0].MaxRetained != 2 || nodes[1].MaxRetained != 5 {
-		t.Fatalf("ListNodes = %+v, %v", nodes, err)
 	}
 }
 

@@ -24,6 +24,7 @@ import {
 } from "./components/ui/dialog";
 import { Field, ErrorNotice, PageHeader } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
+import { randomUuid } from "@oac/agents-client";
 export function MCPs() {
   const query = useMCPs();
   return (
@@ -80,14 +81,14 @@ function ResourceList({
           setEditing(
             kind === "mcps"
               ? {
-                  id: crypto.randomUUID(),
+                  id: randomUuid(),
                   name: "",
                   label: "",
                   url: "",
                   revision: 0,
                 }
               : {
-                  id: crypto.randomUUID(),
+                  id: randomUuid(),
                   name: "",
                   environment: "openai_hosted",
                   revision: 0,
@@ -149,7 +150,7 @@ function ResourceList({
                         onClick={() => {
                           setDirectory(false);
                           setEditing({
-                            id: crypto.randomUUID(),
+                            id: randomUuid(),
                             revision: 0,
                             name: item.name,
                             label: item.server.name,

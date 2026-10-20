@@ -72,7 +72,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		if err := deployments.ConnectNode(t.Context(), nodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err := deployments.Heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
+		if err := fixtureNodeHeartbeat(t.Context(), s, deployments, nodeID, connection, epoch, true); err != nil {
 			t.Fatal(err)
 		}
 	}

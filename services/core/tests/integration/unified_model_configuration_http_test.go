@@ -21,7 +21,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler, err := publicHandler(t, st, auth, "codex", withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
+	handler, err := publicHandler(t, st, auth, "claude_sdk", withCoreKeys(admin), withHarnesses([]string{"codex", "claude_sdk"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,10 +69,10 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 			t.Fatalf("JSON mismatch: %s; want %s", got, want)
 		}
 	}
-	const path = "/core/v1/harnesses/codex/model-configuration"
-	const high = `{"model_reasoning_effort":"high"}`
-	const low = `{"model_reasoning_effort":"low"}`
-	const provider = `{"protocol":"responses","base_url":"https://deployment.example/v1","api_key":"deployment-canary"}`
+	const path = "/core/v1/harnesses/claude_sdk/model-configuration"
+	const high = `{"thinking":{"type":"enabled","budgetTokens":3000}}`
+	const low = `{"thinking":{"type":"enabled","budgetTokens":1000}}`
+	const provider = `{"protocol":"anthropic","base_url":"https://deployment.example/v1","api_key":"deployment-canary"}`
 	setDefault := func(model, native string) {
 		t.Helper()
 		body := `{"model":"` + model + `","harness_config":` + native + `,"model_provider":` + provider + `}`
@@ -84,7 +84,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 			t.Fatal("model configuration identity changed")
 		}
 		equalJSON(view["harness_config"], native)
-		equalJSON(view["model_provider"], `{"protocol":"responses","base_url":"https://deployment.example/v1","api_key_configured":true}`)
+		equalJSON(view["model_provider"], `{"protocol":"anthropic","base_url":"https://deployment.example/v1","api_key_configured":true}`)
 	}
 	create := func(body, retry string) string {
 		t.Helper()
@@ -134,7 +134,7 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 	}
 	assertSession(fresh, "model-replacement", low, "deployment", "deployment", "deployment", "deployment-canary")
 
-	const explicitProvider = `{"protocol":"responses","base_url":"https://explicit.example/v1","api_key":"explicit-canary"}`
+	const explicitProvider = `{"protocol":"anthropic","base_url":"https://explicit.example/v1","api_key":"explicit-canary"}`
 	for _, tc := range []struct{ name, body, model, modelSource, providerSource, key string }{
 		{"model replaces native defaults", `{"agent":{"model":"explicit-model"},"environment":{"type":"openai_hosted"}}`, "explicit-model", "session", "deployment", "deployment-canary"},
 		{"provider replaces native defaults", `{"agent":{},"environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":` + explicitProvider + `}}`, "model-replacement", "deployment", "session", "explicit-canary"},
@@ -161,10 +161,10 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 	for _, tc := range []struct{ name, update string }{
 		{"model", `{"model":"another-model"}`},
 		{"provider", `{"x_agents_core":{"model_provider":` + explicitProvider + `}}`},
-		{"harness", `{"x_agents_core":{"harness":"claude_sdk","model_provider":` + strings.Replace(provider, `"protocol":"responses"`, `"protocol":"anthropic"`, 1) + `}}`},
+		{"harness", `{"x_agents_core":{"harness":"codex","model_provider":` + strings.Replace(provider, `"protocol":"anthropic"`, `"protocol":"responses"`, 1) + `}}`},
 	} {
 		t.Run("saved Agent "+tc.name, func(t *testing.T) {
-			body := `{"model":"saved-model","x_agents_core":{"harness":"codex","harness_config":` + high + `,"model_provider":` + provider + `}}`
+			body := `{"model":"saved-model","x_agents_core":{"harness":"claude_sdk","harness_config":` + high + `,"model_provider":` + provider + `}}`
 			id := text(object(call("POST", "/v1/agents", token, body, "", 201))["id"])
 			call("POST", "/v1/agents/"+id, token, tc.update, "", 200)
 			saved := object(call("GET", "/v1/agents/"+id, token, "", "", 200))
@@ -181,12 +181,12 @@ func TestUnifiedModelConfigurationHTTP(t *testing.T) {
 		})
 	}
 	// Disabling tools cannot enable a non-native model protocol.
-	for _, protocol := range []string{"anthropic", "chat_completions"} {
+	for _, protocol := range []string{"responses", "chat_completions"} {
 		t.Run("non-native protocol "+protocol, func(t *testing.T) {
 			incompatible := `{"protocol":"` + protocol + `","base_url":"https://model.example/v1","api_key":"rejected-canary"}`
 			agent := `{"model":"fixed-model","tools":[{"type":"web_search","mode":"disabled"}]}`
 			call("POST", "/v1/agents/sessions", token, `{"agent":`+agent+`,"environment":{"type":"openai_hosted"},"x_agents_core":{"model_provider":`+incompatible+`}}`, uuid.NewString(), 400)
-			saved := strings.TrimSuffix(agent, "}") + `,"x_agents_core":{"harness":"codex","model_provider":` + incompatible + `}}`
+			saved := strings.TrimSuffix(agent, "}") + `,"x_agents_core":{"harness":"claude_sdk","model_provider":` + incompatible + `}}`
 			call("POST", "/v1/agents", token, saved, "", 400)
 		})
 	}

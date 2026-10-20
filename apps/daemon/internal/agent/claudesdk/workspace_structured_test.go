@@ -18,9 +18,8 @@ func TestWorkspaceStructuredPreparationQualificationAndFrozenSchema(t *testing.T
 		t.Run(mode, func(t *testing.T) {
 			config := preparationFixture(t, mode)
 			req := preparationRequest()
-			req.ObserveMessages = true
 			schema := `{"type":"object","properties":{"n":{"const":9007199254740992}}}`
-			req.ExecutionControls = &proto.ExecutionControls{WebSearch: "disabled", TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(schema)}}
+			req.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(schema)}}
 			e, err := NewExecutorFactory(config)(t.Context(), req)
 			if mode == "structured-missing" {
 				if err == nil || !strings.Contains(err.Error(), "workspace structured output") {

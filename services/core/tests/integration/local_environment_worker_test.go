@@ -26,8 +26,8 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 	caps := prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported})
 	if execute {
 		caps.WorkspaceOutputExport = proto.CapabilitySupported
-		caps.Streaming, caps.Steering, caps.DurableTurns, caps.DurableInputReceipts = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
-		caps.WebSearchControl, caps.TextVerbosity, caps.ExecutionControls = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
+		caps.Streaming, caps.DurableTurns, caps.DurableInputReceipts = proto.CapabilitySupported, proto.CapabilitySupported, proto.CapabilitySupported
+		caps.ExecutionControls = proto.CapabilitySupported
 		caps.SubagentControl, caps.ToolObservations = proto.CapabilitySupported, proto.CapabilitySupported
 	}
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: caps}}})

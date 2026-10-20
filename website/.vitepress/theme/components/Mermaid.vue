@@ -8,6 +8,9 @@ const props = defineProps<{ code: string }>()
 
 const source = computed(() => decodeURIComponent(props.code))
 const svg = ref('')
+// Mermaid caps each diagram at its natural width; on a narrow screen the
+// diagram keeps up to 640px of it and the container scrolls, so text stays readable.
+const minWidth = ref('')
 const failed = ref(false)
 let themeObserver: MutationObserver | undefined
 let renderCount = 0
@@ -28,7 +31,10 @@ async function render() {
   })
   const id = `oac-mermaid-${Math.random().toString(36).slice(2)}-${renderCount++}`
   try {
-    svg.value = (await mermaid.render(id, source.value)).svg
+    const rendered = (await mermaid.render(id, source.value)).svg
+    const natural = Number(/max-width:\s*([\d.]+)px/.exec(rendered)?.[1])
+    minWidth.value = natural > 0 ? `${Math.min(natural, 640)}px` : ''
+    svg.value = rendered
     failed.value = false
   } catch (error) {
     console.error('Mermaid diagram failed to render', error)
@@ -48,7 +54,7 @@ onBeforeUnmount(() => themeObserver?.disconnect())
 
 <template>
   <div class="oac-mermaid" :class="{ failed }">
-    <div v-if="svg && !failed" class="oac-mermaid-diagram" v-html="svg" />
+    <div v-if="svg && !failed" class="oac-mermaid-diagram" :style="{ '--oac-mermaid-min-width': minWidth }" v-html="svg" />
     <pre v-else class="oac-mermaid-source"><code>{{ source }}</code></pre>
   </div>
 </template>
@@ -65,6 +71,7 @@ onBeforeUnmount(() => themeObserver?.disconnect())
 .oac-mermaid-diagram :deep(svg) {
   display: block;
   max-width: 100%;
+  min-width: var(--oac-mermaid-min-width, 0);
   height: auto;
   margin: 0 auto;
 }

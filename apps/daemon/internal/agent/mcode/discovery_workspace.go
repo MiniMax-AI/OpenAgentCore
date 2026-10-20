@@ -15,7 +15,7 @@ import (
 
 func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, runtime *agent.Runtime) *WorkspaceConfig {
 	fail := func(err error) {
-		runtime.Info.Available = false
+		*runtime = *agent.Unavailable(runtime.Info)
 		fmt.Fprintf(options.Stderr, "oac-daemon: mcode workspace unavailable: %v\n", err)
 	}
 	binding, err := localworkspace.Load()
@@ -24,6 +24,7 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		return nil
 	}
 	if binding == nil {
+		narrowWorkspace(&runtime.Info.Capabilities, false)
 		return nil
 	}
 	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
@@ -50,7 +51,7 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		fail(err)
 		return nil
 	}
-	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE"), options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"), binding.NetworkPolicy())
+	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_COMPANION"), os.Getenv("OAC_RUNTIME_WORKSPACE"))
 	if err == nil {
 		err = CheckWorkspace(parent, c)
 	}
@@ -59,8 +60,14 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		return nil
 	}
 
-	caps := &runtime.Info.Capabilities
-	caps.EnvironmentNone = proto.CapabilityUnsupported
-	caps.LocalEnvironment, caps.WorkspaceReadPreparation = proto.CapabilitySupported, proto.CapabilitySupported
+	narrowWorkspace(&runtime.Info.Capabilities, true)
 	return &c
+}
+
+// narrowWorkspace keeps either the local workspace capabilities or environment:none.
+func narrowWorkspace(caps *proto.AgentKindCapabilities, local bool) {
+	agent.Narrow(&caps.EnvironmentNone, !local)
+	agent.Narrow(&caps.LocalEnvironment, local)
+	agent.Narrow(&caps.WorkspaceReadPreparation, local)
+	agent.Narrow(&caps.WorkspaceOutputExport, local)
 }

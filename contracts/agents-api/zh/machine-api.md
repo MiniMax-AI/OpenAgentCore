@@ -1,30 +1,29 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: e9a16774d2924db9dde18385be315d3a0317c616b029b419165e442fa34fb08d
+source_hash: 637717534ca8fd64eea6f6688461dd6b065b317ae271cd974880524d698c3ae9
 ---
 
-机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装器。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
+机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装程序。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
 
 ## 路由 {#routes}
 
 | 路由 | 调用方 | 凭据 | 契约 |
 | --- | --- | --- | --- |
-| `GET sandbox-node/configuration` | 节点安装器与节点 | 登记 token，或节点凭据加 `X-OAC-Node-ID` | [读取节点配置](#read-the-node-configuration) |
-| `POST sandbox-node/enroll` | 节点安装器 | 登记 token | [登记节点](#enroll-a-node) |
+| `GET sandbox-node/configuration` | 节点安装程序与节点 | 登记 token，或节点凭据加 `X-OAC-Node-ID` | [读取节点配置](#read-the-node-configuration) |
+| `POST sandbox-node/enroll` | 节点安装程序 | 登记 token | [登记节点](#enroll-a-node) |
 | `GET sandbox-node/identity?node_id=` | 节点 | 节点凭据 | [恢复节点身份](#recover-a-node-s-identity) |
 | WebSocket `GET sandbox-node/connect?node_id=` | 节点 | 节点凭据 | [节点代际协议](node-generation-protocol.md) |
-| `GET agent-daemon/install/{version}/…` | 自托管安装器 | 无 | [安装授权](environment-executor-credentials.md#installation-grant) |
-| `POST agent-daemon/installation`, `POST agent-daemon/installation/claim` | 自托管安装器 | 安装授权 | [安装授权](environment-executor-credentials.md#installation-grant) |
+| `GET agent-daemon/install/{version}/…` | 自托管安装程序 | 无 | [安装授权](environment-executor-credentials.md#installation-grant) |
+| `POST agent-daemon/installation`, `POST agent-daemon/installation/claim` | 自托管安装程序 | 安装授权 | [安装授权](environment-executor-credentials.md#installation-grant) |
 | `POST agent-daemon/enroll` | 自托管 daemon | 执行器凭据 | [登记自托管 daemon](#enroll-a-self-hosted-daemon) |
-| `GET agent-daemon/connection?environment_id=` | 自托管安装器 | 执行器凭据 | [私有连接确认](environment-executor-credentials.md#private-connection-confirmation) |
+| `GET agent-daemon/connection?environment_id=` | 自托管安装程序 | 执行器凭据 | [私有连接确认](environment-executor-credentials.md#private-connection-confirmation) |
 | `POST agent-daemon/bootstrap` | Runtime daemon | daemon 凭据 | [daemon 引导](#daemon-bootstrap) |
-| `GET agent-daemon/device-status?device_id=` | Runtime daemon | daemon 凭据 | [设备状态](#device-status) |
 | WebSocket `GET agent-daemon/ws?device_id=&version=` | Runtime daemon | daemon 凭据 | [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md) |
 
 所有凭据通过 `Authorization: Bearer` 头传输，不放入 URL。
 
-生成的 [`runtime.openapi.yaml`](../runtime.openapi.yaml) 仅描述 sandbox-node 配置、登记、身份路由和两个安装路由。两个 WebSocket 及 daemon 引导、设备状态、登记和连接路由在 API 路由器外提供，无生成 schema；本文及所链接契约是它们唯一的定义。
+生成的 [`runtime.openapi.yaml`](../runtime.openapi.yaml) 仅描述 sandbox-node 配置、登记、身份路由和两个安装路由。两个 WebSocket 及 daemon 引导、登记和连接路由在 API 路由器外提供，无生成 schema；本文及所链接契约是它们唯一的定义。
 
 ## 凭据 {#credentials}
 
@@ -33,9 +32,9 @@ source_hash: e9a16774d2924db9dde18385be315d3a0317c616b029b419165e442fa34fb08d
 | 登记 token | `POST /core/v1/sandbox/enrollment-tokens`（Web **添加节点**），带节点批准容量。使用一次；在响应 `expires_at` 过期 | 无节点 ID 的 `sandbox-node/configuration`、`sandbox-node/enroll` |
 | 节点凭据 | 节点自身：生成 32 至 256 个无空白字符的密钥，在登记时注册 | 带 `X-OAC-Node-ID` 的 `sandbox-node/configuration`、`sandbox-node/identity`、`sandbox-node/connect` |
 | 安装授权 | `self_hosted` Session 的 `x_agents_core.installation` 命令；短期有效 | `agent-daemon/installation` 及其 `claim` |
-| 执行器凭据 | 安装领取，或 Core 密钥[执行器凭据路由](environment-executor-credentials.md) | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为绑定设备的 daemon 凭据 |
-| 托管沙箱 daemon 凭据 | Core 为每个受管分配签发，通过[引导文件](../../../docs/zh/runtime-bootstrap.md)交付 | `agent-daemon/bootstrap`、`device-status` 和 `ws` |
-| 操作者设备配置 | 具有数据库访问权限的操作者运行 `oac-core-device` | `agent-daemon/bootstrap`、`device-status` 和 `ws` |
+| 执行器凭据 | 安装领取，或[执行器凭据](environment-executor-credentials.md)中使用 Core 密钥的接口 | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为绑定设备的 daemon 凭据 |
+| 托管沙箱 daemon 凭据 | Core 为每个受管分配签发，通过[引导文件](../../../docs/zh/runtime-bootstrap.md)交付 | `agent-daemon/bootstrap` 和 `ws` |
+| 操作者设备配置 | 具有数据库访问权限的操作者运行 `oac-core-device` | `agent-daemon/bootstrap` 和 `ws` |
 
 Core 对存储的每个 token 和凭据仅保留 SHA-256 摘要；安装授权经签名但不存储。凭据不可互换：各自仅适用于自身路由。
 
@@ -104,11 +103,7 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 
 `POST /api/v1/agent-daemon/bootstrap` 携带 daemon 凭据及 `{"device_id": "…"}`，返回 `device_id`、`workspace_id`、`ws_url`（从 `OAC_PUBLIC_URL` 推导，不使用请求头）、`heartbeat_seconds` 和 `protocol_version`。daemon 随后按 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#ownership-and-connection)连接 `ws_url`。
 
-### 设备状态 {#device-status}
-
-`GET /api/v1/agent-daemon/device-status?device_id=` 携带 daemon 凭据，返回 `device_id`、`online` 和 `owner`：当前连接所有者的 `owner_pod_id`、`owner_url`、`generation`、`status` 和 `lease_expires_at`，或 null。
-
-引导、设备状态和 WebSocket 路由共享错误体 `{"error": code, "detail": text}`：400 `missing_params`、`missing_device_id` 或 `bad_json`；401 `missing_bearer`、`unknown_device` 或 `bad_credential`；403 `wrong_runtime_type`；500 `internal`；WebSocket 的 `version` 不等于 Core 精确 Runtime 协议版本时返回 426 `incompatible_version`。
+引导和 WebSocket 路由共享错误体 `{"error": code, "detail": text}`：400 `missing_params`、`missing_device_id` 或 `bad_json`；401 `missing_bearer`、`unknown_device` 或 `bad_credential`；403 `wrong_runtime_type`；500 `internal`；WebSocket 的 `version` 不等于 Core 精确 Runtime 协议版本时返回 426 `incompatible_version`。
 
 ### 登记自托管 daemon {#enroll-a-self-hosted-daemon}
 

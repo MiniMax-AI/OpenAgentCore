@@ -1,8 +1,8 @@
 // Package processconfig is the process settings Core loads from its
 // environment. Load reads every variable and every file it names exactly once,
-// applies each default and validates the result; startup and `oac-core
-// check-config` both call it. Errors name the variable and never include its
-// value or the content of a file.
+// applies each default and validates the result; startup, `oac-core
+// check-config` and `oac-core healthcheck` call it. Errors name the variable
+// and never include its value or the content of a file.
 package processconfig
 
 import (
@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/publicorigin"
 	"io"
 	"net/url"
 	"os"
@@ -18,12 +19,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/databaseurl"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/oauthrefresh"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -44,7 +44,7 @@ type Config struct {
 	// Addr is OAC_ADDR, the listener address.
 	Addr string
 	// PublicOrigin is OAC_PUBLIC_URL.
-	PublicOrigin deployment.PublicOrigin
+	PublicOrigin publicorigin.Origin
 	// DatabaseURL is OAC_DATABASE_URL with the password from
 	// OAC_DATABASE_PASSWORD_FILE.
 	DatabaseURL string
@@ -110,7 +110,7 @@ func Load() (Config, error) {
 	if value == "" {
 		return Config{}, configError("OAC_PUBLIC_URL is required; applications, nodes and sandboxes reach Core at this origin")
 	}
-	if c.PublicOrigin, err = deployment.NewPublicOrigin(value); err != nil {
+	if c.PublicOrigin, err = publicorigin.New(value); err != nil {
 		return Config{}, configError("OAC_PUBLIC_URL must be a canonical http or https origin without path, credentials, query or fragment, such as https://core.example")
 	}
 	if c.DatabaseURL, err = databaseurl.FromEnvironment(); err != nil {
@@ -132,7 +132,7 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	c.DefaultHarness = cmp.Or(os.Getenv("OAC_DEFAULT_HARNESS"), defaultHarness)
-	if _, known := (engine.Catalog{}).Lookup(c.DefaultHarness); !known {
+	if !builtin.Contains(c.DefaultHarness) {
 		return Config{}, configError("OAC_DEFAULT_HARNESS is not a known harness")
 	}
 	if c.Harnesses, err = harnesses(c.DefaultHarness); err != nil {
@@ -172,7 +172,7 @@ func (c Config) Settings() []api.InstallationSetting {
 		setting("OAC_LOG_FORMAT", format, "auto", []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
 		setting("OAC_LOG_ADD_SOURCE", c.Log.AddSource, false, []api.InstallationService{api.InstallationCore, api.InstallationWeb}),
 		setting("OAC_EXECUTION_CONCURRENCY", c.ExecutionConcurrency, execution.DefaultExecutionConcurrency, []api.InstallationService{api.InstallationCore}),
-		setting("OAC_HARNESSES", c.Harnesses, (engine.Catalog{}).Kinds(), []api.InstallationService{api.InstallationCore}),
+		setting("OAC_HARNESSES", c.Harnesses, builtin.Kinds(), []api.InstallationService{api.InstallationCore}),
 		setting("OAC_DEFAULT_HARNESS", c.DefaultHarness, defaultHarness, []api.InstallationService{api.InstallationCore}),
 		setting("OAC_WRITE_AUDIT_RETENTION", duration(c.WriteAuditRetention), duration(defaultWriteAuditRetention), []api.InstallationService{api.InstallationCore}),
 		setting("OAC_OAUTH_TRUSTED_ORIGINS", origins, []string{}, []api.InstallationService{api.InstallationCore}),
@@ -272,11 +272,11 @@ func harnesses(defaultEngine string) ([]string, error) {
 	if value := os.Getenv("OAC_HARNESSES"); value != "" {
 		kinds = append(kinds, strings.Split(value, ",")...)
 	} else {
-		kinds = append(kinds, (engine.Catalog{}).Kinds()...)
+		kinds = append(kinds, builtin.Kinds()...)
 	}
 	for i, kind := range kinds {
 		kind = strings.TrimSpace(kind)
-		if _, known := (engine.Catalog{}).Lookup(kind); !known {
+		if !builtin.Contains(kind) {
 			return nil, configError("OAC_HARNESSES contains an unknown harness")
 		}
 		kinds[i] = kind

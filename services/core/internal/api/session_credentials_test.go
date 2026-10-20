@@ -67,7 +67,7 @@ func TestSessionVaultTypesAndCreationIntent(t *testing.T) {
 func TestSessionProjectionShowsSelectedMCPCredential(t *testing.T) {
 	vault, credential := uuid.NewString(), uuid.NewString()
 	tool := func(label, credentialID string) json.RawMessage {
-		value := v1.MCPTool{Type: "mcp", ServerLabel: label, Transport: v1.MCPHTTPTransport{Type: "http", ServerURL: "https://mcp.example.test/" + label},
+		value := v1.MCPTool{Type: "mcp", ServerLabel: label, Transport: v1.MCPTransport{Type: "http", ServerURL: "https://mcp.example.test/" + label},
 			ConnectionOrigin: "service", RequestMetadata: map[string]json.RawMessage{}}
 		if credentialID != "" {
 			value.CredentialID = &credentialID

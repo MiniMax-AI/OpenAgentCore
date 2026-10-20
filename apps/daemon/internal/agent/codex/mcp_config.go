@@ -16,11 +16,12 @@ type mcpServerConfig struct {
 	URL               string
 	Command           string
 	Args              []string
+	Cwd               string
+	EnvVars           []string
 	EnabledTools      *[]string
 	Required          bool
 	BearerTokenEnvVar string
-	EnvHTTPHeaders    map[string]string
-	ApproveTools      bool
+	HTTPHeaders       map[string]string
 }
 
 // writeCodexMCPConfig writes a `[mcp_servers.<name>]` TOML table per
@@ -48,9 +49,6 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 		b.WriteString("[mcp_servers.")
 		b.WriteString(tomlQuoteString(name))
 		b.WriteString("]\n")
-		if srv.ApproveTools {
-			b.WriteString("default_tools_approval_mode = \"approve\"\n")
-		}
 		if srv.Required {
 			b.WriteString("required = true\n")
 		}
@@ -63,38 +61,44 @@ func writeCodexMCPConfig(codexHome string, servers map[string]mcpServerConfig) e
 				b.WriteString(tomlQuoteString(srv.BearerTokenEnvVar))
 				b.WriteByte('\n')
 			}
-			if srv.EnabledTools != nil {
-				b.WriteString("enabled_tools = [")
-				for i, name := range *srv.EnabledTools {
-					if i > 0 {
-						b.WriteString(", ")
-					}
-					b.WriteString(tomlQuoteString(name))
-				}
-				b.WriteString("]\n")
-			}
-			writeMCPHeaderMap(&b, "env_http_headers", srv.EnvHTTPHeaders)
+			writeMCPHeaderMap(&b, "http_headers", srv.HTTPHeaders)
+		} else {
+			b.WriteString(`command = `)
+			b.WriteString(tomlQuoteString(srv.Command))
 			b.WriteByte('\n')
-			continue
-		}
-		b.WriteString(`command = `)
-		b.WriteString(tomlQuoteString(srv.Command))
-		b.WriteByte('\n')
-		if len(srv.Args) > 0 {
-			b.WriteString("args = [")
-			for i, a := range srv.Args {
-				if i > 0 {
-					b.WriteString(", ")
-				}
-				b.WriteString(tomlQuoteString(a))
+			writeMCPList(&b, "args", srv.Args)
+			if srv.Cwd != "" {
+				b.WriteString("cwd = " + tomlQuoteString(srv.Cwd) + "\n")
 			}
-			b.WriteString("]\n")
+			writeMCPList(&b, "env_vars", srv.EnvVars)
+		}
+		if srv.EnabledTools != nil {
+			b.WriteString("enabled_tools = ")
+			writeMCPList(&b, "", *srv.EnabledTools)
 		}
 		b.WriteByte('\n')
 	}
 
 	path := filepath.Join(codexHome, "config.toml")
 	return appendConfigTOML(path, b.String())
+}
+
+// writeMCPList writes a TOML string array, as a "name = " line unless name is empty.
+func writeMCPList(b *strings.Builder, name string, values []string) {
+	if name != "" {
+		if len(values) == 0 {
+			return
+		}
+		b.WriteString(name + " = ")
+	}
+	b.WriteByte('[')
+	for i, value := range values {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(tomlQuoteString(value))
+	}
+	b.WriteString("]\n")
 }
 
 func writeMCPHeaderMap(b *strings.Builder, field string, values map[string]string) {
@@ -118,7 +122,8 @@ func writeMCPHeaderMap(b *strings.Builder, field string, values map[string]strin
 
 // tomlQuoteString returns a TOML basic-string literal (double-quoted)
 // with the documented escape set applied — \" \\ \n \r \t plus
-// \uXXXX for control chars. Matches the TOML 1.0 spec for basic strings.
+// \uXXXX for the other control characters, DEL included. Matches the TOML 1.0
+// spec for basic strings.
 func tomlQuoteString(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -135,7 +140,7 @@ func tomlQuoteString(s string) string {
 		case '\t':
 			b.WriteString(`\t`)
 		default:
-			if r < 0x20 {
+			if r < 0x20 || r == 0x7f {
 				fmt.Fprintf(&b, `\u%04X`, r)
 			} else {
 				b.WriteRune(r)

@@ -44,30 +44,30 @@ def docker_command(arguments, timeout=30):
         raise DistributionError('Cannot inspect or load the distribution image; check Docker access and disk space') from None
 
 
+def docker_image(manifest, name, docker=('docker',)):
+    """The local ID of the manifest's image when Docker already holds it, else None."""
+    expected = image_identities(manifest, name)
+    for identity in dict.fromkeys(expected):
+        result = docker_command(list(docker) + ['image', 'inspect', identity, '--format',
+                                                '{{.Id}} {{.Os}}/{{.Architecture}}'])
+        if result.returncode:
+            continue
+        fields = result.stdout.strip().split()
+        if len(fields) != 2 or fields[0] not in expected or fields[1] != 'linux/amd64':
+            raise DistributionError('Docker image identity or platform differs from the distribution: ' + name)
+        return fields[0]
+    return None
+
+
 def ensure_docker_image(manifest, name, archive, docker=('docker',)):
     """Resolve a proven local ID; obtain a verified archive only on a cache miss."""
-    expected = image_identities(manifest, name)
-    docker = list(docker)
-
-    def inspect():
-        for identity in dict.fromkeys(expected):
-            result = docker_command(docker + ['image', 'inspect', identity, '--format',
-                                             '{{.Id}} {{.Os}}/{{.Architecture}}'])
-            if result.returncode:
-                continue
-            fields = result.stdout.strip().split()
-            if len(fields) != 2 or fields[0] not in expected or fields[1] != 'linux/amd64':
-                raise DistributionError('Docker image identity or platform differs from the distribution: ' + name)
-            return fields[0]
-        return None
-
-    identity = inspect()
+    identity = docker_image(manifest, name, docker)
     if identity is not None:
         return identity
-    result = docker_command(docker + ['load', '--input', str(archive())], timeout=1800)
+    result = docker_command(list(docker) + ['load', '--input', str(archive())], timeout=1800)
     if result.returncode:
         raise DistributionError('Cannot load the distribution image; check Docker access and free disk space: ' + name)
-    identity = inspect()
+    identity = docker_image(manifest, name, docker)
     if identity is None:
         raise DistributionError('Cannot verify the loaded distribution image: ' + name)
     return identity
@@ -114,15 +114,9 @@ class ArtifactRedirect(urllib.request.HTTPRedirectHandler):
         safe_url(newurl)
         if urlsplit(newurl).scheme != 'https' or request.get_method() not in ('GET', 'HEAD'):
             raise ArtifactError('Artifact redirects require HTTPS')
-        # Artifact redirects carry no credentials, cookies or custom headers.
-        return urllib.request.Request(newurl, method=request.get_method(), unverifiable=True)
-
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Bootstrap metadata and credentials stay on the configured console origin."""
-    def redirect_request(self, request, fp, code, message, headers, newurl):
-        raise ArtifactError('Metadata downloads do not follow redirects; check the console URL '
-                                'and the reverse proxy in front of it')
+        # Artifact redirects carry no credentials, cookies or custom headers; only a resume range follows.
+        headers = {'Range': request.get_header('Range')} if request.has_header('Range') else {}
+        return urllib.request.Request(newurl, headers=headers, method=request.get_method(), unverifiable=True)
 
 
 def checked_path(path):
@@ -139,49 +133,74 @@ def matches(path, entry):
     return path.stat().st_size == entry['size'] and digest(path) == entry['sha256']
 
 
-def obtain_artifact(manifest, logical_path, destination, offline_root=None):
+def obtain_artifact(manifest, logical_path, destination, replace=False):
+    """Download a verified artifact unless the destination already holds it.
+
+    A destination with other bytes is refused, or replaced when the caller owns
+    no use of it (replace)."""
     entry = artifact(manifest, logical_path)
     target = checked_path(destination)
     if target.exists():
-        if not matches(target, entry):
+        if matches(target, entry):
+            return target
+        if not replace:
             raise ArtifactError('Cached artifact differs; preserve the installation and inspect: ' + logical_path)
-        return target
-    source = None
-    if offline_root is not None:
-        candidate = Path(offline_root) / 'artifacts' / entry['filename']
-        if candidate.exists():
-            if candidate.is_symlink() or not candidate.is_file():
-                raise DistributionError('Offline artifact must be a regular file: ' + logical_path)
-            source = candidate
-    if source is not None:
-        return copy_artifact(source, target, entry, logical_path)
+        target.unlink()
     base = manifest.get('artifact_base_url', '')
     if not isinstance(base, str) or not base or urlsplit(base).query:
-        raise ArtifactError('No downloadable artifact source; use the matching offline bundle')
+        raise ArtifactError('No downloadable artifact source: ' + logical_path)
     url = safe_url(base.rstrip('/') + '/' + entry['filename'])
-    with temporary_file(target) as partial:
-        for attempt in range(3):
-            try:
-                download_artifact(url, partial, entry, logical_path)
-                break
-            except urllib.error.HTTPError as error:
-                if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
-                    raise ArtifactError(f'Artifact download failed (HTTP {error.code}): {logical_path}. Check the console and retry.') from None
-            except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
-                if attempt == 2:
-                    raise ArtifactError('Artifact transfer interrupted: ' + logical_path + '. Check network access and rerun.') from None
-            time.sleep(attempt + 1)
-        if digest(partial) != entry['sha256']:
+    partial = partial_path(target)
+    failures = 0
+    while True:
+        had = resumable(partial, entry['size'])
+        try:
+            if had < entry['size']:
+                download_artifact(url, partial, entry, logical_path, had)
+        except urllib.error.HTTPError as error:
+            failures += 1
+            if error.code not in (408, 429, 500, 502, 503, 504) or failures == 3:
+                raise ArtifactError(f'Artifact download failed (HTTP {error.code}): {logical_path}. Check the console and retry.') from None
+            time.sleep(failures)
+            continue
+        except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
+            failures += 1
+            if failures == 3:
+                raise ArtifactError('Artifact transfer interrupted: ' + logical_path + '. Check network access and rerun; the download continues where it stopped.') from None
+            time.sleep(failures)
+            continue
+        if digest(partial) == entry['sha256']:
+            break
+        partial.unlink()
+        if not had:
             raise ArtifactError('Artifact checksum mismatch: ' + logical_path)
-        os.chmod(partial, 0o700 if logical_path.startswith('native/') else 0o600)
-        os.replace(partial, target)
-        return target
+        print(f'The earlier partial download of {logical_path} does not match this release; downloading it again.', flush=True)
+    os.chmod(partial, 0o700 if logical_path.startswith('native/') else 0o600)
+    os.replace(partial, target)
+    return target
+
+
+def partial_path(target):
+    return target.with_name('.' + target.name + '.partial')
+
+
+def resumable(partial, size):
+    """The bytes an earlier interrupted download of this file left, 0 when none is usable."""
+    if partial.is_symlink() or (partial.exists() and
+            (not partial.is_file() or partial.stat().st_uid != os.getuid())):
+        raise DistributionError('Temporary file must be an owned regular file: ' + str(partial))
+    if not partial.exists():
+        return 0
+    if partial.stat().st_size > size:
+        partial.unlink()
+        return 0
+    return partial.stat().st_size
 
 
 @contextmanager
 def temporary_file(target):
     """Clear unfinished work under the caller's installation lock."""
-    partial = target.with_name('.' + target.name + '.partial')
+    partial = partial_path(target)
     if partial.is_symlink() or (partial.exists() and
             (not partial.is_file() or partial.stat().st_uid != os.getuid())):
         raise DistributionError('Temporary file must be an owned regular file: ' + str(target))
@@ -192,53 +211,55 @@ def temporary_file(target):
         partial.unlink(missing_ok=True)
 
 
-def copy_artifact(source, target, entry, logical_path):
-    with temporary_file(target) as temporary:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as output, source.open('rb') as stream:
-            count = 0
-            for block in iter(lambda: stream.read(1024 * 1024), b''):
-                count += len(block)
-                if count > entry['size']:
-                    raise ArtifactError('Artifact exceeds published size: ' + logical_path)
-                output.write(block)
-        if count != entry['size'] or digest(temporary) != entry['sha256']:
-            raise ArtifactError('Artifact checksum mismatch: ' + logical_path)
-        os.chmod(temporary, 0o700 if logical_path.startswith('native/') else 0o600)
-        os.replace(temporary, target)
-        return target
-
-
 # Stop downloads that bring fewer bytes than this in a window.
 SLOW_SECONDS, SLOW_BYTES = 60, 64 * 1024
 
 
-def download_artifact(url, partial, entry, logical_path):
-    """Download a complete artifact into a disposable file."""
+def download_artifact(url, partial, entry, logical_path, have=0):
+    """Download an artifact into its partial file, continuing after the first `have` bytes when the server allows it."""
     size = entry['size']
     opener = urllib.request.build_opener(ArtifactRedirect())
-    with opener.open(url, timeout=60) as stream:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW | os.O_TRUNC
+    mib = 1024 * 1024
+    request = urllib.request.Request(url, headers={'Range': f'bytes={have}-'} if have else {})
+    try:
+        stream = opener.open(request, timeout=60)
+    except urllib.error.HTTPError as error:
+        if error.code != 416 or not have:
+            raise
+        # The server holds fewer bytes than the partial file: start over.
+        have = 0
+        stream = opener.open(url, timeout=60)
+    with stream:
+        if have and (stream.status != 206 or not (stream.headers.get('Content-Range') or '').startswith(f'bytes {have}-')):
+            have = 0
+        if have:
+            print(f'Resuming {logical_path} at {have / mib:.1f} MiB of {size / mib:.1f} MiB', flush=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW
         with os.fdopen(os.open(partial, flags, 0o600), 'wb') as output:
-            count, reported = 0, 0
+            output.truncate(have)
+            output.seek(have)
+            count = have
+            reported = count * 10 // size
             window, window_count = time.monotonic(), 0
             while True:
-                block = stream.read1(1024 * 1024)
+                block = stream.read1(mib)
                 if not block:
                     break
                 count += len(block)
                 if count > size:
+                    partial.unlink()
                     raise ArtifactError('Artifact exceeds published size: ' + logical_path)
                 output.write(block)
                 window_count += len(block)
                 if time.monotonic() - window >= SLOW_SECONDS:
                     if window_count < SLOW_BYTES:
                         raise ArtifactError(f'Artifact download stalled (under {SLOW_BYTES // 1024} KiB in {SLOW_SECONDS} s): '
-                                                f'{logical_path}. Check the network, then rerun the command.')
+                                                f'{logical_path}. Check the network, then rerun the command; the download continues where it stopped.')
                     window, window_count = time.monotonic(), 0
-                if size >= 50 * 1024 * 1024 and count * 10 // size > reported:
+                if count * 10 // size > reported:
                     reported = count * 10 // size
                     try:
-                        print(f'Downloading {logical_path}: {reported * 10}% of {size // (1024 * 1024)} MiB', flush=True)
+                        print(f'Downloading {logical_path}: {reported * 10}% of {size / mib:.1f} MiB', flush=True)
                     except BrokenPipeError:
                         # Nobody reads the output any more (the installer's terminal is gone);
                         # stop instead of retrying it as a network error.
@@ -247,7 +268,8 @@ def download_artifact(url, partial, entry, logical_path):
             raise http.client.IncompleteRead(b'', size - count)
 
 
-def runtime_archive(manifest, cache_root, offline_root=None):
+def runtime_archive(manifest, cache_root, replace=False):
+    """The verified, unpacked Runtime archive; replace as in obtain_artifact."""
     entry = artifact(manifest, 'images/runtime.tar.gz')
     expanded = {'sha256': entry.get('unpacked_sha256'), 'size': entry.get('unpacked_size')}
     if (not re.fullmatch(r'[0-9a-f]{64}', str(expanded['sha256']))
@@ -256,10 +278,12 @@ def runtime_archive(manifest, cache_root, offline_root=None):
     root = Path(cache_root)
     target = checked_path(root / 'images/runtime.tar')
     if target.exists():
-        if not matches(target, expanded):
+        if matches(target, expanded):
+            return target
+        if not replace:
             raise ArtifactError('Cached Runtime archive differs; preserve state and inspect it')
-        return target
-    archive = obtain_artifact(manifest, 'images/runtime.tar.gz', root / 'images/runtime.tar.gz', offline_root)
+        target.unlink()
+    archive = obtain_artifact(manifest, 'images/runtime.tar.gz', root / 'images/runtime.tar.gz', replace)
     with temporary_file(target) as temporary:
         try:
             with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as output, gzip.open(archive, 'rb') as stream:
@@ -278,28 +302,11 @@ def runtime_archive(manifest, cache_root, offline_root=None):
     return target
 
 
-def load_manifest(source_url=None, offline_root=None):
-    """Read the matched public manifest without transmitting installation credentials."""
+def load_manifest(offline_root):
+    """Read the matched public manifest from an offline bundle."""
     def read(name):
-        if offline_root is not None:
-            with (Path(offline_root) / name).open('rb') as stream:
-                data = stream.read(1024 * 1024 + 1)
-        else:
-            if not source_url:
-                raise DistributionError('A Core source URL or offline bundle is required')
-            url = safe_url(source_url.rstrip('/') + '/node-install/' + name)
-            for attempt in range(3):
-                try:
-                    with urllib.request.build_opener(NoRedirect()).open(url, timeout=30) as stream:
-                        data = stream.read(1024 * 1024 + 1)
-                    break
-                except urllib.error.HTTPError as error:
-                    if error.code not in (408, 429, 500, 502, 503, 504) or attempt == 2:
-                        raise DistributionError(f'Distribution metadata unavailable (HTTP {error.code}); check the Core source URL') from None
-                except (urllib.error.URLError, socket.timeout, ConnectionError, http.client.HTTPException):
-                    if attempt == 2:
-                        raise DistributionError('Cannot reach distribution metadata; check network and TLS trust, then retry') from None
-                time.sleep(attempt + 1)
+        with (Path(offline_root) / name).open('rb') as stream:
+            data = stream.read(1024 * 1024 + 1)
         if len(data) > 1024 * 1024:
             raise DistributionError('Distribution metadata exceeds size limit')
         return data
@@ -317,8 +324,7 @@ def load_manifest(source_url=None, offline_root=None):
         if (manifest.get('platform') != 'linux/amd64'
                 or not re.fullmatch(r'[0-9a-f]{40}', manifest.get('source_commit', ''))):
             raise DistributionError('Unsupported distribution platform or revision')
-        # Resolve artifacts through the console, which selects local bytes or a pinned HTTPS release.
-        manifest['artifact_base_url'] = source_url.rstrip('/') + '/node-install/artifacts' if source_url and offline_root is None else ''
+        manifest['artifact_base_url'] = ''
         return manifest
     except (ValueError, TypeError, AttributeError):
         raise DistributionError('Invalid distribution metadata') from None

@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -28,9 +29,6 @@ type functionCalls struct {
 
 func prepareFunctionTools(tools []proto.FunctionTool) (*functionCalls, error) {
 	state := &functionCalls{names: map[string]bool{}, pending: map[string]*pendingFunction{}}
-	if len(tools) > 64 {
-		return nil, errors.New("at most 64 function tools are supported")
-	}
 	for _, tool := range tools {
 		var schema map[string]any
 		if strings.TrimSpace(tool.Name) == "" || state.names[tool.Name] || json.Unmarshal(tool.Parameters, &schema) != nil || schema == nil {
@@ -54,21 +52,38 @@ func (s *Session) handleFunctionCall(raw json.RawMessage, rpcID any) (any, error
 	if err := json.Unmarshal(raw, &call); err != nil {
 		return nil, err
 	}
-	if s.functions == nil || !s.functions.names[call.Tool] || call.Namespace != nil || call.CallID == "" || !s.isRootTurn(call.ThreadID, call.TurnID) || !json.Valid(call.Arguments) {
+	root := s.isRootTurn(call.ThreadID, call.TurnID)
+	child := !root && s.subagents != nil && call.TurnID != "" && call.ThreadID != "" && !s.isRootThread(call.ThreadID)
+	if s.functions == nil || !s.functions.names[call.Tool] || call.Namespace != nil || call.CallID == "" || !(root || child) || !json.Valid(call.Arguments) {
 		return nil, errors.New("unexpected function call")
 	}
+	payload := proto.FunctionCallPayload{CallID: call.CallID, Name: call.Tool, Arguments: call.Arguments}
+	if child {
+		payload.NativeID, payload.TurnID = call.ThreadID, call.TurnID
+	}
+	env, err := proto.NewEnvelope(proto.TypeFunctionCall, s.runID, payload)
+	if err != nil {
+		return nil, err
+	}
 	s.functions.mu.Lock()
-	if s.functions.closed || s.cancelled.Load() || s.terminal.Load() || s.functions.pending[call.CallID] != nil || len(s.functions.pending) >= 64 {
+	if s.functions.closed || s.cancelled.Load() || (root && s.terminal.Load()) || s.functions.pending[call.CallID] != nil || len(s.functions.pending) >= 64 {
 		s.functions.mu.Unlock()
 		return nil, errors.New("function call cannot be admitted")
 	}
-	s.functions.pending[call.CallID] = &pendingFunction{rpcID: rpcID, turnID: call.TurnID, name: call.Tool, receipt: make(chan error, 1)}
-	s.functions.mu.Unlock()
-	env, err := proto.NewEnvelope(proto.TypeFunctionCall, s.runID, proto.FunctionCallPayload{CallID: call.CallID, Name: call.Tool, Arguments: call.Arguments})
-	if err == nil {
-		err = s.sendFunctionCall(env)
+	pending := &pendingFunction{rpcID: rpcID, thread: call.ThreadID, turnID: call.TurnID, name: call.Tool, receipt: make(chan error, 1)}
+	if child {
+		pending.held = &env
 	}
-	if err != nil {
+	s.functions.pending[call.CallID] = pending
+	s.functions.mu.Unlock()
+	if child {
+		select {
+		case s.subagents.wake <- struct{}{}:
+		default:
+		}
+		return DeferReply, nil
+	}
+	if err = s.sendFunctionCall(env); err != nil {
 		s.functions.mu.Lock()
 		delete(s.functions.pending, call.CallID)
 		s.functions.mu.Unlock()
@@ -101,14 +116,72 @@ type functionContent struct {
 	ImageURL *string `json:"imageUrl,omitempty"`
 }
 
-func (s *Session) stopFunctionCalls() {
+// stopFunctionCalls ends every pending call. With rootOnly it ends the root's
+// calls and keeps accepting those of Subagents, which outlive the root Turn.
+func (s *Session) stopFunctionCalls(rootOnly bool) {
 	if s.functions != nil {
 		s.functions.mu.Lock()
-		s.functions.closed = true
-		for _, pending := range s.functions.pending {
-			pending.receipt <- agent.ErrUnknownFunctionCall
+		s.functions.closed = s.functions.closed || !rootOnly
+		for id, pending := range s.functions.pending {
+			if !rootOnly || pending.thread == s.currentThreadID() {
+				pending.receipt <- agent.ErrUnknownFunctionCall
+				delete(s.functions.pending, id)
+			}
 		}
-		clear(s.functions.pending)
 		s.functions.mu.Unlock()
+	}
+}
+
+// withdrawChildCalls removes the pending calls of a child Turn that ended and
+// reports them to Core as withdrawn. Native drops their requests without a
+// reply, so no result can be applied. A call still held was never reported.
+func (s *Session) withdrawChildCalls(ctx context.Context, thread, turn string) error {
+	if s.functions == nil {
+		return nil
+	}
+	var withdrawn []proto.Envelope
+	s.functions.mu.Lock()
+	for id, pending := range s.functions.pending {
+		if pending.thread != thread || pending.turnID != turn {
+			continue
+		}
+		delete(s.functions.pending, id)
+		pending.receipt <- agent.ErrUnknownFunctionCall
+		if pending.held != nil {
+			continue
+		}
+		env, err := proto.NewEnvelope(proto.TypeFunctionCallWithdrawn, s.runID, proto.FunctionCallWithdrawnPayload{CallID: id, NativeID: thread, TurnID: turn})
+		if err != nil {
+			s.functions.mu.Unlock()
+			return err
+		}
+		withdrawn = append(withdrawn, env)
+	}
+	s.functions.mu.Unlock()
+	for _, env := range withdrawn {
+		if !s.sendWithin(ctx, env) {
+			return errors.New("codex: function call withdrawal delivery unavailable")
+		}
+	}
+	return nil
+}
+
+// sendHeldFunctionCalls sends the Subagent calls whose child Turn Core already
+// has, because Core resolves a child's call through its identity.
+func (s *Session) sendHeldFunctionCalls(ctx context.Context) {
+	if s.functions == nil {
+		return
+	}
+	var ready []proto.Envelope
+	s.functions.mu.Lock()
+	for _, pending := range s.functions.pending {
+		if _, sent := s.subagents.sent[proto.TypeSubagentTurn+":"+pending.thread+":"+pending.turnID]; sent && pending.held != nil {
+			ready = append(ready, *pending.held)
+			pending.held = nil
+		}
+	}
+	s.functions.mu.Unlock()
+	for _, env := range ready {
+		s.sendWithin(ctx, env)
 	}
 }

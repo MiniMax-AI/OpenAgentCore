@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -56,6 +55,12 @@ type SessionPlan struct {
 	// ModelReasoningEffort is frozen for launch and every native Turn.
 	ModelReasoningEffort string
 
+	// OutputSchema is the frozen public JSON Schema sent as outputSchema on every
+	// native root Turn.
+	OutputSchema json.RawMessage
+
+	shellEnvExclude []string
+
 	// Cleanup is the deferred housekeeping the session must run after the child exits.
 	Cleanup func()
 }
@@ -68,7 +73,7 @@ type SessionPlan struct {
 //	model_provider  object  frozen upstream protocol, endpoint, credential and token limits
 //	harness_config  object  native parameters accepted by harnessconfig/codex
 //
-// Execution controls select the native web_search and model_verbosity settings.
+// Execution controls map one to one to native settings; see applyExecutionControls.
 // The codex binary itself is resolved via PATH only.
 func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
 	plan := SessionPlan{
@@ -80,8 +85,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		Cleanup:         func() {},
 	}
 
-	nativeConfig, err := harnessconfiguration.Configuration().PrepareHarnessConfig(opts)
-	if err != nil {
+	if _, err := harnessconfiguration.Declaration.Configuration.PrepareHarnessConfig(opts); err != nil {
 		return plan, err
 	}
 
@@ -89,13 +93,8 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		return plan, errors.New("codex: model and complete model_provider are required")
 	}
 
-	if controls != nil {
-		if !slices.Contains([]string{"disabled", "cached", "live"}, controls.WebSearch) {
-			return plan, errors.New("codex: web_search must be disabled, cached or live")
-		}
-		if !slices.Contains([]string{"low", "medium", "high"}, controls.TextVerbosity) {
-			return plan, errors.New("codex: text_verbosity must be low, medium or high")
-		}
+	if err := harnessconfiguration.Declaration.ValidateExecutionControls(controls); err != nil {
+		return plan, err
 	}
 
 	plan.Model = stringOpt(opts, "model")
@@ -108,7 +107,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 	if err := resetGeneratedConfig(codexHome); err != nil {
 		return plan, err
 	}
-	env := []string{"DISABLE_TELEMETRY=1", "CODEX_HOME=" + codexHome}
+	env := []string{"CODEX_HOME=" + codexHome}
 
 	provider, hasProvider, err := normaliseProviderConfig(opts["model_provider"])
 	if err != nil {
@@ -123,17 +122,14 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 		// shell_environment_policy is applied. Do not persist provider credentials.
 		plan.DisableFeatures = append(plan.DisableFeatures, "shell_snapshot")
 		env = append(env, providerAPIKeyEnv+"="+provider.BearerToken)
-		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"shell_environment_policy.exclude", "[" + strconv(providerAPIKeyEnv) + "]"})
+		excludeFromShellEnvironment(&plan, providerAPIKeyEnv)
+		if provider.ContextWindow > 0 {
+			plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_context_window", fmt.Sprint(provider.ContextWindow)})
+		}
 	}
 
 	plan.Env = env
-	if controls != nil {
-		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"web_search", strconv(controls.WebSearch)}, [2]string{"model_verbosity", strconv(controls.TextVerbosity)})
-	}
-	if effort, ok := nativeConfig["model_reasoning_effort"].(string); ok {
-		plan.ModelReasoningEffort = effort
-		plan.ExtraConfig = append(plan.ExtraConfig, [2]string{"model_reasoning_effort", strconv(effort)})
-	}
+	applyExecutionControls(&plan, controls)
 	if plan.ModelProvider != "" {
 		// Pin model_provider at the CLI layer so codex skips its builtin
 		// "openai" provider — without this the [model_providers.oac]
@@ -143,6 +139,68 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 			[2]string{"model_provider", strconv(plan.ModelProvider)})
 	}
 	return plan, nil
+}
+
+// excludeFromShellEnvironment keeps a Runtime secret out of native shell tools.
+// The pattern is a native case-insensitive wildcard; one setting holds them all.
+func excludeFromShellEnvironment(plan *SessionPlan, pattern string) {
+	const key = "shell_environment_policy.exclude"
+	plan.shellEnvExclude = append(plan.shellEnvExclude, strconv(pattern))
+	value := "[" + strings.Join(plan.shellEnvExclude, ",") + "]"
+	for i := range plan.ExtraConfig {
+		if plan.ExtraConfig[i][0] == key {
+			plan.ExtraConfig[i][1] = value
+			return
+		}
+	}
+	plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value})
+}
+
+// applyExecutionControls maps each official value to its native setting. An
+// absent control sends nothing, so Codex keeps its native default; Codex itself
+// ignores a value the selected model does not support.
+func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls) {
+	if controls == nil {
+		return
+	}
+	set := func(key, value string) { plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value}) }
+	if search := controls.WebSearch; search != nil {
+		set("web_search", strconv(search.Mode))
+		set("tools.web_search.context_size", strconv(search.ContextSize))
+		if search.AllowedDomains != nil {
+			quoted := make([]string, len(search.AllowedDomains))
+			for i, domain := range search.AllowedDomains {
+				quoted[i] = strconv(domain)
+			}
+			set("tools.web_search.allowed_domains", "["+strings.Join(quoted, ",")+"]")
+		}
+		if location := search.Location; location != nil {
+			for _, field := range []struct {
+				key   string
+				value *string
+			}{{"city", location.City}, {"country", location.Country}, {"region", location.Region}, {"timezone", location.Timezone}} {
+				if field.value != nil {
+					set("tools.web_search.location."+field.key, strconv(*field.value))
+				}
+			}
+		}
+	}
+	if format := controls.OutputFormat; format != nil {
+		plan.OutputSchema = format.Schema
+	}
+	if controls.ReasoningEffort != "" {
+		plan.ModelReasoningEffort = controls.ReasoningEffort
+		set("model_reasoning_effort", strconv(controls.ReasoningEffort))
+	}
+	if controls.ReasoningSummary != "" {
+		set("model_reasoning_summary", strconv(controls.ReasoningSummary))
+	}
+	if controls.ServiceTier != "" {
+		set("service_tier", strconv(controls.ServiceTier))
+	}
+	if controls.TextVerbosity != "" {
+		set("model_verbosity", strconv(controls.TextVerbosity))
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -199,11 +257,11 @@ func normaliseProviderConfig(raw any) (providerConfig, bool, error) {
 	if raw == nil {
 		return providerConfig{}, false, nil
 	}
-	provider, err := harnessconfiguration.Configuration().ParseProvider(raw)
+	provider, err := harnessconfiguration.Declaration.Configuration.ParseProvider(raw)
 	if err != nil {
 		return providerConfig{}, false, err
 	}
-	return providerConfig{BaseURL: provider.BaseURL, BearerToken: provider.APIKey, WireAPI: "responses"}, true, nil
+	return providerConfig{BaseURL: provider.BaseURL, BearerToken: provider.APIKey, WireAPI: "responses", ContextWindow: provider.ContextWindow}, true, nil
 }
 
 func stringOpt(opts map[string]any, key string) string {

@@ -14,7 +14,7 @@ func TestExecutionOptionsInheritUserEnvironment(t *testing.T) {
 	r := testRequest(t)
 	t.Setenv("OAC_TEST_SECRET_CANARY", "secret")
 	t.Setenv("NODE_OPTIONS", "--import=untrusted")
-	opts, err := prepareOptions(testStateRoot(t), r)
+	opts, err := prepareOptions(testStateRoot(t), r, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,21 +43,22 @@ func TestExecutionRejectsUnqualifiedAuthority(t *testing.T) {
 		func(r *proto.PromptRequestPayload) { r.DisableExecutionEnvironment = false },
 		func(r *proto.PromptRequestPayload) { r.DisableSubagents = false },
 		func(r *proto.PromptRequestPayload) { r.RequireExistingNativeSession = true },
-		func(r *proto.PromptRequestPayload) { r.FunctionTools = []proto.FunctionTool{{Name: "f"}} },
-		func(r *proto.PromptRequestPayload) { r.ExecutionControls.WebSearch = "enabled" },
+		func(r *proto.PromptRequestPayload) {
+			r.ExecutionControls.WebSearch = &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}
+		},
 	} {
 		r := testRequest(t)
 		change(&r)
-		if _, err := prepareOptions(testStateRoot(t), r); err == nil {
+		if _, err := prepareOptions(testStateRoot(t), r, nil); err == nil {
 			t.Fatal("unsupported execution accepted")
 		}
 	}
 }
 
 func TestPublicTextDoesNotInvokeACPCommands(t *testing.T) {
-	for _, text := range []string{"/model", "/compact", "hello"} {
+	for text, want := range map[string]int{"/model": 2, "/compact": 2, "hello": 1} {
 		blocks := promptContent(text)
-		if len(blocks) != 2 || blocks[0]["text"] != text || blocks[1]["text"] != "" {
+		if len(blocks) != want || blocks[0]["text"] != text || (want == 2 && blocks[1]["text"] != "") {
 			t.Fatal(blocks)
 		}
 	}

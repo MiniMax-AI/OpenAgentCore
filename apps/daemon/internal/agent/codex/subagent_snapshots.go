@@ -218,6 +218,9 @@ func (s *Session) publishSubagentHistory(ctx context.Context, h subagentHistory,
 			if err := s.sendSubagentFact(ctx, proto.TypeSubagentTurn, key, payload); err != nil {
 				return false, err
 			}
+			if err := s.withdrawChildCalls(ctx, h.ID, turn.ID); err != nil {
+				return false, err
+			}
 		}
 	}
 	return busy || nativeStatus.Type == "active", nil
@@ -307,6 +310,7 @@ func subagentItemSnapshot(raw json.RawMessage, turnStatus string) (string, json.
 		body, err := json.Marshal(map[string]any{"status": status, "summary": summary})
 		return "reasoning", body, item.ID, err
 	default:
-		return "", nil, "", errors.New("codex: unsupported child Item observation")
+		// Item types without a neutral vocabulary are skipped, as in the root projection.
+		return "", nil, "", nil
 	}
 }

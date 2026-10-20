@@ -18,9 +18,7 @@ export const templates = {
     plugins: "Plugins", updated: "Updated", actions: "Actions",
   },
   access: { enabled: "Enabled", disabled: "Disabled", restricted: "Restricted" },
-  accessHelp: {
-    restricted: "Native tools can reach only the listed hostnames. Subdomains and redirect targets need their own entries.",
-  },
+  accessHelp: "Sessions with this policy are rejected, because the Runtime does not restrict network access.",
   edit: "Edit",
   delete: "Delete",
   deleteLabel: "Delete {{name}}",

@@ -52,8 +52,8 @@ class SelectionTests(unittest.TestCase):
         generator = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(generator)
         with patch.object(generator, "go", side_effect=lambda source: source):
-            outputs = generator.render(generator.load_catalog(generator.ROOT / generator.CATALOG))
-        for path in [*map(str, outputs), "scripts/acceptance/harness_catalog.py"]:
+            outputs = {**generator.render_registrations(generator.packages()), **generator.render_docs([])}
+        for path in [*map(str, outputs), "packages/agents-client/src/harness-catalog.ts", "scripts/acceptance/harness_catalog.py"]:
             with self.subTest(path=path):
                 self.assertIn("distribution", self.jobs(path))
 
@@ -67,7 +67,7 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(set(plan["jobs"]), {"hygiene", "distribution", "api"})
 
     def test_shared_protocol_and_catalog_propagate_to_consumers(self):
-        for path in ("contracts/agents-api/v1/session.go", "internal/harnessconfig/builtin/catalog.json"):
+        for path in ("contracts/agents-api/v1/session.go", "internal/harnessconfig/codex/declaration.go"):
             self.assertTrue({"backend", "api", "native", "web", "web-acceptance", "example", "distribution"} <= self.jobs(path))
         self.assertTrue({"web", "web-acceptance", "example", "api"} <= self.jobs("packages/agents-client/src/client.ts"))
 

@@ -108,11 +108,11 @@ test("shows a self-hosted Session's install command, issues its credential once,
 
   // Web displays Core-provided commands with short-lived installation authority.
   const install = section.getByRole("region", { name: "Connect a host" });
-  await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText("bash fixture-bootstrap --authorization fixture-short-lived");
+  await expect(install.getByLabel("Executor install command").locator("pre")).toHaveText(" OAC_INSTALL_GRANT=fixture-short-lived bash fixture-bootstrap");
   await expect(install.getByRole("link")).toHaveAttribute("href", "https://openagentcore.dev/docs/getting-started/self-hosted");
   await install.getByRole("combobox", { name: "Host platform" }).click();
   await page.getByRole("option", { name: "Windows · PowerShell" }).click();
-  await expect(install.locator("pre")).toContainText("fixture-bootstrap.ps1 -Authorization fixture-short-lived");
+  await expect(install.locator("pre")).toContainText("$env:OAC_INSTALL_GRANT='fixture-short-lived'; & fixture-bootstrap.ps1");
   await install.screenshot({ path: test.info().outputPath("native-host.png") });
 
   await section.getByRole("button", { name: "Issue credential" }).click();

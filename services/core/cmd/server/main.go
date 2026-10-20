@@ -25,6 +25,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -81,6 +82,16 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) == 2 && os.Args[1] == "healthcheck" {
+		if err == nil {
+			err = healthcheck(config.Addr)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err.Error())
+			os.Exit(1)
+		}
+		return
+	}
 	if err == nil {
 		err = run(config)
 	}
@@ -88,6 +99,29 @@ func main() {
 		log.Bg().Error("oac-core startup failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// healthcheck reports whether Core's listener answers /healthz. Compose runs it
+// inside the core container, so an empty or unspecified listen host is probed
+// on 127.0.0.1.
+func healthcheck(addr string) error {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return errors.New("OAC_ADDR must be a host:port listen address")
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		host = "127.0.0.1"
+	}
+	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
+	response, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
+	if err != nil {
+		return err
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("Core returned HTTP %d", response.StatusCode)
+	}
+	return nil
 }
 
 func run(config processconfig.Config) error {
@@ -103,17 +137,17 @@ func run(config processconfig.Config) error {
 	err := migrations.Apply(migrating, config.DatabaseURL)
 	cancelMigration()
 	if err != nil {
-		return fmt.Errorf("Agents API database migration failed: %w", err)
+		return fmt.Errorf("OpenAgentCore database migration failed: %w", err)
 	}
 	pool, err := pgxpool.New(ctx, config.DatabaseURL)
 	if err != nil {
-		return errors.New("invalid Agents API database configuration")
+		return errors.New("invalid OpenAgentCore database configuration")
 	}
 	defer pool.Close()
 	ready, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	if err := pool.Ping(ready); err != nil {
-		return errors.New("Agents API database connection failed")
+		return errors.New("OpenAgentCore database connection failed")
 	}
 	oauthClient, err := oauthrefresh.NewClient(config.OAuthTrustedOrigins)
 	if err != nil {
@@ -235,7 +269,7 @@ func run(config processconfig.Config) error {
 	if err != nil {
 		return err
 	}
-	deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey), dispatcher.Engines)
+	deploymentExecution, err := deployment.NewExecutionOperations(deploymentService, deploymentpg.NewExecution(lease, credentialKey), dispatcher.Harnesses())
 	if err != nil {
 		return errors.Join(err, lease.Close(ctx))
 	}

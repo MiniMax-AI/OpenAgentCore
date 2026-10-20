@@ -21,6 +21,7 @@ import { ResourceField } from "./components/ResourceField";
 import { Select, SelectOption } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
 import { ErrorNotice, Field, Section, Toggle } from "./components/shared";
+import { randomUuid } from "@oac/agents-client";
 export type Configuration = Pick<
   AgentProfile,
   | "model_id"
@@ -61,7 +62,7 @@ export function ConfigurationFields({
     creating?: boolean;
   } | null>(null);
   const add = (kind: string) =>
-    setEditor({ kind, id: crypto.randomUUID(), creating: true });
+    setEditor({ kind, id: randomUuid(), creating: true });
   const inspect = (kind: string) => (id: string) => setEditor({ kind, id });
   const close = () => setEditor(null);
   const capabilityField = (kind: Capability["kind"], label: string) => (

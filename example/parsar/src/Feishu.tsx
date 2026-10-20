@@ -23,6 +23,7 @@ import { Select, SelectOption } from "./components/ui/select";
 import { EmptyState } from "./components/ui/empty-state";
 import { dateTime } from "./lib/api";
 import { cn } from "./lib/utils";
+import { randomUuid } from "@oac/agents-client";
 
 interface Delivery {
   id: string;
@@ -413,7 +414,7 @@ function AddBot({
 
 function QrCreate({ close }: { close: () => void }) {
   const cache = useQueryClient();
-  const [id] = useState(() => crypto.randomUUID());
+  const [id] = useState(() => randomUuid());
   const [started, setStarted] = useState(false);
   const begin = useMutation({
     mutationFn: () =>
@@ -501,7 +502,7 @@ function ManualCreate({ close }: { close: () => void }) {
   });
   const save = useMutation({
     mutationFn: () =>
-      product(`feishu/bots/${crypto.randomUUID()}`, "PUT", {
+      product(`feishu/bots/${randomUuid()}`, "PUT", {
         ...form,
         revision: 0,
         enabled: false,

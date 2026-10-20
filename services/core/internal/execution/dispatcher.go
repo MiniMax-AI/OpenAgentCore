@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -21,7 +20,7 @@ import (
 type Snapshot struct {
 	ModelProviderConfigured bool                          `json:"model_provider_configured,omitempty"`
 	Agent                   v1.Agent                      `json:"agent"`
-	Environment             *v1.Environment               `json:"environment"`
+	Environment             v1.Environment                `json:"environment"`
 	VaultIDs                []string                      `json:"vault_ids,omitempty"`
 	MCPCredentials          []vaults.MCPCredentialBinding `json:"mcp_credentials,omitempty"`
 }
@@ -87,7 +86,7 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 		return sessions.Turn{}, err
 	}
 	var snapshot Snapshot
-	if json.Unmarshal(session.Configuration, &snapshot) != nil || strings.TrimSpace(snapshot.Agent.Model) == "" {
+	if json.Unmarshal(session.Configuration, &snapshot) != nil {
 		return sessions.Turn{}, sessions.ErrInvalidInput
 	}
 	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
@@ -119,17 +118,14 @@ func (d *Dispatcher) Run(ctx context.Context, tenantID, sessionID, turnID string
 	}
 	release, err := peer.TrackExecutionDelivery(turnID)
 	if err != nil {
-		return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
+		return d.finishRun(tenantID, sessionID, turnID, Result{ErrorCode: "delivery_unknown", AppliedThrough: through}, sessions.TurnFailed)
 	}
 	defer release()
 	result, status := d.deliver(ctx, tenantID, sessionID, peer, req, turnID, text, through, prepared)
-	return d.finishRun(tenantID, sessionID, turnID, snapshot.Agent.Model, result, status)
+	return d.finishRun(tenantID, sessionID, turnID, result, status)
 }
 
-func (d *Dispatcher) finishRun(tenantID, sessionID, turnID, model string, result Result, status string) (sessions.Turn, error) {
-	if result.Done.Usage.Model == "" {
-		result.Done.Usage.Model = model
-	}
+func (d *Dispatcher) finishRun(tenantID, sessionID, turnID string, result Result, status string) (sessions.Turn, error) {
 	nativeID, _ := result.Done.Metadata[proto.DoneMetaAgentSessionID].(string)
 	finishCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

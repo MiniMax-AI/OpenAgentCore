@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 9007be1099cf50f5ba376d2de4a060d039b6ee0b1c13c78a94665c28c2fc3fc6
+source_hash: 3408e2c811042732d35227150533cf12a85cfcff8a5118d7eb62a5d68549cc8b
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -37,7 +37,23 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 | [Environment resource](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agents/environment_info.py) | `pending`、`connected`、`disconnected`、`expired`、`failed` |
 | [Session environment event](https://github.com/openai/openai-python/blob/d7c41efee1b0802b79f3f88a678ef2052b06e9ce/src/openai/types/beta/agent_session_environment_state.py) | `pending`、`ready`、`connected`、`disconnected`、`failed`，并带可为 null 的 error |
 
-这两套词汇彼此独立；绝不要将其中一套转换为另一套。Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
+这两套词汇彼此独立；绝不要将其中一套转换为另一套。资源状态按下图变化，失败或过期的 Environment 不再改变：
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> connected
+    connected --> disconnected
+    disconnected --> connected
+    pending --> failed
+    connected --> failed
+    disconnected --> failed
+    pending --> expired
+    connected --> expired
+    disconnected --> expired
+```
+
+Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
 Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
 
@@ -119,20 +135,20 @@ Session 输入通过 `POST /agents/sessions/{id}/events` 以每次 1–64 个事
 
 Core 仅在批次已持久接纳后返回 202。对于取消，202 确认的是接纳，而非原生完成或进程退出。在 Session 锁内，重试会先恢复其原始预留或回执，然后由 Core 在活动 Turn 与新预留之间选择，并在后续工作中保持该目标。未加锁的读取或冲突后的重试绝不会选择不同路径。
 
-等待请求使用有界的池化操作，位于事务和执行租约之外；它绝不会准备或启动原生工作。只有此路由会将其响应写入期限延长至六分钟，以涵盖五分钟的数据库期限及响应时间。断开连接会停止等待，但不会取消预留。错误如下：
-
-| 条件 | 响应 |
-| --- | --- |
-| 预留已过期 | 409 `environment_input_expired` |
-| 预留已取消 | 409 `environment_input_cancelled` |
-| 向失败的 `openai_hosted` Environment 提交新输入 | 409 `conflict_error`，"the hosted environment failed to provision" |
-| 向失败或过期的 `self_hosted` Environment 提交新输入，或 Environment 失败时仍在等待的输入 | 409 `environment_unavailable` |
-| 执行所有权丧失 | 503 `execution_unavailable` |
-| Session 已删除 | 404 |
+等待请求使用有界的池化操作，位于事务和执行租约之外；它绝不会准备或启动原生工作。只有此路由会将其响应写入期限延长至六分钟，以涵盖五分钟的数据库期限及响应时间。断开连接会停止等待，但不会取消预留。该请求的全部结果见[输入错误](sessions-events.md#input-errors)。
 
 ### 预留 {#reservations}
 
 预留会在 Turn 接纳之前存储一个规范消息批次，截止时间依据数据库时钟设置为五分钟。
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> admitted: Turn claim
+    pending --> expired: deadline
+    pending --> cancelled: cancellation, archive or reset
+    pending --> failed: preparation failure
+```
 
 - 它要求 Session 带有 Environment，且没有活动工作。预留和直接输入共享 Session 锁和重试标识；pending 或 settled 的 key 不能通过直接接纳绕过其预留。
 - pending 预留会阻止新的直接批次，包括取消；较早成功的重试仍保持可读。
@@ -148,11 +164,9 @@ Core 仅在批次已持久接纳后返回 202。对于取消，202 确认的是�
 
 在 Turn 存在之前，Session 活动来自最近相关的预留和连接状态。离线 `self_hosted` Environment 上的待处理输入会请求 `environment_connection`；连接到达后会将其清除并设为 `idle`，同时 Worker 仍负责原生就绪性和接纳。没有待处理输入的离线 Environment 不会请求任何操作，而 `openai_hosted` 置备也绝不会请求连接。预留或连接变更会在同一事务中提交不可变的 Session 活动和使用量快照；较新的预留或活动 Turn 负责后续活动。已结算的非初始预留会将操作恢复为 `idle`，直至出现较新的工作。
 
-### 过期与调度 {#expiry-and-scheduling}
+### 过期 {#expiry}
 
-Worker 在每个 tick 中最多处理 32 个到期预留，处理顺序是在检查其租约之后、检查设备或执行槽位之前。该扫描使用带事务超时的租约 Store 连接，绝不使用池化写入方。部分截止时间索引和 `SKIP LOCKED` Session 锁使无关工作得以继续。截止点采用语句时间，而结算会在取得 Session 锁后重新检查数据库时钟。重启会在正常 tick 中继续处理过期；不存在单独的调度器。失败的 Turn 绝不能代替 Turn 之前的连接失败。
-
-当已完成的托管分配处于暂停或恢复状态且有下一 Turn 输入处于 pending 时，Core 会向托管 Runtime 维护循环发出提示。初始输入、冷创建、运行中或已禁用的计算资源、终止回执、取消和函数结果、历史及文件操作均不会发送提示。提示采用尽力而为的方式合并且不会阻塞；它们在正常的五秒周期中最多增加一次扫描，绝不会绕过容量、繁忙的生命周期门控或所有权检查。持久化工作和正常 ticker 始终具有权威性。
+Worker 在正常 tick 中处理到期的预留，重启后继续。失败的 Turn 绝不能代替 Turn 之前的连接失败。
 
 ## Runtime 能力准备 {#runtime-capability-preparation}
 
@@ -175,7 +189,7 @@ Core 会在 Session 创建时冻结资源版本、元数据和源选择。随后
 
 运行器仅使用中立的 Environment 和 Session 身份以及一个 Runtime 对端，不包含提供商、部署或操作系统分支。Harness 差异保留在适配器中。
 
-**可移植的准备输入。** `self_hosted` 输入仅携带 `workspace_directory` 和 `capability_directories`。无论 Session 采用哪种工作区放置方式，还可以发送 `x_agents_core.environment`，这是 Core 扩展，包含 `environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins` 和 `capability_directories`。它使用与 `openai_hosted` 输入相同的解析器和继承规则。若同一字段同时在 `x_agents_core.environment` 和顶层 `environment` 中提供，则会被拒绝，包括显式 null。`self_hosted` Session 只能通过此扩展指定模板，并且不能使用 network 不是 `enabled` 的模板（400，param `x_agents_core.environment.environment_template_id`）。机器位置、规格大小和网络策略不是此扩展的字段。
+**可移植的准备输入。** `self_hosted` 输入仅携带 `workspace_directory` 和 `capability_directories`。无论 Session 采用哪种工作区放置方式，还可以发送 `x_agents_core.environment`，这是 Core 扩展，包含 `environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins` 和 `capability_directories`。它使用与 `openai_hosted` 输入相同的解析器和继承规则。若同一字段同时在 `x_agents_core.environment` 和顶层 `environment` 中提供，则会被拒绝，包括显式 null。`self_hosted` Session 只能通过此扩展指定模板。机器位置、规格大小和网络策略不是此扩展的字段。
 
 ```json
 {
@@ -219,15 +233,24 @@ daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。�
 
 每条命令都使用启动用户的权限和主机网络。进程所有权会等待退出及 I/O 结算完成。命令输出会被丢弃；确认失败时只保留一个有界整数退出状态。
 
-使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[沙箱提供商生命周期](../../../docs/zh/sandbox-provider.md#suspension)定义何时可以替换计算。
+使用外部工作区存储的托管计算替换后，仅持久 Environment 文件系统和已通过资格验证的 Harness 私有原生历史会保留。Setup 命令不会重放。Setup 和工具可以写入启动用户有权访问的其他位置，但冷续接不保留临时系统盘上的修改、进程内存或后台进程。持久输出应写入工作区，软件包应使用已声明的安装路径；[沙箱提供商协议](../../../docs/zh/sandbox-provider.md#cold-replacement-after-checkpoint-retention)定义何时可以替换计算。
 
 ### 显式本地工具环境 {#explicit-local-tool-environment}
 
-安装器的 `--tool-env-file`（`OAC_RUNTIME_TOOL_ENV_FILE`）提供 Runtime 操作者的基础工具变量。准备过程会将这些值复制到其私有初始化快照中，并由 Session 的 `env` 键覆盖。Runtime 绝不会重写源文件，也不会继承无关的环境凭据。设置、能力解析和 Harness 执行都会读取同一份已准备快照。即使操作者编辑了文件，重连仍会保留该快照；新 Session 会读取当前文件。Harness profile 可以引用由 Runtime 所有的文件，但不得持久保存其值的副本。配置的文件缺失或无效时，准备过程会失败。
+安装程序的 `--tool-env-file`（`OAC_RUNTIME_TOOL_ENV_FILE`）提供 Runtime 操作者的基础工具变量。准备过程会将这些值复制到其私有初始化快照中，并由 Session 的 `env` 键覆盖。Runtime 绝不会重写源文件，也不会继承无关的环境凭据。设置、能力解析和 Harness 执行都会读取同一份已准备快照。即使操作者编辑了文件，重连仍会保留该快照；新 Session 会读取当前文件。Harness profile 可以引用由 Runtime 所有的文件，但不得持久保存其值的副本。配置的文件缺失或无效时，准备过程会失败。
 
 ### 初始化状态与失败 {#initialization-state-and-failure}
 
 Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed`，且独立于任何分配、身份验证和连接发布。
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending
+    pending --> running
+    running --> complete
+    pending --> failed
+    running --> failed
+```
 
 - Worker 的初始化调度器每次扫描 32 个 Environment，在末尾循环回绕，并依据执行并发度限制并发准备，且独立于提供商维护。
 - 缺少套接字不会消耗一次 pending 尝试。Harness 不可用时，会在安装前失败。每个操作都会重新检查当前权限和原始套接字；完成时还会重新检查精确绑定。
@@ -235,7 +258,7 @@ Environment 的初始化状态为 `pending`、`running`、`complete` 或 `failed
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
 - 失败对 Session 而言是终止状态，但不会销毁计算资源或文件。
 
-失败时，一个事务会将 Environment 标记为失败，并记录 `agent.session.environment.failed`、一个 `error` 事件和一个 `agent.session.failed`。Session 读取会返回 `failed`、作为 `error` 的原因以及作为 `last_active_at` 的失败时间；实时流会在失败事件后结束。待处理输入以失败状态结算。原因只指明步骤及其退出状态：
+初始化失败时记录的事件和 Session 状态由 [Environment 初始化失败](sessions-events.md#environment-initialization-failure)定义。原因只指明步骤及其退出状态：
 
 | 失败步骤 | 原因 |
 | --- | --- |
@@ -299,7 +322,7 @@ Session 会先应用模板，然后应用自身字段。组合仅在加密 Sessi
 
 `restricted` 要求在 `allowed_domains` 中提供 1–100 个精确 ASCII 主机名；子域名和重定向目标需要各自的条目。通配符、URL 或端口语法、IP 字面量、Unicode 和尾随点都会被拒绝。读取操作会返回提供的拼写、顺序和重复项；比较操作使用单独的小写去重副本。
 
-Runtime 不会强制执行 `disabled` 或 `restricted`，也没有提供商代为强制执行。因此，Core 会在模板中存储这些策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
+只有 `enabled` 可以运行。Core 会在模板中存储其他策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
 
 ### Env 与设置命令 {#env-and-setup-commands}
 
@@ -359,19 +382,19 @@ Skills 及其不可变版本是项目资源，独立于 Session 和原生安装�
 - Bundle 使用服务密码进行加密，并绑定到项目、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
 - 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的模板意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
 
-内联和引用的 Skills 使用相同的机密快照与安装器。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则为每个包使用一个受控封装，其中包含实际目录和不可变硬链接。自动原生 MCP 发现保持禁用。Codex 的嵌套 `SKILL.md` 发现、`agents/openai.yaml` 依赖项配置以及 Claude 内联 shell 预处理都会导致适配器准备失败。原生 Harness 配置绝不会整体透传。
+内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则将其作为私有状态路径下的用户 Skills，使原生列出与本地 `~/.claude/skills` 相同的裸名称。Claude 拒绝包含 `.claude-plugin` 的 Skill，因为原生会将其作为插件加载，连同其 hooks 和 MCP 服务器。Skill 根目录不会启用 MCP 服务器，只有 [Plugin MCP](#plugin-mcp) 会启用。Codex 与本地运行一样递归扫描每个 Skill 根目录，因此嵌套的 `SKILL.md` 会注册另一个原生 Skill。原生 Harness 配置绝不会整体透传。
 
 ### Plugin MCP {#plugin-mcp}
 
 Plugin 可以在 `.codex-plugin/plugin.json` 中通过 `mcpServers: "./.mcp.json"` 声明 MCP 服务器，也可以在省略路径时使用根目录下的 `.mcp.json`。该文件包含以服务器名称为键的 `mcpServers`。将 Plugin 根目录选为能力目录会激活其 MCP 声明；选择父目录则会发现 Skills，但不会激活嵌套 MCP 服务器。
 
-共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`，以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 daemon 变量。
+共享解析器接受 HTTP `url`、`bearer_token_env_var` 和字面量 `http_headers`（与公开 MCP 标头一样为非机密），以及 stdio `command`、`args`、选定的 `env_vars` 和包相对路径 `cwd`。不支持公开的 `env_http_headers`。Runtime 会重新解析已冻结的已安装包，并且只从已初始化的 env 中解析选定值；缺少值时会失败，而不会回退到模型或 daemon 变量。
 
 stdio 服务器通过 daemon 的 stdio helper 启动；该 helper 会解析已安装的声明，并以 Harness 的权限启动命令。在 Unix 上，helper 会将自身替换为服务器；在 Windows 上，它会在所属进程树内部转发 stdio。已初始化的值会覆盖声明中的变量。进程组和 Windows Jobs 负责取消及后代进程清理，而不负责隔离。
 
 [Harness capabilities](harness-capabilities.md#environment-preparation) 负责受支持的 Plugin 传输及每个 Harness 的限制。
 
-Environment MCP 需要启用的网络。重复的服务器身份会被拒绝。Claude 会拒绝字面量标头，因为固定版本客户端会再次展开这些标头，并将自定义标头跨来源转发。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
+重复的服务器身份会被拒绝。Claude 会拒绝 URL 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。MiniMax ACP HTTP 声明会保留在 Session 本地的原生内存中；令牌绝不会进入原生配置文件或进程参数。无法通过 Plugin 清单设置必需初始化和工具允许列表。
 
 ### 有效绑定 {#effective-bindings}
 
@@ -379,12 +402,12 @@ Runtime 会在适配器投影之前，通过 `agent.ResolveMCPBindings` 解析�
 
 ### 公开 MCP 连接来源 {#public-mcp-connection-origin}
 
-Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#http-mcp)）具有 `connection_origin`。省略或传入 null 表示 `service`，在 `self_hosted` Session 中也是如此。该来源会从已保存配置经过 Session 快照一直保留到 Runtime 请求，后者要求精确的线上版本；`service` 请求绝不会变为 `environment` 连接。
+Agent 的 HTTP MCP 工具（[declaration](execution-tools.md#mcp)）具有 `connection_origin`。省略或传入 null 表示 `service`，在 `self_hosted` Session 中也是如此，`stdio` 服务器除外，其唯一来源是 `environment`。该来源会从已保存配置经过 Session 快照一直保留到 Runtime 请求，后者要求精确的线上版本；`service` 请求绝不会变为 `environment` 连接。
 
 | 来源 | 连接发起位置 | 允许的放置方式 |
 | --- | --- | --- |
 | `service` | Core 的服务端执行主机 | 仅 `none` |
-| `environment` | Environment 的工作区 | `openai_hosted` 和启用网络的 `self_hosted` |
+| `environment` | Environment 的工作区 | `openai_hosted` 和 `self_hosted` |
 
 Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与放置方式以及 Runtime 公布的 HTTP、bearer 和必需初始化能力进行核对，Runtime 会在调用适配器之前再次验证来源。不存在按 Harness 名称或提供商分支选择不同路径的逻辑。
 
@@ -392,4 +415,4 @@ Core 的 Harness profile 会声明 `MCPOrigins`；接纳和分派会将来源与
 
 两种来源都支持匿名 HTTP 和 HTTPS bearer 凭据。所附加 Vault 的选择会冻结凭据身份，包括唯一的隐式 URL 匹配或匿名选择。只有该凭据经项目授权后，才会进入瞬时 Runtime 请求；绝不会搜索 Core 默认值或无关 Vault。解密失败或凭据缺失时，执行会失败且不会回退到匿名。公开 Environment MCP 保留 `project_vault` 权限，Plugin 凭据保留 `environment_configuration` 权限；两者都不会覆盖重复的服务器标签。Bearer 令牌绝不会进入持久化的原生配置或进程参数。
 
-工具允许列表和必需初始化遵循 [HTTP MCP contract](execution-tools.md#http-mcp)。
+工具允许列表和必需初始化遵循 [HTTP MCP contract](execution-tools.md#mcp)。

@@ -1,10 +1,10 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 8a7d64ed4be902844e1cbd5c7725e8364599131f3d7df6ce409300159db0ce47
+source_hash: 48515be4243404bb45d5fb93ffe9836580e37f01efb495c1e06e2722d6183165
 ---
 
-Core 安装的每项设置都恰好只有一个归属位置，分属以下三类：
+Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
 
 | 类别 | 示例 | 归属位置 | 修改方式 | 生效方式 |
 | --- | --- | --- | --- | --- |
@@ -16,28 +16,11 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 
 ## 进程设置 {#process-settings}
 
-[安装选项](getting-started/install-options.md)中的安装标志只会一次性写入 `.env`。要更改设置，请编辑 `.env` 并应用：
+[安装选项](getting-started/install-options.md#flags)中的安装标志只会一次性写入 `.env`。要更改设置，请编辑 `.env` 并应用：
 
 ```sh
 ~/.oac/core/oac apply
 ```
-
-### oac apply 的工作方式 {#how-oac-apply-works}
-
-1. 它用你改过的 `.env` 运行 `oac-core check-config`。值无效时什么都不改。
-2. 它运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务。
-
-用 `docker compose ps` 检查服务。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
-
-### 更改公共 URL {#changing-the-public-url}
-
-`OAC_PUBLIC_URL` 是应用、节点、沙箱和自托管执行器使用的唯一源地址。Core 从中派生守护进程 WebSocket URL、自托管 `remote_url` 和每个沙箱的连接地址。它是 http 或 https 源地址，也就是浏览器和节点使用的地址。安装通过 `OAC_WEB_PORT` 以 HTTP 提供 Web；前面有反向代理或托管平台时，由它们终止 HTTPS。
-
-要更改它，先把反向代理指向新地址，然后编辑 `OAC_PUBLIC_URL` 并运行 `oac apply`。之后：
-
-- 使用旧地址的节点不会再获得新沙箱：请在 Web 中移除这些节点，然后重新添加。
-- 只有在旧地址仍可访问此 Core 时，现有沙箱和执行器才会继续工作。
-- 自托管执行器必须使用新的 `remote_url` 重启，并且其安装程序会拒绝为旧地址进行的安装：请创建新的自托管 Session，然后重新连接其主机。
 
 ### 设置 {#settings}
 
@@ -47,8 +30,8 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `OAC_PUBLIC_URL` | 必填；`compose.yaml` 设为 `http://localhost:8080` | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[更改公共 URL](#changing-the-public-url) |
-| `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。安装器设置为 `0.0.0.0` |
+| `OAC_PUBLIC_URL` | 必填；`compose.yaml` 设为 `http://localhost:` 加 `OAC_WEB_PORT` | 应用、节点、沙箱和自托管执行器使用的源地址。参阅[更改公共 URL](getting-started/public-address.md#changing-the-public-url) |
+| `OAC_HOST` | `127.0.0.1` | `compose.yaml` 发布的 Web 绑定地址。安装程序设置为 `0.0.0.0` |
 | `OAC_WEB_PORT` | `8080` | Host port of Web |
 | `OAC_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error` |
 | `OAC_LOG_FORMAT` | `auto` | `auto`, `text` or `json` |
@@ -62,33 +45,13 @@ Core 安装的每项设置都恰好只有一个归属位置，分属以下三类
 
 未设置或为空的值使用默认值。编辑 `.env`，然后运行 `oac apply`。Core 在启动时一次性读取所有进程设置及设置指向的文件，并在 `GET /core/v1/installation` 报告加载的结果。`oac-core check-config` 会在不启动 Core 的情况下加载并校验同样的设置和文件。`OAC_PROVIDER_ROOT` 下的原生安装程序目录清单不属于设置，Core 只在启动时检查它。错误信息只指明变量名，绝不包含其值。敏感设置只报告是否已配置。
 
-### Runtime 历史文件 {#runtime-history-file}
+### oac apply 的工作方式 {#how-oac-apply-works}
 
-`OAC_HISTORY_SETTINGS_FILE` 指向一个 JSON 文件，用于调整[保留的历史记录](../../contracts/agents-api/zh/runtime-observability.md#retained-history-and-optional-export)，并可添加 OTLP 导出。没有此文件时，Core 按下表默认值把历史记录保存在数据库中。在 Compose 安装中，把该文件放在数据卷的 `secrets/core/` 目录中，属主为 UID 65532，权限为 `0600`，并设置 `OAC_HISTORY_SETTINGS_FILE=/run/oac/<file name>`：Core 以只读方式把该目录挂载到 `/run/oac`。headers 中可以包含导出凭据，它们绝不会出现在 `oac` 输出或安装报告中。未知字段会被拒绝。
+1. 它运行 `init` 服务，确认数据卷属于已安装的版本；如果首次启动中途停止，就完成初始化。
+2. 它用你改过的 `.env` 运行 `oac-core check-config`。值无效时不改动任何服务。
+3. 它用主机上已有的镜像运行 `docker compose up -d --wait`。Compose 只重新创建配置有变化的服务，并移除该版本不再定义的容器。若有服务未变为健康，消息会指出该服务和打印其日志的命令。
 
-| 字段 | 默认值 | 含义 |
-| --- | --- | --- |
-| `sample_interval_seconds` | `30` | 定期采样间隔，范围为 5 到 300 |
-| `queue_capacity` | `256` | 每个导出器排队的记录数，最大 4096 |
-| `timeout_seconds` | `2` | 导出和历史查询超时，最大 30 |
-| `endpoint` | 未设置 | 绝对 OTLP/HTTP 指标 URL，例如 `https://collector.example/v1/metrics`。未设置时 Core 不导出，其他导出字段也必须未设置 |
-| `transport` | 未设置 | `otlp_http`；设置 `endpoint` 时必填 |
-| `insecure` | `false` | `http` 端点必须设为 `true`，`https` 端点不允许设为 `true` |
-| `headers` | 无 | 发往端点的请求标头。`Host`、`Content-Length`、`Content-Type` 和 `Content-Encoding` 为保留标头 |
-
-### Runtime 资源目录 {#runtime-resource-directories}
-
-Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` 是由 `OAC_RUNTIME_HOME` 选择的 Runtime 主目录。`OAC_RUNTIME_STATE_DIRECTORY` 仅在未设置时采用默认值；显式空值、相对路径或非规范路径会被拒绝。目录设置没有其他文件或环境变量回退来源。
-
-| Runtime 进程设置 | 默认值 | 打包的 Linux 镜像 |
-| --- | --- | --- |
-| `OAC_RUNTIME_INITIALIZATION_DIRECTORY` | `<RuntimeHome>/initialization` | `/environment/initialization` |
-| `OAC_RUNTIME_PACKAGE_DIRECTORY` | `<RuntimeHome>/packages` | `/environment/packages` |
-| `OAC_RUNTIME_STATE_DIRECTORY` | `<RuntimeHome>` | `/environment/runtime-state` |
-
-状态目录包含保留的原生 Harness 历史和能力安装完成记录，与声明的工作区目录分开。选择独立状态目录不会将 Runtime 设备凭据或连接身份移出 Runtime 主目录中的实例私有路径；不得随原生历史复制这些数据。[Harness 接入指南](../../contracts/agents-api/zh/harness-onboarding.md#register-the-adapter)定义适配器边界，[Environment 准备](../../contracts/agents-api/zh/environments.md)负责初始化和包的行为。
-
-将状态放在独立文件系统上，可以在替换计算资源时保留这些文件。原生续接仍要求 Harness 已通过资格验证、所有权匹配，并确认前一个写入者已停止。这不保留进程内存或计算资源根磁盘上的任意文件。
+用 `docker compose ps` 检查服务。重启会中断哪些操作，见[停止和重启](getting-started/operations.md#stop-and-restart)。
 
 ## 运行时设置：Web {#runtime-settings-web}
 
@@ -97,98 +60,27 @@ Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` �
 | 设置 | Web 中的位置 | Core API | 注意事项 |
 | --- | --- | --- | --- |
 | 沙箱提供商：Docker、microsandbox 或 E2B | **设置** → **沙箱与调度**：设置向导，最后点击 **保存配置** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个沙箱提供商，在首次登录后选择。要改用其他提供商，必须先执行 **重置部署**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
-| 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **设置** → **沙箱与调度** → **修改资源** | `/core/v1/sandbox/deployment` | Web 会推荐 [提供商声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
-| 节点及其容量 | **节点**：**添加节点**、**编辑节点** 和移除 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[节点指南](getting-started/nodes.md) |
+| 沙箱大小、E2B 密钥和模板构建 | **设置** → **沙箱与调度** → **修改资源** | `/core/v1/sandbox/deployment` | Web 会推荐 [提供商声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小。E2B 密钥仅可写入，并且已加密 |
+| 节点及其容量 | **节点**：**添加节点**、**编辑节点** 和移除 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[添加和管理节点](getting-started/nodes.md) |
 | 空闲挂起 | **设置** → **沙箱与调度** → **自动挂起** → **空闲多久后挂起（秒）** → **保存** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
-| 独立工作区存储和租户容量 | **设置 → 工作区存储** | `/core/v1/workspace-storage` | 参阅[独立工作区存储](#independent-workspace-storage)；现有工作区保留自身配置 |
+| 独立工作区存储和租户容量 | **设置 → 工作区存储** | `/core/v1/workspace-storage` | 参阅[设置工作区存储](getting-started/workspace-storage.md)；现有工作区保留自身配置 |
 | 项目和 API 密钥 | **项目与密钥**：**创建项目**、**改名**、**签发密钥**、**撤销**、**归档** | `/core/v1/projects` | 密钥只显示一次；Core 存储其摘要 |
 | 每个 Harness 的默认模型 | **设置** → **模型与凭据**：**设置** | `/core/v1/harnesses/{harness}/model-configuration` | 请参阅[默认模型](#default-models) |
 | 自托管 Session 的执行器凭据 | **Session 日志**，然后进入 **Session** 页面：**执行器凭据** | `/core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 请参阅[自托管执行器](getting-started/self-hosted.md) |
 
 哪些 Harness 已启用以及默认 Harness 属于进程设置（`OAC_HARNESSES`、`OAC_DEFAULT_HARNESS`）；**设置 → 服务与部署** 在 **启动设置** 中列出它们。**设置 → 模型与凭据** 在 Harness 已启用且设置了默认模型时将其标记为 **就绪**，否则指出缺少的步骤：**未设置模型提供商** 或 **已禁用**。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 列出了所有 Core API 路由，[部署契约](../../contracts/agents-api/zh/sandbox-deployment.md) 定义了沙箱字段、限制和更改规则。
 
-### 独立工作区存储 {#independent-workspace-storage}
+### 节点容量 {#node-capacity}
 
-首个支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。新安装应先准备存储和服务账户，再向 Core 暴露挂载、选择存储、配置 microsandbox，最后注册节点。启动服务前，在 Linux Core 主机和所有参与节点上将同一个 NFSv4.2 导出挂载到相同的绝对路径，例如 `/srv/oac-workspaces`。运维人员负责导出、挂载可用性和服务启动顺序。使用带有 `root_squash` 的受信任客户端 AUTH_SYS 导出；不要启用 `no_root_squash` 或放宽权限来使检查通过。按照适配器的[所有权要求](./workspace-provider.md#kernel-nfs-adapter)准备命名空间和服务身份。
+生成 **添加节点** 命令时，Core 会批准节点容量：**同时运行的沙箱**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **保留的沙箱**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值。预留和尚未确认的清理操作都会占用容量；retained slot 已满时可以[提前结束空闲检查点的保留期](./sandbox-provider.md#cold-replacement-after-checkpoint-retention)；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
 
-Core 的 Compose 服务已使用 UID 65532 运行。添加节点前，创建同 UID 的 `oac-node`，主目录为 `/var/lib/oac-node`，使用 nologin shell 和非零主组。附加组只能包含其主组、`docker` 和 `kvm`；已有主目录必须属于该账户。安装器会接管此账户。如果没有预创建账户，安装器分配的系统 UID 不一定与 Core 一致。注册前应通过主机管理流程解决已有 UID 或账户冲突；修改运行中账户的 UID 不属于存储配置步骤。
+`OAC_EXECUTION_CONCURRENCY` 与此无关：它限制 Core 中并发执行的工作量。
 
-对于 Compose 部署，通过部署平台的 Compose 自定义能力，在现有 `core` 服务的 `volumes` 中添加可读写绑定挂载，保留现有服务卷和用户。主机源目录必须已经是 NFS 挂载；`create_host_path: false` 只防止创建不存在的源目录，并不能证明 NFS 已挂载。先挂载再创建容器；主机卸载或重新挂载后，应重新创建容器，使其挂载命名空间使用预期挂载。
+### 默认模型 {#default-models}
 
-```yaml
-services:
-  core:
-    volumes:
-      - type: bind
-        source: /srv/oac-workspaces
-        target: /srv/oac-workspaces
-        read_only: false
-        bind:
-          create_host_path: false
-```
+在 **设置** → **模型与凭据** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/core/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
 
-在 **设置 → 工作区存储 → 选择新配置** 中选择存储，或按[管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)说明，使用 Core 密钥调用 `PUT /core/v1/workspace-storage`。首次设置时，分别为不可变配置 `id` 和命名空间标记生成规范 UUID，然后使用实际值提交以下结构。恢复时保留已有标识。选择操作会在 Core 中运行适配器的可用性、所有权和 xattr 检查；它不证明每个节点均能解析该挂载：
-
-```json
-{
-  "id": "11111111-1111-4111-8111-111111111111",
-  "adapter": "nfs",
-  "parameters": {
-    "root": "/srv/oac-workspaces",
-    "namespace_id": "22222222-2222-4222-8222-222222222222",
-    "uid": 65532
-  },
-  "tenant_capacity_mib": 0
-}
-```
-
-此配置不实施单个工作区配额，因此 `tenant_capacity_mib` 必须为 `0`。如需有上限的工作区，应准备[配额模式存储服务器](#quota-mode-storage-server)，并改为选择带[租户容量](#tenant-capacity)的配额模式配置。
-
-随后通过[沙箱部署 API](../../contracts/agents-api/zh/sandbox-deployment.md#routes)创建或更新 microsandbox 部署，并保留所需计算资源、Runtime 和提供商配置。`resources.environment_disk_mib` 是每个新工作区的容量：非配额模式下为 `0`，正数会被拒绝；配额模式下至少为 1024 MiB，`0` 会在工作区准入时被拒绝。部署变更时，既有工作区保持其获准时的容量。部署的工作区要求和每个 Session 的挂载凭据均从已选数据库配置派生；不要向部署添加文件系统字段，也不要在节点文件中添加第二份存储配置。
-
-存储表单接受 adapter 标识、JSON 对象形式的参数和可选的只写凭据 JSON 对象。Core 验证这些由 adapter 定义的值；Web 不定义提供商专属存储字段。**修改租户容量** 保留已选的不可变配置。选择另一份配置需要新的 ID，不会迁移现有工作区。
-
-选择文件系统和部署后，通过 **节点 → 添加节点** 注册已准备的主机。计算资源已连接且就绪并不足以证明外部文件系统具备资格；准入应用流量前，通过每个参与节点验证实际 Session 创建和访问。将独立命名空间纳入[停止写入后的备份恢复流程](./getting-started/operations.md#back-up)。
-
-#### 配额模式存储服务器 {#quota-mode-storage-server}
-
-配额模式通过 NFS 服务器上的 XFS project quota 为每个工作区的已分配字节和 inode 设定上限，由 Core 经受限 SSH 强制命令调用的 `oac-workspace-quota` 命令设置。协议和强制执行语义由[配额模式](./workspace-provider.md#quota-mode)负责。以存储服务器管理员身份完成以下准备：
-
-1. 将导出放在启用强制 project quota（`prjquota`，而非 `pqnoenforce`）挂载的本地 XFS 文件系统上。导出根目录必须是该挂载点的子目录，例如挂载 `/srv/xfs`、导出 `/srv/xfs/oac-workspaces`；该命令将日志库保存在导出之外的 `/srv/xfs/.oac-quota`。按上文准备命名空间根目录和标记。
-2. 安装 `xfsprogs` 和 Python 3.9 或更高版本。从匹配的发行包将 `storage/oac-workspace-quota` 安装为 `/usr/local/sbin/oac-workspace-quota`，所有者为 root，权限 `0755`。
-3. 写入 `/etc/oac/workspace-quota.json`，所有者为 root，组和其他用户不可写：`{"export_root": "/srv/xfs/oac-workspaces", "mount_point": "/srv/xfs"}`。
-4. 预留该文件系统上其他 project 均未使用的 project ID 范围，然后仅初始化一次日志库：`oac-workspace-quota --config /etc/oac/workspace-quota.json init --projid-start 100000 --projid-end 199999`。它拒绝在已有日志库上运行；绝不要初始化恢复后的存储。
-5. 生成专用密钥对，例如 `ssh-keygen -t ed25519 -N '' -f oac-workspace-quota`。在一个具有可用 shell 的账户（如 `oac-quota`）的 `authorized_keys` 中授权其公钥：`restrict,from="<Core address>",command="sudo -n /usr/local/sbin/oac-workspace-quota --config /etc/oac/workspace-quota.json serve" ssh-ed25519 AAAA...`，并添加 sudoers 条目 `oac-quota ALL=(root) NOPASSWD: /usr/local/sbin/oac-workspace-quota --config /etc/oac/workspace-quota.json serve`。也可以在 `PermitRootLogin forced-commands-only` 下为 root 使用相同选项授权该密钥，命令中不带 `sudo -n`。保持 `PermitUserEnvironment no`。
-6. 在服务器本机的 `/etc/ssh/` 中读取其公共主机密钥，不要通过未经认证的网络扫描获取。
-
-选择配额模式配置时，将私钥作为只写凭据提交。选择成功后删除本地私钥文件；Core 使用 `secrets/core/credential.key` 加密保存它：
-
-```json
-{
-  "id": "33333333-3333-4333-8333-333333333333",
-  "adapter": "nfs",
-  "parameters": {
-    "root": "/srv/oac-workspaces",
-    "namespace_id": "22222222-2222-4222-8222-222222222222",
-    "uid": 65532,
-    "quota": {
-      "endpoint": "storage.internal:22",
-      "user": "oac-quota",
-      "host_key": "ssh-ed25519 AAAA..."
-    }
-  },
-  "credential": {
-    "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\n...\n-----END OPENSSH PRIVATE KEY-----\n"
-  },
-  "tenant_capacity_mib": 65536
-}
-```
-
-选择操作会通过固定的主机密钥调用该命令的只读检查。随后在 `resources.environment_disk_mib` 中设置每个工作区的容量并更新部署。在此更新之前，从非配额配置切换过来的安装会拒绝新工作区；既有工作区继续使用其自身配置。凭据属于不可变配置。如需轮换，先授权新密钥，使用新密钥选择新的配置 ID，并在仍有绑定旧配置的工作区处于创建过程中时保留旧密钥的授权。
-
-配额模式支持的恢复方式是对 XFS 文件系统进行块级复制；参见[备份](./getting-started/operations.md#back-up)。
-
-#### 租户容量 {#tenant-capacity}
+### 租户容量 {#tenant-capacity}
 
 `tenant_capacity_mib` 是安装唯一的租户容量策略，只能与选择一起通过 `PUT /core/v1/workspace-storage` 写入，并保存在 Core 数据库中。正值要求配额模式配置，配额模式配置也要求正值。它限制单个租户所有尚未确认删除的工作区的获准容量之和，并跨配置变更生效；计数规则由[能力验证](./workspace-provider.md#capability-validation)负责。调低该值只拒绝新工作区；删除 Session 后，其存储被移除时即释放容量。
 
@@ -197,16 +89,6 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 非配额模式下创建的工作区保持无上限；不会调整其大小或迁移它们。只要保留此类工作区，在正策略下其租户在删除该 Session 前无法准入新工作区。
 
 该策略限制每个租户可承诺的容量，而不限制文件系统。应按租户数乘以策略值，并为无上限工作区、标识、删除标记、日志库和 XFS 元数据预留余量来规划 XFS 文件系统大小；或者明知超额分配并监测可用空间。每个节点的 `checkpoint_root` 应放在独立存储上。容量上限不提供 I/O 公平性。
-
-### 节点容量 {#node-capacity}
-
-生成 **添加节点** 命令时，Core 会批准节点容量：**同时运行的沙箱**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **保留的沙箱**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值。预留和尚未确认的清理操作都会占用容量；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
-
-`OAC_EXECUTION_CONCURRENCY` 与此无关：它限制 Core 中并发执行的工作量。
-
-### 默认模型 {#default-models}
-
-在 **设置** → **模型与凭据** 中设置默认值，或使用 `PUT /core/v1/harnesses/{harness}/model-configuration`。Core 使用 `secrets/core/credential.key` 加密提供商密钥，并且绝不返回这些密钥。[模型执行](../../contracts/agents-api/zh/model-execution.md#deployment-defaults) 定义了请求字段和替换规则，[优先级](../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence)说明了哪些 Session 使用默认值。
 
 ## Compose 安装 {#compose-installations}
 
@@ -229,12 +111,12 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 
 ## Docker 节点配置 {#docker-node-configuration}
 
-节点安装程序会将 Docker 的主机设置写入节点配置文件的 `native` 对象，只有 Docker 适配器读取它。部署资源、Runtime 发行版本和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
+节点安装程序会将 Docker 的主机设置写入节点配置文件的 `native` 对象，只有 Docker 适配器读取它。部署资源和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
 
 | 字段 | 安装程序设置的值 | 含义 |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | 显式 Docker Engine 套接字 |
-| `image` | 加载后 Runtime 镜像的本地 ID | 发行版本的 `image_id` 或 `image_manifest_digest`。主机的镜像存储决定由哪个 digest 指代已加载的镜像，因此该值属于节点本地；适配器只接受这两个值 |
+| `image` | 加载后 Runtime 镜像的本地 ID | 本安装的 Runtime 镜像。主机的镜像存储决定其本地 ID 是清单中的 `image_id` 还是 `image_manifest_digest`，因此该值属于节点本地 |
 | `network` | `oac-node-<installation-id>` | Runtime 容器网络 |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | 所匹配发行版的 seccomp 配置文件 |
 | `nested_sandbox` | `true` | 启用 Docker 适配器的 init 进程和 proc-mask 配置 |
@@ -248,12 +130,17 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 | 路径 | 内容 | 修改者 |
 | --- | --- | --- |
 | `.env` | 进程设置和固定的 Compose 项目名 | 用户修改后运行 `oac apply` |
-| `compose.yaml`、`compose-sha256sums.txt` | 已校验的发行版服务定义 | 发行流程 |
+| `compose.yaml` | 已校验的发行版服务定义 | 安装程序，在安装时 |
+| `compose.override.yaml` | 可选的本地 Compose 条目。源码包安装中它是 JSON，还保存 Web 的 `/node-payload` 绑定和 Core 的原生安装程序绑定 | 用户。`install.py` 只替换自己的条目，并要求 JSON 格式 |
 | `oac`（Windows 为 `oac.exe`） | 原生管理命令 | 安装程序 |
 
 同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。
 
-Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台并把 `/v1`、`/api/v1` 转发到 Core，是唯一发布端口（`OAC_WEB_PORT`）的服务。没有服务持有 Docker 套接字。
+Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、`core` 和 `web`。Core 启动时执行数据库迁移。Web 提供控制台，是唯一发布端口（`OAC_WEB_PORT`）的服务；它转发的内容见[请求边界](./web/console-server.md#request-boundary)。没有服务持有 Docker 套接字，Web 和 Core 也没有 KVM 访问权限。
+
+## 独立工作区存储 {#independent-workspace-storage}
+
+支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、`oac-node` 账户、Compose 挂载、选择负载和配额模式存储服务器。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 
@@ -262,7 +149,7 @@ Core 读取进程环境。Compose 将 `.env` 插值到环境中，并把机密�
 | 变量 | 设置来源 |
 | --- | --- |
 | `OAC_PUBLIC_URL` | 必填。[公共 URL](#settings)。Core 只校验一次，并从中派生 Agents API 基地址、守护进程 WebSocket URL、自托管 `remote_url`、安装程序下载地址、托管沙箱地址和部署的只读 `core_url`，绝不从请求标头派生 |
-| `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091` |
+| `OAC_ADDR` | 安装程序在容器中设置为 `:8091`。独立启动的 Core 在未设置或为空时，默认使用 `127.0.0.1:8091`。主机部分为空或未指定时，`oac-core healthcheck` 在 `127.0.0.1` 上探测其 `/healthz` |
 | `OAC_DATABASE_URL` | 必填。不含密码的 PostgreSQL URL |
 | `OAC_DATABASE_PASSWORD_FILE` | `/run/database/password`。此时 URL 不得包含密码 |
 | `OAC_CREDENTIAL_KEY_FILE` | 必填。`/run/oac/credential.key`：Base64 编码的 32 字节随机密钥。Core 用它加密存储的凭据 |
@@ -281,11 +168,39 @@ Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时�
 
 | 变量 | 默认值 | 含义 |
 | --- | --- | --- |
-| `OAC_WEB_ADDR` | `:8080` | 监听地址。主机部分为空或未指定时，健康检查在 `127.0.0.1` 上探测它 |
+| `OAC_WEB_ADDR` | `:8080` | 监听地址。主机部分为空或未指定时，`oac-web healthcheck` 在 `127.0.0.1` 上探测其 `/healthz` |
 | `OAC_PUBLIC_URL` | 必填 | [公共 URL](#settings)：面向浏览器的准确源地址，可以使用 HTTP 或 HTTPS，且不得包含路径。Host 和源地址检查使用此值；HTTPS 会使 Session Cookie 具备 `Secure` 属性 |
-| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core 的源地址，可以使用 HTTP 或 HTTPS，且不得包含凭据、查询参数或路径。健康检查探测其 `/healthz` |
+| `OAC_WEB_UPSTREAM` | `http://core:8091` | Core 的源地址，可以使用 HTTP 或 HTTPS，且不得包含凭据、查询参数或路径 |
 | `OAC_WEB_CORE_KEY_FILE` | 必填 | 常规文件的绝对路径，该文件没有组或其他用户权限，并保存 Core 密钥：至少 32 个字符、不含空白字符、最大 4 KiB |
 | `OAC_WEB_DIST` | `/www` | 已构建控制台的绝对目录；必须包含 `index.html` |
 | `OAC_WEB_NODE_PAYLOAD_DIR` | 未设置 | 所匹配发行版的节点载荷（即安装程序的 `node-payload/`）的绝对路径。未设置时，不提供 `/node-install/*`，且 **添加节点** 不可用 |
 
 未设置或为空的变量使用其默认值。无效值会阻止控制台启动，并显示一条指明变量名的消息。控制台还会读取三个日志[进程设置](#settings)，并拒绝 Core 拒绝的值。对于不在同一台计算机上的任何浏览器，请使用 HTTPS。
+
+## 附录：Runtime 历史文件 {#runtime-history-file}
+
+`OAC_HISTORY_SETTINGS_FILE` 指向一个 JSON 文件，用于调整[保留的历史记录](../../contracts/agents-api/zh/runtime-observability.md#retained-history-and-optional-export)，并可添加 OTLP 导出。没有此文件时，Core 按下表默认值把历史记录保存在数据库中。在 Compose 安装中，把该文件放在数据卷的 `secrets/core/` 目录中，属主为 UID 65532，权限为 `0600`，并设置 `OAC_HISTORY_SETTINGS_FILE=/run/oac/<file name>`：Core 以只读方式把该目录挂载到 `/run/oac`。headers 中可以包含导出凭据，它们绝不会出现在 `oac` 输出或安装报告中。未知字段会被拒绝。
+
+| 字段 | 默认值 | 含义 |
+| --- | --- | --- |
+| `sample_interval_seconds` | `30` | 定期采样间隔，范围为 5 到 300 |
+| `queue_capacity` | `256` | 每个导出器排队的记录数，最大 4096 |
+| `timeout_seconds` | `2` | 导出和历史查询超时，最大 30 |
+| `endpoint` | 未设置 | 绝对 OTLP/HTTP 指标 URL，例如 `https://collector.example/v1/metrics`。未设置时 Core 不导出，其他导出字段也必须未设置 |
+| `transport` | 未设置 | `otlp_http`；设置 `endpoint` 时必填 |
+| `insecure` | `false` | `http` 端点必须设为 `true`，`https` 端点不允许设为 `true` |
+| `headers` | 无 | 发往端点的请求标头。`Host`、`Content-Length`、`Content-Type` 和 `Content-Encoding` 为保留标头 |
+
+## 附录：Runtime 资源目录 {#runtime-resource-directories}
+
+Runtime 在发现 Harness 适配器之前解析资源目录。`<RuntimeHome>` 是由 `OAC_RUNTIME_HOME` 选择的 Runtime 主目录。`OAC_RUNTIME_STATE_DIRECTORY` 仅在未设置时采用默认值；显式空值、相对路径或非规范路径会被拒绝。目录设置没有其他文件或环境变量回退来源。
+
+| Runtime 进程设置 | 默认值 | 打包的 Linux 镜像 |
+| --- | --- | --- |
+| `OAC_RUNTIME_INITIALIZATION_DIRECTORY` | `<RuntimeHome>/initialization` | `/environment/initialization` |
+| `OAC_RUNTIME_PACKAGE_DIRECTORY` | `<RuntimeHome>/packages` | `/environment/packages` |
+| `OAC_RUNTIME_STATE_DIRECTORY` | `<RuntimeHome>` | `/environment/runtime-state` |
+
+状态目录包含保留的原生 Harness 历史和能力安装完成记录，与声明的工作区目录分开。选择独立状态目录不会将 Runtime 设备凭据或连接身份移出 Runtime 主目录中的实例私有路径；不得随原生历史复制这些数据。[Harness 接入指南](../../contracts/agents-api/zh/harness-onboarding.md#register-the-adapter)定义适配器边界，[Environment 准备](../../contracts/agents-api/zh/environments.md)负责初始化和包的行为。
+
+将状态放在独立文件系统上，可以在替换计算资源时保留这些文件。原生续接仍要求 Harness 已通过资格验证、所有权匹配，并确认前一个写入者已停止。这不保留进程内存或计算资源根磁盘上的任意文件。

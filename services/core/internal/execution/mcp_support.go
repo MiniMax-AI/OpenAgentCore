@@ -13,8 +13,8 @@ func (p Policy) mcpCredentialBindings(engine string, snapshot Snapshot) (map[str
 	if err != nil {
 		return nil, err
 	}
-	profile, qualified := p.Engines.Lookup(engine)
-	if len(selected) > 0 && (!qualified || !profile.MCPBearer.IsSupported()) {
+	declaration, known := p.Harnesses().Lookup(engine)
+	if len(selected) > 0 && (!known || !declaration.Capabilities.MCPHTTPBearerAuth.IsSupported()) {
 		return nil, errors.New("The configured engine currently supports anonymous HTTP MCP only.")
 	}
 	return selected, nil
@@ -26,8 +26,8 @@ func (p Policy) mcpExecutionCredentials(engine string, snapshot Snapshot, server
 	fail := func(message string) (map[string]vaults.MCPCredentialBinding, error) {
 		return nil, errors.New(message)
 	}
-	profile, _ := p.Engines.Lookup(engine)
-	if err := profile.ValidateMCPOrigins(snapshot.Environment, servers); err != nil {
+	declaration, _ := p.Harnesses().Lookup(engine)
+	if err := declaration.ValidateMCPOrigins(snapshot.Environment.Type, servers); err != nil {
 		return nil, err
 	}
 	if len(servers) > 0 && !caps.MCPHTTPTools {

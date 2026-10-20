@@ -9,7 +9,6 @@ var (
 	_ agent.Turn                     = (*session)(nil)
 	_ agent.Session                  = (*session)(nil)
 	_ agent.DurableSteerer           = (*session)(nil)
-	_ agent.Steerer                  = (*session)(nil)
 	_ agent.FunctionResultSubmitter  = (*session)(nil)
 	_ agent.WorkspaceReader          = (*session)(nil)
 	_ agent.WorkspaceDirectoryLister = (*session)(nil)

@@ -12,31 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestPublicOrigin(t *testing.T) {
-	for _, value := range []string{"https://core.example", "https://core.example:8443", "http://localhost:8091", "http://127.0.0.2:8091", "http://[::1]:8091", "https://[2001:db8::1]", "http://core.example", "http://core:8091", "http://10.0.0.5:8080"} {
-		if origin, err := NewPublicOrigin(value); err != nil || origin.String() != value {
-			t.Errorf("valid Core URL %q rejected: %v", value, err)
-		}
-	}
-	for value, socket := range map[string]string{"https://core.example": "wss://core.example/api/v1/agent-daemon/ws", "http://[::1]:8091": "ws://[::1]:8091/api/v1/agent-daemon/ws"} {
-		origin, err := NewPublicOrigin(value)
-		if err != nil || origin.DaemonWebSocket() != socket || origin.API() != value+"/v1" || origin.RuntimeAPI() != value+"/api/v1" || origin.InstallerBase() != value+"/api/v1/agent-daemon/install/" {
-			t.Errorf("addresses derived from %q: %+v %v", value, origin, err)
-		}
-	}
-	for _, value := range []string{
-		"", "ftp://core.example", "ws://core.example", "https://core.example/", "https://user:secret@core.example",
-		"https://core.example/path", "https://core.example?", "https://core.example?q=x", "https://core.example#x", "https://core.example#",
-		"https://CORE.example", "https://core.example:", "https://core.example:0", "https://core.example:65536", "https://core.example:0080",
-		"https://core.example\\evil", "https://[not-an-ip]", "https://-core.example", "https://core..example", "https://core_example",
-		"https://core.example.", "https://bücher.example", "https://core.example:0443",
-	} {
-		if _, err := NewPublicOrigin(value); !errors.Is(err, ErrInvalidInput) {
-			t.Errorf("invalid Core URL %q accepted: %v", value, err)
-		}
-	}
-}
-
 func TestParseID(t *testing.T) {
 	id := uuid.New()
 	if got, err := parseID(strings.ToUpper(id.String())); err != nil || got != id.String() {
@@ -167,23 +142,20 @@ func TestNormalizeHealth(t *testing.T) {
 	negative, zero, one := int64(-1), float64(0), float64(1)
 	now := time.Now()
 	for _, c := range []struct {
-		name       string
-		in         NodeHealth
-		diagnostic sandbox.NodeDiagnosticCode
-		invalid    bool
+		name    string
+		in      NodeHealth
+		invalid bool
 	}{
-		{"ready clears the diagnostic", NodeHealth{ProviderReady: true, Diagnostic: sandbox.NodeProviderUnavailable}, "", false},
-		{"unknown text becomes provider_unavailable", NodeHealth{Diagnostic: "disk on fire"}, sandbox.NodeProviderUnavailable, false},
-		{"empty stays empty", NodeHealth{}, "", false},
-		{"negative CPU count", NodeHealth{CPUCount: &negative}, "", true},
-		{"negative memory", NodeHealth{AvailableMemoryBytes: &negative}, "", true},
-		{"negative disk", NodeHealth{AvailableDiskBytes: &negative}, "", true},
-		{"host without observation", NodeHealth{Host: &NodeHost{CPUUtilization: &one}}, "", true},
-		{"valid host", NodeHealth{Host: &NodeHost{ObservedAt: &now, CPUUtilization: &one, EffectiveCPUCores: &one}}, "", false},
-		{"zero effective cores", NodeHealth{Host: &NodeHost{ObservedAt: &now, EffectiveCPUCores: &zero}}, "", true},
+		{"empty health", NodeHealth{}, false},
+		{"negative CPU count", NodeHealth{CPUCount: &negative}, true},
+		{"negative memory", NodeHealth{AvailableMemoryBytes: &negative}, true},
+		{"negative disk", NodeHealth{AvailableDiskBytes: &negative}, true},
+		{"host without observation", NodeHealth{Host: &NodeHost{CPUUtilization: &one}}, true},
+		{"valid host", NodeHealth{Host: &NodeHost{ObservedAt: &now, CPUUtilization: &one, EffectiveCPUCores: &one}}, false},
+		{"zero effective cores", NodeHealth{Host: &NodeHost{ObservedAt: &now, EffectiveCPUCores: &zero}}, true},
 	} {
 		got, err := normalizeHealth(c.in)
-		if c.invalid != errors.Is(err, ErrInvalidInput) || (!c.invalid && (err != nil || got.Diagnostic != c.diagnostic)) {
+		if c.invalid != errors.Is(err, ErrInvalidInput) || (!c.invalid && err != nil) {
 			t.Errorf("%s: normalizeHealth = %+v, %v", c.name, got, err)
 		}
 	}
@@ -255,15 +227,11 @@ func TestNodeRollout(t *testing.T) {
 		diagnostic sandbox.NodeDiagnosticCode
 	}{
 		{"offline", NodeRecord{TargetState: "ready", ReadyGeneration: &ready}, "unknown", ""},
-		{"protocol 1 on another generation", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 1, TargetGeneration: 2, TargetState: "ready", ReadyGeneration: &ready}, "update_required", ""},
-		{"protocol 1 on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "ready", ReadyGeneration: &ready}, "ready", ""},
-		{"preparing", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "preparing", ReadyGeneration: &ready}, "preparing", ""},
-		{"failed with an unknown diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "failed", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "failed", sandbox.NodeProviderUnavailable},
-		{"failed without diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "failed", ReadyGeneration: &ready}, "failed", ""},
-		{"ready ignores a diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "ready", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "ready", ""},
-		{"unknown target state", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "other", ReadyGeneration: &ready}, "unknown", ""},
-		{"protocol 1 failed on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "failed", TargetDiagnostic: "host_unsupported", ReadyGeneration: &ready}, "failed", "host_unsupported"},
-		{"protocol 1 without a target state", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, ReadyGeneration: &ready}, "unknown", ""},
+		{"preparing", NodeRecord{Online: true, TargetState: "preparing", ReadyGeneration: &ready}, "preparing", ""},
+		{"failed with an unknown diagnostic", NodeRecord{Online: true, TargetState: "failed", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "failed", sandbox.NodeProviderUnavailable},
+		{"failed without diagnostic", NodeRecord{Online: true, TargetState: "failed", ReadyGeneration: &ready}, "failed", ""},
+		{"ready ignores a diagnostic", NodeRecord{Online: true, TargetState: "ready", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "ready", ""},
+		{"unknown target state", NodeRecord{Online: true, TargetState: "other", ReadyGeneration: &ready}, "unknown", ""},
 	} {
 		got := nodeRollout(c.n)
 		if got.State != c.state || got.Diagnostic != c.diagnostic || got.ReadyGeneration != &ready {

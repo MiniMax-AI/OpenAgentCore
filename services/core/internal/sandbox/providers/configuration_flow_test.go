@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/engine"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -116,7 +116,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer lease.Close(context.Background())
-	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, pgtest.CredentialKey(t)), engine.Catalog{})
+	changes, err := deployment.NewExecutionOperations(service, deploymentpg.NewExecution(lease, pgtest.CredentialKey(t)), builtin.Registry())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,8 +165,7 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	runtime := sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
-	body, _ := json.Marshal(map[string]any{"provider": kind, "expected_generation": 0, "resources": sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, "runtime": runtime, "configuration": map[string]string{"zone": "west"}})
+	body, _ := json.Marshal(map[string]any{"provider": kind, "expected_generation": 0, "resources": sandbox.Resources{CPUs: 2, MemoryMiB: 2048}, "configuration": map[string]string{"zone": "west"}})
 	request := httptest.NewRequest("POST", "/core/v1/sandbox/deployment", bytes.NewReader(body))
 	request.Header.Set("Authorization", "Bearer fixture-admin")
 	response := httptest.NewRecorder()

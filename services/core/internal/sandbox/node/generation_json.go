@@ -80,7 +80,6 @@ func validateGenerationJSON(raw []byte, kind string) error {
 	switch kind {
 	case "hello":
 		fields = "identity health"
-		optional = "generation_management"
 	case "welcome", "heartbeat_ack":
 		fields = "connection_id owner_epoch"
 		optional = "deployment"
@@ -112,7 +111,7 @@ func validateGenerationJSON(raw []byte, kind string) error {
 		}
 	}
 	if value := values["health"]; value != nil {
-		health, err := generationObject(value, "provider_ready observed_at active_operations cpu_utilization total_memory_bytes effective_cpu_cores", "generations diagnostic cpu_count available_memory_bytes available_disk_bytes", "cpu_utilization total_memory_bytes effective_cpu_cores cpu_count available_memory_bytes available_disk_bytes")
+		health, err := generationObject(value, "observed_at active_operations cpu_utilization total_memory_bytes effective_cpu_cores", "generations cpu_count available_memory_bytes available_disk_bytes", "cpu_utilization total_memory_bytes effective_cpu_cores cpu_count available_memory_bytes available_disk_bytes")
 		if err != nil {
 			return err
 		}

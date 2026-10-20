@@ -15,10 +15,8 @@ import (
 )
 
 // Native is the node configuration's native object for Docker. Image is the
-// local ID of the release's Runtime image: the host's image store decides
-// whether the config digest (image_id) or the manifest digest
-// (image_manifest_digest) names the loaded image, so the installer records the
-// one this host resolves.
+// local ID of the installation's Runtime image, as this host's image store
+// resolves it.
 type Native struct {
 	Host          string `json:"host"`
 	Image         string `json:"image"`
@@ -29,12 +27,8 @@ type Native struct {
 
 func decodeNative(config sandbox.NodeConfig) (Native, error) {
 	var entry Native
-	if sandbox.DecodeConfigurationObject(config.Native, &entry, "host", "image", "network", "seccomp_file", "nested_sandbox") != nil {
+	if sandbox.DecodeConfigurationObject(config.Native, &entry, "host", "image", "network", "seccomp_file", "nested_sandbox") != nil || entry.Image == "" {
 		return entry, errors.New("invalid managed Docker node configuration")
-	}
-	release := config.Specification.Runtime
-	if entry.Image != release.ImageID && entry.Image != release.ImageManifestDigest {
-		return entry, errors.New("Docker Runtime image differs from the deployment release")
 	}
 	return entry, nil
 }
@@ -77,7 +71,7 @@ func BuildNode(config sandbox.NodeConfig, _ sandbox.LocalOptions, result *sandbo
 
 // The probe reports its first failed check as its readiness class: the Docker
 // daemon, then limit support, then host capacity for one sandbox of the
-// deployment specification, then the pinned Runtime image. Unclassified
+// deployment specification, then the Runtime image. Unclassified
 // failures stay provider_unavailable. The returned text is local; only its
 // class is reported.
 func dockerProbe(c *client.Client, image string, resources sandbox.Resources) func(context.Context) error {
@@ -102,7 +96,7 @@ func dockerProbe(c *client.Client, image string, resources sandbox.Resources) fu
 			return sandbox.ErrRuntimeImageUnavailable
 		} else if err != nil {
 			// The daemon did not answer; the image may still be present.
-			return fmt.Errorf("%w: cannot inspect the pinned Runtime image", sandbox.ErrProviderUnavailable)
+			return fmt.Errorf("%w: cannot inspect the Runtime image", sandbox.ErrProviderUnavailable)
 		}
 		return nil
 	}

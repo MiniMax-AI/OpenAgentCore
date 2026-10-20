@@ -24,7 +24,7 @@ Behavior shared by the clients:
 - **Strict responses.** Session, history, event, Environment and Core API responses are checked against their pinned shapes before they are returned. A malformed one throws `AgentCoreError` with status 502 and a code such as `invalid_session_resource` or `invalid_admin_response` (`CoreMetricsClient`: status 0, `invalid_response`) instead of passing on a guessed value. Agent responses are typed but not checked at run time.
 - **Errors.** A non-2xx response throws `AgentCoreError` with `status`, `code`, `param`, `errorType` and, from the Core API, the optional `details` of the [Core error envelope](../../contracts/agents-api/core-errors.md). Input the client cannot send, such as a malformed resource ID, throws `TypeError` before any request; Core enforces size, count and range limits.
 - **No retries or timeouts.** No client retries a request. Pass `signal` to cancel one.
-- **Idempotency.** `createSession` takes an idempotency key and generates one when omitted; pass your own to retry a creation safely. `sendMessage`, `submitEvents`, `cancelTurn` and `submitFunctionResult` require one. `createIdempotencyKey()` makes one.
+- **Idempotency.** `createSession` takes an idempotency key and generates one when omitted; pass your own to retry a creation safely. `sendMessage`, `submitEvents`, `cancelTurn` and `submitFunctionResult` require one. `randomUuid()` makes one.
 - **Streams.** `streamEvents` and `createSessionStream` decode the live event stream with `createSSEDecoder` and validate each event. Recover missed events with ordinary reads; the decoder does not resume with `Last-Event-ID`.
 
 ### Saved Agent and deployment defaults
@@ -38,9 +38,9 @@ import { OpenAIAgentsClient } from "@oac/agents-client";
 const client = new OpenAIAgentsClient({ baseUrl: apiBaseURL, token: projectAPIKey });
 const agent = await client.createAgent({
   model: "requested-model",
+  reasoning: { effort: "high" },
   x_agents_core: {
     harness: "codex",
-    harness_config: { model_reasoning_effort: "high" },
     model_provider: {
       protocol: "responses",
       base_url: modelBaseURL,
@@ -82,7 +82,6 @@ if (frozen.model_provider.status === "available") {
 await admin.setHarnessModelConfiguration("codex", {
   model_provider: { protocol: "responses", base_url: modelBaseURL, api_key: modelAPIKey },
   model: "requested-model",
-  harness_config: { model_reasoning_effort: "high" },
 });
 const defaults = await admin.retrieveHarnessModelConfiguration("codex");
 console.log(defaults.model, defaults.harness_config, defaults.model_provider.api_key_configured);

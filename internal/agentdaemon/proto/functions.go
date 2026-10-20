@@ -6,8 +6,9 @@ import (
 )
 
 const (
-	TypeFunctionCall   = "function_call"
-	TypeFunctionResult = "function_result"
+	TypeFunctionCall          = "function_call"
+	TypeFunctionCallWithdrawn = "function_call_withdrawn"
+	TypeFunctionResult        = "function_result"
 )
 
 type FunctionTool struct {
@@ -36,11 +37,25 @@ func (r PromptRequestPayload) ValidateToolSearch(supported bool) error {
 	return nil
 }
 
-// FunctionCallPayload belongs to the Run identified by Envelope.ID.
+// FunctionCallPayload belongs to the Run identified by Envelope.ID. NativeID
+// and TurnID name the native child and its Turn when a Subagent made the call,
+// with the meaning they have in SubagentTurnPayload; both are empty for a call
+// of the Run itself.
 type FunctionCallPayload struct {
 	CallID    string          `json:"call_id"`
+	NativeID  string          `json:"native_id,omitempty"`
+	TurnID    string          `json:"turn_id,omitempty"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+}
+
+// FunctionCallWithdrawnPayload tells that the native Harness will never apply a
+// result for the call, which CallID, NativeID and TurnID identify as in
+// FunctionCallPayload.
+type FunctionCallWithdrawnPayload struct {
+	CallID   string `json:"call_id"`
+	NativeID string `json:"native_id,omitempty"`
+	TurnID   string `json:"turn_id,omitempty"`
 }
 
 type FunctionResultPayload struct {

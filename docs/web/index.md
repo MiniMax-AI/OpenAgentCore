@@ -1,22 +1,24 @@
 ---
-title: "OpenAgentCore Web"
+title: "Web console"
 ---
 
-Web is the administrator console of one OpenAgentCore deployment. Administrators use it to watch health, capacity, usage and failures, inspect each Project's resources and execution history, and manage Projects, keys, nodes and deployment settings. Applications do not use Web; they call Core's Agents API (`/v1`) with their own Project API keys.
+Web is the administrator console of an OpenAgentCore installation: operators sign in with the Core key to watch health and usage, inspect what applications created, and manage Projects, keys, nodes and settings. Applications call `/v1` with Project API keys and never use Web.
 
 ![OpenAgentCore Web overview](../assets/console-overview-en.webp)
 
 ## Sign in
 
-[Sign in](../getting-started/install.md#sign-in-to-web) with the deployment's [Core key](../getting-started/operations.md#core-key); the console has no user accounts. The browser keeps only a session cookie, and the [console server](./console-server.md) sends the Core key to Core on its behalf; [sign-in](./console-server.md#sign-in) describes how long a session lasts.
+[Sign in](../getting-started/install.md#sign-in-to-web) with the deployment's [Core key](../getting-started/operations.md#core-key); the console has no user accounts. The browser keeps only a session cookie, and the [Console server](./console-server.md) sends the Core key to Core on its behalf; [sign-in](./console-server.md#sign-in) describes how long a session lasts.
 
 Signing in opens the Overview. While any step is still to do, its **Getting started** checklist leads through four steps in any order: sandboxes ready, a default model provider, a Project with an active key, and a first Session. An optional tour of the console opens from it.
+
+![The Getting started checklist on the Overview](../assets/console-getting-started-en.webp)
 
 ## Console pages
 
 | Group | Page | Purpose |
 | --- | --- | --- |
-| Monitor | Overview | Service status, running Sessions, sandbox slots and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each opening its page; Needs attention: failed Sessions and Sessions waiting for their caller, active in the last 24 hours, each with its one-line reason; usage by Project |
+| Monitor | Overview | Service status, running Sessions, **Sandbox capacity** and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each opening its page; Needs attention: failed Sessions and Sessions waiting for their caller, active in the last 24 hours, each with its one-line reason; usage by Project |
 | Monitor | Core metrics | Whether Core can run Turns: execution slots, the Turn queue and its p95 wait, interrupted Turns, connected daemons, database latency, CPU and resident memory against their limits, background jobs; Go heap, goroutines and the database pool under **Diagnostics** |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
 | Monitor | Sandbox metrics | Hosted Runtimes across Projects over time, active against total, each with its status (active, suspended, changing state, waiting for allocation or stopped) and its CPU and memory observations; an E2B deployment adds the sandboxes Core holds in E2B's cloud |
@@ -33,25 +35,38 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 
 | Task | Where |
 | --- | --- |
-| Give the installation an HTTPS address | Set `OAC_PUBLIC_URL` and point a reverse proxy at Web; see [Make Core reachable](../getting-started/install.md#configure-the-domain-and-https) |
 | Choose the sandbox backend (microsandbox, E2B or Docker), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
-| Add, resize or remove execution nodes | **Nodes**: **Add node**, **Edit node** and removal; see the [nodes guide](../getting-started/nodes.md) |
+| Add, resize or remove execution nodes | **Nodes**: **Add node**, **Edit node** and removal; see [Add and manage nodes](../getting-started/nodes.md) |
 | Set the default model of a Harness | **Settings → Models and credentials**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |
-| Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [self-hosted executors](../getting-started/self-hosted.md) |
+| Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [Run self-hosted Sessions](../getting-started/self-hosted.md) |
 | Delete a resource, for example a leaked Credential | The resource's row in its list, or its page; Files are deleted from the Files list. The public deletion rules apply |
 
-Installation creates no Project or key. Opening the console neither allocates compute nor calls a model, and an installation may have zero nodes. Web never starts a Session or sends input. Archiving a hosted Session requests cancellation and reclamation; [administrator authority](../concepts.md#what-administrators-can-and-cannot-do) state what administrators can and cannot do.
+Web observes and administers the installation. It never starts a Session or sends input; agents run only when applications call `/v1`. Archiving a hosted Session requests cancellation and sandbox reclamation. [Concepts](../concepts.md#what-administrators-can-and-cannot-do) defines what administrators can do.
+
+A new Project key is shown once, together with the calls that use it:
+
+![The key issued for a Project, with its calls](../assets/console-issue-key-en.webp)
+
+Each Harness's default model is set in **Settings → Models and credentials**:
+
+![Setting the default model configuration of a Harness](../assets/console-default-model-en.webp)
 
 The deployment's sandbox backend serves hosted Sessions. An application's `self_hosted` Runtime, including one in its own E2B account, is a separate path that the sandbox configuration does not change.
 
 A loopback public address (`local_only`) keeps nodes and remote applications from reaching Core. The console stays reachable at its own address and [warns about it](./console-api-usage.md#provenance-and-monitoring).
+
+## Diagnose a failure
+
+The **Session log** shows a failed Turn with its classified reason and next step; [Session diagnostics](../../contracts/agents-api/session-diagnostics.md) defines the categories. The **Request log** shows the HTTP side, such as a rejected request with status 401.
+
+![A failed Turn in the Session log](../assets/console-session-log-en.webp)
+
+![A 401 in the Request log](../assets/console-request-log-en.webp)
 
 ## More
 
 - [Console server](./console-server.md): request boundary, sign-in, settings and verification.
 - [Console API usage](./console-api-usage.md): the Core routes each page uses.
 - [Web package](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/web/README.md): developing the console.
-- [Administrator API](../../contracts/agents-api/admin-api.md): the `/core/v1` routes behind the console.
-
-OpenAgentCore Web is available under the [MIT License](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/LICENSE).
+- [Core administration API](../../contracts/agents-api/admin-api.md): the `/core/v1` routes behind the console.

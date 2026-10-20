@@ -62,9 +62,9 @@ func TestSubcommandsAreRegistered(t *testing.T) {
 	want := map[string]bool{
 		"install":          false,
 		"start":            false,
+		"uninstall":        false,
 		"resume":           false,
 		"runtime-mcp-exec": false,
-		"placement":        false,
 		"connect":          false,
 		"status":           false,
 		"stop":             false,

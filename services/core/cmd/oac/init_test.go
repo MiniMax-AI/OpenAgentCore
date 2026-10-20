@@ -25,13 +25,18 @@ func initFixture(t *testing.T) (string, releaseIdentity, map[string][]byte) {
 	previous := chown
 	chown = func(string, int, int) error { return nil }
 	t.Cleanup(func() { chown = previous })
-	release := releaseIdentity{strings.Repeat("d", 40)}
+	release, files := releaseFixture(strings.Repeat("d", 40))
+	return t.TempDir(), release, files
+}
+
+// releaseFixture returns one release's metadata.
+func releaseFixture(revision string) (releaseIdentity, map[string][]byte) {
 	files := map[string][]byte{}
 	for _, name := range releaseMembers {
-		files[name] = []byte("fixture")
+		files[name] = []byte("fixture " + revision)
 	}
-	files["manifest.json"], _ = json.Marshal(map[string]string{"source_commit": release.revision, "platform": "linux/amd64"})
-	return t.TempDir(), release, files
+	files["manifest.json"], _ = json.Marshal(map[string]any{"source_commit": revision, "platform": "linux/amd64"})
+	return releaseIdentity{revision}, files
 }
 
 func snapshot(t *testing.T, root string) map[string]string {
@@ -110,7 +115,7 @@ func TestInitializeRefusesDataWithoutItsInstallationFiles(t *testing.T) {
 	}
 }
 
-func TestInitializeRefusesChangedMissingOrForeignFiles(t *testing.T) {
+func TestInitializeRefusesChangedOrMissingFiles(t *testing.T) {
 	root, release, files := initFixture(t)
 	if err := initialize(root, release, fixed(files)); err != nil {
 		t.Fatal(err)
@@ -126,9 +131,37 @@ func TestInitializeRefusesChangedMissingOrForeignFiles(t *testing.T) {
 		t.Fatalf("missing: %v", err)
 	}
 	_ = os.WriteFile(path, original, 0o600)
-	release.revision = strings.Repeat("f", 40)
-	if err := initialize(root, release, fixed(files)); err == nil || !strings.Contains(err.Error(), "another release") {
-		t.Fatalf("foreign: %v", err)
+	if err := initialize(root, release, refuseDownload(t)); err != nil {
+		t.Fatalf("restored: %v", err)
+	}
+}
+
+func readReceipt(t *testing.T, root string) installReceipt {
+	t.Helper()
+	var receipt installReceipt
+	raw, err := os.ReadFile(filepath.Join(root, "installation.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	return receipt
+}
+
+func TestInitializeRefusesDataOfAnotherRelease(t *testing.T) {
+	root, release, files := initFixture(t)
+	if err := initialize(root, release, fixed(files)); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshot(t, root)
+	other, otherFiles := releaseFixture(strings.Repeat("e", 40))
+	want := "existing data belongs to release dddddddddddd; to use release eeeeeeeeeeee, uninstall the installation, which deletes its data, then install again"
+	if err := initialize(root, other, fixed(otherFiles)); err == nil || err.Error() != want {
+		t.Fatalf("err = %v", err)
+	}
+	if !maps.Equal(before, snapshot(t, root)) {
+		t.Fatal("a refused release changed installation files")
 	}
 }
 

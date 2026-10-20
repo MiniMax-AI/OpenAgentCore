@@ -2,9 +2,7 @@
 title: "Agents API guide"
 ---
 
-Core serves the [OpenAI Agents API](https://platform.openai.com/docs/api-reference) at `/v1`. Use the official OpenAI SDK or plain HTTP. This guide shows both for every common operation, and notes where Core differs from OpenAI.
-
-New to the API? Run the [quickstart](../getting-started/quickstart.md) first.
+Core serves the OpenAI Agents API at `/v1`. This guide shows every common task with the official OpenAI SDK and with plain HTTP, and where Core differs from OpenAI. If you have not started a Session yet, begin with [Run your first Session](../getting-started/quickstart.md).
 
 ## Before you start
 
@@ -30,13 +28,13 @@ client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
 **HTTP.** Every request needs a Bearer key. Routes under `/agents` and `/vaults` also need `OpenAI-Beta: agents=v1`; `/files` and `/skills` do not. The SDK sets both. The HTTP examples below use this shell helper:
 
 ```sh
-oac() {  # oac PATH [curl options]: call /agents or /vaults with the required headers
+agents() {  # agents PATH [curl options]: call /agents or /vaults with the required headers
   curl -sS "$OPENAI_BASE_URL$1" \
     -H "Authorization: Bearer $OPENAI_API_KEY" \
     -H "OpenAI-Beta: agents=v1" \
     -H "Content-Type: application/json" "${@:2}"
 }
-oac /agents
+agents /agents
 ```
 
 On a shared host, `-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")` keeps the key out of the process list.
@@ -54,9 +52,9 @@ On a shared host, `-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")`
 | [Skills](#skills) | `/skills` | Versioned capability bundles |
 | [Environment Templates](#environment-templates) | `/agents/environments/templates` | Reusable workspace setup |
 | [Vaults](#vaults) | `/vaults` | Write-only credentials for MCP servers |
-| Subagents | `/agents/sessions/{id}/subagents` | Read-only child work; see [subagents](../../contracts/agents-api/subagents.md) |
+| Subagents | `/agents/sessions/{id}/subagents` | Read-only child work; see [Subagents](../../contracts/agents-api/subagents.md) |
 
-Core has exactly the routes of the pinned SDK, listed in [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json). It adds no route; its additions live in [`x_agents_core`](#core-extensions-x_agents_core).
+Core has the routes of the pinned SDK, listed in [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json). It adds no route; its additions live in [`x_agents_core`](#core-extensions).
 
 ## Common tasks
 
@@ -67,7 +65,7 @@ Core has exactly the routes of the pinned SDK, listed in [upstream-routes.json](
 | Stop the current Turn, or recover after a lost response | [Cancel](#cancel), [idempotency](#idempotency) |
 | Call your own code from the agent | [Function tools](#function-tools) |
 | Give the agent Skills, packages, files and setup commands | [Skills](#skills), [Environment Templates](#environment-templates) |
-| Connect an MCP server with credentials | [Vaults](#vaults) and [execution tools](../../contracts/agents-api/execution-tools.md) |
+| Connect an MCP server with credentials | [Vaults](#vaults) and [Execution tools](../../contracts/agents-api/execution-tools.md) |
 | Use Skill or Plugin directories on your own machine | [Local capability directories](../getting-started/self-hosted.md#local-capability-directories) |
 | Put files in the workspace, or download what the agent wrote | [Files](#files) |
 | Read the conversation and tool results | [Turns and Items](#turns-and-items) |
@@ -91,14 +89,18 @@ Lists return:
 
 The SDK pages for you:
 
-```python
+::: code-group
+
+```python [Python]
 for session in client.beta.agents.sessions.list(limit=100):
     print(session.id, session.status)
 ```
 
-```sh
-oac "/agents/sessions?limit=100&after=$LAST_ID"
+```sh [curl]
+agents "/agents/sessions?limit=100&after=$LAST_ID"
 ```
+
+:::
 
 Two lists differ: `GET /files` returns up to 10,000 files at once, and workspace files use an opaque `page` token (see [Workspace files](#workspace-files)).
 
@@ -136,17 +138,17 @@ See [creation retries](../../contracts/agents-api/wire-semantics.md#creation-ret
 
 Every response carries `X-Request-Id`; include it when reporting a problem.
 
-### Core extensions: `x_agents_core`
+### Core extensions: `x_agents_core` {#core-extensions}
 
 Core runs several Harnesses and accepts your own model access. Those settings are the only additions to the OpenAI shapes, and they sit inside `x_agents_core`:
 
 | Field | Where | Value |
 | --- | --- | --- |
 | `harness` | Agent, or a Session's inline `agent` | `codex`, `claude_sdk` or `mcode` |
-| `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and for `mcode` also `context_window` and `max_output_tokens`. The protocol must be one of the Harness's native protocols |
-| `harness_config` | Agent, inline `agent`, or Session creation (top level, wins) | The Harness's native model parameters, such as Codex's `model_reasoning_effort` |
+| `model_provider` | Agent, or Session creation (top level) | `protocol`, `base_url`, `api_key`, and optionally `context_window` and `max_output_tokens`. The protocol must be one of the Harness's native protocols |
+| `harness_config` | Agent, inline `agent`, or Session creation (top level, wins) | The Harness's native model parameters, such as Claude Code's `thinking` |
 | `environment` | `openai_hosted` or `self_hosted` Session creation (top level) | Portable preparation: `environment_template_id`, `files`, `env`, `packages`, `setup_commands`, `skills`, `plugins`, `capability_directories`. A field may not also appear in `environment`; see [Environments](../../contracts/agents-api/environments.md#preparation-order) |
-| `installation` | Read-only, on `self_hosted` Sessions | Short-lived install commands for your machine; see [self-hosted execution](../getting-started/self-hosted.md) |
+| `installation` | Read-only, on `self_hosted` Sessions | Short-lived install commands for your machine; see [Run self-hosted Sessions](../getting-started/self-hosted.md) |
 
 Any other member is rejected with 400. `api_key` is write-only: reads return `api_key_configured`. `harness_config` replaces the whole object; `{}` clears it. With the SDK, pass these through `extra_body`.
 
@@ -158,13 +160,15 @@ The Harness is the agent program that runs a Session: Codex (`codex`), Claude Co
 - **Provider.** The Harness calls your provider directly, with one of the Harness's native protocols; there is no conversion, and a mismatch is rejected when the Session is created. [Model execution](../../contracts/agents-api/model-execution.md#saved-defaults-and-precedence) lists each Harness's protocols and which provider a Session uses on each Environment type. A Session freezes its provider at creation.
 - **Native parameters.** `harness_config` carries the Harness's own model settings; see [native model parameters](../../contracts/agents-api/model-execution.md#native-model-parameters).
 
-Not every combination of Harness, placement and operation is supported; the [Harness capabilities](../../contracts/agents-api/harness-capabilities.md) lists them.
+Not every combination of Harness, placement and operation is supported. [Harness capabilities](../../contracts/agents-api/harness-capabilities.md) lists them, including limits such as image input, usage reporting and public functions.
 
 ## Agents
 
 An Agent is saved configuration. Sessions copy it when they start, so editing an Agent affects only new Sessions.
 
-```python
+::: code-group
+
+```python [Python]
 agent = client.beta.agents.create(
     model="your-model-id",
     name="Reviewer",
@@ -173,14 +177,16 @@ agent = client.beta.agents.create(
 )
 ```
 
-```sh
-oac "/agents" -d '{
+```sh [curl]
+agents "/agents" -d '{
   "model": "your-model-id",
   "name": "Reviewer",
   "instructions": "Review code changes and report problems.",
   "x_agents_core": {"harness": "codex"}
 }'
 ```
+
+:::
 
 ```json
 {"id": "00000000-0000-4000-8000-000000000001", "object": "agent", "model": "your-model-id", "name": "Reviewer",
@@ -200,7 +206,7 @@ oac "/agents" -d '{
 
 - **Update** changes only the fields you send. `metadata` replaces all pairs; `null` clears `name` or `instructions`.
 - **Delete** keeps existing Sessions.
-- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search` with `mode: "disabled"`. Support depends on Harness and Environment; see [execution tools](../../contracts/agents-api/execution-tools.md).
+- **Tools** are functions, MCP servers, `tool_search` (Claude) and `web_search`. Support depends on Harness and Environment; see [Execution tools](../../contracts/agents-api/execution-tools.md).
 
 ## Sessions
 
@@ -208,7 +214,9 @@ A Session is one conversation with a fixed configuration and its own Environment
 
 ### Create a Session
 
-```python
+::: code-group
+
+```python [Python]
 session = client.beta.agents.sessions.create(
     environment={"type": "openai_hosted"},
     agent_id=agent.id,
@@ -217,14 +225,16 @@ session = client.beta.agents.sessions.create(
 )
 ```
 
-```sh
-oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
+```sh [curl]
+agents "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
   "environment": {"type": "openai_hosted"},
   "agent_id": "00000000-0000-4000-8000-000000000001",
   "input": "Review the files in /workspace and summarize the risks.",
   "metadata": {"ticket": "T-123"}
 }'
 ```
+
+:::
 
 Returns 201 with the Session:
 
@@ -248,10 +258,10 @@ Returns 201 with the Session:
 | `environment.type` | Runs on | Notes |
 | --- | --- | --- |
 | `openai_hosted` | A sandbox Core creates on a node or E2B; the administrator provides the capacity | Optional `network`, `packages`, `files`, `skills`, `plugins`, `env`, `capability_directories`, `setup_commands`, or a template |
-| `self_hosted` | Your own Linux, macOS or Windows machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [self-hosted execution](../getting-started/self-hosted.md). The Session brings its own `model_provider` |
+| `self_hosted` | Your own Linux, macOS or Windows machine | Requires an absolute `workspace_directory`. Skills, packages, files or a template go in `x_agents_core.environment`. The response carries install commands in `x_agents_core.installation`; see [Run self-hosted Sessions](../getting-started/self-hosted.md). The Session brings its own `model_provider` |
 | `none` | A device connection an operator registered, with no workspace | `input` required. The model comes from the installation default, or from the device when no default is configured |
 
-A new `openai_hosted` Session reads `idle` while Core prepares its sandbox; its first Turn starts when the Environment is ready. The [Environment contract](../../contracts/agents-api/environments.md) owns placement, expiry and preparation.
+A new `openai_hosted` Session reads `idle` while Core prepares its sandbox; its first Turn starts when the Environment is ready. [Environments and Templates](../../contracts/agents-api/environments.md) owns placement, expiry and preparation.
 
 ### Session status
 
@@ -279,7 +289,9 @@ All input goes to one endpoint as a list of events. It returns 202 after durable
 
 ### Send a message
 
-```python
+::: code-group
+
+```python [Python]
 client.beta.agents.sessions.events.create(
     session.id,
     events=[{
@@ -290,26 +302,32 @@ client.beta.agents.sessions.events.create(
 )
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
   "events": [{"type": "agent.session.input.message",
               "input": [{"role": "user", "content": [{"type": "input_text", "text": "Now fix the first risk."}]}]}]
 }'
 ```
 
+:::
+
 - **When idle,** a message starts a new Turn. **While a Turn runs,** it joins that Turn (steering); it does not start a parallel task.
-- **Content** is `input_text`, plus `input_image` as an inline PNG or JPEG data URI. Codex and Claude Code accept images; MiniMax Code rejects them. The whole request is limited to 1 MiB.
-- Full rules: [message content](../../contracts/agents-api/message-content.md).
+- **Content** is `input_text`, plus `input_image` with an `image_url`; the Harness decides which references it accepts. The whole request is limited to 1 MiB.
+- Full rules: [Message content](../../contracts/agents-api/message-content.md).
 
 ### Cancel
 
-```python
+::: code-group
+
+```python [Python]
 client.beta.agents.sessions.events.create(session.id, events=[{"type": "agent.session.input.cancel"}])
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/events" -d '{"events": [{"type": "agent.session.input.cancel"}]}'
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/events" -d '{"events": [{"type": "agent.session.input.cancel"}]}'
 ```
+
+:::
 
 The Turn is cancelled when it reaches `cancelled`, not when the request returns. A cancel while idle does nothing when no input is pending; a pending Environment input reservation returns 409. A self-hosted machine keeps its workspace and history when you restart the same installation; see [operate the installation](../getting-started/self-hosted.md#operate-the-installation).
 
@@ -317,7 +335,9 @@ The Turn is cancelled when it reaches `cancelled`, not when the request returns.
 
 `GET /agents/sessions/{id}/events` is a server-sent event stream. It is **live only**: events sent while you were disconnected are not replayed. Open it before sending input, and recover gaps from [Turns and Items](#turns-and-items).
 
-```python
+::: code-group
+
+```python [Python]
 with client.beta.agents.sessions.events.stream(session.id) as stream:
     for event in stream:
         if event.type == "agent.session.turn.output_text.delta":
@@ -326,9 +346,11 @@ with client.beta.agents.sessions.events.stream(session.id) as stream:
             break
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/events" -N
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/events" -N
 ```
+
+:::
 
 ```text
 event: agent.session.turn.output_text.delta
@@ -355,7 +377,9 @@ The stream stays open across Turns. To stream one Turn and handle [function call
 
 A Turn is one piece of work started by input. Items are its recorded content: messages, reasoning, tool calls and their results. Both are durable; read them to check results or recover after a disconnect.
 
-```python
+::: code-group
+
+```python [Python]
 turns = client.beta.agents.sessions.turns.list(session.id, order="desc")
 latest = turns.data[0]
 print(latest.status, latest.usage)
@@ -363,10 +387,12 @@ for item in client.beta.agents.sessions.items.list(session.id, order="asc"):
     print(item.type)
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/turns?order=desc&limit=1"
-oac "/agents/sessions/$SESSION_ID/items?order=asc"
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/turns?order=desc&limit=1"
+agents "/agents/sessions/$SESSION_ID/items?order=asc"
 ```
+
+:::
 
 | Turn `status` | Meaning |
 | --- | --- |
@@ -374,7 +400,7 @@ oac "/agents/sessions/$SESSION_ID/items?order=asc"
 | `waiting` | Waiting for a function result |
 | `completed`, `failed`, `cancelled` | Finished |
 
-- **Usage** (`input_tokens`, `output_tokens`, `total_tokens`, …) is null when unknown, never zero. A Session's usage stays null while a Turn runs; Claude Code and MiniMax Code report none ([usage rules](../../contracts/agents-api/sessions-events.md#usage)).
+- **Usage** (`input_tokens`, `output_tokens`, `total_tokens`, …) is null when unknown, never zero. A Session's usage stays null while a Turn runs ([usage rules](../../contracts/agents-api/sessions-events.md#usage)).
 - Turn lists contain top-level Turns only. Read child work under `/subagents`.
 
 ## Function tools
@@ -409,13 +435,13 @@ with client.beta.agents.sessions.stream(
 Without the helper, read the call from `session.required_actions`, then send:
 
 ```sh
-oac "/agents/sessions/$SESSION_ID/events" -d '{
+agents "/agents/sessions/$SESSION_ID/events" -d '{
   "events": [{"type": "agent.session.input.tool_result",
               "turn_id": "turn_...", "call_id": "call_...", "success": true, "output": "Sunny in Paris"}]
 }'
 ```
 
-Resending the same result is safe. A different result for the same call, or one sent after cancellation, fails with 409. MiniMax Code doesn't support public functions.
+Resending the same result is safe. A different result for the same call, or one sent after cancellation, fails with 409.
 
 ## Files
 
@@ -429,14 +455,18 @@ Three kinds of file serve different purposes:
 
 ### Source Files
 
-```python
+::: code-group
+
+```python [Python]
 f = client.files.create(file=open("data.csv", "rb"), purpose="user_data")
 ```
 
-```sh
+```sh [curl]
 curl "$OPENAI_BASE_URL/files" -H "Authorization: Bearer $OPENAI_API_KEY" \
   -F purpose=user_data -F file=@data.csv
 ```
+
+:::
 
 Only `purpose=user_data` is accepted, up to 512 MiB. No Beta header. Their content cannot be downloaded again; use the ID in workspace files or templates.
 
@@ -444,16 +474,20 @@ Only `purpose=user_data` is accepted, up to 512 MiB. No Beta header. Their conte
 
 Copy a file into the workspace of the Session's Environment (`session.environment.id`):
 
-```python
+::: code-group
+
+```python [Python]
 env_id = session.environment.id
 client.beta.agents.environments.files.create(env_id, type="file_id", file_id=f.id, path="/workspace/data.csv")
 client.beta.agents.environments.files.create(env_id, type="inline", data="aGVsbG8K", path="/workspace/hello.txt")
 page = client.beta.agents.environments.files.list(env_id, path="/workspace")
 ```
 
-```sh
-oac "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "file-...", "path": "/workspace/data.csv"}'
+```sh [curl]
+agents "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "file-...", "path": "/workspace/data.csv"}'
 ```
+
+:::
 
 - `inline` data is base64, up to 5 MiB decoded; `file_id` up to 50 MiB.
 - Parent directories are created. An existing file is never overwritten (400).
@@ -463,16 +497,20 @@ oac "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "fil
 
 When a Turn completes, Core captures the regular files under the workspace's `outputs/` directory. Artifacts stay readable after the Environment is gone.
 
-```python
+::: code-group
+
+```python [Python]
 for a in client.beta.agents.sessions.artifacts.list(session.id):
     data = client.beta.agents.sessions.artifacts.content(a.id, session_id=session.id)
     data.write_to_file(a.path.rsplit("/", 1)[-1])
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/artifacts"
-oac "/agents/sessions/$SESSION_ID/artifacts/$ARTIFACT_ID/content" -o report.md
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/artifacts"
+agents "/agents/sessions/$SESSION_ID/artifacts/$ARTIFACT_ID/content" -o report.md
 ```
+
+:::
 
 Each Artifact has `path`, `size_bytes`, `turn_id` and `environment_id`. Deleting one leaves the workspace file alone.
 
@@ -480,14 +518,18 @@ Each Artifact has `path`, `size_bytes`, `turn_id` and `environment_id`. Deleting
 
 A Skill is a versioned bundle of instructions and files an agent can use. Upload a directory or a ZIP; each upload is a version.
 
-```sh
-curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F files=@my-skill.zip
-```
+::: code-group
 
-```python
+```python [Python]
 skill = client.skills.create(files=[("my-skill/SKILL.md", open("my-skill/SKILL.md", "rb"))])
 client.skills.versions.create(skill.id, files=[...], default=True)
 ```
+
+```sh [curl]
+curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F files=@my-skill.zip
+```
+
+:::
 
 - No Beta header. Select up to 50 Skills per Environment; each archive is at most 5 MiB compressed and 20 MiB expanded.
 - SDK 3.13.0 drops a single ZIP file from the upload; use HTTP for a ZIP.
@@ -529,17 +571,17 @@ client.beta.agents.vaults.credentials.create(
 session = client.beta.agents.sessions.create(environment={"type": "none"}, input="...", vault_ids=[vault.id], agent_id=agent.id)
 ```
 
-The HTTP path is `/vaults`, with the Beta header. A Session selects credentials from its `vault_ids`, optionally by `credential_id`; the MCP server's URL must match the selected credential's `mcp_server_url` exactly in either case. The [Vaults contract](../../contracts/agents-api/vaults.md) owns selection, errors, OAuth refresh and deletion. An MCP tool's `connection_origin` decides whether Core's side or the workspace connects to the server, and each Harness supports a different set: see [MCP connection origin](../../contracts/agents-api/environments.md#public-mcp-connection-origin).
+The HTTP path is `/vaults`, with the Beta header. A Session selects credentials from its `vault_ids`, optionally by `credential_id`; the MCP server's URL must match the selected credential's `mcp_server_url` exactly in either case. [Vaults and Credentials](../../contracts/agents-api/vaults.md) owns selection, errors, OAuth refresh and deletion. An MCP tool's `connection_origin` decides whether Core's side or the workspace connects to the server, and each Harness supports a different set: see [MCP connection origin](../../contracts/agents-api/environments.md#public-mcp-connection-origin).
 
 ## Diagnose a failure
 
 1. Read the Session's `status` and `error`, and the latest Turn's `error`. A failed Turn reports only a generic `internal_error`.
 2. Check that the Environment is connected and its Harness is available.
 3. Check the Harness, model and tool combination in [Harness capabilities](../../contracts/agents-api/harness-capabilities.md).
-4. Ask the administrator for the Session's [diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [troubleshooting](../getting-started/operations.md#troubleshooting) for service logs, credentials and node readiness.
+4. Ask the administrator for the [Session diagnostics](../../contracts/agents-api/session-diagnostics.md), which name the failure category, and to check [Troubleshooting](../getting-started/troubleshooting.md) for service logs, credentials and node readiness.
 
 A 401 usually means a key from another namespace; see [API namespaces and credentials](./index.md).
 
 ## Differences from OpenAI
 
-Core differs from the OpenAI service in some behavior, such as Session creation idempotency and Harness-specific tool support. The [coverage ledger](../../contracts/agents-api/index.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.
+Core differs from the OpenAI service in some behavior, such as Session creation idempotency and Harness-specific tool support. The [OpenAI compatibility](../../contracts/agents-api/index.md#differences-from-openai) lists every difference and the per-resource status; the [public OpenAPI](../../contracts/agents-api/openapi.yaml) has the exact schemas.

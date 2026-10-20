@@ -55,8 +55,6 @@ A missing or foreign File returns 404 with type `invalid_request_error`, a null 
 
 Core stores File bytes as PostgreSQL large objects in its own database. An upload and a deletion each commit in one transaction, so a failure leaves neither partial bytes nor metadata. [Back up](../../docs/getting-started/operations.md#back-up) the database with its large objects; deleting a File does not remove it from write-ahead logs or earlier backups.
 
-The source Files schema refuses a downgrade while File rows remain. Delete Files through the API first so their large objects are removed.
-
 A copy into a workspace reads a consistent snapshot of the File and can finish after the File is deleted; later lookups fail. Deleting a File never changes a workspace copy.
 
 ## Skills

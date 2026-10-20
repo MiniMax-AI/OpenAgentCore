@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Exercise the Compose installation in an isolated Docker project.
 
-Core, Web and the gateway image are built from this checkout. Web serves a
-placeholder page instead of the console build. Node metadata comes from the
-release pinned in deploy/compose/smoke-pins.json.
+Core, Web and the ingress image are built from this checkout, with node
+metadata for this commit. Web serves a placeholder page instead of the console
+build.
 """
 
 import hashlib
@@ -13,8 +13,9 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
-import tarfile
+import socket
 import subprocess
 import tempfile
 import urllib.error
@@ -22,44 +23,41 @@ import urllib.request
 import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
-render_spec = importlib.util.spec_from_file_location("render_compose", ROOT / "scripts/render-compose.py")
-render_compose = importlib.util.module_from_spec(render_spec)
-render_spec.loader.exec_module(render_compose)
 
 
-def prepare_pinned_payload(destination):
-    """Build fixtures use verified release metadata; initialization stays offline."""
-    pins = json.loads((ROOT / 'deploy/compose/smoke-pins.json').read_text())
-    stem = 'oac-' + pins['revision'] + '-linux-amd64'
-    destination.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=destination.parent) as temporary:
-        archive = Path(temporary) / 'release.tar.gz'
-        urllib.request.urlretrieve(pins['release_base'] + stem + '.tar.gz', archive)
-        digest = hashlib.sha256()
-        with archive.open('rb') as stream:
-            for block in iter(lambda: stream.read(1024 * 1024), b''):
-                digest.update(block)
-        if digest.hexdigest() != pins['archive_checksum']:
-            raise ValueError('Pinned smoke metadata checksum mismatch')
-        with tarfile.open(archive, 'r:gz') as release:
-            for name in ('manifest.json', 'SHA256SUMS', 'node-install.pyz', 'runtime/seccomp.json'):
-                member = release.getmember(stem + '/' + name)
-                if not member.isfile() or member.size > 1024 * 1024:
-                    raise ValueError('Invalid smoke metadata member')
-                target = destination / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(release.extractfile(member).read())
-    return pins['revision']
+def load(name, path):
+    spec = importlib.util.spec_from_file_location(name, ROOT / path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
-def build_images(directory, tag):
-    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+render_compose = load('render_compose', 'scripts/render-compose.py')
+distribution = load('distribution', 'scripts/core-distribution-manifest.py')
+
+
+def prepare_payload(destination, revision, source_time):
+    """Node metadata for this commit, built with the distribution's own builders."""
+    (destination / 'runtime').mkdir(parents=True)
+    with tempfile.TemporaryDirectory(dir=destination.parent) as sources:
+        sources = Path(sources)
+        for path in (ROOT / 'deploy/node').glob('*.py'):
+            shutil.copyfile(path, sources / path.name)
+        distribution.bootstraps(sources, source_time, revision)
+        shutil.copyfile(sources / 'node-install.pyz', destination / 'node-install.pyz')
+    shutil.copyfile(ROOT / 'services/core/deploy/codex/seccomp.json', destination / 'runtime/seccomp.json')
+    (destination / 'manifest.json').write_text(json.dumps(
+        {'source_commit': revision, 'platform': 'linux/amd64'}))
+    distribution.checksums(destination)
+
+
+def build_images(directory, tag, revision, source_time):
     protocol = re.search(r'const Version = "([^"]+)"', (ROOT / 'internal/agentdaemon/proto/version.go').read_text()).group(1)
     go_env = {**os.environ, 'CGO_ENABLED': '0', 'GOOS': 'linux', 'GOARCH': os.environ.get('GOARCH', 'amd64')}
 
-    def go_build(package, output, build_revision=revision):
+    def go_build(package, output):
         output.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(['go', 'build', '-trimpath', '-ldflags', '-X main.buildRevision=' + build_revision,
+        subprocess.run(['go', 'build', '-trimpath', '-ldflags', '-X main.buildRevision=' + revision,
                         '-o', str(output), './' + package], cwd=ROOT, env=go_env, check=True)
 
     contexts = {name: directory / ('image-' + name) for name in ('core', 'web', 'ingress')}
@@ -80,8 +78,8 @@ def build_images(directory, tag):
     (web / 'dist/index.html').write_text('<!doctype html><html><body>Compose smoke</body></html>\n')
     (web / 'Dockerfile').write_bytes((ROOT / 'services/web/Dockerfile').read_bytes())
     ingress = contexts['ingress']
-    payload_revision = prepare_pinned_payload(ingress / 'node-payload')
-    go_build('services/core/cmd/oac', ingress / 'oac', payload_revision)
+    prepare_payload(ingress / 'node-payload', revision, source_time)
+    go_build('services/core/cmd/oac', ingress / 'oac')
     (ingress / 'Dockerfile').write_bytes((ROOT / 'deploy/distribution/Ingress.Dockerfile').read_bytes())
     for path in directory.glob('image-*/**/*'):
         path.chmod(0o755 if path.is_dir() or os.access(path, os.X_OK) else 0o644)
@@ -103,40 +101,52 @@ def main():
     directory = Path(tempfile.mkdtemp(prefix=project + '-', dir=artifacts))
     data = directory / 'data'
     data.mkdir(mode=0o700)
-    pins = json.loads((ROOT / 'deploy/compose/smoke-pins.json').read_text())
+    revision = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    source_time = subprocess.check_output(['git', 'show', '-s', '--format=%ct', 'HEAD'], cwd=ROOT, text=True).strip()
     rendered = directory / 'compose.yaml'
     rendered.write_text(render_compose.render({
-        'REVISION': pins['revision'],
+        'REVISION': revision,
         'INIT_IMAGE': 'ghcr.io/minimax-ai/openagentcore/ingress@sha256:' + '0' * 64,
         'CORE_IMAGE': 'ghcr.io/minimax-ai/openagentcore/core@sha256:' + '0' * 64,
         'WEB_IMAGE': 'ghcr.io/minimax-ai/openagentcore/web@sha256:' + '0' * 64,
+        'DATABASE_IMAGE': render_compose.DATABASE_PIN,
     }))
     override = directory / 'offline-init.json'
-    images = build_images(directory, project.removeprefix('oac-smoke-'))
+    images = build_images(directory, project.removeprefix('oac-smoke-'), revision, source_time)
 
     override.write_text(json.dumps({'services': {'init': {'network_mode': 'none'}}}))
+    # A free loopback port, kept for the whole run: the default origin follows it.
+    with socket.socket() as probe:
+        probe.bind(('127.0.0.1', 0))
+        port = str(probe.getsockname()[1])
     env = {**os.environ, 'COMPOSE_PROGRESS': 'plain',
-           'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': '0',
+           'OAC_HOST': '127.0.0.1', 'OAC_WEB_PORT': port,
            **{'OAC_IMAGE_' + name.upper(): image for name, image in images.items()}}
     env.pop('OAC_PUBLIC_URL', None)
-    command = ['docker', 'compose', '--env-file', os.devnull, '-p', project,
-               '-f', str(rendered), '-f', str(override)]
 
-    def compose(*args, timeout=120):
-        result = subprocess.run(command + list(args), env=env, cwd=ROOT, capture_output=True, timeout=timeout)
-        if result.returncode:
-            # Startup/configuration stderr helps diagnose failures before containers exist.
-            # Tool output and application logs may contain credentials and stay private.
-            detail = '' if args[0] in ('run', 'logs') else result.stderr.decode(errors='replace')[-4096:]
-            raise RuntimeError(f'Compose {args[0]} failed with exit code {result.returncode}\n{detail}')
-        return result.stdout
+    def runner(files, environment):
+        command = ['docker', 'compose', '--env-file', os.devnull, '-p', project]
+        for file in files:
+            command += ['-f', str(file)]
+
+        def compose(*args, timeout=120):
+            result = subprocess.run(command + list(args), env=environment, cwd=ROOT, capture_output=True, timeout=timeout)
+            if result.returncode:
+                # Startup/configuration stderr helps diagnose failures before containers exist.
+                # Tool output and application logs may contain credentials and stay private.
+                detail = '' if args[0] in ('run', 'logs') else result.stderr.decode(errors='replace')[-4096:]
+                raise RuntimeError(f'Compose {args[0]} failed with exit code {result.returncode}\n{detail}')
+            return result.stdout
+        return compose
+
+    compose = runner([rendered, override], env)
 
     def client():
         return urllib.request.build_opener(urllib.request.ProxyHandler({}),
             urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
     browser = client()
-    origin = 'http://localhost:8080'
+    origin = 'http://localhost:' + port
     address = ''
 
     def request(path, body=None, headers=None, status=200):
@@ -163,6 +173,15 @@ def main():
         assert all(key not in logs for key in keys), 'Credentials appeared in container logs'
         return logs
 
+    def upload(api, content):
+        boundary = 'oac-compose-smoke'
+        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nuser_data\r\n'
+                f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="smoke.txt"\r\n'
+                'Content-Type: text/plain\r\n\r\n').encode() + content + f'\r\n--{boundary}--\r\n'.encode()
+        uploaded = get('/v1/files', body=body, headers={**api, 'Content-Type': 'multipart/form-data; boundary=' + boundary})
+        assert uploaded['bytes'] == len(content), 'Upload was truncated'
+        return uploaded
+
     def terminate(_signum, _frame):
         raise SystemExit(1)
 
@@ -188,25 +207,18 @@ def main():
         installer = request('/node-install/node-install.pyz')
         checksums = dict(line.split('  ', 1)[::-1] for line in request('/node-install/SHA256SUMS').decode().splitlines())
         assert hashlib.sha256(installer).hexdigest() == checksums['node-install.pyz'], 'Node installer checksum mismatch'
-        boundary = 'oac-compose-smoke'
         content = b'x' * (5 * 1024 * 1024)
-        body = (f'--{boundary}\r\nContent-Disposition: form-data; name="purpose"\r\n\r\nuser_data\r\n'
-                f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="smoke.txt"\r\n'
-                'Content-Type: text/plain\r\n\r\n').encode() + content + f'\r\n--{boundary}--\r\n'.encode()
-        uploaded = get('/v1/files', body=body, headers={**api, 'Content-Type': 'multipart/form-data; boundary=' + boundary})
-        assert uploaded['bytes'] == len(content), 'Upload was truncated'
+        uploaded = upload(api, content)
         private_logs(key, project_key)
 
         print('Configuring a reachable URL and recreating containers with the same data directory', flush=True)
-        # Retain the assigned port across recreation, without claiming a fixed host port.
-        env['OAC_WEB_PORT'] = address.rsplit(':', 1)[1]
         env['OAC_PUBLIC_URL'] = address
         compose('down')
         compose('up', '-d', '--wait', '--wait-timeout', '120', timeout=180)
         origin = address
         browser = client()
         assert compose('exec', '-T', 'web', '/usr/local/bin/oac-web', 'core-key').decode().strip() == key, 'Sign-in key changed'
-        request('/', headers={'Host': 'localhost:8080'}, status=403)
+        request('/', headers={'Host': 'localhost:' + port}, status=403)
         request('/console/auth/login', {'core_key': key})
         updated = get('/core/v1/installation')
         assert updated['installation_id'] == facts['installation_id'], 'Installation identity changed'
@@ -228,7 +240,7 @@ def main():
         print('PASS: startup, origin validation, sign-in, API, upload, node installer, key rotation and persistent installation', flush=True)
     except BaseException:
         # Service status identifies failed containers without dumping secret-bearing logs.
-        status = subprocess.run(command + ['ps', '--all'], env=env, capture_output=True, timeout=30)
+        status = subprocess.run(['docker', 'compose', '-p', project, 'ps', '--all'], env=env, capture_output=True, timeout=30)
         print(status.stdout.decode(), flush=True)
         raise
     finally:

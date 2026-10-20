@@ -14,6 +14,7 @@ import {
   DialogFooter,
 } from "./components/ui/dialog";
 import { Field, ErrorNotice } from "./components/shared";
+import { randomUuid } from "@oac/agents-client";
 export function ModelEditor({
   value,
   close,
@@ -74,7 +75,7 @@ export function ModelEditor({
             <Button
               type="button"
               variant="ghost"
-              onClick={() => setProviderId(crypto.randomUUID())}
+              onClick={() => setProviderId(randomUuid())}
             >
               {tr("添加 Provider")}
             </Button>

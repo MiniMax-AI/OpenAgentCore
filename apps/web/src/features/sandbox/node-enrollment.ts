@@ -28,7 +28,7 @@ export interface HostPrerequisite {
  *   and install nothing;
  * - `host_capacity`: the host's CPUs and memory hold one sandbox of the
  *   deployment's size (else the node reports capacity_insufficient); the Runtime
- *   image needs about 2 GB of disk;
+ *   image needs about 3 GB of free disk while it installs (`require_disk`);
  * - network: node files and artifacts only from the console at the public URL
  *   (`fetch` and `metadata`, which never use a release URL), Core's /api/v1 at the
  *   same URL (node_spec.py, the `register` call), and sandboxes reach Core as well
@@ -41,7 +41,7 @@ export function hostRequirements(sized: boolean): HostPrerequisite[] {
     { label: "SELinux is not enforcing" },
     { label: "In sudo mode, one Core per host: a host already running a sudo-mode node for another Core is refused." },
     { label: "What the sandbox backend needs on the host; the installer checks it and names anything missing" },
-    { label: sized ? "CPUs and memory for at least one sandbox: {{size}}; about 2 GB of disk for the Runtime image" : "CPUs and memory for at least one sandbox; about 2 GB of disk for the Runtime image" },
+    { label: sized ? "CPUs and memory for at least one sandbox: {{size}}; about 3 GB of free disk while the Runtime image installs" : "CPUs and memory for at least one sandbox; about 3 GB of free disk while the Runtime image installs" },
     { label: "Reaches {{core}}, as do its sandboxes" },
   ];
 }
@@ -95,5 +95,5 @@ export function enrollmentProgress(node: SandboxNode | null, appearedAt: number 
   if (node.online && node.provider_ready) return { stage: "ready", problem: "" };
   const late = appearedAt !== undefined && now - appearedAt >= NODE_READY_WAIT_MS;
   if (!node.online) return { stage: "registered", problem: late ? "not_connected" : "" };
-  return { stage: "connected", problem: node.diagnostic || late ? nodeProviderDiagnostic(node) : "" };
+  return { stage: "connected", problem: late ? nodeProviderDiagnostic(node) : "" };
 }

@@ -25,6 +25,7 @@ type subagentOptions struct {
 type startRequest struct {
 	NativeModelOptions *nativeModelOptions  `json:"native_model_options,omitempty"`
 	ToolSearch         bool                 `json:"tool_search,omitempty"`
+	WebSearch          string               `json:"web_search,omitempty"`
 	Subagents          *subagentOptions     `json:"subagents,omitempty"`
 	OutputFormat       *proto.OutputFormat  `json:"output_format,omitempty"`
 	Type               string               `json:"type"`
@@ -33,7 +34,6 @@ type startRequest struct {
 	SystemPrompt       string               `json:"system_prompt"`
 	Cwd                string               `json:"cwd"`
 	Resume             string               `json:"resume,omitempty"`
-	ObserveMessages    bool                 `json:"observe_messages,omitempty"`
 	Functions          []proto.FunctionTool `json:"functions,omitempty"`
 	MCPHTTPServers     *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
 	Workspace          *workspaceProfile    `json:"workspace,omitempty"`
@@ -53,36 +53,37 @@ func prepare(config Config, req proto.PromptRequestPayload) (startRequest, []str
 }
 
 func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools}
+	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, Functions: req.FunctionTools}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
-	modelConfiguration, err := harnessconfiguration.Configuration().Prepare(req.AgentOptions)
+	modelConfiguration, err := harnessconfiguration.Declaration.Configuration.Prepare(req.AgentOptions)
 	if err != nil {
 		return startRequest{}, nil, err
 	}
-	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig)
+	if err := harnessconfiguration.Declaration.ValidateExecutionControls(req.ExecutionControls); err != nil {
+		return fail(err.Error())
+	}
+	effort := ""
+	if req.ExecutionControls != nil {
+		effort = req.ExecutionControls.ReasoningEffort
+	}
+	start.NativeModelOptions = compileNativeModelOptions(modelConfiguration.HarnessConfig, effort)
 	if err := req.ValidateToolSearch(true); err != nil {
 		return startRequest{}, nil, err
 	}
-	if req.ToolSearch {
-		if (req.LocalEnvironment != nil && (len(req.LocalEnvironment.Skills) != 0 || len(req.LocalEnvironment.MCP) != 0)) || req.MCPHTTPServers != nil || !req.DisableSubagents || (req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil) {
-			return fail("tool discovery requires the single-agent text/function profile")
-		}
-		start.ToolSearch = true
-	}
+	start.ToolSearch = req.ToolSearch
 	if err := validateMCP(req); err != nil {
 		return startRequest{}, nil, err
 	}
-	// Search is disabled by the fixed native tool profile. Medium selects the
-	// SDK's default text generation; it has no native verbosity-level option.
-	if controls := req.ExecutionControls; controls != nil && (controls.WebSearch != "disabled" || controls.TextVerbosity != "medium") {
-		return fail("execution controls require disabled web search and medium text verbosity")
+	// Without a search control Claude Code keeps its native web tools.
+	if controls := req.ExecutionControls; controls != nil && controls.WebSearch != nil {
+		start.WebSearch = controls.WebSearch.Mode
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.ObserveMessages || !req.DisableSubagents || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && (len(req.LocalEnvironment.MCP) != 0 || len(req.LocalEnvironment.Skills) != 0)) {
-			return fail("structured output requires the qualified message-observing single-agent function profile")
+		if format.Type != "json_schema" {
+			return fail("structured output requires a JSON schema format")
 		}
 		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
 			return startRequest{}, nil, err
@@ -90,8 +91,8 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		start.OutputFormat = format
 	}
 	if req.ObserveSubagentIdentities {
-		if req.DisableSubagents || len(req.FunctionTools) != 0 || req.MCPHTTPServers != nil || (req.LocalEnvironment != nil && len(req.LocalEnvironment.MCP) != 0) {
-			return fail("subagent execution does not support this tool combination")
+		if req.DisableSubagents {
+			return fail("subagent observation conflicts with disabled subagents")
 		}
 		limit := 6
 		if req.MaxConcurrentSubagents != nil {
@@ -145,7 +146,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 			return startRequest{}, nil, err
 		}
 		start.Workspace = profile
-		start.Cwd = workspaceCwd(config.Workspace)
+		start.Cwd = config.Workspace.Directory
 		return start, env, nil
 	}
 	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
@@ -161,7 +162,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 		}
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
-	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"), "DISABLE_TELEMETRY=1", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1")
+	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"))
 	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return startRequest{}, nil, err

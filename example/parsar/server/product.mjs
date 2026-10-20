@@ -243,8 +243,6 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       value.instructions = text(body.instructions, "指令", 100000);
       value.enabled = body.enabled !== false;
       value.ask_user = body.ask_user === true;
-      if (value.ask_user && body.harness === "mcode")
-        throw new AppError(400, "MiniMax Code 尚不支持公开 Function 工具。");
       if (!body.runtime_id) throw new AppError(400, "请选择环境模板。");
       value.runtime_id = requireReference("runtimes", body.runtime_id);
       value.capability_ids = references(

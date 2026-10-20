@@ -207,8 +207,7 @@ func checkMembers(path string, raw json.RawMessage, members []member) error {
 // configurationConflict reports the official semantic rejections of a
 // well-formed configuration: a non-object schema root, a repeated function name
 // and a repeated web_search or tool_search declaration. Schemas without a string
-// root type are unchanged. Session admission also applies it to the resolved
-// saved configuration, so records saved before these checks cannot execute.
+// root type are unchanged.
 func configurationConflict(tools []json.RawMessage, formatType string, schema json.RawMessage) error {
 	names, declared := map[string]bool{}, map[string]bool{}
 	for _, raw := range tools {

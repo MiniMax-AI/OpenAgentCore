@@ -1,16 +1,16 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
+source_hash: 8529f1216a0e6987b099247270583f1ed9f3b4482dd8593231bab3389dfd5520
 ---
 
-本页列出各控制台页面读取和写入的 Core 路由，以及控制台如何限定读取范围。[administrator API contract](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API namespaces and credentials](../api/index.md) 定义了本文使用的术语。
+本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
 
 ## 接口 {#interfaces}
 
 | 接口 | 路径 | 身份验证 | 控制台用途 |
 | --- | --- | --- | --- |
-| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config`、`/node-install/manifest.json` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie；`/node-install/manifest.json` 无需登录 | 登录和退出；**添加节点** 所用的节点安装程序和节点构件；用于 Docker 和 microsandbox 设置的发行版 Runtime release。参见 [console server](console-server.md) |
+| Console server | `/console/auth`、`/console/auth/{login,logout}`、`/console/config` | 登录时使用 Core 密钥，随后使用控制台会话 Cookie | 登录和退出；**添加节点** 所用的节点安装程序和节点构件。参见 [控制台服务器](console-server.md) |
 | Administrator API | `/core/v1/**`，不包括 `/core/v1/sandbox` | Core 密钥，由控制台服务器添加 | 项目、密钥、资源读取和删除、诊断、执行器凭据和安装命令、来源信息、汇总、Core 指标、安装信息、默认模型 |
 | Sandbox administration | `/core/v1/sandbox/**` | Core 密钥，由控制台服务器添加 | 沙箱配置；**节点**；**概览** 上的机群与容量摘要；**沙箱监控** 中每个项目的 Runtime 观测 |
 | Agents API | `/v1/**` | 项目 API 密钥 | 不使用。控制台会向开发者说明如何调用它（参见 [Provenance and monitoring](#provenance-and-monitoring)） |
@@ -56,14 +56,14 @@ source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
 
 ## 执行器凭据和主机连接 {#executor-credentials-and-host-connection}
 
-仅当 Session 的 Environment 为 `self_hosted` 时，Session 页面才会显示 **执行器凭据** 区段，并针对该 Session 的 `project_id` 和 `environment.id` 读取凭据。[执行器凭据契约](../../../contracts/agents-api/zh/environment-executor-credentials.md) 定义了路由、404 和 409 响应以及凭据文件。
+仅当 Session 的 Environment 为 `self_hosted` 时，Session 页面才会显示 **执行器凭据** 区段，并针对该 Session 的 `project_id` 和 `environment.id` 读取凭据。[执行器凭据](../../../contracts/agents-api/zh/environment-executor-credentials.md) 定义了路由、404 和 409 响应以及凭据文件。
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
 | 列出凭据 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 可见时每 5 秒读取一次。表格显示每个凭据的短 `key_id` 及其复制按钮、创建时间（`created_at`，轮换不会改变该值）和状态（Active，或 Revoked 及其时间），并优先显示活动凭据；绝不会列出凭据本身。同一次读取中的 `connection` 观测值用于驱动主机连接面板：never connected、connected、disconnected、bound credential revoked 和 unknown 保持为不同状态，且只有重新读取并得到 connected 才会将主机标记为已连接 |
 | 签发或轮换 | `POST …/executor-credentials`，请求体为 `{"key_id", "rotate"}` | Issue 会在提交前保留生成的密钥 ID。轮换前会确认旧凭据将停止工作；轮换已吊销的凭据会恢复该凭据并生成新密钥。私有 JSON 仅显示一次，供下载或复制，绝不会存储在浏览器存储或查询缓存中，并在 Done 时清除 |
 | 吊销 | `DELETE …/executor-credentials/{key_id}` | **撤销**，需确认（执行器会断开连接且不会重试；其守护进程会保持停止状态，直到操作员将其停止），随后再次读取列表，并显示凭据为 Revoked |
-| 安装命令 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **连接主机**：按 Core 返回的原始内容显示短效 Linux/macOS 和 PowerShell 命令，并提供平台选择器以及指向 [native installation guide](../getting-started/self-hosted.md) 的链接。这些命令会安装守护进程及其 Harnesses、启动守护进程并检查连接；其授权在 30 分钟后过期，控制台每 20 分钟重新读取一次。如果没有可用且未过期的响应，该区段会说明命令不可用。已归档项目不会读取该信息 |
+| 安装命令 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **连接主机**：按 Core 返回的原始内容显示短效 Linux/macOS 和 PowerShell 命令，并提供平台选择器以及指向 [运行自托管 Session](../getting-started/self-hosted.md) 的链接。这些命令会安装守护进程及其 Harnesses、启动守护进程并检查连接；其授权在 30 分钟后过期，控制台每 20 分钟重新读取一次。如果没有可用且未过期的响应，该区段会说明命令不可用。已归档项目不会读取该信息 |
 
 在已归档项目中，该区段会通过提示隐藏 **签发凭据** 和 **轮换**，但保留列表和 **撤销**，因为 Core 仍允许吊销。
 
@@ -75,7 +75,7 @@ source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
 | 写入操作 | `GET /core/v1/projects/{project_id}/write-operations` | 项目的写入历史，按最新优先，可按密钥和资源类型筛选，每页 50 条 |
 | 汇总 | `GET /core/v1/summary` | **概览**（按项目）、**Agent** 列表（`group_by=agent`）、项目页面（按项目并使用 `group_by=key`）、**Agent 监控**（跳过空闲项目，并统计从范围开始以来按创建密钥划分的使用量）、**项目与密钥** 列表（最近活动） |
 | 安装 | `GET /core/v1/installation` | **设置 → 服务与部署** 的 **安装** 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 **启动设置**（`configuration.settings`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）。如果敏感设置包含值，或存在未知成员，读取会失败 |
-| Core 指标 | `GET /core/v1/metrics?range=` | **Core 监控** 页面。不存在该路由的 Core（404）会显示为未报告数据。[Core 指标契约](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
+| Core 指标 | `GET /core/v1/metrics?range=` | **Core 监控** 页面。不存在该路由的 Core（404）会显示为未报告数据。[Core 指标](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
 
 如果为 `local_only`，或者没有 `public_url`，**添加节点** 将无法签发命令，**清理主机** 也无法提供命令。随后 **概览**、**节点** 和 **设置** 会显示醒目警告，并通过 **查看公开地址** 前往 **设置 → 服务与部署**。**节点** 会禁用 **添加节点** 并显示明确原因，**新手引导** 则将沙箱步骤保留为待办项。
 
@@ -99,16 +99,16 @@ source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
 
 ## 工作区存储 {#workspace-storage}
 
-**设置 → 工作区存储** 通过 `GET`、`PUT /core/v1/workspace-storage` 读取和选择配置，并更新租户容量。参数和只写凭据由 adapter 验证；Web 不定义提供商专属字段。表单不回显凭据，也不自动重试结果不确定的写入。完整语义见[管理 API](../../../contracts/agents-api/zh/admin-api.md#workspace-storage)。
+**设置 → 工作区存储** 通过 `GET`、`PUT /core/v1/workspace-storage` 读取和选择配置，并更新租户容量。参数和只写凭据由 adapter 验证；Web 不定义提供商专属字段。表单不回显凭据，也不自动重试结果不确定的写入。完整语义见[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md#workspace-storage)。
 
 ## Sandbox 管理 {#sandbox-administration}
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 **在设置中管理** 前往 **设置 → 服务与部署**，且无需确认；使用 `resources` 以及 Docker 或 microsandbox 的 `runtime` release 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 **设置 → 沙箱与调度** 和 **沙箱监控** 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 **设置 → 沙箱与调度** 中 |
+| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 **在设置中管理** 前往 **设置 → 服务与部署**，且无需确认；使用 Docker 或 microsandbox 的 `resources` 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 **设置 → 沙箱与调度** 和 **沙箱监控** 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 **设置 → 沙箱与调度** 中 |
 | E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
-| 节点 | `GET /core/v1/sandbox/nodes` | **节点** 页面；**概览** 上的机群；**沙箱监控** 中每个托管 Runtime 所在的节点。在线节点的 `diagnostic`（一个[就绪状态码](../getting-started/nodes.md#readiness-codes)；任何其他值均读取为 `provider_unavailable`）会将其标记为降级，并在 **节点** 列表及节点页面中，紧邻状态的帮助提示里说明原因和修复方法。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，**节点** 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 **地址已过期**，而不是健康状态。**添加节点** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
+| 节点 | `GET /core/v1/sandbox/nodes` | **节点** 页面；**概览** 上的机群；**沙箱监控** 中每个托管 Runtime 所在的节点。`provider_ready` 为 false 的在线节点为降级；**节点** 列表及节点页面中紧邻其状态的帮助提示显示 *沙箱提供商不可用*，目标准备原因（`rollout.diagnostic`，一个[就绪状态码](../getting-started/nodes.md#readiness-codes)）显示在其目标状态中。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，**节点** 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 **地址已过期**，而不是健康状态。**添加节点** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
 | 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | **节点** 中的节点页面：主机最近一次心跳报告的 CPU 忙碌占比、内存使用量和可用磁盘，以及 1 小时、6 小时或 24 小时内 CPU 与内存的历史记录；页面可见时每 30 秒刷新一次。**编辑节点** 读取 `host.effective_cpu_cores` 和 `host.total_memory_bytes`，用于在每个 Sandbox 大小旁显示主机容量，以及最多可容纳多少个该大小的 Sandbox |
 | 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | **节点** 页面；**沙箱监控**。节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间；时间为 null 时显示短横线。它不会根据阶段时间或部署的 `suspension.retention_seconds` 推算快照到期时间 |
 | 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **添加节点**：管理员先设置节点的 Sandbox 限制（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
@@ -116,7 +116,7 @@ source_hash: 6eb50333e1da66b50f70b0f07835b76fb8717f80a22a307b1b4dda21ec191b44
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 **清理主机** 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | **沙箱监控**：每个项目的托管 Runtime，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |
 
-E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.allocations` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。用于 Docker 和 microsandbox 的 Runtime 版本来自控制台自身的 `GET /node-install/manifest.json`；如果无法获取该信息，管理员需在高级设置中输入 release。
+E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.allocations` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。
 
 ## 写入 {#writes}
 

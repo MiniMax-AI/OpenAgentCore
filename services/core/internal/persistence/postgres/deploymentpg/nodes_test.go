@@ -2,17 +2,13 @@ package deploymentpg_test
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"errors"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jackc/pgx/v5/stdlib"
-	"github.com/pressly/goose/v3"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -85,8 +81,7 @@ func TestEnrollmentApprovedCapacity(t *testing.T) {
 	}
 }
 
-// Docker never suspends a sandbox, so every read reports its retained limit as its
-// active limit, including for a token or node stored before Core applied that rule.
+// Docker never suspends a sandbox, so every write stores its retained limit as its active limit.
 func TestDockerRetainedLimitFollowsActive(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
@@ -99,40 +94,12 @@ func TestDockerRetainedLimitFollowsActive(t *testing.T) {
 	if identity, err := f.service.Enroll(t.Context(), token.Token, current); err != nil || identity.MaxRetained != 3 {
 		t.Fatal("enrollment kept a separate Docker retained limit", identity, err)
 	}
-	legacyToken, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 8})
-	if err != nil {
-		t.Fatal(err)
-	}
-	nodesExec(t, f.pool, "UPDATE runtime_node_enrollments SET max_retained=8 WHERE token_sha256=$1", nodesTokenDigest(legacyToken.Token))
-	if config, err := f.service.NodeConfiguration(t.Context(), "", legacyToken.Token, 0); err != nil || config.MaxRetained != 2 {
-		t.Fatal("bootstrap reported a legacy Docker retained limit", config, err)
-	}
-	legacy := nodesEnrollment(view, "Legacy", "l")
-	if _, err := f.service.Enroll(t.Context(), legacyToken.Token, legacy); err != nil {
-		t.Fatal(err)
-	}
-	var stored int32
-	if err := f.pool.QueryRow(t.Context(), "SELECT max_retained FROM runtime_nodes WHERE id=$1", legacy.NodeID).Scan(&stored); err != nil || stored != 2 {
-		t.Fatal("enrollment stored a legacy Docker retained limit", stored, err)
-	}
-	nodesExec(t, f.pool, "UPDATE runtime_nodes SET max_retained=8 WHERE id=$1", legacy.NodeID)
-	if identity, err := f.service.AuthenticateNode(t.Context(), legacy.NodeID, legacy.Credential); err != nil || identity.MaxRetained != 2 {
-		t.Fatal("node identity reported a legacy Docker retained limit", identity, err)
-	}
-	if config, err := f.service.NodeConfiguration(t.Context(), legacy.NodeID, legacy.Credential, 0); err != nil || config.MaxRetained != 2 {
-		t.Fatal("node configuration reported a legacy Docker retained limit", config, err)
-	}
 	if err := f.service.UpdateNode(t.Context(), current.NodeID, deployment.NodeUpdate{Name: "Docker", MaxActive: 5, MaxRetained: 12}); err != nil {
 		t.Fatal(err)
 	}
 	nodes, err := f.service.ListNodes(t.Context())
-	if err != nil || len(nodes) != 2 {
-		t.Fatal(nodes, err)
-	}
-	for _, n := range nodes {
-		if n.MaxRetained != n.MaxActive || (n.ID == current.NodeID && n.MaxActive != 5) {
-			t.Fatal("node list kept a separate Docker retained limit", n)
-		}
+	if err != nil || len(nodes) != 1 || nodes[0].MaxActive != 5 || nodes[0].MaxRetained != 5 {
+		t.Fatal("node list kept a separate Docker retained limit", nodes, err)
 	}
 }
 
@@ -353,111 +320,5 @@ func TestNodeUpdateBounds(t *testing.T) {
 	}
 	if err := f.service.RemoveNode(t.Context(), uuid.NewString()); !errors.Is(err, deployment.ErrNotFound) {
 		t.Fatal("unknown node removed", err)
-	}
-}
-
-func TestNodeGenerationDowngradePreservesServingProtocol(t *testing.T) {
-	for _, mode := range []string{"v2", "old_v1", "current_v1"} {
-		t.Run(mode, func(t *testing.T) {
-			f := newFixture(t)
-			changes, _ := f.execution(t)
-			input := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
-			installation, first := f.initialize(t, changes, input)
-			node := f.enroll(t, first, deployment.Capacity{MaxActive: 4, MaxRetained: 16})
-			f.connect(t, node.NodeID)
-			switch mode {
-			case "v2":
-				connection := f.connect(t, node.NodeID)
-				if err := f.service.HeartbeatGenerations(t.Context(), node.NodeID, connection, first.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: first.Generation, SpecificationDigest: first.SpecificationDigest, State: "ready"}}); err != nil {
-					t.Fatal(err)
-				}
-			case "old_v1":
-				input.Resources.CPUs++
-				input.ExpectedGeneration = first.Generation
-				next, err := changes.Update(admin(t), installation, input)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if next.Generation != first.Generation+1 || next.OwnerEpoch != first.OwnerEpoch {
-					t.Fatal("target change replaced execution ownership", next)
-				}
-			}
-			db := sql.OpenDB(stdlib.GetConnector(*f.pool.Config().ConnConfig))
-			defer db.Close()
-			migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../../migrations"), goose.WithTableName("agents_api_schema_version"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = migration.DownTo(t.Context(), 81)
-			if mode == "current_v1" {
-				if err != nil {
-					t.Fatal("safe v1 downgrade refused", err)
-				}
-			} else {
-				if err == nil {
-					t.Fatal("downgrade discarded required node protocol")
-				}
-				// DownTo may have removed later, reversible migrations before the
-				// node protocol migration refused the downgrade. Restore the current
-				// schema before using this version of the adapter to verify recovery.
-				if _, err = migration.Up(t.Context()); err != nil {
-					t.Fatal("refused downgrade could not restore current schema", err)
-				}
-				if _, err = f.service.NodeConfiguration(t.Context(), node.NodeID, node.Credential, 1); err != nil {
-					t.Fatal("refused downgrade damaged retained recovery", err)
-				}
-				if err = f.service.RemoveNode(t.Context(), node.NodeID); err != nil {
-					t.Fatal(err)
-				}
-				if _, err = migration.DownTo(t.Context(), 81); err != nil {
-					t.Fatal("removed node blocked downgrade", err)
-				}
-			}
-			if _, err = migration.Up(t.Context()); err != nil {
-				t.Fatal("node schema could not upgrade again", err)
-			}
-		})
-	}
-}
-
-// Stored vendor codes from before the readiness classes, including an offline
-// node's last report, are rewritten to their class.
-func TestNodeReadinessClassMigrationRewritesStoredCodes(t *testing.T) {
-	f := newFixture(t)
-	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
-	connection := f.connect(t, node.NodeID)
-	failed := []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "failed", Diagnostic: "provider_unavailable"}}
-	if err := f.service.HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{Diagnostic: "provider_unavailable"}, failed); err != nil {
-		t.Fatal(err)
-	}
-	db := sql.OpenDB(stdlib.GetConnector(*f.pool.Config().ConnConfig))
-	defer db.Close()
-	migration, err := goose.NewProvider(goose.DialectPostgres, db, os.DirFS("../../../../migrations"), goose.WithTableName("agents_api_schema_version"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var version int64
-	for _, source := range migration.ListSources() {
-		if strings.HasSuffix(source.Path, "_node_readiness_classes.sql") {
-			version = source.Version
-		}
-	}
-	if _, err := migration.DownTo(t.Context(), version-1); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET health=jsonb_set(health,'{diagnostic}','"kvm_unavailable"') WHERE id=$1`, node.NodeID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.pool.Exec(t.Context(), "UPDATE runtime_node_generation_status SET diagnostic='microsandbox_artifacts_unavailable' WHERE node_id=$1", node.NodeID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := migration.Up(t.Context()); err != nil {
-		t.Fatal(err)
-	}
-	detail, err := f.service.NodeDetail(t.Context(), node.NodeID, "1h")
-	if err != nil || detail.Diagnostic != "host_unsupported" || detail.Rollout.State != "failed" || detail.Rollout.Diagnostic != "artifacts_unavailable" {
-		t.Fatal(detail.Diagnostic, detail.Rollout, err)
 	}
 }

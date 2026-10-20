@@ -111,8 +111,8 @@ func nodeRecords(rows []sqlc.ListRuntimeNodesRow) ([]deployment.NodeRecord, erro
 		}
 		health.NodeHealth.Host = health.Host
 		record := deployment.NodeRecord{ID: uuidString(n.ID), Name: n.Name, Provider: n.ProviderKind, CoreURL: n.CoreUrl, CreatedAt: n.CreatedAt.Time, LastSeenAt: timestamp(n.LastSeenAt),
-			Health: health.NodeHealth, Online: n.Online, ServingReady: n.ServingReady, ProtocolVersion: int(n.ProtocolVersion), DeploymentGeneration: uint64(n.DeploymentGeneration),
-			TargetGeneration: uint64(n.TargetGeneration), TargetState: n.TargetState, TargetDiagnostic: n.TargetDiagnostic, MaxActive: int(n.MaxActive), MaxRetained: int(n.MaxRetained),
+			Health: health.NodeHealth, Online: n.Online, ServingReady: n.ServingReady,
+			TargetState: n.TargetState, TargetDiagnostic: n.TargetDiagnostic, MaxActive: int(n.MaxActive), MaxRetained: int(n.MaxRetained),
 			Active: n.Active, Retained: n.Retained, Reserved: n.Reserved, CleanupPending: n.CleanupPending, Running: n.Running, Snapshots: n.Snapshots}
 		if n.EnrollmentID.Valid {
 			id := uuidString(n.EnrollmentID)

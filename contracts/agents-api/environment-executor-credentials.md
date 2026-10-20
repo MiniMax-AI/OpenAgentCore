@@ -1,5 +1,5 @@
 ---
-title: "Environment executor credentials"
+title: "Executor credentials"
 ---
 
 An executor credential lets `oac-daemon` enroll and connect for one `self_hosted` Environment. It authorizes only the private daemon transport (`/api/v1/agent-daemon/*`) for that Environment, never `/v1`, `/core/v1`, sandbox-node enrollment or Project resources. The Project's principal is its execution principal. Core stores only a digest of the secret.
@@ -22,7 +22,7 @@ Session create, retrieve and update responses of a `self_hosted` Session carry `
 | `expires_at` | Unix time when the grant expires, 30 minutes after the response |
 | `commands.posix`, `commands.powershell` | The install command for Linux/macOS and for Windows PowerShell |
 
-The grant is bound to the Environment, the Session creator's principal and the Core build. It stops working when it expires, when the Session is deleted, when the Project is archived or when Core runs a different build. Reading the Session again returns a fresh grant. Core stores no grant: each response signs a new one, and stored events never carry it. Treat the command as a temporary secret: it can claim the credential, but it cannot run work or read files.
+The grant is bound to the Environment, the Session creator's principal and the Core build. It stops working when it expires, when the Session is deleted, when the Project is archived or when Core runs a different build. Reading the Session again returns a fresh grant. Core stores no grant: each response signs a new one, and stored events never carry it. The command passes the grant in the `OAC_INSTALL_GRANT` environment variable, never in a process argument. The bootstrap hands it to the installer alone, and the installer removes the variable from its environment before it starts the daemon or any Harness. Treat the command as a temporary secret: it can claim the credential, but it cannot run work or read files.
 
 The installer generates the secret and saves it privately as `daemon/executor-credential.json` in the installation directory before it claims the key. Core stores the digest under the key ID equal to the Environment ID. A lost response is safe to retry: the retry must present the same secret. A grant never replaces or restores a credential. If the Environment already has a different, rotated or revoked credential, the claim fails with 409 `executor_credential_exists`.
 
@@ -89,7 +89,7 @@ The installer derives this route from the returned `remote_url` and does not fol
 
 ## Revoked or rotated credential
 
-When Core permanently rejects the daemon (enrollment 401 or 409, a permanent WebSocket rejection, or a daemon version from another Core distribution), the daemon prints the reason once and makes no further requests until it is stopped; it then exits successfully, so a supervisor that restarts on exit does not loop. When started again, it tries enrollment once and parks again. Transient failures keep the normal reconnect behavior and never replay execution.
+When Core permanently rejects the daemon (enrollment 401 or 409, a permanent WebSocket rejection, or a daemon version from another Core distribution), a daemon started by `oac-daemon start` prints the reason once and exits with an error, and starting it again tries enrollment once and exits again. A Docker Runtime (`oac-daemon connect`) prints the reason once and makes no further requests until it is stopped, then exits successfully, so a supervisor that restarts on exit does not loop; started again, it tries enrollment once and parks again. Transient failures keep the normal reconnect behavior and never replay execution.
 
 A machine reconnects only with its bound `key_id`, rotated to a new secret that replaces the credential file at its configured path; the [self-hosted guide](../../docs/getting-started/self-hosted.md#rotate-or-revoke) gives the steps. A new `key_id` cannot reconnect an Environment that is already bound: issuing it succeeds, but enrollment with it returns 409. Rotation does not reinstall Harnesses, change the workspace or replace native history; never create a new Session history to recover a credential.
 

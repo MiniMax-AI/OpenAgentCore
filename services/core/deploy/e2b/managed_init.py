@@ -28,11 +28,6 @@ def identity(payload):
         value = payload[field]
         if not isinstance(value, str) or str(UUID(value)) != value or UUID(value).int == 0:
             raise ValueError('Invalid managed bootstrap identity')
-    if (payload['NetworkAccess'] not in contract.NETWORK_ACCESS or
-            payload['AllowedDomains'] is not None and
-            (not isinstance(payload['AllowedDomains'], list) or
-             any(not isinstance(domain, str) for domain in payload['AllowedDomains']))):
-        raise ValueError('Invalid managed bootstrap configuration')
     return {field: payload[field] for field in fields}
 
 
@@ -50,9 +45,7 @@ def initialize():
     shared.write_private(root / 'managed-launch.json', binding)
     environment = shared.prepare_runtime()
     environment.update(OAC_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
-                       OAC_RUNTIME_SESSION_ID=payload['SessionID'],
-                       OAC_RUNTIME_NETWORK_ACCESS=payload['NetworkAccess'],
-                       OAC_RUNTIME_ALLOWED_DOMAINS=json.dumps(payload['AllowedDomains'] or []))
+                       OAC_RUNTIME_SESSION_ID=payload['SessionID'])
     connection = Path(environment['OAC_RUNTIME_HOME']).parent / 'runtime-bootstrap.json'
     shared.write_private(connection, payload['RuntimeBootstrap'], owner=1000)
     source.unlink()

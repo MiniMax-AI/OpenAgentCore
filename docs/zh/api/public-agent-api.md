@@ -1,12 +1,10 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 1648667dbd1c35f043f6e93e5fdb9dbe45c1d28e4634de08fc3fa9e69d3e3f0d
+source_hash: 83f4c5d7c0e5c748087e6baa51c792a7cd831e217b47980c65db7d04e9222140
 ---
 
-Core 在 `/v1` 提供 [OpenAI Agents API](https://platform.openai.com/docs/api-reference)。可以使用官方 OpenAI SDK 或普通 HTTP。本指南针对每项常见操作同时展示这两种方式，并说明 Core 与 OpenAI 存在差异的地方。
-
-初次使用此 API？请先运行[快速入门](../getting-started/quickstart.md)。
+Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
 
 ## 准备开始 {#before-you-start}
 
@@ -32,13 +30,13 @@ client = OpenAI()  # reads OPENAI_BASE_URL and OPENAI_API_KEY
 **HTTP。** 每个请求都需要 Bearer 密钥。`/agents` 和 `/vaults` 下的路由还需要 `OpenAI-Beta: agents=v1`；`/files` 和 `/skills` 则不需要。SDK 会同时设置这两者。下面的 HTTP 示例使用以下 shell 辅助函数：
 
 ```sh
-oac() {  # oac PATH [curl options]: call /agents or /vaults with the required headers
+agents() {  # agents PATH [curl options]: call /agents or /vaults with the required headers
   curl -sS "$OPENAI_BASE_URL$1" \
     -H "Authorization: Bearer $OPENAI_API_KEY" \
     -H "OpenAI-Beta: agents=v1" \
     -H "Content-Type: application/json" "${@:2}"
 }
-oac /agents
+agents /agents
 ```
 
 在共享主机上，`-H @<(printf 'Authorization: Bearer %s\n' "$OPENAI_API_KEY")` 可以避免密钥出现在进程列表中。
@@ -56,9 +54,9 @@ oac /agents
 | [Skills](#skills) | `/skills` | 带版本的能力捆绑包 |
 | [Environment 模板](#environment-templates) | `/agents/environments/templates` | 可复用的工作区设置 |
 | [Vaults](#vaults) | `/vaults` | MCP 服务器的只写凭据 |
-| Subagents | `/agents/sessions/{id}/subagents` | 只读的子任务；请参阅 [subagents](../../../contracts/agents-api/zh/subagents.md) |
+| Subagents | `/agents/sessions/{id}/subagents` | 只读的子任务；请参阅 [子 Agent](../../../contracts/agents-api/zh/subagents.md) |
 
-Core 的路由与固定版本 SDK 中的路由完全一致，完整列表见 [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json)。Core 不添加任何路由；其扩展内容位于 [`x_agents_core`](#core-extensions-x-agents-core)。
+Core 的路由与固定版本 SDK 中的路由一致，完整列表见 [upstream-routes.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream-routes.json)。Core 不添加任何路由；其扩展内容位于 [`x_agents_core`](#core-extensions)。
 
 ## 常见任务 {#common-tasks}
 
@@ -69,7 +67,7 @@ Core 的路由与固定版本 SDK 中的路由完全一致，完整列表见 [up
 | 停止当前 Turn，或在响应丢失后恢复 | [取消](#cancel)、[幂等性](#idempotency) |
 | 从 Agent 调用你自己的代码 | [函数工具](#function-tools) |
 | 为 Agent 提供 Skills、软件包、文件和设置命令 | [Skills](#skills)、[Environment 模板](#environment-templates) |
-| 连接需要凭据的 MCP 服务器 | [Vaults](#vaults) 和 [execution tools](../../../contracts/agents-api/zh/execution-tools.md) |
+| 连接需要凭据的 MCP 服务器 | [Vaults](#vaults) 和 [执行工具](../../../contracts/agents-api/zh/execution-tools.md) |
 | 在自己的计算机上使用 Skill 或 Plugin 目录 | [本地能力目录](../getting-started/self-hosted.md#local-capability-directories) |
 | 将文件放入工作区，或下载 Agent 生成的内容 | [Files](#files) |
 | 读取对话和工具结果 | [Turns 和 Items](#turns-and-items) |
@@ -93,14 +91,18 @@ Core 的路由与固定版本 SDK 中的路由完全一致，完整列表见 [up
 
 SDK 会自动为你分页：
 
-```python
+::: code-group
+
+```python [Python]
 for session in client.beta.agents.sessions.list(limit=100):
     print(session.id, session.status)
 ```
 
-```sh
-oac "/agents/sessions?limit=100&after=$LAST_ID"
+```sh [curl]
+agents "/agents/sessions?limit=100&after=$LAST_ID"
 ```
+
+:::
 
 有两个列表存在差异：`GET /files` 一次最多返回 10,000 个文件；工作区文件使用不透明的 `page` 令牌（请参阅[工作区文件](#workspace-files)）。
 
@@ -138,17 +140,17 @@ client.beta.agents.sessions.create(environment=..., extra_headers={"Idempotency-
 
 每个响应都包含 `X-Request-Id`；报告问题时请包含该值。
 
-### Core 扩展：`x_agents_core` {#core-extensions-x-agents-core}
+### Core 扩展：`x_agents_core` {#core-extensions}
 
 Core 可以运行多种 Harness，并允许接入你自己的模型访问方式。这些设置是对 OpenAI 数据结构仅有的扩展，位于 `x_agents_core` 内：
 
 | 字段 | 所在位置 | 值 |
 | --- | --- | --- |
 | `harness` | Agent，或 Session 的内联 `agent` | `codex`、`claude_sdk` 或 `mcode` |
-| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`；对于 `mcode`，还包括 `context_window` 和 `max_output_tokens`。协议必须是该 Harness 的原生协议之一 |
-| `harness_config` | Agent、内联 `agent`，或 Session 创建请求（顶层，优先） | Harness 的原生模型参数，例如 Codex 的 `model_reasoning_effort` |
+| `model_provider` | Agent，或 Session 创建请求（顶层） | `protocol`、`base_url`、`api_key`，以及可选的 `context_window` 和 `max_output_tokens`。协议必须是该 Harness 的原生协议之一 |
+| `harness_config` | Agent、内联 `agent`，或 Session 创建请求（顶层，优先） | Harness 的原生模型参数，例如 Claude Code 的 `thinking` |
 | `environment` | `openai_hosted` 或 `self_hosted` Session 创建请求（顶层） | 可移植的准备配置：`environment_template_id`、`files`、`env`、`packages`、`setup_commands`、`skills`、`plugins`、`capability_directories`。同一字段不能也出现在 `environment` 中；请参阅 [Environments](../../../contracts/agents-api/zh/environments.md#preparation-order) |
-| `installation` | 只读，适用于 `self_hosted` Session | 在你的计算机上运行的短期安装命令；请参阅 [self-hosted execution](../getting-started/self-hosted.md) |
+| `installation` | 只读，适用于 `self_hosted` Session | 在你的计算机上运行的短期安装命令；请参阅 [运行自托管 Session](../getting-started/self-hosted.md) |
 
 任何其他成员都会导致 400 错误。`api_key` 为只写字段；读取时会返回 `api_key_configured`。`harness_config` 会替换整个对象；传入 `{}` 可将其清除。使用 SDK 时，请通过 `extra_body` 传入这些字段。
 
@@ -157,16 +159,18 @@ Core 可以运行多种 Harness，并允许接入你自己的模型访问方式�
 Harness 是运行 Session 的 Agent 程序：Codex（`codex`）、Claude Code（`claude_sdk`）或 MiniMax Code（`mcode`）。请在 Agent 或内联 `agent` 上设置 `x_agents_core.harness`；如果未设置，则使用安装的默认 Harness（[`OAC_DEFAULT_HARNESS`](../configuration.md#settings)，除非操作员另行更改，否则为 Codex）。
 
 - **模型。** `model` 是提供商给出的准确模型 ID。`openai_hosted` 或 `none` Session 上的内联 Agent 可以省略此字段，以使用其 Harness 的默认模型配置。保存的 Agent 始终必须指定模型。
-- **提供商。** Harness 会使用其原生协议之一直接调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[Model execution](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 Harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
+- **提供商。** Harness 会使用其原生协议之一直接调用你的提供商；系统不会进行转换，不匹配时会在创建 Session 阶段拒绝请求。[模型执行](../../../contracts/agents-api/zh/model-execution.md#saved-defaults-and-precedence) 列出了每个 Harness 的协议，以及各类 Environment 上 Session 使用的提供商。Session 会在创建时冻结其提供商。
 - **原生参数。** `harness_config` 承载 Harness 自身的模型设置；请参阅[原生模型参数](../../../contracts/agents-api/zh/model-execution.md#native-model-parameters)。
 
-并非每种 Harness、部署位置和操作组合都受支持；[Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 列出了受支持的组合。
+并非每种 Harness、部署位置和操作组合都受支持；[Harness 能力](../../../contracts/agents-api/zh/harness-capabilities.md)列出了受支持的组合，以及图像输入、用量报告和公共函数等限制。
 
 ## Agents {#agents}
 
 Agent 是保存的配置。Session 启动时会复制该配置，因此编辑 Agent 只会影响新的 Session。
 
-```python
+::: code-group
+
+```python [Python]
 agent = client.beta.agents.create(
     model="your-model-id",
     name="Reviewer",
@@ -175,14 +179,16 @@ agent = client.beta.agents.create(
 )
 ```
 
-```sh
-oac "/agents" -d '{
+```sh [curl]
+agents "/agents" -d '{
   "model": "your-model-id",
   "name": "Reviewer",
   "instructions": "Review code changes and report problems.",
   "x_agents_core": {"harness": "codex"}
 }'
 ```
+
+:::
 
 ```json
 {"id": "00000000-0000-4000-8000-000000000001", "object": "agent", "model": "your-model-id", "name": "Reviewer",
@@ -202,7 +208,7 @@ oac "/agents" -d '{
 
 - **更新**只会更改你发送的字段。`metadata` 会替换所有键值对；`null` 会清除 `name` 或 `instructions`。
 - **删除**不会影响现有 Session。
-- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及设置了 `mode: "disabled"` 的 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [execution tools](../../../contracts/agents-api/zh/execution-tools.md)。
+- **工具**包括函数、MCP 服务器、`tool_search`（Claude）以及 `web_search`。支持情况取决于 Harness 和 Environment；请参阅 [执行工具](../../../contracts/agents-api/zh/execution-tools.md)。
 
 ## Sessions {#sessions}
 
@@ -210,7 +216,9 @@ Session 是一次使用固定配置并拥有独立 Environment 的对话。
 
 ### 创建 Session {#create-a-session}
 
-```python
+::: code-group
+
+```python [Python]
 session = client.beta.agents.sessions.create(
     environment={"type": "openai_hosted"},
     agent_id=agent.id,
@@ -219,14 +227,16 @@ session = client.beta.agents.sessions.create(
 )
 ```
 
-```sh
-oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
+```sh [curl]
+agents "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
   "environment": {"type": "openai_hosted"},
   "agent_id": "00000000-0000-4000-8000-000000000001",
   "input": "Review the files in /workspace and summarize the risks.",
   "metadata": {"ticket": "T-123"}
 }'
 ```
+
+:::
 
 返回 201 和 Session：
 
@@ -250,10 +260,10 @@ oac "/agents/sessions" -H "Idempotency-Key: $(uuidgen)" -d '{
 | `environment.type` | 运行位置 | 备注 |
 | --- | --- | --- |
 | `openai_hosted` | Core 在某个节点或 E2B 上创建的沙箱；容量由管理员提供 | 可选 `network`、`packages`、`files`、`skills`、`plugins`、`env`、`capability_directories`、`setup_commands`，也可指定模板 |
-| `self_hosted` | 你自己的 Linux、macOS 或 Windows 计算机 | 要求提供绝对路径 `workspace_directory`。Skills、软件包、文件或模板应放在 `x_agents_core.environment` 中。响应会在 `x_agents_core.installation` 中携带安装命令；请参阅 [self-hosted execution](../getting-started/self-hosted.md)。Session 会自带自己的 `model_provider` |
+| `self_hosted` | 你自己的 Linux、macOS 或 Windows 计算机 | 要求提供绝对路径 `workspace_directory`。Skills、软件包、文件或模板应放在 `x_agents_core.environment` 中。响应会在 `x_agents_core.installation` 中携带安装命令；请参阅 [运行自托管 Session](../getting-started/self-hosted.md)。Session 会自带自己的 `model_provider` |
 | `none` | 由操作员注册的设备连接，无工作区 | `input` 为必填。模型来自安装的默认配置；如果未配置默认模型，则来自设备 |
 
-新建的 `openai_hosted` Session 在 Core 准备沙箱期间会读取到 `idle`；Environment 准备就绪后，其首个 Turn 才会启动。[Environment contract](../../../contracts/agents-api/zh/environments.md) 负责部署位置、过期和准备过程。
+新建的 `openai_hosted` Session 在 Core 准备沙箱期间会读取到 `idle`；Environment 准备就绪后，其首个 Turn 才会启动。[Environment 与模板](../../../contracts/agents-api/zh/environments.md)负责部署位置、过期和准备过程。
 
 ### Session 状态 {#session-status}
 
@@ -281,7 +291,9 @@ client.beta.agents.sessions.delete(session.id)
 
 ### 发送消息 {#send-a-message}
 
-```python
+::: code-group
+
+```python [Python]
 client.beta.agents.sessions.events.create(
     session.id,
     events=[{
@@ -292,26 +304,32 @@ client.beta.agents.sessions.events.create(
 )
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/events" -H "Idempotency-Key: $KEY" -d '{
   "events": [{"type": "agent.session.input.message",
               "input": [{"role": "user", "content": [{"type": "input_text", "text": "Now fix the first risk."}]}]}]
 }'
 ```
 
+:::
+
 - **处于空闲状态时，**消息会启动一个新 Turn。**Turn 运行时，**消息会加入该 Turn（进行引导），而不会启动并行任务。
-- **内容**使用 `input_text`，也可以使用 `input_image` 并以内联 PNG 或 JPEG 数据 URI 提供。Codex 和 Claude Code 接受图像；MiniMax Code 会拒绝图像。整个请求限制为 1 MiB。
+- **内容**使用 `input_text`，也可以使用带 `image_url` 的 `input_image`，由 Harness 决定接受哪些引用。整个请求限制为 1 MiB。
 - 完整规则请参阅[消息内容](../../../contracts/agents-api/zh/message-content.md)。
 
 ### 取消 {#cancel}
 
-```python
+::: code-group
+
+```python [Python]
 client.beta.agents.sessions.events.create(session.id, events=[{"type": "agent.session.input.cancel"}])
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/events" -d '{"events": [{"type": "agent.session.input.cancel"}]}'
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/events" -d '{"events": [{"type": "agent.session.input.cancel"}]}'
 ```
+
+:::
 
 Turn 到达 `cancelled` 状态时才会被取消，而不是请求返回时立即取消。在空闲状态下发送取消时，如果没有待处理输入，则不会执行任何操作；如果 Environment 输入预留仍处于待处理状态，则返回 409。重启同一 installation 时，自托管计算机上的工作区和历史记录会保留；请参阅[操作 installation](../getting-started/self-hosted.md#operate-the-installation)。
 
@@ -319,7 +337,9 @@ Turn 到达 `cancelled` 状态时才会被取消，而不是请求返回时立�
 
 `GET /agents/sessions/{id}/events` 是服务器发送事件流。它**仅提供实时数据**：断连期间发送的事件不会重放。请在发送输入前打开该流，并通过 [Turns 和 Items](#turns-and-items) 补齐缺失内容。
 
-```python
+::: code-group
+
+```python [Python]
 with client.beta.agents.sessions.events.stream(session.id) as stream:
     for event in stream:
         if event.type == "agent.session.turn.output_text.delta":
@@ -328,9 +348,11 @@ with client.beta.agents.sessions.events.stream(session.id) as stream:
             break
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/events" -N
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/events" -N
 ```
+
+:::
 
 ```text
 event: agent.session.turn.output_text.delta
@@ -357,7 +379,9 @@ data: {"type": "agent.session.turn.output_text.delta", "item_id": "item_...", "d
 
 Turn 是由输入启动的一项工作。Items 是其中记录的内容：消息、推理、工具调用及其结果。两者都是持久化的；你可以读取它们来检查结果或在断连后恢复。
 
-```python
+::: code-group
+
+```python [Python]
 turns = client.beta.agents.sessions.turns.list(session.id, order="desc")
 latest = turns.data[0]
 print(latest.status, latest.usage)
@@ -365,10 +389,12 @@ for item in client.beta.agents.sessions.items.list(session.id, order="asc"):
     print(item.type)
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/turns?order=desc&limit=1"
-oac "/agents/sessions/$SESSION_ID/items?order=asc"
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/turns?order=desc&limit=1"
+agents "/agents/sessions/$SESSION_ID/items?order=asc"
 ```
+
+:::
 
 | Turn `status` | 含义 |
 | --- | --- |
@@ -376,7 +402,7 @@ oac "/agents/sessions/$SESSION_ID/items?order=asc"
 | `waiting` | 正在等待函数结果 |
 | `completed`、`failed`、`cancelled` | 已完成 |
 
-- **用量**（`input_tokens`、`output_tokens`、`total_tokens`、……）未知时为 null，绝不会为零。Turn 运行期间，Session 的用量会保持为 null；Claude Code 和 MiniMax Code 不报告用量（[用量规则](../../../contracts/agents-api/zh/sessions-events.md#usage)）。
+- **用量**（`input_tokens`、`output_tokens`、`total_tokens`、……）未知时为 null，绝不会为零。Turn 运行期间，Session 的用量会保持为 null（[用量规则](../../../contracts/agents-api/zh/sessions-events.md#usage)）。
 - Turn 列表只包含顶层 Turn。要读取 `/subagents` 下的子任务，请使用该路径。
 
 ## 函数工具 {#function-tools}
@@ -411,13 +437,13 @@ with client.beta.agents.sessions.stream(
 如果不使用该辅助函数，请从 `session.required_actions` 读取调用，然后发送：
 
 ```sh
-oac "/agents/sessions/$SESSION_ID/events" -d '{
+agents "/agents/sessions/$SESSION_ID/events" -d '{
   "events": [{"type": "agent.session.input.tool_result",
               "turn_id": "turn_...", "call_id": "call_...", "success": true, "output": "Sunny in Paris"}]
 }'
 ```
 
-重新发送相同结果是安全的。为同一次调用发送不同结果，或在取消后发送结果，都会失败并返回 409。MiniMax Code 不支持公共函数。
+重新发送相同结果是安全的。为同一次调用发送不同结果，或在取消后发送结果，都会失败并返回 409。
 
 ## Files {#files}
 
@@ -431,14 +457,18 @@ oac "/agents/sessions/$SESSION_ID/events" -d '{
 
 ### 源文件 {#source-files}
 
-```python
+::: code-group
+
+```python [Python]
 f = client.files.create(file=open("data.csv", "rb"), purpose="user_data")
 ```
 
-```sh
+```sh [curl]
 curl "$OPENAI_BASE_URL/files" -H "Authorization: Bearer $OPENAI_API_KEY" \
   -F purpose=user_data -F file=@data.csv
 ```
+
+:::
 
 仅接受 `purpose=user_data`，最大为 512 MiB。不需要 Beta 请求头。其内容无法再次下载；请在工作区文件或模板中使用其 ID。
 
@@ -446,16 +476,20 @@ curl "$OPENAI_BASE_URL/files" -H "Authorization: Bearer $OPENAI_API_KEY" \
 
 将文件复制到 Session 的 Environment 工作区（`session.environment.id`）：
 
-```python
+::: code-group
+
+```python [Python]
 env_id = session.environment.id
 client.beta.agents.environments.files.create(env_id, type="file_id", file_id=f.id, path="/workspace/data.csv")
 client.beta.agents.environments.files.create(env_id, type="inline", data="aGVsbG8K", path="/workspace/hello.txt")
 page = client.beta.agents.environments.files.list(env_id, path="/workspace")
 ```
 
-```sh
-oac "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "file-...", "path": "/workspace/data.csv"}'
+```sh [curl]
+agents "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "file-...", "path": "/workspace/data.csv"}'
 ```
+
+:::
 
 - `inline` 数据使用 base64，解码后最大为 5 MiB；`file_id` 最大为 50 MiB。
 - 系统会创建父目录。已有文件绝不会被覆盖（400）。
@@ -465,16 +499,20 @@ oac "/agents/environments/$ENV_ID/files" -d '{"type": "file_id", "file_id": "fil
 
 Turn 完成时，Core 会捕获工作区 `outputs/` 目录下的普通文件。即使 Environment 消失，Artifacts 仍可读取。
 
-```python
+::: code-group
+
+```python [Python]
 for a in client.beta.agents.sessions.artifacts.list(session.id):
     data = client.beta.agents.sessions.artifacts.content(a.id, session_id=session.id)
     data.write_to_file(a.path.rsplit("/", 1)[-1])
 ```
 
-```sh
-oac "/agents/sessions/$SESSION_ID/artifacts"
-oac "/agents/sessions/$SESSION_ID/artifacts/$ARTIFACT_ID/content" -o report.md
+```sh [curl]
+agents "/agents/sessions/$SESSION_ID/artifacts"
+agents "/agents/sessions/$SESSION_ID/artifacts/$ARTIFACT_ID/content" -o report.md
 ```
+
+:::
 
 每个 Artifact 都有 `path`、`size_bytes`、`turn_id` 和 `environment_id`。删除 Artifact 不会删除工作区文件。
 
@@ -482,20 +520,24 @@ oac "/agents/sessions/$SESSION_ID/artifacts/$ARTIFACT_ID/content" -o report.md
 
 Skill 是 Agent 可使用的、包含指令和文件的带版本捆绑包。可以上传目录或 ZIP；每次上传都会创建一个版本。
 
-```sh
-curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F files=@my-skill.zip
-```
+::: code-group
 
-```python
+```python [Python]
 skill = client.skills.create(files=[("my-skill/SKILL.md", open("my-skill/SKILL.md", "rb"))])
 client.skills.versions.create(skill.id, files=[...], default=True)
 ```
+
+```sh [curl]
+curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F files=@my-skill.zip
+```
+
+:::
 
 - 不需要 Beta 请求头。每个 Environment 最多可选择 50 个 Skills；每个归档压缩后最大为 5 MiB，展开后最大为 20 MiB。
 - SDK 3.13.0 会上传内容中丢弃唯一的 ZIP 文件；上传 ZIP 时请使用 HTTP。
 - 可通过 Session 的 `environment.skills` 或[模板](#environment-templates)为其附加 Skills。
 
-详细信息请参阅 [Files and Skills](../../../contracts/agents-api/zh/source-files.md)。Session 会在准备期间一次性安装其 Skills、Plugins 和软件包；之后编辑源文件不会影响正在运行的 Session。准备错误会在任何工作开始前导致 Session 失败：请修复原因，而不是在新 Session 中重试。
+详细信息请参阅 [文件与 Skill](../../../contracts/agents-api/zh/source-files.md)。Session 会在准备期间一次性安装其 Skills、Plugins 和软件包；之后编辑源文件不会影响正在运行的 Session。准备错误会在任何工作开始前导致 Session 失败：请修复原因，而不是在新 Session 中重试。
 
 ## Environment 模板 {#environment-templates}
 
@@ -531,17 +573,17 @@ client.beta.agents.vaults.credentials.create(
 session = client.beta.agents.sessions.create(environment={"type": "none"}, input="...", vault_ids=[vault.id], agent_id=agent.id)
 ```
 
-HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` 中选择凭据，也可以通过 `credential_id` 指定具体凭据；无论采用哪种方式，MCP 服务器的 URL 都必须与所选凭据的 `mcp_server_url` 完全匹配。[Vaults contract](../../../contracts/agents-api/zh/vaults.md) 负责选择、错误、OAuth 刷新和删除。MCP 工具的 `connection_origin` 决定由 Core 端还是工作区连接服务器，而且每个 Harness 支持的取值集合不同；请参阅 [MCP connection origin](../../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)。
+HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` 中选择凭据，也可以通过 `credential_id` 指定具体凭据；无论采用哪种方式，MCP 服务器的 URL 都必须与所选凭据的 `mcp_server_url` 完全匹配。[Vault 与 Credential](../../../contracts/agents-api/zh/vaults.md)负责选择、错误、OAuth 刷新和删除。MCP 工具的 `connection_origin` 决定由 Core 端还是工作区连接服务器，而且每个 Harness 支持的取值集合不同；请参阅 [MCP connection origin](../../../contracts/agents-api/zh/environments.md#public-mcp-connection-origin)。
 
 ## 诊断故障 {#diagnose-a-failure}
 
 1. 读取 Session 的 `status` 和 `error`，以及最新 Turn 的 `error`。失败的 Turn 只会报告通用的 `internal_error`。
 2. 检查 Environment 是否已连接，以及其 Harness 是否可用。
-3. 在 [Harness capabilities](../../../contracts/agents-api/zh/harness-capabilities.md) 中检查 Harness、模型和工具的组合。
-4. 向管理员索取 Session 的[诊断信息](../../../contracts/agents-api/zh/session-diagnostics.md)，其中会指出故障类别；同时请查看[故障排除](../getting-started/operations.md#troubleshooting)，了解服务日志、凭据和节点就绪状态。
+3. 在 [Harness 能力](../../../contracts/agents-api/zh/harness-capabilities.md) 中检查 Harness、模型和工具的组合。
+4. 向管理员索取[Session 诊断](../../../contracts/agents-api/zh/session-diagnostics.md)，其中会指出故障类别；同时请查看[故障排查](../getting-started/troubleshooting.md)，了解服务日志、凭据和节点就绪状态。
 
-401 通常表示使用了其他命名空间中的密钥；请参阅 [API 命名空间与凭据](index.md)。
+401 通常表示使用了其他命名空间中的密钥；请参阅 [API 命名空间和凭据](index.md)。
 
 ## 与 OpenAI 的差异 {#differences-from-openai}
 
-Core 在某些行为上与 OpenAI 服务不同，例如 Session 创建的幂等性和特定 Harness 的工具支持。[覆盖情况清单](../../../contracts/agents-api/zh/index.md#differences-from-openai) 列出了所有差异及各资源的状态；[公共 OpenAPI](../../../contracts/agents-api/openapi.yaml) 包含准确的模式定义。
+Core 在某些行为上与 OpenAI 服务不同，例如 Session 创建的幂等性和特定 Harness 的工具支持。[OpenAI 兼容性](../../../contracts/agents-api/zh/index.md#differences-from-openai) 列出了所有差异及各资源的状态；[公共 OpenAPI](../../../contracts/agents-api/openapi.yaml) 包含准确的模式定义。

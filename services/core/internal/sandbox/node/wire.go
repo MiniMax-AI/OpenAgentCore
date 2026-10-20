@@ -18,7 +18,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 6
+const ProtocolVersion = 7
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
@@ -40,8 +40,6 @@ type Identity struct {
 
 type Health struct {
 	Generations          []sandbox.GenerationStatus `json:"generations,omitempty"`
-	Diagnostic           string                     `json:"diagnostic,omitempty"`
-	ProviderReady        bool                       `json:"provider_ready"`
 	ObservedAt           time.Time                  `json:"observed_at"`
 	ActiveOperations     int                        `json:"active_operations"`
 	CPUCount             *int64                     `json:"cpu_count,omitempty"`
@@ -110,17 +108,16 @@ type response struct {
 }
 
 type frame struct {
-	GenerationManagement bool                    `json:"generation_management,omitempty"`
-	Deployment           *sandbox.NodeDeployment `json:"deployment,omitempty"`
-	Control              *generationControl      `json:"control,omitempty"`
-	Version              int                     `json:"version"`
-	Type                 string                  `json:"type"`
-	Identity             *Identity               `json:"identity,omitempty"`
-	Health               *Health                 `json:"health,omitempty"`
-	ConnectionID         string                  `json:"connection_id,omitempty"`
-	OwnerEpoch           uint64                  `json:"owner_epoch,omitempty"`
-	Request              *request                `json:"request,omitempty"`
-	Response             *response               `json:"response,omitempty"`
+	Deployment   *sandbox.NodeDeployment `json:"deployment,omitempty"`
+	Control      *generationControl      `json:"control,omitempty"`
+	Version      int                     `json:"version"`
+	Type         string                  `json:"type"`
+	Identity     *Identity               `json:"identity,omitempty"`
+	Health       *Health                 `json:"health,omitempty"`
+	ConnectionID string                  `json:"connection_id,omitempty"`
+	OwnerEpoch   uint64                  `json:"owner_epoch,omitempty"`
+	Request      *request                `json:"request,omitempty"`
+	Response     *response               `json:"response,omitempty"`
 }
 
 func validID(s string) bool {

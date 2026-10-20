@@ -1,10 +1,10 @@
 ---
-title: "Core 协议行为"
+title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 13d033e194fe4316dfaeced837907b594e4c95d93ebbf9ef9078f47b42cbec92
+source_hash: 50998ccc26430755f2a81e634d33def91e96cfe377149aec66dc04909d972cb4
 ---
 
-已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[coverage ledger](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
+已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
 
 下文所称“Beta 路由”是 `/v1/agents` 和 `/v1/vaults` 下的路由。“Files and Skills”是 `/v1/files` 和 `/v1/skills` 下的路由，这些路由会忽略 `OpenAI-Beta`。
 
@@ -158,7 +158,7 @@ Agent 创建要求提供 `model`。对于省略的字段，Core 会保存并返�
 | Function `defer_loading` | `false` |
 | `programmatic_tool_calling.enabled` | `true` |
 | `web_search` | 保存每个已锁定模式；请参阅 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
-| HTTP MCP 传输方式 | 以 `headers: {}` 保存；拒绝非空标头。Origin 和 allowlist 默认值见 [public MCP connection origin](environments.md#public-mcp-connection-origin) |
+| HTTP MCP 传输方式 | 以 `headers: {}` 保存；非空标头按给定值存储，`Authorization` 标头被拒绝。Origin 和 allowlist 默认值见 [public MCP connection origin](environments.md#public-mcp-connection-origin) |
 
 保存某个值并不会使其可执行。Session 创建允许的配置集合更小；请参阅 [Session admission](#session-admission)。
 
@@ -179,7 +179,7 @@ Agent 创建和更新正文以及 Session 创建中的内联 `agent`，会在其
 
 在同一个对象内，Core 会先报告联合类型的 `type`，然后报告未知成员，再按文档顺序报告成员值，最后按固定 schema 的顺序报告缺失成员；先检查 tools，再检查 `text`，并在重复项和 schema 根检查之前检查整个对象。没有字符串根 `type` 的 schema 不会被检查。Function 和 output schema、`request_metadata` 和 `x_agents_core` 使用各自的解析器。更新正文和 Session 内联 Agent 会在查找 Agent 之前进行验证，因此属于当前租户、属于外部租户、缺失和格式错误的 Agent ID 会得到相同的响应。
 
-即使无法执行，Core 也会保存已锁定形状允许的值：任意长度的函数名称、已启用的 programmatic tool calling、reasoning effort `max` 和 service tier `flex`。
+即使所选 Harness 无法执行，Core 也会保存已锁定形状允许的值：任意长度的函数名称，以及 Harness 未声明的 reasoning、service tier、Web 搜索和 programmatic tool calling 取值。
 
 ### Session 准入 {#session-admission}
 
@@ -187,15 +187,13 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 
 | 配置 | 消息 |
 | --- | --- |
-| 显式 `reasoning.effort` 或 `reasoning.summary` | "Explicit reasoning execution options are not supported by this service yet." |
-| `service_tier` 不是 `auto` | "Execution currently supports service_tier=auto only." |
-| 已启用的 `web_search` 或省略模式的 `web_search`、已启用的 `programmatic_tool_calling` | 见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) |
-| 超过 64 个函数，或函数名称为空或超过 512 字节 | "This service supports at most 64 function tools." 或 "Function names must be nonempty, unique and at most 512 bytes." |
-| 两个 `programmatic_tool_calling` 声明、两个使用同一标签的 MCP 服务器 | "Execution requires distinct tool controls."、"Execution requires distinct MCP server labels." |
+| Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
+| 函数名称为空或重复 | "Function names must be nonempty and unique." |
+| 两个使用同一标签的 MCP 服务器 | "Execution requires distinct MCP server labels." |
 
 每 Session 的 `tools` 替换可以允许一个其已保存 tools 原本会被拒绝的 Session。每种工具和 Harness 的支持情况见 [execution and tools](execution-tools.md)。
 
-省略、null 和显式 `medium` text verbosity 会产生相同的 Session 配置。对于原生目录未声明 verbosity 支持的模型，Codex 适配器会丢弃 `medium` 设置并使用模型默认值，同时拒绝 `low` 或 `high`。
+省略、null 和显式 `medium` text verbosity 会产生相同的 Session 配置。
 
 ### 更新、删除和列表 {#update-delete-and-list}
 
@@ -248,4 +246,4 @@ Subagent 子 Turn 和待处理的 Environment 文件写入不会阻止删除。�
 
 ### 响应字段 {#response-fields}
 
-Session 的 `agent.tools` 会省略 `tool_search` 声明，因为已锁定的 Session 工具联合类型不包含这些声明；冻结配置仍会保留它们。在 `self_hosted` Session 上，`environment.remote_url` 是 Core 守护进程的 WebSocket URL，即公共 URL 下的 `/api/v1/agent-daemon/ws`，只有 OpenAgentCore 的 Runtime 守护进程会与其通信；请求无法设置此值。其他 Session 字段遵循已锁定的类型；`x_agents_core` 的说明见 [Agents API guide](../../../docs/zh/api/public-agent-api.md#core-extensions-x-agents-core)。
+Session 的 `agent.tools` 会省略 `tool_search` 声明，因为已锁定的 Session 工具联合类型不包含这些声明；冻结配置仍会保留它们。在 `self_hosted` Session 上，`environment.remote_url` 是 Core 守护进程的 WebSocket URL，即公共 URL 下的 `/api/v1/agent-daemon/ws`，只有 OpenAgentCore 的 Runtime 守护进程会与其通信；请求无法设置此值。其他 Session 字段遵循已锁定的类型；`x_agents_core` 的说明见 [Agents API guide](../../../docs/zh/api/public-agent-api.md#core-extensions)。

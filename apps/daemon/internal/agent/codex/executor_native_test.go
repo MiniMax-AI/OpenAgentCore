@@ -14,9 +14,12 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// This opt-in test uses the real pinned harness and an explicitly configured
-// Responses provider. Credentials are read from a private file, never arguments.
-func TestExecutorNativeReuse(t *testing.T) {
+// nativeAcceptanceConfig returns the pinned binary and the explicitly
+// configured Responses provider of an opt-in native test, and gives the test an
+// isolated Runtime home. Credentials are read from a private file, never
+// arguments.
+func nativeAcceptanceConfig(t *testing.T) (binary string, options map[string]any) {
+	t.Helper()
 	if os.Getenv("OAC_TEST_CODEX_EXECUTOR_NATIVE") != "1" {
 		t.Skip("requires an authorized native model acceptance environment")
 	}
@@ -45,13 +48,18 @@ func TestExecutorNativeReuse(t *testing.T) {
 	for _, name := range []string{"CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL", "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"} {
 		t.Setenv(name, "")
 	}
+	return binary, map[string]any{"model": model, "model_provider": map[string]any{"base_url": endpoint, "protocol": "responses", "api_key": strings.TrimSpace(string(key))}}
+}
+
+func TestExecutorNativeReuse(t *testing.T) {
+	binary, options := nativeAcceptanceConfig(t)
 	cfg := defaultSessionConfig(testStateRoot(t))
 	cfg.codexBinary = binary
 	cfg.logger = slog.New(slog.DiscardHandler)
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "executor-native",
-		DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true,
-		AgentOptions:  map[string]any{"model": model, "model_provider": map[string]any{"base_url": endpoint, "protocol": "responses", "api_key": strings.TrimSpace(string(key))}},
+		DisableExecutionEnvironment: true, DisableSubagents: true,
+		AgentOptions:  options,
 		FunctionTools: []proto.FunctionTool{{Name: "hold", Description: "Wait until the host supplies a result.", Parameters: json.RawMessage("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")}},
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 4*time.Minute)

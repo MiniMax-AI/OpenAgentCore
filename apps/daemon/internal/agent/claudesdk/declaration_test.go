@@ -6,13 +6,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/contracttest"
 )
 
 func TestClaudeSDKInvalidPathsFailBeforeProbe(t *testing.T) {
@@ -26,7 +25,7 @@ func TestClaudeSDKInvalidPathsFailBeforeProbe(t *testing.T) {
 			} else {
 				root = "relative-home"
 			}
-			out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info, func(context.Context, Config) (RuntimeInfo, error) {
+			out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info(), func(context.Context, Config) (RuntimeInfo, error) {
 				t.Fatal("invalid paths reached runtime probe")
 				return RuntimeInfo{}, nil
 			})
@@ -47,7 +46,7 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 	}
 	t.Setenv(claudeSDKNodeEnv, node)
 	for _, features := range [][]string{nil, {"mcp_http_tools"}, {"mcp_http_bearer_auth"}, {"mcp_http_tools", "mcp_http_bearer_auth"}, {"mcp_http_required"}, {"mcp_http_tools", "mcp_http_required"}, {"subagent_resources"}, {"structured_output"}} {
-		out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info, func(context.Context, Config) (RuntimeInfo, error) {
+		out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info(), func(context.Context, Config) (RuntimeInfo, error) {
 			info := RuntimeInfo{SDK: "0.3.269", Native: "2.1.269 (Claude Code)", Features: features}
 			return info, nil
 		})
@@ -64,23 +63,24 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 	}
 }
 
-// The declaration must retain the complete baseline capability descriptor.
-func TestDeclaredCapabilityBaseline(t *testing.T) {
-	expected := map[string]bool{"Streaming": true, "Usage": true, "Resume": true, "Steering": true, "MessageItems": true, "ToolObservations": true, "EnvironmentNone": true, "ProgrammaticToolCallingDisable": true, "ExecutionControls": true, "SubagentControl": true, "DurableInputReceipts": true, "DurableTurns": true, "FunctionTools": true}
-	value := reflect.ValueOf(Declaration.Info.Capabilities)
-	for i := 0; i < value.NumField(); i++ {
-		name := value.Type().Field(i).Name
-		want := proto.CapabilityUnsupported
-		if expected[name] {
-			want = proto.CapabilitySupported
-		}
-		if got := value.Field(i).Interface(); got != want {
-			t.Errorf("%s = %v, want %v", name, got, want)
-		}
-	}
-	if err := Declaration.Info.ValidateDeclaration(); err != nil {
+// Discovery narrows the declaration to the installed bundle and never widens it.
+func TestDiscoveryOnlyNarrowsDeclaration(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", root)
+	t.Setenv(claudeSDKEntrypointEnv, filepath.Join(root, "main.js"))
+	node, err := os.Executable()
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv(claudeSDKNodeEnv, node)
+	features := []string{"message_images", "function_result_images", "tool_search", "structured_output", "subagent_resources", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required"}
+	out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: io.Discard, Stderr: io.Discard}, Declaration.Info(), func(context.Context, Config) (RuntimeInfo, error) {
+		return RuntimeInfo{SDK: "0.3.269", Native: "2.1.269 (Claude Code)", Features: features}, nil
+	})
+	if out == nil || !out.Info.Available {
+		t.Fatal("runtime unavailable")
+	}
+	contracttest.RequireNarrowed(t, Declaration.Capabilities, out.Info.Capabilities)
 }
 
 func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
@@ -100,7 +100,7 @@ func TestRuntimeDiscoveryConfigurationAndRegistration(t *testing.T) {
 				t.Setenv(claudeSDKEntrypointEnv, entrypoint)
 			}
 			calls := 0
-			runtime := discoverWithCheck(t.Context(), options, Declaration.Info, func(_ context.Context, c Config) (RuntimeInfo, error) {
+			runtime := discoverWithCheck(t.Context(), options, Declaration.Info(), func(_ context.Context, c Config) (RuntimeInfo, error) {
 				calls++
 				if c.Node != node || c.Entrypoint != entrypoint || c.StateDir != filepath.Join(options.StateRoot, "daemon", "test", "runtime", "claude-sdk") || c.Env != nil {
 					t.Fatalf("configuration: %+v", c)

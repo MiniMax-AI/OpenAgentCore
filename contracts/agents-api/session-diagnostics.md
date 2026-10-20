@@ -1,6 +1,8 @@
 ---
-title: "Root Session and Turn diagnostics"
+title: "Session diagnostics"
 ---
+
+Administrators read why a Session or Turn failed through two Core-key routes that report failure categories and Item receipt timing.
 
 These read-only routes require the Core key. The Project ID selects the target Project and does not authenticate. Both return `Cache-Control: no-store`:
 

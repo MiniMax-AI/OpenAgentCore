@@ -75,7 +75,7 @@ func TestMCPBearerRejectsInvalidCredentialBeforeStateCreation(t *testing.T) {
 			t.Fatal("invalid credential wrote execution state", err)
 		}
 	}
-	for _, url := range []string{"http://example.invalid/mcp", "https://example.invalid/mcp#", "https://example.invalid/mcp?", "https://user:secret@example.invalid/mcp"} {
+	for _, url := range []string{"http://example.invalid/mcp", "https://example.invalid/mcp#", "https://user:secret@example.invalid/mcp"} {
 		token := "synthetic-token"
 		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: url, BearerToken: &token}}
 		if err := validateMCP(proto.PromptRequestPayload{DisableExecutionEnvironment: true, MCPHTTPServers: &servers}); err == nil {

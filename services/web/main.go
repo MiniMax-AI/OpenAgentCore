@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -48,8 +47,8 @@ func printCoreKey() error {
 	return nil
 }
 
-// healthcheck reports the installation healthy once Core and Web's own listener
-// answer. Compose runs it inside the web container.
+// healthcheck reports whether Web's own listener answers /healthz. Compose
+// runs it inside the web container; Core has its own healthcheck.
 func healthcheck() error {
 	c, err := loadConfig()
 	if err != nil {
@@ -62,22 +61,14 @@ func healthcheck() error {
 	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
 		host = "127.0.0.1"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 	client := &http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
-	for _, server := range []*url.URL{c.upstream, {Scheme: "http", Host: net.JoinHostPort(host, port)}} {
-		request, err := http.NewRequestWithContext(ctx, http.MethodGet, server.JoinPath("healthz").String(), nil)
-		if err != nil {
-			return err
-		}
-		response, err := client.Do(request)
-		if err != nil {
-			return err
-		}
-		response.Body.Close()
-		if response.StatusCode != http.StatusOK {
-			return fmt.Errorf("%s returned HTTP %d", server.Host, response.StatusCode)
-		}
+	response, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
+	if err != nil {
+		return err
+	}
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("Web returned HTTP %d", response.StatusCode)
 	}
 	return nil
 }

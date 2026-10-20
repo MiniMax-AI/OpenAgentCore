@@ -453,26 +453,6 @@ test("model editing and moving retain unique IDs within each Provider", async (t
   assert.equal(renamed.model, "three");
 });
 
-test("MiniMax MCP bindings reject before Core", async (t) => {
-  const store = openStore(":memory:");
-  t.after(() => store.close());
-  let calls = 0;
-  const { put, agent } = await setup(store, async () => {
-    calls++;
-    return { id: randomUUID() };
-  });
-  const config = await put(
-    "agents",
-    { ...agent, harness: "mcode", skill_ids: [] },
-    agent.id,
-  );
-  await assert.rejects(
-    put("sessions", { name: "Rejected", input: "hello", agent_id: config.id }),
-    /MiniMax Code.*MCP/,
-  );
-  assert.equal(calls, 0);
-});
-
 test("Skills directory preview uses the pinned CLI, bounds imports, and cleans its temporary checkout", async () => {
   const { previewRegistrySkill } = await import(
     "../server/skills-directory.mjs"

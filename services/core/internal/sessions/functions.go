@@ -60,12 +60,15 @@ type FunctionResultMatch struct {
 	Submitted bool
 	// Matches reports that the saved result equals the submitted one.
 	Matches bool
+	// Withdrawn reports that the native Harness abandoned the call.
+	Withdrawn bool
 }
 
 // decideFunctionResult decides whether to store a submitted result for a call
 // the Turn has. An identical retry of a saved result stores nothing, even after
-// the Turn ended; a different result conflicts with the saved one. A new result
-// needs a Turn that accepts results.
+// the Turn ended or the call was withdrawn; a different result conflicts with
+// the saved one. A new result needs a call that was not withdrawn and a Turn
+// that accepts results.
 func decideFunctionResult(turn Turn, match FunctionResultMatch) (bool, error) {
 	if match.Submitted {
 		if !match.Matches {
@@ -73,7 +76,7 @@ func decideFunctionResult(turn Turn, match FunctionResultMatch) (bool, error) {
 		}
 		return false, nil
 	}
-	if !acceptsFunctionResults(turn) {
+	if match.Withdrawn || !acceptsFunctionResults(turn) {
 		return false, ErrTurnConflict
 	}
 	return true, nil

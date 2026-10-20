@@ -145,7 +145,7 @@ func TestEnvironmentRejectionClassifiesConnectionErrors(t *testing.T) {
 		{errors.New("connect: bootstrap: Environment bootstrap failed"), ""},
 		{nil, ""},
 	} {
-		got := environmentRejection(tc.err, uuid.NewString(), uuid.NewString())
+		got := environmentRejection(tc.err, uuid.NewString(), uuid.NewString(), false)
 		if tc.want == "" && got != "" || !strings.Contains(got, tc.want) || strings.Contains(got, "container") {
 			t.Errorf("environmentRejection(%v) = %q", tc.err, got)
 		}

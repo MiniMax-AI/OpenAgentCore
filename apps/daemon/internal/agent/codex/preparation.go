@@ -12,9 +12,6 @@ import (
 )
 
 func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Prepared, error) {
-	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
-		return nil, errors.New("codex: structured output is not qualified")
-	}
 	if req.WorkspaceReadOnly {
 		return nil, errors.New("codex: workspace reads use the local Runtime interface")
 	}
@@ -59,7 +56,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	s := &Session{
 		nativeHome:                nativeHomeFromPlan(plan),
 		functions:                 functions,
-		observeMessages:           req.ObserveMessages,
 		observeSubagentIdentities: req.ObserveSubagentIdentities && !req.DisableSubagents,
 		cfg:                       cfg,
 		rpc:                       rpc,
@@ -84,8 +80,8 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	if _, err := rpc.Start(cancelCtx, initParams); err != nil {
 		return p.preparationFailed(fmt.Errorf("codex: rpc start: %w", err))
 	}
-	if req.ExecutionControls != nil && req.ExecutionControls.DisableProgrammaticToolCalling {
-		if err := verifyProgrammaticToolsDisabled(cancelCtx, rpc); err != nil {
+	if req.ExecutionControls != nil && req.ExecutionControls.ProgrammaticToolCalling != nil {
+		if err := verifyProgrammaticTools(cancelCtx, rpc, *req.ExecutionControls.ProgrammaticToolCalling); err != nil {
 			return p.preparationFailed(err)
 		}
 	}
@@ -95,7 +91,7 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 		}
 	}
 	if s.observeSubagentIdentities {
-		if err := verifySubagentObservationProfile(cancelCtx, rpc, plan.Cwd); err != nil {
+		if err := verifySubagentObservationProfile(cancelCtx, rpc); err != nil {
 			return p.preparationFailed(err)
 		}
 	}

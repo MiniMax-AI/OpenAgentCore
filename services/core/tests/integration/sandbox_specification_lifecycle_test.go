@@ -181,25 +181,17 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 					t.Fatal(err)
 				}
 			}
-			for _, field := range []string{"resources", "runtime"} {
-				changed := input
-				if field == "resources" {
-					changed.Resources.MemoryMiB *= 2
-				} else {
-					runtime := *input.Runtime
-					runtime.SourceCommit = strings.Repeat("1", 40)
-					changed.Runtime = &runtime
-				}
-				changed.ExpectedGeneration = view.Generation
-				if _, _, err := changes.ClassifyChange(t.Context(), view.InstallationID, changed); err != nil {
-					t.Fatal(field, err)
-				}
-				next, err := changes.Update(SandboxResetTestContext(t.Context()), view.InstallationID, changed)
-				if err != nil || next.Generation != view.Generation+1 || next.OwnerEpoch != view.OwnerEpoch {
-					t.Fatal(field, next, err)
-				}
-				view = next
+			changed := input
+			changed.Resources.MemoryMiB *= 2
+			changed.ExpectedGeneration = view.Generation
+			if _, _, err := changes.ClassifyChange(t.Context(), view.InstallationID, changed); err != nil {
+				t.Fatal(err)
 			}
+			next, err := changes.Update(SandboxResetTestContext(t.Context()), view.InstallationID, changed)
+			if err != nil || next.Generation != view.Generation+1 || next.OwnerEpoch != view.OwnerEpoch {
+				t.Fatal(next, err)
+			}
+			view = next
 			after, err := deployments.View(t.Context())
 			if err != nil || before.Resources != after.Resources {
 				t.Fatal("online specification change altered ownership", err)
@@ -226,11 +218,8 @@ func TestSandboxSpecificationChangesPreserveEveryRetainedResource(t *testing.T) 
 			} else if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 				t.Fatal(err)
 			}
-			changed := input
-			changed.Resources.MemoryMiB *= 2
-			runtime := *input.Runtime
-			runtime.SourceCommit = strings.Repeat("2", 40)
-			changed.Runtime = &runtime
+			changed = input
+			changed.Resources.MemoryMiB *= 4
 			changed.ExpectedGeneration = view.Generation
 			committed, err := changes.Update(SandboxResetTestContext(t.Context()), view.InstallationID, changed)
 			if err != nil || committed.Generation != view.Generation+1 || committed.Reset != nil || committed.Resources != (deployment.Resources{}) || committed.Specification == nil || !reflect.DeepEqual(*committed.Specification, changed.DeploymentSpec) {

@@ -11,20 +11,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
+func TestExecutionPersistsMessageObservations(t *testing.T) {
 	h := newDispatchHarness(t)
 	ctx := context.Background()
-	first := h.message("legacy", "legacy observation policy")
-	result := h.run(ctx, first.TurnID)
-	var request proto.PromptRequestPayload
-	env := h.read(testExecutionRequest)
-	_ = env.DecodePayload(&request)
-	if request.ObserveMessages {
-		t.Fatal("unadvertised observation capability requested")
-	}
-	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
-	h.finished(result, sessions.TurnCompleted)
-	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, WebSearchControl: proto.CapabilitySupported, TextVerbosity: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
+	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Resume: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported, ExecutionControls: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, MessageItems: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported, Preparation: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported})}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {
 		peer, err := h.registry.LookupDevice(h.device.ID)
@@ -41,12 +31,8 @@ func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	input := h.message("observed", "stream separate messages")
-	result = h.run(ctx, input.TurnID)
-	env = h.read(testExecutionRequest)
-	_ = env.DecodePayload(&request)
-	if !request.ObserveMessages {
-		t.Fatal("advertised capability was not requested")
-	}
+	result := h.run(ctx, input.TurnID)
+	h.read(testExecutionRequest)
 	text := "complete"
 	h.write(input.TurnID, proto.TypeOutputMessage, proto.OutputMessagePayload{ID: "a", Status: "in_progress", Phase: "commentary"})
 	h.write(input.TurnID, proto.TypeDelta, proto.DeltaPayload{ItemID: "a", Delta: text, Sequence: 1})
@@ -56,7 +42,7 @@ func TestExecutionNegotiatesAndPersistsMessageObservations(t *testing.T) {
 	if _, err := requestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	env = h.read(proto.TypePromptCancel)
+	env := h.read(proto.TypePromptCancel)
 	var cancel proto.PromptCancelPayload
 	_ = env.DecodePayload(&cancel)
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})

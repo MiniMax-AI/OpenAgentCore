@@ -8,8 +8,34 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"time"
 )
+
+// nativeInstallationEntries are the top-level entries an installation directory
+// owns: the installer writes bin, daemon, components and the default
+// capabilities, and Windows keeps the lock file of daemon beside it; the daemon
+// running from it adds runtime, initialization and packages. Install refuses a directory with anything else, and uninstall
+// deletes nothing else.
+var nativeInstallationEntries = []string{"bin", "daemon", "components", "capabilities", ".daemon.runtime.lock", "runtime", "initialization", "packages"}
+
+// foreignEntries names what dir holds that no installation owns.
+func foreignEntries(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var foreign []string
+	for _, entry := range entries {
+		if !slices.Contains(nativeInstallationEntries, entry.Name()) {
+			foreign = append(foreign, entry.Name())
+		}
+	}
+	return foreign, nil
+}
 
 // These exact temporary names are reserved by the installer, never workspace data.
 var nativeTemporaryNames = map[string]*regexp.Regexp{

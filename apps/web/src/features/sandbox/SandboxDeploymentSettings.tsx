@@ -36,6 +36,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
   const buildSize = templateBuildSize(deployment);
   const sizeLabel = (value: { cpus: number; memory_mib: number }) => t("{{cpus}} CPU · {{memory}}", { cpus: value.cpus, memory: formatBytes(value.memory_mib * MIB) });
   const canEdit = fresh && !deployment.reset;
+  const change = () => { setEditKey((key) => key + 1); setChanging(true); };
   return <section className="console-section" aria-labelledby="sandbox-provider-heading">
     <header className="console-section-header">
       <div className="console-section-title">
@@ -44,7 +45,6 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
           {t("One provider serves this deployment. Reset it before choosing a different backend.")}
           {deployment.mode === "direct" ? ` ${t("Core creates E2B sandboxes directly. No node enrollment is needed.")} ${t("Saved configuration does not confirm execution readiness. Session and Environment state report actual execution.")}` : ""}
           <dl className="sandbox-summary">
-            {spec?.runtime ? <div><dt>{t("Runtime")}</dt><dd><code title={spec.runtime.source_commit}>{spec.runtime.source_commit.slice(0, 12)}</code></dd></div> : null}
             {deployment.suspension ? <div><dt>{t("Idle suspension")}</dt><dd>{t("After {{idle}} · kept {{retention}}", { idle: formatPeriod(deployment.suspension.idle_seconds, i18n.resolvedLanguage), retention: formatPeriod(deployment.suspension.retention_seconds, i18n.resolvedLanguage) })}</dd></div> : null}
             <div><dt>{t("Allocated resources")}</dt><dd>{deployment.resources?.allocations ?? t("Unknown state")}</dd></div>
             <div><dt>{t("Pending environments")}</dt><dd>{deployment.resources?.pending ?? t("Unknown state")}</dd></div>
@@ -53,7 +53,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
       </div>
       {!deployment.reset ? <div className="console-section-actions">
         <HelpTip>{t("Changes keep this backend and existing Sessions and nodes. Core prepares the new target for future work; placement may continue on qualified earlier generations.")}</HelpTip>
-        <button type="button" className="button outline" disabled={disabled || !canEdit || changing} onClick={() => { setEditKey((key) => key + 1); setChanging(true); }}>{t("Change resources")}</button>
+        <button type="button" className="button outline" disabled={disabled || !canEdit || changing} onClick={change}>{t("Change resources")}</button>
       </div> : null}
     </header>
     <div className="settings-rows">

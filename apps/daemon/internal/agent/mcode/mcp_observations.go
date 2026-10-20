@@ -10,22 +10,22 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 type mcpToolIdentity struct{ server, tool string }
 
 // MiniMax 0.4.12 atomically writes these assignments before exposing tools.
 // Read its exact mapping instead of reversing lossy native name normalization.
-func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) {
-	if s.req.LocalEnvironment == nil ||
-		!strings.HasPrefix(name, "mcp__") || strings.HasPrefix(name, "mcp__oac_workspace__") {
+func (s *Session) mcpIdentity(name string) (*mcpToolIdentity, error) {
+	if !strings.HasPrefix(name, "mcp__") {
 		return nil, nil
 	}
 	bindings, err := agent.ResolveMCPBindings(s.req)
 	if err != nil {
 		return nil, err
 	}
-	if len(bindings) == 0 {
+	if len(bindings) == 0 && len(s.req.FunctionTools) == 0 {
 		return nil, nil
 	}
 	raw, err := os.ReadFile(filepath.Join(s.opts.DataDir, "mcp-runtime-names.json"))
@@ -50,12 +50,15 @@ func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) 
 			}
 			var key []string
 			declared := 0
+			if server.Raw == declaration.FunctionServerLabel && len(s.req.FunctionTools) > 0 {
+				declared = 1
+			}
 			for _, item := range bindings {
 				if item.ServerLabel == server.Raw {
 					declared++
 				}
 			}
-			if found != nil || declared != 1 || server.Raw == "oac_workspace" || tool.Raw == "" ||
+			if found != nil || declared != 1 || tool.Raw == "" ||
 				json.Unmarshal([]byte(server.Key), &key) != nil || len(key) != 2 || key[0] != "configured" || key[1] != server.Raw {
 				return nil, fmt.Errorf("mcode: ambiguous or undeclared native MCP identity")
 			}
@@ -68,7 +71,7 @@ func (s *Session) environmentMCPIdentity(name string) (*mcpToolIdentity, error) 
 	return found, nil
 }
 
-func environmentMCPObservation(update toolUpdate, stage string) (*proto.ToolObservation, error) {
+func mcpObservation(update toolUpdate, stage string) (*proto.ToolObservation, error) {
 	if update.mcp == nil {
 		return nil, nil
 	}

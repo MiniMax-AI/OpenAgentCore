@@ -23,6 +23,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
+var errCredentialClaimed = errors.New("install: this Session's machine credential is already claimed by another installation, so its install command cannot be used again; to reconnect it, choose Rotate in Web (Session > Executor credentials) and install from an extracted distribution (see Self-hosted executors > Reconnect an existing Session), or create a new Session")
+
 func installationRequest(ctx context.Context, endpoint, authorization string, input any, output any) error {
 	body, err := json.Marshal(input)
 	if err != nil {
@@ -44,7 +46,7 @@ func installationRequest(ctx context.Context, endpoint, authorization string, in
 	case http.StatusUnauthorized:
 		return errors.New("install: authorization rejected or expired; copy a fresh command from the Session")
 	case http.StatusConflict:
-		return errors.New("install: this Environment already has a different or revoked credential; reuse the original installation or resolve its credential in Core")
+		return errCredentialClaimed
 	default:
 		return fmt.Errorf("install: Core rejected installation (HTTP %d); check the Session and obtain a fresh command", response.StatusCode)
 	}
@@ -63,7 +65,7 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 		return nil
 	}
 	if o.OnboardURL == "" || o.Authorization == "" {
-		return errors.New("install: --onboard-url and --authorization are required together")
+		return errors.New("install: --onboard-url and " + v1.NativeInstallGrantEnv + " are required together")
 	}
 	const suffix = "/api/v1/agent-daemon/installation"
 	if !strings.HasSuffix(o.OnboardURL, suffix) {
@@ -96,12 +98,8 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 	if o.RequiredHarness == "" {
 		return errors.New("install: the Session requires an unsupported Harness")
 	}
-	if o.Directory == "" {
-		root, err := paths.Root()
-		if err != nil {
-			return err
-		}
-		o.Directory = filepath.Join(root, "environments", o.Environment)
+	if err := o.defaultDirectory(); err != nil {
+		return err
 	}
 	if !o.NonInteractive {
 		o.Interactive = true
@@ -116,7 +114,7 @@ func prepareOnboardingCredential(ctx context.Context, o *nativeInstallOptions, h
 	var previous nativeInstallation
 	if raw, err := runtimefs.ReadPrivate(held, "installation.json", 1<<20); err == nil {
 		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version || previous.Remote != o.Remote || previous.Environment != o.Environment || previous.Workspace != o.Workspace {
-			return errors.New("install: this directory belongs to an incompatible installation; choose a separate directory")
+			return errors.New("install: this directory holds an installation of another Core build or Session, which the installer never changes; rotate the Session's credential in Web and install from an extracted distribution into a new directory (see Self-hosted executors > Reconnect an existing Session), or create a new Session")
 		}
 		o.Credential = previous.Credential
 		// A completed installation already owns its key. Rotation and revocation
@@ -147,7 +145,12 @@ func prepareOnboardingCredential(ctx context.Context, o *nativeInstallOptions, h
 	} else {
 		return err
 	}
-	return installationRequest(ctx, o.OnboardURL+"/claim", o.Authorization, map[string]string{"executor_token": secret}, nil)
+	err := installationRequest(ctx, o.OnboardURL+"/claim", o.Authorization, map[string]string{"executor_token": secret}, nil)
+	if errors.Is(err, errCredentialClaimed) {
+		// This directory holds no installation, and Core never accepts this secret.
+		_ = held.Remove("executor-credential.json")
+	}
+	return err
 }
 
 func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOptions) error {
@@ -158,7 +161,7 @@ func finishOnboarding(ctx context.Context, rc *runContext, o nativeInstallOption
 			return err
 		}
 		// Run the installed executable. A detached child must never reference the
-		// temporary bundle or inherit the short-lived authorization in argv.
+		// temporary bundle or inherit the short-lived authorization.
 		command := exec.CommandContext(ctx, executable, "start")
 		command.Env = withNativeEnv(map[string]string{"OAC_RUNTIME_HOME": o.Directory, daemonize.BackgroundSentinelEnv: ""})
 		command.Stdout, command.Stderr = rc.stdout, rc.stderr

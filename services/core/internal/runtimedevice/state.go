@@ -1,51 +1,6 @@
 // Package device defines persistence data shared by daemon gateways and their stores.
 package runtimedevice
 
-import "time"
-
-const OwnerStatusConnected = "connected"
-const OwnerStatusDraining = "draining"
-const OwnerStatusExpired = "expired"
-
-// Owner is the persisted view of the current
-// WebSocket owner for one agent_daemon device. Generation is a fencing
-// token: renewal/release paths must carry it so stale pods can't act.
-type Owner struct {
-	DeviceID       string
-	WorkspaceID    string
-	OwnerPodID     string
-	OwnerURL       string
-	Generation     int64
-	Status         string
-	ConnectedAt    time.Time
-	LastSeenAt     time.Time
-	LeaseExpiresAt time.Time
-	UpdatedAt      time.Time
-}
-
-type ClaimOwner struct {
-	DeviceID       string
-	WorkspaceID    string
-	OwnerPodID     string
-	OwnerURL       string
-	LeaseExpiresAt time.Time
-	Now            time.Time
-}
-
-type RenewOwner struct {
-	DeviceID       string
-	OwnerPodID     string
-	Generation     int64
-	LeaseExpiresAt time.Time
-	Now            time.Time
-}
-
-type ReleaseOwner struct {
-	DeviceID   string
-	OwnerPodID string
-	Generation int64
-}
-
 // HeartbeatStatus is the post-heartbeat liveness the runner uses to
 // detect state changes.
 type HeartbeatStatus struct {
@@ -66,20 +21,16 @@ type KindCapabilities struct {
 	Resume                bool `json:"resume,omitempty"`
 	NativeSessionRecovery bool `json:"native_session_recovery,omitempty"`
 	RetainedNativeHistory bool `json:"retained_native_history,omitempty"`
-	Steering              bool `json:"steering,omitempty"`
 	MessageItems          bool `json:"message_items,omitempty"`
 
-	ToolObservations               bool `json:"tool_observations,omitempty"`
-	EnvironmentNone                bool `json:"environment_none,omitempty"`
-	LocalEnvironment               bool `json:"local_environment,omitempty"`
-	Preparation                    bool `json:"preparation,omitempty"`
-	WorkspaceReadPreparation       bool `json:"workspace_read_preparation,omitempty"`
-	WorkspaceOutputExport          bool `json:"workspace_output_export,omitempty"`
-	ProgrammaticToolCallingDisable bool `json:"programmatic_tool_calling_disable,omitempty"`
-	WebSearchControl               bool `json:"web_search_control,omitempty"`
-	// ExecutionControls supports typed search and verbosity controls.
+	ToolObservations         bool `json:"tool_observations,omitempty"`
+	EnvironmentNone          bool `json:"environment_none,omitempty"`
+	LocalEnvironment         bool `json:"local_environment,omitempty"`
+	Preparation              bool `json:"preparation,omitempty"`
+	WorkspaceReadPreparation bool `json:"workspace_read_preparation,omitempty"`
+	WorkspaceOutputExport    bool `json:"workspace_output_export,omitempty"`
+	// ExecutionControls accepts the typed execution controls.
 	ExecutionControls    bool `json:"execution_controls,omitempty"`
-	TextVerbosity        bool `json:"text_verbosity,omitempty"`
 	StructuredOutput     bool `json:"structured_output,omitempty"`
 	ToolSearch           bool `json:"tool_search,omitempty"`
 	MessageImages        bool `json:"message_images,omitempty"`

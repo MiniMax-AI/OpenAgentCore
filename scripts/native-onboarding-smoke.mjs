@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
 import { createReadStream } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
@@ -61,9 +62,9 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
 const remote = origin.replace('http:', 'ws:')+'/api/v1/agent-daemon/ws';
 const base = `${origin}/api/v1/agent-daemon/install/${manifest.daemon_version}`;
-function run(executable, args, input = '') {
+function run(executable, args, input = '', env = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, args, { env: { ...process.env, OAC_RUNTIME_HOME: join(root, 'unused-onboarding-home') }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(executable, args, { env: { ...process.env, OAC_RUNTIME_HOME: join(root, 'unused-onboarding-home'), ...env }, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = '';
     child.stdout.on('data', chunk => { output += chunk; }); child.stderr.on('data', chunk => { output += chunk; });
     child.stdin.on('error', () => {}); child.stdin.end(input);
@@ -73,29 +74,38 @@ function run(executable, args, input = '') {
   });
 }
 const executable = join(bundle, windows ? 'oac-daemon.exe' : 'oac-daemon');
-const args = ['install', '--onboard-url', `${origin}/api/v1/agent-daemon/installation`, '--authorization', authorization, '--install-dir', installation];
+const args = ['install', '--onboard-url', `${origin}/api/v1/agent-daemon/installation`, '--install-dir', installation];
+process.env.OAC_INSTALL_GRANT = authorization;
 try {
-  assert.notEqual((await run(executable, [...args, '--authorization', 'expired', '--non-interactive', '--harness', 'codex'])).code, 0);
+  assert.notEqual((await run(executable, [...args, '--non-interactive', '--harness', 'codex'], '', { OAC_INSTALL_GRANT: 'expired' })).code, 0);
   assert.notEqual((await run(executable, [...args, '--non-interactive'])).code, 0, 'Missing Harness must not prompt');
   assert.notEqual((await run(executable, [...args, '--non-interactive', '--harness', 'codex'])).code, 0, 'Lost claim response should fail safely');
   const saved = JSON.parse(await readFile(join(installation, 'daemon', 'executor-credential.json'), 'utf8'));
   assert.equal(saved.executor_token, secret, 'Secret must survive a lost response');
   const script = resolve(`services/core/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
-  const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base, '-Authorization', authorization] : [script, base, authorization];
+  const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base] : [script, base];
   const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], '\n\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);
   assert.match(result.output, /Daemon connection: connected/);
   assert.match(result.output, /Model configuration: not checked/);
   assert.equal(connections, 1);
-  const repeat = await run(executable, [...args, '--non-interactive', '--harness', 'codex']);
+  // The running daemon must not keep the bootstrap's download lock.
+  const repeat = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation, '--non-interactive', '--harness', 'codex']);
   assert.equal(repeat.code, 0, `Repeat failed: ${repeat.output}`);
   assert.equal(connections, 1, 'Repeated installation created a duplicate daemon');
-  console.log(JSON.stringify({ installation: 'passed', connection: 'passed', interactive: 'passed', retry: 'passed', repeat: 'passed', authentication: 'passed', model_requests: 0 }));
+  const uninstall = await run(join(installation, 'bin', windows ? 'oac-daemon.exe' : 'oac-daemon'), ['uninstall'], 'y\n');
+  assert.equal(uninstall.code, 0, `Uninstall failed: ${uninstall.output}`);
+  assert.match(uninstall.output, /Revoke/);
+  // Windows finishes deleting its own executable after the command exits.
+  for (let wait = 0; existsSync(installation) && wait < 100; wait++) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.ok(!existsSync(installation), 'Uninstall left the installation');
+  assert.ok(existsSync(workspace), 'Uninstall deleted the workspace');
+  console.log(JSON.stringify({ installation: 'passed', connection: 'passed', interactive: 'passed', retry: 'passed', repeat: 'passed', uninstall: 'passed', authentication: 'passed', model_requests: 0 }));
 } finally {
-  // The installed executable resolves its own home unless explicitly overridden.
+  // The installed executable always acts on its own installation.
   delete process.env.OAC_RUNTIME_HOME;
   const installed = join(installation, 'bin', windows ? 'oac-daemon.exe' : 'oac-daemon');
-  try { execFileSync(installed, ['stop'], { env: { ...process.env, OAC_RUNTIME_HOME: installation }, stdio: 'ignore', timeout: 15000 }); } catch { /* A failed installation may never have started. */ }
+  try { execFileSync(installed, ['stop'], { stdio: 'ignore', timeout: 15000 }); } catch { /* A failed installation may never have started. */ }
   for (const socket of sockets) socket.destroy();
   await new Promise(resolve => server.close(resolve));
 }

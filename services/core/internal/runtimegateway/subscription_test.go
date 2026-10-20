@@ -9,7 +9,7 @@ import (
 )
 
 func TestDurableSubscriptionOverflowIsExplicitAndIsolated(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
 	defer s.Close("test finished")
 	sub, err := s.SubscribeDurable("slow")
 	if err != nil {
@@ -35,7 +35,7 @@ func TestDurableSubscriptionOverflowIsExplicitAndIsolated(t *testing.T) {
 
 func TestSubscriptionCloseAndDispatchAreSerialized(t *testing.T) {
 	for range 100 {
-		s := NewSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
+		s := newTestSession(newFakeConn(), "device", "tenant", proto.Version, NewRegistry(), nil)
 		sub, _ := s.SubscribeDurable("run")
 		var wg sync.WaitGroup
 		wg.Add(3)

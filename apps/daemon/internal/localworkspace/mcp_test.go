@@ -28,6 +28,14 @@ func TestEnvironmentMCPCredentialsNeverFallBackToNativeEnv(t *testing.T) {
 	}
 }
 
+func TestDeclaredMCPVariablesNeverFallBackToNativeEnv(t *testing.T) {
+	t.Setenv("SERVER_TOKEN", "native-private-value")
+	servers := []proto.MCPHTTPServer{{ServerLabel: "local", Stdio: &proto.MCPStdio{Command: "run", Cwd: "/", EnvVars: []string{"SERVER_TOKEN"}}}}
+	if requireDeclaredVariables(servers, nil) == nil || requireDeclaredVariables(servers, map[string]string{"SERVER_TOKEN": ""}) != nil {
+		t.Fatal("env_vars did not resolve only from the initialized env")
+	}
+}
+
 func TestMCPStdioLauncherContainsOnlyInstalledIdentity(t *testing.T) {
 	server := proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
 		Name: "package_tool", Type: "stdio", Command: "untrusted-command", Args: []string{"private-argument"},

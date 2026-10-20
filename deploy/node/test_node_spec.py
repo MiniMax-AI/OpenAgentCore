@@ -14,11 +14,7 @@ import node_spec
 class SpecificationTests(unittest.TestCase):
     def setUp(self):
         self.args = argparse.Namespace(core_url="https://core.example", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe", provider=None)
-        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}, "runtime": {
-            "source_commit": "a" * 40, "image_id": "sha256:" + "b" * 64,
-            "image_manifest_digest": "sha256:" + "c" * 64,
-            "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64,
-            "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}
+        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}}
         self.data = {"installation_id": self.args.installation_id, "provider": "docker", "generation": 3,
                      "specification": self.spec, "specification_digest": node_spec.digest("docker", self.spec),
                      "core_url": self.args.core_url, "max_active": 2, "max_retained": 8}
@@ -44,27 +40,33 @@ class SpecificationTests(unittest.TestCase):
         self.assertEqual(headers["Authorization"], "Bearer " + self.retained["credential"])
         self.assertEqual(headers["X-oac-node-id"], self.retained["identity"]["node_id"])
 
-    def test_partial_registration_can_use_enrollment_after_unauthenticated_identity(self):
+    def test_a_retained_identity_core_never_recorded_is_reported_so_it_can_be_discarded(self):
         rejected = urllib.error.HTTPError("https://core.example", 401, "private details", {}, None)
-        opener = mock.Mock(side_effect=[rejected, self.response()])
-        node_spec.fetch(self.args, "once", self.retained, opener, allow_enrollment=True)
-        self.assertEqual(opener.call_count, 2)
-        self.assertEqual(dict(opener.call_args.args[0].header_items()), {"Authorization": "Bearer once"})
+        opener = mock.Mock(side_effect=rejected)
+        with self.assertRaises(node_spec.UnrecordedIdentity):
+            node_spec.fetch(self.args, "once", self.retained, opener, allow_enrollment=True)
+        self.assertEqual(opener.call_count, 1)
+        # A registered node, or a rerun without a token, has nothing to fall back to.
         for allowed, token in ((False, "once"), (True, "")):
-            opener = mock.Mock(side_effect=rejected)
-            with self.assertRaises(node_spec.SpecificationError):
-                node_spec.fetch(self.args, token, self.retained, opener, allow_enrollment=allowed)
-            self.assertEqual(opener.call_count, 1)
+            with self.assertRaises(node_spec.SpecificationError) as raised:
+                node_spec.fetch(self.args, token, self.retained, mock.Mock(side_effect=rejected), allow_enrollment=allowed)
+            self.assertNotIsInstance(raised.exception, node_spec.UnrecordedIdentity)
 
     def test_changed_public_url_says_to_generate_a_new_command(self):
         self.data["core_url"] = "https://core-new.example"
         with self.assertRaisesRegex(node_spec.SpecificationError, "public URL changed"):
             node_spec.fetch(self.args, "once", None, mock.Mock(return_value=self.response()))
 
+    def test_retired_node_points_to_clean_up_a_host(self):
+        rejected = urllib.error.HTTPError("https://core.example", 401, "", {}, None)
+        with self.assertRaisesRegex(node_spec.SpecificationError, "Clean up a host on the Nodes page"):
+            node_spec.fetch(self.args, "", self.retained, mock.Mock(side_effect=rejected))
+
     def test_failures_name_their_cause(self):
         for failure, message in ((urllib.error.HTTPError("https://core.example", 404, "", {}, None), "route /api/v1"),
                                  (urllib.error.HTTPError("https://core.example", 409, "", {}, None), "resetting"),
-                                 (urllib.error.HTTPError("https://core.example", 401, "", {}, None), "credential"),
+                                 (urllib.error.HTTPError("https://core.example", 401, "", {}, None), "Generate a new command"),
+                                 (urllib.error.HTTPError("https://core.example", 502, "", {}, None), "reverse proxy in front of it"),
                                  (urllib.error.URLError("refused"), "reverse proxy routes /api/v1")):
             with self.assertRaisesRegex(node_spec.SpecificationError, message):
                 node_spec.fetch(self.args, "once", None, mock.Mock(side_effect=failure))
@@ -74,7 +76,7 @@ class SpecificationTests(unittest.TestCase):
             original = copy.deepcopy(self.data)
             change()
             self.data["specification_digest"] = node_spec.digest("docker", self.data["specification"])
-            with self.assertRaisesRegex(node_spec.SpecificationError, "Retained node specification differs"):
+            with self.assertRaisesRegex(node_spec.SpecificationError, "prepares the changed sandbox configuration itself"):
                 node_spec.fetch(self.args, "once", self.retained, mock.Mock(return_value=self.response()))
             self.data = original
             self.spec = self.data["specification"]
@@ -106,7 +108,6 @@ class SpecificationTests(unittest.TestCase):
 
     def test_digest_is_independent_of_response_object_key_order(self):
         reordered = copy.deepcopy(self.spec)
-        reordered["runtime"] = dict(reversed(list(reordered["runtime"].items())))
         reordered["resources"] = dict(reversed(list(reordered["resources"].items())))
         self.assertEqual(node_spec.digest("docker", reordered), node_spec.digest("docker", self.spec))
 

@@ -2,31 +2,24 @@
 title: "Overview"
 ---
 
-OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents API. The [architecture overview](../architecture.md) explains its parts. Pick the guides for your role.
+OpenAgentCore runs AI agents on your own infrastructure behind the OpenAI Agents API. Operators install it and add sandbox capacity; application developers call it with the official OpenAI SDK. [Concepts](../concepts.md) defines its terms and [Architecture](../architecture.md) shows its parts.
 
-## Operators
+## Run an installation
 
-Operators install Core and Web, add sandbox capacity and issue Project API keys.
+1. [Install Core and Web](./install.md)
+2. [Configure the public address](./public-address.md)
+3. [Choose a sandbox backend](./sandbox-backends.md), then [Set up workspace storage](./workspace-storage.md) and [Add and manage nodes](./nodes.md)
+4. [Operations](./operations.md) and [Troubleshooting](./troubleshooting.md)
 
-| Guide | Covers |
-| --- | --- |
-| [Install Core and Web](./install.md) | The default installation, from an empty host to the first Project API key |
-| [Installation options](./install-options.md) | Installer flags, existing reverse proxies, offline hosts |
-| [Nodes](./nodes.md) | Adding, changing, removing and troubleshooting sandbox nodes |
-| [Operations](./operations.md) | The `oac` command, the Core key, backups, uninstall, upgrades and troubleshooting |
-| [Configuration reference](../configuration.md) | Every setting, file and environment variable |
-| [Web console](../web/index.md) | What the console shows and manages |
+Every setting is in the [Configuration reference](../configuration.md). Administrators watch and manage the installation in the [Web console](../web/index.md).
 
-## Application developers
+## Build an application
 
-Application developers call the API with a Project API key, and can run Sessions on machines they own.
+1. [Run your first Session](./quickstart.md)
+2. [Agents API guide](../api/public-agent-api.md)
+3. [Run self-hosted Sessions](./self-hosted.md) on your own machine
+4. [Examples](../examples.md)
 
-| Guide | Covers |
-| --- | --- |
-| [Quickstart](./quickstart.md) | From a Project API key to a finished Session |
-| [Agents API guide](../api/public-agent-api.md) | Common tasks, Harness and model choice, and every resource with SDK and HTTP examples |
-| [Self-hosted execution](./self-hosted.md) | Running a Session on your own machine |
-| [Examples](../examples.md) | Complete applications built on the API |
-| [API index](../api/index.md) | All three namespaces and their credentials |
+[API namespaces and credentials](../api/index.md) lists the three API namespaces and the credential each one takes.
 
-Contributors start with the [developer guide](../development.md) and [CONTRIBUTING.md](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md).
+Contributors start with [Develop OpenAgentCore](../development.md) and [CONTRIBUTING.md](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md).

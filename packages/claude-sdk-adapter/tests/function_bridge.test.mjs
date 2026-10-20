@@ -89,10 +89,7 @@ test("successful image results confirm native preprocessing with unchanged ident
     { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "BAUG" } },
     { type: "text", text: "after" },
   ];
-  for (const bad of [converted.slice(1), [...converted, converted[0]],
-    [converted[0], { type: "text", text: "Image could not be processed" }, converted[2]],
-    [converted[2], converted[1], converted[0]],
-    [converted[0], { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "!!" } }, converted[2]]]) {
+  for (const bad of [converted.slice(1), [...converted, converted[0]], [converted[2], converted[1], converted[0]]]) {
     await assert.rejects(bridge.consume(native(value, bad), "native"), /differs/);
   }
   await bridge.consume({ ...native(value, converted), isSynthetic: true }, "native");
@@ -139,4 +136,31 @@ test("native cancellation preserves a submitted result's missing receipt", async
   bridge.cancelUnanswered();
   assert.throws(() => bridge.assertComplete(), /unconfirmed/);
   bridge.close();
+});
+
+test("a Subagent call carries its child, is confirmed by the child's own result and is withdrawn when native abandons it unanswered", { timeout: 5000 }, async () => {
+  const events = [], child = { native_id: "child", turn_id: "child-turn" };
+  const bridge = new FunctionBridge(async event => { events.push(event); });
+  const abort = new AbortController();
+  const kept = bridge.invoke({ ...call("a"), child }, new AbortController().signal);
+  const dropped = bridge.invoke({ ...call("b"), child }, abort.signal);
+  const droppedCheck = assert.rejects(dropped, /aborted/);
+  assert.deepEqual(events[0], { type: "function_call", call: { call_id: "a", name: "lookup", arguments: { ids: ["same"] }, ...child } });
+  bridge.submit(JSON.stringify(result("a")));
+  await bridge.consume(native(result("a")), "native");
+  assert.equal(events.length, 2);
+  await bridge.consume({ ...native(result("a")), parent_tool_use_id: "spawn" }, "native");
+  assert.equal(events.length, 3);
+  assert.deepEqual(events[2], { type: "function_applied", call_id: "a", delivery_id: "delivery-a" });
+  await kept;
+  abort.abort();
+  await droppedCheck;
+  assert.deepEqual(events[3], { type: "function_withdrawn", withdrawn: { call_id: "b", ...child } });
+  bridge.submit(JSON.stringify(result("b")));
+  bridge.assertComplete();
+  const late = new AbortController(), delivered = bridge.invoke({ ...call("c"), child }, late.signal);
+  bridge.submit(JSON.stringify(result("c")));
+  await delivered;
+  late.abort();
+  assert.throws(() => bridge.assertComplete(), /unconfirmed/);
 });

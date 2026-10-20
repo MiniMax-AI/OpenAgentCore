@@ -16,11 +16,7 @@ func (s *Session) onAgentDelta(raw json.RawMessage) {
 	}
 	_ = FoldDeltaIntoBuffer(s.bufs, "agent", p.ItemID, p.Delta)
 	seq := s.deltaSeq.Add(1)
-	payload := proto.DeltaPayload{Delta: p.Delta, Sequence: seq}
-	if s.observeMessages {
-		payload.ItemID = p.ItemID
-	}
-	env, err := proto.NewEnvelope(proto.TypeDelta, s.runID, payload)
+	env, err := proto.NewEnvelope(proto.TypeDelta, s.runID, proto.DeltaPayload{ItemID: p.ItemID, Delta: p.Delta, Sequence: seq})
 	if err != nil {
 		return
 	}
@@ -50,11 +46,11 @@ func (s *Session) onItemCompleted(raw json.RawMessage) {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return
 	}
+	// Record native application before observation backpressure can delay publication.
+	s.confirmFunctionResult(raw)
 	if !s.isRootTurn(p.ThreadID, p.TurnID) || p.Item.ID == "" {
 		return
 	}
-	// Record native application before observation backpressure can delay publication.
-	s.confirmFunctionResult(raw)
 	envs, text, err := DispatchCompletedItem(s.runID, p.Item, s.bufs)
 	if err != nil {
 		s.cfg.logger.Warn("codex: dispatch completed item failed", "run_id", s.runID, "err", err)
@@ -72,7 +68,7 @@ func (s *Session) onItemCompleted(raw json.RawMessage) {
 }
 
 func (s *Session) observeMessage(item ThreadItem, status string, text *string) {
-	if !s.observeMessages || item.Type != "agentMessage" {
+	if item.Type != "agentMessage" {
 		return
 	}
 	env, err := proto.NewEnvelope(proto.TypeOutputMessage, s.runID, proto.OutputMessagePayload{ID: item.ID, Status: status, Phase: item.Phase, Text: text})

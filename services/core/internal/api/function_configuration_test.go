@@ -44,7 +44,7 @@ func TestPublicFunctionConfiguration(t *testing.T) {
 func TestPublicFunctionConfigurationRejectsInvalidOrUnsupported(t *testing.T) {
 	base := `"type":"function","name":"lookup","description":"","parameters":{}`
 	for _, raw := range []string{
-		`[null]`, `[{}]`, `[{"type":"web_search"}]`, `[{"type":"function","name":"lookup","parameters":{}}]`,
+		`[null]`, `[{}]`, `[{"type":"function","name":"lookup","parameters":{}}]`,
 		`[{"type":"function","name":null,"description":"","parameters":{}}]`,
 		`[{"type":"function","name":"lookup","description":null,"parameters":{}}]`,
 		`[{"type":"function","name":"lookup","description":""}]`,

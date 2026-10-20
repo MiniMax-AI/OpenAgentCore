@@ -117,8 +117,8 @@ func Dial(ctx context.Context, opts DialOptions) (*Conn, error) {
 		if dialCtx.Err() != nil {
 			return nil, fmt.Errorf("transport.Dial: ws upgrade: %w", dialCtx.Err())
 		}
-		// Upgrade errors can include peer-controlled text; never log credentials.
-		return nil, fmt.Errorf("transport.Dial: ws upgrade failed")
+		// The credential travels only in the request header, never in the error.
+		return nil, fmt.Errorf("transport.Dial: ws upgrade failed: %w", err)
 	}
 	// Bound a single inbound frame so a misbehaving server can't OOM
 	// us. Matches the gateway's 4 MiB outbound ceiling.
@@ -363,14 +363,13 @@ func isPermanentClose(err error) bool {
 	return websocket.IsCloseError(err, CloseRuntimeDeleted)
 }
 
-// withQueryParams appends non-secret parameters and removes legacy credentials.
+// withQueryParams appends non-secret parameters.
 func withQueryParams(raw string, params map[string]string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("transport: invalid ws url")
 	}
 	q := u.Query()
-	q.Del("token")
 	for k, v := range params {
 		q.Set(k, v)
 	}

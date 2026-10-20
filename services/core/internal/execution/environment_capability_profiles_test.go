@@ -25,8 +25,8 @@ func TestQualifiedClaudeCapabilitiesDoNotDependOnEnvironmentSource(t *testing.T)
 				}
 				agent["multi_agent"] = map[string]bool{"enabled": true}
 				raw, _ = json.Marshal(map[string]any{"agent": agent, "environment": environment})
-				if err := (Policy{}).ValidateSessionConfiguration("claude_sdk", raw); err == nil {
-					t.Fatalf("%s with Subagents accepted", feature)
+				if err := (Policy{}).ValidateSessionConfiguration("claude_sdk", raw); err != nil {
+					t.Fatalf("%s with Subagents: %v", feature, err)
 				}
 			}
 		})

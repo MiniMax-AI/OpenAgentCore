@@ -18,7 +18,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	r := testRequest(t)
 	r.RunID, r.Input = "", nil
 	r.DisableExecutionEnvironment = false
-	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", NetworkAccess: "enabled", WorkspaceRoot: t.TempDir()}
+	r.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: t.TempDir()}
 	record := filepath.Join(t.TempDir(), "calls")
 	exe, err := os.Executable()
 	if err != nil {
@@ -30,7 +30,7 @@ func workspaceFixture(t *testing.T) (WorkspaceConfig, proto.PromptRequestPayload
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
-	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Bridge: "/opt/bridge.mjs", Directory: r.LocalEnvironment.WorkspaceRoot, Network: "enabled", Scratch: t.TempDir()}, r, record
+	return WorkspaceConfig{Binary: binary, Node: "/usr/bin/node", Companion: "/opt/mcode-harness", Directory: r.LocalEnvironment.WorkspaceRoot}, r, record
 }
 
 func executorFixture(t *testing.T, scenario string, workspace bool) (*executor, string) {
@@ -143,15 +143,15 @@ func TestExecutorCancellationRetiresOwnerAndLateCancelCannotRetarget(t *testing.
 			if !disabled {
 				// A terminal native history record still cannot prove Bash cleanup.
 				dir := t.TempDir()
-				node, bridge := filepath.Join(dir, "node"), filepath.Join(dir, "bridge.mjs")
+				node := filepath.Join(dir, "node")
 				body := "#!/bin/sh\nprintf '%s\\n' '{\"version\":1,\"complete\":true,\"rootSessionId\":\"native-1\",\"sessions\":[{\"id\":\"native-1\",\"turns\":[{\"id\":\"root-turn\",\"status\":\"aborted\"}]}]}'\n"
-				for name, data := range map[string]string{node: body, bridge: "", filepath.Join(dir, "subagent-snapshot.mjs"): ""} {
+				for name, data := range map[string]string{node: body, filepath.Join(dir, "subagent-snapshot.mjs"): ""} {
 					if err := os.WriteFile(name, []byte(data), 0700); err != nil {
 						t.Fatal(err)
 					}
 				}
 				t.Setenv("OAC_RUNTIME_MCODE_NODE", node)
-				t.Setenv("OAC_RUNTIME_MCODE_WORKSPACE_BRIDGE", bridge)
+				t.Setenv("OAC_RUNTIME_MCODE_COMPANION", dir)
 			}
 			out := make(chan proto.Envelope, 32)
 			second, err := e.StartTurn(t.Context(), "second", proto.TextInput("wait"), out)

@@ -15,6 +15,7 @@ import { EmptyState } from "./components/ui/empty-state";
 import { ErrorNotice } from "./components/shared";
 import { AgentAvatar } from "./components/AgentAvatar";
 import { cn } from "./lib/utils";
+import { randomUuid } from "@oac/agents-client";
 
 export function Home({ agentId }: { agentId?: string }) {
   const agents = useAgents();
@@ -52,7 +53,7 @@ export function Home({ agentId }: { agentId?: string }) {
   });
   const submit = () => {
     if (agent && text.trim() && !start.isPending)
-      start.mutate(crypto.randomUUID());
+      start.mutate(randomUuid());
   };
   if (!agents.isPending && !available.length)
     return (

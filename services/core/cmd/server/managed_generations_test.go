@@ -101,15 +101,15 @@ print(json.dumps({'Version':1,'Info':info}))
 	}
 }
 
-// The empty resource set must not let a publicly readable template substitute
-// for a team identity. In particular, the old key must be checked as itself.
+// A publicly readable template must not substitute for a team identity, and the
+// committed key is checked as itself.
 func TestE2BReplacementRequiresCommittedOwnershipAnchor(t *testing.T) {
 	for _, tc := range []struct {
 		name, committedKey, committedTemplate, candidateKey, candidateTemplate string
 		want                                                                   error
 		reset                                                                  bool
 	}{
-		{name: "legacy public template cross team", committedKey: "team-a", committedTemplate: "public-b", candidateKey: "team-b", candidateTemplate: "public-b", reset: true},
+		{name: "committed template outside its key's team", committedKey: "team-a", committedTemplate: "public-b", candidateKey: "team-b", candidateTemplate: "public-b", reset: true},
 		{name: "revoked committed key", committedKey: "revoked", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a", reset: true},
 		{name: "unknown committed ownership", committedKey: "unconfirmed", committedTemplate: "owned-a", candidateKey: "team-a", candidateTemplate: "owned-a", want: sandbox.ErrConfigurationUnconfirmed},
 		{name: "proven different team", committedKey: "team-a", committedTemplate: "owned-a", candidateKey: "team-b", candidateTemplate: "public-b", want: sandbox.ErrCredentialOwnership},

@@ -14,9 +14,9 @@ import (
 )
 
 // TV-05: saved Agents keep every pinned web_search mode with the official
-// projection (W1/W2), while Session admission still rejects enabled search
-// before any write on every creation mode (W4), admits a tools replacement (W5)
-// and keeps tenant isolation (W8).
+// projection (W1/W2). Codex declares cached and live search, so saved and inline
+// search reach the Session unchanged (W4/W6); a tools replacement replaces it
+// (W5) and tenant isolation holds (W8).
 func TestSavedWebSearchPostgres(t *testing.T) {
 	// An isolated database keeps the no-write digest independent of other tests.
 	s, _ := newManagedTestStore(t)
@@ -73,6 +73,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	}
 	const defaults = `"context_size":"medium","allowed_domains":null,"location":null}`
 	live := `{"type":"web_search","mode":"live",` + defaults
+	cached := `{"type":"web_search","mode":"cached",` + defaults
 
 	// W1: Agent create with every pinned mode (official create 201).
 	agentIDs := map[string]string{}
@@ -80,7 +81,7 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		{"type-only", `{"type":"web_search"}`, live},
 		{"mode-null", `{"type":"web_search","mode":null}`, live},
 		{"mode-live", `{"type":"web_search","mode":"live"}`, live},
-		{"mode-cached", `{"type":"web_search","mode":"cached"}`, `{"type":"web_search","mode":"cached",` + defaults},
+		{"mode-cached", `{"type":"web_search","mode":"cached"}`, cached},
 		{"mode-cached-full", `{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"city":"Paris","country":"FR","region":null,"timezone":null}}`,
 			`{"type":"web_search","mode":"cached","context_size":"high","allowed_domains":["example.com"],"location":{"country":"FR","region":null,"city":"Paris","timezone":null}}`},
 		// A supplied location projects all four keys, with null for omitted ones
@@ -113,17 +114,17 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		readBack(tc.name, updated, body)
 	}
 
-	// A disabled record saved before this batch reads unchanged and is admitted with
-	// the same frozen Session tool (W7).
+	// A saved disabled search reads unchanged and is admitted with the same frozen
+	// Session tool (W7).
 	_, agentService := fixtureAgents(t, s)
-	legacy, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(
+	savedDisabled, err := agentService.Create(t.Context(), agents.CreateCommand{TenantID: ownerTenant, Metadata: map[string]string{}, Configuration: json.RawMessage(
 		`{"model":"search-model","name":null,"instructions":null,"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"},"tools":[{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}]}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	status, body := client.do(owner, http.MethodGet, "/v1/agents/"+legacy.ID, "", nil)
-	legacyTool := tools("legacy", status, body, http.StatusOK, `{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}`)
-	readBack("legacy", legacy.ID, body)
+	status, body := client.do(owner, http.MethodGet, "/v1/agents/"+savedDisabled.ID, "", nil)
+	disabledTool := tools("disabled", status, body, http.StatusOK, `{"type":"web_search","mode":"disabled","context_size":"medium","allowed_domains":[],"location":null}`)
+	readBack("disabled", savedDisabled.ID, body)
 	// sessionTool returns the first frozen Session tool in canonical form; Session
 	// snapshots keep their own key order.
 	sessionTool := func(name, session string) string {
@@ -140,8 +141,8 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		}
 		return canonicalTool(t, value.Agent.Tools[0])
 	}
-	if got := sessionTool("legacy", client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+legacy.ID+`","environment":{"type":"none"},"input":"hi"}`)); got != canonicalTool(t, json.RawMessage(legacyTool)) {
-		t.Fatalf("legacy Session tool %s, want %s", got, legacyTool)
+	if got := sessionTool("disabled", client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+savedDisabled.ID+`","environment":{"type":"none"},"input":"hi"}`)); got != canonicalTool(t, json.RawMessage(disabledTool)) {
+		t.Fatalf("disabled Session tool %s, want %s", got, disabledTool)
 	}
 
 	// A same-key retry of a Session that recorded its creation request recovers it
@@ -169,39 +170,33 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 		t.Fatalf("retry fixture: %d", status)
 	}
 	client.created(owner, "/v1/agents/"+agentIDs["mode-disabled"], `{"tools":[{"type":"web_search","mode":"live"}]}`)
-	enabledTools := map[string]string{"mode-live": agentIDs["mode-live"], "mode-cached": agentIDs["mode-cached"], "type-only": agentIDs["type-only"], "updated-to-live": agentIDs["mode-disabled"]}
+	enabledTools := map[string]struct{ id, tool string }{"mode-live": {agentIDs["mode-live"], live}, "mode-cached": {agentIDs["mode-cached"], cached}, "type-only": {agentIDs["type-only"], live}, "updated-to-live": {agentIDs["mode-disabled"], live}}
 
-	// W4: every creation mode rejects enabled saved search without writes.
-	before := databaseDigest(t, s.pool)
-	const rejection = `{"error":{"message":"Only disabled web_search is qualified for execution.","type":"invalid_request_error","code":"unsupported_or_invalid_configuration","param":null}}` + "\n"
-	for name, id := range enabledTools {
-		for _, suffix := range []string{
-			`"environment":{"type":"none"},"input":"hi"}`,
-			`"environment":{"type":"none"},"input":"hi","stream":true}`,
-			`"environment":{"type":"self_hosted","workspace_directory":"/workspace"},"input":"hi"}`,
-			`"environment":{"type":"self_hosted","workspace_directory":"/workspace"}}`,
-			`"environment":{"type":"openai_hosted"}}`,
-			`"agent":{"instructions":"Keep the saved tools."},"environment":{"type":"none"},"input":"hi"}`,
-		} {
-			if status, body := client.do(owner, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(`{"agent_id":"`+id+`",`+suffix)); status != http.StatusBadRequest || body != rejection {
-				t.Errorf("%s %s: %d %s", name, suffix, status, body)
-			}
-		}
-		// C4: the input requirement precedes execution admission.
-		const input = `{"error":{"message":"conversation-only sessions currently require initial input","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
-		if status, body := client.do(owner, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(`{"agent_id":"`+id+`","environment":{"type":"none"}}`)); status != http.StatusBadRequest || body != input {
-			t.Errorf("%s without input: %d %s", name, status, body)
+	// W4: each saved search reaches a new Session unchanged.
+	for name, saved := range enabledTools {
+		session := client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+saved.id+`","environment":{"type":"none"},"input":"hi"}`)
+		if got := sessionTool(name, session); got != canonicalTool(t, json.RawMessage(saved.tool)) {
+			t.Errorf("%s Session tool %s, want %s", name, got, saved.tool)
 		}
 	}
-	// W6: inline enabled or omitted-mode search keeps its rejection.
-	for _, tool := range []string{`{"type":"web_search"}`, `{"type":"web_search","mode":null}`, `{"type":"web_search","mode":"cached"}`} {
+	// W6: inline enabled or omitted-mode search is admitted the same way.
+	for tool, want := range map[string]string{`{"type":"web_search"}`: live, `{"type":"web_search","mode":null}`: live, `{"type":"web_search","mode":"cached"}`: cached} {
 		for _, request := range []string{
 			`{"agent":{"model":"m","tools":[` + tool + `]},"environment":{"type":"none"},"input":"hi"}`,
-			`{"agent_id":"` + legacy.ID + `","agent":{"tools":[` + tool + `]},"environment":{"type":"none"},"input":"hi"}`,
+			`{"agent_id":"` + savedDisabled.ID + `","agent":{"tools":[` + tool + `]},"environment":{"type":"none"},"input":"hi"}`,
 		} {
-			if status, body := client.do(owner, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(request)); status != http.StatusBadRequest || body != rejection {
-				t.Errorf("inline %s: %d %s", request, status, body)
+			if got := sessionTool(request, client.created(owner, "/v1/agents/sessions", request)); got != canonicalTool(t, json.RawMessage(want)) {
+				t.Errorf("inline %s: Session tool %s, want %s", request, got, want)
 			}
+		}
+	}
+
+	before := databaseDigest(t, s.pool)
+	// C4: the input requirement still applies to a saved search Agent.
+	const input = `{"error":{"message":"conversation-only sessions currently require initial input","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
+	for name, saved := range enabledTools {
+		if status, body := client.do(owner, http.MethodPost, "/v1/agents/sessions", "application/json", []byte(`{"agent_id":"`+saved.id+`","environment":{"type":"none"}}`)); status != http.StatusBadRequest || body != input {
+			t.Errorf("%s without input: %d %s", name, status, body)
 		}
 	}
 	// W8: another tenant sees the same 404 as a missing Agent and writes nothing.
@@ -236,11 +231,11 @@ func TestSavedWebSearchPostgres(t *testing.T) {
 	if got := sessionTool("retry", original); got != disabled {
 		t.Fatalf("recovered Session tool %s", got)
 	}
-	if status, _ := retry("after-search"); status != http.StatusBadRequest {
-		t.Fatalf("new key after enabling search: %d", status)
+	if status, session := retry("after-search"); status != http.StatusCreated || session == original {
+		t.Fatalf("new key after enabling search: %d %s", status, session)
 	}
 
-	// W5: a per-Session tools replacement admits the saved Agent without its search.
+	// W5: a per-Session tools replacement replaces the saved search.
 	for _, replacement := range []string{`[]`, `[{"type":"web_search","mode":"disabled"}]`} {
 		session := client.created(owner, "/v1/agents/sessions", `{"agent_id":"`+agentIDs["mode-live"]+`","agent":{"tools":`+replacement+`},"environment":{"type":"none"},"input":"hi"}`)
 		if got := sessionTool("replacement", session); got != "" && got != disabled {

@@ -1,6 +1,6 @@
 # E2B Sandbox Provider helper
 
-Core's E2B Sandbox Provider ([`sandbox/e2b`](../../internal/sandbox/e2b)) is a pure-Go adapter that runs this one-shot Python helper for each lifecycle and read operation. The helper uses the official E2B Python SDK 2.51.0 ([`requirements.lock`](requirements.lock)); it implements no provider HTTP, envd RPC, scheduler or network service. E2B uses direct placement: there is no node, and each sandbox's daemon connects to Core over the public URL. Runtime execution and Files use that daemon connection. [Add a Sandbox Provider](../../../../docs/sandbox-provider.md) owns the provider contract this adapter implements.
+Core's E2B Sandbox Provider ([`sandbox/e2b`](../../internal/sandbox/e2b)) is a pure-Go adapter that runs this one-shot Python helper for each lifecycle and read operation. The helper uses the official E2B Python SDK 2.51.0 ([`requirements.lock`](requirements.lock)); it implements no provider HTTP, envd RPC, scheduler or network service. E2B uses direct placement: there is no node, and each sandbox's daemon connects to Core over the public URL. Runtime execution and Files use that daemon connection. [Sandbox Provider protocol](../../../../docs/sandbox-provider.md) owns the provider contract this adapter implements.
 
 ## Deployment
 
@@ -26,7 +26,7 @@ Compatible endpoints must return the SDK 2.51.0 template-list and template-build
 
 ## Private JSON boundary
 
-[`helper_contract.go`](../../internal/sandbox/e2b/helper_contract.go) owns the adapter-private wire types, version, operation and error vocabulary, and bounds. Its generator projects Python declarations into the helper and template sources, deriving managed-bootstrap fields from the Sandbox Provider types, network access values from `agentnetwork.Policy.Validate`, and the SDK version from the hashed dependency lock. The command-input limit comes from its shared Go contract. The generated modules have no SDK or repository dependency and ship with the frozen helper and protected template startup scripts.
+[`helper_contract.go`](../../internal/sandbox/e2b/helper_contract.go) owns the adapter-private wire types, version, operation and error vocabulary, and bounds. Its generator projects Python declarations into the helper and template sources, deriving managed-bootstrap fields from the Sandbox Provider types and the SDK version from the hashed dependency lock. The command-input limit comes from its shared Go contract. The generated modules have no SDK or repository dependency and ship with the frozen helper and protected template startup scripts.
 
 Run `go generate ./services/core/internal/sandbox/e2b` from the repository root after changing these declarations. `make check-e2b-provider` and the Go adapter tests reject stale projections; both languages consume generated valid and invalid exchanges covering wire types, extra fields, operation/reference bounds and managed-bootstrap fields. The helper build copies those fixtures with its source before running the pinned-SDK suite.
 
@@ -34,7 +34,7 @@ The boundary has version 1. The request and credentials arrive on standard input
 
 ## Receipts and state directory
 
-`OAC_E2B_STATE_DIR` ([configuration](../../../../docs/configuration.md#appendix-core-environment-without-the-installer)) must already exist, be owned by the helper's user and grant no group or other access. Keep it on durable private storage across Core upgrades and restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
+`OAC_E2B_STATE_DIR` ([configuration](../../../../docs/configuration.md#appendix-core-environment-without-the-installer)) must already exist, be owned by the helper's user and grant no group or other access. Keep it on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
 
 A helper holds its allocation's lock until the SDK operation returns, even after Core's caller times out. Core tracks the helper's actual exit, and a credential change waits for running helpers without killing them. Helper exit never proves that a remote Create settled. Core serializes lifecycle requests per allocation and never replays Create.
 
@@ -44,7 +44,7 @@ A helper holds its allocation's lock until the SDK operation returns, even after
 2. Record the sandbox ID and connection material, check the sandbox domain, then read the sandbox by ID and check its ownership metadata, template and resources before writing any credential. A mismatch records a settled rejection and returns `CreateSettled` with the error.
 3. Check that `/opt/oac-e2b/managed_init.py` is readable, write the managed bootstrap input to `/root/.oac/e2b/managed-bootstrap.json` and run `managed_init.py` as root.
 
-`managed_init.py` prepares the image as the [application-managed startup](../../deploy/e2b/README.md#startup-and-security-boundary) does, writes the [Runtime bootstrap](../../../../docs/runtime-bootstrap.md) file to `/home/runtime/runtime-bootstrap.json` (mode 0600, owned by UID 1000), sets the Environment, Session and network variables and starts `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json` as UID/GID 1000. It records process handoff in `/root/.oac/e2b/managed-ready.json` and refuses to run again once any launch record exists. `BootstrapComplete` becomes true when a later inspection reads that record with the expected identity; it does not prove enrollment or native readiness.
+`managed_init.py` prepares the image as the [application-managed startup](../../deploy/e2b/README.md#startup-and-security-boundary) does, writes the [Runtime bootstrap](../../../../docs/runtime-bootstrap.md) file to `/home/runtime/runtime-bootstrap.json` (mode 0600, owned by UID 1000), sets the Environment and Session variables and starts `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json` as UID/GID 1000. It records process handoff in `/root/.oac/e2b/managed-ready.json` and refuses to run again once any launch record exists. `BootstrapComplete` becomes true when a later inspection reads that record with the expected identity; it does not prove enrollment or native readiness.
 
 An unknown Create is never repeated. A Create whose connection material was lost can be discovered and destroyed but cannot resume bootstrap, and an unconfirmed startup requires reclaiming the whole allocation.
 

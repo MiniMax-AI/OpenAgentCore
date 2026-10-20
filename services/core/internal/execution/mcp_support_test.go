@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -29,7 +30,7 @@ func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, runtimede
 	t.Helper()
 	vault, credential := uuid.NewString(), uuid.NewString()
 	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example/tools"}}`)
-	snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{tool}}, Environment: &v1.Environment{Type: "none"}, VaultIDs: []string{vault},
+	snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{tool}}, Environment: v1.Environment{Type: "none"}, VaultIDs: []string{vault},
 		MCPCredentials: []vaults.MCPCredentialBinding{{ServerLabel: "tickets", ServerURL: "https://mcp.example/tools", VaultID: vault, CredentialID: credential, AuthType: "static_bearer"}}}
 	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
@@ -102,7 +103,7 @@ func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 				case "preparation":
 					caps.Preparation = false
 				case "environment":
-					snapshot.Environment = nil
+					snapshot.Environment = v1.Environment{}
 				}
 				allowed := placement == "none" && (missing == "" || missing == "preparation")
 				selected, err := (Policy{}).mcpExecutionCredentials("codex", snapshot, servers, caps)
@@ -158,5 +159,32 @@ func TestMCPAnonymousExecutionPreservesFrozenDecision(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// A stdio server runs in the Environment, so only workspace placements admit it,
+// and each Harness declaration applies its own limits.
+func TestMCPStdioAdmission(t *testing.T) {
+	tool := `{"type":"mcp","server_label":"local","connection_origin":"environment","allowed_tools":%s,"transport":{"type":"stdio","command":"run","args":[],"cwd":"/work","env_vars":["TOKEN"]}}`
+	for _, tc := range []struct {
+		engine, placement, allowed string
+		admitted                   bool
+	}{
+		{"codex", "self_hosted", "null", true},
+		{"codex", "openai_hosted", `["lookup"]`, true},
+		{"codex", "none", "null", false},
+		{"claude_sdk", "self_hosted", "null", true},
+		{"claude_sdk", "self_hosted", `["lookup"]`, false},
+		{"mcode", "self_hosted", "null", false},
+	} {
+		snapshot := Snapshot{Agent: v1.Agent{Model: "model", Tools: []json.RawMessage{json.RawMessage(fmt.Sprintf(tool, tc.allowed))}}, Environment: v1.Environment{Type: tc.placement}}
+		declaration, _ := (Policy{}).Harnesses().Lookup(tc.engine)
+		if err := validateDeclaredConfiguration(declaration, snapshot); (err == nil) != tc.admitted {
+			t.Fatalf("%+v: %v", tc, err)
+		}
+	}
+	servers, err := executionTools([]json.RawMessage{json.RawMessage(fmt.Sprintf(tool, "null"))})
+	if err != nil || !reflect.DeepEqual(servers.MCP[0].Stdio, &proto.MCPStdio{Command: "run", Args: []string{}, Cwd: "/work", EnvVars: []string{"TOKEN"}}) {
+		t.Fatal(err, servers.MCP)
 	}
 }

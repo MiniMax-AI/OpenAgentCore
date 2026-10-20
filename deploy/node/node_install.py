@@ -42,10 +42,6 @@ class InstallError(Exception):
     pass
 
 
-class RuntimeDownloadError(InstallError):
-    """A fixed private helper exit category for transfer/provenance failures."""
-
-
 MICRO = provider_assets.artifacts("microsandbox", ("runtime",))
 DOCKER = ("docker", "--host", "unix:///var/run/docker.sock")
 DOCKER_SOCKET = Path("/var/run/docker.sock")
@@ -67,6 +63,9 @@ SAFE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 CHILD_DOCKER_CONFIG = Path("/run/oac-node-docker")
 LOCK_WAIT_SECONDS = 600
 NOTHING_CHANGED = " Nothing was changed."
+DISK_FULL = "The disk is full. Free space under " + str(SERVICE_HOME) + ", then rerun the command."
+# Prefixes failures of an installation; uninstall and generation helpers print theirs bare.
+FAILED = "Installation failed: "
 
 
 def origin(value):
@@ -98,6 +97,15 @@ REGISTRATION_UNCONFIRMED = ("Node enrollment was not confirmed. Check the Core U
                             "prerequisites; keep its state and rerun the command to recover.")
 # The node program's rejection line: Core's status and fixed error code, nothing else.
 REJECTION = re.compile(rb"node enrollment rejected \(HTTP (\d{3})(?: ([a-z_]{1,64}))?\)")
+# The node program's failed local check before it contacts Core; only its fixed class code is shown.
+READINESS_CHECK = re.compile(rb"local provider readiness check failed \(([a-z_]{1,64})\)")
+READINESS_FAILURES = {
+    "provider_unavailable": "The sandbox provider does not answer on this host, for example because Docker is stopped.",
+    "host_unsupported": "This host lacks a capability the sandbox provider needs, such as Docker CPU and memory limits or read-write access to /dev/kvm.",
+    "capacity_insufficient": "This host is too small for one sandbox.",
+    "runtime_image_unavailable": "The sandbox provider does not have the Runtime image.",
+    "artifacts_unavailable": "A sandbox provider file is missing or fails its checksum.",
+}
 
 
 class AddressChanged(InstallError):
@@ -108,18 +116,20 @@ def registration_failure(stderr):
     """A fixed message for Core's answer to registration; never the node program's own text."""
     matches = list(REJECTION.finditer(stderr or b""))
     if not matches:
+        failed = READINESS_CHECK.search(stderr or b"")
+        if failed and failed.group(1).decode() in READINESS_FAILURES:
+            return InstallError(READINESS_FAILURES[failed.group(1).decode()] + " Fix it, then rerun the command; the token was not used.")
         return InstallError(REGISTRATION_UNCONFIRMED)
     status, code = matches[-1].group(1).decode(), (matches[-1].group(2) or b"").decode()
     if code == "sandbox_node_address_mismatch":
         return AddressChanged(node_spec.PUBLIC_URL_CHANGED + " The token was not used; downloaded files are kept.")
     if status == "401":
-        return InstallError("The enrollment command expired or was already used. Generate a new command on the Nodes "
-                            "page and run it on this host; downloaded files are kept.")
+        return InstallError(node_spec.ENROLLMENT_EXPIRED + " Downloaded files are kept.")
     return InstallError(REGISTRATION_UNCONFIRMED + " Core answered HTTP " + status + (" " + code if code else "") + ".")
 
 
 def discard_unregistered(root):
-    """Remove the files that name the old address, so a new command can register this host.
+    """Remove what an earlier attempt decided, so a new command can register this host.
 
     Only for a node Core never recorded: downloads, the image and the service file stay."""
     for name in ("installation.json", "provider.json"):
@@ -159,54 +169,51 @@ def fetch(source, name):
         try:
             with open_request(source + "/node-install/" + name) as response:
                 raw = response.read(1024 * 1024 + 1)
+                # A body cut short by the connection reads as a normal end; the declared length tells.
+                declared = getattr(response, "headers", {}).get("Content-Length", "")
             if len(raw) > 1024 * 1024:
-                raise RuntimeDownloadError("Node bootstrap metadata is too large: " + name)
+                raise InstallError("Node bootstrap metadata is too large: " + name)
+            if declared.isdigit() and int(declared) != len(raw):
+                raise http.client.IncompleteRead(raw, int(declared) - len(raw))
             return io.BytesIO(raw)
         except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
             if not transient(error) or attempt == 2:
                 status = " (HTTP " + str(error.code) + ")" if isinstance(error, urllib.error.HTTPError) else ""
-                raise RuntimeDownloadError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
+                raise InstallError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
             time.sleep(attempt + 1)
 
 
-def metadata(source, bundle=None, prefix=""):
-    if bundle is not None:
-        def read(name):
-            path = bundle / name
-            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(bundle):
-                raise InstallError("Invalid local distribution metadata")
-            return path.open("rb")
-    else:
-        read = lambda name: fetch(source, prefix + name)
+def metadata(source):
+    read = lambda name: fetch(source, name)
     with read("SHA256SUMS") as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024:
-        raise RuntimeDownloadError("Invalid distribution checksum list")
+        raise InstallError("Invalid distribution checksum list")
     sums = {}
     try:
         for line in raw.decode().splitlines():
             checksum, name = line.split("  ", 1)
             if name in sums or not re.fullmatch(r"[0-9a-f]{64}", checksum):
-                raise RuntimeDownloadError("Invalid distribution checksum entry")
+                raise InstallError("Invalid distribution checksum entry")
             sums[name] = checksum
     except ValueError:
-        raise RuntimeDownloadError("Invalid distribution checksum list") from None
+        raise InstallError("Invalid distribution checksum list") from None
     with read("manifest.json") as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024 or hashlib.sha256(raw).hexdigest() != sums.get("manifest.json"):
-        raise RuntimeDownloadError("Distribution manifest checksum mismatch")
+        raise InstallError("Distribution manifest checksum mismatch")
     try:
         manifest = json.loads(raw)
     except (ValueError, TypeError):
-        raise RuntimeDownloadError("Invalid distribution manifest") from None
+        raise InstallError("Invalid distribution manifest") from None
     if (not isinstance(manifest, dict) or manifest.get("platform") != "linux/amd64" or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("source_commit", ""))
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
-        raise RuntimeDownloadError("Unsupported node distribution")
+        raise InstallError("Unsupported node distribution")
     distribution.image_identities(manifest, "runtime")
     for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items if item["role"] != "policy"):
         distribution.artifact(manifest, name)
-    # Metadata stays on the console; artifact requests may redirect to its pinned release.
-    manifest["artifact_base_url"] = source + "/node-install/releases/" + manifest["source_commit"] + "/artifacts" if source else ""
+    # Metadata stays on the console; artifact requests may redirect to the release.
+    manifest["artifact_base_url"] = source + "/node-install/artifacts"
     return manifest, sums
 
 
@@ -232,7 +239,8 @@ def write_once(path, value):
     with distribution.temporary_file(path) as temporary:
         if existing_file(path):
             if path.read_text() != value:
-                raise InstallError("Existing node configuration differs; preserve its state and use the upgrade guide")
+                raise InstallError("Existing node configuration differs from Core's. This node is registered, so its state is kept; "
+                                  "remove the node on the Nodes page, uninstall it on this host, then add the host again with Add node.")
             return
         descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(descriptor, "w") as stream:
@@ -254,19 +262,21 @@ def file_digest(path):
     return result.hexdigest()
 
 
-def download(source, name, root, expected, prefix=""):
+def download(source, name, root, expected, replace=False):
     target = root / name
     safe_directory(target.parent)
     if existing_file(target):
-        if file_digest(target) != expected:
-            raise RuntimeDownloadError("Installed node payload differs; refusing to overwrite it")
-        return
+        if file_digest(target) == expected:
+            return
+        if not replace:
+            raise InstallError("Installed node payload differs; refusing to overwrite it")
+        target.unlink()
     with distribution.temporary_file(target) as temporary:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output, fetch(source, prefix + name) as response:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output, fetch(source, name) as response:
             for block in iter(lambda: response.read(1024 * 1024), b""):
                 output.write(block)
         if file_digest(Path(temporary)) != expected:
-            raise RuntimeDownloadError("Node payload checksum mismatch: " + name)
+            raise InstallError("Node payload checksum mismatch: " + name)
         os.replace(temporary, target)
     if name.startswith("native/"):
         os.chmod(target, 0o700)
@@ -322,7 +332,7 @@ def prepare_checkpoint_root(directory, *, initialize=True):
         os.close(descriptor)
 
 
-def provider_config(root, args, runtime_image):
+def provider_config(root, args, manifest, runtime_image):
     result = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url + "/api/v1",
               "specification": args.configuration["specification"], "generation": args.configuration["generation"]}
     if args.provider == "docker":
@@ -336,7 +346,9 @@ def provider_config(root, args, runtime_image):
         core_rules = [{"action": "allow", "direction": "egress", "destination": address, "protocol": "tcp", "port": str(port)} for address in addresses]
         result["native"] = {
             "helper_path": str(root / MICRO[0]), "runtime_path": str(root / MICRO[1]), "firmware_path": str(root / MICRO[2]),
-            "runtime_home": str(getattr(args, "runtime_home", micro_home(args.installation_id))),
+            "image": manifest["runtime_ref"], "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
+            "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
+            "runtime_home": str(micro_home(args.installation_id)),
             "checkpoint_root": str(checkpoint_root(args)),
             "network": {"default_egress": "deny", "default_ingress": "deny", "rules": core_rules + [
                 {"action": "allow", "direction": "egress", "destination": "public"},
@@ -347,11 +359,34 @@ def provider_config(root, args, runtime_image):
     return result
 
 
+def drop_runtime_archives(root):
+    """The imported image is the cache; the archives only hold disk."""
+    for name in ("images/runtime.tar", "images/runtime.tar.gz"):
+        (root / name).unlink(missing_ok=True)
+        distribution.partial_path(root / name).unlink(missing_ok=True)
+
+
+def micro_env(root, args):
+    return dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(micro_home(args.installation_id)),
+                MSB_PATH=str(root / MICRO[1]), MSB_LIBKRUNFW_PATH=str(root / MICRO[2]))
+
+
+def micro_image_ready(root, args, manifest):
+    inspect = [str(root / MICRO[1]), "image", "inspect", manifest["runtime_ref"], "--format", "json"]
+    try:
+        value = json.loads(checked(inspect, "Runtime image is not installed", env=micro_env(root, args)))
+        return (value.get("digest") == manifest["runtime_ref"].split("@", 1)[1]
+                and value.get("architecture") == "amd64" and value.get("os") == "linux")
+    except (InstallError, ValueError, AttributeError):
+        return False
+
+
 def prepare_runtime(root, args, manifest):
     if args.provider == "docker":
         docker = ["docker", "--host", "unix:///var/run/docker.sock"]
         image = distribution.ensure_docker_image(
-            manifest, "runtime", lambda: distribution.runtime_archive(manifest, root, getattr(args, "bundle", None)), docker)
+            manifest, "runtime", lambda: distribution.runtime_archive(manifest, root, getattr(args, "disposable", False)), docker)
+        drop_runtime_archives(root)
         network = "oac-node-" + args.installation_id
         networks = checked(docker + ["network", "ls", "--format", "{{.Name}}"], "Cannot inspect Docker networks").splitlines()
         if network not in networks:
@@ -363,22 +398,14 @@ def prepare_runtime(root, args, manifest):
             output = result.stdout.decode()
             if "not found" in output or (result.returncode and "statically linked" not in output and "not a dynamic executable" not in output):
                 raise InstallError("Install the microsandbox host shared-library prerequisites")
-        env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(getattr(args, "runtime_home", micro_home(args.installation_id))),
-                   MSB_PATH=str(root / MICRO[1]), MSB_LIBKRUNFW_PATH=str(root / MICRO[2]))
-        inspect = [str(root / MICRO[1]), "image", "inspect", manifest["runtime_ref"], "--format", "json"]
-        def matches():
-            try:
-                value = json.loads(checked(inspect, "Runtime image is not installed", env=env))
-                return (value.get("digest") == manifest["runtime_ref"].split("@", 1)[1]
-                        and value.get("architecture") == "amd64" and value.get("os") == "linux")
-            except (InstallError, ValueError, AttributeError):
-                return False
-        if not matches():
-            archive = distribution.runtime_archive(manifest, root, getattr(args, "bundle", None))
+        if not micro_image_ready(root, args, manifest):
+            archive = distribution.runtime_archive(manifest, root, getattr(args, "disposable", False))
             checked([str(root / MICRO[1]), "image", "load", "--input", str(archive), "--tag", manifest["runtime_ref"], "--quiet"],
-                    "Cannot import the microsandbox runtime image; check free disk space and host libraries", timeout=1800, env=env)
-            if not matches():
+                    "Cannot import the microsandbox runtime image; check free disk space and host libraries", timeout=1800,
+                    env=micro_env(root, args))
+            if not micro_image_ready(root, args, manifest):
                 raise InstallError("Imported microsandbox runtime image identity or platform differs")
+        drop_runtime_archives(root)
 
 
 def unit_name(installation_id):
@@ -389,7 +416,17 @@ def configure_node(root, args, token):
     """Read the Core specification and check the host under the installation lock."""
     identity_file = root / "state/node/identity.json"
     retained = json.loads(identity_file.read_text()) if existing_file(identity_file) else None
-    args.configuration = node_spec.fetch(args, token, retained, open_request, allow_enrollment=not (root / "registered.json").exists())
+    registered = (root / "registered.json").exists()
+    try:
+        args.configuration = node_spec.fetch(args, token, retained, open_request, allow_enrollment=not registered)
+    except node_spec.UnrecordedIdentity:
+        retained = None
+        args.configuration = node_spec.fetch(args, token, None, open_request, allow_enrollment=True)
+    # Core records a node only when its registration completes. Until then the earlier attempt's
+    # files bind nobody, whatever configuration or release it was made for.
+    args.disposable = not registered and retained is None
+    if args.disposable:
+        discard_unregistered(root)
     args.provider = args.configuration["provider"]
     preflight(args.provider)
     if args.provider != "microsandbox" and getattr(args, "checkpoint_root", None) is not None:
@@ -417,45 +454,71 @@ def install_lock(root):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise InstallError("Another node installation is running") from None
+            raise InstallError("Another node installation is running, or this node is preparing a new sandbox configuration; "
+                               "retry once the Nodes page no longer shows Preparing target.") from None
         yield
+
+
+NOT_THIS_INSTALLATION = ("This host's node was added with another Core address, release or provider. Nothing was changed. To use it with this Core, "
+                         "choose Remove node on the Nodes page, uninstall it on this host, then add the host again with Add node.")
+
+GIB = 1024 ** 3
+
+
+def require_disk(root, args, manifest, names):
+    """Refuse before downloading when the node account's disk cannot hold what is still missing.
+
+    The Runtime archive and its unpacked copy exist only until the image is imported; a
+    microsandbox store then keeps about one more unpacked image under the same disk."""
+    needed = 0
+    for name in names:
+        if name != "runtime/seccomp.json":
+            entry = distribution.artifact(manifest, name)
+            target = root / name
+            if not (target.is_file() and distribution.matches(target, entry)):
+                needed += entry["size"] - distribution.resumable(distribution.partial_path(target), entry["size"])
+    if args.provider == "docker":
+        imported = distribution.docker_image(manifest, "runtime", DOCKER) is not None
+    else:
+        imported = (root / MICRO[1]).is_file() and micro_image_ready(root, args, manifest)
+    if not imported:
+        archive = distribution.artifact(manifest, "images/runtime.tar.gz")
+        packed = root / "images/runtime.tar.gz"
+        if not packed.is_file():
+            needed += archive["size"] - distribution.resumable(distribution.partial_path(packed), archive["size"])
+        if not (root / "images/runtime.tar").is_file():
+            needed += archive["unpacked_size"]
+        if args.provider == "microsandbox":
+            needed += archive["unpacked_size"]
+    free = shutil.disk_usage(root).free
+    if free < needed:
+        raise InstallError("Not enough disk space under %s: this installation needs about %.1f GB free and %.1f GB is available. "
+                           "Free space, then rerun the command." % (Path.home(), needed / GIB, free / GIB))
 
 
 def register_node(root, args, token, helper_archive=None, *, secret_path):
     """Download and verify the payload, prepare the Runtime and register; not the service."""
     install_display.step("Downloading and verifying node files")
-    program_manifest, program_sums = metadata(args.source_url, getattr(args, "bundle", None))
-    selected = args.configuration["specification"]["runtime"]
-    manifest, sums = program_manifest, program_sums
-    if selected["source_commit"] != program_manifest["source_commit"]:
-        if getattr(args, "bundle", None) is not None:
-            raise InstallError("This bundle does not contain Core's selected Runtime; install through the console --source-url that retains its release")
-        manifest, sums = metadata(args.source_url, prefix="releases/" + selected["source_commit"] + "/")
-    node_spec.verify_release(args.configuration, manifest)
-    runtime_prefix = "releases/" + manifest["source_commit"] + "/"
+    manifest, sums = metadata(args.source_url)
     names = provider_assets.artifacts(args.provider, ("node", "runtime", "policy"))
     if "runtime/seccomp.json" not in sums:
         raise InstallError("The distribution is missing required node checksums")
     state = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url,
              "source_commit": manifest["source_commit"], "generation": args.configuration["generation"],
              "specification_digest": args.configuration["specification_digest"]}
+    marker = root / "registered.json"
+    if marker.exists() and marker.read_text() != json_text(state):
+        raise InstallError(NOT_THIS_INSTALLATION)
+    require_disk(root, args, manifest, names)
     write_once(root / "installation.json", json_text(state))
-    node_generations.record_root_runtime(root, args, manifest, sums, sys.modules[__name__])
     for name in names:
         if name == "runtime/seccomp.json":
-            if getattr(args, "bundle", None) is None:
-                download(args.source_url, name, root, sums[name], prefix=runtime_prefix)
-            else:
-                source = args.bundle / name
-                if source.is_symlink() or file_digest(source) != sums[name]:
-                    raise InstallError("Local node payload checksum mismatch")
-                safe_directory((root / name).parent)
-                write_once(root / name, source.read_text())
+            download(args.source_url, name, root, sums[name], replace=args.disposable)
         else:
             target = root / name
             safe_directory(target.parent)
             existing_file(target)
-            distribution.obtain_artifact(program_manifest if name in provider_assets.artifacts(args.provider, ("node",)) else manifest, name, target, getattr(args, "bundle", None))
+            distribution.obtain_artifact(manifest, name, target, args.disposable)
             os.chmod(target, 0o700)
     node_generations.install_helper(root, args, sys.modules[__name__], helper_archive)
     safe_directory(root / "state/node")
@@ -468,10 +531,9 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
     runtime_image = prepare_runtime(root, args, manifest)
     # Retain the original network policy when recovering a partial installation.
     if not existing_file(root / "provider.json"):
-        write_once(root / "provider.json", json_text(provider_config(root, args, runtime_image)))
+        write_once(root / "provider.json", json_text(provider_config(root, args, manifest, runtime_image)))
     else:
         node_spec.verify_provider(json.loads((root / "provider.json").read_text()), args.configuration, runtime_image)
-    marker = root / "registered.json"
     if not existing_file(marker):
         # The one-time credential is never passed through process arguments or service environments.
         with os.fdopen(os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as secret:
@@ -485,8 +547,6 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
             discard_unregistered(root)
             raise
         write_once(marker, json_text(state))
-    elif marker.read_text() != json_text(state):
-        raise InstallError("Registered node identity differs; refusing to replace it")
 
 
 def prepare_service_node(args, token, helper_archive):
@@ -679,11 +739,7 @@ def service_child(account, function, arguments, parent, mask, read_ends, output_
         # service. Keep only standard HTTP proxy settings across the UID boundary.
         # curl/urllib prefer lowercase, while the Go registration command prefers
         # uppercase. Give both spellings one value, including an explicit empty value.
-        proxies = {}
-        for name in ("http_proxy", "https_proxy", "no_proxy"):
-            value = os.environ.get(name, os.environ.get(name.upper()))
-            if value is not None:
-                proxies[name] = proxies[name.upper()] = value
+        proxies = proxy_settings(os.environ)
         os.environ.clear()
         os.environ.update(HOME=account.pw_dir, USER=account.pw_name, LOGNAME=account.pw_name, PATH=SAFE_PATH,
                           LANG="C.UTF-8", DOCKER_CONFIG=str(CHILD_DOCKER_CONFIG))
@@ -692,10 +748,13 @@ def service_child(account, function, arguments, parent, mask, read_ends, output_
         function(*arguments)
         code = 0
     except (InstallError, node_spec.SpecificationError, distribution.DistributionError) as error:
-        install_display.error(str(error))
+        install_display.error(str(error), FAILED)
     except Exception as error:  # noqa: BLE001 - the child must always report and exit
-        print("The step running as " + SERVICE_USER + " failed unexpectedly (" + type(error).__name__
-              + "). Inspect the host, then rerun the command.", file=sys.stderr)
+        if isinstance(error, OSError) and error.errno == errno.ENOSPC:
+            install_display.error(DISK_FULL, FAILED)
+        else:
+            print("The step running as " + SERVICE_USER + " failed unexpectedly (" + type(error).__name__
+                  + "). Inspect the host, then rerun the command.", file=sys.stderr)
     finally:
         # A closed output pipe must not skip the exit below.
         for stream in (sys.stdout, sys.stderr):
@@ -705,6 +764,50 @@ def service_child(account, function, arguments, parent, mask, read_ends, output_
 
 
 run_as = as_service_user
+
+
+def proxy_settings(environment):
+    """The standard proxy variables, each under both spellings with one value (an explicit empty value included)."""
+    settings = {}
+    for name in ("http_proxy", "https_proxy", "no_proxy"):
+        value = environment.get(name, environment.get(name.upper()))
+        if value is not None:
+            settings[name] = settings[name.upper()] = value
+    return settings
+
+
+def service_environment(environment):
+    """The proxy settings the node service keeps, as an EnvironmentFile; empty without an HTTP(S) proxy.
+
+    Loopback always stays direct. Systemd reads quoted values without expanding anything."""
+    settings = proxy_settings(environment)
+    if not (settings.get("http_proxy") or settings.get("https_proxy")):
+        return ""
+    direct = "localhost,127.0.0.1,::1"
+    for name in ("no_proxy", "NO_PROXY"):
+        entries = [entry.strip() for entry in settings.get(name, "").split(",") if entry.strip()]
+        known = {entry.lower() for entry in entries}
+        settings[name] = ",".join(entries + [entry for entry in direct.split(",") if entry not in known])
+    if any(set(value) & {"\n", "\r", "\0"} for value in settings.values()):
+        raise InstallError("A proxy setting contains a line break; fix it, then rerun the command." + NOTHING_CHANGED)
+    return "".join(name + '="' + value.replace("\\", "\\\\").replace('"', '\\"') + '"\n' for name, value in sorted(settings.items()) if value)
+
+
+def write_service_environment(path, content):
+    """Keep the installer's proxy settings in a root-only file the unit reads; True when they changed."""
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise InstallError(str(path) + " must be a regular file")
+    current = path.read_text() if path.exists() else ""
+    if current == content:
+        return False
+    if not content:
+        path.unlink()
+        return True
+    with distribution.temporary_file(path) as temporary:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as stream:
+            stream.write(content)
+        os.replace(temporary, path)
+    return True
 
 
 def child_docker_config():
@@ -743,7 +846,8 @@ def host_lock():
 
 def host_checks():
     if sys.version_info < (3, 9) or platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64"):
-        raise InstallError("Run with Python 3.9+ on Linux amd64." + NOTHING_CHANGED)
+        raise InstallError("Python 3.9+ on Linux amd64 is required; this command ran %s (Python %d.%d, %s %s)."
+                           % (sys.executable, *sys.version_info[:2], platform.system(), platform.machine()) + NOTHING_CHANGED)
     if not SYSTEMD_RUNNING.is_dir():
         raise InstallError("systemd is not the init system here, so this host cannot run the node service." + NOTHING_CHANGED)
     for tool in ("systemctl", "useradd", "usermod", "userdel", "gpasswd"):
@@ -758,14 +862,14 @@ def host_checks():
 
 
 def root_file(path, content, replace=False):
-    """Write a root-owned 0644 file, or accept an identical existing one (or replace it)."""
+    """Write a root-owned 0644 file, or accept an identical existing one (or replace it); True when it wrote."""
     if path.is_symlink() or (path.exists() and not path.is_file()):
         raise InstallError(str(path) + " must be a regular file")
     if path.exists():
         if path.stat().st_uid != os.geteuid():
             raise InstallError(str(path) + " must be owned by root; preserve it and inspect the node")
         if path.read_text() == content:
-            return
+            return False
         if not replace:
             raise InstallError(str(path) + " differs from this installer's version; preserve it and inspect the node")
     if not path.parent.exists():
@@ -777,6 +881,7 @@ def root_file(path, content, replace=False):
             stream.write(content)
         os.chmod(temporary, 0o644)
         os.replace(temporary, path)
+    return True
 
 
 def read_root_json(path):
@@ -903,6 +1008,11 @@ def device_group(provider, device, gid):
     return name
 
 
+def installation_containers(installation_id):
+    return checked(list(DOCKER) + ["ps", "--all", "--filter", "label=io.oac.installation=" + installation_id,
+                                   "--format", "{{.Names}}"], "Cannot inspect Docker containers").split()
+
+
 def other_node(args, provider):
     """Refuse a second sudo-mode Core on this host, or a second node for this installation.
 
@@ -925,7 +1035,8 @@ def other_node(args, provider):
                                + ". Preserve it and arrange cleanup separately before installing a system node." + NOTHING_CHANGED)
     if provider == "docker":
         networks = checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"], "Cannot inspect Docker networks").splitlines()
-        if "oac-node-" + args.installation_id in networks:
+        # A network that no container uses is a leftover (Docker was down during an uninstall); the install reuses it.
+        if "oac-node-" + args.installation_id in networks and installation_containers(args.installation_id):
             raise InstallError("Another node for this installation already uses this Docker engine (network oac-node-"
                                + args.installation_id + "). Remove it on the Nodes page and uninstall it first." + NOTHING_CHANGED)
 
@@ -974,7 +1085,7 @@ def prepare_account(account, record, group):
     return service_account()
 
 
-def system_unit(root, provider):
+def system_unit(root, provider, environment):
     def quote(value):
         return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
     after = "network-online.target docker.service" if provider == "docker" else "network-online.target"
@@ -984,6 +1095,7 @@ def system_unit(root, provider):
             + "\nStartLimitIntervalSec=0\n\n[Service]\nType=exec\nUser=" + SERVICE_USER
             + "\nExecStart=:" + quote(root / provider_assets.artifacts(provider, ("node",))[0]) + " run --config " + quote(root / "provider.json")
             + " --state-dir " + quote(root / "state/node") + "\nWorkingDirectory=" + str(root).replace("%", "%%")
+            + "\nEnvironmentFile=-" + str(environment).replace("%", "%%")
             + "\nRestart=on-failure\nRestartSec=5s\nRestartPreventExitStatus=78\nKillMode=process\nUMask=0077"
             + "\n\n[Install]\nWantedBy=multi-user.target\n")
 
@@ -1009,12 +1121,25 @@ def node_record(installation_id):
     return record
 
 
+def refresh_service(installation_id, root, provider, proxy):
+    """Write the root-owned unit and proxy settings, reload systemd and restart a running service that changed."""
+    unit, environment = SYSTEM_UNITS / unit_name(installation_id), SYSTEM_RECORDS / (installation_id + ".env")
+    changed = root_file(unit, system_unit(root, provider, environment), replace=True)
+    changed = write_service_environment(environment, proxy) or changed
+    checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
+    if changed:  # A running service reads its unit and environment only when it starts; a stopped one is left to enable.
+        checked(["systemctl", "try-restart", unit.name], "Cannot restart the node service with the new settings. Inspect sudo journalctl -u " + unit.name)
+
+
 def install_system(args, token):
     """Sudo mode: prepare the host, then run the node as a root-owned system service."""
     os.environ["PATH"] = SAFE_PATH
     host_checks()
     # Checks that change nothing run first, so a refusal leaves no trace, not even a lock.
-    record = node_record(args.installation_id)
+    recorded = node_record(args.installation_id)
+    # A record still marked pending belongs to an attempt that never registered; it pins nothing.
+    record = None if recorded and recorded.get("pending") else recorded
+    proxy = service_environment(os.environ)
     configuration = None
     if record is None:
         install_display.step("Reading the Core deployment specification")
@@ -1031,7 +1156,7 @@ def install_system(args, token):
         other_node(args, provider)
         host_capacity(provider, configuration["specification"]["resources"], details)
     with host_lock():
-        if node_record(args.installation_id) != record or (record is None and [i for i in node_records() if i != args.installation_id]):
+        if node_record(args.installation_id) != recorded or (record is None and [i for i in node_records() if i != args.installation_id]):
             raise InstallError("Another node installation changed this host meanwhile; rerun the command." + NOTHING_CHANGED)
         account, account_record = account_plan()
         helper_archive = node_generations.helper_archive(args, sys.modules[__name__])
@@ -1041,15 +1166,19 @@ def install_system(args, token):
         child_docker_config()
         root = SERVICE_HOME / ".oac/nodes" / args.installation_id
         unit = SYSTEM_UNITS / unit_name(args.installation_id)
-        root_file(SYSTEM_RECORDS / (args.installation_id + ".json"),
-                  json_text({"format": 1, "installation_id": args.installation_id, "provider": provider,
-                             "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}))
+        entry = {"format": 1, "installation_id": args.installation_id, "provider": provider,
+                 "core_url": args.core_url, "node_root": str(root), "unit": str(unit)}
+        if record is None:
+            root_file(SYSTEM_RECORDS / (args.installation_id + ".json"), json_text(dict(entry, pending=True)), replace=True)
+        else:  # A registered node's service takes the new proxy even when the node step stops.
+            refresh_service(args.installation_id, root, provider, proxy)
         args.system, args.provider = True, provider
         run_as(account, prepare_service_node, args, token, helper_archive)
-        root_file(unit, system_unit(root, provider))
+        if record is None:
+            root_file(SYSTEM_RECORDS / (args.installation_id + ".json"), json_text(entry), replace=True)
+            refresh_service(args.installation_id, root, provider, proxy)
         install_display.step("Starting the node service")
-        checked(["systemctl", "daemon-reload"], "Cannot reload systemd")
-        checked(["systemctl", "enable", "--now", unit.name], "Cannot start the node service; retained identity is unchanged")
+        checked(["systemctl", "enable", "--now", unit.name], "Cannot start the node service; its identity is kept. Inspect sudo journalctl -u " + unit.name)
         checked(["systemctl", "is-active", "--quiet", unit.name], "Node service is unavailable; inspect sudo journalctl -u " + unit.name)
         install_display.step("Waiting for Core connection and provider readiness")
         run_as(account, wait_ready, root, args)
@@ -1081,14 +1210,20 @@ def no_links(path):
         raise InstallError(str(path) + " is reached through a symbolic link; inspect and remove it by hand." + NOTHING_CHANGED)
 
 
+def has_node_state(root):
+    """Whether the node ever registered: only then does Core know it."""
+    return (root / "registered.json").exists() or (root / "state/node/identity.json").exists()
+
+
 def confirm_removed(root, core_url, force):
     """Continue only once Core rejects the node's credential, or when it never registered.
 
     Runs as the node's own user. The Core address comes from the caller: in sudo mode
     the root-owned record, never a file the service user can write."""
     no_links(root)
+    no_links(micro_home(root.name))  # Refused here, before anything is removed, so "Nothing was changed" holds.
     identity_file = root / "state/node/identity.json"
-    if not (root / "registered.json").exists() and not identity_file.exists():
+    if not has_node_state(root):
         return
     if force:
         print("Skipping the Core check (--force).", flush=True)
@@ -1126,8 +1261,7 @@ def release_docker_network(installation_id):
     try:
         if network not in checked(list(DOCKER) + ["network", "ls", "--format", "{{.Name}}"], "Docker unavailable").splitlines():
             return
-        remaining = checked(list(DOCKER) + ["ps", "--all", "--filter", "label=io.oac.installation=" + installation_id,
-                                            "--format", "{{.Names}}"], "Docker unavailable").split()
+        remaining = installation_containers(installation_id)
     except InstallError:
         print("Docker is unavailable, so network " + network + " was not removed.")
         return
@@ -1137,25 +1271,31 @@ def release_docker_network(installation_id):
     checked(list(DOCKER) + ["network", "rm", network], "Cannot remove Docker network " + network)
 
 
-def remove_node_files(root, installation_id):
-    """Delete the node's state directory; keep the Runtime image and the microsandbox store.
+def remove_node_files(root, installation_id, confirmed):
+    """Delete the node's state directory and, once Core confirmed the removal, its microsandbox store; keep the Runtime image.
+
+    A node without registered state was never confirmed, so its store stays.
 
     Runs as the node's own user, so a link it planted can never reach another user's files."""
     no_links(root)
     provider = private_json(root / "provider.json") or {}
     image = (provider.get("native") or {}).get("image")
     runtime_home = micro_home(installation_id)
+    delete_store = confirmed and has_node_state(root)
     if root.exists():
         shutil.rmtree(root)
     # The service user can write provider.json; print only what an image ID can be.
     if isinstance(image, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", image):
-        print("Kept the Runtime image " + image + "; remove it with `docker image rm " + image + "` if no other node uses it.")
+        print("Kept the Runtime image " + image + "; remove it with `sudo docker image rm " + image + "` if no other node uses it.")
     if runtime_home.exists():
-        sudo_mode = str(Path.home()) == str(SERVICE_HOME)
-        remove = ("sudo -u " + SERVICE_USER + " rm -rf " if sudo_mode else "rm -rf ") + str(runtime_home)
-        print("Kept the microsandbox store " + str(runtime_home) + " with its images and any sandbox state. When no "
-              "microVM runs (`pgrep -u " + os.environ.get("USER", "") + "` is empty), remove it with `" + remove
-              + "`, then rerun this uninstall command.")
+        no_links(runtime_home)
+        if delete_store and private_json(runtime_home / "oac-installation.json") == {"installation_id": installation_id}:
+            shutil.rmtree(runtime_home)
+            print("Deleted the microsandbox store " + str(runtime_home) + ".")
+        else:
+            sudo_mode = str(Path.home()) == str(SERVICE_HOME)
+            print("Kept the microsandbox store " + str(runtime_home) + " with its images and any sandbox state. Delete it with `"
+                  + ("sudo -u " + SERVICE_USER + " rm -rf " if sudo_mode else "rm -rf ") + str(runtime_home) + "`.")
 
 
 def uninstall_system(args):
@@ -1166,15 +1306,18 @@ def uninstall_system(args):
     record = node_record(args.installation_id)
     unit = SYSTEM_UNITS / unit_name(args.installation_id)
     # Only root-owned files decide whether a node is installed; the service home is not read here.
+    absent = "No node for installation " + args.installation_id + " has a system installation on this host. Nothing was changed."
     if record is None and not unit.exists() and not (SYSTEM_RECORDS / "account.json").exists():
-        print("No node for installation " + args.installation_id + " has a system installation on this host. Nothing was changed.")
+        print(absent)
         return
     with host_lock():
         record = node_record(args.installation_id)
         account, account_record = service_account(), read_root_json(SYSTEM_RECORDS / "account.json")
         root = SERVICE_HOME / ".oac/nodes" / args.installation_id
         if record is None and not unit.exists():
-            print("No node for installation " + args.installation_id + " was installed with sudo on this host.")
+            # A rerun that only finishes the account; release_account says what it did.
+            if node_records():
+                print(absent)
         else:
             if not ours(account, (account_record or {}).get("uid")):
                 raise InstallError("The " + SERVICE_USER + " account is missing or differs from the one this installer "
@@ -1193,10 +1336,15 @@ def uninstall_system(args):
                 with contextlib.suppress(InstallError):
                     checked(["systemctl", "reset-failed", unit.name], "Cannot reset " + unit.name)
             release_docker_network(args.installation_id)
-            run_as(account, remove_node_files, root, args.installation_id)
+            # --force skips Core's confirmation, so it never deletes the store.
+            run_as(account, remove_node_files, root, args.installation_id, not args.force)
             (SYSTEM_RECORDS / (args.installation_id + ".json")).unlink(missing_ok=True)
+            (SYSTEM_RECORDS / (args.installation_id + ".env")).unlink(missing_ok=True)
             print("Node for installation " + args.installation_id + " uninstalled from this host.")
         release_account(account, account_record)
+    if sys.argv[0].endswith(".pyz"):
+        cache = plain(str(Path(sys.argv[0]).resolve().parent), sys.stdout.encoding)
+        print("Kept the downloaded installers in " + cache + ". Remove them with `rm -f " + cache + "/*.pyz`.")
 
 
 def release_account(account, record):
@@ -1229,6 +1377,7 @@ def release_account(account, record):
                 print("Removed " + SERVICE_USER + " from the " + group + " group, which this installer added.")
         if record.get("home_mode") and SERVICE_HOME.is_dir() and not SERVICE_HOME.is_symlink():
             os.chmod(SERVICE_HOME, int(record["home_mode"], 8))
+        print("Kept the " + SERVICE_USER + " user and " + str(SERVICE_HOME) + ", which existed before this installer.")
     (SYSTEM_RECORDS / "account.json").unlink()
     with contextlib.suppress(OSError):
         SYSTEM_RECORDS.rmdir()
@@ -1291,9 +1440,7 @@ def read_token(args):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    source = parser.add_mutually_exclusive_group()
-    source.add_argument("--source-url", type=origin)
-    source.add_argument("--bundle", type=Path)
+    parser.add_argument("--source-url", type=origin)
     parser.add_argument("--core-url", type=origin)
     parser.add_argument("--provider", choices=("docker", "microsandbox"), help="Optional assertion; Core owns provider selection")
     parser.add_argument("--installation-id", required=True)
@@ -1302,40 +1449,38 @@ def main(argv=None):
     parser.add_argument("--generation-action", choices=("prepare", "collect"), help=argparse.SUPPRESS)
     parser.add_argument("--generation", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--specification-digest", help=argparse.SUPPRESS)
-    parser.add_argument("--update", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--uninstall", action="store_true", help="Remove this host's node after it was removed on the Nodes page")
     parser.add_argument("--force", action="store_true", help="With --uninstall: skip the Core check, for a Core that no longer exists")
     parser.add_argument("--no-color", action="store_true", help="Disable terminal colors")
     args = parser.parse_args(argv)
     if args.no_color:
         os.environ["NO_COLOR"] = "1"
-    if str(uuid.UUID(args.installation_id)) != args.installation_id:
-        raise InstallError("Installation ID must be a canonical UUID")
-    if args.update:
-        raise InstallError("Node version updates are not supported; preserve the existing state and reinstall "
-                           "separately. Nothing was changed.")
+    global FAILED
+    if args.uninstall or args.generation_action:
+        FAILED = ""
+    try:
+        valid = str(uuid.UUID(args.installation_id)) == args.installation_id
+    except ValueError:
+        valid = False
+    if not valid:
+        raise InstallError("--installation-id must be the installation's UUID, as in the command from Add node or in the "
+                           "file names under /etc/oac-node. Nothing was changed.")
     if args.generation_action:
         if args.generation is None or not 1 <= args.generation <= 9223372036854775807 or not re.fullmatch(r"[0-9a-f]{64}", args.specification_digest or ""):
             parser.error("Invalid generation authorization")
-        try:
-            (node_generations.prepare if args.generation_action == "prepare" else node_generations.collect)(args, sys.modules[__name__])
-        except (RuntimeDownloadError, distribution.ArtifactError):
-            print("Runtime artifact transfer or verification failed", file=sys.stderr)
-            raise SystemExit(65) from None
+        (node_generations.prepare if args.generation_action == "prepare" else node_generations.collect)(args, sys.modules[__name__])
         return
     if os.geteuid() != 0:
         raise InstallError("Node installation and removal require root. Run this command with sudo.")
     if args.uninstall:
-        if args.source_url or args.bundle or args.core_url or args.provider or args.enrollment_token_stdin or args.checkpoint_root:
+        if args.source_url or args.core_url or args.provider or args.enrollment_token_stdin or args.checkpoint_root:
             parser.error("--uninstall takes only --installation-id and --force")
         uninstall_system(args)
         return
     if args.force:
         parser.error("--force applies only to --uninstall")
-    if not (args.source_url or args.bundle) or not args.core_url:
-        parser.error("--source-url (or --bundle) and --core-url are required")
-    if args.bundle is not None and (not args.bundle.is_absolute() or args.bundle.resolve() != args.bundle):
-        raise InstallError("Local bundle must be an absolute directory without symlinks")
+    if not args.source_url or not args.core_url:
+        parser.error("--source-url and --core-url are required")
     token = read_token(args)
     if len(token) > 4096 or any(c.isspace() for c in token):
         raise InstallError("A valid one-time enrollment credential is required")
@@ -1353,5 +1498,11 @@ if __name__ == "__main__":
         print(INTERRUPTED, file=sys.stderr)
         sys.exit(130)
     except (InstallError, node_spec.SpecificationError, distribution.DistributionError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
-        install_display.error(str(error) if isinstance(error, (InstallError, node_spec.SpecificationError, distribution.DistributionError)) else "check host prerequisites and retained private files")
+        if isinstance(error, (InstallError, node_spec.SpecificationError, distribution.DistributionError)):
+            message = str(error)
+        elif isinstance(error, OSError) and error.errno == errno.ENOSPC:
+            message = DISK_FULL
+        else:
+            message = "check host prerequisites and retained private files"
+        install_display.error(message, FAILED)
         sys.exit(1)

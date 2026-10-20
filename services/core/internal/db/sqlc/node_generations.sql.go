@@ -132,23 +132,6 @@ func (q *Queries) PromoteNodeServingGeneration(ctx context.Context, arg PromoteN
 	return err
 }
 
-const refreshNodeServingReadiness = `-- name: RefreshNodeServingReadiness :exec
-UPDATE runtime_nodes n SET protocol_version=$2, provider_ready=EXISTS(
- SELECT 1 FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=n.ready_generation
- AND g.connection_id=n.connection_id AND g.owner_epoch=n.connected_epoch AND g.state='ready')
-WHERE n.id=$1 AND n.removed_at IS NULL
-`
-
-type RefreshNodeServingReadinessParams struct {
-	ID              pgtype.UUID `json:"id"`
-	ProtocolVersion int32       `json:"protocol_version"`
-}
-
-func (q *Queries) RefreshNodeServingReadiness(ctx context.Context, arg RefreshNodeServingReadinessParams) error {
-	_, err := q.db.Exec(ctx, refreshNodeServingReadiness, arg.ID, arg.ProtocolVersion)
-	return err
-}
-
 const upsertNodeGenerationStatus = `-- name: UpsertNodeGenerationStatus :exec
 INSERT INTO runtime_node_generation_status(node_id,generation,specification_digest,connection_id,owner_epoch,state,diagnostic,checkpoint)
 VALUES($1,$2,$3,$4,$5,$6,$7,$8)

@@ -16,7 +16,7 @@ func mcpObservationSession(t *testing.T) (*Session, chan proto.Envelope) {
 	out := make(chan proto.Envelope, 16)
 	s := &Session{ctx: context.Background(), outputContext: context.Background(), opts: launchOptions{DataDir: t.TempDir()},
 		req: proto.PromptRequestPayload{RunID: "run",
-			LocalEnvironment: &proto.LocalEnvironment{NetworkAccess: "enabled", MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
+			LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{environmentMCPFixture()}}},
 		out: out, tools: map[string]toolUpdate{}, completedTools: map[string]bool{}, active: true, sessionID: "native-session"}
 	if err := writeMCPRegistry(s.opts.DataDir, mcpRegistryEntry("proof.server", "proof_server_2", "read.status", "read_status_2")); err != nil {
 		t.Fatal(err)
@@ -161,18 +161,6 @@ func TestEnvironmentMCPResultMustMatchStartAndUnsettledCallsCloseOnce(t *testing
 				t.Fatal("incomplete observation duplicated")
 			}
 		})
-	}
-}
-
-func TestEnvironmentMCPDoesNotPublishInternalWorkspaceUtilities(t *testing.T) {
-	s, out := mcpObservationSession(t)
-	for _, name := range []string{"workspace_read", "workspace_write", "workspace_edit", "workspace_glob", "workspace_grep"} {
-		if err := s.emitTool(toolUpdate{ID: name, Name: "mcp__oac_workspace__" + name, Status: "completed"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if len(out) != 0 {
-		t.Fatal("internal workspace utility became a public MCP call")
 	}
 }
 

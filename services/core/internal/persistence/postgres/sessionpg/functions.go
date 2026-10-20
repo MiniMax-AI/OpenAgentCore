@@ -53,7 +53,7 @@ func loadPendingFunctionCalls(ctx context.Context, q *sqlc.Queries, session pgty
 }
 
 func functionCallFromRow(row sqlc.FunctionCall) sessions.FunctionCall {
-	return sessions.FunctionCall{CallID: row.CallID, ExecutorCallID: row.ExecutorCallID, Name: row.Name, Arguments: row.Arguments, Result: row.Result, Applied: row.Applied}
+	return sessions.FunctionCall{CallID: row.CallID, ExecutorCallID: row.ExecutorCallID, Name: row.Name, Arguments: row.Arguments, Result: row.Result, Applied: row.Applied, Withdrawn: row.Withdrawn}
 }
 
 func (t *SessionTx) LoadPendingFunctionCalls(ctx context.Context, turn string) ([]sessions.FunctionCall, error) {
@@ -83,7 +83,7 @@ func (t *SessionTx) MatchFunctionResult(ctx context.Context, turn, call string, 
 	if err != nil {
 		return sessions.FunctionResultMatch{}, err
 	}
-	return sessions.FunctionResultMatch{Recorded: true, Submitted: row.Submitted, Matches: row.Matches}, nil
+	return sessions.FunctionResultMatch{Recorded: true, Submitted: row.Submitted, Matches: row.Matches, Withdrawn: row.Withdrawn}, nil
 }
 
 func (t *SessionTx) SubmitFunctionResult(ctx context.Context, turn, call string, result json.RawMessage) error {
@@ -149,4 +149,12 @@ func (t *SessionTx) ApplyFunctionResult(ctx context.Context, turn, call string) 
 		return err
 	}
 	return t.q.ApplyFunctionResult(ctx, sqlc.ApplyFunctionResultParams{SessionID: t.session, TurnID: id, CallID: call})
+}
+
+func (t *SessionTx) WithdrawFunctionCall(ctx context.Context, turn, call string) error {
+	id, err := parseID(turn)
+	if err != nil {
+		return err
+	}
+	return t.q.WithdrawFunctionCall(ctx, sqlc.WithdrawFunctionCallParams{SessionID: t.session, TurnID: id, CallID: call})
 }

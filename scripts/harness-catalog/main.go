@@ -1,4 +1,4 @@
-// Command harness-catalog projects adapter-owned provider declarations and the
+// Command harness-catalog projects the built-in Harness declarations and the
 // model-provider protocol vocabulary for tooling.
 package main
 
@@ -10,26 +10,29 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 )
 
-type provider struct {
-	RequiresTokenLimits bool `json:"requires_token_limits"`
+type harness struct {
+	Kind      string   `json:"kind"`
+	Label     string   `json:"label"`
+	Protocols []string `json:"protocols"`
 }
 
-func declarations() map[string]map[string]provider {
-	result := make(map[string]map[string]provider)
+func declarations() []harness {
+	var result []harness
 	for _, kind := range builtin.Kinds() {
-		providers := make(map[string]provider)
-		for _, declaration := range builtin.Configuration(kind).Providers {
-			providers[declaration.Protocol] = provider{RequiresTokenLimits: declaration.RequiresTokenLimits}
+		declaration, _ := builtin.Registry().Lookup(kind)
+		protocols := []string{}
+		for _, declared := range declaration.Providers {
+			protocols = append(protocols, declared.Protocol)
 		}
-		result[kind] = providers
+		result = append(result, harness{Kind: kind, Label: declaration.Label, Protocols: protocols})
 	}
 	return result
 }
 
 func main() {
 	projection := struct {
-		Harnesses map[string]map[string]provider `json:"harnesses"`
-		Protocols []modelprovider.Protocol       `json:"protocols"`
+		Harnesses []harness                `json:"harnesses"`
+		Protocols []modelprovider.Protocol `json:"protocols"`
 	}{declarations(), modelprovider.Protocols()}
 	if err := json.NewEncoder(os.Stdout).Encode(projection); err != nil {
 		panic(err)

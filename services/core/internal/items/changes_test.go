@@ -28,11 +28,11 @@ func TestObserveDecidesItemChanges(t *testing.T) {
 		check  func(Change) bool
 	}{
 		{
-			name: "a legacy aggregate yields to a native message", kind: "execution_completed",
+			name: "an aggregate answer yields to a native message", kind: "execution_completed",
 			update: project("execution_completed", `{"done":{"content":"final"}}`), stored: Stored{NativeMessage: true}, skip: true,
 		},
 		{
-			name: "a legacy aggregate applies without a native message", kind: "execution_completed",
+			name: "an aggregate answer applies without a native message", kind: "execution_completed",
 			update: project("execution_completed", `{"done":{"content":"final"}}`),
 			check:  func(c Change) bool { return c.Item.Status == "completed" && c.Output && c.Delta == nil },
 		},
@@ -74,15 +74,15 @@ func TestObserveDecidesItemChanges(t *testing.T) {
 }
 
 func TestUpdatesDeclareTheFactsObserveReads(t *testing.T) {
-	legacy := Update{Item: v1.Item{Type: "message"}, LegacyFinal: true}
+	aggregate := Update{Item: v1.Item{Type: "message"}, AggregateFinal: true}
 	result := Update{Item: v1.Item{Type: "function_call_output", CallID: "call"}}
-	if !legacy.NeedsNativeMessage() || result.NeedsNativeMessage() {
+	if !aggregate.NeedsNativeMessage() || result.NeedsNativeMessage() {
 		t.Fatal("native message need")
 	}
 	if call, ok := result.ResultCall(); !ok || call != "call" {
 		t.Fatal("result call", call, ok)
 	}
-	if _, ok := legacy.ResultCall(); ok {
+	if _, ok := aggregate.ResultCall(); ok {
 		t.Fatal("message asked for a function result")
 	}
 }

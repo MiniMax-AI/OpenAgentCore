@@ -185,8 +185,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   </ConfirmDialog>;
   const cleanupDialog = <NodeCleanupDialog cleanup={cleanup?.node ?? null} open={cleanup?.open ?? false} onClose={() => {
     setCleanup((current) => current && { ...current, open: false });
-    // The removed node's button is gone, so focus returns to the page, after the dialog restores its own.
-    window.requestAnimationFrame(() => heading.current?.focus());
+    // After a removal the node's button is gone, so focus returns to the page, after the dialog restores its own.
+    // Clean up a host keeps its button, which the dialog restores focus to.
+    if (cleanup?.node.name !== null) window.requestAnimationFrame(() => heading.current?.focus());
   }} />;
   if (params.id && hostedNodes) {
     const back = () => goBack("nodes");
@@ -216,6 +217,9 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const actions = <>
     {localOnly && hostedNodes ? <span id="add-node-blocked" className="muted">{tCommon("installationNotice.addBlocked")}</span> : null}
     {hostedNodes ? <button className="button outline" type="button" onClick={() => navigate("settings", { id: "sandbox" })}>{tSandboxNav("open")}</button> : null}
+    {consoleConfig.node_installer && snapshot ? <button className="button outline" type="button" onClick={() => setCleanup({ node: {
+      name: null, installationId: snapshot.deployment.installation_id, scriptDigest: consoleConfig.node_installer_sha256, oldAddress: null,
+    }, open: true })}>{t("Clean up a host")}</button> : null}
     {refreshButton}
     {hostedNodes && snapshot ? <button type="button" className="button primary" disabled={addDisabled} aria-describedby={localOnly ? "add-node-blocked" : undefined} onClick={() => setAdding(true)}><Plus size={16} />{t("Add node")}</button> : null}
   </>;

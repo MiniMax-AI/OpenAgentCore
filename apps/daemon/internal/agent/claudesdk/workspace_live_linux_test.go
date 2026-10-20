@@ -91,7 +91,6 @@ func TestLiveClaudeWorkspaceFactory(t *testing.T) {
 		out := make(chan proto.Envelope, 64)
 		req := workspaceRequest()
 		req.RunID, req.Input, req.AgentSessionID = uuid.NewString(), proto.TextInput(prompt), resume
-		req.ObserveMessages = true
 		req.AgentOptions = map[string]any{"model": "MiniMax-M3", "system_prompt": "Follow the exact verification instructions using the requested native tools. Preserve conversation facts. No other files, network operations or background work."}
 		proof := evidence{RunID: req.RunID}
 		running, err := startSingleTurn(ctx, config, req, out)
@@ -154,6 +153,12 @@ func TestLiveClaudeWorkspaceFactory(t *testing.T) {
 			if !bytes.Equal(settled, done) {
 				t.Fatal("cancellation outcome differs from terminal Done")
 			}
+		}
+		// Native history settles when the executor closes after Done; the next step must not race that close.
+		select {
+		case <-s.process.Done():
+		case <-ctx.Done():
+			t.Fatal("native process did not exit after the Turn")
 		}
 		writeEvidence(name, proof)
 		if proof.Terminals != 1 || (cancelOnEffect && !proof.Cancelled) {

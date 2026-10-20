@@ -131,10 +131,10 @@ export async function validateComponents(root, names, daemonVersion) {
       const upstream = await json(join(component, 'source.json'));
       const expected = await json(new URL('../packages/mcode-harness/source.json', import.meta.url));
       if (upstream.version !== pins.minimax || upstream.revision !== expected.revision) throw new Error('MiniMax source pin mismatch');
-      for (const entry of ['launch.mjs', 'dist/worker.mjs', 'provenance.json', 'native-patch.json']) await requireFile(join(component, entry));
+      for (const entry of ['check.mjs', 'subagent-snapshot.mjs', 'provenance.json', 'native-patch.json']) await requireFile(join(component, entry));
       if (probe(node, [join(component, 'native/cli.js'), '--version'], component, env) !== pins.minimax) throw new Error('MiniMax native pin mismatch');
       const info = JSON.parse(probe(node, [join(component, 'check.mjs')], component, env));
-      if (info.protocol !== 2 || info.native !== pins.minimax || info.source !== expected.revision) throw new Error('MiniMax companion compatibility failed');
+      if (info.protocol !== 3 || info.native !== pins.minimax || info.source !== expected.revision) throw new Error('MiniMax companion compatibility failed');
     }
   }
 }
