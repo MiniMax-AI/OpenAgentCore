@@ -21,14 +21,14 @@ The Session brings its own model provider; the installation default never applie
 
 The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
-The installer download is about 320 MiB. Free space is needed on the disk that holds the Runtime home and the installation directory:
+The download depends on the Harnesses you install. The installer (9 MiB) and Node.js (59 MiB) are always needed, plus 121 MiB for Codex, 99 MiB for Claude Code or 23 MiB for MiniMax Code, so a Session with one Harness downloads 90 to 189 MiB. Free space is needed on the disk that holds the Runtime home and the installation directory:
 
 | | One Harness | All three |
 | --- | --- | --- |
-| Free space at the peak | about 2 GiB | about 2.2 GiB |
+| Free space at the peak | about 1.3 GiB | about 2.1 GiB |
 | Installed size | about 560 MiB | about 940 MiB |
 
-With one Harness, the peak is the archive (316 MiB), the unpacked installer (907 MiB) and the installed files (about 560 MiB). The unpacked copy is removed when the command ends and the archive when the installation completes.
+With Codex, the peak is the archives (180 MiB), the unpacked installer (about 560 MiB) and the installed files (about 560 MiB). The unpacked copy is removed when the command ends. The archives stay in `native-download` under the Runtime home so that another Session of the same release on this machine downloads only the 9 MiB installer.
 
 The machine needs:
 
@@ -37,7 +37,7 @@ The machine needs:
 - Python and pip when the Session's packages need them;
 - any system packages your setup needs. The daemon never runs apt, sudo or another elevation command, so install them through the host's normal administration.
 
-No administrator privileges or Docker are needed. The Unix download command also uses `curl`, `tar`, `gzip`, a SHA-256 tool and the system file-lock command (`flock` on Linux, `lockf` on macOS). Windows needs its system `tar.exe`; the command checks for it before downloading. The Runtime home must allow executable files to run. On a Unix `noexec` mount, choose another absolute directory with `OAC_RUNTIME_HOME` before running the command.
+No administrator privileges or Docker are needed. The Unix download command also uses `curl`, `tar`, `gzip` and a SHA-256 tool. Windows needs its system `tar.exe`; the command checks for it before downloading. The Runtime home must allow executable files to run. On a Unix `noexec` mount, choose another absolute directory with `OAC_RUNTIME_HOME` before running the command.
 
 ## Connect a machine
 
@@ -66,7 +66,7 @@ No administrator privileges or Docker are needed. The Unix download command also
    print(installation["commands"]["posix"])  # use "powershell" on Windows
    ```
 
-2. Run the command on the target machine with the account that should run the tools. It downloads the installer matched to this Core, verifies its checksum, asks which Harnesses to install and where, installs them, creates the workspace if needed, starts the daemon and checks its connection.
+2. Run the command on the target machine with the account that should run the tools. It downloads the installer matched to this Core, verifies its checksum, asks which Harnesses to install and where, downloads Node.js and the selected Harnesses, installs them, creates the workspace if needed, starts the daemon and checks its connection.
 3. Send a Turn. A connected machine proves only authentication; the first Turn checks the Harness and the model.
 
 In Web, open the Session and copy the command under **Connect a host**.
@@ -86,7 +86,7 @@ The installer reports three results:
 <details>
 <summary>If the download stops</summary>
 
-The installer checks the grant before it downloads anything, so an expired command costs no download. The archive download resumes after a reset, fails only when it stalls (no data for 60 seconds) and gives up after five attempts; rerun the command to continue where it stopped. A verified archive is kept in `native-download` under the Runtime home until the installation completes, so a rerun after a failure needs no new download; it is checked against Core's checksum on every run and discarded if it fails. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. The small `download.lock` file in `native-download` remains for concurrency control. An active download or installation is never cleared by another run. If the command expires, copy a fresh one from the Session.
+The installer checks the grant before it downloads a Harness, so an expired command costs only the 9 MiB installer. Each archive download resumes after a reset, fails only when it stalls (no data for 60 seconds) and gives up after five attempts; rerun the command to continue where it stopped. Verified archives stay in `native-download/<version>` under the Runtime home. A later run or Session of the same version checks them against Core's checksum and reuses them, discarding any that fails; archives of other versions are removed. Two installations on one machine take turns downloading. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. If the command expires, copy a fresh one from the Session.
 
 </details>
 
@@ -144,7 +144,7 @@ The install command claims the Session's machine credential once, and a second c
 To reconnect the Session without the original directory, rotate its credential and install from an extracted distribution into a new directory:
 
 1. In Web, open the Session and choose **Rotate** in **Executor credentials**. Save the credential JSON it returns.
-2. Download `<base>/<platform>.tar.gz` and extract it, where `<base>` is the first URL of the install command (it ends with the Core version) and `<platform>` is `linux-amd64`, `darwin-arm64` or `windows-amd64`, matching the rows of [Platforms](#platforms).
+2. Download `<base>/<platform>.tar.gz` and `<base>/<platform>-<component>.tar.gz` for `node` and each Harness you install (`codex`, `claude` or `minimax`), and extract them into one directory. `<base>` is the first URL of the install command (it ends with the Core version) and `<platform>` is `linux-amd64`, `darwin-arm64` or `windows-amd64`, matching the rows of [Platforms](#platforms).
 3. Run the installer as in [Install from an extracted distribution](#install-from-an-extracted-distribution) with the Session's `remote_url`, Environment ID, workspace and the saved credential file.
 
 Or create a new Session and run its command.
@@ -163,7 +163,7 @@ On Windows PowerShell:
 & "$HOME\.oac\environments\<environment-id>\bin\oac-daemon.exe" uninstall
 ```
 
-It stops the daemon, lists what it deletes and asks for confirmation. It deletes only what an installation owns inside its directory (`bin`, `daemon`, `components`, `capabilities`, `runtime`, `initialization` and `packages`, with their credential file, native history and Harnesses) and then the directory itself if nothing else is left in it. Anything else in the directory stays, and so do the workspace and any credential file or capability directory outside the installation; the command names each one it keeps. The `native-download` directory and its `download.lock` are never touched. Where nothing is installed it says so and exits 0. If a file cannot be deleted, the command names it and can be run again once it is released. On Windows, the final deletion finishes a few seconds after the command exits.
+It stops the daemon, lists what it deletes and asks for confirmation. It deletes only what an installation owns inside its directory (`bin`, `daemon`, `components`, `capabilities`, `runtime`, `initialization` and `packages`, with their credential file, native history and Harnesses) and then the directory itself if nothing else is left in it. Anything else in the directory stays, and so do the workspace and any credential file or capability directory outside the installation; the command names each one it keeps. The `native-download` cache is never touched; delete it to reclaim the space. Where nothing is installed it says so and exits 0. If a file cannot be deleted, the command names it and can be run again once it is released. On Windows, the final deletion finishes a few seconds after the command exits.
 
 Then, in Web, open the Session and choose **Revoke** in **Executor credentials**, or **Delete** the Session; Core keeps accepting the machine's credential until you do.
 
@@ -218,4 +218,4 @@ The same installer accepts an already extracted distribution and a credential fi
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-Use the Session's `remote_url` and Environment ID. The distribution is the archive named in [Reconnect an existing Session](#reconnect-an-existing-session). In PowerShell, run `.\oac-daemon.exe` with native absolute paths. The installation directory must be missing, empty or hold an installation. This mode needs an existing workspace and does not start the daemon until you run `start`.
+Use the Session's `remote_url` and Environment ID. The distribution is the directory described in [Reconnect an existing Session](#reconnect-an-existing-session): `oac-daemon` and `bundle.json` from the platform archive, and `components/` from the archives of `node` and each selected Harness. A missing component fails with the name of the archive to extract; this mode never downloads. In PowerShell, run `.\oac-daemon.exe` with native absolute paths. The installation directory must be missing, empty or hold an installation. This mode needs an existing workspace and does not start the daemon until you run `start`.

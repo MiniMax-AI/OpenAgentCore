@@ -136,7 +136,11 @@ jobs:
           node scripts/build-native-installer-ci.mjs
       - name: Bootstrap, authenticate, install and connect natively
         id: onboarding
-        run: node scripts/native-onboarding-smoke.mjs
+        run: |
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
+          fi
+          node scripts/native-onboarding-smoke.mjs
       - name: Verify native Harness protocols without model requests
         id: protocol
         run: |
@@ -144,16 +148,11 @@ jobs:
             export CLAUDE_CODE_GIT_BASH_PATH='C:\Program Files\Git\bin\bash.exe'
           fi
           node scripts/native-harness-smoke.mjs --codex-binary "$RUNNER_TEMP/native-installer/components/codex/bin/codex${{ runner.os == 'Windows' && '.exe' || '' }}" --claude-runtime "$RUNNER_TEMP/native-installer/components/claude"
-      - name: Archive the native distribution
-        if: inputs.upload-artifacts
-        run: |
-          cd "$RUNNER_TEMP"
-          tar -C native-installer -czf "oac-native-installer-${{ runner.os }}-${{ runner.arch }}.tar.gz" .
       - uses: actions/upload-artifact@v6
         if: inputs.upload-artifacts
         with:
           name: oac-native-installer-${{ runner.os }}-${{ runner.arch }}
-          path: ${{ runner.temp }}/oac-native-installer-*.tar.gz
+          path: ${{ runner.temp }}/native-archives/*.tar.gz
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

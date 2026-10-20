@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { access, mkdir, readdir, realpath, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { buildBundle } from './build-native-installer.mjs';
+import { archiveBundle, buildBundle } from './build-native-installer.mjs';
 
 const root = resolve(process.env.RUNNER_TEMP ?? '');
 if (!process.env.RUNNER_TEMP) throw new Error('RUNNER_TEMP is required');
@@ -30,6 +30,7 @@ const candidates = await findCodex(join(root, 'native-tools', 'node_modules', '@
 assert.equal(candidates.length, 1, 'Expected exactly one native Codex artifact');
 const bundle = join(root, 'native-installer');
 const receipt = await buildBundle({ daemon, node: await realpath(node), codex: candidates[0], claude: join(root, 'claude-runtime'), ...(!windows ? { minimax: join(root, 'minimax-runtime') } : {}), output: bundle });
+await archiveBundle(bundle, join(root, 'native-archives'));
 console.log(JSON.stringify({ stage: 'bundle', os: receipt.os, arch: receipt.arch, components: Object.keys(receipt.components), model_requests: 0 }));
 const workspace = join(root, 'native-install-workspace'); await mkdir(workspace);
 const credential = join(root, 'native-install-credential.json');

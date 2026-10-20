@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: d8df8f9bacd4a7ee2246ae0878d2139108a06079d0a6d0245f98a67972839b3e
+source_hash: e3503e97930dc4d36f34411e5588d4b9c7102b15eeb14d3763a797c18081af2e
 ---
 
 本页是安装程序参数的参考，并说明如何用默认方式以外的方式安装：在已有反向代理之后、在托管平台上使用 Docker Compose，或在无法访问互联网的主机上。[默认安装](./install.md)无需任何选项。
@@ -84,7 +84,7 @@ docker compose exec web oac-web core-key
 
 安装程序使用当前 shell 的网络设置（包括 `HTTPS_PROXY`）从 GitHub Releases 下载发行文件。Docker 通过其守护进程拉取镜像，守护进程不读取 shell 的代理变量。所有镜像（包括 PostgreSQL）都来自 GHCR（`ghcr.io`），不需要 Docker Hub。如果只能经代理或镜像加速器访问 GHCR，请配置[守护进程代理](https://docs.docker.com/engine/daemon/proxy/)或[镜像加速器](https://docs.docker.com/docker-hub/image-library/mirror/)，然后重新运行安装程序。
 
-无法访问这些地址的 Linux amd64 主机可使用发行资产 `oac-<commit>-linux-amd64-offline.tar.gz` 安装，其中包含所有镜像、节点制品和 Linux amd64 自托管安装程序。macOS 和 Windows 上的自托管机器从 GitHub Releases 下载各自的安装程序。将其复制到该主机并解压，然后用 Python 3.9 或更高版本和 Docker 运行其中的 `install.py`。该主机上不需要检出代码、Go、Node 或 pnpm。安装完成前请保留解压后的安装包；之后已安装的服务和节点下载不再依赖它原来的位置。[开发 OpenAgentCore](../development.md#install-a-checkout-without-publishing-a-release)从检出代码构建的就是同一个归档。
+无法访问这些地址的 Linux amd64 主机可使用发行资产 `oac-<commit>-linux-amd64-offline.tar.gz` 安装，其中包含所有镜像、节点制品和包含全部 Harness 的 Linux amd64 自托管安装程序。macOS 和 Windows 上的自托管机器从 GitHub Releases 下载各自的安装程序。将其复制到该主机并解压，然后用 Python 3.9 或更高版本和 Docker 运行其中的 `install.py`。该主机上不需要检出代码、Go、Node 或 pnpm。安装完成前请保留解压后的安装包；之后已安装的服务和节点下载不再依赖它原来的位置。[开发 OpenAgentCore](../development.md#install-a-checkout-without-publishing-a-release)从检出代码构建的就是同一个归档。
 
 ### `install.py` 选项 {#install-py-options}
 

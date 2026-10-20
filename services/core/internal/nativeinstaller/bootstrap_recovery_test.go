@@ -110,68 +110,17 @@ func TestBootstrapRecovery(t *testing.T) {
 			if scenario == "metadata-503" && metadata.Load() != 2 {
 				t.Fatalf("metadata requests=%d", metadata.Load())
 			}
-			if scenario == "archive-truncated" && downloads.Load() != 2 {
+			// PowerShell accepts a short body; the checksum catches it and a rerun downloads again.
+			if scenario == "archive-truncated" && runtime.GOOS != "windows" && downloads.Load() != 2 {
 				t.Fatalf("download requests=%d", downloads.Load())
 			}
-			if _, err := os.Stat(filepath.Join(home, "native-download", "staging")); !os.IsNotExist(err) {
-				t.Fatalf("left staging: %v", err)
+			if left, _ := filepath.Glob(filepath.Join(home, "native-download", "bundle.*")); len(left) != 0 {
+				t.Fatalf("left the extracted installer: %v", left)
 			}
 			if bytes.Contains(output, []byte("fixture-grant")) || bytes.Contains(output, []byte("\x1b")) {
 				t.Fatal("secret or terminal escape in captured output")
 			}
 		})
-	}
-}
-
-func TestBootstrapDiscardsStaleStagingOnly(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX executable fixture; Windows recovery is covered separately")
-	}
-	home := t.TempDir()
-	staging := filepath.Join(home, "native-download", "staging")
-	if err := os.MkdirAll(staging, 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(staging, "interrupted"), []byte("partial"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	keep := filepath.Join(home, "workspace.txt")
-	if err := os.WriteFile(keep, []byte("keep"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(404) }))
-	defer server.Close()
-	if output, err := bootstrapCommand(t, server.URL, home).CombinedOutput(); err == nil {
-		t.Fatalf("unexpected success %s", output)
-	}
-	if _, err := os.Stat(staging); !os.IsNotExist(err) {
-		t.Fatal("stale staging remains")
-	}
-	if data, err := os.ReadFile(keep); err != nil || string(data) != "keep" {
-		t.Fatal("unrelated file changed")
-	}
-}
-
-func TestBootstrapRejectsLowSpaceBeforeNetwork(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("POSIX disk-space fixture")
-	}
-	home := t.TempDir()
-	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "df"), []byte("#!/bin/sh\nprintf 'Filesystem 1024-blocks Used Available Capacity Mounted\\nfixture 100 99 1 99%% /\\n'\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	var requests atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { requests.Add(1); w.WriteHeader(500) }))
-	defer server.Close()
-	command := bootstrapCommand(t, server.URL, home)
-	command.Env = append(command.Env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	output, err := command.CombinedOutput()
-	if err == nil || !bytes.Contains(output, []byte("Not enough disk space")) || requests.Load() != 0 {
-		t.Fatalf("low-space guard: %v %s requests=%d", err, output, requests.Load())
-	}
-	if _, err = os.Stat(filepath.Join(home, "native-download", "staging")); !os.IsNotExist(err) {
-		t.Fatal("low-space failure left staging")
 	}
 }
 
@@ -209,8 +158,42 @@ func TestBootstrapExplainsUnexecutableInstaller(t *testing.T) {
 	if err == nil || !bytes.Contains(output, []byte("Cannot start the native installer")) {
 		t.Fatalf("%v: %s", err, output)
 	}
-	if _, err := os.Stat(filepath.Join(home, "native-download", "staging")); !os.IsNotExist(err) {
-		t.Fatal("staging remains")
+	if left, _ := filepath.Glob(filepath.Join(home, "native-download", "bundle.*")); len(left) != 0 {
+		t.Fatal("extracted installer remains")
+	}
+}
+
+// Only the installer receives the grant, not curl, tar or the other tools around it.
+func TestBootstrapGivesGrantOnlyToInstaller(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX executable fixture")
+	}
+	curl, err := exec.LookPath("curl")
+	if err != nil {
+		t.Skip("curl unavailable")
+	}
+	leak := filepath.Join(t.TempDir(), "leak")
+	bin := t.TempDir()
+	wrapper := "#!/bin/sh\n[ -z \"$OAC_INSTALL_GRANT\" ] || echo curl >> " + shellQuote(leak) + "\nexec " + shellQuote(curl) + " \"$@\"\n"
+	if err = os.WriteFile(filepath.Join(bin, "curl"), []byte(wrapper), 0700); err != nil {
+		t.Fatal(err)
+	}
+	archive := bootstrapScriptArchive(t, "#!/bin/sh\n[ \"$OAC_INSTALL_GRANT\" = fixture-grant ]\n")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".sha256") {
+			fmt.Fprintf(w, "%x\n", sha256.Sum256(archive))
+			return
+		}
+		w.Write(archive)
+	}))
+	defer server.Close()
+	command := bootstrapCommand(t, server.URL, t.TempDir())
+	command.Env = append(command.Env, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("the installer did not receive the grant: %v: %s", err, output)
+	}
+	if _, err = os.Stat(leak); !os.IsNotExist(err) {
+		t.Fatal("a download tool received the grant")
 	}
 }
 

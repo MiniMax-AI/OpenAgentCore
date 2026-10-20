@@ -4,9 +4,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
-import { createReadStream } from 'node:fs';
-import { existsSync } from 'node:fs';
-import { mkdir, readFile } from 'node:fs/promises';
+import { createReadStream, existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const root = process.env.RUNNER_TEMP;
@@ -18,19 +17,30 @@ const protocol = (await readFile('internal/agentdaemon/proto/version.go', 'utf8'
 const environment = randomUUID(), session = randomUUID(), device = randomUUID();
 const workspace = join(root, 'onboarding-workspace');
 const installation = join(root, 'onboarding-installation');
-const archive = join(root, 'onboarding.tar.gz');
-const tar = windows ? join(process.env.SystemRoot, 'System32', 'tar.exe') : 'tar';
-execFileSync(tar, ['-czf', archive, '-C', bundle, '.']);
-const digest = createHash('sha256');
-for await (const chunk of createReadStream(archive)) digest.update(chunk);
-const checksum = digest.digest('hex');
+// Core serves the base archive and one archive per component, as the release publishes them.
+const archives = join(root, 'native-archives');
+const platform = `${manifest.os}-${manifest.arch}`;
+const checksums = new Map(), downloaded = new Set();
+async function checksum(name) {
+  if (!checksums.has(name)) {
+    const digest = createHash('sha256');
+    for await (const chunk of createReadStream(join(archives, `${name}.tar.gz`))) digest.update(chunk);
+    checksums.set(name, digest.digest('hex'));
+  }
+  return checksums.get(name);
+}
 let secret, connected = false, connections = 0, failClaim = true;
 const authorization = 'fixture-install-authorization';
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, origin);
   const json = (status, value) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(value)); };
-  if (url.pathname.endsWith('.sha256')) { response.setHeader('Content-Type', 'text/plain; charset=utf-8'); return response.end(checksum+'\n'); }
-  if (url.pathname.endsWith('.tar.gz')) return createReadStream(archive).pipe(response);
+  const artifact = url.pathname.match(/\/install\/[^/]+\/([a-z0-9-]+)\.(sha256|tar\.gz)$/);
+  if (artifact) {
+    if (!existsSync(join(archives, `${artifact[1]}.tar.gz`))) return json(404, {});
+    if (artifact[2] === 'sha256') { response.setHeader('Content-Type', 'text/plain; charset=utf-8'); return response.end(await checksum(artifact[1])+'\n'); }
+    downloaded.add(artifact[1]);
+    return createReadStream(join(archives, `${artifact[1]}.tar.gz`)).pipe(response);
+  }
   if (url.pathname.endsWith('bootstrap.sh') || url.pathname.endsWith('bootstrap.ps1')) return createReadStream(resolve('services/core/internal/nativeinstaller/assets', url.pathname.split('/').at(-1))).pipe(response);
   const body = []; for await (const chunk of request) body.push(chunk);
   if (url.pathname.endsWith('/installation') || url.pathname.endsWith('/claim')) {
@@ -84,12 +94,14 @@ try {
   assert.equal(saved.executor_token, secret, 'Secret must survive a lost response');
   const script = resolve(`services/core/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
   const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base] : [script, base];
-  const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], '\n\n');
+  // Select every Harness of this platform so each Harness archive passes the installer's extraction and readiness checks.
+  const harnesses = windows ? ['codex', 'claude'] : ['codex', 'claude', 'minimax'];
+  const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], harnesses.join(',') + '\n\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);
   assert.match(result.output, /Daemon connection: connected/);
+  assert.deepEqual([...downloaded].sort(), [platform, ...['node', ...harnesses].map(name => `${platform}-${name}`)].sort(), 'Only the base, Node and the selected Harnesses may be downloaded');
   assert.match(result.output, /Model configuration: not checked/);
   assert.equal(connections, 1);
-  // The running daemon must not keep the bootstrap's download lock.
   const repeat = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation, '--non-interactive', '--harness', 'codex']);
   assert.equal(repeat.code, 0, `Repeat failed: ${repeat.output}`);
   assert.equal(connections, 1, 'Repeated installation created a duplicate daemon');
