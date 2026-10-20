@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { randomUuid } from "@oac/agents-client";
 import { Plus, Pencil, Trash2, Plug, Server } from "lucide-react";
 import {
   product,
@@ -75,14 +76,14 @@ function ResourceList({
             setEditing(
               kind === "mcps"
                 ? {
-                    id: crypto.randomUUID(),
+                    id: randomUuid(),
                     name: "",
                     label: "",
                     url: "",
                     revision: 0,
                   }
                 : {
-                    id: crypto.randomUUID(),
+                    id: randomUuid(),
                     name: "",
                     environment: "openai_hosted",
                     revision: 0,

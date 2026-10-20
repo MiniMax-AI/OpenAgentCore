@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Upload, Download } from "lucide-react";
-import type { ListPage, SessionArtifact } from "@oac/agents-client";
+import { randomUuid, type ListPage, type SessionArtifact } from "@oac/agents-client";
 import { api, dateTime } from "./lib/api";
 import { Button } from "./components/ui/button";
 import {
@@ -26,7 +26,7 @@ async function upload(environmentId: string, file: File) {
     name += character;
   }
   name ||= "file";
-  const path = `/workspace/inputs/${crypto.randomUUID()}-${name}`;
+  const path = `/workspace/inputs/${randomUuid()}-${name}`;
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",")[1] || "");

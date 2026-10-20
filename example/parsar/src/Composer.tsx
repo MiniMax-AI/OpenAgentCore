@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AgentCoreError,
-  createIdempotencyKey,
+  randomUuid,
   type AgentSession,
 } from "@oac/agents-client";
 import { ArrowUp, Square } from "lucide-react";
@@ -52,10 +52,10 @@ export function Composer({
           `${previous}${previous ? "\n" : ""}请处理文件：${attachment}`,
       );
   }, [attachment]);
-  const [cancelKey, setCancelKey] = useState(createIdempotencyKey);
+  const [cancelKey, setCancelKey] = useState(randomUuid);
   const [cancelRequested, setCancelRequested] = useState(false);
   useEffect(() => {
-    setCancelKey(createIdempotencyKey());
+    setCancelKey(randomUuid());
     setCancelRequested(false);
   }, [turnId]);
   const running =
@@ -66,7 +66,7 @@ export function Composer({
   };
   const send = useMutation({
     mutationFn: async () => {
-      const operation = pending || { key: createIdempotencyKey(), text };
+      const operation = pending || { key: randomUuid(), text };
       sessionStorage.setItem(storageKey, JSON.stringify(operation));
       setPending(operation);
       beginTiming(session.id, operation.key, turnId);
