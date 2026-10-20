@@ -54,7 +54,7 @@ node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-The catalog records the commit, the Runtime protocol version, each archive's SHA-256 and, with a release base, its versioned URL. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<platform>.tar.gz` release assets, and the offline archive holds one copy of each outside the Core image. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
+The catalog records the commit, the Runtime protocol version, each archive's SHA-256 and, with a release base, its versioned URL. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<platform>.tar.gz` release assets, and the offline archive holds one copy of each outside the Core image, which its `install.py` copies into the installation for Core to serve. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
 
 ### Runtime images and helpers
 

@@ -311,8 +311,8 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 			compose.files = []string{"-f", filepath.Join(stage, "compose.yaml")}
 			override := filepath.Join(o.dir, "compose.override.yaml")
 			if raw, err := os.ReadFile(override); err == nil {
-				if cleaned, changed := dropPayloadBind(raw); changed {
-					// The release serves the node payload from the data volume, so the offline installer's host bind goes.
+				if cleaned, changed := dropPayloadBinds(raw); changed {
+					// The release serves the node payload from the data volume and its native installers from the Core image, so the offline installer's host binds go.
 					if err := os.WriteFile(filepath.Join(stage, "compose.override.yaml"), cleaned, 0o600); err != nil {
 						return err
 					}
@@ -364,8 +364,9 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 			}
 		}
 		if cleanedOverride {
-			// Nothing serves the offline installer's host copy any more.
+			// Nothing serves the offline installer's host copies any more.
 			_ = os.RemoveAll(filepath.Join(o.dir, "node-payload"))
+			_ = os.RemoveAll(filepath.Join(o.dir, "native-installers"))
 		}
 	}
 	if !fresh {
@@ -418,25 +419,30 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 	return nil
 }
 
-// dropPayloadBind removes the offline installer's Web bind of /node-payload from a JSON override and keeps every other entry. Other formats are the operator's and stay as they are.
-func dropPayloadBind(raw []byte) ([]byte, bool) {
+// dropPayloadBinds removes the offline installer's binds of Web's /node-payload and Core's /opt/oac/native-installers from a JSON override and keeps every other entry. Other formats are the operator's and stay as they are.
+func dropPayloadBinds(raw []byte) ([]byte, bool) {
 	var override map[string]any
 	if json.Unmarshal(raw, &override) != nil {
 		return nil, false
 	}
 	services, _ := override["services"].(map[string]any)
-	web, _ := services["web"].(map[string]any)
-	volumes, _ := web["volumes"].([]any)
-	kept := make([]any, 0, len(volumes))
-	for _, volume := range volumes {
-		if entry, ok := volume.(map[string]any); !ok || entry["target"] != "/node-payload" {
-			kept = append(kept, volume)
+	changed := false
+	for name, target := range map[string]string{"web": "/node-payload", "core": "/opt/oac/native-installers"} {
+		service, _ := services[name].(map[string]any)
+		volumes, _ := service["volumes"].([]any)
+		kept := make([]any, 0, len(volumes))
+		for _, volume := range volumes {
+			if entry, ok := volume.(map[string]any); !ok || entry["target"] != target {
+				kept = append(kept, volume)
+			}
+		}
+		if len(kept) != len(volumes) {
+			service["volumes"], changed = kept, true
 		}
 	}
-	if len(kept) == len(volumes) {
+	if !changed {
 		return nil, false
 	}
-	web["volumes"] = kept
 	cleaned, err := json.MarshalIndent(override, "", "  ")
 	return append(cleaned, '\n'), err == nil
 }

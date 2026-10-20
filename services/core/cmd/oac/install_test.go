@@ -298,16 +298,17 @@ func TestInstallUpgradesAnotherReleaseOnlyWhenRequested(t *testing.T) {
 	}
 }
 
-func TestUpgradeDropsTheOfflineNodePayloadBind(t *testing.T) {
+func TestUpgradeDropsTheOfflinePayloadBinds(t *testing.T) {
 	f := newInstallFixture(t)
 	setBuildRevision(t, "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0")
 	if err := f.run(); err != nil {
 		t.Fatal(err)
 	}
-	payload := filepath.Join(f.options.dir, "node-payload")
+	payload, native := filepath.Join(f.options.dir, "node-payload"), filepath.Join(f.options.dir, "native-installers")
 	os.Mkdir(payload, 0o755)
+	os.Mkdir(native, 0o755)
 	source, _ := json.Marshal(payload)
-	override := `{"services":{"web":{"volumes":[{"type":"bind","source":` + string(source) + `,"target":"/node-payload","read_only":true},{"type":"bind","source":"/srv/ca","target":"/ca"}]}}}`
+	override := `{"services":{"web":{"volumes":[{"type":"bind","source":` + string(source) + `,"target":"/node-payload","read_only":true},{"type":"bind","source":"/srv/ca","target":"/ca"}]},"core":{"volumes":[{"type":"bind","source":"/srv/native","target":"/opt/oac/native-installers","read_only":true}]}}}`
 	path := filepath.Join(f.options.dir, "compose.override.yaml")
 	os.WriteFile(path, []byte(override), 0o600)
 	setBuildRevision(t, "development")
@@ -327,11 +328,13 @@ func TestUpgradeDropsTheOfflineNodePayloadBind(t *testing.T) {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(path)
-	if strings.Contains(string(raw), "/node-payload") || !strings.Contains(string(raw), "/srv/ca") {
+	if strings.Contains(string(raw), "/node-payload") || strings.Contains(string(raw), "/opt/oac/native-installers") || !strings.Contains(string(raw), "/srv/ca") {
 		t.Fatalf("override after upgrade: %s", raw)
 	}
-	if _, err := os.Stat(payload); !os.IsNotExist(err) {
-		t.Fatal("upgrade kept the node payload directory")
+	for _, directory := range []string{payload, native} {
+		if _, err := os.Stat(directory); !os.IsNotExist(err) {
+			t.Fatalf("upgrade kept %s", directory)
+		}
 	}
 }
 
