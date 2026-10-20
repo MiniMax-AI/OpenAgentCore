@@ -289,12 +289,14 @@ func (q request) validate() error {
 	}
 	return sandbox.ErrInvalid
 }
-func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response {
+
+// execute also returns the local error; only its code crosses the transport.
+func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (response, error) {
 	out := response{ID: q.ID, ConnectionID: q.ConnectionID}
 	err := q.validate()
 	if err != nil {
 		out.ErrorCode = errorCode(err)
-		return out
+		return out, err
 	}
 	if err := providercontract.Require(p, operationMethod(q.Operation)); err != nil {
 		out.ErrorCode = errorCode(err)
@@ -302,7 +304,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		if errors.As(err, &unsupported) {
 			out.Unsupported = unsupported
 		}
-		return out
+		return out, err
 	}
 	var info sandbox.Info
 	var command sandbox.CommandResult
@@ -374,7 +376,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		out.Command = nil
 		out.Compute = nil
 	}
-	return out
+	return out, err
 }
 
 func requiresReady(q request) bool {

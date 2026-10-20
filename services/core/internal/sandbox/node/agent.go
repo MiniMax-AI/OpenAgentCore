@@ -388,17 +388,18 @@ func (a *agent) executeWork(ctx context.Context, task work) {
 	operationCtx, cancel := context.WithDeadline(context.Background(), task.request.deadline)
 	a.active.Add(1)
 	started := time.Now()
-	result := execute(operationCtx, task.provider, task.request)
+	result, err := execute(operationCtx, task.provider, task.request)
 	finished := time.Now()
 	a.active.Add(-1)
 	cancel()
 	_ = task.connection.write(frame{Type: "response", Response: &result})
-	logOperation(ctx, task, started, finished, result.ErrorCode)
+	logOperation(ctx, task, started, finished, result.ErrorCode, err)
 }
 
 // Queue wait and execution share this node's monotonic clock. Read-only
 // observations repeat on every reconciliation tick and log at debug level.
-func logOperation(ctx context.Context, task work, started, finished time.Time, code string) {
+// The local error stays in this host's journal; it may name host paths.
+func logOperation(ctx context.Context, task work, started, finished time.Time, code string, err error) {
 	level := slog.LevelInfo
 	switch task.request.Operation {
 	case "info", "renew", "initial", "new_compute", "compute", "observe":
@@ -406,6 +407,10 @@ func logOperation(ctx context.Context, task work, started, finished time.Time, c
 			level = slog.LevelDebug
 		}
 	}
-	log.Bg().Log(ctx, level, "sandbox node operation", "operation", task.request.Operation, "allocation_id", task.request.Reference.AllocationID,
-		"queue_ms", started.Sub(task.queued).Milliseconds(), "duration_ms", finished.Sub(started).Milliseconds(), "error_code", code)
+	attrs := []any{"operation", task.request.Operation, "allocation_id", task.request.Reference.AllocationID,
+		"queue_ms", started.Sub(task.queued).Milliseconds(), "duration_ms", finished.Sub(started).Milliseconds(), "error_code", code}
+	if err != nil {
+		attrs = append(attrs, "error", err)
+	}
+	log.Bg().Log(ctx, level, "sandbox node operation", attrs...)
 }

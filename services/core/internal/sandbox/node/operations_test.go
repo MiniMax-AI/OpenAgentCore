@@ -15,7 +15,7 @@ import (
 func TestUnsupportedWireIsExplicitAndDoesNotInvokeProvider(t *testing.T) {
 	p := &fakeProvider{}
 	q := request{ID: uuid.NewString(), ConnectionID: uuid.NewString(), Reference: reference(), TimeoutMillis: 1000, Operation: "initial"}
-	out := execute(t.Context(), p, q)
+	out, _ := execute(t.Context(), p, q)
 	if p.creates != 0 || p.reads != 0 || p.kills != 0 {
 		t.Fatal("unsupported operation reached provider")
 	}

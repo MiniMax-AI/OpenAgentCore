@@ -78,7 +78,10 @@ func TestActualWorkspaceRefusalKeepsSettledAbsenceOnWire(t *testing.T) {
 	bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", Workspace: binding}
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	out := execute(ctx, provider, request{ID: ref.AllocationID, ConnectionID: ref.TenantID, Reference: ref, Operation: "create", TimeoutMillis: 1000, Bootstrap: &bootstrap})
+	out, local := execute(ctx, provider, request{ID: ref.AllocationID, ConnectionID: ref.TenantID, Reference: ref, Operation: "create", TimeoutMillis: 1000, Bootstrap: &bootstrap})
+	if !errors.Is(local, workspacefs.ErrUnsupported) {
+		t.Fatal("the node journal lost the local error", local)
+	}
 	raw, err := json.Marshal(frame{Version: ProtocolVersion, Type: "response", Response: &out})
 	if err != nil {
 		t.Fatal(err)

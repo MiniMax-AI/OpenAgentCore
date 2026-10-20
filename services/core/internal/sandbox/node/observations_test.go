@@ -152,7 +152,7 @@ func TestObservationWirePreservesUnavailableAndRejectsMismatchedIdentity(t *test
 	}
 	for _, test := range providers {
 		t.Run(test.name, func(t *testing.T) {
-			out := execute(t.Context(), test.provider, q)
+			out, _ := execute(t.Context(), test.provider, q)
 			if !errors.Is(responseError(out), test.want) || out.Sample != nil {
 				t.Fatal("observation error or missing sample was fabricated", out)
 			}
@@ -163,7 +163,7 @@ func TestObservationWirePreservesUnavailableAndRejectsMismatchedIdentity(t *test
 		invalid := target
 		mutate(&invalid)
 		q.Observation = &invalid
-		if out := execute(t.Context(), p, q); !errors.Is(responseError(out), sandbox.ErrInvalid) {
+		if out, _ := execute(t.Context(), p, q); !errors.Is(responseError(out), sandbox.ErrInvalid) {
 			t.Fatal("mismatched observation reached provider", out)
 		}
 	}
