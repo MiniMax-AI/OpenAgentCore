@@ -277,7 +277,7 @@ func TestSandboxResetSnapshotCountsOfflineOwnershipOnce(t *testing.T) {
 		onlineManagerNode(t, s, d.NodeID)
 		switch state {
 		case "preparing":
-			runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET provider_ready=false`)
+			runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET ready_generation=NULL`)
 		case "stale":
 			runtimeSuspensionSQL(t, s.pool, `UPDATE runtime_nodes SET last_seen_at=clock_timestamp()-interval '46 seconds'`)
 		case "epoch":

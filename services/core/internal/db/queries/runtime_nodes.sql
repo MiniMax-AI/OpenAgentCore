@@ -10,7 +10,7 @@ SELECT * FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL;
 
 -- name: ListRuntimeNodes :many
 SELECT n.*, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at > clock_timestamp()-interval '45 seconds')::boolean AS online,
- d.provider_kind, d.generation AS target_generation,
+ d.provider_kind,
  EXISTS(SELECT 1 FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=n.ready_generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch AND g.state='ready')::boolean AS serving_ready,
  COALESCE((SELECT g.state FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=d.generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch),'')::text AS target_state,
  COALESCE((SELECT g.diagnostic FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=d.generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch),'')::text AS target_diagnostic,
@@ -31,12 +31,12 @@ UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4 WHERE id=$1 AND r
 UPDATE runtime_nodes SET removed_at=clock_timestamp(),connection_id=NULL,ready_generation=NULL WHERE id=$1 AND removed_at IS NULL;
 
 -- name: ConnectRuntimeNode :execrows
-UPDATE runtime_nodes SET connection_id=$2,provider_ready=false,connected_epoch=d.owner_epoch,last_seen_at=clock_timestamp()
+UPDATE runtime_nodes SET connection_id=$2,connected_epoch=d.owner_epoch,last_seen_at=clock_timestamp()
 FROM runtime_deployment d WHERE runtime_nodes.id=$1 AND removed_at IS NULL AND runtime_nodes.installation_id=d.installation_id AND d.owner_epoch=sqlc.arg(owner_epoch)
 AND runtime_nodes.connected_epoch <= sqlc.arg(owner_epoch);
 
 -- name: HeartbeatRuntimeNode :execrows
-UPDATE runtime_nodes SET last_seen_at=clock_timestamp(),provider_ready=$3,health=sqlc.arg(health)::jsonb FROM runtime_deployment d
+UPDATE runtime_nodes SET last_seen_at=clock_timestamp(),health=sqlc.arg(health)::jsonb FROM runtime_deployment d
 WHERE runtime_nodes.id=$1 AND connection_id=$2 AND removed_at IS NULL AND connected_epoch=d.owner_epoch AND d.owner_epoch=sqlc.arg(owner_epoch);
 
 -- name: LockRuntimeNodePresence :one

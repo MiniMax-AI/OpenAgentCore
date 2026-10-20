@@ -95,5 +95,5 @@ export function enrollmentProgress(node: SandboxNode | null, appearedAt: number 
   if (node.online && node.provider_ready) return { stage: "ready", problem: "" };
   const late = appearedAt !== undefined && now - appearedAt >= NODE_READY_WAIT_MS;
   if (!node.online) return { stage: "registered", problem: late ? "not_connected" : "" };
-  return { stage: "connected", problem: node.diagnostic || late ? nodeProviderDiagnostic(node) : "" };
+  return { stage: "connected", problem: late ? nodeProviderDiagnostic(node) : "" };
 }

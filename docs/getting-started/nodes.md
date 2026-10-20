@@ -80,12 +80,12 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 
-**Node software.** A node keeps the host program of the console that added it. To move a node to another release, [remove it](#remove-a-node) and add it again.
+**Node software.** A node runs the host program and Runtime of the installation that added it. Another installation's command is refused on that host until you [remove the node](#remove-a-node) and add it again.
 
 ## Rerun, expiry and slow links
 
-- Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It changes nothing and says why when the node's retained identity belongs to another Core address or installation, when the sandbox configuration has changed since the node registered (the node prepares it itself; see [Change the sandbox configuration](#change-the-sandbox-configuration)), or when Core was upgraded and serves a newer node program: choose **Remove node** on **Nodes**, uninstall the node on the host, then add it again with **Add node**.
-- A run that fails before the node registers leaves nothing that Core knows. The next command, even after a configuration change or a Core upgrade, replaces the earlier attempt's configuration and any downloaded file that no longer matches, keeps the files that match and continues.
+- Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It changes nothing and says why when the node's retained identity or node program belongs to another Core address or installation, or when the sandbox configuration has changed since the node registered (the node prepares it itself; see [Change the sandbox configuration](#change-the-sandbox-configuration)): choose **Remove node** on **Nodes**, uninstall the node on the host, then add it again with **Add node**.
+- A run that fails before the node registers leaves nothing that Core knows. The next command, even after a configuration change, replaces the earlier attempt's configuration and any downloaded file that no longer matches, keeps the files that match and continues.
 - A command that already expired, or was used on another host, fails at once with `The enrollment command expired or was already used`: generate a new command and run it within an hour.
 - If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it, and the download continues where it stopped.
 - Every file shows its progress. Failed or interrupted downloads keep what arrived, and a rerun resumes each partial file where it stopped (`Resuming …`), reuses verified complete files and downloads the rest. If the server cannot resume, the file starts again from the beginning. A transfer that brings less than 64 KiB in a minute stops; check the network and rerun the command.
@@ -102,8 +102,7 @@ Run `sudo journalctl -u oac-node-<installation-id>.service`. In a root shell, om
 
 Sandbox settings apply to the whole installation; nodes follow them.
 
-- **Size, Runtime release, E2B key or template build.** Open **Settings** → **Sandbox and scheduling** → **Change resources**, edit and save. Existing sandboxes keep their configuration. Each node prepares the new one while it keeps serving the old one, and **Nodes** shows its progress: **Preparing target**, **Ready for target** or **Preparation failed** with the [reason](#readiness-codes). Core places new Sessions on nodes ready for the new configuration first, and on nodes still serving an older one when those have no room. E2B changes apply at once.
-- **The installation's Runtime.** When the saved Runtime differs from the one the installation serves, **Settings** → **Sandbox and scheduling** shows a **Runtime** row with both source commits. **Use this installation's Runtime** opens **Change resources** on its review with that Runtime, and **Save configuration** starts the same node preparation. Other changes keep the saved Runtime. When the console serves no Runtime manifest, enter the release under **Advanced settings**.
+- **Size, E2B key or template build.** Open **Settings** → **Sandbox and scheduling** → **Change resources**, edit and save. Existing sandboxes keep their configuration. Each node prepares the new one while it keeps serving the old one, and **Nodes** shows its progress: **Preparing target**, **Ready for target** or **Preparation failed** with the [reason](#readiness-codes). Core places new Sessions on nodes ready for the new configuration first, and on nodes still serving an older one when those have no room. E2B changes apply at once.
 - **Capacity and idle suspension.** On **Nodes**, use **Edit node** for a node's active and retained limits. In **Settings** → **Sandbox and scheduling**, use **Automatic suspension** → **Idle before suspension (seconds)** → **Save** for the deployment-wide [idle policy](../../contracts/agents-api/sandbox-deployment.md#suspension-policy).
 - **Backend.** On the same page, choose **Reset deployment**. Auto reset archives idle hosted Sessions at once and lets running work finish until the deadline you set; force cancels it now. Offline nodes must come back so Core can confirm their cleanup. When the reset completes, Core has retired every node and unused command: set up the new backend, then add nodes again. **Cancel reset** stops the remaining work; archived Sessions stay archived.
 
@@ -126,14 +125,14 @@ It never deletes Docker images or volumes. It keeps the Runtime image and prints
 
 ## Register a node manually
 
-Use manual registration when you manage the node's files and service yourself instead of running Web's command. A manually registered node serves only the configuration it registered with: after a size or Runtime change, **Nodes** shows it as **Node software incompatible**, and it keeps serving the old configuration until you remove it and register the host again.
+Use manual registration when you manage the node's files and service yourself instead of running Web's command.
 
 1. Take `oac-node` from the same release as Core.
 2. Get an enrollment token: the token in a command from **Add node**, or `POST /core/v1/sandbox/enrollment-tokens` with the Core key. It is single-use and carries the node's approved capacity; the response's `expires_at` says when it expires. Save it in a `0600` file on the host.
 3. Read the node configuration with the token, which does not consume it: `GET /api/v1/sandbox-node/configuration` with `Authorization: Bearer <token>`.
-4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add a `native` object with the host settings of that provider. The adapter reads sandbox size, the Runtime image and artifact hashes from `specification`:
+4. Write a private provider file. Copy `provider`, `installation_id`, `core_url`, `generation` and `specification` from the response, and add a `native` object with the host settings of that provider. The adapter reads sandbox size from `specification` and the Runtime from `native`:
    - Docker: the [Docker node configuration](../configuration.md#docker-node-configuration) fields, with `host` an explicit Unix socket, `image` the local ID of the imported Runtime image and `seccomp_file` absolute.
-   - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, a `network` policy, an explicit `checkpoint_root` for private checkpoint archives, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
+   - microsandbox: absolute `helper_path`, `runtime_path` and `firmware_path`, `image` (the manifest's `runtime_ref`), `runtime_sha256` and `firmware_sha256` from the installation's manifest, a `network` policy, an explicit `checkpoint_root` for private checkpoint archives, and `runtime_home`: a private directory, which the helper creates with mode `0700` when it is missing. microsandbox places Unix sockets under it, so keep its path within 48 bytes; the installer refuses a longer one for its own nodes.
    Before the first microsandbox registration, initialize the empty `checkpoint_root` as the node service account using the same release's source checkout: `PYTHONPATH=deploy/node python3 -c 'from node_install import prepare_checkpoint_root; prepare_checkpoint_root("/absolute/private/checkpoints")'`. This reuses the installer's exclusive UUID-marker initialization and ownership checks. Initialize a shared store once; other nodes use the existing marker. Never replace the marker or initialize over restored or nonempty unowned storage.
 5. Register, then run the node under the host's service supervisor, with real absolute paths:
 
@@ -163,22 +162,18 @@ Connection failures and installer messages are in [Troubleshooting](./troublesho
 
 ### Readiness codes
 
-When a node is online but its sandbox provider is not ready, **Nodes** and **Overview** show it as **Provider not ready**. Where the reason appears depends on how the node was added:
+When a node is online but its sandbox provider is not ready, **Nodes** and **Overview** show it as **Provider not ready**. A node reports a failed check of the current sandbox configuration as **Preparation failed** in the node's target status, with the reason in a help tip (`rollout.diagnostic` in `GET /core/v1/sandbox/nodes`). The tip beside **Provider not ready** only says *Sandbox provider unavailable*.
 
-- **Nodes added with Web's command** report a failed check of the current sandbox configuration as **Preparation failed** in the node's target status, with the reason in a help tip (`rollout.diagnostic` in `GET /core/v1/sandbox/nodes`). The tip beside **Provider not ready** only says *Sandbox provider unavailable*.
-- **Manually registered nodes** show the reason in the help tip beside **Provider not ready** (`diagnostic`).
+Each code is a Provider-neutral class; the local error behind it stays on the node. Rerun the command on the host: the installer checks the host requirements first and names what to fix ([Installer messages](./troubleshooting.md#installer-messages)).
 
-Each code is a Provider-neutral class; the local error behind it stays on the node. A manually registered node logs it. For a node added with Web's command, rerun the command on the host: the installer checks the host requirements first and names what to fix ([Installer messages](./troubleshooting.md#installer-messages)).
-
-A node reports only its first failed check, in this order: the Docker daemon or KVM, Docker's limit support, host capacity, then the installed Runtime files. An unreachable Docker daemon therefore hides a missing image. The next heartbeat, about ten seconds after a fix, clears or replaces the code. An offline node keeps its last code, which Web hides until the node reconnects.
+A node reports only its first failed check, in this order: the Docker daemon or KVM, Docker's limit support, host capacity, then the installed Runtime files. An unreachable Docker daemon therefore hides a missing image. The next preparation attempt after a fix clears or replaces the code.
 
 | Code | Help tip | Cause | Fix |
 | --- | --- | --- | --- |
 | `provider_unavailable` | Sandbox provider unavailable | The provider's service is unreachable or fails a request, such as a stopped Docker daemon, or a failure without a class | Rerun the node's command, or read a manually registered node's log |
 | `host_unsupported` | Host unsupported | The host lacks a capability the provider requires, such as Docker CPU and memory limits (cgroup v2) or read-write access to `/dev/kvm` | Rerun the node's command, or read a manually registered node's log |
 | `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
-| `runtime_image_unavailable` | Runtime image missing | The provider does not have the pinned Runtime image | A node added with Web's command downloads it again by itself; otherwise load the image from the matching release |
-| `artifacts_unavailable` | Provider files missing | A pinned provider file, such as the microsandbox Runtime, firmware or helper, is missing or fails its SHA-256 check | A node added with Web's command downloads the missing files by itself; otherwise restore them from the matching release |
-| `runtime_download_failed` | Runtime download failed | While preparing a new configuration, the node could not download or verify the Runtime files | Check the node's HTTPS access to the console and the release. The node retries with growing delays, up to 30 minutes apart |
+| `runtime_image_unavailable` | Runtime image missing | The provider does not have the installation's Runtime image | Rerun the node's command to download it again; otherwise load the image from the matching release |
+| `artifacts_unavailable` | Provider files missing | A pinned provider file, such as the microsandbox Runtime, firmware or helper, is missing or fails its SHA-256 check | Rerun the node's command to download the missing files; otherwise restore them from the matching release |
 
 A new group membership applies only to a new process. Restart the node service: `sudo systemctl restart oac-node-<installation-id>.service`.

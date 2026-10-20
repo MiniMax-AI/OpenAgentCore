@@ -733,8 +733,6 @@ definitions:
         description: |-
           Per-sandbox limits, required for Docker and microsandbox. E2B may omit
           them; Core then uses the validated template build's cpus and memory_mib.
-      runtime:
-        $ref: '#/definitions/sandbox.RuntimeRelease'
     required:
       - expected_generation
     type: object
@@ -754,8 +752,6 @@ definitions:
         description: |-
           Per-sandbox limits, required for Docker and microsandbox. E2B may omit
           them; Core then uses the validated template build's cpus and memory_mib.
-      runtime:
-        $ref: '#/definitions/sandbox.RuntimeRelease'
     required:
       - expected_generation
     type: object
@@ -1276,10 +1272,6 @@ definitions:
         x-nullable: true
       created_at:
         type: string
-      diagnostic:
-        allOf:
-          - $ref: '#/definitions/sandbox.NodeDiagnosticCode'
-        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
       enrollment_id:
         description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
         type: string
@@ -1300,6 +1292,7 @@ definitions:
       provider:
         type: string
       provider_ready:
+        description: True while the node is online and its serving generation is ready.
         type: boolean
       reserved:
         type: integer
@@ -1405,10 +1398,6 @@ definitions:
         x-nullable: true
       created_at:
         type: string
-      diagnostic:
-        allOf:
-          - $ref: '#/definitions/sandbox.NodeDiagnosticCode'
-        description: Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
       enrollment_id:
         description: The enrollment_id of the command that registered this node (POST /core/v1/sandbox/enrollment-tokens); null for nodes enrolled before Core recorded it.
         type: string
@@ -1433,6 +1422,7 @@ definitions:
       provider:
         type: string
       provider_ready:
+        description: True while the node is online and its serving generation is ready.
         type: boolean
       reserved:
         type: integer
@@ -1518,14 +1508,12 @@ definitions:
       - ready
       - preparing
       - failed
-      - update_required
       - unknown
     type: string
     x-enum-varnames:
       - NodeRolloutReady
       - NodeRolloutPreparing
       - NodeRolloutFailed
-      - NodeRolloutUpdateRequired
       - NodeRolloutUnknown
   deployment.NodeUpdate:
     properties:
@@ -1653,14 +1641,11 @@ definitions:
         type: integer
       unknown:
         type: integer
-      update_required:
-        type: integer
     required:
       - failed
       - preparing
       - ready
       - unknown
-      - update_required
     type: object
   deployment.RolloutState:
     enum:
@@ -1879,8 +1864,6 @@ definitions:
     properties:
       resources:
         $ref: '#/definitions/sandbox.Resources'
-      runtime:
-        $ref: '#/definitions/sandbox.RuntimeRelease'
       workspace:
         allOf:
           - $ref: '#/definitions/workspacefs.Declaration'
@@ -1894,7 +1877,6 @@ definitions:
       - provider_unavailable
       - host_unsupported
       - artifacts_unavailable
-      - runtime_download_failed
       - runtime_image_unavailable
       - capacity_insufficient
     type: string
@@ -1902,7 +1884,6 @@ definitions:
       - NodeProviderUnavailable
       - NodeHostUnsupported
       - NodeArtifactsUnavailable
-      - NodeRuntimeDownloadFailed
       - NodeRuntimeImageUnavailable
       - NodeCapacityInsufficient
   sandbox.Resources:
@@ -1918,28 +1899,6 @@ definitions:
     required:
       - cpus
       - memory_mib
-    type: object
-  sandbox.RuntimeRelease:
-    properties:
-      firmware_sha256:
-        type: string
-      image_id:
-        type: string
-      image_manifest_digest:
-        type: string
-      microsandbox_ref:
-        type: string
-      runtime_sha256:
-        type: string
-      source_commit:
-        type: string
-    required:
-      - firmware_sha256
-      - image_id
-      - image_manifest_digest
-      - microsandbox_ref
-      - runtime_sha256
-      - source_commit
     type: object
   sessions.AdminAssetCounts:
     properties:
@@ -7016,7 +6975,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects a provider, enforced resource limits and pinned Runtime release. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
+      description: Selects a provider, enforced resource limits. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body

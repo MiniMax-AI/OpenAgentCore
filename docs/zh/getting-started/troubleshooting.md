@@ -1,7 +1,7 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: 468c8cbd13ee2a736db07f9239f56a49afad2916036a375260b59e377fc3a1e3
+source_hash: 098aaf41f4568311833281887bf0891d438d158ddcbd6e1421f7fbe428416ce6
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
@@ -65,7 +65,7 @@ microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务�
 | `The enrollment command expired or was already used` | 在 Web 生成新命令并在 1 小时内执行 |
 | `Core rejected the node configuration read (HTTP …)` | 检查 Core URL 及其前面的反向代理后重试 |
 | `Not enough disk space under …` 或 `The disk is full` | 按提示释放空间后重试，下载会继续 |
-| This host's node program differs from the one this console serves | 节点添加后 Core 已重新安装。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
+| This host's node belongs to another installation of Core | 该节点由另一个 Core 安装添加。选择 **移除节点**，在主机上卸载，再通过 **添加节点** 重新添加 |
 | Another node installation is running, or this node is preparing a new sandbox configuration | 待 **节点** 不再显示 **正在准备目标配置** 后重试 |
 | 注册前的沙箱提供商检查失败，例如 `This host lacks a capability …` | 修复提示的问题（参阅[就绪状态码](./nodes.md#readiness-codes)）后重试；令牌未被使用 |
 | Core's public URL changed after this command was generated | 在 Web 生成并执行新命令 |

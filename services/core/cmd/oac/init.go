@@ -209,10 +209,6 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 				}
 			}
 			if previous.SourceCommit == release.revision {
-				// The pointer follows the receipt, so a crash between the two heals here.
-				if err := writePointer(root, release); err != nil {
-					return err
-				}
 				if err := syncCoreKeyDigest(root); err != nil {
 					return err
 				}
@@ -229,7 +225,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 		logger.InfoContext(ctx, "Bundled node installation metadata verified", "file_count", len(files))
 		nextStep("publish_node_metadata")
 		names := []string{}
-		prefix := "node-payload/releases/" + release.revision + "/"
+		prefix := "node-payload/"
 		for _, name := range releaseMembers {
 			if err := writeOwned(filepath.Join(root, prefix+name), files[name]); err != nil {
 				return err
@@ -294,22 +290,12 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 			receipt.Files[name] = checksum
 		}
 		raw, _ = json.Marshal(receipt)
-		// The receipt is the commit point; the pointer follows it.
 		if err := writeOwned(marker, raw); err != nil {
-			return err
-		}
-		if err := writePointer(root, release); err != nil {
 			return err
 		}
 		logger.InfoContext(ctx, "Installation initialized", "sign_in_key_command", "docker compose exec web oac-web core-key")
 		return nil
 	})
-}
-
-// writePointer selects the installation's release for Web and node installs.
-func writePointer(root string, release releaseIdentity) error {
-	active, _ := json.Marshal(map[string]string{"source_commit": release.revision})
-	return writeOwned(filepath.Join(root, "node-payload", "active.json"), active)
 }
 
 func randomBytes(n int) []byte {

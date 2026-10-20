@@ -25,7 +25,6 @@ type GenerationProvider struct {
 type GenerationManagerOptions struct {
 	Initial []GenerationProvider
 	Recover []sandbox.GenerationReference
-	Collect []sandbox.GenerationReference
 	Prepare func(context.Context, uint64, string) (GenerationProvider, error)
 	Remove  func(context.Context, GenerationProvider) error
 }
@@ -77,13 +76,6 @@ func NewGenerationManager(ctx context.Context, options GenerationManagerOptions)
 			return nil, sandbox.ErrInvalid
 		}
 		m.values[ref.Generation] = &localGeneration{value: GenerationProvider{Generation: ref.Generation, SpecificationDigest: ref.SpecificationDigest}, state: "failed", diagnostic: string(sandbox.NodeProviderUnavailable), repairing: true}
-	}
-	for _, ref := range options.Collect {
-		if !validGeneration(ref.Generation) || !validSpecificationDigest(ref.SpecificationDigest) || m.values[ref.Generation] != nil {
-			cancel()
-			return nil, sandbox.ErrInvalid
-		}
-		m.values[ref.Generation] = &localGeneration{value: GenerationProvider{Generation: ref.Generation, SpecificationDigest: ref.SpecificationDigest}, collecting: true}
 	}
 	m.workers.Add(2)
 	go func() { defer m.workers.Done(); m.prepareLoop() }()

@@ -246,52 +246,12 @@ func TestNodeStaleEpochCannotReplaceCurrentConnection(t *testing.T) {
 	if err := f.service.DisconnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: false}, nil); !errors.Is(err, deployment.ErrNodeCredential) {
+	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, false); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old Core rewrote health", err)
 	}
 	nodes, err := f.service.ListNodes(t.Context())
 	if err != nil || !nodes[0].Online || !nodes[0].ProviderReady {
 		t.Fatal("stale callback changed current epoch", nodes, err)
-	}
-}
-
-func TestNodeDiagnosticReachesListAndDetail(t *testing.T) {
-	f := newFixture(t)
-	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
-	connection := f.connect(t, node.NodeID)
-	epoch, err := f.adapter.OwnerEpoch(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, tc := range []struct {
-		reported, want string
-		ready          bool
-	}{
-		{reported: "host_unsupported", want: "host_unsupported"},
-		{reported: "capacity_insufficient", want: "capacity_insufficient"},
-		// Older nodes send provider_unavailable or nothing; unknown text is never stored.
-		{reported: "provider_unavailable", want: "provider_unavailable"},
-		{reported: "", want: ""},
-		{reported: "dial unix /var/run/docker.sock: permission denied", want: "provider_unavailable"},
-		{reported: "artifacts_unavailable", want: "", ready: true},
-	} {
-		if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: tc.ready, Diagnostic: sandbox.NodeDiagnosticCode(tc.reported)}, nil); err != nil {
-			t.Fatal(tc.reported, err)
-		}
-		list, err := f.service.ListNodes(t.Context())
-		if err != nil || len(list) != 1 || string(list[0].Diagnostic) != tc.want {
-			t.Fatal(tc.reported, list, err)
-		}
-		detail, err := f.service.NodeDetail(t.Context(), node.NodeID, "1h")
-		if err != nil || string(detail.Diagnostic) != tc.want {
-			t.Fatal(tc.reported, detail.Diagnostic, err)
-		}
-		var stored string
-		if err := f.pool.QueryRow(t.Context(), "SELECT health::text FROM runtime_nodes WHERE id=$1", node.NodeID).Scan(&stored); err != nil || strings.Contains(stored, "/var/run") {
-			t.Fatal("raw diagnostic stored", stored, err)
-		}
 	}
 }
 
@@ -321,11 +281,11 @@ func TestNodeStatusUsesAuthenticatedFreshPresence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: false}, nil); err != nil {
+	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, false); err != nil {
 		t.Fatal(err)
 	}
 	status(true, false)
-	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
+	if err := f.heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, true); err != nil {
 		t.Fatal(err)
 	}
 	status(true, true)

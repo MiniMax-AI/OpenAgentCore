@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -33,64 +32,29 @@ var optionalPayloadFiles = func() map[string]bool {
 	return files
 }()
 
-var payloadRevision = regexp.MustCompile(`^[0-9a-f]{40}$`)
-
-// activePayloadPrefix reads the installer's atomic release pointer once per request.
-func activePayloadPrefix(root *os.Root) (string, error) {
-	raw, err := root.ReadFile("active.json")
-	if err != nil || len(raw) > 256 {
-		return "", errors.New("invalid active node payload")
-	}
-	var pointer struct {
-		SourceCommit string `json:"source_commit"`
-	}
-	if json.Unmarshal(raw, &pointer) != nil || !payloadRevision.MatchString(pointer.SourceCommit) {
-		return "", errors.New("invalid active node payload")
-	}
-	return "releases/" + pointer.SourceCommit + "/", nil
-}
-
-func (h *console) resolveNodePayload(name string) (string, bool) {
-	var prefix string
-	if strings.HasPrefix(name, "releases/") {
-		parts := strings.SplitN(name, "/", 3)
-		if len(parts) != 3 || !payloadRevision.MatchString(parts[1]) {
-			return "", false
-		}
-		prefix, name = "releases/"+parts[1]+"/", parts[2]
-	} else {
-		var err error
-		prefix, err = activePayloadPrefix(h.nodePayload)
-		if err != nil {
-			return "", false
-		}
-	}
+func (h *console) resolveNodePayload(name string) bool {
 	if !nodePayloadFiles[name] && (!strings.HasPrefix(name, "artifacts/") || strings.Contains(strings.TrimPrefix(name, "artifacts/"), "/")) {
-		return "", false
+		return false
 	}
-	manifest, err := h.readNodeManifest(prefix)
+	manifest, err := h.readNodeManifest()
 	if err != nil {
-		return "", false
+		return false
 	}
 	if nodePayloadFiles[name] {
-		return prefix + name, true
+		return true
 	}
 	for logical, entry := range manifest.Artifacts {
 		if optionalPayloadFiles[logical] && entry.Filename != "" && "artifacts/"+entry.Filename == name {
-			return prefix + name, true
+			return true
 		}
 	}
-	return "", false
+	return false
 }
 
 // installerDigest returns the SHA-256 that Web's install commands verify
 // before running the named installer from the payload.
 func installerDigest(root *os.Root, name string) (string, error) {
-	prefix, err := activePayloadPrefix(root)
-	if err != nil {
-		return "", err
-	}
-	f, err := root.Open(prefix + name)
+	f, err := root.Open(name)
 	if err != nil {
 		return "", errors.New("installer " + name + " is missing from the node installation payload")
 	}
@@ -113,16 +77,15 @@ func (h *console) serveNodePayload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimPrefix(r.URL.Path, "/node-install/")
-	resolved, allowed := h.resolveNodePayload(name)
-	if !allowed {
+	if !h.resolveNodePayload(name) {
 		http.NotFound(w, r)
 		return
 	}
-	f, err := h.nodePayload.Open(resolved)
+	f, err := h.nodePayload.Open(name)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			if prefix, filename, ok := strings.Cut(resolved, "artifacts/"); ok {
-				if manifest, readErr := h.readNodeManifest(prefix); readErr == nil {
+			if filename, ok := strings.CutPrefix(name, "artifacts/"); ok {
+				if manifest, readErr := h.readNodeManifest(); readErr == nil {
 					if target := manifest.artifactURL(filename); target != "" {
 						http.Redirect(w, r, target, http.StatusTemporaryRedirect)
 						return
@@ -145,18 +108,13 @@ func (h *console) serveNodePayload(w http.ResponseWriter, r *http.Request) {
 
 // nodeArtifacts reports the providers whose node artifacts this console can serve:
 // each is present locally or has a pinned release download. Nodes verify every
-// checksum themselves. It is read per
-// request, so artifacts added by rerunning the installer show without a restart.
+// checksum themselves. It is read per request.
 func (h *console) nodeArtifacts() []string {
 	available := []string{}
 	if h.nodePayload == nil {
 		return available
 	}
-	prefix, err := activePayloadPrefix(h.nodePayload)
-	if err != nil {
-		return available
-	}
-	manifest, err := h.readNodeManifest(prefix)
+	manifest, err := h.readNodeManifest()
 	if err != nil {
 		return available
 	}
@@ -165,7 +123,7 @@ func (h *console) nodeArtifacts() []string {
 		for _, artifact := range artifacts {
 			logical := artifact.Path
 			entry, ok := manifest.Artifacts[logical]
-			info, err := h.nodePayload.Stat(prefix + "artifacts/" + entry.Filename)
+			info, err := h.nodePayload.Stat("artifacts/" + entry.Filename)
 			local := err == nil && info.Mode().IsRegular() && info.Size() == entry.Size
 			remote := errors.Is(err, os.ErrNotExist) && manifest.artifactURL(entry.Filename) != ""
 			if !ok || entry.Filename == "" || strings.Contains(entry.Filename, "/") || (!local && !remote) {
@@ -181,8 +139,8 @@ func (h *console) nodeArtifacts() []string {
 	return available
 }
 
-// serveConsoleConfiguration reads the active release on every request, so an
-// upgrade that moves the pointer needs no Web restart.
+// serveConsoleConfiguration reads the payload on every request, so artifacts
+// added by rerunning the installer show without a Web restart.
 func (h *console) serveConsoleConfiguration(w http.ResponseWriter, _ *http.Request) {
 	digest := ""
 	if h.nodePayload != nil {

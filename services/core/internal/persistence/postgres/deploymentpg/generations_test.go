@@ -83,11 +83,6 @@ func TestE2BChangeClassifierOmittedKeyAndExplicitSameKey(t *testing.T) {
 	if _, unchanged, err = changes.ClassifyChange(t.Context(), id, input); err != nil || unchanged {
 		t.Fatal("explicit same key skipped verification", err)
 	}
-	invalid := input
-	invalid.Runtime = &sandbox.RuntimeRelease{}
-	if _, _, err := changes.ClassifyChange(t.Context(), id, invalid); err == nil {
-		t.Fatal("omitted resources erased forbidden Runtime input")
-	}
 	input.ExpectedGeneration = 0
 	_, _, err = changes.ClassifyChange(t.Context(), id, input)
 	var stale *deployment.GenerationStaleError

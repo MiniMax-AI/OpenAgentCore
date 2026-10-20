@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"regexp"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
@@ -69,31 +68,8 @@ func (r Resources) validatePolicy(provider string, rules DeploymentPolicy) error
 	return nil
 }
 
-// RuntimeRelease preserves the identities of one verified distribution. Docker
-// may address the same archive by config ID or OCI manifest digest; microsandbox
-// has its own imported OCI identity. These are not interchangeable hashes.
-type RuntimeRelease struct {
-	SourceCommit        string `json:"source_commit" binding:"required"`
-	ImageID             string `json:"image_id" binding:"required"`
-	ImageManifestDigest string `json:"image_manifest_digest" binding:"required"`
-	MicrosandboxRef     string `json:"microsandbox_ref" binding:"required"`
-	RuntimeSHA256       string `json:"runtime_sha256" binding:"required"`
-	FirmwareSHA256      string `json:"firmware_sha256" binding:"required"`
-}
-
-func (r RuntimeRelease) Validate() error {
-	values := reflect.ValueOf(r)
-	for i, rule := range runtimeContract {
-		if !regexp.MustCompile("^(?:" + rule.Pattern + ")$").MatchString(values.Field(i).String()) {
-			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: Runtime must reference one immutable distribution", ErrInvalid)}
-		}
-	}
-	return nil
-}
-
 type DeploymentSpec struct {
-	Resources Resources       `json:"resources" binding:"required"`
-	Runtime   *RuntimeRelease `json:"runtime,omitempty"`
+	Resources Resources `json:"resources" binding:"required"`
 	// Workspace is a derived immutable capability receipt, never filesystem configuration.
 	Workspace *workspacefs.Declaration `json:"workspace,omitempty" readonly:"true"`
 }
@@ -142,18 +118,5 @@ func (r Resources) ValidateWorkspacePolicy(provider string, rules DeploymentPoli
 	return checked.validatePolicy(provider, rules)
 }
 func (s DeploymentSpec) ValidateWorkspacePolicy(provider string, policy DeploymentPolicy, declaration *workspacefs.Declaration) error {
-	if err := s.Resources.ValidateWorkspacePolicy(provider, policy, declaration); err != nil {
-		return err
-	}
-
-	if !policy.Runtime {
-		if s.Runtime != nil {
-			return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: %s", ErrInvalid, policy.RuntimeError)}
-		}
-		return nil
-	}
-	if s.Runtime == nil {
-		return &ValidationError{Param: "runtime", Message: fmt.Sprintf("%s: managed nodes require a pinned Runtime release", ErrInvalid)}
-	}
-	return s.Runtime.Validate()
+	return s.Resources.ValidateWorkspacePolicy(provider, policy, declaration)
 }

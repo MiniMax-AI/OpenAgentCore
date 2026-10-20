@@ -45,9 +45,6 @@ func ValidateRegistration(a Adapter) error {
 	if a.Policy.Workspace != nil && a.Policy.Workspace.Attachment != workspacefs.AttachmentHostDirectory {
 		return invalid("workspace attachment requirements")
 	}
-	if a.Policy.Runtime == (a.Policy.RuntimeError != "") {
-		return invalid("Runtime input policy")
-	}
 	if a.Operations == nil {
 		return invalid("operation declaration")
 	}

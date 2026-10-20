@@ -29,7 +29,7 @@ func TestNodeDiagnosticSchemaContract(t *testing.T) {
 			t.Errorf("%s diagnostic enum = %v, want shared fixture %v", name, values, codes)
 		}
 	}
-	for _, model := range []reflect.Type{reflect.TypeFor[deployment.NodeHealth](), reflect.TypeFor[deployment.NodeRollout]()} {
+	for _, model := range []reflect.Type{reflect.TypeFor[deployment.NodeRollout]()} {
 		field, ok := model.FieldByName("Diagnostic")
 		if !ok {
 			t.Fatalf("%s has no Diagnostic field", model.Name())
@@ -57,7 +57,7 @@ func TestNodeDiagnosticSchemaContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	check("sandbox.NodeDiagnosticCode", document.Definitions["sandbox.NodeDiagnosticCode"].Enum)
-	for _, name := range []string{"deployment.Node", "deployment.NodeDetail", "deployment.NodeRollout"} {
+	for _, name := range []string{"deployment.NodeRollout"} {
 		field := document.Definitions[name].Properties["diagnostic"]
 		ref := field.Ref
 		if len(field.AllOf) == 1 {

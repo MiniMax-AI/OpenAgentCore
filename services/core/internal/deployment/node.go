@@ -44,18 +44,17 @@ type Enrollment struct {
 }
 
 type NodeHealth struct {
-	Host *NodeHost `json:"-"`
-	// Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-	Diagnostic           sandbox.NodeDiagnosticCode `json:"diagnostic,omitempty"`
-	ProviderReady        bool                       `json:"provider_ready" binding:"required"`
-	CPUCount             *int64                     `json:"cpu_count" extensions:"x-nullable" binding:"required"`
-	AvailableMemoryBytes *int64                     `json:"available_memory_bytes" extensions:"x-nullable" binding:"required"`
-	AvailableDiskBytes   *int64                     `json:"available_disk_bytes" extensions:"x-nullable" binding:"required"`
+	Host                 *NodeHost `json:"-"`
+	CPUCount             *int64    `json:"cpu_count" extensions:"x-nullable" binding:"required"`
+	AvailableMemoryBytes *int64    `json:"available_memory_bytes" extensions:"x-nullable" binding:"required"`
+	AvailableDiskBytes   *int64    `json:"available_disk_bytes" extensions:"x-nullable" binding:"required"`
 }
 
 type Node struct {
 	Rollout NodeRollout `json:"rollout" binding:"required"`
 	NodeHealth
+	// True while the node is online and its serving generation is ready.
+	ProviderReady  bool       `json:"provider_ready" binding:"required"`
 	Running        int64      `json:"running" binding:"required"`
 	Snapshots      int64      `json:"snapshots" binding:"required"`
 	ID             string     `json:"id" binding:"required"`

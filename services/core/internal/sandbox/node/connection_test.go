@@ -53,7 +53,7 @@ func connectRawNode(t *testing.T, origin string, id Identity) *websocket.Conn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
+	if err = writeFrame(conn, frame{Type: "hello", Identity: &id, Health: &Health{ObservedAt: time.Now().UTC()}}); err != nil {
 		conn.Close()
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func connectRawNode(t *testing.T, origin string, id Identity) *websocket.Conn {
 func TestHubReservesIdentityAcrossConcurrentOpeningHandshakes(t *testing.T) {
 	id := identity()
 	var connected atomic.Int32
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }, Connected: func(context.Context, Identity, string, uint64) error { connected.Add(1); return nil }})
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }, Connected: func(context.Context, Identity, string, uint64) error { connected.Add(1); return nil }})
 	server := httptest.NewServer(hub)
 	defer server.Close()
 	defer hub.Close()
@@ -127,7 +127,7 @@ func TestCopiedIdentityCannotReplaceNodeWithInflightCreate(t *testing.T) {
 	var credential string
 	var authenticated, connected atomic.Int32
 	duplicateAttempt := make(chan struct{}, 1)
-	hub := NewHub(HubOptions{Authenticate: func(ctx context.Context, node, token string) (Identity, error) {
+	hub := newTestHub(HubOptions{Authenticate: func(ctx context.Context, node, token string) (Identity, error) {
 		if node != id.NodeID || token != credential {
 			return Identity{}, ErrAuthentication
 		}
@@ -160,7 +160,7 @@ func TestCopiedIdentityCannotReplaceNodeWithInflightCreate(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
 		go func() {
-			done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential, Provider: p, Probe: probe})
+			done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential}, p, probe)
 		}()
 		return cancel, done
 	}
@@ -232,7 +232,7 @@ func TestReservationRemainsUntilFencedDisconnectFinishes(t *testing.T) {
 	active := ""
 	connections := 0
 	var callbackErr error
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 9, nil }, Connected: func(ctx context.Context, id Identity, connection string, epoch uint64) error {
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) { return id, nil }, OwnerEpoch: func(context.Context) (uint64, error) { return 9, nil }, Connected: func(ctx context.Context, id Identity, connection string, epoch uint64) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if epoch != 9 {
@@ -323,7 +323,7 @@ func TestNodeLogsEachConnectionCauseOnce(t *testing.T) {
 			return
 		}
 		defer conn.Close()
-		if _, err = readFrame(conn); err != nil || writeFrame(conn, frame{Type: "welcome", ConnectionID: uuid.NewString(), OwnerEpoch: 1}) != nil {
+		if _, err = readFrame(conn); err != nil || writeFrame(conn, frame{Type: "welcome", ConnectionID: uuid.NewString(), OwnerEpoch: 1, Deployment: testDeployment()}) != nil {
 			return
 		}
 		for err == nil {
@@ -344,7 +344,7 @@ func TestNodeLogsEachConnectionCauseOnce(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: &fakeProvider{}, Probe: probe})
+		done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential}, &fakeProvider{}, probe)
 	}()
 	wait(t, func() bool { return refused.Load() >= 2 })
 	accept.Store(true)
@@ -366,7 +366,7 @@ func TestNodeConnectionFailuresNameTheirCause(t *testing.T) {
 	defer untrusted.Close()
 	// Core closes the socket without a frame when it refuses a hello, here one
 	// whose identity differs from the registered node.
-	hub := NewHub(HubOptions{
+	hub := newTestHub(HubOptions{
 		Authenticate: func(_ context.Context, node, _ string) (Identity, error) {
 			other := identity()
 			other.NodeID = node
@@ -382,7 +382,7 @@ func TestNodeConnectionFailuresNameTheirCause(t *testing.T) {
 		{untrusted.URL, "tls: failed to verify certificate: x509: certificate signed by unknown authority"},
 		{core.URL, "Core did not accept the node: websocket: close 1006 (abnormal closure): unexpected EOF"},
 	} {
-		a := agent{config: AgentConfig{CoreURL: c.origin, StateDirectory: t.TempDir(), Identity: identity(), Credential: "credential", Probe: probe}}
+		a := agent{config: AgentConfig{CoreURL: c.origin, StateDirectory: t.TempDir(), Identity: identity(), Credential: "credential", Generations: generationFixture(0)}}
 		if cause := connectionCause(a.connect(t.Context())); cause != c.cause {
 			t.Errorf("%s: cause %q, want %q", c.origin, cause, c.cause)
 		}

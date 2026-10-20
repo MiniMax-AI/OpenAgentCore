@@ -12,38 +12,29 @@ import (
 	"testing"
 )
 
-// activeRelease publishes an empty node payload release under root the way
-// `oac init` does and returns the release directory.
-func activeRelease(t *testing.T, root string, manifest map[string]any) string {
+// publishedPayload writes an empty node payload manifest under root the way
+// `oac init` does and returns root.
+func publishedPayload(t *testing.T, root string, manifest map[string]any) string {
 	t.Helper()
-	revision := strings.Repeat("a", 40)
-	release := filepath.Join(root, "releases", revision)
-	if err := os.MkdirAll(release, 0700); err != nil {
-		t.Fatal(err)
-	}
-	manifest["source_commit"] = revision
+	manifest["source_commit"] = strings.Repeat("a", 40)
 	raw, _ := json.Marshal(manifest)
-	if os.WriteFile(filepath.Join(release, "manifest.json"), raw, 0600) != nil ||
-		os.WriteFile(filepath.Join(root, "active.json"), []byte(`{"source_commit":"`+revision+`"}`), 0600) != nil {
+	if os.WriteFile(filepath.Join(root, "manifest.json"), raw, 0600) != nil {
 		t.Fatal("cannot publish the node payload")
 	}
-	return release
+	return root
 }
 
 func TestConsoleRequiresPublishedNodePayload(t *testing.T) {
-	payload := t.TempDir()
-	if err := os.WriteFile(filepath.Join(payload, "node-install.pyz"), []byte("bootstrap"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	payload := publishedPayload(t, t.TempDir(), map[string]any{})
 	upstream, _ := url.Parse("http://127.0.0.1:1")
 	if _, err := newConsole(config{origin: testOrigin, upstream: upstream, dist: t.TempDir(), coreKey: testCoreKey, nodePayloadDir: payload}); err == nil {
-		t.Fatal("console started from a node payload without active.json")
+		t.Fatal("console started from a node payload without node-install.pyz")
 	}
 }
 
 func TestOfflineArtifactsAreManifestAllowlisted(t *testing.T) {
 	dist, payload := t.TempDir(), t.TempDir()
-	release := activeRelease(t, payload, map[string]any{"artifacts": map[string]any{"native/bin/oac-node": map[string]string{"filename": "matched-node"}, "private/key": map[string]string{"filename": "private-key"}, "native/bin/oac-selfhost": map[string]string{"filename": "retired-launcher"}}})
+	release := publishedPayload(t, payload, map[string]any{"artifacts": map[string]any{"native/bin/oac-node": map[string]string{"filename": "matched-node"}, "private/key": map[string]string{"filename": "private-key"}, "native/bin/oac-selfhost": map[string]string{"filename": "retired-launcher"}}})
 	for _, item := range []struct{ root, name, body string }{{dist, "index.html", "console"}, {release, "node-install.pyz", "bootstrap"}} {
 		if err := os.WriteFile(filepath.Join(item.root, item.name), []byte(item.body), 0600); err != nil {
 			t.Fatal(err)
@@ -96,7 +87,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	for _, logical := range []string{"native/bin/oac-node", "images/runtime.tar.gz", "native/microsandbox/msb", "runtime/seccomp.json"} {
 		artifacts[logical] = map[string]any{"filename": strings.ReplaceAll(logical, "/", "-"), "size": len("runtime-bytes")}
 	}
-	release := activeRelease(t, payload, map[string]any{"artifacts": artifacts})
+	release := publishedPayload(t, payload, map[string]any{"artifacts": artifacts})
 	write(filepath.Join(dist, "index.html"), "console")
 	write(filepath.Join(release, "node-install.pyz"), "bootstrap")
 	for logical := range artifacts {
@@ -135,7 +126,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	}
 }
 
-func TestRetainedPayloadsRemainHTTPReachableAfterPublication(t *testing.T) {
+func TestNodePayloadServesOnlyPublishedFiles(t *testing.T) {
 	root := t.TempDir()
 	write := func(name, body string) {
 		t.Helper()
@@ -147,14 +138,11 @@ func TestRetainedPayloadsRemainHTTPReachableAfterPublication(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	a, b := strings.Repeat("a", 40), strings.Repeat("b", 40)
-	for _, revision := range []string{a, b} {
-		prefix := "releases/" + revision + "/"
-		write(prefix+"manifest.json", `{"source_commit":"`+revision+`","artifacts":{"native/bin/oac-node":{"filename":"node"},"private/key":{"filename":"key"}}}`)
-		write(prefix+"node-install.pyz", "installer-"+revision)
-		write(prefix+"artifacts/node", "binary-"+revision)
-		write(prefix+"artifacts/key", "secret-must-not-be-served")
-	}
+	write("manifest.json", `{"source_commit":"`+strings.Repeat("a", 40)+`","artifacts":{"native/bin/oac-node":{"filename":"node"},"private/key":{"filename":"key"}}}`)
+	write("node-install.pyz", "installer")
+	write("artifacts/node", "binary")
+	write("artifacts/key", "secret-must-not-be-served")
+	write("secrets/core.key", "secret-must-not-be-served")
 	payload, err := os.OpenRoot(root)
 	if err != nil {
 		t.Fatal(err)
@@ -167,33 +155,22 @@ func TestRetainedPayloadsRemainHTTPReachableAfterPublication(t *testing.T) {
 		h.serveNodePayload(w, httptest.NewRequest("GET", "/node-install/"+path, nil))
 		return w.Code, w.Body.String()
 	}
-	for _, revision := range []string{a, b} {
-		write("active.json", `{"source_commit":"`+revision+`"}`)
-		if code, body := request("node-install.pyz"); code != 200 || body != "installer-"+revision {
-			t.Fatal("active release not served", code, body)
-		}
-		// Add node commands verify the active release's installer without a Web restart.
-		config := httptest.NewRecorder()
-		h.serveConsoleConfiguration(config, httptest.NewRequest("GET", "/console/config", nil))
-		digest := sha256.Sum256([]byte("installer-" + revision))
-		if !strings.Contains(config.Body.String(), `"node_installer_sha256":"`+hex.EncodeToString(digest[:])+`"`) {
-			t.Fatal("installer digest does not follow the active release", config.Body.String())
-		}
-		if code, body := request("releases/" + a + "/artifacts/node"); code != 200 || body != "binary-"+a {
-			t.Fatal("retained release unreachable", code, body)
-		}
-		for _, name := range []string{"active.json", "releases/" + a + "/artifacts/key", "releases/" + a + "/secrets/core.key", "releases/../../node-install.pyz"} {
-			if code, _ := request(name); code != 404 {
-				t.Fatal("non-public file exposed", name, code)
-			}
-		}
+	if code, body := request("node-install.pyz"); code != 200 || body != "installer" {
+		t.Fatal("installer not served", code, body)
 	}
-	write("releases/"+a+"/manifest.json", `{"source_commit":"`+b+`"}`)
-	if code, _ := request("releases/" + a + "/node-install.pyz"); code != 404 {
-		t.Fatal("mismatched release identity was served")
+	// Add node commands verify the installer by this digest.
+	config := httptest.NewRecorder()
+	h.serveConsoleConfiguration(config, httptest.NewRequest("GET", "/console/config", nil))
+	digest := sha256.Sum256([]byte("installer"))
+	if !strings.Contains(config.Body.String(), `"node_installer_sha256":"`+hex.EncodeToString(digest[:])+`"`) {
+		t.Fatal("installer digest does not follow the payload", config.Body.String())
 	}
-	write("active.json", `{"source_commit":"../../"}`)
-	if code, _ := request("node-install.pyz"); code != 404 {
-		t.Fatal("invalid pointer did not fail closed")
+	if code, body := request("artifacts/node"); code != 200 || body != "binary" {
+		t.Fatal("declared artifact unreachable", code, body)
+	}
+	for _, name := range []string{"artifacts/key", "secrets/core.key", "releases/" + strings.Repeat("a", 40) + "/node-install.pyz", "../node-install.pyz"} {
+		if code, _ := request(name); code != 404 {
+			t.Fatal("non-public file exposed", name, code)
+		}
 	}
 }

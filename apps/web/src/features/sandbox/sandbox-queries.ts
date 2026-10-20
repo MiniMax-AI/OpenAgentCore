@@ -3,7 +3,6 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 
 import { confirmSandboxRead, startSandboxRead } from "./sandbox-write-ownership";
 import { sandboxConsoleConfig } from "./console-config";
-import { distributionRuntime } from "./deployment-specification";
 
 /**
  * Cache entries for the sandbox deployment (`/core/v1/sandbox`). Every read
@@ -23,14 +22,6 @@ export const sandboxConsoleConfigQuery = queryOptions({
     signal.throwIfAborted();
     return config;
   },
-});
-
-/** The Runtime release of this console's distribution manifest, the release its node installer verifies; null when it serves none. */
-export const distributionRuntimeQuery = queryOptions({
-  queryKey: ["sandbox-runtime-release"],
-  queryFn: ({ signal }) => distributionRuntime(signal).catch(() => null),
-  staleTime: Infinity,
-  retry: false,
 });
 
 /** The deployment alone, for pages that only describe it. */

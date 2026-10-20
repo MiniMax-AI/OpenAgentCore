@@ -330,7 +330,7 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 		if err := owner.Deployment.Claim(t.Context(), installation); err != nil {
 			t.Fatal(err)
 		}
-		specification := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}, Runtime: &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}}
+		specification := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}
 		if !external {
 			specification.Workspace = nil
 			specification.Resources.EnvironmentDiskMiB = 8192
@@ -355,7 +355,7 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 		if err = service.ConnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
+		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
 			t.Fatal(err)
 		}
 		return installation, node.NodeID

@@ -6,7 +6,7 @@ import { checklistStorageKey, checklistView, gettingStartedSteps, nextStepAfterN
 import { node, project } from "./test-fixtures";
 
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({ credential_configured: false, configuration: {}, metadata: {},
-  rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes",
+  rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes",
   resources: { allocations: 0, pending: 0 }, suspension: null, ...overrides,
 });
 const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({ status: "ready", snapshot: { deployment: value, nodes, allocations: [], loadedAt: 0 }, targetGeneration: value.generation, refreshing: false, error: null });
@@ -16,7 +16,7 @@ const harness = (id: CoreHarness["id"], fields: Partial<CoreHarness> = {}): Core
 
 describe("Getting started steps", () => {
   it("uses live provider readiness independently of target state or a durable pin", () => {
-    for (const state of ["preparing", "failed", "update_required", "unknown"] as const) {
+    for (const state of ["preparing", "failed", "unknown"] as const) {
       const serving = node("n1", { rollout: { state, ready_generation: 1 } });
       expect(sandboxes(fleet(deployment({ generation: 2 }), [serving])).state).toBe("done");
       expect(sandboxes(fleet(deployment({ generation: 2 }), [{ ...serving, provider_ready: false }])).state).toBe("todo");

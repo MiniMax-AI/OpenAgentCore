@@ -10,7 +10,7 @@ export type NodeHealth = "available" | "degraded" | "offline";
 
 export function nodeHealth(node: SandboxNode): NodeHealth {
   if (!node.online) return "offline";
-  return node.provider_ready && !node.diagnostic ? "available" : "degraded";
+  return node.provider_ready ? "available" : "degraded";
 }
 
 /** Live provider evidence is independent of target preparation and durable serving pins. */

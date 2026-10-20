@@ -12,7 +12,7 @@ import (
 )
 
 func Policy() sandbox.DeploymentPolicy {
-	return sandbox.DeploymentPolicy{RuntimeError: "E2B Runtime is selected by its immutable template build"}
+	return sandbox.DeploymentPolicy{}
 }
 
 func ValidateResources(r sandbox.Resources) error          { return r.ValidatePolicy("e2b", Policy()) }
@@ -44,12 +44,10 @@ func NormalizeSelection(s sandbox.Selection) (sandbox.Selection, error) {
 	if s.Workspace != nil {
 		return s, sandbox.ErrInvalid
 	}
-	if s.Resources == (sandbox.Resources{}) {
-		if s.Runtime != nil {
-			return s, &sandbox.ValidationError{Param: "runtime", Message: sandbox.ErrInvalid.Error() + ": " + Policy().RuntimeError}
+	if s.Resources != (sandbox.Resources{}) {
+		if err := ValidateSpecification(s.DeploymentSpec); err != nil {
+			return s, err
 		}
-	} else if err := ValidateSpecification(s.DeploymentSpec); err != nil {
-		return s, err
 	}
 	if err := ValidateConfiguration(configuration(s)); err != nil {
 		return s, err

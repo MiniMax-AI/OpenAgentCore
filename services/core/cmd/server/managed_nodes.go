@@ -30,7 +30,7 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 			if err := owner(ctx); err != nil {
 				return err
 			}
-			return nodes.HeartbeatGenerations(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health), health.Generations)
+			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health), health.Generations)
 		},
 		Retention: func(ctx context.Context, n node.Identity, connection string, epoch uint64, refs []sandbox.GenerationReference) (sandbox.NodeDeployment, []sandbox.GenerationRetention, error) {
 			if err := owner(ctx); err != nil {
@@ -63,12 +63,6 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 		Disconnected: func(ctx context.Context, n node.Identity, connection string, epoch uint64) {
 			_ = nodes.DisconnectNode(ctx, n.NodeID, connection, epoch)
 		},
-		Heartbeat: func(ctx context.Context, n node.Identity, connection string, epoch uint64, health node.Health) error {
-			if err := owner(ctx); err != nil {
-				return err
-			}
-			return nodes.Heartbeat(ctx, n.NodeID, connection, epoch, nodeHealthRecord(health), health.Generations)
-		},
 	})
 	result.setup = &managedSetup{processPaths: config.ProviderPaths, registry: registry, deployment: nodes, allocations: reader, hub: result.hub, installationID: config.InstallationID, runtimeAPI: config.PublicOrigin.RuntimeAPI()}
 	result.runtime = execution.NewDeferredRuntimeProvider(config.InstallationID, result.setup.load, result.setup.prepare)
@@ -77,5 +71,5 @@ func configureManagedNodes(nodes *deployment.Service, reader deployment.Reader, 
 }
 
 func nodeHealthRecord(health node.Health) deployment.NodeHealth {
-	return deployment.NodeHealth{Host: &deployment.NodeHost{EffectiveCPUCores: health.EffectiveCPUCores, CPUUtilization: health.CPUUtilization, TotalMemoryBytes: health.TotalMemoryBytes, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes, ObservedAt: &health.ObservedAt}, ProviderReady: health.ProviderReady, Diagnostic: sandbox.NodeDiagnosticCode(health.Diagnostic), CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes}
+	return deployment.NodeHealth{Host: &deployment.NodeHost{EffectiveCPUCores: health.EffectiveCPUCores, CPUUtilization: health.CPUUtilization, TotalMemoryBytes: health.TotalMemoryBytes, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes, ObservedAt: &health.ObservedAt}, CPUCount: health.CPUCount, AvailableMemoryBytes: health.AvailableMemoryBytes, AvailableDiskBytes: health.AvailableDiskBytes}
 }

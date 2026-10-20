@@ -8,7 +8,7 @@ import { NodeRolloutStatus } from "./NodeRolloutStatus";
 import { SandboxDeploymentSettings } from "./SandboxDeploymentSettings";
 
 const deployment: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, installation_id: "i", owner_epoch: 1, generation: 4, provider: "docker", mode: "nodes", core_url: "https://core.example", resources: { allocations: 8, pending: 2 }, reset: null, suspension: null,
-  rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, update_required: 3, unknown: 4 } } };
+  rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, unknown: 4 } } };
 
 describe("authoritative configuration rollout", () => {
   it("keeps attention visible while moving detailed counts off the main page", () => {
@@ -30,14 +30,14 @@ describe("authoritative configuration rollout", () => {
   });
 
   it("does not call settled nodes ready when Core reports unknown target readiness", () => {
-    const html = renderToStaticMarkup(<SandboxRolloutSummary deployment={{ ...deployment, rollout: { ...deployment.rollout, nodes: { ready: 2, preparing: 0, failed: 0, update_required: 0, unknown: 1 } } }} compact />);
+    const html = renderToStaticMarkup(<SandboxRolloutSummary deployment={{ ...deployment, rollout: { ...deployment.rollout, nodes: { ready: 2, preparing: 0, failed: 0, unknown: 1 } } }} compact />);
     expect(html).toContain("Target readiness unknown");
     expect(html).not.toContain("No active preparation");
     expect(html).not.toContain("Ready for target");
   });
 
   it("reports preparing and settled without turning settled into readiness", () => {
-    const quiet = { ...deployment, rollout: { state: "settled" as const, previous_generation_sandboxes: 0, nodes: { ready: 2, preparing: 0, failed: 0, update_required: 0, unknown: 0 } } };
+    const quiet = { ...deployment, rollout: { state: "settled" as const, previous_generation_sandboxes: 0, nodes: { ready: 2, preparing: 0, failed: 0, unknown: 0 } } };
     expect(renderToStaticMarkup(<SandboxRolloutSummary deployment={quiet} compact />)).toContain("No active preparation");
     expect(renderToStaticMarkup(<SandboxRolloutSummary deployment={{ ...quiet, rollout: { ...quiet.rollout, state: "preparing" } }} />)).toContain("Preparing configuration");
     expect(renderToStaticMarkup(<SandboxRolloutSummary deployment={{ ...quiet, provider: "" }} />)).toBe("");

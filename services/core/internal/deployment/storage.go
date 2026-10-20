@@ -324,7 +324,6 @@ type NodeTx interface {
 	DeleteGenerationStatus(nodeID string, generation uint64) error
 	UpsertGenerationStatus(status GenerationStatusRecord) error
 	PromoteServingGeneration(nodeID string, generation uint64) error
-	RefreshServingReadiness(nodeID string, protocol int) error
 }
 
 // DeploymentTx is one leased deployment change.
@@ -463,9 +462,6 @@ type NodeRecord struct {
 	LastSeenAt                  *time.Time
 	Health                      NodeHealth
 	Online, ServingReady        bool
-	ProtocolVersion             int
-	DeploymentGeneration        uint64
-	TargetGeneration            uint64
 	ReadyGeneration             *uint64
 	TargetState                 string
 	TargetDiagnostic            string

@@ -35,7 +35,7 @@ func TestPairedConsoleProxiesOnlyAdministration(t *testing.T) {
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
 	dist, payload := t.TempDir(), t.TempDir()
-	release := activeRelease(t, payload, map[string]any{})
+	release := publishedPayload(t, payload, map[string]any{})
 	for _, file := range []struct{ path, value string }{{filepath.Join(dist, "index.html"), "console"}, {filepath.Join(release, "node-install.pyz"), "print('installer')"}, {filepath.Join(release, "self-hosted-install.pyz"), "print('self-hosted')"}, {filepath.Join(release, "caller.key"), "must-not-be-served"}} {
 		if err := os.WriteFile(file.path, []byte(file.value), 0600); err != nil {
 			t.Fatal(err)

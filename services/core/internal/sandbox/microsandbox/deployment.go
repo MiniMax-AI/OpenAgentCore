@@ -6,7 +6,7 @@ import (
 )
 
 func Policy() sandbox.DeploymentPolicy {
-	return sandbox.DeploymentPolicy{Workspace: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}, Disk: true, Runtime: true,
+	return sandbox.DeploymentPolicy{Workspace: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}, Disk: true,
 		DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 4096, RootDiskMiB: 8192, EnvironmentDiskMiB: 8192}}
 }
 

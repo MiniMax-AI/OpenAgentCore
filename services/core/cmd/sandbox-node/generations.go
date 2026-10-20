@@ -40,14 +40,9 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 	if err != nil {
 		return err
 	}
-	pending, err := filepath.Glob(filepath.Join(stateDir, "generations", "*.preparing"))
-	if err != nil {
-		return err
-	}
-	paths = append(append([]string{configFile}, paths...), pending...)
+	paths = append([]string{configFile}, paths...)
 	values := map[uint64]node.GenerationProvider{}
 	recovery := []sandbox.GenerationReference{}
-	collection := []sandbox.GenerationReference{}
 	seen := map[uint64]sandbox.NodeConfig{}
 	closeValues := func() {
 		for _, v := range values {
@@ -57,19 +52,7 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 		}
 	}
 	for _, path := range paths {
-		var config sandbox.NodeConfig
-		if strings.HasSuffix(path, ".preparing") {
-			journal, readErr := readGenerationJournal(path)
-			err = readErr
-			if err == nil && journal.Configuration == nil {
-				err = sandbox.ErrOwnership
-			}
-			if err == nil {
-				config = *journal.Configuration
-			}
-		} else {
-			config, err = providerconfig.Load(path)
-		}
+		config, err := providerconfig.Load(path)
 		if err != nil {
 			closeValues()
 			return err
@@ -78,16 +61,16 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 			closeValues()
 			return sandbox.ErrOwnership
 		}
-		if path != configFile && strings.TrimSuffix(strings.TrimSuffix(filepath.Base(path), ".json"), ".preparing") != strconv.FormatUint(config.Generation, 10) {
+		if path != configFile && strings.TrimSuffix(filepath.Base(path), ".json") != strconv.FormatUint(config.Generation, 10) {
 			closeValues()
 			return sandbox.ErrOwnership
 		}
-		state, err := generationLocalState(config, stateDir)
+		dropped, err := generationDropped(config, stateDir)
 		if err != nil {
 			closeValues()
 			return err
 		}
-		if state == "dropped" {
+		if dropped {
 			continue
 		}
 		if previous, ok := seen[config.Generation]; ok {
@@ -98,14 +81,6 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 			continue
 		}
 		seen[config.Generation] = config
-		if state == "preparing" {
-			recovery = append(recovery, sandbox.GenerationReference{Generation: config.Generation, SpecificationDigest: config.Specification.Digest(config.Provider)})
-			continue
-		}
-		if state == "collecting" {
-			collection = append(collection, sandbox.GenerationReference{Generation: config.Generation, SpecificationDigest: config.Specification.Digest(config.Provider)})
-			continue
-		}
 		value, err := buildGeneration(registry, config, stateDir)
 		if errors.Is(err, os.ErrNotExist) {
 			recovery = append(recovery, sandbox.GenerationReference{Generation: config.Generation, SpecificationDigest: config.Specification.Digest(config.Provider)})
@@ -135,7 +110,7 @@ func runGenerations(ctx context.Context, registry *providerconfig.Registry, conf
 	for _, v := range values {
 		initial = append(initial, v)
 	}
-	manager, err := node.NewGenerationManager(ctx, node.GenerationManagerOptions{Initial: initial, Recover: recovery, Collect: collection,
+	manager, err := node.NewGenerationManager(ctx, node.GenerationManagerOptions{Initial: initial, Recover: recovery,
 		Prepare: func(ctx context.Context, generation uint64, digest string) (node.GenerationProvider, error) {
 			if err := runHelper(ctx, "prepare", generation, digest); err != nil {
 				return node.GenerationProvider{}, err
@@ -176,12 +151,9 @@ func buildGeneration(registry *providerconfig.Registry, config sandbox.NodeConfi
 }
 
 type generationJournal struct {
-	InstallationID      string              `json:"installation_id"`
-	Generation          uint64              `json:"generation"`
-	SpecificationDigest string              `json:"specification_digest"`
-	NativeComplete      json.RawMessage     `json:"native_complete,omitempty"`
-	ImportStarted       json.RawMessage     `json:"import_started,omitempty"`
-	Configuration       *sandbox.NodeConfig `json:"configuration,omitempty"`
+	InstallationID      string `json:"installation_id"`
+	Generation          uint64 `json:"generation"`
+	SpecificationDigest string `json:"specification_digest"`
 }
 
 func readGenerationJournal(path string) (generationJournal, error) {
@@ -211,62 +183,43 @@ func readGenerationJournal(path string) (generationJournal, error) {
 	return journal, nil
 }
 
-// The preparation configuration is an immutable plan, never a usable provider.
-// A generation's Core-visible envelope is fixed; native is the adapter's
-// node-local state, which preparation may resolve and the adapter validates
-// when it builds.
+// sameGenerationPlan compares the Core-visible envelope of two copies of one
+// generation; native is the adapter's node-local state.
 func sameGenerationPlan(final, plan sandbox.NodeConfig) bool {
 	final.Native, plan.Native = nil, nil
 	return reflect.DeepEqual(final, plan)
 }
 
-// Pending-only entries stay recovery/collection-only. No journal is readiness
-// or authority to collect without a fresh current-connection Core grant.
-func generationLocalState(config sandbox.NodeConfig, stateDir string) (string, error) {
+// generationDropped reports whether the permanent dropped receipt names this
+// generation. No receipt is readiness or authority to collect without a fresh
+// current-connection Core grant.
+func generationDropped(config sandbox.NodeConfig, stateDir string) (bool, error) {
 	directory := filepath.Join(stateDir, "generations")
 	info, err := os.Lstat(directory)
 	if os.IsNotExist(err) {
-		return "", nil
+		return false, nil
 	}
 	if err != nil {
-		return "", err
+		return false, err
 	}
 	owner, ok := info.Sys().(*syscall.Stat_t)
 	resolved, err := filepath.EvalSymlinks(directory)
 	if err != nil || resolved != directory || !info.IsDir() || info.Mode().Perm() != 0700 || !ok || owner.Uid != uint32(os.Getuid()) {
-		return "", sandbox.ErrOwnership
+		return false, sandbox.ErrOwnership
 	}
-	state := ""
-	for _, suffix := range []string{".preparing", ".collecting", ".dropped"} {
-		path := filepath.Join(directory, strconv.FormatUint(config.Generation, 10)+suffix)
-		journal, err := readGenerationJournal(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil || journal.InstallationID != config.InstallationID || journal.Generation != config.Generation || journal.SpecificationDigest != config.Specification.Digest(config.Provider) {
-			return "", sandbox.ErrOwnership
-		}
-		if suffix == ".preparing" {
-			if len(journal.NativeComplete) != 0 || (string(journal.ImportStarted) != "true" && string(journal.ImportStarted) != "false") || journal.Configuration == nil || !sameGenerationPlan(config, *journal.Configuration) {
-				return "", sandbox.ErrOwnership
-			}
-		} else if len(journal.ImportStarted) != 0 || journal.Configuration != nil || suffix == ".collecting" && string(journal.NativeComplete) != "true" && string(journal.NativeComplete) != "false" || suffix == ".dropped" && len(journal.NativeComplete) != 0 {
-			return "", sandbox.ErrOwnership
-		}
-		state = strings.TrimPrefix(suffix, ".")
+	journal, err := readGenerationJournal(filepath.Join(directory, strconv.FormatUint(config.Generation, 10)+".dropped"))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
 	}
-	return state, nil
+	if err != nil || journal.InstallationID != config.InstallationID || journal.Generation != config.Generation || journal.SpecificationDigest != config.Specification.Digest(config.Provider) {
+		return false, sandbox.ErrOwnership
+	}
+	return true, nil
 }
 
-// Exit 65 is reserved by the private preparer for artifact transfer/provenance.
-// Arbitrary provider output never selects a wire diagnostic.
 func generationHelperError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
-	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == 65 {
-		return sandbox.ErrRuntimeDownloadFailed
 	}
 	return errors.New("local generation operation did not complete")
 }

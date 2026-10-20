@@ -14,11 +14,7 @@ import node_spec
 class SpecificationTests(unittest.TestCase):
     def setUp(self):
         self.args = argparse.Namespace(core_url="https://core.example", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe", provider=None)
-        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}, "runtime": {
-            "source_commit": "a" * 40, "image_id": "sha256:" + "b" * 64,
-            "image_manifest_digest": "sha256:" + "c" * 64,
-            "microsandbox_ref": "oac-runtime@sha256:" + "d" * 64,
-            "runtime_sha256": "e" * 64, "firmware_sha256": "f" * 64}}
+        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}}
         self.data = {"installation_id": self.args.installation_id, "provider": "docker", "generation": 3,
                      "specification": self.spec, "specification_digest": node_spec.digest("docker", self.spec),
                      "core_url": self.args.core_url, "max_active": 2, "max_retained": 8}
@@ -112,7 +108,6 @@ class SpecificationTests(unittest.TestCase):
 
     def test_digest_is_independent_of_response_object_key_order(self):
         reordered = copy.deepcopy(self.spec)
-        reordered["runtime"] = dict(reversed(list(reordered["runtime"].items())))
         reordered["resources"] = dict(reversed(list(reordered["resources"].items())))
         self.assertEqual(node_spec.digest("docker", reordered), node_spec.digest("docker", self.spec))
 
