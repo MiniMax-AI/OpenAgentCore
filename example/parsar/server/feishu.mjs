@@ -542,7 +542,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       !["group", "p2p"].includes(message.chatType) ||
       (message.chatType === "group" &&
         !message.mentionedBot &&
-        !threadFor(appId, message)) ||
+        // A topic reply that mentions only other people is addressed to them.
+        (message.mentions?.length || !threadFor(appId, message))) ||
       !message.senderId ||
       message.mentionAll
     )

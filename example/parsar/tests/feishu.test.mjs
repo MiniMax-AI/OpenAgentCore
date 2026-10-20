@@ -1304,6 +1304,36 @@ test("group topics are shared by their participants and private chats stay per s
       .state,
     "delivered",
   );
+  const toColleague = {
+    ...f.message,
+    rootId: "om_first",
+    senderId: "ou_colleague",
+    mentionedBot: false,
+    mentions: [{ key: "@_user_1", openId: "ou_jelly", name: "Jelly", isBot: false }],
+  };
+  w.receive("cli_0123456789abcdef", {
+    ...toColleague,
+    messageId: "om_to_jelly",
+    content: "@Jelly 你在这里发条消息",
+  });
+  assert.equal(
+    f.store.list("feishu_inbound").some((row) => row.message_id === "om_to_jelly"),
+    false,
+    "a topic reply that mentions only someone else is not for the bot",
+  );
+  w.receive("cli_0123456789abcdef", {
+    ...toColleague,
+    messageId: "om_to_both",
+    mentionedBot: true,
+    mentions: [
+      ...toColleague.mentions,
+      { key: "@_user_2", openId: "ou_bot", name: "Parsar", isBot: true },
+    ],
+    content: "@Parsar @Jelly 一起看一下",
+  });
+  assert.ok(
+    f.store.list("feishu_inbound").some((row) => row.message_id === "om_to_both"),
+  );
   const config = await f.api("GET", `/app/feishu/bots/${botId}`);
   await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
   for (const [i, sender] of ["ou_a", "ou_b", "ou_a"].entries()) {
