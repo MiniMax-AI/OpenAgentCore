@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildDirectory } from "./paths.mjs";
+import { isIPv4 } from "node:net";
 import { openStore, dataPath, AppError } from "./server/store.mjs";
 import { productAPI } from "./server/product.mjs";
 import { createFeishuTransport, feishuWorkers } from "./server/feishu.mjs";
@@ -79,7 +80,11 @@ export function configuration(env = process.env) {
   const port = Number(env.OAC_EXAMPLE_PORT || 18180);
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     throw new Error("Invalid OAC_EXAMPLE_PORT.");
-  return { target: target.origin, key, port };
+  // The listen address is also the only accepted Host, so it must be concrete.
+  const host = env.OAC_EXAMPLE_HOST || "127.0.0.1";
+  if (!isIPv4(host) || host === "0.0.0.0")
+    throw new Error("OAC_EXAMPLE_HOST must be one IPv4 address of this machine.");
+  return { target: target.origin, key, port, host };
 }
 
 function fail(res, status, message) {
@@ -131,8 +136,12 @@ export function createHandler(
         store,
         coreClient(config, fetchImpl),
         fetchImpl,
-        `http://127.0.0.1:${config.port}`,
+        `http://${config.host || "127.0.0.1"}:${config.port}`,
       ));
+  const hosts =
+    (config.host || "127.0.0.1") === "127.0.0.1"
+      ? ["127.0.0.1", "localhost"]
+      : [config.host];
   return async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -142,12 +151,11 @@ export function createHandler(
       ["/", "/index.html"].includes(path) &&
       req.headers["sec-fetch-mode"] === "navigate" &&
       req.headers["sec-fetch-dest"] === "document";
-    const host = /^(?:127\.0\.0\.1|localhost)(?::([1-9]\d{0,4}))?$/.exec(
-      req.headers.host || "",
-    );
+    const host = /^([^:]+)(?::([1-9]\d{0,4}))?$/.exec(req.headers.host || "");
     if (
       !host ||
-      (host[1] && Number(host[1]) > 65535) ||
+      !hosts.includes(host[1]) ||
+      (host[2] && Number(host[2]) > 65535) ||
       (req.headers.origin &&
         req.headers.origin !== `http://${req.headers.host}`) ||
       (req.headers["sec-fetch-site"] === "cross-site" &&
@@ -388,7 +396,7 @@ if (
     store,
     core,
     fetch,
-    `http://127.0.0.1:${config.port}`,
+    `http://${config.host}:${config.port}`,
   );
   const feishu = feishuWorkers(
     store,
@@ -412,8 +420,8 @@ if (
       productHandler,
     }),
   );
-  server.listen(config.port, "127.0.0.1", () => {
-    process.stdout.write(`Parsar: http://127.0.0.1:${config.port}\n`);
+  server.listen(config.port, config.host, () => {
+    process.stdout.write(`Parsar: http://${config.host}:${config.port}\n`);
   });
   for (const signal of ["SIGINT", "SIGTERM"])
     process.on(signal, async () => {

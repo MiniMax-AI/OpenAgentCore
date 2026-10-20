@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 42887328536372de7ed6baeadba6001f248f738486648a626946280a76616ee7
+source_hash: 13fcf2f2211276e3f8c8528d5502b4790077cfc0698a9fb972f76048d5040f2d
 ---
 
 # Parsar 工作空间
@@ -20,7 +20,7 @@ pnpm --filter @oac/parsar-example... install --frozen-lockfile
 pnpm --filter @oac/parsar-example dev
 ```
 
-打开 http://127.0.0.1:18180。`OPENAI_BASE_URL` 以 `/v1` 结尾；远程地址必须使用 HTTPS，也可通过 SSH 隧道将远程 Core 映射至本机。`OAC_EXAMPLE_PORT` 调整端口。构建运行使用 `pnpm --filter @oac/parsar-example build`，再运行 `pnpm --filter @oac/parsar-example start`。服务只监听本机回环地址。允许从其他站点的链接顶层打开首页，API 请求仍检查同源。本地隧道可使用不同端口；浏览器 Host 必须为 `localhost` 或 `127.0.0.1`，写请求的 Origin 必须与该 Host 完全一致，包括端口；每个数据目录只运行一个服务进程。
+打开 http://127.0.0.1:18180。`OPENAI_BASE_URL` 以 `/v1` 结尾；远程地址必须使用 HTTPS，也可通过 SSH 隧道将远程 Core 映射至本机。`OAC_EXAMPLE_PORT` 调整端口。构建运行使用 `pnpm --filter @oac/parsar-example build`，再运行 `pnpm --filter @oac/parsar-example start`。服务监听 `OAC_EXAMPLE_HOST`，默认 `127.0.0.1`。设为本机的某个 IPv4 地址（例如局域网地址）即可向该网络提供服务；Parsar 没有登录，能访问该地址的人都可以使用工作空间、其中的模型和飞书机器人。允许从其他站点的链接顶层打开首页，API 请求仍检查同源。浏览器 Host 必须是该地址（默认回环地址时也接受 `localhost`），本地隧道可使用不同端口，写请求的 Origin 必须与 Host 完全一致，包括端口；每个数据目录只运行一个服务进程。
 
 ## 产品模型 {#product-model}
 

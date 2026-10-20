@@ -18,11 +18,12 @@ test("oversized writes return a definite 413 without contacting Core", async (t)
   assert.equal(called, false);
 });
 
-async function serve(t, fetchImpl) {
+async function serve(t, fetchImpl, host) {
   const config = {
     port: 0,
     key: "server-only-secret",
     target: "https://core.example",
+    ...(host ? { host } : {}),
   };
   const server = createServer(createHandler(config, { fetchImpl }));
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
@@ -371,4 +372,35 @@ test("loopback port forwarding preserves exact-origin writes and rejects non-loo
     assert.equal(actual, status, `${host} / ${origin}`);
   }
   assert.equal(calls, 3);
+});
+
+test("a configured LAN address is the only accepted Host", async (t) => {
+  assert.equal(configuration({ OPENAI_API_KEY: "key" }).host, "127.0.0.1");
+  assert.equal(
+    configuration({ OPENAI_API_KEY: "key", OAC_EXAMPLE_HOST: "10.74.84.145" }).host,
+    "10.74.84.145",
+  );
+  for (const OAC_EXAMPLE_HOST of ["0.0.0.0", "parsar.example", "::1"])
+    assert.throws(() => configuration({ OPENAI_API_KEY: "key", OAC_EXAMPLE_HOST }));
+  const url = await serve(t, async () => Response.json({ id: "session" }), "10.1.2.3");
+  for (const [host, status] of [
+    ["10.1.2.3:57357", 200],
+    ["127.0.0.1:57357", 403],
+    ["localhost:57357", 403],
+    ["10.1.2.4:57357", 403],
+  ]) {
+    const actual = await new Promise((resolve, reject) => {
+      const req = request(
+        `${url}/v1/agents`,
+        { method: "POST", headers: { host, origin: `http://${host}` } },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode);
+        },
+      );
+      req.on("error", reject);
+      req.end("{}");
+    });
+    assert.equal(actual, status, host);
+  }
 });

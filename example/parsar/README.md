@@ -15,7 +15,7 @@ pnpm --filter @oac/parsar-example... install --frozen-lockfile
 pnpm --filter @oac/parsar-example dev
 ```
 
-Open http://127.0.0.1:18180. `OPENAI_BASE_URL` ends in `/v1`; remote endpoints require HTTPS. An SSH tunnel can expose a remote Core on loopback. `OAC_EXAMPLE_PORT` changes the local port. For production assets, run `pnpm --filter @oac/parsar-example build`, then `pnpm --filter @oac/parsar-example start`. The server binds only to loopback. Links from other sites may open the homepage as a top-level browser navigation; API requests retain same-origin checks. A local tunnel may use a different port; the browser Host must remain `localhost` or `127.0.0.1`, and write Origins must exactly match that Host, including its port. Use one server process per data directory.
+Open http://127.0.0.1:18180. `OPENAI_BASE_URL` ends in `/v1`; remote endpoints require HTTPS. An SSH tunnel can expose a remote Core on loopback. `OAC_EXAMPLE_PORT` changes the local port. For production assets, run `pnpm --filter @oac/parsar-example build`, then `pnpm --filter @oac/parsar-example start`. The server binds to `OAC_EXAMPLE_HOST`, default `127.0.0.1`. Set it to one IPv4 address of the machine, such as its LAN address, to serve that network; Parsar has no sign-in, so everyone who can reach the address can use the workspace, its models and its Feishu bots. Links from other sites may open the homepage as a top-level browser navigation; API requests retain same-origin checks. The browser Host must be that address (`localhost` is also accepted on the loopback default), a local tunnel may use a different port, and write Origins must exactly match the Host, including its port. Use one server process per data directory.
 
 ## Product model
 
