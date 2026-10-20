@@ -76,7 +76,7 @@ On either platform, open its server terminal and run `docker compose ls` to find
 
 After signing in, [choose a sandbox backend](./sandbox-backends.md) and add nodes using [Add and manage nodes](./nodes.md). The Compose stack deploys the control plane; execution machines remain separate.
 
-Stop with `docker compose stop` using the same files and environment. Back up the data volume and configuration together while the services are stopped. To move to another release, [reinstall](./install.md#install).
+Stop with `docker compose stop` using the same files and environment. Back up the data volume and configuration together while the services are stopped. To move to another release, remove the stack with its data volume (`docker compose down --volumes`), then deploy the new release.
 
 ## Offline hosts
 

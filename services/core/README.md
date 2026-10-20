@@ -16,7 +16,7 @@
 
 ## Database
 
-Core uses its own PostgreSQL database and account and shares no tables with an application. Its schema is one embedded goose baseline migration in [`migrations/`](migrations), tracked in `oac_schema_version`. Before the first public release, schema changes edit the baseline in place, and an installation created from an earlier baseline is reinstalled. Core applies the baseline when it starts. Queries live in `internal/db/queries` and generate typed code with sqlc: run `make sqlc-generate` after changing a query and commit the generated files, which `make check-sqlc` compares.
+Core uses its own PostgreSQL database and account and shares no tables with an application. Its schema is the embedded goose migrations in [`migrations/`](migrations), tracked in `oac_schema_version`; [AGENTS.md](../../AGENTS.md#pre-release-no-compatibility-layers) states how schema changes land. Core applies the migrations when it starts. Queries live in `internal/db/queries` and generate typed code with sqlc: run `make sqlc-generate` after changing a query and commit the generated files, which `make check-sqlc` compares.
 
 ## Run from source
 

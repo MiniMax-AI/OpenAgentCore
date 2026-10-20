@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: 8cfae2d39cc95a588bc231fe9f3661f3c22db7884b2278c6a1483c114a5185fd
+source_hash: 432e372bf9bb4729edf27df889d4e45526c87fc39b9baa43c9b0e16d3fa54036
 ---
 
 本页是安装程序参数的参考，并说明如何用默认方式以外的方式安装：在已有反向代理之后、在托管平台上使用 Docker Compose，或在无法访问互联网的主机上。[默认安装](./install.md)无需任何选项。
@@ -78,7 +78,7 @@ docker compose exec web oac-web core-key
 
 登录后，[选择沙箱提供商](./sandbox-backends.md)，并按[添加和管理节点](./nodes.md)添加节点。Compose 堆栈部署控制平面；执行机器仍需单独部署。
 
-使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，一并备份数据卷和配置。要换到另一个版本，请[重新安装](./install.md#install)。
+使用相同的文件和环境运行 `docker compose stop` 以停止服务。停止服务后，一并备份数据卷和配置。要换到另一个版本，请连同数据卷一起移除该栈（`docker compose down --volumes`），然后部署新版本。
 
 ## 离线主机 {#offline-hosts}
 

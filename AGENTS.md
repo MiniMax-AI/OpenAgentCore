@@ -69,7 +69,7 @@ The categories are [process settings](docs/configuration.md#process-settings), [
 
 ### Pre-release: no compatibility layers
 
-OpenAgentCore has had no public release. Replace superseded interfaces, execution paths and files outright. Keep no version fallback, compatibility shim or migration for superseded behavior. Before the first public release, a schema change edits the baseline migration in place, and an installation created from an earlier baseline is reinstalled. Keep the pinned official public protocol, valid data and still-used, verified infrastructure. Do not rewrite working infrastructure only to rename it.
+OpenAgentCore has had no public release. Replace superseded interfaces, execution paths and files outright. Keep no version fallback, compatibility shim or migration for superseded behavior. An installation of another release is reinstalled, never upgraded. A schema change adds a forward migration, so existing development and test databases follow it; the migrations may be folded into one baseline at any time. Keep the pinned official public protocol, valid data and still-used, verified infrastructure. Do not rewrite working infrastructure only to rename it.
 
 ## Documentation
 

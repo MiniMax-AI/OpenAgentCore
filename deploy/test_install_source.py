@@ -158,7 +158,7 @@ class SourceInstallTest(unittest.TestCase):
         self.manifest['source_commit'] = 'b' * 40
         (self.bundle / 'manifest.json').write_text(json.dumps(self.manifest))
         self.write_sums()
-        with self.assertRaisesRegex(ValueError, 'Reinstall to use this release'):
+        with self.assertRaisesRegex(ValueError, 'To use this release, uninstall the installation'):
             self.install(image='sha256:' + '2' * 64)
         self.assertEqual(self.snapshot(), before)
 

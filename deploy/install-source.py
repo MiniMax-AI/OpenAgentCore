@@ -121,7 +121,7 @@ def install(bundle, destination, host, port, public_url):
         if existing and not previous:
             raise ValueError(f'Incomplete installation: preserve {destination} and choose another directory')
         if previous and previous != revision:
-            raise ValueError(f'This installation runs release {previous[:12]}; this bundle is {revision[:12]}. Reinstall to use this release.')
+            raise ValueError(f'This installation runs release {previous[:12]}; this bundle is {revision[:12]}. To use this release, uninstall the installation, which deletes its data, then install again.')
         if not existing and public_url is None:
             raise ValueError('--public-url is required for a new installation')
         check_docker()
@@ -153,7 +153,7 @@ def install(bundle, destination, host, port, public_url):
             for name in ('core', 'web', 'database'):
                 template = template.replace('__OAC_' + name.upper() + '_IMAGE__', images[name])
             (stage / 'compose.yaml').write_text(template)
-            # The installer owns only the service images and the payload binds; other entries are the operator's.
+            # The installer owns only the payload binds; other entries are the operator's.
             saved = destination / 'compose.override.yaml'
             try:
                 override = json.loads(saved.read_text()) if saved.is_file() else {}

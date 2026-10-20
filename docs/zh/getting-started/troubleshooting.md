@@ -1,7 +1,7 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: 8cbeb8f1ecce90c1b386e05fdca5239f39a153c51c1720567bc19980bfeb5c0d
+source_hash: 468c8cbd13ee2a736db07f9239f56a49afad2916036a375260b59e377fc3a1e3
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
@@ -15,8 +15,8 @@ source_hash: 8cbeb8f1ecce90c1b386e05fdca5239f39a153c51c1720567bc19980bfeb5c0d
 | `Web port unavailable; choose --web-port` | 其他程序占用该端口。停止它，或另选 `--web-port`。安装程序不会改用其他端口。如果消息点名了 Compose 项目 `oac-…`，说明目录已不存在的早期安装仍在运行：按[卸载](./operations.md#uninstall)移除它 |
 | `incomplete installation: preserve … and choose another directory` | 保留目录内容，选择另一个 `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` 中有 Core 拒绝的值。消息只包含变量名。修正 `.env` 后再次运行 `oac apply` |
-| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷属于另一个版本（`existing data belongs to release …`）。请重新安装以使用此版本 |
-| `This installation runs release …` | 安装程序或初始化属于另一个版本。请重新安装以使用此版本 |
+| `data volume check failed; no service was changed` | 初始化拒绝了数据卷；消息会说明原因，例如数据卷属于另一个版本（`existing data belongs to release …`）。要使用此版本，请[卸载](./operations.md#uninstall)该安装（这会删除其数据），然后重新安装 |
+| `This installation runs release …` | 安装程序或初始化属于另一个版本。要使用此版本，请[卸载](./operations.md#uninstall)该安装（这会删除其数据），然后重新安装 |
 | `This account cannot use Docker` | 将该账号加入 `docker` 组后重新登录，或使用 Docker Desktop 或 rootless Docker。不要用 `sudo` 运行安装程序 |
 | `This account cannot access …` | 之前用 `sudo` 运行留下了属于 root 的文件。运行消息给出的 `sudo chown` 命令，再以自己的账号重新运行 |
 | `Docker Compose 2.26 or newer is required` | 安装或更新 Docker Compose 插件 |

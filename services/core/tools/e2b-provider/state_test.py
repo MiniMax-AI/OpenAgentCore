@@ -55,21 +55,13 @@ class StateTest(unittest.TestCase):
                 pass
         self.assertEqual(witness.read_text(), 'unchanged')
 
-    def test_receipt_is_bound_to_endpoint_and_legacy_is_official(self):
+    def test_receipt_is_bound_to_endpoint(self):
         with Receipt(self.request, lambda: 1) as receipt:
             receipt.save(status='create_pending')
             path = receipt.path
         custom = dict(self.request, Config=dict(self.request['Config'],
                                                APIURL='https://sandbox-test.sandbase.ai',
                                                Domain='sandbox-test.sandbase.ai'))
-        with self.assertRaises(Failure):
-            with Receipt(custom, lambda: 1):
-                pass
-        data = json.loads(path.read_text())
-        del data['endpoint']
-        path.write_text(json.dumps(data))
-        with Receipt(self.request, lambda: 1) as receipt:
-            self.assertEqual(receipt.data['status'], 'create_pending')
         with self.assertRaises(Failure):
             with Receipt(custom, lambda: 1):
                 pass

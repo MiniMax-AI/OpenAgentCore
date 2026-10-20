@@ -266,7 +266,7 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 			return fmt.Errorf("incomplete installation: preserve %s and choose another directory", o.dir)
 		}
 		if installed != buildRevision {
-			return fmt.Errorf("This installation runs release %s; this installer is %s. Reinstall to use this release.", short(installed), short(buildRevision))
+			return fmt.Errorf("This installation runs release %s; this installer is %s. To use this release, uninstall the installation, which deletes its data, then install again.", short(installed), short(buildRevision))
 		}
 	}
 	compose := installCompose{docker: i.docker, dir: o.dir}

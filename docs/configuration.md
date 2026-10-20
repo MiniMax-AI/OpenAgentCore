@@ -127,7 +127,7 @@ The installer creates `~/.oac/core` by default (`$HOME/.oac/core` on Windows). I
 | --- | --- | --- |
 | `.env` | Process settings and the stable Compose project name | You, then `oac apply` |
 | `compose.yaml` | Verified release service definition | The installer, when it installs |
-| `compose.override.yaml` | Optional local Compose entries. For a source bundle it is JSON and also holds the four service images and Web's `/node-payload` bind | You. `install.py` replaces only its own entries and requires JSON |
+| `compose.override.yaml` | Optional local Compose entries. For a source bundle it is JSON and also holds Web's `/node-payload` bind and Core's native installer bind | You. `install.py` replaces only its own entries and requires JSON |
 | `oac` (`oac.exe` on Windows) | Native management command | The installer |
 
 The sibling `<install-dir>.lock` directory remains for synchronization; `<install-dir>.staging` holds unpublished installation files. Neither contains service data. On Unix the installer creates private directories with mode `0700` and configuration files with mode `0600`.

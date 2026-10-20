@@ -13,8 +13,8 @@ For a failing request or Turn, start with Web's **Monitor → Request log** and 
 | `Web port unavailable; choose --web-port` | Another program holds that port. Stop it, or choose another `--web-port`. The installer does not move to a different port. When the message names a Compose project `oac-…`, an earlier installation whose directory is gone still runs: remove it as in [Uninstall](./operations.md#uninstall) |
 | `incomplete installation: preserve … and choose another directory` | Preserve the directory and choose another `--install-dir` |
 | `configuration check failed; no service was changed` | `.env` has a value Core rejects. The message names the variable and not the value. Fix `.env` and run `oac apply` again |
-| `data volume check failed; no service was changed` | Initialization refused the data volume; the message names the cause, such as a volume that belongs to another release (`existing data belongs to release …`). Reinstall to use this release |
-| `This installation runs release …` | The installer or initialization belongs to another release. Reinstall to use this release |
+| `data volume check failed; no service was changed` | Initialization refused the data volume; the message names the cause, such as a volume that belongs to another release (`existing data belongs to release …`). To use this release, [uninstall](./operations.md#uninstall) the installation, which deletes its data, then install again |
+| `This installation runs release …` | The installer or initialization belongs to another release. To use this release, [uninstall](./operations.md#uninstall) the installation, which deletes its data, then install again |
 | `This account cannot use Docker` | Add the account to the `docker` group and log in again, or use Docker Desktop or rootless Docker. Do not run the installer with `sudo` |
 | `This account cannot access …` | An earlier run with `sudo` left files owned by root. Run the `sudo chown` command the message prints, then rerun as your own account |
 | `Docker Compose 2.26 or newer is required` | Install or update the Docker Compose plugin |

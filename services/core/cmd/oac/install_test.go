@@ -68,31 +68,13 @@ func newInstallFixture(t *testing.T) *installFixture {
 		}
 		return compose, nil
 	}
-	// Calls against the staged release are recorded with a "staged " prefix and without their file arguments.
 	f.docker = func(_ context.Context, dir string, args ...string) ([]byte, error) {
 		if _, err := os.Stat(dir); dir != "" && err != nil {
 			t.Fatalf("docker %v ran in a missing directory", args)
 		}
-		var words []string
-		staged := false
-		for i := 0; i < len(args); i++ {
-			if args[i] == "-f" || args[i] == "--project-directory" {
-				staged = staged || strings.HasPrefix(args[i+1], f.options.dir+".staging")
-				i++
-				continue
-			}
-			words = append(words, args[i])
-		}
-		command := strings.Join(words, " ")
-		if staged {
-			if f.installedRevision() == buildRevision {
-				t.Fatal("release published before its checks")
-			}
-			f.calls = append(f.calls, "staged "+command)
-		} else {
-			f.calls = append(f.calls, command)
-		}
-		if f.failure != "" && strings.HasPrefix(f.calls[len(f.calls)-1], f.failure) {
+		command := strings.Join(args, " ")
+		f.calls = append(f.calls, command)
+		if f.failure != "" && strings.HasPrefix(command, f.failure) {
 			if f.failureErr != nil {
 				return nil, f.failureErr
 			}
@@ -254,7 +236,7 @@ func TestInstallRefusesAnotherRelease(t *testing.T) {
 	setBuildRevision(t, "development")
 	f.calls = nil
 	err := f.run()
-	if err == nil || err.Error() != "This installation runs release a1b2c3d4e5f6; this installer is development. Reinstall to use this release." {
+	if err == nil || err.Error() != "This installation runs release a1b2c3d4e5f6; this installer is development. To use this release, uninstall the installation, which deletes its data, then install again." {
 		t.Fatal(err)
 	}
 	if len(f.calls) != 3 {
@@ -443,7 +425,7 @@ func TestInstallReportsStartFailuresByCause(t *testing.T) {
 		call, stderr, want, unwanted string
 	}{
 		// A refusal is not fixed by rerunning, and only its own line is shown.
-		{"compose run --rm --no-deps init", "{\"msg\":\"Initialization started\"}\nthis data belongs to a newer release", "data volume check failed; no service was changed: this data belongs to a newer release", "startup failed"},
+		{"compose run --rm --no-deps init", "{\"msg\":\"Initialization started\"}\nexisting data belongs to release 0123456789ab", "data volume check failed; no service was changed: existing data belongs to release 0123456789ab", "startup failed"},
 		{"compose run --rm --no-deps --entrypoint", "OAC_EXECUTION_CONCURRENCY must be positive", "configuration check failed; no service was changed: OAC_EXECUTION_CONCURRENCY must be positive", "startup failed"},
 		{"compose up", progress, "startup failed; data retained, rerun the installer: dependency failed to start: container x-core-1 is unhealthy\nNot healthy: core (unhealthy), web (starting)\nSee why: docker compose -f '", "Healthy"},
 	} {

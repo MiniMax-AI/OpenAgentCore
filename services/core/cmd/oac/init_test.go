@@ -136,19 +136,6 @@ func TestInitializeRefusesChangedOrMissingFiles(t *testing.T) {
 	}
 }
 
-func readReceipt(t *testing.T, root string) installReceipt {
-	t.Helper()
-	var receipt installReceipt
-	raw, err := os.ReadFile(filepath.Join(root, "installation.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(raw, &receipt); err != nil {
-		t.Fatal(err)
-	}
-	return receipt
-}
-
 func TestInitializeHealsTheReleasePointerAfterACrash(t *testing.T) {
 	root, release, files := initFixture(t)
 	if err := initialize(root, release, fixed(files)); err != nil {
@@ -174,7 +161,7 @@ func TestInitializeRefusesDataOfAnotherRelease(t *testing.T) {
 	}
 	before := snapshot(t, root)
 	other, otherFiles := releaseFixture(strings.Repeat("e", 40))
-	want := "existing data belongs to release dddddddddddd; reinstall to use release eeeeeeeeeeee"
+	want := "existing data belongs to release dddddddddddd; to use release eeeeeeeeeeee, uninstall the installation, which deletes its data, then install again"
 	if err := initialize(root, other, fixed(otherFiles)); err == nil || err.Error() != want {
 		t.Fatalf("err = %v", err)
 	}

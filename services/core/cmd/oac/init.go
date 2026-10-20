@@ -219,7 +219,7 @@ func initialize(root string, release releaseIdentity, fetch func() (map[string][
 				logger.InfoContext(ctx, "Existing installation verified", "file_count", len(previous.Files))
 				return nil
 			}
-			return fmt.Errorf("existing data belongs to release %.12s; reinstall to use release %.12s", previous.SourceCommit, release.revision)
+			return fmt.Errorf("existing data belongs to release %.12s; to use release %.12s, uninstall the installation, which deletes its data, then install again", previous.SourceCommit, release.revision)
 		}
 		nextStep("verify_bundled_metadata")
 		files, err := fetch()

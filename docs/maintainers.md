@@ -175,7 +175,7 @@ The planner compares the PR event's tested merge commit with its verified first 
 
 | Group | Checks and consumers |
 | --- | --- |
-| `hygiene` | Names, repository links, bundled documentation integrity, and CI planner/gate tests; runs for every change |
+| `hygiene` | Repository links, bundled documentation integrity, and CI planner/gate tests; runs for every change |
 | `distribution` | Harness catalog and installer schema, install/apply/recovery/cleanup tests, Compose parsing and initialization fixtures, release/download and bundle contracts, Go console tests and build; needs Docker Compose for template parsing, no pnpm install or browser |
 | `compose` | Real startup from empty volumes using images built from the checkout, sign-in and API access, file upload and node installer download, then URL reconfiguration and container recreation with preserved credentials and data; needs Docker, Go and network access, no model credentials |
 | `backend` | Parallel parts, each with a dedicated PostgreSQL guard: `runtime` (sqlc freshness, Runtime/shared Go tests, Linux microsandbox helper, daemon build), `core` (standalone Core build, Core service and client tests) and three `integration` shards of the serial Core integration test package |
