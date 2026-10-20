@@ -51,11 +51,11 @@ def image_archive(path, name, *, nested=False, architecture="amd64", corrupt=Non
 
 
 class DistributionTests(unittest.TestCase):
-    def test_native_payload_is_independent_and_offline_has_only_linux(self):
+    def test_native_payload_is_independent_and_offline_has_only_linux_archives(self):
         source = self.stage / "qualified-native"
         source.mkdir()
         catalog = {"version": REVISION, "protocol_version": "fixture", "artifacts": {}}
-        for platform in ("linux-amd64", "darwin-arm64", "windows-amd64"):
+        for platform in ("linux-amd64", "linux-amd64-codex", "darwin-arm64", "darwin-arm64-codex", "windows-amd64"):
             raw = ("native:" + platform).encode()
             (source / (platform + ".tar.gz")).write_bytes(raw)
             catalog["artifacts"][platform] = {"sha256": hashlib.sha256(raw).hexdigest()}
@@ -74,8 +74,9 @@ class DistributionTests(unittest.TestCase):
         distribution.archive(self.bundle, "1", "offline")
         with tarfile.open(self.bundle.with_name(self.bundle.name + "-offline.tar.gz")) as archive:
             native = [p for p in archive.getmembers() if "native-installers/" in p.name and p.name.endswith(".tar.gz")]
-            self.assertEqual([pathlib.Path(p.name).name for p in native], ["linux-amd64.tar.gz"])
-            self.assertEqual(archive.extractfile(native[0]).read(), (source / "linux-amd64.tar.gz").read_bytes())
+            self.assertEqual(sorted(pathlib.Path(p.name).name for p in native), ["linux-amd64-codex.tar.gz", "linux-amd64.tar.gz"])
+            for member in native:
+                self.assertEqual(archive.extractfile(member).read(), (source / pathlib.Path(member.name).name).read_bytes())
         metadata = json.loads((self.bundle / "native-installers/catalog.json").read_text())
         for platform, entry in metadata["artifacts"].items():
             filename = f"oac-native-{REVISION}-{platform}.tar.gz"

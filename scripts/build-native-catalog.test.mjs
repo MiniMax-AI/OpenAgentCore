@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
-test('catalog accepts large native manifests and still rejects a foreign revision', async () => {
+test('catalog lists each platform base and component archive and rejects a foreign revision', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'oac-native-catalog-'));
   try {
     const input = join(directory, 'input');
@@ -14,20 +14,27 @@ test('catalog accepts large native manifests and still rejects a foreign revisio
     const bundle = join(directory, 'bundle');
     await Promise.all([mkdir(input), mkdir(bundle)]);
     const version = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    for (const [ci, os, arch] of [['Linux-X64', 'linux', 'amd64'], ['macOS-ARM64', 'darwin', 'arm64'], ['Windows-X64', 'windows', 'amd64']]) {
-      await writeFile(join(bundle, 'bundle.json'), JSON.stringify({ daemon_version: version, os, arch, files: { fixture: 'x'.repeat(2 * 1024 * 1024) } }));
-      execFileSync('tar', ['-czf', join(input, `oac-native-installer-${ci}.tar.gz`), '-C', bundle, './bundle.json']);
+    const pack = (name, daemon_version, os, arch, components) => {
+      return writeFile(join(bundle, 'bundle.json'), JSON.stringify({ daemon_version, os, arch, components, filler: 'x'.repeat(2 * 1024 * 1024) })).then(() => {
+        execFileSync('tar', ['-czf', join(input, `${name}.tar.gz`), '-C', bundle, 'bundle.json']);
+      });
+    };
+    for (const [os, arch] of [['linux', 'amd64'], ['darwin', 'arm64'], ['windows', 'amd64']]) {
+      const components = { node: {}, codex: {} };
+      await pack(`${os}-${arch}`, version, os, arch, components);
+      for (const name of Object.keys(components)) await pack(`${os}-${arch}-${name}`, version, os, arch, {});
     }
     const script = resolve('scripts/build-native-catalog.mjs');
     execFileSync(process.execPath, [script, input, output]);
     const catalog = JSON.parse(await readFile(join(output, 'catalog.json'), 'utf8'));
     assert.equal(catalog.version, version);
-    assert.equal(Object.keys(catalog.artifacts).length, 3);
-    const linux = await readFile(join(input, 'oac-native-installer-Linux-X64.tar.gz'));
-    assert.deepEqual(await readFile(join(output, 'linux-amd64.tar.gz')), linux);
-    assert.equal(catalog.artifacts['linux-amd64'].sha256, createHash('sha256').update(linux).digest('hex'));
-    await writeFile(join(bundle, 'bundle.json'), JSON.stringify({ daemon_version: 'foreign', os: 'linux', arch: 'amd64' }));
-    execFileSync('tar', ['-czf', join(input, 'oac-native-installer-Linux-X64.tar.gz'), '-C', bundle, './bundle.json']);
+    assert.deepEqual(Object.keys(catalog.artifacts).sort(), ['darwin-arm64', 'darwin-arm64-codex', 'darwin-arm64-node', 'linux-amd64', 'linux-amd64-codex', 'linux-amd64-node', 'windows-amd64', 'windows-amd64-codex', 'windows-amd64-node']);
+    const part = await readFile(join(input, 'linux-amd64-codex.tar.gz'));
+    assert.deepEqual(await readFile(join(output, 'linux-amd64-codex.tar.gz')), part);
+    assert.equal(catalog.artifacts['linux-amd64-codex'].sha256, createHash('sha256').update(part).digest('hex'));
+    await rm(join(input, 'linux-amd64-codex.tar.gz'));
+    assert.throws(() => execFileSync(process.execPath, [script, input, output], { stdio: 'pipe' }), error => error.stderr.toString().includes('do not match the components'));
+    await pack('linux-amd64', 'foreign', 'linux', 'amd64', {});
     assert.throws(() => execFileSync(process.execPath, [script, input, output], { stdio: 'pipe' }), error => error.stderr.toString().includes('Mismatched native artifact'));
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -1,7 +1,7 @@
 ---
 title: "运行自托管 Session"
 source: docs/getting-started/self-hosted.md
-source_hash: ed3a04fb0421631c5633fc1b46d455d2c50c77d696bab09855b19d1c6d8ee92f
+source_hash: dd09af89f5c98bb1b0bf3dfef5f85c9c9068ef3d490b2e1f03fd7691b43d0fb0
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行，例如工作站、虚拟机或容器，而不是 Core 管理的沙箱。本指南面向用 `oac-daemon` 连接此类机器并保持其运行的应用开发者。
@@ -23,14 +23,14 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 
 安装程序自带固定版本的 Node.js 和 Harness（列于 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
 
-安装程序下载约 320 MiB。Runtime 主目录和安装目录所在磁盘需要有空闲空间：
+下载量取决于你安装的 Harness。安装程序（9 MiB）和 Node.js（59 MiB）始终需要，再加上 Codex 的 121 MiB、Claude Code 的 99 MiB 或 MiniMax Code 的 23 MiB，因此安装一个 Harness 的 Session 下载 90 到 189 MiB。Runtime 主目录和安装目录所在磁盘需要有空闲空间：
 
 | | 一个 Harness | 全部三个 |
 | --- | --- | --- |
-| 高峰时所需空闲空间 | 约 2 GiB | 约 2.2 GiB |
+| 高峰时所需空闲空间 | 约 1.3 GiB | 约 2.1 GiB |
 | 安装后占用 | 约 560 MiB | 约 940 MiB |
 
-只选一个 Harness 时，高峰由归档（316 MiB）、解包后的安装程序（907 MiB）和安装后的文件（约 560 MiB）构成。解包副本在命令结束时删除，归档在安装完成时删除。
+选 Codex 时，高峰由归档（180 MiB）、解包后的安装程序（约 560 MiB）和安装后的文件（约 560 MiB）构成。解包副本在命令结束时删除。归档保留在 Runtime 主目录的 `native-download` 中，因此这台机器上同一发行版的另一个 Session 只需下载 9 MiB 的安装程序。
 
 机器需要：
 
@@ -39,7 +39,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 - Session 的软件包需要时，安装 Python 和 pip；
 - 环境设置所需的系统软件包。守护进程不运行 apt、sudo 或其他提权命令，请通过主机的常规管理方式安装。
 
-不需要管理员权限或 Docker。Unix 下载命令还使用 `curl`、`tar`、`gzip`、SHA-256 工具和系统文件锁命令（Linux 为 `flock`，macOS 为 `lockf`）。Windows 需要系统自带的 `tar.exe`，命令会在下载前检查。Runtime 主目录必须允许执行文件。如果 Unix 挂载点设为 `noexec`，请先用 `OAC_RUNTIME_HOME` 指定另一个允许执行的绝对目录，再运行命令。
+不需要管理员权限或 Docker。Unix 下载命令还使用 `curl`、`tar` 和 SHA-256 工具。Windows 需要系统自带的 `tar.exe`，命令会在下载前检查。Runtime 主目录必须允许执行文件。如果 Unix 挂载点设为 `noexec`，请先用 `OAC_RUNTIME_HOME` 指定另一个允许执行的绝对目录，再运行命令。
 
 ## 连接机器 {#connect-a-machine}
 
@@ -68,7 +68,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
    print(installation["commands"]["posix"])  # use "powershell" on Windows
    ```
 
-2. 在目标机器上，以应运行工具的账号执行命令。命令下载与 Core 匹配的安装程序、验证校验和、询问要安装哪些 Harness 以及安装位置、完成安装、按需创建工作区、启动守护进程并检查连接。
+2. 在目标机器上，以应运行工具的账号执行命令。命令下载与 Core 匹配的安装程序、验证校验和、询问要安装哪些 Harness 以及安装位置、下载 Node.js 和所选 Harness、完成安装、按需创建工作区、启动守护进程并检查连接。
 3. 发送一个 Turn。机器已连接只证明认证成功；第一个 Turn 才会检查 Harness 和模型。
 
 在 Web 中打开 Session，复制 **连接主机** 下的命令。
@@ -88,7 +88,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 <details>
 <summary>下载中断时</summary>
 
-安装程序在下载任何内容之前先检查授权，因此过期的命令不会白下载。归档下载在连接重置后会续传，只在传输停滞（60 秒没有数据）时失败，最多尝试五次；重新执行命令即可从中断处继续。校验通过的归档保存在 Runtime 主目录的 `native-download` 中，直到安装完成，因此失败后重跑无需重新下载；每次运行都会对照 Core 提供的校验和检查它，未通过则丢弃。下载、解压和复制组件前会检查磁盘空间。如果下载或安装被中断，重新执行命令：它清理未完成的临时副本，同时保留已完成的组件、凭据和工作区。`native-download` 中的小型 `download.lock` 文件保留用于并发控制。其他运行不会清理仍在进行的下载或安装。命令过期时，从 Session 复制新命令。
+安装程序在下载 Harness 之前先检查授权，因此过期的命令只会下载 9 MiB 的安装程序。每个归档的下载在连接重置后会续传，只在传输停滞（60 秒没有数据）时失败，最多尝试五次；重新执行命令即可从中断处继续。校验通过的归档保存在 Runtime 主目录的 `native-download/<version>` 中。同一版本的后续运行或 Session 会对照 Core 提供的校验和检查并复用它们，未通过的会被丢弃；其他版本的归档会被删除。同一台机器上的两个安装会轮流下载。下载、解压和复制组件前会检查磁盘空间。如果下载或安装被中断，重新执行命令：它清理未完成的临时副本，同时保留已完成的组件、凭据和工作区。命令过期时，从 Session 复制新命令。
 
 </details>
 
@@ -146,7 +146,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 没有原目录时，轮换该 Session 的凭据，并用已解压的发行包安装到新目录：
 
 1. 在 Web 中打开该 Session，在 **执行器凭据** 中选择 **轮换**，保存返回的凭据 JSON。
-2. 下载并解压 `<base>/<platform>.tar.gz`。`<base>` 是安装命令中的第一个 URL（以 Core 版本结尾），`<platform>` 是 `linux-amd64`、`darwin-arm64` 或 `windows-amd64`，对应[平台](#platforms)表中的各行。
+2. 下载 `<base>/<platform>.tar.gz`，以及 `node` 和你要安装的每个 Harness（`codex`、`claude` 或 `minimax`）的 `<base>/<platform>-<component>.tar.gz`，并解压到同一个目录。`<base>` 是安装命令中的第一个 URL（以 Core 版本结尾），`<platform>` 是 `linux-amd64`、`darwin-arm64` 或 `windows-amd64`，对应[平台](#platforms)表中的各行。
 3. 按[从已解压的发行包安装](#install-from-an-extracted-distribution)运行安装程序，使用该 Session 的 `remote_url`、Environment ID、工作区和保存的凭据文件。
 
 或者新建 Session 并运行它的命令。
@@ -165,7 +165,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 & "$HOME\.oac\environments\<environment-id>\bin\oac-daemon.exe" uninstall
 ```
 
-它会停止守护进程，列出将删除的内容并请求确认。它只删除安装目录中属于该安装的条目（`bin`、`daemon`、`components`、`capabilities`、`runtime`、`initialization` 和 `packages`，含凭据文件、原生历史和 Harness），之后若目录中没有其他内容，再删除目录本身。目录中的其他内容会保留，工作区以及安装目录之外的凭据文件或能力目录也会保留；命令会逐一列出保留的路径。`native-download` 目录及其 `download.lock` 不会被触碰。在没有安装的位置运行时，它会说明这一点并以 0 退出。如果某个文件无法删除，命令会指出它，待其被释放后可再次运行。在 Windows 上，最后的删除会在命令退出几秒后完成。
+它会停止守护进程，列出将删除的内容并请求确认。它只删除安装目录中属于该安装的条目（`bin`、`daemon`、`components`、`capabilities`、`runtime`、`initialization` 和 `packages`，含凭据文件、原生历史和 Harness），之后若目录中没有其他内容，再删除目录本身。目录中的其他内容会保留，工作区以及安装目录之外的凭据文件或能力目录也会保留；命令会逐一列出保留的路径。`native-download` 缓存不会被触碰；如需回收空间，请自行删除。在没有安装的位置运行时，它会说明这一点并以 0 退出。如果某个文件无法删除，命令会指出它，待其被释放后可再次运行。在 Windows 上，最后的删除会在命令退出几秒后完成。
 
 随后在 Web 中打开该 Session，在 **执行器凭据** 中选择 **撤销**，或 **删除** 该 Session；在此之前，Core 仍接受这台机器的凭据。
 
@@ -220,4 +220,4 @@ session = client.beta.agents.sessions.create(
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-使用 Session 的 `remote_url` 和 Environment ID。发行包即[重新连接已有 Session](#reconnect-an-existing-session) 中的压缩包。在 PowerShell 中，以原生绝对路径运行 `.\oac-daemon.exe`。安装目录必须不存在、为空，或已包含一个安装。此模式要求工作区已存在，且在运行 `start` 前不会启动守护进程。
+使用 Session 的 `remote_url` 和 Environment ID。发行包即[重新连接已有 Session](#reconnect-an-existing-session) 中描述的目录：平台归档中的 `oac-daemon` 和 `bundle.json`，以及 `node` 和每个所选 Harness 的归档中的 `components/`。缺少组件会失败，并指出需要解压的归档；此模式从不下载。在 PowerShell 中，以原生绝对路径运行 `.\oac-daemon.exe`。安装目录必须不存在、为空，或已包含一个安装。此模式要求工作区已存在，且在运行 `start` 前不会启动守护进程。

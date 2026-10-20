@@ -184,6 +184,9 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 		}
 	}
 	slices.Sort(all)
+	if err = obtainNativeComponents(ctx, rc.stdout, o, selected); err != nil {
+		return err
+	}
 	// Verify existing components before adding any new one; never repair or
 	// upgrade an installed dependency as a side effect of adding a Harness.
 	if len(previous.Harnesses) > 0 {
