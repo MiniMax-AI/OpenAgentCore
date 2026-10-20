@@ -2,7 +2,6 @@ package claudesdk
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -13,7 +12,6 @@ import (
 
 func TestLocalWorkspaceBindingAndRequiredHistory(t *testing.T) {
 	config := workspaceFixture(t)
-	config.Workspace.PublicDirectory = config.Workspace.Directory
 	req := workspaceRequest()
 	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: config.Workspace.Directory}
 	req.RequireExistingNativeSession = true
@@ -21,19 +19,6 @@ func TestLocalWorkspaceBindingAndRequiredHistory(t *testing.T) {
 	if err != nil || !start.RequireHistory {
 		t.Fatal(start, err)
 	}
-	config.Workspace.PublicDirectory = config.Workspace.HomeDir
-	if _, _, err := prepare(config, req); err == nil {
-		t.Fatal("accepted a different public workspace")
-	}
-	alias := filepath.Join(filepath.Dir(config.Workspace.Directory), "alias")
-	if err := os.Symlink(config.Workspace.Directory, alias); err != nil {
-		t.Fatal(err)
-	}
-	config.Workspace.PublicDirectory = alias
-	if _, _, err := prepare(config, req); err != nil {
-		t.Fatal("same workspace alias rejected", err)
-	}
-
 }
 
 func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {

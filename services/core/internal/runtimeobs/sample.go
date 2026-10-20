@@ -34,15 +34,13 @@ type Sample struct {
 	CPUCapacityCores     *float64
 	// CPUUtilizationRatio is a provider-reported share of CPUCapacityCores, for
 	// providers such as E2B that report a current rate instead of cumulative time.
-	// Newer fields are omitted when absent: node frames carry Sample, and an
-	// older Core decodes them with unknown fields disallowed.
-	CPUUtilizationRatio *float64 `json:",omitempty"`
+	CPUUtilizationRatio *float64
 	MemoryUsageBytes    *uint64
 	MemoryLimitBytes    *uint64
 	// Disk values are current usage and capacity of the Runtime's disk, when
 	// the provider reports them (E2B). They are not part of the /v1 projection.
-	DiskUsageBytes *uint64 `json:",omitempty"`
-	DiskLimitBytes *uint64 `json:",omitempty"`
+	DiskUsageBytes *uint64
+	DiskLimitBytes *uint64
 }
 
 func (s Sample) validate(now time.Time) error {

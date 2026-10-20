@@ -30,7 +30,7 @@ func claudeSession(t *testing.T, h *dispatchHarness, configuration string, prebo
 
 func claudeHeartbeat(t *testing.T, h *dispatchHarness, ready bool) {
 	t.Helper()
-	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(ready), ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
+	caps := prototest.Capabilities(proto.AgentKindCapabilities{Streaming: proto.CapabilitySupported, DurableTurns: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilityFromBool(ready), ExecutionControls: proto.CapabilitySupported, EnvironmentNone: proto.CapabilitySupported, SubagentControl: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported, ToolObservations: proto.CapabilitySupported, Preparation: proto.CapabilitySupported})
 	h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "claude_sdk", Available: true, Capabilities: caps}}})
 	deadline := time.Now().Add(3 * time.Second)
 	for {

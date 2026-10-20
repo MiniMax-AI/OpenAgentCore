@@ -90,7 +90,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   let failed = false;
   let cancellationFactsFailed = false;
   let structured = request.output_format ? new StructuredOutput() : undefined;
-  let messages = request.observe_messages ? new MessageObserver() : undefined;
+  let messages = new MessageObserver();
   let stream: ReturnType<typeof query> | undefined;
   let warm: WarmQuery | undefined;
   let nativeAlive = false;
@@ -170,7 +170,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         turns.configure(stream,(input,output)=>{
           inputs=new Inputs(input);
           functions=new FunctionBridge(output);
-          messages=request.observe_messages ? new MessageObserver() : undefined;
+          messages=new MessageObserver();
           structured=request.output_format ? new StructuredOutput() : undefined;
           commands=workspace ? new CommandObserver() : undefined;
           searches=observeSearch ? new SearchObserver() : undefined;
@@ -205,7 +205,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
       if (mcp) for (const event of mcp.consume(message, nativeID)) await emit(event);
       if (commands) for (const event of commands.consume(message, nativeID, inputs.hasInput)) await emit(event);
       if (searches) for (const event of searches.consume(message, nativeID)) await emit(event);
-      if (messages) for (const event of messages.consume(message)) await emit(event);
+      for (const event of messages.consume(message)) await emit(event);
       if (message.type === "system" && message.subtype === "init") {
         nativeID = message.session_id;
         if (!nativeID || (request.resume && nativeID !== request.resume)) throw new Error("unexpected native session");
@@ -224,9 +224,6 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         }
         turns?.identify(nativeID);
         if(!turns || turns.id) for (const event of inputs.start(nativeID)) await emit(event);
-      } else if (!messages && message.type === "stream_event" && message.parent_tool_use_id === null &&
-                 message.event.type === "content_block_delta" && message.event.delta.type === "text_delta") {
-        await emit({ type: "delta", delta: message.event.delta.text });
       } else if (message.type === "result") {
         if (!message.uuid || resultIDs.has(message.uuid) || !nativeID || message.session_id !== nativeID) throw new Error("invalid native result identity");
         resultIDs.add(message.uuid);

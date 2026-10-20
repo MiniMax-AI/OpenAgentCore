@@ -50,7 +50,7 @@ func TestDurableCompletionWaitsForSteeringReceiptSend(t *testing.T) {
 			registry := agent.NewRegistry()
 			var session *fakeSession
 			var calls atomic.Int32
-			registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+			registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
 				return &steeringSession{fakeSession: session, steer: func(context.Context, proto.PromptSteerPayload) error {
 					calls.Add(1)
@@ -125,7 +125,7 @@ func TestShutdownReleasesSteeringWorkerAndReceiptJoin(t *testing.T) {
 			registry := agent.NewRegistry()
 			entered, exited := make(chan struct{}), make(chan struct{})
 			var session *fakeSession
-			registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+			registerExecutorKind(registry, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
 				return &steeringSession{fakeSession: session, steer: func(ctx context.Context, _ proto.PromptSteerPayload) error {
 					close(entered)

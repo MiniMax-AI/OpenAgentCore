@@ -107,18 +107,9 @@ func (t *preparationTurn) SubmitFunctionResult(ctx context.Context, p proto.Func
 	}
 	return agent.ErrUnknownFunctionCall
 }
-func (t *preparationTurn) Steer(ctx context.Context, p proto.PromptSteerPayload) error {
-	if target, ok := t.Session.(agent.Steerer); ok {
-		return target.Steer(ctx, p)
-	}
-	return agent.ErrSteeringInactive
-}
 func (t *preparationTurn) SteerWithReceipt(ctx context.Context, p proto.PromptSteerPayload, write func()) error {
 	if target, ok := t.Session.(agent.DurableSteerer); ok {
 		return target.SteerWithReceipt(ctx, p, write)
-	}
-	if target, ok := t.Session.(agent.Steerer); ok {
-		return target.Steer(ctx, p)
 	}
 	return agent.ErrSteeringInactive
 }

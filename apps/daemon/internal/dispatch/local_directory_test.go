@@ -40,7 +40,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
-	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, WorkspaceReadOnly: true}
+	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: session, WorkspaceReadOnly: true}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{Configuration: request})); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestLocalDirectoryPreparationNeedsNoHarnessAndRejectsOtherOwners(t *testing
 		t.Fatal("read preparation admitted execution")
 	}
 	bad := request
-	bad.AgentStateKey = "agents-api-" + uuid.NewString()
+	bad.AgentStateKey = uuid.NewString()
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "wrong-session", proto.ExecutionPreparePayload{Configuration: bad})); err == nil {
 		t.Fatal("wrong Session accepted")
 	}
@@ -118,7 +118,7 @@ func TestLocalDirectoryKeepsNotDirectorySeparateFromFailures(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = r.Shutdown(context.Background()) })
-	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: "agents-api-" + session, WorkspaceReadOnly: true}
+	request := proto.PromptRequestPayload{AgentKind: "native", LocalEnvironment: &proto.LocalEnvironment{ID: environment}, AgentStateKey: session, WorkspaceReadOnly: true}
 	if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "idle", proto.ExecutionPreparePayload{Configuration: request})); err != nil {
 		t.Fatal(err)
 	}

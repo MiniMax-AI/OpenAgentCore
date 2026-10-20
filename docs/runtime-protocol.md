@@ -65,13 +65,13 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 
 | Capability | Core requires it when |
 | --- | --- |
-| `streaming`, `steering`, `durable_turns`, `durable_input_receipts`, `preparation`, `execution_controls`, `tool_observations` | Always, for every execution on that Harness (with `available` true) |
+| `streaming`, `durable_turns`, `durable_input_receipts`, `preparation`, `execution_controls`, `tool_observations` | Always, for every execution on that Harness (with `available` true) |
 | `environment_none` | The Environment type is `none` |
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | The Environment type is `openai_hosted` or `self_hosted` |
 | `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
 | `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
 | `retained_native_history` | The Environment uses an external workspace binding; owned workspace storage does not require this capability |
-| `structured_output` and `message_items` | The Agent requests `json_schema` output |
+| `structured_output` and `message_items` | The Agent requests `json_schema` output. A Runtime that declares `message_items` tags text deltas with the native item ID and reports message start, completion, phase and the completion text in `output_message` frames |
 | `subagent_observations` | `multi_agent.enabled` is true |
 | `subagent_control` | `multi_agent.enabled` is false |
 | `tool_search` | The Agent enables tool search or defers function loading |
@@ -217,12 +217,10 @@ The `execution_prepare` configuration carries the opt-ins Core sets for each Run
 | --- | --- |
 | `agent_options` | Always `model` and `system_prompt` from the Agent; `model_provider` when the Session froze one; `harness_config` when the Agent sets `x_agents_core.harness_config`. Core sends no other key; the Runtime rejects any other key with `unsupported_configuration` before preparation |
 | `execution_controls` | Always: the resolved text verbosity (default `medium`) plus each option the Agent sets, whether web search (mode, `context_size`, `allowed_domains`, `location`), programmatic tool calling, reasoning effort and summary, a non-`auto` service tier or a `json_schema` output format. Core validates every value against the Harness declaration before dispatch; native option names belong to the adapter |
-| `observe_messages` | When the Runtime declares `message_items`. Text deltas then carry the native item ID, and `output_message` frames report message start, completion, phase and the completion text |
 | `observe_subagent_identities`, `disable_subagents` | From the Agent's `multi_agent.enabled` |
 | `disable_execution_environment` | For an Environment of type `none` |
 | `local_environment` | For `openai_hosted` and `self_hosted`, with the exact Environment binding. The request carries no working directory; the Runtime checks `workspace_directory` against its binding |
 | `require_existing_native_session` | When a native Session must be recovered |
-| `durable_receipt` on `prompt_steer` | For every active input Core delivers |
 
 An execution configuration requires exactly one of `local_environment` and `disable_execution_environment`; `execution_prepare` rejects neither or both with `unsupported_configuration`.
 
@@ -230,14 +228,14 @@ Requests without an opt-in keep the frames and fields they had without it. A `to
 
 ## Active input receipts
 
-Core delivers active input as `prompt_steer` with `durable_receipt: true`, one input at a time per Run, and waits for its receipt before sending the next.
+Core delivers active input as `prompt_steer`, one input at a time per Run, and waits for its receipt before sending the next.
 
 ```mermaid
 sequenceDiagram
     participant C as Core
     participant R as Runtime
     participant H as Harness adapter
-    C->>R: prompt_steer (durable_receipt)
+    C->>R: prompt_steer
     Note over C,R: written wait limit, from delivery
     R->>H: SteerWithReceipt
     Note over R,H: native write limit

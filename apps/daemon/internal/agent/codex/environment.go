@@ -37,7 +37,7 @@ func nativeEnvironmentStatus(ctx context.Context, rpc *JSONRPCClient, id string)
 	return result.Status, nil
 }
 
-// Native still recognizes the retired transport variables. Reject them before
+// Native Codex honors the executor transport variables. Reject them before
 // setup so the inherited environment cannot select a separate executor.
 // The explicit none selector remains part of native execution isolation.
 func validateNativeTransportEnvironment() error {
@@ -47,7 +47,7 @@ func validateNativeTransportEnvironment() error {
 			continue
 		}
 		if (key == "CODEX_EXEC_SERVER_URL" && value != "none") || strings.HasPrefix(key, "CODEX_EXEC_SERVER_NOISE_") {
-			return errors.New("codex: retired executor transport configuration is not supported")
+			return errors.New("codex: executor transport configuration is not supported")
 		}
 	}
 	return nil

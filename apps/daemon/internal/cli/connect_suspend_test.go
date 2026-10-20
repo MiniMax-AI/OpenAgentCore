@@ -383,7 +383,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 		t.Fatal("no connection")
 	}
 	defer peer.Close()
-	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: "agents-api-" + session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}})
+	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

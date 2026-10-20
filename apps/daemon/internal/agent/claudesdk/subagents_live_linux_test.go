@@ -57,7 +57,7 @@ func TestLiveClaudeSDKNativeSubagent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 256)
-	request := proto.PromptRequestPayload{RunID: uuid.NewString(), ObserveMessages: true, ObserveSubagentIdentities: true,
+	request := proto.PromptRequestPayload{RunID: uuid.NewString(), ObserveSubagentIdentities: true,
 		Input:        proto.TextInput("Call the Agent tool exactly once with subagent_type \"general-purpose\", model \"sonnet\", name \"helper\" and a prompt asking it to reply with the single word PONG. Then report what it replied."),
 		AgentOptions: map[string]any{"model": model}}
 	turn, err := startSingleTurn(ctx, config, request, out)
@@ -107,7 +107,7 @@ func TestLiveClaudeSDKSubagentFunctionCall(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
 	defer cancel()
 	out := make(chan proto.Envelope, 256)
-	request := proto.PromptRequestPayload{RunID: uuid.NewString(), ObserveMessages: true, ObserveSubagentIdentities: true,
+	request := proto.PromptRequestPayload{RunID: uuid.NewString(), ObserveSubagentIdentities: true,
 		FunctionTools: []proto.FunctionTool{{Name: "lookup", Description: "Returns the secret code of a topic.", Parameters: json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"}},"required":["topic"]}`)}},
 		Input:         proto.TextInput("Call the Agent tool exactly once with subagent_type \"general-purpose\", name \"helper\" and a prompt telling it to call the mcp__functions__lookup tool with topic \"sky\" and reply with exactly the code it returned. Then report that code."),
 		AgentOptions:  map[string]any{"model": os.Getenv("OAC_TEST_CLAUDE_SDK_MODEL")}}

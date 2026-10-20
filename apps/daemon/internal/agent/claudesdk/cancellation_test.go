@@ -44,7 +44,7 @@ func TestCancellationWaitsForDrainAndPublishesOutcome(t *testing.T) {
 	if got := running.CancellationOutcome(); !reflect.DeepEqual(got, proto.DonePayload{}) {
 		t.Fatal("unsettled outcome was exposed", got)
 	}
-	if err := running.(*session).Steer(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}); !errors.Is(err, agent.ErrSteeringInactive) {
+	if err := running.(*session).SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "later", Input: proto.TextInput("later")}, func() {}); !errors.Is(err, agent.ErrSteeringInactive) {
 		t.Fatal("cancelled execution accepted steering", err)
 	}
 	if err := os.WriteFile(filepath.Join(config.StateDir, "release"), nil, 0o600); err != nil {
@@ -168,7 +168,7 @@ func cancellationRequest() proto.PromptRequestPayload {
 
 func runCancellationHelper(request startRequest, mode string, scanner *bufio.Scanner, emit func(bridgeEvent)) {
 	if mode == "cancellation-wait" {
-		emit(bridgeEvent{Type: "delta", Delta: "partial"})
+		emit(bridgeEvent{Type: "delta", ItemID: "item", Delta: "partial"})
 		if !scanner.Scan() {
 			return
 		}
@@ -179,7 +179,7 @@ func runCancellationHelper(request startRequest, mode string, scanner *bufio.Sca
 		// These valid observations were in flight when cancellation started.
 		emit(bridgeEvent{Type: "input_ready", SessionID: request.Resume})
 		emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: request.Resume, Usage: json.RawMessage(usageFixture)})
-		emit(bridgeEvent{Type: "delta", Delta: "tail"})
+		emit(bridgeEvent{Type: "delta", ItemID: "item", Delta: "tail"})
 		for {
 			if _, err := os.Stat(filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "release")); err == nil {
 				break
@@ -187,7 +187,7 @@ func runCancellationHelper(request startRequest, mode string, scanner *bufio.Sca
 			time.Sleep(time.Millisecond)
 		}
 		_, _ = os.Stderr.WriteString(strings.Repeat("x", 2*1024*1024))
-		emit(bridgeEvent{Type: "delta", Delta: "drained"})
+		emit(bridgeEvent{Type: "delta", ItemID: "item", Delta: "drained"})
 		emit(bridgeEvent{Type: "input_closed", SessionID: request.Resume})
 		emit(bridgeEvent{Type: "error", Code: "cancelled"})
 		return
@@ -199,7 +199,7 @@ func runCancellationHelper(request startRequest, mode string, scanner *bufio.Sca
 		}
 		emit(bridgeEvent{Type: "input_ready", SessionID: id})
 		emit(bridgeEvent{Type: "usage", ResultID: "native-result", SessionID: id, Usage: json.RawMessage(usageFixture)})
-		emit(bridgeEvent{Type: "delta", Delta: "partial"})
+		emit(bridgeEvent{Type: "delta", ItemID: "item", Delta: "partial"})
 	}
 	emit(bridgeEvent{Type: "error", Code: "execution_failed"})
 }

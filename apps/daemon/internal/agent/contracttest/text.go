@@ -71,7 +71,7 @@ func TextLifecycle(t *testing.T, fixture TextFixture) {
 		t.Fatal("public text Turn must implement DurableSteerer")
 	}
 	var written atomic.Int32
-	if err := steerer.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "contract-input", Input: fixture.SteeringInput, DurableReceipt: true}, func() { written.Add(1) }); err != nil {
+	if err := steerer.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "contract-input", Input: fixture.SteeringInput}, func() { written.Add(1) }); err != nil {
 		t.Fatalf("active input after stale cancellation: %v", err)
 	}
 	if written.Load() != 1 {

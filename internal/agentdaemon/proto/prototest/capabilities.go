@@ -12,13 +12,13 @@ import (
 // fixture is deliberately updated, so declaration validation fails on omission.
 func Capabilities(overrides proto.AgentKindCapabilities) proto.AgentKindCapabilities {
 	c := proto.AgentKindCapabilities{
-		SubagentObservations:     proto.CapabilityUnsupported,
-		Streaming:                proto.CapabilityUnsupported,
-		Usage:                    proto.CapabilityUnsupported,
-		Resume:                   proto.CapabilityUnsupported,
-		NativeSessionRecovery:    proto.CapabilityUnsupported,
-		RetainedNativeHistory:    proto.CapabilityUnsupported,
-		Steering:                 proto.CapabilityUnsupported,
+		SubagentObservations:  proto.CapabilityUnsupported,
+		Streaming:             proto.CapabilityUnsupported,
+		Usage:                 proto.CapabilityUnsupported,
+		Resume:                proto.CapabilityUnsupported,
+		NativeSessionRecovery: proto.CapabilityUnsupported,
+		RetainedNativeHistory: proto.CapabilityUnsupported,
+
 		MessageItems:             proto.CapabilityUnsupported,
 		ToolObservations:         proto.CapabilityUnsupported,
 		EnvironmentNone:          proto.CapabilityUnsupported,

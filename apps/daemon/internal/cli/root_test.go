@@ -65,7 +65,6 @@ func TestSubcommandsAreRegistered(t *testing.T) {
 		"uninstall":        false,
 		"resume":           false,
 		"runtime-mcp-exec": false,
-		"placement":        false,
 		"connect":          false,
 		"status":           false,
 		"stop":             false,

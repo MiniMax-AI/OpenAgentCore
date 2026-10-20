@@ -104,7 +104,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 				s.invalidate()
 			}
 		case "delta":
-			if start.ObserveMessages && event.ItemID == "" || !start.ObserveMessages && event.ItemID != "" {
+			if event.ItemID == "" {
 				failure = fmt.Errorf("claudesdk: invalid message delta identity")
 				s.invalidate()
 				break
@@ -114,7 +114,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 			emit(proto.TypeDelta, proto.DeltaPayload{ItemID: event.ItemID, Delta: event.Delta, Sequence: sequence})
 		case "output_message":
 			message := event.Message
-			if !start.ObserveMessages || message == nil || message.ID == "" ||
+			if message == nil || message.ID == "" ||
 				(message.Status != "in_progress" && message.Status != "completed") ||
 				(message.Status == "completed") != (message.Text != nil) {
 				failure = fmt.Errorf("claudesdk: invalid message observation")
@@ -230,7 +230,6 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 	}
 	close(s.settled)
 	if failure != nil {
-		// A valid Turn boundary replaces the former process-exit boundary.
 		// A native diagnostic does not itself confirm cancellation or reuse.
 		if failure != classifiedFailure || !settlementReceived {
 			engineCode = ""

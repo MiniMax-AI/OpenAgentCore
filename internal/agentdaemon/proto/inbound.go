@@ -162,7 +162,6 @@ type AgentKindCapabilities struct {
 	// process shutdown using its retained private state, without replaying input.
 	// It does not promise process memory or external connection restoration.
 	RetainedNativeHistory CapabilitySupport `json:"retained_native_history"`
-	Steering              CapabilitySupport `json:"steering"`
 	MessageItems          CapabilitySupport `json:"message_items"`
 
 	ToolObservations         CapabilitySupport `json:"tool_observations"`

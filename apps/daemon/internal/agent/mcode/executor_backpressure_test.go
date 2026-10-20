@@ -78,7 +78,7 @@ func TestExecutorUnknownSteeringOutcomeCannotBecomeAppliedCancellation(t *testin
 		t.Fatal("native prompt did not start")
 	}
 	session := turn.(*Session)
-	if err := session.Steer(ctx, proto.PromptSteerPayload{InputID: "input-unknown", Input: proto.TextInput("continue")}); err == nil {
+	if err := session.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "input-unknown", Input: proto.TextInput("continue")}, func() {}); err == nil {
 		t.Fatal("unknown native receipt was accepted")
 	}
 	if err := turn.Cancel(ctx); err == nil {

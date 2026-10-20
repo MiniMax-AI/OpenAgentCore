@@ -16,12 +16,7 @@ func TestExecutionNegotiatesAndPersistsToolObservations(t *testing.T) {
 	ctx := context.Background()
 	input := h.message("observed", "run tools")
 	result := h.run(ctx, input.TurnID)
-	env := h.read(testExecutionRequest)
-	var request proto.PromptRequestPayload
-	_ = env.DecodePayload(&request)
-	if request.ObserveMessages {
-		t.Fatal("unadvertised message items were requested")
-	}
+	h.read(testExecutionRequest)
 	start := json.RawMessage(`{"kind":"mcp","server":"reference","name":"lookup","arguments":{"key":"value"},"status":"in_progress","output":null,"error":null}`)
 	complete := json.RawMessage(`{"kind":"mcp","server":"reference","name":"lookup","arguments":{"key":"value"},"status":"completed","output":{"content":[{"type":"text","text":"answer"}],"structuredContent":{"version":9007199254740993}},"error":null}`)
 	partial := json.RawMessage(`{"kind":"command","command":"long-running","status":"in_progress"}`)
@@ -42,7 +37,7 @@ func TestExecutionNegotiatesAndPersistsToolObservations(t *testing.T) {
 	if _, err := requestCancel(ctx, h.s, h.tenant, h.session.ID, "cancel"); err != nil {
 		t.Fatal(err)
 	}
-	env = h.read(proto.TypePromptCancel)
+	env := h.read(proto.TypePromptCancel)
 	var cancel proto.PromptCancelPayload
 	_ = env.DecodePayload(&cancel)
 	h.write(input.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: &proto.DonePayload{}})

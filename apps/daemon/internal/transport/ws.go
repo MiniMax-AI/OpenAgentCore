@@ -363,14 +363,13 @@ func isPermanentClose(err error) bool {
 	return websocket.IsCloseError(err, CloseRuntimeDeleted)
 }
 
-// withQueryParams appends non-secret parameters and removes legacy credentials.
+// withQueryParams appends non-secret parameters.
 func withQueryParams(raw string, params map[string]string) (string, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "", fmt.Errorf("transport: invalid ws url")
 	}
 	q := u.Query()
-	q.Del("token")
 	for k, v := range params {
 		q.Set(k, v)
 	}

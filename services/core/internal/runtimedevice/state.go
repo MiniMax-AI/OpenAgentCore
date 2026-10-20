@@ -66,7 +66,6 @@ type KindCapabilities struct {
 	Resume                bool `json:"resume,omitempty"`
 	NativeSessionRecovery bool `json:"native_session_recovery,omitempty"`
 	RetainedNativeHistory bool `json:"retained_native_history,omitempty"`
-	Steering              bool `json:"steering,omitempty"`
 	MessageItems          bool `json:"message_items,omitempty"`
 
 	ToolObservations         bool `json:"tool_observations,omitempty"`
