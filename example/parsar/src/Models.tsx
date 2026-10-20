@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { randomUuid } from "@oac/agents-client";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import {
   product,
@@ -35,7 +36,7 @@ export function Models() {
         </Help>
         <Button
           onClick={() =>
-            setProvider({ id: crypto.randomUUID(), name: "", revision: 0 })
+            setProvider({ id: randomUuid(), name: "", revision: 0 })
           }
         >
           <Plus />

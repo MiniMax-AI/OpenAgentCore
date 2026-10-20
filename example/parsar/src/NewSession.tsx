@@ -1,6 +1,7 @@
 import { sessionRestriction } from "../shared/session-profile.mjs";
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { randomUuid } from "@oac/agents-client";
 import {
   product,
   ProductError,
@@ -31,7 +32,7 @@ export function NewSession({
   const cache = useQueryClient();
   const runtimes = useRuntimes();
   const [form, setForm] = useState(() => ({
-    id: crypto.randomUUID(),
+    id: randomUuid(),
     name: "",
     input: "",
     agent_id: agent.id,

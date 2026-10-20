@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { randomUuid } from "@oac/agents-client";
 import { Plus, Copy, Trash2, Layers } from "lucide-react";
 import {
   product,
@@ -43,7 +44,7 @@ export function Agents() {
           onClick={() =>
             setEditing({
               ...emptyConfiguration,
-              id: crypto.randomUUID(),
+              id: randomUuid(),
               name: "",
               revision: 0,
             })
@@ -84,7 +85,7 @@ export function Agents() {
                     onClick={() =>
                       setEditing({
                         ...agent,
-                        id: crypto.randomUUID(),
+                        id: randomUuid(),
                         name: `${agent.name} 副本`,
                         revision: 0,
                       })
