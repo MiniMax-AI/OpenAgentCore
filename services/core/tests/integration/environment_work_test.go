@@ -1,10 +1,8 @@
 package integration
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
 
@@ -16,20 +14,13 @@ func TestEnvironmentInputWorkFiltersAndPagesDevices(t *testing.T) {
 		pending := workerEnvironmentReservation(t, h)
 		wanted[pending.ID] = pending.SessionID
 	}
-	for _, state := range []string{"expired", "cancelled", "deleted", "unbound", "revoked", "disconnected"} {
+	for _, state := range []string{"expired", "cancelled", "unbound", "revoked", "disconnected"} {
 		pending := workerEnvironmentReservation(t, h)
 		switch state {
 		case "expired":
 			makeEnvironmentExpiryDue(t, pool, &pending)
 		case "cancelled":
 			if _, err := cancelEnvironmentInput(t.Context(), h.s, h.tenant, pending.SessionID, pending.ID); err != nil {
-				t.Fatal(err)
-			}
-		case "deleted":
-			if err := sessionService(t, h.s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: pending.SessionID}); !errors.Is(err, sessions.ErrNotIdle) {
-				t.Fatal("pending input deleted", err)
-			}
-			if err := h.s.commitLegacyDeletion(t.Context(), h.tenant, pending.SessionID); err != nil {
 				t.Fatal(err)
 			}
 		case "unbound":

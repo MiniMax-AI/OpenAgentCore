@@ -210,47 +210,31 @@ func TestSessionArtifactsDiscardTerminalPrivateCapture(t *testing.T) {
 	}
 }
 
-func TestSessionArtifactTransferDoesNotBlockDeletionOrCancellation(t *testing.T) {
-	for _, operation := range []string{"delete", "cancel"} {
-		t.Run(operation, func(t *testing.T) {
-			s, _ := configuredStore(t)
-			pool := s.pool
-			tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
-			before := largeObjectCount(t, pool)
-			reader, writer := io.Pipe()
-			defer reader.Close()
-			defer writer.Close()
-			result := make(chan error, 1)
-			go func() { result <- stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, reader) }()
-			// A complete TAR arrives, but transport has not acknowledged success yet.
-			if _, err := writer.Write(artifactArchive(t, map[string][]byte{"outputs/a": []byte("partial")})); err != nil {
-				t.Fatal(err)
-			}
-			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
-			defer cancel()
-			want := sessions.ErrNotFound
-			if operation == "delete" {
-				// The idle-only decision itself is not blocked by the transfer.
-				if err := sessionService(t, s).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session}); !errors.Is(err, sessions.ErrNotIdle) {
-					t.Fatalf("transfer blocked or bypassed the deletion rule: %v", err)
-				}
-				if err := s.commitLegacyDeletion(ctx, tenant, session); err != nil {
-					t.Fatalf("transfer blocked deletion: %v", err)
-				}
-			} else {
-				if _, err := requestCancel(ctx, s, tenant, session, "cancel-capture"); err != nil {
-					t.Fatalf("transfer blocked cancellation: %v", err)
-				}
-				want = sessions.ErrTurnConflict
-			}
-			writer.Close()
-			if err := <-result; !errors.Is(err, want) {
-				t.Fatalf("late publication after %s: %v", operation, err)
-			}
-			if count := largeObjectCount(t, pool); count != before {
-				t.Fatalf("late capture leaked objects: %d -> %d", before, count)
-			}
-		})
+func TestSessionArtifactTransferDoesNotBlockCancellation(t *testing.T) {
+	s, _ := configuredStore(t)
+	pool := s.pool
+	tenant, session, environment, turn := artifactTurn(t, s, "openai_hosted")
+	before := largeObjectCount(t, pool)
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	defer writer.Close()
+	result := make(chan error, 1)
+	go func() { result <- stageTurnArtifacts(t.Context(), s, tenant, session, turn, environment, reader) }()
+	// A complete TAR arrives, but transport has not acknowledged success yet.
+	if _, err := writer.Write(artifactArchive(t, map[string][]byte{"outputs/a": []byte("partial")})); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	if _, err := requestCancel(ctx, s, tenant, session, "cancel-capture"); err != nil {
+		t.Fatalf("transfer blocked cancellation: %v", err)
+	}
+	writer.Close()
+	if err := <-result; !errors.Is(err, sessions.ErrTurnConflict) {
+		t.Fatalf("late publication after cancellation: %v", err)
+	}
+	if count := largeObjectCount(t, pool); count != before {
+		t.Fatalf("late capture leaked objects: %d -> %d", before, count)
 	}
 }
 

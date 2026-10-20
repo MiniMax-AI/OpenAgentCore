@@ -164,7 +164,7 @@ func TestEnvironmentAdmissionWaitsForPreparedClaimAndRetainsRetry(t *testing.T) 
 }
 
 func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
-	for _, name := range []string{"expired", "cancelled", "deleted", "disconnected", "ownership_lost"} {
+	for _, name := range []string{"expired", "cancelled", "disconnected", "ownership_lost"} {
 		t.Run(name, func(t *testing.T) {
 			h, worker := newEnvironmentAdmission(t)
 			ctx, cancel := context.WithCancel(t.Context())
@@ -181,14 +181,6 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 			case "cancelled":
 				expected = execution.ErrEnvironmentInputCancelled
 				if _, err := cancelEnvironmentInput(t.Context(), h.s, h.tenant, h.session.ID, pending.ID); err != nil {
-					t.Fatal(err)
-				}
-			case "deleted":
-				expected = sessions.ErrNotFound
-				if err := sessionService(t, h.s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: h.tenant, SessionID: h.session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
-					t.Fatal("pending input deleted", err)
-				}
-				if err := h.s.commitLegacyDeletion(t.Context(), h.tenant, h.session.ID); err != nil {
 					t.Fatal(err)
 				}
 			case "disconnected":
@@ -215,9 +207,6 @@ func TestEnvironmentAdmissionSettlementDoesNotCreateTurn(t *testing.T) {
 			}
 			if turns != 0 || inputs != 0 {
 				t.Fatal("settlement created work", turns, inputs)
-			}
-			if name == "deleted" {
-				return
 			}
 			retained, err := sessionAdapter(h.s).GetEnvironmentInputReservation(t.Context(), h.tenant, h.session.ID, pending.ID)
 			if err != nil {

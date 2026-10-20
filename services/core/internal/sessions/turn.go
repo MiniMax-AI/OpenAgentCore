@@ -108,8 +108,7 @@ type TurnReader interface {
 	// cursor Turn is ErrNotFound.
 	ListTurns(ctx context.Context, tenant, session, cursor string, limit int, ascending bool) (TurnPage, error)
 	// ListExecutionWork lists, in ID order after the Turn after names, up to
-	// 100 root Turns in statuses across tenants; the queued Turns of a publicly
-	// deleted Session are not work. With connectedDevices not nil, it lists
-	// only the Turns of tenants that own one of those devices, unrevoked.
+	// 100 root Turns in statuses across tenants. With connectedDevices not nil, it
+	// lists only the Turns of tenants that own one of those devices, unrevoked.
 	ListExecutionWork(ctx context.Context, after string, statuses, connectedDevices []string) ([]ExecutionWork, error)
 }
