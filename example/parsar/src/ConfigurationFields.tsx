@@ -48,9 +48,11 @@ export const emptyConfiguration: Configuration = {
 export function ConfigurationFields({
   value,
   change,
+  errors = {},
 }: {
   value: Configuration;
   change: (value: Configuration) => void;
+  errors?: { model_id?: string; runtime_id?: string };
 }) {
   const capabilities = useCapabilities(),
     runtimes = useRuntimes(),
@@ -132,24 +134,11 @@ export function ConfigurationFields({
   );
   return (
     <div className="space-y-6">
-      <Section title={tr("指令")}>
-        <Field label={tr("主指令")} id="config-instructions">
-          <Textarea
-            id="config-instructions"
-            rows={10}
-            className="min-h-52 leading-relaxed"
-            placeholder={tr("描述它负责什么、如何工作，以及输出什么结果。")}
-            value={value.instructions}
-            onChange={(event) =>
-              change({ ...value, instructions: event.target.value })
-            }
-          />
-        </Field>
-        {capabilityField("prompt", tr("指令片段"))}
-      </Section>
       <Section title={tr("模型与环境")}>
         <ResourceField
           label={tr("模型")}
+          required
+          error={errors.model_id}
           loading={models.isPending || providers.isPending}
           options={(models.data || []).map((row) => ({
             id: row.id,
@@ -202,6 +191,7 @@ export function ConfigurationFields({
         <ResourceField
           label={tr("环境模板")}
           required
+          error={errors.runtime_id}
           loading={runtimes.isPending}
           options={runtimes.data || []}
           selected={value.runtime_id ? [value.runtime_id] : []}
@@ -211,6 +201,21 @@ export function ConfigurationFields({
           createLabel={tr("添加环境模板")}
           inspect={inspect("runtimes")}
         />
+      </Section>
+      <Section title={tr("指令")}>
+        <Field label={tr("主指令")} id="config-instructions">
+          <Textarea
+            id="config-instructions"
+            rows={10}
+            className="min-h-52 leading-relaxed"
+            placeholder={tr("描述它负责什么、如何工作，以及输出什么结果。")}
+            value={value.instructions}
+            onChange={(event) =>
+              change({ ...value, instructions: event.target.value })
+            }
+          />
+        </Field>
+        {capabilityField("prompt", tr("指令片段"))}
       </Section>
       <Section title={tr("工具与知识")}>
         <Toggle

@@ -66,9 +66,9 @@ export function EnvironmentFields({
               id={`environment-${manager}`}
               rows={4}
               value={(value.packages?.[manager] || []).join("\n")}
-              placeholder={
-                manager === "npm" ? "typescript@5.8.3" : "pandas==2.3.3"
-              }
+              placeholder={tr("每行一个，例如 {{value0}}", {
+                value0: manager === "npm" ? "typescript@5.8.3" : "pandas==2.3.3",
+              })}
               onChange={(e) =>
                 onChange({
                   ...value,
@@ -89,9 +89,9 @@ export function EnvironmentFields({
           className="font-mono text-sm"
           value={value.setup_script || ""}
           onChange={(e) => onChange({ ...value, setup_script: e.target.value })}
-          placeholder={
-            "set -eu\nmkdir -p outputs\n# Install tools or prepare project files"
-          }
+          placeholder={tr(
+            "# 示例：每个新对话开始前执行\nset -eu\nmkdir -p outputs",
+          )}
         />
       </Field>
       <Group

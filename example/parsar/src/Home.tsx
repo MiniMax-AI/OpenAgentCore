@@ -1,7 +1,7 @@
 import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, Plus } from "lucide-react";
+import { ArrowUp, Plus, Check } from "lucide-react";
 import {
   product,
   ProductError,
@@ -168,14 +168,21 @@ function AgentChoice({
       aria-pressed={selected}
       onClick={choose}
       className={cn(
-        "flex items-start gap-3.5 rounded-2xl border p-4 text-left transition-colors",
+        "relative flex items-start gap-3.5 rounded-2xl border p-4 text-left transition-colors",
         selected
-          ? "border-line-strong bg-surface app-shadow-card"
+          ? "border-fg/40 bg-surface app-shadow-card ring-1 ring-fg/10"
           : "border-line bg-surface-subtle/60 hover:bg-surface",
       )}
     >
       <AgentAvatar name={agent.name} />
-      <span className="min-w-0">
+      {selected && (
+        <Check
+          aria-hidden
+          className="absolute right-4 top-4 h-4 w-4 text-fg"
+          strokeWidth={2.2}
+        />
+      )}
+      <span className="min-w-0 pr-6">
         <span className="block truncate text-sm font-medium text-fg">
           {agent.name}
         </span>

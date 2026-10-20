@@ -47,22 +47,74 @@ export function AgentPage({
             ask_user: true,
             revision: 0,
           };
-  return <AgentEditor key={initial.id} initial={initial} />;
+  return (
+    <AgentEditor
+      key={initial.id}
+      initial={initial}
+      draftKey={`parsar-agent-draft:${id || (copyFrom ? `copy:${copyFrom}` : "new")}`}
+    />
+  );
 }
 
-function AgentEditor({ initial: loaded }: { initial: AgentProfile }) {
+// Unsaved edits survive navigation within the tab; a draft only restores onto
+// the revision it was started from.
+function readDraft(key: string, revision: number) {
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(key) || "null");
+    return draft?.revision === revision ? (draft.form as AgentProfile) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function AgentEditor({
+  initial: loaded,
+  draftKey,
+}: {
+  initial: AgentProfile;
+  draftKey: string;
+}) {
   const cache = useQueryClient();
   const bots = useFeishuBots();
   // The last saved record; later list refreshes never replace an open draft.
   const [initial, setInitial] = useState(loaded);
-  const [form, setFormState] = useState(loaded);
+  const [restored] = useState(() => readDraft(draftKey, loaded.revision));
+  const [form, setFormState] = useState(restored || loaded);
+  const [attempted, setAttempted] = useState(false);
   const setForm = (next: AgentProfile) => {
     setSaved(false);
     setFormState(next);
+    if (JSON.stringify(next) === JSON.stringify(initial))
+      sessionStorage.removeItem(draftKey);
+    else
+      sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({ revision: initial.revision, form: next }),
+      );
   };
   const [saved, setSaved] = useState(false);
   const creating = !initial.revision;
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
+  const missing = {
+    name: form.name.trim() ? undefined : tr("请填写名称"),
+    model_id: form.model_id ? undefined : tr("请选择模型"),
+    runtime_id: form.runtime_id ? undefined : tr("请选择环境模板"),
+  };
+  const errors: Partial<typeof missing> = attempted ? missing : {};
+  const submit = () => {
+    if (Object.values(missing).some(Boolean)) {
+      setAttempted(true);
+      requestAnimationFrame(() => {
+        const field = document.querySelector<HTMLElement>('[data-invalid="true"]');
+        field?.scrollIntoView({ block: "center", behavior: "smooth" });
+        field
+          ?.querySelector<HTMLElement>("input, textarea, button")
+          ?.focus({ preventScroll: true });
+      });
+      return;
+    }
+    save.mutate();
+  };
   const bot = bots.data?.find((row) => row.agent_id === form.id);
   const save = useMutation({
     mutationFn: () => product<AgentProfile>(`agents/${form.id}`, "PUT", form),
@@ -72,6 +124,7 @@ function AgentEditor({ initial: loaded }: { initial: AgentProfile }) {
         ...rows.filter((row) => row.id !== agent.id),
       ]);
       void cache.invalidateQueries({ queryKey: ["agents"] });
+      sessionStorage.removeItem(draftKey);
       if (creating) location.hash = `/agents/${agent.id}`;
       setInitial(agent);
       setFormState(agent);
@@ -126,14 +179,8 @@ function AgentEditor({ initial: loaded }: { initial: AgentProfile }) {
           )}
           <Button
             type="button"
-            onClick={() => save.mutate()}
-            disabled={
-              save.isPending ||
-              (!creating && !dirty) ||
-              !form.name.trim() ||
-              !form.model_id ||
-              !form.runtime_id
-            }
+            onClick={submit}
+            disabled={save.isPending || (!creating && !dirty)}
           >
             {saved && !dirty ? <Check /> : null}
             {save.isPending
@@ -146,8 +193,28 @@ function AgentEditor({ initial: loaded }: { initial: AgentProfile }) {
       </div>
       <div className="mx-auto w-full max-w-3xl space-y-6 px-6 pb-16 pt-2 sm:px-10">
         <ErrorNotice error={save.error || remove.error} className="my-0" />
+        {restored && dirty && (
+          <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-subtle px-4 py-3 text-sm">
+            <span className="text-fg-muted">{tr("已恢复上次未保存的修改。")}</span>
+            <button
+              type="button"
+              className="shrink-0 font-medium text-fg underline-offset-4 hover:underline"
+              onClick={() => {
+                setForm(initial);
+                setAttempted(false);
+              }}
+            >
+              {tr("放弃修改")}
+            </button>
+          </div>
+        )}
         <Section title={tr("基本信息")}>
-          <Field label={tr("名称")} id="agent-name">
+          <Field
+            label={tr("名称")}
+            id="agent-name"
+            required
+            error={errors.name}
+          >
             <Input
               id="agent-name"
               required
@@ -176,16 +243,23 @@ function AgentEditor({ initial: loaded }: { initial: AgentProfile }) {
                 {bot ? bot.name : tr("未绑定")}
               </span>
             </span>
-            <a
-              href="#/feishu"
-              className="shrink-0 text-sm font-medium text-fg underline-offset-4 hover:underline"
-            >
-              {bot ? tr("管理") : tr("去绑定")}
-            </a>
+            {creating ? (
+              <span className="shrink-0 text-sm text-fg-muted">
+                {tr("保存后可绑定")}
+              </span>
+            ) : (
+              <a
+                href="#/feishu"
+                className="shrink-0 text-sm font-medium text-fg underline-offset-4 hover:underline"
+              >
+                {bot ? tr("管理") : tr("去绑定")}
+              </a>
+            )}
           </div>
         </Section>
         <ConfigurationFields
           value={form}
+          errors={errors}
           change={(configuration) => setForm({ ...form, ...configuration })}
         />
       </div>

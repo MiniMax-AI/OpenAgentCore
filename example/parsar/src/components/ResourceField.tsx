@@ -1,3 +1,4 @@
+import { cn } from "../lib/utils";
 import { useId, useState, type ReactNode } from "react";
 import { ChevronDown, Plus, Search, Settings2, X } from "lucide-react";
 import { tr } from "../lib/i18n";
@@ -35,6 +36,7 @@ export function ResourceField({
   detail,
   manage,
   required,
+  error,
 }: {
   label: string;
   options: ResourceOption[];
@@ -51,6 +53,8 @@ export function ResourceField({
   detail?: (id: string) => ReactNode;
   manage?: { href: string; label: string };
   required?: boolean;
+  /** Shown under the field after a failed save attempt. */
+  error?: string;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -64,12 +68,20 @@ export function ResourceField({
     options.find((row) => row.id === key)?.name ||
     (loading ? tr("加载中…") : `${tr("不可用资源")} · ${key}`);
   return (
-    <section className="space-y-2" aria-label={label}>
+    <section
+      className="space-y-2"
+      aria-label={label}
+      data-invalid={error ? "true" : undefined}
+    >
       <div className="flex items-center justify-between gap-2">
-        <label htmlFor={id} className="text-sm font-medium">
-          {label}
-          {required && <span className="ml-1 text-fg-subtle">*</span>}
-        </label>
+        <span className="flex items-baseline text-sm font-medium">
+          <label htmlFor={id}>{label}</label>
+          {required && (
+            <span aria-hidden className="ml-1 text-fg-subtle">
+              *
+            </span>
+          )}
+        </span>
         {multiple && (
           <span className="text-sm tabular-nums text-fg-subtle">
             {selected.length}
@@ -85,8 +97,12 @@ export function ResourceField({
           id={id}
           type="button"
           variant="outline"
-          className="min-w-0 flex-1 justify-between font-normal text-fg-muted"
+          className={cn(
+            "min-w-0 flex-1 justify-between font-normal text-fg-muted",
+            error && "border-danger-border",
+          )}
           aria-haspopup="dialog"
+          aria-invalid={error ? true : undefined}
           onClick={() => {
             setQuery("");
             setOpen(true);
@@ -95,7 +111,7 @@ export function ResourceField({
           <span className="truncate">
             {!multiple && selected.length
               ? tr("更换选择")
-              : empty || tr("选择已有资源")}
+              : empty || `${tr("选择")} ${label}`}
           </span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0" />
         </Button>
@@ -121,6 +137,7 @@ export function ResourceField({
           </Button>
         )}
       </div>
+      {error && <p className="text-sm text-danger">{error}</p>}
       {!!selected.length && (
         <div className="divide-y divide-line-muted rounded-xl border border-line">
           {selected.map((key) => (

@@ -61,6 +61,8 @@ export function Composer({
   }, [turnId]);
   const running =
     session.status === "in_progress" || session.status === "requires_action";
+  // Input during an active Turn reaches the running task; questions are answered on their card.
+  const waiting = session.status === "requires_action";
   const refresh = () => {
     void cache.invalidateQueries({ queryKey: ["session", session.id] });
     void cache.invalidateQueries({ queryKey: ["sessions"] });
@@ -117,7 +119,7 @@ export function Composer({
         className="rounded-3xl border border-line bg-surface p-3 app-shadow-floating transition-colors focus-within:border-line-strong"
         onSubmit={(e) => {
           e.preventDefault();
-          if (text.trim() && !running && !send.isPending) send.mutate();
+          if (text.trim() && !waiting && !send.isPending) send.mutate();
         }}
       >
         <textarea
@@ -135,33 +137,41 @@ export function Composer({
             }
           }}
           disabled={
-            running ||
+            waiting ||
             send.isPending ||
             session.status === "failed" ||
             !!pending
           }
           onChange={(e) => setText(e.target.value)}
           placeholder={
-            running
-              ? tr("Agent 执行中")
-              : session.status === "failed"
-                ? tr("当前会话已失败，请开始新对话")
-                : tr("继续对话\u2026")
+            waiting
+              ? tr("请先回答上方的问题")
+              : running
+                ? tr("补充说明，Agent 会在当前任务中看到\u2026")
+                : session.status === "failed"
+                  ? tr("当前会话已失败，请开始新对话")
+                  : tr("继续对话\u2026")
           }
           className="block max-h-60 w-full resize-none bg-transparent px-3 pt-2 text-base leading-relaxed outline-none placeholder:text-fg-subtle disabled:opacity-60"
         />
-        <div className="flex justify-end pt-1">
-          {running ? (
+        <div className="flex justify-end gap-2 pt-1">
+          {running && (
             <button
               type="button"
               aria-label={tr("取消执行")}
+              title={tr("停止")}
               disabled={cancel.isPending || cancelRequested}
               onClick={() => cancel.mutate()}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-emphasis text-fg-on-emphasis disabled:opacity-30"
+              className={
+                text.trim() && !waiting
+                  ? "flex h-9 w-9 items-center justify-center rounded-full border border-line-strong text-fg hover:app-hover disabled:opacity-30"
+                  : "flex h-9 w-9 items-center justify-center rounded-full bg-surface-emphasis text-fg-on-emphasis disabled:opacity-30"
+              }
             >
               <Square className="h-4 w-4" fill="currentColor" />
             </button>
-          ) : (
+          )}
+          {(!running || (text.trim() && !waiting)) && (
             <button
               type="submit"
               aria-label={pending ? tr("重试发送") : tr("发送")}

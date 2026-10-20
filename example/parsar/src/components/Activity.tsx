@@ -175,12 +175,13 @@ export function SessionTimeline({ items }: { items: SessionItem[] }) {
       {group.message ? (
         <Activity item={group.message} />
       ) : (
-        <details className="my-3 rounded-2xl border border-line-muted px-4 py-2.5">
-          <summary className="cursor-pointer text-sm text-fg-muted hover:text-fg">
+        <details className="group/steps my-3 rounded-2xl border border-line-muted px-4 py-2.5">
+          <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-fg-muted hover:text-fg">
+            <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-open/steps:rotate-90" />
             {tr("执行过程")} · {group.steps.length} {tr("个步骤")}
-            {group.steps.some((step) => step.status === "failed")
-              ? ` · ${tr("失败")}`
-              : ""}
+            {group.steps.some((step) => step.status === "failed") && (
+              <span className="text-danger">· {tr("有步骤失败")}</span>
+            )}
           </summary>
           <div className="mt-2 border-l border-line pl-4">
             {group.steps.map((item) => (

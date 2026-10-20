@@ -83,20 +83,34 @@ export function Field({
   label,
   id,
   hint,
+  required,
+  error,
   children,
 }: {
   label: string;
   id?: string;
   hint?: string;
+  required?: boolean;
+  /** Shown under the field after a failed save attempt. */
+  error?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-2">
-      <label htmlFor={id} className="block text-sm font-medium text-fg">
-        {label}
-      </label>
+    <div className="space-y-2" data-invalid={error ? "true" : undefined}>
+      <div className="flex items-baseline text-sm font-medium text-fg">
+        <label htmlFor={id}>{label}</label>
+        {required && (
+          <span aria-hidden className="ml-1 text-fg-subtle">
+            *
+          </span>
+        )}
+      </div>
       {children}
-      {hint && <p className="text-sm text-fg-muted">{hint}</p>}
+      {error ? (
+        <p className="text-sm text-danger">{error}</p>
+      ) : (
+        hint && <p className="text-sm text-fg-muted">{hint}</p>
+      )}
     </div>
   );
 }

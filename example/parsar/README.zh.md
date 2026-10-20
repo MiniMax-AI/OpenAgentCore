@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: f7e632d99f51f07875dd4ddd206627a5081b2dc06fae1942621a63c816b59659
+source_hash: 672f1c9d9344f60dde9e31fb0f5749f3518faf3f474817de882c49bbba4f0547
 ---
 
 # Parsar 工作空间
@@ -38,7 +38,7 @@ pnpm --filter @oac/parsar-example dev
 
 **新对话** 打开首页：选择 Agent、描述工作并发送。侧栏列出最近对话；**全部对话** 打开完整列表，支持搜索以及按 Agent、来源和日期筛选，并提供 **运行记录**、**用量** 和 **审计日志**。日期筛选按浏览器本地日期计算；用量汇总覆盖所有匹配记录，缺失用量保持未知。模型可配置每百万输入/输出 Token 的美元价格，在对话开始时冻结；费用为估算，不是服务商账单。
 
-对话会流式展示回复和工具活动，归组工作步骤，可用对话导航条跳转用户轮次，支持追问和取消，并可重新打开持久历史。Enter 发送，Shift+Enter 换行。草稿在同一浏览器标签页中刷新后保留。文件夹按钮可在空闲时上传最大 5 MiB 的输入文件，并把路径插入草稿；实时工作区回收后仍可下载 Artifacts，请让 Agent 将交付物保存到 `./outputs`。信息按钮展示 Agent、模型、Harness、环境模板、飞书身份、来源以及创建时记录的配置，不含变量值、脚本内容或凭据。创建响应丢失时，对话页提供 **恢复创建**，复用冻结的请求和幂等键。
+对话会流式展示回复和工具活动，归组工作步骤，可用对话导航条跳转用户轮次，支持追问和取消，并可重新打开持久历史。Agent 执行中发送的消息会进入正在运行的任务；业务提问请在提问卡片上回答。Enter 发送，Shift+Enter 换行。草稿在同一浏览器标签页中刷新后保留。文件夹按钮可在空闲时上传最大 5 MiB 的输入文件，并把路径插入草稿；实时工作区回收后仍可下载 Artifacts，请让 Agent 将交付物保存到 `./outputs`。信息按钮展示 Agent、模型、Harness、环境模板、飞书身份、来源以及创建时记录的配置，不含变量值、脚本内容或凭据。创建响应丢失时，对话页提供 **恢复创建**，复用冻结的请求和幂等键。
 
 可选的业务提问使用声明的 `ask_user` 函数。问题出现在对话中，并通过带稳定请求 ID 的公开 function-result 事件返回。这是收集信息，不是执行审批。
 
@@ -46,7 +46,7 @@ pnpm --filter @oac/parsar-example dev
 
 ## Agent 与资源 {#agents-and-resources}
 
-**Agent** 以卡片列出 Agent，展示模型、Harness、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**指令**、**模型与环境**、**工具与知识** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。指令片段、Plugins 和知识合计最多 8 个，选择器会阻止超出。**推理强度** 发送 `reasoning.effort`（低、中或高），或保留 Harness 默认值。**网页搜索** 为 Codex 和 Claude Code 发送 `live` 模式的 `web_search`，关闭时发送 `disabled`；MiniMax Code 无法开启。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。
+**Agent** 以卡片列出 Agent，展示模型、Harness、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**指令**、**模型与环境**、**工具与知识** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。指令片段、Plugins 和知识合计最多 8 个，选择器会阻止超出。**推理强度** 发送 `reasoning.effort`（低、中或高），或保留 Harness 默认值。**网页搜索** 为 Codex 和 Claude Code 发送 `live` 模式的 `web_search`，关闭时发送 `disabled`；MiniMax Code 无法开启。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。在同一浏览器标签页中回到 Agent 页面时，会恢复未保存的修改；点击 **保存** 时会指出缺少的必填项。
 
 **模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
 

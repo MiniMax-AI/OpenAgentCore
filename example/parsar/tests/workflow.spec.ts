@@ -65,7 +65,7 @@ async function agent(page: Page, name = "审查助手") {
   await page
     .getByRole("radio", { name: "Moonshot / Kimi", exact: true })
     .click();
-  await page.getByRole("button", { name: /^环境模板/ }).click();
+  await page.getByRole("button", { name: "环境模板", exact: true }).click();
   await page.getByRole("radio", { name: "开发沙箱", exact: true }).click();
   await page
     .getByLabel("主指令", { exact: true })
@@ -389,6 +389,10 @@ test("conversations start from the home page, continue, cancel and follow Agent 
   await page.getByLabel("继续对话").fill("Delayed response");
   await page.getByRole("button", { name: "发送", exact: true }).click();
   await expect(page.getByRole("button", { name: "取消执行" })).toBeVisible();
+  await page.getByLabel("继续对话").fill("也看一下移动端");
+  await expect(page.getByRole("button", { name: "发送", exact: true })).toBeEnabled();
+  await page.getByLabel("继续对话").fill("");
+  await expect(page.getByRole("button", { name: "发送", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "取消执行" }).click();
   await expect(page.getByText("已取消", { exact: true })).toBeVisible();
   await expect(page.getByLabel("继续对话")).toBeEnabled({ timeout: 15000 });
@@ -465,7 +469,17 @@ test("Agents are listed as cards, duplicated without sharing state and require a
   await page
     .getByRole("radio", { name: "Moonshot / Kimi", exact: true })
     .click();
-  await expect(page.getByRole("button", { name: "保存", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(page.getByText("请选择环境模板", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "环境模板", exact: true })).toBeFocused();
+  expect(await (await request.get("/app/agents")).json()).toHaveLength(2);
+  await page.getByRole("link", { name: "Agent", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Agent", exact: true })).toBeVisible();
+  await page.goto("/#/agents/new");
+  await expect(page.getByLabel("名称", { exact: true })).toHaveValue("No environment");
+  await expect(page.getByText("已恢复上次未保存的修改。")).toBeVisible();
+  await page.getByRole("button", { name: "放弃修改" }).click();
+  await expect(page.getByLabel("名称", { exact: true })).toHaveValue("");
 });
 
 test("mobile layouts never scroll horizontally", async ({ page }, testInfo) => {

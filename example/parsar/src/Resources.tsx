@@ -401,7 +401,7 @@ export function ResourceEditor({
               </Select>
             </Field>
           )}
-          <Field label={tr("名称")} id="resource-name">
+          <Field label={tr("名称")} id="resource-name" required>
             <Input
               required
               id="resource-name"

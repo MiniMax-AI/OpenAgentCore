@@ -164,16 +164,19 @@ export function SessionDetail({
         data && (
           <>
             <div className="relative flex min-h-0 flex-1 flex-col">
-              <TurnNavRail
-                turns={userTurns}
-                activeKey={activeTurn}
-                onJump={(key) => {
-                  followOutput.current = false;
-                  document
-                    .getElementById(`item-${key}`)
-                    ?.scrollIntoView({ block: "start", behavior: "smooth" });
-                }}
-              />
+              {/* Short conversations need no jump navigation. */}
+              {userTurns.length >= 3 && (
+                <TurnNavRail
+                  turns={userTurns}
+                  activeKey={activeTurn}
+                  onJump={(key) => {
+                    followOutput.current = false;
+                    document
+                      .getElementById(`item-${key}`)
+                      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+                  }}
+                />
+              )}
               <div
                 ref={setViewportElement}
                 onScroll={(event) => {

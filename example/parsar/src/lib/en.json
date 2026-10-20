@@ -426,5 +426,18 @@
   "MiniMax Code 暂不支持网页搜索": "MiniMax Code does not support web search yet",
   "开启": "On",
   "关闭": "Off",
-  "搜索网页": "Web search"
+  "搜索网页": "Web search",
+  "请填写名称": "Enter a name",
+  "请选择模型": "Choose a model",
+  "请选择环境模板": "Choose an environment template",
+  "已恢复上次未保存的修改。": "Restored your unsaved changes.",
+  "放弃修改": "Discard changes",
+  "保存后可绑定": "Available after saving",
+  "选择": "Choose",
+  "请先回答上方的问题": "Answer the question above first",
+  "补充说明，Agent 会在当前任务中看到…": "Add details; the Agent sees them in the current task…",
+  "停止": "Stop",
+  "有步骤失败": "a step failed",
+  "每行一个，例如 {{value0}}": "One per line, for example {{value0}}",
+  "# 示例：每个新对话开始前执行\nset -eu\nmkdir -p outputs": "# Example: runs before each new conversation\nset -eu\nmkdir -p outputs"
 }
