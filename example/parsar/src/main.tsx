@@ -1,4 +1,3 @@
-import { PluginHost } from "./PluginHost";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -14,7 +13,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <QueryClientProvider client={client}>
       <Tooltip.Provider>
-        {location.pathname === "/oauth/callback" ? <OAuthCallback /> : <PluginHost><App /></PluginHost>}
+        {location.pathname === "/oauth/callback" ? <OAuthCallback /> : <App />}
       </Tooltip.Provider>
     </QueryClientProvider>
   </React.StrictMode>,

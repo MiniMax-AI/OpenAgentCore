@@ -1,7 +1,4 @@
-import {
-  connectionFields,
-  environmentVariableName,
-} from "../shared/connection-bindings.mjs";
+import { botFields, environmentVariableName } from "../shared/bot-bindings.mjs";
 import { posix } from "node:path";
 import { AppError, text } from "./store.mjs";
 
@@ -53,24 +50,24 @@ export function runtimeProfile(body, previous) {
       throw new AppError(400, "请填写新环境变量的值；已有变量留空可保留。");
     env[name] = selected;
   }
-  const connection_env = body.connection_env ?? {};
+  const bot_env = body.bot_env ?? {};
   if (
-    !connection_env ||
-    typeof connection_env !== "object" ||
-    Array.isArray(connection_env) ||
-    Object.keys(connection_env).length > 20
+    !bot_env ||
+    typeof bot_env !== "object" ||
+    Array.isArray(bot_env) ||
+    Object.keys(bot_env).length > 20
   )
-    throw new AppError(400, "连接变量映射格式无效。");
-  for (const [name, source] of Object.entries(connection_env)) {
+    throw new AppError(400, "机器人变量映射格式无效。");
+  for (const [name, source] of Object.entries(bot_env)) {
     if (
       !environmentVariableName(name) ||
       Object.hasOwn(env, name) ||
       typeof source !== "string" ||
-      !Object.hasOwn(connectionFields, source)
+      !Object.hasOwn(botFields, source)
     )
       throw new AppError(
         400,
-        "连接变量名称必须有效、不能与固定变量重复，且只能选择公开的连接字段。",
+        "机器人变量名称必须有效、不能与固定变量重复，且只能选择机器人字段。",
       );
   }
   const files = body.files ?? [];
@@ -98,7 +95,7 @@ export function runtimeProfile(body, previous) {
     packages,
     setup_script: text(body.setup_script || "", "初始化脚本", 100000),
     env,
-    connection_env,
+    bot_env,
     files: normalized,
   };
 }
@@ -116,7 +113,7 @@ export function runtimeEnvironment(runtime) {
   return {
     type: "openai_hosted",
     packages: runtime.packages || { npm: [], python: [] },
-    env: runtime.env || {},
+    env: { ...runtime.env },
     setup_commands: runtime.setup_script
       ? [{ command: runtime.setup_script, cwd: "/workspace" }]
       : [],

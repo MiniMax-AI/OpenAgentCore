@@ -331,7 +331,7 @@ export function TurnNavRail({
             onClick={() => jump(previewTurn.key)}
             className="block w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
-            <span className="line-clamp-2 break-words text-xs text-fg-muted">
+            <span className="line-clamp-2 break-words text-sm text-fg-muted">
               {previewTurn.preview}
             </span>
           </button>

@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
-import { ErrorNotice, Help } from "./components/shared";
+import { ErrorNotice } from "./components/shared";
 const maxUploadBytes = 5 * 1024 * 1024;
 async function upload(environmentId: string, file: File) {
   if (file.size > maxUploadBytes) throw new Error(tr("文件不能超过 5 MiB。"));
@@ -128,11 +128,6 @@ export function SessionFiles({
             <Upload />
             {send.isPending ? tr("上传中\u2026") : tr("上传文件")}
           </Button>
-          <Help>
-            {tr(
-              "每次上传一个文件，最大 5 MiB。文件进入当前工作区，路径会插入消息草稿；发送后 Agent 才会处理。执行期间不能上传。让 Agent 将结果保存到当前工作目录的 outputs/，执行完成后可在这里下载。",
-            )}
-          </Help>
           <input
             ref={input}
             aria-label={tr("选择上传文件")}
@@ -147,7 +142,7 @@ export function SessionFiles({
           />
         </div>
         {!writable && (
-          <p role="status" className="text-base">
+          <p role="status" className="text-sm text-fg-muted">
             {tr("会话空闲且运行环境就绪后可以上传。")}
           </p>
         )}
@@ -159,25 +154,25 @@ export function SessionFiles({
               : undefined
           }
         />
-        <h3 className="text-base font-medium">{tr("生成的文件")}</h3>
+        <h3 className="text-base font-semibold">{tr("生成的文件")}</h3>
         <div className="max-h-80 space-y-3 overflow-auto">
           {artifacts.isPending ? (
             <p role="status">{tr("正在读取\u2026")}</p>
           ) : !files.length && !artifacts.error ? (
-            <p className="text-base text-fg-muted">
+            <p className="text-sm text-fg-muted">
               {tr("还没有生成的文件。")}
             </p>
           ) : null}
           {files.map((file) => (
             <div
               key={file.id}
-              className="flex items-center gap-3 rounded-lg border border-line p-3"
+              className="flex items-center gap-3 rounded-xl border border-line px-4 py-3"
             >
               <div className="min-w-0 flex-1">
-                <p className="break-all text-base">
+                <p className="break-all text-sm font-medium">
                   {file.path.replace(/^\/workspace\/outputs\//, "")}
                 </p>
-                <p className="text-base text-fg-muted">
+                <p className="text-sm text-fg-muted">
                   {Math.ceil(file.size_bytes / 1024)} KiB ·{" "}
                   {dateTime(file.created_at)}
                 </p>

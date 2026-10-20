@@ -1,8 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
-import { readHistory } from "./lib/api";
-import { useSessions } from "./lib/product";
-import { PageHeader } from "./components/shared";
-import { EmptyState } from "./components/ui/empty-state";
 import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -86,22 +81,21 @@ function Question({
       sessionStorage.removeItem(storageKey);
       setPending(null);
       void cache.invalidateQueries({ queryKey: ["session", sessionId] });
-      void cache.invalidateQueries({ queryKey: ["inbox"] });
     },
   });
   return (
     <form
-      className="my-4 space-y-3 border-y border-line py-4"
+      className="my-6 space-y-4 rounded-2xl border border-line bg-surface p-5 app-shadow-card"
       onSubmit={(e) => {
         e.preventDefault();
         send.mutate();
       }}
     >
-      <h3 className="text-sm font-medium">
+      <h3 className="text-base font-semibold">
         {typeof args?.question === "string" ? args.question : action.name}
       </h3>
       {action.name !== "ask_user" && (
-        <pre className="max-h-40 overflow-auto text-xs text-fg-muted">
+        <pre className="max-h-40 overflow-auto text-sm text-fg-muted">
           {JSON.stringify(action.arguments, null, 2)}
         </pre>
       )}
@@ -133,53 +127,5 @@ function Question({
         {pending ? tr("重试原回答") : tr("提交回答")}
       </Button>
     </form>
-  );
-}
-
-export function Inbox() {
-  const records = useSessions();
-  const query = useQuery({
-    queryKey: ["inbox"],
-    queryFn: ({ signal }) =>
-      readHistory((options) => api.listSessions(options), signal),
-    refetchInterval: 5000,
-  });
-  const local = new Map(records.data?.map((row) => [row.core_session_id, row]));
-  const pending = query.data?.filter(
-    (session) =>
-      local.has(session.id) &&
-      session.required_actions.some(
-        (action) => action.type === "function_call",
-      ),
-  );
-  return (
-    <>
-      <PageHeader title={tr("收件箱")} />
-      <ErrorNotice error={records.error || query.error} />
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
-        {pending?.map((session) => (
-          <section
-            className="mx-auto max-w-3xl border-b border-line"
-            key={session.id}
-          >
-            <a
-              className="text-sm font-medium underline"
-              href={`#/sessions/${local.get(session.id)!.id}`}
-            >
-              {local.get(session.id)!.name}
-            </a>
-            <Questions session={session} />
-          </section>
-        ))}
-        {!query.isPending && !pending?.length && (
-          <EmptyState
-            title={tr("没有待回答的问题")}
-            description={tr(
-              "Agent 需要补充业务信息时会出现在这里。执行始终使用 bypass。",
-            )}
-          />
-        )}
-      </div>
-    </>
   );
 }

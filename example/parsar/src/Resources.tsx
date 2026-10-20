@@ -9,7 +9,6 @@ import {
   product,
   useMCPs,
   useRuntimes,
-  useAgents,
   type MCPProfile,
   type RuntimeProfile,
 } from "./lib/product";
@@ -23,7 +22,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "./components/ui/dialog";
-import { Field, Help, ErrorNotice, PageHeader } from "./components/shared";
+import { Field, ErrorNotice, PageHeader } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
 export function MCPs() {
   const query = useMCPs();
@@ -61,7 +60,6 @@ function ResourceList({
   const [editing, setEditing] = useState<MCPProfile | RuntimeProfile | null>(
     null,
   );
-  const agents = useAgents();
   const [directory, setDirectory] = useState(false),
     [search, setSearch] = useState("");
   const cache = useQueryClient();
@@ -70,48 +68,49 @@ function ResourceList({
     onSuccess: () => cache.invalidateQueries({ queryKey: [kind] }),
   });
   const Icon = kind === "mcps" ? Plug : Server;
+  const actions = (
+    <>
+      {kind === "mcps" && (
+        <Button variant="outline" onClick={() => setDirectory(true)}>
+          {tr("浏览目录")}
+        </Button>
+      )}
+      <Button
+        onClick={() =>
+          setEditing(
+            kind === "mcps"
+              ? {
+                  id: crypto.randomUUID(),
+                  name: "",
+                  label: "",
+                  url: "",
+                  revision: 0,
+                }
+              : {
+                  id: crypto.randomUUID(),
+                  name: "",
+                  environment: "openai_hosted",
+                  revision: 0,
+                },
+          )
+        }
+      >
+        <Plus />
+        {tr("添加")}
+        {title}
+      </Button>
+    </>
+  );
   return (
     <>
-      <PageHeader title={title}>
-        {kind === "mcps" && (
-          <Button variant="outline" onClick={() => setDirectory(true)}>
-            {tr("浏览目录")}
-          </Button>
-        )}
-        <Help>
-          {kind === "mcps"
-            ? tr(
-                "配置 HTTPS MCP 服务，可绑定凭据库中的凭据。Agent 从工作环境连接服务。",
-              )
-            : tr(
-                "环境模板定义任务开始前需要准备的软件包、文件、变量和初始化脚本。将模板绑定到 Agent 后，每个新会话自动准备。",
-              )}
-        </Help>
-        <Button
-          onClick={() =>
-            setEditing(
-              kind === "mcps"
-                ? {
-                    id: crypto.randomUUID(),
-                    name: "",
-                    label: "",
-                    url: "",
-                    revision: 0,
-                  }
-                : {
-                    id: crypto.randomUUID(),
-                    name: "",
-                    environment: "openai_hosted",
-                    revision: 0,
-                  },
-            )
-          }
-        >
-          <Plus />
-          {tr("添加")}
-          {title}
-        </Button>
-      </PageHeader>
+      {kind === "runtimes" ? (
+        <PageHeader title={title}>{actions}</PageHeader>
+      ) : (
+        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6 pb-1 sm:px-10">
+          <h2 className="text-lg font-semibold tracking-tight text-fg">{title}</h2>
+          <div className="flex flex-wrap items-center gap-2">{actions}</div>
+        </div>
+      )}
       {directory && (
         <Dialog open onOpenChange={setDirectory}>
           <DialogContent
@@ -161,11 +160,11 @@ function ResourceList({
                         {tr("添加服务")}
                       </Button>
                     </div>
-                    <p className="mt-1 text-xs text-fg-muted">
+                    <p className="mt-1 text-sm text-fg-muted">
                       {item.description}
                     </p>
                     {"authentication" in item && (
-                      <p className="mt-1 text-xs">
+                      <p className="mt-1 text-sm">
                         {tr("此服务需要认证，请绑定对应服务的凭据。")}
                       </p>
                     )}
@@ -175,59 +174,54 @@ function ResourceList({
           </DialogContent>
         </Dialog>
       )}
-      <ErrorNotice error={error || remove.error} />
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="divide-y divide-line-muted">
-          {rows.map((row) => (
-            <article
-              key={row.id}
-              className="relative flex min-h-9 items-center gap-6 px-6"
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <Icon className="h-3.5 w-3.5" />
-                <h2 className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {row.name}
-                </h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={tr("编辑 {{value0}}", { value0: row.name })}
-                  onClick={() => setEditing(row)}
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={tr("移除 {{value0}}", { value0: row.name })}
-                  disabled={remove.isPending}
-                  onClick={() => {
-                    if (confirm(tr("移除 {{value0}}？", { value0: row.name })))
-                      remove.mutate(row.id);
-                  }}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-              <p className="w-1/3 truncate text-xs text-fg-muted">
-                {"url" in row ? row.url : environmentSummary(row)}
-              </p>
-              {"environment" in row && (
-                <div className="w-1/4 text-xs text-fg-muted">
-                  <p className="truncate">{row.description}</p>
-                  <p>
-                    {tr("引用此模板的 Agent")}:{" "}
-                    {agents.data
-                      ?.filter((agent) => agent.runtime_id === row.id)
-                      .map((agent) => agent.name)
-                      .join(", ") || "—"}
-                  </p>
+      <ErrorNotice page error={error || remove.error} />
+      <div className="mx-auto w-full max-w-6xl px-6 pb-12 pt-1 sm:px-10">
+        {rows.length > 0 ? (
+          <div className="divide-y divide-line-muted overflow-hidden rounded-2xl border border-line bg-surface app-shadow-card">
+            {rows.map((row) => (
+              <article
+                key={row.id}
+                className="relative flex min-h-[72px] flex-wrap items-center justify-between gap-4 px-6 py-4 transition-colors hover:bg-surface-subtle/60"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-4">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-muted">
+                    <Icon strokeWidth={1.7} className="h-4 w-4 text-fg-muted" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="truncate text-sm font-semibold text-fg">
+                      {row.name}
+                    </h2>
+                    <p className="mt-0.5 truncate text-sm text-fg-muted">
+                      {"url" in row
+                        ? row.url
+                        : row.description || environmentSummary(row)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={tr("编辑 {{value0}}", { value0: row.name })}
+                    onClick={() => setEditing(row)}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={tr("移除 {{value0}}", { value0: row.name })}
+                    disabled={remove.isPending}
+                    onClick={() => {
+                      if (confirm(tr("移除 {{value0}}？", { value0: row.name })))
+                        remove.mutate(row.id);
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
-              )}
-            </article>
-          ))}
-        </div>
-        {!rows.length && (
+              </article>
+            ))}
+          </div>
+        ) : (
           <EmptyState
             title={tr("添加可供 Agent 使用的{{value0}}", { value0: title })}
           />
@@ -244,6 +238,56 @@ function ResourceList({
     </>
   );
 }
+const larkCliSetupScript = `set -eu
+export LARK_LAUNCHER="$(command -v lark-cli)"
+node <<'JS'
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const { execFileSync } = require('node:child_process');
+(async () => {
+  const root = path.dirname(path.dirname(fs.realpathSync(process.env.LARK_LAUNCHER)));
+  const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+  const platform = {linux:'linux', darwin:'darwin'}[process.platform];
+  const arch = {x64:'amd64', arm64:'arm64'}[process.arch];
+  if (!platform || !arch) throw new Error('Unsupported lark-cli release platform');
+  const asset = \`lark-cli-\${version}-\${platform}-\${arch}.tar.gz\`;
+  const line = fs.readFileSync(path.join(root, 'checksums.txt'), 'utf8').split('\\n').find(line => line.trim().split(/\\s+/)[1] === asset);
+  if (!line) throw new Error('Release checksum unavailable');
+  const expected = line.trim().split(/\\s+/)[0];
+  const urls = [
+    \`https://registry.npmmirror.com/-/binary/lark-cli/v\${version}/\${asset}\`,
+    \`https://github.com/larksuite/cli/releases/download/v\${version}/\${asset}\`,
+  ];
+  let bytes;
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {signal: AbortSignal.timeout(10000)});
+      if (!response.ok) continue;
+      const candidate = Buffer.from(await response.arrayBuffer());
+      if (crypto.createHash('sha256').update(candidate).digest('hex') !== expected) throw new Error('Release checksum mismatch');
+      bytes = candidate;
+      break;
+    } catch (error) {
+      if (error.message === 'Release checksum mismatch') throw error;
+    }
+  }
+  if (!bytes) throw new Error('Could not download verified lark-cli release');
+  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'lark-download-'));
+  try {
+    const archive = path.join(directory, asset);
+    fs.writeFileSync(archive, bytes);
+    execFileSync('tar', ['-xzf', archive, '-C', directory, 'lark-cli']);
+    fs.mkdirSync(path.join(root, 'bin'), {recursive: true});
+    fs.copyFileSync(path.join(directory, 'lark-cli'), path.join(root, 'bin/lark-cli'));
+    fs.chmodSync(path.join(root, 'bin/lark-cli'), 0o755);
+  } finally { fs.rmSync(directory, {recursive: true, force: true}); }
+  console.log('Verified lark-cli release installed');
+})().catch(error => { console.error(error.message); process.exitCode = 1; });
+JS
+lark-cli --version
+printf '%s' "$FEISHU_APP_SECRET" | lark-cli config init --app-id "$FEISHU_APP_ID" --app-secret-stdin --brand "\${FEISHU_BRAND:-feishu}"`;
+
 export function ResourceEditor({
   kind,
   title,
@@ -259,6 +303,7 @@ export function ResourceEditor({
 }) {
   const vaults = useVaults();
   const [form, setForm] = useState(value);
+  const [preset, setPreset] = useState("");
   const cache = useQueryClient();
   const save = useMutation({
     mutationFn: () =>
@@ -309,6 +354,52 @@ export function ResourceEditor({
             save.mutate();
           }}
         >
+          {!("url" in form) && !value.revision && (
+            <Field label={tr("起始配置")} id="runtime-preset">
+              <Select
+                id="runtime-preset"
+                value={preset}
+                onValueChange={(choice) => {
+                  setPreset(choice);
+                  if (choice === "lark-cli") {
+                    setForm({
+                      ...form,
+                      name: tr("飞书工作环境"),
+                      description: tr(
+                        "安装官方 lark-cli，并以 Agent 绑定的飞书机器人身份调用开放平台。需要运行节点能够访问飞书开放平台。",
+                      ),
+                      packages: { npm: ["@larksuite/cli@1.0.98"], python: [] },
+                      setup_script: larkCliSetupScript,
+                      env: {
+                        npm_config_ignore_scripts: "true",
+                        LARKSUITE_CLI_DEFAULT_AS: "bot",
+                        LARKSUITE_CLI_STRICT_MODE: "bot",
+                        LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
+                        LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1",
+                      },
+                      bot_env: {
+                        FEISHU_APP_ID: "app_id",
+                        FEISHU_APP_SECRET: "app_secret",
+                        FEISHU_BRAND: "brand",
+                      },
+                      files: [
+                        {
+                          path: "/workspace/WORKSPACE.md",
+                          content:
+                            "# 飞书工作环境\n\n官方 lark-cli 已在 Agent 启动前安装，以 Agent 绑定的飞书机器人身份运行。禁止输出 App Secret、令牌或环境变量。读取 Skill 后使用具体业务命令。网络错误与权限不足分别报告。产物写到 ./outputs。\n",
+                        },
+                      ],
+                    });
+                  }
+                }}
+              >
+                <SelectOption value="">{tr("自定义")}</SelectOption>
+                <SelectOption value="lark-cli">
+                  {tr("飞书工作环境（lark-cli）")}
+                </SelectOption>
+              </Select>
+            </Field>
+          )}
           <Field label={tr("名称")} id="resource-name">
             <Input
               required

@@ -15,7 +15,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "./components/ui/dialog";
-import { Field, Help, ErrorNotice } from "./components/shared";
+import { Field, ErrorNotice } from "./components/shared";
 type Choice = {
   model: string;
   name: string;
@@ -238,11 +238,6 @@ function ProviderForm({
             </Field>
             <div className="flex items-center gap-2 text-base">
               <span>{tr("模型连接")}</span>
-              <Help>
-                {tr(
-                  "地址和密钥用于获取模型列表。密钥仅保存在后端，不返回浏览器。Codex 和 Claude Code 使用此连接；MiniMax Code 使用部署配置的连接。",
-                )}
-              </Help>
             </div>
           </form>
         ) : (

@@ -1,6 +1,3 @@
-import { Connections } from "./Connections";
-import { ListSlot } from "./components/plugin/SlotRenderer";
-import { Inbox } from "./Questions";
 import { tr } from "./lib/i18n";
 import { useEffect, useState } from "react";
 import {
@@ -9,285 +6,225 @@ import {
   Server,
   Moon,
   Sun,
-  Columns3,
-  Folder,
-  MessageSquare,
-  Clock3,
-  Play,
-  ChartBar,
-  ScrollText,
+  Send,
   Settings2,
-  Monitor,
+  SquarePen,
+  type LucideIcon,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Capabilities } from "./Capabilities";
 import { Records, Audit } from "./Records";
 import { Settings, type WorkspaceSettings } from "./Settings";
-import { product } from "./lib/product";
-import { useResizableWidth } from "./lib/layout-width";
-import { ResizeHandle } from "./components/ui/resize-handle";
-import { Schedules } from "./Schedules";
+import { product, useSessions } from "./lib/product";
 import { Feishu } from "./Feishu";
-import { Tasks } from "./Tasks";
-import { TaskDetail } from "./TaskDetail";
-import { Projects } from "./Projects";
 import { Runtimes } from "./Resources";
 import { Agents } from "./Agents";
+import { AgentPage } from "./AgentPage";
 import { SessionPage } from "./SessionPage";
-import { AgentDetail } from "./AgentDetail";
-import { Button } from "./components/ui/button";
+import { Home } from "./Home";
+import { cn } from "./lib/utils";
+import { setTheme, useTheme } from "./lib/theme";
+
+const currentRoute = () => location.hash.slice(1) || "/";
+
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  selected,
+}: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  selected: boolean;
+}) {
+  return (
+    <a
+      href={`#${href}`}
+      aria-current={selected ? "page" : undefined}
+      className={cn(
+        "flex h-9 shrink-0 items-center gap-3 rounded-[10px] px-3 text-sm transition-colors duration-150",
+        selected
+          ? "bg-surface font-medium text-fg app-shadow-control"
+          : "text-fg-muted hover:app-hover hover:text-fg",
+      )}
+    >
+      <Icon
+        strokeWidth={1.7}
+        className={cn("h-4 w-4 shrink-0", selected ? "text-fg" : "text-fg-subtle")}
+      />
+      <span>{label}</span>
+    </a>
+  );
+}
+
+function RecentConversations({ activeId }: { activeId?: string }) {
+  const sessions = useSessions();
+  const rows = [...(sessions.data || [])]
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 40);
+  if (!rows.length) return null;
+  return (
+    <nav aria-label={tr("最近对话")} className="hidden min-h-0 flex-1 flex-col sm:flex">
+      <div className="px-3 pb-2 pt-6 text-sm text-fg-subtle">{tr("最近对话")}</div>
+      <div className="min-h-0 space-y-0.5 overflow-y-auto pr-1">
+        {rows.map((row) => (
+          <a
+            key={row.id}
+            href={`#/sessions/${row.id}`}
+            aria-current={row.id === activeId ? "page" : undefined}
+            className={cn(
+              "flex h-9 items-center gap-2 rounded-[10px] px-3 text-sm transition-colors duration-150",
+              row.id === activeId
+                ? "bg-surface font-medium text-fg app-shadow-control"
+                : "text-fg-muted hover:app-hover hover:text-fg",
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">{row.name}</span>
+            {row.source === "feishu" && (
+              <Send
+                aria-label={tr("飞书")}
+                strokeWidth={1.7}
+                className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
+              />
+            )}
+          </a>
+        ))}
+      </div>
+      <a
+        href="#/conversations"
+        className="mb-4 mt-1 flex h-9 shrink-0 items-center rounded-[10px] px-3 text-sm text-fg-subtle hover:app-hover hover:text-fg"
+      >
+        {tr("全部对话")}
+      </a>
+    </nav>
+  );
+}
+
 export function App() {
-  const [route, setRoute] = useState(location.hash.slice(1) || "/tasks");
+  const [route, setRoute] = useState(currentRoute);
   const workspace = useQuery({
     queryKey: ["settings"],
     queryFn: () => product<WorkspaceSettings>("settings"),
   });
-  const sidebar = useResizableWidth({
-    storageKey: "sidebar",
-    defaultWidth: 232,
-    min: 200,
-    max: 360,
-    edge: "right",
-  });
-  const [theme, setTheme] = useState(() => {
-    try {
-      return localStorage.getItem("oac-example-theme") || "system";
-    } catch {
-      return "system";
-    }
-  });
-  const [systemDark, setSystemDark] = useState(
-    matchMedia("(prefers-color-scheme: dark)").matches,
-  );
-  const dark = theme === "dark" || (theme === "system" && systemDark);
+  const { dark } = useTheme();
   useEffect(() => {
-    const media = matchMedia("(prefers-color-scheme: dark)");
-    const change = () => setSystemDark(media.matches);
-    media.addEventListener("change", change);
-    return () => media.removeEventListener("change", change);
-  }, []);
-  useEffect(() => {
-    const listener = () => setRoute(location.hash.slice(1) || "/tasks");
+    const listener = () => setRoute(currentRoute());
     window.addEventListener("hashchange", listener);
     return () => window.removeEventListener("hashchange", listener);
   }, []);
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    try {
-      localStorage.setItem("oac-example-theme", theme);
-    } catch {
-      /* Theme remains usable without storage. */
-    }
-  }, [dark, theme]);
-  const agentId = route
-    .split("?")[0]!
-    .match(/^\/agents\/([a-f0-9-]{36})$/)?.[1];
-  const sessionId = route.match(/^\/sessions\/([a-f0-9-]{36})$/)?.[1];
-  const taskId = route.match(/^\/tasks\/([a-f0-9-]{36})$/)?.[1];
-  const projectId =
-    new URLSearchParams(route.split("?")[1]).get("project") || "";
-  const navigation = [
-    { href: "/tasks", label: tr("任务"), icon: Columns3, group: tr("工作") },
-    { href: "/projects", label: tr("项目"), icon: Folder, group: tr("工作") },
-    {
-      href: "/conversations",
-      label: tr("对话"),
-      icon: MessageSquare,
-      group: tr("活动"),
-    },
-    {
-      href: "/inbox",
-      label: tr("收件箱"),
-      icon: MessageSquare,
-      group: tr("活动"),
-    },
-    { href: "/runs", label: tr("运行记录"), icon: Play, group: tr("活动") },
-    {
-      href: "/schedules",
-      label: tr("定时任务"),
-      icon: Clock3,
-      group: tr("活动"),
-    },
-    { href: "/usage", label: tr("用量"), icon: ChartBar, group: tr("活动") },
-    {
-      href: "/audit",
-      label: tr("审计日志"),
-      icon: ScrollText,
-      group: tr("活动"),
-    },
-    { href: "/agents", label: tr("Agent 模板"), icon: Bot, group: tr("构建") },
-    {
-      href: "/runtimes",
-      label: tr("环境模板"),
-      icon: Server,
-      group: tr("构建"),
-    },
+  const [path, search = ""] = route.split("?");
+  const params = new URLSearchParams(search);
+  const agentId = path!.match(/^\/agents\/([a-f0-9-]{36})$/)?.[1];
+  const sessionId = path!.match(/^\/sessions\/([a-f0-9-]{36})$/)?.[1];
+  const section = (prefixes: string[]) =>
+    prefixes.some((prefix) => path === prefix || path!.startsWith(`${prefix}/`));
+  const build = [
+    { href: "/agents", label: tr("Agent"), icon: Bot, match: ["/agents"] },
+    { href: "/runtimes", label: tr("环境模板"), icon: Server, match: ["/runtimes"] },
     {
       href: "/capabilities",
       label: tr("资源库"),
       icon: BookOpen,
-      group: tr("构建"),
-    },
-    {
-      href: "/connections",
-      label: tr("我的连接"),
-      icon: Settings2,
-      group: tr("接入与设置"),
-    },
-    {
-      href: "/feishu",
-      label: tr("飞书接入"),
-      icon: MessageSquare,
-      group: tr("接入与设置"),
-    },
-    {
-      href: "/settings",
-      label: tr("设置"),
-      icon: Settings2,
-      group: tr("接入与设置"),
+      match: ["/capabilities", "/models", "/skills", "/mcps", "/credentials"],
     },
   ];
+  const connect = [
+    { href: "/feishu", label: tr("飞书接入"), icon: Send, match: ["/feishu"] },
+    { href: "/settings", label: tr("设置"), icon: Settings2, match: ["/settings"] },
+  ];
+  const groups: [string, typeof build][] = [
+    [tr("构建"), build],
+    [tr("接入"), connect],
+  ];
+  const page =
+    path === "/" || path === "/new" ? (
+      <Home key={route} agentId={params.get("agent") || undefined} />
+    ) : sessionId ? (
+      <SessionPage key={sessionId} id={sessionId} />
+    ) : ["/conversations", "/runs", "/usage"].includes(path!) ? (
+      <Records key={path} view={path!.slice(1) as "conversations" | "runs" | "usage"} />
+    ) : path === "/audit" ? (
+      <Audit />
+    ) : path === "/agents/new" ? (
+      <AgentPage key={route} copyFrom={params.get("from") || undefined} />
+    ) : agentId ? (
+      <AgentPage key={agentId} id={agentId} />
+    ) : path === "/agents" ? (
+      <Agents />
+    ) : path === "/runtimes" ? (
+      <Runtimes />
+    ) : path === "/feishu" ? (
+      <Feishu />
+    ) : path === "/settings" ? (
+      <Settings />
+    ) : path === "/models" ? (
+      <Capabilities key={path} initialTab="models" />
+    ) : path === "/skills" ? (
+      <Capabilities key={path} initialTab="skills" />
+    ) : path === "/mcps" ? (
+      <Capabilities key={path} initialTab="mcps" />
+    ) : path === "/credentials" ? (
+      <Capabilities key={path} initialTab="credentials" />
+    ) : path === "/capabilities" ? (
+      <Capabilities key={path} />
+    ) : (
+      <Home />
+    );
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-surface text-fg sm:flex-row">
-      <aside
-        style={
-          { "--sidebar-width": `${sidebar.width}px` } as React.CSSProperties
-        }
-        className="relative flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface-subtle p-2.5 text-fg sm:w-[var(--sidebar-width)] sm:flex-col sm:flex-nowrap sm:items-stretch sm:gap-0 sm:border-b-0 sm:border-r"
-      >
-        <a href="#/agents" className="flex h-8 min-w-0 items-center gap-2 px-2">
+      <aside className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface-subtle px-3 py-3 sm:w-[264px] sm:flex-col sm:flex-nowrap sm:items-stretch sm:gap-0 sm:border-b-0 sm:border-r sm:px-3 sm:py-4">
+        <a href="#/" className="flex h-10 min-w-0 items-center gap-2.5 px-3">
           <img
             src={dark ? "/parsar-mark-dark.png" : "/parsar-mark-light.png"}
             alt=""
-            width={20}
-            height={20}
+            width={22}
+            height={22}
           />
-          <span className="truncate text-sm font-medium">
+          <span className="truncate text-base font-semibold tracking-tight">
             {workspace.data?.name || "Parsar"}
           </span>
         </a>
+        <a
+          href="#/new"
+          className={cn(
+            "ml-auto flex h-10 shrink-0 items-center gap-2.5 rounded-[10px] border border-line-strong bg-surface px-3 text-sm font-medium text-fg app-shadow-control transition-colors hover:app-hover sm:ml-0 sm:mt-4",
+            (path === "/" || path === "/new") && "ring-1 ring-fg/10",
+          )}
+        >
+          <SquarePen strokeWidth={1.7} className="h-4 w-4" />
+          {tr("新对话")}
+        </a>
+        <RecentConversations activeId={sessionId} />
         <nav
           aria-label={tr("主导航")}
-          className="order-last flex w-full min-w-0 gap-1 overflow-x-auto sm:order-none sm:min-h-0 sm:flex-1 sm:flex-col sm:gap-px sm:overflow-y-auto sm:pt-3.5"
+          className="order-last flex w-full min-w-0 gap-1 overflow-x-auto sm:order-none sm:mt-auto sm:flex-col sm:gap-0.5 sm:overflow-visible sm:border-t sm:border-line sm:pt-3"
         >
-          {navigation.map(({ href, label, icon: Icon, group }, index) => {
-            const selected =
-              route.split("?")[0] === href ||
-              (href === "/capabilities" &&
-                ["/models", "/skills", "/mcps", "/credentials"].includes(
-                  route,
-                )) ||
-              (href === "/tasks" && !!taskId) ||
-              (href === "/agents" && !!agentId) ||
-              (href === "/conversations" && !!sessionId);
-            return (
-              <div key={href} className="shrink-0">
-                {group && group !== navigation[index - 1]?.group && (
-                  <div className="hidden px-2 pb-1 pt-3.5 text-xs text-fg-muted sm:block">
-                    {group}
-                  </div>
-                )}
-                <a
-                  href={`#${href}`}
-                  aria-current={selected ? "page" : undefined}
-                  className={`flex h-[30px] items-center gap-2 rounded-md px-2 text-base focus-visible:ring-2 focus-visible:ring-accent ${selected ? "bg-surface-muted font-medium text-fg" : "text-fg-muted hover:bg-surface-muted hover:text-fg"}`}
-                >
-                  <Icon strokeWidth={1.5} className="h-4 w-4 shrink-0" />
-                  <span>{label}</span>
-                </a>
+          {groups.map(([label, items]) => (
+            <div key={label} className="flex gap-1 sm:block sm:space-y-0.5 sm:pb-2">
+              <div className="hidden px-3 pb-1 pt-2 text-sm text-fg-subtle sm:block">
+                {label}
               </div>
-            );
-          })}
-          <ListSlot slotId="layout.nav.bottom" />
+              {items.map((item) => (
+                <NavLink key={item.href} {...item} selected={section(item.match)} />
+              ))}
+            </div>
+          ))}
         </nav>
-        <div className="ml-auto flex items-center gap-1 sm:ml-0 sm:mt-3 sm:border-t sm:border-line sm:pt-2.5">
-          <span className="hidden flex-1 px-2 text-xs text-fg-muted sm:block">
-            Parsar
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
+        <div className="hidden items-center justify-between px-3 pt-2 sm:flex">
+          <span className="text-sm text-fg-subtle">OpenAgentCore</span>
+          <button
+            type="button"
             aria-label={dark ? tr("切换浅色") : tr("切换深色")}
             onClick={() => setTheme(dark ? "light" : "dark")}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle hover:app-hover hover:text-fg"
           >
-            {dark ? <Sun /> : <Moon />}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={tr("跟随系统主题")}
-            aria-pressed={theme === "system"}
-            onClick={() => setTheme("system")}
-          >
-            <Monitor />
-          </Button>
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
         </div>
-        <ResizeHandle
-          className="hidden sm:block"
-          edge="right"
-          dragging={sidebar.dragging}
-          label={tr("调整侧栏宽度")}
-          {...sidebar.handleProps}
-        />
-        {sidebar.dirty && (
-          <div className="absolute bottom-12 left-2 z-40 rounded-md border border-line bg-surface p-2 app-shadow-floating">
-            <Button variant="ghost" onClick={sidebar.save}>
-              {tr("保存宽度")}
-            </Button>
-            <Button variant="ghost" onClick={sidebar.restore}>
-              {tr("还原")}
-            </Button>
-          </div>
-        )}
       </aside>
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <ListSlot slotId="layout.header.actions" />
-        {["/conversations", "/runs", "/usage"].includes(route) ? (
-          <Records
-            key={route}
-            view={route.slice(1) as "conversations" | "runs" | "usage"}
-          />
-        ) : route === "/inbox" ? (
-          <Inbox />
-        ) : route === "/audit" ? (
-          <Audit />
-        ) : route === "/credentials" ? (
-          <Capabilities key={route} initialTab="credentials" />
-        ) : route === "/settings" ? (
-          <Settings />
-        ) : taskId ? (
-          <TaskDetail key={taskId} id={taskId} />
-        ) : route.split("?")[0] === "/tasks" ? (
-          <Tasks key={projectId} projectId={projectId} />
-        ) : route === "/projects" ? (
-          <Projects />
-        ) : sessionId ? (
-          <SessionPage key={sessionId} id={sessionId} />
-        ) : agentId ? (
-          new URLSearchParams(route.split("?")[1]).get("view") === "full" ? (
-            <AgentDetail key={agentId} id={agentId} />
-          ) : (
-            <Agents selectedId={agentId} />
-          )
-        ) : route === "/models" ? (
-          <Capabilities key={route} initialTab="models" />
-        ) : route === "/capabilities" ? (
-          <Capabilities key={route} />
-        ) : route === "/skills" ? (
-          <Capabilities key={route} initialTab="skills" />
-        ) : route === "/mcps" ? (
-          <Capabilities key={route} initialTab="mcps" />
-        ) : route === "/schedules" ? (
-          <Schedules />
-        ) : route === "/connections" ? (
-          <Connections />
-        ) : route === "/feishu" ? (
-          <Feishu />
-        ) : route === "/runtimes" ? (
-          <Runtimes />
-        ) : (
-          <Agents />
-        )}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {page}
       </main>
     </div>
   );

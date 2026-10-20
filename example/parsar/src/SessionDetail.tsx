@@ -1,4 +1,3 @@
-import { ListSlot } from "./components/plugin/SlotRenderer";
 import {
   TurnNavRail,
   turnPreview,
@@ -8,7 +7,7 @@ import { tr } from "./lib/i18n";
 import { Questions } from "./Questions";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Info } from "lucide-react";
+import { FolderOpen, Info } from "lucide-react";
 import {
   api,
   dateTime,
@@ -28,26 +27,22 @@ import {
 import { Property, PropertyList } from "./components/ui/property-list";
 import { ErrorNotice } from "./components/shared";
 import { SessionTimeline, Thinking } from "./components/Activity";
-import { useSendTiming, timingLabel } from "./lib/session-timing";
-import { Help } from "./components/shared";
 import { useLiveSession } from "./lib/live-session";
 import { Composer } from "./Composer";
 import { SessionFiles } from "./SessionFiles";
-import type { SessionRecord } from "./lib/product";
+import {
+  harnessNames,
+  useAgents,
+  useRuntimes,
+  type SessionRecord,
+} from "./lib/product";
 export function SessionDetail({
   id,
-  agentId,
-  taskId,
-  brief,
-  configuration,
+  record,
 }: {
-  configuration?: SessionRecord["configuration"];
   id: string;
-  agentId: string;
-  taskId?: string;
-  brief?: string;
+  record: SessionRecord;
 }) {
-  const timing = useSendTiming(id);
   const [info, setInfo] = useState(false);
   const [messagePending, setMessagePending] = useState(false);
   const [files, setFiles] = useState(false);
@@ -56,6 +51,8 @@ export function SessionDetail({
     null,
   );
   const followOutput = useRef(true);
+  const agents = useAgents(),
+    runtimes = useRuntimes();
   const query = useQuery({
     queryKey: ["session", id],
     queryFn: async ({ signal }) => {
@@ -94,116 +91,51 @@ export function SessionDetail({
       ? session.environment.id
       : undefined;
   const state = session ? sessionState(session, data?.turns[0]) : undefined;
+  const configuration = record.configuration;
+  const agent = agents.data?.find((row) => row.id === record.agent_id);
+  const runtime = runtimes.data?.find((row) => row.id === record.runtime_id);
+  const outdated =
+    configuration?.agent_revision !== undefined &&
+    !!agent &&
+    (agent.revision !== configuration.agent_revision ||
+      agent.runtime_id !== record.runtime_id ||
+      (!!runtime && runtime.revision !== configuration.runtime_revision));
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-6">
-        <Button asChild variant="ghost" size="icon">
-          <a
-            href={taskId ? `#/tasks/${taskId}` : `#/agents/${agentId}`}
-            aria-label={taskId ? tr("返回任务") : tr("返回 Agent")}
-          >
-            <ArrowLeft />
-          </a>
-        </Button>
-        <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">
-          {session ? sessionTitle(session) : tr("会话")}
-        </h1>
+      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-muted px-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-semibold tracking-tight">
+            {session ? sessionTitle(session) : record.name}
+          </h1>
+        </div>
         {state && (
-          <span className="flex shrink-0 items-center gap-2 text-base">
+          <span className="flex shrink-0 items-center gap-2 text-sm text-fg-muted">
             <StatusIcon status={state.icon} />
             {state.label}
           </span>
         )}
         {environmentId && (
-          <Button variant="ghost" onClick={() => setFiles(true)}>
-            {tr("文件")}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={tr("文件")}
+            title={tr("文件")}
+            onClick={() => setFiles(true)}
+          >
+            <FolderOpen />
           </Button>
         )}
         <Button
           variant="ghost"
           size="icon"
           aria-label={tr("会话详情")}
+          title={tr("会话详情")}
           disabled={!session}
           onClick={() => setInfo(true)}
         >
           <Info />
         </Button>
-        <ListSlot
-          slotId="conversation.header.actions"
-          context={{ sessionId: id, agentId }}
-        />
       </header>
-      <details className="shrink-0 border-b border-line px-6 py-2 text-xs">
-        <summary className="cursor-pointer font-medium">
-          {tr("本次运行")}
-        </summary>
-        <div className="max-h-56 overflow-auto py-3">
-          <PropertyList>
-            <Property label="Core Session">{id}</Property>
-            <Property label="Core Environment">{environmentId || "—"}</Property>
-            {configuration && (
-              <>
-                <Property label={tr("Agent 模板")}>
-                  {configuration.agent_name}
-                </Property>
-                <Property label={tr("模型")}>{configuration.model}</Property>
-                <Property label={tr("执行引擎")}>
-                  {configuration.harness}
-                </Property>
-                <Property label={tr("环境模板")}>
-                  {configuration.environment_name}
-                </Property>
-                <Property label={tr("软件包")}>
-                  {Object.values(configuration.packages || {})
-                    .flat()
-                    .join(", ") || "—"}
-                </Property>
-                <Property label={tr("初始化脚本")}>
-                  {configuration.setup_configured ? tr("已配置") : "—"}
-                </Property>
-                <Property label={tr("环境变量")}>
-                  {configuration.env_names?.join(", ") || "—"}
-                </Property>
-                <Property label={tr("初始文件")}>
-                  {configuration.file_paths?.join(", ") || "—"}
-                </Property>
-                <Property label="Skills">
-                  {configuration.skills
-                    .map(
-                      (skill) =>
-                        `${skill.id} · ${skill.version || tr("创建时使用默认版本")}`,
-                    )
-                    .join(", ") || "—"}
-                </Property>
-                {configuration.connection && (
-                  <Property label={tr("用户连接")}>
-                    {configuration.connection.name} ·{" "}
-                    {tr("本次会话凭据有效期至")}{" "}
-                    {new Date(
-                      configuration.connection.expires_at,
-                    ).toLocaleString()}
-                  </Property>
-                )}
-                <Property label="MCP">
-                  {configuration.mcps.join(", ") || "—"}
-                </Property>
-                <Property label={tr("能力")}>
-                  {configuration.capabilities
-                    .map((row) => `${row.name} (${row.kind}) · v${row.version}`)
-                    .join(", ") || "—"}
-                </Property>
-              </>
-            )}
-          </PropertyList>
-          <p className="mt-2 text-fg-muted">
-            {configuration
-              ? tr(
-                  "以上为创建会话时提交的配置。模板修改只影响新会话；连接和执行状态以当前会话为准。",
-                )
-              : tr("此历史会话未记录创建时的模板配置。")}
-          </p>
-        </div>
-      </details>
       {files && session && environmentId && (
         <SessionFiles
           sessionId={id}
@@ -215,18 +147,19 @@ export function SessionDetail({
           useFile={setAttachment}
         />
       )}
-      {live.reconnecting && (
-        <p role="status" className="px-6 py-2 text-base text-fg-muted">
-          {tr("正在重连实时回复，历史仍会自动更新。")}
-        </p>
+      <ErrorNotice page
+        error={query.error}
+        retry={() => void query.refetch()}
+        className="max-w-3xl"
+      />
+      {session?.error && (
+        <ErrorNotice page error={session.error} className="max-w-3xl" />
       )}
-      <ErrorNotice error={query.error} retry={() => void query.refetch()} />
-      {session?.error && <ErrorNotice error={session.error} />}
       {data?.turns[0]?.error && !session?.error && (
-        <ErrorNotice error={data.turns[0].error.message} />
+        <ErrorNotice page error={data.turns[0].error.message} className="max-w-3xl" />
       )}
       {query.isPending ? (
-        <EmptyState title={tr("正在加载\u2026")} />
+        <EmptyState className="flex-1" title={tr("正在加载\u2026")} />
       ) : (
         data && (
           <>
@@ -254,50 +187,33 @@ export function SessionDetail({
                 className="min-h-0 flex-1 overflow-y-auto"
                 aria-label={tr("会话过程")}
               >
-                <div className="mx-auto max-w-3xl px-6 py-6">
+                <div className="mx-auto max-w-3xl px-6 py-10">
                   <SessionTimeline items={live.items} />
                   {!live.items.length && (
                     <EmptyState title={tr("等待执行记录")} size="compact" />
                   )}
                   {data.session.status === "in_progress" && <Thinking />}
                   <Questions session={data.session} />
+                  {live.reconnecting && (
+                    <p role="status" className="py-2 text-sm text-fg-muted">
+                      {tr("正在重连实时回复，历史仍会自动更新。")}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
-            {timing && (
-              <div
-                aria-label={tr("本次发送耗时")}
-                className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-6 gap-y-2 px-6 pt-3 text-base text-fg-muted"
-              >
-                <span>
-                  {tr("请求返回")}{" "}
-                  <span
-                    className="tabular-nums text-fg"
-                    data-testid="response-time"
-                  >
-                    {timingLabel(timing.responseMs)}
-                  </span>
-                </span>
-                <span>
-                  {tr("首个文本增量")}{" "}
-                  <span
-                    className="tabular-nums text-fg"
-                    data-testid="first-text-time"
-                  >
-                    {timingLabel(timing.firstTextMs)}
-                  </span>
-                </span>
-                <Help>
-                  {tr(
-                    "从本次发送开始计时：请求返回记录发送接口完成；首个文本增量记录浏览器首次收到非空文本片段。未观测到的时间显示为 \u2014，不使用历史轮询推算。",
-                  )}
-                </Help>
+            {outdated && (
+              <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-3 px-6 pt-3">
+                <p className="text-sm text-fg-muted">
+                  {tr("Agent 配置已更新，新配置只对新对话生效。")}
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <a href={`#/new?agent=${record.agent_id}`}>
+                    {tr("用新配置开始新对话")}
+                  </a>
+                </Button>
               </div>
             )}
-            <ListSlot
-              slotId="conversation.input.dock"
-              context={{ sessionId: id, agentId }}
-            />
             <Composer
               onPendingChange={setMessagePending}
               attachment={attachment}
@@ -310,43 +226,95 @@ export function SessionDetail({
       )}
       {session && (
         <Dialog open={info} onOpenChange={setInfo}>
-          <DialogContent aria-describedby={undefined}>
+          <DialogContent
+            aria-describedby={undefined}
+            className="max-w-xl"
+          >
             <DialogHeader>
               <DialogTitle>{tr("会话详情")}</DialogTitle>
             </DialogHeader>
             <PropertyList>
               <Property label="Agent">
-                {session.metadata.agent_name || session.agent.name || "Agent"}
+                {configuration?.agent_name ||
+                  session.metadata.agent_name ||
+                  "Agent"}
               </Property>
               <Property label={tr("模型")}>{session.agent.model}</Property>
-              <Property label={tr("运行引擎")}>
-                {session.agent.x_agents_core?.harness || tr("部署默认")}
+              <Property label={tr("执行引擎")}>
+                {configuration
+                  ? harnessNames[configuration.harness]
+                  : session.agent.x_agents_core?.harness || tr("部署默认")}
               </Property>
-              <Property label={tr("环境")}>{session.environment.type}</Property>
+              {configuration && (
+                <Property label={tr("环境模板")}>
+                  {configuration.environment_name}
+                </Property>
+              )}
+              {configuration?.bot_name && (
+                <Property label={tr("飞书身份")}>
+                  {configuration.bot_name}
+                </Property>
+              )}
+              <Property label={tr("来源")}>
+                {record.source === "feishu"
+                  ? record.feishu_chat_type === "p2p"
+                    ? tr("飞书私聊")
+                    : tr("飞书群聊")
+                  : tr("网页")}
+              </Property>
               <Property label={tr("创建时间")}>
                 {dateTime(session.created_at)}
-              </Property>
-              <Property label="Session ID" mono>
-                {session.id}
               </Property>
               <Property label="Tokens" mono>
                 {session.usage?.total_tokens ?? tr("未报告")}
               </Property>
             </PropertyList>
-            {brief && (
-              <details className="mt-4">
-                <summary className="cursor-pointer text-sm">
-                  {tr("本次执行的任务说明")}
+            {configuration && (
+              <details className="group rounded-xl bg-surface-subtle px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  {tr("创建时的配置")}
                 </summary>
-                <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-sm">
-                  {brief}
-                </pre>
+                <PropertyList className="mt-3">
+                  <Property label={tr("软件包")}>
+                    {Object.values(configuration.packages || {})
+                      .flat()
+                      .join(", ") || "—"}
+                  </Property>
+                  <Property label={tr("初始化脚本")}>
+                    {configuration.setup_configured ? tr("已配置") : "—"}
+                  </Property>
+                  <Property label={tr("环境变量")}>
+                    {configuration.env_names?.join(", ") || "—"}
+                  </Property>
+                  <Property label={tr("初始文件")}>
+                    {configuration.file_paths?.join(", ") || "—"}
+                  </Property>
+                  <Property label="Skills">
+                    {configuration.skills
+                      .map(
+                        (skill) =>
+                          `${skill.id} · ${skill.version || tr("默认版本")}`,
+                      )
+                      .join(", ") || "—"}
+                  </Property>
+                  <Property label="MCP">
+                    {configuration.mcps.join(", ") || "—"}
+                  </Property>
+                  <Property label={tr("能力")}>
+                    {configuration.capabilities
+                      .map(
+                        (row) => `${row.name} (${row.kind}) · v${row.version}`,
+                      )
+                      .join(", ") || "—"}
+                  </Property>
+                  <Property label="Session ID" mono>
+                    {session.id}
+                  </Property>
+                  <Property label="Environment ID" mono>
+                    {environmentId || "—"}
+                  </Property>
+                </PropertyList>
               </details>
-            )}
-            {session.required_actions.length > 0 && (
-              <pre className="max-h-64 overflow-auto text-base">
-                {JSON.stringify(session.required_actions, null, 2)}
-              </pre>
             )}
           </DialogContent>
         </Dialog>

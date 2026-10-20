@@ -34,7 +34,6 @@ export interface Capability {
     content?: string;
     files?: string[];
     has_archive?: boolean;
-    has_client_bundle?: boolean;
     mcp_servers?: { name: string; transport: string }[];
   }[];
 }
@@ -52,31 +51,36 @@ export function Capabilities({
   return (
     <>
       <PageHeader title={tr("资源库")} />
-      <div
-        className="flex h-10 shrink-0 items-center gap-1 border-b border-line px-6"
-        role="tablist"
-        aria-label={tr("能力类型")}
-      >
-        {[
-          ["models", tr("模型")],
-          ["skills", "Skills"],
-          ["mcps", "MCP"],
-          ["plugin", "Plugins"],
-          ["prompt", tr("指令片段")],
-          ["knowledge", tr("知识")],
-          ["credentials", tr("凭据")],
-        ].map(([key, label]) => (
-          <Button
-            key={key}
-            role="tab"
-            aria-selected={tab === key}
-            variant="ghost"
-            className={tab === key ? "bg-surface-muted" : "text-fg-muted"}
-            onClick={() => setTab(key!)}
-          >
-            {label}
-          </Button>
-        ))}
+      <div className="mx-auto w-full max-w-6xl shrink-0 px-6 sm:px-10">
+        <div
+          className="flex items-center gap-6 overflow-x-auto border-b border-line"
+          role="tablist"
+          aria-label={tr("能力类型")}
+        >
+          {[
+            ["models", tr("模型")],
+            ["skills", "Skills"],
+            ["mcps", "MCP"],
+            ["plugin", "Plugins"],
+            ["prompt", tr("指令片段")],
+            ["knowledge", tr("知识")],
+            ["credentials", tr("凭据")],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              className={
+                tab === key
+                  ? "-mb-px h-10 shrink-0 border-b-2 border-fg text-sm font-medium text-fg"
+                  : "-mb-px h-10 shrink-0 border-b-2 border-transparent text-sm text-fg-muted hover:text-fg"
+              }
+              onClick={() => setTab(key!)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
       {tab === "models" ? (
         <Models />
@@ -105,7 +109,8 @@ function CapabilityList({ kind }: { kind: Capability["kind"] }) {
     kind === "plugin" ? Package : kind === "knowledge" ? BookOpen : FileText;
   return (
     <>
-      <PageHeader title={labels[kind]}>
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6 pb-1 sm:px-10">
+        <h2 className="text-lg font-semibold tracking-tight text-fg">{labels[kind]}</h2>
         <Button
           onClick={() =>
             setEditing({
@@ -123,8 +128,8 @@ function CapabilityList({ kind }: { kind: Capability["kind"] }) {
           <Plus />
           {tr("添加能力")}
         </Button>
-      </PageHeader>
-      <ErrorNotice error={query.error} />
+      </div>
+      <ErrorNotice page error={query.error} />
       <Ledger columns="18px minmax(160px,2fr) minmax(180px,2fr) 90px 90px">
         <LedgerHeader>
           <span />
@@ -135,15 +140,17 @@ function CapabilityList({ kind }: { kind: Capability["kind"] }) {
         </LedgerHeader>
         {rows?.map((row) => (
           <LedgerRow key={row.id}>
-            <Icon className="h-3.5 w-3.5 text-fg-muted" />
+            <Icon className="h-4 w-4 text-fg-muted" />
             <button
-              className="truncate text-left font-medium"
+              className="truncate text-left font-medium hover:text-accent"
               onClick={() => setEditing(row)}
             >
               {row.name}
             </button>
-            <span className="text-fg-muted">{row.description}</span>
-            <span className="font-mono text-xs">v{row.default_version}</span>
+            <span className="text-fg-muted">{row.description || "—"}</span>
+            <span className="font-mono text-fg-muted">
+              v{row.default_version}
+            </span>
             <span>{row.deprecated ? tr("已停用") : tr("可用")}</span>
           </LedgerRow>
         ))}
@@ -170,7 +177,6 @@ export function CapabilityEditor({
       value.revision ? undefined : "",
     ),
     [archive, setArchive] = useState(""),
-    [clientBundle, setClientBundle] = useState<string | undefined>(),
     [error, setError] = useState("");
   const selected = form.versions.find(
     (version) => version.version === form.default_version,
@@ -187,9 +193,6 @@ export function CapabilityEditor({
           ? { content, default_version: "" }
           : {}),
         ...(archive ? { archive, default_version: "" } : {}),
-        ...(clientBundle !== undefined
-          ? { client_bundle: clientBundle, default_version: "" }
-          : {}),
       }),
     onSuccess: () => {
       onSaved?.(form.id);
@@ -283,41 +286,13 @@ export function CapabilityEditor({
                   }}
                 />
               </Field>
-              <Field label={tr("前端扩展 JavaScript（可选）")} id="cap-client">
-                <Input
-                  id="cap-client"
-                  type="file"
-                  accept=".js"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    if (file.size > 1024 * 1024)
-                      return setError(tr("前端扩展不能超过 1 MiB。"));
-                    setClientBundle(await file.text());
-                  }}
-                />
-              </Field>
-              <p className="text-xs text-fg-muted">
-                {tr(
-                  "仅安装你信任的前端扩展。它以当前页面的权限运行，可访问 Parsar 数据和公开 API。",
-                )}
-              </p>
-              {selected?.has_client_bundle && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setClientBundle("")}
-                >
-                  {tr("移除前端扩展")}
-                </Button>
-              )}
               {selected?.mcp_servers?.map((server) => (
-                <p className="text-xs" key={server.name}>
+                <p className="text-sm" key={server.name}>
                   {server.name} · {server.transport}
                 </p>
               ))}
               {selected?.files && (
-                <pre className="max-h-48 overflow-auto text-xs">
+                <pre className="max-h-48 overflow-auto rounded-xl bg-surface-subtle p-4 text-sm">
                   {selected.files.join("\n")}
                 </pre>
               )}

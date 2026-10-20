@@ -154,7 +154,9 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
             app_secret: value.client_secret,
             brand: row.brand === "lark" ? "lark" : "feishu",
             enabled: false,
-            routes: bot?.routes || [],
+            agent_id: bot?.agent_id || "",
+            direct: bot?.direct === true,
+            groups: bot?.groups === true,
             revision: (bot?.revision || 0) + 1,
           });
           row = { ...row, status: "success", device_code: undefined };

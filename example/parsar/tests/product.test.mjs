@@ -12,7 +12,7 @@ test("environment templates prepare hosted Sessions, protect variables and freez
   t.after(() => store.close());
   let failed = true;
   const calls = [];
-  const { api, put, agent } = await setup(
+  const { api, put, agent: base } = await setup(
     store,
     async (_path, _method, body) => {
       calls.push(structuredClone(body));
@@ -28,6 +28,7 @@ test("environment templates prepare hosted Sessions, protect variables and freez
     files: [{ path: "/workspace/config.txt", content: "initial content" }],
   });
   assert.deepEqual(runtime.env, { OFFICE_TOKEN: null });
+  const agent = await put("agents", { ...base, runtime_id: runtime.id }, base.id);
   assert.ok(
     !JSON.stringify(await api("GET", "/app/runtimes")).includes("private-env"),
   );
@@ -39,7 +40,6 @@ test("environment templates prepare hosted Sessions, protect variables and freez
         name: "Prepare",
         input: "Read config",
         agent_id: agent.id,
-        runtime_id: runtime.id,
         files: [
           { type: "inline", path: "/workspace/inputs/input.txt", data: "eA==" },
         ],
@@ -92,6 +92,8 @@ test("environment templates prepare hosted Sessions, protect variables and freez
     { env: { PATH: "x" } },
     { env: { OAC_KEY: "x" } },
     { env: { NEW: null } },
+    { bot_env: { TOKEN: "access_token" } },
+    { env: { A: "x" }, bot_env: { A: "app_id" } },
     { files: [{ path: "/workspace/../outside", content: "x" }] },
     {
       files: [
@@ -228,6 +230,7 @@ async function setup(store, core) {
   });
   const agent = await put("agents", {
     name: "Reviewer",
+    runtime_id: runtime.id,
     model_id: model.id,
     harness: "claude_sdk",
     instructions: "Review carefully",
@@ -243,7 +246,6 @@ async function setup(store, core) {
     input: {
       name: "Review",
       agent_id: agent.id,
-      runtime_id: runtime.id,
       input: "Review this",
     },
   };
@@ -311,7 +313,7 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
   assert.equal(store.get("sessions", pending).request, undefined);
   assert.equal(receipts.size, 3);
 });
-test("compatibility validation precedes execution, and old configurations migrate without fake Sessions", async (t) => {
+test("compatibility validation precedes execution and every Agent requires an environment template", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   const { api, put, agent, input } = await setup(store, () => {
@@ -323,10 +325,10 @@ test("compatibility validation precedes execution, and old configurations migrat
     environment: "none",
   };
   store.put("runtimes", runtime);
-  await assert.rejects(
-    put("sessions", { ...input, runtime_id: runtime.id }),
-    /仅支持托管/,
-  );
+  store.put("agents", { ...store.get("agents", agent.id), runtime_id: runtime.id });
+  await assert.rejects(put("sessions", input), /仅支持托管/);
+  const { runtime_id, ...unplaced } = agent;
+  await assert.rejects(put("agents", unplaced), /请选择环境模板/);
   await assert.rejects(
     put("mcps", {
       name: "MCP",
@@ -335,13 +337,7 @@ test("compatibility validation precedes execution, and old configurations migrat
     }),
     /不含凭据/,
   );
-  const legacy = { ...agent, id: randomUUID(), runtime_id: runtime.id };
-  store.put("instances", legacy);
-  productAPI(store, () => {});
-  assert.equal(store.get("agents", legacy.id).name, agent.name);
-  assert.equal(store.get("agents", legacy.id).runtime_id, undefined);
   assert.equal(store.list("sessions").length, 0);
-  assert.equal(store.list("instances").length, 0);
   assert.notEqual(
     dataPath({ target: "https://core.example", key: "a" }),
     dataPath({ target: "https://core.example", key: "b" }),
@@ -470,18 +466,10 @@ test("MiniMax MCP bindings reject before Core", async (t) => {
     { ...agent, harness: "mcode", skill_ids: [] },
     agent.id,
   );
-  for (const environment of ["openai_hosted"]) {
-    const runtime = await put("runtimes", { name: environment, environment });
-    await assert.rejects(
-      put("sessions", {
-        name: "Rejected",
-        input: "hello",
-        agent_id: config.id,
-        runtime_id: runtime.id,
-      }),
-      /MiniMax Code.*MCP/,
-    );
-  }
+  await assert.rejects(
+    put("sessions", { name: "Rejected", input: "hello", agent_id: config.id }),
+    /MiniMax Code.*MCP/,
+  );
   assert.equal(calls, 0);
 });
 
@@ -668,16 +656,8 @@ test("model availability and pricing remain product-owned and freeze with a Sess
     enabled: false,
   });
   store.put("agents", { ...agent, skill_ids: [], mcp_ids: [] });
-  const runtime = {
-    id: randomUUID(),
-    name: "Workspace",
-    environment: "openai_hosted",
-    revision: 1,
-  };
-  store.put("runtimes", runtime);
   const body = {
     agent_id: agent.id,
-    runtime_id: runtime.id,
     name: "Priced task",
     input: "Check usage",
   };
@@ -704,4 +684,60 @@ test("model availability and pricing remain product-owned and freeze with a Sess
     }),
     /价格/,
   );
+});
+
+test("the Agent's bound Feishu bot supplies mapped identity variables without exposing the secret", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const calls = [];
+  const { api, put, agent, input } = await setup(store, async (_p, _m, body) => {
+    calls.push(body);
+    return { id: randomUUID() };
+  });
+  const runtime = await put("runtimes", {
+    name: "Feishu",
+    env: { LARKSUITE_CLI_DEFAULT_AS: "bot" },
+    bot_env: {
+      FEISHU_APP_ID: "app_id",
+      FEISHU_APP_SECRET: "app_secret",
+      FEISHU_BRAND: "brand",
+    },
+  });
+  await put("agents", { ...agent, runtime_id: runtime.id }, agent.id);
+  await assert.rejects(put("sessions", input), /飞书机器人身份/);
+  const botId = randomUUID();
+  await api("PUT", `/app/feishu/bots/${botId}`, {
+    revision: 0,
+    name: "Assistant",
+    app_id: "cli_0123456789abcdef",
+    app_secret: "bot-secret",
+    brand: "lark",
+    enabled: false,
+    agent_id: agent.id,
+    direct: true,
+  });
+  await assert.rejects(
+    api("PUT", `/app/feishu/bots/${randomUUID()}`, {
+      revision: 0,
+      name: "Second",
+      app_id: "cli_fedcba9876543210",
+      app_secret: "other",
+      enabled: false,
+      agent_id: agent.id,
+    }),
+    /已绑定另一个机器人/,
+  );
+  const record = await put("sessions", input);
+  assert.deepEqual(calls.at(-1).environment.env, {
+    LARKSUITE_CLI_DEFAULT_AS: "bot",
+    FEISHU_APP_ID: "cli_0123456789abcdef",
+    FEISHU_APP_SECRET: "bot-secret",
+    FEISHU_BRAND: "lark",
+  });
+  assert.equal(record.configuration.bot_name, "Assistant");
+  assert.ok(record.configuration.env_names.includes("FEISHU_APP_SECRET"));
+  assert.ok(!JSON.stringify(await api("GET", "/app/sessions")).includes("bot-secret"));
+  assert.ok(!JSON.stringify(await api("GET", "/app/runtimes")).includes("bot-secret"));
+  assert.ok(!JSON.stringify(await api("GET", "/app/feishu/bots")).includes("bot-secret"));
+  await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
 });

@@ -1,9 +1,8 @@
 import { AppError, text, uuid } from "./store.mjs";
 import { unzipSync } from "fflate";
-const publicVersion = ({ archive, client_bundle, ...value }) => ({
+const publicVersion = ({ archive, ...value }) => ({
   ...value,
   has_archive: !!archive,
-  has_client_bundle: !!client_bundle,
 });
 export const publicCapability = (row) => ({
   ...row,
@@ -40,12 +39,7 @@ export function capabilityAPI(store) {
     const name = text(body.name, "名称", 80, true);
     const description = text(body.description || "", "说明", 2000);
     const versions = [...(old?.versions || [])];
-    if (
-      !old ||
-      body.content !== undefined ||
-      body.archive ||
-      body.client_bundle !== undefined
-    ) {
+    if (!old || body.content !== undefined || body.archive) {
       const version = {
         version: String(versions.length + 1),
         created_at: Date.now(),
@@ -100,16 +94,6 @@ export function capabilityAPI(store) {
           );
         }
         version.archive = archive;
-        const client =
-          body.client_bundle ??
-          old?.versions.find((row) => row.version === old.default_version)
-            ?.client_bundle;
-        if (client !== undefined)
-          version.client_bundle = text(
-            client,
-            "Client JavaScript",
-            1024 * 1024,
-          );
       } else version.content = text(body.content, "内容", 500000, true);
       versions.push(version);
     }

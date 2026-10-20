@@ -6,11 +6,11 @@ Complete applications built on the [Agents API](./api/public-agent-api.md). Each
 
 | Example | What it shows |
 | --- | --- |
-| [Parsar Agent workbench](#parsar-agent-workbench) | Projects, task boards, reusable Agents, execution history, recurring work and Feishu dispatch |
+| [Parsar Agent workbench](#parsar-agent-workbench) | Web chat and Feishu conversations with reusable Agents, environment templates and a resource library |
 
 ## Parsar Agent workbench
 
-A task workspace built on Core, operated through a local Web UI and trusted Feishu groups. Organize projects, assign tasks to reusable Agents, continue execution Sessions, inspect Artifacts and record delivery progress. Interval plans and Feishu dispatch reuse the public Session flow. Execution runs in bypass mode; product accounts and fine-grained permissions are omitted.
+A conversation workspace built on Core. Assemble Agents from a resource library and an environment template, then talk to them in a local Web chat or through Feishu bots that act as the Agent's identity. Both entries create ordinary public Sessions. Execution runs in bypass mode; product accounts and fine-grained permissions are omitted.
 
 Source: [`example/parsar`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/README.md).
 
@@ -22,17 +22,15 @@ Each feature maps to one part of the API. Read the code next to the guide sectio
 
 | Feature | API used | Guide | Code |
 | --- | --- | --- | --- |
-| Task dispatch and recovery | Public Session creation and durable history | [Create a Session](./api/public-agent-api.md#create-a-session) | [`server/work.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/work.mjs) |
-| Feishu and recurring work | Public Sessions, input events, Turns and Items | [Send input](./api/public-agent-api.md#send-input) | [`server/feishu.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/feishu.mjs), [`server/schedules.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/schedules.mjs) |
+| Web and Feishu conversations | Public Session creation, input events, Turns and Items | [Send input](./api/public-agent-api.md#send-input) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs), [`server/feishu.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/feishu.mjs) |
 | Server-side key and headers | Bearer key, `OpenAI-Beta`, route allowlist | [Before you start](./api/public-agent-api.md#before-you-start) | [`server.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server.mjs) |
 | Agents with a Harness and model | `x_agents_core.harness`, `model_provider` | [Core extensions](./api/public-agent-api.md#core-extensions-x_agents_core) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
-| Sessions on three runtimes | `openai_hosted`, `none`, `self_hosted` with `workspace_directory` | [Create a Session](./api/public-agent-api.md#create-a-session) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
+| Hosted Environments from templates | `openai_hosted` with packages, files, `env` and `setup_commands` | [Create a Session](./api/public-agent-api.md#create-a-session) | [`server/runtime-profile.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/runtime-profile.mjs) |
 | Crash-safe Session creation | `Idempotency-Key`, recovery from a lost response | [Idempotency](./api/public-agent-api.md#idempotency) | [`server/sessions.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/server/sessions.mjs) |
 | Live replies | Event stream, text deltas, reconnect and reconcile | [Stream events](./api/public-agent-api.md#stream-events) | [`src/lib/live-session.ts`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/lib/live-session.ts) |
 | Follow-ups and cancel | Input events with idempotency keys | [Send input](./api/public-agent-api.md#send-input) | [`src/Composer.tsx`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/Composer.tsx) |
 | History | Paging Turns and Items | [Pagination](./api/public-agent-api.md#pagination) | [`src/lib/api.ts`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/lib/api.ts) |
 | Skills and versions | `/skills`, default version | [Skills](./api/public-agent-api.md#skills) | [`src/Skills.tsx`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/Skills.tsx) |
-| Connect your own machine | `x_agents_core.installation`, Environment status | [Self-hosted execution](./getting-started/self-hosted.md) | [`src/ConnectMachine.tsx`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/example/parsar/src/ConnectMachine.tsx) |
 
 ## Add an example
 

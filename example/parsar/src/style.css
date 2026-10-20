@@ -27,23 +27,23 @@
    * The ledger uses five of them: xl (page title), base (UI / body),
    * sm (rows, buttons, inputs), xs (labels, metadata, mono).
    * ---------------------------------------------------------- */
-  --text-2xs: 0.6875rem; /* 11px — compact file trees only, never functional UI text */
-  --text-xs: 0.75rem; /* 12px — labels, metadata, mono ids, column headers */
-  --text-sm: 0.8125rem; /* 13px — list rows, buttons, inputs, property values */
-  --text-base: 0.875rem; /* 14px — sidebar nav, body copy, dialogs */
-  --text-lg: 1rem; /* 16px — page section heads, dialog headings */
-  --text-xl: 1.25rem; /* 20px — page title (the only 600 on a screen) */
-  --text-2xl: 1.375rem; /* 22px — secondary headings on account pages */
-  --text-3xl: 1.75rem; /* 28px — hero titles on setup / login */
+  --text-2xs: 0.75rem; /* 12px — compact file trees only, never functional UI text */
+  --text-xs: 0.8125rem; /* 13px — labels, metadata, mono ids */
+  --text-sm: 0.875rem; /* 14px — list rows, buttons, inputs, property values */
+  --text-base: 0.9375rem; /* 15px — body copy, conversation, dialogs */
+  --text-lg: 1.0625rem; /* 17px — section heads, dialog headings */
+  --text-xl: 1.375rem; /* 22px — page title */
+  --text-2xl: 1.75rem; /* 28px — hero secondary */
+  --text-3xl: 2.25rem; /* 36px — hero titles on the new conversation page */
 
-  --text-2xs--line-height: 0.875rem;
-  --text-xs--line-height: 1rem;
-  --text-sm--line-height: 1.125rem;
-  --text-base--line-height: 1.25rem;
-  --text-lg--line-height: 1.5rem;
-  --text-xl--line-height: 1.5rem;
-  --text-2xl--line-height: 1.875rem;
-  --text-3xl--line-height: 2.25rem;
+  --text-2xs--line-height: 1.1rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm--line-height: 1.45rem;
+  --text-base--line-height: 1.65rem;
+  --text-lg--line-height: 1.7rem;
+  --text-xl--line-height: 1.9rem;
+  --text-2xl--line-height: 2.25rem;
+  --text-3xl--line-height: 2.75rem;
 
   /* ------------------------------------------------------------
    * Semantic colors. Every color used in TSX MUST go through one
@@ -60,22 +60,22 @@
    * `status-*` — status icon colours. Never text.
    * ---------------------------------------------------------- */
 
-  --color-fg: #37352f; /* warm ink */
-  --color-fg-emphasis: #37352f;
-  --color-fg-muted: #787774;
-  --color-fg-subtle: #787774;
-  --color-fg-faint: #787774;
+  --color-fg: #1f1e1c; /* warm ink */
+  --color-fg-emphasis: #141413;
+  --color-fg-muted: #6b6a66;
+  --color-fg-subtle: #85847f;
+  --color-fg-faint: #9e9d99;
   --color-fg-on-emphasis: #ffffff;
 
   --color-surface: #ffffff;
-  --color-surface-subtle: #fafafa; /* panel: sidebar, rail */
-  --color-surface-muted: #f1f1f0; /* pressed / active tint, chips */
-  --color-surface-emphasis: #37352f; /* ink as a background */
+  --color-surface-subtle: #f7f6f3; /* calm warm paper canvas & sidebar */
+  --color-surface-muted: #efeee9; /* pressed / active tint, chips */
+  --color-surface-emphasis: #1f1e1c; /* ink as a background */
   --color-surface-inverse: #191919;
 
-  --color-line: #e9e9ec;
-  --color-line-muted: #efeff1;
-  --color-line-strong: #d6d7dc;
+  --color-line: #e8e6e1;
+  --color-line-muted: #f0efeb;
+  --color-line-strong: #d9d7d0;
 
   --color-danger: #dc2626;
   --color-danger-emphasis: #b91c1c;
@@ -141,7 +141,9 @@ html[data-theme="light"] {
   --app-tile: rgb(55 53 47 / 7%);
   --app-shadow-control: 0 1px 2px rgb(0 0 0 / 6%);
   --app-shadow-floating:
-    0 1px 2px rgb(24 24 27 / 4%), 0 8px 24px -12px rgb(24 24 27 / 18%);
+    0 1px 2px rgb(24 24 27 / 4%), 0 12px 32px -12px rgb(24 24 27 / 16%);
+  --app-shadow-card:
+    0 1px 2px rgb(24 24 27 / 3%), 0 4px 16px -8px rgb(24 24 27 / 10%);
   --app-chat-canvas: var(--color-surface);
   --app-chat-user-bubble: var(--color-surface-muted);
   --app-chat-agent-text: var(--color-fg);
@@ -211,7 +213,8 @@ html[data-theme="dark"] {
   --app-tile: rgb(255 255 255 / 10%);
   --app-shadow-control: 0 1px 2px rgb(0 0 0 / 40%);
   --app-shadow-floating:
-    0 1px 2px rgb(0 0 0 / 30%), 0 8px 24px -12px rgb(0 0 0 / 55%);
+    0 1px 2px rgb(0 0 0 / 30%), 0 12px 32px -12px rgb(0 0 0 / 55%);
+  --app-shadow-card: 0 1px 2px rgb(0 0 0 / 30%);
   --app-chat-canvas: var(--color-surface);
   --app-chat-user-bubble: var(--color-surface-muted);
   --app-chat-agent-text: var(--color-fg);
@@ -565,6 +568,9 @@ samp,
 }
 @utility app-shadow-floating {
   box-shadow: var(--app-shadow-floating);
+}
+@utility app-shadow-card {
+  box-shadow: var(--app-shadow-card);
 }
 
 /* Conversation surface (assistant-ui) keeps its own canvas variables. */

@@ -34,6 +34,7 @@ export function ResourceField({
   inspect,
   detail,
   manage,
+  required,
 }: {
   label: string;
   options: ResourceOption[];
@@ -49,6 +50,7 @@ export function ResourceField({
   inspect?: (id: string) => void;
   detail?: (id: string) => ReactNode;
   manage?: { href: string; label: string };
+  required?: boolean;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -66,23 +68,24 @@ export function ResourceField({
       <div className="flex items-center justify-between gap-2">
         <label htmlFor={id} className="text-sm font-medium">
           {label}
+          {required && <span className="ml-1 text-fg-subtle">*</span>}
         </label>
         {multiple && (
-          <span className="text-xs tabular-nums text-fg-muted">
+          <span className="text-sm tabular-nums text-fg-subtle">
             {selected.length}
             {limit !== undefined ? ` / ${limit}` : ""}
           </span>
         )}
       </div>
       {description && (
-        <p className="text-xs leading-relaxed text-fg-muted">{description}</p>
+        <p className="text-sm leading-relaxed text-fg-muted">{description}</p>
       )}
       <div className="flex gap-2">
         <Button
           id={id}
           type="button"
           variant="outline"
-          className="h-9 min-w-0 flex-1 justify-between font-normal"
+          className="min-w-0 flex-1 justify-between font-normal text-fg-muted"
           aria-haspopup="dialog"
           onClick={() => {
             setQuery("");
@@ -100,7 +103,7 @@ export function ResourceField({
           <Button
             type="button"
             variant="outline"
-            className="h-9 shrink-0"
+            className="shrink-0"
             aria-label={createLabel}
             disabled={limit !== undefined && selected.length >= limit}
             onClick={create}
@@ -110,7 +113,7 @@ export function ResourceField({
           </Button>
         )}
         {manage && (
-          <Button asChild variant="outline" className="h-9 shrink-0">
+          <Button asChild variant="outline" className="shrink-0">
             <a href={manage.href}>
               <Settings2 className="h-3.5 w-3.5" />
               {manage.label}
@@ -119,16 +122,16 @@ export function ResourceField({
         )}
       </div>
       {!!selected.length && (
-        <div className="divide-y divide-line rounded-md border border-line bg-surface-muted/30">
+        <div className="divide-y divide-line-muted rounded-xl border border-line">
           {selected.map((key) => (
             <div
               key={key}
-              className="flex flex-wrap items-center gap-2 px-3 py-2"
+              className="flex flex-wrap items-center gap-2 py-1.5 pl-4 pr-1.5"
             >
               <div className="min-w-0 flex-1">
                 <span className="block truncate text-sm">{name(key)}</span>
                 {options.find((row) => row.id === key)?.disabled && (
-                  <span className="text-xs text-danger">{tr("已停用")}</span>
+                  <span className="text-sm text-danger">{tr("已停用")}</span>
                 )}
               </div>
               {detail?.(key)}
@@ -184,7 +187,7 @@ export function ResourceField({
             aria-label={label}
           >
             {!multiple && (
-              <label className="flex cursor-pointer items-center gap-3 rounded-md p-3 hover:bg-surface-muted">
+              <label className="flex cursor-pointer items-center gap-3 rounded-xl p-3 text-sm hover:bg-surface-muted">
                 <input
                   type="radio"
                   name={id}
@@ -200,7 +203,7 @@ export function ResourceField({
             {rows.map((row) => (
               <label
                 key={row.id}
-                className="flex cursor-pointer items-start gap-3 rounded-md border border-transparent p-3 hover:bg-surface-muted has-[:checked]:border-line has-[:checked]:bg-surface-muted has-[:disabled]:opacity-50"
+                className="flex cursor-pointer items-start gap-3 rounded-xl border border-transparent p-3 hover:bg-surface-muted has-[:checked]:border-line has-[:checked]:bg-surface-muted has-[:disabled]:opacity-50"
               >
                 <input
                   type={multiple ? "checkbox" : "radio"}
@@ -229,12 +232,12 @@ export function ResourceField({
                     {row.name}
                   </span>
                   {row.description && (
-                    <span className="mt-1 block break-words text-xs text-fg-muted">
+                    <span className="mt-1 block break-words text-sm text-fg-muted">
                       {row.description}
                     </span>
                   )}
                   {row.disabled && (
-                    <span className="text-xs text-danger">{tr("已停用")}</span>
+                    <span className="text-sm text-danger">{tr("已停用")}</span>
                   )}
                 </span>
               </label>

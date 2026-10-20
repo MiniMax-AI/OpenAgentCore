@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, KeyRound, Trash2 } from "lucide-react";
 import type { VaultCredential } from "@oac/agents-client";
 import { api, readHistory } from "./lib/api";
-import { PageHeader, ErrorNotice, Field } from "./components/shared";
+import { ErrorNotice, Field } from "./components/shared";
 import { Ledger, LedgerHeader, LedgerRow } from "./components/ui/ledger";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
@@ -77,59 +77,60 @@ export function Credentials() {
   });
   return (
     <>
-      <PageHeader title={tr("凭据")}>
-        <Button
-          variant="outline"
-          disabled={!selected}
-          onClick={() => setOAuth(true)}
-        >
-          {tr("OAuth 授权")}
-        </Button>
-        <Button
-          variant="outline"
-          onClick={() => {
-            const name = prompt(tr("凭据库名称"));
-            if (name?.trim()) addVault.mutate(name.trim());
-          }}
-        >
-          {tr("新建凭据库")}
-        </Button>
-        <Button
-          disabled={!selected}
-          onClick={() => {
-            setName("");
-            setURL("");
-            setToken("");
-            setEditing(null);
-            setCreate(true);
-          }}
-        >
-          <Plus />
-          {tr("添加凭据")}
-        </Button>
-      </PageHeader>
-      <ErrorNotice
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-4 px-6 pt-6 pb-1 sm:px-10">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-semibold tracking-tight text-fg">{tr("凭据")}</h2>
+          <Select
+            aria-label={tr("凭据库")}
+            value={selected}
+            onValueChange={setVaultId}
+            className="w-48"
+          >
+            <SelectOption value="">{tr("选择凭据库")}</SelectOption>
+            {vaults.data?.map((vault) => (
+              <SelectOption key={vault.id} value={vault.id}>
+                {vault.name || vault.id}
+              </SelectOption>
+            ))}
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            disabled={!selected}
+            onClick={() => setOAuth(true)}
+          >
+            {tr("OAuth 授权")}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              const name = prompt(tr("凭据库名称"));
+              if (name?.trim()) addVault.mutate(name.trim());
+            }}
+          >
+            {tr("新建凭据库")}
+          </Button>
+          <Button
+            disabled={!selected}
+            onClick={() => {
+              setName("");
+              setURL("");
+              setToken("");
+              setEditing(null);
+              setCreate(true);
+            }}
+          >
+            <Plus />
+            {tr("添加凭据")}
+          </Button>
+        </div>
+      </div>
+      <ErrorNotice page
         error={
           vaults.error || credentials.error || addVault.error || remove.error
         }
       />
-      <div className="flex h-10 shrink-0 items-center gap-3 border-b border-line px-6">
-        <Select
-          aria-label={tr("凭据库")}
-          value={selected}
-          onValueChange={setVaultId}
-        >
-          <SelectOption value="">{tr("选择凭据库")}</SelectOption>
-          {vaults.data?.map((vault) => (
-            <SelectOption key={vault.id} value={vault.id}>
-              {vault.name || vault.id}
-            </SelectOption>
-          ))}
-        </Select>
-        <span className="text-xs text-fg-muted">
-          {tr("密钥只写入 Core Vault，不返回浏览器。")}
-        </span>
-      </div>
       <Ledger columns="16px minmax(160px,1fr) minmax(220px,2fr) 130px">
         <LedgerHeader>
           <span />
@@ -141,7 +142,7 @@ export function Credentials() {
           <LedgerRow key={row.id}>
             <KeyRound className="h-3.5 w-3.5 text-fg-muted" />
             <span>{row.name}</span>
-            <span className="font-mono text-xs text-fg-muted">
+            <span className="font-mono text-sm text-fg-muted">
               {row.auth.mcp_server_url}
             </span>
             <div className="flex justify-end">

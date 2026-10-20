@@ -3,7 +3,15 @@ import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AgentSession, AgentTurn } from "@oac/agents-client";
-import { Search, MessageSquare, Play, X, Pencil, Trash2 } from "lucide-react";
+import {
+  Search,
+  MessageSquare,
+  Play,
+  X,
+  Pencil,
+  Trash2,
+  Plus,
+} from "lucide-react";
 import { api, readHistory, dateTime, sessionState } from "./lib/api";
 import {
   product,
@@ -11,7 +19,7 @@ import {
   useAgents,
   type SessionRecord,
 } from "./lib/product";
-import { PageHeader, ErrorNotice } from "./components/shared";
+import { PageHeader, ErrorNotice, RecordTabs } from "./components/shared";
 import { Ledger, LedgerHeader, LedgerRow } from "./components/ui/ledger";
 import { Input } from "./components/ui/input";
 import { Button } from "./components/ui/button";
@@ -110,7 +118,7 @@ export function Records({
   const filtered = sessions.data?.filter(
     (row) =>
       (!agentFilter || row.agent_id === agentFilter) &&
-      (!source || row.source === source) &&
+      (!source || (row.source || "web") === source) &&
       `${row.name} ${row.id}`.toLowerCase().includes(search.toLowerCase()),
   );
   const rows = filtered?.slice(page * 20, (page + 1) * 20);
@@ -168,102 +176,117 @@ export function Records({
   );
   return (
     <>
-      <PageHeader title={title} />
-      <ErrorNotice
+      <PageHeader title={title}>
+        <Button asChild>
+          <a href="#/new">
+            <Plus />
+            {tr("新对话")}
+          </a>
+        </Button>
+      </PageHeader>
+      <RecordTabs active={view} />
+      <ErrorNotice page
         error={
           sessions.error || agents.error || observations.error || mutate.error
         }
       />
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-6">
-        <Search className="h-3.5 w-3.5 text-fg-muted" />
-        <Input
-          className="max-w-sm"
-          aria-label={tr("搜索{{value0}}", { value0: title })}
-          placeholder={tr("搜索{{value0}}", { value0: title })}
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(0);
-          }}
-        />
-        <Select
-          aria-label={tr("筛选 Agent")}
-          value={agentFilter}
-          onValueChange={(value) => {
-            setAgentFilter(value);
-            setPage(0);
-          }}
-        >
-          <SelectOption value="">{tr("全部 Agent")}</SelectOption>
-          {agents.data?.map((agent) => (
-            <SelectOption key={agent.id} value={agent.id}>
-              {agent.name}
-            </SelectOption>
-          ))}
-        </Select>
-        <Select
-          aria-label={tr("来源")}
-          value={source}
-          onValueChange={(value) => {
-            setSource(value);
-            setPage(0);
-          }}
-        >
-          <SelectOption value="">{tr("全部来源")}</SelectOption>
-          <SelectOption value="web">Web</SelectOption>
-          <SelectOption value="mcp">MCP</SelectOption>
-          <SelectOption value="feishu">Feishu</SelectOption>
-          <SelectOption value="task">{tr("任务")}</SelectOption>
-          <SelectOption value="schedule">{tr("定时任务")}</SelectOption>
-        </Select>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 border-b border-line px-6 py-2 text-xs">
-        <label>
-          {tr("开始日期")}
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-3 px-6 pt-5 pb-1 sm:px-10">
+        <div className="relative min-w-44 flex-1 max-w-sm">
+          <Search className="absolute left-3 top-2 h-4 w-4 text-fg-muted" />
           <Input
-            type="date"
-            value={from}
+            className="pl-9"
+            aria-label={tr("搜索{{value0}}", { value0: title })}
+            placeholder={tr("搜索{{value0}}", { value0: title })}
+            value={search}
             onChange={(e) => {
-              setFrom(e.target.value);
+              setSearch(e.target.value);
               setPage(0);
             }}
           />
-        </label>
-        <label>
-          {tr("结束日期")}
-          <Input
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => {
-              setTo(e.target.value);
+        </div>
+        <div className="w-40">
+          <Select
+            aria-label={tr("筛选 Agent")}
+            value={agentFilter}
+            onValueChange={(value) => {
+              setAgentFilter(value);
               setPage(0);
             }}
-          />
-        </label>
+          >
+            <SelectOption value="">{tr("全部 Agent")}</SelectOption>
+            {agents.data?.map((agent) => (
+              <SelectOption key={agent.id} value={agent.id}>
+                {agent.name}
+              </SelectOption>
+            ))}
+          </Select>
+        </div>
+        <div className="w-36">
+          <Select
+            aria-label={tr("来源")}
+            value={source}
+            onValueChange={(value) => {
+              setSource(value);
+              setPage(0);
+            }}
+          >
+            <SelectOption value="">{tr("全部来源")}</SelectOption>
+            <SelectOption value="feishu">{tr("飞书对话")}</SelectOption>
+            <SelectOption value="web">{tr("网页对话")}</SelectOption>
+          </Select>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-fg-muted">
+          <label className="flex items-center gap-1.5">
+            <span>{tr("开始日期")}</span>
+            <Input
+              type="date"
+              className="w-36"
+              value={from}
+              onChange={(e) => {
+                setFrom(e.target.value);
+                setPage(0);
+              }}
+            />
+          </label>
+          <label className="flex items-center gap-1.5">
+            <span>{tr("结束日期")}</span>
+            <Input
+              type="date"
+              className="w-36"
+              value={to}
+              min={from || undefined}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setPage(0);
+              }}
+            />
+          </label>
+        </div>
       </div>
       {view === "usage" && (
-        <div className="flex flex-wrap gap-8 border-b border-line px-6 py-4 text-sm">
-          <span>
-            {tr("输入合计")}
-            <strong className="font-mono">
-              {usage.input.toLocaleString()}
-            </strong>
-          </span>
-          <span>
-            {tr("输出合计")}
-            <strong className="font-mono">
-              {usage.output.toLocaleString()}
-            </strong>
-          </span>
-          <span className="text-fg-muted">
-            {usage.unknown}
-            {tr("个会话用量未知")}
-          </span>
-          <span>
-            {tr("估算费用")}: ${usage.cost.toFixed(4)} USD · {usage.unpriced}{" "}
-            {tr("个会话未定价")}
-          </span>
+        <div className="mx-auto w-full max-w-6xl px-6 pt-4 sm:px-10">
+          <div className="flex flex-wrap gap-8 rounded-2xl border border-line bg-surface px-6 py-5 text-sm app-shadow-card">
+            <span>
+              {tr("输入合计")}{" "}
+              <strong className="font-mono text-fg">
+                {usage.input.toLocaleString()}
+              </strong>
+            </span>
+            <span>
+              {tr("输出合计")}{" "}
+              <strong className="font-mono text-fg">
+                {usage.output.toLocaleString()}
+              </strong>
+            </span>
+            <span className="text-fg-muted">
+              {usage.unknown}
+              {tr("个会话用量未知")}
+            </span>
+            <span>
+              {tr("估算费用")}: ${usage.cost.toFixed(4)} USD · {usage.unpriced}{" "}
+              {tr("个会话未定价")}
+            </span>
+          </div>
         </div>
       )}
       <div className="flex min-h-0 flex-1">
@@ -342,7 +365,7 @@ export function Records({
                       turn || row.turns.at(-1),
                     )
                   : {
-                      label: row.error ? tr("读取失败") : tr(row.record.connection_wait ? "等待连接" : "待恢复"),
+                      label: row.error ? tr("读取失败") : tr("待恢复"),
                       icon: "interrupted" as const,
                     };
                 return (
@@ -354,29 +377,38 @@ export function Records({
                   >
                     <StatusIcon status={state.icon} />
                     <button
-                      className="min-w-0 truncate text-left"
+                      className="flex min-w-0 items-center gap-2 truncate text-left"
                       onClick={() => setSelected(row.record.id)}
                     >
-                      <span>{row.record.name}</span>
+                      <span className="truncate font-medium">
+                        {row.record.name}
+                      </span>
+                      {row.record.source === "feishu" && (
+                        <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-0.5 text-sm text-fg-muted">
+                          {row.record.feishu_chat_type === "p2p"
+                            ? tr("飞书私聊")
+                            : tr("飞书群聊")}
+                        </span>
+                      )}
                       {turn && (
-                        <span className="ml-2 font-mono text-xs text-fg-muted">
+                        <span className="font-mono text-fg-muted">
                           {turn.id.slice(0, 8)}
                         </span>
                       )}
                     </button>
                     <span>{agent}</span>
                     <span title={row.error}>{state.label}</span>
-                    <span className="text-xs text-fg-muted">
+                    <span className="text-fg-muted">
                       {dateTime(turn?.started_at || row.record.created_at)}
                     </span>
                     {view === "runs" && (
                       <>
-                        <span className="font-mono text-xs">
+                        <span className="font-mono">
                           {turn?.started_at && turn.completed_at
                             ? `${Math.max(0, turn.completed_at - turn.started_at).toFixed(1)} s`
                             : "—"}
                         </span>
-                        <span className="font-mono text-xs">
+                        <span className="font-mono">
                           {turn?.usage?.total_tokens ?? "—"}
                         </span>
                       </>
@@ -435,12 +467,12 @@ export function Records({
               />
             )}
             {observations.isPending && !!rows?.length && (
-              <p className="px-6 py-4 text-fg-muted">
+              <p className="px-6 py-4 text-sm text-fg-muted">
                 {tr("正在读取执行记录\u2026")}
               </p>
             )}
           </Ledger>
-          <div className="flex h-10 shrink-0 items-center justify-between border-t border-line px-6 text-xs text-fg-muted">
+          <div className="mx-auto flex h-14 w-full max-w-6xl shrink-0 items-center justify-between px-6 text-sm text-fg-muted sm:px-10">
             <span>
               {total}
               {tr("个会话 \u00B7 第")}
@@ -449,14 +481,16 @@ export function Records({
             </span>
             <div className="flex gap-2">
               <Button
-                variant="ghost"
+                variant="outline"
+                size="sm"
                 disabled={!page}
                 onClick={() => setPage(page - 1)}
               >
                 {tr("上一页")}
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
+                size="sm"
                 disabled={(page + 1) * 20 >= total}
                 onClick={() => setPage(page + 1)}
               >
@@ -470,8 +504,13 @@ export function Records({
             aria-label={tr("对话详情")}
             className="fixed inset-0 z-30 flex min-h-0 flex-col bg-surface sm:static sm:z-auto sm:w-[48%] sm:min-w-96 sm:border-l sm:border-line"
           >
-            <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-4 text-sm">
-              <a href={`#/sessions/${selected}`}>{tr("打开完整对话")}</a>
+            <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-4 text-sm">
+              <a
+                href={`#/sessions/${selected}`}
+                className="font-medium text-accent hover:underline"
+              >
+                {tr("打开完整对话")}
+              </a>
               <Button
                 variant="ghost"
                 size="icon"
@@ -505,15 +544,20 @@ export function Audit({ resourceId }: { resourceId?: string }) {
   const [search, setSearch] = useState("");
   return (
     <>
-      <PageHeader title={tr("审计日志")} />
-      <ErrorNotice error={query.error} />
-      <div className="border-b border-line px-6 py-2">
+      {!resourceId && (
+        <>
+          <PageHeader title={tr("审计日志")} />
+          <RecordTabs active="audit" />
+        </>
+      )}
+      <ErrorNotice page error={query.error} />
+      <div className="mx-auto w-full max-w-6xl px-6 pt-5 pb-1 sm:px-10">
         <Input
           aria-label={tr("搜索审计")}
           placeholder={tr("搜索资源或操作")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
+          className="max-w-xs"
         />
       </div>
       <Ledger columns="130px 100px minmax(260px,1fr)">
@@ -532,11 +576,11 @@ export function Audit({ resourceId }: { resourceId?: string }) {
           )
           .map((row) => (
             <LedgerRow key={row.id}>
-              <span className="text-xs text-fg-muted">
+              <span className="text-fg-muted">
                 {dateTime(row.created_at / 1000)}
               </span>
-              <span className="font-mono text-xs">{row.method}</span>
-              <span className="font-mono text-xs">{row.path}</span>
+              <span className="font-mono">{row.method}</span>
+              <span className="font-mono">{row.path}</span>
             </LedgerRow>
           ))}
         {!query.isPending && !query.data?.length && (

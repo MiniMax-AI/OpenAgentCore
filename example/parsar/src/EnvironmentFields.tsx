@@ -1,4 +1,4 @@
-import { connectionFields } from "../shared/connection-bindings.mjs";
+import { botFields } from "../shared/bot-bindings.mjs";
 import { Select, SelectOption } from "./components/ui/select";
 import { useState } from "react";
 import { tr } from "./lib/i18n";
@@ -7,6 +7,26 @@ import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Button } from "./components/ui/button";
 import { Field } from "./components/shared";
+
+function Group({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-3 border-t border-line-muted pt-5">
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export function EnvironmentFields({
   value,
@@ -27,11 +47,6 @@ export function EnvironmentFields({
   const files = value.files || [];
   return (
     <div className="space-y-5">
-      <p className="text-xs text-fg-muted">
-        {tr(
-          "新会话会先准备此环境，再启动 Agent。修改模板只影响之后创建的会话。",
-        )}
-      </p>
       <Field label={tr("用途说明")} id="environment-description">
         <Input
           id="environment-description"
@@ -67,16 +82,11 @@ export function EnvironmentFields({
           </Field>
         ))}
       </div>
-      <p className="text-xs text-fg-muted">
-        {tr(
-          "每行一个软件包，可指定版本；在初始化脚本之前安装。系统软件由运行环境提供。",
-        )}
-      </p>
       <Field label={tr("初始化脚本")} id="environment-setup">
         <Textarea
           id="environment-setup"
           rows={8}
-          className="font-mono text-xs"
+          className="font-mono text-sm"
           value={value.setup_script || ""}
           onChange={(e) => onChange({ ...value, setup_script: e.target.value })}
           placeholder={
@@ -84,14 +94,9 @@ export function EnvironmentFields({
           }
         />
       </Field>
-      <p className="text-xs text-fg-muted">
-        {tr(
-          "Bash 脚本在工作目录执行一次；失败则停止环境准备。使用相对路径，不在脚本中填写密钥。",
-        )}
-      </p>
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{tr("环境变量")}</h3>
+      <Group
+        title={tr("环境变量")}
+        action={
           <Button
             type="button"
             variant="outline"
@@ -103,10 +108,8 @@ export function EnvironmentFields({
           >
             {tr("添加变量")}
           </Button>
-        </div>
-        <p className="text-xs text-fg-muted">
-          {tr("变量值保存后不再显示；已有值留空保留。Agent 可以读取这些变量。")}
-        </p>
+        }
+      >
         {env.map(([name, entry], i) => (
           <div key={i} className="flex gap-2">
             <Input
@@ -161,47 +164,37 @@ export function EnvironmentFields({
             </Button>
           </div>
         ))}
-      </section>
-      <section className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{tr("连接变量映射")}</h3>
+      </Group>
+      <Group
+        title={tr("飞书机器人变量")}
+        action={
           <Button
             type="button"
             variant="outline"
             onClick={() => {
-              let name = "ACCOUNT_TOKEN";
-              while (
-                name in (value.connection_env || {}) ||
-                name in (value.env || {})
-              )
+              let name = "FEISHU_APP_ID";
+              while (name in (value.bot_env || {}) || name in (value.env || {}))
                 name += "_";
               onChange({
                 ...value,
-                connection_env: {
-                  ...value.connection_env,
-                  [name]: "access_token",
-                },
+                bot_env: { ...value.bot_env, [name]: "app_id" },
               });
             }}
           >
-            {tr("添加连接变量")}
+            {tr("添加机器人变量")}
           </Button>
-        </div>
-        <p className="text-xs text-fg-muted">
-          {tr(
-            "Agent 选择账号连接；环境模板决定工具通过哪些变量读取连接。令牌在启动前注入，不保存在模板中。",
-          )}
-        </p>
-        {Object.entries(value.connection_env || {}).map(
+        }
+      >
+        {Object.entries(value.bot_env || {}).map(
           ([name, source], index, rows) => (
             <div key={index} className="flex gap-2">
               <Input
-                aria-label={tr("连接变量名称")}
+                aria-label={tr("机器人变量名称")}
                 value={name}
                 onChange={(event) => {
                   if (
                     event.target.value !== name &&
-                    event.target.value in (value.connection_env || {})
+                    event.target.value in (value.bot_env || {})
                   ) {
                     event.target.setCustomValidity(tr("变量名称不能重复"));
                     return;
@@ -211,21 +204,21 @@ export function EnvironmentFields({
                   updated[index] = [event.target.value, source];
                   onChange({
                     ...value,
-                    connection_env: Object.fromEntries(updated),
+                    bot_env: Object.fromEntries(updated),
                   });
                 }}
               />
               <Select
-                aria-label={tr("连接字段")}
+                aria-label={tr("机器人字段")}
                 value={source}
                 onValueChange={(field) =>
                   onChange({
                     ...value,
-                    connection_env: { ...value.connection_env, [name]: field },
+                    bot_env: { ...value.bot_env, [name]: field },
                   })
                 }
               >
-                {Object.entries(connectionFields).map(([field, label]) => (
+                {Object.entries(botFields).map(([field, label]) => (
                   <SelectOption key={field} value={field}>
                     {tr(label)}
                   </SelectOption>
@@ -237,7 +230,7 @@ export function EnvironmentFields({
                 onClick={() =>
                   onChange({
                     ...value,
-                    connection_env: Object.fromEntries(
+                    bot_env: Object.fromEntries(
                       rows.filter((_, i) => i !== index),
                     ),
                   })
@@ -248,10 +241,10 @@ export function EnvironmentFields({
             </div>
           ),
         )}
-      </section>
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-medium">{tr("初始文件")}</h3>
+      </Group>
+      <Group
+        title={tr("初始文件")}
+        action={
           <Button
             type="button"
             variant="outline"
@@ -264,12 +257,10 @@ export function EnvironmentFields({
           >
             {tr("添加文件")}
           </Button>
-        </div>
-        <p className="text-xs text-fg-muted">
-          {tr("文本文件会在脚本执行前写入工作目录。路径以 /workspace/ 开头。")}
-        </p>
+        }
+      >
         {files.map((file, index) => (
-          <div key={index} className="space-y-2 rounded border border-line p-3">
+          <div key={index} className="space-y-2 rounded-xl border border-line p-3.5">
             <div className="flex gap-2">
               <Input
                 aria-label={tr("文件路径")}
@@ -299,7 +290,7 @@ export function EnvironmentFields({
             <Textarea
               aria-label={tr("文件内容")}
               rows={4}
-              className="font-mono text-xs"
+              className="font-mono text-sm"
               value={file.content}
               onChange={(e) =>
                 onChange({
@@ -312,7 +303,7 @@ export function EnvironmentFields({
             />
           </div>
         ))}
-      </section>
+      </Group>
     </div>
   );
 }
@@ -325,7 +316,7 @@ export function environmentSummary(value: RuntimeProfile) {
       value.setup_script ? tr("初始化脚本") : "",
       Object.keys(value.env || {}).length ? tr("环境变量") : "",
       value.files?.length ? tr("初始文件") : "",
-      Object.keys(value.connection_env || {}).length ? tr("连接变量映射") : "",
+      Object.keys(value.bot_env || {}).length ? tr("飞书机器人身份") : "",
     ]
       .filter(Boolean)
       .join(" · ") || tr("空白工作环境")

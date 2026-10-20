@@ -12,7 +12,7 @@ import {
 import { ModelEditor } from "./ModelEditor";
 import { Button } from "./components/ui/button";
 import { ProviderEditor } from "./ProviderEditor";
-import { Help, ErrorNotice, PageHeader } from "./components/shared";
+import { ErrorNotice } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
 export function Models() {
   const models = useModels();
@@ -29,40 +29,39 @@ export function Models() {
   });
   return (
     <>
-      <PageHeader title={tr("模型")}>
-        <Help>
-          {tr(
-            "获取 Provider 的模型列表，勾选或自定义后保存。Agent 选择已绑定的模型。",
-          )}
-        </Help>
-        <Button
-          onClick={() =>
-            setProvider({ id: crypto.randomUUID(), name: "", revision: 0 })
-          }
-        >
-          <Plus />
-          {tr("添加 Provider")}
-        </Button>
-      </PageHeader>
-      <ErrorNotice error={models.error || providers.error || remove.error} />
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6 pb-1 sm:px-10">
+        <h2 className="text-lg font-semibold tracking-tight text-fg">{tr("模型")}</h2>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() =>
+              setProvider({ id: crypto.randomUUID(), name: "", revision: 0 })
+            }
+          >
+            <Plus />
+            {tr("添加 Provider")}
+          </Button>
+        </div>
+      </div>
+      <ErrorNotice page error={models.error || providers.error || remove.error} />
+      <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-5 sm:px-10">
         {providers.data?.map((group) => (
           <section
             key={group.id}
             aria-label={group.name}
-            className="border-b border-line"
+            className="overflow-hidden rounded-2xl border border-line bg-surface app-shadow-card"
           >
-            <div className="flex min-h-9 flex-wrap items-center gap-2 border-b border-line bg-surface-subtle px-6">
-              <h2 className="min-w-0 flex-1 break-words text-sm font-medium">
+            <div className="flex min-h-12 flex-wrap items-center gap-3 border-b border-line bg-surface-subtle/80 px-5 py-2.5">
+              <h2 className="min-w-0 flex-1 break-words text-sm font-semibold text-fg">
                 {group.name}
               </h2>
-              <span className="text-xs text-fg-muted">
+              <span className="rounded-md bg-surface px-2 py-0.5 text-sm text-fg-muted ring-1 ring-line">
                 {models.data?.filter((model) => model.provider_id === group.id)
                   .length || 0}{" "}
                 {tr("个模型")}
               </span>
               <Button
-                variant="ghost"
+                variant="outline"
+                size="sm"
                 aria-label={tr("编辑 Provider {{value0}}", {
                   value0: group.name,
                 })}
@@ -98,14 +97,14 @@ export function Models() {
                 .map((model) => (
                   <div
                     key={model.id}
-                    className="flex min-h-9 items-center gap-3 px-6"
+                    className="flex min-h-12 items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-hover/50"
                   >
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-sm font-medium">
+                      <h3 className="truncate text-sm font-medium text-fg">
                         {model.name}
                       </h3>
                       {model.name !== model.model && (
-                        <p className="break-words text-xs text-fg-muted">
+                        <p className="mt-0.5 break-words font-mono text-sm text-fg-muted">
                           {model.model}
                         </p>
                       )}

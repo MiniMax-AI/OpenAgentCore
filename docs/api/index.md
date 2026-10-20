@@ -26,4 +26,4 @@ Web and operator scripts update the sandbox idle policy through Core-key-authent
 
 The optional [application example](../../CONTRIBUTING.md#optional-application-example) owns its loopback `/app/` product routes. Their caller is its same-origin local UI; in-process workers reuse the product operations. Its server uses a Project API key for public `/v1` calls and accepts no Core administrator credential.
 
-Its loopback `/mcp/agents/<id>` endpoint serves local MCP clients authenticated with a product-issued Agent token; `/oauth/callback` is a read-only OAuth return page. Product route families, callers and credentials are owned by the [Parsar local API](../../example/parsar/README.md#ownership-and-local-api). These are not Core namespaces.
+Its `/oauth/callback` is a read-only OAuth return page. Product route families, callers and credentials are owned by the [Parsar local API](../../example/parsar/README.md#ownership-and-local-api). These are not Core namespaces.

@@ -1,5 +1,4 @@
-import { useConnections } from "./Connections";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { ModelEditor } from "./ModelEditor";
 import { ResourceEditor } from "./Resources";
 import { SkillCreate, SkillDetail, useSkills } from "./Skills";
@@ -21,10 +20,9 @@ import {
 import { ResourceField } from "./components/ResourceField";
 import { Select, SelectOption } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
-import { ErrorNotice, Field } from "./components/shared";
+import { ErrorNotice, Field, Section, Toggle } from "./components/shared";
 export type Configuration = Pick<
   AgentProfile,
-  | "connection_requirement"
   | "model_id"
   | "harness"
   | "instructions"
@@ -44,27 +42,6 @@ export const emptyConfiguration: Configuration = {
   skill_ids: [],
   mcp_ids: [],
 };
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="space-y-4 rounded-lg border border-line bg-surface p-4">
-      <div className="border-b border-line pb-3">
-        <h3 className="text-sm font-semibold">{title}</h3>
-        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-          {description}
-        </p>
-      </div>
-      {children}
-    </section>
-  );
-}
 export function ConfigurationFields({
   value,
   change,
@@ -72,8 +49,7 @@ export function ConfigurationFields({
   value: Configuration;
   change: (value: Configuration) => void;
 }) {
-  const connections = useConnections(),
-    capabilities = useCapabilities(),
+  const capabilities = useCapabilities(),
     runtimes = useRuntimes(),
     models = useModels(),
     providers = useProviders(),
@@ -88,11 +64,7 @@ export function ConfigurationFields({
     setEditor({ kind, id: crypto.randomUUID(), creating: true });
   const inspect = (kind: string) => (id: string) => setEditor({ kind, id });
   const close = () => setEditor(null);
-  const capabilityField = (
-    kind: Capability["kind"],
-    label: string,
-    description?: string,
-  ) => (
+  const capabilityField = (kind: Capability["kind"], label: string) => (
     <ResourceField
       label={label}
       multiple
@@ -102,7 +74,6 @@ export function ConfigurationFields({
           capabilities.data?.some((row) => row.id === id && row.kind === kind),
         ).length
       }
-      description={description}
       loading={capabilities.isPending}
       options={(capabilities.data || [])
         .filter((row) => row.kind === kind)
@@ -157,16 +128,13 @@ export function ConfigurationFields({
     />
   );
   return (
-    <div className="grid items-start gap-4 lg:grid-cols-2">
-      <Section
-        title={tr("系统提示词")}
-        description={tr("定义 Agent 的职责、工作方式和交付要求。")}
-      >
+    <div className="space-y-6">
+      <Section title={tr("指令")}>
         <Field label={tr("主指令")} id="config-instructions">
           <Textarea
             id="config-instructions"
-            rows={8}
-            className="min-h-40 leading-relaxed"
+            rows={10}
+            className="min-h-52 leading-relaxed"
             placeholder={tr("描述它负责什么、如何工作，以及输出什么结果。")}
             value={value.instructions}
             onChange={(event) =>
@@ -174,16 +142,9 @@ export function ConfigurationFields({
             }
           />
         </Field>
-        {capabilityField(
-          "prompt",
-          tr("指令片段"),
-          tr("可选。按选择顺序追加到主指令后，合并为一份系统提示词。"),
-        )}
+        {capabilityField("prompt", tr("指令片段"))}
       </Section>
-      <Section
-        title={tr("模型与环境")}
-        description={tr("选择执行任务的模型、引擎和默认工作环境。")}
-      >
+      <Section title={tr("模型与环境")}>
         <ResourceField
           label={tr("模型")}
           loading={models.isPending || providers.isPending}
@@ -214,21 +175,19 @@ export function ConfigurationFields({
           </Select>
         </Field>
         <ResourceField
-          label={tr("默认环境模板")}
+          label={tr("环境模板")}
+          required
           loading={runtimes.isPending}
           options={runtimes.data || []}
           selected={value.runtime_id ? [value.runtime_id] : []}
           change={(ids) => change({ ...value, runtime_id: ids[0] || "" })}
-          empty={tr("开始会话时选择")}
+          empty={tr("选择环境模板")}
           create={() => add("runtimes")}
           createLabel={tr("添加环境模板")}
           inspect={inspect("runtimes")}
         />
       </Section>
-      <Section
-        title={tr("工具与知识")}
-        description={tr("从资源库选择能力；只展示已绑定的资源。")}
-      >
+      <Section title={tr("工具与知识")}>
         <ResourceField
           label="Skills"
           multiple
@@ -271,14 +230,6 @@ export function ConfigurationFields({
         />
         {capabilityField("plugin", "Plugins")}
         {capabilityField("knowledge", tr("知识"))}
-        <p className="text-xs text-fg-muted">
-          {tr(
-            "指令片段、Plugins 和知识合计最多 8 个；各选择器显示当前可用额度。",
-          )}
-        </p>
-        <p className="text-xs text-fg-muted">
-          {tr("编辑共享资源会影响使用它的其他 Agent。")}
-        </p>
         {(value.capability_ids || [])
           .filter(
             (id) =>
@@ -302,91 +253,18 @@ export function ConfigurationFields({
             />
           ))}
       </Section>
-      <Section
-        title={tr("账号与行为")}
-        description={tr("按需绑定任务发起者的账号，并设置 Agent 的工作方式。")}
-      >
-        <ResourceField
-          label={tr("所需用户连接")}
-          manage={{ href: "#/connections", label: tr("管理连接") }}
-          options={(connections.data || []).map((entry) => ({
-            id: entry.bot_id,
-            name: `${tr(entry.label || "账号连接")} · ${entry.name}`,
-          }))}
-          loading={connections.isPending}
-          selected={
-            value.connection_requirement
-              ? [value.connection_requirement.bot_id]
-              : []
-          }
-          empty={tr("不需要个人连接")}
-          change={(ids) => {
-            const entry = connections.data?.find(
-              (row) => row.bot_id === ids[0],
-            );
-            change({
-              ...value,
-              connection_requirement: entry
-                ? {
-                    service: entry.service,
-                    bot_id: entry.bot_id,
-                    scopes:
-                      value.connection_requirement?.bot_id === entry.bot_id
-                        ? value.connection_requirement.scopes
-                        : entry.default_scopes || "",
-                  }
-                : undefined,
-            });
-          }}
-        />
-        {value.connection_requirement && (
-          <div className="space-y-2">
-            <Field label={tr("授权范围")} id="agent-connection-scopes">
-              <Textarea
-                id="agent-connection-scopes"
-                rows={2}
-                value={value.connection_requirement.scopes}
-                onChange={(event) =>
-                  change({
-                    ...value,
-                    connection_requirement: {
-                      ...value.connection_requirement!,
-                      scopes: event.target.value,
-                    },
-                  })
-                }
-              />
-            </Field>
-            <p className="text-xs leading-relaxed text-fg-muted">
-              {tr(
-                "运行时使用任务发起者的账号；未授权时等待连接，授权完成后自动继续。",
-              )}
-            </p>
-          </div>
-        )}
-        <div className="divide-y divide-line">
-          <label className="flex items-center justify-between gap-4 py-3 text-sm">
-            {tr("启用 Agent")}
-            <input
-              type="checkbox"
-              className="accent-accent"
-              checked={value.enabled !== false}
-              onChange={(event) =>
-                change({ ...value, enabled: event.target.checked })
-              }
-            />
-          </label>
-          <label className="flex items-center justify-between gap-4 py-3 text-sm">
-            {tr("允许 Agent 提问业务信息（不用于执行审批）")}
-            <input
-              type="checkbox"
-              className="accent-accent"
-              checked={!!value.ask_user}
-              onChange={(event) =>
-                change({ ...value, ask_user: event.target.checked })
-              }
-            />
-          </label>
+      <Section title={tr("行为")}>
+        <div className="space-y-3">
+          <Toggle
+            label={tr("启用 Agent")}
+            checked={value.enabled !== false}
+            onChange={(enabled) => change({ ...value, enabled })}
+          />
+          <Toggle
+            label={tr("允许 Agent 向用户提问")}
+            checked={!!value.ask_user}
+            onChange={(ask_user) => change({ ...value, ask_user })}
+          />
         </div>
       </Section>
       {editor?.kind === "models" && (
@@ -477,7 +355,6 @@ export function ConfigurationFields({
       )}
       <ErrorNotice
         error={
-          connections.error ||
           providers.error ||
           models.error ||
           skills.error ||

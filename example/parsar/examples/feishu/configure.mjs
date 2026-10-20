@@ -7,16 +7,16 @@ for (let i = 2; i < process.argv.length; i += 2) {
   const name = process.argv[i],
     value = process.argv[i + 1];
   if (
-    !["--url", "--model", "--app", "--skills", "--scopes"].includes(name) ||
+    !["--url", "--model", "--bot", "--skills"].includes(name) ||
     !value ||
     args.has(name)
   )
     throw new Error(
-      "Usage: node configure.mjs --url URL --model MODEL_ID --app BOT_ID --skills SKILL_ID[,SKILL_ID] [--scopes SCOPES]",
+      "Usage: node configure.mjs --url URL --model MODEL_ID --bot BOT_ID --skills SKILL_ID[,SKILL_ID]",
     );
   args.set(name, value);
 }
-for (const name of ["--url", "--model", "--app", "--skills"])
+for (const name of ["--url", "--model", "--bot", "--skills"])
   if (!args.has(name)) throw new Error(`Missing ${name}`);
 const base = new URL(args.get("--url"));
 if (
@@ -51,11 +51,6 @@ const environmentId = randomUUID(),
 agent.model_id = args.get("--model");
 agent.skill_ids = args.get("--skills").split(",");
 agent.runtime_id = environmentId;
-agent.connection_requirement = {
-  service: "feishu",
-  bot_id: args.get("--app"),
-  scopes: args.get("--scopes") || "contact:user.base:readonly",
-};
 await api(`/app/runtimes/${environmentId}`, "PUT", environment);
 try {
   await api(`/app/agents/${agentId}`, "PUT", agent);
@@ -63,10 +58,14 @@ try {
   await api(`/app/runtimes/${environmentId}`, "DELETE");
   throw error;
 }
+// The Agent runs as the bot it is bound to; binding also routes the bot's chats to it.
+const botPath = `/app/feishu/bots/${args.get("--bot")}`;
+const bot = await api(botPath, "GET");
+await api(botPath, "PUT", { ...bot, agent_id: agentId });
 console.log(
   JSON.stringify({
     agent_id: agentId,
     environment_id: environmentId,
-    agent_url: `${base.origin}/#/agents/${agentId}?view=full`,
+    agent_url: `${base.origin}/#/agents/${agentId}`,
   }),
 );

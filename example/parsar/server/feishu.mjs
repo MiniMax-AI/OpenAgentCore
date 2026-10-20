@@ -1,14 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
-import { taskStatuses } from "../shared/work-profile.mjs";
-import { sessionRestriction } from "../shared/session-profile.mjs";
 const stableId = (value) => {
   const hex = createHash("sha256").update(value).digest("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
-const selectionId = (app, chat, sender) => stableId(`${app}:${chat}:${sender}`);
 import { feishuContextReader } from "./feishu-context.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
-import { requireAutomaticRuntime } from "./sessions.mjs";
 
 const stamp = () => Date.now();
 export const publicFeishu = ({ app_secret, ...record }) => ({
@@ -65,11 +61,13 @@ export function feishuAPI(store) {
             ["queued", "submitting", "failed"].includes(row.state),
         )
         .map(({ text, payload, event, resources, media, context, ...row }) => {
-          const taskId =
-            row.task_id || store.get("feishu_threads", row.thread_id)?.task_id;
+          const sessionId = store.get("feishu_threads", row.thread_id)?.session_id;
           return {
             ...row,
-            task_id: taskId && store.get("tasks", taskId) ? taskId : undefined,
+            session_id:
+              sessionId && store.get("sessions", sessionId)?.core_session_id
+                ? sessionId
+                : undefined,
           };
         });
     const botMatch = path.match(/^\/app\/feishu\/bots\/([a-f0-9-]{36})$/);
@@ -83,7 +81,9 @@ export function feishuAPI(store) {
       enabled: false,
       app_id: "",
       app_secret: "",
-      routes: [],
+      agent_id: "",
+      direct: false,
+      groups: false,
     };
     if (method === "GET") return publicFeishu(old);
     if (method === "DELETE") {
@@ -99,8 +99,6 @@ export function feishuAPI(store) {
         )
       )
         throw new AppError(409, "机器人仍有未完成投递，请先处理。");
-      if (store.list("schedules").some((row) => row.delivery?.bot_id === id))
-        throw new AppError(409, "机器人仍被定时任务引用，请先修改投递目标。");
       store.remove("feishu_bots", id);
       return {};
     }
@@ -123,62 +121,44 @@ export function feishuAPI(store) {
       : old.app_secret;
     if (app_id !== old.app_id && !body.app_secret)
       throw new AppError(400, "更换 App ID 时请同时填写 App Secret。");
+    if (typeof body.enabled !== "boolean")
+      throw new AppError(400, "飞书配置无效。");
+    const agent_id = text(body.agent_id || "", "Agent", 36);
+    const agent = agent_id && store.get("agents", agent_id);
+    if (agent_id && !agent) throw new AppError(400, "Agent 不存在。");
     if (
-      typeof body.enabled !== "boolean" ||
-      !Array.isArray(body.routes) ||
-      body.routes.length > 20
+      agent_id &&
+      store
+        .list("feishu_bots")
+        .some((row) => row.id !== id && row.agent_id === agent_id)
     )
-      throw new AppError(400, "飞书配置无效；最多配置 20 个群。");
-    const routes = body.routes.map((route) => {
-      const chat_id = text(route.chat_id, "群 ID", 100, true).trim();
-      if (chat_id !== "p2p" && !/^oc_[a-zA-Z0-9_-]+$/.test(chat_id))
-        throw new AppError(400, "群 ID 应以 oc_ 开头，私聊规则填写 p2p。");
-      const agent = store.get(
-          "agents",
-          text(route.agent_id, "Agent", 36, true),
-        ),
-        runtime = store.get(
-          "runtimes",
-          text(route.runtime_id || agent?.runtime_id || "", "环境模板", 36),
-        );
-      if (!agent || (route.runtime_id && !runtime))
-        throw new AppError(400, "请选择群对应的 Agent 和环境模板。");
-      if (body.enabled) {
-        if (!runtime)
-          throw new AppError(400, "Agent 未配置有效的默认环境模板。");
-        requireAutomaticRuntime(store, runtime.id);
-        const restriction = sessionRestriction(agent, runtime);
-        if (restriction) throw new AppError(400, restriction);
-      }
-      if (route.project_id && !store.get("projects", route.project_id))
-        throw new AppError(400, "项目不存在。");
-      return {
-        chat_id,
-        agent_id: agent.id,
-        runtime_id: route.runtime_id || "",
-        project_id: route.project_id || "",
-        allow_agent_selection: route.allow_agent_selection === true,
-      };
-    });
-    if (new Set(routes.map((r) => r.chat_id)).size !== routes.length)
-      throw new AppError(400, "每个群只能有一条分配规则。");
+      throw new AppError(409, "这个 Agent 已绑定另一个机器人。");
+    const direct = body.direct === true;
+    // Group membership is the group boundary: any group the bot joins can mention it.
+    const groups = body.groups === true;
     if (
       body.enabled &&
-      (!/^cli_[0-9a-fA-F]{16}$/.test(app_id) || !secret || !routes.length)
+      (!/^cli_[0-9a-fA-F]{16}$/.test(app_id) ||
+        !secret ||
+        !agent ||
+        (!direct && !groups))
     )
       throw new AppError(
         400,
-        "启用前请配置 App ID、App Secret 和至少一个允许的群。",
+        "启用前请配置 App ID、App Secret、Agent，并开启私聊或群聊。",
       );
+    if (body.enabled && !store.get("runtimes", agent.runtime_id || ""))
+      throw new AppError(400, "Agent 未配置环境模板。");
     const value = {
       id,
       name,
       app_id,
       app_secret: secret,
       brand: body.brand || old.brand || "feishu",
-      history_context: body.history_context === true,
       enabled: body.enabled,
-      routes,
+      agent_id,
+      direct,
+      groups,
       revision: old.revision + 1,
     };
     store.put("feishu_bots", value);
@@ -186,13 +166,193 @@ export function feishuAPI(store) {
   };
 }
 
-export function feishuCard(text) {
-  const [title, ...body] = String(text).split("\n");
+const cardTones = {
+  in_progress: ["处理中", "blue"],
+  requires_action: ["需要你补充信息", "orange"],
+  completed: ["已完成", "green"],
+  cancelled: ["已停止", "grey"],
+  failed: ["执行失败", "red"],
+};
+const grey = (text) => `<font color='grey'>${text}</font>`;
+
+function panel({ title, content }) {
   return {
-    config: { wide_screen_mode: true },
-    header: { title: { tag: "plain_text", content: title.slice(0, 100) } },
-    elements: [{ tag: "markdown", content: body.join("\n").trim() || title }],
+    tag: "collapsible_panel",
+    expanded: false,
+    vertical_spacing: "8px",
+    padding: "4px 12px 8px 12px",
+    border: { color: "grey", corner_radius: "6px" },
+    header: {
+      title: { tag: "markdown", content: grey(title) },
+      width: "auto_when_fold",
+      padding: "4px 0px 4px 0px",
+      icon: {
+        tag: "standard_icon",
+        token: "down-small-ccm_outlined",
+        size: "16px 16px",
+      },
+      icon_position: "right",
+      icon_expanded_angle: -180,
+    },
+    elements: [{ tag: "markdown", content }],
   };
+}
+
+// Outbound payloads are either plain text or the serialized card built here.
+function statusCard(status, body, panels = []) {
+  const [title, template] = cardTones[status] || cardTones.failed;
+  return JSON.stringify({
+    schema: "2.0",
+    config: { update_multi: true },
+    header: { title: { tag: "plain_text", content: title }, template },
+    body: {
+      elements: [{ tag: "markdown", content: body }, ...panels.map(panel)],
+    },
+  });
+}
+
+export function feishuCard(payload) {
+  const text = String(payload);
+  if (text.startsWith("{")) return JSON.parse(text);
+  const [title, ...rest] = text.split("\n");
+  const body = rest.join("\n").trim();
+  if (title === "执行失败" && body) return JSON.parse(statusCard("failed", body));
+  return {
+    schema: "2.0",
+    config: { update_multi: true },
+    body: { elements: [{ tag: "markdown", content: text }] },
+  };
+}
+
+export function progressCard(text, notice) {
+  return statusCard(
+    "in_progress",
+    `**${text}**${notice ? `\n${grey(notice)}` : ""}`,
+  );
+}
+
+export function questionCard(question, options = []) {
+  return statusCard(
+    "requires_action",
+    [
+      question,
+      options.map((option) => `- ${option}`).join("\n"),
+      grey("直接回复这条消息即可回答。"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
+  );
+}
+
+function step(item) {
+  if (item.type === "command_execution" || typeof item.command === "string") {
+    const command = String(item.command || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^\/bin\/(?:ba|z)?sh -lc (['"])([\s\S]*)\1$/, "$2");
+    return ["运行命令", command.length > 56 ? `${command.slice(0, 55)}…` : command];
+  }
+  if (item.type === "mcp_call")
+    return ["调用工具", [item.server_label, item.name].filter(Boolean).join(" · ")];
+  if (item.type === "function_call")
+    return [item.name === "ask_user" ? "向你提问" : "调用函数", item.name || ""];
+  if (item.type === "web_search") return ["搜索网页", ""];
+  if (item.type === "file_change") return ["修改文件", ""];
+  return ["执行步骤", item.name || item.type || ""];
+}
+
+function stepLine(item) {
+  const [label, detail] = step(item);
+  const mark =
+    item.status === "failed"
+      ? "<font color='red'>✗</font>"
+      : item.status === "completed" || item.status === undefined
+        ? "<font color='green'>✓</font>"
+        : grey("○");
+  const seconds =
+    typeof item.duration_ms === "number"
+      ? grey(` ${Math.max(0, Math.round(item.duration_ms / 1000))}s`)
+      : "";
+  return `${mark} ${label}${detail ? ` \`${detail.replaceAll("`", "'")}\`` : ""}${seconds}`;
+}
+
+// Newcomers see the current step or the answer; collapsed panels keep the details.
+export function formatTurnCard(status, items = [], error) {
+  const assistant = items.filter(
+    (item) => item.type === "message" && item.role === "assistant",
+  );
+  const text = (item) =>
+    (item.content || [])
+      .filter((part) => part.type === "output_text")
+      .map((part) => (part.text || "").trim())
+      .filter(Boolean)
+      .join("\n");
+  const messages = assistant.map(text).filter(Boolean);
+  const reasoning = items
+    .filter((item) => item.type === "reasoning")
+    .flatMap((item) => item.summary || item.content || [])
+    .map((part) => (typeof part === "string" ? part : part?.text || "").trim())
+    .filter(Boolean)
+    .join("\n");
+  const steps = items.filter(
+    (item) => item.type !== "message" && item.type !== "reasoning",
+  );
+  const thinking = [
+    reasoning,
+    ...(status === "in_progress" ? messages : messages.slice(0, -1)),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  // Both panels are always present so experienced users know where to look.
+  const panels = [
+    {
+      title: "思考过程",
+      content: thinking ? thinking.slice(-1800) : grey("这一轮没有返回思考内容。"),
+    },
+    {
+      title: `执行记录 · ${steps.length} 步`,
+      content: steps.length
+        ? [
+            steps.length > 12 ? grey(`前面还有 ${steps.length - 12} 步`) : "",
+            steps.slice(-12).map(stepLine).join("\n"),
+          ]
+            .filter(Boolean)
+            .join("\n\n")
+        : grey("这一轮没有运行命令或调用工具。"),
+    },
+  ];
+  if (status === "in_progress") {
+    const last = items.filter((item) => item.role !== "user").at(-1);
+    const current = !last
+      ? "正在思考"
+      : last.type === "message"
+        ? "正在撰写回复"
+        : last.type === "reasoning"
+          ? "正在思考"
+          : last.status === "in_progress"
+            ? `正在${step(last)[0]}`
+            : "正在思考下一步";
+    const done = steps.filter((item) => item.status !== "in_progress").length;
+    return statusCard(
+      "in_progress",
+      `**${current}**${done ? `\n${grey(`已完成 ${done} 步`)}` : ""}`,
+      panels,
+    );
+  }
+  const answer = (messages.at(-1) || "").slice(0, 5000);
+  const body =
+    status === "completed"
+      ? answer || "已完成处理。"
+      : status === "cancelled"
+        ? answer || "已按你的要求停止。"
+        : [
+            answer || "这次没有完成。",
+            error ? `<font color='red'>${error}</font>` : "",
+            grey("直接回复即可重试。"),
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+  return statusCard(status, body, panels);
 }
 
 export async function createFeishuTransport(settings, receive) {
@@ -212,7 +372,7 @@ export async function createFeishuTransport(settings, receive) {
   let readContext;
   return {
     ...feishuOperations(client),
-    readContext: (row, initial) => readContext(row, initial),
+    readContext: (row) => readContext(row),
     async connect() {
       const result = await client.request({
         method: "GET",
@@ -221,11 +381,10 @@ export async function createFeishuTransport(settings, receive) {
       const bot = result.bot || result.data?.bot;
       if (result.code !== 0 || !bot?.open_id)
         throw new Error("Cannot resolve Feishu bot identity");
-      readContext = feishuContextReader(
-        client,
-        { openId: bot.open_id, name: bot.app_name || "Parsar" },
-        settings.history_context,
-      );
+      readContext = feishuContextReader(client, {
+        openId: bot.open_id,
+        name: bot.app_name || "Parsar",
+      });
       const dispatcher = new EventDispatcher({ logger }).register({
         "im.message.receive_v1": async (event) => {
           if (
@@ -349,14 +508,13 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       state,
       updated_at: stamp(),
     });
-  const allowed = (appId, chatId, chatType = "group") => {
+  const sessions = product.sessions;
+  const allowed = (appId, chatType = "group") => {
     const config = store.get("feishu_bots", configId);
-    return (
+    return Boolean(
       config?.enabled &&
-      config.app_id === appId &&
-      config.routes.some((r) =>
-        chatType === "p2p" ? r.chat_id === "p2p" : r.chat_id === chatId,
-      )
+        config.app_id === appId &&
+        (chatType === "p2p" ? config.direct : config.groups),
     );
   };
   const threadFor = (appId, message) =>
@@ -379,7 +537,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       );
   const receive = (appId, message) => {
     if (
-      !allowed(appId, message.chatId, message.chatType) ||
+      !allowed(appId, message.chatType) ||
       !["group", "p2p"].includes(message.chatType) ||
       (message.chatType === "group" &&
         !message.mentionedBot &&
@@ -391,13 +549,6 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     if (!message.content?.trim() || message.content.length > 40000) return;
     const id = stableId(`${appId}:${message.messageId}`);
     if (store.get("feishu_inbound", id)) return;
-    const route = store
-      .get("feishu_bots", configId)
-      .routes.find((r) =>
-        message.chatType === "p2p"
-          ? r.chat_id === "p2p"
-          : r.chat_id === message.chatId,
-      );
     let thread =
       message.chatType === "p2p" &&
       !["/new", "/reset"].includes(message.content.trim())
@@ -413,7 +564,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         : threadFor(appId, message);
     if (
       thread &&
-      !store.get("tasks", thread.task_id) &&
+      !store.get("sessions", thread.session_id) &&
       !message.content.trim().startsWith("/") &&
       (store
         .get("feishu_inbound", thread.first_message_id)
@@ -440,12 +591,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           root_id: root,
           thread_id: message.threadId,
           context_data: message.context,
-          task_id: randomUUID(),
           session_id: randomUUID(),
-          agent_id: route.agent_id,
-          shared: route.allow_agent_selection,
-          runtime_id: route.runtime_id,
-          project_id: route.project_id,
+          agent_id: store.get("feishu_bots", configId).agent_id,
           first_message_id: id,
           sender_id: message.senderId,
           created_at: stamp(),
@@ -473,7 +620,13 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       });
     });
   };
-  const queueReply = (id, thread, payload, notify = false) => {
+  const queueReply = (
+    id,
+    thread,
+    payload,
+    notify = false,
+    replyTo = thread.root_id,
+  ) => {
     if (!store.get("feishu_outbound", id))
       store.put("feishu_outbound", {
         id,
@@ -481,8 +634,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         chat_id: thread.chat_id,
         chat_type: thread.chat_type,
         thread_id: thread.id,
-        task_id: thread.task_id,
-        reply_to: thread.root_id,
+        reply_to: replyTo,
         payload,
         notify,
         state: "queued",
@@ -503,34 +655,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     if (thread) queueReply(stableId(`${row.id}:rejected`), thread, reason);
   };
   const cancel = async (row) => {
-    let thread = store.get("feishu_threads", row.thread_id);
+    const thread = store.get("feishu_threads", row.thread_id);
     if (!thread) return reject(row, "话题关联不可用，请在 Web 中检查。");
-    let run =
-      store.get("sessions", thread.session_id) ||
-      store.list("sessions").find((value) => value.task_id === thread.task_id);
-    if (run?.connection_requirement && row.sender_id !== thread.sender_id)
-      return reject(row, "此任务使用发起者的个人连接，请新建自己的任务。");
-    if (run?.connection_wait && !run.core_session_id) {
-      await product("DELETE", `/app/sessions/${run.id}`, {});
-      store.put("feishu_inbound", { ...row, state: "delivered" });
-      queueReply(
-        stableId(`${row.id}:cancel`),
-        thread,
-        "已取消等待授权的任务。",
-      );
-      return;
-    }
+    let run = store.get("sessions", thread.session_id);
     // Resolve an uncertain initial creation before cancelling its actual Session.
-    if (run && !run.core_session_id)
-      run = await product(
-        "PUT",
-        `/app/tasks/${thread.task_id}/runs/${run.id}`,
-        {},
-      );
-    if (run && run.id !== thread.session_id) {
-      thread = { ...thread, session_id: run.id };
-      store.put("feishu_threads", thread);
-    }
+    if (run && !run.core_session_id && !run.deleted_at)
+      run = await sessions(run.id, {});
     store.transaction(() => {
       for (const previous of store.list("feishu_inbound").reverse()) {
         if (previous.id === row.id) break;
@@ -564,7 +694,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     const thread = store.get("feishu_threads", row.thread_id);
     const context =
       row.context ||
-      (await channel.readContext(row, thread?.first_message_id === row.id));
+      (await channel.readContext(row));
     row = { ...row, context };
     store.put("feishu_inbound", row);
     let input = context.text.replace(
@@ -640,224 +770,104 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   const inbound = async (row) => {
     let thread = store.get("feishu_threads", row.thread_id);
     if (!thread) return reject(row, "话题关联不可用，请在 Web 中检查。");
-    const route = store
-      .get("feishu_bots", configId)
-      .routes.find((value) =>
-        row.chat_type === "p2p"
-          ? value.chat_id === "p2p"
-          : value.chat_id === row.chat_id,
-      );
     if (["/new", "/reset", "/help"].includes(row.text)) {
       queueReply(
         stableId(`${row.id}:command`),
         thread,
         row.text === "/help"
-          ? "发送任务开始工作。/list 列出 Agent；/select <名称或 ID> 切换；/new 或 /reset 新建私聊对话（群聊请另开话题）；/cancel 停止执行；/review 待验收；/done 完成任务；/reopen 重新打开；/answer <call_id> <回答> 回复问题。"
+          ? "直接发送消息即可对话。/new 开始新对话（群聊请另开话题并 @机器人）；/cancel 停止执行；/answer <call_id> <回答> 回复 Agent 的提问。"
           : row.chat_type === "p2p"
-            ? "新对话已就绪，请发送任务。"
-            : "群聊请另开话题并提及机器人，以开始新对话。当前话题保持不变。",
+            ? "新对话已就绪，请直接发送消息。"
+            : "群聊请另开话题并 @机器人，开始新对话。当前话题保持不变。",
       );
       store.put("feishu_inbound", { ...row, state: "delivered" });
       return;
     }
-    if (row.text === "/list" || /^\/select(?:\s|$)/.test(row.text)) {
-      if (!route?.allow_agent_selection)
-        return reject(
-          row,
-          "此群使用固定 Agent；可在 Web 飞书配置中开启共享机器人切换。",
-        );
-      const agents = store.list("agents");
-      let selection, reply;
-      if (row.text === "/list") {
-        reply =
-          agents
-            .map((agent) => `${agent.name} — ${agent.id}`)
-            .join("\n")
-            .slice(0, 5000) +
-          "\n\n发送 /select <完整名称或 ID> 选择新任务的 Agent。选择仅影响你在此群发起的新任务；已有话题保持原会话。";
-      } else {
-        const target = row.text.slice(7).trim();
-        const matches = agents.filter(
-          (agent) => agent.id === target || agent.name === target,
-        );
-        if (matches.length !== 1)
-          return reject(
-            row,
-            "请用 /list 查看 Agent，再用唯一名称或完整 ID 选择。",
-          );
-        const agent = matches[0],
-          runtime = store.get("runtimes", route.runtime_id || agent.runtime_id);
-        if (!runtime)
-          return reject(
-            row,
-            "请为所选 Agent 配置默认环境模板，或为飞书接入指定环境模板。",
-          );
-        try {
-          requireAutomaticRuntime(store, runtime.id);
-        } catch (error) {
-          return reject(row, error.message);
-        }
-        const restriction = sessionRestriction(agent, runtime);
-        if (restriction) return reject(row, restriction);
-        selection = {
-          id: selectionId(row.app_id, row.chat_id, row.sender_id),
-          agent_id: agent.id,
-        };
-        reply = `已选择 ${agent.name}。你在此群发起的新任务将使用这个 Agent；已有话题保持原会话。`;
-      }
-      store.transaction(() => {
-        if (selection) store.put("feishu_selections", selection);
-        queueReply(stableId(`${row.id}:selection`), thread, reply);
-        store.put("feishu_inbound", {
-          ...row,
-          state: "delivered",
-          error: undefined,
-        });
-      });
-      return;
-    }
     const media = await mediaFor(row);
     row = store.get("feishu_inbound", row.id);
-    const first = thread.first_message_id === row.id;
-    let task = store.get("tasks", thread.task_id);
-    if (!task) {
-      if (!first)
-        return reject(row, "话题任务不可用，请重新开一个话题描述任务。");
+    const rotateP2PThread = () => {
+      thread = {
+        ...thread,
+        root_id: row.message_id,
+        agent_id: store.get("feishu_bots", configId).agent_id,
+        session_id: randomUUID(),
+        session_ids: [
+          ...new Set(
+            [...(thread.session_ids || []), thread.session_id].filter(Boolean),
+          ),
+        ],
+        first_message_id: row.id,
+        turn_cursor: undefined,
+        item_cursor: undefined,
+        artifact_cursor: undefined,
+        settled_at: undefined,
+        active_outbound_id: undefined,
+        progress_text: undefined,
+      };
+      store.put("feishu_threads", thread);
+    };
+    if (
+      thread.first_message_id !== row.id &&
+      row.chat_type === "p2p" &&
+      !row.text.startsWith("/") &&
+      store.get("sessions", thread.session_id)?.deleted_at
+    )
+      rotateP2PThread();
+    const progress = (text) => {
+      const progressId = stableId(`${row.id}:accepted`);
+      thread = {
+        ...thread,
+        active_outbound_id: progressId,
+        progress_text: text,
+      };
+      store.put("feishu_threads", thread);
+      queueReply(
+        progressId,
+        thread,
+        text,
+        false,
+        row.chat_type === "p2p" ? row.message_id : thread.root_id,
+      );
+    };
+    const thinking = progressCard(
+      thread.first_message_id === row.id ? "正在准备工作环境" : "正在思考",
+      media.notice,
+    );
+    if (thread.first_message_id === row.id) {
       if (row.text.startsWith("/"))
-        return reject(row, "请先 @机器人 描述任务，再在同一话题中发送命令。");
-      if (!thread.assignment_resolved) {
-        const selected =
-          thread.shared && route?.allow_agent_selection
-            ? store.get(
-                "feishu_selections",
-                selectionId(row.app_id, row.chat_id, row.sender_id),
-              )
-            : undefined;
-        const agent = store.get(
-          "agents",
-          selected?.agent_id || thread.agent_id,
-        );
-        if (!agent) throw new AppError(400, "Agent 不存在。");
-        const runtime = store.get(
-          "runtimes",
-          thread.runtime_id || agent.runtime_id,
-        );
-        if (!runtime)
-          throw new AppError(400, "Agent 未配置有效的默认环境模板。");
-        requireAutomaticRuntime(store, runtime.id);
-        const restriction = sessionRestriction(agent, runtime);
-        if (restriction) throw new AppError(400, restriction);
-        thread = {
-          ...thread,
-          agent_id: agent.id,
-          runtime_id: runtime.id,
-          assignment_resolved: true,
-        };
-        store.put("feishu_threads", thread);
-      }
-      task = await product("PUT", `/app/tasks/${thread.task_id}`, {
-        name: media.title.split("\n")[0].slice(0, 80),
-        description: media.text,
-        project_id: thread.project_id,
-        agent_id: thread.agent_id,
-        runtime_id: thread.runtime_id,
-        status: "backlog",
-        priority: "normal",
-      });
-    }
-    if (first) {
-      // A manually recovered task may already have the occurrence's Session.
-      if (!store.get("sessions", thread.session_id)) {
-        const recovered = store
-          .list("sessions")
-          .find((run) => run.task_id === task.id);
-        if (recovered) {
-          thread = { ...thread, session_id: recovered.id };
-          store.put("feishu_threads", thread);
-        }
-      }
-      if (!store.get("sessions", thread.session_id))
-        requireAutomaticRuntime(store, task.runtime_id);
-      const dispatched = await product(
-        "PUT",
-        `/app/tasks/${task.id}/runs/${thread.session_id}`,
+        return reject(row, "请先发送消息开始对话，再使用命令。");
+      await sessions(
+        thread.session_id,
         {
-          revision: task.revision,
+          name: media.title.split("\n")[0].slice(0, 80),
+          agent_id: thread.agent_id,
+          input: media.text,
           images: media.images,
           files: media.files,
         },
+        { source: "feishu", feishu_chat_type: row.chat_type },
       );
-      queueReply(
-        stableId(`${row.id}:accepted`),
-        thread,
-        `${media.notice ? media.notice + "\n" : ""}已接收任务「${task.name}」。${dispatched.connection_wait ? "正在等待你连接飞书账号，授权后自动继续。" : "正在交给 Agent 执行。"}\n请在本话题中直接追问；/cancel 取消执行，/review 提交验收，/done 确认完成，/reopen 重新打开。\n任务编号：${task.id}（在 Parsar「任务」中搜索）`,
-      );
+      progress(thinking);
     } else {
-      const run = store.get("sessions", thread.session_id);
-      if (run?.deleted_at)
-        return reject(row, "此话题会话已删除，请用 /new 或新话题开始。");
-      if (run?.connection_requirement && row.sender_id !== thread.sender_id)
-        return reject(row, "此任务使用发起者的个人连接，请新建自己的任务。");
-      if (run?.connection_wait && !run.core_session_id) {
-        if (row.text === "/connect")
-          await product("POST", `/app/sessions/${run.id}/connection`, {});
-        else if (row.text === "/cancel") {
-          store.put("sessions", {
-            ...run,
-            deleted_at: Date.now(),
-            connection_wait: undefined,
-          });
-          queueReply(
-            stableId(`${row.id}:cancel`),
-            thread,
-            "已取消等待授权的任务。",
-          );
-        } else
-          return reject(
-            row,
-            "任务正在等待连接，授权后会自动继续。链接过期可发送 /connect，取消可发送 /cancel。",
-          );
-        store.put("feishu_inbound", { ...row, state: "delivered" });
-        return;
-      }
-      if (!run?.core_session_id)
-        return reject(row, "执行会话未确认，请先在 Web 中恢复原执行。");
-      const commands = {
-        "/review": "review",
-        "/done": "done",
-        "/reopen": "backlog",
-      };
-      if (commands[row.text]) {
-        if (row.state !== "submitting") {
-          try {
-            await product("PUT", `/app/tasks/${task.id}`, {
-              ...task,
-              status: commands[row.text],
-            });
-          } catch (error) {
-            if (error instanceof AppError && error.status === 409)
-              return reject(row, error.message);
-            throw error;
-          }
-          store.put("feishu_inbound", { ...row, state: "submitting" });
-        }
-        queueReply(
-          stableId(`${row.id}:command`),
-          thread,
-          `任务状态已更新：${taskStatuses[commands[row.text]]}。`,
+      let run = store.get("sessions", thread.session_id);
+      if (!run || run.deleted_at)
+        return reject(
+          row,
+          row.chat_type === "p2p"
+            ? "此对话已不可用，请发送 /new 开始新对话。"
+            : "此对话已不可用，请另开话题并 @机器人。",
         );
-      } else {
-        if (!row.event && task.status === "done" && row.text !== "/cancel")
-          return reject(row, "任务已完成，请先发送 /reopen 重新打开。");
-        if (
-          row.text.startsWith("/") &&
-          row.text !== "/cancel" &&
-          !row.text.startsWith("/answer ")
-        )
-          return reject(
-            row,
-            "支持的命令：/list、/select、/cancel、/review、/done、/reopen。其他消息会交给 Agent。",
-          );
+      if (!run.core_session_id) run = await sessions(run.id, {});
+      if (
+        row.text.startsWith("/") &&
+        row.text !== "/cancel" &&
+        !row.text.startsWith("/answer ")
+      )
+        return reject(
+          row,
+          "支持的命令：/new、/cancel、/answer、/help。其他消息会交给 Agent。",
+        );
+      try {
         if (
           media.files.length &&
           !row.files_uploaded &&
@@ -934,31 +944,39 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           { events: [event] },
           row.id,
         );
-        if (row.text === "/cancel")
-          queueReply(
-            stableId(`${row.id}:cancel`),
-            thread,
-            "已请求取消，等待 Agent 确认停止。",
-          );
+      } catch (error) {
+        if (
+          row.chat_type === "p2p" &&
+          row.text !== "/cancel" &&
+          (error?.code === "environment_unavailable" ||
+            /environment is no longer available/i.test(error?.message || ""))
+        ) {
+          rotateP2PThread();
+          row = {
+            ...row,
+            state: "queued",
+            event: undefined,
+            files_uploaded: undefined,
+          };
+          store.put("feishu_inbound", row);
+          return inbound(row);
+        }
+        throw error;
       }
+      if (row.text === "/cancel")
+        queueReply(
+          stableId(`${row.id}:cancel`),
+          thread,
+          "已请求取消，等待 Agent 确认停止。",
+        );
+      else progress(thinking);
     }
-    store.transaction(() => {
-      store.put("feishu_inbound", {
-        ...row,
-        state: "delivered",
-        media: undefined,
-        context: undefined,
-        error: undefined,
-      });
-      if (!store.get("activity", row.id))
-        store.put("activity", {
-          id: row.id,
-          task_id: task.id,
-          type: "feishu",
-          message: row.text,
-          actor: row.sender_id,
-          created_at: Math.floor(row.created_at / 1000),
-        });
+    store.put("feishu_inbound", {
+      ...row,
+      state: "delivered",
+      media: undefined,
+      context: undefined,
+      error: undefined,
     });
   };
   const history = async (sessionId, resource, after) => {
@@ -979,19 +997,6 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   };
   const observe = async (thread) => {
     const run = store.get("sessions", thread.session_id);
-    if (run?.connection_wait && !run.deleted_at) {
-      const login = run.connection_wait;
-      const text =
-        login.status === "pending"
-          ? `请用发起任务的飞书账号完成授权，授权后任务自动继续。\n${login.verification_url}\n${login.user_code ? `验证码：${login.user_code}\n` : ""}链接过期可发送 /connect 重新连接。`
-          : `${login.error || "授权已过期或被取消。"}\n发送 /connect 重新连接，原任务仍保留。`;
-      queueReply(
-        stableId(`${thread.id}:connection:${login.id}:${login.status}`),
-        thread,
-        text,
-      );
-      return;
-    }
     if (!run?.core_session_id || run.deleted_at) return;
     const sid = run.core_session_id;
     const [session, turns] = await Promise.all([
@@ -1030,7 +1035,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       queueReply(
         stableId(`${thread.id}:question:${action.call_id}`),
         thread,
-        `Agent 需要补充信息\n\n${typeof args?.question === "string" ? args.question : "请补充任务信息"}\n${Array.isArray(args?.options) ? args.options.filter((value) => typeof value === "string").join("\n") : ""}\n\n回复本话题即可回答，或发送 /answer ${action.call_id} <回答>`,
+        questionCard(
+          typeof args?.question === "string" ? args.question : "请补充信息",
+          Array.isArray(args?.options)
+            ? args.options.filter((value) => typeof value === "string")
+            : [],
+        ),
         true,
       );
     }
@@ -1043,51 +1053,48 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       queueReply(
         stableId(`${thread.id}:initial-failed`),
         thread,
-        "执行环境准备失败或初始输入超时，请在 Web 任务中检查并重新执行。",
+        "执行失败\n\n执行环境准备失败或响应超时，请直接重新发送消息重试。",
       );
-    const progress = store.get(
-      "feishu_outbound",
-      stableId(`${thread.first_message_id}:accepted`),
-    );
-    if (progress?.sent_message_id && session.status !== "in_progress") {
-      const latest = turns.at(-1);
-      const text =
-        session.status === "requires_action"
-          ? "Agent 等待补充信息，请回复提问卡片。"
-          : session.status === "failed" || latest?.status === "failed"
-            ? "Agent 执行失败，请查看后续结果卡片。"
-            : latest?.status === "cancelled"
-              ? "Agent 已停止执行。"
-              : latest?.status === "completed"
-                ? "Agent 执行结束，结果见后续卡片。"
-                : null;
-      if (text && thread.progress_text !== text) {
-        try {
-          await channel.edit(progress.sent_message_id, text, thread);
-          thread = { ...thread, progress_text: text };
-          store.put("feishu_threads", thread);
-        } catch {
-          // A deleted or uneditable progress card must not block result delivery.
-        }
-      }
-    }
-    if (progress?.sent_message_id && session.status === "in_progress") {
-      const items = await history(sid, "items", thread.item_cursor);
-      const output = items
-        .filter((item) => item.type === "message" && item.role === "assistant")
-        .flatMap((item) => item.content || [])
-        .filter((part) => part.type === "output_text")
-        .map((part) => part.text)
-        .join("\n");
-      const text = `Agent 正在执行\n\n${output.slice(-4000)}\n\n已记录 ${items.filter((item) => item.type !== "message").length} 个执行步骤`;
+    const progressId =
+      thread.active_outbound_id ||
+      stableId(`${thread.first_message_id}:accepted`);
+    let progress = store.get("feishu_outbound", progressId);
+    if (
+      progress?.sent_message_id &&
+      session.status === "requires_action" &&
+      !unseen.length
+    ) {
+      const text = statusCard("requires_action", "请回复上方的提问。");
       if (thread.progress_text !== text) {
         try {
           await channel.edit(progress.sent_message_id, text, thread);
           thread = { ...thread, progress_text: text };
           store.put("feishu_threads", thread);
+          store.put("feishu_outbound", { ...progress, payload: text });
         } catch {
           // A deleted or uneditable progress card must not block result delivery.
         }
+      }
+    }
+    if (progress && session.status === "in_progress") {
+      const items = await history(sid, "items", thread.item_cursor);
+      const text = formatTurnCard("in_progress", items);
+      if (progress.sent_message_id) {
+        if (thread.progress_text !== text) {
+          try {
+            await channel.edit(progress.sent_message_id, text, thread);
+            thread = { ...thread, progress_text: text };
+            store.put("feishu_threads", thread);
+            store.put("feishu_outbound", { ...progress, payload: text });
+          } catch {
+            // A deleted or uneditable progress card must not block result delivery.
+          }
+        }
+      } else if (progress.state === "queued" && progress.payload !== text) {
+        progress = { ...progress, payload: text };
+        store.put("feishu_outbound", progress);
+        thread = { ...thread, progress_text: text };
+        store.put("feishu_threads", thread);
       }
     }
     if (!unseen.length) {
@@ -1111,33 +1118,68 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       history(sid, "artifacts", thread.artifact_cursor),
     ]);
     for (const turn of unseen) {
-      const output = items
-        .filter(
-          (item) =>
-            item.turn_id === turn.id &&
-            item.type === "message" &&
-            item.role === "assistant",
-        )
-        .flatMap((item) => item.content || [])
-        .filter((part) => part.type === "output_text")
-        .map((part) => part.text)
-        .join("\n\n");
-      const files = artifacts
-        .filter((file) => file.turn_id === turn.id)
-        .map((file) => file.name || file.path || file.id)
-        .join("、");
-      const summary =
-        turn.status === "completed"
-          ? "Agent 执行结束，请验收结果。"
-          : turn.status === "cancelled"
-            ? "Agent 已停止执行。"
-            : "Agent 执行失败，请在 Web 会话中检查。";
-      queueReply(
-        stableId(`${thread.id}:${turn.id}`),
-        thread,
-        `${summary}\n\n${output.slice(0, 5000)}${output.length > 5000 ? "\n…完整结果请在 Web 查看。" : ""}${files ? `\n\n产物：${files}（在 Web 会话下载）` : ""}\n\n任务编号：${thread.task_id}（在 Parsar「任务」中搜索）`,
-        true,
+      const turnItems = items.filter((item) => item.turn_id === turn.id);
+      const text = formatTurnCard(
+        turn.status,
+        turnItems,
+        turn.error?.message,
       );
+      const receiptId = stableId(`${thread.id}:${turn.id}`);
+      if (progress?.sent_message_id) {
+        try {
+          await channel.edit(progress.sent_message_id, text, thread);
+          store.put("feishu_outbound", { ...progress, payload: text });
+          store.put("feishu_outbound", {
+            id: receiptId,
+            app_id: thread.app_id,
+            chat_id: thread.chat_id,
+            chat_type: thread.chat_type,
+            thread_id: thread.id,
+            reply_to: progress.reply_to || thread.root_id,
+            payload: text,
+            notify: false,
+            state: "delivered",
+            sent_message_id: progress.sent_message_id,
+            attempts: 1,
+            created_at: stamp(),
+            next_at: 0,
+          });
+          thread = {
+            ...thread,
+            progress_text: text,
+            active_outbound_id: undefined,
+          };
+          progress = undefined;
+          continue;
+        } catch {
+          // A deleted or uneditable progress card falls back to sending a result card.
+        }
+      } else if (progress && progress.state === "queued") {
+        store.put("feishu_outbound", { ...progress, payload: text });
+        store.put("feishu_outbound", {
+          id: receiptId,
+          app_id: thread.app_id,
+          chat_id: thread.chat_id,
+          chat_type: thread.chat_type,
+          thread_id: thread.id,
+          reply_to: progress.reply_to || thread.root_id,
+          payload: text,
+          notify: false,
+          state: "delivered",
+          sent_message_id: progress.id,
+          attempts: 1,
+          created_at: stamp(),
+          next_at: 0,
+        });
+        thread = {
+          ...thread,
+          progress_text: text,
+          active_outbound_id: undefined,
+        };
+        progress = undefined;
+        continue;
+      }
+      queueReply(receiptId, thread, text);
     }
     // Advance only through terminal Turns. Keep output for an active Turn available.
     const terminal = turns.findIndex(
@@ -1183,7 +1225,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         queueReply(
           stableId(`${row.id}:failed`),
           thread,
-          "这条消息尚未成功处理。请在 Parsar 的飞书页面检查投递记录，并用原标识重试；不要重复创建任务。",
+          `执行失败\n\n消息处理未完成（${error.message || "服务不可用"}），请重新发送消息重试。`,
         );
     }
   };
@@ -1191,7 +1233,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     for (const row of store.list("feishu_outbound").reverse()) {
       if (!current()) return;
       if (
-        !allowed(row.app_id, row.chat_id, row.chat_type) ||
+        !allowed(row.app_id, row.chat_type) ||
         row.state !== "queued" ||
         row.next_at > stamp()
       )
@@ -1233,22 +1275,6 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
             sent_message_id: result.id,
             error: undefined,
           });
-          if (row.notify && thread?.sender_id) {
-            const id = stableId(`${row.id}:ping`);
-            if (!store.get("feishu_outbound", id))
-              store.put("feishu_outbound", {
-                ...row,
-                id,
-                notify: false,
-                plain_text: true,
-                payload: row.payload.split("\n")[0],
-                reply_to: result.id,
-                state: "queued",
-                attempts: 0,
-                first_attempt_at: undefined,
-                next_at: 0,
-              });
-          }
         });
       } catch (error) {
         retry("feishu_outbound", row, error);
@@ -1257,26 +1283,6 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   };
   const tick = async () => {
     const config = store.get("feishu_bots", configId);
-    for (const occurrence of store.list("schedule_occurrences")) {
-      if (
-        occurrence.delivery?.bot_id !== configId ||
-        occurrence.delivery_thread_id ||
-        occurrence.delivery_error
-      )
-        continue;
-      if (
-        !config?.enabled ||
-        occurrence.delivery.app_id !== config.app_id ||
-        !config.routes.some(
-          (route) => route.chat_id === occurrence.delivery.chat_id,
-        )
-      )
-        store.put("schedule_occurrences", {
-          ...occurrence,
-          delivery_error:
-            "飞书机器人已停用或投递路由已变更，结果保留在任务中。",
-        });
-    }
     if (!config?.enabled) {
       if (channel) await channel.disconnect();
       channel = undefined;
@@ -1312,43 +1318,6 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       store.get("feishu_bots", configId)?.revision === active.revision;
     if (!current()) return;
     health(channel.getConnectionStatus().state);
-    for (const occurrence of store.list("schedule_occurrences")) {
-      if (
-        occurrence.delivery_thread_id ||
-        occurrence.delivery_error ||
-        occurrence.delivery?.bot_id !== configId ||
-        occurrence.delivery.app_id !== config.app_id ||
-        !allowed(config.app_id, occurrence.delivery.chat_id)
-      )
-        continue;
-      const id = stableId(`schedule:${occurrence.id}`);
-      if (store.get("feishu_threads", id)) continue;
-      const task = store.get("tasks", occurrence.task_id);
-      const thread = {
-        id,
-        app_id: config.app_id,
-        chat_id: occurrence.delivery.chat_id,
-        chat_type: "group",
-        task_id: occurrence.task_id,
-        session_id: occurrence.session_id,
-        agent_id: task?.agent_id,
-        runtime_id: task?.runtime_id,
-        first_message_id: id,
-        created_at: stamp(),
-      };
-      store.transaction(() => {
-        store.put("feishu_threads", thread);
-        store.put("schedule_occurrences", {
-          ...occurrence,
-          delivery_thread_id: thread.id,
-        });
-        queueReply(
-          stableId(`${id}:accepted`),
-          thread,
-          `定时任务已开始\n\n${task?.name || occurrence.task_id}`,
-        );
-      });
-    }
     await deliver(current);
     const rows = store.list("feishu_inbound").reverse();
     const cancellations = new Map();
@@ -1363,7 +1332,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     );
     for (const row of cancellations.values()) {
       if (!current()) return;
-      if (!allowed(row.app_id, row.chat_id, row.chat_type)) continue;
+      if (!allowed(row.app_id, row.chat_type)) continue;
       if (row.next_at <= stamp()) {
         try {
           await cancel(row);
@@ -1379,7 +1348,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       if (!current()) return;
       let row = store.get("feishu_inbound", original.id);
       if (
-        !allowed(row.app_id, row.chat_id, row.chat_type) ||
+        !allowed(row.app_id, row.chat_type) ||
         row.text === "/cancel" ||
         ["delivered", "failed", "rejected"].includes(row.state) ||
         blocked.has(row.thread_id)
@@ -1415,7 +1384,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     }
     for (const thread of store.list("feishu_threads")) {
       if (!current()) return;
-      if (!allowed(thread.app_id, thread.chat_id, thread.chat_type)) continue;
+      if (!allowed(thread.app_id, thread.chat_type)) continue;
       if (thread.settled_at && stamp() - thread.settled_at > 5 * 60000)
         continue;
       try {

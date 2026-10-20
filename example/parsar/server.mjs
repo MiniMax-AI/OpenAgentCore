@@ -1,5 +1,3 @@
-import { guardConnectionInput } from "./server/connections.mjs";
-import { agentMCPHandler } from "./server/agent-mcp.mjs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createServer } from "node:http";
@@ -9,7 +7,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildDirectory } from "./paths.mjs";
 import { openStore, dataPath, AppError } from "./server/store.mjs";
 import { productAPI } from "./server/product.mjs";
-import { scheduleWorker } from "./server/schedules.mjs";
 import { createFeishuTransport, feishuWorkers } from "./server/feishu.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
@@ -136,8 +133,6 @@ export function createHandler(
         fetchImpl,
         `http://127.0.0.1:${config.port}`,
       ));
-  const agentMCP =
-    store && agentMCPHandler(store, coreClient(config, fetchImpl), product);
   return async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Referrer-Policy", "no-referrer");
@@ -166,44 +161,6 @@ export function createHandler(
       );
     }
     const url = new URL(req.url, `http://${req.headers.host}`);
-    const mcpMatch = url.pathname.match(/^\/mcp\/agents\/([a-f0-9-]{36})$/);
-    if (mcpMatch && agentMCP) {
-      try {
-        const chunks = [];
-        let size = 0;
-        for await (const chunk of req) {
-          size += chunk.length;
-          if (size > 1024 * 1024) return fail(res, 413, "Request too large.");
-          chunks.push(chunk);
-        }
-        const body = size ? JSON.parse(Buffer.concat(chunks)) : undefined;
-        await agentMCP(mcpMatch[1], req, res, body);
-      } catch {
-        if (!res.headersSent) fail(res, 400, "Invalid MCP request.");
-        else res.destroy();
-      }
-      return;
-    }
-
-    const clientMatch = url.pathname.match(
-      /^\/app\/capabilities\/([a-f0-9-]{36})\/client.js$/,
-    );
-    if (clientMatch && req.method === "GET" && store) {
-      const capability = store.get("capabilities", clientMatch[1]);
-      const bundle =
-        capability &&
-        !capability.deprecated &&
-        capability.versions.find(
-          (row) => row.version === capability.default_version,
-        )?.client_bundle;
-      if (!bundle) return fail(res, 404, "Plugin client not found.");
-      res.writeHead(200, {
-        "Content-Type": "text/javascript; charset=utf-8",
-        "Cache-Control": "no-store",
-      });
-      res.end(bundle);
-      return;
-    }
     if (url.pathname.startsWith("/app/")) {
       if (
         req.method !== "GET" &&
@@ -299,23 +256,6 @@ export function createHandler(
           )
             return fail(res, 413, "Request too large.");
           chunks.push(chunk);
-        }
-        if (
-          store &&
-          req.method === "POST" &&
-          url.pathname.endsWith("/events")
-        ) {
-          let input;
-          try {
-            input = JSON.parse(Buffer.concat(chunks));
-          } catch {
-            return fail(res, 400, "Invalid JSON.");
-          }
-          try {
-            guardConnectionInput(store, url.pathname, input);
-          } catch (error) {
-            return fail(res, error.status || 502, error.message);
-          }
         }
         const headers = {
           Authorization: `Bearer ${config.key}`,
@@ -443,11 +383,7 @@ if (
       })
     : undefined;
   const store = openStore(dataPath(config));
-  const rawCore = coreClient(config);
-  const core = (path, method, body, idempotencyKey) => {
-    if (method === "POST") guardConnectionInput(store, path, body);
-    return rawCore(path, method, body, idempotencyKey);
-  };
+  const core = coreClient(config);
   const productHandler = productAPI(
     store,
     core,
@@ -460,20 +396,7 @@ if (
     productHandler,
     createFeishuTransport,
   );
-  let connectionTimer, connectionRunning;
-  const pollConnections = () => {
-    connectionRunning = productHandler
-      .tickConnections()
-      .catch(() => {})
-      .finally(() => {
-        if (connectionTimer !== null)
-          connectionTimer = setTimeout(pollConnections, 2000);
-      });
-  };
-  pollConnections();
   feishu.start();
-  const schedules = scheduleWorker(store, productHandler, core);
-  schedules.start();
   server.on(
     "request",
     createHandler(config, {
@@ -487,9 +410,7 @@ if (
   });
   for (const signal of ["SIGINT", "SIGTERM"])
     process.on(signal, async () => {
-      clearTimeout(connectionTimer);
-      connectionTimer = null;
-      await Promise.all([feishu.stop(), schedules.stop(), connectionRunning]);
+      await feishu.stop();
       server.close(() => store.close());
       void vite?.close();
     });

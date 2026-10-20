@@ -574,6 +574,27 @@ createServer(async (req, res) => {
     }
     if (event.input[0].content[0].text === "Delayed response")
       await new Promise((resolve) => setTimeout(resolve, 5000));
+    // Ordinary follow-ups complete with a short reply so local previews stay usable.
+    else if (event.input[0].content[0].text !== "Stream reply")
+      setTimeout(() => {
+        if (!histories.has(session.id) || turn.status !== "in_progress") return;
+        const item = message(
+          turn,
+          "assistant",
+          `收到：${event.input[0].content[0].text}\n\n这是本地 fixture 的模拟回复；连接真实 Core 后由模型回答。`,
+        );
+        histories.get(session.id).push(item);
+        session.status = "idle";
+        turn.status = "completed";
+        turn.completed_at = now();
+        emit(session, {
+          turn_id: turn.id,
+          output_index: 0,
+          type: "agent.session.turn.item.done",
+          item,
+        });
+        emit(session, { type: "agent.session.idle", session });
+      }, 1200);
   }
   return reply({}, 202);
 }).listen(18181, "127.0.0.1");

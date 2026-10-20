@@ -1,36 +1,38 @@
 import { runtimeEnvironment } from "./runtime-profile.mjs";
-import { sessionRestriction } from "../shared/session-profile.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 
-export function prepareSession(store, id, body, owner = { kind: "local" }) {
+export function sessionBot(store, agentId) {
+  return store.list("feishu_bots").find((bot) => bot.agent_id === agentId);
+}
+
+export function prepareSession(store, id, body, origin = {}) {
   const agent = store.get("agents", body.agent_id);
-  const runtime = store.get("runtimes", body.runtime_id);
-  if (!agent || !runtime)
-    throw new AppError(400, "请选择有效的 Agent 和运行时。");
+  if (!agent) throw new AppError(400, "请选择有效的 Agent。");
   if (agent.enabled === false)
     throw new AppError(400, "Agent 已停用，请先启用。");
+  const runtime = store.get("runtimes", agent.runtime_id || "");
+  if (!runtime) throw new AppError(400, "Agent 未配置环境模板。");
   const model = store.get("models", agent.model_id);
   const mcps = agent.mcp_ids.map((id) => store.get("mcps", id));
   if (!model || model.enabled === false || mcps.some((mcp) => !mcp))
     throw new AppError(400, "Agent 绑定的资源已不可用。");
   if (new Set(mcps.map((mcp) => mcp.label)).size !== mcps.length)
     throw new AppError(400, "绑定的 MCP 服务标识不能重复。");
-  if (
-    Object.keys(runtime.connection_env || {}).length &&
-    !agent.connection_requirement
-  )
+  const botEnv = Object.entries(runtime.bot_env || {});
+  const bot = sessionBot(store, agent.id);
+  if (botEnv.length && !bot?.app_secret)
     throw new AppError(
       400,
-      "环境模板需要账号连接，请在 Agent 模板中选择所需用户连接。",
+      "环境模板需要飞书机器人身份，请先在飞书接入中把机器人绑定到这个 Agent。",
     );
-  if (
-    agent.connection_requirement &&
-    !Object.keys(runtime.connection_env || {}).length
-  )
-    throw new AppError(400, "请在环境模板中配置连接变量映射。");
   const environment = runtimeEnvironment(runtime);
-  const restriction = sessionRestriction(agent, runtime);
-  if (restriction) throw new AppError(400, restriction);
+  for (const [name, field] of botEnv)
+    environment.env[name] = field === "brand" ? bot.brand || "feishu" : bot[field];
+  if (agent.harness === "mcode" && agent.mcp_ids.length)
+    throw new AppError(
+      400,
+      "MiniMax Code 暂不支持此处的 HTTP MCP，请选择 Claude Code 或 Codex。",
+    );
   let modelProvider;
   if (agent.harness !== "mcode") {
     const provider = store.get("providers", model.provider_id);
@@ -174,9 +176,16 @@ export function prepareSession(store, id, body, owner = { kind: "local" }) {
     name,
     agent_id: agent.id,
     runtime_id: runtime.id,
+    source: origin.source || "web",
+    ...(origin.feishu_chat_type
+      ? { feishu_chat_type: origin.feishu_chat_type }
+      : {}),
     pricing: model.pricing,
     configuration: {
       agent_name: agent.name,
+      agent_revision: agent.revision,
+      runtime_revision: runtime.revision,
+      bot_name: botEnv.length ? bot.name : undefined,
       model: model.model,
       harness: agent.harness,
       environment: runtime.environment,
@@ -185,7 +194,7 @@ export function prepareSession(store, id, body, owner = { kind: "local" }) {
       setup_configured: Boolean(runtime.setup_script),
       env_names: [
         ...Object.keys(runtime.env || {}),
-        ...Object.keys(runtime.connection_env || {}),
+        ...botEnv.map(([name]) => name),
       ],
       file_paths: (runtime.files || []).map((file) => file.path),
       skills: agent.skill_ids.map((id) => ({
@@ -199,9 +208,6 @@ export function prepareSession(store, id, body, owner = { kind: "local" }) {
         version: row.version,
       })),
     },
-    connection_env: runtime.connection_env || {},
-    connection_requirement: agent.connection_requirement,
-    connection_owner: agent.connection_requirement ? owner : undefined,
     created_at: Math.floor(Date.now() / 1000),
     request: {
       agent: {
@@ -251,31 +257,17 @@ export function prepareSession(store, id, body, owner = { kind: "local" }) {
   };
 }
 
-export function sessionAPI(store, core, connections) {
+export function sessionAPI(store, core) {
   const running = new Map();
-  const create = async (id, body) => {
+  const create = async (id, body, origin) => {
     let row = store.get("sessions", id);
-    if (row?.deleted_at) throw new AppError(410, "会话已取消。");
+    if (row?.deleted_at) throw new AppError(410, "会话已删除。");
     if (row?.core_session_id) return row;
     if (!row) {
-      row = prepareSession(store, id, body, connections?.owner(id));
+      row = prepareSession(store, id, body, origin);
       store.put("sessions", row);
     }
     try {
-      if (connections && row.connection_requirement) {
-        row = await connections.prepare(row);
-        if (store.get("sessions", id)?.deleted_at)
-          throw new AppError(410, "会话已取消。");
-        store.put("sessions", row);
-        if (row.connection_wait) {
-          const { request, ...record } = row;
-          return record;
-        }
-      }
-      if (row.connection) {
-        row = { ...row, connection_dispatch_pending: true };
-        store.put("sessions", row);
-      }
       // Freeze the request before sending. Retries, including after restart, reuse the same key and bytes.
       const session = await core(
         "/v1/agents/sessions",
@@ -287,8 +279,6 @@ export function sessionAPI(store, core, connections) {
         throw new AppError(502, "Core 返回了无效的会话。");
       const { request, ...record } = row;
       record.core_session_id = session.id;
-      delete record.connection_dispatch_pending;
-      delete record.connection_error;
       store.put("sessions", record);
       return record;
     } catch (error) {
@@ -300,43 +290,12 @@ export function sessionAPI(store, core, connections) {
       throw error;
     }
   };
-  return (id, body) => {
+  return (id, body, origin) => {
     if (!running.has(id))
       running.set(
         id,
-        create(id, body).finally(() => running.delete(id)),
+        create(id, body, origin).finally(() => running.delete(id)),
       );
     return running.get(id);
   };
-}
-
-export async function requireSessionSettled(core, record) {
-  if (record.deleted_at) return;
-  if (record.connection_wait)
-    throw new AppError(409, "任务正在等待连接，请先完成授权或取消等待。");
-  if (!record.core_session_id)
-    throw new AppError(409, "上次执行尚未确认，请先恢复创建。");
-  const prefix = `/v1/agents/sessions/${record.core_session_id}`;
-  const [session, turns] = await Promise.all([
-    core(prefix, "GET"),
-    core(`${prefix}/turns?order=desc&limit=1`, "GET"),
-  ]);
-  if (
-    session.status !== "failed" &&
-    !(
-      session.status === "idle" &&
-      ["completed", "failed", "cancelled"].includes(turns.data?.[0]?.status)
-    )
-  )
-    throw new AppError(
-      409,
-      "Agent 仍在准备、执行或等待处理，请先打开会话继续或取消。",
-    );
-}
-
-export function requireAutomaticRuntime(store, id) {
-  const runtime = store.get("runtimes", id || "");
-  if (!runtime || runtime.environment !== "openai_hosted")
-    throw new AppError(400, "请选择有效的托管环境模板。");
-  return runtime;
 }

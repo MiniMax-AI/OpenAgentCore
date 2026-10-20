@@ -7,7 +7,6 @@ import {
   type AgentSession,
 } from "@oac/agents-client";
 import { ArrowUp, Square } from "lucide-react";
-import { beginTiming, requestReturned } from "./lib/session-timing";
 import { api } from "./lib/api";
 import { ErrorNotice } from "./components/shared";
 export function Composer({
@@ -71,7 +70,6 @@ export function Composer({
       const operation = pending || { key: createIdempotencyKey(), text };
       sessionStorage.setItem(storageKey, JSON.stringify(operation));
       setPending(operation);
-      beginTiming(session.id, operation.key, turnId);
       let response: Promise<void>;
       try {
         response = api.sendMessage(session.id, operation.text, operation.key);
@@ -82,7 +80,6 @@ export function Composer({
         throw error;
       }
       await response;
-      requestReturned(session.id, operation.key);
     },
     onSuccess: () => {
       sessionStorage.removeItem(draftKey);
@@ -109,15 +106,15 @@ export function Composer({
     },
   });
   return (
-    <div className="mx-auto w-full max-w-3xl px-6 pb-6 pt-3">
+    <div className="mx-auto w-full max-w-3xl px-6 pb-7 pt-3">
       <ErrorNotice error={send.error || cancel.error} />
       {cancelRequested && running && (
-        <p role="status" className="pb-3 text-base">
+        <p role="status" className="pb-3 text-sm text-fg-muted">
           {tr("已请求取消，等待执行结束。")}
         </p>
       )}
       <form
-        className="rounded-2xl bg-surface-muted p-4 focus-within:ring-1 focus-within:ring-line-strong"
+        className="rounded-3xl border border-line bg-surface p-3 app-shadow-floating transition-colors focus-within:border-line-strong"
         onSubmit={(e) => {
           e.preventDefault();
           if (text.trim() && !running && !send.isPending) send.mutate();
@@ -125,8 +122,18 @@ export function Composer({
       >
         <textarea
           aria-label={tr("继续对话")}
-          rows={3}
+          rows={2}
           value={text}
+          onKeyDown={(e) => {
+            if (
+              e.key === "Enter" &&
+              !e.shiftKey &&
+              !e.nativeEvent.isComposing
+            ) {
+              e.preventDefault();
+              e.currentTarget.form?.requestSubmit();
+            }
+          }}
           disabled={
             running ||
             send.isPending ||
@@ -138,19 +145,19 @@ export function Composer({
             running
               ? tr("Agent 执行中")
               : session.status === "failed"
-                ? tr("当前会话已失败，请返回会话列表新建会话")
-                : tr("继续描述你的想法\u2026")
+                ? tr("当前会话已失败，请开始新对话")
+                : tr("继续对话\u2026")
           }
-          className="block w-full resize-none bg-transparent text-base leading-relaxed outline-none placeholder:text-fg-muted disabled:opacity-60"
+          className="block max-h-60 w-full resize-none bg-transparent px-3 pt-2 text-base leading-relaxed outline-none placeholder:text-fg-subtle disabled:opacity-60"
         />
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-1">
           {running ? (
             <button
               type="button"
               aria-label={tr("取消执行")}
               disabled={cancel.isPending || cancelRequested}
               onClick={() => cancel.mutate()}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-emphasis text-fg-on-emphasis disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-emphasis text-fg-on-emphasis disabled:opacity-30"
             >
               <Square className="h-4 w-4" fill="currentColor" />
             </button>
@@ -161,7 +168,7 @@ export function Composer({
               disabled={
                 !text.trim() || send.isPending || session.status === "failed"
               }
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-emphasis text-fg-on-emphasis disabled:opacity-40"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-surface-emphasis text-fg-on-emphasis disabled:opacity-30"
             >
               <ArrowUp className="h-5 w-5" />
             </button>

@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "./components/ui/dialog";
-import { ErrorNotice, Field, Help, PageHeader } from "./components/shared";
+import { ErrorNotice, Field } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
 export const useSkills = () =>
   useQuery({
@@ -39,79 +39,80 @@ export function Skills() {
   });
   return (
     <>
-      <PageHeader title="Skills">
-        <Button variant="outline" onClick={() => setDirectory(true)}>
-          {tr("浏览目录")}
-        </Button>
-        <Help>
-          {tr(
-            "Skills 是可复用的执行方法。上传 ZIP，或用 SKILL.md 创建；绑定到 Agent 后，每个新会话自动加载。",
-          )}
-        </Help>
-        <Button variant="outline" asChild>
-          <label className="cursor-pointer">
-            <Upload />
-            {upload.isPending ? tr("上传中\u2026") : tr("上传 ZIP")}
-            <input
-              aria-label={tr("上传 Skill ZIP")}
-              type="file"
-              accept=".zip"
-              className="sr-only"
-              disabled={upload.isPending}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) upload.mutate(file);
-                e.target.value = "";
-              }}
-            />
-          </label>
-        </Button>
-        <Button onClick={() => setCreating(true)}>
-          <Plus />
-          {tr("创建 Skill")}
-        </Button>
-      </PageHeader>
-      <ErrorNotice error={query.error || upload.error} />
-      <div className="border-b border-line px-6 py-2">
-        <Input
-          aria-label={tr("搜索 Skills")}
-          placeholder={tr("搜索技能")}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="max-w-sm"
-        />
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <div className="flex flex-col divide-y divide-line-muted">
-          {query.data
-            ?.filter((skill) =>
-              `${skill.name} ${skill.description}`
-                .toLowerCase()
-                .includes(search.toLowerCase()),
-            )
-            .map((skill) => (
-              <button
-                key={skill.id}
-                onClick={() => setSelected(skill)}
-                className="flex min-h-9 items-center gap-6 px-6 text-left transition-colors hover:bg-surface-subtle focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <BookOpen className="h-3.5 w-3.5" />
-                  <h2 className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {skill.name}
-                  </h2>
-                  <span className="text-base text-fg-muted">
-                    v{skill.default_version}
-                  </span>
-                </div>
-                <p className="w-1/2 truncate text-xs text-fg-muted">
-                  {skill.description}
-                </p>
-              </button>
-            ))}
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6 pb-2 sm:px-10">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-4">
+          <h2 className="text-lg font-semibold tracking-tight text-fg">Skills</h2>
+          <Input
+            aria-label={tr("搜索 Skills")}
+            placeholder={tr("搜索技能")}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="max-w-xs"
+          />
         </div>
-        {!query.isPending && !query.data?.length && (
-          <EmptyState title={tr("把常用方法保存为 Skill")} />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => setDirectory(true)}>
+            {tr("浏览目录")}
+          </Button>
+          <Button variant="outline" asChild>
+            <label className="cursor-pointer">
+              <Upload />
+              {upload.isPending ? tr("上传中\u2026") : tr("上传 ZIP")}
+              <input
+                aria-label={tr("上传 Skill ZIP")}
+                type="file"
+                accept=".zip"
+                className="sr-only"
+                disabled={upload.isPending}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) upload.mutate(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </Button>
+          <Button onClick={() => setCreating(true)}>
+            <Plus />
+            {tr("创建 Skill")}
+          </Button>
+        </div>
+      </div>
+      <ErrorNotice page error={query.error || upload.error} />
+      <div className="mx-auto w-full max-w-6xl px-6 py-4 sm:px-10">
+        {query.data && query.data.length > 0 ? (
+          <div className="flex flex-col divide-y divide-line-muted overflow-hidden rounded-2xl border border-line bg-surface app-shadow-card">
+            {query.data
+              .filter((skill) =>
+                `${skill.name} ${skill.description}`
+                  .toLowerCase()
+                  .includes(search.toLowerCase()),
+              )
+              .map((skill) => (
+                <button
+                  key={skill.id}
+                  onClick={() => setSelected(skill)}
+                  className="flex min-h-13 items-center gap-6 px-5 py-3 text-left transition-colors hover:bg-surface-hover/60 focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <BookOpen className="h-4 w-4 shrink-0 text-fg-muted" />
+                    <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
+                      {skill.name}
+                    </h2>
+                    <span className="rounded-md bg-surface-subtle px-2 py-0.5 font-mono text-sm text-fg-muted ring-1 ring-line">
+                      v{skill.default_version}
+                    </span>
+                  </div>
+                  <p className="w-1/2 truncate text-sm text-fg-muted">
+                    {skill.description}
+                  </p>
+                </button>
+              ))}
+          </div>
+        ) : (
+          !query.isPending && (
+            <EmptyState title={tr("把常用方法保存为 Skill")} />
+          )
         )}
       </div>
       {directory && <SkillsDirectory close={() => setDirectory(false)} />}
@@ -327,11 +328,6 @@ export function SkillDetail({
         </div>
         {preview && <SkillFiles id={skill.id} version={preview} />}
         <DialogFooter>
-          <Help>
-            {tr(
-              "新任务解析默认版本，已启动任务保留技能快照。删除会影响绑定此 Skill 的新任务，请先解除 Agent 中的绑定。",
-            )}
-          </Help>
           <Button
             variant="ghost"
             aria-label={tr("删除 Skill")}
@@ -408,7 +404,7 @@ function SkillFiles({ id, version }: { id: string; version: string }) {
             <button
               type="button"
               key={name}
-              className={`block w-full truncate px-2 py-1 text-left text-xs ${name === path ? "bg-surface-muted" : ""}`}
+              className={`block w-full truncate px-2 py-1 text-left text-sm ${name === path ? "bg-surface-muted" : ""}`}
               onClick={() => setSelected(name)}
               title={name}
             >
@@ -416,7 +412,7 @@ function SkillFiles({ id, version }: { id: string; version: string }) {
             </button>
           ))}
         </nav>
-        <pre className="min-w-0 flex-1 overflow-auto whitespace-pre-wrap p-3 text-xs">
+        <pre className="min-w-0 flex-1 overflow-auto whitespace-pre-wrap p-3 text-sm">
           {bytes
             ? bytes.length > 256 * 1024
               ? tr("文件过大，请下载查看。")
@@ -539,7 +535,7 @@ function SkillsDirectory({ close }: { close: () => void }) {
                 }}
               >
                 <span>{item.name}</span>
-                <span className="truncate text-xs text-fg-muted">
+                <span className="truncate text-sm text-fg-muted">
                   {item.source}
                 </span>
               </button>
@@ -579,10 +575,10 @@ function SkillsDirectory({ close }: { close: () => void }) {
         </Button>
         {preview.data && (
           <>
-            <div className="text-xs text-fg-muted">
+            <div className="text-sm text-fg-muted">
               {preview.data.files.join(" · ")}
             </div>
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-line p-3 text-xs">
+            <pre className="max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-line p-3 text-sm">
               {preview.data.instructions}
             </pre>
             <Field label={tr("安装目标")} id="registry-target">

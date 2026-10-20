@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SessionEvent, SessionItem } from "@oac/agents-client";
-import { firstTextArrived } from "./session-timing";
 import { api, readHistory } from "./api";
 
 // Only append deltas after observing the item's baseline on this connection.
@@ -85,11 +84,6 @@ export function useLiveSession(id: string, durable: SessionItem[] | undefined) {
           onEvent: (event) => {
             if (seen.has(event.event_id)) return;
             seen.add(event.event_id);
-            if (
-              event.type === "agent.session.turn.output_text.delta" &&
-              event.delta?.length
-            )
-              firstTextArrived(id, event.turn_id);
             if (seen.size > 2000) seen.delete(seen.values().next().value!);
             if (
               event.type === "agent.session.turn.output_text.delta" &&

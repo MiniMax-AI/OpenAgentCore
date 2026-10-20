@@ -1,4 +1,3 @@
-import { ToolCardSlot } from "./plugin/SlotRenderer";
 import { tr } from "../lib/i18n";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -77,10 +76,6 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
   );
 }
 export function Activity({ item }: { item: SessionItem }) {
-  const native = <NativeActivity item={item} />;
-  return item.type === "mcp_call" ? <ToolCardSlot item={item} fallback={native} /> : native;
-}
-function NativeActivity({ item }: { item: SessionItem }) {
   if (item.type === "message") {
     const text =
       item.content
@@ -92,7 +87,7 @@ function NativeActivity({ item }: { item: SessionItem }) {
     if (item.role === "user")
       return (
         <div className="flex justify-end py-3">
-          <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-surface-muted px-5 py-3 text-base leading-relaxed">
+          <p className="max-w-[80%] whitespace-pre-wrap break-words rounded-3xl bg-surface-muted px-5 py-3 text-base leading-relaxed">
             {text}
           </p>
         </div>
@@ -102,7 +97,7 @@ function NativeActivity({ item }: { item: SessionItem }) {
         aria-label={tr("Agent 回复")}
         className="py-4 text-base leading-relaxed"
       >
-        <div className="prose prose-sm max-w-none text-fg [overflow-wrap:anywhere] prose-headings:text-fg prose-headings:font-medium prose-strong:text-fg prose-strong:font-medium prose-code:text-fg prose-a:text-fg prose-a:underline prose-blockquote:text-fg-muted prose-blockquote:border-line prose-code:before:content-none prose-code:after:content-none">
+        <div className="prose max-w-none text-base text-fg [overflow-wrap:anywhere] prose-headings:text-fg prose-headings:font-medium prose-strong:text-fg prose-strong:font-medium prose-code:text-fg prose-a:text-fg prose-a:underline prose-blockquote:text-fg-muted prose-blockquote:border-line prose-code:before:content-none prose-code:after:content-none">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={{
@@ -138,14 +133,14 @@ function NativeActivity({ item }: { item: SessionItem }) {
       ? item.summary?.map((part) => part.text).join("\n")
       : (item.output ?? item.arguments ?? item.action);
   return (
-    <details className="group my-2 border-b border-line py-2 text-base">
-      <summary className="flex cursor-pointer list-none items-center gap-2 py-1 text-fg-muted">
+    <details className="group py-1 text-sm">
+      <summary className="flex cursor-pointer list-none items-center gap-2 py-1.5 text-fg-muted hover:text-fg">
         <ChevronRight className="h-4 w-4 shrink-0 transition-transform group-open:rotate-90" />
         <Terminal className="h-4 w-4 shrink-0" />
         <span className="min-w-0 truncate text-fg">{name}</span>
         {item.status === "failed" && <span>{tr("失败")}</span>}
       </summary>
-      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words py-3 text-sm">
+      <pre className="my-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-xl bg-surface-subtle p-4 text-sm">
         {typeof detail === "string"
           ? detail
           : JSON.stringify(detail ?? item, null, 2)}
@@ -176,14 +171,14 @@ export function SessionTimeline({ items }: { items: SessionItem[] }) {
       {group.message ? (
         <Activity item={group.message} />
       ) : (
-        <details className="my-3 rounded-lg border border-line px-4 py-2">
-          <summary className="cursor-pointer text-sm text-fg-muted">
+        <details className="my-3 rounded-2xl border border-line-muted px-4 py-2.5">
+          <summary className="cursor-pointer text-sm text-fg-muted hover:text-fg">
             {tr("执行过程")} · {group.steps.length} {tr("个步骤")}
             {group.steps.some((step) => step.status === "failed")
               ? ` · ${tr("失败")}`
               : ""}
           </summary>
-          <div className="border-l border-line pl-3">
+          <div className="mt-2 border-l border-line pl-4">
             {group.steps.map((item) => (
               <Activity key={item.id} item={item} />
             ))}

@@ -16,13 +16,13 @@ const { execFileSync } = require('node:child_process');
   if (!line) throw new Error('Release checksum unavailable');
   const expected = line.trim().split(/\s+/)[0];
   const urls = [
-    `https://github.com/larksuite/cli/releases/download/v${version}/${asset}`,
     `https://registry.npmmirror.com/-/binary/lark-cli/v${version}/${asset}`,
+    `https://github.com/larksuite/cli/releases/download/v${version}/${asset}`,
   ];
   let bytes;
   for (const url of urls) {
     try {
-      const response = await fetch(url, {signal: AbortSignal.timeout(60000)});
+      const response = await fetch(url, {signal: AbortSignal.timeout(10000)});
       if (!response.ok) continue;
       const candidate = Buffer.from(await response.arrayBuffer());
       if (crypto.createHash('sha256').update(candidate).digest('hex') !== expected) throw new Error('Release checksum mismatch');
@@ -46,5 +46,4 @@ const { execFileSync } = require('node:child_process');
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
 JS
 lark-cli --version
-mkdir -p outputs
-printf 'lark-cli prepared before Agent startup\n' > outputs/environment-ready.txt
+printf '%s' "$FEISHU_APP_SECRET" | lark-cli config init --app-id "$FEISHU_APP_ID" --app-secret-stdin --brand "${FEISHU_BRAND:-feishu}"

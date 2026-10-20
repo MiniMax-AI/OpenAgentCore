@@ -56,7 +56,7 @@ Core must build, deploy and run independently of product services, frontends and
 
 ### Optional application example
 
-`example/parsar/` is an optional task workspace in this repository. Its [README](example/parsar/README.md) owns its product behavior.
+`example/parsar/` is an optional conversation workspace in this repository. Its [README](example/parsar/README.md) owns its product behavior.
 
 - It calls only public `/v1` APIs. Its Project key stays server-side; it never holds a Core key or issues machine credentials. The example uses only Core-managed hosted environments; its environment templates prepare packages, initialization commands, variables and initial files through the public Session contract.
 - It may keep a small product-owned SQLite database (Node's built-in module, Node 22.13+), outside the checkout and isolated by Core origin and Project key fingerprint. Provider keys never reach the browser.
