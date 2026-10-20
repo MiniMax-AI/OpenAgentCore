@@ -1,12 +1,19 @@
+import { createHash, randomUUID } from "node:crypto";
 import { runtimeEnvironment } from "./runtime-profile.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 import { harnessOptions } from "../shared/harness-options.mjs";
+
+// A warm Session matches a cold creation only when every frozen byte except the
+// first input and the per-conversation metadata is the same.
+const fingerprint = ({ input, metadata, ...request }) =>
+  createHash("sha256").update(JSON.stringify(request)).digest("hex");
+const warmAge = 12 * 3600_000;
 
 export function sessionBot(store, agentId) {
   return store.list("feishu_bots").find((bot) => bot.agent_id === agentId);
 }
 
-export function prepareSession(store, id, body, origin = {}) {
+export function prepareSession(store, id, body, origin = {}, warm = false) {
   const agent = store.get("agents", body.agent_id);
   if (!agent) throw new AppError(400, "请选择有效的 Agent。");
   if (agent.enabled === false)
@@ -167,8 +174,8 @@ export function prepareSession(store, id, body, origin = {}) {
   ]
     .filter(Boolean)
     .join("\n\n");
-  const name = text(body.name, "会话名称", 80, true);
-  const input = text(body.input, "消息", 100000, true);
+  const name = warm ? "" : text(body.name, "会话名称", 80, true);
+  const input = warm ? "" : text(body.input, "消息", 100000, true);
   return {
     id,
     name,
@@ -270,13 +277,66 @@ export function prepareSession(store, id, body, origin = {}) {
 
 export function sessionAPI(store, core) {
   const running = new Map();
+  const sendFirstInput = async (record) => {
+    await core(
+      `/v1/agents/sessions/${record.core_session_id}/events`,
+      "POST",
+      {
+        events: [
+          {
+            type: "agent.session.input.message",
+            input: [
+              {
+                role: "user",
+                content: [{ type: "input_text", text: record.pending_input }],
+              },
+            ],
+          },
+        ],
+      },
+      record.id,
+    );
+    const { pending_input, ...done } = record;
+    store.put("sessions", done);
+    return done;
+  };
+  // Hand a prepared Session to this conversation when one matches its frozen request.
+  const claim = async (row) => {
+    if (typeof row.request.input !== "string") return;
+    const print = fingerprint(row.request);
+    const warm = store
+      .list("warm_sessions")
+      .find((entry) => entry.agent_id === row.agent_id && entry.fingerprint === print);
+    if (!warm) return;
+    store.remove("warm_sessions", warm.id);
+    setTimeout(() => void sessions.refreshWarm().catch(() => {}), 0);
+    const { request, ...record } = row;
+    const claimed = {
+      ...record,
+      core_session_id: warm.core_session_id,
+      pending_input: request.input,
+    };
+    store.put("sessions", claimed);
+    try {
+      return await sendFirstInput(claimed);
+    } catch (error) {
+      if (!(error instanceof AppError && error.status >= 400 && error.status < 500))
+        throw error;
+      // The prepared Session is unusable; fall back to an ordinary creation.
+      store.put("sessions", row);
+      void core(`/v1/agents/sessions/${warm.core_session_id}`, "DELETE").catch(() => {});
+    }
+  };
   const create = async (id, body, origin) => {
     let row = store.get("sessions", id);
     if (row?.deleted_at) throw new AppError(410, "会话已删除。");
+    if (row?.pending_input) return sendFirstInput(row);
     if (row?.core_session_id) return row;
     if (!row) {
       row = prepareSession(store, id, body, origin);
       store.put("sessions", row);
+      const claimed = await claim(row);
+      if (claimed) return claimed;
     }
     try {
       // Freeze the request before sending. Retries, including after restart, reuse the same key and bytes.
@@ -301,7 +361,7 @@ export function sessionAPI(store, core) {
       throw error;
     }
   };
-  return (id, body, origin) => {
+  const sessions = (id, body, origin) => {
     if (!running.has(id))
       running.set(
         id,
@@ -309,4 +369,66 @@ export function sessionAPI(store, core) {
       );
     return running.get(id);
   };
+  // Keep one prepared Session for each Agent whose environment template asks for
+  // it. Core prepares an Environment as soon as a Session exists, so the first
+  // message skips setup. Overlapping refreshes are skipped.
+  let refreshing = false;
+  sessions.refreshWarm = async (now = Date.now()) => {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await refresh(now);
+    } finally {
+      refreshing = false;
+    }
+  };
+  const refresh = async (now) => {
+    for (const agent of store.list("agents")) {
+      let print;
+      if (
+        agent.enabled !== false &&
+        store.get("runtimes", agent.runtime_id || "")?.prepare
+      )
+        try {
+          print = fingerprint(
+            prepareSession(store, randomUUID(), { agent_id: agent.id }, {}, true)
+              .request,
+          );
+        } catch {
+          print = undefined;
+        }
+      const entries = store
+        .list("warm_sessions")
+        .filter((entry) => entry.agent_id === agent.id);
+      for (const entry of entries)
+        if (entry.fingerprint !== print || now - entry.created_at > warmAge) {
+          store.remove("warm_sessions", entry.id);
+          if (entry.core_session_id)
+            await core(`/v1/agents/sessions/${entry.core_session_id}`, "DELETE").catch(
+              () => {},
+            );
+        }
+      if (!print || entries.some((entry) => entry.fingerprint === print && now - entry.created_at <= warmAge))
+        continue;
+      const id = randomUUID();
+      const { request } = prepareSession(store, id, { agent_id: agent.id }, {}, true);
+      const session = await core("/v1/agents/sessions", "POST", {
+        ...request,
+        metadata: { ...request.metadata, title: "", warm: "true" },
+      }, id);
+      store.put("warm_sessions", {
+        id,
+        agent_id: agent.id,
+        fingerprint: print,
+        core_session_id: session.id,
+        created_at: now,
+      });
+    }
+    for (const entry of store.list("warm_sessions"))
+      if (!store.get("agents", entry.agent_id)) {
+        store.remove("warm_sessions", entry.id);
+        await core(`/v1/agents/sessions/${entry.core_session_id}`, "DELETE").catch(() => {});
+      }
+  };
+  return sessions;
 }

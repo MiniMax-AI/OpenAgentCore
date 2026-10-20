@@ -472,5 +472,6 @@
   "被 {{count}} 个{{unit}}使用": "Used by {{count}} {{unit}}",
   "仍在使用中，不能移除": "In use; cannot remove",
   "仍被 {{count}} 个 Agent 使用，不能移除": "Used by {{count}} Agents; cannot remove",
-  "请先移除其中的模型": "Remove its models first"
+  "请先移除其中的模型": "Remove its models first",
+  "提前准备，新对话无需等待安装": "Prepare ahead so new conversations skip setup"
 }

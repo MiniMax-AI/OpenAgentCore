@@ -6,7 +6,7 @@ import type { RuntimeProfile } from "./lib/product";
 import { Input } from "./components/ui/input";
 import { Textarea } from "./components/ui/textarea";
 import { Button } from "./components/ui/button";
-import { Field } from "./components/shared";
+import { Field, Toggle } from "./components/shared";
 
 function Group({
   title,
@@ -55,6 +55,11 @@ export function EnvironmentFields({
           placeholder={tr("例如：飞书办公，预装 lark-cli")}
         />
       </Field>
+      <Toggle
+        label={tr("提前准备，新对话无需等待安装")}
+        checked={!!value.prepare}
+        onChange={(prepare) => onChange({ ...value, prepare })}
+      />
       <div className="grid grid-cols-2 gap-4">
         {(["npm", "python"] as const).map((manager) => (
           <Field

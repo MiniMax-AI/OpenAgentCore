@@ -97,6 +97,7 @@ export function runtimeProfile(body, previous) {
     env,
     bot_env,
     files: normalized,
+    prepare: body.prepare === true,
   };
 }
 

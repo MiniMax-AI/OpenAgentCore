@@ -397,6 +397,13 @@ if (
     createFeishuTransport,
   );
   feishu.start();
+  // Prepared Sessions follow configuration changes within one interval.
+  const refreshPrepared = () =>
+    void productHandler.sessions
+      .refreshWarm()
+      .catch((error) => console.error("Prepared sessions:", error.message));
+  refreshPrepared();
+  setInterval(refreshPrepared, 15000).unref();
   server.on(
     "request",
     createHandler(config, {

@@ -113,7 +113,7 @@ export function SessionDetail({
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-muted px-6">
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-base font-semibold tracking-tight">
-            {session ? sessionTitle(session) : record.name}
+            {record.name || (session ? sessionTitle(session) : "")}
           </h1>
         </div>
         {state && (

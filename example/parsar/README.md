@@ -53,6 +53,8 @@ Optional business questions use the declared `ask_user` function. They appear in
 
 **环境模板** runs only in Core-managed workspaces. Each new conversation installs files and packages and completes setup before starting the Agent; a setup failure stops execution. Initial files use canonical `/workspace/` paths; scripts run from the workspace. Variable values are write-only in product responses: `null` preserves an existing value, a string replaces it and removing the name deletes it. **飞书机器人变量** map variable names to the bound bot’s **App ID**, **App Secret** or region; a conversation with such a template requires the Agent to have a bound bot. Parsar sends templates inline through the public Session Environment contract and does not create a Core Template resource.
 
+**提前准备，新对话无需等待安装** keeps one prepared Session for each Agent that uses the template. Parsar creates it without input, so Core prepares its Environment ahead of time, and the next Web or Feishu conversation takes it over with its first message; the conversation keeps its own title. A prepared Session is replaced when the Agent, its execution profile, environment template, bot or model provider changes, after 12 hours, or once taken; turning the switch off discards it. A first message with images or files starts an ordinary Session. Each prepared Session holds a workspace while it waits.
+
 ## Feishu
 
 **飞书接入** shows one card per bot. **添加机器人** offers **扫码创建**, which provisions an application through Feishu’s device flow, or **已有应用** with an App ID and App Secret. A new bot stays disabled until configured. Secrets stay in the restricted local database. The official SDK owns authentication, normalization and long connections; no inbound public callback is needed.

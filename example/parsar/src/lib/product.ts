@@ -28,6 +28,7 @@ export interface RuntimeProfile extends NamedResource {
   setup_script?: string;
   bot_env?: Record<string, string>;
   env?: Record<string, string | null>;
+  prepare?: boolean;
   files?: { path: string; content: string }[];
 }
 export interface ExecutionProfile extends NamedResource {

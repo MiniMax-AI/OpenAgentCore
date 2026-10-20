@@ -783,3 +783,60 @@ test("execution profiles carry Harness options into the Session request and reje
     /请选择执行配置/,
   );
 });
+
+test("prepared environments hand a ready Session to the next conversation and follow configuration changes", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const calls = [];
+  let failEvents = false;
+  const core = async (path, method, body, key) => {
+    calls.push({ path, method, body, key });
+    if (method === "POST" && path === "/v1/agents/sessions") return { id: randomUUID() };
+    if (method === "POST" && path.endsWith("/events") && failEvents)
+      throw new AppError(502, "Core unavailable");
+    return {};
+  };
+  const { api, put, runtime, agent, input } = await setup(store, core);
+  const sessions = api.sessions;
+  await put("runtimes", { ...runtime, prepare: true }, runtime.id);
+  await sessions.refreshWarm();
+  const created = calls.filter((c) => c.method === "POST" && c.path === "/v1/agents/sessions");
+  assert.equal(created.length, 1);
+  assert.equal(created[0].body.input, undefined);
+  assert.equal(created[0].body.metadata.warm, "true");
+  const [warm] = store.list("warm_sessions");
+
+  calls.length = 0;
+  const id = randomUUID();
+  const record = await put("sessions", input, id);
+  assert.equal(record.core_session_id, warm.core_session_id);
+  assert.equal(record.name, input.name);
+  const sent = calls.find((c) => c.path.endsWith("/events"));
+  assert.equal(sent.key, id);
+  assert.equal(sent.body.events[0].input[0].content[0].text, input.input);
+  assert.equal(calls.some((c) => c.method === "POST" && c.path === "/v1/agents/sessions" && c.body.input), false);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(store.list("warm_sessions").length, 1, "a claimed Session is replaced");
+
+  calls.length = 0;
+  const [refill] = store.list("warm_sessions");
+  await put("agents", { ...agent, instructions: "Changed" }, agent.id);
+  await sessions.refreshWarm();
+  assert.ok(calls.some((c) => c.method === "DELETE" && c.path.endsWith(refill.core_session_id)));
+  assert.notEqual(store.list("warm_sessions")[0].core_session_id, refill.core_session_id);
+
+  failEvents = true;
+  const retried = randomUUID();
+  await assert.rejects(put("sessions", { ...input, name: "Retry" }, retried), /Core unavailable/);
+  assert.ok(store.get("sessions", retried).pending_input);
+  failEvents = false;
+  calls.length = 0;
+  const recovered = await api("PUT", `/app/sessions/${retried}`, {});
+  assert.equal(recovered.pending_input, undefined);
+  assert.equal(calls.find((c) => c.path.endsWith("/events")).key, retried);
+
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  await put("runtimes", { ...store.get("runtimes", runtime.id), prepare: false }, runtime.id);
+  await sessions.refreshWarm();
+  assert.equal(store.list("warm_sessions").length, 0);
+});
