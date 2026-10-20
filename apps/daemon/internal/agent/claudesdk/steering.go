@@ -24,15 +24,8 @@ type steeringState struct {
 	seen      map[string]bool
 }
 
-var _ agent.Steerer = (*session)(nil)
-
-// Steer waits for native consumption, which may occur in a later native turn
-// within this one SDK query. A completed stdin write is not a receipt.
-func (s *session) Steer(ctx context.Context, input proto.PromptSteerPayload) error {
-	return s.SteerWithReceipt(ctx, input, nil)
-}
-
-// SteerWithReceipt separates a complete bridge write from native consumption.
+// SteerWithReceipt separates a complete bridge write from native consumption,
+// which may occur in a later native turn within this one SDK query.
 func (s *session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
 	select {
 	case <-s.cancelOutput:
@@ -91,9 +84,7 @@ func (s *session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerP
 		s.invalidate()
 		return fmt.Errorf("claudesdk: input transport failed")
 	}
-	if written != nil {
-		written()
-	}
+	written()
 	select {
 	case err := <-pending.receipt:
 		return err

@@ -127,7 +127,7 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	schema := json.RawMessage(`{"type":"object","properties":{"n":{"const":9007199254740992}}}`)
-	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), ObserveMessages: true, DisableSubagents: true, AgentOptions: map[string]any{"model": "model", "system_prompt": "Original instructions."}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
+	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), DisableSubagents: true, AgentOptions: map[string]any{"model": "model", "system_prompt": "Original instructions."}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
 	start, _, err := prepare(config, request)
 	if err != nil {
 		t.Fatal(err)
@@ -160,7 +160,6 @@ func TestToolDiscoveryPreservesFrozenFunctionsBesideOtherProfiles(t *testing.T) 
 		t.Fatal("function discovery changed native definitions", err)
 	}
 	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(`{"type":"object"}`)}}
-	request.ObserveMessages = true
 	if start, _, err := prepare(config, request); err != nil || !start.ToolSearch || start.OutputFormat == nil {
 		t.Fatal("native tool search was narrowed by structured output", err)
 	}

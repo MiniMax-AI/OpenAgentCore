@@ -92,7 +92,7 @@ func TestLiveClaudeSDKNativeCombinations(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 			defer cancel()
-			req := proto.PromptRequestPayload{RunID: uuid.NewString(), ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true,
+			req := proto.PromptRequestPayload{RunID: uuid.NewString(), DisableExecutionEnvironment: true, DisableSubagents: true,
 				Input:             proto.TextInput("Call the lookup tool if one is available and put its value in answer. Otherwise answer with the word ready."),
 				ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}},
 				AgentOptions:      map[string]any{"model": model, "system_prompt": "Reply only through the structured output."}}

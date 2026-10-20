@@ -44,7 +44,7 @@ func executorFingerprint(req proto.PromptRequestPayload) ([32]byte, error) {
 
 func (r *Router) handleExecutorPrepare(ctx context.Context, env proto.Envelope, input proto.ExecutionPreparePayload) error {
 	req := input.Configuration
-	if strings.TrimSpace(input.SessionID) == "" || req.RunID != "" || len(req.Input) != 0 || req.AgentStateKey != "agents-api-"+input.SessionID {
+	if strings.TrimSpace(input.SessionID) == "" || req.RunID != "" || len(req.Input) != 0 || req.AgentStateKey != input.SessionID {
 		return r.rejectPreparation(env, "invalid_configuration")
 	}
 	caps, available := r.availableCapabilities(req.AgentKind)

@@ -15,12 +15,12 @@ import (
 )
 
 func TestMessageObservations(t *testing.T) {
-	for _, mode := range []string{"messages-success", "messages-partial", "messages-unrequested", "messages-missing-id", "messages-invalid-snapshot"} {
+	for _, mode := range []string{"messages-success", "messages-partial", "messages-missing-id", "messages-invalid-snapshot"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			t.Setenv("OAC_RUNTIME_HOME", root)
 			config := Config{Node: os.Args[0], Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state"), Env: []string{"GO_CLAUDE_SDK_HELPER=1", "SDK_HELPER_MODE=" + mode, "GORACE=atexit_sleep_ms=0"}}
-			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), ObserveMessages: mode != "messages-unrequested", AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
+			request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "fake-model", "system_prompt": "instructions"}}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			out := make(chan proto.Envelope, 16)
@@ -60,7 +60,7 @@ func TestMessageObservations(t *testing.T) {
 				if len(events) != 4 || events[0].Type != proto.TypeOutputMessage || events[1].Type != proto.TypeDelta {
 					t.Fatalf("lost partial output: %+v", events)
 				}
-			case "messages-unrequested", "messages-missing-id":
+			case "messages-missing-id":
 				if len(events) != 2 {
 					t.Fatalf("invalid bridge observation escaped: %+v", events)
 				}
@@ -77,13 +77,7 @@ func runMessageHelper(request startRequest, mode string, emit func(bridgeEvent))
 		emit(bridgeEvent{Type: "delta", Delta: "unidentified"})
 		return
 	}
-	if mode != "messages-unrequested" && !request.ObserveMessages {
-		os.Exit(4)
-	}
 	message("message-1", "in_progress", nil)
-	if mode == "messages-unrequested" {
-		return
-	}
 	emit(bridgeEvent{Type: "delta", ItemID: "message-1", Delta: "partial"})
 	if mode == "messages-partial" {
 		emit(bridgeEvent{Type: "error", Code: "execution_failed"})

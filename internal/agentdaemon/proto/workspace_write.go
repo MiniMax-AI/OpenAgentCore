@@ -34,8 +34,7 @@ type WorkspaceWriteResultPayload struct {
 	Offset    int    `json:"offset,omitempty"`
 	SizeBytes int    `json:"size_bytes,omitempty"`
 	ErrorCode string `json:"error_code,omitempty"`
-	// Reason optionally refines a write_rejected result. Older peers omit or
-	// ignore it and keep the generic rejection.
+	// Reason optionally refines a write_rejected result.
 	Reason string `json:"reason,omitempty"`
 }
 

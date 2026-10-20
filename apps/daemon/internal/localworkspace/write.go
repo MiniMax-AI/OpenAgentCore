@@ -16,7 +16,7 @@ const WriteMaxBytes = proto.WorkspaceWriteMaxBytes
 var _ agent.WorkspaceWriter = (*Binding)(nil)
 
 func (b *Binding) AcceptsFileWrite(environment, session string) bool {
-	return b != nil && b.writer != nil && b.environment == environment && b.stateKey == "agents-api-"+session
+	return b != nil && b.writer != nil && b.environment == environment && b.stateKey == session
 }
 
 // WriteWorkspaceFile starts only after the caller supplies the complete bounded

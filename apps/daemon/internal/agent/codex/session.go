@@ -62,7 +62,6 @@ type Session struct {
 	subagents                 *subagentObservations
 	observeSubagentIdentities bool
 	functions                 *functionCalls
-	observeMessages           bool
 
 	runID string
 	cfg   sessionConfig

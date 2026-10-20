@@ -24,7 +24,7 @@ func TestReadOnlyPreparationRejectedBeforeNativeSetup(t *testing.T) {
 	}
 }
 
-func TestRetiredNativeTransportEnvironmentRejectedBeforeState(t *testing.T) {
+func TestNativeTransportEnvironmentRejectedBeforeState(t *testing.T) {
 	for _, key := range []string{"CODEX_EXEC_SERVER_URL", "CODEX_EXEC_SERVER_NOISE_REGISTRY_URL", "CODEX_EXEC_SERVER_NOISE_ENVIRONMENT_ID", "CODEX_EXEC_SERVER_NOISE_AUTH_TOKEN"} {
 		for _, none := range []bool{false, true} {
 			t.Run(key+"/"+map[bool]string{false: "local", true: "none"}[none], func(t *testing.T) {
@@ -33,16 +33,16 @@ func TestRetiredNativeTransportEnvironmentRejectedBeforeState(t *testing.T) {
 				if !none {
 					req.LocalEnvironment = &proto.LocalEnvironment{ID: "local"}
 				}
-				t.Setenv(key, "retired-private-value")
+				t.Setenv(key, "private-value")
 				p, err := newPreparation(t.Context(), req, cfg)
-				if p != nil || err == nil || !strings.Contains(err.Error(), "retired executor transport") || strings.Contains(err.Error(), "retired-private-value") {
+				if p != nil || err == nil || !strings.Contains(err.Error(), "executor transport") || strings.Contains(err.Error(), "private-value") {
 					t.Fatal("transport override admitted or disclosed", err)
 				}
 				if len(preparationFrames(t, root)) != 0 {
-					t.Fatal("retired transport started native process")
+					t.Fatal("transport override started native process")
 				}
 				if _, err := os.Stat(filepath.Join(root, "daemon", "agent-sessions")); !os.IsNotExist(err) {
-					t.Fatal("retired transport created state", err)
+					t.Fatal("transport override created state", err)
 				}
 			})
 		}

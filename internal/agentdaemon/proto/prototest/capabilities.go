@@ -18,7 +18,6 @@ func Capabilities(overrides proto.AgentKindCapabilities) proto.AgentKindCapabili
 		Resume:                   proto.CapabilityUnsupported,
 		NativeSessionRecovery:    proto.CapabilityUnsupported,
 		RetainedNativeHistory:    proto.CapabilityUnsupported,
-		Steering:                 proto.CapabilityUnsupported,
 		MessageItems:             proto.CapabilityUnsupported,
 		ToolObservations:         proto.CapabilityUnsupported,
 		EnvironmentNone:          proto.CapabilityUnsupported,

@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { MessageObserver } from "../dist/messages.js";
-import { parseStart } from "../dist/adapter.js";
 
 const stream = (event, parent = null) => ({
   type: "stream_event", uuid: randomUUID(), session_id: "session", parent_tool_use_id: parent, event,
@@ -90,11 +89,4 @@ test("unmatched text cannot acquire an invented identity", () => {
   observer.consume(start("native"));
   observer.consume(block(0));
   assert.throws(() => observer.consume(snapshot("other", "wrong")), /unmatched/);
-});
-
-test("observation opt-in is an optional boolean", () => {
-  const request = { type: "start", input: [{ content: [{ type: "input_text", text: "hello" }] }], model: "model", system_prompt: "", cwd: "/tmp" };
-  assert.equal(parseStart(JSON.stringify(request)).observe_messages, undefined);
-  assert.equal(parseStart(JSON.stringify({ ...request, observe_messages: true })).observe_messages, true);
-  assert.throws(() => parseStart(JSON.stringify({ ...request, observe_messages: "true" })), /invalid_request/);
 });

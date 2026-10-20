@@ -56,7 +56,6 @@ func newPreparation(parent context.Context, req proto.PromptRequestPayload, cfg 
 	s := &Session{
 		nativeHome:                nativeHomeFromPlan(plan),
 		functions:                 functions,
-		observeMessages:           req.ObserveMessages,
 		observeSubagentIdentities: req.ObserveSubagentIdentities && !req.DisableSubagents,
 		cfg:                       cfg,
 		rpc:                       rpc,

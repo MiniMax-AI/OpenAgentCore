@@ -67,7 +67,7 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 		t.Fatal("new Session did not capture new source", err)
 	}
 	// Reusing a snapshot under another identity or selection cannot start native work.
-	reconnect.stateKey = "agents-api-" + uuid.NewString()
+	reconnect.stateKey = uuid.NewString()
 	changed := configured
 	changed.AgentStateKey = reconnect.stateKey
 	if _, err = reconnect.Prepare(t.Context(), changed); err == nil {

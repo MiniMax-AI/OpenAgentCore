@@ -42,9 +42,6 @@ func TestTextFactoryCompletionAndFailures(t *testing.T) {
 				case proto.TypeDelta:
 					var payload proto.DeltaPayload
 					_ = json.Unmarshal(event.Payload, &payload)
-					if payload.ItemID != "" {
-						t.Fatal("ordinary deltas acquired message identity")
-					}
 					deltas += payload.Delta
 				case proto.TypeOutputMessage:
 					t.Fatal("ordinary requests acquired message observations")
@@ -167,7 +164,7 @@ func runSDKHelper() {
 		encode(bridgeEvent{Type: "error", Code: "execution_failed"})
 		return
 	}
-	encode(bridgeEvent{Type: "delta", Delta: "partial"})
+	encode(bridgeEvent{Type: "delta", ItemID: "item", Delta: "partial"})
 	id := request.Resume
 	if mode == "wrong-resume" {
 		id = "different-session"
@@ -177,7 +174,7 @@ func runSDKHelper() {
 		os.Exit(7)
 	}
 	if mode == "after-result" {
-		encode(bridgeEvent{Type: "delta", Delta: "too late"})
+		encode(bridgeEvent{Type: "delta", ItemID: "item", Delta: "too late"})
 		return
 	}
 	time.Sleep(50 * time.Millisecond)

@@ -15,7 +15,7 @@ func ConfigureLocal(config Config, stateRoot, root, workspace string) (Config, e
 	}
 	config.StateDir = filepath.Join(stateRoot, "runtime", "claude-sdk", "history")
 	config.Workspace = &WorkspaceConfig{
-		Directory: workspace, PublicDirectory: workspace,
+		Directory:  workspace,
 		HomeDir:    filepath.Join(root, "runtime", "claude-sdk", "home"),
 		ScratchDir: filepath.Join(root, "runtime", "claude-sdk", "scratch"),
 	}

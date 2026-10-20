@@ -27,7 +27,6 @@ var Declaration = harnessconfig.Declaration{
 		Resume:                   proto.CapabilitySupported,
 		RetainedNativeHistory:    proto.CapabilitySupported,
 		NativeSessionRecovery:    proto.CapabilitySupported,
-		Steering:                 proto.CapabilitySupported,
 		MessageItems:             proto.CapabilitySupported,
 		ToolObservations:         proto.CapabilitySupported,
 		EnvironmentNone:          proto.CapabilitySupported,

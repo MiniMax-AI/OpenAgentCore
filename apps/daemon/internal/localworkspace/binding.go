@@ -83,5 +83,5 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 }
 
 func (b *Binding) Matches(environment, session string) bool {
-	return b != nil && b.environment == environment && b.stateKey == "agents-api-"+session
+	return b != nil && b.environment == environment && b.stateKey == session
 }
