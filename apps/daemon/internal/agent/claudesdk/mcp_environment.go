@@ -20,8 +20,7 @@ type environmentMCPServer struct {
 	Declared bool `json:"declared,omitempty"`
 }
 
-// cwd is the directory the native process starts in; native starts stdio servers there.
-func prepareRuntimeMCP(req proto.PromptRequestPayload, cwd string) ([]environmentMCPServer, []string, error) {
+func prepareRuntimeMCP(req proto.PromptRequestPayload) ([]environmentMCPServer, []string, error) {
 	bindings, err := agent.ResolveMCPBindings(req)
 	if err != nil {
 		return nil, nil, err
@@ -33,7 +32,9 @@ func prepareRuntimeMCP(req proto.PromptRequestPayload, cwd string) ([]environmen
 			return nil, nil, fmt.Errorf("claudesdk: unsupported MCP identity")
 		}
 		if process := binding.Process; process != nil {
-			if filepath.Clean(process.Cwd) != cwd {
+			// Native starts stdio servers in its workspace, which the declared
+			// directory names directly or through the hosted /workspace alias.
+			if req.LocalEnvironment == nil || filepath.Clean(process.Cwd) != req.LocalEnvironment.WorkspaceDirectory {
 				return nil, nil, fmt.Errorf("claudesdk: MCP stdio cwd must be the workspace directory")
 			}
 			args := append([]string{}, process.Args...)
