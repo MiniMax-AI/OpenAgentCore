@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 16d591f49202d2f08b26e296ceccbaed72dfe6f706658cef6a11238de1f78d7c
+source_hash: 0180ec977dbb3efee2d1af237420d133ca972426cf8d3b873b80ca45a4387e4c
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -56,7 +56,7 @@ node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-该目录会记录提交、Runtime 协议版本、每个归档的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<platform>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外为每个平台保留一份副本，由其 `install.py` 复制到安装目录中供 Core 提供下载。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
+该目录会记录提交、Runtime 协议版本、每个归档的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<platform>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外保留 Linux amd64 归档的一份副本，由其 `install.py` 复制到安装目录中供 Core 提供下载。其他平台由 Core 重定向到对应的发布资源；没有发布基址的目录没有这类 URL，因此其离线归档会保留所有归档。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
 
 ### Runtime 镜像和辅助程序 {#runtime-images-and-helpers}
 
