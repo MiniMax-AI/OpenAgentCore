@@ -284,7 +284,7 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 		return err
 	}
 	if !activity.Busy && !activity.WakeRequested {
-		return nil
+		return r.expireForDemand(ctx, owner)
 	}
 	if state.Snapshot == nil || state.Target != nil {
 		return sandbox.ErrOwnership
@@ -307,6 +307,25 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 	}
 	return r.restoreCompute(ctx, p, next, state, false)
 }
+
+// expireForDemand lets capacity pressure end an idle checkpoint's retention
+// early. Core decides eligibility and demand; a refusal changes nothing, and
+// the expired allocation is observed and cleaned up as at its deadline.
+func (r *runtimeLifecycle) expireForDemand(ctx context.Context, owner deployment.Allocation) error {
+	err := r.deployment.ExpireCheckpointForDemand(ctx, owner)
+	if errors.Is(err, deployment.ErrNotIdle) || errors.Is(err, deployment.ErrAllocationConflict) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	expired, err := r.reader.EnvironmentAllocation(ctx, owner.Key())
+	if err != nil {
+		return err
+	}
+	return r.observe(ctx, expired)
+}
+
 func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	if state.Snapshot == nil || state.Snapshot.Compatibility.Validate() != nil || state.Rollback || state.RestoreID == "" {

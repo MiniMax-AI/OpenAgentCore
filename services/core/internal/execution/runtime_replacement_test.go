@@ -54,7 +54,7 @@ func (p *retentionProvider) DeleteSnapshot(context.Context, sandbox.Reference, s
 	return nil
 }
 
-func TestCapacityPressurePreservesSuspendedSnapshot(t *testing.T) {
+func TestCapacityPressureReleasesIdleSuspendedSnapshot(t *testing.T) {
 	provider := &retentionProvider{}
 	fixture := newWorkspaceSettlementFixture(t, provider)
 	r, session := fixture.lifecycle, fixture.session
@@ -69,7 +69,7 @@ func TestCapacityPressurePreservesSuspendedSnapshot(t *testing.T) {
 		{`UPDATE runtime_nodes SET max_active=1,max_retained=1 WHERE id=$1`, owner.NodeID},
 		{`UPDATE environments SET initialization='complete',status='disconnected' WHERE id=$1`, owner.EnvironmentID},
 		{`UPDATE devices SET supported_agent_kinds='[{"kind":"codex","available":true,"capabilities":{"retained_native_history":true}}]' WHERE id=$1`, owner.DeviceID},
-		{`UPDATE runtime_allocations SET state='running',compute_phase='suspended',compute_state='{"current":{"id":"old-compute"},"snapshot":{"id":"old-snapshot"}}',compute_retained_until=clock_timestamp()+interval '24 hours' WHERE id=$1`, owner.ID},
+		{`UPDATE runtime_allocations SET state='running',compute_phase='suspended',compute_state='{"current":{"id":"old-compute"},"snapshot":{"Compatibility":{"artifact_domain":"fixture-store","execution_class":"fixture-runtime"},"id":"old-snapshot"}}',compute_retained_until=clock_timestamp()+interval '24 hours' WHERE id=$1`, owner.ID},
 	} {
 		if _, err := fixture.pool.Exec(t.Context(), statement.sql, statement.arg); err != nil {
 			t.Fatal(err)
@@ -87,25 +87,26 @@ func TestCapacityPressurePreservesSuspendedSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
-		if err := r.observeCompute(t.Context(), owner); err != nil {
-			t.Fatal(err)
-		}
-		current, err := r.reader.EnvironmentAllocation(t.Context(), owner.Key())
-		if err != nil || current.Expired || current.ComputePhase != "suspended" || current.ComputeRevision != owner.ComputeRevision || current.ComputeRetainedUntil == nil || !current.ComputeRetainedUntil.Equal(*owner.ComputeRetainedUntil) {
-			t.Fatal("pressure changed retained snapshot", current, err)
-		}
-		if _, err := r.deployment.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: waiting.Session.Environment.ID}, r.config.InstallationID); !errors.Is(err, placement.ErrNodeUnavailable) {
-			t.Fatal("released retained capacity without cleanup", err)
-		}
+	if _, err := r.deployment.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: waiting.Session.Environment.ID}, r.config.InstallationID); !errors.Is(err, placement.ErrNodeUnavailable) {
+		t.Fatal("placed despite full retained slots", err)
+	}
+	// The blocked demand releases the idle checkpoint as if its deadline passed.
+	if err := r.observeCompute(t.Context(), owner); err != nil {
+		t.Fatal(err)
+	}
+	current, err := r.reader.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil || current.State != "released" {
+		t.Fatal("pressure did not release the checkpoint", current, err)
+	}
+	if _, err := r.deployment.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: waiting.Session.Environment.ID}, r.config.InstallationID); err != nil {
+		t.Fatal("released slot was not usable", err)
 	}
 	pending, err := r.sessions.GetEnvironmentInputReservation(t.Context(), session.TenantID, waiting.Session.ID, input.ID)
 	if err != nil || pending.State != sessions.EnvironmentInputPending || !pending.Deadline.Equal(input.Deadline) {
 		t.Fatal("pressure changed input deadline", pending, err)
 	}
-
-	if provider.kills != 0 || provider.snapshots != 0 || provider.creates != 1 {
-		t.Fatal("pressure changed native resources", provider)
+	if provider.kills != 0 || provider.snapshots != 1 {
+		t.Fatal("pressure did not delete exactly the snapshot", provider)
 	}
 }
 

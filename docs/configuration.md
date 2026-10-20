@@ -68,7 +68,7 @@ Which Harnesses are enabled, and the default one, are process settings (`OAC_HAR
 
 ### Node capacity
 
-Core approves a node's capacity when you generate its Add node command: **Sandboxes at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes** (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**. Reservations and cleanup that is not confirmed count against capacity; lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
+Core approves a node's capacity when you generate its Add node command: **Sandboxes at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes** (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
 
 `OAC_EXECUTION_CONCURRENCY` is unrelated: it limits concurrent execution work in Core.
 
