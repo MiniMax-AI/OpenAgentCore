@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { defaultSandboxResources, distributionRuntime, isRuntimeReleaseField, sandboxesThatFit, savedSpecification, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, distributionRuntime, isRuntimeReleaseField, sandboxesThatFit, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
 import { deploymentContract, type SandboxProvider, type SandboxSpecification } from "@oac/agents-client";
 
 const manifest = { platform: "linux/amd64", source_commit: "0".repeat(40), images: { runtime: `sha256:${"a".repeat(64)}` },
@@ -56,6 +56,17 @@ describe("deployment resources and Runtime", () => {
     expect(validSandboxResources("microsandbox", resources, { ...workspace, user_xattr: false })).toBe(false);
     expect(validSandboxResources("docker", { cpus: 2, memory_mib: 2048 }, workspace)).toBe(false);
     expect(validSandboxResources("microsandbox", { ...resources, environment_disk_mib: 8192 }, { ...workspace, capacity_quota: true })).toBe(true);
+  });
+  it("sizes a first initialization from the selected workspace storage", () => {
+    const sized = (capacity: number | null) => {
+      const workspace = selectedWorkspace("microsandbox", capacity === null ? null : { tenant_capacity_mib: capacity });
+      const resources = defaultSandboxResources("microsandbox", workspace)!;
+      return { workspace, resources, valid: validSandboxResources("microsandbox", resources, workspace) };
+    };
+    expect(sized(0)).toMatchObject({ workspace: { capacity_quota: false }, resources: { environment_disk_mib: 0 }, valid: true });
+    expect(sized(1024)).toMatchObject({ workspace: { capacity_quota: true }, resources: { environment_disk_mib: 8192 }, valid: true });
+    expect(sized(null).workspace).toBeUndefined();
+    expect(selectedWorkspace("docker", { tenant_capacity_mib: 0 })).toBeUndefined();
   });
   it("accepts only Core's Runtime image in the Runtime reference", async () => {
     const digest = "b".repeat(64);
