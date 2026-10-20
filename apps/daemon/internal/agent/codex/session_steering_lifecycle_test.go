@@ -25,9 +25,9 @@ func TestSteeringReceiptTimeoutAndCompletionKeepProcessAlive(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
-			done := make(chan error, 1)
+			done, written := make(chan error, 1), make(chan struct{})
 			go func() {
-				done <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("extra")}, func() {})
+				done <- s.SteerWithReceipt(ctx, proto.PromptSteerPayload{InputID: "input", Input: proto.TextInput("extra")}, func() { close(written) })
 			}()
 			var request JsonRpcRequest
 			if err := json.NewDecoder(server.FromClient).Decode(&request); err != nil {
@@ -36,19 +36,10 @@ func TestSteeringReceiptTimeoutAndCompletionKeepProcessAlive(t *testing.T) {
 			// Withhold the response after reading the entire request frame.
 			if complete {
 				// Reading the pipe does not mean its writer has returned yet.
-				for {
-					client.pendingMu.Lock()
-					pending := client.pending[request.ID]
-					waiting := pending != nil
-					client.pendingMu.Unlock()
-					if waiting {
-						break
-					}
-					select {
-					case <-ctx.Done():
-						t.Fatal("steering request did not reach response wait")
-					case <-time.After(time.Millisecond):
-					}
+				select {
+				case <-written:
+				case <-ctx.Done():
+					t.Fatal("steering request did not reach response wait")
 				}
 				s.onTurnCompleted(json.RawMessage(`{"threadId":"thread","turn":{"id":"turn","status":"completed"}}`))
 			}
