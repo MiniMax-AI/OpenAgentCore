@@ -265,14 +265,16 @@ def native_catalog(bundle, stage, revision, source, artifact_base_url=""):
 
 
 def native_offline(bundle, stage):
+    """Carry the offline host's own platform; Core redirects the others to their release URL."""
     bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
     path = bundle / "native-installers/catalog.json"
     if not path.exists():
         return
     catalog = json.loads(path.read_text())
-    for platform in catalog["artifacts"]:
-        source = stage / "native-artifacts" / f"oac-native-{catalog['version']}-{platform}.tar.gz"
-        os.link(source, path.parent / (platform + ".tar.gz"))
+    for platform, entry in catalog["artifacts"].items():
+        if platform == "linux-amd64" or "url" not in entry:
+            source = stage / "native-artifacts" / f"oac-native-{catalog['version']}-{platform}.tar.gz"
+            os.link(source, path.parent / (platform + ".tar.gz"))
 
 
 @contextmanager

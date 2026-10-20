@@ -32,7 +32,7 @@ With one Harness, the peak is the archive (316 MiB), the unpacked installer (907
 
 The machine needs:
 
-- HTTP or HTTPS access to Core, and to the release download host unless Core carries an offline copy of the installers;
+- HTTP or HTTPS access to Core, and to the release download host unless Core carries an offline copy of this platform's installer (an offline installation carries only Linux amd64);
 - Bash for environment setup and MiniMax Code tools; on Windows, Git Bash, which Claude Code also requires;
 - Python and pip when the Session's packages need them;
 - any system packages your setup needs. The daemon never runs apt, sudo or another elevation command, so install them through the host's normal administration.
