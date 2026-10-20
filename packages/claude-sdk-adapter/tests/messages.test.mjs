@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { MessageObserver } from "../dist/messages.js";
-import { parseStart } from "../dist/adapter.js";
 
 const stream = (event, parent = null) => ({
   type: "stream_event", uuid: randomUUID(), session_id: "session", parent_tool_use_id: parent, event,

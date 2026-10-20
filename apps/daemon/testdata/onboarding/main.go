@@ -126,9 +126,6 @@ func (s *session) Cancel(context.Context) error {
 func (s *session) CancellationOutcome() proto.DonePayload {
 	return proto.DonePayload{Content: "cancelled", Metadata: map[string]any{proto.DoneMetaAgentSessionID: s.native}}
 }
-func (s *session) Steer(ctx context.Context, p proto.PromptSteerPayload) error {
-	return s.SteerWithReceipt(ctx, p, func() {})
-}
 func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload, written func()) error {
 	text, err := p.Input.TextOnly()
 	if err != nil {

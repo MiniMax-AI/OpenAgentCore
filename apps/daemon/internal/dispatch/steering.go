@@ -95,7 +95,6 @@ func (r *Router) queueSteering(ctx context.Context, env proto.Envelope, input pr
 		ack.ErrorCode, ack.Error = "unsupported", "The runtime declaration does not support this input operation."
 		return &ack
 	}
-	session := state.session
 	if state.steerBusy {
 		ack.ErrorCode, ack.Error = "busy", "Another input is awaiting an engine receipt; retry this input later."
 		state.steering[input.InputID] = steeringReceipt{fingerprint: fingerprint, ack: ack}

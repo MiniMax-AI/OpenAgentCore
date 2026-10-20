@@ -81,7 +81,7 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 	info, found, known := peer.AgentKindStatus(engine)
 	caps := info.Capabilities
 	if !known || !found || !info.Available || !caps.Streaming || !caps.DurableTurns || !caps.DurableInputReceipts {
-		return fail("device must advertise streaming, steering and durable turns for this engine")
+		return fail("device must advertise streaming, durable input receipts and durable turns for this engine")
 	}
 	if !caps.Preparation {
 		return fail("device must advertise executor preparation")

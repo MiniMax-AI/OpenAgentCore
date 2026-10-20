@@ -419,8 +419,8 @@ func TestExecutionOutcomeAndNativeBindingCommitTogether(t *testing.T) {
 
 func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 	for _, tc := range []struct{ missing, message string }{
-		{"durable_turns", "device must advertise streaming, steering and durable turns for this engine"},
-		{"durable_input_receipts", "device must advertise streaming, steering and durable turns for this engine"},
+		{"durable_turns", "device must advertise streaming, durable input receipts and durable turns for this engine"},
+		{"durable_input_receipts", "device must advertise streaming, durable input receipts and durable turns for this engine"},
 		{"preparation", "device must advertise executor preparation"},
 		{"execution_controls", "device must advertise execution_controls"},
 		{"tool_observations", "device must advertise tool_observations"},

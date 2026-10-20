@@ -390,14 +390,14 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 		t.Fatalf("fake_beta descriptor not converted: %#v", fake_beta)
 	}
 	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || fake_beta.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || fake_beta.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || fake_beta.Capabilities.SubagentControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || fake_beta.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems {
-		t.Fatalf("steering capability not preserved: %#v", byKind)
+		t.Fatalf("capabilities not preserved: %#v", byKind)
 	}
 	if !byKind["codex"].Capabilities.MCPHTTPTools || claude.Capabilities.MCPHTTPTools || fake_beta.Capabilities.MCPHTTPTools {
 		t.Fatalf("HTTP MCP capability not preserved: %#v", byKind)
 	}
 	codex, found, known := sess.AgentKindStatus("codex")
 	if !found || !known || !codex.Capabilities.MCPHTTPTools {
-		t.Fatalf("steering capability absent from live session: %#v", codex)
+		t.Fatalf("capabilities absent from live session: %#v", codex)
 	}
 }
 
