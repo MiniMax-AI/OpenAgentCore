@@ -24,7 +24,7 @@ function Get-NativeFile([string]$Uri, [string]$Destination) {
     }
   }
 }
-# The installer downloads the Harness archives into the download directory and extracts them beside the executable.
+# The unpacked installer lives here; the installer also keeps unfinished component downloads in this directory.
 $cache = Join-Path ([IO.Path]::GetFullPath($root)) 'native-download'
 $work = Join-Path $cache ('bundle.' + [Guid]::NewGuid().ToString('N').Substring(0, 8))
 try {

@@ -23,19 +23,19 @@ func nativeExe(name string) string {
 	}
 	return name
 }
-func nativeNode(root string) string {
-	base := nativeComponentRoot(root, "node")
+func nativeNode(components string) string {
+	base := filepath.Join(components, "node")
 	if runtime.GOOS != "windows" {
 		base = filepath.Join(base, "bin")
 	}
 	return filepath.Join(base, nativeExe("node"))
 }
 
-func nativeHarnessEnvironment(root string, selected []string) map[string]string {
-	node := nativeNode(root)
+func nativeHarnessEnvironment(components string, selected []string) map[string]string {
+	node := nativeNode(components)
 	values := map[string]string{"PATH": filepath.Dir(node) + string(os.PathListSeparator) + os.Getenv("PATH")}
 	for _, name := range selected {
-		dir := nativeComponentRoot(root, name)
+		dir := filepath.Join(components, name)
 		values["PATH"] = filepath.Join(dir, "bin") + string(os.PathListSeparator) + values["PATH"]
 		for key, value := range nativeHarnesses[name].Environment(dir, node) {
 			values[key] = value
@@ -73,10 +73,10 @@ var nativeHarnesses = map[string]agent.Installation{
 }
 var probeNativeInstallation = checkNativeInstallation
 
-func checkNativeInstallation(ctx context.Context, root string, selected []string) error {
-	env := withNativeEnv(nativeHarnessEnvironment(root, selected))
-	node := nativeNode(root)
-	version, err := installroot.Probe(ctx, node, []string{"--version"}, env, root)
+func checkNativeInstallation(ctx context.Context, components string, selected []string) error {
+	env := withNativeEnv(nativeHarnessEnvironment(components, selected))
+	node := nativeNode(components)
+	version, err := installroot.Probe(ctx, node, []string{"--version"}, env, components)
 	if err != nil || version != "v"+nativePins["node"] {
 		return errors.New("install: bundled Node is unavailable or incompatible; use the matching native distribution")
 	}
@@ -85,7 +85,7 @@ func checkNativeInstallation(ctx context.Context, root string, selected []string
 		if !ok || !spec.Supported() {
 			return fmt.Errorf("install: %s is unsupported on this platform", name)
 		}
-		if err = spec.Check(ctx, nativeComponentRoot(root, name), node, env); err != nil {
+		if err = spec.Check(ctx, filepath.Join(components, name), node, env); err != nil {
 			return fmt.Errorf("install: %s; no installed files were replaced", err)
 		}
 	}

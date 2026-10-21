@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { spawn, execFileSync } from 'node:child_process';
 import { createReadStream, existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 const root = process.env.RUNNER_TEMP;
@@ -21,6 +21,7 @@ const installation = join(root, 'onboarding-installation');
 const archives = join(root, 'native-archives');
 const platform = `${manifest.os}-${manifest.arch}`;
 const checksums = new Map(), downloaded = new Set();
+let componentRequests = 0;
 async function checksum(name) {
   if (!checksums.has(name)) {
     const digest = createHash('sha256');
@@ -38,7 +39,7 @@ const server = createServer(async (request, response) => {
   if (artifact) {
     if (!existsSync(join(archives, `${artifact[1]}.tar.gz`))) return json(404, {});
     if (artifact[2] === 'sha256') { response.setHeader('Content-Type', 'text/plain; charset=utf-8'); return response.end(await checksum(artifact[1])+'\n'); }
-    downloaded.add(artifact[1]);
+    downloaded.add(artifact[1]); if (artifact[1] !== platform) componentRequests++;
     return createReadStream(join(archives, `${artifact[1]}.tar.gz`)).pipe(response);
   }
   if (url.pathname.endsWith('bootstrap.sh') || url.pathname.endsWith('bootstrap.ps1')) return createReadStream(resolve('services/core/internal/nativeinstaller/assets', url.pathname.split('/').at(-1))).pipe(response);
@@ -92,6 +93,9 @@ try {
   assert.notEqual((await run(executable, [...args, '--non-interactive', '--harness', 'codex'])).code, 0, 'Lost claim response should fail safely');
   const saved = JSON.parse(await readFile(join(installation, 'daemon', 'executor-credential.json'), 'utf8'));
   assert.equal(saved.executor_token, secret, 'Secret must survive a lost response');
+  // A failed first installation leaves no user entry, so it pins nothing; its components stay for the next run.
+  const store = join(root, 'unused-onboarding-home', 'components', manifest.daemon_version);
+  assert.deepEqual(existsSync(join(store, 'users')) ? await readdir(join(store, 'users')) : [], [], 'A failed installation is still registered as a user');
   const script = resolve(`services/core/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
   const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base] : [script, base];
   // Select every Harness of this platform so each Harness archive passes the installer's extraction and readiness checks.
@@ -99,15 +103,24 @@ try {
   const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], harnesses.join(',') + '\n\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);
   assert.match(result.output, /Daemon connection: connected/);
-  assert.deepEqual([...downloaded].sort(), [platform, ...['node', ...harnesses].map(name => `${platform}-${name}`)].sort(), 'Only the base, Node and the selected Harnesses may be downloaded');
+  // The failed runs installed Node and Codex from the bundle; the bootstrap reuses them.
+  assert.deepEqual([...downloaded].sort(), [platform, ...harnesses.filter(name => name !== 'codex').map(name => `${platform}-${name}`)].sort(), 'Only the base and the missing Harnesses may be downloaded');
   assert.match(result.output, /Model configuration: not checked/);
+  // Components live once per machine and version, outside the installation.
+  assert.ok(existsSync(join(store, 'codex', '.oac-install.json')), 'Shared Codex component is missing');
+  assert.ok(!existsSync(join(installation, 'components')), 'The installation holds its own component copy');
+  assert.ok(!existsSync(join(root, 'unused-onboarding-home', 'native-download', manifest.daemon_version, `${platform}-codex.tar.gz.part`)), 'An archive remains after installation');
   assert.equal(connections, 1);
+  const downloads = componentRequests;
   const repeat = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation, '--non-interactive', '--harness', 'codex']);
   assert.equal(repeat.code, 0, `Repeat failed: ${repeat.output}`);
   assert.equal(connections, 1, 'Repeated installation created a duplicate daemon');
+  assert.equal(componentRequests, downloads, 'A repeated installation downloaded a component');
   const uninstall = await run(join(installation, 'bin', windows ? 'oac-daemon.exe' : 'oac-daemon'), ['uninstall'], 'y\n');
   assert.equal(uninstall.code, 0, `Uninstall failed: ${uninstall.output}`);
   assert.match(uninstall.output, /Revoke/);
+  assert.match(uninstall.output, /Shared components removed/);
+  assert.ok(!existsSync(store), 'Uninstall left the shared components');
   // Windows finishes deleting its own executable after the command exits.
   for (let wait = 0; existsSync(installation) && wait < 100; wait++) await new Promise(resolve => setTimeout(resolve, 100));
   assert.ok(!existsSync(installation), 'Uninstall left the installation');

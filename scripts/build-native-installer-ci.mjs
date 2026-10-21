@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readdir, realpath, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { access, mkdir, readdir, realpath, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { archiveBundle, buildBundle } from './build-native-installer.mjs';
 
@@ -54,6 +55,13 @@ const allHarnesses = windows ? 'codex,claude' : 'codex,claude,minimax';
 install(['--harness', allHarnesses], true);
 install(['--harness', allHarnesses], true);
 if (windows) install(['--harness', 'minimax'], false);
+// Components are installed once per machine and version, read-only, and the installation only references them.
+const store = join(env.OAC_RUNTIME_HOME, 'components', receipt.daemon_version);
+for (const name of ['node', ...allHarnesses.split(',')]) {
+  assert.ok(existsSync(join(store, name, '.oac-install.json')), `Shared ${name} component is missing`);
+  assert.equal((await stat(join(store, name, '.oac-install.json'))).mode & 0o200, 0, `Shared ${name} component is writable`);
+}
+assert.ok(!existsSync(join(installDir, 'components')), 'The installation holds its own component copy');
 const installedCommand = join(installDir, 'bin', windows ? 'oac-daemon.exe' : 'oac-daemon');
 const installedEnv = { ...process.env }; delete installedEnv.OAC_RUNTIME_HOME;
 const installedVersion = spawnSync(installedCommand, ['version'], { env: installedEnv, encoding: 'utf8', timeout: 10000 });
@@ -62,4 +70,23 @@ assert.equal(installedVersion.stdout.trim(), receipt.daemon_version, 'Installed 
 const incomplete = spawnSync(command, ['install', '--non-interactive'], { env, input: '', encoding: 'utf8', timeout: 10000 });
 assert.equal(Boolean(incomplete.error), false, 'Missing arguments waited for interaction');
 assert.notEqual(incomplete.status, 0, 'Missing required arguments succeeded');
+// A second Session on the machine shares the same components; uninstalling both removes them.
+const secondEnvironment = randomUUID();
+const secondCredential = join(root, 'native-install-second-credential.json');
+await writeFile(secondCredential, JSON.stringify({ key_id: randomUUID(), executor_token: 'fixture-only-not-a-real-credential', environment_id: secondEnvironment }), { mode: 0o600 });
+const secondWorkspace = join(root, 'native-install-second-workspace'); await mkdir(secondWorkspace);
+const secondDir = join(root, 'native-install-second');
+const second = spawnSync(command, ['install', '--non-interactive', '--bundle-dir', bundle, '--harness', allHarnesses, '--install-dir', secondDir, '--remote', 'ws://localhost:1/api/v1/agent-daemon/ws',
+  '--environment-id', secondEnvironment, '--workspace', secondWorkspace, '--credential-file', secondCredential], { env, encoding: 'utf8', timeout: 120000, maxBuffer: 1024 * 1024 });
+assert.equal(second.status, 0, 'Second installation failed');
+assert.ok(!existsSync(join(secondDir, 'components')), 'The second installation holds its own component copy');
+function uninstall(directory) {
+  const result = spawnSync(join(directory, 'bin', windows ? 'oac-daemon.exe' : 'oac-daemon'), ['uninstall'], { env: installedEnv, input: 'y\n', encoding: 'utf8', timeout: 120000 });
+  assert.equal(result.status, 0, 'Uninstall failed');
+  return result.stdout;
+}
+assert.match(uninstall(installDir), /Shared components kept: 1 other/);
+assert.ok(existsSync(join(store, 'node', '.oac-install.json')), 'Uninstalling one installation removed components another uses');
+assert.match(uninstall(secondDir), /Shared components removed/);
+assert.ok(!existsSync(store), 'The last uninstall left the shared components');
 console.log(JSON.stringify({ stage: 'install', harnesses: allHarnesses.split(','), install: 'passed', additive: 'passed', reuse: 'passed', missing_arguments: 'rejected', connection: 'not_attempted', model: 'not_configured', model_requests: 0 }));

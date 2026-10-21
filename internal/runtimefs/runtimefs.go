@@ -13,6 +13,9 @@ import (
 
 var ErrUnsafe = errors.New("Runtime state path unavailable or invalid")
 
+// ErrLocked reports that another process holds the directory lock.
+var ErrLocked = errors.New("directory is locked by another process")
+
 func validName(name string) bool {
 	return name != "" && name != "." && name != ".." && !strings.ContainsAny(name, "/\\\x00")
 }
