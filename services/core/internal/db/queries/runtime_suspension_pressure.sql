@@ -5,6 +5,14 @@ WHERE a.node_id IS NOT NULL AND a.state <> 'released'
   AND (a.compute_phase IN ('quiescing', 'suspending')
        OR (a.compute_retained_until <= clock_timestamp() AND a.compute_phase <> 'disabled'));
 
+-- name: ListRuntimeStartingNodes :many
+-- A node is starting a Session while that Session's sandbox is not created or
+-- its initialization has not finished.
+SELECT DISTINCT p.node_id
+FROM runtime_placements p JOIN environments e ON e.id=p.environment_id
+LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state <> 'released'
+WHERE p.released_at IS NULL AND (a.id IS NULL OR e.initialization IN ('pending', 'running'));
+
 -- name: ListWaitingCheckpointRestores :many
 SELECT DISTINCT a.node_id, a.deployment_generation, (a.compute_state->'snapshot'->'Compatibility')::jsonb AS checkpoint
 FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id JOIN sessions s ON s.id=e.session_id

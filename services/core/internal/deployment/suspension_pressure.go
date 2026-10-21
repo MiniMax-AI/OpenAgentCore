@@ -20,6 +20,7 @@ type SuspensionDemand struct {
 	Deployment         placement.Deployment
 	Nodes              []placement.Node
 	InFlightNodes      []string
+	StartingNodes      []string
 	CheckpointRestores []CheckpointRestoreDemand
 }
 
@@ -48,11 +49,11 @@ func fullNode(pressure SuspensionDemand, owner Allocation) *placement.Node {
 // canKeepFreeSlot allows suspending an allocation that stayed idle for
 // freeSlotIdle on a full node with no reclamation in flight. The node must
 // also have a free retained slot, or the freed active slot admits no Session,
-// and no placed Session waiting for its sandbox, which the node's lane would
-// otherwise create only after this suspension.
+// and no Session still starting on it: the node runs one operation at a time,
+// so that Session's create and preparation would wait for this suspension.
 func canKeepFreeSlot(pressure SuspensionDemand, owner Allocation) bool {
 	n := fullNode(pressure, owner)
-	return n != nil && n.Retained < int64(n.MaxRetained) && n.Reserved == 0 && !slices.Contains(pressure.InFlightNodes, owner.NodeID)
+	return n != nil && n.Retained < int64(n.MaxRetained) && !slices.Contains(pressure.InFlightNodes, owner.NodeID) && !slices.Contains(pressure.StartingNodes, owner.NodeID)
 }
 
 // canSuspendForDemand reports whether compatible waiting demand would place on
