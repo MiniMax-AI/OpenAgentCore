@@ -12,7 +12,7 @@ Core places each new Session on a node with free capacity; the node creates the 
 - **Core has a public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Set a public address other machines can reach before adding nodes*; see [Configure the public address](./public-address.md).
 - **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. Node hosts therefore need access to the release. Without the files, Add node says *This console has no node files for …*.
 - **The host meets the requirements below.**
-- **For independent workspace storage,** the NFS mount and service account are ready on this host; see [Set up workspace storage](./workspace-storage.md). The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
+- **For microsandbox,** the NFS mount for workspace storage is ready on this host; see [Set up workspace storage](./workspace-storage.md). The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
 - **For checkpoint recovery across microsandbox nodes,** see [Checkpoint recovery across nodes](#checkpoint-recovery-across-nodes).
 
 The Core host joins like any other host: to run sandboxes on it, add it as a node.
@@ -62,7 +62,7 @@ The node service keeps the proxy settings of the latest run, so it reaches Core 
 
 | Item | Detail |
 | --- | --- |
-| Service user | System user `oac-node`, home `/var/lib/oac-node`, no login shell. An existing account with that home and a nologin shell is adopted; any other account named `oac-node` is refused |
+| Service user | System user `oac-node` with UID 65532, the UID of Core's service, home `/var/lib/oac-node` and no login shell. An existing account with that UID, that home and a nologin shell is adopted; any other account named `oac-node` is refused. If another account holds UID 65532, the installer stops and changes nothing |
 | Group | The group that owns `/var/run/docker.sock` (Docker) or `/dev/kvm` (microsandbox): `docker` or `kvm`, nothing else |
 | Service | `/etc/systemd/system/oac-node-<installation-id>.service`, a root-owned system unit with `User=oac-node`, enabled at boot. It restarts every 5 seconds while Core is unreachable and stops for good once Core no longer accepts the node |
 | Node state | `/var/lib/oac-node/.oac/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/oac-node/.oac/m/` |

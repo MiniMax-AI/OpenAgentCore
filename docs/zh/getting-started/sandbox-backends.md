@@ -1,7 +1,7 @@
 ---
 title: "选择沙箱提供商"
 source: docs/getting-started/sandbox-backends.md
-source_hash: 5b374c1a7387110371ca16d4817ee52da4e23794e15edd9530599bb934e02afd
+source_hash: 8dd1818c9061d0e29aee5949c189772aba6ffe72a9d984c0ed8d226571754d51
 ---
 
 比较 microsandbox、Docker 和 E2B，然后在 Web 中选择一个。本指南面向已完成[安装 Core 和 Web](./install.md)、需要为 Core 托管的 Session 提供计算资源的运维人员。
@@ -17,8 +17,8 @@ source_hash: 5b374c1a7387110371ca16d4817ee52da4e23794e15edd9530599bb934e02afd
 | 你需要提供 | 带 systemd 和 `/dev/kvm` 的 Linux amd64 主机 | 带 systemd 和 rootful Docker Engine 的 Linux amd64 主机 | E2B API 密钥和模板；Core 的公共 HTTPS URL |
 | 隔离 | 每个沙箱有独立内核 | 容器共享节点内核 | 由 E2B 提供 |
 | 空闲沙箱可挂起和恢复 | 是，通过检查点 | 否 | 否 |
-| 独立工作区存储 | 可选，使用 NFS | 否 | 否 |
-| 磁盘限制 | 根磁盘和数据磁盘 | 无 | 由模板设置 |
+| 工作区存储 | 必需，使用 NFS | 自有磁盘 | 自有磁盘 |
+| 磁盘限制 | 根磁盘和工作区配额 | 无 | 由模板设置 |
 
 字段级差异见[部署契约](../../../contracts/agents-api/zh/sandbox-deployment.md#what-each-field-means-per-sandbox-provider)。节点的主机要求见[添加和管理节点](./nodes.md#host-requirements)。
 
@@ -32,7 +32,7 @@ Docker 节点在其主机上[等同于 root](./nodes.md#what-the-installer-sets-
 2. 选择提供商和沙箱规格。Web 会把[提供商声明的默认大小](../sandbox-provider.md#register-the-provider-kind)推荐为 **标准**。
 3. 选择 **保存配置**。该选择保存在 Core 的数据库中。
 
-选择 **自有机器** 后，继续阅读[添加和管理节点](./nodes.md)。要让工作区不保存在节点上，请先[设置工作区存储](./workspace-storage.md)。microsandbox 节点间的检查点恢复，参阅[跨节点恢复检查点](./nodes.md#checkpoint-recovery-across-nodes)。
+选择 **自有机器** 后，继续阅读[添加和管理节点](./nodes.md)。使用 microsandbox 时，请先[设置工作区存储](./workspace-storage.md)。microsandbox 节点间的检查点恢复，参阅[跨节点恢复检查点](./nodes.md#checkpoint-recovery-across-nodes)。
 
 ## 使用 E2B {#use-e2b}
 

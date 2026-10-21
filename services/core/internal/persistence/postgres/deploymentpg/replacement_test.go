@@ -7,9 +7,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 )
 
@@ -48,7 +46,7 @@ func releaseRetainedFixture(t *testing.T, f fixture, changes *deployment.Executi
 func TestReplacementKeepsSessionIdentityAndFencesPriorOwner(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	firstNode := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	f.connect(t, firstNode.NodeID)
 	secondNode := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
@@ -144,7 +142,7 @@ func TestReplacementKeepsSessionIdentityAndFencesPriorOwner(t *testing.T) {
 func TestReplacementRefusesUnsettledOwnershipAndUnknownHistory(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	f.connect(t, node.NodeID)
 	key := hostedEnvironment(t, f.pool)
@@ -185,7 +183,7 @@ func TestReplacementRefusesUnsettledOwnershipAndUnknownHistory(t *testing.T) {
 func TestTenRetainedWorkspacesShareThreeComputeSlots(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 3, MaxRetained: 3})
 	f.connect(t, node.NodeID)
 	keys := make([]deployment.AllocationKey, 10)
@@ -255,7 +253,7 @@ func TestTenRetainedWorkspacesShareThreeComputeSlots(t *testing.T) {
 func TestResetArchivesRetainedSessionBeforeClearingDeployment(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	f.connect(t, node.NodeID)
 	retained := make([]deployment.Allocation, 37)
@@ -345,7 +343,7 @@ func TestResetArchivesRetainedSessionBeforeClearingDeployment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, err := changes.Initialize(admin(t), installation, sandbox.Selection{Provider: "microsandbox", ExpectedGeneration: committed, DeploymentSpec: retainedSpecification()})
+	next, err := changes.Initialize(admin(t), installation, sandbox.Selection{Provider: "microsandbox", ExpectedGeneration: committed, DeploymentSpec: testSpecification("microsandbox")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -357,55 +355,5 @@ func TestResetArchivesRetainedSessionBeforeClearingDeployment(t *testing.T) {
 	var status, fsState string
 	if err := f.pool.QueryRow(t.Context(), `SELECT e.status,w.state FROM environments e JOIN environment_workspaces w ON w.environment_id=e.id WHERE e.id=$1`, target.EnvironmentID).Scan(&status, &fsState); err != nil || status != "expired" || fsState != "ready" {
 		t.Fatal("archive lost files or kept Session executable", status, fsState, err)
-	}
-}
-
-func retainedSpecification() sandbox.DeploymentSpec {
-	spec := testSpecification("microsandbox")
-	spec.Resources.RootDiskMiB = 8192
-	spec.Resources.EnvironmentDiskMiB = 0
-	spec.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
-	return spec
-}
-
-func TestReplacementWaitsForCompatibleReadyGenerationWithoutReservingOwnedNode(t *testing.T) {
-	f := newFixture(t)
-	changes, _ := f.execution(t)
-	installation, owned := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
-	oldNode := f.enroll(t, owned, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
-	f.connect(t, oldNode.NodeID)
-	external, err := changes.Update(admin(t), installation, sandbox.Selection{Provider: "microsandbox", ExpectedGeneration: owned.Generation, DeploymentSpec: retainedSpecification()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	newNode := f.enroll(t, external, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
-	f.connect(t, newNode.NodeID)
-	key := hostedEnvironment(t, f.pool)
-	if _, err = f.pool.Exec(t.Context(), `INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,$3)`, key.EnvironmentID, newNode.NodeID, external.Generation); err != nil {
-		t.Fatal(err)
-	}
-	owner, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
-	if err != nil {
-		t.Fatal(err)
-	}
-	releaseRetainedFixture(t, f, changes, owner)
-	if _, err = f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1`, newNode.NodeID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = changes.EnsurePlacement(t.Context(), key, installation); !errors.Is(err, placement.ErrNodeUnavailable) {
-		t.Fatal("owned generation admitted retained FS", err)
-	}
-	var released bool
-	if err = f.pool.QueryRow(t.Context(), `SELECT released_at IS NOT NULL FROM runtime_placements WHERE environment_id=$1`, key.EnvironmentID).Scan(&released); err != nil || !released {
-		t.Fatal("incompatible placement consumed capacity", released, err)
-	}
-	f.connect(t, newNode.NodeID)
-	reserved, err := changes.EnsurePlacement(t.Context(), key, installation)
-	if err != nil || reserved.NodeID != newNode.NodeID {
-		t.Fatal("compatible capacity did not recover demand", reserved, err)
-	}
-	fresh, err := changes.ReserveAllocation(t.Context(), key, installation, credentialHash())
-	if err != nil || fresh.ID == owner.ID || fresh.NodeID != newNode.NodeID {
-		t.Fatal(fresh, err)
 	}
 }

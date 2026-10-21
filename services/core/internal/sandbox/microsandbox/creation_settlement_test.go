@@ -11,7 +11,7 @@ import (
 func TestCreateConfigurationRejectionSettlement(t *testing.T) {
 	config, ref := testConfig(), testRef()
 	bootstrap := sandbox.Bootstrap{Reference: ref, SessionID: ref.TenantID, DeviceID: ref.EnvironmentID,
-		CoreURL: "https://core.example/api/v1", Credential: "fixture"}
+		CoreURL: "https://core.example/api/v1", Credential: "fixture", Workspace: workspaceBinding()}
 	for _, test := range []struct {
 		name    string
 		change  func(*Response)
@@ -50,6 +50,7 @@ func TestCreateConfigurationRejectionSettlement(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			resolveTo(provider)
 			info, err := provider.Create(deadline(t), bootstrap)
 			if err == nil || info.CreateSettled != test.settled || info.BootstrapComplete || calls != 1 {
 				t.Fatal("rejection changed readiness or settlement", info, err, calls)

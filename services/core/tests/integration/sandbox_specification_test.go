@@ -3,13 +3,14 @@ package integration
 import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 func SandboxDeploymentTestSpec(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
-		s.Resources.EnvironmentDiskMiB = 8192
+		s.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	}
 	return s
 }

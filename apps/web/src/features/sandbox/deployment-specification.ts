@@ -1,9 +1,9 @@
 import { deploymentContract, type SandboxDeployment, type SandboxE2BTemplateBuild, type SandboxProvider, type SandboxResources, type SandboxSpecification } from "@oac/agents-client";
 
 /** The size the Provider declares for setup to propose; null when its configuration selects the size. */
-export function defaultSandboxResources(provider: SandboxProvider, workspace?: SandboxSpecification["workspace"]): SandboxResources | null {
+export function defaultSandboxResources(provider: SandboxProvider): SandboxResources | null {
   const size: SandboxResources | null = deploymentContract.providers[provider].default_resources;
-  return size && { ...size, ...(workspace && !workspace.capacity_quota ? { environment_disk_mib: 0 } : {}) };
+  return size && { ...size };
 }
 
 /** The workspace requirement a Provider takes from the selected storage; none when it owns its workspaces or no storage is selected. */
@@ -12,15 +12,14 @@ export function selectedWorkspace(provider: SandboxProvider, storage: { tenant_c
   return storage && "workspace" in policy ? { ...policy.workspace, capacity_quota: storage.tenant_capacity_mib > 0 } : undefined;
 }
 
-/** Core keeps owned disk limits; external workspace capacity is optional and requires real quota support. */
+/** A Provider that declares a workspace policy runs every Environment on the selected storage; its environment disk is only a quota request. */
 export function validSandboxResources(provider: SandboxProvider, resources: SandboxResources, workspace?: SandboxSpecification["workspace"]): boolean {
   const policy = deploymentContract.providers[provider];
-  if (workspace) {
-    if (!("workspace" in policy) || workspace.attachment !== policy.workspace.attachment || (policy.workspace.user_xattr && !workspace.user_xattr) || ((resources.environment_disk_mib ?? 0) > 0 && !workspace.capacity_quota)) return false;
-  }
+  if ("workspace" in policy !== Boolean(workspace)) return false;
+  if (workspace && "workspace" in policy && (workspace.attachment !== policy.workspace.attachment || (policy.workspace.user_xattr && !workspace.user_xattr))) return false;
   return deploymentContract.resources.every((rule) => {
-    const [min, max] = workspace && rule.name === "environment_disk_mib" && (resources.environment_disk_mib ?? 0) === 0 ? [0, 0] : !rule.omit_zero ? [rule.min, rule.max] : deploymentContract.providers[provider].disk ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
     const value = resources[rule.name] ?? 0;
+    const [min, max] = !rule.omit_zero ? [rule.min, rule.max] : rule.name === "environment_disk_mib" && workspace?.capacity_quota ? [value === 0 ? 0 : deploymentContract.minimum_disk, rule.max] : rule.name === "root_disk_mib" && policy.disk ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
     return Number.isInteger(value) && value >= min && value <= max;
   });
 }

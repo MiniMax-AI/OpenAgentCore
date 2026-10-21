@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: d3d85be9a8784413ccb107ff8111a15647fd573f31bd66525a322202332e0fb7
+source_hash: 5519609be1b60dbd8c1b3aaac6aa8500f3907bebdba50a9e2ce6cb4ebf928b13
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -140,7 +140,7 @@ Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、
 
 ## 独立工作区存储 {#independent-workspace-storage}
 
-支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、`oac-node` 账户、Compose 挂载、选择负载和配额模式存储服务器。
+microsandbox 要求使用独立工作区存储，唯一支持的组合是与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、Compose 挂载、选择负载和配额模式存储服务器。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 

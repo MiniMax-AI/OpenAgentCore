@@ -51,6 +51,8 @@ KVM = Path("/dev/kvm")
 # this dedicated service user under a root-owned system unit; root never runs a
 # file the service user can write.
 SERVICE_USER = "oac-node"
+# Core's UID: workspace storage gives sandboxes files owned by it, so the node account must match.
+SERVICE_UID = 65532
 SERVICE_HOME = Path("/var/lib/oac-node")
 SYSTEM_RECORDS = Path("/etc/oac-node")
 SYSTEM_UNITS = Path("/etc/systemd/system")
@@ -1052,6 +1054,17 @@ def account_plan():
         raise InstallError("An account named " + SERVICE_USER + " exists but was not created or adopted by this installer "
                            "(home " + account.pw_dir + ", shell " + account.pw_shell + ", uid " + str(account.pw_uid)
                            + ", or groups beyond its own, docker and kvm). Rename or remove it, then rerun." + NOTHING_CHANGED)
+    if account is not None and account.pw_uid != SERVICE_UID:
+        raise InstallError("The " + SERVICE_USER + " account has UID " + str(account.pw_uid) + ", but it must use UID "
+                           + str(SERVICE_UID) + " to match Core. Renumber or remove it, then rerun." + NOTHING_CHANGED)
+    if account is None:
+        try:
+            holder = pwd.getpwuid(SERVICE_UID).pw_name
+        except KeyError:
+            holder = None
+        if holder:
+            raise InstallError("UID " + str(SERVICE_UID) + " belongs to the account " + holder + ", but the " + SERVICE_USER
+                               + " account must use it to match Core. Remove or renumber that account, then rerun." + NOTHING_CHANGED)
     if SERVICE_HOME.is_symlink() or (SERVICE_HOME.exists() and not SERVICE_HOME.is_dir()):
         raise InstallError(str(SERVICE_HOME) + " must be a directory, not a symbolic link." + NOTHING_CHANGED)
     if SERVICE_HOME.exists() and (account is None or SERVICE_HOME.stat().st_uid != account.pw_uid):
@@ -1067,7 +1080,7 @@ def prepare_account(account, record, group):
         # A record of an account that no longer exists is stale; the new account replaces it.
         records.unlink(missing_ok=True)
         shell = next((path for path in ("/usr/sbin/nologin", "/sbin/nologin") if os.path.exists(path)), "/bin/false")
-        checked(["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", str(SERVICE_HOME),
+        checked(["useradd", "--system", "--uid", str(SERVICE_UID), "--user-group", "--no-create-home", "--home-dir", str(SERVICE_HOME),
                  "--shell", shell, SERVICE_USER], "Cannot create the " + SERVICE_USER + " service user")
         account = service_account()
         record = {"format": 1, "created": True, "uid": account.pw_uid, "groups_added": []}

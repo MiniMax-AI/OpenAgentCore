@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 65d9798a2843a67c27d8b4e4a86cc4977be1ac41b798e32b6b8dde6059958640
+source_hash: fef6bd64da44efaa4ab1943901667c68c749790c36974ffb15b1b2845d62a7eb
 ---
 
 节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 或 Docker 时添加、修改和移除节点的运维人员；E2B 不需要节点。
@@ -14,7 +14,7 @@ Core 将新 Session 分配给有空余容量的节点；节点创建沙箱，沙
 - **Core 已有主机及沙箱可访问的公开 URL。** 节点从 Core 控制台下载文件，并通过 `public_url` 连接 Core。设置前，**添加节点** 显示 *添加节点前，请先设置其他机器能访问的公开地址。*参阅[配置公开地址](./public-address.md)。
 - **控制台能提供节点文件。** 节点从控制台下载 Runtime 和提供商文件；控制台缺少文件时重定向到发行下载地址。节点依据发行清单检查各文件的大小和 SHA-256。因此节点主机需要能访问发行下载地址。缺少文件时，**添加节点** 显示 *这个控制台没有 … 的节点文件。*
 - **主机满足下面的要求。**
-- **使用独立工作区存储时，** 此主机上的 NFS 挂载和服务账户已就绪；参阅[设置工作区存储](./workspace-storage.md)。节点随每次 binding 接收所选不可变文件系统配置；不要单独编写节点存储设置。
+- **使用 microsandbox 时，** 此主机上用于工作区存储的 NFS 挂载已就绪；参阅[设置工作区存储](./workspace-storage.md)。节点随每次 binding 接收所选不可变文件系统配置；不要单独编写节点存储设置。
 - **microsandbox 跨节点检查点恢复，** 参阅[跨节点的检查点恢复](#checkpoint-recovery-across-nodes)。
 
 Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添加为节点。
@@ -64,7 +64,7 @@ Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添
 
 | 项目 | 详情 |
 | --- | --- |
-| 服务用户 | 系统用户 `oac-node`，主目录 `/var/lib/oac-node`，无登录 shell。已有账号的主目录相同且 shell 为 nologin 时会复用；其他名为 `oac-node` 的账号会被拒绝 |
+| 服务用户 | 系统用户 `oac-node`，UID 为 65532（与 Core 服务相同），主目录 `/var/lib/oac-node`，无登录 shell。已有账号的 UID、主目录都相同且 shell 为 nologin 时会复用；其他名为 `oac-node` 的账号会被拒绝。如果其他账号占用 UID 65532，安装程序会停止且不做任何更改 |
 | 用户组 | 拥有 `/var/run/docker.sock`（Docker）或 `/dev/kvm`（microsandbox）的组：仅 `docker` 或 `kvm` |
 | 服务 | `/etc/systemd/system/oac-node-<installation-id>.service`，root 所属的系统单元，使用 `User=oac-node`，开机启用。Core 无法访问时每 5 秒重启；Core 不再接受节点后永久停止 |
 | 节点状态 | `/var/lib/oac-node/.oac/nodes/<installation-id>/`：身份、配置和节点文件。microsandbox 在 `/var/lib/oac-node/.oac/m/` 保存镜像和沙箱 |

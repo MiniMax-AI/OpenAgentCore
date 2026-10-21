@@ -72,6 +72,8 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		}
 	case errors.As(err, &unsupported):
 		writeError(w, http.StatusBadRequest, "sandbox_operation_unsupported", "The selected sandbox provider does not support this operation.")
+	case errors.Is(err, sandbox.ErrWorkspaceRequired):
+		writeError(w, http.StatusConflict, "workspace_storage_required", "This sandbox provider runs every Environment on workspace storage. Select workspace storage first.")
 	case errors.Is(err, sandbox.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", "Invalid sandbox provider configuration.", "configuration")
 	case errors.As(err, &stale):

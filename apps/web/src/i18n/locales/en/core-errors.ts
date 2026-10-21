@@ -2,6 +2,7 @@
 export const coreErrors = {
   "invalid_workspace_configuration": "Invalid workspace storage configuration.",
   "workspace_operation_unsupported": "The selected workspace storage does not support the operation or sandbox combination.",
+  "workspace_storage_required": "This sandbox provider needs workspace storage. Select workspace storage first.",
   "workspace_storage_not_found": "Workspace storage is not configured or the requested object does not exist.",
   "workspace_storage_conflict": "Workspace storage ownership or configuration conflicts with the current state.",
   "workspace_storage_unavailable": "Workspace storage is unavailable or an operation remains unconfirmed.",

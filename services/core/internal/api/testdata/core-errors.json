@@ -45,5 +45,6 @@
   "workspace_operation_unsupported",
   "workspace_storage_conflict",
   "workspace_storage_not_found",
+  "workspace_storage_required",
   "workspace_storage_unavailable"
 ]

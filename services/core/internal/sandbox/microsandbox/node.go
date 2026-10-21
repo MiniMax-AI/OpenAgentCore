@@ -60,10 +60,9 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 	}
 	resources := spec.Resources
 	config := Config{
-		ExternalWorkspace: spec.Workspace != nil,
-		InstallationID:    result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, CheckpointRoot: entry.CheckpointRoot, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
+		InstallationID: result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, CheckpointRoot: entry.CheckpointRoot, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
 		RuntimeSHA256: entry.RuntimeSHA256, FirmwareSHA256: entry.FirmwareSHA256, Image: entry.Image,
-		MemoryMiB: resources.MemoryMiB, CPUs: uint8(resources.CPUs), RootDiskMiB: resources.RootDiskMiB, EnvironmentDiskMiB: resources.EnvironmentDiskMiB, Network: network,
+		MemoryMiB: resources.MemoryMiB, CPUs: uint8(resources.CPUs), RootDiskMiB: resources.RootDiskMiB, Network: network,
 	}
 	provider, err := NewWithCaller(config, caller)
 	if err != nil {

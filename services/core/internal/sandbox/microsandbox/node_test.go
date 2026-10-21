@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 )
 
@@ -35,7 +36,7 @@ func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := sandbox.NodeConfig{Provider: "microsandbox", Generation: 9, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192, EnvironmentDiskMiB: 8192}}, Native: raw}
+	config := sandbox.NodeConfig{Provider: "microsandbox", Generation: 9, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}, Native: raw}
 	for _, path := range []string{native.RuntimePath, native.FirmwarePath, native.HelperPath} {
 		if err := os.WriteFile(path, script, 0700); err != nil {
 			t.Fatal(err)

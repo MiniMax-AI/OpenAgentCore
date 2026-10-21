@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 50998ccc26430755f2a81e634d33def91e96cfe377149aec66dc04909d972cb4
+source_hash: 1f374322fcfd4a9fda8162004342162b1c3b8e3b5f12c2f2871f68bd593751da
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -190,6 +190,7 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 | Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
 | 函数名称为空或重复 | "Function names must be nonempty and unique." |
 | 两个使用同一标签的 MCP 服务器 | "Execution requires distinct MCP server labels." |
+| 未声明 `retained_native_history` 的 Harness，运行在把每个 Environment 都放在 workspace 存储上的 sandbox provider 上（[Harness 能力](harness-capabilities.md)） | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
 每 Session 的 `tools` 替换可以允许一个其已保存 tools 原本会被拒绝的 Session。每种工具和 Harness 的支持情况见 [execution and tools](execution-tools.md)。
 

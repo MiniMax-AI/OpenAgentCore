@@ -197,7 +197,7 @@ func TestPressureSuspensionServesRestoreOnItsOriginalNode(t *testing.T) {
 func TestPressureDemandScansPastIncompatiblePage(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	capacity := deployment.Capacity{MaxActive: 1, MaxRetained: 2}
 	node := f.enroll(t, view, capacity)
 	f.connect(t, node.NodeID)
@@ -224,7 +224,7 @@ func TestPressureDemandRejectsUnqualifiedRetainedReceipt(t *testing.T) {
 		t.Run(badReceipt, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
-			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
 			f.connect(t, node.NodeID)
 			count := 1
@@ -261,15 +261,11 @@ func TestPressureDemandRejectsUnqualifiedRetainedReceipt(t *testing.T) {
 }
 
 func TestPressureReclamationIgnoresUnavailableNodeReceipts(t *testing.T) {
-	for _, obstruction := range []string{"offline expired", "offline quiescing", "offline suspending", "different address", "incompatible generation"} {
+	for _, obstruction := range []string{"offline expired", "offline quiescing", "offline suspending", "different address"} {
 		t.Run(obstruction, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
-			spec := retainedSpecification()
-			if obstruction == "incompatible generation" {
-				spec = testSpecification("microsandbox")
-			}
-			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: spec})
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 			badNode := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
 			f.connect(t, badNode.NodeID)
 			stuck := runningPressureOwner(t, f, changes, installation, badNode.NodeID, view.Generation)
@@ -294,22 +290,10 @@ func TestPressureReclamationIgnoresUnavailableNodeReceipts(t *testing.T) {
 				if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET core_url='https://other.example' WHERE id=$1`, badNode.NodeID); err != nil {
 					t.Fatal(err)
 				}
-			case "incompatible generation":
-				var err error
-				view, err = changes.Update(admin(t), installation, sandbox.Selection{Provider: "microsandbox", ExpectedGeneration: view.Generation, DeploymentSpec: retainedSpecification()})
-				if err != nil {
-					t.Fatal(err)
-				}
 			}
 			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
 			f.connect(t, node.NodeID)
-			var waiting deployment.AllocationKey
-			if obstruction == "incompatible generation" {
-				old := releaseRetainedFixture(t, f, changes, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
-				waiting = old.Key()
-			} else {
-				waiting = pendingPressureDemand(t, f)
-			}
+			waiting := pendingPressureDemand(t, f)
 			// A real pending reservation supplies demand and retains its original deadline.
 			if _, err := f.pool.Exec(t.Context(), `INSERT INTO environment_input_reservations(id,session_id,idempotency_key,batch,created_at,deadline) SELECT $1,session_id,'pressure','[{}]',clock_timestamp(),clock_timestamp()+interval '5 minutes' FROM environments WHERE id=$2`, uuid.NewString(), waiting.EnvironmentID); err != nil {
 				t.Fatal(err)

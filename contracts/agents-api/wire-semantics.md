@@ -188,6 +188,7 @@ A Session's effective configuration must also pass execution admission, which ap
 | A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
 | A function name that is blank or repeated | "Function names must be nonempty and unique." |
 | Two MCP servers with one label | "Execution requires distinct MCP server labels." |
+| A Harness that does not declare `retained_native_history`, on a sandbox provider that keeps every Environment on workspace storage ([Harness capabilities](./harness-capabilities.md)) | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
 A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](./execution-tools.md).
 

@@ -35,7 +35,6 @@ func TestWorkspaceConfigurationRejectsChangedExternalReceiptAndReadFailure(t *te
 	declaration := workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	record := webDeployment(t, uuid.NewString(), "microsandbox", 1)
 	specification := testSpecification("microsandbox")
-	specification.Resources.EnvironmentDiskMiB = 0
 	specification.Workspace = &declaration
 	record.Specification, _ = json.Marshal(specification)
 	var readErr error

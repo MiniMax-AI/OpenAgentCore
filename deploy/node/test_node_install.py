@@ -99,8 +99,10 @@ class NodeInstallTests(unittest.TestCase):
             raise urllib.error.HTTPError(request.full_url, 401, "", {}, None)
         resources = {"cpus": self.cpus, "memory_mib": 6144}
         if self.args.provider == "microsandbox":
-            resources.update(root_disk_mib=10240, environment_disk_mib=12288)
+            resources.update(root_disk_mib=10240)
         spec = {"resources": resources}
+        if self.args.provider == "microsandbox":
+            spec["workspace"] = {"attachment": "host_directory", "user_xattr": True, "capacity_quota": False}
         configuration = {"installation_id": self.args.installation_id, "provider": self.args.provider,
                          "core_url": self.args.core_url, "generation": 1, "specification": spec,
                          "specification_digest": node_spec.digest(self.args.provider, spec)}
@@ -464,7 +466,7 @@ class NodeInstallTests(unittest.TestCase):
             self.service_steps.append("wait_ready" if function is installer.wait_ready else function.__name__)
             with mock.patch.object(installer.Path, "home", return_value=Path(account.pw_dir)):
                 function(*arguments)
-        for patch in (mock.patch.multiple(installer, SERVICE_HOME=service_home, SYSTEM_RECORDS=system / "etc",
+        for patch in (mock.patch.multiple(installer, SERVICE_HOME=service_home, SERVICE_UID=os.getuid(), SYSTEM_RECORDS=system / "etc",
                                           SYSTEM_UNITS=system / "units", SYSTEM_LOCKS=system / "run",
                                           CHILD_DOCKER_CONFIG=system / "docker-config",
                                           SYSTEMD_RUNNING=system / "systemd", SELINUX_ENFORCE=system / "selinux",
@@ -472,7 +474,8 @@ class NodeInstallTests(unittest.TestCase):
                                           service_account=lambda: self.account),
                       mock.patch.object(installer.shutil, "which", side_effect=lambda tool: None if tool == "docker" and not self.docker_installed else "/usr/bin/" + tool),
                       mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["oac-node"] if self.joined else [])),
-                      mock.patch.object(installer.grp, "getgrgid", side_effect=lambda gid: SimpleNamespace(gr_name=self.device_group))):
+                      mock.patch.object(installer.grp, "getgrgid", side_effect=lambda gid: SimpleNamespace(gr_name=self.device_group)),
+                      mock.patch.object(installer.pwd, "getpwuid", side_effect=KeyError)):
             patch.start()
             self.addCleanup(patch.stop)
         return system
@@ -521,7 +524,7 @@ class NodeInstallTests(unittest.TestCase):
         system = self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         commands = [call for call, _ in self.calls]
-        self.assertIn(["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", str(self.home / "service"),
+        self.assertIn(["useradd", "--system", "--uid", str(os.getuid()), "--user-group", "--no-create-home", "--home-dir", str(self.home / "service"),
                        "--shell", next(path for path in ("/usr/sbin/nologin", "/sbin/nologin", "/bin/false") if os.path.exists(path) or path == "/bin/false"),
                        "oac-node"], commands)
         self.assertTrue(any(call[:3] == ["usermod", "--append", "--groups"] for call in commands))
@@ -738,6 +741,23 @@ class NodeInstallTests(unittest.TestCase):
         store.mkdir()
         self.assertIn("Kept the microsandbox store", self.uninstall_output(False))
         self.assertTrue(store.is_dir())
+
+    def test_sudo_mode_refuses_when_another_account_holds_core_uid(self):
+        self.sudo_host()
+        with mock.patch.object(installer.pwd, "getpwuid", return_value=SimpleNamespace(pw_name="nonroot")):
+            with self.assertRaisesRegex(installer.InstallError, "UID [0-9]+ belongs to the account nonroot.*Nothing was changed"):
+                installer.install_system(self.args, "synthetic-once-token")
+        self.assertFalse([call for call, _ in self.calls if call[:1] in (["useradd"], ["usermod"], ["systemctl"])])
+
+    def test_sudo_mode_refuses_an_existing_account_with_another_uid(self):
+        self.sudo_host()
+        (self.home / "service").mkdir()
+        self.account = SimpleNamespace(pw_name="oac-node", pw_uid=os.getuid() + 1, pw_gid=os.getgid(),
+                                       pw_dir=str(self.home / "service"), pw_shell="/usr/sbin/nologin")
+        with mock.patch.object(installer.os, "getgrouplist", return_value=[os.getgid()]):
+            with self.assertRaisesRegex(installer.InstallError, "must use UID [0-9]+ to match Core.*Nothing was changed"):
+                installer.install_system(self.args, "synthetic-once-token")
+        self.assertFalse([call for call, _ in self.calls if call[:1] in (["useradd"], ["usermod"], ["systemctl"])])
 
     def test_uninstall_leaves_an_adopted_account_as_found(self):
         system = self.sudo_host()

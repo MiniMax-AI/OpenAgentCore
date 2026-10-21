@@ -2,14 +2,13 @@
 title: "Set up workspace storage"
 ---
 
-Keep Session workspaces on an NFS filesystem outside the sandbox nodes, with or without per-workspace quotas. This guide is for operators who run microsandbox and want workspaces to outlive their compute.
+Keep Session workspaces on an NFS filesystem outside the sandbox nodes, with or without per-workspace quotas. microsandbox runs every Environment on this storage, so select it before you configure the microsandbox backend.
 
-The supported combination is microsandbox with the [kernel NFS adapter](../workspace-provider.md#kernel-nfs-adapter). Docker and E2B do not support independent workspace storage; see [Choose a sandbox backend](./sandbox-backends.md). The [Configuration reference](../configuration.md#independent-workspace-storage) lists where the setting lives.
+The supported combination is microsandbox with the [kernel NFS adapter](../workspace-provider.md#kernel-nfs-adapter). Docker and E2B keep their own disks and do not support it; see [Choose a sandbox backend](./sandbox-backends.md). The [Configuration reference](../configuration.md#independent-workspace-storage) lists where the setting lives.
 
 ```mermaid
 flowchart LR
-  A[Prepare NFS export] --> B[Prepare oac-node]
-  B --> C[Mount into Core]
+  A[Prepare NFS export] --> C[Mount into Core]
   C --> D[Select the storage]
   D --> E[Configure microsandbox]
   E --> F[Add nodes]
@@ -24,12 +23,6 @@ Mount the same NFSv4.2 export on the Linux Core host and on every participating 
 > Do not enable `no_root_squash` or broaden permissions to make a check pass.
 
 Prepare the namespace and service principals according to the adapter's [ownership requirements](../workspace-provider.md#kernel-nfs-adapter).
-
-## Prepare the node account
-
-Core's Compose service already runs as UID 65532. Before adding a node, prepare `oac-node` with the same UID, home `/var/lib/oac-node`, a nologin shell and a nonzero primary group. Its supplementary groups may contain only its primary group, `docker` and `kvm`; an existing home must belong to that account. The node installer adopts this account. Without a precreated account it allocates a system UID, which need not match Core.
-
-Resolve an existing UID or account conflict as a host administration task before enrollment. Changing a running account's UID is not part of storage setup.
 
 ## Mount the export into Core
 
@@ -74,7 +67,7 @@ Selection runs the adapter's availability, ownership and xattr checks in Core. I
 
 ## Configure microsandbox and add nodes
 
-Create or update the microsandbox deployment through the [sandbox deployment API](../../contracts/agents-api/sandbox-deployment.md#routes), keeping the required compute resources, Runtime and provider configuration. `resources.environment_disk_mib` is each new workspace's capacity: `0` without quota mode, where a positive value is rejected, and at least 1024 MiB in quota mode, where `0` is refused at workspace admission. Existing workspaces keep the capacity they were admitted with when the deployment changes.
+Create or update the microsandbox deployment through the [sandbox deployment API](../../contracts/agents-api/sandbox-deployment.md#routes), keeping the required compute resources, Runtime and provider configuration. `resources.environment_disk_mib` is each new workspace's capacity quota request: `0` (the default) without quota mode, where a positive value is rejected, and at least 1024 MiB in quota mode, where `0` is refused at workspace admission. A deployment saved before storage is selected returns `workspace_storage_required`. Existing workspaces keep the capacity they were admitted with when the deployment changes.
 
 Deployment workspace requirements and each Session's attachment come from the selected database configuration. The selected configuration is the only storage setting.
 

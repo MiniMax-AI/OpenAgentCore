@@ -144,9 +144,6 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	if err := ValidateBootstrap(b); err != nil {
 		return absent, err
 	}
-	if p.config.ExternalWorkspace != (b.Workspace != nil) {
-		return absent, sandbox.ErrInvalid
-	}
 	workspace, err := p.resolveWorkspace(ctx, b.Reference, b.Workspace)
 	if err != nil {
 		return absent, err
@@ -279,7 +276,7 @@ func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generati
 
 func (p *Provider) resolveWorkspace(ctx context.Context, reference sandbox.Reference, binding *workspacefs.Binding) (*WorkspaceDirectory, error) {
 	if binding == nil {
-		return nil, nil
+		return nil, sandbox.ErrInvalid
 	}
 	if err := sandbox.ValidateWorkspaceBinding(reference, binding); err != nil {
 		return nil, err
