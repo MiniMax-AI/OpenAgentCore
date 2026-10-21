@@ -288,6 +288,9 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 						return Allocation{}, ErrNotIdle
 					}
 					allowed, err := e.canSuspendForDemand(tx, current)
+					if err == nil && !allowed && activity.ReadyToSuspend(freeSlotIdle) {
+						allowed, err = canKeepFreeSlot(tx, current)
+					}
 					if err != nil {
 						return Allocation{}, err
 					}

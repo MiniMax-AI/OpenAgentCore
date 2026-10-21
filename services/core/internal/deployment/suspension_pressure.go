@@ -4,10 +4,15 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
+
+// freeSlotIdle is how long an allocation on a full node stays idle before
+// Core may suspend it without waiting demand.
+const freeSlotIdle = 2 * time.Minute
 
 // SuspensionDemand is a transaction-bound capacity observation. It is not a
 // reservation: only a confirmed suspension frees an active slot.
@@ -25,22 +30,42 @@ type CheckpointRestoreDemand struct {
 	Nodes         []placement.CheckpointNode
 }
 
+// fullNode returns the owner's node when it is online and has no free active
+// slot, in a nodes deployment that is not resetting and belongs to the owner's
+// installation.
+func fullNode(pressure SuspensionDemand, owner Allocation) *placement.Node {
+	if pressure.Deployment.Resetting || pressure.Deployment.Mode != string(sandbox.DeploymentNodes) || pressure.Deployment.InstallationID != owner.ProviderKey {
+		return nil
+	}
+	for i := range pressure.Nodes {
+		if n := &pressure.Nodes[i]; n.ID == owner.NodeID && n.Online && n.Active >= int64(n.MaxActive) {
+			return n
+		}
+	}
+	return nil
+}
+
+// canKeepFreeSlot allows suspending an allocation that stayed idle for
+// freeSlotIdle on a full node with no reclamation in flight, so the next
+// Session finds a free slot. The suspended allocation keeps its retained
+// slot, so no retained capacity is needed.
+func canKeepFreeSlot(tx AllocationTx, owner Allocation) (bool, error) {
+	pressure, err := tx.LoadSuspensionDemand(owner)
+	if err != nil {
+		return false, err
+	}
+	return fullNode(pressure, owner) != nil && !slices.Contains(pressure.InFlightNodes, owner.NodeID), nil
+}
+
+// canSuspendForDemand reports whether compatible waiting demand would place on
+// the owner's full node once the owner is suspended.
 func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocation) (bool, error) {
 	pressure, err := tx.LoadSuspensionDemand(owner)
 	if err != nil {
 		return false, err
 	}
-	if pressure.Deployment.Resetting || pressure.Deployment.Mode != string(sandbox.DeploymentNodes) || pressure.Deployment.InstallationID != owner.ProviderKey {
-		return false, nil
-	}
-	var source *placement.Node
-	for i := range pressure.Nodes {
-		if pressure.Nodes[i].ID == owner.NodeID {
-			source = &pressure.Nodes[i]
-			break
-		}
-	}
-	if source == nil || !source.Online || source.Active < int64(source.MaxActive) {
+	source := fullNode(pressure, owner)
+	if source == nil {
 		return false, nil
 	}
 	for _, demand := range pressure.CheckpointRestores {

@@ -12,7 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-func runningPressureOwner(t *testing.T, f fixture, changes *deployment.ExecutionOperations, installation, node string, generation uint64) deployment.Allocation {
+func runningPressureOwner(t *testing.T, f fixture, changes *deployment.ExecutionOperations, installation, node string, generation uint64, idle ...string) deployment.Allocation {
+	idleFor := "1 minute"
+	if len(idle) > 0 {
+		idleFor = idle[0]
+	}
 	t.Helper()
 	key := hostedEnvironment(t, f.pool)
 	if _, err := f.pool.Exec(t.Context(), `INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,$3)`, key.EnvironmentID, node, generation); err != nil {
@@ -25,7 +29,7 @@ func runningPressureOwner(t *testing.T, f fixture, changes *deployment.Execution
 	if _, err = f.pool.Exec(t.Context(), `UPDATE environments SET initialization='complete' WHERE id=$1`, key.EnvironmentID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET state='running',create_settled=true,compute_phase='running',compute_activity_at=clock_timestamp()-interval '1 minute',compute_phase_changed_at=clock_timestamp()-interval '1 minute' WHERE id=$1`, owner.ID); err != nil {
+	if _, err = f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET state='running',create_settled=true,compute_phase='running',compute_activity_at=clock_timestamp()-$2::interval,compute_phase_changed_at=clock_timestamp()-$2::interval WHERE id=$1`, owner.ID, idleFor); err != nil {
 		t.Fatal(err)
 	}
 	owner, err = f.adapter.EnvironmentAllocation(t.Context(), key)
@@ -39,21 +43,25 @@ func TestPressureSuspensionRequiresUsefulCapacity(t *testing.T) {
 	for _, test := range []struct {
 		name             string
 		retained         int
+		idle             string
+		maxActive        int
 		demand, freeNode bool
 		want             error
 	}{
-		{"no demand", 3, false, false, deployment.ErrNotIdle},
-		{"retained full", 1, true, false, deployment.ErrNotIdle},
-		{"other node free", 3, true, true, deployment.ErrNotIdle},
-		{"waiting first session", 3, true, false, nil},
+		{"no demand", 3, "1 minute", 1, false, false, deployment.ErrNotIdle},
+		{"retained full", 1, "1 minute", 1, true, false, deployment.ErrNotIdle},
+		{"other node free", 3, "1 minute", 1, true, true, deployment.ErrNotIdle},
+		{"waiting first session", 3, "1 minute", 1, true, false, nil},
+		{"full node idle past two minutes", 3, "3 minutes", 1, false, false, nil},
+		{"node with a free slot", 3, "3 minutes", 2, false, false, deployment.ErrNotIdle},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
 			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
-			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: test.retained})
+			node := f.enroll(t, view, deployment.Capacity{MaxActive: test.maxActive, MaxRetained: test.retained})
 			f.connect(t, node.NodeID)
-			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
+			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation, test.idle)
 			if test.demand {
 				pendingPressureDemand(t, f)
 			}
