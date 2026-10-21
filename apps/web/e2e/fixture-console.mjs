@@ -517,7 +517,7 @@ async function executorCredentialRoute(request, response, projectId, environment
  */
 function registeredNode(nodeId) {
   const { enrollment_id = null, ...limits } = state.enrollment ?? { max_active: 1, max_retained: 1 };
-  return { rollout: { state: "unknown", ready_generation: null }, id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), enrollment_id, online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
+  return { rollout: { state: "unknown", ready_generation: null }, id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), enrollment_id, online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, recommended_capacity: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
 const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-configuration$/;

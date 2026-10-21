@@ -118,7 +118,7 @@ func (f fixture) initialize(t *testing.T, changes *deployment.ExecutionOperation
 // generation with it.
 func (f fixture) enroll(t *testing.T, view deployment.View, capacity deployment.Capacity) deployment.Enrollment {
 	t.Helper()
-	token, err := f.service.CreateEnrollment(admin(t), capacity)
+	token, err := f.service.CreateEnrollment(admin(t), deployment.EnrollmentLimits{MaxActive: &capacity.MaxActive, MaxRetained: &capacity.MaxRetained})
 	if err != nil {
 		t.Fatal(err)
 	}

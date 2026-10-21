@@ -123,6 +123,8 @@ def registration_failure(stderr):
     status, code = matches[-1].group(1).decode(), (matches[-1].group(2) or b"").decode()
     if code == "sandbox_node_address_mismatch":
         return AddressChanged(node_spec.PUBLIC_URL_CHANGED + " The token was not used; downloaded files are kept.")
+    if code == "sandbox_node_host_unmeasured":
+        return InstallError("Core could not measure this host's CPUs and memory, so it cannot derive the node limits. Request a token with explicit limits, then rerun the command.")
     if status == "401":
         return InstallError(node_spec.ENROLLMENT_EXPIRED + " Downloaded files are kept.")
     return InstallError(REGISTRATION_UNCONFIRMED + " Core answered HTTP " + status + (" " + code if code else "") + ".")

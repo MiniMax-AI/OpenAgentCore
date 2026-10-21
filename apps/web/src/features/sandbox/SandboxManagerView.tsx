@@ -18,7 +18,6 @@ import { NodeList, onOldAddress } from "./NodeList";
 import { NodeDetail } from "./NodeDetail";
 import { NodeEnrollment } from "./NodeEnrollment";
 import { NodeEditDialog } from "./NodeEditDialog";
-import { sandboxSize } from "./deployment-specification";
 import { NodeCleanupDialog, type NodeCleanup } from "./NodeCleanupDialog";
 import "./SandboxManagerView.css";
 
@@ -142,7 +141,6 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
     key={editTarget?.id ?? "closed"}
     client={client}
     node={editTarget}
-    size={snapshot ? sandboxSize(snapshot.deployment) : null}
     suspends={suspends}
     onClose={() => setEditId(null)}
     onSaved={() => {

@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 8529f1216a0e6987b099247270583f1ed9f3b4482dd8593231bab3389dfd5520
+source_hash: d14848610e56678c0de35ed6796b4631c5cd42b8a1f0d25366e224a4ff878e44
 ---
 
 本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
@@ -109,9 +109,9 @@ source_hash: 8529f1216a0e6987b099247270583f1ed9f3b4482dd8593231bab3389dfd5520
 | E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
 | 节点 | `GET /core/v1/sandbox/nodes` | **节点** 页面；**概览** 上的机群；**沙箱监控** 中每个托管 Runtime 所在的节点。`provider_ready` 为 false 的在线节点为降级；**节点** 列表及节点页面中紧邻其状态的帮助提示显示 *沙箱提供商不可用*，目标准备原因（`rollout.diagnostic`，一个[就绪状态码](../getting-started/nodes.md#readiness-codes)）显示在其目标状态中。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，**节点** 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 **地址已过期**，而不是健康状态。**添加节点** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
-| 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | **节点** 中的节点页面：主机最近一次心跳报告的 CPU 忙碌占比、内存使用量和可用磁盘，以及 1 小时、6 小时或 24 小时内 CPU 与内存的历史记录；页面可见时每 30 秒刷新一次。**编辑节点** 读取 `host.effective_cpu_cores` 和 `host.total_memory_bytes`，用于在每个 Sandbox 大小旁显示主机容量，以及最多可容纳多少个该大小的 Sandbox |
+| 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | **节点** 中的节点页面：主机最近一次心跳报告的 CPU 忙碌占比、内存使用量和可用磁盘，以及 1 小时、6 小时或 24 小时内 CPU 与内存的历史记录；页面可见时每 30 秒刷新一次。**编辑节点** 读取节点的 `recommended_capacity` 作为推荐值 |
 | 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | **节点** 页面；**沙箱监控**。节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间；时间为 null 时显示短横线。它不会根据阶段时间或部署的 `suspension.retention_seconds` 推算快照到期时间 |
-| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **添加节点**：管理员先设置节点的 Sandbox 限制（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
+| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **添加节点**：管理员保留推荐上限（请求体不含上限，由 Core 在节点注册时推导）或同时设置两个上限（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
 | 更新节点 | `PATCH /core/v1/sandbox/nodes/{node_id}` | **编辑节点**：同时修改名称和 Sandbox 限制（保留数量限制仅适用于 microsandbox；在 Docker 下，Core 会将其设为活动数量限制） |
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 **清理主机** 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | **沙箱监控**：每个项目的托管 Runtime，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |

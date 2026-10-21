@@ -16,11 +16,12 @@ const node = {
   cpu_count: 16, available_memory_bytes: 8589934592, available_disk_bytes: 107374182400, running: 1, snapshots: 0,
   last_seen_at: "2026-09-25T09:00:00Z", max_active: 2, max_retained: 2, active: 1, reserved: 0, retained: 1, cleanup_pending: 0,
   created_at: created, core_url: "https://core.example", enrollment_id: "9d2e6b1a-4c3f-4e8d-a7b6-5c4d3e2f1a0b",
+  recommended_capacity: { max_active: 8, max_retained: 8 },
 };
 /** Never heard from and enrolled before Core recorded enrollment IDs. */
 const unready = {
   ...node, rollout: { state: "unknown", ready_generation: 1 }, id: "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918", online: false, provider_ready: false,
-  cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, last_seen_at: null, active: 0, retained: 0, enrollment_id: null,
+  cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, last_seen_at: null, active: 0, retained: 0, enrollment_id: null, recommended_capacity: null,
 };
 const detail = {
   ...node,

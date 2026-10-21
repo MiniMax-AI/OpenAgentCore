@@ -23,7 +23,7 @@ var nonAdministrationCodes = []string{
 	// Session creation and input admission on /v1.
 	"environment_input_cancelled", "environment_input_expired", "model_provider_required", "sandbox_nodes_preparing", "turn_conflict",
 	// Machine routes for nodes and native installers.
-	"installation_authorization_invalid", "installation_unavailable", "invalid_node_credential", "sandbox_node_address_mismatch",
+	"installation_authorization_invalid", "installation_unavailable", "invalid_node_credential", "sandbox_node_address_mismatch", "sandbox_node_host_unmeasured",
 }
 
 // The shared catalog lists every code an administration caller (/core/v1 or

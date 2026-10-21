@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: a4b0eae5408163c044b11016dda7a2d66bdcb6b6f90660d1388ffb5a5a2115e3
+source_hash: 21fb07f531d4087de59618e5f34211d5dc9674efe97530501170950e8a76f6f2
 ---
 
 沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
@@ -52,7 +52,7 @@ sequenceDiagram
 
 只要节点在当前所有者 epoch 下保持连接，并且最近一次心跳距今不足 45 秒，Core 就会将该节点计为在线。心跳会确立提供商的就绪状态和最近的主机测量值，但绝不表示 Session 活动。[超时与限制](#timeouts-and-limits)列出所有计时器。
 
-健康报告包含 `observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。节点按代次报告就绪状态，详见下文。代次观察记录中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。
+健康报告包含 `observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。注册请求携带节点为健康报告所取的同样测量值：`cpu_count`、`effective_cpu_cores`、`total_memory_bytes` 和 `available_disk_bytes`，无法测量的省略，并按健康报告同样的规则校验。Core 用它们推导注册令牌未设置的每个限制，见[推荐容量](sandbox-deployment.md#recommended-capacity)。节点按代次报告就绪状态，详见下文。代次观察记录中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。
 
 ## 提供商请求 {#provider-requests}
 

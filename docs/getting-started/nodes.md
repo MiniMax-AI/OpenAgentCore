@@ -29,7 +29,7 @@ The Core host joins like any other host: to run sandboxes on it, add it as a nod
 ## Add a node
 
 1. In Web, open **Nodes** and choose **Add node**.
-2. Set **Sandboxes at once** and, with microsandbox, **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). You can change them later with **Edit node**.
+2. Keep **Recommended** limits, or choose **Custom** and set **Sandboxes at once** and, with microsandbox, **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). **Edit node** shows the recommendation for the host and fills it in with **Use recommended**.
 3. Choose **Generate command** and copy the command. It registers one node, once, and only if it runs within an hour; Web counts down and offers **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
 
@@ -103,7 +103,7 @@ Run `sudo journalctl -u oac-node-<installation-id>.service`. In a root shell, om
 Sandbox settings apply to the whole installation; nodes follow them.
 
 - **Size, E2B key or template build.** Open **Settings** → **Sandbox and scheduling** → **Change resources**, edit and save. Existing sandboxes keep their configuration. Each node prepares the new one while it keeps serving the old one, and **Nodes** shows its progress: **Preparing target**, **Ready for target** or **Preparation failed** with the [reason](#readiness-codes). Core places new Sessions on nodes ready for the new configuration first, and on nodes still serving an older one when those have no room. E2B changes apply at once.
-- **Capacity and idle suspension.** On **Nodes**, use **Edit node** for a node's active and retained limits. In **Settings** → **Sandbox and scheduling**, use **Automatic suspension** → **Idle before suspension (seconds)** → **Save** for the deployment-wide [idle policy](../../contracts/agents-api/sandbox-deployment.md#suspension-policy).
+- **Capacity and idle suspension.** On **Nodes**, use **Edit node** for a node's active and retained limits, or **Use recommended** to fill in the recommendation. In **Settings** → **Sandbox and scheduling**, use **Automatic suspension** → **Idle before suspension (seconds)** → **Save** for the deployment-wide [idle policy](../../contracts/agents-api/sandbox-deployment.md#suspension-policy).
 - **Backend.** On the same page, choose **Reset deployment**. Auto reset archives idle hosted Sessions at once and lets running work finish until the deadline you set; force cancels it now. Offline nodes must come back so Core can confirm their cleanup. When the reset completes, Core has retired every node and unused command: set up the new backend, then add nodes again. **Cancel reset** stops the remaining work; archived Sessions stay archived.
 
 The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation-ownership-and-rollout) describes what reset archives and keeps. To archive a single hosted Session, use the [Core API](../../contracts/agents-api/admin-api.md#session-archive).

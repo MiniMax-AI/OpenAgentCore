@@ -25,7 +25,7 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 1}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)}))
 	if err != nil {
 		t.Fatal(err)
 	}

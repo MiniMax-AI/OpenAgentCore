@@ -24,6 +24,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   // Node installation only offers a system service; there is no user-mode alternative.
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   await expect(add.getByLabel("One-time enrollment command without sudo", { exact: true })).toHaveCount(0);
+  await add.getByRole("radio", { name: "Custom" }).click();
   await add.getByLabel("Sandboxes at once").fill("3");
   const tokenRequest = () => page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
   const issued = tokenRequest();
@@ -99,9 +100,19 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(progress).toHaveText("edge-04 · Connected");
   await add.getByRole("button", { name: "Done" }).click();
   await expect(add).toBeHidden();
-  // A finished flow leaves no limits behind: the next node starts from the defaults.
+  // A finished flow leaves no limits behind: the next node starts from the recommended ones.
   await page.getByRole("button", { name: "Add node" }).click();
-  await expect(add.getByLabel("Sandboxes at once")).toHaveValue("2");
+  await expect(add.getByRole("radio", { name: "Recommended" })).toBeChecked();
+  await expect(add.getByLabel("Sandboxes at once")).toHaveCount(0);
+});
+
+test("asks Core to recommend a new node's limits unless the administrator enters them", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
+  await page.getByRole("button", { name: "Add node" }).click();
+  const add = page.getByRole("dialog", { name: "Add node" });
+  const issued = page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
+  await add.getByRole("button", { name: "Generate command" }).click();
+  expect((await issued).postDataJSON()).toEqual({});
 });
 
 test("issues no command before the installation is read, for a loopback public URL or without node files, and sees a fix on reopening", async ({ page, request }) => {
@@ -201,8 +212,8 @@ test("sets up own-machine sandboxes page by page", async ({ page, request }) => 
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
   await page.getByRole("button", { name: "Save configuration" }).click();
 
-  // Own machines continue straight to adding the first node, at its limits: no command is issued yet.
-  await expect(page.getByRole("dialog", { name: "Add node" }).getByLabel("Sandboxes at once")).toBeVisible();
+  // Own machines continue straight to adding the first node, with Recommended limits: no command is issued yet.
+  await expect(page.getByRole("dialog", { name: "Add node" }).getByRole("radio", { name: "Recommended" })).toBeChecked();
   const add = page.getByRole("dialog", { name: "Add node" });
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   // None is requested within a second of opening, and Core saw only the deployment write.
@@ -357,7 +368,9 @@ test("renames a node and sets how many sandboxes run on it at once", async ({ pa
   await page.getByRole("row").filter({ hasText: "core-01" }).getByRole("button", { name: "Edit node" }).click();
   const edit = page.getByRole("dialog", { name: "Edit node" });
   await edit.getByLabel("Name").fill("core-01-large");
-  await edit.getByLabel("Sandboxes at once").fill("6");
+  await expect(edit).toContainText("Recommended: 6 at once.");
+  await edit.getByRole("button", { name: "Use recommended" }).click();
+  await expect(edit.getByLabel("Sandboxes at once")).toHaveValue("6");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(edit).toBeHidden();
   await expect(capacity).toContainText("core-01-large");

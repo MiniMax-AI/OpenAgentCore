@@ -78,9 +78,7 @@ def validate(data, args):
         if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
-                or set(spec) - {"workspace"} != {"resources"}
-                or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
-                or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
+                or set(spec) - {"workspace"} != {"resources"}):
             raise ValueError()
         canonical_spec(provider, spec)
         if data["specification_digest"] != digest(provider, spec):

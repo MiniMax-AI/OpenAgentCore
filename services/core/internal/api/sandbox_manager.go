@@ -29,6 +29,7 @@ type SandboxMutationResponse struct {
 	Updated bool   `json:"updated,omitempty"`
 }
 type SandboxEnrollmentTokenRequest struct {
+	// An omitted limit is derived from the node's host when it enrolls.
 	MaxActive *int `json:"max_active,omitempty"`
 	// Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
 	MaxRetained *int `json:"max_retained,omitempty"`
@@ -43,7 +44,7 @@ type Deployment interface {
 	NodeDetail(ctx context.Context, id, window string) (deployment.NodeDetail, error)
 	UpdateNode(ctx context.Context, id string, update deployment.NodeUpdate) error
 	RemoveNode(ctx context.Context, id string) error
-	CreateEnrollment(ctx context.Context, capacity deployment.Capacity) (deployment.EnrollmentToken, error)
+	CreateEnrollment(ctx context.Context, limits deployment.EnrollmentLimits) (deployment.EnrollmentToken, error)
 	Enroll(ctx context.Context, token string, input deployment.Enrollment) (deployment.NodeIdentity, error)
 	NodeConfiguration(ctx context.Context, nodeID, token string, generation uint64) (deployment.NodeConfiguration, error)
 	NodeStatus(ctx context.Context, nodeID, credential string) (deployment.NodeStatus, error)
@@ -202,14 +203,7 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}
-	capacity := deployment.Capacity{MaxActive: 2, MaxRetained: 8}
-	if input.MaxActive != nil {
-		capacity.MaxActive = *input.MaxActive
-	}
-	if input.MaxRetained != nil {
-		capacity.MaxRetained = *input.MaxRetained
-	}
-	enrollment, err := h.Sandboxes.Deployment.CreateEnrollment(r.Context(), capacity)
+	enrollment, err := h.Sandboxes.Deployment.CreateEnrollment(r.Context(), deployment.EnrollmentLimits{MaxActive: input.MaxActive, MaxRetained: input.MaxRetained})
 	if err != nil {
 		writeDeploymentError(w, r, err)
 		return
@@ -238,7 +232,7 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var input deployment.Enrollment
-	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "deployment_generation", "specification_digest", "core_url") != nil {
+	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "deployment_generation", "specification_digest", "core_url", "cpu_count", "effective_cpu_cores", "total_memory_bytes", "available_disk_bytes") != nil {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}

@@ -33,6 +33,9 @@ func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentReq
 	input.NodeID, input.Credential = stored.Identity.NodeID, stored.Credential
 	input.Provider, input.BackendFingerprint = stored.Identity.Provider, stored.Identity.BackendFingerprint
 	input.CoreURL = coreURL
+	var host Health
+	new(hostHealthSampler).fill(&host, dir)
+	input.CPUCount, input.EffectiveCPUCores, input.TotalMemoryBytes, input.AvailableDiskBytes = host.CPUCount, host.EffectiveCPUCores, host.TotalMemoryBytes, host.AvailableDiskBytes
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	// This also recovers a consumed registration whose success response was lost.
 	target, err := endpoint(coreURL, "/api/v1/sandbox-node/identity")

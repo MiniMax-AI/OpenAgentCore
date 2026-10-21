@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 48515be4243404bb45d5fb93ffe9836580e37f01efb495c1e06e2722d6183165
+source_hash: d3d85be9a8784413ccb107ff8111a15647fd573f31bd66525a322202332e0fb7
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -72,7 +72,7 @@ Core 安装的每项设置、其归属位置以及修改方式。安装程序写
 
 ### 节点容量 {#node-capacity}
 
-生成 **添加节点** 命令时，Core 会批准节点容量：**同时运行的沙箱**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **保留的沙箱**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值。预留和尚未确认的清理操作都会占用容量；retained slot 已满时可以[提前结束空闲检查点的保留期](./sandbox-provider.md#cold-replacement-after-checkpoint-retention)；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
+节点容量是 **同时运行的沙箱**（`max_active`），并且仅对 microsandbox 还有 **保留的沙箱**（`max_retained`），其中 `max_retained >= max_active >= 1`。**添加节点** 默认采用推荐值，即节点注册时 Core [按主机推导](../../contracts/agents-api/zh/sandbox-deployment.md#recommended-capacity)的值；也可以自行填写两个数字。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值，它会显示推荐值并可一键填入。预留和尚未确认的清理操作都会占用容量；retained slot 已满时可以[提前结束空闲检查点的保留期](./sandbox-provider.md#cold-replacement-after-checkpoint-retention)；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
 
 `OAC_EXECUTION_CONCURRENCY` 与此无关：它限制 Core 中并发执行的工作量。
 

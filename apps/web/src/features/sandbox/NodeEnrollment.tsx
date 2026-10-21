@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { SandboxAdminClient, SandboxDeployment, SandboxEnrollment, SandboxNode } from "@oac/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
+import { HelpTip, SegmentedControl, StatusDot, type Tone } from "../../components/console-ui";
 import { Modal } from "../../components/Modal";
 import { coreFieldError } from "../../lib/core-error";
 import { formatBytes } from "../../lib/format";
@@ -30,13 +30,10 @@ function rememberRequirementsSeen() {
   try { window.localStorage.setItem(REQUIREMENTS_SEEN, "1"); } catch { /* Storage can be unavailable; the list then opens each time. */ }
 }
 
-/** The limits a new flow starts from. */
-const DEFAULT_ACTIVE = "2";
-const DEFAULT_RETAINED = "8";
-
 /**
- * Add node: the administrator sets the node's sandbox limits, then Core issues a
- * one-time enrollment command that approves them
+ * Add node: the administrator keeps the recommended limits, which Core derives
+ * from the host when the node registers, or enters both numbers; then Core
+ * issues a one-time enrollment command
  * (`POST /core/v1/sandbox/enrollment-tokens`). Only a deployment with a
  * suspension policy, which its Provider's checkpoint support declares, asks for
  * a retained limit; otherwise a node retains exactly the sandboxes it runs at
@@ -73,8 +70,9 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const { t: tCommon } = useTranslation("common");
   const id = useId();
-  const [active, setActive] = useState(DEFAULT_ACTIVE);
-  const [retained, setRetained] = useState(DEFAULT_RETAINED);
+  const [custom, setCustom] = useState(false);
+  const [active, setActive] = useState("");
+  const [retained, setRetained] = useState("");
   const [busy, setBusy] = useState(false);
   const [enrollment, setEnrollment] = useState<SandboxEnrollment | null>(null);
   const [appeared, setAppeared] = useState<{ id: string; at: number } | null>(null);
@@ -116,9 +114,10 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
   const retainedLimit = limits.retained;
   const activeProblem = limits.activeError ? t(limits.activeError) : null;
   const retainedProblem = suspends && limits.retainedError ? t(limits.retainedError) : null;
-  const activeError = coreFieldError(error, "max_active", tCommon) ?? activeProblem;
-  const retainedError = coreFieldError(error, "max_retained", tCommon) ?? retainedProblem;
-  const limitsReady = !activeProblem && !retainedProblem;
+  // An empty field is not an error yet; it only keeps Generate command off.
+  const activeError = coreFieldError(error, "max_active", tCommon) ?? (active.trim() ? activeProblem : null);
+  const retainedError = coreFieldError(error, "max_retained", tCommon) ?? (retained.trim() ? retainedProblem : null);
+  const limitsReady = !custom || (!activeProblem && !retainedProblem);
   const node = enrollment ? enrolledNode(nodes, enrollment) : null;
   const progress = enrollmentProgress(node, node && appeared?.id === node.id ? appeared.at : undefined, now);
   // Registration uses the token, so from then on its expiry no longer matters; rerunning
@@ -188,7 +187,7 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     // A connected node ends the command; otherwise it waits here for the next opening.
     if (ready) { setEnrollment(null); setAppeared(null); }
     // The limits, and which command was copied, stay only with an unfinished flow: a command still waiting for its node.
-    if (!enrollment || ready) { setActive(DEFAULT_ACTIVE); setRetained(DEFAULT_RETAINED); }
+    if (!enrollment || ready) { setCustom(false); setActive(""); setRetained(""); }
     onClose();
   }
   /**
@@ -201,8 +200,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
     setEnrollment(null); setAppeared(null); setError(null);
   }
   async function generate() {
-    if (request.current || !fresh || !available || blocker || !limitsReady || activeLimit === null || retainedLimit === null) return;
-    const capacity = { max_active: activeLimit, max_retained: retainedLimit };
+    if (request.current || !fresh || !available || blocker || !limitsReady) return;
+    const capacity = custom ? { max_active: activeLimit!, max_retained: retainedLimit! } : {};
     generation.current++;
     const controller = new AbortController(); request.current = controller;
     setBusy(true); setError(null);
@@ -270,8 +269,8 @@ export function NodeEnrollment({ client, consoleConfig, deployment, nodes, open,
         : <p role="status">{blocker.text}</p>
       : !enrollment ? (
         <form id={limitsForm} className="form-stack" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
-          <p>{t("Set the sandbox limits for the host you want to add.")}</p>
-          <NodeCapacityFields id={id} active={active} retained={retained} suspends={suspends} activeError={activeError} retainedError={retainedError} autoFocus={open} onActive={(value) => { setActive(value); setError(null); }} onRetained={(value) => { setRetained(value); setError(null); }} />
+          <SegmentedControl label={t("Limits")} value={custom ? "custom" : "recommended"} options={[{ value: "recommended", label: t("Recommended") }, { value: "custom", label: t("Custom") }]} onChange={(value) => { setCustom(value === "custom"); setError(null); }} />
+          {custom ? <NodeCapacityFields id={id} active={active} retained={retained} suspends={suspends} activeError={activeError} retainedError={retainedError} autoFocus={open} onActive={(value) => { setActive(value); setError(null); }} onRetained={(value) => { setRetained(value); setError(null); }} /> : null}
           {error !== null ? <p role="alert" className="sandbox-error">{sandboxRequestError(error, locale)}</p> : null}
           {requirements}
         </form>

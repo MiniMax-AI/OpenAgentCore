@@ -92,6 +92,8 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusConflict, "sandbox_configuration_error", err.Error())
 	case errors.Is(err, deployment.ErrNodeAddressMismatch):
 		writeError(w, http.StatusConflict, "sandbox_node_address_mismatch", "This node uses a different Core address than the installation public URL. Generate a new command on the Nodes page and run it on the host.")
+	case errors.Is(err, deployment.ErrNodeHostUnmeasured):
+		writeError(w, http.StatusConflict, "sandbox_node_host_unmeasured", "This node reported no host measurements, so Core cannot derive its limits. Set both limits when you generate the command.")
 	case errors.Is(err, deployment.ErrSpecificationMismatch):
 		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
 	case errors.Is(err, deployment.ErrNodeExists):

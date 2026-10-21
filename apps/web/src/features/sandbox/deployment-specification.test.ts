@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultSandboxResources, sandboxesThatFit, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
 import { deploymentContract, type SandboxProvider, type SandboxSpecification } from "@oac/agents-client";
 
 describe("deployment resources", () => {
@@ -52,15 +52,5 @@ describe("deployment resources", () => {
     expect(sized(1024)).toMatchObject({ workspace: { capacity_quota: true }, resources: { environment_disk_mib: 8192 }, valid: true });
     expect(sized(null).workspace).toBeUndefined();
     expect(selectedWorkspace("docker", { tenant_capacity_mib: 0 })).toBeUndefined();
-  });
-});
-
-describe("sandboxes a host holds", () => {
-  it("is the smaller of what its CPUs and its memory hold, and unknown without either or the size", () => {
-    const size = { cpus: 2, memory_mib: 4096 };
-    expect(sandboxesThatFit({ cpus: 16, memoryBytes: 64 * 2 ** 30 }, size)).toBe(8);
-    expect(sandboxesThatFit({ cpus: 64, memoryBytes: 18 * 2 ** 30 }, size)).toBe(4);
-    expect(sandboxesThatFit({ cpus: null, memoryBytes: 64 * 2 ** 30 }, size)).toBeNull();
-    expect(sandboxesThatFit({ cpus: 16, memoryBytes: 64 * 2 ** 30 }, null)).toBeNull();
   });
 });

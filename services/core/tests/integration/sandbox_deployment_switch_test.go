@@ -91,7 +91,7 @@ func TestSandboxDirectDeploymentOwnershipAndCleanSwitch(t *testing.T) {
 	if err != nil || setup.Configuration.(*e2b.DeploymentConfiguration).APIKey != input.Configuration.(*e2b.DeploymentConfiguration).APIKey {
 		t.Fatal("internal credential unavailable", err)
 	}
-	if _, err := deploymentService(t, s).CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 8}); !errors.Is(err, deployment.ErrConflict) {
+	if _, err := deploymentService(t, s).CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(8)}); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("cloud enrolled a machine", err)
 	}
 	tenant := uuid.NewString()
@@ -155,7 +155,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := changes.Initialize(t.Context(), id, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
 		t.Fatal(err)
 	}
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +163,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if _, err := nodes.Enroll(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}
-	unused, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 8}))
+	unused, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(8)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	if _, err := changes.Initialize(t.Context(), id, selection); err != nil {
 		t.Fatal(err)
 	}
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -382,7 +382,7 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	if _, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); !errors.Is(err, placement.ErrAdmissionClosed) {
 		t.Fatal("unspecified deployment admitted a fresh sandbox", err)
 	}
-	if _, err := nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}); !errors.Is(err, deployment.ErrConflict) {
+	if _, err := nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}); !errors.Is(err, deployment.ErrConflict) {
 		t.Fatal("unspecified deployment issued an enrollment token", err)
 	}
 

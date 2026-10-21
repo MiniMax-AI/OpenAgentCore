@@ -32,6 +32,9 @@ var (
 	// ErrNodeAddressMismatch rejects an enrollment whose Core address is not
 	// the installation public URL. The token stays unconsumed.
 	ErrNodeAddressMismatch = errors.New("sandbox node Core address differs from the public URL")
+	// ErrNodeHostUnmeasured rejects an enrollment that leaves a limit unset
+	// and reports no host measurements to derive it from. The token stays unused.
+	ErrNodeHostUnmeasured = errors.New("sandbox node reported no host measurements")
 	// ErrNodeExists rejects an enrollment whose node ID is already in use.
 	ErrNodeExists = errors.New("sandbox node ID is already enrolled")
 	// ErrSandboxResetSessionBusy reports a hosted Session an automatic reset

@@ -113,7 +113,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 		t.Fatal(err)
 	}
 	var enrollment api.SandboxEnrollmentToken
-	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{}`, &enrollment)
+	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{"max_active":2,"max_retained":2}`, &enrollment)
 	nodeID, nodeCredential := uuid.NewString(), strings.Repeat("n", 64)
 	enroll, _ := json.Marshal(deployment.Enrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("docker"), CoreURL: "https://core.example"})
