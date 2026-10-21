@@ -86,12 +86,11 @@ type Node struct {
 	ID                   string
 	Online, ServingReady bool
 	// ReadyGeneration is nil until the node serves a generation.
-	ReadyGeneration *uint64
-	TargetState     string
-	// Reserved counts placements still waiting for their sandbox; Active includes them.
-	Active, Retained, Reserved int64
-	MaxActive, MaxRetained     int
-	CoreURL                    string
+	ReadyGeneration        *uint64
+	TargetState            string
+	Active, Retained       int64
+	MaxActive, MaxRetained int
+	CoreURL                string
 }
 
 // Placement is the node and generation a new Session's Environment reserves.

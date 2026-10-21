@@ -88,20 +88,36 @@ func TestPressureSuspensionRequiresUsefulCapacity(t *testing.T) {
 	}
 }
 
-func TestFreeSlotWaitsForPlacedSession(t *testing.T) {
-	f := newFixture(t)
-	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
-	node := f.enroll(t, view, deployment.Capacity{MaxActive: 2, MaxRetained: 3})
-	f.connect(t, node.NodeID)
-	owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation, "3 minutes")
-	placed := hostedEnvironment(t, f.pool)
-	if _, err := f.pool.Exec(t.Context(), `INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,$3)`, placed.EnvironmentID, node.NodeID, view.Generation); err != nil {
-		t.Fatal(err)
-	}
-	until := time.Now().Add(time.Hour)
-	if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
-		t.Fatalf("quiesce: %v, want %v", err, deployment.ErrNotIdle)
+func TestFreeSlotWaitsForStartingSession(t *testing.T) {
+	for _, created := range []bool{false, true} {
+		t.Run(map[bool]string{false: "waiting for its sandbox", true: "initializing"}[created], func(t *testing.T) {
+			f := newFixture(t)
+			changes, _ := f.execution(t)
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+			node := f.enroll(t, view, deployment.Capacity{MaxActive: 2, MaxRetained: 3})
+			f.connect(t, node.NodeID)
+			owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation, "3 minutes")
+			placed := hostedEnvironment(t, f.pool)
+			if _, err := f.pool.Exec(t.Context(), `INSERT INTO runtime_placements(environment_id,node_id,deployment_generation) VALUES($1,$2,$3)`, placed.EnvironmentID, node.NodeID, view.Generation); err != nil {
+				t.Fatal(err)
+			}
+			if created {
+				starting, err := changes.ReserveAllocation(t.Context(), placed, installation, credentialHash())
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err = f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET state='running',create_settled=true WHERE id=$1`, starting.ID); err != nil {
+					t.Fatal(err)
+				}
+				if _, err = f.pool.Exec(t.Context(), `UPDATE environments SET initialization='running' WHERE id=$1`, placed.EnvironmentID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			until := time.Now().Add(time.Hour)
+			if _, err := changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
+				t.Fatalf("quiesce: %v, want %v", err, deployment.ErrNotIdle)
+			}
+		})
 	}
 }
 

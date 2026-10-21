@@ -79,6 +79,35 @@ func (q *Queries) ListIdleRuntimeCheckpoints(ctx context.Context, nodeID pgtype.
 	return items, nil
 }
 
+const listRuntimeStartingNodes = `-- name: ListRuntimeStartingNodes :many
+SELECT DISTINCT p.node_id
+FROM runtime_placements p JOIN environments e ON e.id=p.environment_id
+LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state <> 'released'
+WHERE p.released_at IS NULL AND (a.id IS NULL OR e.initialization IN ('pending', 'running'))
+`
+
+// A node is starting a Session while that Session's sandbox is not created or
+// its initialization has not finished.
+func (q *Queries) ListRuntimeStartingNodes(ctx context.Context) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listRuntimeStartingNodes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var node_id pgtype.UUID
+		if err := rows.Scan(&node_id); err != nil {
+			return nil, err
+		}
+		items = append(items, node_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRuntimeSuspensionInFlightNodes = `-- name: ListRuntimeSuspensionInFlightNodes :many
 SELECT DISTINCT a.node_id
 FROM runtime_allocations a
