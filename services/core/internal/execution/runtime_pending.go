@@ -125,8 +125,11 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 	}
 	if incomplete {
 		// Capacity-blocked demand should start suspension or expiry now, not on each lane's next tick.
-		for id := range m.snapshotNodes() {
-			m.hintDestination(id)
+		for _, n := range m.snapshotNodes() {
+			select {
+			case n.lifecycle.wakeHints <- struct{}{}:
+			default:
+			}
 		}
 	}
 	return nil
