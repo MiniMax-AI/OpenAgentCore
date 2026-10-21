@@ -144,3 +144,42 @@ func TestPlacementBudgetEndsBeforeAttemptPreservesCursor(t *testing.T) {
 		t.Fatal("unattempted demand advanced cursor", m.placementCursor)
 	}
 }
+
+func TestCapacityFailedPlacementHintsNodeLanes(t *testing.T) {
+	m := testRuntimeManager(t)
+	m.config.InstallationID = uuid.NewString()
+	node, err := m.node("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.deploymentReader = &strictDeploymentReader{t: t, placementDemand: func(context.Context, deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error) {
+		return []deployment.PlacementDemand{{UnallocatedEnvironment: deployment.UnallocatedEnvironment{ID: uuid.NewString(), TenantID: uuid.NewString()}, At: time.Now()}}, deployment.PlacementDemandCursor{}, nil
+	}}
+	_, m.deployment = deploymentOperations(t, &strictDeploymentStorage{t: t}, &strictDeploymentReader{t: t}, &strictExecutionStorage{t: t, withReservation: func(context.Context, deployment.AllocationKey, func(sessions.LockedSession, deployment.ReservationTx) error) error {
+		return placement.ErrNodeUnavailable
+	}})
+	if err := m.reservePlacements(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-node.lifecycle.wakeHints:
+	default:
+		t.Fatal("capacity-blocked demand did not hint the node lane")
+	}
+}
+
+func TestFreedSlotWakesPlacement(t *testing.T) {
+	m := testRuntimeManager(t)
+	m.placementWake = make(chan struct{}, 1)
+	node, err := m.node("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	node.lifecycle.freedSlot()
+	node.lifecycle.freedSlot() // coalesced, never blocks
+	select {
+	case <-m.placementWake:
+	default:
+		t.Fatal("freed slot did not wake placement")
+	}
+}

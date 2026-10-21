@@ -109,7 +109,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination,
+			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination, wakePlacement: m.wakePlacement,
 		}}
 		m.nodes[id] = n
 	}
@@ -139,6 +139,20 @@ func (m *runtimeManager) hintDestination(id string) {
 	select {
 	case n.lifecycle.wakeHints <- struct{}{}:
 	default:
+	}
+}
+
+// A freed slot may admit waiting demand; the placement ticker recovers a missed wake.
+func (m *runtimeManager) wakePlacement() {
+	select {
+	case m.placementWake <- struct{}{}:
+	default:
+	}
+}
+
+func (r *runtimeLifecycle) freedSlot() {
+	if r.wakePlacement != nil {
+		r.wakePlacement()
 	}
 }
 

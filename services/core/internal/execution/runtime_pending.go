@@ -78,6 +78,7 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 		m.placementCursor = deployment.PlacementDemandCursor{}
 		return nil
 	}
+	incomplete := false
 	for _, environment := range rows {
 		if operation.Err() != nil {
 			if ownership := m.lease.CheckOwnership(ctx); ownership != nil {
@@ -100,6 +101,7 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 				return nil
 			}
 			log.Ctx(ctx).Warn("managed Runtime placement incomplete", "environment_id", environment.ID)
+			incomplete = true
 			continue
 		}
 		node, err := m.node(reserved.NodeID)
@@ -120,6 +122,12 @@ func (m *runtimeManager) reservePlacements(ctx context.Context) error {
 	m.placementCursor = next
 	if next.EnvironmentID == "" {
 		m.placementCursor = deployment.PlacementDemandCursor{}
+	}
+	if incomplete {
+		// Capacity-blocked demand should start suspension or expiry now, not on each lane's next tick.
+		for id := range m.snapshotNodes() {
+			m.hintDestination(id)
+		}
 	}
 	return nil
 }

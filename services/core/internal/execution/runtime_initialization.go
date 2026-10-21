@@ -98,6 +98,9 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 	err := w.prepareEnvironment(operation, owner, &failure)
 	if err == nil {
 		err = w.dispatcher.sessionExecution.CompleteEnvironmentInitialization(operation, owner)
+		if err == nil {
+			w.wakeScheduler()
+		}
 	}
 	if err != nil {
 		log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)

@@ -68,6 +68,7 @@ type runtimeLifecycle struct {
 	wakeHints       chan struct{}
 	pendingWake     chan struct{}
 	hintDestination func(string)
+	wakePlacement   func()
 }
 
 func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {
@@ -440,6 +441,9 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 			return nil // Keep scanning unknown creation; absence is not a final receipt.
 		}
 		_, err = r.deployment.ReleaseAllocation(ctx, owner)
+		if err == nil {
+			r.freedSlot()
+		}
 		return err
 	}
 	// A stopped or missing container does not authorize destroying retained
