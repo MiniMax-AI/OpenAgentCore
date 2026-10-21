@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 5218c8ca5101bab6a787f02b0595c4b1ad2d60dead2d1de8a1a3cb5c860c6f9c
+source_hash: 8db49153734b40d3b879b31face4de31f15b5be82eb52e04392abaaff822fcf2
 ---
 
 # Parsar 工作空间
@@ -26,14 +26,13 @@ pnpm --filter @oac/parsar-example dev
 
 | 对象 | 含义 |
 | --- | --- |
-| **资源库** | 组装用的零件，按使用方分组：模型供执行配置使用；Skills、MCP 服务、Plugins、知识和指令片段供 Agent 使用；凭据供 MCP 使用。资源是共享的：修改一项会影响所有使用它的对象，正在使用的条目不能移除。 |
-| **执行配置** | Agent 的运行方式，相当于本地 Codex 的 profile：Harness、模型、推理强度、网页搜索，以及 **高级** 中的推理摘要、输出详细度和服务层级。只提供所选 Harness 声明支持的值。 |
+| **资源库** | 组装用的零件，按使用方分组：模型供 Agent 的执行引擎使用；Skills、MCP 服务、Plugins、知识和指令片段供 Agent 使用；凭据供 MCP 使用。资源是共享的：修改一项会影响所有使用它的对象，正在使用的条目不能移除。 |
 | **环境模板** | 准备好的工作区：npm 与 Python 软件包、Bash 初始化脚本、环境变量、飞书机器人变量和初始文件。 |
-| **Agent** | 用户对话的对象：名称、描述、指令、一个必选的执行配置、一个必选的环境模板、能力和行为开关。**复制**会生成一份独立副本。 |
+| **Agent** | 用户对话的对象：名称、描述、指令、运行方式、一个必选的环境模板、能力和行为开关。运行方式对应本地 Codex 的配置：Harness、模型、推理强度、网页搜索，以及 **高级** 中的推理摘要、输出详细度和服务层级。**复制**会生成一份独立副本。 |
 | **飞书机器人** | 一个机器人最多绑定一个 Agent。它把自己的聊天路由给该 Agent，并在所有对话中（包括网页对话）作为该 Agent 的飞书身份。 |
 | **对话** | 一个公开 Core Session，拥有独立的 Environment，在开始时冻结 Agent 和环境配置。 |
 
-配置只在模板和 Agent 中设定，对话不会覆盖。修改只影响新对话。Agent、其执行配置或环境模板变更后，已有对话会给出提示，并提供 **用新配置开始新对话**。
+配置只在模板和 Agent 中设定，对话不会覆盖。修改只影响新对话。Agent 或其环境模板变更后，已有对话会给出提示，并提供 **用新配置开始新对话**。
 
 ## 网页聊天 {#web-chat}
 
@@ -47,7 +46,7 @@ pnpm --filter @oac/parsar-example dev
 
 ## Agent 与资源 {#agents-and-resources}
 
-**Agent** 以卡片列出 Agent，展示执行配置、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**执行与环境**、**指令**、**能力** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。选择上限与 Core 的 [Environment 限制](../../contracts/agents-api/zh/environments.md#plugins-and-capability-directories)一致：Skills 和 Plugins 各最多 50 个，知识与环境模板文件合计最多 50 个；指令片段和 MCP 服务没有数量上限。只绑定 Agent 需要的资源，因为每个 Skill 和工具都会增加模型要读的内容。在 **执行配置** 中，Harness 会把每个选项收窄到它声明支持的值（[Harness 能力](../../contracts/agents-api/zh/harness-capabilities.md)）；切换 Harness 时，新 Harness 不接受的值会恢复为默认，并说明是哪几项。留空的选项保留 Harness 默认值；网页搜索默认 **关闭**。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑执行配置、模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。在同一浏览器标签页中回到 Agent 页面时，会恢复未保存的修改；点击 **保存** 时会指出缺少的必填项。
+**Agent** 以卡片列出 Agent，展示执行引擎、模型、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**执行与环境**、**指令**、**能力** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。选择上限与 Core 的 [Environment 限制](../../contracts/agents-api/zh/environments.md#plugins-and-capability-directories)一致：Skills 和 Plugins 各最多 50 个，知识与环境模板文件合计最多 50 个；指令片段和 MCP 服务没有数量上限。只绑定 Agent 需要的资源，因为每个 Skill 和工具都会增加模型要读的内容。在 **执行与环境** 中，Harness 会把每个选项收窄到它声明支持的值（[Harness 能力](../../contracts/agents-api/zh/harness-capabilities.md)）；切换 Harness 时，新 Harness 不接受的值会恢复为默认，并说明是哪几项。留空的选项保留 Harness 默认值；网页搜索默认 **关闭**。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。在同一浏览器标签页中回到 Agent 页面时，会恢复未保存的修改；点击 **保存** 时会指出缺少的必填项。
 
 **模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
 
@@ -58,7 +57,7 @@ pnpm --filter @oac/parsar-example dev
 
 **环境模板** 只在 Core 托管的工作区中运行。每个新对话会先写入文件、安装软件包并完成初始化，再启动 Agent；初始化失败会停止执行。初始文件使用规范的 `/workspace/` 路径，脚本在工作区中运行。变量值在产品响应中只写：`null` 保留已有值，字符串替换，删除名称即删除变量。**飞书机器人变量** 把变量名映射到所绑定机器人的 **App ID**、**App Secret** 或地区；使用这类模板的对话要求 Agent 已绑定机器人。Parsar 通过公开 Session Environment 合约内联发送模板，不创建 Core Template 资源。
 
-**提前准备，新对话无需等待安装** 会为使用该模板的每个 Agent 保留一个准备好的 Session。Parsar 在没有输入的情况下创建它，Core 会提前准备好 Environment；下一个网页或飞书对话发送第一条消息时直接接管它，并保留自己的标题。Agent、其执行配置、环境模板、机器人或模型服务商变更后，或超过 12 小时、或被接管后，准备好的 Session 会被替换；关闭开关会丢弃它。第一条消息带图片或文件时，会创建普通的 Session。每个准备好的 Session 在等待期间会占用一个工作区。
+**提前准备，新对话无需等待安装** 会为使用该模板的每个 Agent 保留一个准备好的 Session。Parsar 在没有输入的情况下创建它，Core 会提前准备好 Environment；下一个网页或飞书对话发送第一条消息时直接接管它，并保留自己的标题。Agent、其环境模板、机器人或模型服务商变更后，或超过 12 小时、或被接管后，准备好的 Session 会被替换；关闭开关会丢弃它。第一条消息带图片或文件时，会创建普通的 Session。每个准备好的 Session 在等待期间会占用一个工作区。
 
 ## 飞书 {#feishu}
 
@@ -78,13 +77,13 @@ Agent 以绑定的机器人身份工作。使用 **飞书机器人变量** 时�
 
 ### 飞书工作环境案例 {#feishu-workspace-case}
 
-[飞书工作环境](examples/feishu/)由普通模板组装而成。[environment.json](examples/feishu/environment.json) 声明软件包、机器人变量和文件，[setup.sh](examples/feishu/setup.sh) 安装经过校验和验证的官方 CLI 并用机器人凭证完成配置，[profile.json](examples/feishu/profile.json) 定义 Codex 执行配置，[agent.json](examples/feishu/agent.json) 定义 Agent。配置好模型，导入官方 `lark-shared` Skill 和需要的业务 Skill，添加机器人后运行：
+[飞书工作环境](examples/feishu/)由普通模板组装而成。[environment.json](examples/feishu/environment.json) 声明软件包、机器人变量和文件，[setup.sh](examples/feishu/setup.sh) 安装经过校验和验证的官方 CLI 并用机器人凭证完成配置，[agent.json](examples/feishu/agent.json) 定义一个 Codex Agent。配置好模型，导入官方 `lark-shared` Skill 和需要的业务 Skill，添加机器人后运行：
 
 ```bash
 node example/parsar/examples/feishu/configure.mjs --url http://localhost:3001 --model MODEL_ID --bot BOT_ID --skills SHARED_SKILL_ID,DOMAIN_SKILL_ID
 ```
 
-`--bot` 是 Parsar 中的机器人 ID，不是飞书 App ID。脚本通过与界面相同的 `/app/runtimes`、`/app/profiles` 和 `/app/agents` 操作创建环境模板、执行配置和 Agent，绑定机器人并输出 Agent 链接。第一条消息可以要求执行 `lark-cli api GET /open-apis/bot/v3/info --as bot --json`。运行节点必须能解析并访问飞书开放平台；模板无法修复节点 DNS 或网络策略。
+`--bot` 是 Parsar 中的机器人 ID，不是飞书 App ID。脚本通过与界面相同的 `/app/runtimes` 和 `/app/agents` 操作创建环境模板和 Agent，绑定机器人并输出 Agent 链接。第一条消息可以要求执行 `lark-cli api GET /open-apis/bot/v3/info --as bot --json`。运行节点必须能解析并访问飞书开放平台；模板无法修复节点 DNS 或网络策略。
 
 ## 数据归属与本地 API {#ownership-and-local-api}
 
@@ -92,7 +91,7 @@ Core 的 Project key 只保存在服务端。对话创建成功后，只保留 C
 
 | 产品路由组 | 调用方与凭据 |
 | --- | --- |
-| `/app/providers`、`/app/models`、`/app/profiles`、`/app/agents`、`/app/runtimes`、`/app/mcps`、`/app/sessions` | 同源本地 UI；飞书工作器在进程内复用对话创建 |
+| `/app/providers`、`/app/models`、`/app/agents`、`/app/runtimes`、`/app/mcps`、`/app/sessions` | 同源本地 UI；飞书工作器在进程内复用对话创建 |
 | `/app/feishu/bots`、`/app/feishu/provision`、`/app/feishu/deliveries` | 同源本地 UI；从不返回凭据 |
 | `/app/capabilities`、`/app/skills/registry/preview` | 同源本地 UI |
 | `/app/mcp-oauth/<operation-id>`、`/oauth/callback` | 本地 OAuth 流程；随机 state、PKCE 和同源完成 POST |

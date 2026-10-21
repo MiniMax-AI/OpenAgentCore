@@ -49,8 +49,8 @@ export function Capabilities({
   initialTab?: string;
 }) {
   const [tab, setTab] = useState(initialTab);
-  // Building blocks are grouped by what composes them: execution profiles,
-  // Agents, and MCP authentication.
+  // Building blocks are grouped by what uses them: Agent engines, Agent
+  // capabilities, and MCP authentication.
   const groups: [string, string][][] = [
     [["models", tr("模型")]],
     [

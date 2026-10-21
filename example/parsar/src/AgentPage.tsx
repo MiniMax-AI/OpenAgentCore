@@ -97,7 +97,7 @@ function AgentEditor({
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
   const missing = {
     name: form.name.trim() ? undefined : tr("请填写名称"),
-    profile_id: form.profile_id ? undefined : tr("请选择执行配置"),
+    model_id: form.model_id ? undefined : tr("请选择模型"),
     runtime_id: form.runtime_id ? undefined : tr("请选择环境模板"),
   };
   const errors: Partial<typeof missing> = attempted ? missing : {};

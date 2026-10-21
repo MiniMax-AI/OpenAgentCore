@@ -1,16 +1,15 @@
 import { tr } from "./i18n";
-import { useAgents, useMCPs, useProfiles } from "./product";
+import { useAgents, useMCPs } from "./product";
 
 // Who uses a building block, so lists can show it and block removal up front.
 export function useUsage() {
   const agents = useAgents().data || [],
-    profiles = useProfiles().data || [],
     mcps = useMCPs().data || [];
   const count = (n: number, unit: string) =>
     n ? tr("被 {{count}} 个{{unit}}使用", { count: n, unit }) : "";
   return {
     model: (id: string) =>
-      count(profiles.filter((row) => row.model_id === id).length, tr("执行配置")),
+      count(agents.filter((row) => row.model_id === id).length, "Agent"),
     runtime: (id: string) =>
       count(agents.filter((row) => row.runtime_id === id).length, "Agent"),
     mcp: (id: string) =>

@@ -10,7 +10,7 @@ import { sessionAPI } from "./sessions.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 import {
   harnessOptions,
-  profileOptionFields,
+  executionOptionFields,
   unsupportedOption,
 } from "../shared/harness-options.mjs";
 import { maxFiles, maxPlugins, maxSkills } from "../shared/environment-limits.mjs";
@@ -27,7 +27,6 @@ const kinds = new Set([
   "models",
   "mcps",
   "runtimes",
-  "profiles",
   "agents",
   "sessions",
 ]);
@@ -155,12 +154,11 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       const used =
         store.list("feishu_bots").some((row) => row.agent_id === id) ||
         store.list("models").some((row) => row.provider_id === id) ||
-        store.list("profiles").some((row) => row.model_id === id) ||
         store
           .list("agents")
           .some(
             (row) =>
-              row.profile_id === id ||
+              row.model_id === id ||
               row.runtime_id === id ||
               row.mcp_ids.includes(id),
           ) ||
@@ -248,13 +246,13 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     if (kind === "runtimes") {
       Object.assign(value, runtimeProfile(body, previous));
     }
-    if (kind === "profiles") {
+    if (kind === "agents") {
       if (!harnessOptions[body.harness])
         throw new AppError(400, "请选择执行引擎。");
-      value.description = text(body.description || "", "描述", 500);
       value.harness = body.harness;
+      if (!body.model_id) throw new AppError(400, "请选择模型。");
       value.model_id = requireReference("models", body.model_id);
-      for (const field of profileOptionFields)
+      for (const field of executionOptionFields)
         value[field] = typeof body[field] === "string" ? body[field] : "";
       value.web_search ||= "disabled";
       const unsupported = unsupportedOption(value);
@@ -263,10 +261,6 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
           400,
           `${harnessOptions[value.harness].label} 不支持所选的${optionLabels[unsupported]}。`,
         );
-    }
-    if (kind === "agents") {
-      if (!body.profile_id) throw new AppError(400, "请选择执行配置。");
-      value.profile_id = requireReference("profiles", body.profile_id);
       value.description = text(body.description || "", "描述", 500);
       value.instructions = text(body.instructions, "指令", 100000);
       value.enabled = body.enabled !== false;

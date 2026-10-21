@@ -5,11 +5,10 @@ import {
   useAgents,
   useFeishuBots,
   useModels,
-  useProfiles,
   useRuntimes,
   type AgentProfile,
 } from "./lib/product";
-import { profileSummary } from "./Profiles";
+import { engineSummary } from "./ExecutionFields";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { ErrorNotice, PageHeader } from "./components/shared";
@@ -42,7 +41,6 @@ export function Chip({
 export function Agents() {
   const agents = useAgents(),
     models = useModels(),
-    profiles = useProfiles(),
     runtimes = useRuntimes(),
     bots = useFeishuBots();
   const [search, setSearch] = useState("");
@@ -94,10 +92,7 @@ export function Agents() {
               <AgentCard
                 key={agent.id}
                 agent={agent}
-                engine={profileSummary(
-                  profiles.data?.find((row) => row.id === agent.profile_id),
-                  models.data,
-                )}
+                engine={engineSummary(agent, models.data)}
                 runtime={runtimes.data?.find((r) => r.id === agent.runtime_id)?.name}
                 bot={bots.data?.find((b) => b.agent_id === agent.id)?.name}
               />

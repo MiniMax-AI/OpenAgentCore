@@ -1,5 +1,5 @@
 export type HarnessKind = "codex" | "claude_sdk" | "mcode";
-export type ProfileOptionField =
+export type ExecutionOptionField =
   | "reasoning_effort"
   | "reasoning_summary"
   | "web_search"
@@ -8,11 +8,11 @@ export type ProfileOptionField =
 export const harnessOptions: Record<
   HarnessKind,
   { label: string; protocol: "responses" | "anthropic" } & Record<
-    ProfileOptionField,
+    ExecutionOptionField,
     string[]
   >
 >;
-export const profileOptionFields: ProfileOptionField[];
+export const executionOptionFields: ExecutionOptionField[];
 export function unsupportedOption(
-  profile: { harness: string } & Partial<Record<ProfileOptionField, string>>,
-): ProfileOptionField | "harness" | undefined;
+  agent: { harness: string } & Partial<Record<ExecutionOptionField, string>>,
+): ExecutionOptionField | "harness" | undefined;

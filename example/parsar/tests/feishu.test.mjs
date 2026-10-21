@@ -66,14 +66,10 @@ async function setup(t) {
     name: "Text",
     environment: "openai_hosted",
   });
-  const profile = await put("profiles", {
-    name: "Codex",
-    harness: "codex",
-    model_id: model.id,
-  });
   const agent = await put("agents", {
     name: "Engineer",
-    profile_id: profile.id,
+    harness: "codex",
+    model_id: model.id,
     runtime_id: runtime.id,
     instructions: "Work carefully",
     skill_ids: [],
@@ -633,7 +629,7 @@ test("Agent Skill version selectors are validated and frozen in public requests"
     name: "Hosted",
     environment: "openai_hosted",
   });
-  const model = f.store.get("models", f.store.get("profiles", f.agent.profile_id).model_id);
+  const model = f.store.get("models", f.agent.model_id);
   const provider = f.store.get("providers", model.provider_id);
   await f.put(
     "providers",
@@ -747,7 +743,7 @@ test("settled Feishu threads wake for unmentioned image replies and release proc
     downloads = [],
     reactions = [],
     worker = f.create();
-  const model = f.store.get("models", f.store.get("profiles", f.agent.profile_id).model_id),
+  const model = f.store.get("models", f.agent.model_id),
     provider = f.store.get("providers", model.provider_id);
   await f.put(
     "providers",
@@ -986,10 +982,6 @@ test("Session configuration summary is frozen with the creation request and excl
   await f.api("PUT", `/app/agents/${f.agent.id}`, {
     ...f.agent,
     name: "Changed",
-  });
-  const profile = f.store.get("profiles", f.agent.profile_id);
-  await f.api("PUT", `/app/profiles/${profile.id}`, {
-    ...profile,
     harness: "claude_sdk",
   });
   const settled = await f.api("PUT", `/app/sessions/${id}`, {});

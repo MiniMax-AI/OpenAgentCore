@@ -123,12 +123,12 @@ export function providerAPI(store, fetchImpl) {
           );
           if (
             store
-              .list("profiles")
-              .some((profile) => removed.some((row) => row.id === profile.model_id))
+              .list("agents")
+              .some((agent) => removed.some((row) => row.id === agent.model_id))
           )
             throw new AppError(
               409,
-              "取消的模型仍被执行配置引用，请先调整执行配置的模型。",
+              "取消的模型仍被 Agent 引用，请先调整 Agent 的模型。",
             );
           for (const row of removed) store.remove("models", row.id);
           for (const row of selected) {

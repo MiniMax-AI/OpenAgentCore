@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ResourceEditor } from "./Resources";
-import { ProfileEditor, emptyProfile, profileSummary } from "./Profiles";
+import { ExecutionFields } from "./ExecutionFields";
 import { SkillCreate, SkillDetail, useSkills } from "./Skills";
 import { useQuery } from "@tanstack/react-query";
 import { api, readHistory } from "./lib/api";
@@ -13,7 +13,6 @@ import {
 import {
   useModels,
   useMCPs,
-  useProfiles,
   useRuntimes,
   type AgentProfile,
 } from "./lib/product";
@@ -29,7 +28,13 @@ import { ErrorNotice, Field, Section, Toggle } from "./components/shared";
 import { randomUuid } from "@oac/agents-client";
 export type Configuration = Pick<
   AgentProfile,
-  | "profile_id"
+  | "harness"
+  | "model_id"
+  | "reasoning_effort"
+  | "reasoning_summary"
+  | "web_search"
+  | "verbosity"
+  | "service_tier"
   | "instructions"
   | "skill_ids"
   | "skill_versions"
@@ -41,7 +46,13 @@ export type Configuration = Pick<
   | "capability_versions"
 >;
 export const emptyConfiguration: Configuration = {
-  profile_id: "",
+  harness: "codex",
+  model_id: "",
+  reasoning_effort: "",
+  reasoning_summary: "",
+  web_search: "disabled",
+  verbosity: "",
+  service_tier: "",
   instructions: "",
   skill_ids: [],
   mcp_ids: [],
@@ -53,12 +64,11 @@ export function ConfigurationFields({
 }: {
   value: Configuration;
   change: (value: Configuration) => void;
-  errors?: { profile_id?: string; runtime_id?: string };
+  errors?: { model_id?: string; runtime_id?: string };
 }) {
   const capabilities = useCapabilities(),
     runtimes = useRuntimes(),
     models = useModels(),
-    profiles = useProfiles(),
     skills = useSkills(),
     mcps = useMCPs();
   const [editor, setEditor] = useState<{
@@ -142,22 +152,10 @@ export function ConfigurationFields({
   return (
     <div className="space-y-6">
       <Section title={tr("执行与环境")}>
-        <ResourceField
-          label={tr("执行配置")}
-          required
-          error={errors.profile_id}
-          loading={profiles.isPending || models.isPending}
-          options={(profiles.data || []).map((row) => ({
-            id: row.id,
-            name: row.name,
-            description: profileSummary(row, models.data),
-          }))}
-          selected={value.profile_id ? [value.profile_id] : []}
-          change={(ids) => change({ ...value, profile_id: ids[0] || "" })}
-          empty={tr("选择执行配置")}
-          create={() => add("profiles")}
-          createLabel={tr("添加执行配置")}
-          inspect={inspect("profiles")}
+        <ExecutionFields
+          value={value}
+          change={change}
+          error={errors.model_id}
         />
         <ResourceField
           label={tr("环境模板")}
@@ -267,17 +265,6 @@ export function ConfigurationFields({
           />
         </div>
       </Section>
-      {editor?.kind === "profiles" && (
-        <ProfileEditor
-          value={
-            editor.creating
-              ? { ...emptyProfile(), id: editor.id }
-              : profiles.data!.find((row) => row.id === editor.id)!
-          }
-          close={close}
-          onSaved={(profile_id) => change({ ...value, profile_id })}
-        />
-      )}
       {editor?.kind === "skills" &&
         (editor.creating ? (
           <SkillCreate
@@ -349,7 +336,6 @@ export function ConfigurationFields({
       )}
       <ErrorNotice
         error={
-          profiles.error ||
           models.error ||
           skills.error ||
           mcps.error ||

@@ -31,7 +31,7 @@ export const harnessOptions = {
   },
 };
 
-export const profileOptionFields = [
+export const executionOptionFields = [
   "reasoning_effort",
   "reasoning_summary",
   "web_search",
@@ -39,11 +39,11 @@ export const profileOptionFields = [
   "service_tier",
 ];
 
-// Returns the first option the profile's Harness does not admit.
-export function unsupportedOption(profile) {
-  const declared = harnessOptions[profile.harness];
+// Returns the first option the Agent's Harness does not admit.
+export function unsupportedOption(agent) {
+  const declared = harnessOptions[agent.harness];
   if (!declared) return "harness";
-  return profileOptionFields.find(
-    (field) => profile[field] && !declared[field].includes(profile[field]),
+  return executionOptionFields.find(
+    (field) => agent[field] && !declared[field].includes(agent[field]),
   );
 }

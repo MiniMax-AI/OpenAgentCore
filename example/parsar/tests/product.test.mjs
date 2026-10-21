@@ -159,14 +159,14 @@ test("Provider discovery uses only its credential; selected and custom models sa
     models: ["one", "two"],
   });
   const one = store.list("models").find((row) => row.model === "one");
-  store.put("profiles", { id: randomUUID(), model_id: one.id });
+  store.put("agents", { id: randomUUID(), model_id: one.id, mcp_ids: [] });
   await assert.rejects(
     api("PUT", `/app/providers/${id}`, {
       ...saved,
       name: "Changed",
       models: [],
     }),
-    /仍被执行配置引用/,
+    /仍被 Agent 引用/,
   );
   assert.equal(store.get("providers", id).name, "Team");
   assert.equal(store.list("models").length, 2);
@@ -228,15 +228,11 @@ async function setup(store, core) {
     label: "docs",
     url: "https://mcp.example/docs",
   });
-  const profile = await put("profiles", {
-    name: "Claude",
-    harness: "claude_sdk",
-    model_id: model.id,
-  });
   const agent = await put("agents", {
     name: "Reviewer",
     runtime_id: runtime.id,
-    profile_id: profile.id,
+    model_id: model.id,
+    harness: "claude_sdk",
     instructions: "Review carefully",
     mcp_ids: [mcp.id],
     skill_ids: ["skill_review"],
@@ -245,7 +241,6 @@ async function setup(store, core) {
     api,
     put,
     model,
-    profile,
     runtime,
     agent,
     input: {
@@ -727,18 +722,18 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
   await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
 });
 
-test("execution profiles carry Harness options into the Session request and reject undeclared values", async (t) => {
+test("Agents carry Harness options into the Session request and reject undeclared values", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   const sent = [];
-  const { api, put, profile, agent, input } = await setup(store, async (_path, _method, body) => {
+  const { api, put, agent, input } = await setup(store, async (_path, _method, body) => {
     sent.push(body);
     return { id: randomUUID() };
   });
   const codex = await put(
-    "profiles",
+    "agents",
     {
-      ...profile,
+      ...agent,
       harness: "codex",
       reasoning_effort: "high",
       reasoning_summary: "auto",
@@ -746,7 +741,7 @@ test("execution profiles carry Harness options into the Session request and reje
       verbosity: "low",
       service_tier: "priority",
     },
-    profile.id,
+    agent.id,
   );
   await put("sessions", input);
   const request = sent[0];
@@ -760,9 +755,9 @@ test("execution profiles carry Harness options into the Session request and reje
   );
   assert.equal(request.x_agents_core.model_provider.protocol, "responses");
   const plain = await put(
-    "profiles",
+    "agents",
     { ...codex, harness: "claude_sdk", reasoning_effort: "", reasoning_summary: "", web_search: "", verbosity: "", service_tier: "" },
-    profile.id,
+    agent.id,
   );
   assert.equal(plain.web_search, "disabled");
   await put("sessions", { ...input, name: "Plain" });
@@ -776,11 +771,10 @@ test("execution profiles carry Harness options into the Session request and reje
     [{ reasoning_effort: "minimal" }, /Claude Code 不支持所选的推理强度/],
     [{ harness: "local" }, /请选择执行引擎/],
   ])
-    await assert.rejects(put("profiles", { ...plain, ...patch }, profile.id), message);
-  await assert.rejects(api("DELETE", `/app/profiles/${profile.id}`), /仍被引用/);
+    await assert.rejects(put("agents", { ...plain, ...patch }, agent.id), message);
   await assert.rejects(
-    put("agents", { ...agent, profile_id: undefined }, agent.id),
-    /请选择执行配置/,
+    put("agents", { ...plain, model_id: undefined }, agent.id),
+    /请选择模型/,
   );
 });
 

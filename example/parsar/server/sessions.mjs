@@ -20,9 +20,7 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
     throw new AppError(400, "Agent 已停用，请先启用。");
   const runtime = store.get("runtimes", agent.runtime_id || "");
   if (!runtime) throw new AppError(400, "Agent 未配置环境模板。");
-  const profile = store.get("profiles", agent.profile_id || "");
-  if (!profile) throw new AppError(400, "Agent 未配置执行配置。");
-  const model = store.get("models", profile.model_id);
+  const model = store.get("models", agent.model_id);
   const mcps = agent.mcp_ids.map((id) => store.get("mcps", id));
   if (!model || model.enabled === false || mcps.some((mcp) => !mcp))
     throw new AppError(400, "Agent 绑定的资源已不可用。");
@@ -45,12 +43,12 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
       "请先在模型页面配置所选 Provider 的 HTTPS Base URL 和 API Key。",
     );
   const modelProvider = {
-    protocol: harnessOptions[profile.harness].protocol,
+    protocol: harnessOptions[agent.harness].protocol,
     base_url: provider.base_url,
     api_key: provider.api_key,
   };
   const tools = [
-    { type: "web_search", mode: profile.web_search || "disabled" },
+    { type: "web_search", mode: agent.web_search || "disabled" },
   ];
   if (agent.ask_user)
     tools.push({
@@ -75,7 +73,7 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
       transport: { type: "http", server_url: mcp.url },
       connection_origin: "environment",
       // MiniMax Code admits only optional MCP initialization.
-      required: profile.harness !== "mcode",
+      required: agent.harness !== "mcode",
       ...(mcp.credential_id ? { credential_id: mcp.credential_id } : {}),
     })),
   );
@@ -102,7 +100,7 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
     JSON.stringify(images).length > 900000
   )
     throw new AppError(400, "图片格式或大小无效。");
-  if (images.length && profile.harness === "mcode")
+  if (images.length && agent.harness === "mcode")
     throw new AppError(
       400,
       "当前运行配置不支持图片输入，请使用托管 Codex 或 Claude Code。",
@@ -191,10 +189,8 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
       agent_revision: agent.revision,
       runtime_revision: runtime.revision,
       bot_name: botEnv.length ? bot.name : undefined,
-      profile_name: profile.name,
-      profile_revision: profile.revision,
       model: model.model,
-      harness: profile.harness,
+      harness: agent.harness,
       environment: runtime.environment,
       environment_name: runtime.name,
       packages: runtime.packages || { npm: [], python: [] },
@@ -220,22 +216,22 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
       agent: {
         model: model.model,
         instructions,
-        ...(profile.reasoning_effort || profile.reasoning_summary
+        ...(agent.reasoning_effort || agent.reasoning_summary
           ? {
               reasoning: {
-                ...(profile.reasoning_effort
-                  ? { effort: profile.reasoning_effort }
+                ...(agent.reasoning_effort
+                  ? { effort: agent.reasoning_effort }
                   : {}),
-                ...(profile.reasoning_summary
-                  ? { summary: profile.reasoning_summary }
+                ...(agent.reasoning_summary
+                  ? { summary: agent.reasoning_summary }
                   : {}),
               },
             }
           : {}),
-        ...(profile.service_tier ? { service_tier: profile.service_tier } : {}),
-        x_agents_core: { harness: profile.harness },
+        ...(agent.service_tier ? { service_tier: agent.service_tier } : {}),
+        x_agents_core: { harness: agent.harness },
         multi_agent: { enabled: false },
-        text: { verbosity: profile.verbosity || "medium" },
+        text: { verbosity: agent.verbosity || "medium" },
         tools,
       },
       environment,

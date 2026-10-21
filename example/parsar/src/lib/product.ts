@@ -31,8 +31,10 @@ export interface RuntimeProfile extends NamedResource {
   prepare?: boolean;
   files?: { path: string; content: string }[];
 }
-export interface ExecutionProfile extends NamedResource {
+export interface AgentProfile extends NamedResource {
   description?: string;
+  enabled?: boolean;
+  ask_user?: boolean;
   harness: CoreHarnessKind;
   model_id: string;
   reasoning_effort?: string;
@@ -40,12 +42,6 @@ export interface ExecutionProfile extends NamedResource {
   web_search?: string;
   verbosity?: string;
   service_tier?: string;
-}
-export interface AgentProfile extends NamedResource {
-  description?: string;
-  enabled?: boolean;
-  ask_user?: boolean;
-  profile_id: string;
   runtime_id?: string;
   capability_ids?: string[];
   capability_versions?: Record<string, string>;
@@ -59,8 +55,6 @@ export interface SessionRecord {
     agent_name: string;
     agent_revision?: number;
     runtime_revision?: number;
-    profile_name?: string;
-    profile_revision?: number;
     bot_name?: string;
     model: string;
     harness: CoreHarnessKind;
@@ -113,7 +107,6 @@ export const useResources = <T>(kind: string) =>
 export const useProviders = () => useResources<ProviderProfile>("providers");
 export const useModels = () => useResources<ModelProfile>("models");
 export const useAgents = () => useResources<AgentProfile>("agents");
-export const useProfiles = () => useResources<ExecutionProfile>("profiles");
 export const useRuntimes = () => useResources<RuntimeProfile>("runtimes");
 export const useMCPs = () => useResources<MCPProfile>("mcps");
 export const useSessions = () =>
