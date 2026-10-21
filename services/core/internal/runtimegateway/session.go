@@ -209,13 +209,16 @@ func (s *Session) AgentKindStatus(kind string) (info runtimedevice.SupportedAgen
 	return runtimedevice.SupportedAgentKind{}, false, true
 }
 
-func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKind) {
+// setSupportedAgentKinds reports whether these are the session's first kinds.
+func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKind) (first bool) {
 	copyKinds := make([]runtimedevice.SupportedAgentKind, len(kinds))
 	copy(copyKinds, kinds)
 	s.kindsMu.Lock()
+	first = !s.kindsSeen
 	s.kindsSeen = true
 	s.supportedKinds = copyKinds
 	s.kindsMu.Unlock()
+	return first
 }
 
 // Close closes the transport and subscriptions with ErrSessionClosed, then
@@ -396,7 +399,9 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		return
 	}
 	kinds := deviceKindsFromHeartbeat(p)
-	s.setSupportedAgentKinds(kinds)
+	if s.setSupportedAgentKinds(kinds) {
+		s.reg.announce()
+	}
 	if s.heartbeat == nil {
 		return
 	}
