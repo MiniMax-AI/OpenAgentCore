@@ -242,7 +242,7 @@ sequenceDiagram
 
 ### Suspension
 
-Core suspends an allocation after initialization completes, when no root or Subagent Turn is queued, in progress or waiting, no input or file operation is pending, and real activity has been idle for the policy's idle timeout. A Session need not have run a Turn. Capacity pressure can suspend an already idle node allocation earlier, after the inactivity grace in [Timeouts and limits](#timeouts-and-limits), when compatible waiting demand exists. A full node also keeps one slot free: an allocation idle for 2 minutes may be suspended without waiting demand, so the next Session starts at once. It never interrupts an active Turn or releases capacity before the ordinary quiesce, capture and source-stop proofs complete. If suspension cannot make capacity usable, the waiting request keeps its original deadline. When retained slots are full, pressure can [release an idle checkpoint](#cold-replacement-after-checkpoint-retention), and it suspends an allocation only if that allocation's checkpoint could then be released.
+Core suspends an allocation after initialization completes, when no root or Subagent Turn is queued, in progress or waiting, no input or file operation is pending, and real activity has been idle for the policy's idle timeout. A Session need not have run a Turn. Capacity pressure can suspend an already idle node allocation earlier, after the inactivity grace in [Timeouts and limits](#timeouts-and-limits), when compatible waiting demand exists. A node with no free active slot also keeps one free: after the free-slot inactivity in [Timeouts and limits](#timeouts-and-limits), Core can suspend an idle allocation without waiting demand, so the next Session starts at once. It never interrupts an active Turn or releases capacity before the ordinary quiesce, capture and source-stop proofs complete. If suspension cannot make capacity usable, the waiting request keeps its original deadline. When retained slots are full, pressure can [release an idle checkpoint](#cold-replacement-after-checkpoint-retention), and it suspends an allocation only if that allocation's checkpoint could then be released.
 
 A Provider relies on these rules:
 
@@ -284,7 +284,8 @@ Every other observation keeps ownership and its diagnostic: a `paused`, `running
 | --- | --- | --- |
 | Bounded context | Every Provider call | Ends the caller's wait and proves no rollback, stop, cleanup or absence. The adapter never detaches untracked mutations or replays a timed-out command |
 | Idle timeout and snapshot retention | Checkpoint-capable allocations, set by the [suspension policy](../contracts/agents-api/sandbox-deployment.md#suspension-policy) | At the idle timeout Core begins [suspension](#suspension). When retention ends Core cleans up the snapshot and, for a qualified Session, replaces the compute through [cold replacement](#cold-replacement-after-checkpoint-retention) |
-| 15 s | Inactivity of an idle node allocation before capacity-pressure suspension | Core can suspend it ahead of the idle timeout when compatible waiting demand exists, or after 2 minutes when its node has no free active slot |
+| 15 s | Inactivity of an idle node allocation before capacity-pressure suspension | Core can suspend it ahead of the idle timeout when compatible waiting demand exists |
+| 2 min | Inactivity of an idle allocation on a node with no free active slot | Core can suspend it ahead of the idle timeout without waiting demand, so the next Session finds a free slot |
 | 50 MiB plus 32 bytes (`MaxCommandInputBytes`) | `Command.Stdin` | The command is invalid |
 
 The online window and the other node timers are in the [sandbox node protocol](../contracts/agents-api/node-generation-protocol.md#timeouts-and-limits).

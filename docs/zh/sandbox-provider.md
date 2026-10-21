@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 8aa318c09a96de166eecce5d3e00dc165e37064ec0832f7b4922677dbb5941b5
+source_hash: a4680508946610c7bcb9dfe4dc88e84792e29980e7b60393ebe2bcc733d02a71
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -243,7 +243,7 @@ sequenceDiagram
 
 ### 暂停 {#suspension}
 
-Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中或等待状态、没有待处理的 input 或文件操作，并且真实活动已空闲达到策略的空闲超时之后暂停 allocation。Session 不必运行过 Turn。存在兼容的等待需求时，容量压力可以在[超时与限制](#timeouts-and-limits)所列的无活动宽限期之后，提前暂停已经空闲的 node allocation。已满的 node 还会保留一个空闲 slot：空闲满 2 分钟的 allocation 即使没有等待需求也可以被暂停，让下一个 Session 立即启动。它从不打断活动 Turn，也不会在常规 quiesce、capture 和 source-stop 证明完成之前释放容量。如果暂停无法让容量可用，等待中的请求保留原有期限。retained slot 已满时，容量压力可以[释放空闲检查点](#cold-replacement-after-checkpoint-retention)，并且只暂停其检查点随后可被释放的 allocation。
+Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中或等待状态、没有待处理的 input 或文件操作，并且真实活动已空闲达到策略的空闲超时之后暂停 allocation。Session 不必运行过 Turn。存在兼容的等待需求时，容量压力可以在[超时与限制](#timeouts-and-limits)所列的无活动宽限期之后，提前暂停已经空闲的 node allocation。没有空闲 active slot 的 node 还会保留一个空闲 slot：达到[超时与限制](#timeouts-and-limits)所列的空闲 slot 无活动时间后，即使没有等待需求，Core 也可以暂停空闲的 allocation，让下一个 Session 立即启动。它从不打断活动 Turn，也不会在常规 quiesce、capture 和 source-stop 证明完成之前释放容量。如果暂停无法让容量可用，等待中的请求保留原有期限。retained slot 已满时，容量压力可以[释放空闲检查点](#cold-replacement-after-checkpoint-retention)，并且只暂停其检查点随后可被释放的 allocation。
 
 提供商依赖以下规则：
 
@@ -286,7 +286,8 @@ Core 在释放 allocation 和 placement 归属前，确认原始创建已结算�
 | --- | --- | --- |
 | 有界 context | 每个提供商调用 | 结束调用方的等待，不证明已回滚、停止、清理或不存在。adapter 从不分离未跟踪的 mutation，也不重放已超时的命令 |
 | 空闲超时与快照保留期 | 支持检查点的 allocation，由[暂停策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)设定 | 空闲超时到达时 Core 开始[暂停](#suspension)。保留期结束时 Core 清理快照，并对符合条件的 Session 通过[冷替换](#cold-replacement-after-checkpoint-retention)替换计算资源 |
-| 15 s | 空闲 node allocation 在容量压力暂停之前的无活动时间 | 存在兼容的等待需求时，Core 可以早于空闲超时暂停它；其 node 没有空闲 active slot 时，满 2 分钟后也可以暂停 |
+| 15 s | 空闲 node allocation 在容量压力暂停之前的无活动时间 | 存在兼容的等待需求时，Core 可以早于空闲超时暂停它 |
+| 2 min | 所在 node 没有空闲 active slot 时，空闲 allocation 的无活动时间 | Core 可以早于空闲超时、在没有等待需求时暂停它，让下一个 Session 找到空闲 slot |
 | 50 MiB 加 32 字节（`MaxCommandInputBytes`） | `Command.Stdin` | 命令无效 |
 
 在线窗口和其他节点计时器见[沙箱节点协议](../../contracts/agents-api/zh/node-generation-protocol.md#timeouts-and-limits)。
