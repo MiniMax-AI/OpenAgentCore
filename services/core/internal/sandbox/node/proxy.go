@@ -154,6 +154,14 @@ func (p *provider) DeleteSnapshot(ctx context.Context, r sandbox.Reference, s sa
 func (p *provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute, v sandbox.Command) (sandbox.CommandResult, error) {
 	return p.command(ctx, request{Operation: "command_compute", Reference: r, Compute: &c, Command: &v})
 }
+func (p *provider) RestorePreparation(ctx context.Context, r sandbox.Reference, key string) (bool, error) {
+	out, e := p.call(ctx, request{Operation: "restore_preparation", Reference: r, Key: key})
+	return out.Restored && e == nil, e
+}
+func (p *provider) SavePreparation(ctx context.Context, r sandbox.Reference, key string) error {
+	_, e := p.call(ctx, request{Operation: "save_preparation", Reference: r, Key: key})
+	return e
+}
 func (p *provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	return p.state(ctx, request{Operation: "resume_compute", Reference: r, Compute: &c})
 }

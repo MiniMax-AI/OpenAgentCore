@@ -238,6 +238,24 @@ func (p *Provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c
 	return *out.Command, nil
 }
 
+// The preparation cache addresses the initial compute, like RunCommand.
+func (p *Provider) RestorePreparation(ctx context.Context, r sandbox.Reference, key string) (bool, error) {
+	c, e := p.Initial(ctx, r)
+	if e != nil {
+		return false, e
+	}
+	out, e := p.call(ctx, Request{Operation: "restore_preparation", Reference: r, Compute: c, Key: key})
+	return out.Restored && e == nil, e
+}
+func (p *Provider) SavePreparation(ctx context.Context, r sandbox.Reference, key string) error {
+	c, e := p.Initial(ctx, r)
+	if e != nil {
+		return e
+	}
+	_, e = p.call(ctx, Request{Operation: "save_preparation", Reference: r, Compute: c, Key: key})
+	return e
+}
+
 // ResumeCompute thaws the exact resident source after an aborted suspension.
 // It never starts stopped compute or restores a checkpoint.
 func (p *Provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {

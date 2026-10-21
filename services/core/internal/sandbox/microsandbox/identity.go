@@ -124,6 +124,10 @@ func ValidateRequest(q Request) error {
 			return sandbox.ErrInvalid
 		}
 		return ValidateCompute(q.Config, q.Reference, q.Compute)
+	case "restore_preparation", "save_preparation":
+		if !validHash(q.Key) || q.Compute != (Compute{Name: Name(q.Config, q.Reference, 0)}) {
+			return sandbox.ErrInvalid
+		}
 	case "command":
 		if q.Command == nil || ValidateCommand(*q.Command) != nil {
 			return sandbox.ErrInvalid

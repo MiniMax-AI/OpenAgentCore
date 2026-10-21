@@ -85,12 +85,14 @@ Each operation carries its own arguments and returns the following result on suc
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | None |
+| `restore_preparation` | `RestorePreparation` | `key` | `restored` |
+| `save_preparation` | `SavePreparation` | `key` | None |
 
 A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. The node runs the request on the provider of the named `deployment_generation` and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
 
 The budget is relative: the node anchors `timeout_ms` to its own clock on receipt and consumes it while the request waits in its queue, so the hosts' clocks need not agree. Core still bounds its own wait. A full node queue closes the connection.
 
-The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute` or `delete_snapshot`. A failed response carries an `error_code`:
+The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute`, `delete_snapshot` or `save_preparation`. A failed response carries an `error_code`:
 
 | `error_code` | Meaning |
 | --- | --- |

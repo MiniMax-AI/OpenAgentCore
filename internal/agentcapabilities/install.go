@@ -104,6 +104,21 @@ func Finalize(installed *os.Root, input Input, identity Identity, resolve Direct
 			return ErrInvalid
 		}
 	}
+	return writeManifest(installed, manifest)
+}
+
+// Rebind gives an installation restored from an earlier preparation the identity
+// of this Session. The earlier preparation must have had the identical selection.
+func Rebind(installed *os.Root, manifest *Manifest, input Input, identity Identity) error {
+	digest, err := selectionHash(input)
+	if err != nil || validateIdentity(identity) != nil || manifest.Version != 1 || manifest.SelectionSHA256 != digest {
+		return ErrInvalid
+	}
+	manifest.Identity = identity
+	return writeManifest(installed, *manifest)
+}
+
+func writeManifest(installed *os.Root, manifest Manifest) error {
 	body, err := json.Marshal(manifest)
 	if err != nil || len(body) > 256<<10 || writeFile(installed, ManifestName+".tmp", body, 0400) != nil || installed.Rename(ManifestName+".tmp", ManifestName) != nil {
 		return ErrInvalid

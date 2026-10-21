@@ -140,8 +140,8 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	}
 	identity := agentcapabilities.Identity{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID}
 	operations := setupOperations(setup)
-	for index := 0; index < len(cfg.Files)+len(operations); index++ {
-		err = w.lease.CheckOwnership(ctx)
+	step := func(index int) error {
+		err := w.lease.CheckOwnership(ctx)
 		if err == nil {
 			var currentPeer = peer
 			currentPeer, err = w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
@@ -162,14 +162,30 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 			candidate = command.provisioningFailure(0)
 			err = runRuntimeSetup(ctx, peer, identity, command)
 		}
-		if err != nil {
-			var confirmed *runtimeStepFailure
-			if errors.As(err, &confirmed) {
-				candidate.ExitCode = confirmed.exitCode
-				*failure = candidate
-			}
-			return err
+		var confirmed *runtimeStepFailure
+		if errors.As(err, &confirmed) {
+			candidate.ExitCode = confirmed.exitCode
+			*failure = candidate
 		}
+		return err
 	}
-	return nil
+	total := len(cfg.Files) + len(operations)
+	cache, err := w.preparationCache(ctx, owner, len(cfg.Files), operations)
+	if err != nil {
+		return err
+	}
+	return cache.run(ctx, func() error {
+		for index := 0; index < total; index++ {
+			if err := step(index); err != nil {
+				return err
+			}
+		}
+		return nil
+	}, func() error {
+		// Only finalize binds the restored capability installation to this Session.
+		if len(operations) > 0 && operations[len(operations)-1].Request.Action == "finalize" {
+			return step(total - 1)
+		}
+		return nil
+	})
 }

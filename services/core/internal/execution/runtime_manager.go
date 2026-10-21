@@ -14,6 +14,17 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 )
 
+// provider returns the configured Provider and its installation, or nil during
+// a deployment switch.
+func (m *runtimeManager) provider() (sandbox.SandboxProvider, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.switching {
+		return nil, ""
+	}
+	return m.config.Provider, m.config.InstallationID
+}
+
 // runtimeManager owns node membership, not provider operations. Each registered
 // node has one serial lifecycle; slow provider work cannot occupy another node.
 var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", ErrExecutionUnavailable)
