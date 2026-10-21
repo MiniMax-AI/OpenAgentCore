@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 21fb07f531d4087de59618e5f34211d5dc9674efe97530501170950e8a76f6f2
+source_hash: a8135ed519bdc897237cef7f69c78dde638ab76877c67f096b1e5aef9f28b80b
 ---
 
 沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
@@ -87,12 +87,14 @@ Core 发送包含以下内容的 `request` 帧：
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | 无 |
+| `restore_preparation` | `RestorePreparation` | `key` | `restored` |
+| `save_preparation` | `SavePreparation` | `key` | 无 |
 
 只要 `connection_id`、`owner_epoch` 或 `sequence` 中任一值不匹配，请求就会关闭连接。格式错误的请求会得到 `invalid` 响应。节点在所指 `deployment_generation` 的提供商上运行请求，无法运行时回复 `unconfirmed`。Core 仅向节点上已就绪的代次发送 `create` 和非 observe-only 的 `resume`，并且每条连接最多保留 32 个待处理请求。
 
 预算采用相对计时：节点收到请求时以自己的时钟为基准锚定 `timeout_ms`，并在请求排队等待期间持续消耗该预算，因此各主机的时钟无需保持一致。Core 仍会限制自身等待时长。节点队列已满时会关闭连接。
 
-`response` 帧包含 `id` 和 `connection_id`。成功响应携带操作表中指定的结果；对于 `kill`、`kill_compute` 或 `delete_snapshot`，响应不含结果字段。失败响应携带一个 `error_code`：
+`response` 帧包含 `id` 和 `connection_id`。成功响应携带操作表中指定的结果；对于 `kill`、`kill_compute`、`delete_snapshot` 或 `save_preparation`，响应不含结果字段。失败响应携带一个 `error_code`：
 
 | `error_code` | 含义 |
 | --- | --- |

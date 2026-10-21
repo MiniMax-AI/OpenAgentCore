@@ -70,7 +70,9 @@ type Request struct {
 	Suspend   *SuspendRequest
 	Resume    *ResumeRequest
 	Snapshot  *SnapshotIdentity
-	Deadline  time.Time
+	// Key is the opaque preparation cache key.
+	Key      string `json:",omitempty"`
+	Deadline time.Time
 }
 type Response struct {
 	// CreateSettled binds State to a completed Create rejection or an initial_info
@@ -80,6 +82,7 @@ type Response struct {
 	State         *State
 	Command       *sandbox.CommandResult
 	Metrics       *Metrics
+	Restored      bool `json:",omitempty"`
 	ErrorCode     string
 }
 

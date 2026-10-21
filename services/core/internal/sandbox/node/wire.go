@@ -98,6 +98,8 @@ type request struct {
 	Resume      *sandbox.ResumeRequest    `json:"resume,omitempty"`
 	Snapshot    *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
 	Observation *runtimeobs.Target        `json:"observation,omitempty"`
+	// Key is the opaque preparation cache key of the preparation operations.
+	Key string `json:"key,omitempty"`
 }
 
 type response struct {
@@ -110,6 +112,7 @@ type response struct {
 	State        *sandbox.ComputeState              `json:"state,omitempty"`
 	Command      *sandbox.CommandResult             `json:"command,omitempty"`
 	Sample       *runtimeobs.Sample                 `json:"sample,omitempty"`
+	Restored     bool                               `json:"restored,omitempty"`
 }
 
 type frame struct {
@@ -263,6 +266,10 @@ func (q request) validate() error {
 		if count == 0 {
 			return nil
 		}
+	case "restore_preparation", "save_preparation":
+		if count == 0 && q.Key != "" && len(q.Key) <= 256 {
+			return nil
+		}
 	case "new_compute":
 		if count == 0 || count == 1 && q.Snapshot != nil {
 			return nil
@@ -332,6 +339,10 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (respons
 	case "command":
 		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
 		out.Command = &command
+	case "restore_preparation":
+		out.Restored, err = p.RestorePreparation(ctx, q.Reference, q.Key)
+	case "save_preparation":
+		err = p.SavePreparation(ctx, q.Reference, q.Key)
 	default:
 		var state sandbox.ComputeState
 		var compute sandbox.Compute
@@ -380,6 +391,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (respons
 		}
 		out.Command = nil
 		out.Compute = nil
+		out.Restored = false
 	}
 	return out, err
 }

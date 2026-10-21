@@ -118,6 +118,13 @@ type SandboxProvider interface {
 	// ResumeCompute thaws only the same resident instance after an aborted pause.
 	ResumeCompute(context.Context, Reference, Compute) (ComputeState, error)
 
+	// The preparation cache keeps the Environment filesystem left by one finished
+	// preparation. Key is opaque and the adapter owns storage and lifetime. Both
+	// address the allocation's initial compute and share one declaration.
+	// RestorePreparation returns false when it holds no valid entry.
+	RestorePreparation(ctx context.Context, r Reference, key string) (bool, error)
+	SavePreparation(ctx context.Context, r Reference, key string) error
+
 	// Observe reads one owned Runtime instance after verifying its ownership. It
 	// never renews, restarts or stops compute.
 	Observe(context.Context, runtimeobs.Target) (runtimeobs.Sample, error)
@@ -129,6 +136,9 @@ var requiredOperations = []string{"Create", "GetInfo", "Renew", "Kill", "RunComm
 // checkpointOperations are all supported or all unsupported: partial cleanup or
 // restore support cannot safely own a compute incarnation.
 var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute"}
+
+// preparationOperations are both supported or both unsupported.
+var preparationOperations = []string{"RestorePreparation", "SavePreparation"}
 
 // Compute identifies one incarnation of an allocation. Name is provider-derived.
 // ID is empty only until the original create or restore result is observed.
@@ -253,6 +263,9 @@ func ValidateOperations(operations providercontract.Operations) error {
 		if operations[name].State != operations["Initial"].State {
 			return fmt.Errorf("%w: incomplete checkpoint lifecycle", providercontract.ErrContract)
 		}
+	}
+	if operations[preparationOperations[0]].State != operations[preparationOperations[1]].State {
+		return fmt.Errorf("%w: incomplete preparation cache", providercontract.ErrContract)
 	}
 	return nil
 }

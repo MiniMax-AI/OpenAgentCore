@@ -135,12 +135,12 @@ func validateGenerationJSON(raw []byte, kind string) error {
 		}
 	}
 	if value := values["request"]; value != nil {
-		if _, err := generationObject(value, "deployment_generation id sequence connection_id owner_epoch operation timeout_ms reference", "bootstrap compute generation command suspend resume snapshot observation", ""); err != nil {
+		if _, err := generationObject(value, "deployment_generation id sequence connection_id owner_epoch operation timeout_ms reference", "bootstrap compute generation command suspend resume snapshot observation key", ""); err != nil {
 			return err
 		}
 	}
 	if value := values["response"]; value != nil {
-		if _, err := generationObject(value, "id connection_id", "error_code unsupported info compute state command sample", ""); err != nil {
+		if _, err := generationObject(value, "id connection_id", "error_code unsupported info compute state command sample restored", ""); err != nil {
 			return err
 		}
 	}

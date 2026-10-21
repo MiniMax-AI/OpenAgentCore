@@ -9,21 +9,23 @@ import (
 // Operations is this adapter's complete authored resource contract.
 func Operations() providercontract.Operations {
 	return providercontract.Operations{
-		"Create":            {State: providercontract.Supported},
-		"GetInfo":           {State: providercontract.Supported},
-		"Renew":             {State: providercontract.Supported},
-		"Kill":              {State: providercontract.Supported},
-		"RunCommand":        {State: providercontract.Supported},
-		"Initial":           {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"NewCompute":        {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"GetCompute":        {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"Suspend":           {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"Resume":            {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"KillCompute":       {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"DeleteSnapshot":    {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"RunCommandCompute": {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"ResumeCompute":     {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"Observe":           {State: providercontract.Supported},
+		"Create":             {State: providercontract.Supported},
+		"GetInfo":            {State: providercontract.Supported},
+		"Renew":              {State: providercontract.Supported},
+		"Kill":               {State: providercontract.Supported},
+		"RunCommand":         {State: providercontract.Supported},
+		"Initial":            {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"NewCompute":         {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"GetCompute":         {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"Suspend":            {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"Resume":             {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"KillCompute":        {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"DeleteSnapshot":     {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"RunCommandCompute":  {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"ResumeCompute":      {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"RestorePreparation": {State: providercontract.Unsupported, Reason: "e2b_does_not_support_preparation_cache"},
+		"SavePreparation":    {State: providercontract.Unsupported, Reason: "e2b_does_not_support_preparation_cache"},
+		"Observe":            {State: providercontract.Supported},
 	}
 }
 func (*Provider) ProviderOperations() providercontract.Operations { return Operations() }
@@ -53,4 +55,10 @@ func (p *Provider) RunCommandCompute(context.Context, sandbox.Reference, sandbox
 }
 func (p *Provider) ResumeCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
 	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "ResumeCompute", Reason: Operations()["ResumeCompute"].Reason}
+}
+func (p *Provider) RestorePreparation(context.Context, sandbox.Reference, string) (bool, error) {
+	return false, &providercontract.UnsupportedError{Operation: "RestorePreparation", Reason: Operations()["RestorePreparation"].Reason}
+}
+func (p *Provider) SavePreparation(context.Context, sandbox.Reference, string) error {
+	return &providercontract.UnsupportedError{Operation: "SavePreparation", Reason: Operations()["SavePreparation"].Reason}
 }

@@ -150,6 +150,10 @@ func (b *Binding) loadCapabilitySnapshot(root *os.Root, input agentcapabilities.
 		return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid
 	}
 	manifest, err := agentcapabilities.Load(root)
+	if err == nil && !completed && manifest.Identity != identity {
+		// A preparation restored from an identical earlier Session carries that Session's identity.
+		err = agentcapabilities.Rebind(root, &manifest, input, identity)
+	}
 	if err != nil || agentcapabilities.ValidateSelection(manifest, input, identity) != nil {
 		return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid
 	}
