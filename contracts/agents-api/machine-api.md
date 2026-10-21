@@ -27,7 +27,7 @@ The generated [`runtime.openapi.yaml`](./runtime.openapi.yaml) describes only th
 
 | Credential | Issued by | Accepted on |
 | --- | --- | --- |
-| Enrollment token | `POST /core/v1/sandbox/enrollment-tokens` (Web **Add node**), with the node's approved capacity. One use; it expires at the response's `expires_at` | `sandbox-node/configuration` without a node ID, `sandbox-node/enroll` |
+| Enrollment token | `POST /core/v1/sandbox/enrollment-tokens` (Web **Add node**), with optional node limits. One use; it expires at the response's `expires_at` | `sandbox-node/configuration` without a node ID, `sandbox-node/enroll` |
 | Node credential | The node itself: it generates a secret of 32 to 256 characters without whitespace and registers it at enrollment | `sandbox-node/configuration` with `X-OAC-Node-ID`, `sandbox-node/identity`, `sandbox-node/connect` |
 | Installation grant | The `x_agents_core.installation` command of a `self_hosted` Session; short-lived | `agent-daemon/installation` and its `claim` |
 | Executor credential | The installation claim, or the Core-key routes in [Executor credentials](./environment-executor-credentials.md) | `agent-daemon/enroll` and `agent-daemon/connection`; after enrollment it is also the daemon credential of the bound device |
@@ -58,7 +58,7 @@ oac-daemon connect --profile default
 - A new node sends its enrollment token without `X-OAC-Node-ID`. The token must be valid, unexpired, unconsumed and issued by this installation. An active reset refuses this read.
 - A registered node sends its node credential and its UUID in `X-OAC-Node-ID`. Without a query it reads the current target. `?generation=N` reads only a generation this node may still need: the current target, its serving pin, or one held by an unreleased allocation or placement on it; any other generation is refused. This read stays available during a reset, for owned recovery.
 
-The response has `installation_id`, `provider`, `core_url` (the installation public URL), `generation`, `specification`, `specification_digest`, `max_active` and `max_retained`. It never contains an administrator, Project or E2B credential, and exists only for node-backed providers. The [sandbox deployment contract](./sandbox-deployment.md#canonical-node-specification) defines the specification and its digest.
+The response has `installation_id`, `provider`, `core_url` (the installation public URL), `generation`, `specification` and `specification_digest`. It never contains an administrator, Project or E2B credential, and exists only for node-backed providers. The [sandbox deployment contract](./sandbox-deployment.md#canonical-node-specification) defines the specification and its digest.
 
 ### Enroll a node
 
@@ -73,8 +73,9 @@ The response has `installation_id`, `provider`, `core_url` (the installation pub
 | `backend_fingerprint` | The node's backend namespace digest |
 | `deployment_generation`, `specification_digest` | The configuration the node read |
 | `core_url` | The Core origin the node stores and connects to |
+| `cpu_count`, `effective_cpu_cores`, `total_memory_bytes`, `available_disk_bytes` | Optional host measurements, as the [node protocol](./node-generation-protocol.md#connection) defines |
 
-Core checks, in one transaction, that the token is valid, the deployment is initialized, node-backed and not resetting, the generation and digest match the current specification, `core_url` equals the installation public URL and the node ID is new. Only then does it register the node, with the capacity approved in the token, and consume the token. The 201 response is the node identity: `node_id`, `installation_id`, `provider`, `deployment_generation`, `specification_digest`, `max_active` and `max_retained`. The node cannot submit capacity; the enrolled generation and digest stay the node's immutable identity, and later generations use separate configurations.
+Core checks, in one transaction, that the token is valid, the deployment is initialized, node-backed and not resetting, the generation and digest match the current specification, `core_url` equals the installation public URL and the node ID is new. Only then does it register the node, with the limits the token sets and, for each it leaves unset, the [recommended capacity](./sandbox-deployment.md#recommended-capacity) of the reported host, and consume the token. The 201 response is the node identity: `node_id`, `installation_id`, `provider`, `deployment_generation`, `specification_digest`, `max_active` and `max_retained`. The node cannot submit limits, but a limit the token leaves unset follows the host measurements the node reports, bounded by 1 and 1000000; explicit values and later edits bind. The enrolled generation and digest stay the node's immutable identity, and later generations use separate configurations.
 
 ### Recover a node's identity
 
@@ -89,6 +90,7 @@ Core checks, in one transaction, that the token is valid, the deployment is init
 | 401 | `invalid_node_credential` | A missing, invalid, expired, consumed or foreign token or node credential |
 | 409 | `sandbox_specification_mismatch` | The node's generation or digest does not match |
 | 409 | `sandbox_node_address_mismatch` | `core_url` is not the installation public URL; the token stays unused |
+| 409 | `sandbox_node_host_unmeasured` | The token leaves a limit unset and the request lacks a CPU count or effective cores, or total memory; the token stays unused |
 | 409 | `idempotency_conflict` | The node ID is already registered |
 | 409 | `sandbox_reset_in_progress` | Enrollment or a new node's configuration read during a reset |
 | 503 | `runtime_node_unavailable` | The deployment is not initialized, or storage is unavailable |

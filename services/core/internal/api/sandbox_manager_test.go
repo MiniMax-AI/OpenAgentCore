@@ -79,8 +79,8 @@ func nodeCapacity(active int) error {
 
 func TestSandboxEnrollmentCapacityIsAdministratorOnly(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
-	fakes.deployment.createEnrollment = func(_ context.Context, capacity deployment.Capacity) (deployment.EnrollmentToken, error) {
-		return deployment.EnrollmentToken{}, nodeCapacity(capacity.MaxActive)
+	fakes.deployment.createEnrollment = func(_ context.Context, limits deployment.EnrollmentLimits) (deployment.EnrollmentToken, error) {
+		return deployment.EnrollmentToken{}, nodeCapacity(*limits.MaxActive)
 	}
 	h := newTestHandler(t, deps)
 	for _, test := range []struct{ path, token, body string }{

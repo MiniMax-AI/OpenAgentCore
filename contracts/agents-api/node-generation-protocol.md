@@ -50,7 +50,7 @@ sequenceDiagram
 
 Core counts a node as online while it is connected under the current owner epoch and its last heartbeat is less than 45 seconds old. A heartbeat establishes provider readiness and the last host measurements, never Session activity. [Timeouts and limits](#timeouts-and-limits) lists every timer.
 
-Health carries `observed_at`, `active_operations` (at most 32) and the host measurements that the [Runtime telemetry API](./runtime-observability-api.md#node-host-observations-and-history) reports. A node reports readiness per generation, as described below. A `diagnostic` in a generation observation that is not a declared class makes the frame invalid. The [nodes guide](../../docs/getting-started/nodes.md#readiness-codes) lists the classes and their causes.
+Health carries `observed_at`, `active_operations` (at most 32) and the host measurements that the [Runtime telemetry API](./runtime-observability-api.md#node-host-observations-and-history) reports. The enrollment request carries the same measurements that the node takes for health, `cpu_count`, `effective_cpu_cores`, `total_memory_bytes` and `available_disk_bytes`, each omitted when the node cannot measure it and validated like a health report. Core derives from them every limit the enrollment token leaves unset, as [Recommended capacity](./sandbox-deployment.md#recommended-capacity) defines. A node reports readiness per generation, as described below. A `diagnostic` in a generation observation that is not a declared class makes the frame invalid. The [nodes guide](../../docs/getting-started/nodes.md#readiness-codes) lists the classes and their causes.
 
 ## Provider requests
 

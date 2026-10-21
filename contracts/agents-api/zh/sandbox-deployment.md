@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 7e94d713fd7de92996f17717201c8da58bf8e538dc78e18334f5c43a76802e86
+source_hash: e84e173775d35451be7a77b58946c1786327f77aa627fa169f676648a6933943
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -21,7 +21,7 @@ source_hash: 7e94d713fd7de92996f17717201c8da58bf8e538dc78e18334f5c43a76802e86
 | `POST /core/v1/sandbox/deployment/reset` | 启动托管资源的持久清除或将其升级为持久清除 |
 | `DELETE /core/v1/sandbox/deployment/reset?expected_generation=N` | 取消剩余清除 |
 | `POST /core/v1/sandbox/providers/{provider}/discovery` | 使用临时凭据查询提供商配置目录 |
-| `POST /core/v1/sandbox/enrollment-tokens` | 签发具有已批准容量的一次性节点注册令牌 |
+| `POST /core/v1/sandbox/enrollment-tokens` | 签发带可选节点限制的一次性节点注册令牌 |
 | `GET /core/v1/sandbox/nodes` | 列出已注册节点 |
 | `GET /core/v1/sandbox/nodes/{node_id}` | 读取一个节点及其[主机观测和历史](runtime-observability-api.md#node-host-observations-and-history) |
 | `PATCH /core/v1/sandbox/nodes/{node_id}` | 更改节点的名称和容量 |
@@ -52,7 +52,7 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `root_disk_mib` | microsandbox：至少 1024 MiB；Docker 和 E2B：省略或为零 |
 | `environment_disk_mib` | microsandbox 自有磁盘：至少 1024 MiB；外部文件系统：每个新工作区的获准容量，零表示不请求配额，正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
 
-这些限制描述每个沙箱。节点的 `max_active` 和 `max_retained` 是独立的预留限制，主机测量值绝不会允许超过其中任何一个。即使数值满足这些边界，原生提供商仍可能拒绝这些值。
+这些限制描述每个沙箱。节点的 `max_active` 和 `max_retained` 是独立的预留限制，设置方式见[节点与分配](#nodes-and-allocations)；限制一经设置，任何主机测量值都不允许超过其中任何一个。即使数值满足这些边界，原生提供商仍可能拒绝这些值。
 
 Docker 应用 CPU 和内存限制，并检查运行中容器的限制和精确镜像；它没有硬性的根磁盘或工作区磁盘配额。E2B 的 CPU 和内存必须与精确的就绪模板构建一致，Core 会在保存前通过固定版本 SDK 进行验证；磁盘容量仍属于模板的一部分。两种提供商都不接受其无法强制执行的磁盘配额。E2B 选择可以省略 `resources`：此时 Core 将构建的 CPU 数量和内存存储为 `cpus` 和 `memory_mib`，并通过 `specification.resources` 返回，不带磁盘字段。重启时，Core 会加载已提交的 E2B 选择，而不会再次验证模板构建，因此 E2B 中断绝不会阻碍检查或清理；新选择仍需验证。
 
@@ -195,15 +195,24 @@ stateDiagram-v2
 
 ## 节点与分配 {#nodes-and-allocations}
 
-节点容量由管理员批准，独立于部署 specification。`POST /core/v1/sandbox/enrollment-tokens` 接受可选的 `max_active` 和 `max_retained`，默认分别为 2 和 8，并返回 `{token, expires_at, enrollment_id}`；`enrollment_id` 是该命令的公共句柄，绝不是凭据。microsandbox 会使用两个限制。Docker 绝不暂停，因此 Core 会在此处和 PATCH 中用 `max_active` 替换其 `max_retained`。E2B 没有节点，并返回 409 `sandbox_deployment_conflict`。Core 将批准值与令牌一同存储，并复制到其注册的节点；节点不能提交容量，其本地检查可以拒绝其无法运行的部署，但绝不会提高限制。[节点容量](../../../docs/zh/configuration.md#node-capacity)为操作员说明了这些限制。
+节点容量独立于部署 specification 设置。`POST /core/v1/sandbox/enrollment-tokens` 接受可选的 `max_active` 和 `max_retained`，并返回 `{token, expires_at, enrollment_id}`；`enrollment_id` 是该命令的公共句柄，绝不是凭据。Core 将令牌与发送的限制一同存储，省略的限制保持未设置。节点注册时，Core 把每个显式限制原样复制给节点，并把每个未设置的限制设为注册请求中的主机测量值与当前 specification 的[推荐容量](#recommended-capacity)；限制未设置且没有主机测量值时，返回 409 `sandbox_node_host_unmeasured`，令牌保持未使用。只设置 `max_retained` 时，推导出的 `max_active` 不会超过它；只设置 `max_active` 时，推导出的 `max_retained` 会被提高到至少等于 `max_active`。microsandbox 会使用两个限制。Docker 绝不暂停，因此 Core 会在此处和 PATCH 中用 `max_active` 替换其 `max_retained`。E2B 没有节点，并返回 409 `sandbox_deployment_conflict`。节点不能提交限制，但未设置的限制取决于节点在注册时报告的主机测量值，范围限定在 1 到 1000000。其本地检查可以拒绝其无法运行的部署，但绝不会提高限制。显式值和之后的 PATCH 修改具有约束力：节点注册之后，Core 不再推导。[节点容量](../../../docs/zh/configuration.md#node-capacity)为操作员说明了这些限制。
 
-`GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`enrollment_id` 和 `core_url`。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。请移除该节点并重新添加。
+`GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`recommended_capacity`、`enrollment_id` 和 `core_url`。`recommended_capacity` 是 `{max_active, max_retained}`，即节点最新健康状态与当前 specification 的[推荐容量](#recommended-capacity)；在节点报告 CPU 数量或有效核数以及总内存之前，以及当前 specification 未通过校验时，为 null。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。请移除该节点并重新添加。
 
 节点管理代次，因此其 `provider_ready` 取决于服务代次，目标代次的固定代码会出现在 `rollout.diagnostic` 中。节点会对首次失败的就绪检查进行分类，并且只发送代码；携带任何其他值的帧均无效，且 Core 绝不存储或返回探测文本或主机路径。这些代码是与提供商无关的类别：`provider_unavailable`、`host_unsupported`、`artifacts_unavailable`、`runtime_image_unavailable` 和 `capacity_insufficient`。[就绪代码](../../../docs/zh/getting-started/nodes.md#readiness-codes)给出了原因和操作员应采取的措施。Core 和节点必须来自同一发行包。
 
 `PATCH /core/v1/sandbox/nodes/{node_id}` 接受 `{name, max_active, max_retained}`；降低限制不会停止任何正在运行的沙箱。当节点仍持有分配、快照、预留或待处理清理时，包括节点离线期间，`DELETE /core/v1/sandbox/nodes/{node_id}` 会拒绝操作并返回 409 `runtime_node_in_use`。移除操作不会删除任何计算资源，并且会停用该节点的身份；该主机只能作为新节点重新加入。不存在节点排空过程。
 
 `GET /core/v1/sandbox/nodes/{node_id}/allocations` 列出节点尚未释放的分配。每个项的 `compute_phase_changed_at` 表示该分配进入当前 `compute_phase` 的时间；未知时为 null。该时间是阶段切换时间，不是快照到期时间。此响应不提供快照截止时间，不应根据 `suspension.retention_seconds` 推算。
+
+### 推荐容量 {#recommended-capacity}
+
+Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。`cpus` 在节点报告 `effective_cpu_cores` 时取该值，否则取 `cpu_count`。
+
+- `max_active` 取 `floor(2 × cpus / specification cpus)` 与 `floor((total_memory − 2 GiB) / specification memory)` 中较小者，至少为 1，至多为 1000000。CPU 按核数的两倍分配，因为 Agent 沙箱大多在等待模型。内存从不超配，并为主机和节点服务保留 2 GiB。
+- 不支持检查点的提供商，`max_retained` 等于 `max_active`。否则取 `max_active` 与 `floor(available_disk / 2 / root_disk)` 中较大者，至多为 1000000：挂起的沙箱把根磁盘检查点保留在节点上，其中一半可用磁盘留给它们。
+
+主机未同时报告 CPU 数量或有效核数与总内存时，没有推荐值。Core 仅在注册令牌未设置某个限制时应用它；Web 在 **编辑节点** 中显示它，从不自行应用。
 
 ## 各沙箱提供商中的字段含义 {#what-each-field-means-per-sandbox-provider}
 
@@ -216,7 +225,7 @@ stateDiagram-v2
 | 部署 `metadata.template_build` | 不存在：`metadata` 为空 | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 |
 | 部署 `suspension` | `{idle_seconds, retention_seconds}` | `null`；Core 不暂停 E2B 沙箱 | `null` |
 | 部署 `resources.allocations`、`resources.pending` | 所有节点的总数 | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 |
-| 注册令牌 `max_active`、`max_retained` | 两个限制均适用 | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` |
+| 注册令牌 `max_active`、`max_retained` | 两个限制均适用；省略的限制在注册时推导 | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` |
 | 节点列表和详情 | 已注册节点 | 空列表；详情返回 404 | 已注册节点 |
 | 节点 `retained`、`snapshots`、`max_retained` | 已暂停沙箱数为 `retained` 减去 `active`；`snapshots` 还包含恢复或清理期间保留的快照 | 不适用 | Docker 绝不暂停：`retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` |
 | 节点 `host.available_disk_bytes` | 节点状态目录所在文件系统的可用空间；沙箱磁盘有自己的配额 | 不适用 | 节点状态目录所在文件系统的可用空间，而不是容器的磁盘 |

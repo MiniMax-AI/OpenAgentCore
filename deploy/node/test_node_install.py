@@ -102,7 +102,7 @@ class NodeInstallTests(unittest.TestCase):
             resources.update(root_disk_mib=10240, environment_disk_mib=12288)
         spec = {"resources": resources}
         configuration = {"installation_id": self.args.installation_id, "provider": self.args.provider,
-                         "core_url": self.args.core_url, "generation": 1, "specification": spec, "max_active": 2, "max_retained": 8,
+                         "core_url": self.args.core_url, "generation": 1, "specification": spec,
                          "specification_digest": node_spec.digest(self.args.provider, spec)}
         return io.BytesIO(json.dumps(configuration).encode())
 
@@ -343,6 +343,10 @@ class NodeInstallTests(unittest.TestCase):
 
     def test_registration_failure_names_only_cores_fixed_answer(self):
         self.assertEqual(str(installer.registration_failure(b"secret /home/path details")), installer.REGISTRATION_UNCONFIRMED)
+
+    def test_registration_failure_names_unmeasured_host(self):
+        message = str(installer.registration_failure(b"node enrollment rejected (HTTP 409 sandbox_node_host_unmeasured)\n"))
+        self.assertIn("explicit limits", message)
 
     def test_changed_public_url_clears_unregistered_state_for_a_new_command(self):
         # Core refused the address before consuming the token, so it has no record of this node.

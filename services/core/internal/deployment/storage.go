@@ -494,13 +494,14 @@ type EnrollmentRecord struct {
 	ID, InstallationID     string
 	ExpiresAt              time.Time
 	Consumed               bool
-	MaxActive, MaxRetained int
+	MaxActive, MaxRetained *int
 }
 
 // NewEnrollment is an enrollment token to store, by digest.
 type NewEnrollment struct {
 	ID, TokenDigest, InstallationID string
-	MaxActive, MaxRetained          int
+	// A nil limit is unset: Core derives it from the host when the node enrolls.
+	MaxActive, MaxRetained *int
 }
 
 // Heartbeat is a node's health for one connection.

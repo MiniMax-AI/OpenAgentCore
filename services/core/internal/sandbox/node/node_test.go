@@ -248,6 +248,9 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 		if body.CoreURL != "http://"+r.Host {
 			t.Error("enrollment did not name the node's Core address", body.CoreURL)
 		}
+		if body.CPUCount == nil || *body.CPUCount < 1 {
+			t.Error("enrollment did not report the host measurements", body)
+		}
 		enrollments++
 		registered = true
 		hijacker := w.(http.Hijacker)

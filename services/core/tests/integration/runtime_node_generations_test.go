@@ -67,7 +67,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 				t.Fatal(err)
 			}
 			pendingNode, pendingGeneration := placedGeneration(t, s, w, pending)
-			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2}))
+			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(2)}))
 			if err != nil {
 				t.Fatal(err)
 			}

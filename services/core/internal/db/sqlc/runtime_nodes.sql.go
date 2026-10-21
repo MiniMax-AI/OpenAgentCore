@@ -58,8 +58,8 @@ type CreateRuntimeEnrollmentParams struct {
 	ID             pgtype.UUID `json:"id"`
 	TokenSha256    string      `json:"token_sha256"`
 	InstallationID pgtype.UUID `json:"installation_id"`
-	MaxActive      int32       `json:"max_active"`
-	MaxRetained    int32       `json:"max_retained"`
+	MaxActive      pgtype.Int4 `json:"max_active"`
+	MaxRetained    pgtype.Int4 `json:"max_retained"`
 }
 
 func (q *Queries) CreateRuntimeEnrollment(ctx context.Context, arg CreateRuntimeEnrollmentParams) error {

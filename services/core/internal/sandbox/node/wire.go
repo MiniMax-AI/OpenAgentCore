@@ -60,6 +60,11 @@ type EnrollmentRequest struct {
 	BackendFingerprint   string `json:"backend_fingerprint"`
 	// The retained Core origin; Core refuses an enrollment whose address is not its public URL.
 	CoreURL string `json:"core_url"`
+	// The host measurements of Health. Core derives from them each limit the enrollment token leaves unset.
+	CPUCount           *int64   `json:"cpu_count,omitempty"`
+	EffectiveCPUCores  *float64 `json:"effective_cpu_cores,omitempty"`
+	TotalMemoryBytes   *int64   `json:"total_memory_bytes,omitempty"`
+	AvailableDiskBytes *int64   `json:"available_disk_bytes,omitempty"`
 }
 
 type EnrollmentResponse struct {

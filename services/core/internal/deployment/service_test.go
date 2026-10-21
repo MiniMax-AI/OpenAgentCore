@@ -246,7 +246,7 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 	current := webDeployment(t, installation, "docker", 1)
 	valid := Enrollment{NodeID: uuid.NewString(), Name: "node", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: testSpecification("docker").Digest("docker"), CoreURL: testPublicURL}
-	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: 1, MaxRetained: 1}
+	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: new(1), MaxRetained: new(1)}
 	resetting := current
 	resetting.Reset = &ResetState{Clear: "sandboxes", RequestedAt: time.Now()}
 	unselected := current

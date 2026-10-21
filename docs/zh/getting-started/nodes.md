@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 60f79b32a3c11ee369cf66e2ddde8cfe2652f204996c5adf37eacfe6729be25b
+source_hash: 65d9798a2843a67c27d8b4e4a86cc4977be1ac41b798e32b6b8dde6059958640
 ---
 
 节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 或 Docker 时添加、修改和移除节点的运维人员；E2B 不需要节点。
@@ -31,7 +31,7 @@ Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添
 ## 添加节点 {#add-a-node}
 
 1. 在 Web 打开 **节点**，选择 **添加节点**。
-2. 设置 **同时运行的沙箱**，使用 microsandbox 时还设置 **保留的沙箱**，即节点[容量](../configuration.md#node-capacity)。之后可以通过 **编辑节点** 修改。
+2. 保持 **推荐** 上限，或选择 **自定义** 并设置 **同时运行的沙箱**（使用 microsandbox 时还有 **保留的沙箱**），即节点[容量](../configuration.md#node-capacity)。**编辑节点** 会显示该主机的推荐值，并可通过 **使用推荐值** 填入。
 3. 选择 **生成命令** 并复制命令。命令仅注册一个节点、只能使用一次，且必须在 1 小时内执行；Web 显示倒计时，过期后提供 **生成新命令**。
 4. 在主机上执行。Web 跟踪节点从注册、连接到就绪的过程。
 
@@ -105,7 +105,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 沙箱设置适用于整个安装，节点跟随这些设置。
 
 - **规格、E2B 密钥或模板构建。** 打开 **设置** → **沙箱与调度** → **修改资源**，修改并保存。已有沙箱保持其配置。每个节点继续服务旧配置，同时准备新配置；**节点** 展示进度：**正在准备目标配置**、**目标配置已就绪**，或带[原因](#readiness-codes)的 **目标配置准备失败**。Core 优先在已准备好新配置的节点上放置新 Session；这些节点没有容量时，会使用仍服务旧配置的节点。E2B 变更立即生效。
-- **容量与空闲挂起。** 在 **节点** 中通过 **编辑节点** 修改节点的活跃和保留上限。在 **设置** → **沙箱与调度** 中，通过 **自动挂起** → **空闲多久后挂起（秒）** → **保存** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
+- **容量与空闲挂起。** 在 **节点** 中通过 **编辑节点** 修改节点的活跃和保留上限，或用 **使用推荐值** 填入推荐值。在 **设置** → **沙箱与调度** 中，通过 **自动挂起** → **空闲多久后挂起（秒）** → **保存** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
 - **沙箱提供商。** 同一页面选择 **重置部署**。自动重置立即归档空闲托管 Session，并让运行中的工作在设定截止时间前完成；强制重置立即取消工作。离线节点必须恢复连接，让 Core 确认清理。重置完成时，Core 已撤销所有节点和未使用命令：配置新的沙箱提供商后重新添加节点。**取消重置** 停止剩余工作；已归档 Session 仍保持归档。
 
 [重置协议](../../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout)描述重置会归档和保留哪些内容。归档单个托管 Session 时，使用 [Core API](../../../contracts/agents-api/zh/admin-api.md#session-archive)。

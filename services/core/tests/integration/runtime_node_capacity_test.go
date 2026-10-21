@@ -16,10 +16,10 @@ func TestRuntimeEnrollmentCapacityPrecedesResetConflict(t *testing.T) {
 	if err := deploymentExecution(t, w).StartReset(SandboxResetTestContext(t.Context()), view.InstallationID, deployment.ResetRequest{ExpectedGeneration: view.Generation, Clear: "auto"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 3}); !errors.Is(err, deployment.ErrResetInProgress) {
+	if _, err := nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(3)}); !errors.Is(err, deployment.ErrResetInProgress) {
 		t.Fatal("valid capacity did not reach the reset guard", err)
 	}
-	if _, err := nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 3, MaxRetained: 2}); !errors.Is(err, deployment.ErrInvalidInput) {
+	if _, err := nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(3), MaxRetained: new(2)}); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("invalid capacity reported as a conflict", err)
 	}
 }

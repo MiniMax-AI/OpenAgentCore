@@ -54,7 +54,7 @@ func TestResetStartEscalateAndComplete(t *testing.T) {
 	changes, _ := f.execution(t)
 	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
 	f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
-	if _, err := f.service.CreateEnrollment(admin(t), deployment.Capacity{MaxActive: 1, MaxRetained: 1}); err != nil {
+	if _, err := f.service.CreateEnrollment(admin(t), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)}); err != nil {
 		t.Fatal(err)
 	}
 

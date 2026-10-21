@@ -116,7 +116,7 @@ func TestCheckpointTransferRoutesBeforeTargetIO(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			token, err := r.deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2})
+			token, err := r.deployments.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(2)})
 			if err != nil {
 				t.Fatal(err)
 			}

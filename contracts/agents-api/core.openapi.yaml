@@ -772,6 +772,7 @@ definitions:
   api.SandboxEnrollmentTokenRequest:
     properties:
       max_active:
+        description: An omitted limit is derived from the node's host when it enrolls.
         type: integer
       max_retained:
         description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
@@ -1219,6 +1220,16 @@ definitions:
       - nodes_on_other_address
       - self_hosted_executors
     type: object
+  deployment.Capacity:
+    properties:
+      max_active:
+        type: integer
+      max_retained:
+        type: integer
+    required:
+      - max_active
+      - max_retained
+    type: object
   deployment.HostHistory:
     properties:
       points:
@@ -1294,6 +1305,11 @@ definitions:
       provider_ready:
         description: True while the node is online and its serving generation is ready.
         type: boolean
+      recommended_capacity:
+        allOf:
+          - $ref: '#/definitions/deployment.Capacity'
+        description: The limits Core recommends for the node's latest host measurements and the current specification; null before the node reports them.
+        x-nullable: true
       reserved:
         type: integer
       retained:
@@ -1321,6 +1337,7 @@ definitions:
       - online
       - provider
       - provider_ready
+      - recommended_capacity
       - reserved
       - retained
       - rollout
@@ -1424,6 +1441,11 @@ definitions:
       provider_ready:
         description: True while the node is online and its serving generation is ready.
         type: boolean
+      recommended_capacity:
+        allOf:
+          - $ref: '#/definitions/deployment.Capacity'
+        description: The limits Core recommends for the node's latest host measurements and the current specification; null before the node reports them.
+        x-nullable: true
       reserved:
         type: integer
       retained:
@@ -1453,6 +1475,7 @@ definitions:
       - online
       - provider
       - provider_ready
+      - recommended_capacity
       - reserved
       - retained
       - rollout
