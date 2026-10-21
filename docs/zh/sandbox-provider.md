@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 0b333cf78e2a40479398e57e9e3d7cac7799fb05a5fa976da7e82c6f6893d65d
+source_hash: 95b02d2c1b46117e603ebadd5fa948c92624c3eb59d50cc402eb5a3907e69378
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -69,7 +69,7 @@ Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expir
 
 `Initial` 和 `NewCompute` 构造 compute reference，不分配资源；`ResumeCompute` 在暂停中止后仅解冻同一驻留实例；`RunCommandCompute` 在一个精确 compute incarnation 中运行有界命令。Core 使用 `RunCommandCompute` 在恢复后唤醒 parked daemon（[`runtime_compute_wake.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute_wake.go)）。
 
-`SavePreparation(reference, key)` 在准备完整完成后保存该分配初始 compute 的 `/environment` 文件系统，`RestorePreparation(reference, key)` 把已保存的内容放回，没有有效条目时返回 `false`。`key` 是不透明的：Core 由 Project 和所有进入准备的内容推导它，从不使用 Environment、Session、Harness 或 Agent，提供商也从不解释它。存储、按 Runtime 镜像划分范围、过期和淘汰由提供商负责。条目在保存后 24 小时内有效，恢复不得使用已过期的条目。Core 在 Runtime 连接后调用 `RestorePreparation`，命中时只发送 `finalize` 操作即完成初始化。未命中时完整准备并调用 `SavePreparation`；保存错误只记录日志，不会使 Session 失败。两者都未声明的提供商始终完整准备。microsandbox 适配器在 Runtime home 下的私有目录中为每个 key 保存一个归档。
+`SavePreparation(reference, key)` 在准备完整完成后保存该分配初始 compute 中准备写入 `/environment` 的内容（workspace、packages 和 initialization，从不包括 Runtime 状态），`RestorePreparation(reference, key)` 把已保存的内容放回，没有有效条目时返回 `false`。`key` 是不透明的：Core 由 Project 和所有进入准备的内容推导它，从不使用 Environment、Session、Harness 或 Agent，提供商也从不解释它。存储、按 Runtime 镜像划分范围、过期和淘汰由提供商负责。条目在保存后 24 小时内有效，恢复不得使用已过期的条目。Core 在 Runtime 连接后调用 `RestorePreparation`，命中时只发送 `finalize` 操作即完成初始化。未命中时完整准备并调用 `SavePreparation`；保存错误只记录日志，不会使 Session 失败。两者都未声明的提供商始终完整准备。microsandbox 适配器在 Runtime home 下的私有目录中为每个 key 保存一个归档。
 
 每个声明项为不带 reason 的 `state: supported`，或带 authored reason code 的 `state: unsupported`。缺失、零值、未知或不安全项都会验证失败。给 `SandboxProvider` 添加方法时，必须在每个 adapter 中明确决定并实现；不提供 base type，也不生成笼统的不支持实现。
 

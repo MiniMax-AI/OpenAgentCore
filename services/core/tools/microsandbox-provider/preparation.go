@@ -21,10 +21,15 @@ import (
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-// The preparation cache keeps one archive of /environment per Core-supplied key,
-// image digest and workspace mode in a private directory under the Runtime home.
-// The guest never sees it. An entry is valid for preparationTTL after its save.
+// The preparation cache keeps one archive of the prepared /environment
+// directories per Core-supplied key, image digest and workspace mode in a private
+// directory under the Runtime home. The guest never sees it. An entry is valid
+// for preparationTTL after its save.
 const preparationTTL = 24 * time.Hour
+
+// preparedDirectories are what preparation writes, as created by the bootstrap.
+// runtime-state belongs to the running daemon and is never copied.
+var preparedDirectories = []string{"initialization", "packages", "workspace"}
 
 // The store holds at most this many bytes. A measured Environment archive is
 // tens of MiB, so this keeps over a hundred of them and bounds the node's disk
@@ -143,11 +148,11 @@ func (b backend) savePreparation(ctx context.Context) error {
 	defer os.Remove(temporary)
 	if b.q.Config.ExternalWorkspace {
 		if err = guestRun(ctx, live, "sync"); err == nil {
-			err = hostTar(ctx, nil, "-C", external, "-cf", temporary, ".")
+			err = hostTar(ctx, nil, append([]string{"-C", external, "-cf", temporary}, preparedDirectories...)...)
 		}
 	} else {
 		defer b.removeGuestArchive(live)
-		if err = guestRun(ctx, live, "sync && tar --xattrs --numeric-owner -C /environment -cf "+guestArchive+" ."); err == nil {
+		if err = guestRun(ctx, live, "sync && tar --xattrs --numeric-owner -C /environment -cf "+guestArchive+" "+strings.Join(preparedDirectories, " ")); err == nil {
 			err = live.FS().CopyToHost(ctx, guestArchive, temporary)
 		}
 	}
