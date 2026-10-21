@@ -77,7 +77,14 @@ func (c *preparationCache) run(ctx context.Context, prepare, finalize func() err
 		return err
 	}
 	started = time.Now()
-	c.log(ctx, "save_preparation", false, started, c.provider.SavePreparation(ctx, c.reference, c.key))
+	save := ctx
+	if deadline, bounded := ctx.Deadline(); bounded {
+		// Half the remaining budget, so a slow save never takes the time completion needs.
+		var cancel context.CancelFunc
+		save, cancel = context.WithTimeout(ctx, time.Until(deadline)/2)
+		defer cancel()
+	}
+	c.log(ctx, "save_preparation", false, started, c.provider.SavePreparation(save, c.reference, c.key))
 	return nil
 }
 

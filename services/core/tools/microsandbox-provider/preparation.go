@@ -114,14 +114,18 @@ func (b backend) restorePreparation(ctx context.Context) (bool, error) {
 		}
 		defer f.Close()
 		err = hostTar(ctx, f, "-C", external, "-xf", "-")
-		return err == nil, err
+	} else {
+		defer b.removeGuestArchive(live)
+		// Nothing in /environment has changed until the extraction starts.
+		if live.FS().CopyFromHost(ctx, entry, guestArchive) != nil {
+			return false, nil
+		}
+		err = guestRun(ctx, live, "tar --xattrs --numeric-owner -C /environment -xf "+guestArchive+" && sync")
 	}
-	defer b.removeGuestArchive(live)
-	// Nothing in /environment has changed until the extraction starts.
-	if live.FS().CopyFromHost(ctx, entry, guestArchive) != nil {
-		return false, nil
+	if err != nil {
+		// A failed extraction fails this Session; later Sessions prepare in full.
+		_ = os.Remove(entry)
 	}
-	err = guestRun(ctx, live, "tar --xattrs --numeric-owner -C /environment -xf "+guestArchive+" && sync")
 	return err == nil, err
 }
 
