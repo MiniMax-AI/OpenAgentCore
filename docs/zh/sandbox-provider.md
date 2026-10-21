@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 2f9163d7e65eb780ab057b590d6ceca0bb24b5cd2a2376a13f440a53e9dd64e2
+source_hash: 9d36546c75d10805c104092536d8bb13a87b887bef1573f2f4fd5ee94d1673c7
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -54,7 +54,7 @@ source_hash: 2f9163d7e65eb780ab057b590d6ceca0bb24b5cd2a2376a13f440a53e9dd64e2
 
 Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expiry 和 cleanup 要求。每个 adapter 都实现 `RunCommand`，测试也执行它，但 Core 编排不调用它；只有 node transport 转发。机密命令输入通过 `Command.Stdin` 传输，不放在参数或日志中；结果保留字节顺序、有界输出和实际退出状态。
 
-`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 可携带外部工作区绑定；提供商对此的义务见[挂载](workspace-provider.md#attachment)。
+`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 仅当提供商的 `DeploymentPolicy.Workspace` 已声明时才携带外部工作区绑定；提供商对此的义务见[挂载](workspace-provider.md#attachment)。
 
 ### 明确的操作契约 {#explicit-operation-contracts}
 
@@ -126,7 +126,7 @@ Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`�
 
 ## 注册提供商 kind {#register-the-provider-kind}
 
-`sandbox/providers/registry.go` 是唯一注册表。每项绑定 adapter 的 specification 与 resource validator、`sandbox.ConfigurationAdapter`、部署模式（`nodes` 或 `direct`）、`sandbox.DeploymentPolicy`（磁盘限制，以及 setup 推荐的默认大小）、operation 声明，以及 node-local（`BuildLocal`）或 direct（`BuildDirect`）constructor。`providers.Build` 和 `providers.BuildDirect` 构造 adapter，不分配计算资源。没有 init 时注册或 plugin 加载。
+`sandbox/providers/registry.go` 是唯一注册表。每项绑定 adapter 的 specification 与 resource validator、`sandbox.ConfigurationAdapter`、部署模式（`nodes` 或 `direct`）、`sandbox.DeploymentPolicy`（磁盘限制、可选的外部工作区要求，以及 setup 推荐的默认大小）、operation 声明，以及 node-local（`BuildLocal`）或 direct（`BuildDirect`）constructor。`providers.Build` 和 `providers.BuildDirect` 构造 adapter，不分配计算资源。没有 init 时注册或 plugin 加载。
 
 新提供商执行以下步骤：
 

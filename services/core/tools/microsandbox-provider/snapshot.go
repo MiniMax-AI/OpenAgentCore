@@ -156,7 +156,7 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 		if json.Unmarshal([]byte(source.ConfigJSON()), &captured) != nil {
 			return wire.State{}, sandbox.ErrOwnership
 		}
-		for _, key := range []string{workspaceModeLabel, workspaceObjectLabel, workspacePathLabel} {
+		for _, key := range []string{workspaceObjectLabel, workspacePathLabel} {
 			labels[key] = captured.Labels[key]
 		}
 		_, err = sdk.Snapshot.Create(ctx, sdk.SnapshotCreateOptions{
@@ -318,10 +318,8 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	if q.ObserveOnly || q.Target.ID != "" {
 		return wire.State{}, wire.ErrUnconfirmed
 	}
-	restore := sdk.RestoreConfig{NetworkPolicy: b.network(), ExternalMountPolicy: sdk.ExternalMountStrict}
-	if b.q.Workspace != nil {
-		restore.Volumes = map[string]sdk.MountConfig{"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})}
-	}
+	restore := sdk.RestoreConfig{NetworkPolicy: b.network(), ExternalMountPolicy: sdk.ExternalMountStrict,
+		Volumes: map[string]sdk.MountConfig{"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})}}
 	if err := b.closeExpiredRestore(q); err != nil {
 		return wire.State{}, err
 	}

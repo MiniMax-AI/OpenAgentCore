@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 8ccea275f1d4bef039b9c4467388374a9bbd987c690c1f435733c6628a834ed4
+source_hash: a09c99bf3ad9782ffbf3d9d2f4d6313f93f39ee92ea5b919635a96a70b490edd
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -66,4 +66,4 @@ Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、P
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，字面值头或 HTTPS bearer | 已验证：自托管；已准入：托管；字面值头或 HTTPS bearer |
 
-外部工作区存储还要求所选 Harness 声明和 Runtime 支持 `retained_native_history`；自带工作区存储不要求此能力。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。
+外部工作区存储还要求所选 Harness 声明和 Runtime 支持 `retained_native_history`；使用自有磁盘的 Docker 和 E2B 不要求此能力。microsandbox 始终使用外部存储，因此未声明该能力的 MiniMax Code 无法在其上运行。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。

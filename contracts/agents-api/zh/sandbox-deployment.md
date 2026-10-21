@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: e84e173775d35451be7a77b58946c1786327f77aa627fa169f676648a6933943
+source_hash: 385786135904715e0b92b5978cade8a4313d4004610b4ea5a1310d0b6ff30900
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -50,18 +50,18 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `cpus` | 整数，1 到 255 |
 | `memory_mib` | 整数，512 到 1048576 MiB |
 | `root_disk_mib` | microsandbox：至少 1024 MiB；Docker 和 E2B：省略或为零 |
-| `environment_disk_mib` | microsandbox 自有磁盘：至少 1024 MiB；外部文件系统：每个新工作区的获准容量，零表示不请求配额，正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
+| `environment_disk_mib` | microsandbox：工作区存储上每个新工作区的获准容量，零（默认值）表示不请求配额，正值必须至少为 1024 MiB 且要求强制执行配额；Docker 和 E2B：省略或为零 |
 
 这些限制描述每个沙箱。节点的 `max_active` 和 `max_retained` 是独立的预留限制，设置方式见[节点与分配](#nodes-and-allocations)；限制一经设置，任何主机测量值都不允许超过其中任何一个。即使数值满足这些边界，原生提供商仍可能拒绝这些值。
 
 Docker 应用 CPU 和内存限制，并检查运行中容器的限制和精确镜像；它没有硬性的根磁盘或工作区磁盘配额。E2B 的 CPU 和内存必须与精确的就绪模板构建一致，Core 会在保存前通过固定版本 SDK 进行验证；磁盘容量仍属于模板的一部分。两种提供商都不接受其无法强制执行的磁盘配额。E2B 选择可以省略 `resources`：此时 Core 将构建的 CPU 数量和内存存储为 `cpus` 和 `memory_mib`，并通过 `specification.resources` 返回，不带磁盘字段。重启时，Core 会加载已提交的 E2B 选择，而不会再次验证模板构建，因此 E2B 中断绝不会阻碍检查或清理；新选择仍需验证。
 
-microsandbox 会配置 CPU、内存、托管根磁盘，以及位于 `/environment` 的独立自有磁盘。[microsandbox 辅助工具](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md)说明了 restore 如何处理这些限制。
+microsandbox 会配置 CPU、内存和托管根磁盘，并在挂载于 `/environment` 的[工作区存储](../../../docs/zh/workspace-provider.md)上运行每个 Environment。[microsandbox 辅助工具](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md)说明了 restore 如何处理这些限制。
 
 
-响应中可选的 `specification.workspace` 是从所选[工作区文件系统](../../../docs/zh/workspace-provider.md)派生的不可变能力回执，不是可独立写入的设置。它仅包含 `attachment`、`user_xattr` 和 `capacity_quota`；文件系统配置、路径和凭据不进入 Sandbox specification。Core 保存前校验组合声明，保留代次校验与节点构造均使用此回执。缺失 `workspace` 时保留自有磁盘模式及现有容量边界。Create 和 Resume 必须且仅当固定代次选择外部存储时提供绑定。
+响应中可选的 `specification.workspace` 是从所选[工作区文件系统](../../../docs/zh/workspace-provider.md)派生的不可变能力回执，不是可独立写入的设置。它仅包含 `attachment`、`user_xattr` 和 `capacity_quota`；文件系统配置、路径和凭据不进入 Sandbox specification。Core 保存前校验组合声明，保留代次校验与节点构造均使用此回执。microsandbox 始终具备该回执，尚未选择工作区存储时保存部署会返回 `workspace_storage_required`。Docker 和 E2B 没有回执，继续使用自有磁盘。Create 和 Resume 必须且仅当固定代次具备该回执时提供绑定。
 
-为现有自有磁盘部署启用外部存储时，先选择文件系统配置，再使用兼容资源更新 Sandbox 部署（不支持配额的文件系统使用 `environment_disk_mib: 0`）。选择文件系统不会改变现有代次或 allocation。下一次 Sandbox 更新派生外部能力回执；旧的自有磁盘 allocation 保留原磁盘。文件系统选择必须支持提供商声明的要求。已采用外部存储的部署要求相同的 `attachment` 和 `user_xattr`；选择可以更改 `capacity_quota`，此后在 Sandbox 更新设置相匹配的 `environment_disk_mib` 之前拒绝新工作区。既有工作区保持其获准时的容量。
+先选择文件系统配置，再配置 microsandbox 部署。选择文件系统不会改变现有代次或 allocation；下一次 Sandbox 更新派生该回执。文件系统选择必须支持提供商声明的要求。现有部署要求相同的 `attachment` 和 `user_xattr`；选择可以更改 `capacity_quota`，此后在 Sandbox 更新设置相匹配的 `environment_disk_mib` 之前拒绝新工作区。既有工作区保持其获准时的容量。
 
 ### E2B 配置 {#e2b-configuration}
 
@@ -220,8 +220,8 @@ Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。
 
 | 字段 | microsandbox | E2B | Docker |
 | --- | --- | --- | --- |
-| 独立工作区文件系统 | [Kernel NFS adapter](../../../docs/zh/workspace-provider.md#kernel-nfs-adapter)；与计算资源分开配置 | 不支持 | 不支持 |
-| 部署 `specification.resources` | `cpus`、`memory_mib`、`root_disk_mib` 和 `environment_disk_mib` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 |
+| 独立工作区文件系统 | 必需：[Kernel NFS adapter](../../../docs/zh/workspace-provider.md#kernel-nfs-adapter)，与计算资源分开配置 | 不支持 | 不支持 |
+| 部署 `specification.resources` | `cpus`、`memory_mib`、`root_disk_mib`，以及作为配额请求的 `environment_disk_mib` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 |
 | 部署 `metadata.template_build` | 不存在：`metadata` 为空 | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 |
 | 部署 `suspension` | `{idle_seconds, retention_seconds}` | `null`；Core 不暂停 E2B 沙箱 | `null` |
 | 部署 `resources.allocations`、`resources.pending` | 所有节点的总数 | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 |
@@ -241,6 +241,7 @@ Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。
 | --- | --- | --- |
 | 400 | `invalid_request_error` 或 `invalid_request` | 请求格式错误 |
 | 400 | `invalid_sandbox_configuration` | 配置验证产生的诊断错误 |
+| 409 | `workspace_storage_required` | 提供商在工作区存储上运行每个 Environment，但尚未选择存储 |
 | 409 | `sandbox_generation_stale` | `expected_generation` 不是当前值；`current_generation` 提供当前代次 |
 | 409 | `sandbox_reset_required` | 提供商不同；详情会指明当前提供商和请求的提供商 |
 | 409 | `sandbox_not_configured` | 更改未配置的部署 |

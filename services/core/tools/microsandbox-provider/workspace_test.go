@@ -8,20 +8,14 @@ import (
 	"testing"
 )
 
-func TestExternalEnvironmentQualificationRequiresExplicitOwnership(t *testing.T) {
-	for _, fault := range []string{"match", "missing mode", "foreign path", "owned mount", "wrong guest", "missing object"} {
+func TestEnvironmentQualificationRequiresExplicitOwnership(t *testing.T) {
+	for _, fault := range []string{"match", "foreign path", "owned mount", "wrong guest", "missing object"} {
 		t.Run(fault, func(t *testing.T) {
 			config, actual := deploymentFixture()
-			config.EnvironmentDiskMiB = 0
-			config.ExternalWorkspace = true
-			workspace := &wire.WorkspaceDirectory{Path: "/resolved/environment", ObjectID: "88888888-8888-4888-8888-888888888888"}
-			labels := workspaceLabels(workspace)
+			labels := workspaceLabels(fixtureWorkspace)
 			actual["labels"] = labels
-			mount := map[string]any{"type": "Bind", "host": workspace.Path, "guest": "/environment"}
-			actual["mounts"] = []any{mount}
+			mount := actual["mounts"].([]any)[0].(map[string]any)
 			switch fault {
-			case "missing mode":
-				delete(labels, workspaceModeLabel)
 			case "foreign path":
 				mount["host"] = "/foreign"
 			case "owned mount":
@@ -45,9 +39,6 @@ func TestSnapshotWorkspaceIdentityAllowsReresolvedDirectory(t *testing.T) {
 	workspace.Path = "/new"
 	if err := qualifyWorkspace(labels, workspace); err != nil {
 		t.Fatal(err)
-	}
-	if err := qualifyWorkspace(labels, nil); err == nil {
-		t.Fatal("external checkpoint accepted owned mode")
 	}
 	workspace.ObjectID = "99999999-9999-4999-8999-999999999999"
 	if err := qualifyWorkspace(labels, workspace); err == nil {

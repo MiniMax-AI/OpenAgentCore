@@ -136,7 +136,7 @@ The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `da
 
 ## Independent workspace storage {#independent-workspace-storage}
 
-The supported independent filesystem combination is microsandbox with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the `oac-node` account, the Compose mount, the selection payloads and the quota mode storage server.
+microsandbox requires independent workspace storage, and the only supported combination is with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the Compose mount, the selection payloads and the quota mode storage server.
 
 ## Appendix: Core environment without the installer
 

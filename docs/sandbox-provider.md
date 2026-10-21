@@ -52,7 +52,7 @@ Isolation belongs to the provider's infrastructure, not the daemon; see [Runtime
 
 A backend without a native renewable lease, such as Docker, still keeps Core's hosted expiry and cleanup requirements. Every adapter implements `RunCommand` and its tests exercise it, but Core's orchestration does not call it; only the node transport forwards it. Confidential command input travels in `Command.Stdin`, never in arguments or logs, and the result keeps byte order, bounded output and the actual exit status.
 
-`Bootstrap.Workspace` and `ResumeRequest.Workspace` optionally carry an external workspace binding; the Provider obligations for it are in [Attachment](./workspace-provider.md#attachment).
+`Bootstrap.Workspace` and `ResumeRequest.Workspace` carry an external workspace binding exactly when the Provider's `DeploymentPolicy.Workspace` is declared; the Provider obligations for it are in [Attachment](./workspace-provider.md#attachment).
 
 ### Explicit operation contracts
 
@@ -124,7 +124,7 @@ Hosted and self-hosted Environments use the same Runtime preparation; a provider
 
 ## Register the provider kind
 
-`sandbox/providers/registry.go` is the only registration table. Each entry binds the adapter's specification and resource validators, its `sandbox.ConfigurationAdapter`, the deployment mode (`nodes` or `direct`), its `sandbox.DeploymentPolicy` (disk limits and the default size setup proposes), the operation declaration and a node-local (`BuildLocal`) or direct (`BuildDirect`) constructor. `providers.Build` and `providers.BuildDirect` construct adapters without allocating compute. There is no init-time registration or plugin loading.
+`sandbox/providers/registry.go` is the only registration table. Each entry binds the adapter's specification and resource validators, its `sandbox.ConfigurationAdapter`, the deployment mode (`nodes` or `direct`), its `sandbox.DeploymentPolicy` (disk limits, the optional external workspace requirement and the default size setup proposes), the operation declaration and a node-local (`BuildLocal`) or direct (`BuildDirect`) constructor. `providers.Build` and `providers.BuildDirect` construct adapters without allocating compute. There is no init-time registration or plugin loading.
 
 A new provider takes these steps:
 

@@ -35,7 +35,10 @@ import (
 )
 
 var (
-	ErrInvalid            = errors.New("invalid sandbox configuration")
+	ErrInvalid = errors.New("invalid sandbox configuration")
+	// ErrWorkspaceRequired reports a Provider that runs every Environment on
+	// external storage while none is selected.
+	ErrWorkspaceRequired  = errors.New("sandbox provider requires workspace storage")
 	ErrOwnership          = errors.New("sandbox ownership mismatch")
 	ErrExists             = errors.New("sandbox allocation already exists")
 	ErrNotFound           = errors.New("sandbox allocation not found")
@@ -301,9 +304,10 @@ type ConfigurationRequirements struct {
 	CredentialVerification providercontract.Support
 }
 
-// DeploymentPolicy is the deployment declaration. Disk declares independent
-// disk limits. DefaultResources is the size setup proposes, or nil when the
-// Provider's configuration selects it.
+// DeploymentPolicy is the deployment declaration. Workspace, when present, means
+// the Provider runs every Environment on external storage; absent means its own
+// disk. Disk declares independent disk limits. DefaultResources is the size setup
+// proposes, or nil when the Provider's configuration selects it.
 type DeploymentPolicy struct {
 	Workspace        *workspacefs.Requirements `json:"workspace,omitempty"`
 	Disk             bool                      `json:"disk"`

@@ -77,8 +77,12 @@ type ConfigurationError struct {
 func (e *ConfigurationError) Error() string { return e.Message }
 func (e *ConfigurationError) Unwrap() error { return ErrInvalidInput }
 
-// configurationError wraps a provider's rejection of a selection.
-func configurationError(err error) *ConfigurationError {
+// configurationError wraps a provider's rejection of a selection. A missing
+// workspace storage selection keeps its own typed error.
+func configurationError(err error) error {
+	if errors.Is(err, sandbox.ErrWorkspaceRequired) {
+		return err
+	}
 	var validation *sandbox.ValidationError
 	errors.As(err, &validation)
 	return &ConfigurationError{Message: err.Error(), Validation: validation}

@@ -1,6 +1,7 @@
 export const coreErrors = {
   "invalid_workspace_configuration": "工作区存储配置无效。",
   "workspace_operation_unsupported": "所选工作区存储不支持该操作或沙箱组合。",
+  "workspace_storage_required": "该沙箱提供方需要工作区存储。请先选择工作区存储。",
   "workspace_storage_not_found": "尚未配置工作区存储或请求的对象不存在。",
   "workspace_storage_conflict": "工作区存储归属或配置与当前状态冲突。",
   "workspace_storage_unavailable": "工作区存储不可用或操作尚未确认。",

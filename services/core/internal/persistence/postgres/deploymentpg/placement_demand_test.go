@@ -13,7 +13,7 @@ import (
 func TestPlacementDemandAdmitsOnlyAvailableCompute(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 3, MaxRetained: 10})
 	f.connect(t, node.NodeID)
 	keys := make([]deployment.AllocationKey, 10)
@@ -64,7 +64,7 @@ func TestPlacementDemandAdmitsOnlyAvailableCompute(t *testing.T) {
 func TestPlacementDemandPagesByOriginalDemandTime(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	at := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
 	for i := 0; i < 40; i++ {
 		key := pendingHostedEnvironment(t, f)
@@ -97,7 +97,7 @@ func TestPlacementDemandPagesByOriginalDemandTime(t *testing.T) {
 func TestFirstPlacementChecksActualGenerationHistorySupport(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	f.connect(t, node.NodeID)
 	key := pendingHostedEnvironment(t, f)
@@ -139,7 +139,7 @@ func pendingHostedEnvironment(t *testing.T, f fixture) deployment.AllocationKey 
 func TestReleasedFileWakeUsesFirstDemandAndLatestOwner(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
 	f.connect(t, node.NodeID)
 	key := hostedEnvironment(t, f.pool)
@@ -185,7 +185,7 @@ func TestReleasedFileWakeUsesFirstDemandAndLatestOwner(t *testing.T) {
 func TestPlacementDemandWrapsDespiteContinuousNewArrivals(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	add := func(n int) {
 		for range n {
 			pendingHostedEnvironment(t, f)

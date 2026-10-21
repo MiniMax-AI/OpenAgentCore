@@ -22,6 +22,9 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, dep
 	w := executionWriter(t, s)
 	id := uuid.NewString()
 	changes := deploymentExecution(t, w)
+	if provider == "microsandbox" {
+		selectWorkspaceStorage(t, fixtureWorkspaces(w, w.lease))
+	}
 	if err := changes.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}

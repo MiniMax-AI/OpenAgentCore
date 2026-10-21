@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -18,7 +19,7 @@ func TestCreatedConfigurationRejectionRequiresExactOwnedCompute(t *testing.T) {
 			ref := sandbox.Reference{TenantID: "tenant", EnvironmentID: "environment", AllocationID: "allocation"}
 			created := wire.Compute{Name: wire.Name(config, ref, 0), ID: "local:created"}
 			labels := wire.Labels(config, ref)
-			labels[workspaceModeLabel] = "owned"
+			maps.Copy(labels, workspaceLabels(fixtureWorkspace))
 			labels[bootstrapLabel] = "pending"
 			actual["labels"] = labels
 			actualID, status := created.ID, "running"

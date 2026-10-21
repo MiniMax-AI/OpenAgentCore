@@ -22,7 +22,7 @@ import (
 )
 
 // The preparation cache keeps one archive of the prepared /environment
-// directories per Core-supplied key, image digest and workspace mode in a private
+// directories per Core-supplied key and image digest in a private
 // directory under the Runtime home. The guest never sees it. An entry is valid
 // for preparationTTL after its save.
 const preparationTTL = 24 * time.Hour
@@ -36,19 +36,14 @@ var preparedDirectories = []string{"initialization", "packages", "workspace"}
 // use; the TTL alone does not, because a busy node can save many keys in a day.
 const maxPreparationBytes = 8 << 30
 
-// The guest archive lives on the root disk, outside /environment, so it is
-// never part of the archive it carries.
-const guestArchive = "/tmp/oac-preparation.tar"
-
 func (b backend) preparationStore() string {
 	return filepath.Join(b.q.Config.RuntimeHome, "preparation")
 }
 
-// preparationEntry names the archive for this key, scoped by the Runtime image
-// digest and by whether /environment is an owned disk or an external directory.
+// preparationEntry names the archive for this key, scoped by the Runtime image digest.
 func (b backend) preparationEntry() string {
 	_, digest, _ := strings.Cut(b.q.Config.Image, "@")
-	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%t|%s", digest, b.q.Config.ExternalWorkspace, b.q.Key)))
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%s", digest, b.q.Key)))
 	return filepath.Join(b.preparationStore(), hex.EncodeToString(sum[:])+".tar")
 }
 
@@ -58,7 +53,7 @@ func validPreparation(path string, now time.Time) bool {
 }
 
 // preparationSandbox connects to the running compute and returns the host
-// directory behind /environment, which is empty when the disk is owned.
+// directory behind /environment.
 func (b backend) preparationSandbox(ctx context.Context) (*sdk.Sandbox, string, error) {
 	h, _, err := b.inspect(ctx, b.q.Compute)
 	if err != nil {
@@ -69,7 +64,7 @@ func (b backend) preparationSandbox(ctx context.Context) (*sdk.Sandbox, string, 
 		return nil, "", err
 	}
 	var config sdk.SandboxConfig
-	if b.q.Config.ExternalWorkspace && (json.Unmarshal([]byte(h.ConfigJSON()), &config) != nil || config.Labels[workspacePathLabel] == "") {
+	if json.Unmarshal([]byte(h.ConfigJSON()), &config) != nil || config.Labels[workspacePathLabel] == "" {
 		live.Detach(context.Background())
 		return nil, "", sandbox.ErrInvalid
 	}
@@ -106,33 +101,17 @@ func (b backend) restorePreparation(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	defer live.Detach(context.Background())
-	if b.q.Config.ExternalWorkspace {
-		// The running guest sees the extracted files at once.
-		f, err := os.Open(entry)
-		if err != nil {
-			return false, nil
-		}
-		defer f.Close()
-		err = hostTar(ctx, f, "-C", external, "-xf", "-")
-	} else {
-		defer b.removeGuestArchive(live)
-		// Nothing in /environment has changed until the extraction starts.
-		if live.FS().CopyFromHost(ctx, entry, guestArchive) != nil {
-			return false, nil
-		}
-		err = guestRun(ctx, live, "tar --xattrs --numeric-owner -C /environment -xf "+guestArchive+" && sync")
-	}
+	// The running guest sees the extracted files at once.
+	f, err := os.Open(entry)
 	if err != nil {
+		return false, nil
+	}
+	defer f.Close()
+	if err = hostTar(ctx, f, "-C", external, "-xf", "-"); err != nil {
 		// A failed extraction fails this Session; later Sessions prepare in full.
 		_ = os.Remove(entry)
 	}
 	return err == nil, err
-}
-
-func (b backend) removeGuestArchive(live *sdk.Sandbox) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_ = guestRun(ctx, live, "rm -f "+guestArchive)
 }
 
 func (b backend) savePreparation(ctx context.Context) error {
@@ -147,18 +126,10 @@ func (b backend) savePreparation(ctx context.Context) error {
 	if err = privateDirectory(store); err != nil {
 		return err
 	}
-	// The temporary name does not exist yet, so a copy from the guest creates it.
 	temporary := filepath.Join(store, ".tmp-"+uuid.NewString())
 	defer os.Remove(temporary)
-	if b.q.Config.ExternalWorkspace {
-		if err = guestRun(ctx, live, "sync"); err == nil {
-			err = hostTar(ctx, nil, append([]string{"-C", external, "-cf", temporary}, preparedDirectories...)...)
-		}
-	} else {
-		defer b.removeGuestArchive(live)
-		if err = guestRun(ctx, live, "sync && tar --xattrs --numeric-owner -C /environment -cf "+guestArchive+" "+strings.Join(preparedDirectories, " ")); err == nil {
-			err = live.FS().CopyToHost(ctx, guestArchive, temporary)
-		}
+	if err = guestRun(ctx, live, "sync"); err == nil {
+		err = hostTar(ctx, nil, append([]string{"-C", external, "-cf", temporary}, preparedDirectories...)...)
 	}
 	if err != nil {
 		return err

@@ -50,10 +50,6 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	for key, value := range workspaceLabels(b.q.Workspace) {
 		labels[key] = value
 	}
-	mount := sdk.Mount.Owned(sdk.OwnedVolumeOptions{Kind: sdk.VolumeKindDisk, SizeMiB: b.q.Config.EnvironmentDiskMiB})
-	if b.q.Workspace != nil {
-		mount = sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})
-	}
 	live, e := sdk.CreateSandbox(ctx, c.Name,
 		// Every compatible node holds the pinned image; nothing is ever pulled.
 		sdk.WithImage(b.q.Config.Image), sdk.WithPullPolicy(sdk.PullPolicyNever), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
@@ -62,7 +58,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		// The selected Environment mount keeps workspace and staging on one filesystem.
 		// Bootstrap creates their directories before starting the daemon.
 		sdk.WithWorkdir("/"), sdk.WithMounts(map[string]sdk.MountConfig{
-			"/environment": mount,
+			"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{}),
 		}),
 		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()),
 		sdk.WithEnv(map[string]string{
@@ -86,7 +82,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	var actual struct {
 		Labels map[string]string `json:"labels"`
 	}
-	if json.Unmarshal([]byte(h.ConfigJSON()), &actual) != nil || qualifyWorkspace(actual.Labels, b.q.Workspace) != nil || (b.q.Workspace != nil && actual.Labels[workspacePathLabel] != b.q.Workspace.Path) {
+	if json.Unmarshal([]byte(h.ConfigJSON()), &actual) != nil || qualifyWorkspace(actual.Labels, b.q.Workspace) != nil || actual.Labels[workspacePathLabel] != b.q.Workspace.Path {
 		qualified.CreateSettled = true
 		return qualified, sandbox.ErrInvalid
 	}

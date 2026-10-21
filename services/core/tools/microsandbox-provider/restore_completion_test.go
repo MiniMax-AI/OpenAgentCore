@@ -17,7 +17,7 @@ func TestRestoreCompletionRecoversOnlyDerivedProof(t *testing.T) {
 			config, actual := deploymentFixture()
 			actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = nil
 			actual["snapshot_parent"] = "verified-snapshot"
-			labels := map[string]string{workspaceModeLabel: "owned"}
+			labels := fixtureLabels(nil)
 			actual["labels"] = labels
 			target := wire.Compute{Name: "restored-target", Generation: 1, RestoredFrom: &wire.SnapshotIdentity{ID: "verified-snapshot"}}
 			reads, writes := 0, 0
@@ -61,12 +61,12 @@ func TestRestoreCompletionRecoversOnlyDerivedProof(t *testing.T) {
 }
 
 func TestRestoreCompletionRejectsUnverifiedTargets(t *testing.T) {
-	for _, fault := range []string{"cpu", "memory", "environment", "image", "root", "foreign parent", "foreign ID", "foreign proof", "stopped", "starting", "paused", "crashed", "unfinished", "replacement after write", "proof not persisted"} {
+	for _, fault := range []string{"cpu", "memory", "mount", "image", "root", "foreign parent", "foreign ID", "foreign proof", "stopped", "starting", "paused", "crashed", "unfinished", "replacement after write", "proof not persisted"} {
 		t.Run(fault, func(t *testing.T) {
 			config, actual := deploymentFixture()
 			actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = nil
 			actual["snapshot_parent"] = "verified-snapshot"
-			labels := map[string]string{workspaceModeLabel: "owned"}
+			labels := fixtureLabels(nil)
 			actual["labels"] = labels
 			target := wire.Compute{Name: "restored-target", ID: "local:restored", Generation: 1, RestoredFrom: &wire.SnapshotIdentity{ID: "verified-snapshot"}}
 			actualID, status := target.ID, "running"
@@ -75,8 +75,8 @@ func TestRestoreCompletionRejectsUnverifiedTargets(t *testing.T) {
 				actual["resources"].(map[string]any)["cpus"] = 1
 			case "memory":
 				actual["resources"].(map[string]any)["memory_mib"] = 1024
-			case "environment":
-				actual["mounts"].([]any)[0].(map[string]any)["storage"].(map[string]any)["capacity_mib"] = 1024
+			case "mount":
+				actual["mounts"].([]any)[0].(map[string]any)["host"] = "/foreign"
 			case "image":
 				actual["image"] = "runtime:foreign"
 			case "root":
@@ -126,7 +126,7 @@ func TestRestoreCompletionPreservesInspectionErrors(t *testing.T) {
 	for _, failedRead := range []int{1, 2} {
 		config, actual := deploymentFixture()
 		actual["snapshot_parent"] = "verified-snapshot"
-		actual["labels"] = map[string]string{workspaceModeLabel: "owned", resourceProofLabel: resourceProof(config)}
+		actual["labels"] = fixtureLabels(map[string]string{resourceProofLabel: resourceProof(config)})
 		target := wire.Compute{Name: "restored-target", ID: "local:restored", Generation: 1, RestoredFrom: &wire.SnapshotIdentity{ID: "verified-snapshot"}}
 		unavailable := errors.New("native inspection unavailable")
 		reads := 0

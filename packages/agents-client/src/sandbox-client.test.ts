@@ -50,12 +50,11 @@ const docker = {
   resources: { allocations: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, specification_digest: "0".repeat(64),
 };
 const microsandbox = {
-  ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192, environment_disk_mib: 8192 } },
+  ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 } },
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
 const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
-const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification,
-  resources: { ...microsandbox.specification.resources, environment_disk_mib: 0 }, workspace: externalWorkspace } };
+const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification, workspace: externalWorkspace } };
 /** An E2B selection saved before Core recorded its template build. */
 const e2bDeployment = {
   ...docker, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 } },

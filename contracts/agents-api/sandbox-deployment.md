@@ -48,17 +48,17 @@ The request has no Core address. Core derives the deployment's `core_url` from t
 | `cpus` | Integer, 1 through 255 |
 | `memory_mib` | Integer, 512 through 1048576 MiB |
 | `root_disk_mib` | microsandbox: at least 1024 MiB; Docker and E2B: omitted or zero |
-| `environment_disk_mib` | microsandbox owned disk: at least 1024 MiB; external filesystem: each new workspace's admitted capacity, where zero requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; Docker and E2B: omitted or zero |
+| `environment_disk_mib` | microsandbox: each new workspace's admitted capacity on workspace storage, where zero (the default) requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; Docker and E2B: omitted or zero |
 
 These limits describe each sandbox. A node's `max_active` and `max_retained` are separate reservation limits, set as [Node capacity](#nodes-and-allocations) describes; no host measurement permits exceeding either once set. Native providers may reject values that pass these bounds.
 
 Docker applies the CPU and memory limits and checks the running container's limits and exact image; it has no hard root or workspace disk quota. E2B CPU and memory must equal the exact ready template build, which Core validates through the pinned SDK before saving; disk capacity stays part of the template. Neither provider accepts a disk quota it cannot enforce. An E2B selection may omit `resources`: Core then stores the build's CPU count and memory as `cpus` and `memory_mib`, returned in `specification.resources` without disk fields. On restart Core loads the committed E2B selection without validating the template build again, so an E2B outage never blocks inspection or cleanup; new selections still require validation.
 
-microsandbox configures the CPUs, memory, a managed root disk and a separate owned disk at `/environment`. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
+microsandbox configures the CPUs, memory and a managed root disk. It runs every Environment on [workspace storage](../../docs/workspace-provider.md) mounted at `/environment`. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
 
-The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. Missing `workspace` preserves owned disk mode, including its existing disk bounds. Create and Resume must provide a binding exactly when the frozen generation selects external storage.
+The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. microsandbox always has the receipt, and a deployment saved before workspace storage is selected returns `workspace_storage_required`. Docker and E2B have no receipt and keep their own disks. Create and Resume provide a binding exactly when the frozen generation has the receipt.
 
-To enable external storage for an existing owned deployment, select the filesystem configuration first, then update the sandbox deployment with compatible resources (`environment_disk_mib: 0` for a filesystem without quotas). Selecting the filesystem does not alter existing generations or allocations. The next sandbox update derives the external receipt; old owned allocations keep their owned disks. A filesystem selection must support the provider's declared requirements. An already external deployment requires the same `attachment` and `user_xattr`; the selection may change `capacity_quota`, after which new workspaces are refused until a sandbox update sets a matching `environment_disk_mib`. Existing workspaces keep the capacity they were admitted with.
+Select the filesystem configuration before the microsandbox deployment. Selecting the filesystem does not alter existing generations or allocations; the next sandbox update derives the receipt. A filesystem selection must support the provider's declared requirements. An existing deployment requires the same `attachment` and `user_xattr`; the selection may change `capacity_quota`, after which new workspaces are refused until a sandbox update sets a matching `environment_disk_mib`. Existing workspaces keep the capacity they were admitted with.
 
 ### E2B configuration
 
@@ -215,8 +215,8 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 
 | Field | microsandbox | E2B | Docker |
 | --- | --- | --- | --- |
-| Independent workspace filesystem | [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter); configured separately from compute | Unsupported | Unsupported |
-| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota |
+| Independent workspace filesystem | Required: [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter), configured separately from compute | Unsupported | Unsupported |
+| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and, as a quota request, `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota |
 | Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved | Absent: `metadata` is empty |
 | Deployment `suspension` | `{idle_seconds, retention_seconds}` | `null`; Core does not suspend E2B sandboxes | `null` |
 | Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes |
@@ -236,6 +236,7 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | --- | --- | --- |
 | 400 | `invalid_request_error` or `invalid_request` | A malformed request |
 | 400 | `invalid_sandbox_configuration` | A validated configuration diagnostic |
+| 409 | `workspace_storage_required` | The provider runs every Environment on workspace storage and none is selected |
 | 409 | `sandbox_generation_stale` | `expected_generation` is not current; `current_generation` gives the current one |
 | 409 | `sandbox_reset_required` | A different backend; the details name the current and requested providers |
 | 409 | `sandbox_not_configured` | A change to an unconfigured deployment |
