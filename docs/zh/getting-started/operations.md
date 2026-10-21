@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 2f6435641f47d00db1ae4556594d99367223270013dfdf282c16648f8a6cd275
+source_hash: c61c4d11097be8e0718c6c095c55b10a47020e5a2f83f24c504eb6753ca00b5c
 ---
 
 Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Core 密钥、备份和卸载。节点有[专门的指南](./nodes.md)，[故障排查](./troubleshooting.md)列出了安装程序和访问方面的提示信息。设置见[配置参考](../configuration.md)。
@@ -167,7 +167,7 @@ docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoi
 - 对于[配额模式](../workspace-provider.md#quota-mode)命名空间，将承载导出的整个 XFS 文件系统作为一份块级副本备份：存储或 LVM 快照，或已冻结或已卸载设备的镜像。只有这样的副本能保持 project ID、配额限制、inode 标识、文件系统 UUID 和 `oac-workspace-quota` 日志库的一致。文件级复制、`tar`、`rsync` 或 `xfsdump` 会丢失这些信息；此时该命令会拒绝恢复后的对象，而不是在无上限状态下提供它们。
 - 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其提供商存储：Docker 卷或 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
 
-- 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、归档、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。它独立于原生 SDK store 和工作区 namespace。保留其身份和私有所有权；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其生命周期。
+- 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、检查点、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。它独立于原生 SDK store 和工作区 namespace。保留其身份和私有所有权；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其生命周期。
 
 ### 建立停止写入窗口 {#establish-a-stopped-write-window}
 

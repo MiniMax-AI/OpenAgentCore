@@ -74,7 +74,7 @@ func qualifySnapshotResources(config wire.Config, labels map[string]string) erro
 	return nil
 }
 
-// Archives exclude the image. The restored root must resolve from this node's
+// Checkpoints exclude the image. The restored root must resolve from this node's
 // installed image by the captured digest; a missing image record fails before
 // Restore. This metadata check cannot verify the SDK's physical image cache.
 func qualifyRuntimeImage(ctx context.Context, config wire.Config, captured string) error {

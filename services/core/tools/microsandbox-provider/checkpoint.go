@@ -4,8 +4,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -21,11 +19,11 @@ import (
 )
 
 // This adapter-private namespace is never a guest mount. The allocation lock
-// serializes archive publication, admission and deletion across all its nodes.
-type archiveReceipt struct {
+// serializes checkpoint publication, admission and deletion across all its nodes.
+// The native snapshot is the checkpoint: it lives in the group directory of its
+// operation, next to the receipt that proves ownership.
+type checkpointReceipt struct {
 	Snapshot         wire.SnapshotIdentity `json:"snapshot"`
-	SHA256           string                `json:"sha256"`
-	Size             int64                 `json:"size"`
 	SourceTerminated bool                  `json:"source_terminated"`
 	SourceStopped    bool                  `json:"source_stopped"`
 	Deleted          bool                  `json:"deleted"`
@@ -34,7 +32,7 @@ type archiveReceipt struct {
 func (b backend) storeDirectory() string {
 	return filepath.Join(b.q.Config.CheckpointRoot, wire.Name(b.q.Config, b.q.Reference, 0))
 }
-func (b backend) archiveDirectory(operation string) string {
+func (b backend) checkpointDirectory(operation string) string {
 	return filepath.Join(b.storeDirectory(), "s-"+operation)
 }
 func privateDirectory(path string) error {
@@ -114,91 +112,17 @@ func readPrivateJSON(path string, value any) error {
 	}
 	return nil
 }
-func (b backend) receipt(operation string) (archiveReceipt, error) {
-	var r archiveReceipt
-	e := readPrivateJSON(filepath.Join(b.archiveDirectory(operation), "receipt.json"), &r)
-	if e == nil && (r.Snapshot.OperationID != operation || wire.ValidateSnapshot(b.q.Config, b.q.Reference, r.Snapshot) != nil) {
+func (b backend) receipt(operation string) (checkpointReceipt, error) {
+	var r checkpointReceipt
+	e := readPrivateJSON(filepath.Join(b.checkpointDirectory(operation), "receipt.json"), &r)
+	if e == nil && (r.Snapshot.OperationID != operation || wire.ValidateSnapshot(b.q.Config, b.q.Reference, r.Snapshot) != nil || (r.SourceStopped && !r.SourceTerminated)) {
 		e = sandbox.ErrOwnership
-	}
-	if e == nil && !r.Deleted {
-		decoded, err := hex.DecodeString(r.SHA256)
-		if err != nil || len(decoded) != 32 || r.Size <= 0 || (r.SourceStopped && !r.SourceTerminated) {
-			e = sandbox.ErrOwnership
-		}
 	}
 	return r, e
 }
-func archiveDigest(path string) (string, int64, error) {
-	real, e := filepath.EvalSymlinks(path)
-	if e != nil {
-		return "", 0, e
-	}
-	if real != path {
-		return "", 0, sandbox.ErrOwnership
-	}
-	st, e := os.Lstat(path)
-	if e != nil {
-		return "", 0, e
-	}
-	if !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
-		return "", 0, sandbox.ErrOwnership
-	}
-	f, e := os.Open(path)
-	if e != nil {
-		return "", 0, e
-	}
-	defer f.Close()
-	h := sha256.New()
-	n, e := io.Copy(h, f)
-	return hex.EncodeToString(h.Sum(nil)), n, e
-}
-func (b backend) publishArchive(ctx context.Context, a *sdk.SnapshotArtifact, s wire.SnapshotIdentity) (archiveReceipt, bool, error) {
-	prior, e := b.receipt(s.OperationID)
-	if e == nil {
-		if prior.Snapshot != s || prior.Deleted {
-			return prior, false, sandbox.ErrOwnership
-		}
-		return prior, false, nil
-	}
-	if !errors.Is(e, os.ErrNotExist) {
-		return prior, false, e
-	}
-	dir := b.archiveDirectory(s.OperationID)
-	if e = privateDirectory(dir); e != nil {
-		return prior, false, e
-	}
-	if e = syncDirectory(b.storeDirectory()); e != nil {
-		return prior, false, e
-	}
-	archive := filepath.Join(dir, "archive.msb")
-	// A publication interrupted before its receipt can be rebuilt from the exact
-	// verified native artifact. The shared allocation lock excludes consumers.
-	if e = os.Remove(archive); e != nil && !errors.Is(e, os.ErrNotExist) {
-		return prior, false, e
-	}
-	if e = a.SaveTo(ctx, archive, sdk.SnapshotSaveOptions{}); e != nil {
-		return prior, false, e
-	}
-	if e = os.Chmod(archive, 0600); e != nil {
-		return prior, false, e
-	}
-	f, e := os.Open(archive)
-	if e != nil {
-		return prior, false, e
-	}
-	e = f.Sync()
-	f.Close()
-	if e != nil {
-		return prior, false, e
-	}
-	digest, size, e := archiveDigest(archive)
-	if e != nil {
-		return prior, false, e
-	}
-	r := archiveReceipt{Snapshot: s, SHA256: digest, Size: size}
-	return r, true, durableJSON(filepath.Join(dir, "receipt.json"), r)
-}
-func (b backend) importArchive(ctx context.Context, want wire.SnapshotIdentity) (*sdk.SnapshotArtifact, error) {
+
+// restoreSource returns the verified checkpoint of a source-settled receipt.
+func (b backend) restoreSource(ctx context.Context, want wire.SnapshotIdentity) (*sdk.SnapshotArtifact, error) {
 	r, e := b.receipt(want.OperationID)
 	if e != nil {
 		return nil, e
@@ -213,45 +137,17 @@ func (b backend) importArchive(ctx context.Context, want wire.SnapshotIdentity) 
 	if class != want.Compatibility {
 		return nil, sandbox.ErrInvalid
 	}
-	path := filepath.Join(b.archiveDirectory(want.OperationID), "archive.msb")
-	hash, size, e := archiveDigest(path)
-	if e != nil {
-		return nil, e
-	}
-	if hash != r.SHA256 || size != r.Size {
-		return nil, sandbox.ErrOwnership
-	}
-	artifact, e := b.verifiedSnapshot(ctx, want)
-	if sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
-		if _, e = sdk.Snapshot.LoadWithOptions(ctx, path, sdk.SnapshotLoadOptions{Group: wire.Name(b.q.Config, b.q.Reference, 0)}); e != nil {
-			return nil, e
-		}
-		return b.verifiedSnapshot(ctx, want)
-	}
-	return artifact, e
+	return b.verifiedSnapshot(ctx, want)
 }
-func (b backend) deleteArchive(ctx context.Context, want wire.SnapshotIdentity) error {
-	return b.deleteArchiveWithNative(want, func() error {
-		_, err := b.ownedSnapshot(ctx, want)
-		if err == nil {
-			err = sdk.Snapshot.Remove(ctx, want.Reference, false)
-		}
-		if sdk.IsKind(err, sdk.ErrSnapshotNotFound) {
-			return nil
-		}
-		return err
-	})
-}
-
-// Native artifact removal must settle before the private archive is unlinked.
-func (b backend) deleteArchiveWithNative(want wire.SnapshotIdentity, removeNative func() error) error {
+func (b backend) deleteCheckpoint(ctx context.Context, want wire.SnapshotIdentity) error {
 	if e := b.requireSettledRestores(nil, &want); e != nil {
 		return e
 	}
+	dir := b.checkpointDirectory(want.OperationID)
 	r, e := b.receipt(want.OperationID)
 	if errors.Is(e, os.ErrNotExist) {
-		r = archiveReceipt{Snapshot: want}
-		if e = privateDirectory(b.archiveDirectory(want.OperationID)); e != nil {
+		r = checkpointReceipt{Snapshot: want}
+		if e = privateDirectory(dir); e != nil {
 			return e
 		}
 		if e = syncDirectory(b.storeDirectory()); e != nil {
@@ -263,19 +159,31 @@ func (b backend) deleteArchiveWithNative(want wire.SnapshotIdentity, removeNativ
 	if r.Snapshot != want {
 		return sandbox.ErrOwnership
 	}
-	// Fence consumers before removing either local or portable artifact. Keep the
-	// small tombstone, including its ownership identity, against delayed helpers.
+	// Fence consumers before removing the checkpoint. Keep the small tombstone,
+	// including its ownership identity, against delayed helpers.
 	r.Deleted = true
-	if e = durableJSON(filepath.Join(b.archiveDirectory(want.OperationID), "receipt.json"), r); e != nil {
+	if e = durableJSON(filepath.Join(dir, "receipt.json"), r); e != nil {
 		return e
 	}
-	if e = removeNative(); e != nil {
+	entries, e := os.ReadDir(dir)
+	if e != nil {
 		return e
 	}
-	if e = os.Remove(filepath.Join(b.archiveDirectory(want.OperationID), "archive.msb")); e != nil && !errors.Is(e, os.ErrNotExist) {
-		return e
+	for _, entry := range entries {
+		if entry.Name() == "receipt.json" {
+			continue
+		}
+		// The SDK removal also drops its index row; a damaged snapshot or a
+		// staging directory left by an interrupted capture is removed directly.
+		path := filepath.Join(dir, entry.Name())
+		if strings.HasPrefix(entry.Name(), "snap_") && sdk.Snapshot.Remove(ctx, path, false) == nil {
+			continue
+		}
+		if e = os.RemoveAll(path); e != nil {
+			return e
+		}
 	}
-	return syncDirectory(b.archiveDirectory(want.OperationID))
+	return syncDirectory(dir)
 }
 
 type restoreAdmission struct {
@@ -413,17 +321,6 @@ func (b backend) requireSettledRestores(target *wire.Compute, snapshot *wire.Sna
 		if target != nil && target.ID != "" && target.ID != r.CompletedID {
 			return sandbox.ErrOwnership
 		}
-	}
-	return nil
-}
-
-func (b backend) verifyArchive(r archiveReceipt) error {
-	hash, size, e := archiveDigest(filepath.Join(b.archiveDirectory(r.Snapshot.OperationID), "archive.msb"))
-	if e != nil {
-		return e
-	}
-	if hash != r.SHA256 || size != r.Size {
-		return sandbox.ErrOwnership
 	}
 	return nil
 }

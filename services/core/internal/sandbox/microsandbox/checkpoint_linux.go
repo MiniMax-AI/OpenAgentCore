@@ -16,7 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-// CheckpointStore opens only an explicitly configured, private archive root.
+// CheckpointStore opens only an explicitly configured, private checkpoint root.
 // Its marker is an operator-owned identity, never inferred from workspace paths.
 func CheckpointStore(c Config) (string, error) {
 	if !filepath.IsAbs(c.CheckpointRoot) || filepath.Clean(c.CheckpointRoot) != c.CheckpointRoot {

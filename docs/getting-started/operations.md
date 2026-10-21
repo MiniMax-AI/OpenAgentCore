@@ -165,7 +165,7 @@ An installation with independent workspace storage or nodes needs the full proce
 - For a [quota mode](../workspace-provider.md#quota-mode) namespace, the entire XFS filesystem holding the export as one block-level copy: a storage or LVM snapshot, or an image of the frozen or unmounted device. Only such a copy keeps project IDs, quota limits, inode identities, the filesystem UUID and the `oac-workspace-quota` journal consistent. A file-level copy, `tar`, `rsync` or `xfsdump` loses them; the command then refuses the restored objects instead of serving them unbounded.
 - Each node's state directory, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, and its provider storage: Docker volumes or microsandbox's store. Include all compute and snapshot resources still referenced by the database. See [when a node host fails](./nodes.md#when-a-node-host-fails).
 
-- Each private `checkpoint_root` in its entirety, including `.oac-checkpoint-store`, archives, operation journals, lock files and tombstones, together with the matching Core database. It is separate from the native SDK store and independent workspace namespace. Preserve its identity and private ownership; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns its lifecycle.
+- Each private `checkpoint_root` in its entirety, including `.oac-checkpoint-store`, checkpoints, operation journals, lock files and tombstones, together with the matching Core database. It is separate from the native SDK store and independent workspace namespace. Preserve its identity and private ownership; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns its lifecycle.
 
 ### Establish a stopped-write window
 
