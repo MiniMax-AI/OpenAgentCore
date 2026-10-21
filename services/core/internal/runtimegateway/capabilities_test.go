@@ -48,3 +48,25 @@ func TestInvalidHeartbeatDiscardsPreviousDeclarationAndClosesTransport(t *testin
 		t.Fatal("old declaration survived invalid heartbeat")
 	}
 }
+
+func TestFirstHeartbeatAnnouncesAgentKinds(t *testing.T) {
+	registry := NewRegistry()
+	session := newTestSession(newFakeConn(), "runtime", "workspace", proto.Version, registry, nil)
+	heartbeat, err := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []bool{true, false} {
+		session.handleHeartbeat(heartbeat)
+		select {
+		case <-registry.Announced():
+			if !want {
+				t.Fatal("repeated heartbeat announced again")
+			}
+		default:
+			if want {
+				t.Fatal("first agent kinds not announced")
+			}
+		}
+	}
+}

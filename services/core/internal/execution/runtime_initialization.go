@@ -33,6 +33,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			return ctx.Err()
 		case id := <-done:
 			delete(active, id)
+		case <-w.dispatcher.Registry.Announced():
 		case <-ticker.C:
 		}
 		rows, err := w.dispatcher.SessionsReader.ListEnvironmentInitializations(ctx, cursor)
