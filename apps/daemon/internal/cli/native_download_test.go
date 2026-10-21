@@ -124,8 +124,7 @@ func writeBundle(t *testing.T, bundle string, components map[string]nativeCompon
 }
 
 func TestNativeInstallDownloadsOnlySelectedComponentsOnceAndResumes(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", home)
+	home := nativeTestHome(t)
 	oldDelay, oldProbe := nativeRetryDelay, probeNativeInstallation
 	nativeRetryDelay = time.Millisecond
 	probeNativeInstallation = func(context.Context, string, []string) error { return nil }
@@ -140,36 +139,47 @@ func TestNativeInstallDownloadsOnlySelectedComponentsOnceAndResumes(t *testing.T
 	if err := os.MkdirAll(filepath.Join(cache, "older-version"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	// Two Sessions of one release share the machine's cache.
+	// Two Sessions of one release on one machine download each component once, into one store.
+	var installations []string
 	for i := 0; i < 2; i++ {
-		bundle := t.TempDir()
+		bundle, installation := t.TempDir(), t.TempDir()
+		installations = append(installations, installation)
 		writeBundle(t, bundle, components)
-		if i == 1 {
-			// A damaged cached archive is discarded and fetched again.
-			if err := os.WriteFile(filepath.Join(cache, Version, runtime.GOOS+"-"+runtime.GOARCH+"-node.tar.gz"), []byte("damaged"), 0600); err != nil {
-				t.Fatal(err)
-			}
-		}
-		if err := nativeDownloadInstall(t, core, bundle, "--install-dir", t.TempDir()); err != nil {
+		if err := nativeDownloadInstall(t, core, bundle, "--install-dir", installation); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := os.Stat(nativeComponentRoot(bundle, "claude")); err == nil {
-			t.Fatal("downloaded a Harness the Session does not use")
+		if _, err := os.Stat(filepath.Join(bundle, "components")); err == nil {
+			t.Fatal("extracted into the distribution directory")
+		}
+		if _, err := os.Stat(filepath.Join(installation, "components")); err == nil {
+			t.Fatal("copied components into the installation")
 		}
 	}
-	if core.bodies["node"] != 2 || core.bodies["claude"] != 0 {
+	if core.bodies["node"] != 1 || core.bodies["claude"] != 0 {
 		t.Fatalf("unexpected downloads: %v", core.bodies)
 	}
 	if core.bodies["codex"] != 1 {
-		t.Fatalf("codex was fetched %d times, want its interrupted download resumed and then reused", core.bodies["codex"])
+		t.Fatalf("codex was fetched %d times, want its interrupted download resumed", core.bodies["codex"])
+	}
+	store := nativeTestStore(t)
+	for _, name := range []string{"node", "codex"} {
+		if err := verifyNativeComponent(context.Background(), filepath.Join(store, name), name, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(store, "claude")); err == nil {
+		t.Fatal("downloaded a Harness the Sessions do not use")
+	}
+	if left, _ := filepath.Glob(filepath.Join(cache, Version, "*")); len(left) != 0 {
+		t.Fatalf("archives remain after extraction: %v", left)
 	}
 	if _, err := os.Stat(filepath.Join(cache, "older-version")); err == nil {
-		t.Fatal("archives of another version were kept")
+		t.Fatal("downloads of another version were kept")
 	}
 }
 
 func TestNativeInstallRejectsGrantBeforeDownloading(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	nativeTestHome(t)
 	core, _ := newFakeCore(t, t.TempDir())
 	core.status = http.StatusUnauthorized
 	if err := nativeDownloadInstall(t, core, t.TempDir()); err == nil || !strings.Contains(err.Error(), "authorization rejected") {
@@ -181,7 +191,7 @@ func TestNativeInstallRejectsGrantBeforeDownloading(t *testing.T) {
 }
 
 func TestNativeInstallRefusesRedirectToHTTP(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
+	nativeTestHome(t)
 	core, _ := newFakeCore(t, t.TempDir())
 	components := map[string]nativeComponent{"node": core.add(t, "node"), "codex": core.add(t, "codex")}
 	core.redirect = "http://127.0.0.1:1/archive.tar.gz"
@@ -194,7 +204,7 @@ func TestNativeInstallRefusesRedirectToHTTP(t *testing.T) {
 
 func TestNativeInstallFromDistributionNamesMissingArchive(t *testing.T) {
 	rc, args, _, bundle := nativeInstallFixture(t)
-	if err := os.RemoveAll(nativeComponentRoot(bundle, "codex")); err != nil {
+	if err := os.RemoveAll(bundleComponent(bundle, "codex")); err != nil {
 		t.Fatal(err)
 	}
 	err := runInstall(rc, args)

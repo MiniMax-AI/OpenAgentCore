@@ -57,7 +57,7 @@ func TestNativeStartInterruptCancelsEnrollment(t *testing.T) {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestNativeStartInterruptHelper$")
-	cmd.Env = append(os.Environ(), "OAC_TEST_START_INTERRUPT=1")
+	cmd.Env = append(os.Environ(), "OAC_TEST_START_INTERRUPT=1", "OAC_RUNTIME_HOME="+root)
 	output := new(bytes.Buffer)
 	cmd.Stdout, cmd.Stderr = output, output
 	if err := cmd.Start(); err != nil {

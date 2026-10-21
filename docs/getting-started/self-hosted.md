@@ -25,10 +25,10 @@ The download depends on the Harnesses you install. The installer (9 MiB) and Nod
 
 | | One Harness | All three |
 | --- | --- | --- |
-| Free space at the peak | about 1.3 GiB | about 2.1 GiB |
-| Installed size | about 560 MiB | about 940 MiB |
+| Free space at the peak | about 0.7 GiB | about 1.1 GiB |
+| Installed size, once per machine and version | about 560 MiB | about 940 MiB |
 
-With Codex, the peak is the archives (180 MiB), the unpacked installer (about 560 MiB) and the installed files (about 560 MiB). The unpacked copy is removed when the command ends. The archives stay in `native-download` under the Runtime home so that another Session of the same release on this machine downloads only the 9 MiB installer.
+Components install once per machine and version, in `components/<version>` under the Runtime home, and every Session of that version on the machine shares them. They are read-only, which prevents accidental changes; all Sessions run as the same account, so `start` verifies the components and refuses changed ones. Another Session of the same release downloads only the 9 MiB installer, installs no component again and adds only its own small directory. The peak is the installed size plus the archive being unpacked (121 MiB for Codex); each archive is deleted once its component is installed.
 
 The machine needs:
 
@@ -86,7 +86,7 @@ The installer reports three results:
 <details>
 <summary>If the download stops</summary>
 
-The installer checks the grant before it downloads a Harness, so an expired command costs only the 9 MiB installer. Each archive download resumes after a reset, fails only when it stalls (no data for 60 seconds) and gives up after five attempts; rerun the command to continue where it stopped. Verified archives stay in `native-download/<version>` under the Runtime home. A later run or Session of the same version checks them against Core's checksum and reuses them, discarding any that fails; archives of other versions are removed. Two installations on one machine take turns downloading. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. If the command expires, copy a fresh one from the Session.
+The installer checks the grant before it downloads a Harness, so an expired command costs only the 9 MiB installer. Each archive download resumes after a reset, fails only when it stalls (no data for 60 seconds) and gives up after five attempts; rerun the command to continue where it stopped. An unfinished archive stays in `native-download/<version>` under the Runtime home until a later run completes it, and downloads of other versions are removed. A component already installed on this machine is not downloaded again. Installations on one machine take turns installing components: the later one prints a waiting line and fails after 10 minutes. If a shared component was modified, `install` and `start` fail and name its directory: stop the installations that use it, delete that directory (the files are read-only: `chmod -R u+w <directory> && rm -rf <directory>`, or `Remove-Item -Recurse -Force <directory>` in PowerShell) and run the install command again. Disk space is checked before downloading, extracting and copying components. If a download or installation is interrupted, rerun the command: it clears unfinished temporary copies while preserving completed components, credentials and the workspace. If the command expires, copy a fresh one from the Session.
 
 </details>
 
@@ -163,7 +163,7 @@ On Windows PowerShell:
 & "$HOME\.oac\environments\<environment-id>\bin\oac-daemon.exe" uninstall
 ```
 
-It stops the daemon, lists what it deletes and asks for confirmation. It deletes only what an installation owns inside its directory (`bin`, `daemon`, `components`, `capabilities`, `runtime`, `initialization` and `packages`, with their credential file, native history and Harnesses) and then the directory itself if nothing else is left in it. Anything else in the directory stays, and so do the workspace and any credential file or capability directory outside the installation; the command names each one it keeps. The `native-download` cache is never touched; delete it to reclaim the space. Where nothing is installed it says so and exits 0. If a file cannot be deleted, the command names it and can be run again once it is released. On Windows, the final deletion finishes a few seconds after the command exits.
+It stops the daemon, lists what it deletes and asks for confirmation. It deletes only what an installation owns inside its directory (`bin`, `daemon`, `capabilities`, `runtime`, `initialization` and `packages`, with their credential file and native history) and then the directory itself if nothing else is left in it. Anything else in the directory stays, and so do the workspace and any credential file or capability directory outside the installation; the command names each one it keeps. The shared components in the Runtime home are deleted with the last installation of that version on the machine; otherwise the command says how many other installations still use them. An installation directory deleted by hand is forgotten, and components nothing uses are removed, at the next install or uninstall on the machine. Unfinished downloads in `native-download` are never touched; delete that directory to reclaim the space. Where nothing is installed it says so and exits 0. If a file cannot be deleted, the command names it and can be run again once it is released. On Windows, the final deletion finishes a few seconds after the command exits.
 
 Then, in Web, open the Session and choose **Revoke** in **Executor credentials**, or **Delete** the Session; Core keeps accepting the machine's credential until you do.
 
@@ -218,4 +218,4 @@ The same installer accepts an already extracted distribution and a credential fi
 "$HOME/.oac/my-runtime/bin/oac-daemon" start
 ```
 
-Use the Session's `remote_url` and Environment ID. The distribution is the directory described in [Reconnect an existing Session](#reconnect-an-existing-session): `oac-daemon` and `bundle.json` from the platform archive, and `components/` from the archives of `node` and each selected Harness. A missing component fails with the name of the archive to extract; this mode never downloads. In PowerShell, run `.\oac-daemon.exe` with native absolute paths. The installation directory must be missing, empty or hold an installation. This mode needs an existing workspace and does not start the daemon until you run `start`.
+Use the Session's `remote_url` and Environment ID. The distribution is the directory described in [Reconnect an existing Session](#reconnect-an-existing-session): `oac-daemon` and `bundle.json` from the platform archive, and `components/` from the archives of `node` and each selected Harness. A component not yet installed on this machine is copied from the distribution, and one that is already installed is used as it is. A component missing from both fails with the name of the archive to extract; this mode never downloads. In PowerShell, run `.\oac-daemon.exe` with native absolute paths. The installation directory must be missing, empty or hold an installation. This mode needs an existing workspace and does not start the daemon until you run `start`.

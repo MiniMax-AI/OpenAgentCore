@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,12 +18,64 @@ import (
 	"github.com/google/uuid"
 )
 
+// nativeTestHome points the Runtime home at a fresh directory. The shared components are read-only,
+// so cleanup makes them writable first.
+func nativeTestHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", home)
+	t.Cleanup(func() { _ = removeNativeTree(home) })
+	return home
+}
+
+func bundleComponent(bundle, name string) string {
+	return filepath.Join(filepath.Join(bundle, "components"), name)
+}
+
+func nativeTestStore(t *testing.T) string {
+	t.Helper()
+	store, err := nativeStoreDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+// otherNativeInstallation returns arguments for a second Session on the same machine and distribution.
+func otherNativeInstallation(t *testing.T, args []string) []string {
+	t.Helper()
+	other := append([]string{}, args...)
+	environment := uuid.NewString()
+	key := filepath.Join(t.TempDir(), "credential.json")
+	body, _ := json.Marshal(map[string]string{"key_id": uuid.NewString(), "executor_token": "private-test-credential", "environment_id": environment})
+	if err := os.WriteFile(key, body, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for flag, value := range map[string]string{"--environment-id": environment, "--credential-file": key, "--workspace": t.TempDir(), "--install-dir": t.TempDir()} {
+		other[slices.Index(other, flag)+1] = value
+	}
+	return other
+}
+
+// uninstallNative runs the installed executable's uninstall for one installation directory.
+func uninstallNative(t *testing.T, root string) string {
+	t.Helper()
+	old := os.Getenv("OAC_RUNTIME_HOME")
+	t.Setenv("OAC_RUNTIME_HOME", root)
+	defer os.Setenv("OAC_RUNTIME_HOME", old)
+	output := new(bytes.Buffer)
+	if err := runUninstall(&runContext{stdin: strings.NewReader("y\n"), stdout: output, stderr: output}, nil); err != nil {
+		t.Fatal(err)
+	}
+	return output.String()
+}
+
 func nativeInstallFixture(t *testing.T) (*runContext, []string, string, string) {
 	t.Helper()
 	root := t.TempDir()
 	bundle := t.TempDir()
 	workspace := t.TempDir()
-	t.Setenv("OAC_RUNTIME_HOME", root)
+	nativeTestHome(t)
 	key := filepath.Join(t.TempDir(), "credential.json")
 	environment := uuid.NewString()
 	body, _ := json.Marshal(map[string]string{"key_id": uuid.NewString(), "executor_token": "private-test-credential", "environment_id": environment})
@@ -34,7 +87,7 @@ func nativeInstallFixture(t *testing.T) (*runContext, []string, string, string) 
 		data := []byte("fixture " + name)
 		sum := sha256.Sum256(data)
 		b.Components[name] = nativeComponent{Version: nativePins[name], Files: map[string]nativeFile{"program": {SHA256: hex.EncodeToString(sum[:]), Executable: true}}}
-		dir := nativeComponentRoot(bundle, name)
+		dir := bundleComponent(bundle, name)
 		if err := os.MkdirAll(dir, 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -117,13 +170,17 @@ func TestNativeInstallationFailureAndRecoveryPreserveExisting(t *testing.T) {
 	if err := runInstall(rc, append(args, "--harness", "claude")); err != nil {
 		t.Fatalf("could not reuse complete unpublished component: %v", err)
 	}
-	// Source corruption cannot affect an existing component, and cannot be used
-	// to repair a modified installed one silently.
-	_ = os.WriteFile(filepath.Join(nativeComponentRoot(root, "codex"), "program"), []byte("changed"), 0700)
-	if err := runInstall(rc, args); err == nil {
-		t.Fatal("silently repaired modified executable")
+	// A modified shared component fails with the directory to delete and is never repaired silently.
+	component := filepath.Join(nativeTestStore(t), "codex")
+	program := filepath.Join(component, "program")
+	if err := os.Chmod(program, 0700); err != nil {
+		t.Fatal(err)
 	}
-	if got, _ := os.ReadFile(filepath.Join(nativeComponentRoot(root, "codex"), "program")); string(got) != "changed" {
+	_ = os.WriteFile(program, []byte("changed"), 0700)
+	if err := runInstall(rc, args); err == nil || !strings.Contains(err.Error(), component) || !strings.Contains(err.Error(), nativeDeleteCommand(component)) {
+		t.Fatalf("modified component: %v", err)
+	}
+	if got, _ := os.ReadFile(program); string(got) != "changed" {
 		t.Fatal("overwrote installed data")
 	}
 	_ = bundle
@@ -201,7 +258,7 @@ func TestNativeInstallationLockAndManifestContainment(t *testing.T) {
 	if err = runInstall(rc, args); err == nil {
 		t.Fatal("accepted manifest traversal")
 	}
-	if _, err = os.Stat(filepath.Join(root, "components")); !errors.Is(err, os.ErrNotExist) {
+	if _, err = os.Stat(filepath.Join(os.Getenv("OAC_RUNTIME_HOME"), "components")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatal("manifest validation happened after mutation")
 	}
 }
@@ -248,10 +305,12 @@ func TestNativeInstallationConnectCannotBypassValidation(t *testing.T) {
 	if err := runInstall(rc, args); err != nil {
 		t.Fatal(err)
 	}
+	store := nativeTestStore(t)
+	t.Setenv("OAC_RUNTIME_HOME", root) // The installed executable acts on its own installation.
 	for _, mode := range []string{"installed", "missing-component"} {
 		t.Run(mode, func(t *testing.T) {
 			if mode == "missing-component" {
-				if err := os.Remove(filepath.Join(nativeComponentRoot(root, "codex"), "program")); err != nil {
+				if err := removeNativeTree(filepath.Join(store, "codex")); err != nil {
 					t.Fatal(err)
 				}
 			}

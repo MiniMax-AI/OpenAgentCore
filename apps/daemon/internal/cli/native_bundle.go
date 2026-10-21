@@ -84,8 +84,6 @@ func validBundlePath(name string) bool {
 	return name != "." && path.Clean(name) == name && !strings.ContainsAny(name, "\\\x00\r\n:") && filepath.IsLocal(filepath.FromSlash(name)) && name != ".oac-install.json"
 }
 
-func nativeComponentRoot(root, name string) string { return filepath.Join(root, "components", name) }
-
 func componentReceipt(root string) (nativeComponent, error) {
 	var c nativeComponent
 	err := readNativeJSON(filepath.Join(root, ".oac-install.json"), &c)
@@ -130,35 +128,90 @@ func checkComponentFiles(ctx context.Context, directory string, c nativeComponen
 	return nil
 }
 
-// A complete component is published once. An interruption cannot turn a partial
-// copy into an installation; a subsequent run can reuse an already-published one.
-func installNativeComponent(ctx context.Context, source, root, name string, expected nativeComponent) error {
-	dest := nativeComponentRoot(root, name)
+// verifyNativeComponent checks a stored component against its receipt and, when the distribution
+// is at hand, against the distribution's manifest.
+func verifyNativeComponent(ctx context.Context, dir, name string, expected *nativeComponent) error {
+	info, err := os.Lstat(dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("shared component %s is missing from %s; run install again", name, filepath.Dir(dir))
+	}
+	remedy := "stop the installations that use it, delete " + dir + " (" + nativeDeleteCommand(dir) + ") and run install again"
+	if err != nil || !info.IsDir() || !ownedByCurrentUser(info) {
+		return fmt.Errorf("shared component %s is not a directory of this account; %s", name, remedy)
+	}
+	c, err := componentReceipt(dir)
+	if err != nil || c.Version != nativePins[name] || len(c.Files) == 0 {
+		return fmt.Errorf("shared component %s is missing files or modified; %s", name, remedy)
+	}
+	if expected != nil && !reflect.DeepEqual(c, *expected) {
+		return fmt.Errorf("shared component %s differs from this distribution's bundle.json; %s", name, remedy)
+	}
+	if err = checkComponentFiles(ctx, dir, c); errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) || errors.Is(err, os.ErrPermission) {
+		return fmt.Errorf("shared component %s is missing files, modified or unreadable; %s", name, remedy)
+	} else if err != nil {
+		return fmt.Errorf("install: cannot verify shared component %s: %w", name, err)
+	}
+	return nil
+}
+
+// ensureNativeComponent makes the store hold name: a stored component is verified, a missing one is
+// copied from the distribution directory or, with a Core address, downloaded. It is published
+// once, complete and read-only, so an interruption leaves nothing partial in place.
+func ensureNativeComponent(ctx context.Context, out io.Writer, o *nativeInstallOptions, name string, expected nativeComponent) error {
+	dest := filepath.Join(o.ComponentDirectory, name)
 	if _, err := os.Lstat(dest); err == nil {
-		got, e := componentReceipt(dest)
-		if e != nil || !reflect.DeepEqual(got, expected) {
-			return fmt.Errorf("install: existing %s is incompatible; preserve it and use a separate installation directory", name)
+		err = nativeInstallPhase(out, "Using installed "+name, func() error { return verifyNativeComponent(ctx, dest, name, &expected) })
+		if err != nil {
+			return err
 		}
-		if err := checkComponentFiles(ctx, dest, got); err != nil {
-			if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("install: existing %s is incomplete or modified; reinstall separately", name)
-			}
-			return fmt.Errorf("install: cannot verify existing %s: %w", name, err)
-		}
-		return nil
+		// An interruption between the rename and the seal leaves the top directory writable.
+		return sealNativeComponent(dest)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	parent := filepath.Dir(dest)
-	if err := os.MkdirAll(parent, 0700); err != nil {
-		return err
+	source := filepath.Join(o.Bundle, "components", name)
+	_, missing := os.Lstat(source)
+	if missing != nil && o.OnboardURL == "" {
+		return fmt.Errorf("install: component %s is missing from %s; extract %s-%s-%s.tar.gz into it and retry", name, o.Bundle, runtime.GOOS, runtime.GOARCH, name)
 	}
-	tmp, err := os.MkdirTemp(parent, ".install-"+name+"-")
+	stage, err := os.MkdirTemp(o.ComponentDirectory, ".install-"+name+"-")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(tmp)
-	src, err := os.OpenRoot(filepath.Join(source, "components", name))
+	defer removeNativeTree(stage)
+	var archive string
+	if missing == nil {
+		err = nativeInstallPhase(out, "Installing "+name, func() error { return copyNativeComponent(ctx, source, stage, expected) })
+	} else {
+		// A download prints its own progress, which a redrawn phase line would interleave with.
+		fmt.Fprintln(out, "Installing "+name+"...")
+		archive, err = downloadNativeComponent(ctx, out, o.OnboardURL, name, stage, expected)
+	}
+	if err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(expected)
+	if err = os.WriteFile(filepath.Join(stage, ".oac-install.json"), raw, 0600); err != nil {
+		return err
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+	if err = setNativeReadOnly(stage); err != nil {
+		return err
+	}
+	if err = os.Rename(stage, dest); err != nil {
+		return err
+	}
+	if archive != "" {
+		_ = os.Remove(archive)
+	}
+	return sealNativeComponent(dest)
+}
+
+// copyNativeComponent copies the manifest's files from the distribution into stage, verifying each.
+func copyNativeComponent(ctx context.Context, source, stage string, expected nativeComponent) error {
+	src, err := os.OpenRoot(source)
 	if err != nil {
 		return err
 	}
@@ -177,15 +230,12 @@ func installNativeComponent(ctx context.Context, source, root, name string, expe
 		}
 		required += uint64(info.Size())
 	}
-	if err = requireNativeSpace(parent, required); err != nil {
+	if err = requireNativeSpace(filepath.Dir(stage), required); err != nil {
 		return err
 	}
 	for name, expectedFile := range expected.Files {
 		if err := ctx.Err(); err != nil {
 			return err
-		}
-		if !validBundlePath(name) {
-			return errors.New("install: invalid component path")
 		}
 		in, err := src.Open(filepath.FromSlash(name))
 		if err != nil {
@@ -196,7 +246,7 @@ func installNativeComponent(ctx context.Context, source, root, name string, expe
 			in.Close()
 			return errors.New("install: component must contain regular files")
 		}
-		destination := filepath.Join(tmp, filepath.FromSlash(name))
+		destination := filepath.Join(stage, filepath.FromSlash(name))
 		if err = os.MkdirAll(filepath.Dir(destination), 0700); err != nil {
 			in.Close()
 			return err
@@ -227,14 +277,7 @@ func installNativeComponent(ctx context.Context, source, root, name string, expe
 			return errors.New("install: component checksum failed")
 		}
 	}
-	raw, _ := json.Marshal(expected)
-	if err = os.WriteFile(filepath.Join(tmp, ".oac-install.json"), raw, 0600); err != nil {
-		return err
-	}
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, dest)
+	return nil
 }
 
 func selectedNativeHarnesses(value string) ([]string, error) {
