@@ -109,7 +109,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination, wakePlacement: m.wakePlacement,
+			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination, placementWake: m.placementWake,
 		}}
 		m.nodes[id] = n
 	}
@@ -142,17 +142,13 @@ func (m *runtimeManager) hintDestination(id string) {
 	}
 }
 
-// A freed slot may admit waiting demand; the placement ticker recovers a missed wake.
-func (m *runtimeManager) wakePlacement() {
-	select {
-	case m.placementWake <- struct{}{}:
-	default:
-	}
-}
-
+// A freed node slot may admit waiting demand; the placement ticker recovers a missed wake.
 func (r *runtimeLifecycle) freedSlot() {
-	if r.wakePlacement != nil {
-		r.wakePlacement()
+	if r.nodeID != "" {
+		select {
+		case r.placementWake <- struct{}{}:
+		default:
+		}
 	}
 }
 
