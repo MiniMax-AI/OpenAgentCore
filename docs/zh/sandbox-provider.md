@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 9d36546c75d10805c104092536d8bb13a87b887bef1573f2f4fd5ee94d1673c7
+source_hash: 6476bd4c551ee002c2006eba645cfd6ebe3f107b9369570d2fa386fb9c0ef132
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -258,11 +258,11 @@ Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中
 
 支持检查点的 generation 报告 `CheckpointCompatibility`，包含不透明的 `ArtifactDomain` 与 `ExecutionClass` token。每个已验证 `SnapshotIdentity` 携带同样的资格。Core 只比较这些值，不解释 CPU 特性、文件系统路径或存储实现。恢复目标必须在线、对 allocation 的不可变 deployment generation 已就绪、两个 token 均匹配，并有 active 容量；跨 node 时还需 retained slot。allocation、Device 和 Session 身份保持不变。Session 与 deployment 事务先提交目标路由、placement 和精确 restore intent，再执行目标侧原生操作。没有容量或兼容目标时，保留快照的所有权一直持续到配置期限。目标必须已持有该精确 generation；Core 不会在新节点自动准备历史 generation。节点会保留被取代的 generation 的提供商，直到检查点保留义务结束。
 
-`Suspend` 只有在持久发布已验证的完整归档、停止精确 source compute，并结清 source 本地 capture 与 cleanup 义务后，才能报告 `SourceStopped`。Core 先持久化快照，再标记 suspended；仅原生资源不存在并不足够。`Suspend.ObserveOnly` 可以为同一 operation 已验证的快照完成归档发布和源清理，但不能重新捕获快照，也不能停止已经恢复 running 的源。此前已发布的归档缺失或损坏时，`ObserveOnly` 可以返回其精确持久 ownership receipt，标记 `Status: unknown` 和 `SourceStopped: false`，供清理使用；该 receipt 不证明归档当前可用，也不证明源不存在。`Resume` 仍在执行前验证归档。完成源结清屏障后，source node 不可用不再阻止恢复。删除和正常到期可以将空闲 suspended allocation 的清理路由转给同一 artifact domain 内的在线 node；删除不要求 execution class 匹配。清理目标必须已提供同一不可变 generation，且有 retained 容量。没有这样的 node 时，清理保持 pending，不释放所有权；运维需恢复符合条件的 node 或其容量。未知 running 或 restoring writer 不会仅因 node 不可达而迁移。
+`Suspend` 只有在持久发布已验证的完整检查点、停止精确 source compute，并结清 source 本地 capture 与 cleanup 义务后，才能报告 `SourceStopped`。Core 先持久化快照，再标记 suspended；仅原生资源不存在并不足够。`Suspend.ObserveOnly` 可以为同一 operation 已验证的快照完成检查点发布和源清理，但不能重新捕获快照，也不能停止已经恢复 running 的源。此前已发布的检查点缺失或损坏时，`ObserveOnly` 可以返回其精确持久 ownership receipt，标记 `Status: unknown` 和 `SourceStopped: false`，供清理使用；该 receipt 不证明检查点当前可用，也不证明源不存在。`Resume` 仍在执行前验证检查点。完成源结清屏障后，source node 不可用不再阻止恢复。删除和正常到期可以将空闲 suspended allocation 的清理路由转给同一 artifact domain 内的在线 node；删除不要求 execution class 匹配。清理目标必须已提供同一不可变 generation，且有 retained 容量。没有这样的 node 时，清理保持 pending，不释放所有权；运维需恢复符合条件的 node 或其容量。未知 running 或 restoring writer 不会仅因 node 不可达而迁移。
 
-恢复用 `Resume.ObserveOnly` 观察已持久化的 target 与 operation。`RestoreAttemptClosed` 是精确 operation ID，不是通用 absence 标志：adapter 只有在持久关闭从未进入原生执行的 attempt，并隔离该 ID 的所有迟到请求后才能返回。如果 adapter 能证明当前调用在派发原生恢复之前失败，也可以关闭已持久 admitted 的 attempt。microsandbox adapter 仅在 fresh 请求的 wire deadline 于原生派发之前到期时执行这种关闭；归档损坏、资格错误和不透明 SDK 失败都不授权自动重试。Core 随后先持久化新的 operation ID，再尝试执行。一旦已派发原生恢复，结果未知的 attempt 保留相同 target、所有权与原始 retention deadline；原生列表缺失、helper 死亡或超时都不授权重放。这种恢复可能一直不可用，直到显式删除或正常保留期到期；等待中的 input 可能达到其公共 deadline。用户删除仍需精确原生 settlement，之后才能释放资源与所有权。
+恢复用 `Resume.ObserveOnly` 观察已持久化的 target 与 operation。`RestoreAttemptClosed` 是精确 operation ID，不是通用 absence 标志：adapter 只有在持久关闭从未进入原生执行的 attempt，并隔离该 ID 的所有迟到请求后才能返回。如果 adapter 能证明当前调用在派发原生恢复之前失败，也可以关闭已持久 admitted 的 attempt。microsandbox adapter 仅在 fresh 请求的 wire deadline 于原生派发之前到期时执行这种关闭；检查点损坏、资格错误和不透明 SDK 失败都不授权自动重试。Core 随后先持久化新的 operation ID，再尝试执行。一旦已派发原生恢复，结果未知的 attempt 保留相同 target、所有权与原始 retention deadline；原生列表缺失、helper 死亡或超时都不授权重放。这种恢复可能一直不可用，直到显式删除或正常保留期到期；等待中的 input 可能达到其公共 deadline。用户删除仍需精确原生 settlement，之后才能释放资源与所有权。
 
-microsandbox adapter 要求显式的私有 `checkpoint_root`，位于所有 guest 可访问文件系统之外。目录权限为 `0700`，私有 namespace marker 标识真实归档存储。默认安装创建 node 本地私有 store。跨 node 恢复要求运维为参与 node 挂载同一个私有 store，挂载路径可以不同。Runtime state 目录与 workspace binding 都不用于推导该 root。adapter 在恢复前再次验证归档、外部文件系统身份和原生 execution class。恢复 RAM 与文件描述符不保证外部 TCP 连接连续，也不保证应用副作用可安全重放。
+microsandbox adapter 要求显式的私有 `checkpoint_root`，位于所有 guest 可访问文件系统之外。目录权限为 `0700`，私有 namespace marker 标识真实检查点存储。默认安装创建 node 本地私有 store。跨 node 恢复要求运维为参与 node 挂载同一个私有 store，挂载路径可以不同。每个保留的检查点都是 guest 内存与根磁盘层的未压缩原生快照，因此共享 store 要为每次挂起和跨 node 恢复承载这部分数据量。Runtime state 目录与 workspace binding 都不用于推导该 root。adapter 在恢复前再次验证检查点、外部文件系统身份和原生 execution class。恢复 RAM 与文件描述符不保证外部 TCP 连接连续，也不保证应用副作用可安全重放。
 
 ### 检查点保留期后的冷替换 {#cold-replacement-after-checkpoint-retention}
 

@@ -152,7 +152,7 @@ type Compute struct {
 	RestoredFrom *SnapshotIdentity
 }
 
-// CheckpointCompatibility identifies an adapter-verified private archive domain
+// CheckpointCompatibility identifies an adapter-verified private checkpoint domain
 // and execution compatibility class. Core compares these opaque tokens only.
 type CheckpointCompatibility struct {
 	ArtifactDomain string `json:"artifact_domain"`
@@ -190,7 +190,7 @@ type ComputeState struct {
 	Status            string
 	BootstrapComplete bool
 	Snapshot          *SnapshotIdentity
-	// SourceStopped proves the archive is durable and all source-local compute
+	// SourceStopped proves the checkpoint is durable and all source-local compute
 	// and capture obligations have settled, so another node can own restoration.
 	SourceStopped bool
 	// RestoreAttemptClosed echoes the exact Resume OperationID only after a

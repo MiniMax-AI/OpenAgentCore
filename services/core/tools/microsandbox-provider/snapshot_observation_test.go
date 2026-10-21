@@ -83,31 +83,6 @@ func TestRestoreJournalRejectsPartialAndSymlinkRecords(t *testing.T) {
 		})
 	}
 }
-func TestArchiveDigestRejectsGuestReadableAndSymlinkArtifacts(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "archive")
-	if err := os.WriteFile(path, []byte("private RAM"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	hash, size, err := archiveDigest(path)
-	if err != nil || len(hash) != 64 || size != 11 {
-		t.Fatal(hash, size, err)
-	}
-	if err = os.Chmod(path, 0644); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err = archiveDigest(path); !errors.Is(err, sandbox.ErrOwnership) {
-		t.Fatal(err)
-	}
-	link := filepath.Join(dir, "link")
-	if err = os.Symlink(path, link); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err = archiveDigest(link); !errors.Is(err, sandbox.ErrOwnership) {
-		t.Fatal(err)
-	}
-}
-
 func TestAdmittedRestoreBlocksCleanupUntilExactCompletion(t *testing.T) {
 	request := initialInfoRequest(t)
 	guard, err := allocationLock(request)
@@ -184,7 +159,11 @@ func TestTargetCleanupFenceSurvivesReopenBeforeAndAfterAdmission(t *testing.T) {
 	}
 }
 
-func TestLostCaptureResponseStillExposesOwnedIdentityWhenArchiveIsDamaged(t *testing.T) {
+func TestLostCaptureResponseStillExposesOwnedIdentityWhenCheckpointIsDamaged(t *testing.T) {
+	if !isolatedSDKTest(t) {
+		return
+	}
+	t.Setenv("MSB_HOME", t.TempDir())
 	for _, settled := range []bool{false, true} {
 		for _, damage := range []string{"corrupt", "missing"} {
 			t.Run(fmt.Sprintf("settled=%t/%s", settled, damage), func(t *testing.T) {
@@ -203,29 +182,21 @@ func TestLostCaptureResponseStillExposesOwnedIdentityWhenArchiveIsDamaged(t *tes
 					t.Fatal(err)
 				}
 				snapshot := wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(request.Config, request.Reference, operation), ID: "exact-snapshot", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: operation, SourceName: source.Name, SourceID: source.ID}
-				dir := b.archiveDirectory(operation)
+				dir := b.checkpointDirectory(operation)
 				if err = privateDirectory(dir); err != nil {
 					t.Fatal(err)
 				}
-				archive := filepath.Join(dir, "archive.msb")
-				if err = os.WriteFile(archive, []byte("verified full archive"), 0600); err != nil {
-					t.Fatal(err)
-				}
-				hash, size, err := archiveDigest(archive)
-				if err != nil {
-					t.Fatal(err)
-				}
-				receipt := archiveReceipt{Snapshot: snapshot, SHA256: hash, Size: size, SourceTerminated: settled, SourceStopped: settled}
+				receipt := checkpointReceipt{Snapshot: snapshot, SourceTerminated: settled, SourceStopped: settled}
 				if err = durableJSON(filepath.Join(dir, "receipt.json"), receipt); err != nil {
 					t.Fatal(err)
 				}
 				if damage == "corrupt" {
-					err = os.WriteFile(archive, []byte("damaged"), 0600)
-				} else {
-					err = os.Remove(archive)
-				}
-				if err != nil {
-					t.Fatal(err)
+					if err = os.Mkdir(filepath.Join(dir, "snap_damaged"), 0700); err == nil {
+						err = os.WriteFile(filepath.Join(dir, "snap_damaged", "snapshot.json"), []byte("damaged"), 0600)
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
 				}
 				// Core lost the capture response and therefore has no Snapshot yet. It
 				// needs this ownership identity to reach ordinary Kill/DeleteSnapshot.
@@ -233,11 +204,11 @@ func TestLostCaptureResponseStillExposesOwnedIdentityWhenArchiveIsDamaged(t *tes
 				if err != nil || state.Snapshot == nil || *state.Snapshot != snapshot || state.Compute != source || state.SourceStopped || state.Status != "unknown" || state.BootstrapComplete {
 					t.Fatalf("cleanup identity hidden or execution authorized: %+v %v", state, err)
 				}
-				if artifact, err := b.importArchive(t.Context(), snapshot); err == nil || artifact != nil {
-					t.Fatal("damaged archive was usable for restore", err)
+				if artifact, err := b.restoreSource(t.Context(), snapshot); err == nil || artifact != nil {
+					t.Fatal("damaged checkpoint was usable for restore", err)
 				}
 				if _, err = b.suspend(t.Context(), wire.SuspendRequest{Reference: request.Reference, OperationID: operation, Source: source}); err == nil {
-					t.Fatal("non-observation accepted unusable archive")
+					t.Fatal("non-observation accepted unusable checkpoint")
 				}
 				foreign := source
 				foreign.ID = "local:foreign"
@@ -245,15 +216,11 @@ func TestLostCaptureResponseStillExposesOwnedIdentityWhenArchiveIsDamaged(t *tes
 				if !errors.Is(err, sandbox.ErrOwnership) || denied.Snapshot != nil {
 					t.Fatal("foreign request recovered owned identity", denied, err)
 				}
-				nativeRemoved := false
-				if err = b.deleteArchiveWithNative(*state.Snapshot, func() error { nativeRemoved = true; return nil }); err != nil {
-					t.Fatal("owned damaged archive could not be deleted", err)
+				if err = b.deleteCheckpoint(t.Context(), *state.Snapshot); err != nil {
+					t.Fatal("owned damaged checkpoint could not be deleted", err)
 				}
-				if !nativeRemoved {
-					t.Fatal("native cleanup was skipped")
-				}
-				if _, err = os.Lstat(archive); !errors.Is(err, os.ErrNotExist) {
-					t.Fatal("archive remains", err)
+				if _, err = os.Stat(filepath.Join(dir, "snap_damaged")); !errors.Is(err, os.ErrNotExist) {
+					t.Fatal("damaged checkpoint content was kept", err)
 				}
 				deleted, err := b.receipt(operation)
 				if err != nil || !deleted.Deleted || deleted.Snapshot != snapshot {
@@ -288,27 +255,19 @@ func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 				q.Snapshot = wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(request.Config, request.Reference, q.OperationID), ID: "id", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: q.OperationID, SourceName: wire.Name(request.Config, request.Reference, 0), SourceID: "local:source"}
-				dir := b.archiveDirectory(q.OperationID)
+				dir := b.checkpointDirectory(q.OperationID)
 				if err = privateDirectory(dir); err != nil {
 					t.Fatal(err)
 				}
-				archive := filepath.Join(dir, "archive.msb")
-				if err = os.WriteFile(archive, []byte("original"), 0600); err != nil {
+				if err = durableJSON(filepath.Join(dir, "receipt.json"), checkpointReceipt{Snapshot: q.Snapshot, SourceStopped: true, SourceTerminated: true}); err != nil {
 					t.Fatal(err)
 				}
-				hash, size, err := archiveDigest(archive)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err = durableJSON(filepath.Join(dir, "receipt.json"), archiveReceipt{Snapshot: q.Snapshot, SHA256: hash, Size: size, SourceStopped: true, SourceTerminated: true}); err != nil {
-					t.Fatal(err)
-				}
-				if err = os.WriteFile(archive, []byte("corrupt!"), 0600); err != nil {
+				if err = os.MkdirAll(filepath.Join(dir, "snap_damaged"), 0700); err != nil {
 					t.Fatal(err)
 				}
 			}
 			if _, err = b.resume(t.Context(), q); err == nil {
-				t.Fatal("missing archive accepted")
+				t.Fatal("unusable checkpoint accepted")
 			}
 			path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
 			var record restoreAdmission
@@ -390,7 +349,7 @@ func isolatedSDKTest(t *testing.T) bool {
 	return false
 }
 
-func TestAdmittedAbsentObservationSkipsArchiveAndStaysUnknown(t *testing.T) {
+func TestAdmittedAbsentObservationSkipsCheckpointAndStaysUnknown(t *testing.T) {
 	if !isolatedSDKTest(t) {
 		return
 	}
@@ -406,7 +365,7 @@ func TestAdmittedAbsentObservationSkipsArchiveAndStaysUnknown(t *testing.T) {
 	if _, err = b.admitRestore(q); err != nil {
 		t.Fatal(err)
 	}
-	// Even a missing archive must not be consulted: its ENOENT would differ from
+	// Even a missing checkpoint must not be consulted: its ENOENT would differ from
 	// the typed unknown result returned for this existing admitted target.
 	path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
 	before, err := os.ReadFile(path)

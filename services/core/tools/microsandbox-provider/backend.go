@@ -57,7 +57,7 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 		s, e := b.resume(ctx, *b.q.Resume)
 		return wire.Response{State: &s}, e
 	case "delete_snapshot":
-		return wire.Response{}, b.deleteArchive(ctx, *b.q.Snapshot)
+		return wire.Response{}, b.deleteCheckpoint(ctx, *b.q.Snapshot)
 	}
 	return wire.Response{}, sandbox.ErrInvalid
 }

@@ -103,7 +103,7 @@ func TestSnapshotProofBindsResourcesWithoutChangingCleanupOwnership(t *testing.T
 	}
 }
 
-// Archives exclude the image, so Restore must find the pinned image locally.
+// Checkpoints exclude the image, so Restore must find the pinned image locally.
 // The real SDK's empty local registry proves absence fails typed, without a pull.
 func TestRestoreRequiresPinnedLocalImage(t *testing.T) {
 	if !isolatedSDKTest(t) {

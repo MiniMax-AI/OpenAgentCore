@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
@@ -25,15 +26,44 @@ func (b backend) snapshotLabels(operation string, source wire.Compute) map[strin
 	return labels
 }
 
-// openSnapshot opens only an allocation/operation-derived selector and returns
+// snapshotPath finds the one native snapshot the SDK published in the
+// operation's group directory.
+func (b backend) snapshotPath(operation string) (string, error) {
+	dir := b.checkpointDirectory(operation)
+	entries, e := os.ReadDir(dir)
+	if errors.Is(e, os.ErrNotExist) {
+		return "", &sdk.Error{Kind: sdk.ErrSnapshotNotFound, Message: dir}
+	} else if e != nil {
+		return "", e
+	}
+	var found string
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), "snap_") {
+			continue
+		}
+		if found != "" || !entry.IsDir() {
+			return "", sandbox.ErrOwnership
+		}
+		found = entry.Name()
+	}
+	if found == "" {
+		return "", &sdk.Error{Kind: sdk.ErrSnapshotNotFound, Message: dir}
+	}
+	return filepath.Join(dir, found), nil
+}
+
+// openSnapshot opens only an allocation/operation-derived directory and returns
 // its ownership identity without the checkpoint root, which needs Verify.
 func (b backend) openSnapshot(ctx context.Context, operation string, source wire.Compute) (*sdk.SnapshotArtifact, wire.SnapshotIdentity, error) {
-	selector := wire.SnapshotReference(b.q.Config, b.q.Reference, operation)
-	artifact, e := sdk.Snapshot.Open(ctx, selector)
+	path, e := b.snapshotPath(operation)
 	if e != nil {
 		return nil, wire.SnapshotIdentity{}, e
 	}
-	if artifact.Scope() != sdk.SnapshotScopeFull || artifact.SourceSandbox() == nil || *artifact.SourceSandbox() != source.Name {
+	artifact, e := sdk.Snapshot.Open(ctx, path)
+	if e != nil {
+		return nil, wire.SnapshotIdentity{}, e
+	}
+	if artifact.ID() != filepath.Base(path) || artifact.Scope() != sdk.SnapshotScopeFull || artifact.SourceSandbox() == nil || *artifact.SourceSandbox() != source.Name {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
 	for key, value := range b.snapshotLabels(operation, source) {
@@ -50,7 +80,7 @@ func (b backend) openSnapshot(ctx context.Context, operation string, source wire
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
 	compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: artifact.Labels()["io.oac.artifact_domain"], ExecutionClass: artifact.Labels()["io.oac.execution_class"]}
-	return artifact, wire.SnapshotIdentity{Compatibility: compatibility, Reference: selector, ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}, nil
+	return artifact, wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(b.q.Config, b.q.Reference, operation), ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}, nil
 }
 
 // inspectSnapshot verifies a fresh capture before its identity is published.
@@ -85,23 +115,6 @@ func (b backend) verifiedSnapshot(ctx context.Context, want wire.SnapshotIdentit
 	return a, nil
 }
 
-// ownedSnapshot matches a published identity for cleanup, where payload
-// integrity is irrelevant. The SDK descriptor digest covers the checkpoint
-// root, so an equal digest binds the published root without re-hashing.
-func (b backend) ownedSnapshot(ctx context.Context, want wire.SnapshotIdentity) (*sdk.SnapshotArtifact, error) {
-	a, got, e := b.openSnapshot(ctx, want.OperationID, wire.Compute{Name: want.SourceName, ID: want.SourceID, Generation: want.SourceGeneration})
-	if e != nil {
-		return nil, e
-	}
-	if got.Digest != want.Digest {
-		return nil, sandbox.ErrOwnership
-	}
-	got.CheckpointRoot = want.CheckpointRoot
-	if got != want || wire.ValidateSnapshot(b.q.Config, b.q.Reference, got) != nil {
-		return nil, sandbox.ErrOwnership
-	}
-	return a, nil
-}
 func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State, error) {
 	receipt, receiptErr := b.receipt(q.OperationID)
 	if receiptErr == nil {
@@ -114,7 +127,7 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 	}
 
 	// The host allocation flock spans pause, capture, verification and source kill.
-	// A surviving completed artifact is observed, never overwritten or recaptured.
+	// A surviving completed snapshot is observed, never overwritten or recaptured.
 	artifact, snap, e := b.inspectSnapshot(ctx, q.OperationID, q.Source)
 	if sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
 		if q.ObserveOnly {
@@ -160,7 +173,7 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 			labels[key] = captured.Labels[key]
 		}
 		_, err = sdk.Snapshot.Create(ctx, sdk.SnapshotCreateOptions{
-			Name: "s-" + q.OperationID, Group: wire.Name(b.q.Config, b.q.Reference, 0), FromSandbox: q.Source.Name,
+			Name: "s-" + q.OperationID, Group: "s-" + q.OperationID, DestDir: b.storeDirectory(), FromSandbox: q.Source.Name,
 			Full: true, RecordIntegrity: true, GuestFlush: sdk.GuestFlushSkip, Labels: labels})
 		if err != nil {
 			return wire.State{}, err
@@ -176,20 +189,22 @@ func (b backend) suspend(ctx context.Context, q wire.SuspendRequest) (wire.State
 	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
 		return wire.State{}, e
 	}
-	receipt, hashed, e := b.publishArchive(ctx, artifact, snap)
-	if e != nil {
+	// The SDK has published the snapshot durably and inspectSnapshot has just
+	// verified it, so the receipt only records ownership.
+	receipt = checkpointReceipt{Snapshot: snap}
+	if e = durableJSON(filepath.Join(b.checkpointDirectory(q.OperationID), "receipt.json"), receipt); e != nil {
 		return wire.State{}, e
 	}
-	return b.settleSource(ctx, q, receipt, hashed)
+	return b.settleSource(ctx, q, receipt, true)
 }
 
-// hashed means this process has just written and hashed the archive under the
-// allocation lock; an existing receipt is always checked against its bytes.
-func (b backend) settleSource(ctx context.Context, q wire.SuspendRequest, r archiveReceipt, hashed bool) (wire.State, error) {
-	if !hashed {
-		if e := b.verifyArchive(r); e != nil {
+// verified means this process has just verified the snapshot under the
+// allocation lock; an existing receipt is always checked against its snapshot.
+func (b backend) settleSource(ctx context.Context, q wire.SuspendRequest, r checkpointReceipt, verified bool) (wire.State, error) {
+	if !verified {
+		if _, e := b.verifiedSnapshot(ctx, r.Snapshot); e != nil {
 			if q.ObserveOnly {
-				// Ownership comes from the durable receipt, independently of archive
+				// Ownership comes from the durable receipt, independently of snapshot
 				// usability. Expose cleanup identity without authorizing source transfer,
 				// claiming its current state, or weakening the restore integrity check.
 				return wire.State{Compute: q.Source, Status: "unknown", Snapshot: &r.Snapshot}, nil
@@ -223,7 +238,7 @@ func (b backend) settleSource(ctx context.Context, q wire.SuspendRequest, r arch
 	}
 	if !r.SourceTerminated {
 		r.SourceTerminated = true
-		if e = durableJSON(filepath.Join(b.archiveDirectory(q.OperationID), "receipt.json"), r); e != nil {
+		if e = durableJSON(filepath.Join(b.checkpointDirectory(q.OperationID), "receipt.json"), r); e != nil {
 			return wire.State{}, e
 		}
 	}
@@ -235,11 +250,8 @@ func (b backend) settleSource(ctx context.Context, q wire.SuspendRequest, r arch
 	if _, e = sdk.GetSandbox(ctx, q.Source.Name); !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
 		return wire.State{}, wire.ErrUnconfirmed
 	}
-	if e = sdk.Snapshot.Remove(ctx, r.Snapshot.Reference, false); e != nil && !sdk.IsKind(e, sdk.ErrSnapshotNotFound) {
-		return wire.State{}, e
-	}
 	r.SourceStopped = true
-	if e = durableJSON(filepath.Join(b.archiveDirectory(q.OperationID), "receipt.json"), r); e != nil {
+	if e = durableJSON(filepath.Join(b.checkpointDirectory(q.OperationID), "receipt.json"), r); e != nil {
 		return wire.State{}, e
 	}
 	return wire.State{Compute: q.Source, Status: "suspended", BootstrapComplete: true, Snapshot: &r.Snapshot, SourceStopped: true}, nil
@@ -295,7 +307,7 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	}
 	// Admission is durable before any native import/restore operation. A prior
 	// admitted operation with no visible target remains unknown, never replayed.
-	artifact, e := b.importArchive(ctx, q.Snapshot)
+	artifact, e := b.restoreSource(ctx, q.Snapshot)
 	if e != nil {
 		return wire.State{}, e
 	}
