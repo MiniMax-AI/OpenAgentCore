@@ -13,6 +13,7 @@ import {
   profileOptionFields,
   unsupportedOption,
 } from "../shared/harness-options.mjs";
+import { maxFiles, maxPlugins, maxSkills } from "../shared/environment-limits.mjs";
 
 const optionLabels = {
   reasoning_effort: "推理强度",
@@ -62,8 +63,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     return id;
   };
   const references = (kind, ids) => {
-    if (!Array.isArray(ids) || ids.length > 8)
-      throw new AppError(400, "最多选择 8 个资源。");
+    if (!Array.isArray(ids)) throw new AppError(400, "请选择有效的资源。");
     return [...new Set(ids.map((id) => requireReference(kind, id)))];
   };
   const handle = async (method, path, body) => {
@@ -277,6 +277,21 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
         "capabilities",
         body.capability_ids || [],
       );
+      // Knowledge items become initial files beside the template's own files.
+      const kinds = value.capability_ids.map(
+        (capabilityId) => store.get("capabilities", capabilityId).kind,
+      );
+      if (kinds.filter((kind) => kind === "plugin").length > maxPlugins)
+        throw new AppError(400, `最多选择 ${maxPlugins} 个 Plugin。`);
+      if (
+        kinds.filter((kind) => kind === "knowledge").length +
+          (store.get("runtimes", value.runtime_id).files || []).length >
+        maxFiles
+      )
+        throw new AppError(
+          400,
+          `知识和环境模板文件合计最多 ${maxFiles} 个。`,
+        );
       value.capability_versions = {};
       for (const capabilityId of value.capability_ids) {
         const version = body.capability_versions?.[capabilityId];
@@ -290,9 +305,10 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
         if (version) value.capability_versions[capabilityId] = version;
       }
       value.mcp_ids = references("mcps", body.mcp_ids);
+      if (Array.isArray(body.skill_ids) && body.skill_ids.length > maxSkills)
+        throw new AppError(400, `最多选择 ${maxSkills} 个 Skill。`);
       if (
         !Array.isArray(body.skill_ids) ||
-        body.skill_ids.length > 8 ||
         body.skill_ids.some(
           (id) =>
             typeof id !== "string" ||

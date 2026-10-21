@@ -82,12 +82,6 @@ export function ResourceField({
             </span>
           )}
         </span>
-        {multiple && (
-          <span className="text-sm tabular-nums text-fg-subtle">
-            {selected.length}
-            {limit !== undefined ? ` / ${limit}` : ""}
-          </span>
-        )}
       </div>
       {description && (
         <p className="text-sm leading-relaxed text-fg-muted">{description}</p>

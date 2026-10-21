@@ -18,6 +18,11 @@ import {
   type AgentProfile,
 } from "./lib/product";
 import { ResourceField } from "./components/ResourceField";
+import {
+  maxFiles,
+  maxPlugins,
+  maxSkills,
+} from "../shared/environment-limits.mjs";
 import { Select, SelectOption } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
 import { ErrorNotice, Field, Section, Toggle } from "./components/shared";
@@ -70,10 +75,16 @@ export function ConfigurationFields({
       label={label}
       multiple
       limit={
-        Math.max(0, 8 - (value.capability_ids?.length || 0)) +
-        (value.capability_ids || []).filter((id) =>
-          capabilities.data?.some((row) => row.id === id && row.kind === kind),
-        ).length
+        kind === "plugin"
+          ? maxPlugins
+          : kind === "knowledge"
+            ? Math.max(
+                0,
+                maxFiles -
+                  (runtimes.data?.find((row) => row.id === value.runtime_id)
+                    ?.files?.length || 0),
+              )
+            : undefined
       }
       loading={capabilities.isPending}
       options={(capabilities.data || [])
@@ -181,7 +192,7 @@ export function ConfigurationFields({
         <ResourceField
           label="Skills"
           multiple
-          limit={8}
+          limit={maxSkills}
           loading={skills.isPending}
           options={skills.data || []}
           selected={value.skill_ids}
@@ -206,7 +217,6 @@ export function ConfigurationFields({
         <ResourceField
           label="MCP"
           multiple
-          limit={8}
           loading={mcps.isPending}
           options={(mcps.data || []).map((row) => ({
             ...row,

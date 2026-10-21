@@ -842,7 +842,7 @@ test("Agent page creates and edits shared resources inline without losing unsave
   expect(saved.mcp_ids).toHaveLength(1);
 });
 
-test("Agent resource selectors enforce the shared capability budget before saving", async ({
+test("Agent resource selectors have no shared budget beyond Core's limits", async ({
   page,
   request,
 }) => {
@@ -850,13 +850,13 @@ test("Agent resource selectors enforce the shared capability budget before savin
   const id = await agent(page);
   const a = await (await request.get(`/app/agents/${id}`)).json();
   const ids: string[] = [];
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 10; i++) {
     const capability = crypto.randomUUID();
     const response = await request.put(`/app/capabilities/${capability}`, {
       headers: { origin: appOrigin },
       data: {
         name: `Shared ${i}`,
-        kind: i < 4 ? "prompt" : "knowledge",
+        kind: i < 5 ? "prompt" : "knowledge",
         content: `Content ${i}`,
       },
     });
@@ -867,7 +867,7 @@ test("Agent resource selectors enforce the shared capability budget before savin
     (
       await request.put(`/app/agents/${a.id}`, {
         headers: { origin: appOrigin },
-        data: { ...a, capability_ids: ids.slice(0, 8) },
+        data: { ...a, capability_ids: ids.slice(0, 9) },
       })
     ).ok(),
   ).toBeTruthy();
@@ -875,28 +875,15 @@ test("Agent resource selectors enforce the shared capability budget before savin
   for (const name of ["指令片段", "Plugins", "知识"])
     await expect(
       page.getByRole("button", { name: `新建${name}`, exact: true }),
-    ).toBeDisabled();
+    ).toBeEnabled();
+  await expect(page.getByText("9 / 8")).toHaveCount(0);
   await page.getByRole("button", { name: "知识", exact: true }).click();
-  await expect(
-    page.getByRole("checkbox", { name: "Shared 8", exact: true }),
-  ).toBeDisabled();
+  await page.getByRole("checkbox", { name: "Shared 9", exact: true }).check();
   await page.getByRole("button", { name: "完成", exact: true }).click();
-  await page
-    .getByRole("button", { name: "移除绑定 Shared 0", exact: true })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "新建Plugins", exact: true }),
-  ).toBeEnabled();
-  await page.getByRole("button", { name: "知识", exact: true }).click();
-  await page.getByRole("checkbox", { name: "Shared 8", exact: true }).check();
-  await page.getByRole("button", { name: "完成", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "新建Plugins", exact: true }),
-  ).toBeDisabled();
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("button", { name: "已保存" })).toBeVisible();
   const saved = await (await request.get(`/app/agents/${a.id}`)).json();
-  expect(saved.capability_ids).toEqual(ids.slice(1));
+  expect(saved.capability_ids).toEqual(ids);
 });
 
 test("execution profiles narrow options to the engine and reach new conversations", async ({

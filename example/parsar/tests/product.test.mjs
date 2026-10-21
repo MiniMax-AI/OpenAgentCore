@@ -840,3 +840,39 @@ test("prepared environments hand a ready Session to the next conversation and fo
   await sessions.refreshWarm();
   assert.equal(store.list("warm_sessions").length, 0);
 });
+
+test("Agent resources follow Core's Environment limits instead of one shared budget", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const { put, agent, runtime } = await setup(store, async () => ({ id: randomUUID() }));
+  const make = (kind, n) =>
+    Array.from({ length: n }, (_, i) => {
+      const id = randomUUID();
+      store.put("capabilities", { id, kind, name: `${kind} ${i}`, default_version: "1", versions: [{ version: "1" }] });
+      return id;
+    });
+  const prompts = make("prompt", 12),
+    knowledge = make("knowledge", 9),
+    plugins = make("plugin", 51);
+  const mcps = [];
+  for (let i = 0; i < 9; i++)
+    mcps.push((await put("mcps", { name: `MCP ${i}`, label: `mcp_${i}`, url: `https://mcp.example/${i}` })).id);
+  const skills = Array.from({ length: 51 }, (_, i) => `skill_${i}`);
+  const saved = await put(
+    "agents",
+    { ...agent, capability_ids: [...prompts, ...knowledge, ...plugins.slice(0, 50)], mcp_ids: mcps, skill_ids: skills.slice(0, 50) },
+    agent.id,
+  );
+  assert.equal(saved.capability_ids.length, 71);
+  assert.equal(saved.mcp_ids.length, 9);
+  await assert.rejects(put("agents", { ...saved, skill_ids: skills }, agent.id), /最多选择 50 个 Skill/);
+  await assert.rejects(put("agents", { ...saved, capability_ids: plugins }, agent.id), /最多选择 50 个 Plugin/);
+  store.put("runtimes", {
+    ...store.get("runtimes", runtime.id),
+    files: Array.from({ length: 42 }, (_, i) => ({ path: `/workspace/f${i}.txt`, content: "x" })),
+  });
+  await assert.rejects(
+    put("agents", { ...saved, capability_ids: knowledge }, agent.id),
+    /知识和环境模板文件合计最多 50 个/,
+  );
+});

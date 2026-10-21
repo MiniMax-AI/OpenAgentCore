@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: edb29bb21c00a59a8593b81252b584b3ef06b1c4b60a04fb4501255958fd3ddc
+source_hash: 5218c8ca5101bab6a787f02b0595c4b1ad2d60dead2d1de8a1a3cb5c860c6f9c
 ---
 
 # Parsar 工作空间
@@ -47,7 +47,7 @@ pnpm --filter @oac/parsar-example dev
 
 ## Agent 与资源 {#agents-and-resources}
 
-**Agent** 以卡片列出 Agent，展示执行配置、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**执行与环境**、**指令**、**能力** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。指令片段、Plugins 和知识合计最多 8 个，选择器会阻止超出。在 **执行配置** 中，Harness 会把每个选项收窄到它声明支持的值（[Harness 能力](../../contracts/agents-api/zh/harness-capabilities.md)）；切换 Harness 时，新 Harness 不接受的值会恢复为默认，并说明是哪几项。留空的选项保留 Harness 默认值；网页搜索默认 **关闭**。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑执行配置、模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。在同一浏览器标签页中回到 Agent 页面时，会恢复未保存的修改；点击 **保存** 时会指出缺少的必填项。
+**Agent** 以卡片列出 Agent，展示执行配置、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**执行与环境**、**指令**、**能力** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。选择上限与 Core 的 [Environment 限制](../../contracts/agents-api/zh/environments.md#plugins-and-capability-directories)一致：Skills 和 Plugins 各最多 50 个，知识与环境模板文件合计最多 50 个；指令片段和 MCP 服务没有数量上限。只绑定 Agent 需要的资源，因为每个 Skill 和工具都会增加模型要读的内容。在 **执行配置** 中，Harness 会把每个选项收窄到它声明支持的值（[Harness 能力](../../contracts/agents-api/zh/harness-capabilities.md)）；切换 Harness 时，新 Harness 不接受的值会恢复为默认，并说明是哪几项。留空的选项保留 Harness 默认值；网页搜索默认 **关闭**。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑执行配置、模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。在同一浏览器标签页中回到 Agent 页面时，会恢复未保存的修改；点击 **保存** 时会指出缺少的必填项。
 
 **模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
 
