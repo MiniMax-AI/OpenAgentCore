@@ -54,6 +54,7 @@ func TestPressureSuspensionRequiresUsefulCapacity(t *testing.T) {
 		{"waiting first session", 3, "1 minute", 1, true, false, nil},
 		{"full node idle past two minutes", 3, "3 minutes", 1, false, false, nil},
 		{"node with a free slot", 3, "3 minutes", 2, false, false, deployment.ErrNotIdle},
+		{"retained full idle past two minutes", 1, "3 minutes", 1, false, false, deployment.ErrNotIdle},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			f := newFixture(t)

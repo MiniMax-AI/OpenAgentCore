@@ -46,24 +46,16 @@ func fullNode(pressure SuspensionDemand, owner Allocation) *placement.Node {
 }
 
 // canKeepFreeSlot allows suspending an allocation that stayed idle for
-// freeSlotIdle on a full node with no reclamation in flight, so the next
-// Session finds a free slot. The suspended allocation keeps its retained
-// slot, so no retained capacity is needed.
-func canKeepFreeSlot(tx AllocationTx, owner Allocation) (bool, error) {
-	pressure, err := tx.LoadSuspensionDemand(owner)
-	if err != nil {
-		return false, err
-	}
-	return fullNode(pressure, owner) != nil && !slices.Contains(pressure.InFlightNodes, owner.NodeID), nil
+// freeSlotIdle on a full node with no reclamation in flight. The node must
+// also have a free retained slot, or the freed active slot admits no Session.
+func canKeepFreeSlot(pressure SuspensionDemand, owner Allocation) bool {
+	n := fullNode(pressure, owner)
+	return n != nil && n.Retained < int64(n.MaxRetained) && !slices.Contains(pressure.InFlightNodes, owner.NodeID)
 }
 
 // canSuspendForDemand reports whether compatible waiting demand would place on
 // the owner's full node once the owner is suspended.
-func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, owner Allocation) (bool, error) {
-	pressure, err := tx.LoadSuspensionDemand(owner)
-	if err != nil {
-		return false, err
-	}
+func (e *ExecutionOperations) canSuspendForDemand(tx AllocationTx, pressure SuspensionDemand, owner Allocation) (bool, error) {
 	source := fullNode(pressure, owner)
 	if source == nil {
 		return false, nil
