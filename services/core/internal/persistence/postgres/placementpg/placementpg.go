@@ -106,7 +106,7 @@ func ComputeBlocksAdmission(ctx context.Context, q *sqlc.Queries, session pgtype
 func node(row sqlc.ListRuntimeNodesRow) placement.Node {
 	n := placement.Node{
 		ID: uuidString(row.ID), Online: row.Online, ServingReady: row.ServingReady, TargetState: row.TargetState,
-		Active: row.Active, Retained: row.Retained, MaxActive: int(row.MaxActive), MaxRetained: int(row.MaxRetained), CoreURL: row.CoreUrl,
+		Active: row.Active, Retained: row.Retained, Reserved: row.Reserved, MaxActive: int(row.MaxActive), MaxRetained: int(row.MaxRetained), CoreURL: row.CoreUrl,
 	}
 	if row.ReadyGeneration.Valid {
 		ready := uint64(row.ReadyGeneration.Int64)
