@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 3408e2c811042732d35227150533cf12a85cfcff8a5118d7eb62a5d68549cc8b
+source_hash: f50217dd1fc465626ac7135a46b69cea0ee40fc14fd30141e23813018192cb5c
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -317,6 +317,10 @@ Session 会先应用模板，然后应用自身字段。组合仅在加密 Sessi
 | `skills`、`plugins`、`capability_directories` | 继承列表 | 替换列表；`[]` 会清除 |
 
 作为比较，不带模板的内联 `openai_hosted` Session 会将省略或为 null 的 `network` 视为启用。
+
+### 准备复用 {#preparation-reuse}
+
+Core 可以用同一 Project 中较早一次准备的结果启动托管 Environment，前提是两者在 Template 组合之后的有效配置完全相同，且距该次准备不超过 24 小时。每个 Session 仍然得到自己的副本。此时设置命令和包安装不会为该 Session 再次运行。只复用 `/environment`（见工作区文件系统范围），HOME 和其他与计算实例本地相关的改动不会复用。设置过程不得产生每个 Session 唯一的值，不得执行必须按 Session 发生的外部副作用，也不得获取 24 小时内就会过期的凭据；需要这些行为的配置必须有所不同，例如在 `env` 或 `files` 上。未声明[准备缓存](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)的提供商始终完整准备。
 
 ### 受限网络 {#restricted-network}
 

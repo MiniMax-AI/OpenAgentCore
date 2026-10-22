@@ -31,7 +31,7 @@ The installer calls these machine routes on Core:
 | Route | Authorization | Purpose |
 | --- | --- | --- |
 | `GET /api/v1/agent-daemon/install/{version}/bootstrap.sh`, `bootstrap.ps1` | None | Platform bootstrap scripts |
-| `GET /api/v1/agent-daemon/install/{version}/{os}-{arch}.sha256`, `{os}-{arch}.tar.gz` | None | Installer checksum and archive. Core serves a local copy, or redirects (307) to the versioned release URL in its catalog |
+| `GET /api/v1/agent-daemon/install/{version}/{os}-{arch}[-{component}].sha256`, `{os}-{arch}[-{component}].tar.gz` | None | Checksum and archive of a platform's base installer or of one of its components, named in its `bundle.json`. The installer downloads only the components it needs. Core serves a local copy, or redirects (307) to the versioned release URL in its catalog |
 | `POST /api/v1/agent-daemon/installation` | Grant | The frozen binding: `version`, `protocol_version`, `environment_id`, `remote_url`, `workspace_directory`, `harness` |
 | `POST /api/v1/agent-daemon/installation/claim` | Grant | `{"executor_token":"SECRET"}`; 204 |
 

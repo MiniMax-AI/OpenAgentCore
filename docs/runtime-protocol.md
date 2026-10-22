@@ -70,7 +70,7 @@ A declaration describes what the Runtime can do. Core admits a public feature on
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | The Environment type is `openai_hosted` or `self_hosted` |
 | `workspace_read_preparation` | An idle Files directory read needs a read-only preparation |
 | `native_session_recovery` | A Session with a started Turn has no recorded native Session ID |
-| `retained_native_history` | The Environment uses an external workspace binding; owned workspace storage does not require this capability |
+| `retained_native_history` | The Environment uses an external workspace binding; a Provider's own disk does not require this capability |
 | `structured_output` and `message_items` | The Agent requests `json_schema` output. A Runtime that declares `message_items` tags text deltas with the native item ID and reports message start, completion, phase and the completion text in `output_message` frames |
 | `subagent_observations` | `multi_agent.enabled` is true |
 | `subagent_control` | `multi_agent.enabled` is false |

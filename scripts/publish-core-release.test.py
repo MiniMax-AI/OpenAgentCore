@@ -34,7 +34,7 @@ class PublicationTests(unittest.TestCase):
             (self.assets / (name + ".sha256")).write_text(
                 hashlib.sha256(b"archive fixture").hexdigest() + "  " + name + "\n")
         catalog = {"version": self.revision, "artifacts": {}}
-        for platform in ("linux-amd64", "darwin-arm64", "windows-amd64"):
+        for platform in ("linux-amd64", "darwin-arm64", "windows-amd64-codex"):
             name = f"oac-native-{self.revision}-{platform}.tar.gz"
             (self.assets / name).write_bytes(b"native archive")
             checksum = hashlib.sha256(b"native archive").hexdigest()
@@ -71,7 +71,7 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(len(self.release["assets"]), 28)
 
     def test_missing_native_asset_refuses_release_creation(self):
-        (self.assets / f"oac-native-{self.revision}-windows-amd64.tar.gz").unlink()
+        (self.assets / f"oac-native-{self.revision}-windows-amd64-codex.tar.gz").unlink()
         with self.assertRaises(FileNotFoundError):
             self.publish()
         self.assertEqual(self.writes(), [])

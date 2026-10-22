@@ -25,6 +25,7 @@ func TestPublicEnvironmentInputFailureMappings(t *testing.T) {
 		{execution.ErrEnvironmentInputCancelled, http.StatusConflict, "environment_input_cancelled"},
 		{execution.ErrExecutionUnavailable, http.StatusServiceUnavailable, "execution_unavailable"},
 		{execution.ErrWhitespaceOnlyText, http.StatusBadRequest, "unsupported_or_invalid_configuration"},
+		{sessions.ErrRetainedHistoryUnsupported, http.StatusBadRequest, "unsupported_or_invalid_configuration"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			recorder := &inputRecorder{err: fmt.Errorf("submission: %w", tc.err)}

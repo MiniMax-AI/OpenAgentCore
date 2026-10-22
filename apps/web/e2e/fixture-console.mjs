@@ -23,6 +23,8 @@ const LOCKOUT_SECONDS = 30;
 
 let state;
 const SOURCE_COMMIT = "c0ffee".padEnd(40, "0");
+// microsandbox runs every sandbox on workspace storage, so the installation has it selected.
+const WORKSPACE_STORAGE = { id: "5d0c2a4e-8f6b-4c1d-9e3a-7b2f1a0c6d48", adapter: "nfs", parameters: { root: "/srv/oac-workspaces", namespace_id: "22222222-2222-4222-8222-222222222222", uid: 65532 }, tenant_capacity_mib: 0 };
 
 /**
  * config.json's public_url. "public": an HTTPS address, so applications get an API base URL;
@@ -259,6 +261,7 @@ async function adminWrite(request, response, path) {
 function adminRead(response, path, url) {
   const a = state.admin;
   if (path === "/installation") return send(response, 200, installation());
+  if (path === "/workspace-storage") return send(response, 200, WORKSPACE_STORAGE);
   if (path === "/projects") return send(response, 200, { data: a.projects.map(a.publicProject), has_more: false });
   if (path === "/summary") return send(response, 200, a.summary(url));
   if (path === "/request-logs") return send(response, 200, requestLog(url));
@@ -517,7 +520,7 @@ async function executorCredentialRoute(request, response, projectId, environment
  */
 function registeredNode(nodeId) {
   const { enrollment_id = null, ...limits } = state.enrollment ?? { max_active: 1, max_retained: 1 };
-  return { rollout: { state: "unknown", ready_generation: null }, id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), enrollment_id, online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
+  return { rollout: { state: "unknown", ready_generation: null }, id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), enrollment_id, online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, recommended_capacity: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
 const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-configuration$/;

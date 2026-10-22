@@ -6,7 +6,7 @@ import {
   attachmentKindValues,
   deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentModeValues, deploymentViewRequired,
   hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields,
-  nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
+  capacityFields, nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
   resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues,
   sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
   type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
@@ -181,6 +181,7 @@ function projectNode(node: Record<string, unknown>): SandboxNode {
   valid(strings(node, ["id", "name", "provider", "core_url"]) && typeof node.online === "boolean" && typeof node.provider_ready === "boolean" &&
     [node.cpu_count, node.available_memory_bytes, node.available_disk_bytes].every(nullable(isNonnegativeInteger)) &&
     [node.running, node.snapshots, node.max_active, node.max_retained, node.active, node.reserved, node.retained, node.cleanup_pending].every(isNonnegativeInteger) &&
+    nullable((capacity) => { const c = members(capacity, capacityFields); return [c.max_active, c.max_retained].every(isNonnegativeInteger); })(node.recommended_capacity) &&
     nullable(timestamp)(node.last_seen_at) && timestamp(node.created_at) && (node.enrollment_id === null || typeof node.enrollment_id === "string"));
   return fields as unknown as SandboxNode;
 }

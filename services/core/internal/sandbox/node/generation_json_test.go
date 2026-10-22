@@ -123,3 +123,21 @@ func TestCheckpointGenerationHealthJSONRoundTrip(t *testing.T) {
 		})
 	}
 }
+
+func TestPreparationFramesSurviveStrictFrame(t *testing.T) {
+	q := request{DeploymentGeneration: 1, ID: uuid.NewString(), Sequence: 1, ConnectionID: uuid.NewString(), OwnerEpoch: 1, Operation: "restore_preparation", TimeoutMillis: 60000, Reference: reference(), Key: strings.Repeat("a", 64)}
+	out := response{ID: q.ID, ConnectionID: q.ConnectionID, Restored: true}
+	for _, f := range []frame{{Version: ProtocolVersion, Type: "request", Request: &q}, {Version: ProtocolVersion, Type: "response", Response: &out}} {
+		raw, err := json.Marshal(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := decodeFrame(raw)
+		if err != nil {
+			t.Fatal("preparation frame rejected", f.Type, err)
+		}
+		if (decoded.Request != nil && decoded.Request.Key != q.Key) || (decoded.Response != nil && !decoded.Response.Restored) {
+			t.Fatal("preparation field lost", f.Type)
+		}
+	}
+}

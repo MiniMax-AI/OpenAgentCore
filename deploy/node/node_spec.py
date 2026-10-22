@@ -24,7 +24,7 @@ ENROLLMENT_EXPIRED = ("The enrollment command expired or was already used. Gener
 
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
 
@@ -34,6 +34,8 @@ def canonical_spec(provider, specification, validate=True):
         raise ValueError("Invalid specification fields")
     workspace = specification.get("workspace")
     requirements = rules.get("workspace")
+    if validate and requirements and workspace is None:
+        raise ValueError("Workspace storage is required")
     if validate and workspace is not None:
         if (not isinstance(workspace, dict) or set(workspace) - set(_CONTRACT["workspace_fields"])
                 or not requirements or workspace.get("attachment") != requirements["attachment"]
@@ -78,9 +80,7 @@ def validate(data, args):
         if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
-                or set(spec) - {"workspace"} != {"resources"}
-                or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
-                or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
+                or set(spec) - {"workspace"} != {"resources"}):
             raise ValueError()
         canonical_spec(provider, spec)
         if data["specification_digest"] != digest(provider, spec):

@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: a4b0eae5408163c044b11016dda7a2d66bdcb6b6f90660d1388ffb5a5a2115e3
+source_hash: cc071a27e2a33ecbecf7d5f4a3aa7cbd5d61e0f1cac114df686eea8df0baf5e3
 ---
 
 沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
@@ -52,7 +52,7 @@ sequenceDiagram
 
 只要节点在当前所有者 epoch 下保持连接，并且最近一次心跳距今不足 45 秒，Core 就会将该节点计为在线。心跳会确立提供商的就绪状态和最近的主机测量值，但绝不表示 Session 活动。[超时与限制](#timeouts-and-limits)列出所有计时器。
 
-健康报告包含 `observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。节点按代次报告就绪状态，详见下文。代次观察记录中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。
+健康报告包含 `observed_at`、最多为 32 的 `active_operations`，以及 [Runtime 遥测 API](runtime-observability-api.md#node-host-observations-and-history) 报告的主机测量值。注册请求携带节点为健康报告所取的同样测量值：`cpu_count`、`effective_cpu_cores`、`total_memory_bytes` 和 `available_disk_bytes`，无法测量的省略，并按健康报告同样的规则校验。Core 用它们推导注册令牌未设置的每个限制，见[推荐容量](sandbox-deployment.md#recommended-capacity)。节点按代次报告就绪状态，详见下文。代次观察记录中的 `diagnostic` 若不是已声明的类别，该帧即无效。[节点指南](../../../docs/zh/getting-started/nodes.md#readiness-codes) 列出了这些类别及其原因。
 
 ## 提供商请求 {#provider-requests}
 
@@ -87,12 +87,14 @@ Core 发送包含以下内容的 `request` 帧：
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | 无 |
+| `restore_preparation` | `RestorePreparation` | `key` | `restored` |
+| `save_preparation` | `SavePreparation` | `key` | 无 |
 
 只要 `connection_id`、`owner_epoch` 或 `sequence` 中任一值不匹配，请求就会关闭连接。格式错误的请求会得到 `invalid` 响应。节点在所指 `deployment_generation` 的提供商上运行请求，无法运行时回复 `unconfirmed`。Core 仅向节点上已就绪的代次发送 `create` 和非 observe-only 的 `resume`，并且每条连接最多保留 32 个待处理请求。
 
 预算采用相对计时：节点收到请求时以自己的时钟为基准锚定 `timeout_ms`，并在请求排队等待期间持续消耗该预算，因此各主机的时钟无需保持一致。Core 仍会限制自身等待时长。节点队列已满时会关闭连接。
 
-`response` 帧包含 `id` 和 `connection_id`。成功响应携带操作表中指定的结果；对于 `kill`、`kill_compute` 或 `delete_snapshot`，响应不含结果字段。失败响应携带一个 `error_code`：
+`response` 帧包含 `id` 和 `connection_id`。成功响应携带操作表中指定的结果；对于 `kill`、`kill_compute`、`delete_snapshot` 或 `save_preparation`，响应不含结果字段。失败响应携带一个 `error_code`：
 
 | `error_code` | 含义 |
 | --- | --- |
@@ -106,7 +108,7 @@ Core 发送包含以下内容的 `request` 帧：
 
 节点启动和代次加载会在接受工作前验证完整的提供商操作声明，Core 代理使用同一份已注册声明，因此不支持的操作会在节点解析或原生 I/O 之前被拒绝。操作清单由[操作契约](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)维护。`unsupported` 响应包含一个 `unsupported` 对象，其中有精确的方法 `operation` 和经作者编写且安全的 `reason`；代理会将两者与请求进行核对。证据缺失、格式错误或不匹配会得到 `unconfirmed` 结果，而绝不会证明变更操作被拒绝。`unsupported` 始终不同于观察不可用，也不同于计算或命令结果未知；它既不确定资源所有权，也不授权重放。
 
-Create 引导和 Resume 请求可携带可选的工作区文件系统绑定。节点在转发前校验其租户及 Environment 与分配引用一致、ObjectID 不可变且有效，以及挂载配置 ID 与所传配置一致。文件系统解析器负责适配器原生所有权校验。未提供绑定时选择自有存储；已提供绑定时不得回退。错误响应仅可保留原生 ID 非空且名称、代次、快照来源均匹配请求的 Resume 目标；这仅为清理证据，不代表恢复成功。
+Create 引导和 Resume 请求可携带可选的工作区文件系统绑定。节点在转发前校验其租户及 Environment 与分配引用一致、ObjectID 不可变且有效，以及挂载配置 ID 与所传配置一致。文件系统解析器负责适配器原生所有权校验。策略声明了工作区存储的提供商拒绝缺失的绑定，未声明的提供商拒绝已提供的绑定，两者都不回退。错误响应仅可保留原生 ID 非空且名称、代次、快照来源均匹配请求的 Resume 目标；这仅为清理证据，不代表恢复成功。
 
 ## 代次控制 {#generation-control}
 

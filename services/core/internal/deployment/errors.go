@@ -32,6 +32,9 @@ var (
 	// ErrNodeAddressMismatch rejects an enrollment whose Core address is not
 	// the installation public URL. The token stays unconsumed.
 	ErrNodeAddressMismatch = errors.New("sandbox node Core address differs from the public URL")
+	// ErrNodeHostUnmeasured rejects an enrollment that leaves a limit unset
+	// and reports no host measurements to derive it from. The token stays unused.
+	ErrNodeHostUnmeasured = errors.New("sandbox node reported no host measurements")
 	// ErrNodeExists rejects an enrollment whose node ID is already in use.
 	ErrNodeExists = errors.New("sandbox node ID is already enrolled")
 	// ErrSandboxResetSessionBusy reports a hosted Session an automatic reset
@@ -74,8 +77,12 @@ type ConfigurationError struct {
 func (e *ConfigurationError) Error() string { return e.Message }
 func (e *ConfigurationError) Unwrap() error { return ErrInvalidInput }
 
-// configurationError wraps a provider's rejection of a selection.
-func configurationError(err error) *ConfigurationError {
+// configurationError wraps a provider's rejection of a selection. A missing
+// workspace storage selection keeps its own typed error.
+func configurationError(err error) error {
+	if errors.Is(err, sandbox.ErrWorkspaceRequired) {
+		return err
+	}
 	var validation *sandbox.ValidationError
 	errors.As(err, &validation)
 	return &ConfigurationError{Message: err.Error(), Validation: validation}

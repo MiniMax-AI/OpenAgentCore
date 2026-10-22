@@ -17,7 +17,7 @@ func testConfig() Config {
 	return Config{CheckpointRoot: "/private-checkpoints",
 		InstallationID: "11111111-1111-4111-8111-111111111111", HelperPath: "/helper", RuntimeHome: "/private/msb", RuntimePath: "/private/bin/msb", FirmwarePath: "/private/lib/libkrunfw.so",
 		RuntimeSHA256: strings.Repeat("a", 64), FirmwareSHA256: strings.Repeat("b", 64), Image: "registry/runtime@sha256:" + strings.Repeat("c", 64),
-		MemoryMiB: 2048, CPUs: 2, RootDiskMiB: 4096, EnvironmentDiskMiB: 2048, Network: NetworkPolicy{DefaultEgress: "deny", DefaultIngress: "deny", Rules: []NetworkRule{{Action: "allow", Direction: "egress", Destination: "host"}}},
+		MemoryMiB: 2048, CPUs: 2, RootDiskMiB: 4096, Network: NetworkPolicy{DefaultEgress: "deny", DefaultIngress: "deny", Rules: []NetworkRule{{Action: "allow", Direction: "egress", Destination: "host"}}},
 	}
 }
 func testRef() sandbox.Reference {
@@ -60,7 +60,8 @@ func TestRestoreMustRetainExactProvenance(t *testing.T) {
 		got.RestoredFrom = &v
 		return Response{Version: ProtocolVersion, State: &State{Compute: got, Status: "running", BootstrapComplete: true}}, nil
 	}))
-	_, e := p.Resume(deadline(t), ResumeRequest{Reference: r, OperationID: "66666666-6666-4666-8666-666666666666", Snapshot: s, Target: target})
+	resolveTo(p)
+	_, e := p.Resume(deadline(t), ResumeRequest{Reference: r, OperationID: "66666666-6666-4666-8666-666666666666", Snapshot: s, Target: target, Workspace: workspaceBinding()})
 	if !errors.Is(e, sandbox.ErrOwnership) {
 		t.Fatalf("different snapshot accepted: %v", e)
 	}

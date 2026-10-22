@@ -12,7 +12,7 @@ Core places each new Session on a node with free capacity; the node creates the 
 - **Core has a public URL** that the host and its sandboxes can reach. Nodes download from Core's console and connect to Core at `public_url`. Until it is set, Add node says *Set a public address other machines can reach before adding nodes*; see [Configure the public address](./public-address.md).
 - **The console can serve the node files.** Nodes download their Runtime and provider files from the console, which redirects to the release for files it does not hold, and check each file's size and SHA-256 against the release manifest. Node hosts therefore need access to the release. Without the files, Add node says *This console has no node files for …*.
 - **The host meets the requirements below.**
-- **For independent workspace storage,** the NFS mount and service account are ready on this host; see [Set up workspace storage](./workspace-storage.md). The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
+- **For microsandbox,** the NFS mount for workspace storage is ready on this host; see [Set up workspace storage](./workspace-storage.md). The node receives the selected immutable filesystem configuration with each binding; do not author a separate node storage setting.
 - **For checkpoint recovery across microsandbox nodes,** see [Checkpoint recovery across nodes](#checkpoint-recovery-across-nodes).
 
 The Core host joins like any other host: to run sandboxes on it, add it as a node.
@@ -29,7 +29,7 @@ The Core host joins like any other host: to run sandboxes on it, add it as a nod
 ## Add a node
 
 1. In Web, open **Nodes** and choose **Add node**.
-2. Set **Sandboxes at once** and, with microsandbox, **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). You can change them later with **Edit node**.
+2. Keep **Recommended** limits, or choose **Custom** and set **Sandboxes at once** and, with microsandbox, **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). **Edit node** shows the recommendation for the host and fills it in with **Use recommended**.
 3. Choose **Generate command** and copy the command. It registers one node, once, and only if it runs within an hour; Web counts down and offers **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
 
@@ -62,7 +62,7 @@ The node service keeps the proxy settings of the latest run, so it reaches Core 
 
 | Item | Detail |
 | --- | --- |
-| Service user | System user `oac-node`, home `/var/lib/oac-node`, no login shell. An existing account with that home and a nologin shell is adopted; any other account named `oac-node` is refused |
+| Service user | System user `oac-node` with UID 65532, the UID of Core's service, home `/var/lib/oac-node` and no login shell. An existing account with that UID, that home and a nologin shell is adopted; any other account named `oac-node` is refused. If another account holds UID 65532, the installer stops and changes nothing |
 | Group | The group that owns `/var/run/docker.sock` (Docker) or `/dev/kvm` (microsandbox): `docker` or `kvm`, nothing else |
 | Service | `/etc/systemd/system/oac-node-<installation-id>.service`, a root-owned system unit with `User=oac-node`, enabled at boot. It restarts every 5 seconds while Core is unreachable and stops for good once Core no longer accepts the node |
 | Node state | `/var/lib/oac-node/.oac/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/oac-node/.oac/m/` |
@@ -103,7 +103,7 @@ Run `sudo journalctl -u oac-node-<installation-id>.service`. In a root shell, om
 Sandbox settings apply to the whole installation; nodes follow them.
 
 - **Size, E2B key or template build.** Open **Settings** → **Sandbox and scheduling** → **Change resources**, edit and save. Existing sandboxes keep their configuration. Each node prepares the new one while it keeps serving the old one, and **Nodes** shows its progress: **Preparing target**, **Ready for target** or **Preparation failed** with the [reason](#readiness-codes). Core places new Sessions on nodes ready for the new configuration first, and on nodes still serving an older one when those have no room. E2B changes apply at once.
-- **Capacity and idle suspension.** On **Nodes**, use **Edit node** for a node's active and retained limits. In **Settings** → **Sandbox and scheduling**, use **Automatic suspension** → **Idle before suspension (seconds)** → **Save** for the deployment-wide [idle policy](../../contracts/agents-api/sandbox-deployment.md#suspension-policy).
+- **Capacity and idle suspension.** On **Nodes**, use **Edit node** for a node's active and retained limits, or **Use recommended** to fill in the recommendation. In **Settings** → **Sandbox and scheduling**, use **Automatic suspension** → **Idle before suspension (seconds)** → **Save** for the deployment-wide [idle policy](../../contracts/agents-api/sandbox-deployment.md#suspension-policy).
 - **Backend.** On the same page, choose **Reset deployment**. Auto reset archives idle hosted Sessions at once and lets running work finish until the deadline you set; force cancels it now. Offline nodes must come back so Core can confirm their cleanup. When the reset completes, Core has retired every node and unused command: set up the new backend, then add nodes again. **Cancel reset** stops the remaining work; archived Sessions stay archived.
 
 The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation-ownership-and-rollout) describes what reset archives and keeps. To archive a single hosted Session, use the [Core API](../../contracts/agents-api/admin-api.md#session-archive).

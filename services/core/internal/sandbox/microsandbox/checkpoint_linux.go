@@ -16,7 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-// CheckpointStore opens only an explicitly configured, private archive root.
+// CheckpointStore opens only an explicitly configured, private checkpoint root.
 // Its marker is an operator-owned identity, never inferred from workspace paths.
 func CheckpointStore(c Config) (string, error) {
 	if !filepath.IsAbs(c.CheckpointRoot) || filepath.Clean(c.CheckpointRoot) != c.CheckpointRoot {
@@ -89,9 +89,9 @@ func CheckpointClass(c Config) (sandbox.CheckpointCompatibility, error) {
 	raw, _ := json.Marshal(struct {
 		SDK, Runtime, Firmware, Image, Kernel string
 		CPUs                                  uint8
-		Memory, Root, Environment             uint32
+		Memory, Root                          uint32
 		CPU                                   []string
-	}{SDKVersion, c.RuntimeSHA256, c.FirmwareSHA256, c.Image, strings.TrimSpace(string(kernel)), c.CPUs, c.MemoryMiB, c.RootDiskMiB, c.EnvironmentDiskMiB, stable})
+	}{SDKVersion, c.RuntimeSHA256, c.FirmwareSHA256, c.Image, strings.TrimSpace(string(kernel)), c.CPUs, c.MemoryMiB, c.RootDiskMiB, stable})
 	h := sha256.Sum256(raw)
 	return sandbox.CheckpointCompatibility{ArtifactDomain: domain, ExecutionClass: hex.EncodeToString(h[:])}, nil
 }

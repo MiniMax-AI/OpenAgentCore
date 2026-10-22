@@ -58,7 +58,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
     </header>
     <div className="settings-rows">
       <Fact label={t("Provider")}>{sandboxProviderLabel(deployment.provider, locale)}</Fact>
-      <Fact label={t("Each sandbox")} help={spec?.workspace && !spec.workspace.capacity_quota ? t("Workspace storage is configured by the operator; no capacity quota is enforced.") : undefined}>{size ? `${sizeLabel(size)}${size.root_disk_mib ? ` · ${spec?.workspace ? t("Root disk {{root}} · external workspace", { root: formatBytes(size.root_disk_mib * MIB) }) : t("Root disk {{root}} · data disk {{data}}", { root: formatBytes(size.root_disk_mib * MIB), data: formatBytes((size.environment_disk_mib ?? 0) * MIB) })}` : ""}` : MISSING}</Fact>
+      <Fact label={t("Each sandbox")} help={spec?.workspace && !spec.workspace.capacity_quota ? t("Workspace storage is configured by the operator; no capacity quota is enforced.") : undefined}>{size ? `${sizeLabel(size)}${size.root_disk_mib ? ` · ${t("Root disk {{root}} · external workspace", { root: formatBytes(size.root_disk_mib * MIB) })}` : ""}` : MISSING}</Fact>
       {deployment.provider === "e2b" ? <>
         <Fact label={t("Sandbox API URL")}><code className="system-code">{deployment.configuration?.api_url}</code></Fact>
         <Fact label={t("Sandbox data-plane domain")}><code className="system-code">{deployment.configuration?.domain}</code></Fact>

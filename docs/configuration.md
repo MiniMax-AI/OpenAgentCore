@@ -68,7 +68,7 @@ Which Harnesses are enabled, and the default one, are process settings (`OAC_HAR
 
 ### Node capacity
 
-Core approves a node's capacity when you generate its Add node command: **Sandboxes at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes** (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
+A node's capacity is **Sandboxes at once** (`max_active`) and, for microsandbox only, **Retained sandboxes** (`max_retained`), with `max_retained >= max_active >= 1`. **Add node** keeps the recommended limits by default, which Core [derives from the host](../contracts/agents-api/sandbox-deployment.md#recommended-capacity) when the node registers, or you enter both numbers. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**, which shows the recommendation and fills it in on request. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
 
 `OAC_EXECUTION_CONCURRENCY` is unrelated: it limits concurrent execution work in Core.
 
@@ -136,7 +136,7 @@ The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `da
 
 ## Independent workspace storage {#independent-workspace-storage}
 
-The supported independent filesystem combination is microsandbox with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the `oac-node` account, the Compose mount, the selection payloads and the quota mode storage server.
+microsandbox requires independent workspace storage, and the only supported combination is with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the Compose mount, the selection payloads and the quota mode storage server.
 
 ## Appendix: Core environment without the installer
 

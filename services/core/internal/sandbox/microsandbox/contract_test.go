@@ -12,7 +12,7 @@ import (
 func TestProviderContract(t *testing.T) {
 	contracttest.RunFailures(t, func(t *testing.T, s contracttest.Scenario, cancel context.CancelFunc) contracttest.Fixture {
 		c, r := testConfig(), testRef()
-		b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic"}
+		b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", Workspace: workspaceBinding()}
 		var calls []string
 		p, err := NewWithCaller(c, callerFunc(func(ctx context.Context, q Request) (Response, error) {
 			calls = append(calls, q.Operation)
@@ -39,6 +39,7 @@ func TestProviderContract(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		resolveTo(p)
 		nativeOperation := s.Operation
 		if nativeOperation == "renew" || nativeOperation == "inspect" {
 			nativeOperation = "initial_info"
@@ -62,7 +63,8 @@ func TestProviderContractObservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic"}
+	resolveTo(p)
+	b := sandbox.Bootstrap{Reference: r, SessionID: uuid.NewString(), DeviceID: uuid.NewString(), CoreURL: "https://core.example/api/v1", Credential: "synthetic", Workspace: workspaceBinding()}
 	got, err := p.Create(deadline(t), b)
 	contracttest.AssertObservation(t, got, err, r, "native-owned", "running")
 	got, err = p.GetInfo(deadline(t), r)

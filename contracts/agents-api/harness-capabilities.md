@@ -64,4 +64,4 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, with literal headers or HTTPS bearer | Verified: self-hosted; admitted: hosted; literal headers or HTTPS bearer |
 
-External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.
+External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; Docker and E2B, which keep their own disks, do not. microsandbox always uses external storage, so MiniMax Code, which does not declare the capability, cannot run on it. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.

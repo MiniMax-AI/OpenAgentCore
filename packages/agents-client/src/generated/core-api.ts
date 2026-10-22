@@ -116,6 +116,11 @@ export interface AdminauditPage {
 export const adminauditPageFields = ["data", "has_more", "next_cursor"] as const;
 export const attachmentKindValues = ["host_directory"] as const;
 export type AttachmentKind = (typeof attachmentKindValues)[number];
+export interface Capacity {
+  max_active: number;
+  max_retained: number;
+}
+export const capacityFields = ["max_active", "max_retained"] as const;
 export interface ConfigurationDiscoveryInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
@@ -425,13 +430,14 @@ export interface Node {
   online: boolean;
   provider: string;
   provider_ready: boolean;
+  recommended_capacity: Capacity | null;
   reserved: number;
   retained: number;
   rollout: NodeRollout;
   running: number;
   snapshots: number;
 }
-export const nodeFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
+export const nodeFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "recommended_capacity", "reserved", "retained", "rollout", "running", "snapshots"] as const;
 export interface NodeAllocation {
   compute_phase: string;
   compute_phase_changed_at: string | null;
@@ -468,13 +474,14 @@ export interface NodeDetail {
   online: boolean;
   provider: string;
   provider_ready: boolean;
+  recommended_capacity: Capacity | null;
   reserved: number;
   retained: number;
   rollout: NodeRollout;
   running: number;
   snapshots: number;
 }
-export const nodeDetailFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "history", "host", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
+export const nodeDetailFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "history", "host", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "recommended_capacity", "reserved", "retained", "rollout", "running", "snapshots"] as const;
 export const nodeDiagnosticCodeValues = ["provider_unavailable", "host_unsupported", "artifacts_unavailable", "runtime_image_unavailable", "capacity_insufficient"] as const;
 export type NodeDiagnosticCode = (typeof nodeDiagnosticCodeValues)[number];
 export interface NodeHost {

@@ -45,6 +45,11 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 		defer cancel()
 		result, e := runCommand(commandCtx, live, *b.q.Command, "1000:1000")
 		return wire.Response{Command: &result}, e
+	case "restore_preparation":
+		restored, e := b.restorePreparation(ctx)
+		return wire.Response{Restored: restored}, e
+	case "save_preparation":
+		return wire.Response{}, b.savePreparation(ctx)
 	case "suspend":
 		s, e := b.suspend(ctx, *b.q.Suspend)
 		return wire.Response{State: &s}, e
@@ -52,7 +57,7 @@ func (b backend) run(ctx context.Context) (wire.Response, error) {
 		s, e := b.resume(ctx, *b.q.Resume)
 		return wire.Response{State: &s}, e
 	case "delete_snapshot":
-		return wire.Response{}, b.deleteArchive(ctx, *b.q.Snapshot)
+		return wire.Response{}, b.deleteCheckpoint(ctx, *b.q.Snapshot)
 	}
 	return wire.Response{}, sandbox.ErrInvalid
 }

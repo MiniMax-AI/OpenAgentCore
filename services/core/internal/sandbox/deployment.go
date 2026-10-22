@@ -39,11 +39,13 @@ type Resources struct {
 	EnvironmentDiskMiB uint32 `json:"environment_disk_mib,omitempty"`
 }
 
+// ValidatePolicy validates the resources against a Provider's declaration. On
+// external storage, environment_disk_mib is only the capacity quota request: zero
+// requests none and the storage declaration decides whether a quota is possible.
 func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error {
-	return r.ValidateWorkspacePolicy(provider, rules, nil)
-}
-
-func (r Resources) validatePolicy(provider string, rules DeploymentPolicy) error {
+	if rules.Workspace != nil && r.EnvironmentDiskMiB == 0 && rules.Disk {
+		r.EnvironmentDiskMiB = minimumDiskMiB
+	}
 	values := reflect.ValueOf(r)
 	for i, rule := range resourceContract {
 		min, max := rule.Min, rule.Max
@@ -54,7 +56,10 @@ func (r Resources) validatePolicy(provider string, rules DeploymentPolicy) error
 			message = provider + " does not support independent disk capacity limits"
 			if rules.Disk {
 				min, max = minimumDiskMiB, ^uint32(0)
-				message = provider + " requires root_disk_mib and environment_disk_mib of at least 1024 MiB"
+				message = provider + " requires " + rule.Name + " of at least 1024 MiB"
+				if rules.Workspace != nil && rule.Name == "environment_disk_mib" {
+					message = provider + " requires environment_disk_mib of 0 or at least 1024 MiB"
+				}
 				maximum = nil
 			} else {
 				maximum = validationBound(max)
@@ -75,8 +80,20 @@ type DeploymentSpec struct {
 }
 
 // ValidatePolicy applies a registered adapter's rules without knowing its kind.
+// A Provider that declares workspace requirements runs every Environment on
+// external storage and cannot be deployed without a selection.
 func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy) error {
-	return s.ValidateWorkspacePolicy(provider, policy, s.Workspace)
+	switch {
+	case policy.Workspace == nil && s.Workspace != nil:
+		return workspacefs.ErrUnsupported
+	case policy.Workspace != nil && s.Workspace == nil:
+		return ErrWorkspaceRequired
+	case policy.Workspace != nil:
+		if err := workspacefs.ValidateCombination(*policy.Workspace, *s.Workspace, s.Resources.EnvironmentDiskMiB); err != nil {
+			return err
+		}
+	}
+	return s.Resources.ValidatePolicy(provider, policy)
 }
 
 func (s DeploymentSpec) Digest(provider string) string {
@@ -98,25 +115,4 @@ type Description struct {
 func BackendFingerprint(kind, namespace string) string {
 	digest := sha256.Sum256([]byte(kind + "\x00" + namespace))
 	return hex.EncodeToString(digest[:])
-}
-
-// ValidateWorkspacePolicy validates explicit external storage without weakening root disk limits.
-func (r Resources) ValidateWorkspacePolicy(provider string, rules DeploymentPolicy, declaration *workspacefs.Declaration) error {
-	if declaration == nil {
-		return r.validatePolicy(provider, rules)
-	}
-	if rules.Workspace == nil {
-		return workspacefs.ErrUnsupported
-	}
-	if err := workspacefs.ValidateCombination(*rules.Workspace, *declaration, r.EnvironmentDiskMiB); err != nil {
-		return err
-	}
-	checked := r
-	if checked.EnvironmentDiskMiB == 0 && rules.Disk {
-		checked.EnvironmentDiskMiB = minimumDiskMiB
-	}
-	return checked.validatePolicy(provider, rules)
-}
-func (s DeploymentSpec) ValidateWorkspacePolicy(provider string, policy DeploymentPolicy, declaration *workspacefs.Declaration) error {
-	return s.Resources.ValidateWorkspacePolicy(provider, policy, declaration)
 }

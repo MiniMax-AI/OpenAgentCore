@@ -47,14 +47,16 @@ A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distri
 
 ### Native installers
 
-Self-hosted machines install `oac-daemon` from per-platform native installers: Linux amd64, macOS arm64 and Windows amd64. Each is built on its own OS by the `native-check` workflow (`scripts/build-native-installer.mjs`, whose `pins` object fixes the Node.js and Harness versions) and verified on every selected native check. Manual packaging runs and release checks upload `oac-native-installer-<OS>-<ARCH>.tar.gz` for seven days; ordinary PR and main checks do not upload successful packages. For a local distribution, download the three artifacts from a `native-check` run on that exact commit (a manual run or the release run; pull-request runs build the merge commit and do not match), then assemble the catalog from that checkout:
+Self-hosted machines install `oac-daemon` from per-platform native installers: Linux amd64, macOS arm64 and Windows amd64. Each is built on its own OS by the `native-check` workflow (`scripts/build-native-installer.mjs`, whose `pins` object fixes the Node.js and Harness versions) and verified on every selected native check. Manual packaging runs and release checks upload the platform's archives as `oac-native-installer-<OS>-<ARCH>` for seven days; ordinary PR and main checks do not upload successful packages. For a local distribution, download the three artifacts from a `native-check` run on that exact commit (a manual run or the release run; pull-request runs build the merge commit and do not match), then assemble the catalog from that checkout, with all archives of the three artifacts in one input directory:
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-The catalog records the commit, the Runtime protocol version, each archive's SHA-256 and, with a release base, its versioned URL. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<platform>.tar.gz` release assets, and the offline archive holds one copy of each outside the Core image, which its `install.py` copies into the installation for Core to serve. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
+Each platform has a small base archive `<os>-<arch>.tar.gz` (`oac-daemon` and `bundle.json`, which lists every component with the SHA-256 of each file) and one archive per component, `<os>-<arch>-node` and `<os>-<arch>-<harness>` (MiniMax Code is not built for Windows). `build-native-installer.mjs` writes them. Core serves these artifacts by name and knows nothing of their content; `oac-daemon install` downloads the components it needs.
+
+The catalog records the commit, the Runtime protocol version, each artifact's SHA-256 and, with a release base, its versioned URL. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<artifact>.tar.gz` release assets, and the offline archive holds a copy of every Linux amd64 archive outside the Core image, which its `install.py` copies into the installation for Core to serve. Core redirects the other platforms to their release assets; a catalog without a release base has no such URL, so its offline archive holds every archive. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
 
 ### Runtime images and helpers
 

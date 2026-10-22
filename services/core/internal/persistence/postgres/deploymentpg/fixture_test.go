@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -94,7 +95,7 @@ func testSpecification(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
-		s.Resources.EnvironmentDiskMiB = 8192
+		s.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	}
 	return s
 }
@@ -118,7 +119,7 @@ func (f fixture) initialize(t *testing.T, changes *deployment.ExecutionOperation
 // generation with it.
 func (f fixture) enroll(t *testing.T, view deployment.View, capacity deployment.Capacity) deployment.Enrollment {
 	t.Helper()
-	token, err := f.service.CreateEnrollment(admin(t), capacity)
+	token, err := f.service.CreateEnrollment(admin(t), deployment.EnrollmentLimits{MaxActive: &capacity.MaxActive, MaxRetained: &capacity.MaxRetained})
 	if err != nil {
 		t.Fatal(err)
 	}

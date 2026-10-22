@@ -4,7 +4,8 @@ import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, readFile, rename, rm, symli
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { buildBundle, copyComponent, prepareNodeEntrypoints, validateNodeCommands } from './build-native-installer.mjs';
+import { execFileSync } from 'node:child_process';
+import { archiveBundle, buildBundle, copyComponent, prepareNodeEntrypoints, validateNodeCommands } from './build-native-installer.mjs';
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'oac-native-bundle-test-'));
@@ -94,4 +95,20 @@ test('real npm and npx remain runnable from PATH after regular-file copying and 
     assert.equal(files[path].sha256, createHash('sha256').update(await readFile(join(relocated, path))).digest('hex'));
     assert.equal(files[path].executable, true);
   }
+});
+
+test('archives hold the daemon alone and each component separately', async t => {
+  const { root, source } = await fixture(t);
+  const windows = process.platform === 'win32';
+  const daemon = windows ? 'oac-daemon.exe' : 'oac-daemon';
+  await writeFile(join(source, daemon), 'daemon');
+  await writeFile(join(source, 'bundle.json'), JSON.stringify({ os: 'linux', arch: 'amd64', components: { node: {}, codex: {} } }));
+  for (const name of ['node', 'codex']) { await mkdir(join(source, 'components', name), { recursive: true }); await writeFile(join(source, 'components', name, 'file'), name); }
+  const output = join(root, 'archives');
+  await archiveBundle(source, output);
+  const tar = windows ? join(process.env.SystemRoot, 'System32', 'tar.exe') : 'tar';
+  const list = name => execFileSync(tar, ['-tzf', join(output, `${name}.tar.gz`)], { encoding: 'utf8' }).split(/\r?\n/).filter(Boolean).map(entry => entry.replace(/\/$/, '')).sort();
+  assert.deepEqual(list('linux-amd64'), ['bundle.json', daemon].sort());
+  assert.deepEqual(list('linux-amd64-codex'), ['components/codex', 'components/codex/file']);
+  assert.deepEqual(list('linux-amd64-node'), ['components/node', 'components/node/file']);
 });

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: fd77d3617bd8a124382a8d7e8c95adb824fc0da73c31fce2ff475c920e3b0626
+source_hash: 5766fdb6de7cdf07f02de16e2fdaf3fea0ce4d3b357d5648f15e9d709483b819
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -137,6 +137,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **Environments 和模板**
 
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
+- MiniMax Code 未声明 `retained_native_history`，因此无法在 microsandbox 上运行（其每个 Environment 都使用工作区存储）；Core 会拒绝该 Session（[Harness 能力](./harness-capabilities.md)）。
 - 只有 `enabled` 网络可以运行，因此需要 `disabled` 或 `restricted` 的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
 - `packages.system` 会被拒绝；系统软件包必须预先安装。
 - 冷续接不恢复进程内存、后台进程或临时系统盘修改，已完成的 setup 不会重放（参见 [Environment 持久化](environments.md#runtime-capability-preparation)）。在使用保留 NFS 存储的兼容 microsandbox 节点上，Codex 和 Claude Code 已通过[检查点转移](../../../docs/zh/sandbox-provider.md#checkpoint-transfer)以及[已确认的计算丢失](../../../docs/zh/sandbox-provider.md#confirmed-compute-loss)后续接的资格验证。接管未确认停止的旧写入者、主机崩溃时的持久性及任意崩溃受损历史的完整性仍未通过资格验证。

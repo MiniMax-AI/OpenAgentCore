@@ -123,12 +123,15 @@ func TestTypedErrors(t *testing.T) {
 		t.Fatal("ResetRequiredError is not a conflict")
 	}
 	validation := &sandbox.ValidationError{Param: "resources.cpus", Message: "too many"}
-	err := configurationError(validation)
+	err := configurationError(validation).(*ConfigurationError)
 	if !errors.Is(err, ErrInvalidInput) || err.Validation != validation || err.Message != "too many" {
 		t.Fatalf("configurationError = %#v", err)
 	}
-	if plain := configurationError(errors.New("rejected")); plain.Validation != nil || plain.Error() != "rejected" {
+	if plain := configurationError(errors.New("rejected")).(*ConfigurationError); plain.Validation != nil || plain.Error() != "rejected" {
 		t.Fatalf("configurationError of a plain error = %#v", plain)
+	}
+	if err := configurationError(sandbox.ErrWorkspaceRequired); !errors.Is(err, sandbox.ErrWorkspaceRequired) {
+		t.Fatal("missing storage lost its typed error", err)
 	}
 	if got := string(configurationJSON(nil)); got != "{}" {
 		t.Fatalf("configurationJSON(nil) = %s", got)

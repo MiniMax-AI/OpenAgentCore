@@ -36,11 +36,16 @@
         "memory_mib": 1048576,
         "root_disk_mib": 1024,
         "environment_disk_mib": 4294967295
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295}}",
-    "digest": "bab416199b7aa94421b948fa3dfcb55a4547fa56209395b2a4dbaeacbefe6e72"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "a0f5348e68e36ff01ffcef3e6c71c5eddfd429f34b440a4b3bb273b8f9eeac94"
   },
   {
     "name": "e2b",
@@ -132,6 +137,11 @@
         "memory_mib": 1048576,
         "root_disk_mib": 1023,
         "environment_disk_mib": 4294967295
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
       }
     },
     "valid": false
@@ -222,7 +232,7 @@
     "valid": false
   },
   {
-    "name": "microsandbox-owned-zero-environment-rejected",
+    "name": "microsandbox-requires-workspace",
     "provider": "microsandbox",
     "specification": {
       "resources": {

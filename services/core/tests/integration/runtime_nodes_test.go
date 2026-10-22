@@ -229,7 +229,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	s, w, d := managerFixture(t, 2, 4)
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}))
 	if err != nil {
 		t.Fatal(err)
 	}

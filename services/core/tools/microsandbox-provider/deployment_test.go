@@ -12,19 +12,30 @@ import (
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 )
 
+var fixtureWorkspace = &wire.WorkspaceDirectory{Path: "/resolved/environment", ObjectID: "88888888-8888-4888-8888-888888888888"}
+
+// fixtureLabels are the workspace labels of a created compute plus any extras.
+func fixtureLabels(extra map[string]string) map[string]string {
+	labels := workspaceLabels(fixtureWorkspace)
+	for key, value := range extra {
+		labels[key] = value
+	}
+	return labels
+}
+
 func deploymentFixture() (wire.Config, map[string]any) {
-	config := wire.Config{Image: "runtime@sha256:" + strings.Repeat("a", 64), CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192, EnvironmentDiskMiB: 4096}
+	config := wire.Config{Image: "runtime@sha256:" + strings.Repeat("a", 64), CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}
 	actual := map[string]any{
-		"labels":    map[string]string{workspaceModeLabel: "owned"},
+		"labels":    fixtureLabels(nil),
 		"image":     map[string]any{"Oci": map[string]any{"reference": config.Image, "root_disk": map[string]any{"kind": "managed", "size_mib": 8192}}},
 		"resources": map[string]any{"cpus": 2, "max_cpus": 2, "memory_mib": 2048, "max_memory_mib": 2048},
-		"mounts":    []any{map[string]any{"type": "Owned", "guest": "/environment", "storage": map[string]any{"kind": "disk", "capacity_mib": 4096}}},
+		"mounts":    []any{map[string]any{"type": "Bind", "host": fixtureWorkspace.Path, "guest": "/environment"}},
 	}
 	return config, actual
 }
 
 func TestNativeDeploymentConfigurationRejectsDrift(t *testing.T) {
-	for _, field := range []string{"match", "cpus", "max_cpus", "memory_mib", "max_memory_mib", "image", "root", "environment", "extra_mount", "missing_mount"} {
+	for _, field := range []string{"match", "cpus", "max_cpus", "memory_mib", "max_memory_mib", "image", "root", "mount", "extra_mount", "missing_mount"} {
 		t.Run(field, func(t *testing.T) {
 			config, actual := deploymentFixture()
 			switch field {
@@ -34,8 +45,8 @@ func TestNativeDeploymentConfigurationRejectsDrift(t *testing.T) {
 				actual["image"] = "runtime:latest"
 			case "root":
 				actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = 16384
-			case "environment":
-				actual["mounts"].([]any)[0].(map[string]any)["storage"].(map[string]any)["capacity_mib"] = 8192
+			case "mount":
+				actual["mounts"].([]any)[0].(map[string]any)["host"] = "/foreign"
 			case "extra_mount":
 				actual["mounts"] = append(actual["mounts"].([]any), map[string]any{"type": "Bind", "guest": "/other"})
 			case "missing_mount":
@@ -55,7 +66,7 @@ func TestRestoredRootRequiresVerifiedInheritedProof(t *testing.T) {
 	actual["image"].(map[string]any)["Oci"].(map[string]any)["root_disk"].(map[string]any)["size_mib"] = nil
 	compute := wire.Compute{RestoredFrom: &wire.SnapshotIdentity{ID: "verified-parent"}}
 	for _, proof := range []string{"", "foreign", resourceProof(config)} {
-		actual["labels"] = map[string]string{workspaceModeLabel: "owned", resourceProofLabel: proof}
+		actual["labels"] = fixtureLabels(map[string]string{resourceProofLabel: proof})
 		raw, _ := json.Marshal(actual)
 		err := qualifyConfiguration(config, compute, string(raw), false)
 		if (proof == resourceProof(config)) != (err == nil) {
@@ -74,7 +85,6 @@ func TestSnapshotProofBindsResourcesWithoutChangingCleanupOwnership(t *testing.T
 	config, actual := deploymentFixture()
 	ref := sandbox.Reference{TenantID: "tenant", EnvironmentID: "environment", AllocationID: "allocation"}
 	labels := wire.Labels(config, ref)
-	labels[workspaceModeLabel] = "owned"
 	labels[resourceProofLabel] = resourceProof(config)
 	if err := qualifySnapshotResources(config, labels); err != nil {
 		t.Fatal(err)
@@ -85,7 +95,7 @@ func TestSnapshotProofBindsResourcesWithoutChangingCleanupOwnership(t *testing.T
 	}
 	actual["labels"] = labels
 	raw, _ := json.Marshal(actual)
-	if _, err := qualifyCompute(config, ref, wire.Compute{ID: "owned"}, "owned", "running", string(raw)); err != nil {
+	if _, err := qualifyCompute(config, ref, wire.Compute{ID: "local:1"}, "local:1", "running", string(raw)); err != nil {
 		t.Fatal("resource drift changed cleanup ownership", err)
 	}
 	if err := qualifySnapshotResources(config, nil); !errors.Is(err, sandbox.ErrInvalid) {
@@ -93,7 +103,7 @@ func TestSnapshotProofBindsResourcesWithoutChangingCleanupOwnership(t *testing.T
 	}
 }
 
-// Archives exclude the image, so Restore must find the pinned image locally.
+// Checkpoints exclude the image, so Restore must find the pinned image locally.
 // The real SDK's empty local registry proves absence fails typed, without a pull.
 func TestRestoreRequiresPinnedLocalImage(t *testing.T) {
 	if !isolatedSDKTest(t) {

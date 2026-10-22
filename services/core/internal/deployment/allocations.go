@@ -287,7 +287,14 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 					if !activity.ReadyToSuspend(15*time.Second) || current.NodeID == "" {
 						return Allocation{}, ErrNotIdle
 					}
-					allowed, err := e.canSuspendForDemand(tx, current)
+					pressure, err := tx.LoadSuspensionDemand(current)
+					if err != nil {
+						return Allocation{}, err
+					}
+					allowed, err := e.canSuspendForDemand(tx, pressure, current)
+					if err == nil && !allowed && activity.ReadyToSuspend(freeSlotIdle) {
+						allowed = canKeepFreeSlot(pressure, current)
+					}
 					if err != nil {
 						return Allocation{}, err
 					}

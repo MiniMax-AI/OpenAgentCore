@@ -316,6 +316,10 @@ The Session applies the Template first, then its own fields. Composition happens
 
 For comparison, an inline `openai_hosted` Session without a Template treats omitted and null `network` as enabled.
 
+### Preparation reuse
+
+Core may start a hosted Environment from the result of an earlier preparation in the same Project whose effective configuration, after Template composition, is identical, for up to 24 hours after that preparation. Each Session still gets its own copy. Setup commands and package installation then do not run again for this Session. Only `/environment` is reused (see the workspace filesystem scope); HOME and other compute-local changes are not. Setup must not create per-Session unique values, perform external side effects that must happen per Session, or fetch credentials that expire within 24 hours; configurations that need this must differ, for example in `env` or `files`. A Provider that does not declare the [preparation cache](../../docs/sandbox-provider.md#explicit-operation-contracts) always prepares in full.
+
 ### Restricted network
 
 `restricted` requires 1–100 exact ASCII hostnames in `allowed_domains`; subdomains and redirect targets need their own entries. Wildcards, URL or port syntax, IP literals, Unicode and trailing dots are rejected. Reads return the supplied spelling, order and duplicates; comparison uses a separate lowercase, deduplicated copy.

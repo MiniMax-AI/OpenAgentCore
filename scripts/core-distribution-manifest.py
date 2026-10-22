@@ -238,6 +238,10 @@ def release_base(value):
     return value.rstrip("/")
 
 
+# A platform base archive or one named part of it.
+NATIVE_ARTIFACT = re.compile(r"(linux|darwin|windows)-(amd64|arm64)(-[a-z]+)?")
+
+
 def native_catalog(bundle, stage, revision, source, artifact_base_url=""):
     """Ship only catalog metadata in Core; publish native archives independently."""
     bundle, stage, source = pathlib.Path(bundle), pathlib.Path(stage), pathlib.Path(source)
@@ -249,30 +253,32 @@ def native_catalog(bundle, stage, revision, source, artifact_base_url=""):
         raise ValueError("Native catalog has no qualified artifacts")
     assets = stage / "native-artifacts"
     assets.mkdir()
-    for platform, entry in catalog["artifacts"].items():
-        if not re.fullmatch(r"(linux|darwin|windows)-(amd64|arm64)", platform):
-            raise ValueError("Invalid native installer platform")
-        archive = source / (platform + ".tar.gz")
+    for name, entry in catalog["artifacts"].items():
+        if not NATIVE_ARTIFACT.fullmatch(name):
+            raise ValueError("Invalid native installer artifact")
+        archive = source / (name + ".tar.gz")
         if archive.is_symlink() or sha256(archive) != entry["sha256"]:
             raise ValueError("Native installer checksum mismatch")
-        filename = f"oac-native-{revision}-{platform}.tar.gz"
+        filename = f"oac-native-{revision}-{name}.tar.gz"
         shutil.copyfile(archive, assets / filename)
         (assets / (filename + ".sha256")).write_text(entry["sha256"] + "  " + filename + "\n")
-        catalog["artifacts"][platform] = {"sha256": entry["sha256"], **({"url": base + "/" + filename} if base else {})}
+        catalog["artifacts"][name] = {"sha256": entry["sha256"], **({"url": base + "/" + filename} if base else {})}
     for directory in (stage / "core/native-installers", bundle / "native-installers"):
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "catalog.json").write_text(json.dumps(catalog, indent=2) + "\n")
 
 
 def native_offline(bundle, stage):
+    """Carry the offline host's own platform; Core redirects the others to their release URL."""
     bundle, stage = pathlib.Path(bundle), pathlib.Path(stage)
     path = bundle / "native-installers/catalog.json"
     if not path.exists():
         return
     catalog = json.loads(path.read_text())
-    for platform in catalog["artifacts"]:
-        source = stage / "native-artifacts" / f"oac-native-{catalog['version']}-{platform}.tar.gz"
-        os.link(source, path.parent / (platform + ".tar.gz"))
+    for name, entry in catalog["artifacts"].items():
+        if name.startswith("linux-amd64") or "url" not in entry:
+            source = stage / "native-artifacts" / f"oac-native-{catalog['version']}-{name}.tar.gz"
+            os.link(source, path.parent / (name + ".tar.gz"))
 
 
 @contextmanager

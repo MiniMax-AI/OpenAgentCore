@@ -14,7 +14,7 @@ import (
 func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 	s, writer, d := managerFixture(t, 4, 8)
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 8}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(4), MaxRetained: new(8)}))
 	if err != nil {
 		t.Fatal(err)
 	}

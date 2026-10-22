@@ -96,6 +96,9 @@ func TestPrivateLockChild(t *testing.T) {
 			unlock()
 			t.Fatal("concurrent lock admitted")
 		}
+		if !errors.Is(err, ErrLocked) {
+			t.Fatalf("a held lock must report ErrLocked, got %v", err)
+		}
 	} else {
 		if err != nil {
 			t.Fatal(err)

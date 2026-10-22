@@ -14,6 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -137,6 +138,7 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 	for err, code := range map[error]string{
 		deployment.ErrConflict:                 "sandbox_deployment_conflict",
 		deployment.ErrNodeInUse:                "runtime_node_in_use",
+		sandbox.ErrWorkspaceRequired:           "workspace_storage_required",
 		deployment.ErrNodeAddressMismatch:      "sandbox_node_address_mismatch",
 		sessions.ErrEnvironmentUnavailable:     "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",

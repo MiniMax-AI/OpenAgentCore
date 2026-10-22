@@ -22,6 +22,9 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, dep
 	w := executionWriter(t, s)
 	id := uuid.NewString()
 	changes := deploymentExecution(t, w)
+	if provider == "microsandbox" {
+		selectWorkspaceStorage(t, fixtureWorkspaces(w, w.lease))
+	}
 	if err := changes.Claim(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +48,7 @@ func specificationNode(t *testing.T, s *Store, view deployment.View) deployment.
 func enrollNode(t *testing.T, s *Store, view deployment.View, capacity deployment.Capacity) deployment.Enrollment {
 	t.Helper()
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), capacity))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: &capacity.MaxActive, MaxRetained: &capacity.MaxRetained}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +64,7 @@ func enrollNode(t *testing.T, s *Store, view deployment.View, capacity deploymen
 func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T) {
 	s, w, view, input := webSpecificationFixture(t, "docker")
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}))
 	if err != nil {
 		t.Fatal(err)
 	}

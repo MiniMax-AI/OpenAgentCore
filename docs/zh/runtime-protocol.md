@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 8764ef0b2f84de45e65f77d66e2f4a76f4e6771543d0ec9b63b04b81a7ee17d4
+source_hash: 68d35aa375b6c371975c619712f65970dc0055b49e4362c271f835422779eea1
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -72,7 +72,7 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | Environment 类型为 `openai_hosted` 或 `self_hosted` |
 | `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
 | `native_session_recovery` | Session 已启动过 Turn，但未记录原生 Session ID |
-| `retained_native_history` | Environment 使用外部工作区绑定；自带工作区存储不要求此能力 |
+| `retained_native_history` | Environment 使用外部工作区绑定；提供商自有磁盘不要求此能力 |
 | `structured_output` 和 `message_items` | Agent 请求 `json_schema` 输出。声明 `message_items` 的 Runtime 会给文本 delta 标注原生 item ID，并通过 `output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `subagent_observations` | `multi_agent.enabled` 为 true |
 | `subagent_control` | `multi_agent.enabled` 为 false |

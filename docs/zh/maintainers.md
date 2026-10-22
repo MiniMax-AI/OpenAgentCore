@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 16d591f49202d2f08b26e296ceccbaed72dfe6f706658cef6a11238de1f78d7c
+source_hash: f66f608093cc824add3215a9df520082b1679af1852ee213b7a6adfca40221ed
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -49,14 +49,16 @@ ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`�
 
 ### 原生安装程序 {#native-installers}
 
-自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象会固定 Node.js 和 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会上传 `oac-native-installer-<OS>-<ARCH>.tar.gz` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录：
+自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象会固定 Node.js 和 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会将该平台的各个归档上传为 `oac-native-installer-<OS>-<ARCH>` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录，输入目录中放入这三个构件的所有归档：
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-该目录会记录提交、Runtime 协议版本、每个归档的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<platform>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外为每个平台保留一份副本，由其 `install.py` 复制到安装目录中供 Core 提供下载。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
+每个平台有一个小型基础归档 `<os>-<arch>.tar.gz`（`oac-daemon` 和 `bundle.json`，后者列出每个组件及其每个文件的 SHA-256），以及每个组件一个归档，即 `<os>-<arch>-node` 和 `<os>-<arch>-<harness>`（MiniMax Code 不为 Windows 构建）。`build-native-installer.mjs` 生成它们。Core 按名称提供这些制品，不了解其内容；`oac-daemon install` 下载所需的组件。
+
+该目录会记录提交、Runtime 协议版本、每个制品的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<artifact>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外保留所有 Linux amd64 归档的一份副本，由其 `install.py` 复制到安装目录中供 Core 提供下载。其他平台由 Core 重定向到对应的发布资源；没有发布基址的目录没有这类 URL，因此其离线归档会保留所有归档。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
 
 ### Runtime 镜像和辅助程序 {#runtime-images-and-helpers}
 

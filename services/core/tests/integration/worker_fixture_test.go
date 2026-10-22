@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/sessionpg"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -145,6 +146,7 @@ func fixtureOwner(s *Store, lease *pgunit.Lease) (execution.Owner, error) {
 		return execution.Owner{}, err
 	}
 	return execution.Owner{
+		Workspaces: fixtureWorkspaces(s, lease),
 		Lease:      lease,
 		Deployment: changes,
 		Sessions:   sessionExecution,
@@ -164,6 +166,9 @@ func webDeployment(t *testing.T, s *Store, provider string) string {
 	owner, err := fixtureOwner(s, lease)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if provider == "microsandbox" {
+		selectWorkspaceStorage(t, owner.Workspaces)
 	}
 	installation := uuid.NewString()
 	input := sandbox.Selection{Provider: provider, DeploymentSpec: SandboxDeploymentTestSpec(provider)}
@@ -188,8 +193,13 @@ func webRuntimes(t testing.TB, s *Store, installation string, p sandbox.SandboxP
 		if err != nil || setup.Provider == "" {
 			return nil, err
 		}
+		adapter, err := providers.Builtin().Lookup(setup.Provider)
+		if err != nil {
+			return nil, err
+		}
 		return &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Mode: setup.Mode, Generation: setup.Generation,
-			CoreURL: "http://core.invalid/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p, Suspension: suspension}, nil
+			CoreURL: "http://core.invalid/api/v1", BackendFingerprint: setup.BackendFingerprint, Provider: p, Suspension: suspension,
+			Resources: setup.Specification.Resources, WorkspaceRequirements: adapter.Policy.Workspace, Workspace: setup.Specification.Workspace}, nil
 	}, unusedPreparation(t))
 }
 

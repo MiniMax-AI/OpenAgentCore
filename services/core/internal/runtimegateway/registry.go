@@ -37,15 +37,31 @@ type Registry struct {
 	// happens between WaitForDevice registering and selecting on the
 	// chan still wakes the waiter.
 	waiters map[string][]chan *Session
+
+	// announced coalesces "a session reported its agent kinds for the first
+	// time" for the one owner that waits on known kinds.
+	announced chan struct{}
 }
 
 // NewRegistry returns an empty registry. The zero value would also
 // work but the constructor avoids accidental nil-map panics.
 func NewRegistry() *Registry {
 	return &Registry{
-		byDevice: map[string]*Session{},
-		byRun:    map[string]*Session{},
-		waiters:  map[string][]chan *Session{},
+		byDevice:  map[string]*Session{},
+		byRun:     map[string]*Session{},
+		waiters:   map[string][]chan *Session{},
+		announced: make(chan struct{}, 1),
+	}
+}
+
+// Announced signals after a session first reports its agent kinds. Polling
+// recovers a coalesced signal.
+func (r *Registry) Announced() <-chan struct{} { return r.announced }
+
+func (r *Registry) announce() {
+	select {
+	case r.announced <- struct{}{}:
+	default:
 	}
 }
 

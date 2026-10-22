@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 const testPublicURL = "https://core.example"
@@ -59,7 +60,7 @@ func testSpecification(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
-		s.Resources.EnvironmentDiskMiB = 8192
+		s.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	}
 	return s
 }
@@ -246,7 +247,7 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 	current := webDeployment(t, installation, "docker", 1)
 	valid := Enrollment{NodeID: uuid.NewString(), Name: "node", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: testSpecification("docker").Digest("docker"), CoreURL: testPublicURL}
-	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: 1, MaxRetained: 1}
+	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: new(1), MaxRetained: new(1)}
 	resetting := current
 	resetting.Reset = &ResetState{Clear: "sandboxes", RequestedAt: time.Now()}
 	unselected := current

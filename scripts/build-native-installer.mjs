@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Package trusted, already-built native artifacts. This does not install on a host.
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
@@ -177,4 +177,15 @@ export async function buildBundle(options) {
     await rename(staging, output);
     return manifest;
   } finally { await rm(staging, { recursive: true, force: true }); }
+}
+
+// Split a built bundle into the small base archive (the daemon and bundle.json) and one archive
+// per component. Names are the artifact names Core serves: <os>-<arch>[-<component>].
+export async function archiveBundle(bundle, output) {
+  const { os, arch, components } = await json(join(bundle, 'bundle.json'));
+  const tar = process.platform === 'win32' ? join(process.env.SystemRoot, 'System32', 'tar.exe') : 'tar';
+  const pack = (name, entries) => execFileSync(tar, ['-czf', join(output, `${name}.tar.gz`), '-C', bundle, ...entries], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
+  await mkdir(output, { recursive: true });
+  pack(`${os}-${arch}`, [process.platform === 'win32' ? 'oac-daemon.exe' : 'oac-daemon', 'bundle.json']);
+  for (const name of Object.keys(components)) pack(`${os}-${arch}-${name}`, [`components/${name}`]);
 }

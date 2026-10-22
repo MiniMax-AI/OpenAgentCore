@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,7 @@ import (
 
 func TestNativeInstallationCleansOnlyReservedPartialFiles(t *testing.T) {
 	rc, args, root, _ := nativeInstallFixture(t)
-	names := []string{"components/.install-codex-12345/partial", "bin/.oac-daemon-9876", "daemon/.installation.json-0123456789abcdef01234567.tmp"}
+	names := []string{"bin/.oac-daemon-9876", "daemon/.installation.json-0123456789abcdef01234567.tmp"}
 	for _, name := range names {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -22,7 +23,7 @@ func TestNativeInstallationCleansOnlyReservedPartialFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	keep := filepath.Join(root, "components", ".install-codex-user-notes")
+	keep := filepath.Join(root, "bin", ".oac-daemon-user-notes")
 	if err := os.WriteFile(keep, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -85,11 +86,11 @@ func TestNativeStagingCleanupDoesNotFollowLinks(t *testing.T) {
 	if err := os.WriteFile(keep, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	parent := filepath.Join(root, "components")
+	parent := filepath.Join(root, "bin")
 	if err := os.Mkdir(parent, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(parent, ".install-codex-123")); err != nil {
+	if err := os.Symlink(outside, filepath.Join(parent, ".oac-daemon-123")); err != nil {
 		t.Skip("symlink permission unavailable")
 	}
 	if err := cleanNativeTemporaryFiles(root); err != nil {
@@ -105,6 +106,7 @@ func TestNativeVerificationCancellationPreservesInstallation(t *testing.T) {
 	if err := runInstall(rc, args); err != nil {
 		t.Fatal(err)
 	}
+	store := nativeTestStore(t)
 	config := filepath.Join(root, "daemon", "installation.json")
 	before, err := os.ReadFile(config)
 	if err != nil {
@@ -112,21 +114,21 @@ func TestNativeVerificationCancellationPreservesInstallation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err = verifyNativeComponents(ctx, root, []string{"codex"}); !errors.Is(err, context.Canceled) {
+	if err = verifyNativeComponents(ctx, store, []string{"codex"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled verification reported damage: %v", err)
 	}
 	b, err := readNativeBundle(bundle, []string{"codex"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = installNativeComponent(ctx, bundle, root, "codex", b.Components["codex"]); !errors.Is(err, context.Canceled) {
+	if err = ensureNativeComponent(ctx, io.Discard, &nativeInstallOptions{nativeInstallation: nativeInstallation{ComponentDirectory: store}, Bundle: bundle}, "codex", b.Components["codex"]); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled reuse reported damage: %v", err)
 	}
 	after, err := os.ReadFile(config)
 	if err != nil || !bytes.Equal(before, after) {
 		t.Fatal("cancellation changed installation")
 	}
-	if err = verifyNativeComponents(context.Background(), root, []string{"codex"}); err != nil {
+	if err = verifyNativeComponents(context.Background(), store, []string{"codex"}); err != nil {
 		t.Fatal(err)
 	}
 }
