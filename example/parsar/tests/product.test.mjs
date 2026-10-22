@@ -1056,3 +1056,19 @@ test("model tests make one tiny generation and environment trials report a real 
   store.put("agents", { ...store.list("agents")[0], runtime_id: randomUUID() });
   await assert.rejects(api("POST", `/app/runtimes/${runtime.id}/trial`, {}), /先把这个环境模板绑定到一个 Agent/);
 });
+
+test("each ledger entry follows its own Core Turn when inputs arrive before the monitor runs", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const plan = { environments: [], turns: ["complete", "stall"] };
+  const fake = scriptedCore(plan);
+  const { api, put, input } = await setup(store, fake.core);
+  const id = randomUUID();
+  await put("sessions", input, id);
+  await api("POST", `/app/sessions/${id}/messages`, { text: "Then this", key: "k1" });
+  await api.sessions.turns.monitor();
+  const [follow, first] = fake.sessions.get(store.get("sessions", id).core_session_id).turns;
+  assert.equal(store.get("turns", `${id}:first`).core_turn_id, first.id);
+  assert.equal(store.get("turns", `${id}:first`).outcome, "completed");
+  assert.equal(store.get("turns", `${id}:k1`).core_turn_id, follow.id);
+});

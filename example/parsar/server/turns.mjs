@@ -160,11 +160,13 @@ export function turnsAPI(store, core) {
     const sid = turn.core_session_id;
     const session = await core(`/v1/agents/sessions/${sid}`, "GET");
     const superseded = new Set(record.superseded_turns || []);
-    const recent = (await core(`/v1/agents/sessions/${sid}/turns?order=desc&limit=20`, "GET")).data || [];
+    // Oldest first. This input's Turn is the first one after its baseline:
+    // later inputs only start later Turns. An input sent while a Turn runs
+    // joins that Turn instead of starting one.
+    const recent = [...((await core(`/v1/agents/sessions/${sid}/turns?order=desc&limit=100`, "GET")).data || [])].reverse();
     const at = turn.base_turn_id ? recent.findIndex((t) => t.id === turn.base_turn_id) : -1;
-    const newer = (at < 0 ? recent : recent.slice(0, at)).filter((t) => !superseded.has(t.id));
-    // An input sent while a Turn runs joins that Turn instead of starting one.
-    const coreTurn = newer[0] || (turn.base_running ? recent[at] : undefined);
+    const coreTurn =
+      recent.slice(at + 1).find((t) => !superseded.has(t.id)) || (turn.base_running && at >= 0 ? recent[at] : undefined);
     if (!coreTurn) {
       if (session.status === "failed") {
         if (turn.kind === "first" && record.request && turn.retries < maxRetries)
