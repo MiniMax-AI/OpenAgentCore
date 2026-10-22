@@ -55,3 +55,12 @@ func TestNodeOperationMappingCoversForwardedMethods(t *testing.T) {
 		}
 	}
 }
+
+func TestCheckpointUnusableCrossesTheWireAsFixedCode(t *testing.T) {
+	if code := errorCode(sandbox.ErrCheckpointUnusable); code != "checkpoint_unusable" {
+		t.Fatal(code)
+	}
+	if !errors.Is(responseError(response{ErrorCode: "checkpoint_unusable"}), sandbox.ErrCheckpointUnusable) {
+		t.Fatal("code not mapped back")
+	}
+}

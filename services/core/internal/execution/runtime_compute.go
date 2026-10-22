@@ -316,7 +316,11 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 // early. Core decides eligibility and demand; a refusal changes nothing, and
 // the expired allocation is observed and cleaned up as at its deadline.
 func (r *runtimeLifecycle) expireForDemand(ctx context.Context, owner deployment.Allocation) error {
-	err := r.deployment.ExpireCheckpointForDemand(ctx, owner)
+	return r.expire(ctx, owner, r.deployment.ExpireCheckpointForDemand)
+}
+
+func (r *runtimeLifecycle) expire(ctx context.Context, owner deployment.Allocation, end func(context.Context, deployment.Allocation) error) error {
+	err := end(ctx, owner)
 	if errors.Is(err, deployment.ErrNotIdle) || errors.Is(err, deployment.ErrAllocationConflict) {
 		return nil
 	}
@@ -366,6 +370,11 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 	started := time.Now()
 	result, err := p.Resume(ctx, sandbox.ResumeRequest{Workspace: workspace, Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
 	logComputeStep(ctx, owner, "resume", started, err)
+	if errors.Is(err, sandbox.ErrCheckpointUnusable) {
+		// The Provider closed this attempt before native dispatch. Never restore
+		// the snapshot again: expire it and continue by ordinary expiry cleanup.
+		return r.expire(ctx, owner, r.deployment.ExpireUnusableCheckpoint)
+	}
 	if err != nil {
 		return err
 	}

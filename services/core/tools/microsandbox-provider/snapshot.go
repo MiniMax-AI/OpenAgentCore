@@ -307,24 +307,35 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	}
 	// Admission is durable before any native import/restore operation. A prior
 	// admitted operation with no visible target remains unknown, never replayed.
+	// The fresh dispatch that created the admission closes it on any failure
+	// before RestoreSandbox, since no guest execution can have occurred.
 	artifact, e := b.restoreSource(ctx, q.Snapshot)
+	if e == nil {
+		e = qualifySnapshotResources(b.q.Config, artifact.Labels())
+	}
+	if e == nil {
+		e = qualifyWorkspace(artifact.Labels(), b.q.Workspace)
+	}
+	if e == nil {
+		e = qualifyRuntimeImage(ctx, b.q.Config, artifact.ImageManifestDigest())
+	}
 	if e != nil {
-		return wire.State{}, e
-	}
-	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
-		return wire.State{}, e
-	}
-	if err := qualifyWorkspace(artifact.Labels(), b.q.Workspace); err != nil {
-		return wire.State{}, err
-	}
-	if err := qualifyRuntimeImage(ctx, b.q.Config, artifact.ImageManifestDigest()); err != nil {
-		return wire.State{}, err
+		if q.ObserveOnly {
+			return wire.State{}, e
+		}
+		return wire.State{}, b.closeUndispatchedRestore(q, e)
 	}
 	_, _, e = b.inspectOwned(ctx, q.Target)
 	if e == nil {
 		return b.completeRestore(ctx, q, q.Target)
 	}
 	if !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
+		// A failed target lookup proves nothing about the snapshot: close only.
+		if !q.ObserveOnly {
+			if err := b.closeRestore(q, false); err != nil {
+				return wire.State{}, err
+			}
+		}
 		return wire.State{}, e
 	}
 	if q.ObserveOnly || q.Target.ID != "" {
