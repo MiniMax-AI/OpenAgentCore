@@ -67,6 +67,8 @@ func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 		return out, sandbox.ErrNotFound
 	case "command_unconfirmed":
 		return out, sandbox.ErrCommandUnconfirmed
+	case "checkpoint_unusable":
+		return out, sandbox.ErrCheckpointUnusable
 	case "metrics_unavailable":
 		return out, runtimeobs.ErrUnavailable
 	default:

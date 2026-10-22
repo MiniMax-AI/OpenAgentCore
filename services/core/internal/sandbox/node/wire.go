@@ -197,6 +197,8 @@ func errorCode(err error) string {
 		return "not_found"
 	case errors.Is(err, sandbox.ErrCommandUnconfirmed):
 		return "command_unconfirmed"
+	case errors.Is(err, sandbox.ErrCheckpointUnusable):
+		return "checkpoint_unusable"
 	default:
 		return "unconfirmed"
 	}
@@ -233,6 +235,8 @@ func responseError(out response) error {
 		return sandbox.ErrNotFound
 	case "command_unconfirmed":
 		return sandbox.ErrCommandUnconfirmed
+	case "checkpoint_unusable":
+		return sandbox.ErrCheckpointUnusable
 	default:
 		return sandbox.ErrComputeUnconfirmed
 	}

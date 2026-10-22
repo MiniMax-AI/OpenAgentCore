@@ -33,5 +33,5 @@ ORDER BY a.compute_retained_until, a.id;
 -- name: ExpireRuntimeCheckpoint :one
 UPDATE runtime_allocations
 SET compute_retained_until=clock_timestamp(), compute_revision=compute_revision+1
-WHERE id=$1 AND compute_revision=$2 AND state='running' AND compute_phase='suspended' AND compute_retained_until>clock_timestamp()
+WHERE id=$1 AND compute_revision=$2 AND state='running' AND compute_phase IN ('suspended','restoring') AND compute_retained_until>clock_timestamp()
 RETURNING *;

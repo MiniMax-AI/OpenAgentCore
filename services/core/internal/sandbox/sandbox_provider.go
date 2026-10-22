@@ -46,6 +46,11 @@ var (
 	// ErrComputeUnconfirmed requires observation of the retained operation identity;
 	// it does not authorize another Create, capture, restore, or cold start.
 	ErrComputeUnconfirmed = errors.New("sandbox lifecycle outcome unconfirmed")
+	// ErrCheckpointUnusable is a Resume outcome: the adapter durably closed this
+	// operation before dispatching native restoration, and the snapshot cannot be
+	// restored. It repeats for the same operation and is never returned once
+	// native restoration was dispatched.
+	ErrCheckpointUnusable = errors.New("sandbox checkpoint cannot be restored")
 )
 
 // Reference must be persisted by the caller before Create. AllocationID is a fresh

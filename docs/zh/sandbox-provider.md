@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 6476bd4c551ee002c2006eba645cfd6ebe3f107b9369570d2fa386fb9c0ef132
+source_hash: 2e359fb0bd99974bd1077f15b3a529c80a4ff19b3d9c2f7a3882fe125aa9f8c8
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -109,7 +109,7 @@ Microsandbox 在返回创建不存在回执前永久关闭初始 Create 准入�
 | `Kill` | 所属计算资源与保留存储已移除；重复已确认不存在时成功 | error 保留所有权与清理意图；所有权不匹配不删除外来资源 | 未决创建或 mutation 已隔离后重试同一 `Reference` 的清理；不提前释放 owner |
 | `RunCommand`, `RunCommandCompute` | 收集到输出和实际 exit code；非零退出是已结算命令失败 | 缺失原生完成为 `ErrCommandUnconfirmed`；部分输出不是成功 | 不重放。无法证明完成时保留 owner，并在复用前回收 |
 
-`ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound`、`ErrComputeUnconfirmed` 和 `ErrCommandUnconfirmed` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将提供商 diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
+`ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound`、`ErrComputeUnconfirmed`、`ErrCommandUnconfirmed`，以及仅用于 `Resume` 的 `ErrCheckpointUnusable` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将提供商 diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
 
 Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`；原样持久化 operation ID 与提供商 snapshot provenance。suspend 或 resume 的 `ObserveOnly` 仅观察上次尝试，不启动另一 capture 或 restore。`ResumeCompute` 仅解冻保留源，不冷启动已停止源。清理针对精确 compute incarnation 和 snapshot，不针对当前同名实例。只有所属节点已验证精确 incarnation 不再存在时，`GetCompute` 才返回 `ErrNotFound`；同名但 native ID 不同的实例为 `ErrOwnership`，节点或提供商不可达属于未知结果。`ComputeState.Status` 为 `stopped` 或 `crashed` 表示 adapter 已验证该精确 incarnation 的进程不再存在；其记录或磁盘可保留到 `KillCompute` 将其移除。`paused`、没有 Runtime 连接的 `running` 和未知状态均不证明进程已终止。声明 checkpoint 支持前阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
 
@@ -260,13 +260,15 @@ Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中
 
 `Suspend` 只有在持久发布已验证的完整检查点、停止精确 source compute，并结清 source 本地 capture 与 cleanup 义务后，才能报告 `SourceStopped`。Core 先持久化快照，再标记 suspended；仅原生资源不存在并不足够。`Suspend.ObserveOnly` 可以为同一 operation 已验证的快照完成检查点发布和源清理，但不能重新捕获快照，也不能停止已经恢复 running 的源。此前已发布的检查点缺失或损坏时，`ObserveOnly` 可以返回其精确持久 ownership receipt，标记 `Status: unknown` 和 `SourceStopped: false`，供清理使用；该 receipt 不证明检查点当前可用，也不证明源不存在。`Resume` 仍在执行前验证检查点。完成源结清屏障后，source node 不可用不再阻止恢复。删除和正常到期可以将空闲 suspended allocation 的清理路由转给同一 artifact domain 内的在线 node；删除不要求 execution class 匹配。清理目标必须已提供同一不可变 generation，且有 retained 容量。没有这样的 node 时，清理保持 pending，不释放所有权；运维需恢复符合条件的 node 或其容量。未知 running 或 restoring writer 不会仅因 node 不可达而迁移。
 
-恢复用 `Resume.ObserveOnly` 观察已持久化的 target 与 operation。`RestoreAttemptClosed` 是精确 operation ID，不是通用 absence 标志：adapter 只有在持久关闭从未进入原生执行的 attempt，并隔离该 ID 的所有迟到请求后才能返回。如果 adapter 能证明当前调用在派发原生恢复之前失败，也可以关闭已持久 admitted 的 attempt。microsandbox adapter 仅在 fresh 请求的 wire deadline 于原生派发之前到期时执行这种关闭；检查点损坏、资格错误和不透明 SDK 失败都不授权自动重试。Core 随后先持久化新的 operation ID，再尝试执行。一旦已派发原生恢复，结果未知的 attempt 保留相同 target、所有权与原始 retention deadline；原生列表缺失、helper 死亡或超时都不授权重放。这种恢复可能一直不可用，直到显式删除或正常保留期到期；等待中的 input 可能达到其公共 deadline。用户删除仍需精确原生 settlement，之后才能释放资源与所有权。
+恢复用 `Resume.ObserveOnly` 观察已持久化的 target 与 operation。`RestoreAttemptClosed` 是精确 operation ID，不是通用 absence 标志：adapter 只有在持久关闭从未进入原生执行的 attempt，并隔离该 ID 的所有迟到请求后才能返回。如果 adapter 能证明当前调用在派发原生恢复之前失败，也可以关闭已持久 admitted 的 attempt。microsandbox adapter 对创建该 admission 的 fresh 请求，在派发原生恢复之前的任何失败上执行这种关闭。wire deadline 到期或未分类失败会关闭该 attempt，Core 随后持久化新的 operation ID。快照缺失、未通过身份或完整性校验，或未通过 adapter 对当前 generation 的资格检查（例如资源、workspace 或 runtime image 不匹配）时，也会关闭该 attempt，并报告为 `ErrCheckpointUnusable`。该结果是持久的：同一 operation 的 `Resume.ObserveOnly` 会再次报告它，该 operation ID 的迟到请求仍被隔离。一旦已派发原生恢复，提供商不会返回它。收到 `ErrCheckpointUnusable` 后，Core 不再恢复该快照，并[立即结束其保留](#cold-replacement-after-checkpoint-retention)。一旦已派发原生恢复，结果未知的 attempt 保留相同 target、所有权与原始 retention deadline；原生列表缺失、helper 死亡或超时都不授权重放。这种恢复可能一直不可用，直到显式删除或正常保留期到期；等待中的 input 可能达到其公共 deadline。用户删除仍需精确原生 settlement，之后才能释放资源与所有权。
 
 microsandbox adapter 要求显式的私有 `checkpoint_root`，位于所有 guest 可访问文件系统之外。目录权限为 `0700`，私有 namespace marker 标识真实检查点存储。默认安装创建 node 本地私有 store。跨 node 恢复要求运维为参与 node 挂载同一个私有 store，挂载路径可以不同。每个保留的检查点都是 guest 内存与根磁盘层的未压缩原生快照，因此共享 store 要为每次挂起和跨 node 恢复承载这部分数据量。Runtime state 目录与 workspace binding 都不用于推导该 root。adapter 在恢复前再次验证检查点、外部文件系统身份和原生 execution class。恢复 RAM 与文件描述符不保证外部 TCP 连接连续，也不保证应用副作用可安全重放。
 
 ### 检查点保留期后的冷替换 {#cold-replacement-after-checkpoint-retention}
 
 快照保留期限制计算资源，不限制符合条件的保留 Session 的生命周期。到期后，只有独立文件系统对象已就绪、初始化已完成、Session 与 Environment 均未终结，且此前已认证 Runtime 的 `retained_native_history` 声明已持久化时，Core 才能在不终结 Session 的情况下清理 allocation。能力及原生恢复义务由 [Core–Runtime 协议](runtime-protocol.md)定义。仅保留文件系统并不足够。
+
+不可用的检查点（恢复中的 allocation 的 `Resume` 报告 `ErrCheckpointUnusable`）会立即结束保留，如同其 deadline 已到。Core 通过正常的到期清理删除 target 与快照；符合条件的 Session 按下文继续，不符合条件的则如正常到期一样结束。
 
 仅当等待中的放置需求被节点已满的 retained slot 阻塞时，容量压力才会提前结束保留期，且只针对该节点上最早挂起、空闲并满足上述条件的 allocation。Core 将其视为已过期，每个被阻塞的需求只释放一个；其他已挂起的 allocation 在配置的期限到达前保留快照并继续占用 retained slot。恢复时缺少容量或兼容节点的检查点不会因此被冷替换。等待请求保持原有的输入期限。常规 expiry cleanup 必须确认资源已删除，其他 allocation 才能预留该 slot；文件与已验证的原生历史继续保留。
 

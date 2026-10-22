@@ -163,6 +163,20 @@ func (e *ExecutionOperations) ExpireCheckpointForDemand(ctx context.Context, own
 	return err
 }
 
+// ExpireUnusableCheckpoint ends the retention of a restoring allocation whose
+// Provider reported its checkpoint unusable, exactly as if its deadline had
+// passed. The snapshot is never restored again; ordinary expiry cleanup deletes
+// it and any qualified Session continues on new compute.
+func (e *ExecutionOperations) ExpireUnusableCheckpoint(ctx context.Context, owner Allocation) error {
+	_, err := e.change(ctx, owner, false, func(tx AllocationTx, current Allocation) (Allocation, error) {
+		if current.State != "running" || current.ComputePhase != "restoring" || current.Expired || current.ComputeRevision != owner.ComputeRevision {
+			return Allocation{}, ErrAllocationConflict
+		}
+		return tx.ExpireCheckpoint(current)
+	})
+	return err
+}
+
 // placementNeedsCapacity scans bounded pages under the caller's deployment
 // lock and transaction deadline. It reports whether waiting demand would place
 // on nodeID once release frees the slot the caller may reclaim; an ineligible

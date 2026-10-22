@@ -98,6 +98,7 @@ The `response` frame carries `id` and `connection_id`. A successful response car
 | --- | --- |
 | `invalid`, `ownership`, `exists`, `not_found` | `ErrInvalid`, `ErrOwnership`, `ErrExists`, `ErrNotFound` |
 | `command_unconfirmed` | `ErrCommandUnconfirmed` |
+| `checkpoint_unusable` | `ErrCheckpointUnusable`, a `resume` outcome |
 | `observation_unavailable`, `runtime_not_running` | The observation outcomes |
 | `unsupported` | The operation is declared unsupported; see below |
 | `unconfirmed`, or any other value | The outcome is unknown |

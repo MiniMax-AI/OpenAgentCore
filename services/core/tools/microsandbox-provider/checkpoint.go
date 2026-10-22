@@ -191,6 +191,8 @@ type restoreAdmission struct {
 	Snapshot    wire.SnapshotIdentity
 	Target      wire.Compute
 	Closed      bool
+	// Unusable marks a closed attempt whose snapshot cannot be restored.
+	Unusable    bool
 	CompletedID string
 	Cleaned     bool
 }
@@ -207,13 +209,16 @@ func (b backend) admitRestore(q wire.ResumeRequest) (bool, error) {
 	var prior restoreAdmission
 	e := readPrivateJSON(path, &prior)
 	if e == nil {
-		closed := prior.Closed
-		prior.Closed = false
+		closed, unusable := prior.Closed, prior.Unusable
+		prior.Closed, prior.Unusable = false, false
 		prior.CompletedID = ""
 		cleaned := prior.Cleaned
 		prior.Cleaned = false
 		if !reflect.DeepEqual(prior, want) {
 			return false, sandbox.ErrOwnership
+		}
+		if unusable {
+			return false, sandbox.ErrCheckpointUnusable
 		}
 		if closed {
 			return true, nil
@@ -246,6 +251,37 @@ func (b backend) closeExpiredRestore(q wire.ResumeRequest) error {
 	if time.Now().Before(b.q.Deadline) {
 		return nil
 	}
+	if err := b.closeRestore(q, false); err != nil {
+		return err
+	}
+	return context.DeadlineExceeded
+}
+
+// closeUndispatchedRestore closes the attempt this fresh dispatch just admitted
+// after a failure before RestoreSandbox. A snapshot defect is recorded so that
+// every later call for the operation reports ErrCheckpointUnusable; any other
+// failure is returned as it is and Core replaces the closed attempt.
+func (b backend) closeUndispatchedRestore(q wire.ResumeRequest, cause error) error {
+	unusable := snapshotDefect(cause)
+	if err := b.closeRestore(q, unusable); err != nil {
+		return err
+	}
+	if unusable {
+		return sandbox.ErrCheckpointUnusable
+	}
+	return cause
+}
+
+// snapshotDefect reports a failure that proves this snapshot cannot be restored:
+// it is missing, fails identity or integrity verification, or fails this
+// generation's qualification. I/O and context errors prove nothing.
+func snapshotDefect(e error) bool {
+	return errors.Is(e, sandbox.ErrOwnership) || errors.Is(e, sandbox.ErrInvalid) || errors.Is(e, os.ErrNotExist) ||
+		sdk.IsKind(e, sdk.ErrSnapshotNotFound) || sdk.IsKind(e, sdk.ErrSnapshotIntegrity) ||
+		sdk.IsKind(e, sdk.ErrSnapshotImageMissing) || sdk.IsKind(e, sdk.ErrSnapshotMigration)
+}
+
+func (b backend) closeRestore(q wire.ResumeRequest, unusable bool) error {
 	if q.ObserveOnly || q.Target.ID != "" {
 		return sandbox.ErrOwnership
 	}
@@ -258,11 +294,8 @@ func (b backend) closeExpiredRestore(q wire.ResumeRequest) error {
 	if !reflect.DeepEqual(prior, want) {
 		return sandbox.ErrOwnership
 	}
-	want.Closed = true
-	if err := durableJSON(path, want); err != nil {
-		return err
-	}
-	return context.DeadlineExceeded
+	want.Closed, want.Unusable = true, unusable
+	return durableJSON(path, want)
 }
 
 // Completion records the incarnation whose native restore has become observable
