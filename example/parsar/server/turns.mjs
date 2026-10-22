@@ -90,12 +90,12 @@ export function turnsAPI(store, core) {
     return turn;
   };
 
-  // Records and sends a follow-up input. The entry is written first so a
-  // retried send (same id and key) keeps its original baseline.
-  const deliver = async (record, input, { id, key, source }) => {
+  // Records and sends one input. The entry is written first so the monitor
+  // sees the wait, and a retried send (same id and key) keeps its baseline.
+  const deliver = async (record, input, { id, key, source, kind = "followup", prepared = false }) => {
     const turn =
       store.get("turns", id) ||
-      start(record, { id, kind: "followup", input, source, base: await baseline(record.core_session_id) });
+      start(record, { id, kind, input, source, prepared, base: await baseline(record.core_session_id) });
     try {
       await post(record.core_session_id, message(turn.input), key);
     } catch (error) {
@@ -171,7 +171,8 @@ export function turnsAPI(store, core) {
           return recreate(turn, record, `${record.id}:attempt:${turn.retries + 1}`, turn.retries + 1);
         return finish(turn, "failed", explainFailure(session.error, runtimeName(record)));
       }
-      if (turn.kind === "followup" && session.status === "idle" && now() - turn.started_at > reservationMs)
+      // Input sent to an existing Session that Core never admitted has expired.
+      if ((turn.kind === "followup" || turn.prepared) && session.status === "idle" && now() - turn.started_at > reservationMs)
         return finish(turn, "failed", unadmitted);
       return;
     }

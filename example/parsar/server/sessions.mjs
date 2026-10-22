@@ -275,28 +275,17 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
 export function sessionAPI(store, core) {
   const running = new Map();
   const turns = turnsAPI(store, core);
+  // A claimed prepared Session gets its first input through the Turn ledger,
+  // like every later input.
   const sendFirstInput = async (record) => {
-    await core(
-      `/v1/agents/sessions/${record.core_session_id}/events`,
-      "POST",
-      {
-        events: [
-          {
-            type: "agent.session.input.message",
-            input: [
-              {
-                role: "user",
-                content: [{ type: "input_text", text: record.pending_input }],
-              },
-            ],
-          },
-        ],
-      },
-      record.id,
-    );
+    await turns.deliver(record, record.pending_input, {
+      id: `${record.id}:first`,
+      key: record.id,
+      kind: "first",
+      prepared: true,
+    });
     const { pending_input, ...done } = record;
     store.put("sessions", done);
-    turns.start(done, { id: `${done.id}:first`, kind: "first", input: pending_input, prepared: true });
     return done;
   };
   // Hand a prepared Session to this conversation when one matches its frozen request.

@@ -880,6 +880,8 @@ function scriptedCore(plan) {
   const nowS = () => Math.floor(Date.now() / 1000);
   const addTurn = (session, input) => {
     const outcome = plan.turns.shift() || "complete";
+    // Reserved input that never starts a Turn, as when capacity stays full.
+    if (outcome === "reserve") return;
     const turn = { id: `turn_${randomUUID()}`, status: "in_progress", created_at: outcome === "stall" ? nowS() - 60 : nowS() };
     session.turns.unshift(turn);
     session.items.push({ id: randomUUID(), type: "message", role: "user", turn_id: turn.id, content: input?.[0]?.content || [] });
@@ -984,6 +986,17 @@ test("the Turn monitor replaces a failed Environment, resends stalled or failed 
   assert.equal(final.retries, 1);
   assert.match(final.failure, /connection reset/);
 
+  // Input Core never admits settles once its reservation has expired.
+  plan.turns.push("reserve");
+  await api("POST", `/app/sessions/${id}/messages`, { text: "Queued", key: "k3" });
+  await turns.monitor();
+  assert.equal(turns.summary(id).outcome, "running");
+  const waiting = store.get("turns", `${id}:k3`);
+  store.put("turns", { ...waiting, started_at: waiting.started_at - 6 * 60_000 });
+  await turns.monitor();
+  assert.equal(store.get("turns", `${id}:k3`).outcome, "failed");
+  assert.match(store.get("turns", `${id}:k3`).failure, /没有被执行/);
+
   // Manual retry sends the input again as a new Turn.
   plan.turns.push("complete");
   await api("POST", `/app/sessions/${id}/retry`, {});
@@ -999,8 +1012,8 @@ test("the Turn monitor replaces a failed Environment, resends stalled or failed 
   ]);
 
   const health = await api("GET", `/app/agents/${input.agent_id}/health`);
-  assert.equal(health.turns, 5);
-  assert.equal(health.success_rate, 3 / 5);
+  assert.equal(health.turns, 6);
+  assert.equal(health.success_rate, 3 / 6);
   assert.equal(health.retried, 4);
   assert.equal(typeof health.median_first_output_s, "number");
 });
