@@ -221,7 +221,7 @@ func (o *ExecutionOperations) CompleteExecution(ctx context.Context, tenant, ses
 	if !TerminalStatus(status) || len(outcome) > maxOutcomeBytes || len(nativeID) > 512 || appliedThrough < 0 {
 		return Turn{}, ErrInvalidInput
 	}
-	outcome, err := jsonobject.Normalize(outcome)
+	outcome, err := journalPayload(outcome)
 	if err != nil {
 		return Turn{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 	}

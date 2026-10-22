@@ -14,7 +14,7 @@ import (
 const expireRuntimeCheckpoint = `-- name: ExpireRuntimeCheckpoint :one
 UPDATE runtime_allocations
 SET compute_retained_until=clock_timestamp(), compute_revision=compute_revision+1
-WHERE id=$1 AND compute_revision=$2 AND state='running' AND compute_phase='suspended' AND compute_retained_until>clock_timestamp()
+WHERE id=$1 AND compute_revision=$2 AND state='running' AND compute_phase IN ('suspended','restoring') AND compute_retained_until>clock_timestamp()
 RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 

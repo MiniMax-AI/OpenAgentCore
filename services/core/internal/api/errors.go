@@ -98,8 +98,13 @@ func writeOperationError(w http.ResponseWriter, r *http.Request, err error) {
 const invalidInputMessage = "Invalid resource identifier or request limits."
 
 // writeInternalError reports an unmapped failure. Driver errors can include
-// submitted values, so the raw error is never logged.
+// submitted values, so the raw error is never logged. Once the client has gone,
+// the failure is its ended request context: nothing is reported, and the request
+// log records the request as aborted.
 func writeInternalError(w http.ResponseWriter, r *http.Request) {
+	if r.Context().Err() != nil {
+		return
+	}
 	log.Ctx(r.Context()).Error("oac-core persistence operation failed")
 	writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
 }

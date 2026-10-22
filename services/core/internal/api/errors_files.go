@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
@@ -28,8 +27,6 @@ func writeFilesError(w http.ResponseWriter, r *http.Request, err error, notFound
 	case errors.Is(err, files.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid resource identifier or request limits.")
 	default:
-		// Storage failures can include submitted values; do not log the error.
-		log.Ctx(r.Context()).Error("oac-core persistence operation failed")
-		writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
+		writeInternalError(w, r)
 	}
 }

@@ -232,7 +232,7 @@ func TestLostCaptureResponseStillExposesOwnedIdentityWhenCheckpointIsDamaged(t *
 }
 
 // These requests use the real SDK's empty local registry, without starting a VM.
-func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
+func TestUnusableCheckpointClosesAdmissionDurably(t *testing.T) {
 	if !isolatedSDKTest(t) {
 		return
 	}
@@ -266,13 +266,13 @@ func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err = b.resume(t.Context(), q); err == nil {
-				t.Fatal("unusable checkpoint accepted")
+			if _, err = b.resume(t.Context(), q); !errors.Is(err, sandbox.ErrCheckpointUnusable) {
+				t.Fatal("unusable checkpoint not reported", err)
 			}
 			path := filepath.Join(b.storeDirectory(), "r-"+q.OperationID+".json")
 			var record restoreAdmission
-			if err = readPrivateJSON(path, &record); err != nil || record.Closed {
-				t.Fatal("permanent failure closed", record, err)
+			if err = readPrivateJSON(path, &record); err != nil || !record.Closed || !record.Unusable {
+				t.Fatal("unusable checkpoint left admission open", record, err)
 			}
 			before, err := os.ReadFile(path)
 			if err != nil {
@@ -282,10 +282,11 @@ func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			q.ObserveOnly = true
-			for i := 0; i < 3; i++ {
+			// Observation and late fresh requests report the same durable outcome.
+			for _, observe := range []bool{true, false, true} {
+				q.ObserveOnly = observe
 				state, err := b.resume(t.Context(), q)
-				if !errors.Is(err, wire.ErrUnconfirmed) || state.RestoreAttemptClosed != "" {
+				if !errors.Is(err, sandbox.ErrCheckpointUnusable) || state.RestoreAttemptClosed != "" {
 					t.Fatal(state, err)
 				}
 			}
@@ -298,6 +299,28 @@ func TestPermanentRestoreImportFailureKeepsOneAdmission(t *testing.T) {
 				t.Fatal("journal grew", err)
 			}
 		})
+	}
+}
+
+func TestUnclassifiedPreDispatchFailureClosesAttemptForReplacement(t *testing.T) {
+	request := initialInfoRequest(t)
+	guard, err := allocationLock(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.Close()
+	b := backend{q: request}
+	q := wire.ResumeRequest{OperationID: "66666666-6666-4666-8666-666666666666", Target: wire.Compute{Name: "target", Generation: 1}}
+	if _, err = b.admitRestore(q); err != nil {
+		t.Fatal(err)
+	}
+	if err = b.closeUndispatchedRestore(q, context.Canceled); !errors.Is(err, context.Canceled) {
+		t.Fatal("unclassified failure changed", err)
+	}
+	q.ObserveOnly = true
+	state, err := b.resume(t.Context(), q)
+	if err != nil || state.RestoreAttemptClosed != q.OperationID {
+		t.Fatal("closed attempt not reported", state, err)
 	}
 }
 

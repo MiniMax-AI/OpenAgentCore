@@ -26,6 +26,9 @@ func (p *restoreAttemptProvider) NewCompute(_ context.Context, _ sandbox.Referen
 }
 func (p *restoreAttemptProvider) Resume(_ context.Context, q sandbox.ResumeRequest) (sandbox.ComputeState, error) {
 	p.requests = append(p.requests, q)
+	if p.outcome == "unusable" {
+		return sandbox.ComputeState{}, sandbox.ErrCheckpointUnusable
+	}
 	if !q.ObserveOnly {
 		return sandbox.ComputeState{}, p.stop
 	}
@@ -98,6 +101,36 @@ func TestRestoreAttemptRecoveryUsesExactClosedEvidence(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestUnusableCheckpointEndsRetentionAndIsNeverRestoredAgain(t *testing.T) {
+	provider := &restoreAttemptProvider{outcome: "unusable"}
+	f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, true))
+	r, session := f.lifecycle, f.session
+	owner, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := &sandbox.SnapshotIdentity{ID: "snapshot", Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}
+	state := runtimeCompute{Current: sandbox.Compute{ID: "source", Name: "source", Generation: 1}, Snapshot: snapshot, RestoreID: uuid.NewString(), Target: &sandbox.Compute{Name: "target", Generation: 2, RestoredFrom: snapshot}}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='restoring',compute_revision=4,compute_retained_until=clock_timestamp()+interval '1 hour',compute_state=$2 WHERE id=$1`, owner.ID, raw); err != nil {
+		t.Fatal(err)
+	}
+	owner, err = r.reader.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = r.observe(t.Context(), owner); err != nil {
+		t.Fatal(err)
+	}
+	released, err := r.reader.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil || released.State != "released" || provider.kills != 1 || provider.snapshots != 1 || len(provider.requests) != 1 {
+		t.Fatalf("unusable checkpoint was not cleaned up once: %v %#v kills=%d snapshots=%d requests=%d", err, released, provider.kills, provider.snapshots, len(provider.requests))
 	}
 }
 

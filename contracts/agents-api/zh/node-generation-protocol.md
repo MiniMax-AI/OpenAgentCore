@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: cc071a27e2a33ecbecf7d5f4a3aa7cbd5d61e0f1cac114df686eea8df0baf5e3
+source_hash: 090803f51d2e29d8900cfe8612b0eb21363a0fd2687daf3d368cc746dd65809f
 ---
 
 沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
@@ -100,6 +100,7 @@ Core 发送包含以下内容的 `request` 帧：
 | --- | --- |
 | `invalid`、`ownership`、`exists`、`not_found` | `ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound` |
 | `command_unconfirmed` | `ErrCommandUnconfirmed` |
+| `checkpoint_unusable` | `ErrCheckpointUnusable`，`resume` 的结果 |
 | `observation_unavailable`、`runtime_not_running` | 对应的观察结果 |
 | `unsupported` | 该操作被声明为不支持；见下文 |
 | `unconfirmed` 或任何其他值 | 结果未知 |
