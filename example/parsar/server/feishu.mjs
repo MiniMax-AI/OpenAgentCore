@@ -4,7 +4,8 @@ const stableId = (value) => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
 import { feishuContextReader } from "./feishu-context.mjs";
-import { explainFailure } from "./turns.mjs";
+import { explainFailure, turnsAPI } from "./turns.mjs";
+import { typicalWait, waitingHeadline } from "../shared/turn-status.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
 
 const stamp = () => Date.now();
@@ -326,20 +327,12 @@ export function formatTurnCard(status, items = [], error, turn) {
   if (status === "in_progress") {
     const last = items.filter((item) => item.role !== "user").at(-1);
     // Before any output, the Turn's stage tells where the time goes.
-    const waiting =
-      turn?.stage === "retrying"
-        ? "响应较慢，正在自动重试"
-        : turn?.stage === "preparing"
-          ? "正在准备工作环境"
-          : turn?.slow
-            ? "比平时慢，请稍候"
-            : "正在思考";
     const typical =
       !last && turn?.expected_s && turn.stage !== "retrying"
-        ? `\n${grey(`通常约 ${turn.expected_s} 秒`)}`
+        ? `\n${grey(typicalWait.replace("{{value0}}", turn.expected_s))}`
         : "";
     const current = !last
-      ? waiting
+      ? waitingHeadline(turn)
       : last.type === "message"
         ? "正在撰写回复"
         : last.type === "reasoning"
@@ -528,6 +521,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       updated_at: stamp(),
     });
   const sessions = product.sessions;
+  // The Turn ledger, bound to this worker's Core client like every other call here.
+  const ledger = turnsAPI(store, core);
   const allowed = (appId, chatType = "group") => {
     const config = store.get("feishu_bots", configId);
     return Boolean(
@@ -958,24 +953,16 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
                 ],
               });
         store.put("feishu_inbound", { ...row, state: "submitting", event });
-        const base =
-          event.type === "agent.session.input.message"
-            ? await sessions.turns.baseline(run.core_session_id)
-            : {};
-        await core(
-          `/v1/agents/sessions/${run.core_session_id}/events`,
-          "POST",
-          { events: [event] },
-          row.id,
-        );
+        // Messages go through the Turn ledger; answers and cancellations go to Core directly.
         if (event.type === "agent.session.input.message")
-          sessions.turns.start(run, {
-            id: row.id,
-            kind: "followup",
-            input: event.input,
-            source: "feishu",
-            base,
-          });
+          await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" });
+        else
+          await core(
+            `/v1/agents/sessions/${run.core_session_id}/events`,
+            "POST",
+            { events: [event] },
+            row.id,
+          );
       } catch (error) {
         if (
           row.chat_type === "p2p" &&
@@ -1076,7 +1063,6 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         true,
       );
     }
-    const ledger = sessions.turns;
     const recovering = ledger.recovering(run.id);
     // A Turn the monitor cancelled or retried is never reported; a failed or
     // stopped Turn waits until the monitor has decided not to retry it.

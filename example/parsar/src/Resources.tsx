@@ -1,4 +1,7 @@
 import { EnvironmentFields, environmentSummary } from "./EnvironmentFields";
+// The Feishu workspace preset is the shipped example, so both stay one definition.
+import feishuEnvironment from "../examples/feishu/environment.json";
+import feishuSetupScript from "../examples/feishu/setup.sh?raw";
 import catalog from "./lib/mcp-catalog.json";
 import { tr } from "./lib/i18n";
 import { useVaults } from "./Credentials";
@@ -246,55 +249,6 @@ function ResourceList({
     </>
   );
 }
-const larkCliSetupScript = `set -eu
-export LARK_LAUNCHER="$(command -v lark-cli)"
-node <<'JS'
-const fs = require('node:fs');
-const path = require('node:path');
-const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
-(async () => {
-  const root = path.dirname(path.dirname(fs.realpathSync(process.env.LARK_LAUNCHER)));
-  const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
-  const platform = {linux:'linux', darwin:'darwin'}[process.platform];
-  const arch = {x64:'amd64', arm64:'arm64'}[process.arch];
-  if (!platform || !arch) throw new Error('Unsupported lark-cli release platform');
-  const asset = \`lark-cli-\${version}-\${platform}-\${arch}.tar.gz\`;
-  const line = fs.readFileSync(path.join(root, 'checksums.txt'), 'utf8').split('\\n').find(line => line.trim().split(/\\s+/)[1] === asset);
-  if (!line) throw new Error('Release checksum unavailable');
-  const expected = line.trim().split(/\\s+/)[0];
-  const urls = [
-    \`https://registry.npmmirror.com/-/binary/lark-cli/v\${version}/\${asset}\`,
-    \`https://github.com/larksuite/cli/releases/download/v\${version}/\${asset}\`,
-  ];
-  let bytes;
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, {signal: AbortSignal.timeout(10000)});
-      if (!response.ok) continue;
-      const candidate = Buffer.from(await response.arrayBuffer());
-      if (crypto.createHash('sha256').update(candidate).digest('hex') !== expected) throw new Error('Release checksum mismatch');
-      bytes = candidate;
-      break;
-    } catch (error) {
-      if (error.message === 'Release checksum mismatch') throw error;
-    }
-  }
-  if (!bytes) throw new Error('Could not download verified lark-cli release');
-  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'lark-download-'));
-  try {
-    const archive = path.join(directory, asset);
-    fs.writeFileSync(archive, bytes);
-    execFileSync('tar', ['-xzf', archive, '-C', directory, 'lark-cli']);
-    fs.mkdirSync(path.join(root, 'bin'), {recursive: true});
-    fs.copyFileSync(path.join(directory, 'lark-cli'), path.join(root, 'bin/lark-cli'));
-    fs.chmodSync(path.join(root, 'bin/lark-cli'), 0o755);
-  } finally { fs.rmSync(directory, {recursive: true, force: true}); }
-  console.log('Verified lark-cli release installed');
-})().catch(error => { console.error(error.message); process.exitCode = 1; });
-JS
-lark-cli --version
-printf '%s' "$FEISHU_APP_SECRET" | lark-cli config init --app-id "$FEISHU_APP_ID" --app-secret-stdin --brand "\${FEISHU_BRAND:-feishu}"`;
 
 export function ResourceEditor({
   kind,
@@ -369,39 +323,15 @@ export function ResourceEditor({
                 value={preset}
                 onValueChange={(choice) => {
                   setPreset(choice);
-                  if (choice === "lark-cli") {
+                  if (choice === "lark-cli")
                     setForm({
                       ...form,
-                      name: tr("飞书工作环境"),
-                      description: tr(
-                        "安装官方 lark-cli，并以 Agent 绑定的飞书机器人身份调用开放平台。需要运行节点能够访问飞书开放平台。",
-                      ),
-                      packages: { npm: ["@larksuite/cli@1.0.98"], python: [] },
-                      setup_script: larkCliSetupScript,
-                      env: {
-                        npm_config_ignore_scripts: "true",
-                        LARKSUITE_CLI_DEFAULT_AS: "bot",
-                        LARKSUITE_CLI_STRICT_MODE: "bot",
-                        LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
-                        LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1",
-                        // Only /workspace survives a reused preparation or a new sandbox.
-                        LARKSUITE_CLI_CONFIG_DIR: "/workspace/.lark-cli",
-                        LARKSUITE_CLI_DATA_DIR: "/workspace/.lark-cli/data",
-                      },
-                      bot_env: {
-                        FEISHU_APP_ID: "app_id",
-                        FEISHU_APP_SECRET: "app_secret",
-                        FEISHU_BRAND: "brand",
-                      },
-                      files: [
-                        {
-                          path: "/workspace/WORKSPACE.md",
-                          content:
-                            "# 飞书工作环境\n\n官方 lark-cli 已在 Agent 启动前安装，以 Agent 绑定的飞书机器人身份运行。禁止输出 App Secret、令牌或环境变量。读取 Skill 后使用具体业务命令。网络错误与权限不足分别报告。产物写到 ./outputs。\n",
-                        },
-                      ],
+                      ...feishuEnvironment,
+                      environment: "openai_hosted",
+                      name: tr(feishuEnvironment.name),
+                      description: tr(feishuEnvironment.description),
+                      setup_script: feishuSetupScript,
                     });
-                  }
                 }}
               >
                 <SelectOption value="">{tr("自定义")}</SelectOption>

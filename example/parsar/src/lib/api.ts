@@ -62,3 +62,20 @@ export const dateTime = (seconds: number) =>
     hour: "2-digit",
     minute: "2-digit",
   }).format(seconds * 1000);
+
+// Saves one Session Artifact; Core keeps Artifacts after the live workspace is gone.
+export async function downloadArtifact(sessionId: string, file: { id: string; path: string }) {
+  const response = await fetch(
+    `/v1/agents/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(file.id)}/content`,
+  );
+  if (!response.ok) {
+    const value = await response.json().catch(() => ({}));
+    throw new Error(value.error?.message || tr("下载失败，请重试。"));
+  }
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = file.path.split("/").at(-1) || "artifact";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

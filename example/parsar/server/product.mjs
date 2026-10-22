@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { providerAPI, publicProvider } from "./providers.mjs";
 import { runtimeProfile, publicRuntime } from "./runtime-profile.mjs";
 import { feishuAPI } from "./feishu.mjs";
+import { trialAPI } from "./trials.mjs";
 import { sessionAPI } from "./sessions.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 import {
@@ -46,6 +47,22 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
   const feishu = feishuAPI(store);
   const registration = feishuRegistrationAPI(store, fetchImpl);
   const providers = providerAPI(store, fetchImpl);
+  const trials = trialAPI(store, core);
+  const sessionAfter = (run) => async (id, body) => {
+    await run(id, body);
+    return publicRow("sessions", store.get("sessions", id));
+  };
+  const actions = {
+    "POST sessions/messages": sessionAfter(sessions.turns.send),
+    "POST sessions/retry": sessionAfter(sessions.turns.retry),
+    "GET agents/health": (id) => {
+      if (!store.get("agents", id)) throw new AppError(404, "Agent 不存在。");
+      return sessions.turns.health(id);
+    },
+    "POST models/test": (id) => providers.test(id),
+    "POST runtimes/trial": (id) => trials.start(id),
+    "GET runtimes/trial": (id) => trials.get(id),
+  };
   const touchProviders = (...ids) => {
     for (const id of new Set(ids.filter(Boolean))) {
       const provider = store.get("providers", id);
@@ -125,29 +142,10 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       return feishu(method, path, body);
     if (path === "/app/providers/discover" && method === "POST")
       return providers.discover(body);
-    const action = path.match(/^\/app\/(sessions|agents|models|runtimes)\/([a-f0-9-]{36})\/(messages|retry|health|test|trial)$/);
-    if (action) {
-      const [, owner, ownerId, verb] = action;
-      if (owner === "sessions" && verb === "messages" && method === "POST") {
-        await sessions.turns.send(ownerId, body);
-        return publicRow("sessions", store.get("sessions", ownerId));
-      }
-      if (owner === "sessions" && verb === "retry" && method === "POST") {
-        await sessions.turns.retry(ownerId);
-        return publicRow("sessions", store.get("sessions", ownerId));
-      }
-      if (owner === "models" && verb === "test" && method === "POST")
-        return providers.test(ownerId);
-      if (owner === "runtimes" && verb === "trial" && method === "POST")
-        return sessions.trial.start(ownerId);
-      if (owner === "runtimes" && verb === "trial" && method === "GET")
-        return sessions.trial.get(ownerId);
-      if (owner === "agents" && verb === "health" && method === "GET") {
-        if (!store.get("agents", ownerId)) throw new AppError(404, "Agent 不存在。");
-        return sessions.turns.health(ownerId);
-      }
-      throw new AppError(405, "Method not allowed.");
-    }
+    // Actions on one resource: `/app/{kind}/{id}/{action}`.
+    const action = path.match(/^\/app\/([a-z]+)\/([a-f0-9-]{36})\/([a-z]+)$/);
+    const handler = action && actions[`${method} ${action[1]}/${action[3]}`];
+    if (action && handler) return handler(action[2], body);
     const match = path.match(/^\/app\/([a-z]+)(?:\/([a-f0-9-]{36}))?$/);
     if (!match || !kinds.has(match[1]) || (match[2] && !uuid.test(match[2])))
       throw new AppError(404, "Not found.");
@@ -198,7 +196,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
         return { deleted: true };
       }
       if (method !== "PUT") throw new AppError(405, "Method not allowed.");
-      return sessions(id, body);
+      return publicRow("sessions", await sessions(id, body));
     }
     const previous = store.get(kind, id);
     if (method === "DELETE") {

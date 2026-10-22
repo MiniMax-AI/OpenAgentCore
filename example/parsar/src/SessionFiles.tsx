@@ -3,7 +3,7 @@ import { useRef } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Upload, Download } from "lucide-react";
 import { randomUuid, type ListPage, type SessionArtifact } from "@oac/agents-client";
-import { api, dateTime } from "./lib/api";
+import { api, dateTime, downloadArtifact } from "./lib/api";
 import { Button } from "./components/ui/button";
 import {
   Dialog,
@@ -92,21 +92,7 @@ export function SessionFiles({
     },
   });
   const download = useMutation({
-    mutationFn: async (file: SessionArtifact) => {
-      const response = await fetch(
-        `/v1/agents/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(file.id)}/content`,
-      );
-      if (!response.ok) {
-        const value = await response.json();
-        throw new Error(value.error?.message || tr("下载失败，请重试。"));
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = file.path.split("/").at(-1) || "artifact";
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    },
+    mutationFn: (file: SessionArtifact) => downloadArtifact(sessionId, file),
   });
   const files = artifacts.data?.pages.flatMap((page) => page.data) || [];
   return (

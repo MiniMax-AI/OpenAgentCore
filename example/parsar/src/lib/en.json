@@ -486,5 +486,6 @@
   "{{value0}} 次": "{{value0}} times",
   "近 7 天 · {{value0}} 轮对话": "Last 7 days · {{value0}} turns",
   "产物": "Outputs",
-  "还没有生成的文件": "No files yet"
+  "还没有生成的文件": "No files yet",
+  "正在思考": "Thinking"
 }

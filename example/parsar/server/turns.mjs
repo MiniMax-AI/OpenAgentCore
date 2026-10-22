@@ -5,14 +5,17 @@ import { AppError } from "./store.mjs";
 // Environment is still provisioning, so the clock starts at the Core Turn.
 const stallMs = 45_000;
 const maxRetries = 1;
+// Core keeps input sent to an idle Session for at most five minutes.
+const reservationMs = 5.5 * 60_000;
 const statsWindowMs = 7 * 24 * 3600_000;
 // Typical first-output times before Parsar has its own history, in seconds.
 const typicalDefaults = { cold: 25, prepared: 6, followup: 3 };
+const terminal = ["completed", "failed", "cancelled"];
+const unresponsive = "模型服务暂时没有响应，已自动重试仍未恢复。可以稍后重试。";
+const unadmitted = "这条消息没有被执行，请重新发送。";
 
 const asInput = (input) =>
-  typeof input === "string"
-    ? [{ role: "user", content: [{ type: "input_text", text: input }] }]
-    : input;
+  typeof input === "string" ? [{ role: "user", content: [{ type: "input_text", text: input }] }] : input;
 
 const median = (values) => {
   if (!values.length) return undefined;
@@ -27,20 +30,27 @@ export function explainFailure(error, runtimeName = "环境模板") {
   const script = message.match(/script "setup_commands\[(\d+)\]" failed with exit code (\d+)/);
   if (script)
     return `「${runtimeName}」的初始化脚本第 ${Number(script[1]) + 1} 段失败（退出码 ${script[2]}）。通常是网络波动，可以直接重试。`;
-  if (/provision/i.test(message))
-    return `「${runtimeName}」准备失败。通常是网络或安装问题，可以直接重试。`;
-  if (/expired|no longer available/i.test(message))
-    return "这个对话的工作环境已过期，请开始新对话。";
-  if (/unresponsive/.test(message)) return "模型服务暂时没有响应，已自动重试仍未恢复。可以稍后重试。";
+  if (/provision/i.test(message)) return `「${runtimeName}」准备失败。通常是网络或安装问题，可以直接重试。`;
+  if (/expired|no longer available/i.test(message)) return "这个对话的工作环境已过期，请开始新对话。";
   if (/rate|429/i.test(message)) return "模型服务繁忙（请求过多），请稍后重试。";
   if (/timeout|timed out/i.test(message)) return "模型服务响应超时，可以直接重试。";
   return message ? `执行失败：${message}` : "执行失败，可以直接重试。";
 }
 
+// One ledger entry per user input, from Web and Feishu alike. The monitor
+// watches running entries and recovers them only while nothing has run.
 export function turnsAPI(store, core) {
   const now = () => Date.now();
   const kindOf = (turn) => (turn.kind === "followup" ? "followup" : turn.prepared ? "prepared" : "cold");
   const runtimeName = (record) => store.get("runtimes", record.runtime_id || "")?.name;
+  const latest = (sessionId) =>
+    store
+      .list("turns")
+      .filter((t) => t.session_id === sessionId)
+      .sort((a, b) => b.started_at - a.started_at)[0];
+  const post = (coreSessionId, event, key) =>
+    core(`/v1/agents/sessions/${coreSessionId}/events`, "POST", { events: [event] }, key);
+  const message = (input) => ({ type: "agent.session.input.message", input });
 
   // Median first-output seconds for one Agent and Turn kind over the stats window.
   const typical = (agentId, kind) => {
@@ -55,8 +65,8 @@ export function turnsAPI(store, core) {
   // The newest Core Turn before an input is sent; the input's Turn is newer,
   // or is this one when the input joined a running Turn.
   const baseline = async (coreSessionId) => {
-    const [latest] = (await core(`/v1/agents/sessions/${coreSessionId}/turns?order=desc&limit=1`, "GET")).data || [];
-    return latest ? { base_turn_id: latest.id, base_running: !["completed", "failed", "cancelled"].includes(latest.status) } : {};
+    const [newest] = (await core(`/v1/agents/sessions/${coreSessionId}/turns?order=desc&limit=1`, "GET")).data || [];
+    return newest ? { base_turn_id: newest.id, base_running: !terminal.includes(newest.status) } : {};
   };
 
   const start = (record, { id, kind, input, source, prepared = false, base = {} }) => {
@@ -80,23 +90,29 @@ export function turnsAPI(store, core) {
     return turn;
   };
 
-  // A follow-up message from the Web composer; Feishu records its own sends.
-  const send = async (sessionId, { text, key }) => {
+  // Records and sends a follow-up input. The entry is written first so a
+  // retried send (same id and key) keeps its original baseline.
+  const deliver = async (record, input, { id, key, source }) => {
+    const turn =
+      store.get("turns", id) ||
+      start(record, { id, kind: "followup", input, source, base: await baseline(record.core_session_id) });
+    try {
+      await post(record.core_session_id, message(turn.input), key);
+    } catch (error) {
+      if (error instanceof AppError && error.status >= 400 && error.status < 500) store.remove("turns", id);
+      throw error;
+    }
+    return turn;
+  };
+
+  // A follow-up message from the Web composer.
+  const send = (sessionId, { text, key }) => {
     const record = store.get("sessions", sessionId);
     if (!record || record.deleted_at) throw new AppError(404, "会话不存在。");
     if (!record.core_session_id) throw new AppError(409, "会话仍在创建，请稍后再发。");
-    if (typeof text !== "string" || !text.trim() || text.length > 100000)
-      throw new AppError(400, "消息无效或过长。");
+    if (typeof text !== "string" || !text.trim() || text.length > 100000) throw new AppError(400, "消息无效或过长。");
     if (typeof key !== "string" || !key || key.length > 100) throw new AppError(400, "缺少消息标识。");
-    const input = asInput(text);
-    const base = await baseline(record.core_session_id);
-    await core(
-      `/v1/agents/sessions/${record.core_session_id}/events`,
-      "POST",
-      { events: [{ type: "agent.session.input.message", input }] },
-      key,
-    );
-    return start(record, { id: `${sessionId}:${key}`, kind: "followup", input, source: "web", base });
+    return deliver(record, text, { id: `${sessionId}:${key}`, key, source: "web" });
   };
 
   const finish = (turn, outcome, failure) => {
@@ -107,36 +123,31 @@ export function turnsAPI(store, core) {
     return done;
   };
 
-  const supersede = (record, coreTurnId) =>
-    store.put("sessions", {
-      ...record,
-      superseded_turns: [...new Set([...(record.superseded_turns || []), coreTurnId])],
-    });
-
-  // Replace a Session whose Environment failed before any Turn ran.
-  const recreate = async (turn, record, key = `${record.id}:attempt:${turn.retries + 1}`, attempt = turn.retries + 1) => {
+  // Replaces a Session whose Environment failed before any Turn ran, with the
+  // identical frozen request.
+  const recreate = async (turn, record, key, retries) => {
     const created = await core("/v1/agents/sessions", "POST", record.request, key);
-    const previous = record.core_session_id;
     store.transaction(() => {
       store.put("sessions", { ...record, core_session_id: created.id, superseded_turns: [] });
       // Feishu cursors belong to the replaced Core Session.
       for (const thread of store.list("feishu_threads").filter((t) => t.session_id === record.id))
         store.put("feishu_threads", { ...thread, turn_cursor: undefined, item_cursor: undefined, artifact_cursor: undefined });
-      store.put("turns", { ...turn, core_session_id: created.id, retries: attempt, stage: "preparing" });
+      store.put("turns", { ...turn, core_session_id: created.id, retries, stage: "preparing" });
     });
-    await core(`/v1/agents/sessions/${previous}`, "DELETE").catch(() => {});
+    await core(`/v1/agents/sessions/${record.core_session_id}`, "DELETE").catch(() => {});
   };
 
-  const resend = async (turn, record, coreTurnId) => {
-    const attempt = turn.retries + 1;
-    supersede(record, coreTurnId);
-    await core(
-      `/v1/agents/sessions/${record.core_session_id}/events`,
-      "POST",
-      { events: [{ type: "agent.session.input.message", input: turn.input }] },
-      `${turn.id}:resend:${attempt}`,
-    );
-    store.put("turns", { ...turn, retries: attempt, stage: "retrying", pending_cancel: undefined, core_turn_id: undefined });
+  // Sends the input again after a Core Turn ended without output; the ended
+  // Turn is superseded so neither channel shows it.
+  const resend = async (turn, coreTurnId) => {
+    const record = store.get("sessions", turn.session_id);
+    const retries = turn.retries + 1;
+    store.put("sessions", {
+      ...record,
+      superseded_turns: [...new Set([...(record.superseded_turns || []), coreTurnId])],
+    });
+    await post(record.core_session_id, message(turn.input), `${turn.id}:resend:${retries}`);
+    store.put("turns", { ...turn, retries, stage: "retrying", pending_cancel: undefined, core_turn_id: undefined });
   };
 
   const check = async (turn) => {
@@ -155,9 +166,14 @@ export function turnsAPI(store, core) {
     // An input sent while a Turn runs joins that Turn instead of starting one.
     const coreTurn = newer[0] || (turn.base_running ? recent[at] : undefined);
     if (!coreTurn) {
-      if (session.status !== "failed") return;
-      if (turn.kind === "first" && record.request && turn.retries < maxRetries) return recreate(turn, record);
-      return finish(turn, "failed", explainFailure(session.error, runtimeName(record)));
+      if (session.status === "failed") {
+        if (turn.kind === "first" && record.request && turn.retries < maxRetries)
+          return recreate(turn, record, `${record.id}:attempt:${turn.retries + 1}`, turn.retries + 1);
+        return finish(turn, "failed", explainFailure(session.error, runtimeName(record)));
+      }
+      if (turn.kind === "followup" && session.status === "idle" && now() - turn.started_at > reservationMs)
+        return finish(turn, "failed", unadmitted);
+      return;
     }
     const items = ((await core(`/v1/agents/sessions/${sid}/items?order=desc&limit=50`, "GET")).data || []).filter(
       (item) => item.turn_id === coreTurn.id && !(item.type === "message" && item.role === "user"),
@@ -172,16 +188,14 @@ export function turnsAPI(store, core) {
       }
     }
     if (coreTurn.status === "completed") return finish(current, "completed");
-    if (coreTurn.status === "cancelled") {
-      if (current.pending_cancel === coreTurn.id && !items.length)
-        return resend(current, store.get("sessions", turn.session_id), coreTurn.id);
-      return finish(current, "cancelled");
-    }
-    if (coreTurn.status === "failed") {
-      if (!items.length && current.retries < maxRetries)
-        return resend(current, store.get("sessions", turn.session_id), coreTurn.id);
-      return finish(current, "failed", explainFailure(coreTurn.error || session.error, runtimeName(record)));
-    }
+    if (coreTurn.status === "cancelled")
+      return current.pending_cancel === coreTurn.id && !items.length
+        ? resend(current, coreTurn.id)
+        : finish(current, "cancelled");
+    if (coreTurn.status === "failed")
+      return !items.length && current.retries < maxRetries
+        ? resend(current, coreTurn.id)
+        : finish(current, "failed", explainFailure(coreTurn.error || session.error, runtimeName(record)));
     if (session.status === "requires_action") current.stage = "waiting_user";
     else if (current.pending_cancel) current.stage = "retrying";
     else current.stage = items.length ? "working" : "starting";
@@ -191,16 +205,9 @@ export function turnsAPI(store, core) {
       session.status === "in_progress" &&
       now() - (coreTurn.created_at ? coreTurn.created_at * 1000 : current.started_at) > stallMs;
     if (stalled && current.retries < maxRetries) {
-      await core(
-        `/v1/agents/sessions/${sid}/events`,
-        "POST",
-        { events: [{ type: "agent.session.input.cancel" }] },
-        `${turn.id}:cancel:${current.retries + 1}`,
-      );
+      await post(sid, { type: "agent.session.input.cancel" }, `${turn.id}:cancel:${current.retries + 1}`);
       current = { ...current, pending_cancel: coreTurn.id, stage: "retrying" };
-    } else if (stalled && !current.failure) {
-      current.failure = explainFailure("unresponsive");
-    }
+    } else if (stalled) current.failure = unresponsive;
     store.put("turns", current);
   };
 
@@ -220,10 +227,7 @@ export function turnsAPI(store, core) {
 
   // The latest Turn of a conversation, as the UI and Feishu cards show it.
   const summary = (sessionId) => {
-    const turn = store
-      .list("turns")
-      .filter((t) => t.session_id === sessionId)
-      .sort((a, b) => b.started_at - a.started_at)[0];
+    const turn = latest(sessionId);
     if (!turn) return undefined;
     const kind = kindOf(turn);
     const expected_s = typical(turn.agent_id, kind);
@@ -259,33 +263,18 @@ export function turnsAPI(store, core) {
   // otherwise the input is sent again as a new Turn.
   const retry = async (sessionId) => {
     const record = store.get("sessions", sessionId);
-    const turn = store
-      .list("turns")
-      .filter((t) => t.session_id === sessionId)
-      .sort((a, b) => b.started_at - a.started_at)[0];
-    if (!record || !turn || turn.outcome !== "failed") throw new AppError(409, "没有可以重试的失败执行。");
+    const turn = latest(sessionId);
+    if (!record || turn?.outcome !== "failed") throw new AppError(409, "没有可以重试的失败执行。");
     const session = await core(`/v1/agents/sessions/${record.core_session_id}`, "GET");
     const id = `${turn.id}:manual:${now()}`;
-    if (session.status === "failed" && record.request && !turn.core_turn_id) {
-      const next = start(record, { id, kind: turn.kind, input: turn.input, source: turn.source, prepared: false });
-      await recreate(next, record, id, 0);
-      return summary(sessionId);
-    }
-    const base = await baseline(record.core_session_id);
-    await core(
-      `/v1/agents/sessions/${record.core_session_id}/events`,
-      "POST",
-      { events: [{ type: "agent.session.input.message", input: turn.input }] },
-      id,
-    );
-    start(record, { id, kind: "followup", input: turn.input, source: turn.source, base });
-    return summary(sessionId);
+    if (session.status === "failed" && record.request && !turn.core_turn_id)
+      await recreate(start(record, { id, kind: turn.kind, input: turn.input, source: turn.source }), record, id, 0);
+    else await deliver(record, turn.input, { id, key: id, source: turn.source });
   };
 
   const superseded = (sessionId, coreTurnId) =>
     (store.get("sessions", sessionId)?.superseded_turns || []).includes(coreTurnId);
-  const recovering = (sessionId) =>
-    store.list("turns").some((t) => t.session_id === sessionId && t.outcome === "running");
+  const recovering = (sessionId) => store.list("turns").some((t) => t.session_id === sessionId && t.outcome === "running");
 
-  return { start, send, baseline, monitor, summary, health, retry, superseded, recovering, typical, explainFailure };
+  return { start, deliver, send, monitor, summary, health, retry, superseded, recovering };
 }

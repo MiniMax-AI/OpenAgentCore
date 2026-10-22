@@ -2,7 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { tr } from "./lib/i18n";
 import { product } from "./lib/product";
-import { dateTime } from "./lib/api";
+import { dateTime, downloadArtifact } from "./lib/api";
 import { Button } from "./components/ui/button";
 import { ErrorNotice, PageHeader } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
@@ -27,21 +27,7 @@ export function Artifacts() {
     queryFn: () => product<Artifact[]>("artifacts"),
   });
   const download = useMutation({
-    mutationFn: async (file: Artifact) => {
-      const response = await fetch(
-        `/v1/agents/sessions/${encodeURIComponent(file.core_session_id)}/artifacts/${encodeURIComponent(file.id)}/content`,
-      );
-      if (!response.ok) {
-        const value = await response.json().catch(() => ({}));
-        throw new Error(value.error?.message || tr("下载失败，请重试。"));
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = file.path.split("/").at(-1) || "artifact";
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    },
+    mutationFn: (file: Artifact) => downloadArtifact(file.core_session_id, file),
   });
   const rows = query.data || [];
   return (

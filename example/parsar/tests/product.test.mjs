@@ -1027,7 +1027,7 @@ test("model tests make one tiny generation and environment trials report a real 
   assert.equal(denied.error.includes("provider-secret"), false, "the key is never echoed");
 
   const settle = async () => {
-    for (let i = 0; i < 40 && api.sessions.trial.get(runtime.id)?.state === "running"; i++)
+    for (let i = 0; i < 40 && (await api("GET", `/app/runtimes/${runtime.id}/trial`))?.state === "running"; i++)
       await new Promise((resolve) => setTimeout(resolve, 50));
     return api("GET", `/app/runtimes/${runtime.id}/trial`);
   };

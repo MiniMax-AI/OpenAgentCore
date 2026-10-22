@@ -4,12 +4,7 @@ import { tr } from "./lib/i18n";
 import { product, type SessionRecord } from "./lib/product";
 import { Button } from "./components/ui/button";
 import { ErrorNotice } from "./components/shared";
-
-const stageText = {
-  preparing: "正在准备工作环境",
-  starting: "正在启动",
-  retrying: "响应较慢，正在自动重试",
-} as const;
+import { typicalWait, waitingHeadline } from "../shared/turn-status.mjs";
 
 // Where a running Turn spends its time before the first output, and a plain
 // explanation with a retry when it failed.
@@ -55,21 +50,14 @@ export function TurnStatus({ record }: { record: SessionRecord }) {
     );
   if (!waiting) return null;
   const elapsed = Math.max(0, Math.round((now - turn.started_at) / 1000));
-  const text =
-    turn.stage === "retrying"
-      ? tr(stageText.retrying)
-      : turn.slow
-        ? tr("比平时慢，请稍候")
-        : tr(stageText[turn.stage as keyof typeof stageText]);
   return (
     <div className="mx-auto w-full max-w-3xl px-6 pt-3">
       <p
         role="status"
         className="rounded-xl bg-surface-subtle px-4 py-3 text-sm text-fg"
       >
-        {text} · {tr("已等待 {{value0}} 秒", { value0: elapsed })}
-        {turn.stage !== "retrying" &&
-          ` · ${tr("通常约 {{value0}} 秒", { value0: turn.expected_s })}`}
+        {tr(waitingHeadline(turn))} · {tr("已等待 {{value0}} 秒", { value0: elapsed })}
+        {turn.stage !== "retrying" && ` · ${tr(typicalWait, { value0: turn.expected_s })}`}
       </p>
     </div>
   );
