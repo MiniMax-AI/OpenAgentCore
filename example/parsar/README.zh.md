@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: f416c43596238cde97764c22a8bf371bb53fba040ce284e4af19f003c990f25a
+source_hash: b04d534b7992d0e5deaca65ea28cb0b8500922dae1cd619073215e8e338e0dd7
 ---
 
 # Parsar 工作空间
@@ -57,7 +57,7 @@ Parsar 会跟踪每一轮正在执行的对话，网页和飞书都一样。出�
 - **凭据** 创建 Vault 和只写的 bearer 凭据。**OAuth 授权** 使用维护中的 MCP SDK 完成发现、动态客户端注册、签发方绑定和 PKCE，再通过公开 Vault API 保存令牌。OAuth 令牌不会返回浏览器。
 - 指令片段和知识具有不可变的编号版本、默认版本、固定版本和停用状态。知识版本会成为初始工作区文件。标准 Claude/Codex Plugin ZIP 会成为公开 Environment Plugin，并列出其中声明的 `.mcp.json` 服务。stdio 服务所需的可执行文件必须存在于环境中。
 
-**环境模板** 只在 Core 托管的工作区中运行。每个新对话会先写入文件、安装软件包并完成初始化，再启动 Agent；初始化失败会停止执行。初始文件使用规范的 `/workspace/` 路径，脚本在工作区中运行。变量值在产品响应中只写：`null` 保留已有值，字符串替换，删除名称即删除变量。**飞书机器人变量** 把变量名映射到所绑定机器人的 **App ID**、**App Secret** 或地区；使用这类模板的对话要求 Agent 已绑定机器人。Parsar 通过公开 Session Environment 合约内联发送模板，不创建 Core Template 资源。
+**环境模板** 只在 Core 托管的工作区中运行。每个新对话会先写入文件、安装软件包并完成初始化，再启动 Agent；初始化失败会停止执行。初始文件使用规范的 `/workspace/` 路径，脚本在工作区中运行。变量值在产品响应中只写：`null` 保留已有值，字符串替换，删除名称即删除变量。**飞书机器人变量** 把变量名映射到所绑定机器人的 **App ID**、**App Secret** 或地区；使用这类模板的对话要求 Agent 已绑定机器人。Parsar 通过公开 Session Environment 合约内联发送模板，不创建 Core Template 资源。Core 可能在 24 小时内复用一次完全相同的准备结果（[准备结果复用](../../contracts/agents-api/zh/environments.md#preparation-reuse)），长时间空闲的对话也可能换到新沙箱；这两种情况下只保留 `/environment`（包括 `/workspace`），初始化脚本不会再次执行。因此初始化脚本必须把之后要用的内容写到 `/workspace` 或软件包目录下，不能写在 HOME 中。飞书工作环境通过 `LARKSUITE_CLI_CONFIG_DIR` 和 `LARKSUITE_CLI_DATA_DIR` 把 lark-cli 的配置和加密凭证放在 `/workspace/.lark-cli`。
 
 **提前准备，新对话无需等待安装** 会为使用该模板的每个 Agent 保留一个准备好的 Session。Parsar 在没有输入的情况下创建它，Core 会提前准备好 Environment；下一个网页或飞书对话发送第一条消息时直接接管它，并保留自己的标题。Agent、其环境模板、机器人或模型服务商变更后，或超过 12 小时、或被接管后，准备好的 Session 会被替换；关闭开关会丢弃它。第一条消息带图片或文件时，会创建普通的 Session。每个准备好的 Session 在等待期间会占用一个工作区。
 

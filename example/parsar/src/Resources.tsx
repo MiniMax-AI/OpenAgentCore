@@ -384,6 +384,9 @@ export function ResourceEditor({
                         LARKSUITE_CLI_STRICT_MODE: "bot",
                         LARKSUITE_CLI_NO_UPDATE_NOTIFIER: "1",
                         LARKSUITE_CLI_NO_SKILLS_NOTIFIER: "1",
+                        // Only /workspace survives a reused preparation or a new sandbox.
+                        LARKSUITE_CLI_CONFIG_DIR: "/workspace/.lark-cli",
+                        LARKSUITE_CLI_DATA_DIR: "/workspace/.lark-cli/data",
                       },
                       bot_env: {
                         FEISHU_APP_ID: "app_id",
