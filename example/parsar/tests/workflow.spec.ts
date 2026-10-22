@@ -404,6 +404,9 @@ test("conversations start from the home page, continue, cancel and follow Agent 
   await page.screenshot({ path: testInfo.outputPath("session-dark.png") });
   const sessionURL = page.url();
   await page.goto(`/#/agents/${id}`);
+  // Parsar watched these Turns; the one the user cancelled is not a failure.
+  await expect(page.getByRole("heading", { name: /近 7 天 · [1-9]\d* 轮对话/ })).toBeVisible();
+  await expect(page.getByText("100%", { exact: true })).toBeVisible();
   await page.getByLabel("主指令", { exact: true }).fill("New instructions");
   await page.getByRole("button", { name: "保存", exact: true }).click();
   await expect(page.getByRole("button", { name: "已保存" })).toBeVisible();
@@ -630,6 +633,11 @@ test("conversation uploads insert a file path and download binary artifacts with
   expect(Buffer.concat(chunks)).toEqual(Buffer.from([0, 255, 128, 13, 10]));
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(page.getByLabel("继续对话")).toHaveValue(/numbers.csv/);
+  const conversation = page.url();
+  await page.getByRole("link", { name: "产物", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "report.bin" }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "下载 report.bin" }).first()).toBeEnabled();
+  await page.goto(conversation);
   await page.route(/\/v1\/agents\/sessions\/[a-f0-9-]+$/, async (route) => {
     const response = await route.fetch();
     const value = await response.json();
@@ -662,7 +670,7 @@ test("a send completed after leaving the conversation does not restore a sent dr
   const received = new Promise<void>((resolve) => {
     arrived = resolve;
   });
-  await page.route("**/events", async (route) => {
+  await page.route("**/messages", async (route) => {
     if (route.request().method() !== "POST") return route.continue();
     const response = await route.fetch();
     arrived();

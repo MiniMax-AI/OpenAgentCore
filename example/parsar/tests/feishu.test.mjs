@@ -384,6 +384,12 @@ test("official Feishu dispatcher awaits persistence and propagates a failed comm
   };
   await dispatcher.invoke(event, { needCheck: false });
   assert.equal(received, 1);
+  const external = structuredClone(event);
+  external.header.tenant_key = "tenant_bot";
+  external.event.sender.tenant_key = "tenant_guest";
+  external.event.message.message_id = "om_external";
+  await dispatcher.invoke(external, { needCheck: false });
+  assert.equal(received, 1, "messages from another tenant are ignored");
   fail = true;
   await assert.rejects(
     dispatcher.invoke(event, { needCheck: false }),

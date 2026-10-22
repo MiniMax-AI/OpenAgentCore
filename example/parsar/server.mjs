@@ -412,6 +412,8 @@ if (
       .catch((error) => console.error("Prepared sessions:", error.message));
   refreshPrepared();
   setInterval(refreshPrepared, 15000).unref();
+  // Running Turns are watched for stalls and failed Environments.
+  setInterval(() => void productHandler.sessions.turns.monitor(), 1500).unref();
   server.on(
     "request",
     createHandler(config, {

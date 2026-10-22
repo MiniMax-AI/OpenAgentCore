@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { runtimeEnvironment } from "./runtime-profile.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 import { harnessOptions } from "../shared/harness-options.mjs";
+import { turnsAPI } from "./turns.mjs";
 
 // A warm Session matches a cold creation only when every frozen byte except the
 // first input and the per-conversation metadata is the same.
@@ -273,6 +274,7 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
 
 export function sessionAPI(store, core) {
   const running = new Map();
+  const turns = turnsAPI(store, core);
   const sendFirstInput = async (record) => {
     await core(
       `/v1/agents/sessions/${record.core_session_id}/events`,
@@ -294,6 +296,7 @@ export function sessionAPI(store, core) {
     );
     const { pending_input, ...done } = record;
     store.put("sessions", done);
+    turns.start(done, { id: `${done.id}:first`, kind: "first", input: pending_input, prepared: true });
     return done;
   };
   // Hand a prepared Session to this conversation when one matches its frozen request.
@@ -327,7 +330,10 @@ export function sessionAPI(store, core) {
     let row = store.get("sessions", id);
     if (row?.deleted_at) throw new AppError(410, "会话已删除。");
     if (row?.pending_input) return sendFirstInput(row);
-    if (row?.core_session_id) return row;
+    if (row?.core_session_id) {
+      const { request, ...record } = row;
+      return record;
+    }
     if (!row) {
       row = prepareSession(store, id, body, origin);
       store.put("sessions", row);
@@ -344,10 +350,14 @@ export function sessionAPI(store, core) {
       );
       if (!uuid.test(session.id))
         throw new AppError(502, "Core 返回了无效的会话。");
-      const { request, ...record } = row;
-      record.core_session_id = session.id;
+      // The frozen request stays until the first output, so a failed
+      // Environment can be replaced with identical configuration.
+      const record = { ...row, core_session_id: session.id };
       store.put("sessions", record);
-      return record;
+      if (record.request.input !== undefined)
+        turns.start(record, { id: `${id}:first`, kind: "first", input: record.request.input });
+      const { request, ...visible } = record;
+      return visible;
     } catch (error) {
       if (
         error instanceof AppError &&
@@ -369,6 +379,58 @@ export function sessionAPI(store, core) {
   // it. Core prepares an Environment as soon as a Session exists, so the first
   // message skips setup. Overlapping refreshes are skipped.
   let refreshing = false;
+  sessions.turns = turns;
+  // A trial run creates one real Session for an Agent that uses the template,
+  // waits for its first reply, records the outcome and deletes the Session.
+  const trialLimitMs = 5 * 60_000;
+  sessions.trial = {
+    get(runtimeId) {
+      const trial = store.get("runtime_trials", runtimeId);
+      if (trial?.state === "running" && Date.now() - trial.started_at > trialLimitMs + 30_000)
+        return { ...trial, state: "failed", failure: "试运行被中断，请重新开始。" };
+      return trial || null;
+    },
+    async start(runtimeId) {
+      const runtime = store.get("runtimes", runtimeId);
+      if (!runtime) throw new AppError(404, "环境模板不存在。");
+      if (sessions.trial.get(runtimeId)?.state === "running") return sessions.trial.get(runtimeId);
+      const agent = store.list("agents").find((a) => a.runtime_id === runtimeId && a.enabled !== false);
+      if (!agent) throw new AppError(400, "先把这个环境模板绑定到一个 Agent，再试运行。");
+      const { request } = prepareSession(store, randomUUID(), {
+        agent_id: agent.id,
+        name: "试运行",
+        input: "只回复 OK，不要调用任何工具。",
+      });
+      request.metadata = { ...request.metadata, application: "parsar-trial", title: "试运行" };
+      const started_at = Date.now();
+      const session = await core("/v1/agents/sessions", "POST", request, randomUUID());
+      const trial = { id: runtimeId, state: "running", started_at, agent_name: agent.name, runtime_revision: runtime.revision };
+      store.put("runtime_trials", trial);
+      void (async () => {
+        let result = { state: "failed", failure: "5 分钟内没有完成。" };
+        try {
+          while (Date.now() - started_at < trialLimitMs) {
+            const current = await core(`/v1/agents/sessions/${session.id}`, "GET");
+            if (current.status === "failed") {
+              result = { state: "failed", failure: turns.explainFailure(current.error, runtime.name) };
+              break;
+            }
+            const items = (await core(`/v1/agents/sessions/${session.id}/items?limit=20`, "GET")).data || [];
+            if (items.some((item) => item.type === "message" && item.role === "assistant")) {
+              result = { state: "succeeded" };
+              break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+          }
+        } catch (error) {
+          result = { state: "failed", failure: turns.explainFailure(error.message, runtime.name) };
+        }
+        store.put("runtime_trials", { ...trial, ...result, seconds: Math.round((Date.now() - started_at) / 1000) });
+        await core(`/v1/agents/sessions/${session.id}`, "DELETE").catch(() => {});
+      })();
+      return trial;
+    },
+  };
   sessions.refreshWarm = async (now = Date.now()) => {
     if (refreshing) return;
     refreshing = true;

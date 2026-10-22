@@ -26,6 +26,7 @@ import { Field, ErrorNotice, PageHeader } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
 import { randomUuid } from "@oac/agents-client";
 import { useUsage } from "./lib/usage";
+import { RuntimeTrial } from "./Checks";
 export function MCPs() {
   const query = useMCPs();
   return (
@@ -202,6 +203,7 @@ function ResourceList({
                         : row.description || environmentSummary(row)}
                     </p>
                   </div>
+                  {kind === "runtimes" && <RuntimeTrial id={row.id} name={row.name} />}
                   <Button
                     variant="ghost"
                     size="icon"

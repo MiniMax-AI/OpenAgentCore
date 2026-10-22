@@ -50,7 +50,20 @@ export interface AgentProfile extends NamedResource {
   skill_versions?: Record<string, string>;
   mcp_ids: string[];
 }
+export interface TurnSummary {
+  outcome: "running" | "completed" | "failed" | "cancelled";
+  stage?: "preparing" | "starting" | "working" | "waiting_user" | "retrying";
+  kind: "cold" | "prepared" | "followup";
+  started_at: number;
+  elapsed_s: number;
+  expected_s: number;
+  slow: boolean;
+  retries: number;
+  failure?: string;
+}
 export interface SessionRecord {
+  turn?: TurnSummary;
+  superseded_turns?: string[];
   configuration?: {
     agent_name: string;
     agent_revision?: number;

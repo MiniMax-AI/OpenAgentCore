@@ -37,7 +37,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     if (kind === "runtimes") return publicRuntime(row);
     if (kind === "sessions") {
       const { request, ...record } = row;
-      return record;
+      return { ...record, turn: sessions.turns.summary(record.id) };
     }
     return row;
   };
@@ -87,6 +87,34 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       store.put("settings", value);
       return value;
     }
+    // Files every recent conversation produced, newest first. Core keeps
+    // artifacts with the Session, so listing them wakes no sandbox.
+    if (path === "/app/artifacts" && method === "GET") {
+      const recent = store
+        .list("sessions")
+        .filter((row) => row.core_session_id && !row.deleted_at)
+        .sort((a, b) => b.created_at - a.created_at)
+        .slice(0, 50);
+      const rows = [];
+      for (let i = 0; i < recent.length; i += 5)
+        for (const [row, page] of await Promise.all(
+          recent.slice(i, i + 5).map(async (row) => [
+            row,
+            await core(`/v1/agents/sessions/${row.core_session_id}/artifacts?limit=20&order=desc`, "GET").catch(() => ({ data: [] })),
+          ]),
+        ))
+          for (const file of page.data || [])
+            rows.push({
+              id: file.id,
+              path: file.path,
+              size_bytes: file.size_bytes,
+              created_at: file.created_at,
+              session_id: row.id,
+              core_session_id: row.core_session_id,
+              conversation: row.name,
+            });
+      return rows.sort((a, b) => b.created_at - a.created_at);
+    }
     if (path === "/app/audit" && method === "GET")
       return store.list("audit").sort((a, b) => b.created_at - a.created_at);
     if (path === "/app/skills/registry/preview" && method === "POST")
@@ -97,6 +125,29 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       return feishu(method, path, body);
     if (path === "/app/providers/discover" && method === "POST")
       return providers.discover(body);
+    const action = path.match(/^\/app\/(sessions|agents|models|runtimes)\/([a-f0-9-]{36})\/(messages|retry|health|test|trial)$/);
+    if (action) {
+      const [, owner, ownerId, verb] = action;
+      if (owner === "sessions" && verb === "messages" && method === "POST") {
+        await sessions.turns.send(ownerId, body);
+        return publicRow("sessions", store.get("sessions", ownerId));
+      }
+      if (owner === "sessions" && verb === "retry" && method === "POST") {
+        await sessions.turns.retry(ownerId);
+        return publicRow("sessions", store.get("sessions", ownerId));
+      }
+      if (owner === "models" && verb === "test" && method === "POST")
+        return providers.test(ownerId);
+      if (owner === "runtimes" && verb === "trial" && method === "POST")
+        return sessions.trial.start(ownerId);
+      if (owner === "runtimes" && verb === "trial" && method === "GET")
+        return sessions.trial.get(ownerId);
+      if (owner === "agents" && verb === "health" && method === "GET") {
+        if (!store.get("agents", ownerId)) throw new AppError(404, "Agent 不存在。");
+        return sessions.turns.health(ownerId);
+      }
+      throw new AppError(405, "Method not allowed.");
+    }
     const match = path.match(/^\/app\/([a-z]+)(?:\/([a-f0-9-]{36}))?$/);
     if (!match || !kinds.has(match[1]) || (match[2] && !uuid.test(match[2])))
       throw new AppError(404, "Not found.");

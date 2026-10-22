@@ -15,6 +15,7 @@ import { Textarea } from "./components/ui/textarea";
 import { EmptyState } from "./components/ui/empty-state";
 import { ErrorNotice, Field, PageHeader, Section } from "./components/shared";
 import { randomUuid } from "@oac/agents-client";
+import { AgentHealth } from "./AgentHealth";
 
 export function AgentPage({
   id,
@@ -257,6 +258,7 @@ function AgentEditor({
             )}
           </div>
         </Section>
+        {!creating && <AgentHealth id={initial.id} />}
         <ConfigurationFields
           value={form}
           errors={errors}

@@ -205,8 +205,8 @@ test("Provider discovery reports failures without leaking keys or upstream bodie
   store.close();
 });
 
-async function setup(store, core) {
-  const api = productAPI(store, core);
+async function setup(store, core, fetchImpl) {
+  const api = productAPI(store, core, fetchImpl);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
   const provider = await put("providers", {
@@ -310,7 +310,9 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
   );
   assert.equal(resumed.core_session_id, receipts.get(pending).id);
   assert.deepEqual(calls.at(-1).body, frozen);
-  assert.equal(store.get("sessions", pending).request, undefined);
+  // Kept until the first output so a failed Environment can be replaced; never returned.
+  assert.deepEqual(store.get("sessions", pending).request, frozen);
+  assert.equal(resumed.request, undefined);
   assert.equal(receipts.size, 3);
 });
 test("compatibility validation precedes execution and every Agent requires an environment template", async (t) => {
@@ -869,4 +871,175 @@ test("Agent resources follow Core's Environment limits instead of one shared bud
     put("agents", { ...saved, capability_ids: knowledge }, agent.id),
     /知识和环境模板文件合计最多 50 个/,
   );
+});
+
+// A minimal Core: Sessions with Turns and Items; `plan` decides each new Turn.
+function scriptedCore(plan) {
+  const sessions = new Map();
+  const calls = [];
+  const nowS = () => Math.floor(Date.now() / 1000);
+  const addTurn = (session, input) => {
+    const outcome = plan.turns.shift() || "complete";
+    const turn = { id: `turn_${randomUUID()}`, status: "in_progress", created_at: outcome === "stall" ? nowS() - 60 : nowS() };
+    session.turns.unshift(turn);
+    session.items.push({ id: randomUUID(), type: "message", role: "user", turn_id: turn.id, content: input?.[0]?.content || [] });
+    if (outcome === "complete") {
+      turn.status = "completed";
+      session.items.push({ id: randomUUID(), type: "message", role: "assistant", turn_id: turn.id, content: [{ type: "output_text", text: "OK" }] });
+    } else if (outcome === "fail") {
+      turn.status = "failed";
+      turn.error = { message: "connection reset" };
+      session.status = "idle";
+      return;
+    }
+    session.status = turn.status === "in_progress" ? "in_progress" : "idle";
+  };
+  const core = async (path, method, body, key) => {
+    calls.push({ path, method, body, key });
+    const [, id, sub] = path.match(/^\/v1\/agents\/sessions(?:\/([^/?]+))?(?:\/([a-z]+))?/) || [];
+    if (method === "POST" && !id) {
+      const session = { id: randomUUID(), status: "idle", turns: [], items: [] };
+      sessions.set(session.id, session);
+      if (plan.environments.shift() === "fail") {
+        session.status = "failed";
+        session.error = 'Failed to provision environment: script "setup_commands[0]" failed with exit code 1';
+      } else if (body.input) addTurn(session, typeof body.input === "string" ? [{ role: "user", content: [{ type: "input_text", text: body.input }] }] : body.input);
+      return { id: session.id };
+    }
+    const session = sessions.get(id);
+    if (method === "DELETE") return sessions.delete(id), {};
+    if (!session) throw new AppError(404, "missing");
+    if (method === "GET" && !sub) return { id, status: session.status, error: session.error };
+    if (method === "GET" && sub === "turns") return { data: session.turns };
+    if (method === "GET" && sub === "items") return { data: [...session.items].reverse() };
+    if (method === "GET" && sub === "artifacts") return { data: session.artifacts || [] };
+    if (method === "POST" && sub === "events") {
+      const [event] = body.events;
+      if (event.type === "agent.session.input.cancel") {
+        const running = session.turns.find((t) => t.status === "in_progress");
+        if (running) running.status = "cancelled";
+        session.status = "idle";
+      } else addTurn(session, event.input);
+      return {};
+    }
+    throw new Error(`unexpected ${method} ${path}`);
+  };
+  return { core, calls, sessions };
+}
+
+test("the Turn monitor replaces a failed Environment, resends stalled or failed Turns once, and explains final failures", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const plan = { environments: ["fail"], turns: [] };
+  const fake = scriptedCore(plan);
+  const { api, put, runtime, input } = await setup(store, fake.core);
+  const turns = api.sessions.turns;
+
+  // A failed Environment is replaced with the identical frozen request.
+  const id = randomUUID();
+  const created = await put("sessions", input, id);
+  await turns.monitor();
+  const replaced = store.get("sessions", id);
+  assert.notEqual(replaced.core_session_id, created.core_session_id);
+  const creations = fake.calls.filter((c) => c.method === "POST" && c.path === "/v1/agents/sessions");
+  assert.deepEqual(creations[1].body, creations[0].body);
+  assert.equal(creations[1].key, `${id}:attempt:1`);
+  await turns.monitor();
+  assert.equal(turns.summary(id).outcome, "completed");
+  assert.equal(turns.summary(id).retries, 1);
+  assert.equal(store.get("sessions", id).request, undefined, "the frozen request is dropped after output");
+
+  // A second failure is final and explained in plain language.
+  plan.environments.push("fail", "fail");
+  const broken = randomUUID();
+  await put("sessions", { ...input, name: "Broken" }, broken);
+  await turns.monitor();
+  await turns.monitor();
+  const failed = turns.summary(broken);
+  assert.equal(failed.outcome, "failed");
+  assert.match(failed.failure, new RegExp(`「${runtime.name}」的初始化脚本第 1 段失败（退出码 1）`));
+
+  // A follow-up without output for 45 s is cancelled and resent once; the cancelled
+  // Turn is superseded so no channel reports it.
+  plan.turns.push("stall", "complete");
+  const after = await api("POST", `/app/sessions/${id}/messages`, { text: "Continue", key: "k1" });
+  assert.equal(after.turn.kind, "followup");
+  const stalled = fake.sessions.get(replaced.core_session_id).turns[0].id;
+  await turns.monitor();
+  assert.equal(turns.summary(id).stage, "retrying");
+  await turns.monitor();
+  assert.deepEqual(store.get("sessions", id).superseded_turns, [stalled]);
+  assert.ok(turns.superseded(id, stalled));
+  assert.ok(fake.calls.some((c) => c.key === `${id}:k1:resend:1`));
+  await turns.monitor();
+  assert.equal(turns.summary(id).outcome, "completed");
+
+  // A Turn that fails before any output is resent once, then reported.
+  plan.turns.push("fail", "fail");
+  await api("POST", `/app/sessions/${id}/messages`, { text: "Again", key: "k2" });
+  await turns.monitor();
+  await turns.monitor();
+  const final = turns.summary(id);
+  assert.equal(final.outcome, "failed");
+  assert.equal(final.retries, 1);
+  assert.match(final.failure, /connection reset/);
+
+  // Manual retry sends the input again as a new Turn.
+  plan.turns.push("complete");
+  await api("POST", `/app/sessions/${id}/retry`, {});
+  await turns.monitor();
+  assert.equal(turns.summary(id).outcome, "completed");
+
+  fake.sessions.get(store.get("sessions", id).core_session_id).artifacts = [
+    { id: "file_1", path: "/workspace/outputs/report.md", size_bytes: 2048, created_at: 100 },
+  ];
+  const outputs = await api("GET", "/app/artifacts");
+  assert.deepEqual(outputs.map((row) => [row.path, row.session_id, row.conversation]), [
+    ["/workspace/outputs/report.md", id, input.name],
+  ]);
+
+  const health = await api("GET", `/app/agents/${input.agent_id}/health`);
+  assert.equal(health.turns, 5);
+  assert.equal(health.success_rate, 3 / 5);
+  assert.equal(health.retried, 4);
+  assert.equal(typeof health.median_first_output_s, "number");
+});
+
+test("model tests make one tiny generation and environment trials report a real first reply", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const requests = [];
+  const fetchImpl = async (url, init) => {
+    requests.push({ url, init });
+    return new Response(JSON.stringify({ error: "bad key provider-secret" }), { status: requests.length === 1 ? 200 : 401 });
+  };
+  const plan = { environments: ["fail", "ok"], turns: [] };
+  const fake = scriptedCore(plan);
+  const { api, model, runtime } = await setup(store, fake.core, fetchImpl);
+  const ok = await api("POST", `/app/models/${model.id}/test`, {});
+  assert.equal(ok.ok, true);
+  assert.equal(requests[0].url, "https://provider.example/v1/responses");
+  assert.equal(JSON.parse(requests[0].init.body).model, "kimi-k2.6");
+  assert.equal(requests[0].init.headers.Authorization, "Bearer provider-secret");
+  const denied = await api("POST", `/app/models/${model.id}/test`, {});
+  assert.equal(denied.ok, false);
+  assert.match(denied.error, /HTTP 401/);
+  assert.equal(denied.error.includes("provider-secret"), false, "the key is never echoed");
+
+  const settle = async () => {
+    for (let i = 0; i < 40 && api.sessions.trial.get(runtime.id)?.state === "running"; i++)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    return api("GET", `/app/runtimes/${runtime.id}/trial`);
+  };
+  assert.equal((await api("POST", `/app/runtimes/${runtime.id}/trial`, {})).state, "running");
+  const failed = await settle();
+  assert.equal(failed.state, "failed");
+  assert.match(failed.failure, /初始化脚本第 1 段失败/);
+  await api("POST", `/app/runtimes/${runtime.id}/trial`, {});
+  const passed = await settle();
+  assert.equal(passed.state, "succeeded");
+  assert.equal(typeof passed.seconds, "number");
+  assert.equal(fake.sessions.size, 0, "trial Sessions are deleted");
+  store.put("agents", { ...store.list("agents")[0], runtime_id: randomUUID() });
+  await assert.rejects(api("POST", `/app/runtimes/${runtime.id}/trial`, {}), /先把这个环境模板绑定到一个 Agent/);
 });

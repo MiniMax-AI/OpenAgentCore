@@ -16,6 +16,7 @@ import { ErrorNotice } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
 import { randomUuid } from "@oac/agents-client";
 import { useUsage } from "./lib/usage";
+import { ModelTest } from "./Checks";
 export function Models() {
   const usage = useUsage();
   const models = useModels();
@@ -120,6 +121,7 @@ export function Models() {
                         </p>
                       )}
                     </div>
+                    <ModelTest id={model.id} name={model.name} />
                     <Button
                       variant="ghost"
                       size="icon"

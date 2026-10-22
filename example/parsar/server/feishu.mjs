@@ -4,6 +4,7 @@ const stableId = (value) => {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
 import { feishuContextReader } from "./feishu-context.mjs";
+import { explainFailure } from "./turns.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
 
 const stamp = () => Date.now();
@@ -278,7 +279,7 @@ function stepLine(item) {
 }
 
 // Newcomers see the current step or the answer; collapsed panels keep the details.
-export function formatTurnCard(status, items = [], error) {
+export function formatTurnCard(status, items = [], error, turn) {
   const assistant = items.filter(
     (item) => item.type === "message" && item.role === "assistant",
   );
@@ -324,8 +325,21 @@ export function formatTurnCard(status, items = [], error) {
   ];
   if (status === "in_progress") {
     const last = items.filter((item) => item.role !== "user").at(-1);
+    // Before any output, the Turn's stage tells where the time goes.
+    const waiting =
+      turn?.stage === "retrying"
+        ? "响应较慢，正在自动重试"
+        : turn?.stage === "preparing"
+          ? "正在准备工作环境"
+          : turn?.slow
+            ? "比平时慢，请稍候"
+            : "正在思考";
+    const typical =
+      !last && turn?.expected_s && turn.stage !== "retrying"
+        ? `\n${grey(`通常约 ${turn.expected_s} 秒`)}`
+        : "";
     const current = !last
-      ? "正在思考"
+      ? waiting
       : last.type === "message"
         ? "正在撰写回复"
         : last.type === "reasoning"
@@ -336,7 +350,7 @@ export function formatTurnCard(status, items = [], error) {
     const done = steps.filter((item) => item.status !== "in_progress").length;
     return statusCard(
       "in_progress",
-      `**${current}**${done ? `\n${grey(`已完成 ${done} 步`)}` : ""}`,
+      `**${current}**${typical}${done ? `\n${grey(`已完成 ${done} 步`)}` : ""}`,
       panels,
     );
   }
@@ -390,6 +404,10 @@ export async function createFeishuTransport(settings, receive) {
         "im.message.receive_v1": async (event) => {
           if (
             event.sender?.sender_type !== "user" ||
+            // The bot serves its own tenant; external contacts are ignored.
+            (event.tenant_key &&
+              event.sender.tenant_key &&
+              event.sender.tenant_key !== event.tenant_key) ||
             ![
               "text",
               "post",
@@ -940,12 +958,24 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
                 ],
               });
         store.put("feishu_inbound", { ...row, state: "submitting", event });
+        const base =
+          event.type === "agent.session.input.message"
+            ? await sessions.turns.baseline(run.core_session_id)
+            : {};
         await core(
           `/v1/agents/sessions/${run.core_session_id}/events`,
           "POST",
           { events: [event] },
           row.id,
         );
+        if (event.type === "agent.session.input.message")
+          sessions.turns.start(run, {
+            id: row.id,
+            kind: "followup",
+            input: event.input,
+            source: "feishu",
+            base,
+          });
       } catch (error) {
         if (
           row.chat_type === "p2p" &&
@@ -1046,16 +1076,22 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         true,
       );
     }
+    const ledger = sessions.turns;
+    const recovering = ledger.recovering(run.id);
+    // A Turn the monitor cancelled or retried is never reported; a failed or
+    // stopped Turn waits until the monitor has decided not to retry it.
     const unseen = turns.filter(
       (turn) =>
         ["completed", "failed", "cancelled"].includes(turn.status) &&
+        !ledger.superseded(run.id, turn.id) &&
+        (turn.status === "completed" || !recovering) &&
         !store.get("feishu_outbound", stableId(`${thread.id}:${turn.id}`)),
     );
-    if (session.status === "failed" && !turns.length && !thread.turn_cursor)
+    if (session.status === "failed" && !turns.length && !thread.turn_cursor && !recovering)
       queueReply(
-        stableId(`${thread.id}:initial-failed`),
+        stableId(`${thread.id}:initial-failed:${sid}`),
         thread,
-        "执行失败\n\n执行环境准备失败或响应超时，请直接重新发送消息重试。",
+        `执行失败\n\n${ledger.summary(run.id)?.failure || "执行环境准备失败，请重新发送消息重试。"}`,
       );
     const progressId =
       thread.active_outbound_id ||
@@ -1078,9 +1114,11 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         }
       }
     }
-    if (progress && session.status === "in_progress") {
-      const items = await history(sid, "items", thread.item_cursor);
-      const text = formatTurnCard("in_progress", items);
+    if (progress && (session.status === "in_progress" || recovering) && !unseen.length) {
+      const items = (await history(sid, "items", thread.item_cursor)).filter(
+        (item) => !ledger.superseded(run.id, item.turn_id),
+      );
+      const text = formatTurnCard("in_progress", items, undefined, ledger.summary(run.id));
       if (progress.sent_message_id) {
         if (thread.progress_text !== text) {
           try {
@@ -1124,7 +1162,9 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       const text = formatTurnCard(
         turn.status,
         turnItems,
-        turn.error?.message,
+        turn.status === "failed"
+          ? ledger.summary(run.id)?.failure || explainFailure(turn.error)
+          : turn.error?.message,
       );
       const receiptId = stableId(`${thread.id}:${turn.id}`);
       if (progress?.sent_message_id) {

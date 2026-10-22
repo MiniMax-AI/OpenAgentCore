@@ -5,6 +5,7 @@ import {
 } from "./components/ui/turn-nav-rail";
 import { tr } from "./lib/i18n";
 import { optionValue } from "./ExecutionFields";
+import { TurnStatus } from "./TurnStatus";
 import { Questions } from "./Questions";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -67,7 +68,15 @@ export function SessionDetail({
     refetchInterval: 2000,
   });
   const data = query.data;
-  const live = useLiveSession(id, data?.items);
+  const liveSession = useLiveSession(id, data?.items);
+  // Turns the monitor cancelled and resent are not part of the conversation.
+  const superseded = new Set(record.superseded_turns || []);
+  const live = {
+    ...liveSession,
+    items: liveSession.items.filter(
+      (item) => !("turn_id" in item && superseded.has(item.turn_id as string)),
+    ),
+  };
   const userTurns = live.items
     .filter((item) => item.type === "message" && item.role === "user")
     .map((item) => ({
@@ -218,7 +227,9 @@ export function SessionDetail({
                 </Button>
               </div>
             )}
+            <TurnStatus record={record} />
             <Composer
+              recordId={record.id}
               onPendingChange={setMessagePending}
               attachment={attachment}
               key={id}

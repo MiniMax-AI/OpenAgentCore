@@ -10,6 +10,9 @@ export function SessionPage({ id }: { id: string }) {
   const query = useQuery({
     queryKey: ["session-record", id],
     queryFn: () => product<SessionRecord>(`sessions/${id}`),
+    // The Turn monitor's stage and recovery show up within a couple of seconds.
+    refetchInterval: (query) =>
+      query.state.data?.turn?.outcome === "running" ? 2000 : 10000,
   });
   const resume = useMutation({
     mutationFn: () => product<SessionRecord>(`sessions/${id}`, "PUT", {}),

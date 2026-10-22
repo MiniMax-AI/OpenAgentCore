@@ -19,6 +19,7 @@ import { product, useSessions } from "./lib/product";
 import { Feishu } from "./Feishu";
 import { Runtimes } from "./Resources";
 import { Agents } from "./Agents";
+import { Artifacts } from "./Artifacts";
 import { AgentPage } from "./AgentPage";
 import { SessionPage } from "./SessionPage";
 import { Home } from "./Home";
@@ -93,9 +94,15 @@ function RecentConversations({ activeId }: { activeId?: string }) {
       </div>
       <a
         href="#/conversations"
-        className="mb-4 mt-1 flex h-9 shrink-0 items-center rounded-[10px] px-3 text-sm text-fg-subtle hover:app-hover hover:text-fg"
+        className="mt-1 flex h-9 shrink-0 items-center rounded-[10px] px-3 text-sm text-fg-subtle hover:app-hover hover:text-fg"
       >
         {tr("全部对话")}
+      </a>
+      <a
+        href="#/artifacts"
+        className="mb-4 flex h-9 shrink-0 items-center rounded-[10px] px-3 text-sm text-fg-subtle hover:app-hover hover:text-fg"
+      >
+        {tr("产物")}
       </a>
     </nav>
   );
@@ -144,6 +151,8 @@ export function App() {
       <SessionPage key={sessionId} id={sessionId} />
     ) : ["/conversations", "/runs", "/usage"].includes(path!) ? (
       <Records key={path} view={path!.slice(1) as "conversations" | "runs" | "usage"} />
+    ) : path === "/artifacts" ? (
+      <Artifacts />
     ) : path === "/audit" ? (
       <Audit />
     ) : path === "/agents/new" ? (

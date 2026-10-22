@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 8db49153734b40d3b879b31face4de31f15b5be82eb52e04392abaaff822fcf2
+source_hash: f416c43596238cde97764c22a8bf371bb53fba040ce284e4af19f003c990f25a
 ---
 
 # Parsar 工作空间
@@ -40,15 +40,17 @@ pnpm --filter @oac/parsar-example dev
 
 对话会流式展示回复和工具活动，归组工作步骤，可用对话导航条跳转用户轮次，支持追问和取消，并可重新打开持久历史。Agent 执行中发送的消息会进入正在运行的任务；业务提问请在提问卡片上回答。Enter 发送，Shift+Enter 换行。草稿在同一浏览器标签页中刷新后保留。文件夹按钮可在空闲时上传最大 5 MiB 的输入文件，并把路径插入草稿；实时工作区回收后仍可下载 Artifacts，请让 Agent 将交付物保存到 `./outputs`。信息按钮展示 Agent、模型、Harness、环境模板、飞书身份、来源以及创建时记录的配置，不含变量值、脚本内容或凭据。创建响应丢失时，对话页提供 **恢复创建**，复用冻结的请求和幂等键。
 
+Parsar 会跟踪每一轮正在执行的对话，网页和飞书都一样。出现第一条输出之前，会显示所处阶段（**正在准备工作环境**、**正在启动**）、已等待的时间，以及这个 Agent 近 7 天通常的首次回复时间。自动恢复只在还没有执行任何内容时进行：环境初始化失败时，用同一份冻结的请求重建一次；一轮对话开始 45 秒后仍没有任何输出，会取消并重新发送一次输入；在任何输出之前就失败的一轮，会重新发送一次。被替换的轮次不会出现在对话中，也不会发到飞书。最终失败会用通俗的话说明原因，并提供 **重试**。**产物** 汇总最近对话生成的文件，并链接到对应的对话。
+
 可选的业务提问使用声明的 `ask_user` 函数。问题出现在对话中，并通过带稳定请求 ID 的公开 function-result 事件返回。这是收集信息，不是执行审批。
 
 **设置** 可修改工作空间名称、中英文界面以及浅色、深色或跟随系统的主题。
 
 ## Agent 与资源 {#agents-and-resources}
 
-**Agent** 以卡片列出 Agent，展示执行引擎、模型、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**执行与环境**、**指令**、**能力** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。选择上限与 Core 的 [Environment 限制](../../contracts/agents-api/zh/environments.md#plugins-and-capability-directories)一致：Skills 和 Plugins 各最多 50 个，知识与环境模板文件合计最多 50 个；指令片段和 MCP 服务没有数量上限。只绑定 Agent 需要的资源，因为每个 Skill 和工具都会增加模型要读的内容。在 **执行与环境** 中，Harness 会把每个选项收窄到它声明支持的值（[Harness 能力](../../contracts/agents-api/zh/harness-capabilities.md)）；切换 Harness 时，新 Harness 不接受的值会恢复为默认，并说明是哪几项。留空的选项保留 Harness 默认值；网页搜索默认 **关闭**。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。在同一浏览器标签页中回到 Agent 页面时，会恢复未保存的修改；点击 **保存** 时会指出缺少的必填项。
+**Agent** 以卡片列出 Agent，展示执行引擎、模型、环境模板和绑定的飞书机器人。Agent 页面分为 **基本信息**、**执行与环境**、**指令**、**能力** 和 **行为**。**主指令** 是 Agent 自己的指令文本；可选的 **指令片段** 按选择顺序追加，合并为一份系统提示词。选择上限与 Core 的 [Environment 限制](../../contracts/agents-api/zh/environments.md#plugins-and-capability-directories)一致：Skills 和 Plugins 各最多 50 个，知识与环境模板文件合计最多 50 个；指令片段和 MCP 服务没有数量上限。只绑定 Agent 需要的资源，因为每个 Skill 和工具都会增加模型要读的内容。在 **执行与环境** 中，Harness 会把每个选项收窄到它声明支持的值（[Harness 能力](../../contracts/agents-api/zh/harness-capabilities.md)）；切换 Harness 时，新 Harness 不接受的值会恢复为默认，并说明是哪几项。留空的选项保留 Harness 默认值；网页搜索默认 **关闭**。网页对话和飞书执行记录中的搜索显示为 **搜索网页**。在 Agent 页面中新建或编辑模型、Skill、MCP、环境模板或能力时，未保存的字段会保留，新建的资源会自动选中。在同一浏览器标签页中回到 Agent 页面时，会恢复未保存的修改；点击 **保存** 时会指出缺少的必填项。已有 Agent 的页面会显示近 7 天的成功率、首次回复中位数和自动恢复次数。
 
-**模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
+**模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。**测试** 会用已保存的连接发起一次极小的生成，显示耗时或服务商返回的错误，不会显示密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
 
 - **Skills** 支持创建 SKILL.md、上传 ZIP、版本管理、默认版本选择、按 Agent 固定版本以及有限的文件预览。**浏览目录** 搜索 skills.sh 索引；预览在临时目录中使用固定版本的 `skills@1.5.23` CLI，再走常规公开 Skill 上传。这需要 Parsar 主机具备 `npx` 和网络访问。导入的压缩包限制为 32 MiB 和 1,000 个文件。
 - **MCP** 提供静态服务目录和 HTTPS 端点配置。可选的 Vault 凭据使用官方公开 MCP 工具，连接来源为 environment。
@@ -59,13 +61,15 @@ pnpm --filter @oac/parsar-example dev
 
 **提前准备，新对话无需等待安装** 会为使用该模板的每个 Agent 保留一个准备好的 Session。Parsar 在没有输入的情况下创建它，Core 会提前准备好 Environment；下一个网页或飞书对话发送第一条消息时直接接管它，并保留自己的标题。Agent、其环境模板、机器人或模型服务商变更后，或超过 12 小时、或被接管后，准备好的 Session 会被替换；关闭开关会丢弃它。第一条消息带图片或文件时，会创建普通的 Session。每个准备好的 Session 在等待期间会占用一个工作区。
 
+**试运行** 会用使用该模板的 Agent 发起一次真实对话，等待首次回复，显示成功及耗时或通俗的失败原因，然后删除这次对话。
+
 ## 飞书 {#feishu}
 
 **飞书接入** 为每个机器人展示一张卡片。**添加机器人** 提供 **扫码创建**（通过飞书设备流创建应用）和 **已有应用**（填写 App ID 与 App Secret）。新机器人在配置完成前保持停用。密钥保存在受限的本地数据库中。官方 SDK 负责鉴权、消息规范化和长连接，不需要公网回调。
 
 1. 在卡片上选择 **Agent**，打开 **私聊** 和/或 **群聊**，然后 **保存并启用**。启用需要应用凭证、已配置环境模板的 Agent，以及两者至少开启一项。打开 **群聊** 后，机器人会回复它所在的任何群里的 @ 消息，把机器人拉进群即可使用。谁能添加机器人由开发者后台中应用的可用范围控制。
 2. 在开发者后台启用机器人、长连接事件推送和 `im.message.receive_v1`，发布应用并把它加入目标群。授予接收 @ 消息和以机器人身份发送消息的权限；私聊、消息资源和表情回复需要各自的权限。缺少表情权限不会丢弃消息。
-3. 私聊为每个发送者保持一个对话，直到发送 `/new` 或 `/reset`。群聊中 @ 机器人会开启一个话题，每个话题是一个对话，所有在其中回复的人共享。只有应用开通了敏感权限“获取群组中所有消息”（`im:message.group_msg`），话题中不带 @ 的后续消息才会推送给机器人；否则需要在话题中再次 @ 机器人。话题中只 @ 了其他人的回复是发给他们的，会被忽略。其他机器人和 `@所有人` 会被忽略；关闭 **群聊** 时忽略群消息，关闭 **私聊** 时忽略私聊。更换绑定的 Agent 只影响新话题和新的私聊对话。
+3. 私聊为每个发送者保持一个对话，直到发送 `/new` 或 `/reset`。群聊中 @ 机器人会开启一个话题，每个话题是一个对话，所有在其中回复的人共享。只有应用开通了敏感权限“获取群组中所有消息”（`im:message.group_msg`），话题中不带 @ 的后续消息才会推送给机器人；否则需要在话题中再次 @ 机器人。话题中只 @ 了其他人的回复是发给他们的，会被忽略。其他机器人和 机器人只服务自己所在的企业，外部联系人发来的消息会被忽略。`@所有人` 会被忽略；关闭 **群聊** 时忽略群消息，关闭 **私聊** 时忽略私聊。更换绑定的 Agent 只影响新话题和新的私聊对话。
 4. 文本、富文本、图片、文件、音视频、引用消息和合并转发会在投递前规范化。附件上限为 8 个、合计 5 MiB。后续消息中的文件会等到对话空闲后写入。引用消息最多读取四层；不读取更早的群消息。
 5. `/cancel`、`/answer <call_id> <回答>`、`/new` 和 `/help` 在同一话题中使用。只有一个待回答的业务问题时，直接回复即可作答。取消优先于排队中的追问，并会先确认不确定的创建再取消。
 
@@ -91,7 +95,7 @@ Core 的 Project key 只保存在服务端。对话创建成功后，只保留 C
 
 | 产品路由组 | 调用方与凭据 |
 | --- | --- |
-| `/app/providers`、`/app/models`、`/app/agents`、`/app/runtimes`、`/app/mcps`、`/app/sessions` | 同源本地 UI；飞书工作器在进程内复用对话创建 |
+| `/app/providers`、`/app/models`、`/app/agents`、`/app/runtimes`、`/app/mcps`、`/app/sessions`、`/app/artifacts` | 同源本地 UI；飞书工作器在进程内复用对话创建 |
 | `/app/feishu/bots`、`/app/feishu/provision`、`/app/feishu/deliveries` | 同源本地 UI；从不返回凭据 |
 | `/app/capabilities`、`/app/skills/registry/preview` | 同源本地 UI |
 | `/app/mcp-oauth/<operation-id>`、`/oauth/callback` | 本地 OAuth 流程；随机 state、PKCE 和同源完成 POST |

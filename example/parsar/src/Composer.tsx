@@ -8,13 +8,16 @@ import {
 } from "@oac/agents-client";
 import { ArrowUp, Square } from "lucide-react";
 import { api } from "./lib/api";
+import { product, ProductError } from "./lib/product";
 import { ErrorNotice } from "./components/shared";
 export function Composer({
+  recordId,
   session,
   turnId,
   attachment = "",
   onPendingChange,
 }: {
+  recordId: string;
   session: AgentSession;
   turnId?: string;
   attachment?: string;
@@ -66,22 +69,18 @@ export function Composer({
   const refresh = () => {
     void cache.invalidateQueries({ queryKey: ["session", session.id] });
     void cache.invalidateQueries({ queryKey: ["sessions"] });
+    void cache.invalidateQueries({ queryKey: ["session-record", recordId] });
   };
   const send = useMutation({
     mutationFn: async () => {
       const operation = pending || { key: randomUuid(), text };
       sessionStorage.setItem(storageKey, JSON.stringify(operation));
       setPending(operation);
-      let response: Promise<void>;
-      try {
-        response = api.sendMessage(session.id, operation.text, operation.key);
-      } catch (error) {
-        // Client validation throws before sending; network failures reject the Promise.
-        sessionStorage.removeItem(storageKey);
-        setPending(null);
-        throw error;
-      }
-      await response;
+      // Parsar records the Turn so it can watch it and recover a stall.
+      await product(`sessions/${recordId}/messages`, "POST", {
+        text: operation.text,
+        key: operation.key,
+      });
     },
     onSuccess: () => {
       sessionStorage.removeItem(draftKey);
@@ -92,7 +91,7 @@ export function Composer({
     },
     onError: (error) => {
       if (
-        error instanceof AgentCoreError &&
+        (error instanceof AgentCoreError || error instanceof ProductError) &&
         [400, 401, 403, 404, 413, 422].includes(error.status)
       ) {
         sessionStorage.removeItem(storageKey);

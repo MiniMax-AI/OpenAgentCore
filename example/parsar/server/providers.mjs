@@ -47,6 +47,41 @@ function connection(body, previous) {
 
 export function providerAPI(store, fetchImpl) {
   return {
+    // One tiny generation with the saved connection, in the protocol its URL serves.
+    async test(modelId) {
+      const model = store.get("models", modelId);
+      if (!model) throw new AppError(404, "模型不存在。");
+      const provider = store.get("providers", model.provider_id);
+      if (!provider?.base_url || !provider.api_key)
+        throw new AppError(400, "请先配置 Provider 的 Base URL 和 API Key。");
+      const base = provider.base_url.replace(/\/$/, "");
+      const anthropic = base.endsWith("/anthropic");
+      const started = Date.now();
+      try {
+        const response = await fetchImpl(
+          anthropic ? `${base}/v1/messages` : `${base.endsWith("/v1") ? base : `${base}/v1`}/responses`,
+          {
+            method: "POST",
+            redirect: "error",
+            signal: AbortSignal.timeout(30000),
+            headers: anthropic
+              ? { "x-api-key": provider.api_key, "anthropic-version": "2023-06-01", "Content-Type": "application/json" }
+              : { Authorization: `Bearer ${provider.api_key}`, "Content-Type": "application/json" },
+            body: JSON.stringify(
+              anthropic
+                ? { model: model.model, max_tokens: 16, messages: [{ role: "user", content: "Reply with OK." }] }
+                : { model: model.model, max_output_tokens: 16, input: "Reply with OK." },
+            ),
+          },
+        );
+        const latency_ms = Date.now() - started;
+        if (response.ok) return { ok: true, latency_ms };
+        const detail = (await response.text()).replaceAll(provider.api_key, "***").slice(0, 300);
+        return { ok: false, latency_ms, error: `HTTP ${response.status}${detail ? ` · ${detail}` : ""}` };
+      } catch (error) {
+        return { ok: false, latency_ms: Date.now() - started, error: error.name === "TimeoutError" ? "30 秒内没有响应" : "无法连接" };
+      }
+    },
     async discover(body) {
       const { base_url, api_key } = connection(
         body,
