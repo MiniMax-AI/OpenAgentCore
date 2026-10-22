@@ -1,11 +1,11 @@
 import type { SandboxNode, SandboxNodeRollout } from "@oac/agents-client";
 import { useTranslation } from "react-i18next";
-import { HelpTip, StatusDot, type Tone } from "../../components/console-ui";
+import { StatusDot, type Tone } from "../../components/console-ui";
 import type { ParseKeys } from "i18next";
 import { DiagnosticTip } from "../fleet/DiagnosticTip";
 
-const labels: Record<SandboxNodeRollout["state"], ParseKeys<"sandbox">> = { ready: "Ready for target", preparing: "Preparing target", failed: "Preparation failed", update_required: "Node software incompatible", unknown: "Target readiness unknown" };
-const tones: Record<SandboxNodeRollout["state"], Tone> = { ready: "ok", preparing: "neutral", failed: "warning", update_required: "warning", unknown: "neutral" };
+const labels: Record<SandboxNodeRollout["state"], ParseKeys<"sandbox">> = { ready: "Ready for target", preparing: "Preparing target", failed: "Preparation failed", unknown: "Target readiness unknown" };
+const tones: Record<SandboxNodeRollout["state"], Tone> = { ready: "ok", preparing: "neutral", failed: "warning", unknown: "neutral" };
 
 /** A serving pin is historical ownership, not proof of a live connection or capacity. */
 export function NodeRolloutStatus({ node, stale = false }: { node: SandboxNode; stale?: boolean }) {
@@ -14,6 +14,5 @@ export function NodeRolloutStatus({ node, stale = false }: { node: SandboxNode; 
   return <span className="status-with-help">
     <StatusDot tone={tones[state]} label={t(labels[state])} />
     {state === "failed" && node.rollout.diagnostic ? <DiagnosticTip code={node.rollout.diagnostic} /> : null}
-    {state === "update_required" ? <HelpTip>{t("This node can't prepare new sandbox configurations and keeps serving the one it registered with. To move it to the current configuration, choose Remove node, then add the host again with Add node.")}</HelpTip> : null}
   </span>;
 }

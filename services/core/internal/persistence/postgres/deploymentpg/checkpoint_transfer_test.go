@@ -26,7 +26,7 @@ func readyCheckpointNode(t *testing.T, f fixture, node deployment.Enrollment, vi
 	if err := f.service.ConnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.service.HeartbeatGenerations(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &compatibility}}); err != nil {
+	if err := f.service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &compatibility}}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -47,7 +47,7 @@ func suspendedCheckpointOwner(t *testing.T, f fixture, changes *deployment.Execu
 func TestCheckpointTransferPreservesAllocationAndFencesOldOwner(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	source := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	readyCheckpointNode(t, f, source, view, checkpointClass)
 	target := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
@@ -94,7 +94,7 @@ func TestCheckpointTransferRequiresCompatibleGenerationAndCapacity(t *testing.T)
 		t.Run(obstruction, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
-			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 			source := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
 			readyCheckpointNode(t, f, source, view, checkpointClass)
 			target := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
@@ -163,7 +163,7 @@ func TestCheckpointTransferRequiresCompatibleGenerationAndCapacity(t *testing.T)
 func TestCheckpointTransfersSerializeDestinationCapacity(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	source := f.enroll(t, view, deployment.Capacity{MaxActive: 2, MaxRetained: 2})
 	readyCheckpointNode(t, f, source, view, checkpointClass)
 	target := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
@@ -196,7 +196,7 @@ func TestCheckpointTransfersSerializeDestinationCapacity(t *testing.T) {
 func TestCheckpointCleanupRelocatesArtifactWithoutExecutionCompatibility(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	source := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	readyCheckpointNode(t, f, source, view, checkpointClass)
 	target := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 2})
@@ -241,7 +241,7 @@ func TestCheckpointPressureSuspendsOnlyUsableDestination(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
-			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 			source := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 			readyCheckpointNode(t, f, source, view, checkpointClass)
 			suspendedCheckpointOwner(t, f, changes, installation, source, view)
@@ -279,7 +279,7 @@ func TestCheckpointPressureSuspendsOnlyUsableDestination(t *testing.T) {
 func TestCheckpointRestoreUsesRetainedSlotAndImmutableGeneration(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	source := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	readyCheckpointNode(t, f, source, view, checkpointClass)
 	owner := suspendedCheckpointOwner(t, f, changes, installation, source, view)

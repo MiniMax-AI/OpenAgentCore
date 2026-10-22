@@ -16,12 +16,10 @@ import (
 // isolation boundary or authorize a public Environment. The operator must place
 // the entire factory inside the qualified outer mount/process boundary first.
 // State directories must already exist.
-// PublicDirectory may name a second mount of the same workspace inode.
 type WorkspaceConfig struct {
-	Directory       string
-	PublicDirectory string
-	HomeDir         string
-	ScratchDir      string
+	Directory  string
+	HomeDir    string
+	ScratchDir string
 }
 
 type workspaceProfile struct {
@@ -57,19 +55,12 @@ func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspace
 		profile.Skills = req.LocalEnvironment.Skills
 		profile.CapabilityRoot = req.LocalEnvironment.CapabilityRoot
 	}
-	servers, credentials, err := prepareRuntimeMCP(req, workspaceCwd(config.Workspace))
+	servers, credentials, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return nil, nil, err
 	}
 	profile.MCP = servers
 	return profile, append(env, credentials...), nil
-}
-
-func workspaceCwd(w *WorkspaceConfig) string {
-	if w.PublicDirectory != "" {
-		return w.PublicDirectory
-	}
-	return w.Directory
 }
 
 // Harness state paths and selected model credentials overlay the user environment.
@@ -87,15 +78,8 @@ func workspaceEnvironment(config Config) (*workspaceProfile, []string, error) {
 			return fail()
 		}
 	}
-	for _, path := range []string{workspaceCwd(w), config.StateDir, w.HomeDir, w.ScratchDir} {
+	for _, path := range []string{w.Directory, config.StateDir, w.HomeDir, w.ScratchDir} {
 		if !canonicalWorkspaceDir(path) {
-			return fail()
-		}
-	}
-	if w.PublicDirectory != "" {
-		actual, err := os.Stat(w.Directory)
-		alias, aliasErr := os.Stat(w.PublicDirectory)
-		if err != nil || aliasErr != nil || !os.SameFile(actual, alias) {
 			return fail()
 		}
 	}

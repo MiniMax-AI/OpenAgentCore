@@ -1,6 +1,7 @@
 export const coreErrors = {
   "invalid_workspace_configuration": "工作区存储配置无效。",
   "workspace_operation_unsupported": "所选工作区存储不支持该操作或沙箱组合。",
+  "workspace_storage_required": "该沙箱提供方需要工作区存储。请先选择工作区存储。",
   "workspace_storage_not_found": "尚未配置工作区存储或请求的对象不存在。",
   "workspace_storage_conflict": "工作区存储归属或配置与当前状态冲突。",
   "workspace_storage_unavailable": "工作区存储不可用或操作尚未确认。",
@@ -18,7 +19,7 @@ export const coreErrors = {
   "model_provider_protocol_unsupported": "此 Harness 不支持该协议。",
   "model_provider_api_key_invalid": "请输入有效的 API 密钥，不要包含控制字符。",
   "model_provider_token_limits_invalid": "请填写有效的 token 限制；输出不能超过上下文。",
-  "invalid_sandbox_configuration": "请检查沙箱资源和 Runtime 版本。",
+  "invalid_sandbox_configuration": "请检查沙箱资源。",
   "project_archived": "此项目已归档。",
   "project_exists": "此项目名称已被使用。",
   "project_api_key_exists": "此名称已被使用中的 API 密钥占用。",
@@ -55,6 +56,5 @@ export const coreErrorDetails = {
   "protocols": "支持的协议：{{protocols}}。",
   "keyLimit": "请输入有效的 API 密钥，长度最多 {{max}} 个字符。",
   "resourceRange": "请输入 {{min}} 到 {{max}} 的整数。",
-  "resourceMin": "请输入不小于 {{min}} 的整数。",
-  "runtime": "请使用适用于此沙箱提供商的有效不可变 Runtime 版本。"
+  "resourceMin": "请输入不小于 {{min}} 的整数。"
 } as const;

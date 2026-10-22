@@ -36,9 +36,8 @@ func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Sess
 		options["harness_config"] = native
 	}
 	request := proto.PromptRequestPayload{AgentKind: session.Engine, FunctionTools: tools.Functions, ToolSearch: tools.Search,
-		AgentOptions: options, ExecutionControls: executionControls(snapshot.Agent, tools), AgentStateKey: "agents-api-" + session.ID,
+		AgentOptions: options, ExecutionControls: executionControls(snapshot.Agent, tools), AgentStateKey: session.ID,
 		AgentSessionID: bound.NativeSessionID, RequireExistingNativeSession: recoverNativeSession,
-		ObserveMessages:           caps.MessageItems,
 		ObserveSubagentIdentities: snapshot.Agent.MultiAgent.Enabled,
 		MaxConcurrentSubagents:    snapshot.Agent.MultiAgent.MaxConcurrentSubagents,
 		DisableSubagents:          !snapshot.Agent.MultiAgent.Enabled}

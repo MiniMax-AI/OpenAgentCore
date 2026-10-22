@@ -176,16 +176,10 @@ type Session interface {
 // unsupported operations return ErrUnsupportedOperation with a fixed safe reason.
 
 // DurableSteerer reports one complete write synchronously, then waits for the native receipt.
-// It is independent of Steerer and is mandatory on every public Turn.
+// It is mandatory on every public Turn.
 // Required input receipts cannot be implemented by returning Unsupported.
 type DurableSteerer interface {
 	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
-}
-
-// Steerer delivers non-durable input when declared; otherwise it explicitly
-// returns ErrUnsupportedOperation without submitting input.
-type Steerer interface {
-	Steer(context.Context, proto.PromptSteerPayload) error
 }
 
 // FunctionResultSubmitter delivers a result for an outstanding native call.

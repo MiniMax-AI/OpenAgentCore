@@ -1,4 +1,4 @@
-"""Read the Core-owned node specification and verify its matched release."""
+"""Read the Core-owned node specification."""
 import hashlib
 import http.client
 import json
@@ -22,27 +22,20 @@ ENROLLMENT_EXPIRED = ("The enrollment command expired or was already used. Gener
                       "and run it on this host.")
 
 
-def release(manifest):
-    return {"source_commit": manifest["source_commit"],
-            "image_id": manifest["images"]["runtime"],
-            "image_manifest_digest": manifest["image_manifest_digests"]["runtime"],
-            "microsandbox_ref": manifest["runtime_ref"],
-            "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
-            "firmware_sha256": manifest["microsandbox"]["firmware_sha256"]}
-
-
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"runtime\":[{\"name\":\"source_commit\",\"pattern\":\"[0-9a-f]{40}\"},{\"name\":\"image_id\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"image_manifest_digest\",\"pattern\":\"sha256:[0-9a-f]{64}\"},{\"name\":\"microsandbox_ref\",\"pattern\":\"oac-runtime@sha256:[0-9a-f]{64}\"},{\"name\":\"runtime_sha256\",\"pattern\":\"[0-9a-f]{64}\"},{\"name\":\"firmware_sha256\",\"pattern\":\"[0-9a-f]{64}\"}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"runtime\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"runtime\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192,\"environment_disk_mib\":8192}}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"providers\":{\"docker\":{\"mode\":\"nodes\",\"disk\":false,\"default_resources\":{\"cpus\":2,\"memory_mib\":2048}},\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
 
 
 def canonical_spec(provider, specification, validate=True):
     rules = _CONTRACT["providers"][provider]
-    if validate and (not isinstance(specification, dict) or set(specification) - {"workspace"} != ({"resources", "runtime"} if rules["runtime"] else {"resources"})):
+    if validate and (not isinstance(specification, dict) or set(specification) - {"workspace"} != {"resources"}):
         raise ValueError("Invalid specification fields")
     workspace = specification.get("workspace")
     requirements = rules.get("workspace")
+    if validate and requirements and workspace is None:
+        raise ValueError("Workspace storage is required")
     if validate and workspace is not None:
         if (not isinstance(workspace, dict) or set(workspace) - set(_CONTRACT["workspace_fields"])
                 or not requirements or workspace.get("attachment") != requirements["attachment"]
@@ -69,17 +62,6 @@ def canonical_spec(provider, specification, validate=True):
         if value or not rule["omit_zero"]:
             ordered[name] = value
     result = {"provider": provider, "resources": ordered}
-    if rules["runtime"]:
-        runtime = specification["runtime"]
-        if validate and (not isinstance(runtime, dict) or set(runtime) != {rule["name"] for rule in _CONTRACT["runtime"]}):
-            raise ValueError("Invalid release fields")
-        ordered_runtime = {}
-        for rule in _CONTRACT["runtime"]:
-            value = runtime[rule["name"]]
-            if validate and (not isinstance(value, str) or not re.fullmatch(rule["pattern"], value)):
-                raise ValueError("Invalid release identity")
-            ordered_runtime[rule["name"]] = value
-        result["runtime"] = ordered_runtime
     if workspace is not None:
         result["workspace"] = {field: workspace[field] if field == "attachment" else bool(workspace.get(field, False)) for field in _CONTRACT["workspace_fields"]}
     return result
@@ -98,9 +80,7 @@ def validate(data, args):
         if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
-                or set(spec) - {"workspace"} != {"resources", "runtime"}
-                or type(data["max_active"]) is not int or type(data["max_retained"]) is not int
-                or not 1 <= data["max_active"] <= data["max_retained"] <= 1000000):
+                or set(spec) - {"workspace"} != {"resources"}):
             raise ValueError()
         canonical_spec(provider, spec)
         if data["specification_digest"] != digest(provider, spec):
@@ -166,11 +146,6 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
     if generation is not None and data["generation"] != generation:
         raise SpecificationError("Core returned a different generation")
     return data
-
-
-def verify_release(configuration, manifest):
-    if configuration["specification"]["runtime"] != release(manifest):
-        raise SpecificationError("Core Runtime release differs from this distribution; use the matched installation artifacts")
 
 
 def verify_provider(stored, configuration, runtime_image):

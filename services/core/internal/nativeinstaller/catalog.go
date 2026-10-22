@@ -40,7 +40,8 @@ type Catalog struct {
 
 var checksum = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-var platformName = regexp.MustCompile(`^(linux|darwin|windows)-(amd64|arm64)$`)
+// An artifact is a platform's base archive or one named part of it.
+var artifactName = regexp.MustCompile(`^(linux|darwin|windows)-(amd64|arm64)(-[a-z]+)?$`)
 
 // Load checks the matched catalog without downloading execution payloads. Local
 // offline archives are verified once; the directory stays immutable while serving.
@@ -58,25 +59,25 @@ func Load(directory, version string) (*Catalog, error) {
 		return nil, errors.New("native installer catalog does not match this Core build and protocol")
 	}
 	c.local = make(map[string]bool)
-	for platform, artifact := range c.Artifacts {
-		if !platformName.MatchString(platform) || !checksum.MatchString(artifact.SHA256) {
-			return nil, errors.New("invalid native installer platform")
+	for name, artifact := range c.Artifacts {
+		if !artifactName.MatchString(name) || !checksum.MatchString(artifact.SHA256) {
+			return nil, errors.New("invalid native installer artifact")
 		}
 		if artifact.URL != "" {
 			u, err := url.Parse(artifact.URL)
-			filename := "oac-native-" + c.Version + "-" + platform + ".tar.gz"
+			filename := "oac-native-" + c.Version + "-" + name + ".tar.gz"
 			if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || !strings.HasSuffix(u.Path, "/"+filename) || strings.Contains(strings.ToLower(u.Path), "/latest/") {
 				return nil, errors.New("invalid versioned native installer URL")
 			}
 		}
-		file, err := os.Open(filepath.Join(directory, platform+".tar.gz"))
+		file, err := os.Open(filepath.Join(directory, name+".tar.gz"))
 		if errors.Is(err, os.ErrNotExist) && artifact.URL != "" {
 			continue
 		}
 		if err != nil {
 			return nil, err
 		}
-		c.local[platform] = true
+		c.local[name] = true
 		hash := sha256.New()
 		_, err = io.Copy(hash, file)
 		file.Close()
@@ -104,22 +105,22 @@ func (c *Catalog) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(raw)
 		return
 	}
-	platform := strings.TrimSuffix(strings.TrimSuffix(name, ".sha256"), ".tar.gz")
-	artifact, ok := c.Artifacts[platform]
+	archive := strings.TrimSuffix(strings.TrimSuffix(name, ".sha256"), ".tar.gz")
+	artifact, ok := c.Artifacts[archive]
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	if name == platform+".sha256" {
+	if name == archive+".sha256" {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprintln(w, artifact.SHA256)
 		return
 	}
-	if name != platform+".tar.gz" {
+	if name != archive+".tar.gz" {
 		http.NotFound(w, r)
 		return
 	}
-	if c.local[platform] {
+	if c.local[archive] {
 		// An archive outlives the server-wide write timeout on a slow link.
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 		http.ServeFile(w, r, filepath.Join(c.directory, name))

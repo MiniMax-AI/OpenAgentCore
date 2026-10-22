@@ -40,8 +40,6 @@ type Identity struct {
 
 type Health struct {
 	Generations          []sandbox.GenerationStatus `json:"generations,omitempty"`
-	Diagnostic           string                     `json:"diagnostic,omitempty"`
-	ProviderReady        bool                       `json:"provider_ready"`
 	ObservedAt           time.Time                  `json:"observed_at"`
 	ActiveOperations     int                        `json:"active_operations"`
 	CPUCount             *int64                     `json:"cpu_count,omitempty"`
@@ -62,6 +60,11 @@ type EnrollmentRequest struct {
 	BackendFingerprint   string `json:"backend_fingerprint"`
 	// The retained Core origin; Core refuses an enrollment whose address is not its public URL.
 	CoreURL string `json:"core_url"`
+	// The host measurements of Health. Core derives from them each limit the enrollment token leaves unset.
+	CPUCount           *int64   `json:"cpu_count,omitempty"`
+	EffectiveCPUCores  *float64 `json:"effective_cpu_cores,omitempty"`
+	TotalMemoryBytes   *int64   `json:"total_memory_bytes,omitempty"`
+	AvailableDiskBytes *int64   `json:"available_disk_bytes,omitempty"`
 }
 
 type EnrollmentResponse struct {
@@ -95,6 +98,8 @@ type request struct {
 	Resume      *sandbox.ResumeRequest    `json:"resume,omitempty"`
 	Snapshot    *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
 	Observation *runtimeobs.Target        `json:"observation,omitempty"`
+	// Key is the opaque preparation cache key of the preparation operations.
+	Key string `json:"key,omitempty"`
 }
 
 type response struct {
@@ -107,20 +112,20 @@ type response struct {
 	State        *sandbox.ComputeState              `json:"state,omitempty"`
 	Command      *sandbox.CommandResult             `json:"command,omitempty"`
 	Sample       *runtimeobs.Sample                 `json:"sample,omitempty"`
+	Restored     bool                               `json:"restored,omitempty"`
 }
 
 type frame struct {
-	GenerationManagement bool                    `json:"generation_management,omitempty"`
-	Deployment           *sandbox.NodeDeployment `json:"deployment,omitempty"`
-	Control              *generationControl      `json:"control,omitempty"`
-	Version              int                     `json:"version"`
-	Type                 string                  `json:"type"`
-	Identity             *Identity               `json:"identity,omitempty"`
-	Health               *Health                 `json:"health,omitempty"`
-	ConnectionID         string                  `json:"connection_id,omitempty"`
-	OwnerEpoch           uint64                  `json:"owner_epoch,omitempty"`
-	Request              *request                `json:"request,omitempty"`
-	Response             *response               `json:"response,omitempty"`
+	Deployment   *sandbox.NodeDeployment `json:"deployment,omitempty"`
+	Control      *generationControl      `json:"control,omitempty"`
+	Version      int                     `json:"version"`
+	Type         string                  `json:"type"`
+	Identity     *Identity               `json:"identity,omitempty"`
+	Health       *Health                 `json:"health,omitempty"`
+	ConnectionID string                  `json:"connection_id,omitempty"`
+	OwnerEpoch   uint64                  `json:"owner_epoch,omitempty"`
+	Request      *request                `json:"request,omitempty"`
+	Response     *response               `json:"response,omitempty"`
 }
 
 func validID(s string) bool {
@@ -261,6 +266,10 @@ func (q request) validate() error {
 		if count == 0 {
 			return nil
 		}
+	case "restore_preparation", "save_preparation":
+		if count == 0 && q.Key != "" && len(q.Key) <= 256 {
+			return nil
+		}
 	case "new_compute":
 		if count == 0 || count == 1 && q.Snapshot != nil {
 			return nil
@@ -292,12 +301,14 @@ func (q request) validate() error {
 	}
 	return sandbox.ErrInvalid
 }
-func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response {
+
+// execute also returns the local error; only its code crosses the transport.
+func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (response, error) {
 	out := response{ID: q.ID, ConnectionID: q.ConnectionID}
 	err := q.validate()
 	if err != nil {
 		out.ErrorCode = errorCode(err)
-		return out
+		return out, err
 	}
 	if err := providercontract.Require(p, operationMethod(q.Operation)); err != nil {
 		out.ErrorCode = errorCode(err)
@@ -305,7 +316,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		if errors.As(err, &unsupported) {
 			out.Unsupported = unsupported
 		}
-		return out
+		return out, err
 	}
 	var info sandbox.Info
 	var command sandbox.CommandResult
@@ -328,6 +339,10 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 	case "command":
 		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
 		out.Command = &command
+	case "restore_preparation":
+		out.Restored, err = p.RestorePreparation(ctx, q.Reference, q.Key)
+	case "save_preparation":
+		err = p.SavePreparation(ctx, q.Reference, q.Key)
 	default:
 		var state sandbox.ComputeState
 		var compute sandbox.Compute
@@ -376,8 +391,9 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) response
 		}
 		out.Command = nil
 		out.Compute = nil
+		out.Restored = false
 	}
-	return out
+	return out, err
 }
 
 func requiresReady(q request) bool {

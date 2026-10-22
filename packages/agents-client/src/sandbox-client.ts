@@ -5,12 +5,12 @@ import { hasOwn, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResour
 import {
   attachmentKindValues,
   deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentModeValues, deploymentViewRequired,
-  hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields, nodeDetailRequired,
-  nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRequired, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
-  resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues, runtimeReleaseFields,
+  hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields,
+  capacityFields, nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
+  resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues,
   sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
   type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
-  type NodeHost, type NodeRollout, type NodeUpdate, type Reset, type ResetOfflineNode, type ResetRequest, type Rollout, type RuntimeRelease,
+  type NodeHost, type NodeRollout, type NodeUpdate, type Reset, type ResetOfflineNode, type ResetRequest, type Rollout,
   type SandboxIdlePolicyInput, type SandboxDeploymentInput, type SandboxEnrollmentToken, type SandboxResources as SandboxResourcesResource,
 } from "./generated/core-api";
 import type { ReadOptions } from "./types";
@@ -29,19 +29,18 @@ export function normalizeSandboxNodeDiagnostic(value: string): SandboxNodeDiagno
 export type SandboxProvider = keyof typeof deploymentContract.providers;
 /** Client-generated, never a Core code: a deployment write whose rejection could echo the key and is withheld. */
 export const sandboxConfigurationUnconfirmed = "sandbox_configuration_unconfirmed";
-const sandboxConfigurationParams = new Set<unknown>(["runtime", ...deploymentContract.resources.map(({ name }) => `resources.${name}`)]);
+const sandboxConfigurationParams = new Set<unknown>([...deploymentContract.resources.map(({ name }) => `resources.${name}`)]);
 
 // Generated types keep their schema names in ./generated/core-api; these are the client's names for them.
 /** CPU and MiB limits for each sandbox, not node concurrency. */
 export type SandboxResources = SandboxResourcesResource;
-export type SandboxRuntimeRelease = RuntimeRelease;
 export type SandboxSpecification = DeploymentSpec;
 export type SandboxRollout = Rollout;
 /** `state` is target preparation, which never invalidates a qualified older serving pin; `ready_generation` is that durable pin and alone does not imply connection readiness. */
 export type SandboxNodeRollout = NodeRollout;
 export type StartSandboxReset = ResetRequest;
 export type SandboxReset = Reset;
-/** `provider_ready` is the last provider report, so combine it with `online`; `diagnostic` is absent while the provider is ready. A `core_url` other than the installation public URL means the node receives no new sandboxes and must be re-added. */
+/** `provider_ready` is true while the node is online and its serving generation is ready. A `core_url` other than the installation public URL means the node receives no new sandboxes and must be re-added. */
 export type SandboxNode = Node;
 /** A one-time node enrollment command; `enrollment_id` is its public handle, never a credential. */
 export type SandboxEnrollment = SandboxEnrollmentToken;
@@ -54,7 +53,7 @@ export type SandboxAllocation = NodeAllocation;
 // The schema types each Provider's configuration, credential and metadata as free-form objects; the client names E2B's.
 /**
  * Core derives the deployment's address from the installation public URL; a `core_url` member is rejected.
- * `expected_generation` is required, zero for first setup. Docker and microsandbox require `resources` and `runtime`;
+ * `expected_generation` is required, zero for first setup. Docker and microsandbox require `resources`;
  * E2B may omit `resources` to adopt its template build's CPU and memory, and always runs that build.
  */
 export type InitializeSandboxDeployment = Omit<SandboxDeploymentInput, "provider" | "configuration" | "credential"> & {
@@ -106,11 +105,6 @@ function projectSpecification(value: unknown): SandboxSpecification {
     const workspace = members(specification.workspace, deploymentContract.workspace_fields);
     if (!isOneOf(attachmentKindValues, workspace.attachment) || typeof workspace.user_xattr !== "boolean" || typeof workspace.capacity_quota !== "boolean") return invalidSandboxResponse();
     result.workspace = { attachment: workspace.attachment, user_xattr: workspace.user_xattr, capacity_quota: workspace.capacity_quota };
-  }
-  if (hasOwn(specification, "runtime")) {
-    const runtime = members(specification.runtime, runtimeReleaseFields);
-    valid(strings(runtime, runtimeReleaseFields));
-    result.runtime = { ...runtime } as unknown as SandboxRuntimeRelease;
   }
   return result;
 }
@@ -181,26 +175,24 @@ function projectDeployment(value: unknown): SandboxDeployment {
   } as unknown as SandboxDeployment;
 }
 
-/** Core omits an empty `diagnostic`, so a present one is a code; an unknown code reads as provider_unavailable. */
 function projectNode(node: Record<string, unknown>): SandboxNode {
-  const { diagnostic, rollout, ...rest } = node;
+  const { rollout, ...rest } = node;
   const fields = { ...rest, rollout: projectNodeRollout(rollout, node.online) };
   valid(strings(node, ["id", "name", "provider", "core_url"]) && typeof node.online === "boolean" && typeof node.provider_ready === "boolean" &&
     [node.cpu_count, node.available_memory_bytes, node.available_disk_bytes].every(nullable(isNonnegativeInteger)) &&
     [node.running, node.snapshots, node.max_active, node.max_retained, node.active, node.reserved, node.retained, node.cleanup_pending].every(isNonnegativeInteger) &&
-    nullable(timestamp)(node.last_seen_at) && timestamp(node.created_at) && (node.enrollment_id === null || typeof node.enrollment_id === "string") &&
-    (diagnostic === undefined || (typeof diagnostic === "string" && diagnostic !== "")));
-  if (diagnostic === undefined) return { ...fields } as unknown as SandboxNode;
-  return { ...fields, diagnostic: normalizeSandboxNodeDiagnostic(diagnostic as string) } as unknown as SandboxNode;
+    nullable((capacity) => { const c = members(capacity, capacityFields); return [c.max_active, c.max_retained].every(isNonnegativeInteger); })(node.recommended_capacity) &&
+    nullable(timestamp)(node.last_seen_at) && timestamp(node.created_at) && (node.enrollment_id === null || typeof node.enrollment_id === "string"));
+  return fields as unknown as SandboxNode;
 }
 function projectNodeList(value: unknown): { data: SandboxNode[] } {
   const list = members(value, sandboxNodeListFields);
   valid(Array.isArray(list.data));
-  return { data: (list.data as unknown[]).map((entry) => projectNode(members(entry, nodeFields, nodeRequired))) };
+  return { data: (list.data as unknown[]).map((entry) => projectNode(members(entry, nodeFields))) };
 }
 /** A never-observed host is all null; the history lists every bucket of the range. */
 function projectNodeDetail(value: unknown, nodeId: string): SandboxNodeDetail {
-  const { host, history, ...fields } = members(value, nodeDetailFields, nodeDetailRequired);
+  const { host, history, ...fields } = members(value, nodeDetailFields);
   const node = projectNode(fields);
   const observed = members(host, nodeHostFields);
   const buckets = members(history, hostHistoryFields);

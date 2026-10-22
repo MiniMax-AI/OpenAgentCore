@@ -26,7 +26,7 @@ func TestDurableSteeringWaitsBeyondTransportDeadline(t *testing.T) {
 	var session *fakeSession
 	var calls atomic.Int32
 	release := make(chan struct{})
-	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+	registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 		session = &fakeSession{out: out, closeOutOnCancel: true}
 		return &durableSteeringSession{steeringSession: &steeringSession{fakeSession: session}, phased: func(ctx context.Context, input proto.PromptSteerPayload, written func()) error {
 			calls.Add(1)
@@ -41,7 +41,7 @@ func TestDurableSteeringWaitsBeyondTransportDeadline(t *testing.T) {
 	}))
 	startRun(t, h.router, h.sender, "durable", proto.PromptRequestPayload{AgentKind: "codex"})
 	base := len(h.sender.snapshot())
-	input := proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("additional"), DurableReceipt: true}
+	input := proto.PromptSteerPayload{InputID: "extra", Input: proto.TextInput("additional")}
 	env := mustEnv(t, proto.TypePromptSteer, "durable", input)
 	if err := handleSteeringAndWait(t, h, env); err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestDurableSteeringTransportTimeoutAndShutdown(t *testing.T) {
 			h := newHarness(t)
 			defer h.router.Shutdown(context.Background())
 			exited := make(chan struct{})
-			registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, Steering: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
+			registerExecutorKind(h.reg, proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, DurableInputReceipts: proto.CapabilitySupported})}, sessionExecutor(func(_ context.Context, _ string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				return &durableSteeringSession{steeringSession: &steeringSession{fakeSession: &fakeSession{out: out, closeOutOnCancel: true}}, phased: func(ctx context.Context, _ proto.PromptSteerPayload, written func()) error {
 					defer close(exited)
 					if phase == "written" {
@@ -91,7 +91,7 @@ func TestDurableSteeringTransportTimeoutAndShutdown(t *testing.T) {
 			ctx := context.Background()
 			startRun(t, h.router, h.sender, "run", proto.PromptRequestPayload{AgentKind: "codex"})
 			base := len(h.sender.snapshot())
-			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text"), DurableReceipt: true})); err != nil {
+			if err := h.router.Handle(ctx, mustEnv(t, proto.TypePromptSteer, "run", proto.PromptSteerPayload{InputID: "one", Input: proto.TextInput("text")})); err != nil {
 				t.Fatal(err)
 			}
 			if phase == "blocked-write" {

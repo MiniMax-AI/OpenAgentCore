@@ -1,4 +1,4 @@
-import { normalizeSandboxNodeDiagnostic, type SandboxNode } from "@oac/agents-client";
+import type { SandboxNode } from "@oac/agents-client";
 import i18n, { type SupportedLanguage } from "../i18n";
 import type { ParseKeys } from "i18next";
 export interface SandboxDiagnosticMessage { label: string; advice: string }
@@ -22,24 +22,20 @@ const diagnostics: Record<string, { label: ParseKeys<"sandbox">; advice: ParseKe
   },
   provider_unavailable: {
     label: "Sandbox provider unavailable",
-    advice: "Restore the provider on the assigned node, then refresh. Running the install command again on the host checks its requirements and names the fix; a manually registered node logs the local error.",
+    advice: "Restore the provider on the assigned node, then refresh. Running the install command again on the host checks its requirements and names the fix.",
   },
   // Provider-neutral readiness classes; Core sends only the code, and the node keeps the local detail.
   host_unsupported: {
     label: "Host unsupported",
-    advice: "The host lacks a capability its sandbox provider requires. Running the install command again on the host checks its requirements and names the fix; a manually registered node logs the local error.",
+    advice: "The host lacks a capability its sandbox provider requires. Running the install command again on the host checks its requirements and names the fix.",
   },
   artifacts_unavailable: {
     label: "Provider files missing",
     advice: "Pinned provider files are missing or fail their checksum. Run the install command again.",
   },
-  runtime_download_failed: {
-    label: "Runtime download failed",
-    advice: "Runtime files could not be downloaded or verified. Check the node's network access and the configured Runtime release.",
-  },
   runtime_image_unavailable: {
     label: "Runtime image missing",
-    advice: "The pinned Runtime image isn't on the host. Run the install command again.",
+    advice: "The Runtime image isn't on the host. Run the install command again.",
   },
   capacity_insufficient: {
     label: "Host too small",
@@ -47,14 +43,10 @@ const diagnostics: Record<string, { label: ParseKeys<"sandbox">; advice: ParseKe
   },
 };
 
-/**
- * Why an online node's provider is not ready, as one fixed code; an unknown
- * value reads as provider_unavailable. Empty while the provider is ready, and
- * for an offline node, whose last code may no longer apply.
- */
-export function nodeProviderDiagnostic(node: Pick<SandboxNode, "online" | "provider_ready" | "diagnostic">): string {
-  if (!node.online || (node.provider_ready && !node.diagnostic)) return "";
-  return normalizeSandboxNodeDiagnostic(node.diagnostic ?? "");
+/** Why an online node is not ready: its target generation's fixed code, else provider_unavailable; empty otherwise. */
+export function nodeProviderDiagnostic(node: Pick<SandboxNode, "online" | "provider_ready" | "rollout">): string {
+  if (!node.online || node.provider_ready) return "";
+  return node.rollout.diagnostic ?? "provider_unavailable";
 }
 
 export function sandboxDiagnosticMessage(value?: string, locale: SupportedLanguage = "en"): SandboxDiagnosticMessage | null {

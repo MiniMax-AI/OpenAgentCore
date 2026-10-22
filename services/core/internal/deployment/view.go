@@ -10,11 +10,10 @@ import (
 type NodeRolloutState string
 
 const (
-	NodeRolloutReady          NodeRolloutState = "ready"
-	NodeRolloutPreparing      NodeRolloutState = "preparing"
-	NodeRolloutFailed         NodeRolloutState = "failed"
-	NodeRolloutUpdateRequired NodeRolloutState = "update_required"
-	NodeRolloutUnknown        NodeRolloutState = "unknown"
+	NodeRolloutReady     NodeRolloutState = "ready"
+	NodeRolloutPreparing NodeRolloutState = "preparing"
+	NodeRolloutFailed    NodeRolloutState = "failed"
+	NodeRolloutUnknown   NodeRolloutState = "unknown"
 )
 
 type RolloutState string
@@ -67,11 +66,10 @@ type NodeRollout struct {
 }
 
 type RolloutNodes struct {
-	Ready          int64 `json:"ready" binding:"required"`
-	Preparing      int64 `json:"preparing" binding:"required"`
-	Failed         int64 `json:"failed" binding:"required"`
-	UpdateRequired int64 `json:"update_required" binding:"required"`
-	Unknown        int64 `json:"unknown" binding:"required"`
+	Ready     int64 `json:"ready" binding:"required"`
+	Preparing int64 `json:"preparing" binding:"required"`
+	Failed    int64 `json:"failed" binding:"required"`
+	Unknown   int64 `json:"unknown" binding:"required"`
 }
 
 type Rollout struct {

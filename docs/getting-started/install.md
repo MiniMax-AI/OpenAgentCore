@@ -42,7 +42,7 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 
 :::
 
-The installer checks Docker and the port, writes the [installation directory](../configuration.md#installation-directory) `~/.oac/core` with its `.env` and the `oac` command (`oac.exe` on Windows), and starts the services. Web serves the console on port 8080 and [forwards API requests to Core](./public-address.md#listeners-and-access). Downloads and configuration checks finish before the installation directory is created, so a failed new installation leaves nothing behind. It prints the console address and, on a fresh installation, the Core key; a rerun or upgrade prints `oac core-key --show` instead.
+The installer checks Docker and the port, writes the [installation directory](../configuration.md#installation-directory) `~/.oac/core` with its `.env` and the `oac` command (`oac.exe` on Windows), and starts the services. Web serves the console on port 8080 and [forwards API requests to Core](./public-address.md#listeners-and-access). Downloads and configuration checks finish before the installation directory is created, so a failed new installation leaves nothing behind. It prints the console address and, on a fresh installation, the Core key; a rerun prints `oac core-key --show` instead.
 
 The console address defaults to this host's private IP on the default route, or `http://localhost:8080` when there is none. Browsers must open exactly that address. To choose it yourself, for example the HTTPS address of an existing reverse proxy, pass `--public-url`. To pass flags on Windows, see [Pass flags](./install-options.md#pass-flags).
 
@@ -61,7 +61,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 > [!TIP]
 > Rerunning is safe. If the installer stops on a failed check, on a service that is not healthy within three minutes, or on Ctrl-C, fix what the message names and run the same command again. A rerun keeps the configuration and data and reuses existing images. `--public-url`, `--host` and `--web-port` apply only to a new installation; to change them later, edit `.env` and run `oac apply`. On Linux and macOS the launcher also resumes an unfinished download. [Troubleshooting](./troubleshooting.md#installation) lists the messages.
 
-To move to a newer release, follow [Upgrade](./operations.md#upgrade).
+To move to a newer release, reinstall: [uninstall](./operations.md#uninstall) the installation, then run the installer again.
 
 ## Sign in to Web
 
@@ -101,5 +101,5 @@ This step is optional for a trial on one machine. Applications, nodes and sandbo
 | --- | --- |
 | Make an API call | [Run your first Session](./quickstart.md) |
 | Add Linux nodes | [Add and manage nodes](./nodes.md) |
-| Back up, upgrade and uninstall | [Operations](./operations.md) |
+| Back up and uninstall | [Operations](./operations.md) |
 | Flags, Compose and offline hosts | [Installation options](./install-options.md) |

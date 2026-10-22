@@ -1,4 +1,4 @@
-import { type WorkspaceStorageSelection } from "@oac/agents-client";
+import { randomUuid, type WorkspaceStorageSelection } from "@oac/agents-client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,7 +21,7 @@ function StorageEditor({ current, replacement, onClose }: { current: WorkspaceSt
   const formId = useId();
   // Retain this identity across failed or uncertain saves. Credentials never enter the query cache.
   const [selection] = useState(current);
-  const [configurationId] = useState(() => replacement ? crypto.randomUUID() : selection?.id ?? "");
+  const [configurationId] = useState(() => replacement ? randomUuid() : selection?.id ?? "");
   const selectionChanged = !replacement && (!selection || current?.id !== selection.id);
   const [adapter, setAdapter] = useState(current?.adapter ?? "");
   const [parameters, setParameters] = useState(JSON.stringify(current?.parameters ?? {}, null, 2));

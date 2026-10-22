@@ -34,7 +34,6 @@ type startRequest struct {
 	SystemPrompt       string               `json:"system_prompt"`
 	Cwd                string               `json:"cwd"`
 	Resume             string               `json:"resume,omitempty"`
-	ObserveMessages    bool                 `json:"observe_messages,omitempty"`
 	Functions          []proto.FunctionTool `json:"functions,omitempty"`
 	MCPHTTPServers     *[]mcpHTTPServer     `json:"mcp_http_servers,omitempty"`
 	Workspace          *workspaceProfile    `json:"workspace,omitempty"`
@@ -54,7 +53,7 @@ func prepare(config Config, req proto.PromptRequestPayload) (startRequest, []str
 }
 
 func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, ObserveMessages: req.ObserveMessages, Functions: req.FunctionTools}
+	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, Functions: req.FunctionTools}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}
@@ -83,8 +82,8 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
-		if format.Type != "json_schema" || !req.ObserveMessages {
-			return fail("structured output requires message observation")
+		if format.Type != "json_schema" {
+			return fail("structured output requires a JSON schema format")
 		}
 		if err := proto.ValidateBinary64Schema(format.Schema); err != nil {
 			return startRequest{}, nil, err
@@ -147,7 +146,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 			return startRequest{}, nil, err
 		}
 		start.Workspace = profile
-		start.Cwd = workspaceCwd(config.Workspace)
+		start.Cwd = config.Workspace.Directory
 		return start, env, nil
 	}
 	if req.LocalEnvironment != nil || req.RequireExistingNativeSession {
@@ -164,7 +163,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	}
 	env := withProvider(append(append([]string{}, os.Environ()...), config.Env...), provider)
 	env = append(env, "CLAUDE_CONFIG_DIR="+config.StateDir, "TMPDIR="+filepath.Join(config.StateDir, "tmp"))
-	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req, "")
+	projectedMCP, mcpEnv, err := prepareRuntimeMCP(req)
 	if err != nil {
 		return startRequest{}, nil, err
 	}

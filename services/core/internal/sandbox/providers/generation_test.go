@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	sandboxmicro "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 )
 
@@ -20,8 +22,10 @@ func generationConfig(t *testing.T) (sandbox.NodeConfig, sandboxmicro.Native) {
 	t.Helper()
 	dir := t.TempDir()
 	spec := validRegistrationSpec()
-	spec.Resources.RootDiskMiB, spec.Resources.EnvironmentDiskMiB = 8192, 8192
+	spec.Resources.RootDiskMiB = 8192
+	spec.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	native := sandboxmicro.Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, CheckpointRoot: t.TempDir(), RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
+		Image: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64),
 		Network: sandboxmicro.Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
 	raw, err := json.Marshal(native)
 	if err != nil {
@@ -54,7 +58,7 @@ func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {
 				}
 			}
 			config, _ := generationConfig(t)
-			built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: state})
+			built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: state, Workspace: unreachableWorkspaceResolver{}})
 			closeProvider()
 			if mode == "private" {
 				info, statErr := os.Lstat(directory)
@@ -76,7 +80,7 @@ func TestMicrosandboxGenerationBindsLeaseIdentity(t *testing.T) {
 	registry := Builtin()
 	config, native := generationConfig(t)
 	state := t.TempDir()
-	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: state})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: state, Workspace: unreachableWorkspaceResolver{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,9 +156,10 @@ func TestMicrosandboxGenerationRejectsUnpinnedImage(t *testing.T) {
 	registry := Builtin()
 	for _, image := range []string{"latest", "oac-runtime@sha256:bad", "oac-runtime@sha256:"} {
 		t.Run(image, func(t *testing.T) {
-			config, _ := generationConfig(t)
-			config.Specification.Runtime.MicrosandboxRef = image
-			built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: t.TempDir()})
+			config, native := generationConfig(t)
+			native.Image = image
+			config.Native, _ = json.Marshal(native)
+			built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{GenerationStateDirectory: t.TempDir(), Workspace: unreachableWorkspaceResolver{}})
 			closeProvider()
 			if err == nil || built != nil {
 				t.Fatalf("accepted image %q", image)
@@ -168,10 +173,10 @@ func TestLocalConstructionRequiresExplicitContext(t *testing.T) {
 	state := t.TempDir()
 	config, _ := generationConfig(t)
 	for _, options := range []sandbox.LocalOptions{
-		{},
-		{Standalone: true, GenerationStateDirectory: state},
-		{GenerationStateDirectory: "relative"},
-		{GenerationStateDirectory: state + "/../node"},
+		{Workspace: unreachableWorkspaceResolver{}},
+		{Standalone: true, GenerationStateDirectory: state, Workspace: unreachableWorkspaceResolver{}},
+		{GenerationStateDirectory: "relative", Workspace: unreachableWorkspaceResolver{}},
+		{GenerationStateDirectory: state + "/../node", Workspace: unreachableWorkspaceResolver{}},
 	} {
 		built, closeProvider, err := registry.Build(config, options)
 		closeProvider()
@@ -179,7 +184,7 @@ func TestLocalConstructionRequiresExplicitContext(t *testing.T) {
 			t.Fatalf("accepted construction context %+v: %v", options, err)
 		}
 	}
-	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{Standalone: true})
+	built, closeProvider, err := registry.Build(config, sandbox.LocalOptions{Standalone: true, Workspace: unreachableWorkspaceResolver{}})
 	closeProvider()
 	if err != nil || built == nil {
 		t.Fatalf("standalone construction: %v", err)

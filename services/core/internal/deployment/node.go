@@ -27,8 +27,8 @@ type EnrollmentToken struct {
 }
 
 type Capacity struct {
-	MaxActive   int `json:"max_active"`
-	MaxRetained int `json:"max_retained"`
+	MaxActive   int `json:"max_active" binding:"required"`
+	MaxRetained int `json:"max_retained" binding:"required"`
 }
 
 type Enrollment struct {
@@ -41,21 +41,30 @@ type Enrollment struct {
 	BackendFingerprint   string `json:"backend_fingerprint"`
 	// The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
 	CoreURL string `json:"core_url"`
+	// Host measurements as in the node's health reports. Core derives a limit the enrollment token leaves unset from them.
+	CPUCount           *int64   `json:"cpu_count,omitempty"`
+	EffectiveCPUCores  *float64 `json:"effective_cpu_cores,omitempty"`
+	TotalMemoryBytes   *int64   `json:"total_memory_bytes,omitempty"`
+	AvailableDiskBytes *int64   `json:"available_disk_bytes,omitempty"`
+}
+
+// EnrollmentLimits are the limits an enrollment token approves. A nil limit is unset.
+type EnrollmentLimits struct {
+	MaxActive, MaxRetained *int
 }
 
 type NodeHealth struct {
-	Host *NodeHost `json:"-"`
-	// Fixed reason for the last reported unreadiness; absent while the provider is ready. Clients treat an unknown value as provider_unavailable.
-	Diagnostic           sandbox.NodeDiagnosticCode `json:"diagnostic,omitempty"`
-	ProviderReady        bool                       `json:"provider_ready" binding:"required"`
-	CPUCount             *int64                     `json:"cpu_count" extensions:"x-nullable" binding:"required"`
-	AvailableMemoryBytes *int64                     `json:"available_memory_bytes" extensions:"x-nullable" binding:"required"`
-	AvailableDiskBytes   *int64                     `json:"available_disk_bytes" extensions:"x-nullable" binding:"required"`
+	Host                 *NodeHost `json:"-"`
+	CPUCount             *int64    `json:"cpu_count" extensions:"x-nullable" binding:"required"`
+	AvailableMemoryBytes *int64    `json:"available_memory_bytes" extensions:"x-nullable" binding:"required"`
+	AvailableDiskBytes   *int64    `json:"available_disk_bytes" extensions:"x-nullable" binding:"required"`
 }
 
 type Node struct {
 	Rollout NodeRollout `json:"rollout" binding:"required"`
 	NodeHealth
+	// True while the node is online and its serving generation is ready.
+	ProviderReady  bool       `json:"provider_ready" binding:"required"`
 	Running        int64      `json:"running" binding:"required"`
 	Snapshots      int64      `json:"snapshots" binding:"required"`
 	ID             string     `json:"id" binding:"required"`
@@ -70,6 +79,8 @@ type Node struct {
 	Retained       int64      `json:"retained" binding:"required"`
 	CleanupPending int64      `json:"cleanup_pending" binding:"required"`
 	CreatedAt      time.Time  `json:"created_at" binding:"required"`
+	// The limits Core recommends for the node's latest host measurements and the current specification; null before the node reports them.
+	RecommendedCapacity *Capacity `json:"recommended_capacity" extensions:"x-nullable" binding:"required"`
 	// The Core address this node enrolled with. A node whose address differs
 	// from the installation public URL receives no new sandboxes; re-add it.
 	CoreURL string `json:"core_url" binding:"required"`
@@ -92,8 +103,6 @@ type NodeStatus struct {
 }
 
 type NodeConfiguration struct {
-	MaxActive           int                    `json:"max_active"`
-	MaxRetained         int                    `json:"max_retained"`
 	InstallationID      string                 `json:"installation_id"`
 	Provider            string                 `json:"provider"`
 	CoreURL             string                 `json:"core_url"`

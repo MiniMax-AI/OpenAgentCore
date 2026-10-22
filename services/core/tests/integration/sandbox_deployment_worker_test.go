@@ -57,7 +57,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 	if _, err := w.ProvisionEnvironment(t.Context(), queued.TenantID, queued.Environment.ID, id); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("zero-node deployment provisioned compute", err)
 	}
-	token, err := EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 4, MaxRetained: 16}))
+	token, err := EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(4), MaxRetained: new(16)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		if err := deployments.ConnectNode(t.Context(), nodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err := deployments.Heartbeat(t.Context(), nodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
+		if err := fixtureNodeHeartbeat(t.Context(), s, deployments, nodeID, connection, epoch, true); err != nil {
 			t.Fatal(err)
 		}
 	}

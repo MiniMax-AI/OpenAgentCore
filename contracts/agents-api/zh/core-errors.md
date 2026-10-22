@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 814b5faa5534df0814f8037a947c24bc1f4d78960aff9f5c5bf42fe4d1ad11ec
+source_hash: 9229fb99268c1b3f5a97a4c97e762faaf0e45bada46e6b1f82d28798e090d205
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -68,10 +68,9 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `harness_config_invalid` | `harness_config` | 省略 | 部署默认配置的原生参数不受支持或无效 |
 | `invalid_sandbox_configuration` | `resources.cpus` | `min`：1，`max`：255 | CPU 数量超出支持范围 |
 | `invalid_sandbox_configuration` | `resources.memory_mib` | `min`：512，`max`：1048576 | 内存超出支持范围 |
-| `invalid_sandbox_configuration` | `resources.root_disk_mib` 或 `resources.environment_disk_mib` | `min`：microsandbox 为 1024；Docker 和 E2B 的 `min`：0，`max`：0 | 磁盘容量缺失或提供商不支持 |
-| `invalid_sandbox_configuration` | `runtime` | 省略 | Runtime 版本缺失、可变、无效或 E2B 不允许 |
+| `invalid_sandbox_configuration` | `resources.root_disk_mib` 或 `resources.environment_disk_mib` | `min`：microsandbox 为 1024（`environment_disk_mib` 也接受 0）；Docker 和 E2B 的 `min`：0，`max`：0 | 磁盘容量缺失或提供商不支持 |
 
-这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；项目名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、限制，然后是 Harness 协议；沙箱资源依次为 CPU、内存、磁盘，然后是 Runtime。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
+这些边界是验证常量，绝不是提交的值。节点名称按字节数限制；项目名称和键名称按去除首尾空白后的 Unicode 字符数限制，且不得包含控制字符。系统仅按以下顺序报告第一个失败项：模型提供商 URL、协议、密钥、限制，然后是 Harness 协议；沙箱资源依次为 CPU、内存，然后是磁盘。`model_provider` 对象内的模型提供商字段错误仍以该对象的相应字段作为 `param`。未知的沙箱提供商返回一个不含这些字段的错误。
 
 ## 其他管理错误 {#other-administration-errors}
 
@@ -83,6 +82,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | 400 | `workspace_operation_unsupported` | 所选工作区存储不支持该操作或沙箱组合 |
 | 404 | `workspace_storage_not_found` | 尚未配置工作区存储或请求的对象不存在 |
 | 409 | `workspace_storage_conflict` | 工作区存储归属或配置与当前状态冲突 |
+| 409 | `workspace_storage_required` | 沙箱提供方在工作区存储上运行每个 Environment，但尚未选择存储 |
 | 503 | `workspace_storage_unavailable` | 工作区存储不可用或操作尚未确认 |
 | 400 | `sandbox_operation_unsupported` | 所选沙箱提供商不支持该操作 |
 | 401 | `invalid_admin_key` | Bearer 凭据不是有效的 Core 密钥 |

@@ -52,7 +52,7 @@ func TestHubCapacityCacheCannotOverrideAdminChangesOrBlockReconnect(t *testing.T
 	id := identity()
 	approved := id
 	var mu sync.Mutex
-	hub := NewHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) {
+	hub := newTestHub(HubOptions{Authenticate: func(context.Context, string, string) (Identity, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		return approved, nil
@@ -74,7 +74,7 @@ func TestHubCapacityCacheCannotOverrideAdminChangesOrBlockReconnect(t *testing.T
 	mu.Lock()
 	approved.MaxActive, approved.MaxRetained = 2, 8
 	mu.Unlock()
-	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: peer.id, OwnerEpoch: peer.epoch, Health: &Health{ProviderReady: true, ObservedAt: time.Now().UTC()}}); err != nil {
+	if err := writeFrame(conn, frame{Type: "heartbeat", ConnectionID: peer.id, OwnerEpoch: peer.epoch, Health: &Health{ObservedAt: time.Now().UTC()}}); err != nil {
 		t.Fatal(err)
 	}
 	_ = conn.SetReadDeadline(time.Now().Add(time.Second))

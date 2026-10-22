@@ -38,7 +38,7 @@ func TestSandboxDeploymentUpdateHTTPCommitsWithAdministratorAudit(t *testing.T) 
 		t.Helper()
 		resources := input.Resources
 		resources.CPUs = cpus
-		body, err := json.Marshal(map[string]any{"expected_generation": generation, "provider": "docker", "configuration": map[string]any{}, "resources": resources, "runtime": input.Runtime})
+		body, err := json.Marshal(map[string]any{"expected_generation": generation, "provider": "docker", "configuration": map[string]any{}, "resources": resources})
 		if err != nil {
 			t.Fatal(err)
 		}

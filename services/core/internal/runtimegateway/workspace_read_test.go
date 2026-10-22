@@ -17,7 +17,7 @@ func workspaceReadRequest() proto.WorkspaceReadPayload {
 }
 
 func TestWorkspaceReadCorrelatesOneBoundedResult(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")
 	done := make(chan error, 1)
 	data := bytes.Repeat([]byte{0, 127, 255, 3}, proto.WorkspaceReadMaxBytes/4)
@@ -54,7 +54,7 @@ func TestWorkspaceReadRejectsIncompleteOrContradictoryReplies(t *testing.T) {
 		{Outcome: "unknown", ErrorCode: "read_unconfirmed", Data: []byte("partial")},
 		{Outcome: "rejected", ErrorCode: "native-private-secret"},
 	} {
-		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+		s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() { _, err := s.ReadWorkspaceFile(t.Context(), workspaceReadRequest()); done <- err }()
 		request := <-s.sendCh
@@ -82,7 +82,7 @@ func TestWorkspaceDirectoryAcceptsNotDirectoryOnlyForDirectoryReads(t *testing.T
 		{true, proto.WorkspaceReadResultPayload{Outcome: "completed", CloseAcknowledged: true, ErrorCode: proto.WorkspaceReadNotDirectory, Directory: &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}}}, false},
 		{false, proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: proto.WorkspaceReadNotDirectory}, false},
 	} {
-		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+		s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
 			var err error
@@ -104,7 +104,7 @@ func TestWorkspaceDirectoryAcceptsNotDirectoryOnlyForDirectoryReads(t *testing.T
 }
 
 func TestWorkspaceReadObserverCancellationDoesNotSendCancelOrRetry(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
@@ -130,7 +130,7 @@ func TestWorkspaceReadObserverCancellationDoesNotSendCancelOrRetry(t *testing.T)
 }
 
 func TestWorkspaceReadCapacityAndConnectionLoss(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	done := make(chan error, 4)
 	for i := 0; i < 4; i++ {
 		go func() { _, err := s.ReadWorkspaceFile(t.Context(), workspaceReadRequest()); done <- err }()
@@ -154,7 +154,7 @@ func TestWorkspaceReadCapacityAndConnectionLoss(t *testing.T) {
 func TestWorkspaceReadRejectsOversizedRequestsBeforeQueueing(t *testing.T) {
 	for _, field := range []string{"path", "handle", "environment", "escaped"} {
 		t.Run(field, func(t *testing.T) {
-			s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+			s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 			defer s.Close("test")
 			request := workspaceReadRequest()
 			oversized := strings.Repeat("x", int(ReadLimit))

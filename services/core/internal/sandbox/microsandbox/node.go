@@ -20,15 +20,19 @@ var NodeArtifacts = []providerassets.Artifact{
 }
 
 // Native is the node configuration's native object for microsandbox: the
-// helper, Runtime and firmware paths, the private store and the network policy.
-// The helper owns local paths; no ambient backend is selected. Resources, the
-// image and the artifact hashes come from the deployment specification.
+// helper, Runtime and firmware paths, the installation's verified Runtime image
+// and artifact hashes, the private store and the network policy. The helper owns
+// local paths; no ambient backend is selected. Resources come from the
+// deployment specification.
 type Native struct {
 	HelperPath     string  `json:"helper_path"`
 	RuntimeHome    string  `json:"runtime_home"`
 	CheckpointRoot string  `json:"checkpoint_root"`
 	RuntimePath    string  `json:"runtime_path"`
 	FirmwarePath   string  `json:"firmware_path"`
+	Image          string  `json:"image"`
+	RuntimeSHA256  string  `json:"runtime_sha256"`
+	FirmwareSHA256 string  `json:"firmware_sha256"`
 	Network        Network `json:"network"`
 }
 
@@ -54,12 +58,11 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 	for _, rule := range entry.Network.Rules {
 		network.Rules = append(network.Rules, NetworkRule{Action: rule.Action, Direction: rule.Direction, Destination: rule.Destination, Protocol: rule.Protocol, Port: rule.Port})
 	}
-	release, resources := spec.Runtime, spec.Resources
+	resources := spec.Resources
 	config := Config{
-		ExternalWorkspace: spec.Workspace != nil,
-		InstallationID:    result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, CheckpointRoot: entry.CheckpointRoot, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
-		RuntimeSHA256: release.RuntimeSHA256, FirmwareSHA256: release.FirmwareSHA256, Image: release.MicrosandboxRef,
-		MemoryMiB: resources.MemoryMiB, CPUs: uint8(resources.CPUs), RootDiskMiB: resources.RootDiskMiB, EnvironmentDiskMiB: resources.EnvironmentDiskMiB, Network: network,
+		InstallationID: result.InstallationID, HelperPath: entry.HelperPath, RuntimeHome: entry.RuntimeHome, CheckpointRoot: entry.CheckpointRoot, RuntimePath: entry.RuntimePath, FirmwarePath: entry.FirmwarePath,
+		RuntimeSHA256: entry.RuntimeSHA256, FirmwareSHA256: entry.FirmwareSHA256, Image: entry.Image,
+		MemoryMiB: resources.MemoryMiB, CPUs: uint8(resources.CPUs), RootDiskMiB: resources.RootDiskMiB, Network: network,
 	}
 	provider, err := NewWithCaller(config, caller)
 	if err != nil {
@@ -87,7 +90,7 @@ func configureMicrosandbox(entry Native, spec sandbox.DeploymentSpec, caller *Pr
 func BuildNode(c sandbox.NodeConfig, options sandbox.LocalOptions, result *sandbox.Built) (func(), error) {
 	closeProvider := func() {}
 	var entry Native
-	if sandbox.DecodeConfigurationObject(c.Native, &entry, "helper_path", "runtime_home", "runtime_path", "firmware_path", "network", "checkpoint_root") != nil {
+	if sandbox.DecodeConfigurationObject(c.Native, &entry, "helper_path", "runtime_home", "runtime_path", "firmware_path", "image", "runtime_sha256", "firmware_sha256", "network", "checkpoint_root") != nil {
 		return closeProvider, errors.New("invalid managed microsandbox node configuration")
 	}
 	caller := &ProcessCaller{}

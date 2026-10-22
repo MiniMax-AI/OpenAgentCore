@@ -30,7 +30,7 @@ func (s *preparedMutationSession) SubmitFunctionResult(context.Context, proto.Fu
 	return nil
 }
 
-func (s *preparedMutationSession) Steer(context.Context, proto.PromptSteerPayload) error {
+func (s *preparedMutationSession) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
 	s.steers.Add(1)
 	return nil
 }
@@ -278,4 +278,3 @@ func TestPreparedHandoffEarlyDonePublishesAfterStarted(t *testing.T) {
 }
 
 var _ agent.FunctionResultSubmitter = (*preparedMutationSession)(nil)
-var _ agent.Steerer = (*preparedMutationSession)(nil)

@@ -311,7 +311,6 @@ type RuntimeNode struct {
 	MaxActive            int32              `json:"max_active"`
 	MaxRetained          int32              `json:"max_retained"`
 	ConnectionID         pgtype.UUID        `json:"connection_id"`
-	ProviderReady        bool               `json:"provider_ready"`
 	Health               []byte             `json:"health"`
 	ConnectedEpoch       int64              `json:"connected_epoch"`
 	LastSeenAt           pgtype.Timestamptz `json:"last_seen_at"`
@@ -322,7 +321,6 @@ type RuntimeNode struct {
 	CoreUrl              string             `json:"core_url"`
 	EnrollmentID         pgtype.UUID        `json:"enrollment_id"`
 	ReadyGeneration      pgtype.Int8        `json:"ready_generation"`
-	ProtocolVersion      int32              `json:"protocol_version"`
 }
 
 type RuntimeNodeEnrollment struct {
@@ -331,8 +329,8 @@ type RuntimeNodeEnrollment struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
 	NodeID         pgtype.UUID        `json:"node_id"`
-	MaxActive      int32              `json:"max_active"`
-	MaxRetained    int32              `json:"max_retained"`
+	MaxActive      pgtype.Int4        `json:"max_active"`
+	MaxRetained    pgtype.Int4        `json:"max_retained"`
 	ID             pgtype.UUID        `json:"id"`
 }
 

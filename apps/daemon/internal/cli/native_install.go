@@ -3,12 +3,11 @@ package cli
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,6 +26,7 @@ type nativeInstallation struct {
 	Workspace           string   `json:"workspace_directory"`
 	Credential          string   `json:"credential_file"`
 	CapabilityDirectory string   `json:"capability_directory"`
+	ComponentDirectory  string   `json:"component_directory"`
 	ToolEnvironmentFile string   `json:"tool_environment_file,omitempty"`
 	Harnesses           []string `json:"harnesses"`
 }
@@ -56,6 +56,14 @@ func lockNativeInstallation(root string) (*os.Root, func(), error) {
 	return held, func() { unlock(); held.Close() }, nil
 }
 
+// validateNativeComponentDirectory accepts only a version directory of a components store.
+func validateNativeComponentDirectory(dir string) error {
+	if runtimefs.ValidateLocalPath(dir) != nil || filepath.Base(dir) != Version || filepath.Base(filepath.Dir(dir)) != "components" {
+		return errors.New("invalid component directory")
+	}
+	return nil
+}
+
 func validateNativeInstallation(c nativeInstallation) error {
 	if c.Version != Version {
 		return errors.New("installation version is unsupported; preserve this installation and reinstall in a separate directory")
@@ -70,6 +78,9 @@ func validateNativeInstallation(c nativeInstallation) error {
 		if runtimefs.ValidateLocalPath(p) != nil {
 			return errors.New("install: --workspace, --credential-file and capability destination must be clean absolute paths")
 		}
+	}
+	if validateNativeComponentDirectory(c.ComponentDirectory) != nil {
+		return errors.New("installation component directory is invalid; reinstall in a separate directory")
 	}
 	info, err := os.Stat(c.Workspace)
 	if err != nil || !info.IsDir() {
@@ -145,6 +156,35 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	if err = cleanNativeTemporaryFiles(o.Directory); err != nil {
 		return err
 	}
+	// A rerun keeps the shared components its installation already uses.
+	var previous nativeInstallation
+	raw, err := runtimefs.ReadPrivate(held, "installation.json", 1<<20)
+	if err == nil {
+		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version || len(previous.Harnesses) == 0 {
+			return errors.New("install: existing installation is unsupported; preserve it and reinstall separately")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return errors.New("install: cannot read existing installation")
+	}
+	if len(previous.Harnesses) > 0 {
+		if validateNativeComponentDirectory(previous.ComponentDirectory) != nil {
+			return errors.New("install: existing installation is unsupported; preserve it and reinstall separately")
+		}
+		o.ComponentDirectory = previous.ComponentDirectory
+	} else if o.ComponentDirectory, err = nativeStoreDirectory(); err != nil {
+		return err
+	}
+	// An installation that did not publish its record must not pin the shared components. Removing
+	// the entry only lowers the count, so it needs no store lock; a later install or uninstall collects.
+	defer func() {
+		if _, err := os.Stat(filepath.Join(o.Directory, "daemon", "installation.json")); errors.Is(err, os.ErrNotExist) {
+			_ = os.Remove(nativeUserEntry(o.ComponentDirectory, o.Directory))
+		}
+	}()
+	// Fetch before claiming the credential, so a failed download leaves the Session's credential unclaimed.
+	if err = ensureNativeComponents(ctx, rc.stdout, o, bundle, selected); err != nil {
+		return err
+	}
 	if o.OnboardURL != "" {
 		if runtimefs.ValidateLocalPath(o.Workspace) != nil {
 			return errors.New("install: Session workspace is invalid on this platform")
@@ -159,12 +199,7 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	if err = validateNativeInstallation(o.nativeInstallation); err != nil {
 		return err
 	}
-	var previous nativeInstallation
-	raw, err := runtimefs.ReadPrivate(held, "installation.json", 1<<20)
-	if err == nil {
-		if decodeEnvironmentJSON(raw, &previous) != nil || previous.Version != Version || len(previous.Harnesses) == 0 {
-			return errors.New("install: existing installation is unsupported; preserve it and reinstall separately")
-		}
+	if len(previous.Harnesses) > 0 {
 		wanted := o.nativeInstallation
 		wanted.Harnesses = nil
 		comparison := previous
@@ -174,8 +209,6 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 		if !bytes.Equal(before, after) {
 			return errors.New("install: existing connection settings differ; additive installation cannot replace them")
 		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return errors.New("install: cannot read existing installation")
 	}
 	all := append([]string{}, previous.Harnesses...)
 	for _, name := range selected {
@@ -184,22 +217,16 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 		}
 	}
 	slices.Sort(all)
-	// Verify existing components before adding any new one; never repair or
-	// upgrade an installed dependency as a side effect of adding a Harness.
-	if len(previous.Harnesses) > 0 {
-		if err = nativeInstallPhase(rc.stdout, "Verifying installed components", func() error { return verifyNativeComponents(ctx, o.Directory, previous.Harnesses) }); err != nil {
+	// Harnesses installed earlier but not selected now were not touched above; they are verified, never repaired.
+	if untouched := slices.DeleteFunc(slices.Clone(previous.Harnesses), func(name string) bool { return slices.Contains(selected, name) }); len(untouched) > 0 {
+		if err = nativeInstallPhase(rc.stdout, "Verifying installed components", func() error { return verifyNativeComponents(ctx, o.ComponentDirectory, untouched) }); err != nil {
 			return err
 		}
 	}
 	if err = nativeInstallPhase(rc.stdout, "Installing Runtime", func() error { return installNativeBinary(ctx, o.Directory, len(previous.Harnesses) > 0) }); err != nil {
 		return err
 	}
-	for _, name := range append([]string{"node"}, selected...) {
-		if err = nativeInstallPhase(rc.stdout, "Installing "+name, func() error { return installNativeComponent(ctx, o.Bundle, o.Directory, name, bundle.Components[name]) }); err != nil {
-			return err
-		}
-	}
-	if err = nativeInstallPhase(rc.stdout, "Checking installed programs", func() error { return probeNativeInstallation(ctx, o.Directory, all) }); err != nil {
+	if err = nativeInstallPhase(rc.stdout, "Checking installed programs", func() error { return probeNativeInstallation(ctx, o.ComponentDirectory, all) }); err != nil {
 		return err
 	}
 	if err = ctx.Err(); err != nil {
@@ -218,20 +245,40 @@ func installNativeOptions(ctx context.Context, rc *runContext, o *nativeInstallO
 	return nil
 }
 
-func verifyNativeComponents(ctx context.Context, root string, selected []string) error {
+// ensureNativeComponents registers the installation as a user of this version's shared components,
+// collects what no installation uses, and installs the missing components. It holds the store lock.
+func ensureNativeComponents(ctx context.Context, out io.Writer, o *nativeInstallOptions, bundle nativeBundle, selected []string) error {
+	unlock, err := lockNativeStore(ctx, out, filepath.Dir(o.ComponentDirectory))
+	if err != nil {
+		return fmt.Errorf("install: %w", err)
+	}
+	defer unlock()
+	if err = requireNativeDirectory(o.ComponentDirectory); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("install: %w", err)
+	}
+	if err = addNativeUser(o.ComponentDirectory, o.Directory); err != nil {
+		return err
+	}
+	_ = collectNativeStore(filepath.Dir(o.ComponentDirectory))
+	if err = cleanNativeStaging(o.ComponentDirectory); err != nil {
+		return err
+	}
 	for _, name := range append([]string{"node"}, selected...) {
+		if err = ensureNativeComponent(ctx, out, o, name, bundle.Components[name]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// verifyNativeComponents checks node and the named Harnesses in the shared components directory.
+func verifyNativeComponents(ctx context.Context, components string, harnesses []string) error {
+	for _, name := range append([]string{"node"}, harnesses...) {
 		if _, ok := nativePins[name]; !ok {
 			return errors.New("installation contains an unsupported Harness")
 		}
-		c, err := componentReceipt(nativeComponentRoot(root, name))
-		if err != nil || c.Version != nativePins[name] || len(c.Files) == 0 {
-			return fmt.Errorf("installed %s is missing, modified or incompatible; reinstall separately (no automatic repair or upgrade)", name)
-		}
-		if err = checkComponentFiles(ctx, nativeComponentRoot(root, name), c); err != nil {
-			if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
-				return fmt.Errorf("installed %s is missing or modified; reinstall separately", name)
-			}
-			return fmt.Errorf("install: cannot verify installed %s: %w", name, err)
+		if err := verifyNativeComponent(ctx, filepath.Join(components, name), name, nil); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -247,21 +294,11 @@ func installNativeBinary(ctx context.Context, root string, existing bool) error 
 		return err
 	}
 	dest := filepath.Join(dir, nativeExe("oac-daemon"))
-	digest := func(name string) (string, error) {
-		f, e := os.Open(name)
-		if e != nil {
-			return "", e
-		}
-		defer f.Close()
-		h := sha256.New()
-		_, e = nativeCopy(ctx, h, f)
-		return hex.EncodeToString(h.Sum(nil)), e
-	}
-	want, err := digest(exe)
+	want, err := nativeFileDigest(ctx, exe)
 	if err != nil {
 		return err
 	}
-	if got, e := digest(dest); e == nil {
+	if got, e := nativeFileDigest(ctx, dest); e == nil {
 		if got != want {
 			return errors.New("install: existing daemon binary differs; in-place upgrades are unsupported")
 		}
@@ -337,10 +374,10 @@ func runStart(rc *runContext, args []string) error {
 		err = errors.New("start: no installed Harnesses; rerun install with --harness")
 	}
 	if err == nil {
-		err = verifyNativeComponents(ctx, root, config.Harnesses)
+		err = verifyNativeComponents(ctx, config.ComponentDirectory, config.Harnesses)
 	}
 	if err == nil {
-		err = probeNativeInstallation(ctx, root, config.Harnesses)
+		err = probeNativeInstallation(ctx, config.ComponentDirectory, config.Harnesses)
 	}
 	unlock()
 	if err != nil {
@@ -349,7 +386,7 @@ func runStart(rc *runContext, args []string) error {
 	previousKinds := rc.installedKinds
 	rc.installedKinds = nativeInstallationKinds(config.Harnesses)
 	defer func() { rc.installedKinds = previousKinds }()
-	values := nativeHarnessEnvironment(root, config.Harnesses)
+	values := nativeHarnessEnvironment(config.ComponentDirectory, config.Harnesses)
 	values["OAC_RUNTIME_WORKSPACE"] = config.Workspace
 	values["OAC_RUNTIME_CAPABILITY_DIRECTORY"] = config.CapabilityDirectory
 	values["OAC_RUNTIME_TOOL_ENV_FILE"] = config.ToolEnvironmentFile

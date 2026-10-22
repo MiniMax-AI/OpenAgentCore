@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: e638457e86e53dac6f049c96e1a1dbd91646a26b1b6179f90c5b39f8750425b5
+source_hash: ec59f9762d21e486cf84108e4dda087c9640095196527bb8059c6833279df8ec
 ---
 
 本指南带运维人员从一台空主机到可用的安装：在 Docker 下运行的 Core、Web 控制台和 PostgreSQL，一个沙箱提供商，一个默认模型和第一个项目 API 密钥。Web 的 **概览** 通过 **新手引导** 清单跟踪同样的步骤。
@@ -44,7 +44,7 @@ irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install
 
 :::
 
-安装程序检查 Docker 和端口，写入[安装目录](../configuration.md#installation-directory) `~/.oac/core`，其中包含 `.env` 和 `oac` 命令（Windows 为 `oac.exe`），然后启动服务。Web 在 8080 端口提供控制台，并[把 API 请求转发到 Core](./public-address.md#listeners-and-access)。下载和配置检查在创建安装目录之前完成，因此全新安装失败时不会留下任何文件。安装程序会打印控制台地址；仅在全新安装时打印 Core 密钥，重新运行或升级则打印 `oac core-key --show`。
+安装程序检查 Docker 和端口，写入[安装目录](../configuration.md#installation-directory) `~/.oac/core`，其中包含 `.env` 和 `oac` 命令（Windows 为 `oac.exe`），然后启动服务。Web 在 8080 端口提供控制台，并[把 API 请求转发到 Core](./public-address.md#listeners-and-access)。下载和配置检查在创建安装目录之前完成，因此全新安装失败时不会留下任何文件。安装程序会打印控制台地址；仅在全新安装时打印 Core 密钥，重新运行则打印 `oac core-key --show`。
 
 控制台地址默认是本机默认路由上的私网 IP；没有时为 `http://localhost:8080`。浏览器必须打开这个确切的地址。要自行指定，例如已有反向代理的 HTTPS 地址，请传入 `--public-url`。Windows 上传参的方式见[传入参数](./install-options.md#pass-flags)。
 
@@ -63,7 +63,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 > [!TIP]
 > 可以放心重新运行。如果安装程序因检查失败、服务三分钟内未变为健康或按 Ctrl-C 而停止，修复提示信息所指的问题后重新执行同一命令。重新运行会保留配置和数据，并复用已有镜像。`--public-url`、`--host` 和 `--web-port` 只对全新安装生效；之后要修改它们，请编辑 `.env` 并运行 `oac apply`。在 Linux 和 macOS 上，启动脚本还会继续未完成的下载。[故障排查](./troubleshooting.md#installation)列出了这些提示信息。
 
-要换到更新的发布版本，请按[升级](./operations.md#upgrade)操作。
+要换到更新的发布版本，请重新安装：先[卸载](./operations.md#uninstall)现有安装，再运行安装程序。
 
 ## 登录 Web {#sign-in-to-web}
 
@@ -103,5 +103,5 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 | --- | --- |
 | 发起 API 调用 | [运行第一个 Session](./quickstart.md) |
 | 添加 Linux 节点 | [添加和管理节点](./nodes.md) |
-| 备份、升级和卸载 | [运维](./operations.md) |
+| 备份和卸载 | [运维](./operations.md) |
 | 参数、Compose 和离线主机 | [安装选项](./install-options.md) |

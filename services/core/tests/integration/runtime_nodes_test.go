@@ -34,7 +34,7 @@ func onlineManagerNode(t *testing.T, s *Store, id string) string {
 	if err := nodes.ConnectNode(t.Context(), id, connection, managerEpoch(t, s)); err != nil {
 		t.Fatal(err)
 	}
-	if err := fixtureNodeHeartbeat(t.Context(), s, nodes, id, connection, managerEpoch(t, s), deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err := fixtureNodeHeartbeat(t.Context(), s, nodes, id, connection, managerEpoch(t, s), true); err != nil {
 		t.Fatal(err)
 	}
 	return connection
@@ -53,7 +53,7 @@ func createSessionOnNode(t *testing.T, s, w *Store, tenant string, input session
 		id, connection string
 		epoch          uint64
 	}
-	rows, err := s.pool.Query(t.Context(), "SELECT id::text, connection_id::text, connected_epoch FROM runtime_nodes WHERE provider_ready AND id<>$1 AND connection_id IS NOT NULL AND removed_at IS NULL", node)
+	rows, err := s.pool.Query(t.Context(), "SELECT id::text, connection_id::text, connected_epoch FROM runtime_nodes WHERE id<>$1 AND connection_id IS NOT NULL AND removed_at IS NULL", node)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,13 +72,13 @@ func createSessionOnNode(t *testing.T, s, w *Store, tenant string, input session
 	}
 	nodes := deploymentService(t, s)
 	for _, value := range others {
-		if err := fixtureNodeHeartbeat(t.Context(), s, nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
+		if err := fixtureNodeHeartbeat(t.Context(), s, nodes, value.id, value.connection, value.epoch, false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	defer func() {
 		for _, value := range others {
-			if err := fixtureNodeHeartbeat(context.WithoutCancel(t.Context()), s, nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+			if err := fixtureNodeHeartbeat(context.WithoutCancel(t.Context()), s, nodes, value.id, value.connection, value.epoch, true); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -229,7 +229,7 @@ func TestRuntimeNodesAtomicPlacementAndRetry(t *testing.T) {
 func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	s, w, d := managerFixture(t, 2, 4)
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -268,7 +268,7 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if next := managerEpoch(t, s); next != epoch+1 {
 		t.Fatal(next)
 	}
-	if err := fixtureNodeHeartbeat(t.Context(), s, nodes, input.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}); !errors.Is(err, deployment.ErrNodeCredential) {
+	if err := fixtureNodeHeartbeat(t.Context(), s, nodes, input.NodeID, connection, epoch, true); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old epoch heartbeat revived node", err)
 	}
 	queued, err := s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput("stale"))

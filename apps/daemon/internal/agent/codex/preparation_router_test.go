@@ -53,7 +53,7 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req.AgentStateKey = "agents-api-" + session
+			req.AgentStateKey = session
 			req.DisableExecutionEnvironment = false
 			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}
 			registry := agent.NewRegistry()

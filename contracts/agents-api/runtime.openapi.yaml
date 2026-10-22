@@ -38,15 +38,22 @@ definitions:
     type: object
   deployment.Enrollment:
     properties:
+      available_disk_bytes:
+        type: integer
       backend_fingerprint:
         type: string
       core_url:
         description: The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
         type: string
+      cpu_count:
+        description: Host measurements as in the node's health reports. Core derives a limit the enrollment token leaves unset from them.
+        type: integer
       credential:
         type: string
       deployment_generation:
         type: integer
+      effective_cpu_cores:
+        type: number
       name:
         type: string
       node_id:
@@ -55,6 +62,8 @@ definitions:
         type: string
       specification_digest:
         type: string
+      total_memory_bytes:
+        type: integer
     type: object
   deployment.NodeConfiguration:
     properties:
@@ -64,10 +73,6 @@ definitions:
         type: integer
       installation_id:
         type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
       provider:
         type: string
       specification:
@@ -117,8 +122,6 @@ definitions:
     properties:
       resources:
         $ref: '#/definitions/sandbox.Resources'
-      runtime:
-        $ref: '#/definitions/sandbox.RuntimeRelease'
       workspace:
         allOf:
           - $ref: '#/definitions/workspacefs.Declaration'
@@ -140,28 +143,6 @@ definitions:
     required:
       - cpus
       - memory_mib
-    type: object
-  sandbox.RuntimeRelease:
-    properties:
-      firmware_sha256:
-        type: string
-      image_id:
-        type: string
-      image_manifest_digest:
-        type: string
-      microsandbox_ref:
-        type: string
-      runtime_sha256:
-        type: string
-      source_commit:
-        type: string
-    required:
-      - firmware_sha256
-      - image_id
-      - image_manifest_digest
-      - microsandbox_ref
-      - runtime_sha256
-      - source_commit
     type: object
   v1.APIError:
     properties:

@@ -8,7 +8,7 @@ SWAG_VERSION ?= v1.16.4
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
 
-check: check-ci check-harness-catalog check-names check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
+check: check-ci check-harness-catalog check-distribution check-database check-sqlc check-go check-microsandbox-provider check-core check-claude-sdk check-web check-example check-mcode-harness
 	@printf 'OpenAgentCore checks passed.\n'
 
 .PHONY: generate-harness-catalog check-harness-catalog
@@ -18,11 +18,6 @@ generate-harness-catalog:
 check-harness-catalog:
 	python3 scripts/generate-harness-catalog.py --check
 	python3 scripts/generate-harness-catalog.test.py
-
-.PHONY: check-names
-check-names:
-	python3 scripts/check-names.test.py
-	python3 scripts/check-names.py
 
 check-database:
 	@test -n "$${OAC_TEST_DATABASE_URL:-}" || { echo 'Set OAC_TEST_DATABASE_URL to a dedicated test PostgreSQL database' >&2; exit 1; }

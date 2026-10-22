@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 8f41d8581db31b3a8bac4c54cc2808cf30f70c609c852cd9172d915ad466abf2
+source_hash: f66f608093cc824add3215a9df520082b1679af1852ee213b7a6adfca40221ed
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -39,7 +39,7 @@ make build-core-distribution
 | `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | 已缓存的 microsandbox 发布归档。默认值：`~/.oac/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz`，缺失时下载 |
 | `CORE_DISTRIBUTION_DATABASE_IMAGE` | PostgreSQL 16 镜像；默认值为 `deploy/compose/database-image.txt` 中索引的 linux/amd64 清单 |
 
-构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交、其提交时间（`source_time`，用于在升级时为发布版本排序）和源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装程序在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装程序资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
+构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交及其源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装程序在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装程序资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
 
 ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`、`SHA256SUMS`、`node-install.pyz` 与 `runtime/seccomp.json`。构建流程根据与分发包相同的 Runtime 和构件身份生成其清单，再禁用网络验证初始化。节点清单不包含控制平面镜像身份，因此可在 ingress 镜像生成前打包。
 
@@ -49,14 +49,16 @@ ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`�
 
 ### 原生安装程序 {#native-installers}
 
-自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象会固定 Node.js 和 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会上传 `oac-native-installer-<OS>-<ARCH>.tar.gz` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录：
+自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象会固定 Node.js 和 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会将该平台的各个归档上传为 `oac-native-installer-<OS>-<ARCH>` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录，输入目录中放入这三个构件的所有归档：
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-该目录会记录提交、Runtime 协议版本、每个归档的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<platform>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外为每个平台保留一份副本。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
+每个平台有一个小型基础归档 `<os>-<arch>.tar.gz`（`oac-daemon` 和 `bundle.json`，后者列出每个组件及其每个文件的 SHA-256），以及每个组件一个归档，即 `<os>-<arch>-node` 和 `<os>-<arch>-<harness>`（MiniMax Code 不为 Windows 构建）。`build-native-installer.mjs` 生成它们。Core 按名称提供这些制品，不了解其内容；`oac-daemon install` 下载所需的组件。
+
+该目录会记录提交、Runtime 协议版本、每个制品的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<artifact>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外保留所有 Linux amd64 归档的一份副本，由其 `install.py` 复制到安装目录中供 Core 提供下载。其他平台由 Core 重定向到对应的发布资源；没有发布基址的目录没有这类 URL，因此其离线归档会保留所有归档。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
 
 ### Runtime 镜像和辅助程序 {#runtime-images-and-helpers}
 
@@ -139,8 +141,6 @@ flowchart LR
 
 标签使用 `vMAJOR.MINOR.PATCH` 格式，可选用 `-rc.1` 等预发布后缀以及 `+build.1` 等构建元数据。预发布后缀会创建 GitHub 预发布版。推送标签即表示发布决定。自动检查用于确定构建和测试结果，而不是真实模型资格：推送标签前应评估实际执行证据。模型凭据和私有证书颁发机构绝不能进入 CI 或发布输入，包含它们的验收镜像也不例外。
 
-发布说明会列出每一项协议版本变更（节点线协议、microsandbox 辅助程序或 Core–Runtime 协议），以及它要求运维人员执行的操作。Core 绝不能依赖只有更新版本的初始化才会创建的密钥或文件：升级会先运行新 Core 的 `check-config`，再运行新的 `init`。Release 发布后，将 `deploy/compose/smoke-pins.json` 设为它的标签及其 `compose.yaml` 的 SHA-256，使 Compose 冒烟测试从最新的已发布版本升级。
-
 工作流会在带标签的提交上运行 `check`，包括完整的本地门禁、官方客户端和镜像验收，以及启用打包构件的原生平台矩阵。检查成功后，`blacksmith-4vcpu-ubuntu-2204` 上的一个 `build` 作业会准备固定的 Runtime 输入、复用原生安装程序、构建分发包，并直接从本地文件发布。此合并作业具有 `contents: write` 和 `packages: write` 权限；检出过程不会保留凭据。只有发布失败或手动构建不发布时，才会把这些文件保留为未压缩的 Actions 构建产物，供恢复使用。
 
 分发归档和 Runtime 归档使用 `pigz` 级别 6，最多使用四个压缩工作线程，并且 gzip 头部中不包含文件名或时间戳。发布器会验证归档和原生安装程序校验和、解析仓库身份、拒绝使用该标签已有的 Release 或草稿，并创建一个具有固定 ID 的草稿。最多四个资源可并发上传，按从大到小的顺序进行，且不会重试。确认完整的远程资源清单后，发布器会验证所有镜像归档和现有注册表标签，再并发推送最多四个镜像。每个镜像配置和注册表清单都会接受验证；任何错误都会使 Release 保持未发布状态。失败操作返回前，正在进行的传输会完成。发布器会按 ID 发布草稿，并在发布前重新检查版本标签。
@@ -179,9 +179,9 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 | 组 | 检查和使用方 |
 | --- | --- |
-| `hygiene` | 名称、仓库链接、随包文档完整性以及 CI 计划器/门禁测试；每次变更都会运行 |
+| `hygiene` | 仓库链接、随包文档完整性以及 CI 计划器/门禁测试；每次变更都会运行 |
 | `distribution` | Harness 目录和安装程序模式、安装/应用/恢复/清理测试、Compose 解析和初始化固定数据、发布/下载和捆绑包契约、Go 控制台测试与构建；模板解析需要 Docker Compose，不需要 pnpm install 或浏览器 |
-| `compose` | 使用从当前检出构建的镜像从空数据卷实际启动、登录和 API 访问、上传文件和下载节点安装程序，然后在保留凭据和数据的同时重新配置 URL 并重新创建容器，并从固定的已发布版本原地升级；需要 Docker、Go 和网络访问，不需要模型凭据 |
+| `compose` | 使用从当前检出构建的镜像从空数据卷实际启动、登录和 API 访问、上传文件和下载节点安装程序，然后在保留凭据和数据的同时重新配置 URL 并重新创建容器；需要 Docker、Go 和网络访问，不需要模型凭据 |
 | `backend` | 并行部分，每部分都有专用 PostgreSQL 保护检查：`runtime`（sqlc 新鲜度、Runtime/共享 Go 测试、Linux microsandbox 辅助程序、守护进程构建）、`core`（独立 Core 构建、Core 服务和客户端测试），以及串行 Core 集成测试包的三个 `integration` 分片 |
 | `harness` | Claude Code adapter 测试和打包、MiniMax 配套脚本 |
 | `example` | 可选的应用程序类型检查、测试、构建和隔离的浏览器验收 |
@@ -194,7 +194,7 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 `.github/actionlint.yaml` 会选择 hygiene 和 lint。已知工作流变更会选择其使用方：CI review 和 actionlint 工作流运行 hygiene 和 lint；原生工作流变更会添加原生检查；API 验收工作流变更会添加启用容器验收的 API 检查；网站工作流变更会添加网站检查。共享 Node 操作会选择使用它的每个作业以及 lint。新工作流或未分类的工作流/操作会选择完整门禁，直至在计划器中声明其使用方。计划器测试和 CI 测量脚本运行 hygiene；更改计划器本身会运行完整门禁。
 
-Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web 和 ingress 镜像都从当前检出构建，并带有当前检出提交的节点元数据；Web 提供占位页面而不是控制台构建，初始化容器禁用网络运行。升级阶段使用 `deploy/compose/smoke-pins.json` 中按标签和 SHA-256 固定的发布版本的已发布 `compose.yaml` 启动一个新安装，创建一个 Project、一个 Project 密钥和一个文件，然后使用当前检出的镜像运行安装程序的预检（先 `core check-config`，再 `init`）和 `up --wait`。它会检查安装 ID、Core 密钥、Project、Project 密钥和文件均被保留，Core 和节点载荷报告当前检出的提交，并且数据库架构处于最新迁移。冒烟矩阵使用 Linux amd64 和 arm64 原生 runner；原生矩阵在 Linux、macOS 和 Windows 上构建并测试共享的 Core 安装程序。
+Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web 和 ingress 镜像都从当前检出构建，并带有当前检出提交的节点元数据；Web 提供占位页面而不是控制台构建，初始化容器禁用网络运行。冒烟矩阵使用 Linux amd64 和 arm64 原生 runner；原生矩阵在 Linux、macOS 和 Windows 上构建并测试共享的 Core 安装程序。
 
 `scripts/ci_plan.py` 根据变更路径选择检查组。每个所选集合都包含 `hygiene`，混合变更会累加其使用方，并且每个作业都读取同一计划，而不是维护各自的路径列表。仅修改通知的 PR 会跳过数据库、浏览器和原生作业；同时修改通知和 Core 的 PR 会添加后端和 API 检查。
 

@@ -7,7 +7,7 @@ test("shows each node's retained limit and elapsed phase time without inventing 
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
     const response = await route.fetch();
     const deployment = await response.json();
-    await route.fulfill({ response, json: { ...deployment, provider: "microsandbox", suspension: { idle_seconds: 300, retention_seconds: 86400 }, specification: { ...deployment.specification, resources: { ...deployment.specification.resources, root_disk_mib: 8192, environment_disk_mib: 8192 } } } });
+    await route.fulfill({ response, json: { ...deployment, provider: "microsandbox", suspension: { idle_seconds: 300, retention_seconds: 86400 }, specification: { ...deployment.specification, resources: { ...deployment.specification.resources, root_disk_mib: 8192 } } } });
   });
   await page.route("**/core/v1/sandbox/nodes", async (route) => {
     const response = await route.fetch();
@@ -50,7 +50,7 @@ test("edits deployment idle time without changing generation", async ({ page, re
   page.on("request", (sent) => { if (new URL(sent.url()).pathname.startsWith("/core/v1/sandbox/nodes")) nodeReads.push(sent.url()); });
   await openConsole(page, request, "settings?id=sandbox");
   const deployment = await setDeployment(request, { suspension: { idle_seconds: 300, retention_seconds: 86400 } });
-  await setDeployment(request, { provider: "microsandbox", specification: { ...deployment.specification!, resources: { ...deployment.specification!.resources, root_disk_mib: 8192, environment_disk_mib: 8192 } } });
+  await setDeployment(request, { provider: "microsandbox", specification: { ...deployment.specification!, resources: { ...deployment.specification!.resources, root_disk_mib: 8192 } } });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   const area = page.getByRole("region", { name: "Automatic suspension" });
   const idle = area.getByLabel("Idle before suspension (seconds)");

@@ -69,7 +69,7 @@ The categories are [process settings](docs/configuration.md#process-settings), [
 
 ### Pre-release: no compatibility layers
 
-OpenAgentCore is pre-release. Replace superseded interfaces, execution paths and files outright. Keep no version fallback, compatibility shim or migration for superseded behavior unless an explicit upgrade contract requires it. The [in-place upgrade](docs/getting-started/operations.md#upgrade) from v0.0.10 or later is that contract: persisted changes ship as forward migrations (goose for PostgreSQL, `oac init` for the data volume), and a landed migration is never edited. Protocols may change; the release notes list each change with the operator actions it requires. Keep the pinned official public protocol, valid data and still-used, verified infrastructure. Do not rewrite working infrastructure only to rename it.
+OpenAgentCore has had no public release. Replace superseded interfaces, execution paths and files outright. Keep no version fallback, compatibility shim or migration for superseded behavior. An installation of another release is reinstalled, never upgraded. A schema change adds a forward migration, so existing development and test databases follow it; the migrations may be folded into one baseline at any time. Keep the pinned official public protocol, valid data and still-used, verified infrastructure. Do not rewrite working infrastructure only to rename it.
 
 ## Documentation
 

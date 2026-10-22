@@ -13,7 +13,7 @@ import (
 
 var ErrProjectScopeConflict = errors.New("fixture project conflicts with a persisted execution scope")
 
-// EnsureProjectScopes establishes execution scopes for legacy resource fixtures.
+// EnsureProjectScopes establishes execution scopes for resource fixtures.
 func (s *Store) EnsureProjectScopes(ctx context.Context, scopes []identity.ProjectScope) error {
 	validated, err := identity.ProjectScopes(scopes)
 	if err != nil {

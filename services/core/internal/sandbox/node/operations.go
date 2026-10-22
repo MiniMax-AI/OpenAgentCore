@@ -2,21 +2,23 @@ package node
 
 // Transport operation names map to the authored Provider method declarations.
 var operationMethods = map[string]string{
-	"create":          "Create",
-	"info":            "GetInfo",
-	"renew":           "Renew",
-	"kill":            "Kill",
-	"command":         "RunCommand",
-	"initial":         "Initial",
-	"new_compute":     "NewCompute",
-	"compute":         "GetCompute",
-	"suspend":         "Suspend",
-	"resume":          "Resume",
-	"kill_compute":    "KillCompute",
-	"delete_snapshot": "DeleteSnapshot",
-	"command_compute": "RunCommandCompute",
-	"resume_compute":  "ResumeCompute",
-	"observe":         "Observe",
+	"create":              "Create",
+	"info":                "GetInfo",
+	"renew":               "Renew",
+	"kill":                "Kill",
+	"command":             "RunCommand",
+	"initial":             "Initial",
+	"new_compute":         "NewCompute",
+	"compute":             "GetCompute",
+	"suspend":             "Suspend",
+	"resume":              "Resume",
+	"kill_compute":        "KillCompute",
+	"delete_snapshot":     "DeleteSnapshot",
+	"command_compute":     "RunCommandCompute",
+	"resume_compute":      "ResumeCompute",
+	"restore_preparation": "RestorePreparation",
+	"save_preparation":    "SavePreparation",
+	"observe":             "Observe",
 }
 
 func operationMethod(wire string) string { return operationMethods[wire] }

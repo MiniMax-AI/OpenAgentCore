@@ -568,13 +568,3 @@ func TestServiceRejectsMismatchedResolvedOwnership(t *testing.T) {
 }
 
 func float64Pointer(value float64) *float64 { return &value }
-
-func TestSampleWithoutNewerFieldsKeepsItsNodeWireForm(t *testing.T) {
-	observedAt := time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)
-	cpu, memory := 1.5, uint64(1024)
-	raw, err := json.Marshal(Sample{ObservedAt: observedAt, CPUUsageSecondsTotal: &cpu, MemoryUsageBytes: &memory})
-	want := `{"ObservedAt":"2026-09-25T01:00:00Z","StartedAt":null,"CPUUsageSecondsTotal":1.5,"CPUCapacityCores":null,"MemoryUsageBytes":1024,"MemoryLimitBytes":null}`
-	if err != nil || string(raw) != want {
-		t.Fatalf("an older Core could not decode this node sample: %s %v", raw, err)
-	}
-}

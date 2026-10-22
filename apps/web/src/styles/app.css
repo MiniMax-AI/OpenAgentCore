@@ -2,7 +2,7 @@
  * The console's single stylesheet entry, in cascade order:
  * 1. Tailwind's theme variables (no preflight: the console keeps its base rules);
  * 2. IBM Plex Sans and Beautiful UI's foundation — the design tokens every surface uses;
- * 3. the console's legacy base and grammar, whose variables alias those tokens;
+ * 3. the console's base and grammar, whose variables alias those tokens;
  * 4. system.css, the component system in Beautiful UI's vocabulary;
  * 5. Tailwind utilities last, generated only for the registry components.
  */

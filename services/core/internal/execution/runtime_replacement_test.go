@@ -14,7 +14,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
@@ -54,7 +53,7 @@ func (p *retentionProvider) DeleteSnapshot(context.Context, sandbox.Reference, s
 	return nil
 }
 
-func TestCapacityPressurePreservesSuspendedSnapshot(t *testing.T) {
+func TestCapacityPressureReleasesIdleSuspendedSnapshot(t *testing.T) {
 	provider := &retentionProvider{}
 	fixture := newWorkspaceSettlementFixture(t, provider)
 	r, session := fixture.lifecycle, fixture.session
@@ -69,7 +68,7 @@ func TestCapacityPressurePreservesSuspendedSnapshot(t *testing.T) {
 		{`UPDATE runtime_nodes SET max_active=1,max_retained=1 WHERE id=$1`, owner.NodeID},
 		{`UPDATE environments SET initialization='complete',status='disconnected' WHERE id=$1`, owner.EnvironmentID},
 		{`UPDATE devices SET supported_agent_kinds='[{"kind":"codex","available":true,"capabilities":{"retained_native_history":true}}]' WHERE id=$1`, owner.DeviceID},
-		{`UPDATE runtime_allocations SET state='running',compute_phase='suspended',compute_state='{"current":{"id":"old-compute"},"snapshot":{"id":"old-snapshot"}}',compute_retained_until=clock_timestamp()+interval '24 hours' WHERE id=$1`, owner.ID},
+		{`UPDATE runtime_allocations SET state='running',compute_phase='suspended',compute_state='{"current":{"id":"old-compute"},"snapshot":{"Compatibility":{"artifact_domain":"fixture-store","execution_class":"fixture-runtime"},"id":"old-snapshot"}}',compute_retained_until=clock_timestamp()+interval '24 hours' WHERE id=$1`, owner.ID},
 	} {
 		if _, err := fixture.pool.Exec(t.Context(), statement.sql, statement.arg); err != nil {
 			t.Fatal(err)
@@ -87,25 +86,26 @@ func TestCapacityPressurePreservesSuspendedSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 3 {
-		if err := r.observeCompute(t.Context(), owner); err != nil {
-			t.Fatal(err)
-		}
-		current, err := r.reader.EnvironmentAllocation(t.Context(), owner.Key())
-		if err != nil || current.Expired || current.ComputePhase != "suspended" || current.ComputeRevision != owner.ComputeRevision || current.ComputeRetainedUntil == nil || !current.ComputeRetainedUntil.Equal(*owner.ComputeRetainedUntil) {
-			t.Fatal("pressure changed retained snapshot", current, err)
-		}
-		if _, err := r.deployment.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: waiting.Session.Environment.ID}, r.config.InstallationID); !errors.Is(err, placement.ErrNodeUnavailable) {
-			t.Fatal("released retained capacity without cleanup", err)
-		}
+	if _, err := r.deployment.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: waiting.Session.Environment.ID}, r.config.InstallationID); !errors.Is(err, placement.ErrNodeUnavailable) {
+		t.Fatal("placed despite full retained slots", err)
+	}
+	// The blocked demand releases the idle checkpoint as if its deadline passed.
+	if err := r.observeCompute(t.Context(), owner); err != nil {
+		t.Fatal(err)
+	}
+	current, err := r.reader.EnvironmentAllocation(t.Context(), owner.Key())
+	if err != nil || current.State != "released" {
+		t.Fatal("pressure did not release the checkpoint", current, err)
+	}
+	if _, err := r.deployment.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: waiting.Session.Environment.ID}, r.config.InstallationID); err != nil {
+		t.Fatal("released slot was not usable", err)
 	}
 	pending, err := r.sessions.GetEnvironmentInputReservation(t.Context(), session.TenantID, waiting.Session.ID, input.ID)
 	if err != nil || pending.State != sessions.EnvironmentInputPending || !pending.Deadline.Equal(input.Deadline) {
 		t.Fatal("pressure changed input deadline", pending, err)
 	}
-
-	if provider.kills != 0 || provider.snapshots != 0 || provider.creates != 1 {
-		t.Fatal("pressure changed native resources", provider)
+	if provider.kills != 0 || provider.snapshots != 1 {
+		t.Fatal("pressure did not delete exactly the snapshot", provider)
 	}
 }
 
@@ -323,22 +323,27 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 	}
 }
 
+// workspaceNodeSetup deploys microsandbox, which runs every Environment on external storage, or, without storage, docker.
 func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Service, deployment.Reader) (string, string) {
 	return func(owner Owner, service *deployment.Service, reader deployment.Reader) (string, string) {
 		installation := uuid.NewString()
 		if err := owner.Deployment.Claim(t.Context(), installation); err != nil {
 			t.Fatal(err)
 		}
-		specification := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}, Runtime: &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}}
+		specification := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}
+		provider := "microsandbox"
 		if !external {
-			specification.Workspace = nil
-			specification.Resources.EnvironmentDiskMiB = 8192
+			provider, specification = "docker", sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 		}
-		view, err := owner.Deployment.Initialize(t.Context(), installation, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: specification})
+		view, err := owner.Deployment.Initialize(t.Context(), installation, sandbox.Selection{Provider: provider, DeploymentSpec: specification})
 		if err != nil {
 			t.Fatal(err)
 		}
-		token, err := service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2})
+		retained, checkpoint := 2, &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}
+		if !external {
+			retained, checkpoint = 1, nil
+		}
+		token, err := service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: &retained})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -354,7 +359,7 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 		if err = service.ConnectNode(t.Context(), node.NodeID, connection, epoch); err != nil {
 			t.Fatal(err)
 		}
-		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
+		if err = service.Heartbeat(t.Context(), node.NodeID, connection, epoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: checkpoint}}); err != nil {
 			t.Fatal(err)
 		}
 		return installation, node.NodeID
@@ -362,48 +367,7 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 	}
 }
 
-func TestProvisionUsesReservedGenerationStorageDuringUpdate(t *testing.T) {
-	for _, external := range []bool{false, true} {
-		t.Run(map[bool]string{false: "owned_ready_external_target", true: "external_ready_owned_target"}[external], func(t *testing.T) {
-			provider := &retentionProvider{bootstraps: make(chan sandbox.Bootstrap, 1)}
-			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, external))
-			r, s := f.lifecycle, f.session
-			setup, err := r.deployments.Setup(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
-			target := setup.Specification
-			target.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
-			target.Resources.EnvironmentDiskMiB = 0
-			if external {
-				target.Workspace = nil
-				target.Resources.EnvironmentDiskMiB = 8192
-			}
-			if _, err = r.deployment.Update(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()}), r.config.InstallationID, sandbox.Selection{Provider: setup.Provider, ExpectedGeneration: setup.Generation, DeploymentSpec: target}); err != nil {
-				t.Fatal(err)
-			}
-			// Neither today's target nor the lane's cached storage mode selects storage.
-			r.config.Workspace = target.Workspace
-			owner, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if owner.DeploymentGeneration != setup.Generation {
-				t.Fatal("lost reserved generation", owner)
-			}
-			bootstrap := <-provider.bootstraps
-			if (bootstrap.Workspace != nil) != external {
-				t.Fatal("storage mode followed target instead of reservation", external, bootstrap.Workspace)
-			}
-			environment, err := r.sessions.GetEnvironment(t.Context(), s.TenantID, s.Environment.ID)
-			if err != nil || environment.ExternalWorkspace != external {
-				t.Fatal("immutable binding projection", environment, err)
-			}
-		})
-	}
-}
-
-func TestProvisionRejectsRetainedBindingOnOwnedGeneration(t *testing.T) {
+func TestProvisionRejectsRetainedBindingOnProviderWithoutStorage(t *testing.T) {
 	provider := &retentionProvider{bootstraps: make(chan sandbox.Bootstrap, 1)}
 	f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, false))
 	r, s := f.lifecycle, f.session
@@ -418,69 +382,5 @@ func TestProvisionRejectsRetainedBindingOnOwnedGeneration(t *testing.T) {
 	}
 	if _, err := r.reader.EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: s.TenantID, EnvironmentID: s.Environment.ID}); !errors.Is(err, deployment.ErrNotFound) {
 		t.Fatal("incompatible compute reserved", err)
-	}
-}
-
-// A deterministic provider stops after capturing Resume, before subsequent
-// wake operations. The allocation, generation and filesystem binding are real.
-type resumeStorageProvider struct {
-	retentionProvider
-	request *sandbox.ResumeRequest
-	stop    error
-}
-
-func (p *resumeStorageProvider) Resume(_ context.Context, request sandbox.ResumeRequest) (sandbox.ComputeState, error) {
-	p.request = &request
-	return sandbox.ComputeState{}, p.stop
-}
-
-func TestRestoreUsesAllocationGenerationStorageInsteadOfCachedLane(t *testing.T) {
-	for _, external := range []bool{false, true} {
-		t.Run(map[bool]string{false: "owned_allocation_external_lane", true: "external_allocation_owned_lane"}[external], func(t *testing.T) {
-			stop := errors.New("resume request captured")
-			provider := &resumeStorageProvider{stop: stop}
-			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, external))
-			r, s := f.lifecycle, f.session
-			owner, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID)
-			if err != nil {
-				t.Fatal(err)
-			}
-			setup, err := r.deployments.Setup(t.Context())
-			if err != nil {
-				t.Fatal(err)
-			}
-			target := setup.Specification
-			target.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
-			target.Resources.EnvironmentDiskMiB = 0
-			if external {
-				target.Workspace = nil
-				target.Resources.EnvironmentDiskMiB = 8192
-			}
-			audit := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()})
-			if _, err = r.deployment.Update(audit, r.config.InstallationID, sandbox.Selection{Provider: setup.Provider, ExpectedGeneration: setup.Generation, DeploymentSpec: target}); err != nil {
-				t.Fatal(err)
-			}
-			r.config.Workspace = target.Workspace
-			r.config.Resources = target.Resources
-			state := runtimeCompute{Target: &sandbox.Compute{ID: "replacement-compute", Generation: 2}, Snapshot: &sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, ID: "snapshot"}, RestoreID: uuid.NewString()}
-			if err = r.restoreCompute(t.Context(), provider, owner, state, false); !errors.Is(err, stop) {
-				t.Fatal(err)
-			}
-			if provider.request == nil || (provider.request.Workspace != nil) != external {
-				t.Fatal("Resume binding followed cached lane", external, provider.request)
-			}
-			if external {
-				stored, err := f.storage.Get(t.Context(), s.TenantID, s.Environment.ID)
-				if err != nil || provider.request.Workspace.Attachment.Reference != stored.Reference {
-					t.Fatal("Resume lost retained object identity", err)
-				}
-			}
-			provider.request = nil
-			stale := owner
-			stale.ID = uuid.NewString()
-			if err = r.restoreCompute(t.Context(), provider, stale, state, false); !errors.Is(err, sandbox.ErrOwnership) || provider.request != nil {
-				t.Fatal("stale owner reached native Resume", err)
-			}
-		})
 	}
 }

@@ -31,6 +31,13 @@ func (t *allocationTx) LoadSuspensionDemand(current deployment.Allocation) (depl
 	for _, node := range inFlight {
 		result.InFlightNodes = append(result.InFlightNodes, uuidString(node))
 	}
+	starting, err := t.q.ListRuntimeStartingNodes(t.ctx)
+	if err != nil {
+		return result, err
+	}
+	for _, node := range starting {
+		result.StartingNodes = append(result.StartingNodes, uuidString(node))
+	}
 	result.Nodes, err = placementpg.LoadNodes(t.ctx, t.q)
 	if err != nil {
 		return result, err
@@ -59,6 +66,34 @@ func (t *allocationTx) LoadSuspensionDemand(current deployment.Allocation) (depl
 		result.CheckpointRestores = append(result.CheckpointRestores, deployment.CheckpointRestoreDemand{SourceNode: uuidString(restore.NodeID), Compatibility: compatibility, Nodes: nodes})
 	}
 	return result, nil
+}
+
+func (t *allocationTx) OldestIdleCheckpoint(current deployment.Allocation) (bool, error) {
+	node, err := parseID(current.NodeID)
+	if err != nil {
+		return false, err
+	}
+	ids, err := t.q.ListIdleRuntimeCheckpoints(t.ctx, node)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range ids {
+		if uuidString(id) == current.ID {
+			return true, nil
+		}
+		// An older peer that can be retained is released first. Its own Session
+		// lock rechecks this when it is chosen.
+		if retained, err := t.q.CanRetainRuntimeEnvironment(t.ctx, id); err != nil || retained {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
+func (t *allocationTx) ExpireCheckpoint(current deployment.Allocation) (deployment.Allocation, error) {
+	return t.change(current, func(ctx context.Context, id pgtype.UUID) (sqlc.RuntimeAllocation, error) {
+		return t.q.ExpireRuntimeCheckpoint(ctx, sqlc.ExpireRuntimeCheckpointParams{ID: id, ComputeRevision: current.ComputeRevision})
+	})
 }
 
 func (t *allocationTx) PlacementDemand(after deployment.PlacementDemandCursor) ([]deployment.PlacementDemand, deployment.PlacementDemandCursor, error) {

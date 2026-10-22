@@ -35,7 +35,10 @@ import (
 )
 
 var (
-	ErrInvalid            = errors.New("invalid sandbox configuration")
+	ErrInvalid = errors.New("invalid sandbox configuration")
+	// ErrWorkspaceRequired reports a Provider that runs every Environment on
+	// external storage while none is selected.
+	ErrWorkspaceRequired  = errors.New("sandbox provider requires workspace storage")
 	ErrOwnership          = errors.New("sandbox ownership mismatch")
 	ErrExists             = errors.New("sandbox allocation already exists")
 	ErrNotFound           = errors.New("sandbox allocation not found")
@@ -118,6 +121,13 @@ type SandboxProvider interface {
 	// ResumeCompute thaws only the same resident instance after an aborted pause.
 	ResumeCompute(context.Context, Reference, Compute) (ComputeState, error)
 
+	// The preparation cache keeps the Environment filesystem left by one finished
+	// preparation. Key is opaque and the adapter owns storage and lifetime. Both
+	// address the allocation's initial compute and share one declaration.
+	// RestorePreparation returns false when it holds no valid entry.
+	RestorePreparation(ctx context.Context, r Reference, key string) (bool, error)
+	SavePreparation(ctx context.Context, r Reference, key string) error
+
 	// Observe reads one owned Runtime instance after verifying its ownership. It
 	// never renews, restarts or stops compute.
 	Observe(context.Context, runtimeobs.Target) (runtimeobs.Sample, error)
@@ -130,6 +140,9 @@ var requiredOperations = []string{"Create", "GetInfo", "Renew", "Kill", "RunComm
 // restore support cannot safely own a compute incarnation.
 var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute"}
 
+// preparationOperations are both supported or both unsupported.
+var preparationOperations = []string{"RestorePreparation", "SavePreparation"}
+
 // Compute identifies one incarnation of an allocation. Name is provider-derived.
 // ID is empty only until the original create or restore result is observed.
 type Compute struct {
@@ -139,7 +152,7 @@ type Compute struct {
 	RestoredFrom *SnapshotIdentity
 }
 
-// CheckpointCompatibility identifies an adapter-verified private archive domain
+// CheckpointCompatibility identifies an adapter-verified private checkpoint domain
 // and execution compatibility class. Core compares these opaque tokens only.
 type CheckpointCompatibility struct {
 	ArtifactDomain string `json:"artifact_domain"`
@@ -177,7 +190,7 @@ type ComputeState struct {
 	Status            string
 	BootstrapComplete bool
 	Snapshot          *SnapshotIdentity
-	// SourceStopped proves the archive is durable and all source-local compute
+	// SourceStopped proves the checkpoint is durable and all source-local compute
 	// and capture obligations have settled, so another node can own restoration.
 	SourceStopped bool
 	// RestoreAttemptClosed echoes the exact Resume OperationID only after a
@@ -254,6 +267,9 @@ func ValidateOperations(operations providercontract.Operations) error {
 			return fmt.Errorf("%w: incomplete checkpoint lifecycle", providercontract.ErrContract)
 		}
 	}
+	if operations[preparationOperations[0]].State != operations[preparationOperations[1]].State {
+		return fmt.Errorf("%w: incomplete preparation cache", providercontract.ErrContract)
+	}
 	return nil
 }
 
@@ -288,15 +304,13 @@ type ConfigurationRequirements struct {
 	CredentialVerification providercontract.Support
 }
 
-// DeploymentPolicy is the deployment declaration. Disk declares independent
-// disk limits; Runtime requires a pinned Runtime release, and RuntimeError is
-// the fixed reason for rejecting one otherwise. DefaultResources is the size
-// setup proposes, or nil when the Provider's configuration selects it.
+// DeploymentPolicy is the deployment declaration. Workspace, when present, means
+// the Provider runs every Environment on external storage; absent means its own
+// disk. Disk declares independent disk limits. DefaultResources is the size setup
+// proposes, or nil when the Provider's configuration selects it.
 type DeploymentPolicy struct {
 	Workspace        *workspacefs.Requirements `json:"workspace,omitempty"`
-	RuntimeError     string                    `json:"-"`
 	Disk             bool                      `json:"disk"`
-	Runtime          bool                      `json:"runtime"`
 	DefaultResources *Resources                `json:"default_resources"`
 }
 
@@ -343,8 +357,8 @@ type DirectConfig struct {
 
 // NodeConfig is a node's configuration for one deployment generation. Native
 // holds only the selected adapter's node-local settings, such as host paths;
-// that adapter alone decodes it, strictly. Resources and the Runtime release
-// are read from Specification, never copied into Native.
+// that adapter alone decodes it, strictly. Resources are read from
+// Specification, never copied into Native.
 type NodeConfig struct {
 	Specification  DeploymentSpec  `json:"specification"`
 	Generation     uint64          `json:"generation"`

@@ -58,13 +58,3 @@ func refreshIdentity(t *testing.T, coreURL string) error {
 	_, err := node.RefreshIdentity(t.Context(), dir)
 	return err
 }
-
-func TestProtocolVersionRequiresNoProviderOrIdentity(t *testing.T) {
-	// This is a binary capability check, not a provider readiness probe.
-	if err := run(t.Context(), []string{"protocol-version"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := run(t.Context(), []string{"protocol-version", "--config", "/missing"}); err == nil {
-		t.Fatal("extra protocol capability arguments accepted")
-	}
-}

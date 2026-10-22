@@ -81,12 +81,6 @@ type Session struct {
 	log  SessionLogger
 	reg  *Registry
 
-	// owner is non-nil in multi-pod mode. It fences this WebSocket
-	// against the DB owner row so stale connections from an older pod
-	// cannot keep handling prompts after a reconnect claimed a newer
-	// generation.
-	owner *ownerLease
-
 	// heartbeat persists daemon-advertised capability snapshots.
 	heartbeat      HeartbeatTouch
 	credentialHash string
@@ -140,12 +134,10 @@ type Session struct {
 	closed    chan struct{}
 }
 
-// NewSessionWithOwner wires a freshly-upgraded WS connection into a Session
-// with an optional DB-backed owner lease. Multi-pod deployments pass the lease
-// returned by ClaimAgentDaemonDeviceOwner so heartbeats can fence stale
-// connections. The session does NOT start its goroutines automatically — Start
-// runs once the handler is ready so the session can't race with response writes.
-func NewSessionWithOwner(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger, owner *ownerLease) *Session {
+// NewSession wires a freshly-upgraded WS connection into a Session. The session
+// does NOT start its goroutines automatically — Start runs once the handler is
+// ready so the session can't race with response writes.
+func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
 	now := time.Now()
 	return &Session{
 		DeviceID:      deviceID,
@@ -155,7 +147,6 @@ func NewSessionWithOwner(conn WSConn, deviceID, workspaceID, daemonVersion strin
 		conn:          conn,
 		log:           log,
 		reg:           reg,
-		owner:         owner,
 		lastSeenAt:    now,
 		subs:          map[string]*Subscription{},
 		preparations:  map[string]*preparationSubscription{},
@@ -218,13 +209,16 @@ func (s *Session) AgentKindStatus(kind string) (info runtimedevice.SupportedAgen
 	return runtimedevice.SupportedAgentKind{}, false, true
 }
 
-func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKind) {
+// setSupportedAgentKinds reports whether these are the session's first kinds.
+func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKind) (first bool) {
 	copyKinds := make([]runtimedevice.SupportedAgentKind, len(kinds))
 	copy(copyKinds, kinds)
 	s.kindsMu.Lock()
+	first = !s.kindsSeen
 	s.kindsSeen = true
 	s.supportedKinds = copyKinds
 	s.kindsMu.Unlock()
+	return first
 }
 
 // Close closes the transport and subscriptions with ErrSessionClosed, then
@@ -250,7 +244,6 @@ func (s *Session) Close(reason string) {
 		s.closeWorkspaceWrites()
 		s.closeCapabilities()
 		s.closeWorkspaceExports()
-		s.releaseOwnerLease()
 	})
 }
 
@@ -380,9 +373,6 @@ func (s *Session) readLoop() {
 		}
 		if !s.receiptDraining() {
 			s.markSeen()
-			if !s.renewOwnerLease() {
-				return
-			}
 		}
 
 		var env proto.Envelope
@@ -400,48 +390,6 @@ func (s *Session) markSeen() {
 	s.hbMu.Unlock()
 }
 
-func (s *Session) renewOwnerLease() bool {
-	if s.owner == nil || s.owner.store == nil {
-		return true
-	}
-	now := time.Now().UTC()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	_, ok, err := s.owner.store.RenewAgentDaemonDeviceOwner(ctx, runtimedevice.RenewOwner{
-		DeviceID:       s.owner.deviceID,
-		OwnerPodID:     s.owner.ownerPodID,
-		Generation:     s.owner.generation,
-		Now:            now,
-		LeaseExpiresAt: now.Add(normalizeOwnerTTL(s.owner.ttl)),
-	})
-	if err != nil {
-		s.log("agentdaemon gateway: owner lease renew failed device=%s generation=%d: %v", s.DeviceID, s.owner.generation, err)
-		s.Close("owner lease renew failed")
-		return false
-	}
-	if !ok {
-		s.log("agentdaemon gateway: owner lease lost device=%s generation=%d", s.DeviceID, s.owner.generation)
-		s.Close("owner lease lost to a newer connection")
-		return false
-	}
-	return true
-}
-
-func (s *Session) releaseOwnerLease() {
-	if s.owner == nil || s.owner.store == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	if _, err := s.owner.store.ReleaseAgentDaemonDeviceOwner(ctx, runtimedevice.ReleaseOwner{
-		DeviceID:   s.owner.deviceID,
-		OwnerPodID: s.owner.ownerPodID,
-		Generation: s.owner.generation,
-	}); err != nil {
-		s.log("agentdaemon gateway: owner lease release failed device=%s generation=%d: %v", s.DeviceID, s.owner.generation, err)
-	}
-}
-
 func (s *Session) handleHeartbeat(env proto.Envelope) {
 	var p proto.HeartbeatPayload
 	if err := env.DecodePayload(&p); err != nil {
@@ -451,7 +399,9 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		return
 	}
 	kinds := deviceKindsFromHeartbeat(p)
-	s.setSupportedAgentKinds(kinds)
+	if s.setSupportedAgentKinds(kinds) {
+		s.reg.announce()
+	}
 	if s.heartbeat == nil {
 		return
 	}
@@ -495,7 +445,6 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.Supporte
 				Streaming:             info.Capabilities.Streaming.IsSupported(),
 				Usage:                 info.Capabilities.Usage.IsSupported(),
 				Resume:                info.Capabilities.Resume.IsSupported(),
-				Steering:              info.Capabilities.Steering.IsSupported(),
 				DurableTurns:          info.Capabilities.DurableTurns.IsSupported(),
 				DurableInputReceipts:  info.Capabilities.DurableInputReceipts.IsSupported(),
 				NativeSessionRecovery: info.Capabilities.NativeSessionRecovery.IsSupported(),

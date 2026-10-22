@@ -72,6 +72,8 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		}
 	case errors.As(err, &unsupported):
 		writeError(w, http.StatusBadRequest, "sandbox_operation_unsupported", "The selected sandbox provider does not support this operation.")
+	case errors.Is(err, sandbox.ErrWorkspaceRequired):
+		writeError(w, http.StatusConflict, "workspace_storage_required", "This sandbox provider runs every Environment on workspace storage. Select workspace storage first.")
 	case errors.Is(err, sandbox.ErrInvalid):
 		writeError(w, http.StatusBadRequest, "invalid_sandbox_configuration", "Invalid sandbox provider configuration.", "configuration")
 	case errors.As(err, &stale):
@@ -92,8 +94,10 @@ func writeSandboxError(w http.ResponseWriter, err error) bool {
 		writeError(w, http.StatusConflict, "sandbox_configuration_error", err.Error())
 	case errors.Is(err, deployment.ErrNodeAddressMismatch):
 		writeError(w, http.StatusConflict, "sandbox_node_address_mismatch", "This node uses a different Core address than the installation public URL. Generate a new command on the Nodes page and run it on the host.")
+	case errors.Is(err, deployment.ErrNodeHostUnmeasured):
+		writeError(w, http.StatusConflict, "sandbox_node_host_unmeasured", "This node reported no host measurements, so Core cannot derive its limits. Set both limits when you generate the command.")
 	case errors.Is(err, deployment.ErrSpecificationMismatch):
-		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits or Runtime release do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
+		writeError(w, http.StatusConflict, "sandbox_specification_mismatch", "The node resource limits do not match the active deployment. Restore its installed configuration or remove and enroll the node again after a drained deployment change.")
 	case errors.Is(err, deployment.ErrNodeExists):
 		writeError(w, http.StatusConflict, "idempotency_conflict", "This idempotency key was used with different input.")
 	case errors.Is(err, deployment.ErrConflict):

@@ -262,7 +262,7 @@ func TestEnvironmentDeletionHidesWithoutDestroyingOwnership(t *testing.T) {
 	}
 }
 
-func TestEnvironmentAbsentForNoneAndLegacySnapshots(t *testing.T) {
+func TestEnvironmentAbsentForNoneAndEmptyConfigurations(t *testing.T) {
 	s, _ := testStore(t)
 	ctx := context.Background()
 	tenant := uuid.NewString()

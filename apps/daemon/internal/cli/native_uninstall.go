@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -39,6 +40,11 @@ func runUninstall(rc *runContext, args []string) error {
 	if config.Workspace != "" && within(root, config.Workspace) {
 		return fmt.Errorf("uninstall: the workspace %s is inside the installation directory; move it out first", config.Workspace)
 	}
+	// The entry is named while the installation directory still exists.
+	var entry string
+	if validateNativeComponentDirectory(config.ComponentDirectory) == nil {
+		entry = nativeUserEntry(config.ComponentDirectory, root)
+	}
 	var owned []string
 	for _, name := range nativeInstallationEntries {
 		if _, err = os.Lstat(filepath.Join(root, name)); err == nil {
@@ -53,7 +59,10 @@ func runUninstall(rc *runContext, args []string) error {
 	for _, target := range owned {
 		fmt.Fprintln(rc.stdout, "  "+target)
 	}
-	fmt.Fprintln(rc.stdout, "These hold the executor credential, native history and Harnesses. The workspace stays, and so does anything else in "+root+" and any credential or capability directory outside the installation.")
+	if entry != "" {
+		fmt.Fprintln(rc.stdout, "The shared components of this version are deleted too when no other installation uses them: "+config.ComponentDirectory)
+	}
+	fmt.Fprintln(rc.stdout, "These hold the executor credential and native history. The workspace stays, and so does anything else in "+root+" and any credential or capability directory outside the installation.")
 	fmt.Fprint(rc.stdout, "Continue? [y/N] ")
 	answer, _ := bufio.NewReader(rc.stdin).ReadString('\n')
 	if !strings.EqualFold(strings.TrimSpace(answer), "y") {
@@ -87,6 +96,7 @@ func runUninstall(rc *runContext, args []string) error {
 	bin := filepath.Join(root, "bin")
 	order = append(order, bin, record)
 	var kept bool
+	var releaseErr error
 	for _, target := range order {
 		held, e := removeTree(target, running)
 		if e != nil {
@@ -103,6 +113,17 @@ func runUninstall(rc *runContext, args []string) error {
 		_ = os.Remove(root)
 	}
 	fmt.Fprintln(rc.stdout, "oac-daemon: uninstalled")
+	if entry != "" {
+		users, err := releaseNativeStore(context.Background(), rc.stdout, config.ComponentDirectory, entry)
+		if err != nil {
+			releaseErr = fmt.Errorf("uninstall: the installation was removed but its shared components could not be released (%w); the next install or uninstall on this machine collects them", err)
+			fmt.Fprintln(rc.stdout, "Warning: "+releaseErr.Error())
+		} else if users == 0 {
+			fmt.Fprintln(rc.stdout, "Shared components removed: "+config.ComponentDirectory)
+		} else {
+			fmt.Fprintf(rc.stdout, "Shared components kept: %d other installation(s) still use %s\n", users, config.ComponentDirectory)
+		}
+	}
 	if config.Workspace != "" {
 		fmt.Fprintln(rc.stdout, "Workspace kept: "+config.Workspace)
 	}
@@ -115,7 +136,7 @@ func runUninstall(rc *runContext, args []string) error {
 		}
 	}
 	fmt.Fprintf(rc.stdout, "Core still accepts this machine's credential. In Web, open the Session (Environment %s) and choose Revoke in Executor credentials, or Delete the Session. This Session's install command cannot be used again; to reconnect it, choose Rotate and install from an extracted distribution, or create a new Session.\n", config.Environment)
-	return nil
+	return releaseErr
 }
 
 // removeTree deletes path. keep is the running executable, which Windows

@@ -24,6 +24,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   // Node installation only offers a system service; there is no user-mode alternative.
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   await expect(add.getByLabel("One-time enrollment command without sudo", { exact: true })).toHaveCount(0);
+  await add.getByRole("radio", { name: "Custom" }).click();
   await add.getByLabel("Sandboxes at once").fill("3");
   const tokenRequest = () => page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
   const issued = tokenRequest();
@@ -91,17 +92,27 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(problem).toContainText("Not connected yet");
   await expect(problem).toContainText("sudo journalctl -u oac-node-7f3c2a90-5b1e-4c2d-9e3f-0a1b2c3d4e5f.service");
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
-  // Connected, it reports why its provider isn't ready; once ready, the node is connected.
-  await setNode(request, { id: "node-new", online: true, diagnostic: "host_unsupported" });
-  await expect(problem).toContainText("Host unsupported");
+  // Connected but not ready, it keeps waiting for its provider; once ready, the node is connected.
+  await setNode(request, { id: "node-new", online: true });
+  await expect(problem).toContainText("Sandbox provider unavailable");
   await expect(progress).toContainText("Waiting for Docker");
-  await setNode(request, { id: "node-new", provider_ready: true, diagnostic: "" });
+  await setNode(request, { id: "node-new", provider_ready: true });
   await expect(progress).toHaveText("edge-04 · Connected");
   await add.getByRole("button", { name: "Done" }).click();
   await expect(add).toBeHidden();
-  // A finished flow leaves no limits behind: the next node starts from the defaults.
+  // A finished flow leaves no limits behind: the next node starts from the recommended ones.
   await page.getByRole("button", { name: "Add node" }).click();
-  await expect(add.getByLabel("Sandboxes at once")).toHaveValue("2");
+  await expect(add.getByRole("radio", { name: "Recommended" })).toBeChecked();
+  await expect(add.getByLabel("Sandboxes at once")).toHaveCount(0);
+});
+
+test("asks Core to recommend a new node's limits unless the administrator enters them", async ({ page, request }) => {
+  await openConsole(page, request, "nodes");
+  await page.getByRole("button", { name: "Add node" }).click();
+  const add = page.getByRole("dialog", { name: "Add node" });
+  const issued = page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
+  await add.getByRole("button", { name: "Generate command" }).click();
+  expect((await issued).postDataJSON()).toEqual({});
 });
 
 test("issues no command before the installation is read, for a loopback public URL or without node files, and sees a fix on reopening", async ({ page, request }) => {
@@ -192,7 +203,7 @@ test("gives the host's uninstall command even when the installation must be read
   await expect(cleanup.getByLabel("Uninstall command", { exact: true })).toHaveValue(/'https:\/\/core\.example\.com\/node-install\/node-install\.pyz'/);
 });
 
-test("sets up own-machine sandboxes page by page, with the Runtime from the distribution", async ({ page, request }) => {
+test("sets up own-machine sandboxes page by page", async ({ page, request }) => {
   await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
   await expect(page.getByRole("heading", { name: "Where should sandboxes run?" })).toBeVisible();
   await page.getByRole("button", { name: "Own machines" }).click();
@@ -201,8 +212,8 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   await expect(page.getByRole("heading", { name: "Review and save" })).toBeVisible();
   await page.getByRole("button", { name: "Save configuration" }).click();
 
-  // Own machines continue straight to adding the first node, at its limits: no command is issued yet.
-  await expect(page.getByRole("dialog", { name: "Add node" }).getByLabel("Sandboxes at once")).toBeVisible();
+  // Own machines continue straight to adding the first node, with Recommended limits: no command is issued yet.
+  await expect(page.getByRole("dialog", { name: "Add node" }).getByRole("radio", { name: "Recommended" })).toBeChecked();
   const add = page.getByRole("dialog", { name: "Add node" });
   await expect(add.getByText("No sudo on this host?")).toHaveCount(0);
   // None is requested within a second of opening, and Core saw only the deployment write.
@@ -211,9 +222,6 @@ test("sets up own-machine sandboxes page by page, with the Runtime from the dist
   expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
   await add.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  // The saved specification carries the Runtime read from the console's manifest.
-  await page.getByRole("button", { name: "Configuration details", exact: true }).click();
-  await expect(page.locator(".help-tip-popover").getByText("c0ffee000000", { exact: true })).toBeVisible();
 });
 
 test("preselects microsandbox and asks once before switching to Docker", async ({ page, request }) => {
@@ -305,11 +313,9 @@ test("shows the retained E2B build while a replacement key is checked", async ({
   await expect(edit.getByRole("button", { name: "Next" })).toBeEnabled();
 });
 
-test("edits only the saved backend, preserving a custom size and Runtime", async ({ page, request }) => {
-  const runtime = { source_commit: "0".repeat(40), image_id: `sha256:${"a".repeat(64)}`, image_manifest_digest: `sha256:${"b".repeat(64)}`,
-    microsandbox_ref: `oac-runtime@sha256:${"b".repeat(64)}`, runtime_sha256: "c".repeat(64), firmware_sha256: "d".repeat(64) };
-  const current = { resources: { cpus: 7, memory_mib: 8192 }, runtime };
-  let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, update_required: 0, unknown: 0 } },
+test("edits only the saved backend, preserving a custom size", async ({ page, request }) => {
+  const current = { resources: { cpus: 7, memory_mib: 8192 } };
+  let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, unknown: 0 } },
     owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
     suspension: null };
   let submitted: Record<string, unknown> | null = null;
@@ -327,7 +333,7 @@ test("edits only the saved backend, preserving a custom size and Runtime", async
   await expect(page.getByRole("button", { name: "E2B cloud" })).toHaveCount(0);
   await page.getByRole("button", { name: /^Current/ }).click();
   await page.getByRole("button", { name: "Save configuration" }).click();
-  await expect.poll(() => submitted).toMatchObject({ provider: "docker", expected_generation: 1, resources: current.resources, runtime });
+  await expect.poll(() => submitted).toMatchObject({ provider: "docker", expected_generation: 1, resources: current.resources });
   expect(submitted).not.toHaveProperty("core_url");
 });
 
@@ -351,9 +357,6 @@ test("keeps the page usable when Core refuses a sandbox change, and shows a safe
   const added = page.getByRole("dialog", { name: "Add node" });
   await expect(added).toBeVisible();
   await added.getByRole("button", { name: "Close dialog" }).click();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Configuration details", exact: true }).click();
-  await expect(page.locator(".help-tip-popover").getByText("c0ffee000000", { exact: true })).toBeVisible();
 });
 
 test("renames a node and sets how many sandboxes run on it at once", async ({ page, request }) => {
@@ -365,7 +368,9 @@ test("renames a node and sets how many sandboxes run on it at once", async ({ pa
   await page.getByRole("row").filter({ hasText: "core-01" }).getByRole("button", { name: "Edit node" }).click();
   const edit = page.getByRole("dialog", { name: "Edit node" });
   await edit.getByLabel("Name").fill("core-01-large");
-  await edit.getByLabel("Sandboxes at once").fill("6");
+  await expect(edit).toContainText("Recommended: 6 at once.");
+  await edit.getByRole("button", { name: "Use recommended" }).click();
+  await expect(edit.getByLabel("Sandboxes at once")).toHaveValue("6");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(edit).toBeHidden();
   await expect(capacity).toContainText("core-01-large");

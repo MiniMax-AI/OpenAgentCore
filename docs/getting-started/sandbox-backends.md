@@ -15,8 +15,8 @@ The installer selects no backend. One installation uses one backend. To change i
 | You provide | Linux amd64 hosts with systemd and `/dev/kvm` | Linux amd64 hosts with systemd and rootful Docker Engine | An E2B API key and a template; a public HTTPS URL for Core |
 | Isolation | Each sandbox has its own kernel | Containers share the node's kernel | E2B's |
 | Idle sandboxes suspend and resume | Yes, with checkpoints | No | No |
-| Independent workspace storage | Optional, on NFS | No | No |
-| Disk limits | Root and data disks | None | Set by the template |
+| Workspace storage | Required, on NFS | Own disk | Own disk |
+| Disk limits | Root disk and workspace quota | None | Set by the template |
 
 The field-level differences are in the [deployment contract](../../contracts/agents-api/sandbox-deployment.md#what-each-field-means-per-sandbox-provider). Host requirements for nodes are in [Add and manage nodes](./nodes.md#host-requirements).
 
@@ -30,7 +30,7 @@ Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a 
 2. Choose the backend and the sandbox size. Web proposes the [default size the Provider declares](../sandbox-provider.md#register-the-provider-kind) as **Standard**.
 3. Choose **Save configuration**. The choice is stored in Core's database.
 
-For **Own machines**, continue with [Add and manage nodes](./nodes.md). To keep workspaces off the nodes, first [Set up workspace storage](./workspace-storage.md). For checkpoint recovery across microsandbox nodes, see [Checkpoint recovery across nodes](./nodes.md#checkpoint-recovery-across-nodes).
+For **Own machines**, continue with [Add and manage nodes](./nodes.md). For microsandbox, first [Set up workspace storage](./workspace-storage.md). For checkpoint recovery across microsandbox nodes, see [Checkpoint recovery across nodes](./nodes.md#checkpoint-recovery-across-nodes).
 
 ## Use E2B
 

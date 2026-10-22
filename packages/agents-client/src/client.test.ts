@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminClient } from "./admin-client";
-import { AgentCoreError, projectAgentSession, CreationStreamRetryError, createIdempotencyKey, isSessionDeletionConflict, OpenAIAgentsClient } from "./client";
+import { AgentCoreError, projectAgentSession, CreationStreamRetryError, isSessionDeletionConflict, OpenAIAgentsClient, randomUuid } from "./client";
 import hostedDadf64 from "./fixtures/parsar-dadf64a7/openai-hosted.json";
 import eventBatchDadf64 from "./fixtures/parsar-dadf64a7/session-event-batch.json";
 import type {
@@ -2249,7 +2249,7 @@ describe("OpenAIAgentsClient", () => {
 
   it("lets the caller hold and reuse one event-write idempotency key before an uncertain retry", async () => {
     const calls: FetchCall[] = [];
-    const key = createIdempotencyKey();
+    const key = randomUuid();
     const client = new OpenAIAgentsClient({
       fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
         calls.push({ input, init });
@@ -2258,8 +2258,7 @@ describe("OpenAIAgentsClient", () => {
     });
     const events: SessionInputEvent[] = [{ type: "agent.session.input.cancel" }];
 
-    expect(key.trim()).not.toBe("");
-    expect(new TextEncoder().encode(key).length).toBeLessThanOrEqual(128);
+    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     await expect(client.submitEvents("session", events, key)).rejects.toMatchObject({ status: 500 });
     await expect(client.submitEvents("session", events, key)).rejects.toMatchObject({ status: 500 });
     expect(calls).toHaveLength(2);
@@ -2286,7 +2285,7 @@ describe("OpenAIAgentsClient", () => {
     }
   });
 
-  it("keeps the three legacy single-event helpers on the public batch wire", async () => {
+  it("maps the single-event helpers on the public batch wire", async () => {
     const calls: FetchCall[] = [];
     const client = new OpenAIAgentsClient({ fetch: recordingFetch(new Response(null, { status: 202 }), calls) });
 

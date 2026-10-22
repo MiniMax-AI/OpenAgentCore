@@ -55,8 +55,7 @@ def load_receipt(path, identity, config):
         data = json.load(source)
     if data.get('identity') != identity or data.get('version') != 1:
         raise Failure('ownership')
-    # Receipts from releases before custom endpoints belong to official E2B.
-    if data.get('endpoint', endpoint_identity({})) != endpoint_identity(config):
+    if data.get('endpoint') != endpoint_identity(config):
         raise Failure('ownership')
     return data
 

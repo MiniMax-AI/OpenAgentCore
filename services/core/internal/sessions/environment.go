@@ -141,7 +141,7 @@ type EnvironmentFileWrite struct {
 // ValidateRetainedHistory checks the selected external filesystem and Harness combination.
 func ValidateRetainedHistory(required, supported bool) error {
 	if required && !supported {
-		return fmt.Errorf("%w: external workspace storage requires retained_native_history", ErrInvalidInput)
+		return ErrRetainedHistoryUnsupported
 	}
 	return nil
 }

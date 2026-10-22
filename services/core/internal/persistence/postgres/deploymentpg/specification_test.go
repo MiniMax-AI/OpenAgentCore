@@ -76,7 +76,7 @@ func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	issued, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 2})
+	issued, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(2)})
 	if err != nil || uuid.Validate(issued.ID) != nil || issued.Token == "" {
 		t.Fatal(issued.ID, err)
 	}
@@ -90,7 +90,7 @@ func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
 		t.Fatal("the refused enrollment consumed its token", err)
 	}
 	earlier := strings.Repeat("e", 64)
-	if _, err := f.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES($1,$2,clock_timestamp()+interval '10 minutes')",
+	if _, err := f.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,clock_timestamp()+interval '10 minutes',2,2)",
 		setupDigest(earlier), view.InstallationID); err != nil {
 		t.Fatal(err)
 	}

@@ -22,9 +22,9 @@ type nodeManifest struct {
 	Artifacts       map[string]nodeArtifact `json:"artifacts"`
 }
 
-func (h *console) readNodeManifest(prefix string) (nodeManifest, error) {
+func (h *console) readNodeManifest() (nodeManifest, error) {
 	var manifest nodeManifest
-	f, err := h.nodePayload.Open(prefix + "manifest.json")
+	f, err := h.nodePayload.Open("manifest.json")
 	if err != nil {
 		return manifest, err
 	}
@@ -33,12 +33,10 @@ func (h *console) readNodeManifest(prefix string) (nodeManifest, error) {
 	if err != nil || len(raw) > 1024*1024 || json.Unmarshal(raw, &manifest) != nil {
 		return manifest, errors.New("invalid node manifest")
 	}
-	if prefix != "releases/"+manifest.SourceCommit+"/" {
-		return manifest, errors.New("node manifest release mismatch")
-	}
 	return manifest, nil
 }
 
+var payloadRevision = regexp.MustCompile(`^[0-9a-f]{40}$`)
 var nodeArtifactName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 var nodeArtifactDigest = regexp.MustCompile(`^[0-9a-f]{64}$`)
 

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 )
 
@@ -21,7 +22,10 @@ func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
 	}
 	useKVM(t, true)
 	dir := t.TempDir()
-	native := Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, CheckpointRoot: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"), Network: Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
+	script := []byte("#!/bin/sh\nprintf '%s' '{}'\n")
+	digest := sha256.Sum256(script)
+	native := Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, CheckpointRoot: dir, RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
+		Image: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:]), Network: Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
 	if err := os.Chmod(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -32,10 +36,7 @@ func TestMicrosandboxConstructionSelectsGenerationReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	script := []byte("#!/bin/sh\nprintf '%s' '{}'\n")
-	digest := sha256.Sum256(script)
-	release := sandbox.RuntimeRelease{MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: hex.EncodeToString(digest[:]), FirmwareSHA256: hex.EncodeToString(digest[:])}
-	config := sandbox.NodeConfig{Provider: "microsandbox", Generation: 9, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192, EnvironmentDiskMiB: 8192}, Runtime: &release}, Native: raw}
+	config := sandbox.NodeConfig{Provider: "microsandbox", Generation: 9, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}, Native: raw}
 	for _, path := range []string{native.RuntimePath, native.FirmwarePath, native.HelperPath} {
 		if err := os.WriteFile(path, script, 0700); err != nil {
 			t.Fatal(err)

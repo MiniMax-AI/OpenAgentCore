@@ -27,21 +27,17 @@ type AgentConfig struct {
 	StateDirectory string
 	Identity       Identity
 	Credential     string
-	Provider       sandbox.SandboxProvider
-	Probe          func(context.Context) (Health, error)
 	// Dialer is optional, primarily for an operator-supplied TLS trust configuration.
 	Dialer *websocket.Dialer
 }
 
 type agent struct {
-	config     AgentConfig
-	stored     StoredIdentity
-	mu         sync.Mutex
-	current    *agentConnection
-	queue      chan work
-	active     atomic.Int32
-	ready      atomic.Bool
-	healthSeen atomic.Bool
+	config  AgentConfig
+	stored  StoredIdentity
+	mu      sync.Mutex
+	current *agentConnection
+	queue   chan work
+	active  atomic.Int32
 	// failureLogged is set when Run logged a connection failure and cleared when
 	// the next accepted connection is logged. Only Run's goroutine uses it.
 	failureLogged bool
@@ -78,20 +74,14 @@ type work struct {
 	connection *agentConnection
 	provider   sandbox.SandboxProvider
 	release    func()
-	ready      bool
 	queued     time.Time
 }
 
 // Run owns one persistent node identity and reconnects its transport only. It
 // never resends a Provider request. The bounded worker outlives each connection.
 func Run(ctx context.Context, config AgentConfig) error {
-	if config.Generations == nil && (config.Provider == nil || config.Probe == nil) {
-		return sandbox.ErrInvalid
-	}
 	if config.Generations == nil {
-		if err := sandbox.ValidateProvider(config.Provider); err != nil {
-			return err
-		}
+		return sandbox.ErrInvalid
 	}
 	release, err := lockDirectory(config.StateDirectory)
 	if err != nil {
@@ -163,33 +153,10 @@ func Run(ctx context.Context, config AgentConfig) error {
 		}
 	}
 }
-func (a *agent) health(ctx context.Context, host *hostHealthSampler) (Health, error) {
-	if a.config.Generations != nil {
-		health := Health{Generations: a.config.Generations.Statuses(), ObservedAt: time.Now().UTC(), ActiveOperations: int(a.active.Load())}
-		host.fill(&health, a.config.StateDirectory)
-		return health, nil
-	}
-	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	h, e := a.config.Probe(probeCtx)
-	h.ProviderReady = e == nil
-	// Only the fixed code leaves this process; the probe error may name host paths.
-	h.Diagnostic = sandbox.NodeDiagnostic(e)
-	if e != nil && ctx.Err() != nil {
-		// A closing connection cancelled the probe; that says nothing about the provider.
-		h.Diagnostic = string(sandbox.NodeProviderUnavailable)
-	} else {
-		wasReady := a.ready.Swap(h.ProviderReady)
-		seen := a.healthSeen.Swap(true)
-		if e != nil && probeCtx.Err() == nil && (!seen || wasReady) {
-			// The local error stays in this host's journal; it may name host paths.
-			log.Ctx(ctx).Warn("sandbox node provider unavailable; check local runtime configuration and permissions", "node_id", a.config.Identity.NodeID, "diagnostic", h.Diagnostic, "error", e)
-		}
-	}
-	h.ObservedAt = time.Now().UTC()
-	h.ActiveOperations = int(a.active.Load())
-	host.fill(&h, a.config.StateDirectory)
-	return h, e
+func (a *agent) health(host *hostHealthSampler) Health {
+	health := Health{Generations: a.config.Generations.Statuses(), ObservedAt: time.Now().UTC(), ActiveOperations: int(a.active.Load())}
+	host.fill(&health, a.config.StateDirectory)
+	return health
 }
 func (a *agent) connect(ctx context.Context) error {
 	endpointURL, err := endpoint(a.config.CoreURL, "/api/v1/sandbox-node/connect")
@@ -221,17 +188,17 @@ func (a *agent) connect(ctx context.Context) error {
 	defer conn.Close()
 	conn.SetReadLimit(MaxFrameBytes)
 	host := new(hostHealthSampler)
-	health, _ := a.health(ctx, host)
+	health := a.health(host)
 	_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	version := ProtocolVersion
-	if err = writeFrame(conn, frame{Version: version, Type: "hello", GenerationManagement: a.config.Generations != nil, Identity: &a.config.Identity, Health: &health}); err != nil {
+	if err = writeFrame(conn, frame{Version: version, Type: "hello", Identity: &a.config.Identity, Health: &health}); err != nil {
 		return err
 	}
 	welcome, err := readFrame(conn)
 	if err != nil {
 		return notAccepted{err}
 	}
-	if (a.config.Generations == nil && welcome.Deployment != nil) || welcome.Version != version || welcome.Type != "welcome" || !validID(welcome.ConnectionID) || welcome.OwnerEpoch == 0 {
+	if welcome.Deployment == nil || welcome.Version != version || welcome.Type != "welcome" || !validID(welcome.ConnectionID) || welcome.OwnerEpoch == 0 {
 		return notAccepted{sandbox.ErrInvalid}
 	}
 	a.mu.Lock()
@@ -259,19 +226,13 @@ func (a *agent) connect(ctx context.Context) error {
 	detach := context.AfterFunc(connectionCtx, current.close)
 	defer detach()
 	go a.heartbeats(connectionCtx, current, host)
-	var controlDone chan struct{}
-	controlWork := make(chan []sandbox.GenerationRetention, 1)
-	if a.config.Generations != nil {
-		if welcome.Deployment == nil {
-			return sandbox.ErrInvalid
-		}
-		if err := a.config.Generations.Deployment(*welcome.Deployment); err != nil {
-			return err
-		}
-		controlDone = make(chan struct{})
-		go func() { defer close(controlDone); a.garbageCollection(connectionCtx, current, controlWork) }()
-		defer func() { cancel(); <-controlDone }()
+	if err := a.config.Generations.Deployment(*welcome.Deployment); err != nil {
+		return err
 	}
+	controlWork := make(chan []sandbox.GenerationRetention, 1)
+	controlDone := make(chan struct{})
+	go func() { defer close(controlDone); a.garbageCollection(connectionCtx, current, controlWork) }()
+	defer func() { cancel(); <-controlDone }()
 	sequence := uint64(0)
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(35 * time.Second))
@@ -283,20 +244,18 @@ func (a *agent) connect(ctx context.Context) error {
 			return sandbox.ErrInvalid
 		}
 		if f.Type == "heartbeat_ack" && f.ConnectionID == current.id {
-			if f.OwnerEpoch != current.epoch || (a.config.Generations == nil && f.Deployment != nil) {
+			if f.OwnerEpoch != current.epoch {
 				return sandbox.ErrOwnership
 			}
-			if a.config.Generations != nil {
-				if f.Deployment == nil {
-					return sandbox.ErrInvalid
-				}
-				if err := a.config.Generations.Deployment(*f.Deployment); err != nil {
-					return err
-				}
+			if f.Deployment == nil {
+				return sandbox.ErrInvalid
+			}
+			if err := a.config.Generations.Deployment(*f.Deployment); err != nil {
+				return err
 			}
 			continue
 		}
-		if f.Type == "retention_ack" && a.config.Generations != nil {
+		if f.Type == "retention_ack" {
 			if err := a.acceptRetention(current, f, controlWork); err != nil {
 				return err
 			}
@@ -306,9 +265,6 @@ func (a *agent) connect(ctx context.Context) error {
 			return sandbox.ErrInvalid
 		}
 		q := *f.Request
-		if a.config.Generations == nil && q.DeploymentGeneration != a.config.Identity.DeploymentGeneration {
-			return sandbox.ErrOwnership
-		}
 		if q.ConnectionID != current.id || q.OwnerEpoch != current.epoch || q.Sequence != sequence+1 {
 			return sandbox.ErrOwnership
 		}
@@ -317,20 +273,16 @@ func (a *agent) connect(ctx context.Context) error {
 			_ = current.write(frame{Type: "response", Response: &response{ID: q.ID, ConnectionID: current.id, ErrorCode: "invalid"}})
 			continue
 		}
-		task := work{request: q, connection: current, provider: a.config.Provider, ready: a.ready.Load(), queued: time.Now()}
-		if a.config.Generations != nil {
-			task.provider, task.ready, task.release, err = a.config.Generations.Acquire(q.DeploymentGeneration)
-			if err != nil {
-				_ = current.write(frame{Type: "response", Response: &response{ID: q.ID, ConnectionID: current.id, ErrorCode: "unconfirmed"}})
-				continue
-			}
+		task := work{request: q, connection: current, queued: time.Now()}
+		task.provider, _, task.release, err = a.config.Generations.Acquire(q.DeploymentGeneration)
+		if err != nil {
+			_ = current.write(frame{Type: "response", Response: &response{ID: q.ID, ConnectionID: current.id, ErrorCode: "unconfirmed"}})
+			continue
 		}
 		select {
 		case a.queue <- task:
 		default:
-			if task.release != nil {
-				task.release()
-			}
+			task.release()
 			return ErrUnavailable
 		}
 	}
@@ -382,12 +334,12 @@ func (a *agent) heartbeats(ctx context.Context, c *agentConnection, host *hostHe
 		case <-c.done:
 			return
 		case <-ticker.C:
-			h, _ := a.health(ctx, host)
+			h := a.health(host)
 			if c.write(frame{Type: "heartbeat", ConnectionID: c.id, OwnerEpoch: c.epoch, Health: &h}) != nil {
 				c.close()
 				return
 			}
-			if a.config.Generations != nil && a.requestRetention(c) != nil {
+			if a.requestRetention(c) != nil {
 				c.close()
 				return
 			}
@@ -399,9 +351,7 @@ func (a *agent) worker(ctx context.Context) {
 		for {
 			select {
 			case task := <-a.queue:
-				if task.release != nil {
-					task.release()
-				}
+				task.release()
 			default:
 				return
 			}
@@ -417,9 +367,7 @@ func (a *agent) worker(ctx context.Context) {
 	}
 }
 func (a *agent) executeWork(ctx context.Context, task work) {
-	if task.release != nil {
-		defer task.release()
-	}
+	defer task.release()
 	a.mu.Lock()
 	current := a.current
 	a.mu.Unlock()
@@ -431,10 +379,7 @@ func (a *agent) executeWork(ctx context.Context, task work) {
 		return
 	default:
 	}
-	ready := a.ready.Load()
-	if a.config.Generations != nil {
-		ready = a.config.Generations.Ready(task.request.DeploymentGeneration)
-	}
+	ready := a.config.Generations.Ready(task.request.DeploymentGeneration)
 	if !time.Now().Before(task.request.deadline) || requiresReady(task.request) && !ready {
 		_ = task.connection.write(frame{Type: "response", Response: &response{ID: task.request.ID, ConnectionID: task.connection.id, ErrorCode: "unconfirmed"}})
 		return
@@ -443,17 +388,18 @@ func (a *agent) executeWork(ctx context.Context, task work) {
 	operationCtx, cancel := context.WithDeadline(context.Background(), task.request.deadline)
 	a.active.Add(1)
 	started := time.Now()
-	result := execute(operationCtx, task.provider, task.request)
+	result, err := execute(operationCtx, task.provider, task.request)
 	finished := time.Now()
 	a.active.Add(-1)
 	cancel()
 	_ = task.connection.write(frame{Type: "response", Response: &result})
-	logOperation(ctx, task, started, finished, result.ErrorCode)
+	logOperation(ctx, task, started, finished, result.ErrorCode, err)
 }
 
 // Queue wait and execution share this node's monotonic clock. Read-only
 // observations repeat on every reconciliation tick and log at debug level.
-func logOperation(ctx context.Context, task work, started, finished time.Time, code string) {
+// The local error stays in this host's journal; it may name host paths.
+func logOperation(ctx context.Context, task work, started, finished time.Time, code string, err error) {
 	level := slog.LevelInfo
 	switch task.request.Operation {
 	case "info", "renew", "initial", "new_compute", "compute", "observe":
@@ -461,6 +407,10 @@ func logOperation(ctx context.Context, task work, started, finished time.Time, c
 			level = slog.LevelDebug
 		}
 	}
-	log.Bg().Log(ctx, level, "sandbox node operation", "operation", task.request.Operation, "allocation_id", task.request.Reference.AllocationID,
-		"queue_ms", started.Sub(task.queued).Milliseconds(), "duration_ms", finished.Sub(started).Milliseconds(), "error_code", code)
+	attrs := []any{"operation", task.request.Operation, "allocation_id", task.request.Reference.AllocationID,
+		"queue_ms", started.Sub(task.queued).Milliseconds(), "duration_ms", finished.Sub(started).Milliseconds(), "error_code", code}
+	if err != nil {
+		attrs = append(attrs, "error", err)
+	}
+	log.Bg().Log(ctx, level, "sandbox node operation", attrs...)
 }

@@ -25,22 +25,17 @@ func initFixture(t *testing.T) (string, releaseIdentity, map[string][]byte) {
 	previous := chown
 	chown = func(string, int, int) error { return nil }
 	t.Cleanup(func() { chown = previous })
-	release, files := releaseFixture(strings.Repeat("d", 40), 1760000000)
+	release, files := releaseFixture(strings.Repeat("d", 40))
 	return t.TempDir(), release, files
 }
 
-// releaseFixture returns one release's metadata. A zero sourceTime omits
-// source_time, as v0.0.10 and v0.0.11 manifests do.
-func releaseFixture(revision string, sourceTime int64) (releaseIdentity, map[string][]byte) {
+// releaseFixture returns one release's metadata.
+func releaseFixture(revision string) (releaseIdentity, map[string][]byte) {
 	files := map[string][]byte{}
 	for _, name := range releaseMembers {
 		files[name] = []byte("fixture " + revision)
 	}
-	manifest := map[string]any{"source_commit": revision, "platform": "linux/amd64"}
-	if sourceTime != 0 {
-		manifest["source_time"] = sourceTime
-	}
-	files["manifest.json"], _ = json.Marshal(manifest)
+	files["manifest.json"], _ = json.Marshal(map[string]any{"source_commit": revision, "platform": "linux/amd64"})
 	return releaseIdentity{revision}, files
 }
 
@@ -154,75 +149,19 @@ func readReceipt(t *testing.T, root string) installReceipt {
 	return receipt
 }
 
-func TestInitializeUpgradesAnOlderInstallationInPlace(t *testing.T) {
-	root, release, files := initFixture(t)
-	old, oldFiles := releaseFixture(strings.Repeat("c", 40), 0)
-	if err := initialize(root, old, fixed(oldFiles)); err != nil {
-		t.Fatal(err)
-	}
-	// Receipts written by v0.0.10 and v0.0.11 also pin the release pointer.
-	receipt := readReceipt(t, root)
-	pointer := filepath.Join(root, "node-payload", "active.json")
-	receipt.Files["node-payload/active.json"], _ = fileDigest(pointer)
-	raw, _ := json.Marshal(receipt)
-	if err := os.WriteFile(filepath.Join(root, "installation.json"), raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	before := snapshot(t, root)
-
-	if err := initialize(root, release, fixed(files)); err != nil {
-		t.Fatal(err)
-	}
-	after := snapshot(t, root)
-	for name, data := range before {
-		if (strings.HasPrefix(name, "secrets/") || strings.HasPrefix(name, "node-payload/releases/")) && after[name] != data {
-			t.Fatalf("upgrade changed %s", name)
-		}
-	}
-	receipt = readReceipt(t, root)
-	if receipt.SourceCommit != release.revision {
-		t.Fatalf("receipt release = %s", receipt.SourceCommit)
-	}
-	for _, revision := range []string{old.revision, release.revision} {
-		for _, name := range releaseMembers {
-			if receipt.Files["node-payload/releases/"+revision+"/"+name] == "" {
-				t.Fatalf("receipt lacks %s of %s", name, revision)
-			}
-		}
-	}
-	if _, pinned := receipt.Files["node-payload/active.json"]; pinned {
-		t.Fatal("receipt still pins the release pointer")
-	}
-	want := `{"source_commit":"` + release.revision + `"}`
-	if after["node-payload/active.json"] != want {
-		t.Fatalf("pointer = %s", after["node-payload/active.json"])
-	}
-
-	// A crash between the receipt and the pointer heals on the next start.
-	if err := os.WriteFile(pointer, []byte(before["node-payload/active.json"]), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := initialize(root, release, refuseDownload(t)); err != nil {
-		t.Fatal(err)
-	}
-	if healed, _ := os.ReadFile(pointer); string(healed) != want {
-		t.Fatalf("pointer = %s", healed)
-	}
-}
-
-func TestInitializeRefusesAnOlderRelease(t *testing.T) {
+func TestInitializeRefusesDataOfAnotherRelease(t *testing.T) {
 	root, release, files := initFixture(t)
 	if err := initialize(root, release, fixed(files)); err != nil {
 		t.Fatal(err)
 	}
 	before := snapshot(t, root)
-	older, olderFiles := releaseFixture(strings.Repeat("e", 40), 1700000000)
-	want := "This installation runs release dddddddddddd (2025-10-09 08:53 UTC); this release, eeeeeeeeeeee (2023-11-14 22:13 UTC), is not newer. Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade."
-	if err := initialize(root, older, fixed(olderFiles)); err == nil || err.Error() != want {
+	other, otherFiles := releaseFixture(strings.Repeat("e", 40))
+	want := "existing data belongs to release dddddddddddd; to use release eeeeeeeeeeee, uninstall the installation, which deletes its data, then install again"
+	if err := initialize(root, other, fixed(otherFiles)); err == nil || err.Error() != want {
 		t.Fatalf("err = %v", err)
 	}
 	if !maps.Equal(before, snapshot(t, root)) {
-		t.Fatal("a refused downgrade changed installation files")
+		t.Fatal("a refused release changed installation files")
 	}
 }
 

@@ -113,7 +113,7 @@ func RuntimeConnected(ctx context.Context, s ConnectionStore, registry *runtimeg
 		return false, nil
 	}
 	// Recheck authority after reading the socket; rotation/revocation never inherits
-	// the connected observation of a socket authenticated with the former key.
+	// the connected observation of a socket authenticated with the previous key.
 	if _, err = s.AuthenticateEnvironmentExecutor(ctx, environment, digest); err != nil {
 		return false, err
 	}

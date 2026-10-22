@@ -23,12 +23,12 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_DB: oac_ci_tests
-          POSTGRES_USER: agents_api
-          POSTGRES_PASSWORD: agents_api_test_only
+          POSTGRES_USER: oac
+          POSTGRES_PASSWORD: oac_test_only
         ports:
           - 5432/tcp
         options: >-
-          --health-cmd "pg_isready -U agents_api -d oac_ci_tests"
+          --health-cmd "pg_isready -U oac -d oac_ci_tests"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -58,7 +58,7 @@ jobs:
           PY
       - name: Verify official-client HTTP compatibility
         env:
-          OAC_TEST_DATABASE_URL: postgres://agents_api:agents_api_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
+          OAC_TEST_DATABASE_URL: postgres://oac:oac_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
           OAC_TEST_SERVER_BIN: ${{ runner.temp }}/oac-core-build/oac-core
           OAC_TEST_OFFICIAL_SDK_PYTHON: python
         run: |
@@ -70,7 +70,7 @@ jobs:
       - name: Verify the distribution's Core image
         if: inputs.container
         env:
-          OAC_TEST_DATABASE_URL: postgres://agents_api:agents_api_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
+          OAC_TEST_DATABASE_URL: postgres://oac:oac_test_only@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/oac_ci_tests?sslmode=disable
           OAC_DEV_CORE_IMAGE: oac-core:ci
           OAC_TEST_OFFICIAL_SDK_PYTHON: python
         run: make check-core-container

@@ -1,7 +1,7 @@
 ---
 title: "文件与 Skill"
 source: contracts/agents-api/source-files.md
-source_hash: 320216a4e7ac0d1e3e2455dfe622e0f91576ea1d0aa00d11911683b0e98387f1
+source_hash: 86d63f3ea780394ed99c0f5ec9d566117140a8650cb780e4b038e4ab45155ba9
 ---
 
 Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的项目资源，不依赖 Session。File 保存上传字节，Environment 通过 ID 复制它们。Skill 保存不可变、版本化的包，由模板和 Session 引用。项目的所有 API 密钥共享这些资源。
@@ -56,8 +56,6 @@ Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的
 ### 存储与删除 {#storage-and-deletion}
 
 Core 在自身数据库中以 PostgreSQL 大对象存储 File 字节。上传和删除分别在单一事务中提交，失败不会留下部分字节或元数据。[备份](../../../docs/zh/getting-started/operations.md#back-up)数据库时包含大对象；删除 File 不会将其从预写日志或旧备份移除。
-
-存在 File 行时，源文件 schema 拒绝降级。先通过 API 删除 File，以清理大对象。
 
 复制到工作区时读取 File 一致快照，可在 File 删除后完成；后续查询失败。删除 File 不改变工作区副本。
 

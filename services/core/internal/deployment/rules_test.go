@@ -123,12 +123,15 @@ func TestTypedErrors(t *testing.T) {
 		t.Fatal("ResetRequiredError is not a conflict")
 	}
 	validation := &sandbox.ValidationError{Param: "resources.cpus", Message: "too many"}
-	err := configurationError(validation)
+	err := configurationError(validation).(*ConfigurationError)
 	if !errors.Is(err, ErrInvalidInput) || err.Validation != validation || err.Message != "too many" {
 		t.Fatalf("configurationError = %#v", err)
 	}
-	if plain := configurationError(errors.New("rejected")); plain.Validation != nil || plain.Error() != "rejected" {
+	if plain := configurationError(errors.New("rejected")).(*ConfigurationError); plain.Validation != nil || plain.Error() != "rejected" {
 		t.Fatalf("configurationError of a plain error = %#v", plain)
+	}
+	if err := configurationError(sandbox.ErrWorkspaceRequired); !errors.Is(err, sandbox.ErrWorkspaceRequired) {
+		t.Fatal("missing storage lost its typed error", err)
 	}
 	if got := string(configurationJSON(nil)); got != "{}" {
 		t.Fatalf("configurationJSON(nil) = %s", got)
@@ -142,23 +145,20 @@ func TestNormalizeHealth(t *testing.T) {
 	negative, zero, one := int64(-1), float64(0), float64(1)
 	now := time.Now()
 	for _, c := range []struct {
-		name       string
-		in         NodeHealth
-		diagnostic sandbox.NodeDiagnosticCode
-		invalid    bool
+		name    string
+		in      NodeHealth
+		invalid bool
 	}{
-		{"ready clears the diagnostic", NodeHealth{ProviderReady: true, Diagnostic: sandbox.NodeProviderUnavailable}, "", false},
-		{"unknown text becomes provider_unavailable", NodeHealth{Diagnostic: "disk on fire"}, sandbox.NodeProviderUnavailable, false},
-		{"empty stays empty", NodeHealth{}, "", false},
-		{"negative CPU count", NodeHealth{CPUCount: &negative}, "", true},
-		{"negative memory", NodeHealth{AvailableMemoryBytes: &negative}, "", true},
-		{"negative disk", NodeHealth{AvailableDiskBytes: &negative}, "", true},
-		{"host without observation", NodeHealth{Host: &NodeHost{CPUUtilization: &one}}, "", true},
-		{"valid host", NodeHealth{Host: &NodeHost{ObservedAt: &now, CPUUtilization: &one, EffectiveCPUCores: &one}}, "", false},
-		{"zero effective cores", NodeHealth{Host: &NodeHost{ObservedAt: &now, EffectiveCPUCores: &zero}}, "", true},
+		{"empty health", NodeHealth{}, false},
+		{"negative CPU count", NodeHealth{CPUCount: &negative}, true},
+		{"negative memory", NodeHealth{AvailableMemoryBytes: &negative}, true},
+		{"negative disk", NodeHealth{AvailableDiskBytes: &negative}, true},
+		{"host without observation", NodeHealth{Host: &NodeHost{CPUUtilization: &one}}, true},
+		{"valid host", NodeHealth{Host: &NodeHost{ObservedAt: &now, CPUUtilization: &one, EffectiveCPUCores: &one}}, false},
+		{"zero effective cores", NodeHealth{Host: &NodeHost{ObservedAt: &now, EffectiveCPUCores: &zero}}, true},
 	} {
 		got, err := normalizeHealth(c.in)
-		if c.invalid != errors.Is(err, ErrInvalidInput) || (!c.invalid && (err != nil || got.Diagnostic != c.diagnostic)) {
+		if c.invalid != errors.Is(err, ErrInvalidInput) || (!c.invalid && err != nil) {
 			t.Errorf("%s: normalizeHealth = %+v, %v", c.name, got, err)
 		}
 	}
@@ -230,15 +230,11 @@ func TestNodeRollout(t *testing.T) {
 		diagnostic sandbox.NodeDiagnosticCode
 	}{
 		{"offline", NodeRecord{TargetState: "ready", ReadyGeneration: &ready}, "unknown", ""},
-		{"protocol 1 on another generation", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 1, TargetGeneration: 2, TargetState: "ready", ReadyGeneration: &ready}, "update_required", ""},
-		{"protocol 1 on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "ready", ReadyGeneration: &ready}, "ready", ""},
-		{"preparing", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "preparing", ReadyGeneration: &ready}, "preparing", ""},
-		{"failed with an unknown diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "failed", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "failed", sandbox.NodeProviderUnavailable},
-		{"failed without diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "failed", ReadyGeneration: &ready}, "failed", ""},
-		{"ready ignores a diagnostic", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "ready", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "ready", ""},
-		{"unknown target state", NodeRecord{Online: true, ProtocolVersion: 2, TargetState: "other", ReadyGeneration: &ready}, "unknown", ""},
-		{"protocol 1 failed on the target", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, TargetState: "failed", TargetDiagnostic: "host_unsupported", ReadyGeneration: &ready}, "failed", "host_unsupported"},
-		{"protocol 1 without a target state", NodeRecord{Online: true, ProtocolVersion: 1, DeploymentGeneration: 2, TargetGeneration: 2, ReadyGeneration: &ready}, "unknown", ""},
+		{"preparing", NodeRecord{Online: true, TargetState: "preparing", ReadyGeneration: &ready}, "preparing", ""},
+		{"failed with an unknown diagnostic", NodeRecord{Online: true, TargetState: "failed", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "failed", sandbox.NodeProviderUnavailable},
+		{"failed without diagnostic", NodeRecord{Online: true, TargetState: "failed", ReadyGeneration: &ready}, "failed", ""},
+		{"ready ignores a diagnostic", NodeRecord{Online: true, TargetState: "ready", TargetDiagnostic: "boom", ReadyGeneration: &ready}, "ready", ""},
+		{"unknown target state", NodeRecord{Online: true, TargetState: "other", ReadyGeneration: &ready}, "unknown", ""},
 	} {
 		got := nodeRollout(c.n)
 		if got.State != c.state || got.Diagnostic != c.diagnostic || got.ReadyGeneration != &ready {

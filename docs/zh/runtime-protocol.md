@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: b65ff793e777225c871367f2f48608458acf78104d0f831f2be7633a534e9768
+source_hash: 68d35aa375b6c371975c619712f65970dc0055b49e4362c271f835422779eea1
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -47,7 +47,7 @@ sequenceDiagram
 - 立即发送第一个 heartbeat，之后按 bootstrap 返回的间隔发送。每个 heartbeat 声明 `supported_agent_kinds`、其可用性和[能力](#capability-declarations)。第一个 heartbeat 之前能力未知；heartbeat 中缺失的 kind 视为未声明。两者都不允许推断。
 - Heartbeat 仅证明存活，不证明执行进度，也不充当此前消息的回执。
 
-每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 隔离 owner lease，移除旧 Run 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
+每条物理连接拥有新的路由、admission handle 和传输状态。同一设备的新连接替代旧连接：Core 移除旧 Run 路由，新连接不继承这些状态。有效凭据和连接不授权选择其他 Session 或 Environment 绑定。
 
 ## 版本 {#versioning}
 
@@ -67,13 +67,13 @@ wire 上每个字段都是 JSON boolean，所有字段都必须出现，包括 `
 
 | 能力 | Core 何时要求 |
 | --- | --- |
-| `streaming`, `steering`, `durable_turns`, `durable_input_receipts`, `preparation`, `execution_controls`, `tool_observations` | 始终要求，适用于该 Harness 上每次执行（`available` 为 true） |
+| `streaming`, `durable_turns`, `durable_input_receipts`, `preparation`, `execution_controls`, `tool_observations` | 始终要求，适用于该 Harness 上每次执行（`available` 为 true） |
 | `environment_none` | Environment 类型为 `none` |
 | `local_environment`, `workspace_read_preparation`, `workspace_output_export` | Environment 类型为 `openai_hosted` 或 `self_hosted` |
 | `workspace_read_preparation` | 空闲 Files 目录读取需要只读 preparation |
 | `native_session_recovery` | Session 已启动过 Turn，但未记录原生 Session ID |
-| `retained_native_history` | Environment 使用外部工作区绑定；自带工作区存储不要求此能力 |
-| `structured_output` 和 `message_items` | Agent 请求 `json_schema` 输出 |
+| `retained_native_history` | Environment 使用外部工作区绑定；提供商自有磁盘不要求此能力 |
+| `structured_output` 和 `message_items` | Agent 请求 `json_schema` 输出。声明 `message_items` 的 Runtime 会给文本 delta 标注原生 item ID，并通过 `output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `subagent_observations` | `multi_agent.enabled` 为 true |
 | `subagent_control` | `multi_agent.enabled` 为 false |
 | `tool_search` | Agent 启用 tool search 或延迟 function 加载 |
@@ -219,12 +219,10 @@ Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并�
 | --- | --- |
 | `agent_options` | 始终设置 Agent 的 `model` 和 `system_prompt`；Session 冻结了模型提供商时设置 `model_provider`；Agent 设置 `x_agents_core.harness_config` 时设置 `harness_config`。Core 不发送其他键；Runtime 在准备之前以 `unsupported_configuration` 拒绝任何其他键 |
 | `execution_controls` | 始终设置：解析后的 text verbosity（默认 `medium`），以及 Agent 设置的每个选项，包括 web search（mode、`context_size`、`allowed_domains`、`location`）、programmatic tool calling、reasoning effort 和 summary、非 `auto` 的 service tier，以及 `json_schema` 输出格式。Core 在分发前按 Harness 声明校验每个值；原生选项名称属于适配器 |
-| `observe_messages` | Runtime 声明 `message_items` 时设置。文本 delta 随后携带原生 item ID，`output_message` frame 报告消息开始、完成、phase 和完成文本 |
 | `observe_subagent_identities`, `disable_subagents` | 根据 Agent 的 `multi_agent.enabled` 设置 |
 | `disable_execution_environment` | Environment 类型为 `none` 时设置 |
 | `local_environment` | 为 `openai_hosted` 和 `self_hosted` 设置，包含精确的 Environment 绑定。请求不携带 working directory；Runtime 按自身绑定检查 `workspace_directory` |
 | `require_existing_native_session` | 需要恢复原生 Session 时设置 |
-| `prompt_steer` 上的 `durable_receipt` | Core 交付的每个活动输入都设置 |
 
 执行配置必须且只能包含 `local_environment` 和 `disable_execution_environment` 之一；两者都缺失或同时存在时，`execution_prepare` 以 `unsupported_configuration` 拒绝。
 
@@ -232,14 +230,14 @@ Executor 空闲到期属于 Runtime 资源策略，与 Core 的活动 Turn 并�
 
 ## 活动输入回执 {#active-input-receipts}
 
-Core 通过 `prompt_steer` 交付活动输入，设置 `durable_receipt: true`，每个 Run 一次交付一个输入，并等待回执后再发送下一个。
+Core 通过 `prompt_steer` 交付活动输入，每个 Run 一次交付一个输入，并等待回执后再发送下一个。
 
 ```mermaid
 sequenceDiagram
     participant C as Core
     participant R as Runtime
     participant H as Harness adapter
-    C->>R: prompt_steer (durable_receipt)
+    C->>R: prompt_steer
     Note over C,R: written wait limit, from delivery
     R->>H: SteerWithReceipt
     Note over R,H: native write limit

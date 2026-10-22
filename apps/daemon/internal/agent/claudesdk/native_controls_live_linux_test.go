@@ -45,7 +45,7 @@ func TestLiveClaudeSDKNativeControls(t *testing.T) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 		defer cancel()
-		req := proto.PromptRequestPayload{RunID: uuid.NewString(), ObserveMessages: true, DisableExecutionEnvironment: true, DisableSubagents: true, Input: prompt,
+		req := proto.PromptRequestPayload{RunID: uuid.NewString(), DisableExecutionEnvironment: true, DisableSubagents: true, Input: prompt,
 			ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium"},
 			AgentOptions:      map[string]any{"model": model, "system_prompt": "Answer briefly."}}
 		configure(&req)

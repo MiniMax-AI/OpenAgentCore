@@ -16,7 +16,7 @@ import (
 func lifecycleTestNode(t *testing.T, s *Store) string {
 	t.Helper()
 	nodes := deploymentService(t, s)
-	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 100, MaxRetained: 100}))
+	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(100), MaxRetained: new(100)}))
 	if err != nil {
 		t.Fatal(err)
 	}

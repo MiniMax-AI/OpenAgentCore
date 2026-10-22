@@ -17,8 +17,8 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 	}{
 		{"docker", sandbox.Resources{}, "resources.cpus", "cpus must be 1..255 and memory_mib must be 512..1048576", validationBound(1), validationBound(255)},
 		{"docker", sandbox.Resources{CPUs: 1, MemoryMiB: 511}, "resources.memory_mib", "cpus must be 1..255 and memory_mib must be 512..1048576", validationBound(512), validationBound(1048576)},
-		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 512}, "resources.root_disk_mib", "microsandbox requires root_disk_mib and environment_disk_mib of at least 1024 MiB", validationBound(1024), nil},
-		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 512, RootDiskMiB: 1024}, "resources.environment_disk_mib", "microsandbox requires root_disk_mib and environment_disk_mib of at least 1024 MiB", validationBound(1024), nil},
+		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 512}, "resources.root_disk_mib", "microsandbox requires root_disk_mib of at least 1024 MiB", validationBound(1024), nil},
+		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 512, RootDiskMiB: 1024, EnvironmentDiskMiB: 1}, "resources.environment_disk_mib", "microsandbox requires environment_disk_mib of 0 or at least 1024 MiB", validationBound(1024), nil},
 		{"docker", sandbox.Resources{CPUs: 1, MemoryMiB: 512, RootDiskMiB: 1}, "resources.root_disk_mib", "docker does not support independent disk capacity limits", validationBound(0), validationBound(0)},
 		{"e2b", sandbox.Resources{CPUs: 1, MemoryMiB: 512, EnvironmentDiskMiB: 1}, "resources.environment_disk_mib", "e2b does not support independent disk capacity limits", validationBound(0), validationBound(0)},
 	} {
@@ -32,21 +32,6 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 			if (bound == nil) != (want == nil) || (bound != nil && *bound != *want) {
 				t.Fatal("wrong fixed bounds", field)
 			}
-		}
-	}
-	for _, tc := range []struct {
-		provider string
-		runtime  *sandbox.RuntimeRelease
-		message  string
-	}{
-		{"docker", nil, "managed nodes require a pinned Runtime release"},
-		{"docker", &sandbox.RuntimeRelease{}, "Runtime must reference one immutable distribution"},
-		{"e2b", &sandbox.RuntimeRelease{}, "E2B Runtime is selected by its immutable template build"},
-	} {
-		err := registry.ValidateSpecification(tc.provider, sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}, Runtime: tc.runtime})
-		var field *sandbox.ValidationError
-		if !errors.As(err, &field) || field.Param != "runtime" || err.Error() != sandbox.ErrInvalid.Error()+": "+tc.message || !errors.Is(err, sandbox.ErrInvalid) {
-			t.Fatal(err)
 		}
 	}
 	if err := registry.ValidateResources("docker", sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}); err != nil {

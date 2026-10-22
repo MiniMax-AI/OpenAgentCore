@@ -1,43 +1,27 @@
-import { deploymentContract, type SandboxDeployment, type SandboxE2BTemplateBuild, type SandboxProvider, type SandboxResources, type SandboxRuntimeRelease, type SandboxSpecification } from "@oac/agents-client";
-
-interface Manifest {
-  platform?: string;
-  source_commit?: string;
-  images?: { runtime?: string };
-  image_manifest_digests?: { runtime?: string };
-  runtime_ref?: string;
-  microsandbox?: { runtime_sha256?: string; firmware_sha256?: string };
-}
+import { deploymentContract, type SandboxDeployment, type SandboxE2BTemplateBuild, type SandboxProvider, type SandboxResources, type SandboxSpecification } from "@oac/agents-client";
 
 /** The size the Provider declares for setup to propose; null when its configuration selects the size. */
-export function defaultSandboxResources(provider: SandboxProvider, workspace?: SandboxSpecification["workspace"]): SandboxResources | null {
+export function defaultSandboxResources(provider: SandboxProvider): SandboxResources | null {
   const size: SandboxResources | null = deploymentContract.providers[provider].default_resources;
-  return size && { ...size, ...(workspace ? { environment_disk_mib: 0 } : {}) };
+  return size && { ...size };
 }
 
-/** Core keeps owned disk limits; external workspace capacity is optional and requires real quota support. */
+/** The workspace requirement a Provider takes from the selected storage; none when it owns its workspaces or no storage is selected. */
+export function selectedWorkspace(provider: SandboxProvider, storage: { tenant_capacity_mib: number } | null | undefined): SandboxSpecification["workspace"] {
+  const policy = deploymentContract.providers[provider];
+  return storage && "workspace" in policy ? { ...policy.workspace, capacity_quota: storage.tenant_capacity_mib > 0 } : undefined;
+}
+
+/** A Provider that declares a workspace policy runs every Environment on the selected storage; its environment disk is only a quota request. */
 export function validSandboxResources(provider: SandboxProvider, resources: SandboxResources, workspace?: SandboxSpecification["workspace"]): boolean {
   const policy = deploymentContract.providers[provider];
-  if (workspace) {
-    if (!("workspace" in policy) || workspace.attachment !== policy.workspace.attachment || (policy.workspace.user_xattr && !workspace.user_xattr) || ((resources.environment_disk_mib ?? 0) > 0 && !workspace.capacity_quota)) return false;
-  }
+  if ("workspace" in policy !== Boolean(workspace)) return false;
+  if (workspace && "workspace" in policy && (workspace.attachment !== policy.workspace.attachment || (policy.workspace.user_xattr && !workspace.user_xattr))) return false;
   return deploymentContract.resources.every((rule) => {
-    const [min, max] = workspace && rule.name === "environment_disk_mib" && (resources.environment_disk_mib ?? 0) === 0 ? [0, 0] : !rule.omit_zero ? [rule.min, rule.max] : deploymentContract.providers[provider].disk ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
     const value = resources[rule.name] ?? 0;
+    const [min, max] = !rule.omit_zero ? [rule.min, rule.max] : rule.name === "environment_disk_mib" && workspace?.capacity_quota ? [value === 0 ? 0 : deploymentContract.minimum_disk, rule.max] : rule.name === "root_disk_mib" && policy.disk ? [deploymentContract.minimum_disk, rule.max] : [0, 0];
     return Number.isInteger(value) && value >= min && value <= max;
   });
-}
-
-const releasePatterns = Object.fromEntries(deploymentContract.runtime.map(({ name, pattern }) => [name, new RegExp(`^(?:${pattern})$`)])) as Record<keyof SandboxRuntimeRelease, RegExp>;
-
-export const RUNTIME_RELEASE_FIELDS = deploymentContract.runtime.map(({ name }) => name);
-
-export function isRuntimeReleaseField(field: keyof SandboxRuntimeRelease, value: string): boolean {
-  return releasePatterns[field].test(value);
-}
-
-export function isRuntimeRelease(value: Partial<SandboxRuntimeRelease>): value is SandboxRuntimeRelease {
-  return RUNTIME_RELEASE_FIELDS.every((field) => typeof value[field] === "string" && releasePatterns[field].test(value[field]));
 }
 
 export function savedSpecification(provider: SandboxProvider, savedProvider?: SandboxProvider | "", specification?: SandboxSpecification): SandboxSpecification | null {
@@ -59,25 +43,4 @@ export function templateBuildStatus(build: SandboxE2BTemplateBuild | undefined):
 /** Each sandbox's limits: the saved specification, else the E2B template build that an E2B selection adopts. */
 export function sandboxSize(deployment: SandboxDeployment): SandboxResources | null {
   return deployment.specification?.resources ?? templateBuildSize(deployment);
-}
-
-/**
- * At most how many sandboxes of this size a host's CPUs and memory hold at once,
- * each at its full limits; null while a figure or the size is unknown. A
- * suggestion for a node's limit, which Core itself never derives.
- */
-export function sandboxesThatFit(host: { cpus: number | null; memoryBytes: number | null }, size: Pick<SandboxResources, "cpus" | "memory_mib"> | null): number | null {
-  if (!size || host.cpus === null || host.memoryBytes === null || size.cpus <= 0 || size.memory_mib <= 0) return null;
-  return Math.min(Math.floor(host.cpus / size.cpus), Math.floor(host.memoryBytes / (size.memory_mib * 2 ** 20)));
-}
-
-/** The paired console serves one matched distribution; Core persists approval. */
-export async function distributionRuntime(signal: AbortSignal): Promise<SandboxRuntimeRelease> {
-  const response = await fetch("/node-install/manifest.json", { signal, credentials: "include", redirect: "error" });
-  if (!response.ok) throw new Error("distribution unavailable");
-  const manifest = await response.json() as Manifest;
-  const release = { source_commit: manifest.source_commit, image_id: manifest.images?.runtime, image_manifest_digest: manifest.image_manifest_digests?.runtime,
-    microsandbox_ref: manifest.runtime_ref, runtime_sha256: manifest.microsandbox?.runtime_sha256, firmware_sha256: manifest.microsandbox?.firmware_sha256 };
-  if (manifest.platform !== "linux/amd64" || !isRuntimeRelease(release)) throw new Error("invalid distribution");
-  return release;
 }

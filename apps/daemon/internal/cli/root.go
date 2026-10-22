@@ -40,7 +40,6 @@ var commands = []command{
 	{name: "uninstall", summary: "Stop the daemon and delete this installation", run: runUninstall},
 	{name: "resume", summary: "Wake one planned hosted suspension", run: runResume},
 	{name: "runtime-mcp-exec", summary: "Execute an installed MCP server", run: runRuntimeMCP},
-	{name: "placement", summary: "Enroll or retire an explicitly managed local execution placement", run: runPlacement},
 	{name: "connect", summary: "Open the reverse WebSocket and start serving prompts", run: runConnect},
 	{name: "status", summary: "Print the credential profile and daemon state", run: runStatus},
 	{name: "stop", summary: "Stop a background `connect -b` daemon", run: runStop},

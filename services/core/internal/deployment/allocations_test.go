@@ -126,6 +126,16 @@ func (f *fakeAllocationTx) LoadActivity(current Allocation) (Activity, error) {
 	return f.loadActivity(current)
 }
 
+func (f *fakeAllocationTx) OldestIdleCheckpoint(Allocation) (bool, error) {
+	unexpected(f.t, "OldestIdleCheckpoint")
+	return false, nil
+}
+
+func (f *fakeAllocationTx) ExpireCheckpoint(Allocation) (Allocation, error) {
+	unexpected(f.t, "ExpireCheckpoint")
+	return Allocation{}, nil
+}
+
 func (f *fakeAllocationTx) LoadSuspensionDemand(current Allocation) (SuspensionDemand, error) {
 	if f.loadSuspensionDemand == nil {
 		unexpected(f.t, "LoadSuspensionDemand")

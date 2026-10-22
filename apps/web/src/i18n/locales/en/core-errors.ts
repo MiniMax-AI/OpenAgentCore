@@ -2,6 +2,7 @@
 export const coreErrors = {
   "invalid_workspace_configuration": "Invalid workspace storage configuration.",
   "workspace_operation_unsupported": "The selected workspace storage does not support the operation or sandbox combination.",
+  "workspace_storage_required": "This sandbox provider needs workspace storage. Select workspace storage first.",
   "workspace_storage_not_found": "Workspace storage is not configured or the requested object does not exist.",
   "workspace_storage_conflict": "Workspace storage ownership or configuration conflicts with the current state.",
   "workspace_storage_unavailable": "Workspace storage is unavailable or an operation remains unconfirmed.",
@@ -19,7 +20,7 @@ export const coreErrors = {
   "model_provider_protocol_unsupported": "This protocol is not supported by the Harness.",
   "model_provider_api_key_invalid": "Enter a valid API key without control characters.",
   "model_provider_token_limits_invalid": "Use valid token limits; output cannot exceed context.",
-  "invalid_sandbox_configuration": "Check the sandbox resources and Runtime release.",
+  "invalid_sandbox_configuration": "Check the sandbox resources.",
   "project_archived": "This Project is archived.",
   "project_exists": "A Project with this name already exists.",
   "project_api_key_exists": "An active API key with this name already exists.",
@@ -57,6 +58,5 @@ export const coreErrorDetails = {
   "protocols": "Allowed protocols: {{protocols}}.",
   "keyLimit": "Enter a valid API key of at most {{max}} characters.",
   "resourceRange": "Enter a whole number from {{min}} to {{max}}.",
-  "resourceMin": "Enter a whole number of at least {{min}}.",
-  "runtime": "Use a valid immutable Runtime release for this backend."
+  "resourceMin": "Enter a whole number of at least {{min}}."
 } as const;

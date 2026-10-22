@@ -207,11 +207,13 @@ function isHarnessKind(value: unknown): value is CoreHarnessKind {
   return typeof value === "string" && harnessKinds.has(value as CoreHarnessKind);
 }
 
-export function createIdempotencyKey(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+/** A random v4 UUID. `crypto.randomUUID` needs a secure context, which a plain-HTTP console lacks. */
+export function randomUuid(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 function addPageOptions(params: URLSearchParams, options?: PageOptions): void {
@@ -1856,7 +1858,7 @@ export class OpenAIAgentsClient implements AgentCore {
     return { ...page, data: page.data.map((session) => projectAgentSession(session)) };
   }
 
-  async createSession(input: CreateSessionInput, idempotencyKey = createIdempotencyKey()): Promise<AgentSession> {
+  async createSession(input: CreateSessionInput, idempotencyKey = randomUuid()): Promise<AgentSession> {
     if ((input as { stream?: boolean }).stream === true) {
       throw new TypeError("createSession only supports the JSON response; connect streamEvents after creation.");
     }
@@ -1893,7 +1895,7 @@ export class OpenAIAgentsClient implements AgentCore {
     const headers = this.headers({
       Accept: "text/event-stream",
       "Content-Type": "application/json",
-      "Idempotency-Key": idempotencyKey ?? createIdempotencyKey(),
+      "Idempotency-Key": idempotencyKey ?? randomUuid(),
     });
     const response = await this.fetchImpl(`${this.baseUrl}/agents/sessions`, {
       method: "POST",

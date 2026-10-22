@@ -188,7 +188,7 @@ type fakeDeployment struct {
 	nodeDetail          func(context.Context, string, string) (deployment.NodeDetail, error)
 	updateNode          func(context.Context, string, deployment.NodeUpdate) error
 	removeNode          func(context.Context, string) error
-	createEnrollment    func(context.Context, deployment.Capacity) (deployment.EnrollmentToken, error)
+	createEnrollment    func(context.Context, deployment.EnrollmentLimits) (deployment.EnrollmentToken, error)
 	enroll              func(context.Context, string, deployment.Enrollment) (deployment.NodeIdentity, error)
 	nodeConfiguration   func(context.Context, string, string, uint64) (deployment.NodeConfiguration, error)
 	nodeStatus          func(context.Context, string, string) (deployment.NodeStatus, error)
@@ -230,7 +230,7 @@ func (f *fakeDeployment) RemoveNode(a0 context.Context, a1 string) error {
 	return f.removeNode(a0, a1)
 }
 
-func (f *fakeDeployment) CreateEnrollment(a0 context.Context, a1 deployment.Capacity) (deployment.EnrollmentToken, error) {
+func (f *fakeDeployment) CreateEnrollment(a0 context.Context, a1 deployment.EnrollmentLimits) (deployment.EnrollmentToken, error) {
 	if f.createEnrollment == nil {
 		unexpectedCall(f.t, "CreateEnrollment")
 	}

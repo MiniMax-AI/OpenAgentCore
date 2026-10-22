@@ -13,7 +13,7 @@ import (
 )
 
 func TestWorkspaceWriteChunksAndCorrelatesReceipt(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")
 	data := bytes.Repeat([]byte{0, 255, 3}, 400000)
 	id := uuid.NewString()
@@ -67,7 +67,7 @@ func TestWorkspaceWriteChunksAndCorrelatesReceipt(t *testing.T) {
 }
 
 func TestWorkspaceWriteDoesNotCommitAfterLostObservation(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)

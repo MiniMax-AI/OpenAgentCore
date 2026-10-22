@@ -19,12 +19,6 @@ ON CONFLICT(node_id,generation) DO UPDATE SET specification_digest=EXCLUDED.spec
 UPDATE runtime_nodes SET ready_generation=$2 WHERE id=$1 AND removed_at IS NULL
 AND $2=(SELECT generation FROM runtime_deployment) AND (ready_generation IS NULL OR ready_generation<$2);
 
--- name: RefreshNodeServingReadiness :exec
-UPDATE runtime_nodes n SET protocol_version=$2, provider_ready=EXISTS(
- SELECT 1 FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=n.ready_generation
- AND g.connection_id=n.connection_id AND g.owner_epoch=n.connected_epoch AND g.state='ready')
-WHERE n.id=$1 AND n.removed_at IS NULL;
-
 -- name: NodeGenerationReady :one
 SELECT EXISTS(SELECT 1 FROM runtime_node_generation_status g JOIN runtime_nodes n ON n.id=g.node_id CROSS JOIN runtime_deployment d
  WHERE n.id=sqlc.arg(node_id) AND g.generation=sqlc.arg(generation) AND n.removed_at IS NULL

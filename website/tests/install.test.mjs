@@ -27,7 +27,7 @@ exit "$DOWNLOAD_STATUS"
     writeFileSync(join(root, 'sleep'), '#!/bin/sh\n')
     chmodSync(join(root, 'sleep'), 0o700)
     chmodSync(join(root, 'curl'), 0o700)
-    const args = ['--upgrade', '--install-dir', '/path with spaces/core', '--version', 'v0.0.10']
+    const args = ['--install-dir', '/path with spaces/core', '--version', 'v0.0.10']
     for (const downloadStatus of [0, 22]) {
       const result = spawnSync('/bin/bash', ['-s', '--', ...args], {
         input: readFileSync(script), encoding: 'utf8',

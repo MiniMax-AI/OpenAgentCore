@@ -13,7 +13,7 @@ export function SandboxRolloutSummary({ deployment, stale = false, onOpen }: { d
   const [open, setOpen] = useState(false);
   if (!deployment.provider || deployment.reset) return null;
   const { rollout } = deployment;
-  const needsAttention = !!rollout.nodes && (rollout.nodes.failed > 0 || rollout.nodes.update_required > 0);
+  const needsAttention = !!rollout.nodes && (rollout.nodes.failed > 0);
   const unknown = !!rollout.nodes && rollout.nodes.unknown > 0;
   const label = stale ? "Rollout state unconfirmed" : needsAttention ? "Needs attention" : unknown ? "Target readiness unknown" : rollout.state === "preparing" ? "Preparing configuration" : "No active preparation";
   const tone: Tone = stale || needsAttention || unknown ? "warning" : rollout.state === "preparing" ? "pending" : "neutral";
@@ -32,7 +32,7 @@ export function SandboxRolloutSummary({ deployment, stale = false, onOpen }: { d
           <StatusDot tone={tone} label={t(label)} />
           <HelpTip>
             {t(stale ? "Rollout state is unconfirmed. These are the last confirmed observations." : rollout.state === "settled" ? "Core reports no active preparation. This does not mean every node is ready." : "Core is preparing the target configuration.")}
-            {needsAttention || unknown ? ` ${t("Review affected nodes for preparation errors, incompatible node software or an unconfirmed connection. Qualified earlier generations may still serve work.")}` : null}
+            {needsAttention || unknown ? ` ${t("Review affected nodes for preparation errors or an unconfirmed connection. Qualified earlier generations may still serve work.")}` : null}
           </HelpTip>
         </div>
         <dl className="sandbox-rollout-facts">
@@ -43,7 +43,6 @@ export function SandboxRolloutSummary({ deployment, stale = false, onOpen }: { d
             <div><dt>{t("Ready for target")}</dt><dd>{count(rollout.nodes.ready)}</dd></div>
             <div><dt>{t("Preparing target")}</dt><dd>{count(rollout.nodes.preparing)}</dd></div>
             <div><dt>{t("Preparation failed")}</dt><dd>{count(rollout.nodes.failed)}</dd></div>
-            <div><dt>{t("Node software incompatible")}</dt><dd>{count(rollout.nodes.update_required)}</dd></div>
             <div><dt>{t("Target readiness unknown")}</dt><dd>{count(rollout.nodes.unknown)}</dd></div>
           </> : null}
         </dl>

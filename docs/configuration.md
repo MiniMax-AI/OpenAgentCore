@@ -56,7 +56,7 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
 | Sandbox backend: Docker, microsandbox or E2B | **Settings** → **Sandbox and scheduling**: the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per installation, chosen after the first sign-in. Another backend needs **Reset deployment** first; see [change the sandbox configuration](./getting-started/nodes.md#change-the-sandbox-configuration) |
-| Sandbox size, Runtime release, E2B key and template build | **Settings** → **Sandbox and scheduling** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size and release. The E2B key is write-only and encrypted |
+| Sandbox size, E2B key and template build | **Settings** → **Sandbox and scheduling** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size. The E2B key is write-only and encrypted |
 | Nodes and their capacity | **Nodes**: **Add node**, **Edit node** and removal | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and [Add and manage nodes](./getting-started/nodes.md) |
 | Idle suspension | **Settings** → **Sandbox and scheduling** → **Automatic suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | Deployment-wide; see [suspension policy](../contracts/agents-api/sandbox-deployment.md#suspension-policy) |
 | Independent workspace storage and tenant capacity | **Settings → Workspace storage** | `/core/v1/workspace-storage` | See [Set up workspace storage](./getting-started/workspace-storage.md); existing workspaces retain their configuration |
@@ -68,7 +68,7 @@ Which Harnesses are enabled, and the default one, are process settings (`OAC_HAR
 
 ### Node capacity
 
-Core approves a node's capacity when you generate its Add node command: **Sandboxes at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes** (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**. Reservations and cleanup that is not confirmed count against capacity; lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
+A node's capacity is **Sandboxes at once** (`max_active`) and, for microsandbox only, **Retained sandboxes** (`max_retained`), with `max_retained >= max_active >= 1`. **Add node** keeps the recommended limits by default, which Core [derives from the host](../contracts/agents-api/sandbox-deployment.md#recommended-capacity) when the node registers, or you enter both numbers. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**, which shows the recommendation and fills it in on request. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
 
 `OAC_EXECUTION_CONCURRENCY` is unrelated: it limits concurrent execution work in Core.
 
@@ -107,12 +107,12 @@ The named Docker volume `<project>_data` contains these paths. Docker manages Li
 
 ## Docker node configuration
 
-The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources, the Runtime release and capacity remain in [Core’s database](#runtime-settings-web).
+The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources and capacity remain in [Core’s database](#runtime-settings-web).
 
 | Field | Installer value | Meaning |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
-| `image` | The Runtime image’s local ID after loading | The release’s `image_id` or `image_manifest_digest`. The host’s image store decides which digest names the loaded image, so the value is node-local; the adapter accepts only these two |
+| `image` | The Runtime image’s local ID after loading | The installation’s Runtime image. The host’s image store decides whether its local ID is the manifest’s `image_id` or `image_manifest_digest`, so the value is node-local |
 | `network` | `oac-node-<installation-id>` | Runtime container network |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
 | `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |
@@ -126,8 +126,8 @@ The installer creates `~/.oac/core` by default (`$HOME/.oac/core` on Windows). I
 | Path | Content | Changed by |
 | --- | --- | --- |
 | `.env` | Process settings and the stable Compose project name | You, then `oac apply` |
-| `compose.yaml` | Verified release service definition | The installer, when it installs or [upgrades](./getting-started/operations.md#upgrade) |
-| `compose.override.yaml` | Optional local Compose entries. For a source bundle it is JSON and also holds the four service images and Web's `/node-payload` bind | You. `install.py` replaces only its own entries and requires JSON. `oac install --upgrade` removes the `/node-payload` bind and the host `node-payload/` directory, because a release serves its payload from the data volume |
+| `compose.yaml` | Verified release service definition | The installer, when it installs |
+| `compose.override.yaml` | Optional local Compose entries. For a source bundle it is JSON and also holds Web's `/node-payload` bind and Core's native installer bind | You. `install.py` replaces only its own entries and requires JSON |
 | `oac` (`oac.exe` on Windows) | Native management command | The installer |
 
 The sibling `<install-dir>.lock` directory remains for synchronization; `<install-dir>.staging` holds unpublished installation files. Neither contains service data. On Unix the installer creates private directories with mode `0700` and configuration files with mode `0600`.
@@ -136,7 +136,7 @@ The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `da
 
 ## Independent workspace storage {#independent-workspace-storage}
 
-The supported independent filesystem combination is microsandbox with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the `oac-node` account, the Compose mount, the selection payloads and the quota mode storage server.
+microsandbox requires independent workspace storage, and the only supported combination is with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the Compose mount, the selection payloads and the quota mode storage server.
 
 ## Appendix: Core environment without the installer
 

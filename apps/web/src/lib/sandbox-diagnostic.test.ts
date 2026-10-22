@@ -16,47 +16,17 @@ describe("sandbox diagnostics", () => {
     expect(sandboxDiagnosticMessage("ownership_mismatch")?.label).toBe("Sandbox ownership mismatch");
     expect(sandboxDiagnosticMessage("provider_unavailable")?.label).toBe("Sandbox provider unavailable");
   });
-  it("names why a node's provider is not ready, reading an unknown code as provider_unavailable", () => {
-    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic: "host_unsupported" }))?.label).toBe("Host unsupported");
-    expect(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic: "future_code" as SandboxNodeDiagnostic })).toBe("provider_unavailable");
-    expect(nodeProviderDiagnostic({ online: true, provider_ready: true })).toBe("");
-    // An offline node's last code may no longer apply.
-    expect(nodeProviderDiagnostic({ online: false, provider_ready: false, diagnostic: "host_unsupported" })).toBe("");
+  it("names an online node's readiness class from its rollout and hides an offline one", () => {
+    const failed = { state: "failed", ready_generation: null, diagnostic: "host_unsupported" } as const;
+    const unknown = { state: "unknown", ready_generation: null } as const;
+    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, rollout: failed }))?.label).toBe("Host unsupported");
+    expect(sandboxDiagnosticMessage(nodeProviderDiagnostic({ online: true, provider_ready: false, rollout: unknown }))?.label).toBe("Sandbox provider unavailable");
+    expect(nodeProviderDiagnostic({ online: true, provider_ready: true, rollout: failed })).toBe("");
+    expect(nodeProviderDiagnostic({ online: false, provider_ready: false, rollout: unknown })).toBe("");
   });
   it("does not expose an unknown raw error or turn it into a healthy state", () => {
     const message = sandboxDiagnosticMessage("private-provider-error-with-secret");
     expect(message?.label).toBe("Sandbox state needs attention");
     expect(JSON.stringify(message)).not.toContain("private-provider-error");
-  });
-  it("preserves the typed download diagnostic on an online node and suppresses stale offline health", () => {
-    const diagnostic: SandboxNodeDiagnostic = "runtime_download_failed";
-    expect(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic })).toBe(diagnostic);
-    expect(nodeProviderDiagnostic({ online: false, provider_ready: false, diagnostic })).toBe("");
-  });
-  it("explains download and verification failures separately from provider image failures in both languages", () => {
-    const diagnostic: SandboxNodeDiagnostic = "runtime_download_failed";
-    expect(sandboxDiagnosticMessage(diagnostic, "en")).toEqual({
-      label: "Runtime download failed",
-      advice: "Runtime files could not be downloaded or verified. Check the node's network access and the configured Runtime release.",
-    });
-    expect(sandboxDiagnosticMessage(diagnostic, "zh-CN")).toEqual({
-      label: "Runtime 下载失败",
-      advice: "Runtime 文件下载或验证失败。请检查节点网络连接及配置的 Runtime 发布版本。",
-    });
-    for (const locale of ["en", "zh-CN"] as const) {
-      expect(sandboxDiagnosticMessage(diagnostic, locale)).not.toEqual(sandboxDiagnosticMessage("runtime_image_unavailable", locale));
-    }
-  });
-});
-
-describe("shared node readiness diagnostics", () => {
-  it.each(sandboxNodeDiagnostics)("preserves %s with localized messages", (diagnostic) => {
-    expect(nodeProviderDiagnostic({ online: true, provider_ready: false, diagnostic })).toBe(diagnostic);
-    const english = sandboxDiagnosticMessage(diagnostic, "en");
-    const chinese = sandboxDiagnosticMessage(diagnostic, "zh-CN");
-    expect(english?.label).not.toBe("Sandbox state needs attention");
-    expect(english?.advice).not.toBe("Inspect the assigned node and resource, then refresh.");
-    expect(chinese?.label).not.toBe(english?.label);
-    expect(chinese?.advice).not.toBe(english?.advice);
   });
 });

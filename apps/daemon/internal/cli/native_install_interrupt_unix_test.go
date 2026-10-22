@@ -44,7 +44,7 @@ func TestNativeInstallationInterruptReapsProbe(t *testing.T) {
 	script := []byte("#!/bin/sh\nsleep 300 &\nprintf '%s %s' \"$$\" \"$!\" > \"$OAC_TEST_PROBE_PIDS\"\nwait\n")
 	sum := sha256.Sum256(script)
 	b.Components["node"] = nativeComponent{Version: nativePins["node"], Files: map[string]nativeFile{"bin/node": {SHA256: hex.EncodeToString(sum[:]), Executable: true}}}
-	dir := filepath.Join(nativeComponentRoot(bundle, "node"), "bin")
+	dir := filepath.Join(bundleComponent(bundle, "node"), "bin")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}

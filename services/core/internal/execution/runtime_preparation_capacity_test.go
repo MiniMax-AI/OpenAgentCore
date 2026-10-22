@@ -7,7 +7,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"strings"
 	"sync"
 	"testing"
 
@@ -183,45 +182,8 @@ func TestUnsettledFilesystemPreparationYieldsOnlyCompute(t *testing.T) {
 	if err != nil || !target.PlacementReleased || target.AllocationID != "" {
 		t.Fatal(target, err)
 	}
-	// A newer generation without external storage must not displace this
-	// unallocated Session's already-bound filesystem onto owned ephemeral disk.
-	setup, err := r.deployments.Setup(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	updated := setup.Specification
-	updated.Workspace = nil
-	updated.Resources.EnvironmentDiskMiB = 8192
-	view, err := r.deployment.Update(adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "fixture-admin", RequestID: uuid.NewString(), TraceID: uuid.NewString()}), r.config.InstallationID, sandbox.Selection{Provider: setup.Provider, ExpectedGeneration: setup.Generation, DeploymentSpec: updated})
-	if err != nil {
-		t.Fatal(err)
-	}
-	token, err := r.deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2})
-	if err != nil {
-		t.Fatal(err)
-	}
-	newer := deployment.Enrollment{NodeID: uuid.NewString(), Name: "newer owned workspace", Credential: strings.Repeat("n", 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("c", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: fixturePublicURL}
-	if _, err := r.deployments.Enroll(t.Context(), token.Token, newer); err != nil {
-		t.Fatal(err)
-	}
-	epoch, err := r.reader.OwnerEpoch(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	connection := uuid.NewString()
-	if err := r.deployments.ConnectNode(t.Context(), newer.NodeID, connection, epoch); err != nil {
-		t.Fatal(err)
-	}
-	if err := r.deployments.Heartbeat(t.Context(), newer.NodeID, connection, epoch, deployment.NodeHealth{ProviderReady: true}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}}}); err != nil {
-		t.Fatal(err)
-	}
-	demands, _, err := r.reader.PlacementDemand(t.Context(), deployment.PlacementDemandCursor{})
-	if err != nil || len(demands) != 1 || !demands[0].Retained {
-		t.Fatal("bound FS omitted from pressure eligibility", demands, err)
-	}
-	selected, err := r.deployment.EnsurePlacement(t.Context(), key, r.config.InstallationID)
-	if err != nil || selected.NodeID != r.nodeID || selected.Generation != setup.Generation {
-		t.Fatal("selected generation cannot attach retained filesystem", selected, err)
+	if selected, err := r.deployment.EnsurePlacement(t.Context(), key, r.config.InstallationID); err != nil || selected.NodeID != r.nodeID {
+		t.Fatal("released placement was not offered again", selected, err)
 	}
 	if _, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID); err != nil {
 		t.Fatal(err)

@@ -13,7 +13,7 @@ test("discovery preserves intent and rejects a mismatch with deferred functions"
 });
 
 test("discovery combines with structured output and MCP", () => {
-  const combined = {...request(), observe_messages:true, output_format:{type:"json_schema",schema:{type:"object"}},
+  const combined = {...request(), output_format:{type:"json_schema",schema:{type:"object"}},
     mcp_http_servers:[{server_label:"docs",server_url:"https://example.test/mcp",allowed_tools:null}]};
   assert.deepEqual(parseStart(JSON.stringify(combined)), combined);
 });

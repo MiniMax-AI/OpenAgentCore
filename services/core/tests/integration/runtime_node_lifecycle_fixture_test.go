@@ -134,7 +134,7 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 }
 func (f *nodeIsolationFixture) enroll(id string) {
 	f.t.Helper()
-	token, err := EnrollmentTestToken(f.nodes.CreateEnrollment(f.t.Context(), deployment.Capacity{MaxActive: 100, MaxRetained: 100}))
+	token, err := EnrollmentTestToken(f.nodes.CreateEnrollment(f.t.Context(), deployment.EnrollmentLimits{MaxActive: new(100), MaxRetained: new(100)}))
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -149,7 +149,7 @@ func (f *nodeIsolationFixture) online(id string) {
 	if err := f.nodes.ConnectNode(f.t.Context(), id, connection, f.epoch); err != nil {
 		f.t.Fatal(err)
 	}
-	if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, id, connection, f.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+	if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, id, connection, f.epoch, true); err != nil {
 		f.t.Fatal(err)
 	}
 }
@@ -161,12 +161,12 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 		input.InitialFiles = []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/seed", Data: []byte("retained")}}
 	}
 	// Placement is automatic and generation readiness is current-connection
-	// authority. Do not merely change the legacy provider_ready projection.
+	// authority. Do not merely change the provider_ready projection.
 	type presence struct {
 		id, connection string
 		epoch          uint64
 	}
-	rows, err := f.pool.Query(f.t.Context(), "SELECT id::text, connection_id::text, connected_epoch FROM runtime_nodes WHERE provider_ready AND id<>$1 AND connection_id IS NOT NULL AND removed_at IS NULL", node)
+	rows, err := f.pool.Query(f.t.Context(), "SELECT id::text, connection_id::text, connected_epoch FROM runtime_nodes WHERE id<>$1 AND connection_id IS NOT NULL AND removed_at IS NULL", node)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 		f.t.Fatal(err)
 	}
 	for _, value := range others {
-		if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: false}); err != nil {
+		if err := fixtureNodeHeartbeat(f.t.Context(), f.store, f.nodes, value.id, value.connection, value.epoch, false); err != nil {
 			f.t.Fatal(err)
 		}
 	}
@@ -193,7 +193,7 @@ func (f *nodeIsolationFixture) session(node string, initialize bool) (string, se
 		_, err = f.placement.EnsurePlacement(f.t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, f.key)
 	}
 	for _, value := range others {
-		if err := fixtureNodeHeartbeat(context.WithoutCancel(f.t.Context()), f.store, f.nodes, value.id, value.connection, value.epoch, deployment.NodeHealth{ProviderReady: true}); err != nil {
+		if err := fixtureNodeHeartbeat(context.WithoutCancel(f.t.Context()), f.store, f.nodes, value.id, value.connection, value.epoch, true); err != nil {
 			f.t.Fatal(err)
 		}
 	}

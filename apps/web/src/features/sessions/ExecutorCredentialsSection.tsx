@@ -1,4 +1,4 @@
-import { AgentCoreError, type ExecutorCredential, type IssuedExecutorCredential } from "@oac/agents-client";
+import { AgentCoreError, randomUuid, type ExecutorCredential, type IssuedExecutorCredential } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -23,16 +23,6 @@ import { ExecutorConnectionPanel } from "./ExecutorConnectionPanel";
 
 /** An issuance that gets no answer in this time has an unknown outcome. */
 const WRITE_TIMEOUT_MS = 30_000;
-
-/** A key ID for a new credential. Plain-HTTP consoles lack `crypto.randomUUID`, so it falls back to a v4 UUID. */
-function newKeyId(): string {
-  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6]! & 0x0f) | 0x40;
-  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
-  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
 
 /**
  * A write either failed before Core acted ("rejected", with Core's error) or
@@ -135,7 +125,7 @@ export function ExecutorCredentialsSection({ projectId, sessionId, environmentId
   const issue = async () => {
     if (busy) return;
     // A listed key ID is managed from its row; reusing it would recover a credential that was since rotated or revoked.
-    const keyId = kept !== null && !credentials?.some((credential) => sameKey(credential.key_id, kept)) ? kept : newKeyId();
+    const keyId = kept !== null && !credentials?.some((credential) => sameKey(credential.key_id, kept)) ? kept : randomUuid();
     setKept(keyId);
     setIssuing(true);
     try {

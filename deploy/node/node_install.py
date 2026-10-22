@@ -42,10 +42,6 @@ class InstallError(Exception):
     pass
 
 
-class RuntimeDownloadError(InstallError):
-    """A fixed private helper exit category for transfer/provenance failures."""
-
-
 MICRO = provider_assets.artifacts("microsandbox", ("runtime",))
 DOCKER = ("docker", "--host", "unix:///var/run/docker.sock")
 DOCKER_SOCKET = Path("/var/run/docker.sock")
@@ -55,6 +51,8 @@ KVM = Path("/dev/kvm")
 # this dedicated service user under a root-owned system unit; root never runs a
 # file the service user can write.
 SERVICE_USER = "oac-node"
+# Core's UID: workspace storage gives sandboxes files owned by it, so the node account must match.
+SERVICE_UID = 65532
 SERVICE_HOME = Path("/var/lib/oac-node")
 SYSTEM_RECORDS = Path("/etc/oac-node")
 SYSTEM_UNITS = Path("/etc/systemd/system")
@@ -127,6 +125,8 @@ def registration_failure(stderr):
     status, code = matches[-1].group(1).decode(), (matches[-1].group(2) or b"").decode()
     if code == "sandbox_node_address_mismatch":
         return AddressChanged(node_spec.PUBLIC_URL_CHANGED + " The token was not used; downloaded files are kept.")
+    if code == "sandbox_node_host_unmeasured":
+        return InstallError("Core could not measure this host's CPUs and memory, so it cannot derive the node limits. Request a token with explicit limits, then rerun the command.")
     if status == "401":
         return InstallError(node_spec.ENROLLMENT_EXPIRED + " Downloaded files are kept.")
     return InstallError(REGISTRATION_UNCONFIRMED + " Core answered HTTP " + status + (" " + code if code else "") + ".")
@@ -136,7 +136,7 @@ def discard_unregistered(root):
     """Remove what an earlier attempt decided, so a new command can register this host.
 
     Only for a node Core never recorded: downloads, the image and the service file stay."""
-    for name in ("installation.json", "provider.json", "runtime-artifacts.json", "preparation.json"):
+    for name in ("installation.json", "provider.json"):
         if existing_file(root / name):
             (root / name).unlink()
     if (root / "state/node").is_dir() and not (root / "state/node").is_symlink():
@@ -176,48 +176,48 @@ def fetch(source, name):
                 # A body cut short by the connection reads as a normal end; the declared length tells.
                 declared = getattr(response, "headers", {}).get("Content-Length", "")
             if len(raw) > 1024 * 1024:
-                raise RuntimeDownloadError("Node bootstrap metadata is too large: " + name)
+                raise InstallError("Node bootstrap metadata is too large: " + name)
             if declared.isdigit() and int(declared) != len(raw):
                 raise http.client.IncompleteRead(raw, int(declared) - len(raw))
             return io.BytesIO(raw)
         except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
             if not transient(error) or attempt == 2:
                 status = " (HTTP " + str(error.code) + ")" if isinstance(error, urllib.error.HTTPError) else ""
-                raise RuntimeDownloadError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
+                raise InstallError("Cannot download node metadata " + name + status + "; check the console URL, TLS and network, then rerun") from None
             time.sleep(attempt + 1)
 
 
-def metadata(source, prefix=""):
-    read = lambda name: fetch(source, prefix + name)
+def metadata(source):
+    read = lambda name: fetch(source, name)
     with read("SHA256SUMS") as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024:
-        raise RuntimeDownloadError("Invalid distribution checksum list")
+        raise InstallError("Invalid distribution checksum list")
     sums = {}
     try:
         for line in raw.decode().splitlines():
             checksum, name = line.split("  ", 1)
             if name in sums or not re.fullmatch(r"[0-9a-f]{64}", checksum):
-                raise RuntimeDownloadError("Invalid distribution checksum entry")
+                raise InstallError("Invalid distribution checksum entry")
             sums[name] = checksum
     except ValueError:
-        raise RuntimeDownloadError("Invalid distribution checksum list") from None
+        raise InstallError("Invalid distribution checksum list") from None
     with read("manifest.json") as response:
         raw = response.read(1024 * 1024 + 1)
     if len(raw) > 1024 * 1024 or hashlib.sha256(raw).hexdigest() != sums.get("manifest.json"):
-        raise RuntimeDownloadError("Distribution manifest checksum mismatch")
+        raise InstallError("Distribution manifest checksum mismatch")
     try:
         manifest = json.loads(raw)
     except (ValueError, TypeError):
-        raise RuntimeDownloadError("Invalid distribution manifest") from None
+        raise InstallError("Invalid distribution manifest") from None
     if (not isinstance(manifest, dict) or manifest.get("platform") != "linux/amd64" or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("source_commit", ""))
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
-        raise RuntimeDownloadError("Unsupported node distribution")
+        raise InstallError("Unsupported node distribution")
     distribution.image_identities(manifest, "runtime")
     for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items if item["role"] != "policy"):
         distribution.artifact(manifest, name)
-    # Metadata stays on the console; artifact requests may redirect to its pinned release.
-    manifest["artifact_base_url"] = source + "/node-install/releases/" + manifest["source_commit"] + "/artifacts"
+    # Metadata stays on the console; artifact requests may redirect to the release.
+    manifest["artifact_base_url"] = source + "/node-install/artifacts"
     return manifest, sums
 
 
@@ -266,21 +266,21 @@ def file_digest(path):
     return result.hexdigest()
 
 
-def download(source, name, root, expected, prefix="", replace=False):
+def download(source, name, root, expected, replace=False):
     target = root / name
     safe_directory(target.parent)
     if existing_file(target):
         if file_digest(target) == expected:
             return
         if not replace:
-            raise RuntimeDownloadError("Installed node payload differs; refusing to overwrite it")
+            raise InstallError("Installed node payload differs; refusing to overwrite it")
         target.unlink()
     with distribution.temporary_file(target) as temporary:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output, fetch(source, prefix + name) as response:
+        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output, fetch(source, name) as response:
             for block in iter(lambda: response.read(1024 * 1024), b""):
                 output.write(block)
         if file_digest(Path(temporary)) != expected:
-            raise RuntimeDownloadError("Node payload checksum mismatch: " + name)
+            raise InstallError("Node payload checksum mismatch: " + name)
         os.replace(temporary, target)
     if name.startswith("native/"):
         os.chmod(target, 0o700)
@@ -336,7 +336,7 @@ def prepare_checkpoint_root(directory, *, initialize=True):
         os.close(descriptor)
 
 
-def provider_config(root, args, runtime_image):
+def provider_config(root, args, manifest, runtime_image):
     result = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url + "/api/v1",
               "specification": args.configuration["specification"], "generation": args.configuration["generation"]}
     if args.provider == "docker":
@@ -350,7 +350,9 @@ def provider_config(root, args, runtime_image):
         core_rules = [{"action": "allow", "direction": "egress", "destination": address, "protocol": "tcp", "port": str(port)} for address in addresses]
         result["native"] = {
             "helper_path": str(root / MICRO[0]), "runtime_path": str(root / MICRO[1]), "firmware_path": str(root / MICRO[2]),
-            "runtime_home": str(getattr(args, "runtime_home", micro_home(args.installation_id))),
+            "image": manifest["runtime_ref"], "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
+            "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
+            "runtime_home": str(micro_home(args.installation_id)),
             "checkpoint_root": str(checkpoint_root(args)),
             "network": {"default_egress": "deny", "default_ingress": "deny", "rules": core_rules + [
                 {"action": "allow", "direction": "egress", "destination": "public"},
@@ -369,7 +371,7 @@ def drop_runtime_archives(root):
 
 
 def micro_env(root, args):
-    return dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(getattr(args, "runtime_home", micro_home(args.installation_id))),
+    return dict(os.environ, MSB_BACKEND="local", MSB_HOME=str(micro_home(args.installation_id)),
                 MSB_PATH=str(root / MICRO[1]), MSB_LIBKRUNFW_PATH=str(root / MICRO[2]))
 
 
@@ -461,23 +463,13 @@ def install_lock(root):
         yield
 
 
-NEWER_NODE_SOFTWARE = ("This host's node program differs from the one this console serves, usually because Core was upgraded "
-                       "after the node was added. Nothing was changed. To move the node to this release, choose Remove node on "
-                       "the Nodes page, uninstall it on this host, then add the host again with Add node.")
-
-
-def refuse_newer_node_software(root, manifest, names):
-    """A registered node keeps its own program; a rerun cannot swap it for another release's."""
-    for name in names:
-        target = root / name
-        if existing_file(target) and not distribution.matches(target, distribution.artifact(manifest, name)):
-            raise InstallError(NEWER_NODE_SOFTWARE)
-
+NOT_THIS_INSTALLATION = ("This host's node was added with another Core address, release or provider. Nothing was changed. To use it with this Core, "
+                         "choose Remove node on the Nodes page, uninstall it on this host, then add the host again with Add node.")
 
 GIB = 1024 ** 3
 
 
-def require_disk(root, args, program_manifest, manifest, names):
+def require_disk(root, args, manifest, names):
     """Refuse before downloading when the node account's disk cannot hold what is still missing.
 
     The Runtime archive and its unpacked copy exist only until the image is imported; a
@@ -485,7 +477,7 @@ def require_disk(root, args, program_manifest, manifest, names):
     needed = 0
     for name in names:
         if name != "runtime/seccomp.json":
-            entry = distribution.artifact(program_manifest if name in provider_assets.artifacts(args.provider, ("node",)) else manifest, name)
+            entry = distribution.artifact(manifest, name)
             target = root / name
             if not (target.is_file() and distribution.matches(target, entry)):
                 needed += entry["size"] - distribution.resumable(distribution.partial_path(target), entry["size"])
@@ -511,33 +503,26 @@ def require_disk(root, args, program_manifest, manifest, names):
 def register_node(root, args, token, helper_archive=None, *, secret_path):
     """Download and verify the payload, prepare the Runtime and register; not the service."""
     install_display.step("Downloading and verifying node files")
-    program_manifest, program_sums = metadata(args.source_url)
-    selected = args.configuration["specification"]["runtime"]
-    manifest, sums = program_manifest, program_sums
-    if selected["source_commit"] != program_manifest["source_commit"]:
-        manifest, sums = metadata(args.source_url, prefix="releases/" + selected["source_commit"] + "/")
-    node_spec.verify_release(args.configuration, manifest)
-    runtime_prefix = "releases/" + manifest["source_commit"] + "/"
+    manifest, sums = metadata(args.source_url)
     names = provider_assets.artifacts(args.provider, ("node", "runtime", "policy"))
     if "runtime/seccomp.json" not in sums:
         raise InstallError("The distribution is missing required node checksums")
-    node_names = provider_assets.artifacts(args.provider, ("node",))
-    if (root / "registered.json").exists():
-        refuse_newer_node_software(root, program_manifest, node_names)
-    require_disk(root, args, program_manifest, manifest, names)
     state = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url,
              "source_commit": manifest["source_commit"], "generation": args.configuration["generation"],
              "specification_digest": args.configuration["specification_digest"]}
+    marker = root / "registered.json"
+    if marker.exists() and marker.read_text() != json_text(state):
+        raise InstallError(NOT_THIS_INSTALLATION)
+    require_disk(root, args, manifest, names)
     write_once(root / "installation.json", json_text(state))
-    node_generations.record_root_runtime(root, args, manifest, sums, sys.modules[__name__])
     for name in names:
         if name == "runtime/seccomp.json":
-            download(args.source_url, name, root, sums[name], prefix=runtime_prefix, replace=args.disposable)
+            download(args.source_url, name, root, sums[name], replace=args.disposable)
         else:
             target = root / name
             safe_directory(target.parent)
             existing_file(target)
-            distribution.obtain_artifact(program_manifest if name in node_names else manifest, name, target, args.disposable)
+            distribution.obtain_artifact(manifest, name, target, args.disposable)
             os.chmod(target, 0o700)
     node_generations.install_helper(root, args, sys.modules[__name__], helper_archive)
     safe_directory(root / "state/node")
@@ -550,10 +535,9 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
     runtime_image = prepare_runtime(root, args, manifest)
     # Retain the original network policy when recovering a partial installation.
     if not existing_file(root / "provider.json"):
-        write_once(root / "provider.json", json_text(provider_config(root, args, runtime_image)))
+        write_once(root / "provider.json", json_text(provider_config(root, args, manifest, runtime_image)))
     else:
         node_spec.verify_provider(json.loads((root / "provider.json").read_text()), args.configuration, runtime_image)
-    marker = root / "registered.json"
     if not existing_file(marker):
         # The one-time credential is never passed through process arguments or service environments.
         with os.fdopen(os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as secret:
@@ -567,8 +551,6 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
             discard_unregistered(root)
             raise
         write_once(marker, json_text(state))
-    elif marker.read_text() != json_text(state):
-        raise InstallError("Registered node identity differs; refusing to replace it")
 
 
 def prepare_service_node(args, token, helper_archive):
@@ -1072,6 +1054,17 @@ def account_plan():
         raise InstallError("An account named " + SERVICE_USER + " exists but was not created or adopted by this installer "
                            "(home " + account.pw_dir + ", shell " + account.pw_shell + ", uid " + str(account.pw_uid)
                            + ", or groups beyond its own, docker and kvm). Rename or remove it, then rerun." + NOTHING_CHANGED)
+    if account is not None and account.pw_uid != SERVICE_UID:
+        raise InstallError("The " + SERVICE_USER + " account has UID " + str(account.pw_uid) + ", but it must use UID "
+                           + str(SERVICE_UID) + " to match Core. Renumber or remove it, then rerun." + NOTHING_CHANGED)
+    if account is None:
+        try:
+            holder = pwd.getpwuid(SERVICE_UID).pw_name
+        except KeyError:
+            holder = None
+        if holder:
+            raise InstallError("UID " + str(SERVICE_UID) + " belongs to the account " + holder + ", but the " + SERVICE_USER
+                               + " account must use it to match Core. Remove or renumber that account, then rerun." + NOTHING_CHANGED)
     if SERVICE_HOME.is_symlink() or (SERVICE_HOME.exists() and not SERVICE_HOME.is_dir()):
         raise InstallError(str(SERVICE_HOME) + " must be a directory, not a symbolic link." + NOTHING_CHANGED)
     if SERVICE_HOME.exists() and (account is None or SERVICE_HOME.stat().st_uid != account.pw_uid):
@@ -1087,7 +1080,7 @@ def prepare_account(account, record, group):
         # A record of an account that no longer exists is stale; the new account replaces it.
         records.unlink(missing_ok=True)
         shell = next((path for path in ("/usr/sbin/nologin", "/sbin/nologin") if os.path.exists(path)), "/bin/false")
-        checked(["useradd", "--system", "--user-group", "--no-create-home", "--home-dir", str(SERVICE_HOME),
+        checked(["useradd", "--system", "--uid", str(SERVICE_UID), "--user-group", "--no-create-home", "--home-dir", str(SERVICE_HOME),
                  "--shell", shell, SERVICE_USER], "Cannot create the " + SERVICE_USER + " service user")
         account = service_account()
         record = {"format": 1, "created": True, "uid": account.pw_uid, "groups_added": []}
@@ -1490,11 +1483,7 @@ def main(argv=None):
     if args.generation_action:
         if args.generation is None or not 1 <= args.generation <= 9223372036854775807 or not re.fullmatch(r"[0-9a-f]{64}", args.specification_digest or ""):
             parser.error("Invalid generation authorization")
-        try:
-            (node_generations.prepare if args.generation_action == "prepare" else node_generations.collect)(args, sys.modules[__name__])
-        except (RuntimeDownloadError, distribution.ArtifactError):
-            print("Runtime artifact transfer or verification failed", file=sys.stderr)
-            raise SystemExit(65) from None
+        (node_generations.prepare if args.generation_action == "prepare" else node_generations.collect)(args, sys.modules[__name__])
         return
     if os.geteuid() != 0:
         raise InstallError("Node installation and removal require root. Run this command with sudo.")

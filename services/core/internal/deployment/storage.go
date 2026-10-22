@@ -127,6 +127,11 @@ type AllocationTx interface {
 	LoadActivity(current Allocation) (Activity, error)
 	// LoadSuspensionDemand locks the deployment and reads demand and capacity.
 	LoadSuspensionDemand(current Allocation) (SuspensionDemand, error)
+	// OldestIdleCheckpoint reports whether current has the earliest retention
+	// deadline among its node's idle suspended allocations that can be retained.
+	OldestIdleCheckpoint(current Allocation) (bool, error)
+	// ExpireCheckpoint ends the suspended allocation's retention now.
+	ExpireCheckpoint(current Allocation) (Allocation, error)
 	// PlacementDemand reads one qualified page; next advances past all inspected
 	// rows, including ineligible receipts. An empty next.EnvironmentID ends the scan.
 	PlacementDemand(after PlacementDemandCursor) ([]PlacementDemand, PlacementDemandCursor, error)
@@ -319,7 +324,6 @@ type NodeTx interface {
 	DeleteGenerationStatus(nodeID string, generation uint64) error
 	UpsertGenerationStatus(status GenerationStatusRecord) error
 	PromoteServingGeneration(nodeID string, generation uint64) error
-	RefreshServingReadiness(nodeID string, protocol int) error
 }
 
 // DeploymentTx is one leased deployment change.
@@ -458,9 +462,6 @@ type NodeRecord struct {
 	LastSeenAt                  *time.Time
 	Health                      NodeHealth
 	Online, ServingReady        bool
-	ProtocolVersion             int
-	DeploymentGeneration        uint64
-	TargetGeneration            uint64
 	ReadyGeneration             *uint64
 	TargetState                 string
 	TargetDiagnostic            string
@@ -493,13 +494,14 @@ type EnrollmentRecord struct {
 	ID, InstallationID     string
 	ExpiresAt              time.Time
 	Consumed               bool
-	MaxActive, MaxRetained int
+	MaxActive, MaxRetained *int
 }
 
 // NewEnrollment is an enrollment token to store, by digest.
 type NewEnrollment struct {
 	ID, TokenDigest, InstallationID string
-	MaxActive, MaxRetained          int
+	// A nil limit is unset: Core derives it from the host when the node enrolls.
+	MaxActive, MaxRetained *int
 }
 
 // Heartbeat is a node's health for one connection.

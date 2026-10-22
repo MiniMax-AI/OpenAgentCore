@@ -44,10 +44,6 @@ func exitCode(err error) int {
 }
 
 func run(ctx context.Context, args []string) error {
-	if len(args) == 1 && args[0] == "protocol-version" {
-		fmt.Println(node.ProtocolVersion)
-		return nil
-	}
 	if len(args) == 0 || (args[0] != "register" && args[0] != "run") {
 		return errors.New("usage: oac-node register|run --config PATH --state-dir PATH")
 	}
@@ -69,14 +65,10 @@ func run(ctx context.Context, args []string) error {
 	registry := providerconfig.Builtin()
 	if args[0] == "run" {
 		helper := filepath.Join(filepath.Dir(*configFile), "generation-preparer.pyz")
-		if info, err := os.Lstat(helper); err == nil {
-			if !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
-				return errors.New("generation preparer must be a private regular file")
-			}
-			return runGenerations(ctx, registry, *configFile, *stateDir)
-		} else if !os.IsNotExist(err) {
-			return err
+		if info, err := os.Lstat(helper); err != nil || !info.Mode().IsRegular() || info.Mode().Perm() != 0600 {
+			return errors.New("generation preparer must be a private regular file")
 		}
+		return runGenerations(ctx, registry, *configFile, *stateDir)
 	}
 	config, err := providerconfig.Load(*configFile)
 	if err != nil {
@@ -92,63 +84,41 @@ func run(ctx context.Context, args []string) error {
 		return errors.New("node configuration requires one local provider backend")
 	}
 	expected := node.Identity{SpecificationDigest: built.SpecificationDigest, DeploymentGeneration: config.Generation, InstallationID: built.InstallationID, Provider: config.Provider, BackendFingerprint: built.BackendFingerprint}
-	probe := func(ctx context.Context) (node.Health, error) {
-		checkpoint, err := built.Probe(ctx)
-		status := sandbox.GenerationStatus{Generation: config.Generation, SpecificationDigest: built.SpecificationDigest, State: "ready", Checkpoint: checkpoint}
-		if err != nil {
-			status.State, status.Diagnostic, status.Checkpoint = "failed", sandbox.NodeDiagnostic(err), nil
-		}
-		return node.Health{ProviderReady: err == nil, Generations: []sandbox.GenerationStatus{status}}, err
+	if !filepath.IsAbs(*tokenFile) {
+		return errors.New("enrollment-token-file must be absolute")
 	}
-	if args[0] == "register" {
-		if !filepath.IsAbs(*tokenFile) {
-			return errors.New("enrollment-token-file must be absolute")
-		}
 
-		fd, err := syscall.Open(*tokenFile, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
-		if err != nil {
-			return errors.New("cannot open enrollment token")
-		}
-		file := os.NewFile(uintptr(fd), "enrollment token")
-		st, err := file.Stat()
-		if err != nil || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
-			file.Close()
-			return errors.New("enrollment token must be a private regular file (0600)")
-		}
-		raw, err := io.ReadAll(io.LimitReader(file, 4097))
-		file.Close()
-		if err != nil {
-			return errors.New("cannot read enrollment token")
-		}
-		token := strings.TrimSpace(string(raw))
-		if token == "" || len(token) > 4096 {
-			return errors.New("invalid enrollment token")
-		}
-		if _, err = node.InitIdentity(*stateDir, *coreURL, expected); err != nil {
-			return err
-		}
-		probeCtx, stopProbe := context.WithTimeout(ctx, 5*time.Second)
-		_, err = probe(probeCtx)
-		stopProbe()
-		if err != nil {
-			return fmt.Errorf("local provider readiness check failed (%s): %w", sandbox.NodeDiagnostic(err), err)
-		}
-		stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, node.EnrollmentRequest{Name: *name})
-		if err != nil {
-			return err
-		}
-		return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{MaxActive: stored.Identity.MaxActive, MaxRetained: stored.Identity.MaxRetained, SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
+	fd, err := syscall.Open(*tokenFile, syscall.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		return errors.New("cannot open enrollment token")
 	}
-	stored, err := node.RefreshIdentity(ctx, *stateDir)
+	file := os.NewFile(uintptr(fd), "enrollment token")
+	st, err := file.Stat()
+	if err != nil || !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
+		file.Close()
+		return errors.New("enrollment token must be a private regular file (0600)")
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, 4097))
+	file.Close()
+	if err != nil {
+		return errors.New("cannot read enrollment token")
+	}
+	token := strings.TrimSpace(string(raw))
+	if token == "" || len(token) > 4096 {
+		return errors.New("invalid enrollment token")
+	}
+	if _, err = node.InitIdentity(*stateDir, *coreURL, expected); err != nil {
+		return err
+	}
+	probeCtx, stopProbe := context.WithTimeout(ctx, 5*time.Second)
+	_, err = built.Probe(probeCtx)
+	stopProbe()
+	if err != nil {
+		return fmt.Errorf("local provider readiness check failed (%s): %w", sandbox.NodeDiagnostic(err), err)
+	}
+	stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, node.EnrollmentRequest{Name: *name})
 	if err != nil {
 		return err
 	}
-	expected.NodeID = stored.Identity.NodeID
-	if expected.SpecificationDigest != stored.Identity.SpecificationDigest || expected.DeploymentGeneration != stored.Identity.DeploymentGeneration || expected.InstallationID != stored.Identity.InstallationID || expected.Provider != stored.Identity.Provider || expected.BackendFingerprint != stored.Identity.BackendFingerprint {
-		return errors.New("provider configuration differs from retained node identity")
-	}
-	if *coreURL != "" && *coreURL != stored.CoreURL {
-		return errors.New("run uses the retained Core URL")
-	}
-	return node.Run(ctx, node.AgentConfig{CoreURL: stored.CoreURL, StateDirectory: *stateDir, Identity: stored.Identity, Credential: stored.Credential, Provider: built.Provider, Probe: probe})
+	return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{MaxActive: stored.Identity.MaxActive, MaxRetained: stored.Identity.MaxRetained, SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
 }

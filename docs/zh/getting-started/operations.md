@@ -1,10 +1,10 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: 54c6d2de28e483497c00a3f2bfc310b4d8b7ff22519607778e7340ec851f252e
+source_hash: c61c4d11097be8e0718c6c095c55b10a47020e5a2f83f24c504eb6753ca00b5c
 ---
 
-Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Core 密钥、备份、升级和卸载。节点有[专门的指南](./nodes.md)，[故障排查](./troubleshooting.md)列出了安装程序和访问方面的提示信息。设置见[配置参考](../configuration.md)。
+Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Core 密钥、备份和卸载。节点有[专门的指南](./nodes.md)，[故障排查](./troubleshooting.md)列出了安装程序和访问方面的提示信息。设置见[配置参考](../configuration.md)。
 
 ## oac 命令 {#the-oac-command}
 
@@ -12,7 +12,7 @@ Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Cor
 
 | 命令 | 功能 |
 | --- | --- |
-| `oac install` | 安装、继续或[升级](#upgrade)安装；安装脚本会运行它 |
+| `oac install` | 安装，或继续一个在启动前停止的安装；安装脚本会运行它 |
 | `oac apply` | 检查数据卷和 `.env`，然后启动服务，并重新创建配置有变化的服务；参见 [oac apply 的工作方式](../configuration.md#how-oac-apply-works)。校验失败时不改动任何服务。成功时打印 `Services are running with the current settings.` |
 | `oac core-key [--show]` | 指出 Core 密钥在数据卷中的位置；加上 `--show` 时打印密钥本身 |
 | `oac rotate-core-key` | 替换 Core 密钥并重启 Core 和 Web，然后说明如何读取新密钥 |
@@ -127,7 +127,7 @@ Core 记录每次公开资源写入所使用的密钥；历史保留策略为 [`
 
 ## 备份 {#back-up}
 
-可恢复的备份必须是一组在停止写入期间取得的一致数据。仅数据库转储或 Core 卷导出不包含独立工作区存储及节点计算状态。恢复数据卷时，同时恢复同一份备份中的安装目录，其中保存着写入该数据的版本；之后可以用更新的版本[升级](#upgrade)恢复后的安装。
+可恢复的备份必须是一组在停止写入期间取得的一致数据。仅数据库转储或 Core 卷导出不包含独立工作区存储及节点计算状态。恢复数据卷时，同时恢复同一份备份中的安装目录，其中保存着写入该数据的版本。
 
 ### 单机备份与恢复 {#single-host-backup}
 
@@ -167,7 +167,7 @@ docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoi
 - 对于[配额模式](../workspace-provider.md#quota-mode)命名空间，将承载导出的整个 XFS 文件系统作为一份块级副本备份：存储或 LVM 快照，或已冻结或已卸载设备的镜像。只有这样的副本能保持 project ID、配额限制、inode 标识、文件系统 UUID 和 `oac-workspace-quota` 日志库的一致。文件级复制、`tar`、`rsync` 或 `xfsdump` 会丢失这些信息；此时该命令会拒绝恢复后的对象，而不是在无上限状态下提供它们。
 - 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其提供商存储：Docker 卷或 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
 
-- 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、归档、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。它独立于原生 SDK store 和工作区 namespace。保留其身份和私有所有权；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其生命周期。
+- 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、检查点、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。它独立于原生 SDK store 和工作区 namespace。保留其身份和私有所有权；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其生命周期。
 
 ### 建立停止写入窗口 {#establish-a-stopped-write-window}
 
@@ -183,7 +183,7 @@ docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoi
 
 ```sh
 docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
-  pg_dump -U agents_api agents_api > oac-backup.sql
+  pg_dump -U oac oac > oac-backup.sql
 ```
 
 逻辑转储仍然需要匹配的 secrets、state、独立文件系统及所需节点资源。Docker Desktop 的 **Volumes** 导出可用于复制已停止的数据卷，但不会协调这些其他部分。
@@ -197,53 +197,6 @@ docker compose -f "$HOME/.oac/core/compose.yaml" exec -T database \
 已释放计算资源的冷恢复基线仅在新计算资源准入后续接具备资格的原生历史。包含保留检查点的备份还依赖匹配的原生 Runtime、节点标识、提供商存储和外部文件系统标识。文件级恢复可能改变 inode 标识，即使文件字节一致，也可能阻止严格检查点恢复。此流程不承诺可移植内存快照，也不承诺恢复到任意替代节点；应保留未解决的归属，而不是替换为新沙箱。
 
 恢复依赖全部完整后才启动 database、Core 和节点服务；检查期间保持入口受限。在隔离演练中，验证保留 Session 的文件和具备资格时在新计算资源上的原生续接，确认已删除对象无法重新打开，并检查旧写入方均无法访问恢复后的命名空间。在依赖备份进行恢复前记录结果。
-
-## 升级 {#upgrade}
-
-v0.0.10 及更高版本的安装可以原地升级到更新的发布版本，并保留数据库、数据卷、`.env`、密钥、Core 密钥、安装 ID 以及你在 `compose.override.yaml` 中添加的条目。更早的安装无法升级：请将新版本安装到新目录。降级会被拒绝。
-
-> [!IMPORTANT]
-> 升级之前，阅读目标版本的发布说明，了解[协议变更](#protocol-changes)及其要求的操作，并[备份](#single-host-backup)安装。升级不会备份；升级之后，备份是回到先前版本的唯一途径。
-
-1. 使用目标版本的安装程序，带上 `--upgrade` 和安装目录运行：
-
-   ```sh
-   curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --upgrade --install-dir "$HOME/.oac/core"
-   ```
-
-   `--version TAG` 选择最新版本以外的发布版本。Windows 上运行 `& ([scriptblock]::Create((irm https://github.com/MiniMax-AI/OpenAgentCore/releases/latest/download/install.ps1))) --upgrade --install-dir "$HOME\.oac\core"`。对于从[源码包](../development.md#install-a-checkout-without-publishing-a-release)安装的实例，运行新源码包的安装程序：`python3 <bundle>/install.py --install-dir <dir> --upgrade`。
-2. 准备好后，[应用该版本的 Runtime](#runtime-after-an-upgrade)。
-
-不带 `--upgrade` 时，其他版本的安装程序不做任何更改，并以 `This installation runs release <old>; this installer is <new>. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.` 停止（`install.py` 的提示为 `this bundle is`）。无论是否带该参数，已安装版本的安装程序都会继续该安装。安装程序和修改状态的 `oac` 命令共用[安装锁](../configuration.md#installation-directory)；其他命令正在运行时，等待其结束后重试。
-
-### 升级会做什么 {#what-the-upgrade-does}
-
-安装程序下载该版本的 `compose.yaml` 并拉取缺失的镜像。替换任何文件之前，它使用安装的 `.env` 和 Compose 覆盖文件运行新版本的配置检查和初始化。初始化会升级数据卷，或拒绝降级。随后安装程序将新的 `compose.yaml` 和 `oac` 放到位并启动服务，重新创建有变化的服务；Core 启动时迁移数据库。[部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md#installation)说明了每个步骤。这次重启对工作的影响与任何一次 [Core 重启](#stop-and-restart)相同；节点和沙箱继续运行并重新连接。
-
-成功时，安装程序打印控制台地址、用 `oac core-key --show` 代替密钥，以及一行 `Upgraded from <old> to <new>. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.`
-
-如果某项检查失败，安装程序会打印 `Upgrade stopped; the running services are unchanged` 及 Docker 的输出，先前版本继续提供服务。修复原因后重新运行命令。初始化升级数据卷后，先前版本便无法再在该数据卷上启动：如果后续步骤失败（例如出现 `startup failed; data retained, rerun the installer`），重新运行同一命令，它会安全地重复每个步骤；也可以[回滚](#roll-back)。
-
-### 升级后的 Runtime {#runtime-after-an-upgrade}
-
-升级不会改变沙箱配置：节点继续服务已保存的 Runtime，新 Session 也使用它。要切换到该版本的 Runtime，打开 **设置** → **沙箱与调度**，在 **Runtime** 行选择 **使用本安装的 Runtime**，确认更改后选择 **保存配置**。节点随后准备新代次，现有沙箱保留原代次，直到被释放；参阅[修改沙箱配置](nodes.md#change-the-sandbox-configuration)。E2B 部署没有 **Runtime** 行；除非该版本更改了 Core–Runtime 协议，其模板继续可用。
-
-### 协议变更 {#protocol-changes}
-
-以下三种连接要求两端的协议版本相同：Core 与节点、节点与 microsandbox 辅助程序、Core 与 Runtime。升级不会改动任何节点主机或正在运行的沙箱。更改其中某个协议的版本会在发布说明中注明，并指出需要以下哪些操作：
-
-- 重新安装每个节点：[移除节点](nodes.md#remove-a-node)，清理主机，再通过 **添加节点** 重新添加该主机。Core 拒绝移除仍持有沙箱的节点，所以升级前先归档这些 Session；
-- 升级后立即应用该版本的 Runtime；仍在较早代次上的沙箱将停止工作；
-- [构建新的 E2B 模板](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template)，并在[沙箱配置](nodes.md#change-the-sandbox-configuration)中选择它；
-- 重新连接[自托管机器](self-hosted.md#reconnect-an-existing-session)。
-
-### 降级 {#downgrades}
-
-初始化会拒绝不比已安装版本更新的版本，并提示 `This installation runs release <installed> (<date>); this release, <own> (<date>), is not newer. Downgrades are not supported: run that release or a newer one, or restore the backup taken before the upgrade.` 安装程序将其报告为已停止的升级，安装继续运行。Core 会拒绝由更新版本迁移过的数据库，并提示 `Agents API database schema version N is newer than this Core supports (M). Downgrades are not supported: run the release that upgraded this database or a newer one, or restore the backup taken before the upgrade.` 要回到较早的版本，请[回滚](#roll-back)。
-
-### 回滚 {#roll-back}
-
-回滚即恢复升级前的备份：停止服务，[恢复](#restore-and-rehearse)数据卷和安装目录，然后启动服务。尽量在应用该版本的 Runtime 之前恢复：节点准备好它之后，恢复的数据库并不知道节点的新代次，因此还需[移除每个节点](nodes.md#remove-a-node)并重新添加。备份之后创建的 Session 和数据会丢失。
 
 ## 卸载 {#uninstall}
 

@@ -58,7 +58,7 @@ func TestExecutorNativeReuse(t *testing.T) {
 	cfg.logger = slog.New(slog.DiscardHandler)
 	req := proto.PromptRequestPayload{
 		AgentKind: "codex", AgentStateKey: "executor-native",
-		DisableExecutionEnvironment: true, DisableSubagents: true, ObserveMessages: true,
+		DisableExecutionEnvironment: true, DisableSubagents: true,
 		AgentOptions:  options,
 		FunctionTools: []proto.FunctionTool{{Name: "hold", Description: "Wait until the host supplies a result.", Parameters: json.RawMessage("{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}")}},
 	}

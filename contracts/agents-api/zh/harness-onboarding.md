@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: a9da1282681370ebdd5c228b96c027eac444b7bdc9ce81038375b39be2498d05
+source_hash: 8beb6af27e99a4bf25a2e828d1b2c1c51adcd7b597f3cd64a211396a506a09c0
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -69,7 +69,6 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 | `ExecutorFactory`、`Executor.StartTurn`、`Executor.Close` | 真实实现 | 在没有模型输入的情况下准备；保留失败或不确定资源的所有权；确认清理 |
 | `Session`、`Turn`、`CancellationOutcome`、`AwaitSettlement` | 真实实现 | 取消精确的 Turn，保留已观察结果，并独立于取消请求确认结算 |
 | `DurableSteerer` | 每个 Turn 上真实实现 | 区分完整写入与原生应用回执；保留重试身份 |
-| `Steerer` | 明确实现或 Unsupported | 额外的非持久化活动 Turn 输入 |
 | `FunctionResultSubmitter` | 明确实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
 | `WorkspaceReader`、`WorkspaceDirectoryLister`、`WorkspaceWriter` | 在 Turn 和 Executor 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
 | 中立消息、图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
@@ -176,7 +175,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 
 显式填写声明中 `proto.AgentKindCapabilities` 的每个字段；[能力声明](../../../docs/zh/runtime-protocol.md#capability-declarations)定义声明的编码、验证和冻结方式。安装探测可以使用 `agent.Narrow` 撤回已声明的字段，但绝不授予新字段；`Registry.Register` 会拒绝授予了新字段的探测结果。可用性通过 `SupportedAgentKind.Available` 单独表示。读取声明的代码应调用 `IsSupported()`；接口断言用于验证实现，绝不表示支持。每个声明都必须与针对该安装验证的行为一致。
 
-准入映射是显式的。`Steering` 控制非持久化 `Steerer` 输入。`DurableInputReceipts` 控制 `DurableSteerer` 输入，并且还要求 Turn 结算契约；二者互不隐含，而且 Core 的公共文本路径要求同时具备二者。工作区声明描述授权资源所有者，包括通用 Runtime 工作区实现。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`。Runtime 自行就绪该 preparation，并从绑定的本地工作区目录提供读取，不调用 Executor 工厂；因此仅当该 kind 的 Environment 工作区就是该本地目录时，adapter 才声明它。注册过程不会派生它。Runtime 注册不会授予 Core 准入；声明才会授予。
+准入映射是显式的。`DurableInputReceipts` 控制 `DurableSteerer` 输入，并且还要求 Turn 结算契约。工作区声明描述授权资源所有者，包括通用 Runtime 工作区实现。`WorkspaceReadPreparation` 准入带 `workspace_read_only` 的 `execution_prepare`。Runtime 自行就绪该 preparation，并从绑定的本地工作区目录提供读取，不调用 Executor 工厂；因此仅当该 kind 的 Environment 工作区就是该本地目录时，adapter 才声明它。注册过程不会派生它。Runtime 注册不会授予 Core 准入；声明才会授予。
 
 可运行的仅测试示例 [`testdata/onboarding/main.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/testdata/onboarding/main.go) 会注册一个仅支持文本的合成 Harness。它展示 Session 所有的 Executor、全新的 Turn、持久化引导、取消和历史绑定，并且绝不会发布。
 

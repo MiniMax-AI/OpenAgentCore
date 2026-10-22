@@ -290,81 +290,8 @@ func TestGenerationDeploymentRejectsConflictingImmutableIdentity(t *testing.T) {
 	}
 }
 
-func TestInterruptedCollectionNeverPreparesOrServesAfterRestart(t *testing.T) {
-	digest := strings.Repeat("a", 64)
-	ref := sandbox.GenerationReference{Generation: 1, SpecificationDigest: digest}
-	probed := make(chan struct{}, 1)
-	removes := 0
-	manager, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
-		Initial: []GenerationProvider{{Generation: 2, SpecificationDigest: digest, Provider: &fakeProvider{}, Probe: func(context.Context) (*sandbox.CheckpointCompatibility, error) {
-			select {
-			case probed <- struct{}{}:
-			default:
-			}
-			return nil, nil
-		}}},
-		Collect: []sandbox.GenerationReference{ref},
-		Prepare: func(context.Context, uint64, string) (GenerationProvider, error) {
-			t.Error("collection entered preparation")
-			return GenerationProvider{}, sandbox.ErrInvalid
-		},
-		Remove: func(_ context.Context, value GenerationProvider) error {
-			removes++
-			if value.Generation != 1 {
-				t.Error("wrong generation")
-			}
-			if removes == 1 {
-				return errors.New("interrupted cleanup")
-			}
-			return nil
-		},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer manager.Close()
-	pin := uint64(2)
-	if err = manager.Deployment(sandbox.NodeDeployment{Generation: 2, SpecificationDigest: digest, ServingGeneration: &pin}); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-probed:
-	case <-time.After(3 * time.Second):
-		t.Fatal("provider loop did not run")
-	}
-	if _, _, _, err = manager.Acquire(1); err == nil {
-		t.Fatal("unfinished collection admitted an operation")
-	}
-	for _, status := range manager.Statuses() {
-		if status.Generation == 1 {
-			t.Fatal("unfinished collection advertised readiness", status)
-		}
-	}
-	if len(manager.Retained(0)) != 2 || removes != 0 {
-		t.Fatal("restart consumed old drop authorization")
-	}
-	cancelled, cancel := context.WithCancel(t.Context())
-	cancel()
-	grant := sandbox.GenerationRetention{GenerationReference: ref}
-	if err = manager.Drop(cancelled, grant); err == nil || removes != 0 {
-		t.Fatal("cancelled connection collected")
-	}
-	if err = manager.Drop(t.Context(), grant); err == nil {
-		t.Fatal("expected interrupted cleanup")
-	}
-	if _, _, _, err = manager.Acquire(1); err == nil {
-		t.Fatal("failed cleanup resumed serving")
-	}
-	if err = manager.Drop(t.Context(), grant); err != nil {
-		t.Fatal(err)
-	}
-	if len(manager.Retained(0)) != 1 || removes != 2 {
-		t.Fatal("cleanup did not settle")
-	}
-}
-
 func TestPreparationDiagnosticPreservesTypedCause(t *testing.T) {
-	for _, cause := range []error{sandbox.ErrRuntimeDownloadFailed, sandbox.ErrProviderUnavailable, sandbox.ErrHostUnsupported, sandbox.ErrOwnership, context.Canceled, errors.New("raw secret provider text")} {
+	for _, cause := range []error{sandbox.ErrProviderUnavailable, sandbox.ErrHostUnsupported, sandbox.ErrOwnership, context.Canceled, errors.New("raw secret provider text")} {
 		t.Run(sandbox.NodeDiagnostic(cause)+cause.Error(), func(t *testing.T) {
 			m, err := NewGenerationManager(t.Context(), GenerationManagerOptions{
 				Prepare: func(context.Context, uint64, string) (GenerationProvider, error) { return GenerationProvider{}, cause },

@@ -30,7 +30,6 @@ import (
 type installOptions struct {
 	dir, version, publicURL, host string
 	port                          int
-	upgrade                       bool
 	// given names the settings flags the caller passed, which an existing installation ignores.
 	given []string
 }
@@ -52,7 +51,6 @@ func installCommand(ctx context.Context, args []string) error {
 	flags.StringVar(&o.publicURL, "public-url", "", "URL reachable by browsers and nodes")
 	flags.StringVar(&o.host, "host", "0.0.0.0", "Web bind address")
 	flags.IntVar(&o.port, "web-port", 8080, "Web port")
-	flags.BoolVar(&o.upgrade, "upgrade", false, "upgrade an existing installation to this release")
 	// The flag package's own report would repeat the error main prints.
 	flags.SetOutput(io.Discard)
 	if err := flags.Parse(args); err != nil {
@@ -252,10 +250,6 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		return err
 	}
 	fresh := len(entries) == 0
-	if fresh && o.upgrade {
-		return fmt.Errorf("No installation in %s; pass the installation's --install-dir.", o.dir)
-	}
-	installed := buildRevision
 	if !fresh {
 		for _, name := range []string{"compose.yaml", ".env", cliName()} {
 			info, err := os.Lstat(filepath.Join(o.dir, name))
@@ -267,24 +261,21 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		if err != nil {
 			return err
 		}
-		if installed = composeRevision(raw); installed == "" {
+		installed := composeRevision(raw)
+		if installed == "" {
 			return fmt.Errorf("incomplete installation: preserve %s and choose another directory", o.dir)
 		}
-	}
-	upgrade := installed != buildRevision
-	if upgrade && !o.upgrade {
-		return fmt.Errorf("This installation runs release %s; this installer is %s. Back up the installation (Upgrade in the operations guide), then rerun with --upgrade.", short(installed), short(buildRevision))
+		if installed != buildRevision {
+			return fmt.Errorf("This installation runs release %s; this installer is %s. To use this release, uninstall the installation, which deletes its data, then install again.", short(installed), short(buildRevision))
+		}
 	}
 	compose := installCompose{docker: i.docker, dir: o.dir}
-	cleanedOverride := false
-	if fresh || upgrade {
-		if fresh {
-			listener, err := net.Listen("tcp", net.JoinHostPort(o.host, strconv.Itoa(o.port)))
-			if err != nil {
-				return fmt.Errorf("Web port unavailable; choose --web-port: %w%s", err, i.portHolderHint(ctx, o.port))
-			}
-			listener.Close()
+	if fresh {
+		listener, err := net.Listen("tcp", net.JoinHostPort(o.host, strconv.Itoa(o.port)))
+		if err != nil {
+			return fmt.Errorf("Web port unavailable; choose --web-port: %w%s", err, i.portHolderHint(ctx, o.port))
 		}
+		listener.Close()
 		if err := os.Mkdir(stage, 0o700); err != nil {
 			return err
 		}
@@ -300,29 +291,11 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		if err := os.WriteFile(filepath.Join(stage, "compose.yaml"), release, 0o600); err != nil {
 			return err
 		}
-		if fresh {
-			contents := fmt.Sprintf("COMPOSE_PROJECT_NAME=oac-%s\nOAC_HOST='%s'\nOAC_WEB_PORT='%d'\nOAC_PUBLIC_URL='%s'\n", randomHex(5), o.host, o.port, o.publicURL)
-			if err := os.WriteFile(filepath.Join(stage, ".env"), []byte(contents), 0o600); err != nil {
-				return err
-			}
-			compose.dir = stage
-		} else {
-			// The staged release runs with the installation's settings, project name and override.
-			compose.files = []string{"-f", filepath.Join(stage, "compose.yaml")}
-			override := filepath.Join(o.dir, "compose.override.yaml")
-			if raw, err := os.ReadFile(override); err == nil {
-				if cleaned, changed := dropPayloadBind(raw); changed {
-					// The release serves the node payload from the data volume, so the offline installer's host bind goes.
-					if err := os.WriteFile(filepath.Join(stage, "compose.override.yaml"), cleaned, 0o600); err != nil {
-						return err
-					}
-					override = filepath.Join(stage, "compose.override.yaml")
-					cleanedOverride = true
-				}
-				compose.files = append(compose.files, "-f", override)
-			}
-			compose.files = append(compose.files, "--project-directory", o.dir)
+		contents := fmt.Sprintf("COMPOSE_PROJECT_NAME=oac-%s\nOAC_HOST='%s'\nOAC_WEB_PORT='%d'\nOAC_PUBLIC_URL='%s'\n", randomHex(5), o.host, o.port, o.publicURL)
+		if err := os.WriteFile(filepath.Join(stage, ".env"), []byte(contents), 0o600); err != nil {
+			return err
 		}
+		compose.dir = stage
 		if err := copyExecutable(i.executable, filepath.Join(stage, cliName())); err != nil {
 			return err
 		}
@@ -345,32 +318,6 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		if _, err := i.docker(ctx, "", "pull", image); err != nil {
 			return fmt.Errorf("Docker could not pull %s: %w\nImage pulls go through the Docker daemon, which does not use this shell's proxy settings: if the registry is unreachable, configure the daemon's proxy or a registry mirror, or install from the offline archive (Offline hosts in the installation options).", image, err)
 		}
-	}
-	if upgrade {
-		// Init upgrades the data volume or refuses; until then the running release is untouched.
-		fmt.Println("Checking the upgrade...")
-		for _, check := range [][]string{checkConfig, initVolume} {
-			if err := compose.Run(ctx, check...); err != nil {
-				return fmt.Errorf("Upgrade stopped; the running services are unchanged: %w", err)
-			}
-		}
-		names := []string{cliName(), "compose.yaml"}
-		if cleanedOverride {
-			names = append(names, "compose.override.yaml")
-		}
-		for _, name := range names {
-			if err := os.Rename(filepath.Join(stage, name), filepath.Join(o.dir, name)); err != nil {
-				return err
-			}
-		}
-		if cleanedOverride {
-			// Nothing serves the offline installer's host copy any more.
-			_ = os.RemoveAll(filepath.Join(o.dir, "node-payload"))
-		}
-	}
-	if !fresh {
-		// Installations from earlier releases kept a checksum that no longer describes compose.yaml.
-		_ = os.Remove(filepath.Join(o.dir, "compose-sha256sums.txt"))
 	}
 	if fresh {
 		if _, err := os.Stat(o.dir); err == nil {
@@ -409,36 +356,10 @@ func (i installer) installLocked(ctx context.Context, o installOptions, detected
 		fmt.Printf("Core key: %s core-key --show\n", command)
 	}
 	fmt.Printf("Command: %s\n", command)
-	if upgrade {
-		fmt.Printf("Upgraded from %s to %s. Settings → Sandbox and scheduling offers this release's Runtime; sandboxes keep their current Runtime until you apply it.\n", short(installed), short(buildRevision))
-	}
 	if fresh && detected {
 		fmt.Printf("Browsers must open exactly %s. If they reach this host at another address, set OAC_PUBLIC_URL in .env and run %s apply.\n", origin, command)
 	}
 	return nil
-}
-
-// dropPayloadBind removes the offline installer's Web bind of /node-payload from a JSON override and keeps every other entry. Other formats are the operator's and stay as they are.
-func dropPayloadBind(raw []byte) ([]byte, bool) {
-	var override map[string]any
-	if json.Unmarshal(raw, &override) != nil {
-		return nil, false
-	}
-	services, _ := override["services"].(map[string]any)
-	web, _ := services["web"].(map[string]any)
-	volumes, _ := web["volumes"].([]any)
-	kept := make([]any, 0, len(volumes))
-	for _, volume := range volumes {
-		if entry, ok := volume.(map[string]any); !ok || entry["target"] != "/node-payload" {
-			kept = append(kept, volume)
-		}
-	}
-	if len(kept) == len(volumes) {
-		return nil, false
-	}
-	web["volumes"] = kept
-	cleaned, err := json.MarshalIndent(override, "", "  ")
-	return append(cleaned, '\n'), err == nil
 }
 
 // portHolderHint names an OpenAgentCore Compose project that publishes the port. A project whose directory is gone keeps running; one whose directory exists is a live installation, so the hint names it instead of offering to delete it.
@@ -456,7 +377,7 @@ func (i installer) portHolderHint(ctx context.Context, port int) string {
 			return fmt.Sprintf("\nThe Compose project %s holds it.", name)
 		}
 		if _, err := os.Stat(dir); err == nil {
-			return fmt.Sprintf("\nThe installation in %s holds it; upgrade or manage it with --install-dir %s.", dir, dir)
+			return fmt.Sprintf("\nThe installation in %s holds it; manage it with --install-dir %s.", dir, dir)
 		}
 		return fmt.Sprintf("\nThe Compose project %s holds it, and its installation directory %s no longer exists. Remove it with: docker compose -p %s down --volumes --remove-orphans (this deletes its data)", name, dir, name)
 	}
@@ -565,12 +486,11 @@ func copyExecutable(from, to string) error {
 type installCompose struct {
 	docker func(context.Context, string, ...string) ([]byte, error)
 	dir    string
-	files  []string
 }
 
 // Output reports a failure as the last line of Compose's output, which holds the cause; the progress lines before it only repeat what happened.
 func (c installCompose) Output(ctx context.Context, args ...string) ([]byte, error) {
-	output, err := c.docker(ctx, c.dir, append(append([]string{"compose"}, c.files...), args...)...)
+	output, err := c.docker(ctx, c.dir, append([]string{"compose"}, args...)...)
 	if err != nil {
 		if lines := strings.Split(strings.TrimSpace(err.Error()), "\n"); len(lines) > 1 {
 			err = errors.New(strings.TrimSpace(lines[len(lines)-1]))

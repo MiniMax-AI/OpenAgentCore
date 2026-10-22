@@ -6,19 +6,11 @@
       "resources": {
         "cpus": 2,
         "memory_mib": 4096
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"docker\",\"resources\":{\"cpus\":2,\"memory_mib\":4096},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}}",
-    "digest": "1237a0d19e665b387922ad3d60143d5cd530864f0e3e4ee2c5ace57a1134aa38"
+    "canonical": "{\"provider\":\"docker\",\"resources\":{\"cpus\":2,\"memory_mib\":4096}}",
+    "digest": "6931ff71e3c92bccfbc422fb11d0e69fdf591e7bdd1aed76ac47fa4f144baca1"
   },
   {
     "name": "docker-zero-disks",
@@ -29,19 +21,11 @@
         "memory_mib": 4096,
         "root_disk_mib": 0,
         "environment_disk_mib": 0
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"docker\",\"resources\":{\"cpus\":2,\"memory_mib\":4096},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}}",
-    "digest": "1237a0d19e665b387922ad3d60143d5cd530864f0e3e4ee2c5ace57a1134aa38"
+    "canonical": "{\"provider\":\"docker\",\"resources\":{\"cpus\":2,\"memory_mib\":4096}}",
+    "digest": "6931ff71e3c92bccfbc422fb11d0e69fdf591e7bdd1aed76ac47fa4f144baca1"
   },
   {
     "name": "microsandbox",
@@ -53,18 +37,15 @@
         "root_disk_mib": 1024,
         "environment_disk_mib": 4294967295
       },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"}}",
-    "digest": "1bb6daadcf9e34b236a8ecba6eb4c5215b946a3f226721b2bf148f72acb5f05e"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "a0f5348e68e36ff01ffcef3e6c71c5eddfd429f34b440a4b3bb273b8f9eeac94"
   },
   {
     "name": "e2b",
@@ -86,14 +67,6 @@
       "resources": {
         "cpus": 0,
         "memory_mib": 4096
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": false
@@ -105,14 +78,6 @@
       "resources": {
         "cpus": 256,
         "memory_mib": 4096
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": false
@@ -124,14 +89,6 @@
       "resources": {
         "cpus": true,
         "memory_mib": 4096
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": false
@@ -143,14 +100,6 @@
       "resources": {
         "cpus": 2,
         "memory_mib": 511
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": false
@@ -163,14 +112,6 @@
         "cpus": 2,
         "memory_mib": 4096,
         "other": 1
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": false
@@ -183,14 +124,6 @@
         "cpus": 2,
         "memory_mib": 4096,
         "root_disk_mib": 1024
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": false
@@ -205,19 +138,16 @@
         "root_disk_mib": 1023,
         "environment_disk_mib": 4294967295
       },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
       }
     },
     "valid": false
   },
   {
-    "name": "invalid-release-digest",
+    "name": "runtime-rejected",
     "provider": "docker",
     "specification": {
       "resources": {
@@ -225,12 +155,7 @@
         "memory_mib": 4096
       },
       "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
       }
     },
     "valid": false
@@ -244,14 +169,6 @@
         "memory_mib": 1048576,
         "root_disk_mib": 1024
       },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true,
@@ -259,8 +176,8 @@
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
-    "digest": "ea1aa3cb9bd74682f5fb1a727dc43c63df193f71c7946c395da30451ee5ee3b0"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "cd31758a8ec9df729120eccd3db650d0f82cb35c4fbd1b1f5b7cf70140ae9faf"
   },
   {
     "name": "microsandbox-external-requires-root",
@@ -270,14 +187,6 @@
         "cpus": 255,
         "memory_mib": 1048576,
         "root_disk_mib": 0
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       },
       "workspace": {
         "attachment": "host_directory",
@@ -297,14 +206,6 @@
         "root_disk_mib": 1024,
         "environment_disk_mib": 4096
       },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true,
@@ -322,14 +223,6 @@
         "memory_mib": 1048576,
         "root_disk_mib": 1024
       },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": false,
@@ -339,21 +232,13 @@
     "valid": false
   },
   {
-    "name": "microsandbox-owned-zero-environment-rejected",
+    "name": "microsandbox-requires-workspace",
     "provider": "microsandbox",
     "specification": {
       "resources": {
         "cpus": 255,
         "memory_mib": 1048576,
         "root_disk_mib": 1024
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       }
     },
     "valid": false
@@ -365,14 +250,6 @@
       "resources": {
         "cpus": 255,
         "memory_mib": 1048576
-      },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
       },
       "workspace": {
         "attachment": "host_directory",
@@ -391,22 +268,14 @@
         "memory_mib": 1048576,
         "root_disk_mib": 1024
       },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
-    "digest": "ea1aa3cb9bd74682f5fb1a727dc43c63df193f71c7946c395da30451ee5ee3b0"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "cd31758a8ec9df729120eccd3db650d0f82cb35c4fbd1b1f5b7cf70140ae9faf"
   },
   {
     "name": "microsandbox-external-null-false-quota",
@@ -417,14 +286,6 @@
         "memory_mib": 1048576,
         "root_disk_mib": 1024
       },
-      "runtime": {
-        "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "image_id": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "image_manifest_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        "microsandbox_ref": "oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-        "runtime_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-        "firmware_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-      },
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true,
@@ -432,7 +293,7 @@
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"runtime\":{\"source_commit\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"image_id\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"image_manifest_digest\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"microsandbox_ref\":\"oac-runtime@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"runtime_sha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"firmware_sha256\":\"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff\"},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
-    "digest": "ea1aa3cb9bd74682f5fb1a727dc43c63df193f71c7946c395da30451ee5ee3b0"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "cd31758a8ec9df729120eccd3db650d0f82cb35c4fbd1b1f5b7cf70140ae9faf"
   }
 ]

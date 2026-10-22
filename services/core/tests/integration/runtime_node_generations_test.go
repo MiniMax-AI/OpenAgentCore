@@ -33,7 +33,7 @@ func generationHeartbeat(t *testing.T, s *Store, node deployment.Enrollment, con
 	if state == "ready" && view.Provider == "microsandbox" {
 		status.Checkpoint = &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}
 	}
-	err := deploymentService(t, s).HeartbeatGenerations(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{status})
+	err := deploymentService(t, s).Heartbeat(t.Context(), node.NodeID, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{status})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 				t.Fatal(err)
 			}
 			pendingNode, pendingGeneration := placedGeneration(t, s, w, pending)
-			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2}))
+			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(2)}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -146,24 +146,24 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 	}
 }
 
-func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
+func TestNodeGenerationsReconnectKeepsServingPin(t *testing.T) {
 	s, w, first, input := webSpecificationFixture(t, "docker")
 	service := deploymentService(t, s)
 	node := specificationNode(t, s, first)
 	old := onlineManagerNode(t, s, node.NodeID)
 	second, _ := changeNodeTarget(t, w, first, input)
 	nodes, err := service.ListNodes(t.Context())
-	if err != nil || !nodes[0].ProviderReady || nodes[0].Rollout.State != "update_required" {
+	if err != nil || !nodes[0].ProviderReady || nodes[0].Rollout.State != "unknown" {
 		t.Fatal(nodes, err)
 	}
 	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
-		t.Fatal("v1 lost fallback", err)
+		t.Fatal("serving pin lost fallback", err)
 	}
 	connection := uuid.NewString()
 	if err = service.ConnectNode(t.Context(), node.NodeID, connection, first.OwnerEpoch); err != nil {
 		t.Fatal(err)
 	}
-	if err = service.HeartbeatGenerations(t.Context(), node.NodeID, old, first.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: second.Generation, SpecificationDigest: second.SpecificationDigest, State: "ready"}}); !errors.Is(err, deployment.ErrNodeCredential) {
+	if err = service.Heartbeat(t.Context(), node.NodeID, old, first.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: second.Generation, SpecificationDigest: second.SpecificationDigest, State: "ready"}}); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("old connection qualified", err)
 	}
 	nodes, err = service.ListNodes(t.Context())
@@ -177,11 +177,11 @@ func TestNodeGenerationsReconnectAndV1Fallback(t *testing.T) {
 	if err := reserveSessionPlacement(t, s, w, queued); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("unconfirmed connection admitted", err)
 	}
-	if err = service.Heartbeat(t.Context(), node.NodeID, connection, first.OwnerEpoch, deployment.NodeHealth{ProviderReady: true}, nil); err != nil {
+	if err = fixtureNodeHeartbeat(t.Context(), s, service, node.NodeID, connection, first.OwnerEpoch, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err = s.CreateSession(t.Context(), uuid.NewString(), managerSessionInput(uuid.NewString())); err != nil {
-		t.Fatal("fresh v1 readiness did not restore fallback", err)
+		t.Fatal("fresh pin readiness did not restore fallback", err)
 	}
 }
 

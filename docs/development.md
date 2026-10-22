@@ -128,7 +128,7 @@ Choose focused checks for the current diff and its directly affected behavior us
 | Claude Code adapter and artifact | `make check-claude-sdk` |
 | Web UI and clients | `make check-web` |
 | Distribution or installer | `make check-distribution` |
-| Documentation | `make check-docs` (Markdown links and anchors), `make check-names`, and `pnpm --dir website check-translations` for Chinese mirrors |
+| Documentation | `make check-docs` (Markdown links and anchors) and `pnpm --dir website check-translations` for Chinese mirrors |
 
 Fixture browser acceptance uses loopback ports 18092 and 4174. Select unused ports with `AGENTS_FIXTURE_PORT` and `AGENTS_WEB_PORT` when running parallel validation. Keep databases, ports and containers separate between validation workers. Compilation, fixture success and live model/provider acceptance establish different facts; report skipped or unavailable checks explicitly. Follow the [review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review) after validation.
 

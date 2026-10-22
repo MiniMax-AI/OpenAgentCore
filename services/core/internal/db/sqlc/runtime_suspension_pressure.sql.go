@@ -11,6 +11,103 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const expireRuntimeCheckpoint = `-- name: ExpireRuntimeCheckpoint :one
+UPDATE runtime_allocations
+SET compute_retained_until=clock_timestamp(), compute_revision=compute_revision+1
+WHERE id=$1 AND compute_revision=$2 AND state='running' AND compute_phase='suspended' AND compute_retained_until>clock_timestamp()
+RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
+`
+
+type ExpireRuntimeCheckpointParams struct {
+	ID              pgtype.UUID `json:"id"`
+	ComputeRevision int64       `json:"compute_revision"`
+}
+
+func (q *Queries) ExpireRuntimeCheckpoint(ctx context.Context, arg ExpireRuntimeCheckpointParams) (RuntimeAllocation, error) {
+	row := q.db.QueryRow(ctx, expireRuntimeCheckpoint, arg.ID, arg.ComputeRevision)
+	var i RuntimeAllocation
+	err := row.Scan(
+		&i.ID,
+		&i.EnvironmentID,
+		&i.DeviceID,
+		&i.ProviderKey,
+		&i.State,
+		&i.CreateSettled,
+		&i.CreatedAt,
+		&i.ReleasedAt,
+		&i.ComputePhase,
+		&i.ComputeRevision,
+		&i.ComputeState,
+		&i.ComputeActivityAt,
+		&i.ComputeWakeRequested,
+		&i.ComputeRetainedUntil,
+		&i.NodeID,
+		&i.ObservationError,
+		&i.ComputePhaseChangedAt,
+		&i.DeploymentGeneration,
+	)
+	return i, err
+}
+
+const listIdleRuntimeCheckpoints = `-- name: ListIdleRuntimeCheckpoints :many
+SELECT a.id
+FROM runtime_allocations a JOIN environments e ON e.id=a.environment_id
+WHERE a.node_id=$1 AND a.state='running' AND a.compute_phase='suspended' AND a.compute_retained_until>clock_timestamp()
+ AND NOT a.compute_wake_requested
+ AND NOT EXISTS(SELECT 1 FROM environment_input_reservations r WHERE r.session_id=e.session_id AND r.state='pending')
+ AND NOT EXISTS(SELECT 1 FROM environment_file_writes f WHERE f.environment_id=e.id AND f.state='pending')
+ORDER BY a.compute_retained_until, a.id
+`
+
+func (q *Queries) ListIdleRuntimeCheckpoints(ctx context.Context, nodeID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listIdleRuntimeCheckpoints, nodeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRuntimeStartingNodes = `-- name: ListRuntimeStartingNodes :many
+SELECT DISTINCT p.node_id
+FROM runtime_placements p JOIN environments e ON e.id=p.environment_id
+LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state <> 'released'
+WHERE p.released_at IS NULL AND (a.id IS NULL OR e.initialization IN ('pending', 'running'))
+`
+
+// A node is starting a Session while that Session's sandbox is not created or
+// its initialization has not finished.
+func (q *Queries) ListRuntimeStartingNodes(ctx context.Context) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listRuntimeStartingNodes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var node_id pgtype.UUID
+		if err := rows.Scan(&node_id); err != nil {
+			return nil, err
+		}
+		items = append(items, node_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRuntimeSuspensionInFlightNodes = `-- name: ListRuntimeSuspensionInFlightNodes :many
 SELECT DISTINCT a.node_id
 FROM runtime_allocations a

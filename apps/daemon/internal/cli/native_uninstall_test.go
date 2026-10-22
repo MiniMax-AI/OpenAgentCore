@@ -50,6 +50,7 @@ func TestUninstallDeletesInstallationAndKeepsWorkspace(t *testing.T) {
 	if err := os.WriteFile(foreignFile, []byte("keep"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	t.Setenv("OAC_RUNTIME_HOME", root)
 	output := new(bytes.Buffer)
 	rc = &runContext{stdin: strings.NewReader("n\n"), stdout: output, stderr: output}
 	if err := runUninstall(rc, nil); err == nil || !strings.Contains(output.String(), filepath.Join(root, "bin")) {
@@ -63,7 +64,7 @@ func TestUninstallDeletesInstallationAndKeepsWorkspace(t *testing.T) {
 	if err := runUninstall(rc, nil); err != nil {
 		t.Fatal(err)
 	}
-	for _, text := range []string{"Revoke", "Executor credentials", "Delete the Session", "Kept: " + foreignFile, "Kept: " + foreignDir, "Kept: " + credential, "Rotate"} {
+	for _, text := range []string{"Revoke", "Executor credentials", "Delete the Session", "Kept: " + foreignFile, "Kept: " + foreignDir, "Kept: " + credential, "Rotate", "Shared components removed"} {
 		if !strings.Contains(output.String(), text) {
 			t.Fatalf("missing %q in\n%s", text, output)
 		}
@@ -90,10 +91,7 @@ func TestUninstallRemovesEmptiedInstallationDirectory(t *testing.T) {
 	if err := runInstall(rc, args); err != nil {
 		t.Fatal(err)
 	}
-	rc = &runContext{stdin: strings.NewReader("y\n"), stdout: new(bytes.Buffer), stderr: new(bytes.Buffer)}
-	if err := runUninstall(rc, nil); err != nil {
-		t.Fatal(err)
-	}
+	uninstallNative(t, root)
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatal("installation directory remains")
 	}
@@ -109,7 +107,8 @@ func TestUninstallFailureCanBeRerun(t *testing.T) {
 	if err := runInstall(rc, args); err != nil {
 		t.Fatal(err)
 	}
-	locked := filepath.Join(root, "components", "locked")
+	t.Setenv("OAC_RUNTIME_HOME", root)
+	locked := filepath.Join(root, "capabilities", "locked")
 	if err := os.MkdirAll(locked, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -157,13 +156,13 @@ func TestInstallRefusesDirectoryHoldingOtherFiles(t *testing.T) {
 
 // Without --install-dir an installation gets its own directory in the Runtime home.
 func TestInstallDefaultsToEnvironmentDirectory(t *testing.T) {
-	rc, args, root, _ := nativeInstallFixture(t)
+	rc, args, _, _ := nativeInstallFixture(t)
 	args = slices.Delete(args, slices.Index(args, "--install-dir"), slices.Index(args, "--install-dir")+2)
 	if err := runInstall(rc, args); err != nil {
 		t.Fatal(err)
 	}
 	environment := args[slices.Index(args, "--environment-id")+1]
-	if _, err := os.Stat(filepath.Join(root, "environments", environment, "daemon", "installation.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(os.Getenv("OAC_RUNTIME_HOME"), "environments", environment, "daemon", "installation.json")); err != nil {
 		t.Fatalf("installation is not in the default directory: %v", err)
 	}
 }

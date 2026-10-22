@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: d59774502bc1508bd7372abbb833abbed5629152ece25dc00fb4b6baab7f5f65
+source_hash: 5519609be1b60dbd8c1b3aaac6aa8500f3907bebdba50a9e2ce6cb4ebf928b13
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -60,7 +60,7 @@ Core 安装的每项设置、其归属位置以及修改方式。安装程序写
 | 设置 | Web 中的位置 | Core API | 注意事项 |
 | --- | --- | --- | --- |
 | 沙箱提供商：Docker、microsandbox 或 E2B | **设置** → **沙箱与调度**：设置向导，最后点击 **保存配置** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个沙箱提供商，在首次登录后选择。要改用其他提供商，必须先执行 **重置部署**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
-| 沙箱大小、Runtime 发行版、E2B 密钥和模板构建 | **设置** → **沙箱与调度** → **修改资源** | `/core/v1/sandbox/deployment` | Web 会推荐 [提供商声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小和发行版。E2B 密钥仅可写入，并且已加密 |
+| 沙箱大小、E2B 密钥和模板构建 | **设置** → **沙箱与调度** → **修改资源** | `/core/v1/sandbox/deployment` | Web 会推荐 [提供商声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小。E2B 密钥仅可写入，并且已加密 |
 | 节点及其容量 | **节点**：**添加节点**、**编辑节点** 和移除 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[添加和管理节点](getting-started/nodes.md) |
 | 空闲挂起 | **设置** → **沙箱与调度** → **自动挂起** → **空闲多久后挂起（秒）** → **保存** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
 | 独立工作区存储和租户容量 | **设置 → 工作区存储** | `/core/v1/workspace-storage` | 参阅[设置工作区存储](getting-started/workspace-storage.md)；现有工作区保留自身配置 |
@@ -72,7 +72,7 @@ Core 安装的每项设置、其归属位置以及修改方式。安装程序写
 
 ### 节点容量 {#node-capacity}
 
-生成 **添加节点** 命令时，Core 会批准节点容量：**同时运行的沙箱**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **保留的沙箱**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值。预留和尚未确认的清理操作都会占用容量；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
+节点容量是 **同时运行的沙箱**（`max_active`），并且仅对 microsandbox 还有 **保留的沙箱**（`max_retained`），其中 `max_retained >= max_active >= 1`。**添加节点** 默认采用推荐值，即节点注册时 Core [按主机推导](../../contracts/agents-api/zh/sandbox-deployment.md#recommended-capacity)的值；也可以自行填写两个数字。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值，它会显示推荐值并可一键填入。预留和尚未确认的清理操作都会占用容量；retained slot 已满时可以[提前结束空闲检查点的保留期](./sandbox-provider.md#cold-replacement-after-checkpoint-retention)；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
 
 `OAC_EXECUTION_CONCURRENCY` 与此无关：它限制 Core 中并发执行的工作量。
 
@@ -111,12 +111,12 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 
 ## Docker 节点配置 {#docker-node-configuration}
 
-节点安装程序会将 Docker 的主机设置写入节点配置文件的 `native` 对象，只有 Docker 适配器读取它。部署资源、Runtime 发行版本和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
+节点安装程序会将 Docker 的主机设置写入节点配置文件的 `native` 对象，只有 Docker 适配器读取它。部署资源和容量仍存储在 [Core 的数据库](#runtime-settings-web)中。
 
 | 字段 | 安装程序设置的值 | 含义 |
 | --- | --- | --- |
 | `host` | `unix:///var/run/docker.sock` | 显式 Docker Engine 套接字 |
-| `image` | 加载后 Runtime 镜像的本地 ID | 发行版本的 `image_id` 或 `image_manifest_digest`。主机的镜像存储决定由哪个 digest 指代已加载的镜像，因此该值属于节点本地；适配器只接受这两个值 |
+| `image` | 加载后 Runtime 镜像的本地 ID | 本安装的 Runtime 镜像。主机的镜像存储决定其本地 ID 是清单中的 `image_id` 还是 `image_manifest_digest`，因此该值属于节点本地 |
 | `network` | `oac-node-<installation-id>` | Runtime 容器网络 |
 | `seccomp_file` | `<node-root>/runtime/seccomp.json` | 所匹配发行版的 seccomp 配置文件 |
 | `nested_sandbox` | `true` | 启用 Docker 适配器的 init 进程和 proc-mask 配置 |
@@ -130,8 +130,8 @@ Session 创建可以在异步工作区准入之前成功。容量耗尽时，Cor
 | 路径 | 内容 | 修改者 |
 | --- | --- | --- |
 | `.env` | 进程设置和固定的 Compose 项目名 | 用户修改后运行 `oac apply` |
-| `compose.yaml` | 已校验的发行版服务定义 | 安装程序，在安装或[升级](getting-started/operations.md#upgrade)时 |
-| `compose.override.yaml` | 可选的本地 Compose 条目。源码包安装中它是 JSON，还保存四个服务镜像和 Web 的 `/node-payload` 绑定 | 用户。`install.py` 只替换自己的条目，并要求 JSON 格式。`oac install --upgrade` 会删除 `/node-payload` 绑定和主机上的 `node-payload/` 目录，因为发布版本从数据卷提供该载荷 |
+| `compose.yaml` | 已校验的发行版服务定义 | 安装程序，在安装时 |
+| `compose.override.yaml` | 可选的本地 Compose 条目。源码包安装中它是 JSON，还保存 Web 的 `/node-payload` 绑定和 Core 的原生安装程序绑定 | 用户。`install.py` 只替换自己的条目，并要求 JSON 格式 |
 | `oac`（Windows 为 `oac.exe`） | 原生管理命令 | 安装程序 |
 
 同级 `<install-dir>.lock` 目录用于同步操作并一直保留；`<install-dir>.staging` 保存尚未就位的安装文件。两者都不保存服务数据。Unix 上安装程序以 `0700` 创建私有目录，以 `0600` 创建配置文件。
@@ -140,7 +140,7 @@ Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、
 
 ## 独立工作区存储 {#independent-workspace-storage}
 
-支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、`oac-node` 账户、Compose 挂载、选择负载和配额模式存储服务器。
+microsandbox 要求使用独立工作区存储，唯一支持的组合是与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、Compose 挂载、选择负载和配额模式存储服务器。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 

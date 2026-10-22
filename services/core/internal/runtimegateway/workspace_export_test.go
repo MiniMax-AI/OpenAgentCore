@@ -21,7 +21,7 @@ func exportReply(t *testing.T, s *Session, id string, result proto.WorkspaceExpo
 }
 
 func TestWorkspaceExportPullsOnlyAfterConsumedAndRequiresCompletion(t *testing.T) {
-	s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 	defer s.Close("test")
 	consumed, resume := make(chan struct{}), make(chan struct{})
 	done := make(chan error, 1)
@@ -74,7 +74,7 @@ func TestWorkspaceExportRejectsInvalidChunksAndNativeFailure(t *testing.T) {
 		{Outcome: "completed", Data: []byte("x")},
 		{Outcome: "failed", ErrorCode: "export_failed"},
 	} {
-		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+		s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		done := make(chan error, 1)
 		go func() {
 			done <- s.ExportWorkspaceOutputs(t.Context(), proto.WorkspaceExportPayload{Handle: "prepared", EnvironmentID: "env"}, func(r io.Reader) error { _, err := io.Copy(io.Discard, r); return err })
@@ -95,7 +95,7 @@ func TestWorkspaceExportRejectsInvalidChunksAndNativeFailure(t *testing.T) {
 
 func TestWorkspaceExportDisconnectAndCancellationSettleRead(t *testing.T) {
 	for _, disconnect := range []bool{false, true} {
-		s := NewSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+		s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
 		ctx, cancel := context.WithCancel(t.Context())
 		done := make(chan error, 1)
 		go func() {

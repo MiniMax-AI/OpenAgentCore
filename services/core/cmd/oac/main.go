@@ -184,7 +184,7 @@ func accessError(root string, err error) error {
 var (
 	initVolume  = []string{"run", "--rm", "--no-deps", "init"}
 	checkConfig = []string{"run", "--rm", "--no-deps", "--entrypoint", "/usr/local/bin/oac-core", "core", "check-config"}
-	// Starting recreates changed services, so a resumed upgrade leaves no container on the previous release.
+	// Starting recreates changed services.
 	startServices = []string{"up", "-d", "--wait", "--wait-timeout", "180", "--pull", "never", "--remove-orphans"}
 )
 

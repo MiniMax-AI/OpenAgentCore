@@ -116,7 +116,7 @@ func TestCheckpointTransferRoutesBeforeTargetIO(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			token, err := r.deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2})
+			token, err := r.deployments.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(2)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -130,7 +130,7 @@ func TestCheckpointTransferRoutesBeforeTargetIO(t *testing.T) {
 				t.Fatal(err)
 			}
 			compat := sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}
-			if err = r.deployments.Heartbeat(t.Context(), targetNode, connection, view.OwnerEpoch, deployment.NodeHealth{ProviderReady: true}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &compat}}); err != nil {
+			if err = r.deployments.Heartbeat(t.Context(), targetNode, connection, view.OwnerEpoch, deployment.NodeHealth{}, []sandbox.GenerationStatus{{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: "ready", Checkpoint: &compat}}); err != nil {
 				t.Fatal(err)
 			}
 			state := runtimeCompute{Current: sandbox.Compute{ID: "source", Name: "source", Generation: 1}, Snapshot: &sandbox.SnapshotIdentity{ID: "snapshot", Compatibility: compat}}

@@ -16,6 +16,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 const testPublicURL = "https://core.example"
@@ -57,10 +58,9 @@ func operations(t *testing.T, publicURL string, tx *fakeDeploymentTx) *Execution
 // testSpecification is a valid deployment specification for provider.
 func testSpecification(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
-	s.Runtime = &sandbox.RuntimeRelease{SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64), ImageManifestDigest: "sha256:" + strings.Repeat("c", 64), MicrosandboxRef: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
-		s.Resources.EnvironmentDiskMiB = 8192
+		s.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	}
 	return s
 }
@@ -151,22 +151,14 @@ func TestSandboxValidationWrapperPreservesClassification(t *testing.T) {
 	if errors.Is(err, sandbox.ErrInvalid) {
 		t.Fatal("wrapper changed sentinel identity")
 	}
-	_, err = service.SetupForSelection(installation, sandbox.Selection{Provider: "e2b", DeploymentSpec: sandbox.DeploymentSpec{Runtime: &sandbox.RuntimeRelease{}}})
-	if !errors.As(err, &configuration) || configuration.Validation == nil || configuration.Validation.Param != "runtime" || err.Error() != "invalid sandbox configuration: E2B Runtime is selected by its immutable template build" {
-		t.Fatal("pending E2B validation order changed", err)
-	}
 }
 
-// A stored provider the registry no longer holds fails every read and change
-// that consults it.
+// A stored provider the registry no longer holds fails every read that consults it.
 func TestRegistryLookupFailuresPropagate(t *testing.T) {
 	stored := webDeployment(t, uuid.NewString(), "retired", 1)
 	reader := &fakeReader{t: t,
 		snapshot:   func(context.Context) (Snapshot, error) { return Snapshot{Record: stored}, nil },
 		deployment: func(context.Context) (Record, error) { return stored, nil },
-		nodes: func(context.Context) ([]NodeRecord, error) {
-			return []NodeRecord{{ID: uuid.NewString(), Provider: "retired", MaxActive: 1, MaxRetained: 1}}, nil
-		},
 	}
 	service := newService(t, &fakeStorage{t: t}, reader, testPublicURL)
 	// View decodes the stored configuration first, and reports that failure as a conflict.
@@ -175,9 +167,6 @@ func TestRegistryLookupFailuresPropagate(t *testing.T) {
 	}
 	if _, err := service.Setup(t.Context()); !errors.Is(err, providers.ErrUnknownProvider) {
 		t.Errorf("Setup = %v", err)
-	}
-	if _, err := service.ListNodes(t.Context()); !errors.Is(err, providers.ErrUnknownProvider) {
-		t.Errorf("ListNodes = %v", err)
 	}
 }
 
@@ -195,17 +184,6 @@ func TestSetupReportsDeclarationsAndStoredConfigurationConflicts(t *testing.T) {
 	stored.Configuration.Public = json.RawMessage(`{"retired":true}`)
 	if _, err := service.Setup(t.Context()); !errors.Is(err, ErrConflict) {
 		t.Fatal("an undecodable stored configuration was not a conflict", err)
-	}
-}
-
-// Docker never suspends, so its nodes retain at most their active capacity.
-func TestListNodesAppliesTheRetainedLimit(t *testing.T) {
-	reader := &fakeReader{t: t, nodes: func(context.Context) ([]NodeRecord, error) {
-		return []NodeRecord{{Provider: "docker", MaxActive: 2, MaxRetained: 5}, {Provider: "microsandbox", MaxActive: 2, MaxRetained: 5}}, nil
-	}}
-	nodes, err := newService(t, &fakeStorage{t: t}, reader, testPublicURL).ListNodes(t.Context())
-	if err != nil || len(nodes) != 2 || nodes[0].MaxRetained != 2 || nodes[1].MaxRetained != 5 {
-		t.Fatalf("ListNodes = %+v, %v", nodes, err)
 	}
 }
 
@@ -269,7 +247,7 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 	current := webDeployment(t, installation, "docker", 1)
 	valid := Enrollment{NodeID: uuid.NewString(), Name: "node", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: testSpecification("docker").Digest("docker"), CoreURL: testPublicURL}
-	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: 1, MaxRetained: 1}
+	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: new(1), MaxRetained: new(1)}
 	resetting := current
 	resetting.Reset = &ResetState{Clear: "sandboxes", RequestedAt: time.Now()}
 	unselected := current

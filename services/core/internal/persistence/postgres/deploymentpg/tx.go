@@ -85,7 +85,7 @@ func (u unit) LoadEnrollment(tokenDigest string) (deployment.EnrollmentRecord, e
 	if err != nil {
 		return deployment.EnrollmentRecord{}, err
 	}
-	return deployment.EnrollmentRecord{ID: uuidString(r.ID), InstallationID: uuidString(r.InstallationID), ExpiresAt: r.ExpiresAt.Time, Consumed: r.ConsumedAt.Valid, MaxActive: int(r.MaxActive), MaxRetained: int(r.MaxRetained)}, nil
+	return deployment.EnrollmentRecord{ID: uuidString(r.ID), InstallationID: uuidString(r.InstallationID), ExpiresAt: r.ExpiresAt.Time, Consumed: r.ConsumedAt.Valid, MaxActive: optionalInt(r.MaxActive), MaxRetained: optionalInt(r.MaxRetained)}, nil
 }
 
 func (u unit) LoadGenerationSpecification(generation uint64) (deployment.GenerationSpecification, error) {
@@ -175,6 +175,21 @@ func (t *nodeTx) RemoveNode(id string) error {
 	return t.q.RemoveRuntimeNode(t.ctx, nodeID)
 }
 
+func optionalInt4(v *int) pgtype.Int4 {
+	if v == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*v), Valid: true}
+}
+
+func optionalInt(v pgtype.Int4) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int32)
+	return &n
+}
+
 func (t *nodeTx) CreateEnrollment(enrollment deployment.NewEnrollment) (time.Time, error) {
 	id, err := parseID(enrollment.ID)
 	if err != nil {
@@ -184,7 +199,7 @@ func (t *nodeTx) CreateEnrollment(enrollment deployment.NewEnrollment) (time.Tim
 	if err != nil {
 		return time.Time{}, err
 	}
-	if err := t.q.CreateRuntimeEnrollment(t.ctx, sqlc.CreateRuntimeEnrollmentParams{ID: id, TokenSha256: enrollment.TokenDigest, InstallationID: installation, MaxActive: int32(enrollment.MaxActive), MaxRetained: int32(enrollment.MaxRetained)}); err != nil {
+	if err := t.q.CreateRuntimeEnrollment(t.ctx, sqlc.CreateRuntimeEnrollmentParams{ID: id, TokenSha256: enrollment.TokenDigest, InstallationID: installation, MaxActive: optionalInt4(enrollment.MaxActive), MaxRetained: optionalInt4(enrollment.MaxRetained)}); err != nil {
 		return time.Time{}, err
 	}
 	row, err := t.q.GetRuntimeEnrollment(t.ctx, enrollment.TokenDigest)
@@ -216,7 +231,7 @@ func (t *nodeTx) HeartbeatNode(heartbeat deployment.Heartbeat) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	changed, err := t.q.HeartbeatRuntimeNode(t.ctx, sqlc.HeartbeatRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(heartbeat.Epoch), ProviderReady: heartbeat.Health.ProviderReady, Health: raw})
+	changed, err := t.q.HeartbeatRuntimeNode(t.ctx, sqlc.HeartbeatRuntimeNodeParams{ID: id, ConnectionID: connection, OwnerEpoch: int64(heartbeat.Epoch), Health: raw})
 	return changed == 1, translate(err)
 }
 
@@ -253,14 +268,6 @@ func (t *nodeTx) PromoteServingGeneration(nodeID string, generation uint64) erro
 		return err
 	}
 	return t.q.PromoteNodeServingGeneration(t.ctx, sqlc.PromoteNodeServingGenerationParams{ID: id, ReadyGeneration: pgtype.Int8{Int64: int64(generation), Valid: true}})
-}
-
-func (t *nodeTx) RefreshServingReadiness(nodeID string, protocol int) error {
-	id, err := parseID(nodeID)
-	if err != nil {
-		return err
-	}
-	return t.q.RefreshNodeServingReadiness(t.ctx, sqlc.RefreshNodeServingReadinessParams{ID: id, ProtocolVersion: int32(protocol)})
 }
 
 // deploymentTx is one leased deployment change.

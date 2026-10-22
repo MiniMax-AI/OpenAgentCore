@@ -14,12 +14,6 @@ import (
 func validRegistrationSpec() sandbox.DeploymentSpec {
 	return sandbox.DeploymentSpec{
 		Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048},
-		Runtime: &sandbox.RuntimeRelease{
-			SourceCommit: strings.Repeat("a", 40), ImageID: "sha256:" + strings.Repeat("b", 64),
-			ImageManifestDigest: "sha256:" + strings.Repeat("c", 64),
-			MicrosandboxRef:     "oac-runtime@sha256:" + strings.Repeat("d", 64),
-			RuntimeSHA256:       strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64),
-		},
 	}
 }
 
@@ -30,8 +24,6 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 		name   string
 		mutate func(*Adapter)
 	}{
-		{"missing Runtime input policy", func(a *Adapter) { a.Policy = sandbox.DeploymentPolicy{} }},
-		{"contradictory Runtime input policy", func(a *Adapter) { a.Policy.RuntimeError = "Runtime rejected" }},
 		{"missing mode", func(a *Adapter) { a.Mode = "" }},
 		{"unknown mode", func(a *Adapter) { a.Mode = "private-token" }},
 		{"missing local constructor", func(a *Adapter) { a.BuildLocal = nil }},

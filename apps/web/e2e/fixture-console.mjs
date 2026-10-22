@@ -22,10 +22,9 @@ const LOCKOUT_AFTER = 3;
 const LOCKOUT_SECONDS = 30;
 
 let state;
-const hex = (c) => c.repeat(64);
-/** The Runtime release this fixture's distribution manifest describes. */
-const release = { source_commit: "c0ffee".padEnd(40, "0"), image_id: `sha256:${hex("1")}`, image_manifest_digest: `sha256:${hex("2")}`, microsandbox_ref: `oac-runtime@sha256:${hex("3")}`, runtime_sha256: hex("4"), firmware_sha256: hex("5") };
-const manifest = { platform: "linux/amd64", source_commit: release.source_commit, images: { runtime: release.image_id }, image_manifest_digests: { runtime: release.image_manifest_digest }, runtime_ref: release.microsandbox_ref, microsandbox: { runtime_sha256: release.runtime_sha256, firmware_sha256: release.firmware_sha256 }, artifacts: {} };
+const SOURCE_COMMIT = "c0ffee".padEnd(40, "0");
+// microsandbox runs every sandbox on workspace storage, so the installation has it selected.
+const WORKSPACE_STORAGE = { id: "5d0c2a4e-8f6b-4c1d-9e3a-7b2f1a0c6d48", adapter: "nfs", parameters: { root: "/srv/oac-workspaces", namespace_id: "22222222-2222-4222-8222-222222222222", uid: 65532 }, tenant_capacity_mib: 0 };
 
 /**
  * config.json's public_url. "public": an HTTPS address, so applications get an API base URL;
@@ -50,7 +49,7 @@ function installation() {
   return {
     // As Core: api_base_url is always public_url followed by /v1; local_only marks a loopback public_url.
     object: "core.installation", installation_id: INSTALLATION_ID, public_url: publicUrl(), api_base_url: `${publicUrl()}/v1`,
-    local_only: local, source_commit: release.source_commit,
+    local_only: local, source_commit: SOURCE_COMMIT,
     configuration: {
       settings: [
         // The settings Core reports (services/core/internal/processconfig), with the enabled harnesses of this fixture.
@@ -77,7 +76,7 @@ function installation() {
 
 const noNodeRollout = () => ({ state: "settled", previous_generation_sandboxes: 0, nodes: null });
 function nodeRollout(previous = 0) {
-  const nodes = { ready: 0, preparing: 0, failed: 0, update_required: 0, unknown: 0 };
+  const nodes = { ready: 0, preparing: 0, failed: 0, unknown: 0 };
   for (const node of state.nodes) nodes[node.rollout.state]++;
   return { state: nodes.preparing > 0 ? "preparing" : "settled", previous_generation_sandboxes: previous, nodes };
 }
@@ -87,7 +86,7 @@ function unconfiguredDeployment(generation = 0, ownerEpoch = 3) {
 }
 
 function configuredDeployment() {
-  return { installation_id: INSTALLATION_ID, provider: "docker", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, runtime: release }, specification_digest: "fixture", suspension: null };
+  return { installation_id: INSTALLATION_ID, provider: "docker", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 } }, specification_digest: "fixture", suspension: null };
 }
 /** The E2B template build as Core read it when the selection was saved. */
 const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
@@ -262,6 +261,7 @@ async function adminWrite(request, response, path) {
 function adminRead(response, path, url) {
   const a = state.admin;
   if (path === "/installation") return send(response, 200, installation());
+  if (path === "/workspace-storage") return send(response, 200, WORKSPACE_STORAGE);
   if (path === "/projects") return send(response, 200, { data: a.projects.map(a.publicProject), has_more: false });
   if (path === "/summary") return send(response, 200, a.summary(url));
   if (path === "/request-logs") return send(response, 200, requestLog(url));
@@ -397,7 +397,7 @@ async function sandboxRoute(request, response, path, url) {
     if (initialize && state.deployment.provider) return error(response, 409, "The sandbox deployment is already configured.", "sandbox_deployment_conflict");
     if (!initialize && !state.deployment.provider) return error(response, 409, "The sandbox deployment is not configured.", "sandbox_deployment_conflict");
     const e2b = input.provider === "e2b";
-    if (!e2b && (!input.resources || !input.runtime)) return error(response, 400, "resources and runtime are required.", "invalid_sandbox_configuration");
+    if (!e2b && !input.resources) return error(response, 400, "resources are required.", "invalid_sandbox_configuration");
     // As Core (ErrSandboxPublicURLUnreachable): E2B sandboxes reach Core over the internet, which a loopback public_url cannot serve.
     if (e2b && state.installation === "local") return error(response, 409, "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback (public_url in config.json, OAC_PUBLIC_URL for Core).", "sandbox_configuration_error");
     // Synthetic classifier outcomes only; never persist or echo submitted keys.
@@ -409,7 +409,7 @@ async function sandboxRoute(request, response, path, url) {
     // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
     const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
     const previous = state.deployment;
-    const specification = { resources, ...(input.runtime ? { runtime: input.runtime } : {}) };
+    const specification = { resources };
     const explicitKey = e2b && Object.hasOwn(input, "credential");
     const sameSelection = !initialize && JSON.stringify(specification) === JSON.stringify(previous.specification) && (!e2b || input.configuration.template === previous.configuration?.template);
     // Omission can be a no-op; every explicit key, including identical bytes,
@@ -516,12 +516,11 @@ async function executorCredentialRoute(request, response, projectId, environment
 
 /**
  * A node as it first registers with the last enrollment command: not yet connected,
- * provider not ready, with the token's limits and enrollment ID. Like Core, it has no
- * diagnostic field until one is reported.
+ * provider not ready, with the token's limits and enrollment ID.
  */
 function registeredNode(nodeId) {
   const { enrollment_id = null, ...limits } = state.enrollment ?? { max_active: 1, max_retained: 1 };
-  return { rollout: { state: "unknown", ready_generation: null }, id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), enrollment_id, online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
+  return { rollout: { state: "unknown", ready_generation: null }, id: nodeId, name: nodeId, provider: state.deployment?.provider ?? "docker", core_url: publicUrl(), enrollment_id, online: false, provider_ready: false, cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, snapshots: 0, last_seen_at: null, recommended_capacity: null, ...limits, active: 0, reserved: 0, retained: 0, cleanup_pending: 0, created_at: new Date().toISOString() };
 }
 
 const HARNESS_PROVIDER = /^\/harnesses\/([^/]+)\/model-configuration$/;
@@ -623,21 +622,20 @@ async function fixtureRoute(request, response, url) {
     return send(response, 200, { ok: true });
   }
   if (url.pathname === "/__fixture/node" && request.method === "POST") {
-    // { id, ...fields }: registers the node on first use, then applies the fields (online, provider_ready, diagnostic,
-    // or another command's enrollment_id); an empty diagnostic removes the field, as Core omits it.
+    // { id, ...fields }: registers the node on first use, then applies the fields (online, provider_ready,
+    // or another command's enrollment_id).
     const { id: nodeId, ...fields } = await body(request);
     let node = state.nodes.find((entry) => entry.id === nodeId);
     if (!node) state.nodes.push(node = registeredNode(nodeId));
     Object.assign(node, fields);
     // A control may supply an explicit target observation. Existing enrollment
     // cases only supply connection facts, so give that newly joined target a pin.
-    if (!fields.rollout && ("online" in fields || "provider_ready" in fields || "diagnostic" in fields)) {
+    if (!fields.rollout && ("online" in fields || "provider_ready" in fields)) {
       node.rollout = !node.online ? { state: "unknown", ready_generation: node.rollout.ready_generation }
         : node.provider_ready ? { state: "ready", ready_generation: state.deployment.generation }
-        : { state: "failed", ready_generation: node.rollout.ready_generation, diagnostic: node.diagnostic || "provider_unavailable" };
+        : { state: "failed", ready_generation: node.rollout.ready_generation, diagnostic: "provider_unavailable" };
     }
     if (state.deployment.mode === "nodes") state.deployment.rollout = nodeRollout(state.deployment.rollout.previous_generation_sandboxes);
-    if (!node.diagnostic) delete node.diagnostic;
     return send(response, 200, node);
   }
   if (url.pathname === "/__fixture/requests") return send(response, 200, { violations: state.violations, writes: state.writes });
@@ -648,8 +646,6 @@ http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://127.0.0.1:${port}`);
   try {
     if (url.pathname.startsWith("/__fixture/")) return await fixtureRoute(request, response, url);
-    // The console service serves its distribution manifest to anyone, as nodes download it.
-    if (url.pathname === "/node-install/manifest.json") return send(response, 200, manifest);
     if (request.headers.authorization) state.violations.push(`Authorization header on ${request.method} ${url.pathname}`);
     if (url.pathname.startsWith("/console/")) return await consoleRoute(request, response, url);
     const signedIn = state.auth.mode === "authenticated" && request.headers.cookie?.includes(SESSION_COOKIE);

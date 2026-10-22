@@ -9,18 +9,19 @@ function response(value: unknown, status = 200) { return new Response(JSON.strin
 
 // Shapes as Core serializes them (deployment.Node, deployment.NodeDetail, deployment.NodeAllocation, deployment.View).
 const created = "2026-09-25T08:00:00.123456789Z";
-/** A ready node: Core omits `diagnostic`. */
+/** A ready node. */
 const node = {
   rollout: { state: "ready", ready_generation: 1 },
   id: "3b0c1f4e-8a2d-4c6b-9e7f-1a2b3c4d5e6f", name: "core-01", provider: "docker", online: true, provider_ready: true,
   cpu_count: 16, available_memory_bytes: 8589934592, available_disk_bytes: 107374182400, running: 1, snapshots: 0,
   last_seen_at: "2026-09-25T09:00:00Z", max_active: 2, max_retained: 2, active: 1, reserved: 0, retained: 1, cleanup_pending: 0,
   created_at: created, core_url: "https://core.example", enrollment_id: "9d2e6b1a-4c3f-4e8d-a7b6-5c4d3e2f1a0b",
+  recommended_capacity: { max_active: 8, max_retained: 8 },
 };
-/** Never heard from, enrolled before Core recorded enrollment IDs, with a fixed readiness code. */
+/** Never heard from and enrolled before Core recorded enrollment IDs. */
 const unready = {
-  ...node, rollout: { state: "unknown", ready_generation: 1 }, id: "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918", online: false, provider_ready: false, diagnostic: "host_unsupported",
-  cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, last_seen_at: null, active: 0, retained: 0, enrollment_id: null,
+  ...node, rollout: { state: "unknown", ready_generation: 1 }, id: "7f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918", online: false, provider_ready: false,
+  cpu_count: null, available_memory_bytes: null, available_disk_bytes: null, running: 0, last_seen_at: null, active: 0, retained: 0, enrollment_id: null, recommended_capacity: null,
 };
 const detail = {
   ...node,
@@ -41,21 +42,19 @@ const allocation = {
   session_id: "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f", environment_id: "3d4e5f6a-7b8c-4d9e-8f1a-2b3c4d5e6f7a",
   state: "running", compute_phase: "running", compute_phase_changed_at: null, diagnostic: "", initialization: "ready", created_at: created,
 };
-const runtime = { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) };
 const unconfigured = {
   credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
 const docker = {
   configuration: {}, metadata: {},
-  ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, update_required: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
-  resources: { allocations: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 }, runtime }, specification_digest: "0".repeat(64),
+  ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
+  resources: { allocations: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, specification_digest: "0".repeat(64),
 };
 const microsandbox = {
-  ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192, environment_disk_mib: 8192 }, runtime },
+  ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 } },
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
 const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
-const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification,
-  resources: { ...microsandbox.specification.resources, environment_disk_mib: 0 }, workspace: externalWorkspace } };
+const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification, workspace: externalWorkspace } };
 /** An E2B selection saved before Core recorded its template build. */
 const e2bDeployment = {
   ...docker, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 } },
@@ -93,7 +92,7 @@ describe("strict sandbox administration projections", () => {
   it.each([
     ["nodes", "an unknown member", { data: [{ ...node, credential: "node-secret" }] }],
     ["nodes", "a missing enrollment_id", { data: [unenrolled] }],
-    ["nodes", "an empty diagnostic", { data: [{ ...node, diagnostic: "" }] }],
+    ["nodes", "a node diagnostic", { data: [{ ...node, diagnostic: "host_unsupported" }] }],
     ["nodes", "a string count", { data: [{ ...node, cpu_count: "16" }] }],
     ["nodes", "a numeric timestamp", { data: [{ ...node, last_seen_at: 0 }] }],
     ["nodes", "a null list", { data: null }],
@@ -161,12 +160,6 @@ describe("Core sandbox credential boundaries", () => {
     expect(new Headers(fetch.mock.calls[0]?.[1]?.headers).has("Authorization")).toBe(false);
     expect(fetch.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
   });
-  it("returns the node's fixed readiness diagnostic unchanged and reads an unknown code as provider_unavailable", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [unready, { ...unready, diagnostic: "future_code" }, node] }));
-    const { data } = await new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", fetch }).listNodes();
-    expect(data.map((entry) => entry.diagnostic)).toEqual(["host_unsupported", "provider_unavailable", undefined]);
-    expectTypeOf<SandboxNode["diagnostic"]>().toEqualTypeOf<undefined | "provider_unavailable" | "host_unsupported" | "artifacts_unavailable" | "runtime_download_failed" | "runtime_image_unavailable" | "capacity_insufficient">();
-  });
   it("requires each node's enrollment ID: a string, or null for nodes enrolled before Core recorded it", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ data: [node, unready] }));
     const { data } = await new SandboxAdminClient({ fetch }).listNodes();
@@ -214,7 +207,7 @@ describe("Core sandbox credential boundaries", () => {
   it("forwards one specification with generation and preserves backend conflict details", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_specification_mismatch", message: "Node specification differs" } }, 409));
     const admin = new SandboxAdminClient({ token: "admin-only", fetch });
-    const input = { provider: "docker" as const, resources: { cpus: 2, memory_mib: 2048 }, runtime: { source_commit: "a".repeat(40), image_id: "sha256:" + "b".repeat(64), image_manifest_digest: "sha256:" + "c".repeat(64), microsandbox_ref: "oac-runtime@sha256:" + "d".repeat(64), runtime_sha256: "e".repeat(64), firmware_sha256: "f".repeat(64) }, expected_generation: 3 };
+    const input = { provider: "docker" as const, resources: { cpus: 2, memory_mib: 2048 }, expected_generation: 3 };
     await expect(admin.updateDeployment(input)).rejects.toMatchObject({ status: 409, code: "sandbox_specification_mismatch" });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual(input);
@@ -301,7 +294,7 @@ describe("hosted provider configuration", () => {
     expect((shown as AgentCoreError).errorType).toBeUndefined();
     await expect(client.initializeDeployment({ expected_generation: 0, provider: "e2b", configuration: { template: e2b.template }, credential: { api_key: e2b.api_key } })).rejects.toMatchObject({ status: 409, code: "sandbox_configuration_error", message: rejection.message, param: null });
   });
-  it("keeps legacy E2B ownership reset actionable without reflecting either key", async () => {
+  it("keeps E2B ownership reset actionable without reflecting either key", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: {
       code: "sandbox_reset_required", message: "revoked-old-key " + e2b.api_key,
       param: "revoked-old-key", details: { current_provider: "e2b", requested_provider: "e2b", secret: e2b.api_key },
@@ -410,14 +403,14 @@ it("keeps omitted-key public-URL errors actionable without reflecting a stored k
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it.each(["unknown", "preparing", "failed", "update_required"])("does not erase old serving readiness for target %s", async (state) => {
-  const value = { ...node, rollout: { state, ready_generation: 1, ...(state === "failed" ? { diagnostic: "runtime_download_failed" } : {}) } };
+it.each(["unknown", "preparing", "failed"])("does not erase old serving readiness for target %s", async (state) => {
+  const value = { ...node, rollout: { state, ready_generation: 1, ...(state === "failed" ? { diagnostic: "capacity_insufficient" } : {}) } };
   const client = new SandboxAdminClient({ fetch: async () => response({ data: [value] }) });
   expect((await client.listNodes()).data[0]).toEqual(value);
 });
 
- it("preserves artifact transfer diagnostics on node and target without exposing transport details", async () => {
- const value = { ...unready, online: true, diagnostic: "runtime_download_failed", rollout: { state: "failed", ready_generation: 1, diagnostic: "runtime_download_failed" } };
+ it("preserves the target diagnostic without exposing transport details", async () => {
+ const value = { ...unready, online: true, rollout: { state: "failed", ready_generation: 1, diagnostic: "capacity_insufficient" } };
  const client = new SandboxAdminClient({ fetch: async () => response({ data: [value] }) });
  expect((await client.listNodes()).data[0]).toEqual(value);
  });
@@ -427,11 +420,10 @@ describe("shared node diagnostic contract", () => {
     expect([...sandboxNodeDiagnostics].sort()).toEqual([...nodeDiagnosticFixture].sort());
     expect(normalizeSandboxNodeDiagnostic("future_code")).toBe("provider_unavailable");
   });
-  it.each(nodeDiagnosticFixture)("preserves %s through node and rollout projections", async (diagnostic) => {
-    const value = { ...node, provider_ready: false, diagnostic, rollout: { state: "failed", ready_generation: 1, diagnostic } };
+  it.each(nodeDiagnosticFixture)("preserves %s through the rollout projection", async (diagnostic) => {
+    const value = { ...node, provider_ready: false, rollout: { state: "failed", ready_generation: 1, diagnostic } };
     const client = new SandboxAdminClient({ baseUrl: "https://core.example", token: "test", fetch: async () => response({ data: [value] }) });
     const result = await client.listNodes();
-    expect(result.data[0]?.diagnostic).toBe(diagnostic);
     expect(result.data[0]?.rollout.diagnostic).toBe(diagnostic);
   });
 });

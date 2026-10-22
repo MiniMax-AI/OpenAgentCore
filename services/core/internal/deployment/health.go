@@ -8,14 +8,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-// normalizeHealth validates a node's reported health. A diagnostic explains
-// unreadiness only: unknown values, including arbitrary text, become
-// provider_unavailable, a ready provider has none and empty stays empty.
+// normalizeHealth validates a node's reported health.
 func normalizeHealth(health NodeHealth) (NodeHealth, error) {
-	health.Diagnostic = sandbox.NodeDiagnosticCode(sandbox.NormalizeNodeDiagnostic(string(health.Diagnostic)))
-	if health.ProviderReady {
-		health.Diagnostic = ""
-	}
 	for _, value := range []*int64{health.CPUCount, health.AvailableMemoryBytes, health.AvailableDiskBytes} {
 		if value != nil && *value < 0 {
 			return health, ErrInvalidInput
@@ -77,10 +71,6 @@ func historyPoints(window coremetrics.Range, samples []HostHistoryPoint) []HostH
 func nodeRollout(n NodeRecord) NodeRollout {
 	out := NodeRollout{State: NodeRolloutUnknown, ReadyGeneration: n.ReadyGeneration}
 	if !n.Online {
-		return out
-	}
-	if n.ProtocolVersion == 1 && n.DeploymentGeneration != n.TargetGeneration {
-		out.State = NodeRolloutUpdateRequired
 		return out
 	}
 	switch NodeRolloutState(n.TargetState) {

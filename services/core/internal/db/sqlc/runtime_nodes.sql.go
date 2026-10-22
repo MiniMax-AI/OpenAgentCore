@@ -12,7 +12,7 @@ import (
 )
 
 const connectRuntimeNode = `-- name: ConnectRuntimeNode :execrows
-UPDATE runtime_nodes SET connection_id=$2,provider_ready=false,connected_epoch=d.owner_epoch,last_seen_at=clock_timestamp()
+UPDATE runtime_nodes SET connection_id=$2,connected_epoch=d.owner_epoch,last_seen_at=clock_timestamp()
 FROM runtime_deployment d WHERE runtime_nodes.id=$1 AND removed_at IS NULL AND runtime_nodes.installation_id=d.installation_id AND d.owner_epoch=$3
 AND runtime_nodes.connected_epoch <= $3
 `
@@ -58,8 +58,8 @@ type CreateRuntimeEnrollmentParams struct {
 	ID             pgtype.UUID `json:"id"`
 	TokenSha256    string      `json:"token_sha256"`
 	InstallationID pgtype.UUID `json:"installation_id"`
-	MaxActive      int32       `json:"max_active"`
-	MaxRetained    int32       `json:"max_retained"`
+	MaxActive      pgtype.Int4 `json:"max_active"`
+	MaxRetained    pgtype.Int4 `json:"max_retained"`
 }
 
 func (q *Queries) CreateRuntimeEnrollment(ctx context.Context, arg CreateRuntimeEnrollmentParams) error {
@@ -169,7 +169,7 @@ func (q *Queries) GetRuntimeEnrollment(ctx context.Context, tokenSha256 string) 
 }
 
 const getRuntimeNode = `-- name: GetRuntimeNode :one
-SELECT id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, core_url, enrollment_id, ready_generation, protocol_version FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL
+SELECT id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, core_url, enrollment_id, ready_generation FROM runtime_nodes WHERE id=$1 AND removed_at IS NULL
 `
 
 func (q *Queries) GetRuntimeNode(ctx context.Context, id pgtype.UUID) (RuntimeNode, error) {
@@ -184,7 +184,6 @@ func (q *Queries) GetRuntimeNode(ctx context.Context, id pgtype.UUID) (RuntimeNo
 		&i.MaxActive,
 		&i.MaxRetained,
 		&i.ConnectionID,
-		&i.ProviderReady,
 		&i.Health,
 		&i.ConnectedEpoch,
 		&i.LastSeenAt,
@@ -195,7 +194,6 @@ func (q *Queries) GetRuntimeNode(ctx context.Context, id pgtype.UUID) (RuntimeNo
 		&i.CoreUrl,
 		&i.EnrollmentID,
 		&i.ReadyGeneration,
-		&i.ProtocolVersion,
 	)
 	return i, err
 }
@@ -239,23 +237,21 @@ func (q *Queries) GetRuntimePlacement(ctx context.Context, environmentID pgtype.
 }
 
 const heartbeatRuntimeNode = `-- name: HeartbeatRuntimeNode :execrows
-UPDATE runtime_nodes SET last_seen_at=clock_timestamp(),provider_ready=$3,health=$4::jsonb FROM runtime_deployment d
-WHERE runtime_nodes.id=$1 AND connection_id=$2 AND removed_at IS NULL AND connected_epoch=d.owner_epoch AND d.owner_epoch=$5
+UPDATE runtime_nodes SET last_seen_at=clock_timestamp(),health=$3::jsonb FROM runtime_deployment d
+WHERE runtime_nodes.id=$1 AND connection_id=$2 AND removed_at IS NULL AND connected_epoch=d.owner_epoch AND d.owner_epoch=$4
 `
 
 type HeartbeatRuntimeNodeParams struct {
-	ID            pgtype.UUID `json:"id"`
-	ConnectionID  pgtype.UUID `json:"connection_id"`
-	ProviderReady bool        `json:"provider_ready"`
-	Health        []byte      `json:"health"`
-	OwnerEpoch    int64       `json:"owner_epoch"`
+	ID           pgtype.UUID `json:"id"`
+	ConnectionID pgtype.UUID `json:"connection_id"`
+	Health       []byte      `json:"health"`
+	OwnerEpoch   int64       `json:"owner_epoch"`
 }
 
 func (q *Queries) HeartbeatRuntimeNode(ctx context.Context, arg HeartbeatRuntimeNodeParams) (int64, error) {
 	result, err := q.db.Exec(ctx, heartbeatRuntimeNode,
 		arg.ID,
 		arg.ConnectionID,
-		arg.ProviderReady,
 		arg.Health,
 		arg.OwnerEpoch,
 	)
@@ -267,7 +263,7 @@ func (q *Queries) HeartbeatRuntimeNode(ctx context.Context, arg HeartbeatRuntime
 
 const insertRuntimeNode = `-- name: InsertRuntimeNode :one
 INSERT INTO runtime_nodes(id,installation_id,name,backend_fingerprint,credential_sha256,max_active,max_retained,specification_digest,deployment_generation,core_url,enrollment_id,ready_generation)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$9) RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, core_url, enrollment_id, ready_generation, protocol_version
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$9) RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, core_url, enrollment_id, ready_generation
 `
 
 type InsertRuntimeNodeParams struct {
@@ -308,7 +304,6 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 		&i.MaxActive,
 		&i.MaxRetained,
 		&i.ConnectionID,
-		&i.ProviderReady,
 		&i.Health,
 		&i.ConnectedEpoch,
 		&i.LastSeenAt,
@@ -319,7 +314,6 @@ func (q *Queries) InsertRuntimeNode(ctx context.Context, arg InsertRuntimeNodePa
 		&i.CoreUrl,
 		&i.EnrollmentID,
 		&i.ReadyGeneration,
-		&i.ProtocolVersion,
 	)
 	return i, err
 }
@@ -379,8 +373,8 @@ func (q *Queries) ListNodeRuntimeAllocations(ctx context.Context, nodeID pgtype.
 }
 
 const listRuntimeNodes = `-- name: ListRuntimeNodes :many
-SELECT n.id, n.installation_id, n.name, n.backend_fingerprint, n.credential_sha256, n.max_active, n.max_retained, n.connection_id, n.provider_ready, n.health, n.connected_epoch, n.last_seen_at, n.created_at, n.removed_at, n.specification_digest, n.deployment_generation, n.core_url, n.enrollment_id, n.ready_generation, n.protocol_version, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at > clock_timestamp()-interval '45 seconds')::boolean AS online,
- d.provider_kind, d.generation AS target_generation,
+SELECT n.id, n.installation_id, n.name, n.backend_fingerprint, n.credential_sha256, n.max_active, n.max_retained, n.connection_id, n.health, n.connected_epoch, n.last_seen_at, n.created_at, n.removed_at, n.specification_digest, n.deployment_generation, n.core_url, n.enrollment_id, n.ready_generation, (n.connection_id IS NOT NULL AND n.connected_epoch=d.owner_epoch AND n.last_seen_at > clock_timestamp()-interval '45 seconds')::boolean AS online,
+ d.provider_kind,
  EXISTS(SELECT 1 FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=n.ready_generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch AND g.state='ready')::boolean AS serving_ready,
  COALESCE((SELECT g.state FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=d.generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch),'')::text AS target_state,
  COALESCE((SELECT g.diagnostic FROM runtime_node_generation_status g WHERE g.node_id=n.id AND g.generation=d.generation AND g.connection_id=n.connection_id AND g.owner_epoch=d.owner_epoch),'')::text AS target_diagnostic,
@@ -404,7 +398,6 @@ type ListRuntimeNodesRow struct {
 	MaxActive            int32              `json:"max_active"`
 	MaxRetained          int32              `json:"max_retained"`
 	ConnectionID         pgtype.UUID        `json:"connection_id"`
-	ProviderReady        bool               `json:"provider_ready"`
 	Health               []byte             `json:"health"`
 	ConnectedEpoch       int64              `json:"connected_epoch"`
 	LastSeenAt           pgtype.Timestamptz `json:"last_seen_at"`
@@ -415,10 +408,8 @@ type ListRuntimeNodesRow struct {
 	CoreUrl              string             `json:"core_url"`
 	EnrollmentID         pgtype.UUID        `json:"enrollment_id"`
 	ReadyGeneration      pgtype.Int8        `json:"ready_generation"`
-	ProtocolVersion      int32              `json:"protocol_version"`
 	Online               bool               `json:"online"`
 	ProviderKind         string             `json:"provider_kind"`
-	TargetGeneration     int64              `json:"target_generation"`
 	ServingReady         bool               `json:"serving_ready"`
 	TargetState          string             `json:"target_state"`
 	TargetDiagnostic     string             `json:"target_diagnostic"`
@@ -448,7 +439,6 @@ func (q *Queries) ListRuntimeNodes(ctx context.Context, nodeID pgtype.UUID) ([]L
 			&i.MaxActive,
 			&i.MaxRetained,
 			&i.ConnectionID,
-			&i.ProviderReady,
 			&i.Health,
 			&i.ConnectedEpoch,
 			&i.LastSeenAt,
@@ -459,10 +449,8 @@ func (q *Queries) ListRuntimeNodes(ctx context.Context, nodeID pgtype.UUID) ([]L
 			&i.CoreUrl,
 			&i.EnrollmentID,
 			&i.ReadyGeneration,
-			&i.ProtocolVersion,
 			&i.Online,
 			&i.ProviderKind,
-			&i.TargetGeneration,
 			&i.ServingReady,
 			&i.TargetState,
 			&i.TargetDiagnostic,
@@ -582,7 +570,7 @@ func (q *Queries) SetRuntimeObservation(ctx context.Context, arg SetRuntimeObser
 }
 
 const updateRuntimeNode = `-- name: UpdateRuntimeNode :one
-UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4 WHERE id=$1 AND removed_at IS NULL RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, provider_ready, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, core_url, enrollment_id, ready_generation, protocol_version
+UPDATE runtime_nodes SET name=$2,max_active=$3,max_retained=$4 WHERE id=$1 AND removed_at IS NULL RETURNING id, installation_id, name, backend_fingerprint, credential_sha256, max_active, max_retained, connection_id, health, connected_epoch, last_seen_at, created_at, removed_at, specification_digest, deployment_generation, core_url, enrollment_id, ready_generation
 `
 
 type UpdateRuntimeNodeParams struct {
@@ -609,7 +597,6 @@ func (q *Queries) UpdateRuntimeNode(ctx context.Context, arg UpdateRuntimeNodePa
 		&i.MaxActive,
 		&i.MaxRetained,
 		&i.ConnectionID,
-		&i.ProviderReady,
 		&i.Health,
 		&i.ConnectedEpoch,
 		&i.LastSeenAt,
@@ -620,7 +607,6 @@ func (q *Queries) UpdateRuntimeNode(ctx context.Context, arg UpdateRuntimeNodePa
 		&i.CoreUrl,
 		&i.EnrollmentID,
 		&i.ReadyGeneration,
-		&i.ProtocolVersion,
 	)
 	return i, err
 }

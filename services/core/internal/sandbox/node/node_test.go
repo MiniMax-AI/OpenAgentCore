@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -82,12 +81,11 @@ func wait(t *testing.T, ready func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
-func probe(context.Context) (Health, error) { return Health{ProviderReady: true}, nil }
 
 func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing.T) {
 	id := identity()
 	var credential string
-	hub := NewHub(HubOptions{Authenticate: func(ctx context.Context, node, token string) (Identity, error) {
+	hub := newTestHub(HubOptions{Authenticate: func(ctx context.Context, node, token string) (Identity, error) {
 		if node != id.NodeID || token != credential {
 			return Identity{}, ErrAuthentication
 		}
@@ -106,7 +104,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		done <- Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential, Provider: p, Probe: probe})
+		done <- runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: credential}, p, probe)
 	}()
 	defer func() {
 		cancel()
@@ -167,7 +165,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 }
 
 func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
-	h := NewHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
+	h := newTestHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
 	p := h.Proxy(uuid.NewString(), docker.Operations(), 1)
 	if sandbox.SupportsCheckpoint(p) {
 		t.Fatal("docker advertised checkpoint")
@@ -193,7 +191,7 @@ func TestAgentRejectsDuplicateSequenceAndRetainsEpoch(t *testing.T) {
 			return
 		}
 		connectionID := uuid.NewString()
-		_ = writeFrame(conn, frame{Type: "welcome", ConnectionID: connectionID, OwnerEpoch: 9})
+		_ = writeFrame(conn, frame{Type: "welcome", ConnectionID: connectionID, OwnerEpoch: 9, Deployment: testDeployment()})
 		q := request{DeploymentGeneration: id.DeploymentGeneration, ID: uuid.NewString(), Sequence: 1, ConnectionID: connectionID, OwnerEpoch: 9, Operation: "info", TimeoutMillis: 60000, Reference: reference()}
 		_ = writeFrame(conn, frame{Type: "request", Request: &q})
 		_, _ = readFrame(conn)
@@ -209,7 +207,7 @@ func TestAgentRejectsDuplicateSequenceAndRetainsEpoch(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	err := Run(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential, Provider: p, Probe: probe})
+	err := runProvider(ctx, AgentConfig{CoreURL: server.URL, StateDirectory: dir, Identity: id, Credential: stored.Credential}, p, probe)
 	if !errors.Is(err, sandbox.ErrOwnership) {
 		t.Fatalf("duplicate sequence = %v", err)
 	}
@@ -249,6 +247,9 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 		}
 		if body.CoreURL != "http://"+r.Host {
 			t.Error("enrollment did not name the node's Core address", body.CoreURL)
+		}
+		if body.CPUCount == nil || *body.CPUCount < 1 {
+			t.Error("enrollment did not report the host measurements", body)
 		}
 		enrollments++
 		registered = true
@@ -293,26 +294,6 @@ func TestCoreURLRejectsOtherSchemesAndCredentials(t *testing.T) {
 	for _, raw := range []string{"https://core.example.test:9443", "http://127.0.0.1:8080", "http://[::1]:8080", "http://core.example.test:8080"} {
 		if _, err := endpoint(raw, "/api/v1/sandbox-node/enroll"); err != nil {
 			t.Fatalf("rejected %q: %v", raw, err)
-		}
-	}
-}
-
-func TestHealthSendsOnlyFixedDiagnosticCode(t *testing.T) {
-	for _, tc := range []struct {
-		err  error
-		want string
-	}{
-		{fmt.Errorf("%w: open /home/operator/private/kvm", sandbox.ErrHostUnsupported), "host_unsupported"},
-		{errors.New("open /home/operator/private/runtime: permission denied"), "provider_unavailable"},
-		{nil, ""},
-	} {
-		a := &agent{config: AgentConfig{StateDirectory: stateDir(t), Identity: identity(), Probe: func(context.Context) (Health, error) {
-			return Health{Diagnostic: "/home/operator/private"}, tc.err
-		}}}
-		h, _ := a.health(t.Context(), new(hostHealthSampler))
-		raw, err := json.Marshal(frame{Type: "heartbeat", Health: &h})
-		if err != nil || h.Diagnostic != tc.want || h.ProviderReady != (tc.err == nil) || strings.Contains(string(raw), "private") {
-			t.Fatalf("heartbeat = %s, %v", raw, err)
 		}
 	}
 }

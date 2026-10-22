@@ -135,12 +135,6 @@ func TestSubagentIdentityIsAtomicScopedAndImmutable(t *testing.T) {
 	if err = sessionService(t, reopened).DeleteSession(ctx, sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); !errors.Is(err, sessions.ErrNotIdle) {
 		t.Fatal("running Session deleted", err)
 	}
-	if err = reopened.commitLegacyDeletion(ctx, tenant, session.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err = reopened.GetSubagentIdentity(ctx, tenant, session.ID, "child-a"); !errors.Is(err, sessions.ErrNotFound) {
-		t.Fatal("deleted Session exposed identity", err)
-	}
 }
 
 func TestSubagentIdentityRejectsLostLease(t *testing.T) {

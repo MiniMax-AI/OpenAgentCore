@@ -33,7 +33,6 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 	upperCapacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 1000001, MaxRetained: 8})
 	capacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 0})
 	_, resourceErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{}})
-	_, runtimeErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}}})
 	for _, tc := range []struct {
 		err                       error
 		code, param               string
@@ -46,7 +45,6 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 		{upperCapacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
 		{capacityErr, "invalid_node_capacity", "max_active", map[string]any{"min": float64(1), "max": float64(1000000)}, "Invalid resource identifier or request limits.", "invalid_request", writeDeploymentError},
 		{resourceErr, "invalid_sandbox_configuration", "resources.cpus", map[string]any{"min": float64(1), "max": float64(255)}, "invalid sandbox configuration: cpus must be 1..255 and memory_mib must be 512..1048576", "invalid_sandbox_configuration", writeDeploymentError},
-		{runtimeErr, "invalid_sandbox_configuration", "runtime", nil, "invalid sandbox configuration: managed nodes require a pinned Runtime release", "invalid_sandbox_configuration", writeDeploymentError},
 	} {
 		if tc.err == nil {
 			t.Fatal("missing validator error")
@@ -86,8 +84,8 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 
 func TestCoreActiveCapacityUpperBoundNamesSubmittedField(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
-	fakes.deployment.createEnrollment = func(_ context.Context, capacity deployment.Capacity) (deployment.EnrollmentToken, error) {
-		return deployment.EnrollmentToken{}, nodeCapacity(capacity.MaxActive)
+	fakes.deployment.createEnrollment = func(_ context.Context, limits deployment.EnrollmentLimits) (deployment.EnrollmentToken, error) {
+		return deployment.EnrollmentToken{}, nodeCapacity(*limits.MaxActive)
 	}
 	fakes.deployment.updateNode = func(_ context.Context, _ string, input deployment.NodeUpdate) error {
 		return nodeCapacity(input.MaxActive)

@@ -35,50 +35,44 @@ func qualifyPressureRetention(t *testing.T, f fixture, owner deployment.Allocati
 	return current
 }
 
-func TestRetentionPressureKeepsHistoryUntilOrdinaryCleanupSettles(t *testing.T) {
+func TestRetentionPressureReleasesOldestRetainableCheckpoint(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 3, MaxRetained: 3})
 	f.connect(t, node.NodeID)
-	owner := qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
-	for range 2 {
-		qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
+	var owners []deployment.Allocation
+	for range 3 {
+		owners = append(owners, qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)))
 	}
 	waiting := pendingPressureDemand(t, f)
-	for range 6 {
-		pendingPressureDemand(t, f)
-	}
 	if _, err := changes.EnsurePlacement(t.Context(), waiting, installation); !errors.Is(err, placement.ErrNodeUnavailable) {
 		t.Fatal("reserved despite retained capacity limit")
 	}
-	current, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
-	if err != nil || current.Expired || !current.ComputeRetainedUntil.Equal(*owner.ComputeRetainedUntil) {
-		t.Fatal("pressure shortened retention", current, err)
+	// Only the oldest checkpoint is released, and only once per blocked demand.
+	if err := changes.ExpireCheckpointForDemand(t.Context(), owners[1]); !errors.Is(err, deployment.ErrNotIdle) {
+		t.Fatal("released a checkpoint that is not the oldest", err)
 	}
-	// Advance the fixture clock past the authored deadline, not because of demand.
-	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_retained_until=clock_timestamp()-interval '1 second' WHERE id=$1`, owner.ID); err != nil {
+	if err := changes.ExpireCheckpointForDemand(t.Context(), owners[0]); err != nil {
 		t.Fatal(err)
 	}
-	// The database deadline is only an intent. It is not a cleanup receipt.
-	nodes, err := f.adapter.Nodes(t.Context())
-	if err != nil || nodes[0].Retained != 3 || nodes[0].Active != 0 {
-		t.Fatal("released capacity before cleanup", nodes, err)
+	if err := changes.ExpireCheckpointForDemand(t.Context(), owners[1]); !errors.Is(err, deployment.ErrNotIdle) {
+		t.Fatal("released a second checkpoint for one demand", err)
 	}
-	if _, err = changes.EnsurePlacement(t.Context(), waiting, installation); !errors.Is(err, placement.ErrNodeUnavailable) {
-		t.Fatal("reserved before cleanup")
-	}
-	current, err = f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
+	current, err := f.adapter.EnvironmentAllocation(t.Context(), owners[0].Key())
 	if err != nil || !current.Expired {
-		t.Fatal("database expiry", current, err)
+		t.Fatal("checkpoint not expired", current, err)
 	}
 	pending, err := changes.RequestCleanup(t.Context(), current)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var status, filesystem string
-	if err = f.pool.QueryRow(t.Context(), `SELECT e.status,w.state FROM environments e JOIN environment_workspaces w ON w.environment_id=e.id WHERE e.id=$1`, owner.EnvironmentID).Scan(&status, &filesystem); err != nil || status == "expired" || status == "failed" || filesystem != "ready" {
+	if err = f.pool.QueryRow(t.Context(), `SELECT e.status,w.state FROM environments e JOIN environment_workspaces w ON w.environment_id=e.id WHERE e.id=$1`, owners[0].EnvironmentID).Scan(&status, &filesystem); err != nil || status == "expired" || status == "failed" || filesystem != "ready" {
 		t.Fatal("lost retained environment", status, filesystem, err)
+	}
+	if _, err = changes.EnsurePlacement(t.Context(), waiting, installation); !errors.Is(err, placement.ErrNodeUnavailable) {
+		t.Fatal("reserved before cleanup")
 	}
 	// This fixture supplies the native cleanup completion that a real lifecycle
 	// must obtain before invoking ReleaseAllocation.
@@ -90,23 +84,78 @@ func TestRetentionPressureKeepsHistoryUntilOrdinaryCleanupSettles(t *testing.T) 
 	}
 }
 
-func TestPressurePreservesRetainableOwnerWhenRetainedSlotsAreFull(t *testing.T) {
-	f := newFixture(t)
-	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
-	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
-	f.connect(t, node.NodeID)
-	owner := qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
-	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='running',compute_retained_until=NULL WHERE id=$1`, owner.ID); err != nil {
-		t.Fatal(err)
+func TestRetentionPressureKeepsIneligibleCheckpoints(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		demand bool
+		damage string
+	}{
+		{"no demand", false, ""},
+		{"wake requested", true, `UPDATE runtime_allocations SET compute_wake_requested=true WHERE id=$1`},
+		{"owned workspace storage", true, `DELETE FROM environment_workspaces WHERE environment_id=(SELECT environment_id FROM runtime_allocations WHERE id=$1)`},
+		{"no retained native history", true, `UPDATE devices SET supported_agent_kinds='[]' WHERE id=(SELECT device_id FROM runtime_allocations WHERE id=$1)`},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newFixture(t)
+			changes, _ := f.execution(t)
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+			f.connect(t, node.NodeID)
+			owner := qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
+			if test.damage != "" {
+				if _, err := f.pool.Exec(t.Context(), test.damage, owner.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if test.demand {
+				pendingPressureDemand(t, f)
+			}
+			if err := changes.ExpireCheckpointForDemand(t.Context(), owner); !errors.Is(err, deployment.ErrNotIdle) {
+				t.Fatal("released early", err)
+			}
+			current, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
+			if err != nil || current.Expired || !current.ComputeRetainedUntil.Equal(*owner.ComputeRetainedUntil) {
+				t.Fatal("retention shortened", current, err)
+			}
+		})
 	}
-	owner, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
-	if err != nil {
-		t.Fatal(err)
-	}
-	pendingPressureDemand(t, f)
-	until := time.Now().Add(24 * time.Hour)
-	if _, err = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until); !errors.Is(err, deployment.ErrNotIdle) {
-		t.Fatal("suspended without usable capacity", err)
+}
+
+// A full node suspends only an owner whose checkpoint can then be released.
+func TestPressureSuspendsReleasableOwnerWhenRetainedSlotsAreFull(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		damage  string
+		suspend bool
+	}{
+		{"releasable", "", true},
+		{"no retained native history", `UPDATE devices SET supported_agent_kinds='[]' WHERE id=(SELECT device_id FROM runtime_allocations WHERE id=$1)`, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			f := newFixture(t)
+			changes, _ := f.execution(t)
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+			f.connect(t, node.NodeID)
+			owner := qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
+			if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='running',compute_retained_until=NULL WHERE id=$1`, owner.ID); err != nil {
+				t.Fatal(err)
+			}
+			if test.damage != "" {
+				if _, err := f.pool.Exec(t.Context(), test.damage, owner.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			owner, err := f.adapter.EnvironmentAllocation(t.Context(), owner.Key())
+			if err != nil {
+				t.Fatal(err)
+			}
+			pendingPressureDemand(t, f)
+			until := time.Now().Add(24 * time.Hour)
+			_, err = changes.SetCompute(t.Context(), owner, "quiescing", json.RawMessage(`{}`), &until)
+			if test.suspend != (err == nil) || (err != nil && !errors.Is(err, deployment.ErrNotIdle)) {
+				t.Fatal("unexpected suspension decision", err)
+			}
+		})
 	}
 }
