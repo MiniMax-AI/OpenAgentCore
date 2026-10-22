@@ -141,6 +141,8 @@ Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-seman
 
 A failed tool does not fail its Turn. Tool output is readable by the Session's Project and can contain the tool's own diagnostic text.
 
+PostgreSQL cannot store U+0000, so Harness output that contains it, such as a command's output, is stored, streamed and listed with U+FFFD in its place, and the Turn continues.
+
 ## Usage
 
 Turn and Session `usage` uses the pinned `TokenUsage` fields: input, cached input, output, reasoning output and total tokens. Null means unknown, never zero.

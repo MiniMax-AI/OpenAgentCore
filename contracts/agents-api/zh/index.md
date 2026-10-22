@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 5766fdb6de7cdf07f02de16e2fdaf3fea0ce4d3b357d5648f15e9d709483b819
+source_hash: 535fce4a958c4176e98e0b59a6995fd9d72c874cb4a6493b797545652c37321b
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -96,6 +96,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 与其他文本并存的空文本部分可被接受并存储。
 - 空输入会返回 400 `invalid_request`，附带通用消息和值为 null 的 param；官方响应为 `invalid_request_error`，param 为 `input`。
 - 一旦所有根级 Turn 均已进入终态，Session 用量即可用；官方读取会滞后数秒。
+- Harness 输出（例如命令输出）中的 U+0000 读取时为 U+FFFD；官方服务会保留该字符。
 
 **Files、Skills、Environment files 和 Artifacts**（[Files and Skills](source-files.md)、[Environment files and Artifacts](environment-files.md)）
 
