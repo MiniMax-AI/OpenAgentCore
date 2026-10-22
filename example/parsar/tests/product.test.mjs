@@ -821,15 +821,24 @@ test("prepared environments hand a ready Session to the next conversation and fo
   assert.ok(calls.some((c) => c.method === "DELETE" && c.path.endsWith(refill.core_session_id)));
   assert.notEqual(store.list("warm_sessions")[0].core_session_id, refill.core_session_id);
 
+  // A prepared Session that cannot take the input is replaced by an ordinary
+  // creation with the frozen request; the conversation never sees an error.
   failEvents = true;
   const retried = randomUUID();
-  await assert.rejects(put("sessions", { ...input, name: "Retry" }, retried), /Core unavailable/);
-  assert.ok(store.get("sessions", retried).pending_input);
+  const claimedRecord = await put("sessions", { ...input, name: "Retry" }, retried);
+  const prepared = claimedRecord.core_session_id;
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(store.get("turns", `${retried}:first`).unsent, true);
   failEvents = false;
   calls.length = 0;
-  const recovered = await api("PUT", `/app/sessions/${retried}`, {});
-  assert.equal(recovered.pending_input, undefined);
-  assert.equal(calls.find((c) => c.path.endsWith("/events")).key, retried);
+  await sessions.turns.monitor();
+  const replaced = store.get("sessions", retried);
+  assert.notEqual(replaced.core_session_id, prepared);
+  assert.equal(replaced.pending_input, undefined);
+  const creation = calls.find((c) => c.method === "POST" && c.path === "/v1/agents/sessions");
+  assert.equal(creation.key, `${retried}:attempt:1`);
+  assert.equal(creation.body.input, input.input);
+  assert.ok(calls.some((c) => c.method === "DELETE" && c.path.endsWith(prepared)));
 
   await new Promise((resolve) => setTimeout(resolve, 10));
   await put("runtimes", { ...store.get("runtimes", runtime.id), prepare: false }, runtime.id);

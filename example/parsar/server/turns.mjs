@@ -90,12 +90,12 @@ export function turnsAPI(store, core) {
     return turn;
   };
 
-  // Records and sends one input. The entry is written first so the monitor
-  // sees the wait, and a retried send (same id and key) keeps its baseline.
-  const deliver = async (record, input, { id, key, source, kind = "followup", prepared = false }) => {
+  // Records and sends a follow-up input. The entry is written first so a
+  // retried send (same id and key) keeps its original baseline.
+  const deliver = async (record, input, { id, key, source }) => {
     const turn =
       store.get("turns", id) ||
-      start(record, { id, kind, input, source, prepared, base: await baseline(record.core_session_id) });
+      start(record, { id, kind: "followup", input, source, base: await baseline(record.core_session_id) });
     try {
       await post(record.core_session_id, message(turn.input), key);
     } catch (error) {
@@ -103,6 +103,28 @@ export function turnsAPI(store, core) {
       throw error;
     }
     return turn;
+  };
+
+  // The first input of a claimed prepared Session. Core answers the send only
+  // once the Turn starts, so it runs in the background; the monitor replaces
+  // the Session when its Turn does not start.
+  const sendPrepared = (record) => {
+    const id = `${record.id}:first`;
+    start(record, { id, kind: "first", input: record.pending_input, prepared: true });
+    void post(record.core_session_id, message(asInput(record.pending_input)), record.id).then(
+      () => {
+        const current = store.get("sessions", record.id);
+        if (current?.core_session_id !== record.core_session_id) return;
+        const { pending_input, ...sent } = current;
+        store.put("sessions", sent);
+      },
+      () => {
+        const turn = store.get("turns", id);
+        if (turn?.outcome === "running" && turn.core_session_id === record.core_session_id)
+          store.put("turns", { ...turn, unsent: true });
+      },
+    );
+    return record;
   };
 
   // A follow-up message from the Web composer.
@@ -123,16 +145,17 @@ export function turnsAPI(store, core) {
     return done;
   };
 
-  // Replaces a Session whose Environment failed before any Turn ran, with the
-  // identical frozen request.
+  // Replaces a Session whose first Turn never ran (its Environment failed, or a
+  // claimed prepared Session did not start) with the identical frozen request.
   const recreate = async (turn, record, key, retries) => {
     const created = await core("/v1/agents/sessions", "POST", record.request, key);
     store.transaction(() => {
-      store.put("sessions", { ...record, core_session_id: created.id, superseded_turns: [] });
+      const { pending_input, ...rest } = record;
+      store.put("sessions", { ...rest, core_session_id: created.id, superseded_turns: [] });
       // Feishu cursors belong to the replaced Core Session.
       for (const thread of store.list("feishu_threads").filter((t) => t.session_id === record.id))
         store.put("feishu_threads", { ...thread, turn_cursor: undefined, item_cursor: undefined, artifact_cursor: undefined });
-      store.put("turns", { ...turn, core_session_id: created.id, retries, stage: "preparing" });
+      store.put("turns", { ...turn, core_session_id: created.id, retries, prepared: false, unsent: undefined, stage: "preparing" });
     });
     await core(`/v1/agents/sessions/${record.core_session_id}`, "DELETE").catch(() => {});
   };
@@ -168,11 +191,11 @@ export function turnsAPI(store, core) {
     const coreTurn =
       recent.slice(at + 1).find((t) => !superseded.has(t.id)) || (turn.base_running && at >= 0 ? recent[at] : undefined);
     if (!coreTurn) {
-      if (session.status === "failed") {
-        if (turn.kind === "first" && record.request && turn.retries < maxRetries)
-          return recreate(turn, record, `${record.id}:attempt:${turn.retries + 1}`, turn.retries + 1);
-        return finish(turn, "failed", explainFailure(session.error, runtimeName(record)));
-      }
+      const replaceable = turn.kind === "first" && record.request && turn.retries < maxRetries;
+      const notStarted = turn.prepared && (turn.unsent || now() - turn.started_at > stallMs);
+      if (replaceable && (session.status === "failed" || notStarted))
+        return recreate(turn, record, `${record.id}:attempt:${turn.retries + 1}`, turn.retries + 1);
+      if (session.status === "failed") return finish(turn, "failed", explainFailure(session.error, runtimeName(record)));
       // Input sent to an existing Session that Core never admitted has expired.
       if ((turn.kind === "followup" || turn.prepared) && session.status === "idle" && now() - turn.started_at > reservationMs)
         return finish(turn, "failed", unadmitted);
@@ -279,5 +302,5 @@ export function turnsAPI(store, core) {
     (store.get("sessions", sessionId)?.superseded_turns || []).includes(coreTurnId);
   const recovering = (sessionId) => store.list("turns").some((t) => t.session_id === sessionId && t.outcome === "running");
 
-  return { start, deliver, send, monitor, summary, health, retry, superseded, recovering };
+  return { start, sendPrepared, deliver, send, monitor, summary, health, retry, superseded, recovering };
 }

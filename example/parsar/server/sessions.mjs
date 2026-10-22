@@ -275,21 +275,10 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
 export function sessionAPI(store, core) {
   const running = new Map();
   const turns = turnsAPI(store, core);
-  // A claimed prepared Session gets its first input through the Turn ledger,
-  // like every later input.
-  const sendFirstInput = async (record) => {
-    await turns.deliver(record, record.pending_input, {
-      id: `${record.id}:first`,
-      key: record.id,
-      kind: "first",
-      prepared: true,
-    });
-    const { pending_input, ...done } = record;
-    store.put("sessions", done);
-    return done;
-  };
-  // Hand a prepared Session to this conversation when one matches its frozen request.
-  const claim = async (row) => {
+  // Hand a prepared Session to this conversation when one matches its frozen
+  // request. The request stays, so the monitor can still create the Session
+  // normally if the prepared one does not start.
+  const claim = (row) => {
     if (typeof row.request.input !== "string") return;
     const print = fingerprint(row.request);
     const warm = store
@@ -298,32 +287,19 @@ export function sessionAPI(store, core) {
     if (!warm) return;
     store.remove("warm_sessions", warm.id);
     setTimeout(() => void sessions.refreshWarm().catch(() => {}), 0);
-    const { request, ...record } = row;
-    const claimed = {
-      ...record,
-      core_session_id: warm.core_session_id,
-      pending_input: request.input,
-    };
+    const claimed = { ...row, core_session_id: warm.core_session_id, pending_input: row.request.input };
     store.put("sessions", claimed);
-    try {
-      return await sendFirstInput(claimed);
-    } catch (error) {
-      if (!(error instanceof AppError && error.status >= 400 && error.status < 500))
-        throw error;
-      // The prepared Session is unusable; fall back to an ordinary creation.
-      store.put("sessions", row);
-      void core(`/v1/agents/sessions/${warm.core_session_id}`, "DELETE").catch(() => {});
-    }
+    return turns.sendPrepared(claimed);
   };
   const create = async (id, body, origin) => {
     let row = store.get("sessions", id);
     if (row?.deleted_at) throw new AppError(410, "会话已删除。");
-    if (row?.pending_input) return sendFirstInput(row);
+    if (row?.pending_input) return turns.sendPrepared(row);
     if (row?.core_session_id) return row;
     if (!row) {
       row = prepareSession(store, id, body, origin);
       store.put("sessions", row);
-      const claimed = await claim(row);
+      const claimed = claim(row);
       if (claimed) return claimed;
     }
     try {
