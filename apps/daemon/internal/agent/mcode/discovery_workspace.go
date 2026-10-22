@@ -27,11 +27,7 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		narrowWorkspace(&runtime.Info.Capabilities, false)
 		return nil
 	}
-	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
-	if node == "" {
-		node = "node"
-	}
-	node, err = exec.LookPath(node)
+	node, err := exec.LookPath(defaultNode())
 	if err != nil {
 		fail(err)
 		return nil

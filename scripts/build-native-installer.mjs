@@ -127,7 +127,6 @@ export async function validateComponents(root, names, daemonVersion) {
       const info = JSON.parse(probe(node, [join(component, 'dist/runtime_check.js')], component, env));
       if (info.type !== 'runtime_ready' || info.protocol !== 3 || info.sdk !== pins.claude || info.native !== '2.1.269 (Claude Code)' || !info.features?.includes('local_runtime_v2')) throw new Error('Claude runtime compatibility failed');
     } else if (name === 'minimax') {
-      if (windows) throw new Error('MiniMax is not supported on Windows');
       const upstream = await json(join(component, 'source.json'));
       const expected = await json(new URL('../packages/mcode-harness/source.json', import.meta.url));
       if (upstream.version !== pins.minimax || upstream.revision !== expected.revision) throw new Error('MiniMax source pin mismatch');
@@ -145,7 +144,6 @@ export async function buildBundle(options) {
   for (const path of Object.values(options)) if (!isAbsolute(path)) throw new Error('Bundle paths must be absolute');
   const names = ['codex', 'claude', 'minimax'].filter(name => options[name]);
   if (!names.length) throw new Error('At least one Harness source is required');
-  if (process.platform === 'win32' && options.minimax) throw new Error('MiniMax is not supported on Windows');
   try { await lstat(options.output); throw new Error('Bundle output already exists'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const output = await outputRealPath(options.output);
   // Refuse staging inside a source: recursive copying must not ingest its own output.
@@ -167,9 +165,10 @@ export async function buildBundle(options) {
       const rg = await realpath(nativeRequire('@vscode/ripgrep').rgPath);
       if (!inside(component, rg)) throw new Error('MiniMax ripgrep escaped the component');
       await requireFile(rg);
+      const rgName = process.platform === 'win32' ? 'rg.exe' : 'rg';
       await mkdir(join(component, 'bin'), { recursive: true });
-      await copyFile(rg, join(component, 'bin', 'rg')); await chmod(join(component, 'bin', 'rg'), 0o755);
-      components.minimax.files['bin/rg'] = { sha256: createHash('sha256').update(await readFile(rg)).digest('hex'), executable: true };
+      await copyFile(rg, join(component, 'bin', rgName)); await chmod(join(component, 'bin', rgName), 0o755);
+      components.minimax.files[`bin/${rgName}`] = { sha256: createHash('sha256').update(await readFile(rg)).digest('hex'), executable: true };
     }
     await validateComponents(staging, names, daemonVersion);
     const manifest = { schema: 1, daemon_version: daemonVersion, os: platforms[process.platform], arch: architectures[process.arch], components };

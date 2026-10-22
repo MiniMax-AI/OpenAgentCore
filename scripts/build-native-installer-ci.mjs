@@ -30,7 +30,7 @@ async function findCodex(directory, depth = 0) {
 const candidates = await findCodex(join(root, 'native-tools', 'node_modules', '@openai'));
 assert.equal(candidates.length, 1, 'Expected exactly one native Codex artifact');
 const bundle = join(root, 'native-installer');
-const receipt = await buildBundle({ daemon, node: await realpath(node), codex: candidates[0], claude: join(root, 'claude-runtime'), ...(!windows ? { minimax: join(root, 'minimax-runtime') } : {}), output: bundle });
+const receipt = await buildBundle({ daemon, node: await realpath(node), codex: candidates[0], claude: join(root, 'claude-runtime'), minimax: join(root, 'minimax-runtime'), output: bundle });
 await archiveBundle(bundle, join(root, 'native-archives'));
 console.log(JSON.stringify({ stage: 'bundle', os: receipt.os, arch: receipt.arch, components: Object.keys(receipt.components), model_requests: 0 }));
 const workspace = join(root, 'native-install-workspace'); await mkdir(workspace);
@@ -51,10 +51,9 @@ function install(extra, expected) {
   assert.ok(!`${result.stdout}${result.stderr}`.includes('fixture-only-not-a-real-credential'), 'Installer echoed a credential');
 }
 install(['--harness', 'codex'], true);
-const allHarnesses = windows ? 'codex,claude' : 'codex,claude,minimax';
+const allHarnesses = 'codex,claude,minimax';
 install(['--harness', allHarnesses], true);
 install(['--harness', allHarnesses], true);
-if (windows) install(['--harness', 'minimax'], false);
 // Components are installed once per machine and version, read-only, and the installation only references them.
 const store = join(env.OAC_RUNTIME_HOME, 'components', receipt.daemon_version);
 for (const name of ['node', ...allHarnesses.split(',')]) {

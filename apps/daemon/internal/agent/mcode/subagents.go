@@ -53,7 +53,7 @@ type nativeSubagentTask struct {
 }
 
 func subagentReader() (string, string, error) {
-	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
+	node := defaultNode()
 	reader := filepath.Join(os.Getenv("OAC_RUNTIME_MCODE_COMPANION"), "subagent-snapshot.mjs")
 	for _, path := range []string{node, reader} {
 		resolved, err := filepath.EvalSymlinks(path)

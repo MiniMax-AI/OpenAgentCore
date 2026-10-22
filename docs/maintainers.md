@@ -54,7 +54,7 @@ node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-Each platform has a small base archive `<os>-<arch>.tar.gz` (`oac-daemon` and `bundle.json`, which lists every component with the SHA-256 of each file) and one archive per component, `<os>-<arch>-node` and `<os>-<arch>-<harness>` (MiniMax Code is not built for Windows). `build-native-installer.mjs` writes them. Core serves these artifacts by name and knows nothing of their content; `oac-daemon install` downloads the components it needs.
+Each platform has a small base archive `<os>-<arch>.tar.gz` (`oac-daemon` and `bundle.json`, which lists every component with the SHA-256 of each file) and one archive per component, `<os>-<arch>-node` and `<os>-<arch>-<harness>`. `build-native-installer.mjs` writes them. Core serves these artifacts by name and knows nothing of their content; `oac-daemon install` downloads the components it needs.
 
 The catalog records the commit, the Runtime protocol version, each artifact's SHA-256 and, with a release base, its versioned URL. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<artifact>.tar.gz` release assets, and the offline archive holds a copy of every Linux amd64 archive outside the Core image, which its `install.py` copies into the installation for Core to serve. Core redirects the other platforms to their release assets; a catalog without a release base has no such URL, so its offline archive holds every archive. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
 
@@ -84,7 +84,7 @@ docker build --platform linux/amd64 -t oac-runtime:claude "${OAC_DEV_HOME:-$HOME
 
 The first step exports the adapter with the pinned Claude Agent SDK (`packages/claude-sdk-adapter/package.json`) as a checksummed archive for the host platform; the second verifies it and adds the daemon. The image step needs the `linux-x64-glibc` archive, so build both on Linux x86_64 with glibc. Keep the exported archive unchanged.
 
-**MiniMax Code Runtime image.** Build the companion from a checkout of the revision pinned in `packages/mcode-harness/source.json`, with the `@minimax-ai/code` npm package of the same version for native dependencies. The companion build runs on Linux x86_64 or macOS arm64 into a new directory; for the Linux Runtime image, build it on Linux x86_64 (macOS arm64 serves only the native installer):
+**MiniMax Code Runtime image.** Build the companion from a checkout of the revision pinned in `packages/mcode-harness/source.json`, with the `@minimax-ai/code` npm package of the same version for native dependencies. The companion build runs on Linux x86_64, macOS arm64 or Windows x86_64 (in Git Bash) into a new directory; for the Linux Runtime image, build it on Linux x86_64 (macOS and Windows builds serve only the native installer):
 
 ```sh
 MCODE_NATIVE_SOURCE=/absolute/minimax-code \

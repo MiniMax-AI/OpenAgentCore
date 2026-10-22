@@ -5,7 +5,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
@@ -19,11 +18,8 @@ type WorkspaceConfig struct {
 
 func ConfigureLocal(binary, node, companion, workspace string) (WorkspaceConfig, error) {
 	c := WorkspaceConfig{Binary: binary, Node: node, Companion: companion, Directory: workspace}
-	if runtime.GOOS == "windows" {
-		return c, fmt.Errorf("mcode: native execution requires Linux or macOS")
-	}
 	for _, path := range []string{binary, node, companion, workspace} {
-		if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" {
+		if !filepath.IsAbs(path) || filepath.Clean(path) != path || filepath.Dir(path) == path {
 			return c, fmt.Errorf("mcode: canonical absolute deployment paths are required")
 		}
 	}
@@ -77,7 +73,7 @@ func prepareWorkspaceOptions(runtimeRoot string, c WorkspaceConfig, req proto.Pr
 				}
 			} else if !os.IsNotExist(err) {
 				return opts, err
-			} else if err := os.Symlink(target, link); err != nil {
+			} else if err := linkDirectory(target, link); err != nil {
 				return opts, err
 			}
 		}

@@ -5,19 +5,22 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
 // Config describes an adapter's CLI version command and error contract.
 type Config struct {
-	Name           string
-	DefaultBinary  string
+	Name          string
+	DefaultBinary string
+	// Args precede --version, for a CLI started through an interpreter.
+	Args           []string
 	MissingError   error
 	TrimBinary     bool
 	StderrFallback bool
 }
 
-// Check runs `<binary> --version` and returns its trimmed first output line.
+// Check runs `<binary> [args...] --version` and returns its trimmed first output line.
 func Check(ctx context.Context, binary string, config Config) (string, error) {
 	if (config.TrimBinary && strings.TrimSpace(binary) == "") || (!config.TrimBinary && binary == "") {
 		binary = config.DefaultBinary
@@ -27,7 +30,7 @@ func Check(ctx context.Context, binary string, config Config) (string, error) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	command := exec.CommandContext(ctx, binary, "--version")
+	command := exec.CommandContext(ctx, binary, append(slices.Clone(config.Args), "--version")...)
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {

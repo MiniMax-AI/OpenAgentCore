@@ -14,7 +14,7 @@ No second model or scheduling loop is introduced. Hosted public execution is not
 
 ## Build
 
-`source.json` pins the CLI source. The pinned npm package supplies native runtime dependencies; the CLI is built from the patched source with its upstream build script and lockfile. On Linux x86_64 or macOS arm64:
+`source.json` pins the CLI source. The pinned npm package supplies native runtime dependencies; the CLI is built from the patched source with its upstream build script and lockfile. On Linux x86_64, macOS arm64 or Windows x86_64 (in Git Bash):
 
 ```sh
 MCODE_NATIVE_SOURCE=/absolute/upstream/checkout MCODE_CLI_DIR=/absolute/pinned/package bash scripts/build-mcode-harness.sh

@@ -24,6 +24,8 @@ jobs:
             github-runner: ubuntu-22.04
           - runner: macos-15
             github-runner: macos-15
+          - runner: blacksmith-2vcpu-windows-2025
+            github-runner: windows-2025
     runs-on: ${{ vars.OAC_USE_GITHUB_RUNNERS == 'true' && matrix.github-runner || matrix.runner }}
     timeout-minutes: 15
     steps:
