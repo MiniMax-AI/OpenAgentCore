@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: a87569d0232231fec4eeefeae610626125162474b3362ca490d2938ca0b8a024
+source_hash: 581c5a36cd2df2fa35d96da7c0e4d8fcbc7e01f4d97d35a2351b39386b15b380
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -142,6 +142,8 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 | `reasoning`、`agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态；reasoning 状态可以为 null |
 
 工具失败不会导致其 Turn 失败。Session 的项目可以读取工具输出，其中可能包含该工具自己的诊断文本。
+
+PostgreSQL 无法存储 U+0000，因此 Harness 输出（例如命令输出）中的 U+0000 在存储、事件流和列表中都会替换为 U+FFFD，Turn 照常继续。
 
 ## 使用量 {#usage}
 

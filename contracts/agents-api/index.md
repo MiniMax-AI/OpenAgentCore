@@ -93,6 +93,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - An empty text part beside other text is accepted and stored.
 - Empty input returns 400 `invalid_request` with a generic message and a null param; the official response is `invalid_request_error` with param `input`.
 - Session usage is available as soon as every root Turn has settled; official reads lag by seconds.
+- U+0000 in Harness output, such as command output, reads as U+FFFD; the official service keeps it.
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 

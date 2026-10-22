@@ -1,8 +1,11 @@
 package sessions
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -22,7 +25,7 @@ const (
 )
 
 // JournalBatch is a validated batch of execution observations for a Turn's
-// journal, each payload normalized. NewJournalBatch makes one.
+// journal, each payload in its journalPayload form. NewJournalBatch makes one.
 type JournalBatch struct {
 	turn   string
 	first  int32
@@ -44,7 +47,7 @@ func NewJournalBatch(turn string, first int32, events []ExecutionEvent) (Journal
 		if len(event.Payload) > journalPayloadBytes || !ValidEngine(event.Kind) {
 			return JournalBatch{}, ErrInvalidInput
 		}
-		payload, err := jsonobject.Normalize(event.Payload)
+		payload, err := journalPayload(event.Payload)
 		if err != nil {
 			return JournalBatch{}, fmt.Errorf("%w: %w", ErrInvalidInput, err)
 		}
@@ -55,6 +58,43 @@ func NewJournalBatch(turn string, first int32, events []ExecutionEvent) (Journal
 		return JournalBatch{}, ErrEventLimit
 	}
 	return batch, nil
+}
+
+// journalPayload normalizes an execution observation's payload into the form
+// the journal stores. Observed text is the Harness's own output, such as a
+// command's, so U+0000, which jsonb cannot store, becomes U+FFFD in every
+// string, as decoding already does for invalid UTF-8, instead of failing the
+// Turn.
+func journalPayload(raw json.RawMessage) (json.RawMessage, error) {
+	payload, err := jsonobject.Normalize(raw)
+	if err != nil || !bytes.Contains(payload, []byte(`\u0000`)) {
+		return payload, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	return json.Marshal(withoutNUL(value))
+}
+
+func withoutNUL(value any) any {
+	switch v := value.(type) {
+	case string:
+		return strings.ReplaceAll(v, "\x00", "\uFFFD")
+	case []any:
+		for i, item := range v {
+			v[i] = withoutNUL(item)
+		}
+	case map[string]any:
+		replaced := make(map[string]any, len(v))
+		for key, item := range v {
+			replaced[strings.ReplaceAll(key, "\x00", "\uFFFD")] = withoutNUL(item)
+		}
+		return replaced
+	}
+	return value
 }
 
 // validID reports whether value can name a stored resource: a nonzero UUID.

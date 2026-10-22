@@ -114,6 +114,32 @@ func TestTurnJournalRecordsReplaysAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestTurnJournalStoresNULInObservedTextAsReplacementCharacter(t *testing.T) {
+	pool, _, operations := leasedJournal(t)
+	tenant, session, turn := newTurn(t, pool, sessions.TurnInProgress)
+	batch := []sessions.ExecutionEvent{
+		observation("tool_call", `{"id":"c","stage":"before","observation":{"status":"in_progress","kind":"command","command":"printf"}}`),
+		observation("command_output", `{"id":"c","delta":"before\u0000after"}`),
+		observation("tool_call", `{"id":"c","stage":"after","observation":{"status":"completed","kind":"command","command":"printf","output":"before\u0000after"}}`),
+	}
+	if err := operations.AppendTurnEvents(t.Context(), text(tenant), text(session), text(turn), 1, batch); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := operations.CompleteExecution(t.Context(), text(tenant), text(session), text(turn), sessions.TurnFailed, json.RawMessage(`{"error":"native\u0000"}`), "", 0); err != nil {
+		t.Fatal(err)
+	}
+	var delta, output, failure string
+	if err := pool.QueryRow(t.Context(), `SELECT
+		(SELECT payload->>'delta' FROM turn_events WHERE turn_id = $1 AND ordinal = 2),
+		(SELECT payload#>>'{observation,output}' FROM turn_events WHERE turn_id = $1 AND ordinal = 3),
+		outcome->>'error' FROM turns WHERE id = $1`, turn).Scan(&delta, &output, &failure); err != nil {
+		t.Fatal(err)
+	}
+	if delta != "before\uFFFDafter" || output != "before\uFFFDafter" || failure != "native\uFFFD" {
+		t.Fatalf("stored %q, %q and %q", delta, output, failure)
+	}
+}
+
 func TestSubagentProjectionStoresTheSessionRows(t *testing.T) {
 	pool, _, operations := leasedJournal(t)
 	tenant, session, turn, device := uuid.New(), uuid.New(), uuid.New(), uuid.New()
