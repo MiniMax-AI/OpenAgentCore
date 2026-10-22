@@ -253,7 +253,8 @@ def publish(assets, repository, revision, tag, mode):
     # The builder validates the manifest and Runtime assets. Verify archives again
     # after the Actions artifact transfer between jobs.
     stem = "oac-" + revision + "-linux-amd64"
-    archives = [assets / (stem + ".tar.gz"), assets / ("oac-" + revision + "-linux-arm64.tar.gz"), assets / "install.sh", assets / "install.ps1"]
+    control_archives = [assets / f"oac-{revision}-linux-{arch}.tar.gz" for arch in ("amd64", "arm64")]
+    archives = control_archives + [assets / "install.sh", assets / "install.ps1"]
     archives.extend(assets / name for name in ("oac-linux-amd64", "oac-linux-arm64", "oac-darwin-amd64", "oac-darwin-arm64", "oac-windows-amd64.exe"))
     if mode == "publish" or (assets / (stem + "-offline.tar.gz")).exists():
         archives.append(assets / (stem + "-offline.tar.gz"))
@@ -275,6 +276,11 @@ def publish(assets, repository, revision, tag, mode):
         if (distribution.sha256(path) != entry["sha256"]
                 or path.with_name(path.name + ".sha256").read_text() != entry["sha256"] + "  " + path.name + "\n"):
             raise ValueError("Native installer checksum mismatch")
+
+    # Keep control archives for catalog verification, image publication and recovery,
+    # but installers do not download them from Releases.
+    internal_files = {path.name + suffix for path in control_archives for suffix in ("", ".sha256")}
+    files = [path for path in files if path.name not in internal_files]
 
     # Actions can retain the old repository name after a rename. Resolve it
     # before any writes; binary uploads must not depend on POST redirects.

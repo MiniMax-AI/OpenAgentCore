@@ -6,7 +6,7 @@ This guide is for maintainers who build and publish OpenAgentCore. To install Co
 
 ## Build a distribution
 
-A distribution is a matched set of release assets built from one commit: the control archive (the installer, the `oac` command, and the Core, Web, ingress and PostgreSQL images), the Runtime image and node artifacts as separate files, and the native installers.
+A distribution is a matched set of build outputs from one commit: the control archive (the installer, the `oac` command, and the Core, Web, ingress and PostgreSQL images), the Runtime image and node artifacts as separate files, and the native installers.
 
 Core, Web and ingress images are published as verified Linux amd64/arm64 indexes. The arm64 control archive contains those three images; Node, hosted Runtime and offline payloads use Linux amd64. Release builders use QEMU for ARM image steps, including the E2B helper. Host `oac` binaries are built from the same command for Linux amd64/arm64, macOS amd64/arm64 and Windows amd64; launchers only select, verify and invoke them. Each version index is checked against its platform archives before floating tags move.
 
@@ -142,6 +142,8 @@ Tags use `vMAJOR.MINOR.PATCH`, optionally with a prerelease suffix such as `-rc.
 The workflow runs `check` on the tagged commit, including the full local gate, official-client and image acceptance, and the native matrix with its packaging artifacts enabled. After checks succeed, one `build` job on `blacksmith-4vcpu-ubuntu-2204` prepares the pinned Runtime inputs, reuses the native installers, builds the distribution and publishes directly from its local files. This combined job has `contents: write` and `packages: write`; checkout does not persist credentials. It retains the assets as an uncompressed Actions artifact only when publication fails, for recovery, or when a manual build does not publish.
 
 Distribution and Runtime archives use `pigz` level 6 with at most four compression workers and no filename or timestamp in the gzip header. The publisher verifies archive and native installer checksums, resolves the repository identity, refuses an existing Release or draft for the tag and creates one draft with a fixed ID. Up to four assets upload concurrently, largest first, without retries. After confirming the complete remote inventory, the publisher validates all image archives and existing registry tags before pushing up to four images concurrently. Each image config and registry manifest is verified; any error leaves the Release unpublished. In-flight transfers finish before a failed operation returns. The publisher rechecks the version tag before publishing the draft by its ID.
+
+The control archives `oac-<commit>-linux-amd64.tar.gz` and `oac-<commit>-linux-arm64.tar.gz`, and their `.sha256` files, stay in the build output and the Actions recovery artifact; they are not uploaded to GitHub Releases, including manual drafts. The publisher still verifies them and reads their native catalog and image payloads. Online installers download the host binary and Compose files and pull images from GHCR; offline installs use the offline archive. Runtime, node and native installer assets remain separate downloads.
 
 ### Container registry
 

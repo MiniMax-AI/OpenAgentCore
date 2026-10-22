@@ -1,14 +1,14 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: f66f608093cc824add3215a9df520082b1679af1852ee213b7a6adfca40221ed
+source_hash: 25fc91df22355fa1dcbd148586b57eeb84ec641ce882e82386d50c3d5a01ba1d
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
 
 ## 构建分发包 {#build-a-distribution}
 
-分发包是从同一个提交构建的一组相互匹配的发布资源：控制归档（安装程序、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装程序。
+分发包是从同一个提交生成的一组相互匹配的构建输出：控制归档（安装程序、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装程序。
 
 Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
 
@@ -144,6 +144,8 @@ flowchart LR
 工作流会在带标签的提交上运行 `check`，包括完整的本地门禁、官方客户端和镜像验收，以及启用打包构件的原生平台矩阵。检查成功后，`blacksmith-4vcpu-ubuntu-2204` 上的一个 `build` 作业会准备固定的 Runtime 输入、复用原生安装程序、构建分发包，并直接从本地文件发布。此合并作业具有 `contents: write` 和 `packages: write` 权限；检出过程不会保留凭据。只有发布失败或手动构建不发布时，才会把这些文件保留为未压缩的 Actions 构建产物，供恢复使用。
 
 分发归档和 Runtime 归档使用 `pigz` 级别 6，最多使用四个压缩工作线程，并且 gzip 头部中不包含文件名或时间戳。发布器会验证归档和原生安装程序校验和、解析仓库身份、拒绝使用该标签已有的 Release 或草稿，并创建一个具有固定 ID 的草稿。最多四个资源可并发上传，按从大到小的顺序进行，且不会重试。确认完整的远程资源清单后，发布器会验证所有镜像归档和现有注册表标签，再并发推送最多四个镜像。每个镜像配置和注册表清单都会接受验证；任何错误都会使 Release 保持未发布状态。失败操作返回前，正在进行的传输会完成。发布器会按 ID 发布草稿，并在发布前重新检查版本标签。
+
+控制归档 `oac-<commit>-linux-amd64.tar.gz` 和 `oac-<commit>-linux-arm64.tar.gz` 及其 `.sha256` 文件保留在构建输出和 Actions 恢复构件中，不上传到 GitHub Releases，手动草稿也一样。发布器仍会校验它们，并读取其中的原生安装目录和镜像内容。在线安装程序下载主机二进制与 Compose 文件，并从 GHCR 拉取镜像；离线安装使用离线归档。Runtime、节点和原生安装程序资源仍作为独立文件下载。
 
 ### 容器注册表 {#container-registry}
 

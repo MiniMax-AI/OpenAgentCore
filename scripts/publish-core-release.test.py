@@ -68,13 +68,56 @@ class PublicationTests(unittest.TestCase):
         self.publish(tag="build-" + self.revision, mode="draft")
         self.images.assert_called_once()
         self.assertTrue(self.release["draft"])
-        self.assertEqual(len(self.release["assets"]), 28)
+        self.assertEqual(len(self.release["assets"]), 24)
 
     def test_missing_native_asset_refuses_release_creation(self):
         (self.assets / f"oac-native-{self.revision}-windows-amd64-codex.tar.gz").unlink()
         with self.assertRaises(FileNotFoundError):
             self.publish()
         self.assertEqual(self.writes(), [])
+
+    def test_control_archives_stay_local_for_images_and_recovery(self):
+        before = {p.name: publisher.distribution.sha256(p) for p in self.assets.iterdir()}
+        internal = {f"oac-{self.revision}-linux-{arch}.tar.gz{suffix}"
+                    for arch in ("amd64", "arm64") for suffix in ("", ".sha256")}
+        # Execution payloads and their checksums must still be downloadable.
+        for suffix in ("runtime.tar.gz", "sandbox-node"):
+            path = self.assets / (self.stem + "-" + suffix)
+            path.write_bytes(b"node payload")
+            path.with_name(path.name + ".sha256").write_text(
+                publisher.distribution.sha256(path) + "  " + path.name + "\n")
+        expected = {p.name for p in self.assets.iterdir()} - internal
+        images = self.images.return_value
+        def publish_images(assets, repository, revision, tag, **kwargs):
+            self.assertEqual(assets, self.assets)
+            self.assertEqual(revision, self.revision)
+            for name, checksum in before.items():
+                self.assertEqual(publisher.distribution.sha256(assets / name), checksum)
+            return images
+        self.images.side_effect = publish_images
+        for mode, tag in (("publish", "v1.2.3"), ("draft", "build-" + self.revision)):
+            with self.subTest(mode=mode):
+                for name in ("compose.yaml", "compose-sha256sums.txt"):
+                    (self.assets / name).unlink(missing_ok=True)
+                self.publish(tag=tag, mode=mode)
+                self.assertEqual({a["name"] for a in self.release["assets"]},
+                                 expected | {"compose.yaml", "compose-sha256sums.txt"})
+                for name, checksum in before.items():
+                    self.assertEqual(publisher.distribution.sha256(self.assets / name), checksum)
+
+    def test_missing_control_inputs_refuse_release_creation(self):
+        for arch in ("amd64", "arm64"):
+            for suffix in ("", ".sha256"):
+                path = self.assets / f"oac-{self.revision}-linux-{arch}.tar.gz{suffix}"
+                with self.subTest(name=path.name):
+                    original = path.read_bytes()
+                    path.unlink()
+                    try:
+                        with self.assertRaises(FileNotFoundError):
+                            self.publish()
+                        self.assertEqual(self.writes(), [])
+                    finally:
+                        path.write_bytes(original)
 
     def test_corrupt_native_asset_refuses_release_creation(self):
         (self.assets / f"oac-native-{self.revision}-linux-amd64.tar.gz").write_bytes(b"corrupt")
@@ -142,7 +185,7 @@ class PublicationTests(unittest.TestCase):
                 return result
             if endpoint == "releases/7":
                 self.assertEqual(active, 0)
-                self.assertIn(len(self.release["assets"]), (26, 28))
+                self.assertIn(len(self.release["assets"]), (22, 24))
             return self.response(repo, endpoint, *args)
         self.api.side_effect = response
         self.publish()
@@ -153,7 +196,7 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertFalse(self.release["draft"])
         self.assertFalse(self.release["prerelease"])
-        self.assertEqual(len(self.release["assets"]), 28)
+        self.assertEqual(len(self.release["assets"]), 24)
         self.assertEqual({a["name"] for a in self.release["assets"] if a["name"].endswith(".yaml")}, {"compose.yaml"})
         self.assertEqual(self.api.call_args.args[1:],
                          ("releases/7", "--method", "PATCH", "-F", "draft=false"))
@@ -305,10 +348,17 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(self.writes(), [])
 
     def test_changed_archive_is_refused(self):
-        (self.assets / (self.stem + ".tar.gz")).write_bytes(b"changed")
-        with self.assertRaisesRegex(ValueError, "checksum"):
-            self.publish()
-        self.assertEqual(self.writes(), [])
+        for arch in ("amd64", "arm64"):
+            path = self.assets / f"oac-{self.revision}-linux-{arch}.tar.gz"
+            with self.subTest(arch=arch):
+                original = path.read_bytes()
+                path.write_bytes(b"changed")
+                try:
+                    with self.assertRaisesRegex(ValueError, "checksum"):
+                        self.publish()
+                    self.assertEqual(self.writes(), [])
+                finally:
+                    path.write_bytes(original)
 
     def test_empty_or_linked_payload_is_refused(self):
         for p in self.assets.iterdir():
