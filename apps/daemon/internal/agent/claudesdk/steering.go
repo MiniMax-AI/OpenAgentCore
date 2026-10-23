@@ -38,12 +38,7 @@ func (s *session) SteerWithReceipt(ctx context.Context, input proto.PromptSteerP
 	if strings.TrimSpace(input.InputID) == "" || len(input.InputID) > 256 || input.Input.Validate() != nil {
 		return fmt.Errorf("%w: input identity and text are required", agent.ErrSteeringRejected)
 	}
-	data, err := json.Marshal(struct {
-		Type    string             `json:"type"`
-		TurnID  string             `json:"turn_id"`
-		InputID string             `json:"input_id"`
-		Input   proto.MessageInput `json:"input"`
-	}{Type: "steer", TurnID: s.runID, InputID: input.InputID, Input: input.Input})
+	data, err := json.Marshal(steerFrame{Type: "steer", TurnID: s.runID, InputID: input.InputID, Input: input.Input})
 	if err != nil || len(data) > 1024*1024 {
 		return fmt.Errorf("%w: input exceeds bridge limit", agent.ErrSteeringRejected)
 	}

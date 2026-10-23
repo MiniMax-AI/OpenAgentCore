@@ -199,11 +199,7 @@ func (e *executor) StartTurn(ctx context.Context, run string, input proto.Messag
 	go s.runTurn(start, out)
 	// Once the write is attempted, a lost receipt has an unknown input outcome.
 	stopWrite := context.AfterFunc(ctx, s.invalidate)
-	err := e.write(struct {
-		Type   string             `json:"type"`
-		TurnID string             `json:"turn_id"`
-		Input  proto.MessageInput `json:"input"`
-	}{"turn_start", run, input})
+	err := e.write(turnStartFrame{"turn_start", run, input})
 	stopWrite()
 	if err != nil {
 		s.invalidate()

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import test from "node:test";
+import { assertFrame } from "./frames.mjs";
 
 const fixture = `
 import assert from "node:assert/strict";
@@ -70,7 +71,7 @@ async function launch(t,mode="normal") {
  const child=spawn(process.execPath,["--input-type=module","-e",fixture,mode],{stdio:["pipe","pipe","pipe","ipc"]});
  const events=[],observations=[];let buffer="",stderr="";
  child.stdout.setEncoding("utf8");child.stderr.setEncoding("utf8");
- child.stdout.on("data",data=>{buffer+=data;while(buffer.includes("\n")){const end=buffer.indexOf("\n");events.push(JSON.parse(buffer.slice(0,end)));buffer=buffer.slice(end+1)}});
+ child.stdout.on("data",data=>{buffer+=data;while(buffer.includes("\n")){const end=buffer.indexOf("\n");{const event=JSON.parse(buffer.slice(0,end));assertFrame(event);events.push(event)}buffer=buffer.slice(end+1)}});
  child.stderr.on("data",data=>{stderr+=data});child.on("message",event=>observations.push(event));
  const closed=new Promise(resolve=>child.once("close",(code,signal)=>resolve({code,signal})));
  t.after(async()=>{child.kill("SIGKILL");await closed});
