@@ -45,7 +45,7 @@ func TestBootstrapConnectionDoesNotReadOrOverwritePrivateProfile(t *testing.T) {
 	}
 	t.Cleanup(localworkspace.Unbind)
 	for range 2 {
-		p, err := bootstrapProfile(path)
+		p, _, err := bootstrapProfile(path)
 		if err != nil || p.ServerURL != input.CoreURL || p.RuntimeID != input.DeviceID || p.RunnerCredential != input.Credential {
 			t.Fatal("failed bootstrap/restart", err)
 		}
@@ -60,13 +60,13 @@ func TestBootstrapConnectionDoesNotReadOrOverwritePrivateProfile(t *testing.T) {
 	if err = os.WriteFile(path, []byte("bootstrap-secret"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = bootstrapProfile(path); err == nil || strings.Contains(err.Error(), input.Credential) {
+	if _, _, err = bootstrapProfile(path); err == nil || strings.Contains(err.Error(), input.Credential) {
 		t.Fatal("invalid input fell back or leaked")
 	}
 	if err = os.Remove(path); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = bootstrapProfile(path); err == nil {
+	if _, _, err = bootstrapProfile(path); err == nil {
 		t.Fatal("missing input fell back to private auth")
 	}
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const Version = 2
+const Version = 3
 const MaxBytes = 16 * 1024
 
 // PublicWorkspace is the workspace path applications and Core use for a hosted Environment.
@@ -26,8 +26,8 @@ const PublicWorkspace = "/workspace"
 const RuntimeWorkspace = "/environment/workspace"
 
 // SuspendControlFile is where the Runtime daemon publishes its suspend control.
-// Its directory is private to the Runtime user. Providers enable the control by
-// setting OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE to it, and Core's wake command reads it.
+// Its directory is private to the Runtime user. The Runtime publishes it exactly when
+// the bootstrap sets SuspendControl, and Core's wake command reads it.
 const SuspendControlFile = "/run/oac/daemon-suspend.json"
 
 var ErrInvalid = errors.New("invalid Runtime bootstrap input")
@@ -36,14 +36,16 @@ var ErrInvalid = errors.New("invalid Runtime bootstrap input")
 // CoreURL includes the machine API base path. The provider owns delivery and
 // file permissions; Runtime owns validation and its authentication representation.
 // EnvironmentID, SessionID and Workspace bind the Runtime to its Environment.
+// SuspendControl is true exactly when the Provider declares checkpoint support.
 type Connection struct {
-	Version       int    `json:"version"`
-	CoreURL       string `json:"core_url"`
-	DeviceID      string `json:"device_id"`
-	Credential    string `json:"credential"`
-	EnvironmentID string `json:"environment_id"`
-	SessionID     string `json:"session_id"`
-	Workspace     string `json:"workspace"`
+	Version        int    `json:"version"`
+	CoreURL        string `json:"core_url"`
+	DeviceID       string `json:"device_id"`
+	Credential     string `json:"credential"`
+	EnvironmentID  string `json:"environment_id"`
+	SessionID      string `json:"session_id"`
+	Workspace      string `json:"workspace"`
+	SuspendControl bool   `json:"suspend_control"`
 }
 
 func canonicalUUID(value string) bool {
@@ -111,6 +113,14 @@ func Decode(raw []byte) (Connection, error) {
 			err = d.Decode(&c.SessionID)
 		case "workspace":
 			err = d.Decode(&c.Workspace)
+		case "suspend_control":
+			var enabled *bool
+			if err = d.Decode(&enabled); err == nil && enabled == nil {
+				err = ErrInvalid
+			}
+			if enabled != nil {
+				c.SuspendControl = *enabled
+			}
 		default:
 			return Connection{}, ErrInvalid
 		}
@@ -121,7 +131,7 @@ func Decode(raw []byte) (Connection, error) {
 	if token, err = d.Token(); err != nil || token != json.Delim('}') {
 		return Connection{}, ErrInvalid
 	}
-	if len(seen) != 7 || d.Decode(new(any)) != io.EOF || c.Validate() != nil {
+	if len(seen) != 8 || d.Decode(new(any)) != io.EOF || c.Validate() != nil {
 		return Connection{}, ErrInvalid
 	}
 	return c, nil

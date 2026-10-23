@@ -53,10 +53,15 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `environment_id` | Canonical nonzero UUID of the Environment the Runtime serves |
 | `session_id` | Canonical nonzero UUID of the Session whose native history the Runtime keeps |
 | `workspace` | Clean absolute directory of the workspace, `runtimebootstrap.RuntimeWorkspace` in the packaged Runtime layout. The Runtime serves it as `runtimebootstrap.PublicWorkspace` (`/workspace`), the path applications and Core use |
+| `suspend_control` | Required boolean. Core sets it exactly when the Provider declares [checkpoint support](./sandbox-provider.md), and the Provider forwards it unchanged |
 
 The decoder rejects unknown, duplicate, missing and case-aliased fields, other versions and documents larger than `runtimebootstrap.MaxBytes`. Errors never include submitted values. A missing or malformed file fails before the daemon connects.
 
 The file is the only authentication input for this launch: the daemon refuses to combine it with self-hosted enrollment options, and reads the credential into memory without saving it to a stored profile. Credentials never go in command arguments, environment variables or receipts. The provider keeps the file for process restarts and removes it only during explicit cleanup of the resources it owns.
+
+## Suspend control
+
+When `suspend_control` is true, the daemon publishes its suspend control at `runtimebootstrap.SuspendControlFile` and parks for suspension. Core's wake command, `oac-daemon resume --control-file`, reads that file. A Provider that declares checkpoint support prepares the file's directory before it starts the daemon: private to the Runtime account (mode 0700, owned by UID 1000). `oac-daemon connect` fails when `suspend_control` is true and it cannot publish the control, and the control is never enabled by any other setting.
 
 ## Timeouts and limits
 

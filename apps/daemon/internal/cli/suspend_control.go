@@ -14,9 +14,8 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 )
-
-const suspendControlEnv = "OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE"
 
 type suspendIdentity struct {
 	PID           int    `json:"pid"`
@@ -34,14 +33,16 @@ type suspendControl struct {
 	signal      chan os.Signal
 }
 
-func newSuspendControl() (*suspendControl, error) {
-	path := os.Getenv(suspendControlEnv)
-	if path == "" {
+// newSuspendControl publishes the control at runtimebootstrap.SuspendControlFile
+// when the bootstrap enables it, and fails the connection when it cannot.
+func newSuspendControl(enabled bool) (*suspendControl, error) {
+	if !enabled {
 		return nil, nil
 	}
-	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
-		return nil, errors.New("connect: absolute suspend control file required")
-	}
+	return openSuspendControl(runtimebootstrap.SuspendControlFile)
+}
+
+func openSuspendControl(path string) (*suspendControl, error) {
 	info, err := os.Lstat(filepath.Dir(path))
 	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
 		return nil, errors.New("connect: private suspend control directory required")

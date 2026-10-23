@@ -49,7 +49,6 @@ def initialize():
     control.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chown(control.parent, 1000, 1000)
     control.parent.chmod(0o700)
-    environment['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'] = str(control)
     connection = Path(environment['OAC_RUNTIME_HOME']).parent / 'runtime-bootstrap.json'
     shared.write_private(connection, payload['RuntimeBootstrap'], owner=1000)
     source.unlink()

@@ -62,6 +62,8 @@ type Bootstrap struct {
 	Workspace *workspacefs.Binding `json:",omitempty"`
 	Reference
 	SessionID, DeviceID, CoreURL, Credential string
+	// SuspendControl is true exactly when the Provider declares checkpoint support.
+	SuspendControl bool
 }
 
 // Info describes compute only. Running does not establish daemon authentication,

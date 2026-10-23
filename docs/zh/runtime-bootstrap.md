@@ -1,7 +1,7 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: 5a6b2fff6d4f54505022e783ebb4a4c20cc8602935842053416870786ee7bc74
+source_hash: 68bb957984c615d36b941efae570b366b6245f08fe4c76561f8aaa92966e1a4b
 ---
 
 Runtime 引导协议连接沙箱提供商与其启动的托管 Runtime。提供商向 Runtime 交付一个引导文件，该文件是此次启动中 Runtime 唯一的认证输入，也是其 Environment 绑定的唯一来源。
@@ -55,10 +55,15 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `environment_id` | Runtime 所服务 Environment 的规范非零 UUID |
 | `session_id` | Runtime 保存其原生历史的 Session 的规范非零 UUID |
 | `workspace` | 工作区的干净绝对目录；打包的 Runtime 布局中为 `runtimebootstrap.RuntimeWorkspace`。Runtime 将其作为 `runtimebootstrap.PublicWorkspace`（`/workspace`）提供，这是应用与 Core 使用的路径 |
+| `suspend_control` | 必填布尔值。当且仅当提供商声明[检查点支持](./sandbox-provider.md)时，Core 将其置为 true，提供商原样转交 |
 
 解码器拒绝未知、重复、缺失和大小写别名字段，拒绝其他版本及超过 `runtimebootstrap.MaxBytes`的文档。错误不包含提交的值。文件缺失或格式错误时，daemon 在连接前失败。
 
 该文件是此次启动唯一的认证输入：daemon 拒绝将其与自托管注册选项组合使用，并将凭据读入内存而不保存到存储的 profile。凭据不进入命令参数、环境变量或回执。提供商为进程重启保留该文件，仅在明确清理自己拥有的资源时删除。
+
+## 挂起控制 {#suspend-control}
+
+`suspend_control` 为 true 时，daemon 在 `runtimebootstrap.SuspendControlFile` 发布其挂起控制并为挂起而停放。Core 的唤醒命令 `oac-daemon resume --control-file` 读取该文件。声明检查点支持的提供商在启动 daemon 前准备该文件所在目录：仅 Runtime 账户可访问（权限 0700，属主 UID 1000）。`suspend_control` 为 true 而 `oac-daemon connect` 无法发布该控制时，连接失败；没有任何其他设置可以启用该控制。
 
 ## 超时与限制 {#timeouts-and-limits}
 

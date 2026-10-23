@@ -16,9 +16,9 @@ import managed_init
 def payload():
     value = {key: str(uuid4()) for key in ['InstallationID', 'TenantID', 'EnvironmentID',
                                           'AllocationID', 'SessionID', 'DeviceID']}
-    return dict(value, RuntimeBootstrap={'version': 2, 'core_url': 'https://core.example/api/v1',
+    return dict(value, RuntimeBootstrap={'version': 3, 'core_url': 'https://core.example/api/v1',
                 'device_id': value['DeviceID'], 'credential': 'private-managed-token',
-                'environment_id': value['EnvironmentID'], 'session_id': value['SessionID'], 'workspace': '/environment/workspace'})
+                'environment_id': value['EnvironmentID'], 'session_id': value['SessionID'], 'workspace': '/environment/workspace', 'suspend_control': True})
 
 
 class ManagedStartupTest(unittest.TestCase):
@@ -82,7 +82,7 @@ class ManagedStartupTest(unittest.TestCase):
                 self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(process.call_args.kwargs['env']))
                 self.assertEqual(json.loads(connection_file.read_text())['environment_id'], data['EnvironmentID'])
                 self.assertEqual(process.call_args.kwargs['user'], 1000)
-                self.assertEqual(process.call_args.kwargs['env']['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'], str(Path(temporary) / 'run' / 'daemon-suspend.json'))
+                self.assertTrue((Path(temporary) / 'run').is_dir())
                 if failed:
                     self.assertFalse((root / 'managed-ready.json').exists())
                 else:
