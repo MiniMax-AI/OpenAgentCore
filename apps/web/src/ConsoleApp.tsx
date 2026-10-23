@@ -19,7 +19,7 @@ import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
-import { consoleDepth, ConsoleNavigationContext, useConsoleNavigation, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
+import { consoleDepth, ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { ProjectsProvider, useProjects } from "./lib/projects";
 import { collectionQuery, collections, filesCollection, queryClient, type CollectionSpec } from "./lib/queries";

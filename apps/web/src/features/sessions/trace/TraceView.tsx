@@ -84,14 +84,6 @@ function formatDuration(milliseconds: number, locale = "en-US"): string {
   return `${minutes}m ${String(remainder).padStart(2, "0")}s`;
 }
 
-function formatTimestamp(seconds: number | null | undefined, locale: string, unknown: string): string {
-  if (typeof seconds !== "number" || !Number.isSafeInteger(seconds) || seconds < 0) return unknown;
-  const timestamp = new Date(seconds * 1_000);
-  return Number.isNaN(timestamp.getTime())
-    ? unknown
-    : new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "medium" }).format(timestamp);
-}
-
 function itemStatusKind(status: TraceRow["status"]): StatusKind {
   if (status === "in_progress") return "running";
   if (status === "failed") return "failed";
@@ -113,11 +105,6 @@ function rowIcon(row: TraceRow): ReactNode {
   if (row.kind === "assistant_message") return <Bot size={14} strokeWidth={1.5} aria-hidden="true" />;
   if (row.kind === "tool_call" || row.kind === "tool_result") return <Wrench size={14} strokeWidth={1.5} aria-hidden="true" />;
   return <FileJson size={14} strokeWidth={1.5} aria-hidden="true" />;
-}
-
-function valueLabel<T>(value: TraceValue<T>, t: Translate, format: (available: T) => string = String): string {
-  if (value.state === "available" && value.value !== null) return format(value.value);
-  return value.state === "unknown" ? t("common.unknown") : t("common.unavailable");
 }
 
 function rowDurationPresentation(value: TraceValue<number>, t: Translate, locale: string): {
@@ -145,11 +132,6 @@ function rowDurationPresentation(value: TraceValue<number>, t: Translate, locale
     assistive: t("trace.perItemNotProvided"),
     title: t("trace.perItemTimingMissing"),
   };
-}
-
-function durationDetailLabel(value: TraceValue<number>, t: Translate, locale: string): string {
-  if (value.state === "available" && value.value !== null) return formatDuration(value.value, locale);
-  return value.state === "unknown" ? t("common.unknown") : t("trace.notProvidedByCore");
 }
 
 function turnDurationLabel(value: TraceValue<number>, t: Translate, locale: string): string {

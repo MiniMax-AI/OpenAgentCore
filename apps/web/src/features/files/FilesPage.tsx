@@ -10,7 +10,7 @@ import { ListToolbar, listSummary, NameCell, RowActions, SearchField } from "../
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatBytes, formatDateTime, MISSING } from "../../lib/format";
-import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
+import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import { filesPageSize, filterFiles, isUnrecognizedFile } from "./file-operations";
 import "./files.css";
 import { filesCollection } from "../../lib/queries";

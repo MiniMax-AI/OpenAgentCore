@@ -25,7 +25,7 @@ Behavior shared by the clients:
 - **Errors.** A non-2xx response throws `AgentCoreError` with `status`, `code`, `param`, `errorType` and, from the Core API, the optional `details` of the [Core error envelope](../../contracts/agents-api/core-errors.md). Input the client cannot send, such as a malformed resource ID, throws `TypeError` before any request; Core enforces size, count and range limits.
 - **No retries or timeouts.** No client retries a request. Pass `signal` to cancel one.
 - **Idempotency.** `createSession` takes an idempotency key and generates one when omitted; pass your own to retry a creation safely. `sendMessage`, `submitEvents`, `cancelTurn` and `submitFunctionResult` require one. `randomUuid()` makes one.
-- **Streams.** `streamEvents` and `createSessionStream` decode the live event stream with `createSSEDecoder` and validate each event. Recover missed events with ordinary reads; the decoder does not resume with `Last-Event-ID`.
+- **Streams.** `streamEvents` and `createSessionStream` decode the live event stream and validate each event. Recover missed events with ordinary reads; the decoder does not resume with `Last-Event-ID`.
 
 ### Saved Agent and deployment defaults
 

@@ -24,7 +24,7 @@ import { TableSkeleton } from "../../components/Skeleton";
  * keys.
  */
 export function SkillsPage() {
-  const { params, navigate, back } = useConsoleNavigation();
+  const { params, back } = useConsoleNavigation();
 
   if (params.project && params.id) {
     return (

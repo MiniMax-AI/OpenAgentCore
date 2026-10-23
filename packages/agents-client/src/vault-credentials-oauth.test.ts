@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { OpenAIAgentsClient } from "./client";
-import type { McpOAuthCredentialAuth, VaultCredential } from "./types";
+import type { VaultCredential } from "./types";
 
 const vaultId = "11111111-1111-4111-8111-111111111111";
 const credentialId = "22222222-2222-4222-8222-222222222222";
@@ -14,7 +14,7 @@ const staticCredential: VaultCredential = {
   created_at: 1,
   updated_at: 2,
 };
-const oauthAuth: McpOAuthCredentialAuth = {
+const oauthAuth: Extract<VaultCredential["auth"], { type: "mcp_oauth" }> = {
   type: "mcp_oauth",
   mcp_server_url: "https://mcp.example/tools",
   expires_at: "2030-01-01T00:00:00Z",

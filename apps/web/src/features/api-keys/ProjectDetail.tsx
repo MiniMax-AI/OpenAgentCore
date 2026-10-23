@@ -9,7 +9,6 @@ import { CopyableId, RowActions } from "../../components/list-ui";
 import { epochSeconds, formatCompact, formatDateTime, formatInteger, formatRelative } from "../../lib/format";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import type { ConsoleView } from "../../lib/console-routes";
-import { admin } from "../../lib/projects";
 import { ProjectHowToCall } from "./HowToCall";
 import { prefixLabel } from "./key-flows";
 import { loadedFrom, projectKeysQuery, projectSummaryQuery, type Loaded } from "./project-queries";

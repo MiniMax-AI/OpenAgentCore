@@ -2,7 +2,6 @@ export const templates = {
   boundary: "Applications create and change templates through the Agents API with a project API key. The console only inspects and deletes them.",
   refreshFailed: "The catalog could not be refreshed. Check the connection and try again.",
   created: "Template created. No Runtime was allocated.",
-  updated: "Template updated. Existing Sessions keep their configuration.",
   deleted: "Template deleted.",
   loading: "Loading Environment templates…",
   loadFailedTitle: "Environment templates could not be loaded",
@@ -11,7 +10,6 @@ export const templates = {
   count: "{{visible}} of {{total}} templates",
   emptyTitle: "No Environment templates yet",
   noMatch: "No matching templates",
-  clearFilter: "Clear filter",
   listLabel: "Environment templates",
   columns: {
     name: "Name", network: "Network", packages: "Packages", files: "Files", skills: "Skills",
@@ -19,7 +17,6 @@ export const templates = {
   },
   access: { enabled: "Enabled", disabled: "Disabled", restricted: "Restricted" },
   accessHelp: "Sessions with this policy are rejected, because the Runtime does not restrict network access.",
-  edit: "Edit",
   delete: "Delete",
   deleteLabel: "Delete {{name}}",
   open: "Open {{name}}",

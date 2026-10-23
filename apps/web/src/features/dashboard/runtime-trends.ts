@@ -1,38 +1,13 @@
-import type { AgentSession, RuntimeObservation } from "@oac/agents-client";
-
-import { holdLastReported } from "./held-usage";
-import type { RuntimeDashboardSnapshot } from "./runtime-snapshot";
-
-export const RUNTIME_TREND_WINDOW_MS = 60 * 60 * 1_000;
-export const RUNTIME_TREND_MAX_SAMPLES = 120;
-export const RUNTIME_TREND_SERIES_LIMIT = 3;
-export const RUNTIME_TREND_MAX_TARGETS = RUNTIME_TREND_SERIES_LIMIT * 2;
-export const RUNTIME_TREND_RANGES = [
-  { label: "15m", milliseconds: 15 * 60 * 1_000 },
-  { label: "1h", milliseconds: RUNTIME_TREND_WINDOW_MS },
-] as const;
-export type RuntimeTrendRange = typeof RUNTIME_TREND_RANGES[number]["milliseconds"];
-
 export interface RuntimeTrendTarget {
   seriesId: string;
   label: string;
   cpuRatio: number | null;
 }
 
-export interface RuntimeTrendCPUCandidate extends RuntimeTrendTarget {
-  observedAt: number | null;
-  startedAt: number | null;
-  allocationKey: string | null;
-  usageSecondsTotal: number | null;
-  capacityCores: number | null;
-  reportedRatio: number | null;
-}
-
 export interface RuntimeTrendSample {
   sampledAt: number;
   activeSandboxCount: number | null;
   targets: RuntimeTrendTarget[];
-  cpuCandidates: RuntimeTrendCPUCandidate[];
   memoryUsageBytes: number | null;
   memoryLimitBytes: number | null;
   tokenTotals: RuntimeTrendTokenTotal[];
@@ -45,199 +20,6 @@ export interface RuntimeTrendTokenTotal {
   sampledAt: number;
   inputTokens: number;
   outputTokens: number;
-  /** Kept from the report at sampledAt while public Session usage is null. */
-  held?: true;
-}
-
-export interface TokenThroughputSample {
-  sampledAt: number;
-  inputPerMinute: number | null;
-  outputPerMinute: number | null;
-}
-
-function finiteNonNegative(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
-}
-
-function safeInteger(value: unknown): number | null {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
-}
-
-function sessionTitle(session: AgentSession): string {
-  const title = session.metadata?.title;
-  if (typeof title === "string" && title.length > 0) return title;
-  return session.agent.name ?? session.agent.model;
-}
-
-function reportedCpuRatio(observation: RuntimeObservation): number | null {
-  if (observation.status !== "observed") return null;
-  const reported = finiteNonNegative(observation.cpu?.utilization_ratio);
-  if (reported !== null) return reported;
-  const usage = finiteNonNegative(observation.cpu?.usage_cores);
-  const capacity = finiteNonNegative(observation.cpu?.capacity_cores);
-  return usage !== null && capacity !== null && capacity > 0
-    ? finiteNonNegative(usage / capacity)
-    : null;
-}
-
-function allocationKey(observation: RuntimeObservation): string | null {
-  if (observation.mode !== "openai_hosted") return null;
-  const allocationId = observation.instance.allocation_id;
-  return typeof allocationId === "string" && allocationId.length > 0
-    ? `${observation.instance.kind}:${allocationId}`
-    : null;
-}
-
-function tokenTotals(sessions: readonly AgentSession[], sampledAt: number): RuntimeTrendTokenTotal[] {
-  return sessions.flatMap((session): RuntimeTrendTokenTotal[] => {
-    const inputTokens = safeInteger(session.usage?.input_tokens);
-    const outputTokens = safeInteger(session.usage?.output_tokens);
-    return inputTokens === null || outputTokens === null
-      ? []
-      : [{ sessionId: session.id, sampledAt, inputTokens, outputTokens }];
-  });
-}
-
-// Keep a listed Session's last reported totals, with their report time, while
-// its public usage is null. tokenRate treats a held total as unknown, so those
-// intervals are gaps; the next reported total is spread over the time since the
-// last report.
-function carryTokenTotals(previous: RuntimeTrendSample, next: RuntimeTrendSample, snapshot: RuntimeDashboardSnapshot): void {
-  const reported = new Map<string, RuntimeTrendTokenTotal | null>(snapshot.sessions.map((session) => [session.id, null]));
-  for (const total of next.tokenTotals) reported.set(total.sessionId, total);
-  const prior = new Map(previous.tokenTotals.map((total) => [total.sessionId, { ...total, held: true as const }]));
-  next.tokenTotals = [...holdLastReported(prior, reported).values()];
-}
-
-export function runtimeTrendSample(snapshot: RuntimeDashboardSnapshot): RuntimeTrendSample {
-  const sessions = new Map(snapshot.sessions.map((session) => [session.id, session]));
-  const managed = snapshot.observations.flatMap((observation) => {
-    const session = sessions.get(observation.session_id);
-    if (!session || observation.mode !== "openai_hosted") return [];
-    const key = allocationKey(observation);
-    const allocationId = observation.instance.allocation_id;
-    if (key === null || typeof allocationId !== "string" || allocationId.length === 0) return [];
-    return [{
-      seriesId: `${observation.session_id}:${key}`,
-      allocationId,
-      label: sessionTitle(session),
-      cpuRatio: reportedCpuRatio(observation),
-      resolvedAt: safeInteger(observation.resolved_at),
-      observedAt: safeInteger(observation.observed_at),
-      startedAt: safeInteger(observation.started_at),
-      allocationKey: allocationKey(observation),
-      usageSecondsTotal: finiteNonNegative(observation.cpu?.usage_seconds_total),
-      capacityCores: finiteNonNegative(observation.cpu?.capacity_cores),
-      memoryUsageBytes: finiteNonNegative(observation.memory?.usage_bytes),
-      memoryLimitBytes: finiteNonNegative(observation.memory?.limit_bytes),
-      lifecycleState: observation.lifecycle_state,
-      observed: observation.status === "observed",
-    }];
-  });
-  const latestByAllocation = new Map<string, typeof managed[number]>();
-  for (const target of managed) {
-    const previous = latestByAllocation.get(target.allocationId);
-    if (!previous || (target.resolvedAt ?? -1) >= (previous.resolvedAt ?? -1)) {
-      latestByAllocation.set(target.allocationId, target);
-    }
-  }
-  const allocations = [...latestByAllocation.values()];
-  const latestObservedByAllocation = new Map<string, typeof managed[number]>();
-  for (const target of managed) {
-    if (!target.observed) continue;
-    const previous = latestObservedByAllocation.get(target.allocationId);
-    if (!previous || (target.observedAt ?? -1) >= (previous.observedAt ?? -1)) {
-      latestObservedByAllocation.set(target.allocationId, target);
-    }
-  }
-  const observed = [...latestObservedByAllocation.values()];
-  const targets: RuntimeTrendTarget[] = observed.filter((target) => target.cpuRatio !== null)
-    .sort((left, right) => (right.cpuRatio ?? 0) - (left.cpuRatio ?? 0))
-    .slice(0, RUNTIME_TREND_SERIES_LIMIT)
-    .map((target) => ({
-      seriesId: target.seriesId,
-      label: target.label,
-      cpuRatio: target.cpuRatio,
-    }));
-  const pairedMemory = observed.filter((target) => (
-    target.memoryUsageBytes !== null && target.memoryLimitBytes !== null
-  ));
-  return {
-    sampledAt: snapshot.loadedAt,
-    activeSandboxCount: allocations.filter((target) => target.lifecycleState === "active").length,
-    targets,
-    cpuCandidates: observed.flatMap((target): RuntimeTrendCPUCandidate[] => (
-      target.seriesId !== null && (target.cpuRatio !== null || (
-        target.observedAt !== null && target.allocationKey !== null &&
-        target.usageSecondsTotal !== null && target.capacityCores !== null && target.capacityCores > 0
-      ))
-        ? [{
-          seriesId: target.seriesId!,
-          label: target.label,
-          cpuRatio: target.cpuRatio,
-          observedAt: target.observedAt,
-          startedAt: target.startedAt,
-          allocationKey: target.allocationKey,
-          usageSecondsTotal: target.usageSecondsTotal,
-          capacityCores: target.capacityCores,
-          reportedRatio: target.cpuRatio,
-        }]
-        : []
-    )),
-    memoryUsageBytes: pairedMemory.length === 0
-      ? null
-      : pairedMemory.reduce((total, target) => total + (target.memoryUsageBytes ?? 0), 0),
-    memoryLimitBytes: pairedMemory.length === 0
-      ? null
-      : pairedMemory.reduce((total, target) => total + (target.memoryLimitBytes ?? 0), 0),
-    tokenTotals: tokenTotals(snapshot.sessions, snapshot.loadedAt),
-    inputTokensPerMinute: null,
-    outputTokensPerMinute: null,
-  };
-}
-
-function cpuRatios(previous: RuntimeTrendSample, next: RuntimeTrendSample): Map<string, number> {
-  const previousCandidates = new Map(previous.cpuCandidates.map((candidate) => [candidate.seriesId, candidate]));
-  const ratios = new Map<string, number>();
-  for (const current of next.cpuCandidates) {
-    const prior = previousCandidates.get(current.seriesId);
-    if (current.reportedRatio !== null && !prior) {
-      ratios.set(current.seriesId, current.reportedRatio);
-      continue;
-    }
-    if (
-      !prior || prior.allocationKey === null || prior.allocationKey !== current.allocationKey ||
-      prior.observedAt === null || current.observedAt === null || current.observedAt <= prior.observedAt
-    ) continue;
-    if (current.reportedRatio !== null) {
-      ratios.set(current.seriesId, current.reportedRatio);
-      continue;
-    }
-    if (
-      prior.startedAt === null || current.startedAt === null || prior.startedAt !== current.startedAt ||
-      prior.usageSecondsTotal === null || current.usageSecondsTotal === null ||
-      current.usageSecondsTotal < prior.usageSecondsTotal ||
-      current.capacityCores === null || current.capacityCores <= 0
-    ) continue;
-    const usageCores = (current.usageSecondsTotal - prior.usageSecondsTotal) /
-      (current.observedAt - prior.observedAt);
-    const ratio = finiteNonNegative(usageCores / current.capacityCores);
-    if (ratio !== null) ratios.set(current.seriesId, ratio);
-  }
-  return ratios;
-}
-
-function applyCPURatios(sample: RuntimeTrendSample, ratios: ReadonlyMap<string, number>): void {
-  const cpu = sample.cpuCandidates.flatMap((candidate): RuntimeTrendTarget[] => {
-    const ratio = ratios.get(candidate.seriesId);
-    return ratio === undefined ? [] : [{
-      seriesId: candidate.seriesId,
-      label: candidate.label,
-      cpuRatio: ratio,
-    }];
-  }).sort((left, right) => (right.cpuRatio ?? 0) - (left.cpuRatio ?? 0))
-    .slice(0, RUNTIME_TREND_SERIES_LIMIT);
-  sample.targets = cpu;
 }
 
 function tokenRate(
@@ -253,17 +35,15 @@ function tokenRate(
     const prior = previousTotals.get(current.sessionId);
     return prior ? [[prior, current]] : [];
   });
-  // A total held from an earlier report is not a measurement at this sample.
-  const measured = (current: RuntimeTrendTokenTotal) => !current.held;
   const inputRates = pairs.map(([prior, current]) => {
     const elapsedMinutes = (current.sampledAt - prior.sampledAt) / 60_000;
     const delta = current.inputTokens - prior.inputTokens;
-    return measured(current) && elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
+    return elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
   });
   const outputRates = pairs.map(([prior, current]) => {
     const elapsedMinutes = (current.sampledAt - prior.sampledAt) / 60_000;
     const delta = current.outputTokens - prior.outputTokens;
-    return measured(current) && elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
+    return elapsedMinutes > 0 && delta >= 0 ? delta / elapsedMinutes : null;
   });
   const inputRate = inputRates.length > 0 && inputRates.every((rate) => rate !== null)
     ? inputRates.reduce<number>((total, rate) => total + (rate ?? 0), 0)
@@ -284,46 +64,4 @@ export function deriveTokenThroughput(samples: readonly RuntimeTrendSample[]): R
     if (previous) Object.assign(current, tokenRate(previous, sample));
     return current;
   });
-}
-
-export function appendRuntimeTrendSample(
-  current: readonly RuntimeTrendSample[],
-  snapshot: RuntimeDashboardSnapshot,
-  windowMs = RUNTIME_TREND_WINDOW_MS,
-  maximum = RUNTIME_TREND_MAX_SAMPLES,
-): RuntimeTrendSample[] {
-  const next = runtimeTrendSample(snapshot);
-  const retained = current
-    .filter((sample) => sample.sampledAt !== next.sampledAt)
-    .filter((sample) => sample.sampledAt >= next.sampledAt - windowMs && sample.sampledAt <= next.sampledAt)
-    .sort((left, right) => left.sampledAt - right.sampledAt)
-    .slice(-(maximum - 1));
-  const previous = retained.at(-1);
-  if (previous) {
-    carryTokenTotals(previous, next, snapshot);
-    Object.assign(next, tokenRate(previous, next));
-    applyCPURatios(next, cpuRatios(previous, next));
-  }
-  return [
-    ...retained.map((sample) => ({ ...sample, cpuCandidates: [], tokenTotals: [] })),
-    next,
-  ].slice(-maximum);
-}
-
-export function tokenThroughput(samples: readonly RuntimeTrendSample[]): TokenThroughputSample[] {
-  return samples.map((sample) => ({
-    sampledAt: sample.sampledAt,
-    inputPerMinute: sample.inputTokensPerMinute,
-    outputPerMinute: sample.outputTokensPerMinute,
-  }));
-}
-
-export function runtimeTrendRange(
-  samples: readonly RuntimeTrendSample[],
-  range: RuntimeTrendRange,
-): RuntimeTrendSample[] {
-  const newest = samples.at(-1)?.sampledAt;
-  if (newest === undefined) return [];
-  const start = newest - range;
-  return samples.filter((sample) => sample.sampledAt >= start && sample.sampledAt <= newest);
 }
