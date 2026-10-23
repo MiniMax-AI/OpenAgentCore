@@ -8,7 +8,7 @@ import (
 )
 
 // Service replaces, removes and resolves deployment defaults. Storage seals
-// the complete bundle, key included, to its Harness.
+// the provider key to its Harness; every other field is stored plainly.
 type Service struct {
 	storage Storage
 }
@@ -30,7 +30,7 @@ func (s *Service) Replace(ctx context.Context, replacement Replacement) (Configu
 		return Configuration{}, err
 	}
 	view := configuration.SafeView()
-	return s.storage.Replace(ctx, Record{Harness: replacement.Harness, Provider: *view.ModelProvider, Model: view.Model, HarnessConfig: view.HarnessConfig, Configuration: configuration})
+	return s.storage.Replace(ctx, Record{Harness: replacement.Harness, Provider: *view.ModelProvider, Model: view.Model, HarnessConfig: view.HarnessConfig, APIKey: configuration.ModelProvider.APIKey})
 }
 
 // Delete removes the Harness's default. It is idempotent. Sessions that

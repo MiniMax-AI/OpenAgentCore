@@ -42,7 +42,7 @@ type DeploymentModelProvider struct {
 	BaseUrl         string             `json:"base_url"`
 	ContextWindow   int32              `json:"context_window"`
 	MaxOutputTokens int32              `json:"max_output_tokens"`
-	EncryptedConfig []byte             `json:"encrypted_config"`
+	EncryptedApiKey []byte             `json:"encrypted_api_key"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Revision        pgtype.UUID        `json:"revision"`
 	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
