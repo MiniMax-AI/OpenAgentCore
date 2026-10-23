@@ -59,16 +59,3 @@ func Load(profile string) (Profile, error) {
 	}
 	return p, nil
 }
-
-// Delete removes the auth.json for a profile. Idempotent — missing
-// file is not an error.
-func Delete(profile string) error {
-	authPath, err := paths.AuthFile(profile)
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(authPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("auth: delete: %w", err)
-	}
-	return nil
-}

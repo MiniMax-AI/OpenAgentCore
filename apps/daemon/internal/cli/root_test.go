@@ -69,7 +69,6 @@ func TestSubcommandsAreRegistered(t *testing.T) {
 		"status":           false,
 		"stop":             false,
 		"logs":             false,
-		"logout":           false,
 		"version":          false,
 	}
 	for _, c := range commands {

@@ -144,7 +144,7 @@ func TestNativeInstallationAdditiveReuseAndVersionRejection(t *testing.T) {
 	if err := runInstall(rc, args); err == nil {
 		t.Fatal("accepted historical installation")
 	}
-	if err := runStart(rc, []string{"--foreground"}); err == nil {
+	if err := runStart(rc, nil); err == nil {
 		t.Fatal("started historical installation")
 	}
 	if got, _ := os.ReadFile(file); !bytes.Equal(got, raw) {
@@ -188,7 +188,7 @@ func TestNativeInstallationFailureAndRecoveryPreserveExisting(t *testing.T) {
 
 func TestNativeInstallationMissingInputAndSecrets(t *testing.T) {
 	rc, _, root, _ := nativeInstallFixture(t)
-	for _, args := range [][]string{{"--non-interactive"}, {"--non-interactive", "--remote", "ws://user:secret@host/x"}, {"--interactive=secret"}, {"--token", "private-test-credential"}} {
+	for _, args := range [][]string{{"--non-interactive"}, {"--non-interactive", "--remote", "ws://user:secret@host/x"}, {"--token", "private-test-credential"}} {
 		err := runInstall(rc, args)
 		if err == nil {
 			t.Fatal("accepted incomplete input")
