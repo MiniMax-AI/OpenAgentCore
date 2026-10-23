@@ -118,6 +118,7 @@ The [Session diagnostics](./session-diagnostics.md) routes return these categori
 | `server_error` | Native server failure classification |
 | `invalid_request` | Native request rejection |
 | `resource_not_found` | Native resource/model not found |
+| `request_timeout` | Native provider timeout classification |
 | `context_length_exceeded` | Native context limit classification |
 | `cyber_policy` | Native cyber policy rejection |
 | `connection_failed` | Native connection failure; params contain `http_status`, an integer in 100–599 or null |

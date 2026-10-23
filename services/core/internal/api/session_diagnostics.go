@@ -19,7 +19,7 @@ const (
 )
 
 type DiagnosticFailure struct {
-	Code     string           `json:"code" binding:"required" enums:"harness_error,model_provider_required,runtime_unavailable,runtime_disconnected,runtime_preparation_failed,execution_interrupted,delivery_unconfirmed,input_rejected,executor_protocol_error,core_storage_failed,internal_error,environment_connection_timeout,environment_unavailable,environment_provisioning_failed,authentication_error,rate_limit_exceeded,usage_limit_exceeded,server_overloaded,server_error,invalid_request,resource_not_found,context_length_exceeded,cyber_policy,connection_failed"`
+	Code     string           `json:"code" binding:"required" enums:"harness_error,model_provider_required,runtime_unavailable,runtime_disconnected,runtime_preparation_failed,execution_interrupted,delivery_unconfirmed,input_rejected,executor_protocol_error,core_storage_failed,internal_error,environment_connection_timeout,environment_unavailable,environment_provisioning_failed,authentication_error,rate_limit_exceeded,usage_limit_exceeded,server_overloaded,server_error,invalid_request,resource_not_found,request_timeout,context_length_exceeded,cyber_policy,connection_failed"`
 	Params   CoreErrorDetails `json:"params" swaggertype:"object" binding:"required"`
 	FailedAt *time.Time       `json:"failed_at" extensions:"x-nullable" binding:"required"`
 }

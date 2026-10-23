@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 1532078430d8e8a5570e652db60a99b282d57897ca6f3360cd0b1a94a948d02d
+source_hash: fbdf667a44da9eb95dae54ca7fc54129d7f8d1b50e1d7e864f00a8ce1794860b
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -120,6 +120,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `server_error` | 原生服务器故障分类 |
 | `invalid_request` | 原生请求被拒绝 |
 | `resource_not_found` | 未找到原生资源或模型 |
+| `request_timeout` | 原生提供商超时分类 |
 | `context_length_exceeded` | 原生上下文限制分类 |
 | `cyber_policy` | 原生网络安全策略拒绝 |
 | `connection_failed` | 原生连接故障；params 包含 `http_status`，其值为 100–599 范围内的整数或 null |

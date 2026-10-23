@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 266d585b72187dfcb7d9b3b328b9a941079bc26495f4e4b991d936f604229bf1
+source_hash: 1ceb0a7799a57aa1e53b6354b0c4c6acd1002e328430c7a98dd0713f9f7a334b
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -143,7 +143,7 @@ PUT 要求提供 `model` 和完整的 `model_provider`；`harness_config` 默认
 Harness 和默认模型读取结果包含可空的 `last_used_at`、`last_error_code` 和 `last_error_at`；即使配置包未发生变化，PUT 也会重置这三项。
 
 - 只有当 Session 冻结的正是当前默认修订版时，已完成的根 Turn 才会记录使用情况。
-- 失败的根 Turn 仅记录原生提供商错误码 `authentication_error`、`connection_failed`、`rate_limit_exceeded`、`usage_limit_exceeded`、`server_overloaded`、`server_error`、`resource_not_found` 和 `invalid_request`。输入策略、Core 或 Runtime 导致的失败，以及 cancelled 和 waiting 结果均不计入。
+- 失败的根 Turn 仅记录原生提供商错误码 `authentication_error`、`connection_failed`、`rate_limit_exceeded`、`usage_limit_exceeded`、`server_overloaded`、`server_error`、`resource_not_found`、`request_timeout` 和 `invalid_request`。输入策略、Core 或 Runtime 导致的失败，以及 cancelled 和 waiting 结果均不计入。
 - 成功不会清除较早的错误；比较时间戳只是一种显示约定。
 - 无论错误码是什么，错误观测都会节流 30 秒，常规成功观测也会节流 30 秒；错误后的首次成功会立即记录恢复。对于未变化的修订版，这意味着数据库时间的任意 30 秒窗口内最多允许三次有效写入。
 - 每次观测的预算为 1 秒，包括获取连接池资源和行锁的时间，并且无法更改已提交的 Turn。崩溃、失败或节流都可能导致最新观测缺失。

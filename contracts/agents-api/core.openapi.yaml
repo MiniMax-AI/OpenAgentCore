@@ -373,6 +373,7 @@ definitions:
           - server_error
           - invalid_request
           - resource_not_found
+          - request_timeout
           - context_length_exceeded
           - cyber_policy
           - connection_failed
@@ -831,6 +832,7 @@ definitions:
           - server_error
           - invalid_request
           - resource_not_found
+          - request_timeout
           - context_length_exceeded
           - cyber_policy
           - connection_failed
@@ -1746,6 +1748,7 @@ definitions:
       - server_overloaded
       - server_error
       - resource_not_found
+      - request_timeout
       - invalid_request
     type: string
     x-enum-varnames:
@@ -1756,6 +1759,7 @@ definitions:
       - ProviderServerOverloaded
       - ProviderServerError
       - ProviderResourceNotFound
+      - ProviderRequestTimeout
       - ProviderInvalidRequest
   modelprovider.Protocol:
     enum:
