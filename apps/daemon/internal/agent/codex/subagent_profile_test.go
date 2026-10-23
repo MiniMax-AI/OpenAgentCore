@@ -74,3 +74,20 @@ func TestSubagentItemSnapshotSkipsUnmappedItemTypes(t *testing.T) {
 		}
 	}
 }
+
+func TestSubagentReasoningIsReportedOnlyWhenRequestedWithText(t *testing.T) {
+	for _, test := range []struct {
+		item      string
+		requested bool
+		want      string
+	}{
+		{`{"type":"reasoning","id":"r1","summary":["plan","next"]}`, true, `{"status":"completed","summary":[{"text":"plan","type":"summary_text"},{"text":"next","type":"summary_text"}]}`},
+		{`{"type":"reasoning","id":"r1","summary":["plan"]}`, false, ""},
+		{`{"type":"reasoning","id":"r1"}`, true, ""},
+	} {
+		kind, body, _, err := subagentItemSnapshot(json.RawMessage(test.item), "completed", test.requested)
+		if err != nil || string(body) != test.want || (kind == "") != (test.want == "") {
+			t.Fatal(test.item, test.requested, kind, string(body), err)
+		}
+	}
+}

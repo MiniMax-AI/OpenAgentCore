@@ -2,6 +2,7 @@ package items
 
 import (
 	"reflect"
+	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
@@ -60,29 +61,47 @@ func Events(change Change, outputIndex *int32) []v1.SessionEvent {
 		return events
 	}
 	if item.Type == "reasoning" {
-		// The summary is one part, framed like assistant text.
-		text, zero := summaryText(item), int64(0)
-		event := base
-		event.ItemID, event.SummaryIndex = item.ID, &zero
-		if text != "" && summaryText(previous) == "" {
-			empty := ""
-			event.Part = &v1.ItemContent{Type: "summary_text", Text: &empty}
-			emit("reasoning_summary_part.added", event)
-			event.Part = nil
-			if delta == nil {
-				delta = &text
+		// Each summary part is framed like assistant text. A part is done once
+		// a later part starts or the Item ends.
+		done := func(summary []v1.SummaryText, status string) int {
+			if status == "in_progress" && len(summary) > 0 {
+				return len(summary) - 1
 			}
+			return len(summary)
 		}
-		if delta != nil && *delta != "" {
-			event.Delta = delta
-			emit("reasoning_summary_text.delta", event)
-			event.Delta = nil
+		closed := 0
+		if previous.ID != "" {
+			closed = done(previous.Summary, previous.Status)
 		}
-		if item.Status != "in_progress" && text != "" {
-			event.Text = &text
-			emit("reasoning_summary_text.done", event)
-			event.Text, event.Part = nil, &v1.ItemContent{Type: "summary_text", Text: &text}
-			emit("reasoning_summary_part.done", event)
+		for i, part := range item.Summary {
+			index, before := int64(i), ""
+			event := base
+			event.ItemID, event.SummaryIndex = item.ID, &index
+			if i < len(previous.Summary) {
+				before = previous.Summary[i].Text
+			} else {
+				empty := ""
+				event.Part = &v1.ItemContent{Type: "summary_text", Text: &empty}
+				emit("reasoning_summary_part.added", event)
+				event.Part = nil
+			}
+			// A child snapshot that rewrote earlier text reports it only when done.
+			if fragment, ok := strings.CutPrefix(part.Text, before); ok && fragment != "" {
+				event.Delta = &fragment
+				emit("reasoning_summary_text.delta", event)
+				event.Delta = nil
+			}
+			if i >= closed && i < done(item.Summary, item.Status) {
+				text := part.Text
+				event.Text = &text
+				emit("reasoning_summary_text.done", event)
+				event.Text, event.Part = nil, &v1.ItemContent{Type: "summary_text", Text: &text}
+				if item.Status == "incomplete" {
+					status := "incomplete"
+					event.Status = &status
+				}
+				emit("reasoning_summary_part.done", event)
+			}
 		}
 	}
 	if item.Type == "command_execution" && delta != nil {

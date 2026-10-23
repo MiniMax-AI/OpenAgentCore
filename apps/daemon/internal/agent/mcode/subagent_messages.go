@@ -34,11 +34,6 @@ func (s *Session) projectSubagentMessages(session nativeSubagentSession, turn na
 		if message.Role != "assistant" {
 			continue
 		}
-		if message.Data.Thinking != "" {
-			if err := emit(message.ID+":reasoning", "reasoning", map[string]any{"status": "completed", "summary": []map[string]string{{"type": "summary_text", "text": message.Data.Thinking}}}); err != nil {
-				return err
-			}
-		}
 		if message.Data.Text != "" {
 			text := message.Data.Text
 			if err := emit(message.ID, proto.TypeOutputMessage, proto.OutputMessagePayload{ID: message.ID, Status: "completed", Text: &text}); err != nil {

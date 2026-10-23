@@ -14,6 +14,8 @@ type Update struct {
 	Item               v1.Item
 	AppendText         bool
 	CommandOutputDelta *string
+	// SummaryIndex is the reasoning summary part an appended fragment extends.
+	SummaryIndex int
 	// An aggregate answer is used only when no native message identity was recorded.
 	AggregateFinal bool
 }
@@ -67,14 +69,14 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 		if err := json.Unmarshal(raw, &p); err != nil {
 			return nil, err
 		}
-		if p.ID == "" || (p.Status != "in_progress" && p.Status != "completed" && p.Status != "incomplete") {
+		if !p.Valid() {
 			return nil, errors.New("invalid reasoning observation")
 		}
 		item := v1.Item{ID: Identity(turn, "reasoning:"+p.ID), TurnID: turn, Type: "reasoning", Status: p.Status}
 		if p.Delta != "" {
 			item.Summary = []v1.SummaryText{{Type: "summary_text", Text: p.Delta}}
 		}
-		return []Update{{Item: item, AppendText: true}}, nil
+		return []Update{{Item: item, AppendText: true, SummaryIndex: p.Index}}, nil
 	case proto.TypeDone, "execution_failed":
 		// Done may contain adapter diagnostics. Only a successful Turn
 		// confirms aggregate answer text; failures retain observed message deltas.
@@ -112,13 +114,9 @@ func Project(turn, kind string, sequence int64, raw json.RawMessage) ([]Update, 
 	}
 }
 
-// summaryText is the text of a reasoning Item's single summary part.
-func summaryText(item v1.Item) string {
-	if len(item.Summary) == 0 {
-		return ""
-	}
-	return item.Summary[0].Text
-}
+// Reasoning parts advance in order: a fragment extends the current part or
+// starts the next one.
+var errReasoningPart = errors.New("reasoning part out of order")
 
 func Merge(update Update, previous v1.Item) (v1.Item, error) {
 	if update.CommandOutputDelta != nil {
@@ -126,6 +124,9 @@ func Merge(update Update, previous v1.Item) (v1.Item, error) {
 	}
 	item := update.Item
 	if previous.ID == "" {
+		if update.SummaryIndex != 0 {
+			return previous, errReasoningPart
+		}
 		return item, nil
 	}
 	if previous.Status != "in_progress" && !(update.AggregateFinal && previous.Status == "incomplete") {
@@ -139,9 +140,17 @@ func Merge(update Update, previous v1.Item) (v1.Item, error) {
 	}
 	if update.AppendText {
 		if item.Type == "reasoning" {
-			if text := summaryText(previous) + summaryText(item); text != "" {
-				item.Summary = []v1.SummaryText{{Type: "summary_text", Text: text}}
+			parts, index := slices.Clone(previous.Summary), update.SummaryIndex
+			switch {
+			case len(item.Summary) == 0:
+			case index == len(parts):
+				parts = append(parts, item.Summary[0])
+			case index == len(parts)-1:
+				parts[index].Text += item.Summary[0].Text
+			default:
+				return previous, errReasoningPart
 			}
+			item.Summary = parts
 			return item, nil
 		}
 		text := *previous.Content[0].Text + *item.Content[0].Text

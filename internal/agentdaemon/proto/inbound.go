@@ -64,12 +64,19 @@ type OutputMessagePayload struct {
 	Text   *string `json:"text,omitempty"`
 }
 
-// ReasoningPayload reports one native reasoning item. Delta is the next text
-// fragment, empty on a frame that only changes Status.
+// ReasoningPayload reports one native reasoning item. An in_progress frame
+// carries the next text fragment of native part Index, which is the current
+// part or the next one; the completed frame carries no text.
 type ReasoningPayload struct {
 	ID     string `json:"id"`
 	Status string `json:"status"`
+	Index  int    `json:"index,omitempty"`
 	Delta  string `json:"delta,omitempty"`
+}
+
+// Valid reports whether p is a well-formed reasoning frame.
+func (p ReasoningPayload) Valid() bool {
+	return p.ID != "" && p.Index >= 0 && (p.Status == "in_progress" || (p.Status == "completed" && p.Delta == ""))
 }
 
 // ToolCallPayload carries a tool invocation event. Stage is "before"

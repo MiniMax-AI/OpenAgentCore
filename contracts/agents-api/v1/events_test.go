@@ -60,6 +60,8 @@ func TestSessionEventWireFields(t *testing.T) {
 		{SessionEvent{Type: "agent.session.environment.failed", EventID: "event", Environment: &SessionEnvironmentState{ID: "environment", Type: "openai_hosted", Status: "failed",
 			Error: &StreamError{Type: "environment_error", Code: "environment_connection_failed", Message: "The environment failed to connect."}}},
 			`{"type":"agent.session.environment.failed","event_id":"event","environment":{"id":"environment","type":"openai_hosted","status":"failed","error":{"code":"environment_connection_failed","type":"environment_error","message":"The environment failed to connect."}},"turn_id":null}`},
+		{SessionEvent{Type: "agent.session.turn.reasoning_summary_part.done", EventID: "event", SessionID: "session", TurnID: "turn", ItemID: "item", OutputIndex: new(int32), SummaryIndex: new(int64), Part: &ItemContent{Type: "summary_text", Text: new(string)}},
+			`{"type":"agent.session.turn.reasoning_summary_part.done","event_id":"event","session_id":"session","turn_id":"turn","item_id":"item","output_index":0,"part":{"type":"summary_text","text":""},"summary_index":0,"status":null}`},
 		{SessionEvent{Type: "agent.session.subagent.closed", EventID: "event", SessionID: "session", Subagent: &Subagent{ID: "subagent", Object: "agent.session.subagent", SessionID: "session", ParentAgentID: "root", Status: "closed"}},
 			`{"subagent":{"id":"subagent","object":"agent.session.subagent","session_id":"session","parent_agent_id":"root","opened_at":0,"closed_at":null,"name":null,"instructions":null,"status":"closed"},"type":"agent.session.subagent.closed","event_id":"event"}`},
 	} {

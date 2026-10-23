@@ -73,10 +73,6 @@ func Observe(kind string, update Update, stored Stored) (Change, bool, error) {
 	switch kind {
 	case proto.TypeDelta:
 		change.Delta = update.Item.Content[0].Text
-	case proto.TypeReasoning:
-		if text := summaryText(update.Item); text != "" {
-			change.Delta = &text
-		}
 	case proto.TypeCommandOutput:
 		change.Delta = update.CommandOutputDelta
 	}

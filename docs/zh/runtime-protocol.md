@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 033ea14b34c596c855004a3ec1ee2e9b675c13ed962bfcc2e5c01d76e5fff4bd
+source_hash: f9a66794bab8aca97b88712a67451271ea96d825f35b20288f94c98d42523f1a
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -122,7 +122,7 @@ Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，�
 
 `function_call_withdrawn` 携带某个 `function_call` 的 `call_id`、`native_id` 和 `turn_id`，表示原生 Harness 永远不会为它应用结果，例如 Codex Subagent 的 Turn 已结束且原生丢弃了其请求。Core 不再要求回答该调用，并拒绝之后为它提交的结果。adapter 以 `not_pending` 确认已在传输中的 `function_result`，Core 随后等待撤回或 Turn 结束，既不让 Turn 失败，也不重发该结果。
 
-`reasoning` frame 按原生 `id` 报告一个原生推理 item。状态为 `in_progress` 的 frame 在 `delta` 中携带下一段文本，状态为 `completed` 或 `incomplete` 的 frame 结束该 item 且不带文本。文本是 Harness 产生的原生推理摘要，没有摘要时是其原生推理文本。只有 `execution_controls` 设置了推理摘要时，适配器才发送 `reasoning` frame，Run 及其 Subagent 都遵循此规则。
+`reasoning` frame 按原生 `id` 报告 Run 的一个原生推理 item。状态为 `in_progress` 的 frame 在 `delta` 中携带原生部分 `index` 的下一段文本，`index` 从 0 开始，取当前部分或下一个部分；状态为 `completed` 的 frame 结束该 item 且不带文本。适配器不上报没有文本的推理，并且只有 `execution_controls` 设置了推理摘要时，才发送 `reasoning` frame 或 `reasoning` Subagent Item 快照。文本内容见 [OpenAI 兼容性](../../contracts/agents-api/zh/index.md#differences-from-openai)。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 

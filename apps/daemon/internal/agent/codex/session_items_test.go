@@ -92,7 +92,7 @@ func TestReasoningIsReportedOnlyWhenRequested(t *testing.T) {
 			}
 		}
 		want := []proto.ReasoningPayload{
-			{ID: "r1", Status: "in_progress", Delta: "plan "}, {ID: "r1", Status: "in_progress", Delta: "\n\nnext"}, {ID: "r1", Status: "completed"},
+			{ID: "r1", Status: "in_progress", Delta: "plan "}, {ID: "r1", Status: "in_progress", Index: 1, Delta: "next"}, {ID: "r1", Status: "completed"},
 			{ID: "r2", Status: "in_progress", Delta: "whole"}, {ID: "r2", Status: "completed"},
 		}
 		if !requested {

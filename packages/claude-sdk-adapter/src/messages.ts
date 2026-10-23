@@ -11,7 +11,8 @@ type ActiveMessage = {
   block?: number;
   observed: boolean;
   failed: boolean;
-  thinking: Set<number>;
+  // Thinking blocks in progress, and whether each has reported text.
+  thinking: Map<number, boolean>;
 };
 
 export class MessageObserver {
@@ -39,7 +40,7 @@ export class MessageObserver {
     const event = message.event;
     if (event.type === "message_start") {
       if (!event.message.id) throw new Error("missing native message identity");
-      this.active = { id: event.message.id, blocks: new Map(), observed: false, failed: false, thinking: new Set() };
+      this.active = { id: event.message.id, blocks: new Map(), observed: false, failed: false, thinking: new Map() };
       return [];
     }
     const active = this.active;
@@ -47,9 +48,10 @@ export class MessageObserver {
     if (event.type === "content_block_start") {
       active.block = event.index;
       if (event.content_block.type === "thinking" && this.reasoning) {
-        active.thinking.add(event.index);
-        const id = `${active.id}:${event.index}`;
-        return [{ type: "reasoning", reasoning: { id, status: "in_progress", ...(event.content_block.thinking ? { delta: event.content_block.thinking } : {}) } }];
+        // A block reports nothing until its first text, so one without text is not reported.
+        const delta = event.content_block.thinking;
+        active.thinking.set(event.index, !!delta);
+        return delta ? [{ type: "reasoning", reasoning: { id: `${active.id}:${event.index}`, status: "in_progress", delta } }] : [];
       }
       if (event.content_block.type !== "text") return [];
       active.blocks.set(event.index, event.content_block.text);
@@ -68,11 +70,15 @@ export class MessageObserver {
       return event.delta.text ? [{ type: "delta", item_id: active.id, delta: event.delta.text }] : [];
     }
     if (event.type === "content_block_delta" && event.delta.type === "thinking_delta" && active.thinking.has(event.index)) {
-      return event.delta.thinking ? [{ type: "reasoning", reasoning: { id: `${active.id}:${event.index}`, status: "in_progress", delta: event.delta.thinking } }] : [];
+      if (!event.delta.thinking) return [];
+      active.thinking.set(event.index, true);
+      return [{ type: "reasoning", reasoning: { id: `${active.id}:${event.index}`, status: "in_progress", delta: event.delta.thinking } }];
     }
     if (event.type === "content_block_stop") {
       active.block = undefined;
-      if (active.thinking.delete(event.index)) return [{ type: "reasoning", reasoning: { id: `${active.id}:${event.index}`, status: "completed" } }];
+      const reported = active.thinking.get(event.index);
+      active.thinking.delete(event.index);
+      if (reported) return [{ type: "reasoning", reasoning: { id: `${active.id}:${event.index}`, status: "completed" } }];
     }
     if (event.type === "message_stop") {
       this.active = undefined;

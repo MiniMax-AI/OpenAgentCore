@@ -298,10 +298,15 @@ func subagentItemSnapshot(raw json.RawMessage, turnStatus string, reasoningSumma
 		if json.Unmarshal(raw, &source) != nil {
 			return "", nil, "", errors.New("codex: invalid child reasoning")
 		}
-		parts := nativeReasoningParts(source)
-		summary := make([]map[string]string, 0, len(parts))
-		for _, text := range parts {
-			summary = append(summary, map[string]string{"type": "summary_text", "text": text})
+		var summary []map[string]string
+		for _, text := range nativeReasoningParts(source) {
+			if text != "" {
+				summary = append(summary, map[string]string{"type": "summary_text", "text": text})
+			}
+		}
+		if len(summary) == 0 {
+			// A reasoning item with no text is not reported, as in the root projection.
+			return "", nil, "", nil
 		}
 		status := "in_progress"
 		if turnStatus == "completed" {

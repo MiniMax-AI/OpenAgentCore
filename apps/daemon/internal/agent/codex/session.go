@@ -145,8 +145,8 @@ func (s *Session) onTurnStarted(raw json.RawMessage) {
 }
 
 // onReasoningDelta streams the first native channel a reasoning item delivers:
-// its summary, or the raw reasoning text of a model that has no summary. A new
-// part of the same channel starts a new paragraph.
+// its summary, or the raw reasoning text of a model that has no summary. Each
+// native part is reported as its own part.
 func (s *Session) onReasoningDelta(channel string, raw json.RawMessage) {
 	var p ReasoningDeltaNotification
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -155,20 +155,20 @@ func (s *Session) onReasoningDelta(channel string, raw json.RawMessage) {
 	if !s.reasoningSummary || !s.isRootTurn(p.ThreadID, p.TurnID) || p.Delta == "" || p.ItemID == "" {
 		return
 	}
-	index := p.ContentIndex
+	native := p.ContentIndex
 	if channel == "summary" {
-		index = p.SummaryIndex
+		native = p.SummaryIndex
 	}
 	stream, started := s.bufs.Reasoning[p.ItemID]
 	if started && stream.channel != channel {
 		return
 	}
-	delta := p.Delta
-	if started && stream.index != index {
-		delta = "\n\n" + delta
+	if started && stream.native != native {
+		stream.part++
 	}
-	s.bufs.Reasoning[p.ItemID] = reasoningStream{channel: channel, index: index}
-	s.sendReasoning(p.ItemID, "in_progress", delta)
+	stream.channel, stream.native = channel, native
+	s.bufs.Reasoning[p.ItemID] = stream
+	s.sendReasoning(p.ItemID, "in_progress", stream.part, p.Delta)
 }
 
 // completeReasoning ends a reasoning item. An item that streamed nothing is
@@ -180,17 +180,22 @@ func (s *Session) completeReasoning(item ThreadItem) {
 	_, streamed := s.bufs.Reasoning[item.ID]
 	delete(s.bufs.Reasoning, item.ID)
 	if !streamed {
-		body := strings.Join(nativeReasoningParts(item), "\n\n")
-		if body == "" {
+		part := 0
+		for _, text := range nativeReasoningParts(item) {
+			if text != "" {
+				s.sendReasoning(item.ID, "in_progress", part, text)
+				part++
+			}
+		}
+		if part == 0 {
 			return
 		}
-		s.sendReasoning(item.ID, "in_progress", body)
 	}
-	s.sendReasoning(item.ID, "completed", "")
+	s.sendReasoning(item.ID, "completed", 0, "")
 }
 
-func (s *Session) sendReasoning(id, status, delta string) {
-	env, err := proto.NewEnvelope(proto.TypeReasoning, s.runID, proto.ReasoningPayload{ID: id, Status: status, Delta: delta})
+func (s *Session) sendReasoning(id, status string, part int, delta string) {
+	env, err := proto.NewEnvelope(proto.TypeReasoning, s.runID, proto.ReasoningPayload{ID: id, Status: status, Index: part, Delta: delta})
 	if err == nil {
 		s.trySend(env)
 	}

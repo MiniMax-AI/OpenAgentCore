@@ -124,8 +124,7 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 			emit(proto.TypeOutputMessage, message)
 		case "reasoning":
 			reasoning := event.Reasoning
-			if !start.ReasoningSummary || reasoning == nil || reasoning.ID == "" ||
-				(reasoning.Status != "in_progress" && reasoning.Status != "completed") {
+			if !start.ReasoningSummary || reasoning == nil || !reasoning.Valid() {
 				failure = fmt.Errorf("claudesdk: invalid reasoning observation")
 				s.invalidate()
 				break

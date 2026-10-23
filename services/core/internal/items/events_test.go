@@ -2,6 +2,7 @@ package items
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -115,13 +116,14 @@ func TestEventsAddAssistantTextEmptyAndInProgress(t *testing.T) {
 	}
 }
 
-func TestReasoningObservationsBecomeOneItemWithOfficialEvents(t *testing.T) {
+func TestReasoningPartsBecomeOneItemWithOfficialEvents(t *testing.T) {
 	index := int32(0)
 	var stored v1.Item
 	var kinds, deltas []string
 	for _, frame := range []proto.ReasoningPayload{
 		{ID: "r1", Status: "in_progress", Delta: "think "},
 		{ID: "r1", Status: "in_progress", Delta: "hard"},
+		{ID: "r1", Status: "in_progress", Index: 1, Delta: "then act"},
 		{ID: "r1", Status: "completed"},
 	} {
 		raw, _ := json.Marshal(frame)
@@ -134,34 +136,40 @@ func TestReasoningObservationsBecomeOneItemWithOfficialEvents(t *testing.T) {
 			t.Fatalf("observe %+v: %v %v", frame, ok, err)
 		}
 		for _, event := range Events(change, &index) {
-			kinds = append(kinds, event.Type[len("agent.session.turn."):])
+			kind := event.Type[len("agent.session.turn."):]
+			if event.SummaryIndex != nil {
+				kind += fmt.Sprint(*event.SummaryIndex)
+			}
+			kinds = append(kinds, kind)
 			if event.Delta != nil {
 				deltas = append(deltas, *event.Delta)
-			}
-			if event.Type == "agent.session.turn.reasoning_summary_text.done" && *event.Text != "think hard" {
-				t.Fatalf("done text %q", *event.Text)
 			}
 		}
 		stored = change.Item
 	}
-	wantKinds := []string{"item.added", "reasoning_summary_part.added", "reasoning_summary_text.delta", "reasoning_summary_text.delta", "reasoning_summary_text.done", "reasoning_summary_part.done", "item.done"}
-	if !reflect.DeepEqual(kinds, wantKinds) || !reflect.DeepEqual(deltas, []string{"think ", "hard"}) {
+	wantKinds := []string{"item.added", "reasoning_summary_part.added0", "reasoning_summary_text.delta0", "reasoning_summary_text.delta0",
+		"reasoning_summary_text.done0", "reasoning_summary_part.done0", "reasoning_summary_part.added1", "reasoning_summary_text.delta1",
+		"reasoning_summary_text.done1", "reasoning_summary_part.done1", "item.done"}
+	if !reflect.DeepEqual(kinds, wantKinds) || !reflect.DeepEqual(deltas, []string{"think ", "hard", "then act"}) {
 		t.Fatalf("events %q deltas %q", kinds, deltas)
 	}
-	if stored.Type != "reasoning" || stored.Status != "completed" || len(stored.Summary) != 1 || stored.Summary[0].Text != "think hard" {
+	want := []v1.SummaryText{{Type: "summary_text", Text: "think hard"}, {Type: "summary_text", Text: "then act"}}
+	if stored.Type != "reasoning" || stored.Status != "completed" || !reflect.DeepEqual(stored.Summary, want) {
 		t.Fatalf("item %+v", stored)
 	}
 }
 
 func TestOpenReasoningEndsIncompleteWithItsText(t *testing.T) {
-	text := "partial"
-	open := v1.Item{ID: "item", TurnID: testTurn, Type: "reasoning", Status: "in_progress", Summary: []v1.SummaryText{{Type: "summary_text", Text: text}}}
+	open := v1.Item{ID: "item", TurnID: testTurn, Type: "reasoning", Status: "in_progress", Summary: []v1.SummaryText{{Type: "summary_text", Text: "partial"}}}
 	ended := open
 	ended.Status = "incomplete"
 	index := int32(0)
 	var kinds []string
 	for _, event := range Events(Change{Previous: open, Item: ended}, &index) {
 		kinds = append(kinds, event.Type[len("agent.session.turn."):])
+		if event.Type == "agent.session.turn.reasoning_summary_part.done" && (event.Status == nil || *event.Status != "incomplete" || *event.Part.Text != "partial") {
+			t.Fatalf("part done %+v", event)
+		}
 	}
 	if want := []string{"reasoning_summary_text.done", "reasoning_summary_part.done", "item.done"}; !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("events %q, want %q", kinds, want)

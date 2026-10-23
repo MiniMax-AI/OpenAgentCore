@@ -16,11 +16,11 @@ type ItemBuffers struct {
 	AgentText map[string]string
 }
 
-// reasoningStream is the native channel a reasoning item streams and the last
-// part index seen on it.
+// reasoningStream is the native channel a reasoning item streams, the last
+// native part index seen on it and the reported part it maps to.
 type reasoningStream struct {
-	channel string
-	index   int
+	channel      string
+	native, part int
 }
 
 // NewItemBuffers returns an empty buffer set.

@@ -35,9 +35,8 @@ type nativeSubagentMessage struct {
 	ID, TurnID, Role string
 	CreatedAt        int64
 	Data             struct {
-		Text     string               `json:"msg_content"`
-		Thinking string               `json:"thinking_content"`
-		Tools    []nativeSubagentTool `json:"tool_calls"`
+		Text  string               `json:"msg_content"`
+		Tools []nativeSubagentTool `json:"tool_calls"`
 	}
 }
 type nativeSubagentTool struct {
