@@ -29,6 +29,7 @@ func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
 // and Environment configuration checks they perform.
 func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 	var cursor *sessions.CursorError
+	var unknownCall *sessions.UnknownFunctionCallError
 	switch {
 	case errors.Is(err, projects.ErrArchived):
 		// Executor credential management checks the Project in its own
@@ -61,8 +62,9 @@ func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, sessions.ErrNotIdle):
 		// Observed official status, type, code, null param and message.
 		writeError(w, http.StatusConflict, "conflict_error", "session must be durably idle or failed without required actions before deletion")
-	case errors.Is(err, sessions.ErrUnknownFunctionCall):
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "Unknown pending tool call.")
+	case errors.As(err, &unknownCall):
+		// The official SDK recognizes a lost race by this exact message.
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "Unknown pending tool call: "+unknownCall.CallID)
 	case errors.Is(err, sessions.ErrFunctionCallTurnMismatch):
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "The tool call belongs to a different Turn.")
 	case errors.Is(err, sessions.ErrFunctionResultConflict):

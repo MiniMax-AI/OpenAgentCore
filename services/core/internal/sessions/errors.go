@@ -78,3 +78,12 @@ var (
 	// Session Artifacts.
 	ErrArtifactCursor = &CursorError{Message: "after is not a valid artifact ID"}
 )
+
+// UnknownFunctionCallError is ErrUnknownFunctionCall with the rejected call_id.
+type UnknownFunctionCallError struct{ CallID string }
+
+func (e *UnknownFunctionCallError) Error() string {
+	return ErrUnknownFunctionCall.Error() + ": " + e.CallID
+}
+
+func (e *UnknownFunctionCallError) Unwrap() error { return ErrUnknownFunctionCall }

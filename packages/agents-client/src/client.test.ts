@@ -2271,7 +2271,7 @@ describe("OpenAIAgentsClient", () => {
     for (const [status, type, code, message] of [
       [409, "conflict_error", "conflict_error", "The tool call already has a different result."],
       [409, "conflict_error", "conflict_error", "The Turn cannot accept this input in its current state."],
-      [400, "invalid_request_error", "invalid_request_error", "Unknown pending tool call."],
+      [400, "invalid_request_error", "invalid_request_error", "Unknown pending tool call: call"],
       [400, "invalid_request_error", "invalid_request_error", "The tool call belongs to a different Turn."],
     ] as const) {
       const calls: FetchCall[] = [];

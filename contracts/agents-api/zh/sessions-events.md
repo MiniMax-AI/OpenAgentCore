@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 9e02f5fc7ace233f2a17cd7d8fa53447794b95430bf7bf219b66ece33f96ca35
+source_hash: ef11e7900a0dec4acceb06c60a0f1275c3e0231081a929c3f1a074e454fb785b
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -71,7 +71,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 | Turn 在当前状态下无法接受的输入，例如取消后提交的结果，或 Turn 已结束且未存储结果后提交的结果 | 409 `conflict_error` | "The Turn cannot accept this input in its current state." |
 | 与该调用已存储结果不同的结果，无论其 Turn 结束之前还是之后 | 409 `conflict_error` | "The tool call already has a different result." |
 | 相同 `Idempotency-Key` 搭配不同批次 | 409 `idempotency_conflict` | "This idempotency key was used with different input." |
-| `call_id` 未标识该 Session 的任何函数调用的结果 | 400 `invalid_request_error`, param null | "Unknown pending tool call." |
+| `call_id` 未标识该 Session 的任何函数调用的结果 | 400 `invalid_request_error`, param null | "Unknown pending tool call: {call_id}" |
 | 为该 Session 的某个调用提交结果，但 `turn_id` 标识另一个 Turn、未知 Turn ID，或不是 Turn ID 的值 | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
 | 缺失、格式错误或来自其他作用域的 Session | 404 `not_found_error` | "Resource not found." |
 | 预留的批次在 Turn 启动前超过五分钟截止时间 | 409 `environment_input_expired` | "The environment input deadline elapsed before admission." |

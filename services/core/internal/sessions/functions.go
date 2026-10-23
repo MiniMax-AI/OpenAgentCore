@@ -131,7 +131,7 @@ func AdmitFunctionResult(ctx context.Context, tx FunctionResultTx, input Functio
 	if elsewhere {
 		return Turn{}, ErrFunctionCallTurnMismatch
 	}
-	return Turn{}, ErrUnknownFunctionCall
+	return Turn{}, &UnknownFunctionCallError{CallID: input.CallID}
 }
 
 // PendingFunctionCallsTx reads a Turn's function calls that wait for a result
