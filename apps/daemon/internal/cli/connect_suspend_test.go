@@ -17,7 +17,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -383,7 +382,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 		t.Fatal("no connection")
 	}
 	defer peer.Close()
-	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}})
+	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &proto.CapabilitySources{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

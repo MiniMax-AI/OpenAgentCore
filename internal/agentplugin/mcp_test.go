@@ -3,6 +3,8 @@ package agentplugin
 import (
 	"reflect"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestMCPOnlyPluginPreservesEnvironmentDeclarations(t *testing.T) {
@@ -16,7 +18,7 @@ func TestMCPOnlyPluginPreservesEnvironmentDeclarations(t *testing.T) {
 	}
 	t.Setenv("DO_NOT_EXPAND", "private-native-value")
 	t.Setenv("PLUGIN_TOKEN", "must-not-resolve-here")
-	bundle, err := Read(pluginArchive(t, files, 0600), Metadata{Type: "inline", Name: "proof", Description: "Use shared resources."})
+	bundle, err := Read(pluginArchive(t, files, 0600), proto.PluginMetadata{Type: "inline", Name: "proof", Description: "Use shared resources."})
 	if err != nil || len(bundle.Skills) != 0 || len(bundle.MCP) != 2 {
 		t.Fatalf("MCP-only bundle: %+v %v", bundle, err)
 	}
@@ -32,7 +34,7 @@ func TestPluginCombinesSkillAndMCPWithoutActivatingOtherFiles(t *testing.T) {
 	files := pluginFixture()
 	files[".mcp.json"] = []byte(`{"mcpServers":{"remote":{"type":"http","url":"https://example.com/mcp"}}}`)
 	files["hooks/hooks.json"] = []byte(`{"must_remain_inert":true}`)
-	bundle, err := Read(pluginArchive(t, files, 0600), Metadata{Type: "inline", Name: "proof", Description: "Use shared resources."})
+	bundle, err := Read(pluginArchive(t, files, 0600), proto.PluginMetadata{Type: "inline", Name: "proof", Description: "Use shared resources."})
 	if err != nil || len(bundle.Skills) != 2 || len(bundle.MCP) != 1 {
 		t.Fatalf("combined package: %+v %v", bundle, err)
 	}
@@ -54,7 +56,7 @@ func TestMCPRejectsUnsupportedAuthorityAndMalformedTransport(t *testing.T) {
 	} {
 		files := pluginFixture()
 		files[".mcp.json"] = []byte(`{"mcpServers":{"test":` + input + `}}`)
-		if _, err := Read(pluginArchive(t, files, 0600), Metadata{Type: "inline", Name: "proof", Description: "Use shared resources."}); err == nil {
+		if _, err := Read(pluginArchive(t, files, 0600), proto.PluginMetadata{Type: "inline", Name: "proof", Description: "Use shared resources."}); err == nil {
 			t.Errorf("unsupported declaration accepted: %s", input)
 		}
 	}

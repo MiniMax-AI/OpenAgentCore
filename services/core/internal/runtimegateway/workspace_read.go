@@ -98,7 +98,7 @@ func validWorkspaceReadResult(result proto.WorkspaceReadResultPayload, limit int
 		return false
 	}
 	switch result.ErrorCode {
-	case "invalid_request", "resource_unavailable", "read_capacity", "read_unsupported", "not_found", "permission_denied":
+	case "invalid_request", "resource_unavailable", "read_capacity", "not_found", "permission_denied":
 		return true
 	default:
 		return false

@@ -4,8 +4,6 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 )
 
 // MCPHTTPServer declares public MCP tools with an explicit outbound connection origin. It is an HTTP
@@ -40,7 +38,7 @@ var mcpEnvironmentVariable = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 // variable names in EnvVars and no NUL in the command or its arguments.
 func (s MCPStdio) Valid() bool {
 	if strings.TrimSpace(s.Command) == "" || strings.ContainsRune(s.Command+strings.Join(s.Args, ""), 0) ||
-		agentcapabilities.ValidateSourceDirectories([]string{s.Cwd}) != nil {
+		ValidateSourceDirectories([]string{s.Cwd}) != nil {
 		return false
 	}
 	for _, name := range s.EnvVars {

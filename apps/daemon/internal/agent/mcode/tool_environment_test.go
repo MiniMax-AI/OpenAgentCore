@@ -8,8 +8,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/google/uuid"
 )
 
@@ -40,7 +41,7 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 	req.AgentStateKey = session
 	req.LocalEnvironment.ID, req.LocalEnvironment.WorkspaceDirectory = environment, config.Directory
 	req.LocalEnvironment.Capabilities = true
-	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{plugin}}
+	req.LocalEnvironment.CapabilitySources = &proto.CapabilitySources{Directories: []string{plugin}}
 	for _, resume := range []bool{false, true} {
 		if resume {
 			req.AgentSessionID = "native-1"

@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 )
 
 // Setup is confidential input, never ordinary resource metadata.
@@ -45,7 +46,7 @@ func (s Setup) ValidateInstalled() error {
 }
 
 func (s Setup) validate(installed bool) error {
-	if validateSkills(s.Skills, installed) != nil || ValidatePlugins(s.Plugins) != nil || agentcapabilities.ValidateSourceDirectories(s.CapabilityDirectories) != nil {
+	if validateSkills(s.Skills, installed) != nil || ValidatePlugins(s.Plugins) != nil || proto.ValidateSourceDirectories(s.CapabilityDirectories) != nil {
 		return ErrInvalid
 	}
 	ordinary := s

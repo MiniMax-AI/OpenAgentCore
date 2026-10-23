@@ -12,15 +12,13 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/google/uuid"
 )
 
 func skillPreparation() proto.RuntimePreparePayload {
 	return proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "skill",
-		Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}}
+		Skill: &proto.SkillMetadata{Type: "inline", Name: "example", Description: "Example"}}
 }
 
 type capabilityOutcome struct {
@@ -117,7 +115,7 @@ func TestCapabilitiesTransfersMoreThanFrameLimitAndCorrelates(t *testing.T) {
 func TestCapabilitiesFinalizeTransfersNoArchive(t *testing.T) {
 	s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 	defer s.Close("test")
-	request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{}}
+	request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &proto.CapabilitySources{}}
 	id := uuid.NewString()
 	done := beginCapabilities(s, t.Context(), id, request, nil)
 	env := nextCapabilityFrame(t, s)
@@ -142,7 +140,7 @@ func TestCapabilitiesRefusesConflictingArchiveBeforeSending(t *testing.T) {
 	for _, mutate := range []func(*proto.RuntimePreparePayload){
 		func(p *proto.RuntimePreparePayload) { p.SHA256 = "incorrect" },
 		func(p *proto.RuntimePreparePayload) { p.SizeBytes = 999 },
-		func(p *proto.RuntimePreparePayload) { p.Sources = &agentcapabilities.Input{} },
+		func(p *proto.RuntimePreparePayload) { p.Sources = &proto.CapabilitySources{} },
 	} {
 		request := skillPreparation()
 		mutate(&request)

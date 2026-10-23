@@ -8,26 +8,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"golang.org/x/net/http/httpguts"
 )
 
-// MCPServer is an inert package declaration. Environment variables are resolved
-// from installed user configuration by Runtime, never from the parser's process.
-type MCPServer struct {
-	Name              string            `json:"-"`
-	Type              string            `json:"type,omitempty"`
-	URL               string            `json:"url,omitempty"`
-	BearerTokenEnvVar string            `json:"bearer_token_env_var,omitempty"`
-	HTTPHeaders       map[string]string `json:"http_headers,omitempty"`
-	Command           string            `json:"command,omitempty"`
-	Args              []string          `json:"args,omitempty"`
-	EnvVars           []string          `json:"env_vars,omitempty"`
-	CWD               string            `json:"cwd,omitempty"`
-}
-
 var environmentVariable = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-func readMCP(raw json.RawMessage, files map[string][]byte) ([]MCPServer, error) {
+func readMCP(raw json.RawMessage, files map[string][]byte) ([]proto.PluginMCPServer, error) {
 	config := ".mcp.json"
 	declared := len(raw) != 0
 	if declared {
@@ -55,14 +43,14 @@ func readMCP(raw json.RawMessage, files map[string][]byte) ([]MCPServer, error) 
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	servers := make([]MCPServer, 0, len(names))
+	servers := make([]proto.PluginMCPServer, 0, len(names))
 	for _, name := range names {
-		var server MCPServer
+		var server proto.PluginMCPServer
 		if name == "" || len(name) > 128 || strings.ContainsAny(name, "\x00\r\n") || decodeObject(input.Servers[name], &server) != nil {
 			return nil, ErrInvalid
 		}
 		server.Name = name
-		if err := server.validate(); err != nil {
+		if err := validateMCPServer(&server); err != nil {
 			return nil, err
 		}
 		servers = append(servers, server)
@@ -70,7 +58,7 @@ func readMCP(raw json.RawMessage, files map[string][]byte) ([]MCPServer, error) 
 	return servers, nil
 }
 
-func (s *MCPServer) validate() error {
+func validateMCPServer(s *proto.PluginMCPServer) error {
 	if s.Type == "" && s.Command != "" {
 		s.Type = "stdio"
 	}

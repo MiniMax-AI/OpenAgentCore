@@ -4,12 +4,13 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 func TestRuntimeMCPOverlaysExplicitVariablesOnUserEnvironment(t *testing.T) {
-	manifest := agentcapabilities.Manifest{MCP: []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
+	manifest := agentcapabilities.Manifest{MCP: []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: proto.PluginMCPServer{
 		Name: "local", Type: "stdio", Command: "python3", Args: []string{"proof.py", "${LITERAL}"}, EnvVars: []string{"SELECTED"}, CWD: "./server",
 	}}}}
 	t.Setenv("SELECTED", "private-native-value")
@@ -29,7 +30,7 @@ func TestRuntimeMCPOverlaysExplicitVariablesOnUserEnvironment(t *testing.T) {
 }
 
 func TestRuntimeMCPKeepsAbsoluteCWDAndRejectsHTTP(t *testing.T) {
-	manifest := agentcapabilities.Manifest{MCP: []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
+	manifest := agentcapabilities.Manifest{MCP: []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: proto.PluginMCPServer{
 		Name: "local", Type: "stdio", Command: "python3", CWD: "/workspace",
 	}}}}
 	got, err := resolveMCPInvocation(manifest, "/private/runtime/capabilities", "plugins/0", "local", nil)

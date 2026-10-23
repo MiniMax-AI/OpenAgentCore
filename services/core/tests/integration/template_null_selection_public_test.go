@@ -14,7 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -63,7 +64,7 @@ func TestTemplateNullSelectionOfficialClientPostgres(t *testing.T) {
 		RejectedKeys []string          `json:"rejected_keys"`
 		Expected     map[string]struct {
 			Skills                []environmentconfig.SkillMetadata `json:"skills"`
-			Plugins               []agentplugin.Metadata            `json:"plugins"`
+			Plugins               []proto.PluginMetadata            `json:"plugins"`
 			CapabilityDirectories []string                          `json:"capability_directories"`
 			SkillDigests          []string                          `json:"skill_digests"`
 			PluginDigests         []string                          `json:"plugin_digests"`
