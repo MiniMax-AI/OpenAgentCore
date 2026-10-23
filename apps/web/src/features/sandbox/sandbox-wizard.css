@@ -259,14 +259,6 @@
   font-size: 13px;
 }
 
-.wizard-missing {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--orange);
-  font-weight: 500;
-}
-
 @media (max-width: 640px) {
   .wizard-choices-3 {
     grid-template-columns: minmax(0, 1fr);

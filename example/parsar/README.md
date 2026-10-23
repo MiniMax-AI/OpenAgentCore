@@ -37,7 +37,7 @@ Use one server process and a dedicated Project for this local single-user exampl
 A few more implementation details:
 
 - **Providers and models** are saved together in one SQLite transaction. Editing reads a Provider and its models as one snapshot; changing a model advances the Provider's revision.
-- **Browser calls** use `OpenAIAgentsClient`, with a small public HTTP reader for Artifacts (not yet exposed by that client); only Session creation goes through a small server adapter. Closing the browser aborts the upstream stream, never the running Session.
+- **Browser calls** use `OpenAIAgentsClient`, with a small public HTTP reader for Artifacts (the client has no Artifact method); only Session creation goes through a small server adapter. Closing the browser aborts the upstream stream, never the running Session.
 - **Workspaces:** hosted Sessions each get their own. User-machine Sessions use the selected host directory, so the same path means shared files.
 - **Skills on a user machine** come only from local capability directories in this example; it rejects Agents bound to managed Skills instead of ignoring them. Core itself can deliver managed Skills to user machines through `x_agents_core.environment`.
 
@@ -66,6 +66,6 @@ Create a user-machine runtime and start a Session with an Agent using Codex or C
 
 The selected model Provider needs an HTTPS Base URL and API key. Its protocol is Responses for Codex and Anthropic for Claude Code and MiniMax Code. Core freezes and delivers the configuration to the enrolled executor. Local pending creation requests contain that configuration but browser Session responses omit the entire pending request.
 
-Self-hosted capability sources are local directories under the current Core API. Managed Skill bindings fail explicitly; configure local Skills/Plugins in the runtime's capability directory before connecting. Bound HTTP MCP services also fail explicitly for self-hosted Sessions; configure them in local Plugins instead.
+Self-hosted capability sources are local directories under the Core API. Managed Skill bindings fail explicitly; configure local Skills/Plugins in the runtime's capability directory before connecting. Bound HTTP MCP services also fail explicitly for self-hosted Sessions; configure them in local Plugins instead.
 
 The daemon runs with the starting user's permissions and adds no sandbox. Runtime home is separate per Session; stopping it preserves local files. Credential rotation and revocation remain Core console operations. Reuse the original installation directory when reconnecting.

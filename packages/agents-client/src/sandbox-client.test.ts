@@ -1,8 +1,9 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
-import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, sandboxNodeDiagnostics, type SandboxNode } from "./sandbox-client";
+import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, type SandboxNode } from "./sandbox-client";
 
 import { deploymentContract } from "./deployment-contract";
+import { nodeDiagnosticCodeValues } from "./generated/core-api";
 import nodeDiagnosticFixture from "../../../services/core/internal/sandbox/testdata/node-diagnostics.json";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
@@ -417,7 +418,7 @@ it.each(["unknown", "preparing", "failed"])("does not erase old serving readines
 
 describe("shared node diagnostic contract", () => {
   it("checks the client declaration against the Go diagnostic fixture", () => {
-    expect([...sandboxNodeDiagnostics].sort()).toEqual([...nodeDiagnosticFixture].sort());
+    expect([...nodeDiagnosticCodeValues].sort()).toEqual([...nodeDiagnosticFixture].sort());
     expect(normalizeSandboxNodeDiagnostic("future_code")).toBe("provider_unavailable");
   });
   it.each(nodeDiagnosticFixture)("preserves %s through the rollout projection", async (diagnostic) => {

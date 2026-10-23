@@ -27,7 +27,7 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
 | Platform | Projects and keys | Create, rename and archive Projects; issue and revoke keys; each Project's usage, write history and how to call the API |
 | Platform | Nodes | Add, edit and remove microsandbox or Docker nodes; each node's readiness, active and retained limits, host CPU and memory with their history, free disk, and allocations with elapsed time in each compute phase |
-| Platform | Settings | **Sandbox and scheduling**, **Workspace storage**, **Models and credentials**, and **Service and deployment**; see [configuration](../configuration.md#runtime-settings-web) |
+| Platform | Settings | Platform configuration, one group per [runtime setting](../configuration.md#runtime-settings-web) |
 
 Missing data is shown as missing (—), never as zero. [Console API usage](./console-api-usage.md) lists what each page reads and how its figures are bounded.
 
@@ -42,7 +42,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 | Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [Run self-hosted Sessions](../getting-started/self-hosted.md) |
 | Delete a resource, for example a leaked Credential | The resource's row in its list, or its page; Files are deleted from the Files list. The public deletion rules apply |
 
-Web observes and administers the installation. It never starts a Session or sends input; agents run only when applications call `/v1`. Archiving a hosted Session requests cancellation and sandbox reclamation. [Concepts](../concepts.md#what-administrators-can-and-cannot-do) defines what administrators can do.
+Web observes and administers the installation. It never starts a Session or sends input; agents run only when applications call `/v1`. Archiving a hosted Session is defined in [Session archive](../../contracts/agents-api/admin-api.md#session-archive). [Concepts](../concepts.md#what-administrators-can-and-cannot-do) defines what administrators can do.
 
 A new Project key is shown once, together with the calls that use it:
 

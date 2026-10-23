@@ -73,7 +73,7 @@ func TestUsageTransportPreservesSnapshotOnFailureAndDone(t *testing.T) {
 				}
 				var want map[string]any
 				_ = json.Unmarshal([]byte(original), &want)
-				if observed.Provider != "claude_code" || !reflect.DeepEqual(observed.Raw["claude_sdk_result"], want) || observed.Model != "" || observed.Tokens != nil || observed.CostUSD != 0 || observed.InputTokens != 0 || observed.OutputTokens != 0 {
+				if observed.Provider != "claude_code" || !reflect.DeepEqual(observed.Raw["claude_sdk_result"], want) || observed.Model != "" || observed.Tokens != nil {
 					t.Fatalf("usage normalized or lost: %+v", observed)
 				}
 			}
@@ -112,54 +112,4 @@ func runUsageHelper(request startRequest, mode string, encode func(bridgeEvent))
 		id = "changed"
 	}
 	encode(bridgeEvent{Type: "result", SessionID: id, Text: "final"})
-}
-
-func verifyLiveUsageEvents(t *testing.T, events []proto.Envelope) {
-	t.Helper()
-	var observed proto.Usage
-	count := 0
-	for _, event := range events {
-		switch event.Type {
-		case proto.TypeUsage:
-			var payload proto.UsagePayload
-			if err := event.DecodePayload(&payload); err != nil {
-				t.Fatal(err)
-			}
-			observed = payload.Usage
-			count++
-		case proto.TypeDone:
-			var payload proto.DonePayload
-			if err := event.DecodePayload(&payload); err != nil {
-				t.Fatal(err)
-			}
-			if count < 1 || !reflect.DeepEqual(payload.Usage, observed) {
-				t.Fatal("missing, repeated or changed live usage")
-			}
-		}
-	}
-	if count < 1 || observed.Tokens != nil || observed.Model != "" || observed.CostUSD != 0 {
-		t.Fatal("live native evidence became unsupported public accounting")
-	}
-	if count > 1 {
-		snapshots, ok := observed.Raw["claude_sdk_results"].([]any)
-		if !ok || len(snapshots) != count || !reflect.DeepEqual(snapshots[count-1], observed.Raw["claude_sdk_result"]) {
-			t.Fatal("lost native-turn snapshots")
-		}
-	}
-	snapshot, ok := observed.Raw["claude_sdk_result"].(map[string]any)
-	if !ok || snapshot["subtype"] != "success" || snapshot["is_error"] != false {
-		t.Fatal("missing native result provenance")
-	}
-	main, ok := snapshot["usage"].(map[string]any)
-	if !ok {
-		t.Fatal("missing main-loop usage")
-	}
-	output, ok := main["output_tokens"].(float64)
-	if !ok || output <= 0 {
-		t.Fatal("missing real output count")
-	}
-	models, ok := snapshot["modelUsage"].(map[string]any)
-	if !ok || len(models) == 0 {
-		t.Fatal("missing per-model native usage")
-	}
 }

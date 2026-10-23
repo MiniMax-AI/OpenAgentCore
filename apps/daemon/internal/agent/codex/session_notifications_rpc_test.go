@@ -109,11 +109,11 @@ func TestRootRPCNotificationOrdering(t *testing.T) {
 					if err := env.DecodePayload(&done); err != nil {
 						t.Fatal(err)
 					}
-					wantInput := int32(130)
+					wantInput := int64(130)
 					if resume {
 						wantInput = 30
 					}
-					if done.Content != "root answer" || done.Metadata[proto.DoneMetaAgentSessionID] != "root" || done.Usage.InputTokens != wantInput {
+					if done.Content != "root answer" || done.Metadata[proto.DoneMetaAgentSessionID] != "root" || done.Usage.Tokens.InputTokens != wantInput {
 						t.Fatalf("reply ordering lost root output/usage: %+v", done)
 					}
 				}

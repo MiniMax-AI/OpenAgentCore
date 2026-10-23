@@ -117,7 +117,7 @@ func TestSessionStreamsCurrentTurnAndResumes(t *testing.T) {
 					if p.Content != "Hello world" || p.Metadata[proto.DoneMetaAgentSessionID] != "native-1" {
 						t.Fatalf("done = %#v", p)
 					}
-					if p.Usage.InputTokens != 0 || p.Usage.OutputTokens != 0 || p.Usage.CostUSD != 0 {
+					if p.Usage.Tokens != nil {
 						t.Fatalf("context occupancy reported as usage: %#v", p.Usage)
 					}
 				}

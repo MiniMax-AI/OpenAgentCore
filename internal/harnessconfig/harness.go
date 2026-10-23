@@ -163,12 +163,11 @@ func validChoices(values []string, allowed ...string) bool {
 }
 
 // PreparedConfiguration owns a validated snapshot without native side effects.
-// Model and Provider may be absent only for the existing native-owned connection
-// path. A supplied model must be a nonempty string; an explicit provider requires
-// an explicit model. HarnessConfig is always an independently owned object.
+// Model may be absent only for the existing native-owned connection path. A
+// supplied model must be a nonempty string; an explicit provider requires an
+// explicit model. HarnessConfig is always an independently owned object.
 type PreparedConfiguration struct {
 	Model         string
-	Provider      *modelprovider.Provider
 	HarnessConfig proto.HarnessConfig
 }
 
@@ -198,11 +197,9 @@ func (c Configuration) Prepare(options map[string]any) (PreparedConfiguration, e
 		if result.Model == "" {
 			return PreparedConfiguration{}, ErrModel
 		}
-		provider, err := c.ParseProvider(value)
-		if err != nil {
+		if _, err := c.ParseProvider(value); err != nil {
 			return PreparedConfiguration{}, err
 		}
-		result.Provider = &provider
 	}
 	native, err := c.PrepareHarnessConfig(options)
 	if err != nil {

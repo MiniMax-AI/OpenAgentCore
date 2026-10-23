@@ -142,7 +142,6 @@ export function runtimeDurableTrendSamples(
       sampledAt: value.sampledAt,
       activeSandboxCount: value.hasObservationCoverage ? value.activeSandboxes.size : null,
       targets: [...value.targets.values()],
-      cpuCandidates: [],
       memoryUsageBytes: observedMemory.length > 0
         ? observedMemory.reduce((total, current) => total + current.usage, 0)
         : null,

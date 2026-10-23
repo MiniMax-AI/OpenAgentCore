@@ -1,7 +1,7 @@
 ---
 title: "概念"
 source: docs/concepts.md
-source_hash: 378b3621d64bbe1d70057c048c5bac457361dea628a30c5e60704d69d17277ca
+source_hash: a0749db928e9f8767f5547dec2e6fb4887d1ace214c6fb8a08fe2e7fd5667af0
 ---
 
 项目是 OpenAgentCore 的执行租户。应用使用其 API 密钥；运维人员使用独立的 Core 密钥管理安装实例。[API 命名空间和凭据](api/index.md)将每类调用方映射到对应命名空间和凭据。
@@ -20,7 +20,7 @@ source_hash: 378b3621d64bbe1d70057c048c5bac457361dea628a30c5e60704d69d17277ca
 
 ## 管理员可以做什么 {#what-administrators-can-and-cannot-do}
 
-管理员管理项目和密钥、沙箱部署、节点、执行器凭据及部署默认模型。他们可以检查资源、执行历史、运行计数与用量，并按删除规则删除资源。归档托管 Session 会请求取消和沙箱回收；参见 [Session 归档](../../contracts/agents-api/zh/admin-api.md#session-archive)。
+管理员管理项目和密钥、沙箱部署、节点、执行器凭据及部署默认模型。他们可以检查资源、执行历史、运行计数与用量，并按删除规则删除资源。归档托管 Session 的行为由 [Session 归档](../../contracts/agents-api/zh/admin-api.md#session-archive)定义。
 
 创建或编辑应用资产、启动 Session 和提交输入都需要项目 API 密钥。Core 密钥不提供应用身份，不能读取已保存的秘密。[Core 管理 API](../../contracts/agents-api/zh/admin-api.md) 定义其操作；[控制台服务器](web/console-server.md) 负责 Web 登录与凭据处理。
 

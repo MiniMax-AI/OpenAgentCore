@@ -347,7 +347,6 @@ func runStart(rc *runContext, args []string) error {
 	ctx, stop := daemonize.NotifyContext(context.Background())
 	defer stop()
 	flags := newFlagSet("start")
-	foreground := flags.Bool("foreground", false, "stay attached to this terminal")
 	if err := flags.Parse(args); err != nil {
 		return errors.New("start: invalid arguments")
 	}
@@ -395,7 +394,7 @@ func runStart(rc *runContext, args []string) error {
 			return err
 		}
 	}
-	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, !*foreground, true, config.Remote, config.Environment, config.Credential)
+	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, true, true, config.Remote, config.Environment, config.Credential)
 }
 
 func useInstalledNativeHome() {

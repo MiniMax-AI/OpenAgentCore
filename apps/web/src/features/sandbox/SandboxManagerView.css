@@ -10,7 +10,6 @@
 .sandbox-summary dt { font-size: 12px; color: var(--ink-3); margin-bottom: 4px; }
 .sandbox-summary dd { margin: 0; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
 .sandbox-error { color: var(--danger) !important; }
-.sandbox-enrollment { max-width: 580px; padding: 24px; border: 1px solid var(--line); border-radius: 12px; }
 .sandbox-command { min-width: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
 .sandbox-command-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 12px; border-bottom: 1px solid var(--line); }
 .sandbox-command-heading > span { display: inline-flex; align-items: center; gap: 7px; color: var(--fg-muted); font-size: 12px; }
@@ -23,15 +22,12 @@
 .sandbox-notice { padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
 @media (max-width: 600px) {
   .sandbox-manager { padding: 22px 14px; }
-  .sandbox-enrollment { padding: 18px; }
 }
 
 /* The node manager page uses the shared console header and body rhythm. */
 .sandbox-manager-page { display: flex; padding: 0; overflow: hidden; }
 .sandbox-manager-page > .console-page-body { max-width: none; margin: 0; }
 .sandbox-manager-page .page-header h1 { margin: 0; }
-.sandbox-enrollment > p { font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
-.sandbox-enrollment > .button { align-self: flex-start; }
 
 /* Node list and node detail. */
 .nodes-nowrap { white-space: nowrap; }
@@ -88,11 +84,5 @@
 .sandbox-reset-options > label:not(.field) { display: flex; align-items: center; gap: 8px; }
 .sandbox-reset-options input[type="number"] { max-width: 180px; }
 .sandbox-reset-dialog p { line-height: 1.6; }
-
-/* Shared rollout summaries keep target facts ahead of the secondary node partition. */
-.sandbox-rollout { min-width: 0; gap: 12px; }
-.sandbox-rollout h3 { margin: 0; font-size: 13px; font-weight: 600; }
-.sandbox-rollout p { margin: 0; font-size: 13px; color: var(--fg-muted); }
-.sandbox-rollout > .text-action { align-self: flex-start; }
 
 .node-statuses { display: grid; gap: 4px; }

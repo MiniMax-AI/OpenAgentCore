@@ -1,7 +1,7 @@
 ---
 title: "Web 控制台"
 source: docs/web/index.md
-source_hash: fed3544a6fb993db8fb8a4f6c4dc3f64894ff2a587cd6d2deb3b49b9b74d082f
+source_hash: d8f267f45ad305a3c7280d98333aaa1fdfdf4d5cc5082a5781d5de7ab1bd56b4
 ---
 
 Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥登录，查看健康状态和用量，检查应用创建的内容，并管理项目、密钥、节点和设置。应用使用项目 API 密钥调用 `/v1`，不使用 Web。
@@ -29,7 +29,7 @@ Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥�
 | 资源 | Agent、Environment 模板、Skills、文件、Vault | 检查和允许的删除操作，显示各资源所属项目及创建密钥 |
 | 平台 | 项目与密钥 | 创建、重命名和归档项目；签发与撤销密钥；各项目的用量、写入历史和 API 调用方法 |
 | 平台 | 节点 | 添加、编辑和移除 microsandbox 或 Docker 节点；各节点的就绪状态、活跃与保留上限、主机 CPU 与内存及其历史、可用磁盘，以及分配及其在各计算阶段的已用时间 |
-| 平台 | 设置 | **沙箱与调度**、**工作区存储**、**模型与凭据** 和 **服务与部署**；参阅[配置](../configuration.md#runtime-settings-web) |
+| 平台 | 设置 | 平台配置，每个[运行时设置](../configuration.md#runtime-settings-web)一组 |
 
 缺失数据展示为缺失（—），不会当作零。[控制台 API 使用](console-api-usage.md)列出各页面读取内容及统计边界。
 
@@ -44,7 +44,7 @@ Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥�
 | 签发、轮换或撤销自托管执行器凭据，或复制安装命令 | **Session 日志** 中的 Session 页面；参阅[运行自托管 Session](../getting-started/self-hosted.md) |
 | 删除资源，例如泄露的 Credential | 资源列表行或资源页面；文件从 **文件** 列表删除。适用公开删除规则 |
 
-Web 观察并管理安装。它从不启动 Session，也不发送输入；只有应用调用 `/v1` 时 Agent 才会运行。归档托管 Session 会请求取消并回收沙箱。[概念](../concepts.md#what-administrators-can-and-cannot-do)定义了管理员能做什么。
+Web 观察并管理安装。它从不启动 Session，也不发送输入；只有应用调用 `/v1` 时 Agent 才会运行。归档托管 Session 的行为由 [Session 归档](../../../contracts/agents-api/zh/admin-api.md#session-archive)定义。[概念](../concepts.md#what-administrators-can-and-cannot-do)定义了管理员能做什么。
 
 新项目密钥只显示一次，并附带使用它的调用示例：
 

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 7597a55282203a07f4f9f794ee548374b41e53a335be46d62c727aabb5c00bb3
+source_hash: d9f1160d3e7eda55c74d21eb186c694e5b6f56162b37c1e5ee7ff1248c57a4de
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -39,7 +39,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
 | Environment 模板 | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment 模板](environments.md#templates) |
-| Vaults | create, retrieve, list, delete | 已实现；没有归档操作 | [Vaults and Credentials](vaults.md) |
+| Vaults | create, retrieve, list, delete | 已实现 | [Vaults and Credentials](vaults.md) |
 | Vault Credentials | create, retrieve, update, list, delete | 已支持 `static_bearer` 和 `mcp_oauth` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | 已实现 | [Files and Skills](source-files.md) |
@@ -102,7 +102,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Files、Skills、Environment files 和 Artifacts**（[Files and Skills](source-files.md)、[Environment files and Artifacts](environment-files.md)）
 
-- 文件上传上限为 512 MiB；官方上限为 512 MB。Files 列表默认最多返回 10,000 个 Files，`purpose` 过滤值不是 `user_data` 时会返回空页面。
+- 文件上传上限为 512 MiB；官方上限为 512 MB。`purpose` 过滤值不是 `user_data` 时会返回空页面。
 - Skill 版本号绝不复用，并且针对某个 Skill 的上传和删除会串行执行。
 - Environment files 可用于 `self_hosted` Environments，而官方服务会拒绝。
 - 在已有常规文件上创建 Environment file 会返回 "must not traverse symlinks or overwrite existing files" 消息。若父级符号链接仍位于工作区内，则会跟随该链接；若父级逸出工作区或父级本身是常规文件，则会返回通用 400；官方服务会拒绝父级符号链接。
@@ -122,7 +122,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **配置和工具**
 
-- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`text.verbosity`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
 - Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入。
 - 由模型推导出的推理默认值不会被解析确定。
 
@@ -152,7 +152,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **Vaults 和 Credentials**
 
-- 没有归档生命周期、存储密钥轮换或重新加密。
+- 没有存储密钥轮换或重新加密。
 - OAuth 刷新仅在派发时执行：提供商返回 401 时不会刷新，不会在 Turn 中途替换令牌，也不会撤回已发送给 Runtime 的令牌。
 - 发送到所选 Credential 已被删除的 Session 的输入会先通过准入，随后在派发时失败。
 - 创建 Credential 时不接受 `Idempotency-Key`。

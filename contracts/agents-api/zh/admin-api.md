@@ -1,7 +1,7 @@
 ---
 title: "Core 管理 API"
 source: contracts/agents-api/admin-api.md
-source_hash: da7f631aea81c3b934e61e8749de577f2dc458d5b45ede3f5492a3f184affe08
+source_hash: 0b0be1a0a0d85119e047330c178258481e71f645d577554b5619d3a9b201a794
 ---
 
 Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密钥、项目资源的读取和删除、执行器凭据、部署默认模型、沙箱部署及其节点、监控和审计。Web 的[控制台服务器](../../../docs/zh/web/console-server.md#forwarding-to-core)会为已登录的管理员调用它；运维人员则从 Core 主机上的脚本调用它（[编写 Core API 脚本](../../../docs/zh/getting-started/operations.md#script-the-core-api)）。生成的架构是 [core.openapi.yaml](../core.openapi.yaml)，所有错误都使用 [Core 错误封装](core-errors.md)。
@@ -65,7 +65,7 @@ Core 管理 API（`/core/v1`）用于管理安装实例：项目及其 API 密�
 | `address_bindings` 字段 | 含义 |
 | --- | --- |
 | `nodes` | 已注册且未移除的节点 |
-| `nodes_on_other_address` | 使用了 `public_url` 以外地址注册的节点。它们不会获得新的沙箱；请移除后重新添加。最多为 `nodes` 个 |
+| `nodes_on_other_address` | 使用了 `public_url` 以外地址注册的节点。它们不会获得新的沙箱；参见[更改公开 URL](../../../docs/zh/getting-started/public-address.md#changing-the-public-url)。最多为 `nodes` 个 |
 | `hosted_sandboxes` | 保留的待处理托管沙箱；它们启动时使用当时有效的地址运行 |
 | `self_hosted_executors` | 未吊销的执行器凭据；对应执行器安装时使用的是当时公布的 `remote_url` |
 

@@ -115,7 +115,7 @@ func (u TurnUsage) completeTokens() bool {
 }
 
 func (s *Session) usagePayload(u TurnUsage) proto.Usage {
-	result := proto.Usage{Provider: "openai", Model: s.resolvedModel, InputTokens: int32(u.InputTokens), OutputTokens: int32(u.OutputTokens)}
+	result := proto.Usage{Provider: "openai", Model: s.resolvedModel}
 	if u.completeTokens() {
 		result.Tokens = &proto.TokenUsage{InputTokens: int64(u.InputTokens), OutputTokens: int64(u.OutputTokens), CachedInputTokens: int64(u.CachedInputTokens), ReasoningOutputTokens: int64(u.ReasoningOutputTokens), TotalTokens: int64(u.TotalTokens)}
 	}

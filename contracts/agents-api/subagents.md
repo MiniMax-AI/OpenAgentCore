@@ -32,7 +32,7 @@ Active includes idle. A successful close records the native time; a successful r
 
 ## Adapter contract
 
-Adapters report Subagent facts through `internal/agentdaemon/proto/subagents.go` over the existing authenticated Run and execution journal. There is no separate transport, scheduler or model and tool loop.
+Adapters report Subagent facts through `internal/agentdaemon/proto/subagents.go` over the authenticated Run and execution journal. There is no separate transport, scheduler or model and tool loop.
 
 | Fact | Adapter obligation |
 | --- | --- |

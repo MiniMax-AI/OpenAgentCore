@@ -30,7 +30,6 @@ type LocalEnvironment struct {
 // and the selected user bearer may be confidential. It is not agent.tools MCP.
 type EnvironmentMCP struct {
 	InstallationRoot string
-	WorkspaceRoot    string
 	PackageRoot      string
 	Server           agentplugin.MCPServer
 	BearerToken      *string

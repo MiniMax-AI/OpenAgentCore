@@ -1,7 +1,7 @@
 ---
 title: "Environment 文件与 Artifact"
 source: contracts/agents-api/environment-files.md
-source_hash: 957cca18ef63a95a01ff682ff8adffb0d63d34e520c197ed9f6c8d08c4fd6c5d
+source_hash: b6c51bd066cf70b6cce4c38ba1403dc3463574fcbc254bf64f8c98b6aeca9b93
 ---
 
 Session 工作区保存由 agent 及其工具修改的实时文件。`/agents/environments/{environment_id}/files` 列出一个工作区目录，并在其中创建文件。Turn 完成时，Core 将工作区 `outputs/` 目录中的文件复制为不可变 Artifact，通过 `/agents/sessions/{session_id}/artifacts` 读取。Artifact 的生命周期长于 Environment；工作区文件则不是。

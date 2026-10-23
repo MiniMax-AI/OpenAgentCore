@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 2e359fb0bd99974bd1077f15b3a529c80a4ff19b3d9c2f7a3882fe125aa9f8c8
+source_hash: 5cb1e7a7139fceaf0e9efb1833959b067d6a7b313484b1d6c9c652e3ab9191f5
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。

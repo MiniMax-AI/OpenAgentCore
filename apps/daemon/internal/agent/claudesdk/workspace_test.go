@@ -43,7 +43,7 @@ func TestWorkspaceTrustedBindingAndEnvironment(t *testing.T) {
 	config := workspaceFixture(t)
 	t.Setenv("OAC_TEST_PARENT_SECRET", "parent-only")
 	t.Setenv("ANTHROPIC_API_KEY", "unselected-provider")
-	start, env, err := prepare(config, workspaceRequest())
+	start, env, err := prepareConfiguration(config, workspaceRequest())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestWorkspaceRejectsConflictsBeforeSideEffects(t *testing.T) {
 				config.Env = append(config.Env, "ANTHROPIC_API_KEY=bad\x00value")
 
 			}
-			if _, _, err := prepare(config, req); err == nil {
+			if _, _, err := prepareConfiguration(config, req); err == nil {
 				t.Fatal("invalid binding or request accepted")
 			}
 			entries, err := os.ReadDir(config.StateDir)
@@ -127,7 +127,7 @@ func TestWorkspaceRetainsDeclaredFunctions(t *testing.T) {
 	config := workspaceFixture(t)
 	req := workspaceRequest()
 	req.FunctionTools = []proto.FunctionTool{{Name: "lookup", Parameters: json.RawMessage(`{"type":"object"}`)}}
-	start, _, err := prepare(config, req)
+	start, _, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestPublicMCPUsesWorkspaceProjectionWithoutCredentialCopy(t *testing.T) {
 	token := "vault-selected-canary"
 	tools := []string{"prove"}
 	req.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "environment", ServerLabel: "remote", ServerURL: "https://example.test/mcp", AllowedTools: &tools, Required: true, BearerToken: &token}}
-	start, env, err := prepare(config, req)
+	start, env, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)
 	}

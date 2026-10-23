@@ -11,20 +11,15 @@ import (
 )
 
 type harness struct {
-	Kind      string   `json:"kind"`
-	Label     string   `json:"label"`
-	Protocols []string `json:"protocols"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
 }
 
 func declarations() []harness {
 	var result []harness
 	for _, kind := range builtin.Kinds() {
 		declaration, _ := builtin.Registry().Lookup(kind)
-		protocols := []string{}
-		for _, declared := range declaration.Providers {
-			protocols = append(protocols, declared.Protocol)
-		}
-		result = append(result, harness{Kind: kind, Label: declaration.Label, Protocols: protocols})
+		result = append(result, harness{Kind: kind, Label: declaration.Label})
 	}
 	return result
 }

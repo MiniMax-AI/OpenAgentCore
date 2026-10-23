@@ -14,7 +14,6 @@ import (
 
 type subagentEffect struct {
 	proto.SubagentLifecyclePayload
-	source, turn, call string
 }
 type rolloutCall struct {
 	Name      string `json:"name"`
@@ -228,7 +227,7 @@ func readSubagentEffects(home string, h *subagentHistory) ([]subagentEffect, err
 			if json.Unmarshal(output, &text) != nil || json.Unmarshal([]byte(text), &receipt) != nil || len(receipt) != 1 || !validSubagentStatus(receipt[key]) {
 				return nil, errors.New("codex: lifecycle success receipt unavailable")
 			}
-			effects = append(effects, subagentEffect{proto.SubagentLifecyclePayload{NativeID: target, EffectID: h.ID + ":" + item.ID, Status: status, OccurredAtMS: completion.CompletedAt}, h.ID, turn.ID, item.ID})
+			effects = append(effects, subagentEffect{proto.SubagentLifecyclePayload{NativeID: target, EffectID: h.ID + ":" + item.ID, Status: status, OccurredAtMS: completion.CompletedAt}})
 		}
 	}
 	for call := range calls {

@@ -73,7 +73,7 @@ In an archived project the section hides **Issue credential** and **Rotate** beh
 | Write operations | `GET /core/v1/projects/{project_id}/write-operations` | A project's write history, newest first, filtered by key and resource type, 50 per page |
 | Summary | `GET /core/v1/summary` | Overview (per project), the Agents list (`group_by=agent`), a project's page (per project and `group_by=key`), Agent metrics (to skip idle projects, and usage by creating key since the start of the range), the Projects list (last activity) |
 | Installation | `GET /core/v1/installation` | Settings → Service and deployment installation facts (`public_url`, `api_base_url`, `installation_id`, `source_commit`) and read-only Startup settings (`configuration.settings`; a sensitive setting shows only whether it is `configured`); `api_base_url` in the call samples; `public_url` as the download origin and `--source-url` of the node install and uninstall commands (and the install command's `--core-url`). A sensitive setting with a value, or an unknown member, fails the read |
-| Core metrics | `GET /core/v1/metrics?range=` | Core metrics page. A Core without the route (404) is shown as not reporting. [Core metrics](../../contracts/agents-api/core-metrics.md) defines every measurement |
+| Core metrics | `GET /core/v1/metrics?range=` | Core metrics page. [Core metrics](../../contracts/agents-api/core-metrics.md) defines every measurement |
 
 `local_only`, or no `public_url`, stops Add node from issuing a command and Clean up the host from giving one. Overview, Nodes and Settings then show a visible warning, with Review the public address leading to Settings → Service and deployment. Nodes disables Add node with a visible reason, and Getting started leaves its sandbox step to do.
 
@@ -89,7 +89,7 @@ Summary figures are cumulative per Session and are not billing records. Sessions
 
 | Operation | Route | Console use |
 | --- | --- | --- |
-| List Harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials default model cards: each Harness's readiness (Ready when `enabled` and its model configuration is set, otherwise Model provider not set or Disabled), `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (the default Harness is Ready, or any Harness when none is default) |
+| List Harnesses | `GET /core/v1/harnesses` | Settings → Models and credentials default model cards: each Harness's readiness ([readiness](../configuration.md#runtime-settings-web)), `default`, its model configuration without the key, and Usage details from the configuration's `last_used_at`, `last_error_code` and `last_error_at`; the Overview's Getting started (the default Harness is Ready, or any Harness when none is default) |
 | Set or replace | `PUT /core/v1/harnesses/{harness}/model-configuration` | **Set** or **Replace**: the complete model configuration with its write-only provider key, never prefilled and never retried; a 400 shows Core's message in the form; then the list is read again |
 | Clear | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **Clear**, confirmed, then the list is read again |
 

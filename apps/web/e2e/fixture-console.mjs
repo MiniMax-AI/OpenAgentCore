@@ -533,7 +533,7 @@ const tokenLimit = (value) => value === undefined || (Number.isInteger(value) &&
 const jsonKind = (value) => Array.isArray(value) ? "an array" : typeof value === "string" ? "a string" : typeof value === "boolean" ? "a boolean" : Number.isInteger(value) ? "an integer" : "a number";
 
 /** The first rule a provider body breaks, in Core's order and words; null when valid. */
-function providerProblem(harness, input) {
+function providerProblem(input) {
   if (Object.keys(input).some((key) => !PROVIDER_FIELDS.has(key)) || ["protocol", "base_url", "api_key"].some((key) => typeof input[key] !== "string") ||
     !tokenLimit(input.context_window) || !tokenLimit(input.max_output_tokens)) return PROVIDER_SHAPE;
   if (!httpsBase(input.base_url)) return "model provider requires an HTTPS base_url without credentials, query or fragment";
@@ -581,7 +581,7 @@ async function harnessRoute(request, response, path) {
   if (typeof input.model !== "string" || !input.model.trim()) return error(response, 400, "A model ID is required.", "model_configuration_model_invalid");
   if (input.harness_config !== undefined && (!input.harness_config || typeof input.harness_config !== "object" || Array.isArray(input.harness_config))) return error(response, 400, "Harness configuration must be an object.", "harness_config_invalid");
   if (!support(harness).protocols.includes(input.model_provider?.protocol)) return error(response, 400, "This harness does not support this protocol.", "model_provider_protocol_unsupported");
-  const problem = providerProblem(harness, input.model_provider ?? {});
+  const problem = providerProblem(input.model_provider ?? {});
   if (problem) return error(response, 400, problem, "invalid_request_error");
   entry.provider = {
     object: "core.model_configuration", harness, model: input.model, harness_config: input.harness_config ?? {},

@@ -65,7 +65,7 @@ func TestUsagePayloadEmbedsUsage(t *testing.T) {
 	// which translates Usage → store.UsageInput. If we accidentally
 	// renamed the embedded field or stopped embedding, the persistence
 	// path would silently lose all usage fields. Catch that here.
-	in := UsagePayload{Usage: Usage{Provider: "anthropic", Model: "claude-opus", InputTokens: 100}}
+	in := UsagePayload{Usage: Usage{Provider: "anthropic", Model: "claude-opus", Tokens: &TokenUsage{InputTokens: 100}}}
 	raw, err := json.Marshal(in)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
@@ -77,7 +77,7 @@ func TestUsagePayloadEmbedsUsage(t *testing.T) {
 	if err := json.Unmarshal(raw, &out); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	if out.Provider != "anthropic" || out.InputTokens != 100 {
+	if out.Provider != "anthropic" || out.Tokens.InputTokens != 100 {
 		t.Fatalf("usage round-trip lost data: %+v", out)
 	}
 }

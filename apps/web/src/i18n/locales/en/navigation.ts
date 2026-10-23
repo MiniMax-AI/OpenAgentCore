@@ -1,5 +1,4 @@
 export const navigation = {
-  console: "Console",
   mainNavigation: "Console navigation",
   groups: {
     monitor: "Monitor",
@@ -31,7 +30,5 @@ export const navigation = {
   lightTheme: "Light theme",
   darkTheme: "Dark theme",
   language: "Language",
-  english: "English",
-  chinese: "简体中文",
   appearanceSettings: "Language and appearance",
 } as const;

@@ -34,7 +34,7 @@ The boundary has version 1. The request and credentials arrive on standard input
 
 ## Receipts and state directory
 
-`OAC_E2B_STATE_DIR` ([configuration](../../../../docs/configuration.md#appendix-core-environment-without-the-installer)) must already exist, be owned by the helper's user and grant no group or other access. Keep it on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
+The state directory is the fixed `/state/e2b` ([private Provider state](../../../../docs/configuration.md#compose-installations)). It must be owned by the helper's user and grant no group or other access, and it lives on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
 
 A helper holds its allocation's lock until the SDK operation returns, even after Core's caller times out. Core tracks the helper's actual exit, and a credential change waits for running helpers without killing them. Helper exit never proves that a remote Create settled. Core serializes lifecycle requests per allocation and never replays Create.
 

@@ -52,9 +52,6 @@ type SessionPlan struct {
 	// SystemPrompt is forwarded as developerInstructions on thread/start.
 	SystemPrompt string
 
-	// ModelReasoningEffort is frozen for launch and every native Turn.
-	ModelReasoningEffort string
-
 	// ReasoningSummary reports that the Agent requested reasoning summaries.
 	ReasoningSummary bool
 
@@ -196,7 +193,6 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 		plan.OutputSchema = format.Schema
 	}
 	if controls.ReasoningEffort != "" {
-		plan.ModelReasoningEffort = controls.ReasoningEffort
 		set("model_reasoning_effort", strconv(controls.ReasoningEffort))
 	}
 	if controls.ReasoningSummary != "" {

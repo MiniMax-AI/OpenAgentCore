@@ -73,7 +73,6 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 		local.MCP, err = resolveEnvironmentMCP(manifest.MCP, values)
 		for i := range local.MCP {
 			local.MCP[i].InstallationRoot = b.capabilityRoot
-			local.MCP[i].WorkspaceRoot = b.workspace
 		}
 		if err != nil {
 			return r, err

@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: d14848610e56678c0de35ed6796b4631c5cd42b8a1f0d25366e224a4ff878e44
+source_hash: fb035e336b49105be6cc6fb4ec72e2f62e98b7ca6ea696a907cdce2fd8824e9e
 ---
 
 本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
@@ -91,7 +91,7 @@ source_hash: d14848610e56678c0de35ed6796b4631c5cd42b8a1f0d25366e224a4ff878e44
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 列出 Harnesses | `GET /core/v1/harnesses` | **设置 → 模型与凭据** 的 **默认模型配置** 卡片：每个 Harness 的就绪状态（`enabled` 且已设置模型配置时为 **就绪**，否则为 **未设置模型提供商** 或 **已禁用**）、`default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 **使用详情**；**概览** 的 **新手引导**（默认 Harness 为 **就绪**；没有默认 Harness 时，任意 Harness 为 **就绪**） |
+| 列出 Harnesses | `GET /core/v1/harnesses` | **设置 → 模型与凭据** 的 **默认模型配置** 卡片：每个 Harness 的就绪状态（[就绪状态](../configuration.md#runtime-settings-web)）、`default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 **使用详情**；**概览** 的 **新手引导**（默认 Harness 为 **就绪**；没有默认 Harness 时，任意 Harness 为 **就绪**） |
 | 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **设置** 或 **替换**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息；随后再次读取列表 |
 | 清除 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **清除**，需确认，随后再次读取列表 |
 
