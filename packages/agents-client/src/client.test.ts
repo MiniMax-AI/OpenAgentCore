@@ -1110,6 +1110,37 @@ describe("OpenAIAgentsClient", () => {
     expect(onEvent.mock.calls[2]?.[0]).toMatchObject({ output_index: 0, item: { id: "item_1", turn_id: "turn_1" } });
   });
 
+  it("projects reasoning summary parts and text without dropping their item identity", async () => {
+    const base = { session_id: "session", turn_id: "turn_1", item_id: "reasoning_1", output_index: 2, summary_index: 1 };
+    const events = [
+      { ...base, type: "agent.session.turn.reasoning_summary_part.added", event_id: "part-added", part: { type: "summary_text", text: "" } },
+      { ...base, type: "agent.session.turn.reasoning_summary_text.delta", event_id: "delta", delta: "checking" },
+      { ...base, type: "agent.session.turn.reasoning_summary_text.done", event_id: "text-done", text: "checked" },
+      { ...base, type: "agent.session.turn.reasoning_summary_part.done", event_id: "part-done", part: { type: "summary_text", text: "checked" }, status: null },
+      { ...base, type: "agent.session.turn.reasoning_summary_part.done", event_id: "incomplete", part: { type: "summary_text", text: "partial" }, status: "incomplete" },
+    ];
+    const onEvent = vi.fn();
+    const client = new OpenAIAgentsClient({
+      fetch: recordingFetch(streamResponse(events.map((event) => `data: ${JSON.stringify(event)}\n\n`)), []),
+    });
+    await client.streamEvents("session", { onEvent });
+    expect(onEvent.mock.calls.map(([event]) => event)).toEqual(events);
+
+    for (const invalid of [
+      { ...events[0], summary_index: -1 },
+      { ...events[0], summary_index: 0.5 },
+      { ...events[0], part: { type: "output_text", text: "wrong part" } },
+      { ...events[0], part: { type: "summary_text", text: "text", private_data: "hidden" } },
+      { ...events[1], session_id: "another-session" },
+      { ...events[1], delta: null },
+      { ...events[3], status: "completed" },
+    ]) {
+      const rejected = new OpenAIAgentsClient({ fetch: recordingFetch(streamResponse([`data: ${JSON.stringify(invalid)}\n\n`]), []) });
+      await expect(rejected.streamEvents("session", { onEvent: vi.fn() }))
+        .rejects.toMatchObject({ status: 502, code: "invalid_stream_event" });
+    }
+  });
+
   it("projects explicit wire nulls", async () => {
     const user = {
       id: "user_1", turn_id: "turn_1", type: "message", status: "completed", role: "user",

@@ -77,6 +77,7 @@ export function SessionDetail({
       (item) => !("turn_id" in item && superseded.has(item.turn_id as string)),
     ),
   };
+  const latestItem = live.items.at(-1);
   const userTurns = live.items
     .filter((item) => item.type === "message" && item.role === "user")
     .map((item) => ({
@@ -205,7 +206,8 @@ export function SessionDetail({
                   {!live.items.length && (
                     <EmptyState title={tr("等待执行记录")} size="compact" />
                   )}
-                  {data.session.status === "in_progress" && <Thinking />}
+                  {data.session.status === "in_progress" &&
+                    !(latestItem?.type === "reasoning" && latestItem.status === "in_progress") && <Thinking />}
                   <Questions session={data.session} />
                   {live.reconnecting && (
                     <p role="status" className="py-2 text-sm text-fg-muted">

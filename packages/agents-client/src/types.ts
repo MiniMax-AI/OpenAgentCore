@@ -671,7 +671,9 @@ export interface SessionEventBase {
   /** Null on Item events for input Items. */
   output_index?: number | null;
   content_index?: number;
-  part?: ItemContent;
+  summary_index?: number;
+  part?: ItemContent | { type: "summary_text"; text: string };
+  status?: "incomplete" | null;
   delta?: string;
   text?: string;
   error?: StreamError;
@@ -708,6 +710,10 @@ export type KnownSessionEventType =
   | "agent.session.turn.content_part.done"
   | "agent.session.turn.output_text.delta"
   | "agent.session.turn.output_text.done"
+  | "agent.session.turn.reasoning_summary_part.added"
+  | "agent.session.turn.reasoning_summary_part.done"
+  | "agent.session.turn.reasoning_summary_text.delta"
+  | "agent.session.turn.reasoning_summary_text.done"
   | "agent.output.command_execution_output.delta";
 
 export interface KnownSessionEvent extends SessionEventBase {

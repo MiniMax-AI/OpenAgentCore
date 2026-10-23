@@ -112,6 +112,7 @@
   "已请求取消，等待执行结束。": "Cancellation requested; waiting for execution to stop.",
   "待恢复": "Recovery needed",
   "思考过程": "Thinking",
+  "正在思考…": "Thinking…",
   "总 Token": "Total tokens",
   "恢复创建": "Recover creation",
   "手动选择": "Choose manually",

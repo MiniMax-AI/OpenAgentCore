@@ -528,6 +528,48 @@ test("text arrives incrementally before durable completion, then survives reload
   await expect(reply).toContainText("流式第一段，第二段完成。");
 });
 
+test("thinking stays in the conversation, streams a preview, and restores complete summaries without duplicates", async ({ page, request }) => {
+  await resources(page);
+  await agent(page);
+  await converse(page);
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  await request.post("http://127.0.0.1:18181/reasoning-output?phase=start");
+  const thinking = page.getByRole("region", { name: "思考过程", exact: true });
+  await expect(thinking.getByRole("button", { name: "正在思考…", exact: true })).toBeVisible();
+  await expect(thinking.getByText("先检查约束。", { exact: true }).first()).toBeVisible();
+  await expect(page.locator("details").filter({ has: thinking })).toHaveCount(0);
+  await request.post("http://127.0.0.1:18181/reasoning-output?phase=done");
+  const toggle = thinking.getByRole("button", { name: "思考过程", exact: true });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.click();
+  await expect(thinking.locator("div")).toHaveText("已核对约束。\n\n第二步完成。");
+  await page.reload();
+  await expect(thinking).toHaveCount(1);
+  await expect(toggle).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await toggle.press("Enter");
+  await expect(thinking.locator("div")).toBeVisible();
+  await expect(thinking.locator("div")).toHaveText("已核对约束。\n\n第二步完成。");
+});
+
+test("thinking without a replayed baseline immediately recovers authoritative history", async ({ page, request }) => {
+  await resources(page);
+  await agent(page);
+  await converse(page);
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  await page.addInitScript(() => {
+    const original = window.setInterval;
+    window.setInterval = ((handler: TimerHandler, delay?: number, ...args: unknown[]) =>
+      original(handler, delay === 2000 ? 60000 : delay, ...args)) as typeof setInterval;
+  });
+  await page.reload();
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  await request.post("http://127.0.0.1:18181/reasoning-output?phase=resume");
+  const thinking = page.getByRole("region", { name: "思考过程", exact: true });
+  await expect(thinking).toBeVisible({ timeout: 1500 });
+  await expect(thinking.locator("p")).toHaveText("之前的分析，恢复后继续。");
+});
+
 test("an active reply without a replayed item baseline refreshes immediately on its next delta", async ({
   page,
   request,

@@ -2,6 +2,7 @@ import { zipSync, strToU8 } from "fflate";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
 let executorConnected = false;
+let reasoningItem;
 let vaults = [],
   credentials = [],
   skillBundles = new Map();
@@ -75,6 +76,37 @@ createServer(async (req, res) => {
     });
     return reply({});
   }
+  if (url.pathname === "/reasoning-output") {
+    const session = sessions.at(-1), turn = turns.get(session.id).at(-1);
+    const phase = url.searchParams.get("phase");
+    if (phase !== "done") reasoningItem = {
+      id: randomUUID(), turn_id: turn.id, type: "reasoning", status: "in_progress", summary: [],
+    };
+    const base = { turn_id: turn.id, item_id: reasoningItem.id, output_index: 0, summary_index: 0 };
+    const summary = (type, fields) => emit(session, { ...base, type: `agent.session.turn.reasoning_summary_${type}`, ...fields });
+    if (phase === "start") {
+      // No durable copy: these assertions must be satisfied by the event stream.
+      emit(session, { type: "agent.session.turn.item.added", turn_id: turn.id, output_index: 0, item: reasoningItem });
+      summary("part.added", { part: { type: "summary_text", text: "" } });
+      summary("text.delta", { delta: "先检查约束。" });
+    } else if (phase === "done") {
+      reasoningItem.summary = [{ type: "summary_text", text: "已核对约束。" }, { type: "summary_text", text: "第二步完成。" }];
+      summary("text.done", { text: reasoningItem.summary[0].text });
+      summary("part.done", { part: reasoningItem.summary[0], status: null });
+      summary("part.added", { summary_index: 1, part: { type: "summary_text", text: "" } });
+      summary("text.delta", { summary_index: 1, delta: reasoningItem.summary[1].text });
+      summary("text.done", { summary_index: 1, text: reasoningItem.summary[1].text });
+      summary("part.done", { summary_index: 1, part: reasoningItem.summary[1], status: null });
+      reasoningItem.status = "completed";
+      histories.get(session.id).push(reasoningItem);
+      emit(session, { type: "agent.session.turn.item.done", turn_id: turn.id, output_index: 0, item: reasoningItem });
+    } else if (phase === "resume") {
+      reasoningItem.summary = [{ type: "summary_text", text: "之前的分析，恢复后继续。" }];
+      histories.get(session.id).push(reasoningItem);
+      summary("text.delta", { delta: "恢复后继续。" });
+    }
+    return reply({});
+  }
   if (url.pathname === "/drop-streams") {
     for (const peers of streams.values()) for (const peer of peers) peer.end();
     return reply({});
@@ -99,6 +131,7 @@ createServer(async (req, res) => {
     for (const peers of streams.values()) for (const peer of peers) peer.end();
     streams.clear();
     executorConnected = false;
+    reasoningItem = undefined;
     vaults = [];
     credentials = [];
     skillBundles = new Map();

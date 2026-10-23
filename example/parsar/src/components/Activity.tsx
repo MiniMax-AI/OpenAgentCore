@@ -75,7 +75,37 @@ function CodeBlock({ children }: { children?: React.ReactNode }) {
     </div>
   );
 }
+function Reasoning({ item }: { item: SessionItem }) {
+  const [expanded, setExpanded] = useState(false);
+  const active = item.status === "in_progress";
+  const text = item.summary?.map((part) => part.text).join("\n\n") || "";
+  const contentId = `reasoning-${item.id}`;
+  return (
+    <section aria-label={tr("思考过程")} className="py-3 text-sm text-fg-muted">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={() => setExpanded(!expanded)}
+        className="flex cursor-pointer items-center gap-1.5 rounded py-1 hover:text-fg focus-visible:outline-2 focus-visible:outline-offset-4"
+      >
+        {active ? tr("正在思考…") : tr("思考过程")}
+        <ChevronRight className={`h-3.5 w-3.5 transition-transform ${expanded ? "rotate-90" : ""}`} />
+      </button>
+      {active && !expanded && text && (
+        <p className="mt-1 line-clamp-2 whitespace-pre-wrap break-words leading-relaxed">
+          {text.length > 240 ? `…${text.slice(-240)}` : text}
+        </p>
+      )}
+      <div id={contentId} hidden={!expanded} className="mt-2 whitespace-pre-wrap break-words leading-relaxed">
+        {text}
+      </div>
+    </section>
+  );
+}
+
 export function Activity({ item }: { item: SessionItem }) {
+  if (item.type === "reasoning") return <Reasoning item={item} />;
   if (item.type === "message") {
     const text =
       item.content
@@ -129,13 +159,8 @@ export function Activity({ item }: { item: SessionItem }) {
         ? [tr("搜索网页"), item.action?.query || item.action?.url]
             .filter(Boolean)
             .join(" · ")
-      : item.type === "reasoning"
-        ? tr("思考过程")
         : item.name || item.type;
-  const detail =
-    item.type === "reasoning"
-      ? item.summary?.map((part) => part.text).join("\n")
-      : (item.output ?? item.arguments ?? item.action);
+  const detail = item.output ?? item.arguments ?? item.action;
   return (
     <details className="group py-1 text-sm">
       <summary className="flex cursor-pointer list-none items-center gap-2 py-1.5 text-fg-muted hover:text-fg">
@@ -154,14 +179,14 @@ export function Activity({ item }: { item: SessionItem }) {
 }
 
 export function SessionTimeline({ items }: { items: SessionItem[] }) {
-  const groups: { id: string; message?: SessionItem; steps: SessionItem[] }[] =
+  const groups: { id: string; entry?: SessionItem; steps: SessionItem[] }[] =
     [];
   for (const item of items) {
-    if (item.type === "message")
-      groups.push({ id: item.id, message: item, steps: [] });
+    if (item.type === "message" || item.type === "reasoning")
+      groups.push({ id: item.id, entry: item, steps: [] });
     else {
       const last = groups.at(-1);
-      if (last && !last.message && last.steps.at(-1)?.turn_id === item.turn_id)
+      if (last && !last.entry && last.steps.at(-1)?.turn_id === item.turn_id)
         last.steps.push(item);
       else groups.push({ id: item.id, steps: [item] });
     }
@@ -169,11 +194,11 @@ export function SessionTimeline({ items }: { items: SessionItem[] }) {
   return groups.map((group) => (
     <div
       id={`item-${group.id}`}
-      data-turn-key={group.message?.role === "user" ? group.id : undefined}
+      data-turn-key={group.entry?.role === "user" ? group.id : undefined}
       key={group.id}
     >
-      {group.message ? (
-        <Activity item={group.message} />
+      {group.entry ? (
+        <Activity item={group.entry} />
       ) : (
         <details className="group/steps my-3 rounded-2xl border border-line-muted px-4 py-2.5">
           <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-fg-muted hover:text-fg">
