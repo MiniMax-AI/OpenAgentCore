@@ -188,30 +188,6 @@ type FunctionResultSubmitter interface {
 	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
 }
 
-// Workspace extensions, implemented by each owner explicitly. The common
-// Runtime may supply an authorized workspace owner independently of the adapter.
-// A resource without native access returns the corresponding Unsupported error;
-// this does not disable capabilities provided by the common workspace owner.
-
-// WorkspaceReader returns success only after acknowledged native close on an existing owner.
-type WorkspaceReader interface {
-	ReadWorkspaceFile(context.Context, string, int) (WorkspaceReadResult, error)
-}
-
-// WorkspaceDirectoryLister reads one directory through an existing workspace owner.
-// An empty directory selects the root; other paths contain only relative components.
-// Entry names are single components. Kind is file, directory, symlink or other;
-// SizeBytes is present and nonnegative only for regular files. Results have no
-// prescribed order, and Truncated must not be presented as a complete inventory.
-// maxEntries is positive; adapters may reject limits above their private bound.
-// Successful return requires settled directory/metadata access and handle cleanup.
-// Implementations retain workspace authorization and isolation and use the existing
-// WorkspaceRead errors for unsupported, unavailable, busy, invalid or uncertain reads.
-// This interface does not establish public Files pagination or feature admission.
-type WorkspaceDirectoryLister interface {
-	ListWorkspaceDirectory(context.Context, string, int) (WorkspaceDirectoryResult, error)
-}
-
 // Kind registration.
 
 // RegisterKind installs the heartbeat descriptor and model configuration for an

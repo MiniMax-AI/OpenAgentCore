@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -36,7 +37,7 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		r.mu.Unlock()
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead("read_capacity"))
 	}
-	resource, code := r.workspaceResourceLocked(request)
+	code := r.workspaceReadAdmissionLocked(request)
 	if code != "" {
 		r.mu.Unlock()
 		return r.sendWorkspaceRead(ctx, env, rejectedWorkspaceRead(code))
@@ -45,6 +46,7 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		r.workspaceReads = make(map[string]struct{})
 	}
 	r.workspaceReads[env.ID] = struct{}{}
+	binding := r.localWorkspace
 	r.shutdownWG.Add(1)
 	r.mu.Unlock()
 	go func() {
@@ -53,44 +55,32 @@ func (r *Router) handleWorkspaceRead(ctx context.Context, env proto.Envelope) er
 		// Observer loss does not discard an admitted native wait or replay it.
 		operation, cancel := context.WithTimeout(context.WithoutCancel(ctx), 12*time.Second)
 		defer cancel()
-		result := executeWorkspaceRead(operation, resource, request)
+		result := executeWorkspaceRead(operation, binding, request)
 		_ = r.sendWorkspaceRead(context.WithoutCancel(ctx), env, result)
 	}()
 	return nil
 }
 
-func (r *Router) workspaceResourceLocked(request proto.WorkspaceReadPayload) (any, string) {
-	var resource any
+func (r *Router) workspaceReadAdmissionLocked(request proto.WorkspaceReadPayload) string {
 	if request.Handle != "" {
 		p := r.preparations[request.Handle]
 		if p == nil || p.environmentID != request.EnvironmentID || p.status.State != "ready" ||
 			!p.owns || p.busy || p.ctx.Err() != nil || !time.Now().Before(p.deadline) {
-			return nil, "resource_unavailable"
+			return "resource_unavailable"
 		}
-		if p.executor != nil {
-			resource = p.executor.native
-		}
-	} else {
-		s := r.sessions[request.RunID]
-		if s == nil || s.environmentID != request.EnvironmentID || s.session == nil ||
-			!r.interactionRouteOpenLocked(s) {
-			return nil, "resource_unavailable"
-		}
-		resource = s.session
+		return ""
 	}
-	if r.localWorkspace != nil {
-		resource = r.localWorkspace
+	s := r.sessions[request.RunID]
+	if s == nil || s.environmentID != request.EnvironmentID || s.session == nil ||
+		!r.interactionRouteOpenLocked(s) {
+		return "resource_unavailable"
 	}
-	return resource, ""
+	return ""
 }
 
-func executeWorkspaceRead(ctx context.Context, resource any, request proto.WorkspaceReadPayload) proto.WorkspaceReadResultPayload {
+func executeWorkspaceRead(ctx context.Context, binding *localworkspace.Binding, request proto.WorkspaceReadPayload) proto.WorkspaceReadResultPayload {
 	if request.Operation == "directory" {
-		reader, ok := resource.(agent.WorkspaceDirectoryLister)
-		if !ok {
-			return rejectedWorkspaceRead("read_unsupported")
-		}
-		read, err := reader.ListWorkspaceDirectory(ctx, request.Path, request.MaxEntries)
+		read, err := binding.ListWorkspaceDirectory(ctx, request.Path, request.MaxEntries)
 		if err != nil {
 			return workspaceReadResult(agent.WorkspaceReadResult{}, err, 0)
 		}
@@ -106,11 +96,7 @@ func executeWorkspaceRead(ctx context.Context, resource any, request proto.Works
 		}
 		return proto.WorkspaceReadResultPayload{Outcome: "completed", Directory: directory, CloseAcknowledged: true}
 	}
-	reader, ok := resource.(agent.WorkspaceReader)
-	if !ok {
-		return rejectedWorkspaceRead("read_unsupported")
-	}
-	read, err := reader.ReadWorkspaceFile(ctx, request.Path, request.MaxBytes)
+	read, err := binding.ReadWorkspaceFile(ctx, request.Path, request.MaxBytes)
 	return workspaceReadResult(read, err, request.MaxBytes)
 }
 
@@ -126,7 +112,6 @@ func workspaceReadResult(read agent.WorkspaceReadResult, err error, limit int) p
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceReadUnsupported, "read_unsupported"},
 		{agent.ErrWorkspaceReadUnavailable, "resource_unavailable"},
 		{agent.ErrWorkspaceReadBusy, "read_capacity"},
 		{agent.ErrWorkspaceReadInvalid, "invalid_request"},

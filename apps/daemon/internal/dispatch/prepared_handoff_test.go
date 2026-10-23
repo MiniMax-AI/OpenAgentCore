@@ -190,7 +190,7 @@ func TestPreparedHandoffDuplicateStartDoesNotReexecuteDuringPublication(t *testi
 	if len(frames) == 0 || frames[len(frames)-1].Type != proto.TypeWorkspaceReadResult || frames[len(frames)-1].DecodePayload(&readResult) != nil || readResult.ErrorCode != "resource_unavailable" {
 		t.Fatalf("pre-publication workspace read = %+v", frames)
 	}
-	if session.functions.Load() != 0 || session.steers.Load() != 0 || session.reads.Load() != 0 {
+	if session.functions.Load() != 0 || session.steers.Load() != 0 {
 		t.Fatal("private Session accepted work before started publication")
 	}
 	duplicate := mustEnv(t, proto.TypeExecutionStart, "request", proto.ExecutionStartPayload{Handle: ready.Handle, ExecutorID: ready.ExecutorID, RunID: "run", Input: proto.TextInput("input")})
