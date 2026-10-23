@@ -185,7 +185,7 @@ func (s *Session) publishSubagentHistory(ctx context.Context, h subagentHistory,
 			if turn.CompletedItems[identity.ID] {
 				itemStatus = "completed"
 			}
-			kind, body, id, err := subagentItemSnapshot(raw, itemStatus)
+			kind, body, id, err := subagentItemSnapshot(raw, itemStatus, s.reasoningSummary)
 			if kind == proto.TypeSubagentCoordination {
 				value, decodeErr := subagentCoordination(raw, h.ID)
 				if decodeErr != nil {
@@ -234,7 +234,7 @@ func nativeMilliseconds(seconds *int64) *int64 {
 	return &ms
 }
 
-func subagentItemSnapshot(raw json.RawMessage, turnStatus string) (string, json.RawMessage, string, error) {
+func subagentItemSnapshot(raw json.RawMessage, turnStatus string, reasoningSummary bool) (string, json.RawMessage, string, error) {
 	var item struct {
 		Type   string `json:"type"`
 		ID     string `json:"id"`
@@ -291,14 +291,16 @@ func subagentItemSnapshot(raw json.RawMessage, turnStatus string) (string, json.
 		body, err := json.Marshal(map[string]any{"input": []any{map[string]any{"type": "message", "role": "user", "content": content}}})
 		return "message", body, item.ID, err
 	case "reasoning":
-		var source struct {
-			Summary []string `json:"summary"`
+		if !reasoningSummary {
+			return "", nil, "", nil
 		}
+		var source ThreadItem
 		if json.Unmarshal(raw, &source) != nil {
 			return "", nil, "", errors.New("codex: invalid child reasoning")
 		}
-		summary := make([]map[string]string, 0, len(source.Summary))
-		for _, text := range source.Summary {
+		parts := nativeReasoningParts(source)
+		summary := make([]map[string]string, 0, len(parts))
+		for _, text := range parts {
 			summary = append(summary, map[string]string{"type": "summary_text", "text": text})
 		}
 		status := "in_progress"

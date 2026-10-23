@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 535fce4a958c4176e98e0b59a6995fd9d72c874cb4a6493b797545652c37321b
+source_hash: 90e786b565e819d9c1396e7182c11da1f66f7213398e3c166d2b0713fd072e97
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -126,7 +126,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **执行和历史**
 
-- Codex 的推理摘要会被请求，但不会投影为 `reasoning` Item；流也不会发出 reasoning-summary 事件、Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
+- `reasoning` Item 的 `summary_text` 携带 Harness 产生的原生推理摘要，没有摘要时携带完整的原生推理文本，例如模型原始推理或 Claude Code 的 thinking 块。Claude Code 只接受 `reasoning.summary` 为 `auto`，Codex 流式输出一个 item 先送达的原生通道，即摘要或原始推理文本。
+- 流不会发出 Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
 - 除 [Turns and Items](sessions-events.md#turns-and-items) 中列出的变体外，其他原生 Item 变体不会被投影，而且 Items 无法修改。
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。

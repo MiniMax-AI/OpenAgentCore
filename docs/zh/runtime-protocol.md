@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 68d35aa375b6c371975c619712f65970dc0055b49e4362c271f835422779eea1
+source_hash: 033ea14b34c596c855004a3ec1ee2e9b675c13ed962bfcc2e5c01d76e5fff4bd
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -110,7 +110,7 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [初始化与能力传输](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_cancel` | `delta`, `thinking`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel` | `delta`, `reasoning`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `function_call_withdrawn`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | 对应的 `*_result` | [读取](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go)、[写入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go)、[导出](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
@@ -121,6 +121,8 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，含义与 `subagent_turn` 中相同；Run 自身发起的调用两者均为空。Adapter 在调用之前发送该子级的 `subagent_identity` 和 `subagent_turn`，Core 用同一个 `call_id` 的 `function_result` 作答。
 
 `function_call_withdrawn` 携带某个 `function_call` 的 `call_id`、`native_id` 和 `turn_id`，表示原生 Harness 永远不会为它应用结果，例如 Codex Subagent 的 Turn 已结束且原生丢弃了其请求。Core 不再要求回答该调用，并拒绝之后为它提交的结果。adapter 以 `not_pending` 确认已在传输中的 `function_result`，Core 随后等待撤回或 Turn 结束，既不让 Turn 失败，也不重发该结果。
+
+`reasoning` frame 按原生 `id` 报告一个原生推理 item。状态为 `in_progress` 的 frame 在 `delta` 中携带下一段文本，状态为 `completed` 或 `incomplete` 的 frame 结束该 item 且不带文本。文本是 Harness 产生的原生推理摘要，没有摘要时是其原生推理文本。只有 `execution_controls` 设置了推理摘要时，适配器才发送 `reasoning` frame，Run 及其 Subagent 都遵循此规则。
 
 Usage frame 和最终 usage snapshot 都携带当前执行的累计测量，替换之前的快照；不要相加。缺失的测量表示未知，不是零。
 

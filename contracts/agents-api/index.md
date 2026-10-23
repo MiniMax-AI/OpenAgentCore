@@ -123,7 +123,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Execution and history**
 
-- Codex reasoning summaries are requested but not projected as `reasoning` Items, and the stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
+- A `reasoning` Item's `summary_text` carries the Harness's native reasoning summary when it produces one, otherwise its full native reasoning text, such as raw model reasoning or Claude Code thinking blocks. Claude Code admits only `reasoning.summary` `auto`, and Codex streams the first native channel an item delivers, its summary or its raw reasoning text.
+- The stream does not emit Environment `pending` or `ready` events, or every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.

@@ -71,7 +71,7 @@ func TestExecutionControlsRejectUnsupportedProfilesBeforeLaunch(t *testing.T) {
 		"unknown-verbosity": {TextVerbosity: "invalid"},
 		"no-effort":         {ReasoningEffort: "none"},
 		"minimal-effort":    {ReasoningEffort: "minimal"},
-		"summary":           {ReasoningSummary: "auto"},
+		"summary":           {ReasoningSummary: "concise"},
 		"service-tier":      {ServiceTier: "priority"},
 	}
 	for name, controls := range cases {
@@ -167,5 +167,19 @@ func TestToolDiscoveryPreservesFrozenFunctionsBesideOtherProfiles(t *testing.T) 
 	request.ToolSearch = false
 	if _, _, err := prepare(config, request); err == nil {
 		t.Fatal("deferred definitions became eager")
+	}
+}
+
+func TestReasoningSummaryReachesTheBridgeOnlyWhenRequested(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("OAC_RUNTIME_HOME", root)
+	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
+	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Input."), AgentOptions: map[string]any{"model": "native-model"}}
+	for _, summary := range []string{"", "auto"} {
+		request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", ReasoningSummary: summary}
+		start, _, err := prepare(config, request)
+		if err != nil || start.ReasoningSummary != (summary != "") {
+			t.Fatalf("summary %q: reasoning flag %v, err %v", summary, start.ReasoningSummary, err)
+		}
 	}
 }

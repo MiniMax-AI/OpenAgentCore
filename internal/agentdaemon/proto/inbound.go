@@ -19,10 +19,9 @@ const (
 	// TypeOutputMessage carries opt-in native message boundaries and completion snapshots.
 	TypeOutputMessage = "output_message"
 
-	// TypeThinking carries an internal-thinking fragment. Gateway
-	// forwards as a plain EventDelta so existing renderers keep
-	// working.
-	TypeThinking = "thinking"
+	// TypeReasoning carries one native reasoning item: its text fragments while
+	// in progress and its terminal status.
+	TypeReasoning = "reasoning"
 
 	// TypeToolCall carries a tool invocation. Stage=="before" runs
 	// before the call, "after" runs after.
@@ -65,10 +64,12 @@ type OutputMessagePayload struct {
 	Text   *string `json:"text,omitempty"`
 }
 
-// ThinkingPayload carries an internal-thinking fragment.
-type ThinkingPayload struct {
-	Text     string `json:"text"`
-	Sequence uint64 `json:"sequence,omitempty"`
+// ReasoningPayload reports one native reasoning item. Delta is the next text
+// fragment, empty on a frame that only changes Status.
+type ReasoningPayload struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Delta  string `json:"delta,omitempty"`
 }
 
 // ToolCallPayload carries a tool invocation event. Stage is "before"

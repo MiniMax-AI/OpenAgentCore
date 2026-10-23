@@ -23,7 +23,7 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | [Whitespace-only message text](./message-content.md) | Admitted; delivered unchanged | Admitted; native drops it, and an all-blank message becomes `(no content)` | Rejected |
 | [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
 | `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
-| `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | Rejected | Rejected |
+| `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | `auto`: admitted | Rejected |
 | `service_tier` other than `auto` | `default`, `flex`, `priority`: admitted | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
 | [Public token usage](./sessions-events.md) | Measured counters | Null | Null |

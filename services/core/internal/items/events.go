@@ -31,6 +31,10 @@ func Events(change Change, outputIndex *int32) []v1.SessionEvent {
 	textMessage := item.Type == "message" && item.Role == "assistant" && len(item.Content) == 1 && item.Content[0].Text != nil
 	if previous.ID == "" {
 		initial := item
+		if item.Type == "reasoning" {
+			// Reasoning text arrives only through summary events.
+			initial.Status, initial.Summary = "in_progress", []v1.SummaryText{}
+		}
 		if textMessage {
 			// Assistant text is added empty and in progress; its text arrives
 			// only through deltas, as in official streams (EVT-10).
@@ -54,6 +58,32 @@ func Events(change Change, outputIndex *int32) []v1.SessionEvent {
 	}
 	if outputIndex == nil {
 		return events
+	}
+	if item.Type == "reasoning" {
+		// The summary is one part, framed like assistant text.
+		text, zero := summaryText(item), int64(0)
+		event := base
+		event.ItemID, event.SummaryIndex = item.ID, &zero
+		if text != "" && summaryText(previous) == "" {
+			empty := ""
+			event.Part = &v1.ItemContent{Type: "summary_text", Text: &empty}
+			emit("reasoning_summary_part.added", event)
+			event.Part = nil
+			if delta == nil {
+				delta = &text
+			}
+		}
+		if delta != nil && *delta != "" {
+			event.Delta = delta
+			emit("reasoning_summary_text.delta", event)
+			event.Delta = nil
+		}
+		if item.Status != "in_progress" && text != "" {
+			event.Text = &text
+			emit("reasoning_summary_text.done", event)
+			event.Text, event.Part = nil, &v1.ItemContent{Type: "summary_text", Text: &text}
+			emit("reasoning_summary_part.done", event)
+		}
 	}
 	if item.Type == "command_execution" && delta != nil {
 		event := base

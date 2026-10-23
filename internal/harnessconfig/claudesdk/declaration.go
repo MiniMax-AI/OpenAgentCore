@@ -52,8 +52,9 @@ var Declaration = harnessconfig.Declaration{
 		MCPHTTPRequired:          proto.CapabilitySupported,
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
 	},
-	// The SDK takes effort low to max. It has no verbosity, summary or service
-	// tier. Native REPL runs tool calls inside model-written code, outside the root
+	// The SDK takes effort low to max. Its thinking blocks are the reasoning
+	// text, so a summary request takes only auto; there is no concise or
+	// detailed setting. It has no verbosity or service tier. Native REPL runs tool calls inside model-written code, outside the root
 	// tool_use and tool_result records that function receipts and tool observations
 	// read, so enabling programmatic tool calling is rejected. Native WebSearch and
 	// WebFetch are live and have no cached mode or settings: disabled removes them,
@@ -63,6 +64,7 @@ var Declaration = harnessconfig.Declaration{
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled", "live"},
 		ReasoningEfforts:        []string{"low", "medium", "high", "xhigh", "max"},
+		ReasoningSummaries:      []string{"auto"},
 		ProgrammaticToolCalling: []bool{false},
 		TextVerbosities:         []string{"medium"},
 	},

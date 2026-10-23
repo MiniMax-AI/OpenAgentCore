@@ -2,7 +2,8 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 
 export type MessageEvent =
   | { type: "delta"; delta: string; item_id: string }
-  | { type: "output_message"; message: { id: string; status: "in_progress" | "completed"; phase?: "final_answer"; text?: string } };
+  | { type: "output_message"; message: { id: string; status: "in_progress" | "completed"; phase?: "final_answer"; text?: string } }
+  | { type: "reasoning"; reasoning: { id: string; status: "in_progress" | "completed"; delta?: string } };
 
 type ActiveMessage = {
   id: string;
@@ -10,10 +11,13 @@ type ActiveMessage = {
   block?: number;
   observed: boolean;
   failed: boolean;
+  thinking: Set<number>;
 };
 
 export class MessageObserver {
   private active?: ActiveMessage;
+  // Native thinking blocks are reported as reasoning only when the Agent requested summaries.
+  constructor(private readonly reasoning = false) {}
 
   consume(message: SDKMessage): MessageEvent[] {
     if ((message.type !== "stream_event" && message.type !== "assistant") ||
@@ -35,13 +39,18 @@ export class MessageObserver {
     const event = message.event;
     if (event.type === "message_start") {
       if (!event.message.id) throw new Error("missing native message identity");
-      this.active = { id: event.message.id, blocks: new Map(), observed: false, failed: false };
+      this.active = { id: event.message.id, blocks: new Map(), observed: false, failed: false, thinking: new Set() };
       return [];
     }
     const active = this.active;
     if (!active) throw new Error("native message start is missing");
     if (event.type === "content_block_start") {
       active.block = event.index;
+      if (event.content_block.type === "thinking" && this.reasoning) {
+        active.thinking.add(event.index);
+        const id = `${active.id}:${event.index}`;
+        return [{ type: "reasoning", reasoning: { id, status: "in_progress", ...(event.content_block.thinking ? { delta: event.content_block.thinking } : {}) } }];
+      }
       if (event.content_block.type !== "text") return [];
       active.blocks.set(event.index, event.content_block.text);
       const events: MessageEvent[] = [];
@@ -58,7 +67,13 @@ export class MessageObserver {
       active.blocks.set(event.index, previous + event.delta.text);
       return event.delta.text ? [{ type: "delta", item_id: active.id, delta: event.delta.text }] : [];
     }
-    if (event.type === "content_block_stop") active.block = undefined;
+    if (event.type === "content_block_delta" && event.delta.type === "thinking_delta" && active.thinking.has(event.index)) {
+      return event.delta.thinking ? [{ type: "reasoning", reasoning: { id: `${active.id}:${event.index}`, status: "in_progress", delta: event.delta.thinking } }] : [];
+    }
+    if (event.type === "content_block_stop") {
+      active.block = undefined;
+      if (active.thinking.delete(event.index)) return [{ type: "reasoning", reasoning: { id: `${active.id}:${event.index}`, status: "completed" } }];
+    }
     if (event.type === "message_stop") {
       this.active = undefined;
       if (active.observed && !active.failed) {

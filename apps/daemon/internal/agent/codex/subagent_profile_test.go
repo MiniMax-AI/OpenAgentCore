@@ -68,7 +68,7 @@ func TestSubagentProfileRejectsRequirementsThatForceUnobservableFeatures(t *test
 
 func TestSubagentItemSnapshotSkipsUnmappedItemTypes(t *testing.T) {
 	for _, item := range []string{`{"type":"imageView","id":"i1","path":"/x.png"}`, `{"type":"contextCompaction","id":"c1"}`} {
-		kind, _, _, err := subagentItemSnapshot(json.RawMessage(item), "completed")
+		kind, _, _, err := subagentItemSnapshot(json.RawMessage(item), "completed", true)
 		if err != nil || kind != "" {
 			t.Fatal(item, kind, err)
 		}
