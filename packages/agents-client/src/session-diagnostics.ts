@@ -12,7 +12,7 @@ import {
 // ItemDiagnosticTiming holds Core receipt intervals, distinct from the public tool-reported duration_ms.
 export type { DiagnosticFailureCode, ItemDiagnosticTiming };
 // The schema types params as a free-form object; each code that carries params has one of these shapes.
-export type ProvisioningFailureParams = { step: "setup" | "python" | "npm" | "system" | "file" | "skill" | null; index: number | null; exit_code: number | null };
+export type ProvisioningFailureParams = { step: "setup" | "python" | "npm" | "file" | "skill" | null; index: number | null; exit_code: number | null };
 export type ConnectionFailureParams = { http_status: number | null };
 export type DiagnosticFailure = Omit<DiagnosticFailureResource, "params"> & { params: Record<string, never> | ProvisioningFailureParams | ConnectionFailureParams };
 export type SessionDiagnosticFailure = DiagnosticFailure & Pick<SessionDiagnosticFailureResource, "source" | "turn_id">;
@@ -20,7 +20,7 @@ export type SessionDiagnostics = Omit<SessionDiagnosticsResource, "failure"> & {
 export type TurnDiagnostics = Omit<TurnDiagnosticsResource, "failure"> & { failure: DiagnosticFailure | null };
 
 // The schema's one code enum covers every failure source; each source produces only its subset.
-const turnCodes: readonly DiagnosticFailureCode[] = ["authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "request_timeout", "context_length_exceeded", "cyber_policy", "connection_failed", "harness_error", "model_provider_required", "runtime_unavailable", "runtime_disconnected", "runtime_preparation_failed", "execution_interrupted", "delivery_unconfirmed", "input_rejected", "executor_protocol_error", "core_storage_failed", "internal_error"];
+const turnCodes: readonly DiagnosticFailureCode[] = ["authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "context_length_exceeded", "cyber_policy", "connection_failed", "harness_error", "model_provider_required", "runtime_unavailable", "runtime_disconnected", "runtime_preparation_failed", "execution_interrupted", "delivery_unconfirmed", "input_rejected", "executor_protocol_error", "core_storage_failed", "internal_error"];
 const inputCodes: readonly DiagnosticFailureCode[] = ["environment_connection_timeout", "environment_unavailable", "model_provider_required", "internal_error"];
 const environmentCodes: readonly DiagnosticFailureCode[] = ["environment_provisioning_failed"];
 const fields = (...values: string[]) => new Set(values);
@@ -33,9 +33,9 @@ function failure(value: unknown, codes: readonly DiagnosticFailureCode[], sessio
   let params: DiagnosticFailure["params"] = {};
   if (value.code === "environment_provisioning_failed") {
     const p = value.params;
-    if (!exactFields(p, fields("step", "index", "exit_code")) || (p.step !== null && (typeof p.step !== "string" || !["setup", "python", "npm", "system", "file", "skill"].includes(p.step))) ||
+    if (!exactFields(p, fields("step", "index", "exit_code")) || (p.step !== null && (typeof p.step !== "string" || !["setup", "python", "npm", "file", "skill"].includes(p.step))) ||
         (p.index !== null && (!Number.isSafeInteger(p.index) || (p.index as number) < 0 || p.step !== "setup")) ||
-        (p.exit_code !== null && (!Number.isSafeInteger(p.exit_code) || (p.exit_code as number) < 1 || (p.exit_code as number) > 255 || !["setup", "python", "npm", "system"].includes(p.step ?? "")))) return invalidAdminResponse();
+        (p.exit_code !== null && (!Number.isSafeInteger(p.exit_code) || (p.exit_code as number) < 1 || (p.exit_code as number) > 255 || !["setup", "python", "npm"].includes(p.step ?? "")))) return invalidAdminResponse();
     params = { step: p.step as ProvisioningFailureParams["step"], index: p.index as number | null, exit_code: p.exit_code as number | null };
   } else if (value.code === "connection_failed") {
     const p = value.params;

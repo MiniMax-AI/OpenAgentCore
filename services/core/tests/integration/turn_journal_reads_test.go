@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -13,9 +14,16 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
+type turnEvent struct {
+	Ordinal   int32
+	Kind      string
+	Payload   json.RawMessage
+	CreatedAt time.Time
+}
+
 // ListTurnEvents reads a Turn's journal after the given ordinal. Only tests
 // read the journal back.
-func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, after int32, limit int) ([]sessions.TurnEvent, error) {
+func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID string, after int32, limit int) ([]turnEvent, error) {
 	p, err := sessionpg.TurnLookup(tenantID, sessionID, turnID)
 	if err != nil {
 		return nil, err
@@ -30,9 +38,9 @@ func (s *Store) ListTurnEvents(ctx context.Context, tenantID, sessionID, turnID 
 	if err != nil {
 		return nil, err
 	}
-	events := make([]sessions.TurnEvent, 0, len(rows))
+	events := make([]turnEvent, 0, len(rows))
 	for _, row := range rows {
-		events = append(events, sessions.TurnEvent{Ordinal: row.Ordinal, Kind: row.Kind, Payload: row.Payload, CreatedAt: row.CreatedAt.Time})
+		events = append(events, turnEvent{Ordinal: row.Ordinal, Kind: row.Kind, Payload: row.Payload, CreatedAt: row.CreatedAt.Time})
 	}
 	return events, nil
 }

@@ -52,7 +52,7 @@ var testWriteKey = FileWriteIdentity{ID: testFileWrite, DeviceID: testDevice, Re
 func TestReserveEnvironmentFileWrite(t *testing.T) {
 	reserve := "WithFileWriteReservation " + testTenant + " " + testEnvironment
 	admission := []string{reserve, "LoadFileWrite " + testFileWrite, "LoadEnvironment", "LoadSessionDevice", "LoadComputeSuspension", "LoadPendingFileWrite", "LoadActiveTurn", "LoadPendingInput"}
-	pending := EnvironmentFileWrite{Identity: testWriteKey, EnvironmentID: testEnvironment, SessionID: testSession, State: "pending"}
+	pending := EnvironmentFileWrite{Identity: testWriteKey, State: "pending"}
 	bound := loads(ExecutionDevice{ID: testDevice, EnvironmentID: testEnvironment}, true)
 	admitted := func(tx fakeTx) fakeTx {
 		tx.loadFileWrite = loads(EnvironmentFileWrite{}, false)
@@ -116,7 +116,7 @@ func TestSettleEnvironmentFileWrite(t *testing.T) {
 	load := "LoadFileWrite " + testFileWrite
 	settledAt := time.Unix(1, 0)
 	write := func(state string) EnvironmentFileWrite {
-		return EnvironmentFileWrite{Identity: testWriteKey, EnvironmentID: testEnvironment, SessionID: testSession, State: state, SettledAt: &settledAt}
+		return EnvironmentFileWrite{Identity: testWriteKey, State: state, SettledAt: &settledAt}
 	}
 	for _, test := range []struct {
 		name     string

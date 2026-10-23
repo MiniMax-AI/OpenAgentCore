@@ -38,7 +38,7 @@ func TestBootstrapAddressUsesPublicOrigin(t *testing.T) {
 			if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &body) != nil || body["ws_url"] != publicURL {
 				t.Fatalf("bootstrap status=%d body=%s", response.Code, response.Body.String())
 			}
-			if len(body) != 5 {
+			if len(body) != 3 {
 				t.Fatal("bootstrap exposed private allocation metadata")
 			}
 		})

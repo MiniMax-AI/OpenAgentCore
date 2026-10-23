@@ -264,7 +264,7 @@ func TestStartHeartbeatsTicks(t *testing.T) {
 	var calls atomic.Int32
 	conn.StartHeartbeats(context.Background(), 30*time.Millisecond, func() proto.HeartbeatPayload {
 		calls.Add(1)
-		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), DaemonVersion: "0.0.0-dev"}
+		return proto.HeartbeatPayload{}
 	}, nil)
 
 	deadline := time.Now().Add(time.Second)
@@ -306,7 +306,7 @@ func TestStartHeartbeatsSendsImmediately(t *testing.T) {
 	defer cancel()
 	conn.StartHeartbeats(hbCtx, time.Hour, func() proto.HeartbeatPayload {
 		calls.Add(1)
-		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), DaemonVersion: "0.0.0-dev"}
+		return proto.HeartbeatPayload{}
 	}, nil)
 
 	deadline := time.Now().Add(2 * time.Second)

@@ -59,7 +59,7 @@ it.each([
   expect(() => projectSessionDiagnostics(value, id)).toThrow();
 });
 
-it.each(["authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "request_timeout", "context_length_exceeded", "cyber_policy", "connection_failed"])("projects finite native category %s", (code) => {
+it.each(["authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "context_length_exceeded", "cyber_policy", "connection_failed"])("projects finite native category %s", (code) => {
   const params = code === "connection_failed" ? { http_status: 503 } : {};
   const failed = { ...failure, code, params };
   expect(projectTurnDiagnostics({ ...snapshot, failure: failed }, id, turn).failure).toEqual(failed);

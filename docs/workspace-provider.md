@@ -2,7 +2,7 @@
 title: Workspace filesystem protocol
 ---
 
-The workspace filesystem protocol connects Core and sandbox nodes to the adapter that owns durable Environment storage. Core creates, observes and deletes storage objects; a node resolves an object to a host directory that its [Sandbox Provider protocol](sandbox-provider.md) attaches to compute. It is for authors of filesystem adapters and Sandbox Providers.
+The workspace filesystem protocol connects Core and sandbox nodes to the adapter that owns durable Environment storage. Core creates and deletes storage objects; a node resolves an object to a host directory that its [Sandbox Provider protocol](sandbox-provider.md) attaches to compute. It is for authors of filesystem adapters and Sandbox Providers.
 
 | | |
 | --- | --- |
@@ -21,7 +21,7 @@ Core selects and validates the combination of a Sandbox Provider and a filesyste
 ## Implement an adapter
 
 1. Define `Parameters` and the optional credential, and implement `Normalize` ([Identity and configuration](#identity-and-configuration)).
-2. Implement `Declaration`, `Check`, `Create`, `Observe` and `Delete` in `Control`, and `Resolve` in `Resolver` ([Operations and outcomes](#operations-and-outcomes)).
+2. Implement `Declaration`, `Check`, `Create` and `Delete` in `Control`, and `Resolve` in `Resolver` ([Operations and outcomes](#operations-and-outcomes)).
 3. Declare the attachment kind, user xattr support and quota enforcement ([Capability validation](#capability-validation)).
 4. Keep one writer per object and delete only on Core's authorization ([Lifetime and filesystem scope](#lifetime-and-filesystem-scope)).
 
@@ -50,14 +50,13 @@ Core selects and validates the combination of a Sandbox Provider and a filesyste
 
 An adapter registers one implementation of `Adapter` with three separate, mandatory roles. `Normalize(parameters, credential)` validates and canonicalizes parameters and encodes the credential input without I/O; a missing required credential or a credential the parameters do not use is `ErrInvalid`, and an encoded credential is valid input that encodes to itself, so Core can re-select a retained configuration with its stored credential. `Control(ConfigurationRecord)` constructs the control adapter in Core with the decrypted credential. `Resolver(Configuration)` constructs the node resolver from public configuration only. Construction performs no filesystem or network operation.
 
-Every control adapter implements `Declaration`, `Check`, `Create`, `Observe` and `Delete`. Every node attachment adapter implements `Resolve`. There is no optional side interface, implicit adapter substitution or nil implementation fallback.
+Every control adapter implements `Declaration`, `Check`, `Create` and `Delete`. Every node attachment adapter implements `Resolve`. There is no optional side interface, implicit adapter substitution or nil implementation fallback.
 
 | Operation | Required meaning |
 | --- | --- |
 | `Declaration()` | Describe the selected configuration's verified attachment, user xattr and quota behavior. |
 | `Check(ctx)` | Validate configuration and availability without creating an object. |
 | `Create(ctx, reference, capacityMiB)` | Create the owned object or converge on its existing attachment without overwriting data; retries and concurrent calls use the same immutable reference and admitted capacity. A positive capacity is enforced, and verified on every retry, before success. |
-| `Observe(ctx, reference)` | Return an existing object's bound attachment without creating, repairing or preparing it. |
 | `Delete(ctx, reference)` | Converge on terminal deletion of the verified owned object after Core has authorized deletion and confirmed compute stop. |
 | `Resolve(ctx, binding)` | Validate native ownership and resolve the attachment for local compute. |
 
@@ -72,7 +71,7 @@ Errors support `errors.Is`. Adapters preserve these outcomes when wrapping error
 | `ErrNotFound` | The object is missing |
 | `ErrUnsupported` | The combination is unsupported |
 
-A missing observation does not prove an earlier mutation settled. A timeout or canceled context ends the caller's wait; it does not prove native stop or rollback. Core retains ownership on unknown outcomes. It may retry `Create` or `Delete` with the same persisted immutable reference and configuration, including after `ErrUnconfirmed`; it must never substitute a new object identity to retry an uncertain operation.
+A missing object does not prove an earlier mutation settled. A timeout or canceled context ends the caller's wait; it does not prove native stop or rollback. Core retains ownership on unknown outcomes. It may retry `Create` or `Delete` with the same persisted immutable reference and configuration, including after `ErrUnconfirmed`; it must never substitute a new object identity to retry an uncertain operation.
 
 Same-reference retry and concurrent convergence are mandatory adapter guarantees. `Create` preserves any existing object data and returns the attachment for that owned object; it never reinitializes a live object. Repeated and concurrent `Delete` calls converge on the same terminal deletion. Once terminal deletion is recorded, concurrent, delayed or retried `Create` calls must not resurrect the object, and `Resolve` must not expose it. Retained deletion metadata and further cleanup of settled in-flight operations are permitted. These guarantees apply to storage lifecycle operations; they do not establish mutation settlement at timeout or distributed compute fencing.
 

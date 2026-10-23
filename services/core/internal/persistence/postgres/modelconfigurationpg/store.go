@@ -39,7 +39,6 @@ type Store struct {
 
 var (
 	_ modelconfiguration.Storage  = (*Store)(nil)
-	_ modelconfiguration.Reader   = (*Store)(nil)
 	_ modelconfiguration.Observer = (*Store)(nil)
 )
 

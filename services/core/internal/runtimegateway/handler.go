@@ -127,7 +127,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 			h.cfg.Log("agentdaemon gateway: heartbeat on connect: %v", hbErr)
 		}
 	}
-	sess := NewSession(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log)
+	sess := NewSession(conn, auth.DeviceID, version, h.cfg.Registry, h.cfg.Log)
 	sess.heartbeat = h.cfg.Heartbeat
 	sess.archivedCancellations = h.cfg.ArchivedCancellations
 	sess.credentialHash = runtimedevice.HashCredential(token)
@@ -176,10 +176,8 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]any{
 		"device_id":         auth.DeviceID,
-		"workspace_id":      auth.WorkspaceID,
 		"ws_url":            h.cfg.PublicWSURL,
 		"heartbeat_seconds": int(h.cfg.HeartbeatInterval.Seconds()),
-		"protocol_version":  proto.Version,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

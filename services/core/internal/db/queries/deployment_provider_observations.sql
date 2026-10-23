@@ -16,7 +16,7 @@ WITH locked AS MATERIALIZED (
             AND t.outcome->>'engine_error_code' IN (
                 'authentication_error', 'connection_failed', 'rate_limit_exceeded',
                 'usage_limit_exceeded', 'server_overloaded', 'server_error',
-                'resource_not_found', 'request_timeout', 'invalid_request')))
+                'resource_not_found', 'invalid_request')))
     FOR UPDATE OF d
 ), observed AS MATERIALIZED (
     SELECT harness, revision, clock_timestamp() AS received_at FROM locked

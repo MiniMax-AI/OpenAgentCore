@@ -64,7 +64,7 @@ func (k AllocationKey) parse() (AllocationKey, error) {
 
 // NewAllocation is an allocation to store with its dedicated device.
 type NewAllocation struct {
-	ID, EnvironmentID, DeviceID, ProviderKey string
+	ID, DeviceID, ProviderKey string
 	// NodeID is empty when no node serves the allocation.
 	NodeID     string
 	Generation uint64

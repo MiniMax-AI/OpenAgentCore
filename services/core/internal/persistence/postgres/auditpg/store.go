@@ -9,20 +9,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 )
 
 // Store reads the audit records and applies write audit retention.
 type Store struct{ pool *pgunit.Pool }
 
 func New(pool *pgunit.Pool) *Store { return &Store{pool: pool} }
-
-var (
-	_ writeaudit.Reader = (*Store)(nil)
-	_ adminaudit.Reader = (*Store)(nil)
-)
 
 // A page cursor names the last row of its page and is bound to the digest of
 // the query that produced it, so it cannot resume another tenant's or filter's

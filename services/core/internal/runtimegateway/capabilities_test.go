@@ -31,7 +31,7 @@ func TestCapabilityProjectionCoversEveryField(t *testing.T) {
 }
 
 func TestInvalidHeartbeatDiscardsPreviousDeclarationAndClosesTransport(t *testing.T) {
-	session := newTestSession(newFakeConn(), "runtime", "workspace", proto.Version, NewRegistry(), nil)
+	session := newTestSession(newFakeConn(), "runtime", proto.Version, NewRegistry(), nil)
 	valid, err := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +51,7 @@ func TestInvalidHeartbeatDiscardsPreviousDeclarationAndClosesTransport(t *testin
 
 func TestFirstHeartbeatAnnouncesAgentKinds(t *testing.T) {
 	registry := NewRegistry()
-	session := newTestSession(newFakeConn(), "runtime", "workspace", proto.Version, registry, nil)
+	session := newTestSession(newFakeConn(), "runtime", proto.Version, registry, nil)
 	heartbeat, err := proto.NewEnvelope(proto.TypeHeartbeat, "", proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{})}}})
 	if err != nil {
 		t.Fatal(err)

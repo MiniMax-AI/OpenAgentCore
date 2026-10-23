@@ -103,8 +103,7 @@ func loadSessionDevice(ctx context.Context, q *sqlc.Queries, tenant, session pgt
 }
 
 // GetDeviceCredential reads a device's credential for the Runtime gateway. A
-// malformed or unknown device has no credential. The standalone service
-// assigns no product WorkspaceID.
+// malformed or unknown device has no credential.
 func (s *Store) GetDeviceCredential(ctx context.Context, device string) (runtimedevice.Credential, bool, error) {
 	id, err := pgunit.ParseID(device)
 	if err != nil {
@@ -155,7 +154,7 @@ func (s *Store) ListEnrolledRuntimeBindings(ctx context.Context) ([]sessions.Enr
 	for _, row := range rows {
 		result = append(result, sessions.EnrolledRuntimeBinding{
 			DeviceID: optionalID(row.DeviceID), TenantID: optionalID(row.TenantID),
-			EnvironmentID: optionalID(row.EnvironmentID), SessionID: optionalID(row.SessionID),
+			EnvironmentID: optionalID(row.EnvironmentID),
 		})
 	}
 	return result, nil

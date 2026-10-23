@@ -7,7 +7,6 @@ import "context"
 // of ListCredentials, which is ErrNotFound; a missing or foreign resource is
 // ErrNotFound.
 type Reader interface {
-	GetVault(ctx context.Context, tenantID, vaultID string) (Vault, error)
 	ListVaults(ctx context.Context, tenantID string, query PageQuery) (VaultPage, error)
 	GetCredential(ctx context.Context, tenantID, vaultID, credentialID string) (Credential, error)
 	// ListCredentials resolves the parent Vault first: an inaccessible parent

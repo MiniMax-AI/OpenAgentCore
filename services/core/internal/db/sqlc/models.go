@@ -210,20 +210,6 @@ type ProjectApiKey struct {
 	ProjectID   pgtype.UUID        `json:"project_id"`
 }
 
-type PublicExecutionTurn struct {
-	ID                     pgtype.UUID        `json:"id"`
-	SessionID              pgtype.UUID        `json:"session_id"`
-	Status                 string             `json:"status"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	StartedAt              pgtype.Timestamptz `json:"started_at"`
-	CompletedAt            pgtype.Timestamptz `json:"completed_at"`
-	CancelRequestedAt      pgtype.Timestamptz `json:"cancel_requested_at"`
-	Outcome                []byte             `json:"outcome"`
-	TokenUsage             []byte             `json:"token_usage"`
-	ArtifactCaptureStarted bool               `json:"artifact_capture_started"`
-	SubagentID             pgtype.UUID        `json:"subagent_id"`
-}
-
 type RuntimeAllocation struct {
 	ID                    pgtype.UUID        `json:"id"`
 	EnvironmentID         pgtype.UUID        `json:"environment_id"`

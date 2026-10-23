@@ -80,7 +80,7 @@ func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine strin
 	deployments := deploymentService(t, s)
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: deployments,
-		Projects: projectService, ProjectsReader: fixtureProjectsReader{Reader: projectStore, keys: keys},
+		Projects: projectService, ProjectsReader: fixtureProjectsReader{Store: projectStore, keys: keys},
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
 		Files: fileService, FilesReader: fileStore,
@@ -131,7 +131,7 @@ func fixtureFiles(t testing.TB, s *Store) (*filepg.Store, *files.Service) {
 
 // storeKeys resolves Project keys from the database, as production does.
 func storeKeys(*Store) func(*api.Dependencies) {
-	return func(d *api.Dependencies) { d.ProjectsReader = d.ProjectsReader.(fixtureProjectsReader).Reader }
+	return func(d *api.Dependencies) { d.ProjectsReader = d.ProjectsReader.(fixtureProjectsReader).Store }
 }
 
 // withCoreKeys replaces the Core key.

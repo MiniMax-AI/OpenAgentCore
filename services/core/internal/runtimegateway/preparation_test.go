@@ -10,7 +10,7 @@ import (
 
 func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T) {
 	registry := NewRegistry()
-	s := newTestSession(newFakeConn(), "device", "tenant", "test", registry, nil)
+	s := newTestSession(newFakeConn(), "device", "test", registry, nil)
 	defer s.Close("test")
 	sub, err := s.SubscribePreparation("request")
 	if err != nil {
@@ -48,7 +48,7 @@ func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T)
 
 func TestPreparationCloseAndOverflowDoNotInventRunEvents(t *testing.T) {
 	for _, overflow := range []bool{false, true} {
-		s := newTestSession(newFakeConn(), "device", "tenant", "test", NewRegistry(), nil)
+		s := newTestSession(newFakeConn(), "device", "test", NewRegistry(), nil)
 		sub, err := s.SubscribePreparation("request")
 		if err != nil {
 			t.Fatal(err)

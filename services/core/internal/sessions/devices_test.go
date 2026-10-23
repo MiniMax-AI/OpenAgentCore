@@ -173,7 +173,7 @@ func TestDeviceUseCases(t *testing.T) {
 		storage := &fakeStorage{t: t, touchDevice: returns(current), touchAuthenticatedDevice: returns(current)}
 		service := deviceService(t, storage)
 		runtime, err := service.TouchRuntimeHeartbeat(t.Context(), "device")
-		if err != nil || runtime != (runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: !current}) {
+		if err != nil || runtime != (runtimedevice.HeartbeatStatus{Deleted: !current}) {
 			t.Fatalf("runtime heartbeat %+v, %v", runtime, err)
 		}
 		daemon, err := service.TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: "device", CredentialHash: credentialDigest})

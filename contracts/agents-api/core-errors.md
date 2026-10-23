@@ -38,7 +38,7 @@ These have null `param` and no `details`. A Core `401 invalid_admin_key` therefo
 
 ## Sandbox provider verification
 
-A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-deployment.md#reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
+A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-deployment.md#e2b-key-replacement)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
 
 | HTTP | Code | Meaning | `param` |
 | --- | --- | --- | --- |
@@ -118,7 +118,6 @@ The [Session diagnostics](./session-diagnostics.md) routes return these categori
 | `server_error` | Native server failure classification |
 | `invalid_request` | Native request rejection |
 | `resource_not_found` | Native resource/model not found |
-| `request_timeout` | Reserved neutral timeout category; no current adapter producer |
 | `context_length_exceeded` | Native context limit classification |
 | `cyber_policy` | Native cyber policy rejection |
 | `connection_failed` | Native connection failure; params contain `http_status`, an integer in 100–599 or null |

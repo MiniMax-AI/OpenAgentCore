@@ -1,7 +1,6 @@
 package adminaudit
 
 import (
-	"context"
 	"errors"
 	"time"
 
@@ -11,12 +10,6 @@ import (
 // ErrInvalidQuery reports an audit log query with an invalid filter, page size
 // or cursor.
 var ErrInvalidQuery = errors.New("invalid administrator audit query")
-
-// Reader reads committed administrator mutations as safe metadata, never
-// request bodies or secrets.
-type Reader interface {
-	ListAdminAudit(ctx context.Context, filter Filter) (Page, error)
-}
 
 // Filter selects committed administrator mutations, newest first. A zero Limit
 // is the default page size.

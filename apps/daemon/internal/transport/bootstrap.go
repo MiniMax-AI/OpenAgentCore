@@ -25,10 +25,8 @@ import (
 // BootstrapResponse mirrors gateway/handler.go's Bootstrap response.
 type BootstrapResponse struct {
 	DeviceID         string `json:"device_id"`
-	WorkspaceID      string `json:"workspace_id"`
 	WSURL            string `json:"ws_url"`
 	HeartbeatSeconds int    `json:"heartbeat_seconds"`
-	ProtocolVersion  string `json:"protocol_version"`
 }
 
 // HeartbeatInterval defends against the server returning 0 — a zero
