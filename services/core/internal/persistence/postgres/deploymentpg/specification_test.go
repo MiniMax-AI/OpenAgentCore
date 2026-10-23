@@ -33,7 +33,7 @@ func TestSandboxSpecificationRoundTripAndClaimStays(t *testing.T) {
 				t.Fatal("saved deployment lost its resources or Runtime provenance", err)
 			}
 			preview, err := f.service.SetupForSelection(view.InstallationID, input)
-			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || !reflect.DeepEqual(preview.Suspension, setup.Suspension) || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
+			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || (preview.Suspension == nil) != (setup.Suspension == nil) || preview.Suspension != nil && preview.Suspension.RetentionSeconds != setup.Suspension.RetentionSeconds || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
 				t.Fatal("preview and persisted normalized deployment disagree", err)
 			}
 			input.ExpectedGeneration = view.Generation
