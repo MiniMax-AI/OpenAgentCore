@@ -111,7 +111,7 @@ python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoc
 # The bundled docs (BUNDLED_DOCS); links that leave them point at this commit on GitHub.
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
-cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
+cp services/core/internal/sandbox/docker/seccomp.json "$bundle/runtime/"
 mkdir -p "$bundle/storage"
 install -m 0755 services/core/internal/workspacefs/nfs/quota/oac-workspace-quota "$bundle/storage/"
 cp LICENSE "$bundle/"

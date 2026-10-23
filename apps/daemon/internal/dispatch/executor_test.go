@@ -56,6 +56,10 @@ func (t *reusableTurn) finish() {
 		close(t.settled)
 	})
 }
+func (*reusableTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return agent.ErrUnsupportedOperation
+}
+
 func (t *reusableTurn) Cancel(context.Context) error { t.cancels.Add(1); t.finish(); return nil }
 func (t *reusableTurn) CancellationOutcome() proto.DonePayload {
 	return proto.DonePayload{Content: t.id, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
