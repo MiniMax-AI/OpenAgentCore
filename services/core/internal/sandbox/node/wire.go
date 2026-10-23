@@ -19,7 +19,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 7
+const ProtocolVersion = 8
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
