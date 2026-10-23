@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -25,20 +24,11 @@ const providerAPIKeyEnv = "OAC_CODEX_PROVIDER_API_KEY"
 // ModelProviderInfo enum (model-provider-info/src/lib.rs) so the
 // rendered TOML deserialises 1:1 against upstream.
 type providerConfig struct {
-	// Name is the human-readable label shown in codex UI; defaults to
-	// "OpenAgentCore" when empty.
-	Name string
 	// BaseURL is the model provider's HTTPS endpoint, including any
 	// path prefix (e.g. /v1). Required.
 	BaseURL string
 	// BearerToken is supplied only through the native env_key mechanism.
 	BearerToken string
-	// HTTPHeaders is forwarded as `[model_providers.oac.http_headers]`.
-	// Keys / values rendered as TOML basic strings.
-	HTTPHeaders map[string]string
-	// QueryParams is forwarded as `[model_providers.oac.query_params]`,
-	// used by Azure (api-version=2025-04-01-preview).
-	QueryParams map[string]string
 	// WireAPI is "responses" (codex Responses API) or "chat" (rejected
 	// upstream since codex-rs 0.140). Empty defaults to "responses".
 	WireAPI string
@@ -76,12 +66,8 @@ func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
 	b.WriteString(oacProviderSlug)
 	b.WriteString("]\n")
 
-	name := strings.TrimSpace(cfg.Name)
-	if name == "" {
-		name = "OpenAgentCore"
-	}
 	b.WriteString("name = ")
-	b.WriteString(tomlQuoteString(name))
+	b.WriteString(tomlQuoteString("OpenAgentCore"))
 	b.WriteByte('\n')
 
 	b.WriteString("base_url = ")
@@ -101,42 +87,6 @@ func writeCodexProviderConfig(codexHome string, cfg providerConfig) error {
 	}
 	b.WriteString("wire_api = ")
 	b.WriteString(tomlQuoteString(wireAPI))
-	b.WriteByte('\n')
-
-	if len(cfg.HTTPHeaders) > 0 {
-		keys := make([]string, 0, len(cfg.HTTPHeaders))
-		for k := range cfg.HTTPHeaders {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		b.WriteString("\n[model_providers.")
-		b.WriteString(oacProviderSlug)
-		b.WriteString(".http_headers]\n")
-		for _, k := range keys {
-			b.WriteString(tomlQuoteString(k))
-			b.WriteString(" = ")
-			b.WriteString(tomlQuoteString(cfg.HTTPHeaders[k]))
-			b.WriteByte('\n')
-		}
-	}
-
-	if len(cfg.QueryParams) > 0 {
-		keys := make([]string, 0, len(cfg.QueryParams))
-		for k := range cfg.QueryParams {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		b.WriteString("\n[model_providers.")
-		b.WriteString(oacProviderSlug)
-		b.WriteString(".query_params]\n")
-		for _, k := range keys {
-			b.WriteString(tomlQuoteString(k))
-			b.WriteString(" = ")
-			b.WriteString(tomlQuoteString(cfg.QueryParams[k]))
-			b.WriteByte('\n')
-		}
-	}
-
 	b.WriteByte('\n')
 
 	path := filepath.Join(codexHome, "config.toml")

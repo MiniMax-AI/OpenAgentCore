@@ -16,15 +16,15 @@ func TestNativeTokenUsageAcrossRuns(t *testing.T) {
 		cfg: sessionConfig{logger: slog.New(slog.NewTextHandler(io.Discard, nil))}}
 	s.setThreadID("thread")
 	// A resumed thread replays its previous usage before starting this run.
-	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"previous","tokenUsage":{"total":{"inputTokens":1000,"outputTokens":100},"last":{"inputTokens":500,"outputTokens":50}}}`))
+	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"previous","tokenUsage":{"total":{"inputTokens":1000,"cachedInputTokens":0,"outputTokens":100,"reasoningOutputTokens":0,"totalTokens":1100},"last":{"inputTokens":500,"cachedInputTokens":0,"outputTokens":50,"reasoningOutputTokens":0,"totalTokens":550}}}`))
 	if s.latestUsage != nil {
 		t.Fatal("restored history was treated as current usage")
 	}
 	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"current"}}`))
-	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"current","tokenUsage":{"total":{"inputTokens":1200,"outputTokens":120},"last":{"inputTokens":200,"outputTokens":20}}}`))
+	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"current","tokenUsage":{"total":{"inputTokens":1200,"cachedInputTokens":0,"outputTokens":120,"reasoningOutputTokens":0,"totalTokens":1320},"last":{"inputTokens":200,"cachedInputTokens":0,"outputTokens":20,"reasoningOutputTokens":0,"totalTokens":220}}}`))
 	// The second model request follows a tool call; its last counter is not
 	// the whole turn. Repeating the cumulative snapshot must not add usage.
-	second := json.RawMessage(`{"threadId":"thread","turnId":"current","tokenUsage":{"total":{"inputTokens":1500,"outputTokens":150},"last":{"inputTokens":300,"outputTokens":30}}}`)
+	second := json.RawMessage(`{"threadId":"thread","turnId":"current","tokenUsage":{"total":{"inputTokens":1500,"cachedInputTokens":0,"outputTokens":150,"reasoningOutputTokens":0,"totalTokens":1650},"last":{"inputTokens":300,"cachedInputTokens":0,"outputTokens":30,"reasoningOutputTokens":0,"totalTokens":330}}}`)
 	s.onUsageUpdated(second)
 	s.onUsageUpdated(second)
 	if s.latestUsage == nil || s.latestUsage.InputTokens != 500 || s.latestUsage.OutputTokens != 50 {
@@ -39,7 +39,7 @@ func TestNativeTokenUsageAcrossRuns(t *testing.T) {
 	if s.latestUsage != nil {
 		t.Fatal("new turn retained previous turn usage")
 	}
-	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"next","tokenUsage":{"total":{"inputTokens":1700,"outputTokens":175},"last":{"inputTokens":200,"outputTokens":25}}}`))
+	s.onUsageUpdated(json.RawMessage(`{"threadId":"thread","turnId":"next","tokenUsage":{"total":{"inputTokens":1700,"cachedInputTokens":0,"outputTokens":175,"reasoningOutputTokens":0,"totalTokens":1875},"last":{"inputTokens":200,"cachedInputTokens":0,"outputTokens":25,"reasoningOutputTokens":0,"totalTokens":225}}}`))
 	s.finalText = "done"
 	s.onTurnCompleted(json.RawMessage(`{"threadId":"thread","turn":{"id":"next","status":"completed"}}`))
 	var usage proto.UsagePayload
@@ -56,7 +56,7 @@ func TestNativeTokenUsageAcrossRuns(t *testing.T) {
 			}
 		}
 	}
-	if usage.InputTokens != 200 || usage.OutputTokens != 25 || done.Usage.InputTokens != 200 || done.Content != "done" {
+	if usage.Tokens.InputTokens != 200 || usage.Tokens.OutputTokens != 25 || done.Usage.Tokens.InputTokens != 200 || done.Content != "done" {
 		t.Fatalf("terminal usage=%+v done=%+v", usage, done)
 	}
 }

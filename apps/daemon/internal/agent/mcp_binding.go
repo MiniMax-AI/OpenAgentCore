@@ -14,15 +14,13 @@ import (
 // it into their native configuration without resolving credentials or packages.
 // Never serialize or log bindings: bearer values are confidential.
 type MCPBinding struct {
-	ServerLabel         string
-	ConnectionOrigin    string
-	CredentialAuthority string
-	Transport           string
-	ServerURL           string
-	AllowedTools        *[]string
-	Required            bool
-	BearerToken         *string
-	HTTPHeaders         map[string]string
+	ServerLabel  string
+	Transport    string
+	ServerURL    string
+	AllowedTools *[]string
+	Required     bool
+	BearerToken  *string
+	HTTPHeaders  map[string]string
 	// Stdio retains the installed package identity for the fixed Runtime launcher.
 	Stdio *proto.EnvironmentMCP
 	// Process is a public stdio declaration, started natively by the Harness.
@@ -44,7 +42,7 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 			if server.Stdio != nil {
 				transport = "stdio"
 			}
-			item := MCPBinding{ServerLabel: server.ServerLabel, ConnectionOrigin: server.ConnectionOrigin, CredentialAuthority: "none", Transport: transport, ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken, HTTPHeaders: maps.Clone(server.Headers)}
+			item := MCPBinding{ServerLabel: server.ServerLabel, Transport: transport, ServerURL: server.ServerURL, Required: server.Required, BearerToken: server.BearerToken, HTTPHeaders: maps.Clone(server.Headers)}
 			if server.Stdio != nil {
 				process := *server.Stdio
 				process.Args, process.EnvVars = slices.Clone(process.Args), slices.Clone(process.EnvVars)
@@ -54,21 +52,15 @@ func ResolveMCPBindings(req proto.PromptRequestPayload) ([]MCPBinding, error) {
 				names := append([]string{}, (*server.AllowedTools)...)
 				item.AllowedTools = &names
 			}
-			if server.BearerToken != nil {
-				item.CredentialAuthority = "project_vault"
-			}
 			bindings = append(bindings, item)
 		}
 	}
 	if local := req.LocalEnvironment; local != nil && len(local.MCP) > 0 {
 		for _, installed := range local.MCP {
 			declaration := installed.Server
-			item := MCPBinding{ServerLabel: declaration.Name, ConnectionOrigin: "environment", CredentialAuthority: "none", Transport: declaration.Type, ServerURL: declaration.URL, BearerToken: installed.BearerToken, HTTPHeaders: maps.Clone(declaration.HTTPHeaders)}
+			item := MCPBinding{ServerLabel: declaration.Name, Transport: declaration.Type, ServerURL: declaration.URL, BearerToken: installed.BearerToken, HTTPHeaders: maps.Clone(declaration.HTTPHeaders)}
 			if declaration.BearerTokenEnvVar != "" && installed.BearerToken == nil {
 				return nil, errors.New("environment MCP credential unavailable")
-			}
-			if installed.BearerToken != nil || len(declaration.HTTPHeaders) > 0 || len(declaration.EnvVars) > 0 {
-				item.CredentialAuthority = "environment_configuration"
 			}
 			if declaration.Type == "stdio" {
 				value := installed

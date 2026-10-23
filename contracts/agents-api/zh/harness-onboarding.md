@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 735078df56cfbe89dc569d36a87d31c7eccd69848f19465d3bf66ac55e5f2238
+source_hash: c5688b7362e0ede4a85200d3a66ee383bd71da23505429755adbc1888ce8dd60
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -70,7 +70,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 | `Session`、`Turn`、`CancellationOutcome`、`AwaitSettlement` | 真实实现 | 取消精确的 Turn，保留已观察结果，并独立于取消请求确认结算 |
 | `DurableSteerer` | 每个 Turn 上真实实现 | 区分完整写入与原生应用回执；保留重试身份 |
 | `FunctionResultSubmitter` | 明确实现或 Unsupported | 匹配原生调用和结果身份，并确认应用 |
-| `WorkspaceReader`、`WorkspaceDirectoryLister`、`WorkspaceWriter` | 在 Turn 和 Executor 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
+| `WorkspaceReader`、`WorkspaceDirectoryLister` | 在 Turn 和 Executor 所有者上明确实现 | 使用授权工作区，确认访问，提交或关闭，或者返回该操作的 Unsupported 错误 |
 | 中立消息、图像、MCP、结构化输出和 Subagent 观察 | 明确作出能力决策 | 保持每项操作的协议语义；在提交前拒绝不受支持的输入 |
 
 每个适配器的 `contracts.go` 都包含针对每个小型接口的单项编译时断言。不要嵌入会让未来接口看起来已经实现的默认实现。添加契约时，还必须在通用完整性检查中进行分类，并在每个公共适配器中添加明确断言；该检查遵循已编写的 Harness 目录。

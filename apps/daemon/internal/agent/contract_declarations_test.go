@@ -21,7 +21,6 @@ func TestPublicHarnessContractDeclarations(t *testing.T) {
 		"FunctionResultSubmitter":  {"session"},
 		"WorkspaceReader":          {"executor", "session"},
 		"WorkspaceDirectoryLister": {"executor", "session"},
-		"WorkspaceWriter":          {"executor", "session"},
 	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {

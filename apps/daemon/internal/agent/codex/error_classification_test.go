@@ -82,7 +82,7 @@ func TestClassificationOnlyFromRootTerminalError(t *testing.T) {
 					done = true
 					var p proto.DonePayload
 					_ = env.DecodePayload(&p)
-					if p.Metadata[proto.DoneMetaAgentSessionID] != "root" || p.Usage.InputTokens != 7 {
+					if p.Metadata[proto.DoneMetaAgentSessionID] != "root" {
 						t.Fatal(p)
 					}
 				}

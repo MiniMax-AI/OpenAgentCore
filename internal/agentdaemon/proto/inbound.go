@@ -118,13 +118,10 @@ type TokenUsage struct {
 // Tokens is absent when a complete, correctly scoped measurement is unavailable.
 // Core does not reconstruct token counts, prices or provider identity from Raw.
 type Usage struct {
-	Tokens       *TokenUsage    `json:"tokens,omitempty"`
-	Provider     string         `json:"provider,omitempty"`
-	Model        string         `json:"model,omitempty"`
-	InputTokens  int32          `json:"input_tokens,omitempty"`
-	OutputTokens int32          `json:"output_tokens,omitempty"`
-	CostUSD      float64        `json:"cost_usd,omitempty"`
-	Raw          map[string]any `json:"raw,omitempty"`
+	Tokens   *TokenUsage    `json:"tokens,omitempty"`
+	Provider string         `json:"provider,omitempty"`
+	Model    string         `json:"model,omitempty"`
+	Raw      map[string]any `json:"raw,omitempty"`
 }
 
 // UsagePayload carries a Usage update mid-stream.
@@ -146,7 +143,6 @@ type DonePayload struct {
 	// SourceCompletedAtMS freezes the native root completion before child settlement.
 	SourceCompletedAtMS *int64         `json:"source_completed_at_ms,omitempty"`
 	Content             string         `json:"content"`
-	Transcript          string         `json:"transcript,omitempty"`
 	Usage               Usage          `json:"usage,omitzero"`
 	Metadata            map[string]any `json:"metadata,omitempty"`
 }

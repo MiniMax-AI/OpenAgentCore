@@ -15,7 +15,7 @@ func TestLocalWorkspaceBindingAndRequiredHistory(t *testing.T) {
 	req := workspaceRequest()
 	req.LocalEnvironment = &proto.LocalEnvironment{ID: "environment", WorkspaceRoot: config.Workspace.Directory}
 	req.RequireExistingNativeSession = true
-	start, _, err := prepare(config, req)
+	start, _, err := prepareConfiguration(config, req)
 	if err != nil || !start.RequireHistory {
 		t.Fatal(start, err)
 	}
@@ -26,7 +26,7 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 	original := slices.Clone(config.Env)
 	req := workspaceRequest()
 	req.AgentOptions["model_provider"] = map[string]any{"protocol": "anthropic", "base_url": "https://provider.example/anthropic", "api_key": "selected-secret", "context_window": 64000, "max_output_tokens": 4096}
-	start, env, err := prepare(config, req)
+	start, env, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +42,7 @@ func TestWorkspaceProviderCredentialsReplaceAmbientSelection(t *testing.T) {
 	}
 	for _, value := range []any{nil, "secret", map[string]any{"protocol": "anthropic", "base_url": "http://provider.example", "api_key": "secret"}, map[string]any{"protocol": "anthropic", "base_url": "https://user:pass@provider.example", "api_key": "secret"}} {
 		req.AgentOptions["model_provider"] = value
-		if _, _, err := prepare(config, req); err == nil || strings.Contains(err.Error(), "secret") {
+		if _, _, err := prepareConfiguration(config, req); err == nil || strings.Contains(err.Error(), "secret") {
 			t.Fatal("unsafe provider accepted or disclosed")
 		}
 	}

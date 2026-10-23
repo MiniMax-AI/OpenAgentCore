@@ -37,7 +37,7 @@ func TestDeclaredMCPVariablesNeverFallBackToNativeEnv(t *testing.T) {
 }
 
 func TestMCPStdioLauncherContainsOnlyInstalledIdentity(t *testing.T) {
-	server := proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
+	server := proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
 		Name: "package_tool", Type: "stdio", Command: "untrusted-command", Args: []string{"private-argument"},
 	}}
 	command, args := MCPStdioCommand(server)

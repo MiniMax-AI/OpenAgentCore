@@ -51,9 +51,9 @@ func TestCancellationKeepsConsumedTerminalOutputAndUsage(t *testing.T) {
 	s.setThreadID("native")
 	s.onTurnStarted(json.RawMessage(`{"threadId":"native","turn":{"id":"turn"}}`))
 	s.appendFinalText("Already produced")
-	s.onTurnCompleted(json.RawMessage(`{"threadId":"native","turn":{"id":"turn","status":"interrupted","usage":{"inputTokens":31,"outputTokens":7}}}`))
+	s.onTurnCompleted(json.RawMessage(`{"threadId":"native","turn":{"id":"turn","status":"interrupted","usage":{"inputTokens":31,"cachedInputTokens":0,"outputTokens":7,"reasoningOutputTokens":0,"totalTokens":38}}}`))
 	snapshot := s.CancellationOutcome()
-	if snapshot.Content != "Already produced" || snapshot.Usage.InputTokens != 31 || snapshot.Usage.OutputTokens != 7 || snapshot.Metadata[proto.DoneMetaAgentSessionID] != "native" {
+	if snapshot.Content != "Already produced" || snapshot.Usage.Tokens.InputTokens != 31 || snapshot.Usage.Tokens.OutputTokens != 7 || snapshot.Metadata[proto.DoneMetaAgentSessionID] != "native" {
 		t.Fatalf("incomplete terminal snapshot: %+v", snapshot)
 	}
 }

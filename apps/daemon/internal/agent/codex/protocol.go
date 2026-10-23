@@ -112,14 +112,11 @@ type ThreadStartParams struct {
 }
 
 type Thread struct {
-	ID         string `json:"id"`
-	Cwd        string `json:"cwd,omitempty"`
-	Preview    string `json:"preview,omitempty"`
-	UpdatedAt  int64  `json:"updatedAt,omitempty"`
-	CreatedAt  int64  `json:"createdAt,omitempty"`
-	Status     any    `json:"status,omitempty"`
-	Path       string `json:"path,omitempty"`
-	CLIVersion string `json:"cliVersion,omitempty"`
+	ID        string `json:"id"`
+	Cwd       string `json:"cwd,omitempty"`
+	CreatedAt int64  `json:"createdAt,omitempty"`
+	Status    any    `json:"status,omitempty"`
+	Path      string `json:"path,omitempty"`
 }
 
 type ThreadStartResult struct {
@@ -144,9 +141,8 @@ type ThreadResumeParams struct {
 type UserInputType string
 
 const (
-	UserInputText       UserInputType = "text"
-	UserInputLocalImage UserInputType = "localImage"
-	UserInputRemoteImg  UserInputType = "image"
+	UserInputText      UserInputType = "text"
+	UserInputRemoteImg UserInputType = "image"
 )
 
 // UserInput is one element of TurnStartParams.Input. Each variant uses a
@@ -157,8 +153,6 @@ type UserInput struct {
 	// Text variant
 	Text         string `json:"text,omitempty"`
 	TextElements []any  `json:"text_elements,omitempty"`
-	// LocalImage variant
-	Path string `json:"path,omitempty"`
 	// Image (remote URL) variant
 	URL string `json:"url,omitempty"`
 }
@@ -197,9 +191,8 @@ type Turn struct {
 
 // CodexErrorInfo is a native enum with string and object variants.
 type TurnError struct {
-	Message           string          `json:"message,omitempty"`
-	CodexErrorInfo    json.RawMessage `json:"codexErrorInfo,omitempty"`
-	AdditionalDetails *string         `json:"additionalDetails,omitempty"`
+	Message        string          `json:"message,omitempty"`
+	CodexErrorInfo json.RawMessage `json:"codexErrorInfo,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -247,10 +240,6 @@ type ThreadItem struct {
 // live as constants in session.go's handler registration).
 // ---------------------------------------------------------------------------
 
-type ThreadStartedNotification struct {
-	Thread Thread `json:"thread"`
-}
-
 type TurnStartedNotification struct {
 	ThreadID string `json:"threadId"`
 	Turn     Turn   `json:"turn"`
@@ -262,17 +251,15 @@ type TurnCompletedNotification struct {
 }
 
 type ItemStartedNotification struct {
-	ThreadID    string     `json:"threadId"`
-	TurnID      string     `json:"turnId"`
-	Item        ThreadItem `json:"item"`
-	StartedAtMs int64      `json:"startedAtMs,omitempty"`
+	ThreadID string     `json:"threadId"`
+	TurnID   string     `json:"turnId"`
+	Item     ThreadItem `json:"item"`
 }
 
 type ItemCompletedNotification struct {
-	ThreadID      string     `json:"threadId"`
-	TurnID        string     `json:"turnId"`
-	Item          ThreadItem `json:"item"`
-	CompletedAtMs int64      `json:"completedAtMs,omitempty"`
+	ThreadID string     `json:"threadId"`
+	TurnID   string     `json:"turnId"`
+	Item     ThreadItem `json:"item"`
 }
 
 type AgentMessageDeltaNotification struct {

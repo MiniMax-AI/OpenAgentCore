@@ -13,18 +13,10 @@ func (s *executor) ListWorkspaceDirectory(context.Context, string, int) (agent.W
 	return agent.WorkspaceDirectoryResult{}, agent.ErrWorkspaceReadUnsupported
 }
 
-func (s *executor) WriteWorkspaceFile(context.Context, string, []byte) (agent.WorkspaceWriteResult, error) {
-	return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteUnsupported
-}
-
 func (s *Session) ReadWorkspaceFile(context.Context, string, int) (agent.WorkspaceReadResult, error) {
 	return agent.WorkspaceReadResult{}, agent.ErrWorkspaceReadUnsupported
 }
 
 func (s *Session) ListWorkspaceDirectory(context.Context, string, int) (agent.WorkspaceDirectoryResult, error) {
 	return agent.WorkspaceDirectoryResult{}, agent.ErrWorkspaceReadUnsupported
-}
-
-func (s *Session) WriteWorkspaceFile(context.Context, string, []byte) (agent.WorkspaceWriteResult, error) {
-	return agent.WorkspaceWriteResult{}, agent.ErrWorkspaceWriteUnsupported
 }

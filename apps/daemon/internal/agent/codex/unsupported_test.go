@@ -38,11 +38,4 @@ func TestUnsupportedExtensionsHaveNoNativeEffects(t *testing.T) {
 			t.Fatal("unsupported listing fabricated entries")
 		}
 	}
-	for _, owner := range []agent.WorkspaceWriter{(*Executor)(nil), (*Session)(nil)} {
-		result, err := owner.WriteWorkspaceFile(ctx, secret, []byte(secret))
-		check(err)
-		if result.SizeBytes != 0 {
-			t.Fatal("unsupported write fabricated receipt")
-		}
-	}
 }

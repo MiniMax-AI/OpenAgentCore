@@ -87,9 +87,8 @@ type JSONRPCClient struct {
 	stdout  io.ReadCloser
 	stderr  io.ReadCloser
 
-	mu       sync.Mutex
-	alive    bool
-	exitCode *int
+	mu    sync.Mutex
+	alive bool
 
 	pendingMu sync.Mutex
 	pending   map[string]*pendingRequest
@@ -465,10 +464,6 @@ func (c *JSONRPCClient) waitChild() {
 	err := c.process.Wait()
 	c.mu.Lock()
 	c.alive = false
-	if c.cmd.ProcessState != nil {
-		code := c.cmd.ProcessState.ExitCode()
-		c.exitCode = &code
-	}
 	c.mu.Unlock()
 	_ = c.drainPending(fmt.Errorf("codex app-server exited: %v", err))
 }

@@ -13,8 +13,6 @@ import (
 // This private transfer bound is distinct from the public inline-file limit.
 const WriteMaxBytes = proto.WorkspaceWriteMaxBytes
 
-var _ agent.WorkspaceWriter = (*Binding)(nil)
-
 func (b *Binding) AcceptsFileWrite(environment, session string) bool {
 	return b != nil && b.writer != nil && b.environment == environment && b.stateKey == session
 }

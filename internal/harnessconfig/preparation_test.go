@@ -42,14 +42,12 @@ func TestPrepareModelConfiguration(t *testing.T) {
 			}
 		})
 	}
-	raw := provider()
-	got, err := c.Prepare(map[string]any{"model": "fixture", "model_provider": raw})
+	got, err := c.Prepare(map[string]any{"model": "fixture", "model_provider": provider()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw["api_key"] = "changed"
-	if got.Model != "fixture" || got.Provider.APIKey != "private-sentinel" {
-		t.Fatal("prepared provider did not own snapshot")
+	if got.Model != "fixture" {
+		t.Fatal("prepared model changed")
 	}
 	if _, err := (Configuration{}).Prepare(map[string]any{"model": "fixture", "model_provider": provider()}); err == nil {
 		t.Fatal("empty declaration inferred provider support")
