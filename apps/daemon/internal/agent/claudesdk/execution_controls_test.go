@@ -18,13 +18,13 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), AgentSessionID: "native-session", AgentOptions: map[string]any{"model": "native-model", "system_prompt": "Keep these exact instructions.\nDo not replace them."}}
-	ordinary, _, err := prepare(config, request)
+	ordinary, _, err := prepareConfiguration(config, request)
 	if err != nil {
 		t.Fatal(err)
 	}
 	request.ExecutionControls = &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "disabled", ContextSize: "medium"}, TextVerbosity: "medium"}
 	before, _ := json.Marshal(request)
-	controlled, _, err := prepare(config, request)
+	controlled, _, err := prepareConfiguration(config, request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestExecutionControlsPreserveNativeDefaultsAndInstructions(t *testing.T) {
 	}
 	// Without a search control Claude Code keeps its native web tools.
 	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium"}
-	absent, _, err := prepare(config, request)
+	absent, _, err := prepareConfiguration(config, request)
 	if err != nil || !reflect.DeepEqual(ordinary, absent) {
 		t.Fatal("absent search control changed the native configuration", err)
 	}
@@ -48,14 +48,14 @@ func TestLiveWebSearchReachesTheBridgeOnEveryPlacement(t *testing.T) {
 	live := &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}, TextVerbosity: "medium"}
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	none, _, err := prepare(Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}, proto.PromptRequestPayload{
+	none, _, err := prepareConfiguration(Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}, proto.PromptRequestPayload{
 		RunID: "run", Input: proto.TextInput("Search."), ExecutionControls: live, AgentOptions: map[string]any{"model": "native-model"}})
 	if err != nil || none.WebSearch != "live" {
 		t.Fatal("live search on environment none did not reach the bridge", err)
 	}
 	request := workspaceRequest()
 	request.ExecutionControls = live
-	workspace, _, err := prepare(workspaceFixture(t), request)
+	workspace, _, err := prepareConfiguration(workspaceFixture(t), request)
 	if err != nil || workspace.WebSearch != "live" {
 		t.Fatal("live search on a workspace did not reach the bridge", err)
 	}
@@ -97,7 +97,7 @@ func TestReasoningEffortReachesNativeOptions(t *testing.T) {
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	for _, effort := range []string{"low", "medium", "high", "xhigh", "max"} {
 		request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("hello"), ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", ReasoningEffort: effort}, AgentOptions: map[string]any{"model": "native-model", "harness_config": map[string]any{"thinking": map[string]any{"type": "adaptive"}}}}
-		start, _, err := prepare(config, request)
+		start, _, err := prepareConfiguration(config, request)
 		if err != nil {
 			t.Fatal(effort, err)
 		}
@@ -128,21 +128,21 @@ func TestStructuredOutputConfigurationReachesNativeUnchanged(t *testing.T) {
 	config := Config{Entrypoint: filepath.Join(root, "worker"), StateDir: filepath.Join(root, "state")}
 	schema := json.RawMessage(`{"type":"object","properties":{"n":{"const":9007199254740992}}}`)
 	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Original input."), DisableSubagents: true, AgentOptions: map[string]any{"model": "model", "system_prompt": "Original instructions."}, ExecutionControls: &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: schema}}}
-	start, _, err := prepare(config, request)
+	start, _, err := prepareConfiguration(config, request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if start.OutputFormat == nil || string(start.OutputFormat.Schema) != string(schema) || *start.Input[0].Content[0].Text != *request.Input[0].Content[0].Text || start.SystemPrompt != "Original instructions." {
+	if start.OutputFormat == nil || string(start.OutputFormat.Schema) != string(schema) || start.SystemPrompt != "Original instructions." {
 		t.Fatal("native configuration changed")
 	}
 	request.ExecutionControls.OutputFormat.Schema = json.RawMessage(`{"type":"object","const":9007199254740993}`)
-	if _, _, err := prepare(config, request); err == nil {
+	if _, _, err := prepareConfiguration(config, request); err == nil {
 		t.Fatal("lossy schema accepted")
 	}
 	request.ExecutionControls.OutputFormat.Schema = schema
 	request.DisableExecutionEnvironment = true
 	request.MCPHTTPServers = &[]proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "fixture", ServerURL: "https://example.invalid/mcp"}}
-	if start, _, err := prepare(config, request); err != nil || start.OutputFormat == nil {
+	if start, _, err := prepareConfiguration(config, request); err != nil || start.OutputFormat == nil {
 		t.Fatal("native structured output was narrowed by MCP", err)
 	}
 }
@@ -155,17 +155,17 @@ func TestToolDiscoveryPreservesFrozenFunctionsBesideOtherProfiles(t *testing.T) 
 		{Name: "lookup", Description: "Lookup", Parameters: json.RawMessage(`{"type":"object","properties":{"ticket":{"const":"original"}}}`), DeferLoading: true},
 		{Name: "clock", Description: "Clock", Parameters: json.RawMessage(`{"type":"object"}`)},
 	}}
-	start, _, err := prepare(config, request)
+	start, _, err := prepareConfiguration(config, request)
 	if err != nil || !start.ToolSearch || !reflect.DeepEqual(start.Functions, request.FunctionTools) {
 		t.Fatal("function discovery changed native definitions", err)
 	}
 	request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", OutputFormat: &proto.OutputFormat{Type: "json_schema", Schema: json.RawMessage(`{"type":"object"}`)}}
-	if start, _, err := prepare(config, request); err != nil || !start.ToolSearch || start.OutputFormat == nil {
+	if start, _, err := prepareConfiguration(config, request); err != nil || !start.ToolSearch || start.OutputFormat == nil {
 		t.Fatal("native tool search was narrowed by structured output", err)
 	}
 	request.ExecutionControls = nil
 	request.ToolSearch = false
-	if _, _, err := prepare(config, request); err == nil {
+	if _, _, err := prepareConfiguration(config, request); err == nil {
 		t.Fatal("deferred definitions became eager")
 	}
 }
@@ -177,7 +177,7 @@ func TestReasoningSummaryReachesTheBridgeOnlyWhenRequested(t *testing.T) {
 	request := proto.PromptRequestPayload{RunID: "run", Input: proto.TextInput("Input."), AgentOptions: map[string]any{"model": "native-model"}}
 	for _, summary := range []string{"", "auto"} {
 		request.ExecutionControls = &proto.ExecutionControls{TextVerbosity: "medium", ReasoningSummary: summary}
-		start, _, err := prepare(config, request)
+		start, _, err := prepareConfiguration(config, request)
 		if err != nil || start.ReasoningSummary != (summary != "") {
 			t.Fatalf("summary %q: reasoning flag %v, err %v", summary, start.ReasoningSummary, err)
 		}

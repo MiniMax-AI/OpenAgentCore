@@ -91,10 +91,8 @@ func TestDialPassesAuthOnlyInHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(gw.handler))
 	defer srv.Close()
 
-	headers := http.Header{"Authorization": {"Bearer obsolete"}, "X-Test": {"preserved"}}
 	conn, err := transport.Dial(context.Background(), transport.DialOptions{
 		WSURL:         httpToWS(srv.URL) + "/agent-daemon/ws",
-		HTTPHeader:    headers,
 		DeviceID:      "rt_abc",
 		Credential:    "shh-secret",
 		DaemonVersion: "0.1.0",
@@ -116,9 +114,6 @@ func TestDialPassesAuthOnlyInHeader(t *testing.T) {
 	gw.mu.Unlock()
 	if auth != "Bearer shh-secret" {
 		t.Error("missing credential authorization header")
-	}
-	if headers.Get("Authorization") != "Bearer obsolete" {
-		t.Error("Dial mutated caller headers")
 	}
 	if !strings.Contains(dialURL, "version=0.1.0") {
 		t.Errorf("dial URL %q missing version", dialURL)

@@ -12,8 +12,6 @@ var (
 	_ agent.FunctionResultSubmitter  = (*Session)(nil)
 	_ agent.WorkspaceReader          = (*Session)(nil)
 	_ agent.WorkspaceDirectoryLister = (*Session)(nil)
-	_ agent.WorkspaceWriter          = (*Session)(nil)
 	_ agent.WorkspaceReader          = (*executor)(nil)
 	_ agent.WorkspaceDirectoryLister = (*executor)(nil)
-	_ agent.WorkspaceWriter          = (*executor)(nil)
 )

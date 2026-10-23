@@ -212,11 +212,6 @@ type WorkspaceDirectoryLister interface {
 	ListWorkspaceDirectory(context.Context, string, int) (WorkspaceDirectoryResult, error)
 }
 
-// WorkspaceWriter confirms a native commit on an already authorized prepared owner.
-type WorkspaceWriter interface {
-	WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error)
-}
-
 // Kind registration.
 
 // RegisterKind installs the heartbeat descriptor and model configuration for an

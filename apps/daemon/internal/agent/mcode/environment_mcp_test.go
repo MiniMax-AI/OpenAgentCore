@@ -15,7 +15,7 @@ import (
 )
 
 func environmentMCPFixture() proto.EnvironmentMCP {
-	return proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/fixture", Server: agentplugin.MCPServer{
+	return proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/fixture", Server: agentplugin.MCPServer{
 		Name: "proof.server", Type: "stdio", Command: "never-exec-before-sandbox", Args: []string{"private-argument"},
 		EnvVars: []string{"USER_SELECTED"}, CWD: "resources",
 	}}
