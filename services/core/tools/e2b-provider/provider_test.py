@@ -27,9 +27,9 @@ class Fixture(unittest.TestCase):
         self.request = {'Version': 1, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
-                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret')}
+                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True)}
         self.request['RuntimeBootstrap'] = {
-            'version': 2, 'core_url': self.request['Bootstrap']['CoreURL'],
+            'version': 3, 'suspend_control': True, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
             'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',
@@ -387,6 +387,25 @@ class CheckpointTest(Fixture):
         self.assertEqual(self.resume(dict(snapshot, OperationID=other))['ErrorCode'], 'checkpoint_unusable')
         self.assertEqual(self.resume(snapshot)['ErrorCode'], 'checkpoint_unusable')
         self.api.connect.assert_not_called()
+
+    def test_unseen_pause_never_reports_running(self):
+        self.assertEqual(self.suspend()['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.suspend(observe=True)['ErrorCode'], 'unconfirmed')
+
+    def test_drift_before_dispatch_is_unusable(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        self.cloud.template_id = 'drifted'
+        self.assertEqual(self.resume(snapshot)['ErrorCode'], 'checkpoint_unusable')
+        self.api.connect.assert_not_called()
+
+    def test_failure_after_dispatch_stays_open(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        self.api.connect.side_effect = SandboxNotFoundException()
+        self.assertEqual(self.resume(snapshot)['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.record()['resume']['status'], 'dispatched')
+        self.assertNotIn(self.op, self.record().get('closed', {}))
 
     def test_renew_compute_extends_only_a_running_lease(self):
         self.request['Compute'] = self.compute()

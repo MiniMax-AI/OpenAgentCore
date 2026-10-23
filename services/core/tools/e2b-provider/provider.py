@@ -1,4 +1,4 @@
-"""Five bounded SDK operations for an already authorized Core allocation, plus
+"""Bounded SDK operations for an already authorized Core allocation, plus
 read-only deployment validation and observation."""
 from concurrent.futures import ThreadPoolExecutor
 import json
@@ -176,7 +176,7 @@ class Provider:
             raise Failure('unconfirmed')
         return restore(material, self.options())
 
-    def inspect(self):
+    def inspect(self, qualify=True):
         if self.rejected_absence():
             return None
         found = self.discover()
@@ -187,7 +187,8 @@ class Provider:
         if len(found) != 1:
             raise Failure('unconfirmed')
         cloud = found[0]
-        self.qualified(cloud)
+        if qualify:
+            self.qualified(cloud)
         record = self.receipt.data or {}
         if (cloud.state == 'running' and not record.get('bootstrap_complete') and record.get('connection')
                 and record.get('status') not in ('bootstrap_failed', 'killed')):
@@ -242,7 +243,7 @@ class Provider:
             raise Failure('template_invalid' if check['ExitCode'] == 78 else 'unconfirmed')
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
-        del payload['CoreURL'], payload['Credential']
+        del payload['CoreURL'], payload['Credential'], payload['SuspendControl']
         if (set(payload) - set(MANAGED_BOOTSTRAP_FIELDS) or
                 not set(MANAGED_BOOTSTRAP_REQUIRED_FIELDS) <= set(payload)):
             raise Failure('invalid')
@@ -380,7 +381,8 @@ class Provider:
             cloud = self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
         pause = (self.receipt.data or {}).get('pause') or {}
         if cloud.state != 'paused' or pause.get('operation_id') != operation:
-            if request['ObserveOnly']:
+            # A dispatched pause may still take effect, so running is never reported for it.
+            if request['ObserveOnly'] and not (pause.get('operation_id') == operation and pause.get('status') == 'pending'):
                 return self.state(source, cloud)
             raise Failure('unconfirmed')
         self.receipt.save(pause={'operation_id': operation, 'status': 'paused'})
@@ -424,7 +426,8 @@ class Provider:
             self.close_resume(operation, 'attempt')
             return self.closed_state(target, operation)
         pause = data.get('pause') or {}
-        cloud = self.inspect()
+        # Drift is judged below, before dispatch, as an unusable checkpoint.
+        cloud = self.inspect(qualify=False)
         usable = (cloud is not None and cloud.state == 'paused' and pause.get('status') == 'paused' and
                   pause.get('operation_id') == snapshot['OperationID'] and
                   snapshot['SourceGeneration'] == self.generation() < target['Generation'] and
@@ -441,8 +444,8 @@ class Provider:
         try:
             connected = Sandbox.connect(cloud.sandbox_id, timeout=self.config['TimeoutSeconds'], **self.options())
         except SandboxNotFoundException:
-            self.close_resume(operation, 'unusable')
-            raise Failure('checkpoint_unusable') from None
+            # Dispatched: the outcome is unknown and the attempt stays open.
+            raise Failure('unconfirmed') from None
         cloud = self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
         if cloud.state != 'running':
             raise Failure('unconfirmed')
