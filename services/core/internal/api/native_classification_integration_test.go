@@ -75,11 +75,22 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 			if strings.Contains(string(eventBytes), "canary") || strings.Contains(string(eventBytes), "engine_error") || strings.Contains(string(eventBytes), "http_status") {
 				t.Fatal("private metadata entered SSE")
 			}
-			// Remove only additive private fields. All public response bytes must match.
+			// The Turn read alone publishes the category: official names stay, anything else is internal_error.
+			public := code
+			if code == "secret-canary" {
+				public = "internal_error"
+			}
+			if !strings.Contains(string(before[1]), `"error":{"code":"`+public+`"`) {
+				t.Fatal("Turn error code", before[1])
+			}
+			// Remove only the private fields; every other public response must keep its bytes.
 			if _, err = pool.Exec(t.Context(), `UPDATE turns SET outcome=outcome-'engine_error_code'-'engine_http_status' WHERE id=$1`, receipt.TurnID); err != nil {
 				t.Fatal(err)
 			}
 			for i, path := range paths {
+				if i == 1 {
+					continue
+				}
 				w := diagnosticRequest(h, path, "Bearer caller")
 				if w.Code != 200 || !bytes.Equal(before[i], w.Body.Bytes()) {
 					t.Fatal("private classification changed public response", path, w.Body)
