@@ -10,7 +10,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 func markerBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
@@ -78,7 +77,7 @@ func TestCompletedSnapshotLossNeverRecapturesSources(t *testing.T) {
 				if populated {
 					writeSourceSkill(t, source, "first")
 					request.LocalEnvironment.Capabilities = true
-					request.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{source}}
+					request.LocalEnvironment.CapabilitySources = &proto.CapabilitySources{Directories: []string{source}}
 				}
 				if _, err := b.Prepare(t.Context(), request); err != nil {
 					t.Fatal(err)
@@ -121,7 +120,7 @@ func TestSnapshotMarkerBackfillsOnlyVerifiedManifest(t *testing.T) {
 	b, request := markerBinding(t)
 	source := t.TempDir()
 	writeSourceSkill(t, source, "frozen")
-	input := agentcapabilities.Input{Directories: []string{source}}
+	input := proto.CapabilitySources{Directories: []string{source}}
 	root, err := os.OpenRoot(b.capabilityRoot)
 	if err != nil {
 		t.Fatal(err)
@@ -186,7 +185,7 @@ func TestSnapshotMarkerRefusesDamagedState(t *testing.T) {
 func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T) {
 	b, _ := markerBinding(t)
 	identity := b.capabilityIdentity()
-	finalize := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "finalize", Sources: &agentcapabilities.Input{}}
+	finalize := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "finalize", Sources: &proto.CapabilitySources{}}
 	if err := b.ApplyRuntimePreparation(t.Context(), finalize, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +196,7 @@ func TestCapabilityFinalizeRecordsCompletionAndRejectsLaterImports(t *testing.T)
 	if err := os.RemoveAll(b.capabilityRoot); err != nil {
 		t.Fatal(err)
 	}
-	skill := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "skill", Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 1, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+	skill := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: identity.EnvironmentID, SessionID: identity.SessionID, Action: "skill", Skill: &proto.SkillMetadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 1, SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 	if err := b.ApplyRuntimePreparation(t.Context(), skill, []byte("x")); err == nil {
 		t.Fatal("completed identity accepted import")
 	}

@@ -11,8 +11,8 @@ type HeartbeatStatus struct {
 	Deleted bool
 }
 
-// KindCapabilities mirrors the daemon heartbeat capability
-// shape after gateway-level normalization. Persistence stays separate from wire protocol structs.
+// KindCapabilities is the persisted boolean projection of proto.AgentKindCapabilities,
+// field for field. The gateway fills it by field name.
 type KindCapabilities struct {
 	SubagentObservations  bool `json:"subagent_observations,omitempty"`
 	Streaming             bool `json:"streaming,omitempty"`

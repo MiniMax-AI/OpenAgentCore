@@ -1,4 +1,4 @@
-package agentcapabilities
+package proto
 
 import (
 	"strings"
@@ -18,8 +18,5 @@ func TestPortableSourceDirectories(t *testing.T) {
 	}
 	if ValidateSourceDirectories([]string{"/a", "/a"}) == nil || ValidateSourceDirectories(make([]string, 51)) == nil {
 		t.Fatal("source bounds not enforced")
-	}
-	if ValidateDirectories([]string{`C:\skills`}) == nil || ValidateLocalDirectories([]string{`C:\skills`}) == nil {
-		t.Fatal("portable source weakened local/managed authorization")
 	}
 }

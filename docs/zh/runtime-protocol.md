@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: e41baeed3c6b990b6da8823fc792d54393b2e247f0d96811f98b4bfccf1da5aa
+source_hash: 56e2831e66c8638c833d1d296cce2d6597c6a808f34a60a29bde0a46d67b8c59
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -115,8 +115,11 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | `function_result` | `function_call`, `function_call_withdrawn`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | 对应的 `*_result` | [读取](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go)、[写入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go)、[导出](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [暂停 fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
+| 无 | `subagent_identity`, `subagent_lifecycle`, `subagent_turn`, `subagent_item`, `subagent_coordination` | [Subagent 观察](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/subagents.go) |
 
 初始、已准备和活动输入使用同一[有序 MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go)。Adapter 保留消息与内容顺序，并明确拒绝不支持的内容；仅文本 transport 拒绝图像内容而不丢弃它。[消息输入契约](../../contracts/agents-api/zh/message-content.md)负责公开图像 profile、空白规则和各 Harness 的原生转换。
+
+Run 的 adapter 按以下顺序报告 Subagent：先发送带已验证原生身份的 `subagent_identity`，再为每个 child 拥有的 Turn 发送 `subagent_turn`（先 active，再终态快照），其间发送 `subagent_item` 快照。`subagent_lifecycle` 报告成功的原生效果，例如重新打开，绝不表示任务完成或断连。`subagent_coordination` 以通用词汇报告原生协调操作，对 root 直接发送，或作为 `subagent_item` 的 payload 发送。每个 payload 的范围由已认证的 Run envelope 决定，只携带原生标识；所有公开资源 ID 由 Core 拥有。只有声明 `subagent_observations` 的 adapter 才发送这些消息。
 
 Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，含义与 `subagent_turn` 中相同；Run 自身发起的调用两者均为空。Adapter 在调用之前发送该子级的 `subagent_identity` 和 `subagent_turn`，Core 用同一个 `call_id` 的 `function_result` 作答。
 
@@ -302,7 +305,7 @@ Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engin
 
 无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 从绑定的本地工作区提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
 
-`workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果携带有限数量的单路径组件 UTF-8 名称，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。
+`workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果携带有限数量的单路径组件 UTF-8 名称，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。被拒绝的结果携带 `invalid_request`、`resource_unavailable`、`read_capacity`、`not_found` 和 `permission_denied` 之一。
 
 准入前，请求 payload 与 correlation ID 受限；过长 ID 不回显，过大的 trace metadata 不进入回复。原始 read result 受限于 transport frame 之内。这些是私有 transport 限制，不是公开 Files 参数。成功读取要求完整字节或明确截断，并确认原生 close。安全的原生拒绝不携带字节；中断或有歧义的读取保持未知，并停止该 owner 的后续读取。已 dispatch 的读取在 observer 取消以及资源转移或释放后仍保留有限时等待方，资源关闭阻止新准入。gateway 限制订阅，不在重连后重试或重放读取；重复的 pending operation ID 不能启动另一次读取。
 

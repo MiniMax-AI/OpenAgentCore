@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -433,40 +434,26 @@ func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.Supporte
 	out := make([]runtimedevice.SupportedAgentKind, 0, len(p.SupportedAgentKinds))
 	for _, info := range p.SupportedAgentKinds {
 		out = append(out, runtimedevice.SupportedAgentKind{
-			Kind:      info.Kind,
-			Available: info.Available,
-			Version:   info.Version,
-			Capabilities: runtimedevice.KindCapabilities{
-				Streaming:             info.Capabilities.Streaming.IsSupported(),
-				Usage:                 info.Capabilities.Usage.IsSupported(),
-				Resume:                info.Capabilities.Resume.IsSupported(),
-				DurableTurns:          info.Capabilities.DurableTurns.IsSupported(),
-				DurableInputReceipts:  info.Capabilities.DurableInputReceipts.IsSupported(),
-				NativeSessionRecovery: info.Capabilities.NativeSessionRecovery.IsSupported(),
-				RetainedNativeHistory: info.Capabilities.RetainedNativeHistory.IsSupported(),
-				MessageItems:          info.Capabilities.MessageItems.IsSupported(),
-
-				ToolObservations:         info.Capabilities.ToolObservations.IsSupported(),
-				EnvironmentNone:          info.Capabilities.EnvironmentNone.IsSupported(),
-				LocalEnvironment:         info.Capabilities.LocalEnvironment.IsSupported(),
-				Preparation:              info.Capabilities.Preparation.IsSupported(),
-				WorkspaceReadPreparation: info.Capabilities.WorkspaceReadPreparation.IsSupported(),
-				WorkspaceOutputExport:    info.Capabilities.WorkspaceOutputExport.IsSupported(),
-				StructuredOutput:         info.Capabilities.StructuredOutput.IsSupported(),
-				ToolSearch:               info.Capabilities.ToolSearch.IsSupported(),
-				MessageImages:            info.Capabilities.MessageImages.IsSupported(),
-				FunctionResultImages:     info.Capabilities.FunctionResultImages.IsSupported(),
-				ExecutionControls:        info.Capabilities.ExecutionControls.IsSupported(),
-				SubagentControl:          info.Capabilities.SubagentControl.IsSupported(),
-				SubagentObservations:     info.Capabilities.SubagentObservations.IsSupported(),
-				FunctionTools:            info.Capabilities.FunctionTools.IsSupported(),
-				MCPHTTPTools:             info.Capabilities.MCPHTTPTools.IsSupported(),
-				MCPHTTPRequired:          info.Capabilities.MCPHTTPRequired.IsSupported(),
-				MCPHTTPBearerAuth:        info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
-			},
+			Kind:         info.Kind,
+			Available:    info.Available,
+			Version:      info.Version,
+			Capabilities: deviceCapabilities(info.Capabilities),
 		})
 	}
 	return out
+}
+
+// deviceCapabilities projects the declaration by field name; TestCapabilityProjectionCoversEveryField
+// proves the two inventories match.
+func deviceCapabilities(declared proto.AgentKindCapabilities) runtimedevice.KindCapabilities {
+	var kind runtimedevice.KindCapabilities
+	source, target := reflect.ValueOf(declared), reflect.ValueOf(&kind).Elem()
+	for i := 0; i < source.NumField(); i++ {
+		if field := target.FieldByName(source.Type().Field(i).Name); field.IsValid() {
+			field.SetBool(source.Field(i).Interface().(proto.CapabilitySupport).IsSupported())
+		}
+	}
+	return kind
 }
 
 func (s *Session) dispatch(env proto.Envelope) {

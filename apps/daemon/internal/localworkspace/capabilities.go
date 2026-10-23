@@ -140,7 +140,7 @@ func (b *Binding) ApplyRuntimePreparation(ctx context.Context, input proto.Runti
 	return ctx.Err()
 }
 
-func (b *Binding) loadCapabilitySnapshot(root *os.Root, input agentcapabilities.Input, identity agentcapabilities.Identity, completed bool) (agentcapabilities.Manifest, error) {
+func (b *Binding) loadCapabilitySnapshot(root *os.Root, input proto.CapabilitySources, identity agentcapabilities.Identity, completed bool) (agentcapabilities.Manifest, error) {
 	if _, err := root.Lstat(agentcapabilities.ManifestName); errors.Is(err, os.ErrNotExist) {
 		if completed || agentcapabilities.Finalize(root, input, identity, b.resolveCapabilityDirectory) != nil {
 			return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid

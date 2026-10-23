@@ -10,33 +10,29 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 var ErrInvalid = errors.New("invalid or unsupported Plugin bundle")
 
-type Metadata struct {
-	Type        string `json:"type"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
-
 // Skill identifies a validated root inside its preserved Plugin package.
 type Skill struct {
-	Metadata     agentskill.Metadata `json:"metadata"`
+	Metadata     proto.SkillMetadata `json:"metadata"`
 	RelativeRoot string              `json:"relative_root"`
 }
 
 type Bundle struct {
-	Metadata Metadata
+	Metadata proto.PluginMetadata
 	Files    []agentbundle.File
 	Skills   []Skill
-	MCP      []MCPServer
+	MCP      []proto.PluginMCPServer
 }
 
 // Read validates the archive and its declared identity without native loading.
-func Read(archive []byte, expected Metadata) (Bundle, error) {
+func Read(archive []byte, expected proto.PluginMetadata) (Bundle, error) {
 	files, err := agentbundle.Read(archive)
 	if err != nil {
 		return Bundle{}, ErrInvalid
@@ -82,7 +78,7 @@ func Inspect(files []agentbundle.File) (Bundle, error) {
 	if err != nil {
 		return Bundle{}, ErrInvalid
 	}
-	result := Bundle{Metadata: Metadata{Type: "inline", Name: manifest.Name, Description: manifest.Description}, Files: files, MCP: servers}
+	result := Bundle{Metadata: proto.PluginMetadata{Type: "inline", Name: manifest.Name, Description: manifest.Description}, Files: files, MCP: servers}
 	seen := map[string]bool{}
 	for _, file := range files {
 		if path.Base(file.Path) != "SKILL.md" {

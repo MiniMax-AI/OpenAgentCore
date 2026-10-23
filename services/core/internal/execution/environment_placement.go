@@ -7,7 +7,6 @@ import (
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -15,7 +14,7 @@ import (
 const hostedWorkspaceDirectory = "/workspace"
 
 type environmentPlacement struct {
-	Plugins               []agentplugin.Metadata            `json:"plugins,omitempty"`
+	Plugins               []proto.PluginMetadata            `json:"plugins,omitempty"`
 	Skills                []environmentconfig.SkillMetadata `json:"skills,omitempty"`
 	Type                  string                            `json:"type"`
 	ToolEnvironment       bool                              `json:"initialization,omitempty"`
@@ -36,7 +35,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 		return placement, sessions.ErrInvalidInput
 	}
 	var local struct {
-		Plugins               []agentplugin.Metadata                  `json:"plugins,omitempty"`
+		Plugins               []proto.PluginMetadata                  `json:"plugins,omitempty"`
 		Skills                []environmentconfig.SkillMetadata       `json:"skills,omitempty"`
 		Files                 []environmentconfig.InitialFileMetadata `json:"files"`
 		Packages              *v1.EnvironmentPackages                 `json:"packages,omitempty"`
@@ -48,7 +47,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 	}
 	decoder := json.NewDecoder(bytes.NewReader(configuration))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&local) != nil || agentcapabilities.ValidateSourceDirectories(local.CapabilityDirectories) != nil {
+	if decoder.Decode(&local) != nil || proto.ValidateSourceDirectories(local.CapabilityDirectories) != nil {
 		return placement, sessions.ErrInvalidInput
 	}
 	// Placement selects a workspace; all preparation fields are shared.
@@ -80,7 +79,7 @@ func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, envi
 	if err != nil || !environmentDeviceMatches(session, environment, bound) {
 		return sessions.ErrInvalidInput
 	}
-	sources := &agentcapabilities.Input{Plugins: append([]agentplugin.Metadata(nil), placement.Plugins...), Directories: append([]string(nil), placement.CapabilityDirectories...)}
+	sources := &proto.CapabilitySources{Plugins: append([]proto.PluginMetadata(nil), placement.Plugins...), Directories: append([]string(nil), placement.CapabilityDirectories...)}
 	for _, metadata := range placement.Skills {
 		if metadata.ValidateInstalled() != nil {
 			return sessions.ErrInvalidInput
@@ -97,6 +96,6 @@ func (d *Dispatcher) configurePreparedEnvironment(session sessions.Session, envi
 }
 
 func validSelfHostedPlacement(placement environmentPlacement) bool {
-	return agentcapabilities.ValidateSourceDirectories([]string{placement.WorkspaceDirectory}) == nil &&
-		agentcapabilities.ValidateSourceDirectories(placement.CapabilityDirectories) == nil
+	return proto.ValidateSourceDirectories([]string{placement.WorkspaceDirectory}) == nil &&
+		proto.ValidateSourceDirectories(placement.CapabilityDirectories) == nil
 }

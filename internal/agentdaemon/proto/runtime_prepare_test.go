@@ -6,15 +6,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/google/uuid"
 )
 
 func capabilityBegin() RuntimePreparePayload {
 	return RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(),
-		Action: "skill", Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 10, SHA256: strings.Repeat("a", 64)}
+		Action: "skill", Skill: &SkillMetadata{Type: "inline", Name: "example", Description: "Example"}, SizeBytes: 10, SHA256: strings.Repeat("a", 64)}
 }
 
 func TestCapabilitiesRequestValidation(t *testing.T) {
@@ -31,16 +28,16 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 		"begin data":            func(p *RuntimePreparePayload) { p.Data = []byte("x") },
 		"begin offset":          func(p *RuntimePreparePayload) { p.Offset = 1 },
 		"mixed metadata": func(p *RuntimePreparePayload) {
-			p.Plugin = &agentplugin.Metadata{Type: "inline", Name: "example", Description: "Example"}
+			p.Plugin = &PluginMetadata{Type: "inline", Name: "example", Description: "Example"}
 		},
-		"mixed sources":    func(p *RuntimePreparePayload) { p.Sources = &agentcapabilities.Input{} },
+		"mixed sources":    func(p *RuntimePreparePayload) { p.Sources = &CapabilitySources{} },
 		"missing metadata": func(p *RuntimePreparePayload) { p.Skill = nil },
 		"wrong metadata type": func(p *RuntimePreparePayload) {
-			p.Skill = &agentskill.Metadata{Type: "reference", Name: "example", Description: "Example"}
+			p.Skill = &SkillMetadata{Type: "reference", Name: "example", Description: "Example"}
 		},
-		"missing description": func(p *RuntimePreparePayload) { p.Skill = &agentskill.Metadata{Type: "inline", Name: "example"} },
+		"missing description": func(p *RuntimePreparePayload) { p.Skill = &SkillMetadata{Type: "inline", Name: "example"} },
 		"oversized header": func(p *RuntimePreparePayload) {
-			p.Skill = &agentskill.Metadata{Type: "inline", Name: "example", Description: strings.Repeat("x", RuntimePrepareMaxFrameBytes)}
+			p.Skill = &SkillMetadata{Type: "inline", Name: "example", Description: strings.Repeat("x", RuntimePrepareMaxFrameBytes)}
 		},
 		"skill slot":        func(p *RuntimePreparePayload) { p.Slot = 1 },
 		"no digest":         func(p *RuntimePreparePayload) { p.SHA256 = "" },
@@ -58,7 +55,7 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 		})
 	}
 	plugin := valid
-	plugin.Action, plugin.Skill, plugin.Plugin, plugin.Slot = "plugin", nil, &agentplugin.Metadata{Type: "inline", Name: "example", Description: "Example"}, 49
+	plugin.Action, plugin.Skill, plugin.Plugin, plugin.Slot = "plugin", nil, &PluginMetadata{Type: "inline", Name: "example", Description: "Example"}, 49
 	if !ValidRuntimePrepareRequest(plugin) {
 		t.Fatal("valid plugin refused")
 	}
@@ -85,7 +82,7 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 		{Step: "chunk"},
 		{Step: "commit", Offset: 1},
 		{Step: "commit", Data: []byte("x")},
-		{Step: "commit", Sources: &agentcapabilities.Input{}},
+		{Step: "commit", Sources: &CapabilitySources{}},
 	} {
 		if ValidRuntimePrepareRequest(p) {
 			t.Fatal("invalid continuation accepted", p.Step)
@@ -94,7 +91,7 @@ func TestCapabilitiesRequestValidation(t *testing.T) {
 }
 
 func TestCapabilitiesFinalizeRequiresExplicitBoundedSelection(t *testing.T) {
-	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{}}
+	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &CapabilitySources{}}
 	if !ValidRuntimePrepareRequest(p) {
 		t.Fatal("explicit empty finalization refused")
 	}
@@ -103,13 +100,13 @@ func TestCapabilitiesFinalizeRequiresExplicitBoundedSelection(t *testing.T) {
 		func(p *RuntimePreparePayload) { p.SHA256 = strings.Repeat("a", 64) },
 		func(p *RuntimePreparePayload) { p.SizeBytes = 1 },
 		func(p *RuntimePreparePayload) {
-			p.Sources = &agentcapabilities.Input{Directories: make([]string, 51)}
+			p.Sources = &CapabilitySources{Directories: make([]string, 51)}
 		},
 		func(p *RuntimePreparePayload) {
-			p.Sources = &agentcapabilities.Input{Directories: []string{"/workspace/../secret"}}
+			p.Sources = &CapabilitySources{Directories: []string{"/workspace/../secret"}}
 		},
 		func(p *RuntimePreparePayload) {
-			p.Sources = &agentcapabilities.Input{Directories: []string{"/workspace/a", "/workspace/a"}}
+			p.Sources = &CapabilitySources{Directories: []string{"/workspace/a", "/workspace/a"}}
 		},
 	} {
 		bad := p
@@ -155,9 +152,9 @@ func TestCapabilitiesResultCannotMisrepresentUncertainty(t *testing.T) {
 }
 
 func TestLocalEnvironmentCarriesSelectionButNeverInstalledRoots(t *testing.T) {
-	input := &agentcapabilities.Input{Directories: []string{"/workspace/capabilities"}}
+	input := &CapabilitySources{Directories: []string{"/workspace/capabilities"}}
 	original := LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", CapabilitySources: input, Capabilities: true,
-		Skills: []agentcapabilities.InstalledSkill{{RelativeRoot: "private-installed-root"}},
+		Skills: []InstalledSkill{{RelativeRoot: "private-installed-root"}},
 		MCP:    []EnvironmentMCP{{PackageRoot: "private-mcp-root"}}}
 	raw, err := json.Marshal(original)
 	if err != nil {
@@ -266,12 +263,9 @@ func TestRuntimePreparationExitCodes(t *testing.T) {
 }
 
 func TestRuntimePreparationPortableSources(t *testing.T) {
-	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{Directories: []string{`C:\Users\operator\skills`, `\\host\share\skills`}}}
+	p := RuntimePreparePayload{BudgetMS: 300000, Step: "begin", EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &CapabilitySources{Directories: []string{`C:\Users\operator\skills`, `\\host\share\skills`}}}
 	if !ValidRuntimePrepareRequest(p) {
 		t.Fatal("portable sources rejected by wire")
-	}
-	if agentcapabilities.ValidateLocalDirectories(p.Sources.Directories) == nil {
-		t.Fatal("Windows sources accepted by Linux resolver")
 	}
 }
 

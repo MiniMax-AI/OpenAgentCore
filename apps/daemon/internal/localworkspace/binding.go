@@ -2,10 +2,11 @@ package localworkspace
 
 import (
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 
@@ -67,7 +68,7 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 		if local.WorkspaceDirectory != "/workspace" && local.WorkspaceDirectory != b.workspace {
 			return r, errors.New("request does not match the local workspace selection")
 		}
-		if local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil {
+		if local.CapabilitySources == nil || proto.ValidateCapabilitySources(*local.CapabilitySources) != nil {
 			return r, agentcapabilities.ErrInvalid
 		}
 		sources := *local.CapabilitySources

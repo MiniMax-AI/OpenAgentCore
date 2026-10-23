@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -23,14 +22,14 @@ type WorkspaceConfig struct {
 }
 
 type workspaceProfile struct {
-	ToolEnv        map[string]string                  `json:"tool_env,omitempty"`
-	CapabilityRoot string                             `json:"capability_root,omitempty"`
-	MCP            []environmentMCPServer             `json:"mcp,omitempty"`
-	Skills         []agentcapabilities.InstalledSkill `json:"skills,omitempty"`
-	Home           string                             `json:"home"`
-	State          string                             `json:"state"`
-	Scratch        string                             `json:"scratch"`
-	EnvNames       []string                           `json:"env_names"`
+	ToolEnv        map[string]string      `json:"tool_env,omitempty"`
+	CapabilityRoot string                 `json:"capability_root,omitempty"`
+	MCP            []environmentMCPServer `json:"mcp,omitempty"`
+	Skills         []proto.InstalledSkill `json:"skills,omitempty"`
+	Home           string                 `json:"home"`
+	State          string                 `json:"state"`
+	Scratch        string                 `json:"scratch"`
+	EnvNames       []string               `json:"env_names"`
 }
 
 func prepareWorkspace(config Config, req proto.PromptRequestPayload) (*workspaceProfile, []string, error) {

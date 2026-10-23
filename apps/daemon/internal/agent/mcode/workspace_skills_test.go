@@ -7,8 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestWorkspaceSkillsUseSelectedSnapshotAndNativeLoader(t *testing.T) {
@@ -23,9 +22,9 @@ func TestWorkspaceSkillsUseSelectedSnapshotAndNativeLoader(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.LocalEnvironment.CapabilityRoot = root
-	req.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{
+	req.LocalEnvironment.Skills = []proto.InstalledSkill{{
 		InstallationRoot: root, RelativeRoot: "plugin/skills/proof", PackageRoot: "plugin",
-		Metadata: agentskill.Metadata{Name: "proof", Description: "Read a marker"},
+		Metadata: proto.SkillMetadata{Name: "proof", Description: "Read a marker"},
 	}}
 	for range 2 {
 		opts, err := prepareWorkspaceOptions(testStateRoot(t), c, req)
