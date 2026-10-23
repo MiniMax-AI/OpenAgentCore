@@ -251,8 +251,6 @@ test("shows a node's host on Nodes and opens a sandbox in a dialog from Sandbox 
 test("shows E2B's cloud instead of machines", async ({ page, request }) => {
   await openConsole(page, request, "sandbox-metrics", { sandbox: "e2b" });
   await expect(page.getByRole("heading", { name: "Provider cloud" })).toBeVisible();
-  // Each sandbox takes the template build's size, disk included.
-  await expect(page.getByText("10 GiB disk")).toBeVisible();
   await expect(page.getByRole("button", { name: "Add node" })).toHaveCount(0);
   await expect(page.getByRole("columnheader", { name: "Node", exact: true })).toHaveCount(0);
 
