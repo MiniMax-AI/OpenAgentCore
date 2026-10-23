@@ -35,7 +35,6 @@ func New(pool *pgunit.Pool, cipher *credentialcrypto.Cipher) *Store {
 
 var (
 	_ agents.Storage = (*Store)(nil)
-	_ agents.Reader  = (*Store)(nil)
 )
 
 func (s *Store) CreateAgent(ctx context.Context, input agents.NewAgent) (agents.Agent, error) {

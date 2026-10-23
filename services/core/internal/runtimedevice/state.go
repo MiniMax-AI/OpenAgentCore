@@ -4,7 +4,6 @@ package runtimedevice
 // HeartbeatStatus is the post-heartbeat liveness the runner uses to
 // detect state changes.
 type HeartbeatStatus struct {
-	Liveness string
 	// Deleted is true when the heartbeat UPDATE matched zero rows,
 	// meaning the runtime was soft-deleted (or never existed). The
 	// gateway uses this to send a permanent WS close frame so the
@@ -59,8 +58,5 @@ type Heartbeat struct {
 	RuntimeID string
 	// CredentialHash comes from gateway authentication, never a daemon frame.
 	CredentialHash      string
-	DaemonVersion       string
-	ActiveRequests      int
-	HeartbeatTimestamp  int64
 	SupportedAgentKinds []SupportedAgentKind
 }

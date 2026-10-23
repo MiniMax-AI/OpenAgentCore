@@ -53,9 +53,6 @@ func Name(c Config, r sandbox.Reference, g uint64) string {
 func SnapshotReference(c Config, r sandbox.Reference, operation string) string {
 	return Name(c, r, 0) + ":s-" + operation
 }
-func Labels(c Config, r sandbox.Reference) map[string]string {
-	return map[string]string{"io.oac.installation": c.InstallationID, "io.oac.tenant": r.TenantID, "io.oac.environment": r.EnvironmentID, "io.oac.allocation": r.AllocationID}
-}
 func ValidateCompute(c Config, r sandbox.Reference, v Compute) error {
 	if !ValidReference(r) || v.Name != Name(c, r, v.Generation) {
 		return sandbox.ErrInvalid

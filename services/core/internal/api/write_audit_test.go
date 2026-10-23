@@ -101,10 +101,10 @@ func TestAuthenticatedWriteProvenance(t *testing.T) {
 	h := &Handler{Dependencies: deps}
 	var source writeaudit.Source
 	var got bool
-	handler := responseHeadersWithErrors(log.HTTPMiddleware(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := responseHeadersWithLog(log.HTTPMiddleware(h.authenticateCaller(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		source, got = writeaudit.FromContext(r.Context())
 		w.WriteHeader(204)
-	}), true)), func(string) {})
+	}), true)), func(string) {}, nil)
 	for _, test := range []struct {
 		method, path string
 		present      bool

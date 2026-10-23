@@ -95,7 +95,7 @@ func TestDiagnosticFailureWhitelist(t *testing.T) {
 }
 
 func TestDiagnosticNativeClassification(t *testing.T) {
-	codes := []string{"authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "request_timeout", "context_length_exceeded", "cyber_policy", "connection_failed"}
+	codes := []string{"authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "context_length_exceeded", "cyber_policy", "connection_failed"}
 	catalog, err := os.ReadFile("../../../../contracts/agents-api/core-errors.md")
 	if err != nil {
 		t.Fatal(err)

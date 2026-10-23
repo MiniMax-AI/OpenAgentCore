@@ -31,7 +31,7 @@ func (r *receiptStore) ArchivedCancellationReceipt(_ context.Context, id, hash s
 
 func TestArchivedReceiptTracksDeliveryBeyondDoneAndRejectsNewWork(t *testing.T) {
 	conn := newFakeConn()
-	peer := newTestSession(conn, "device", "", "", NewRegistry(), nil)
+	peer := newTestSession(conn, "device", "", NewRegistry(), nil)
 	defer peer.Close("test complete")
 	peer.credentialHash = "original-hash"
 	receipt := runtimedevice.ArchivedCancellationReceipt{RunID: "run", Deadline: time.Now().Add(time.Second)}
@@ -94,7 +94,7 @@ func (c *blockedControlConn) WriteControl(kind int, data []byte, _ time.Time) er
 
 func TestCloseWithCodeUsesConcurrentControlWriter(t *testing.T) {
 	conn := &blockedControlConn{fakeConn: newFakeConn(), entered: make(chan struct{}), resume: make(chan struct{}), wrote: make(chan struct{})}
-	peer := newTestSession(conn, "device", "", "", NewRegistry(), nil)
+	peer := newTestSession(conn, "device", "", NewRegistry(), nil)
 	peer.Start()
 	env, _ := proto.NewEnvelope(proto.TypePromptCancel, "run", nil)
 	if err := peer.Send(t.Context(), env); err != nil {
@@ -123,7 +123,7 @@ func TestCloseWithCodeUsesConcurrentControlWriter(t *testing.T) {
 }
 
 func TestArchivedReceiptDeadlineDoesNotRenew(t *testing.T) {
-	peer := newTestSession(newFakeConn(), "device", "", "", NewRegistry(), nil)
+	peer := newTestSession(newFakeConn(), "device", "", NewRegistry(), nil)
 	defer peer.Close("test complete")
 	peer.credentialHash = "original-hash"
 	receipt := runtimedevice.ArchivedCancellationReceipt{RunID: "run", Deadline: time.Now().Add(100 * time.Millisecond)}

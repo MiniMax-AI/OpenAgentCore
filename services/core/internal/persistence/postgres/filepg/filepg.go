@@ -23,7 +23,6 @@ func New(pool *pgunit.Pool) *Store { return &Store{pool: pool} }
 
 var (
 	_ files.Storage = (*Store)(nil)
-	_ files.Reader  = (*Store)(nil)
 )
 
 // Create writes the content into a large object and stores the File and its

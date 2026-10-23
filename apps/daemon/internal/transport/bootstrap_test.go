@@ -32,10 +32,8 @@ func TestBootstrapSendsBearerAndDeviceID(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"device_id":         "rt_abc",
-			"workspace_id":      "ws_xyz",
 			"ws_url":            "wss://example/agent-daemon/ws",
 			"heartbeat_seconds": 15,
-			"protocol_version":  "0.3.0",
 		})
 	}))
 	defer srv.Close()
@@ -44,7 +42,7 @@ func TestBootstrapSendsBearerAndDeviceID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if resp.DeviceID != "rt_abc" || resp.WorkspaceID != "ws_xyz" {
+	if resp.DeviceID != "rt_abc" {
 		t.Errorf("unexpected response: %+v", resp)
 	}
 	if resp.WSURL != "wss://example/agent-daemon/ws" {
@@ -68,7 +66,6 @@ func TestBootstrapHeartbeatIntervalDefaultsToFifteen(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"device_id":         "rt",
-			"workspace_id":      "ws",
 			"ws_url":            "",
 			"heartbeat_seconds": 0, // server forgot to set it
 		})

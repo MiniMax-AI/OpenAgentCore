@@ -96,7 +96,7 @@ func (t *fileWriteTx) LoadFileWrite(ctx context.Context, write string) (sessions
 	if err != nil {
 		return sessions.EnvironmentFileWrite{}, false, err
 	}
-	return fileWriteFromRow(row.EnvironmentFileWrite, row.SessionID), true, nil
+	return fileWriteFromRow(row.EnvironmentFileWrite), true, nil
 }
 
 func (t *fileWriteTx) loadFileWrite(ctx context.Context, write string) (sqlc.GetEnvironmentFileWriteRow, error) {
@@ -132,7 +132,7 @@ func (t *fileWriteTx) CreateFileWrite(ctx context.Context, key sessions.FileWrit
 	if err != nil {
 		return sessions.EnvironmentFileWrite{}, err
 	}
-	return fileWriteFromRow(row, t.session), nil
+	return fileWriteFromRow(row), nil
 }
 
 func (t *fileWriteTx) SettleFileWrite(ctx context.Context, write, state string) (sessions.EnvironmentFileWrite, error) {
@@ -144,7 +144,7 @@ func (t *fileWriteTx) SettleFileWrite(ctx context.Context, write, state string) 
 	if err != nil {
 		return sessions.EnvironmentFileWrite{}, err
 	}
-	return fileWriteFromRow(row, t.session), nil
+	return fileWriteFromRow(row), nil
 }
 
 func (t *fileWriteTx) RecordFileWriteAudit(ctx context.Context, write string) error {
@@ -162,10 +162,10 @@ func (t *fileWriteTx) RecordFileWriteAudit(ctx context.Context, write string) er
 	return auditpg.RecordWriteAudit(writeaudit.WithSource(ctx, source), t.q, optionalID(t.tenant), writeaudit.ActionUploadFile, writeaudit.ResourceEnvironment, optionalID(t.environment), optionalID(t.session))
 }
 
-func fileWriteFromRow(row sqlc.EnvironmentFileWrite, session pgtype.UUID) sessions.EnvironmentFileWrite {
+func fileWriteFromRow(row sqlc.EnvironmentFileWrite) sessions.EnvironmentFileWrite {
 	result := sessions.EnvironmentFileWrite{
-		Identity:      sessions.FileWriteIdentity{ID: optionalID(row.ID), DeviceID: optionalID(row.DeviceID), RequestSHA256: row.RequestSha256},
-		EnvironmentID: optionalID(row.EnvironmentID), SessionID: optionalID(session), State: row.State, CreatedAt: row.CreatedAt.Time,
+		Identity: sessions.FileWriteIdentity{ID: optionalID(row.ID), DeviceID: optionalID(row.DeviceID), RequestSHA256: row.RequestSha256},
+		State:    row.State, CreatedAt: row.CreatedAt.Time,
 	}
 	if row.SettledAt.Valid {
 		settled := row.SettledAt.Time

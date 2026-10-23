@@ -73,7 +73,6 @@ type SessionLogger func(format string, args ...any)
 // violating gorilla's "single writer" requirement.
 type Session struct {
 	DeviceID      string
-	WorkspaceID   string
 	DaemonVersion string
 	ConnectedAt   time.Time
 
@@ -137,11 +136,10 @@ type Session struct {
 // NewSession wires a freshly-upgraded WS connection into a Session. The session
 // does NOT start its goroutines automatically — Start runs once the handler is
 // ready so the session can't race with response writes.
-func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
+func NewSession(conn WSConn, deviceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
 	now := time.Now()
 	return &Session{
 		DeviceID:      deviceID,
-		WorkspaceID:   workspaceID,
 		DaemonVersion: daemonVersion,
 		ConnectedAt:   now,
 		conn:          conn,
@@ -411,9 +409,6 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 	status, err := s.heartbeat.TouchAgentDaemonHeartbeat(ctx, runtimedevice.Heartbeat{
 		RuntimeID:           s.DeviceID,
 		CredentialHash:      s.credentialHash,
-		DaemonVersion:       p.DaemonVersion,
-		ActiveRequests:      p.ActiveRequests,
-		HeartbeatTimestamp:  p.Timestamp,
 		SupportedAgentKinds: kinds,
 	})
 	if err != nil {

@@ -345,9 +345,6 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 	conn.StartHeartbeats(parentCtx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
 		kinds := advertisedKinds(registry, local.CanExport())
 		return proto.HeartbeatPayload{
-			Timestamp:           time.Now().Unix(),
-			ActiveRequests:      router.ActiveRuns(),
-			DaemonVersion:       Version,
 			SupportedAgentKinds: kinds,
 		}
 	}, obslog.Bg().With("component", "heartbeat"))

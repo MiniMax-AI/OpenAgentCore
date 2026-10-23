@@ -224,7 +224,7 @@ export interface DiagnosticFailure {
   params: Record<string, unknown>;
 }
 export const diagnosticFailureFields = ["code", "failed_at", "params"] as const;
-export const diagnosticFailureCodeValues = ["harness_error", "model_provider_required", "runtime_unavailable", "runtime_disconnected", "runtime_preparation_failed", "execution_interrupted", "delivery_unconfirmed", "input_rejected", "executor_protocol_error", "core_storage_failed", "internal_error", "environment_connection_timeout", "environment_unavailable", "environment_provisioning_failed", "authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "request_timeout", "context_length_exceeded", "cyber_policy", "connection_failed"] as const;
+export const diagnosticFailureCodeValues = ["harness_error", "model_provider_required", "runtime_unavailable", "runtime_disconnected", "runtime_preparation_failed", "execution_interrupted", "delivery_unconfirmed", "input_rejected", "executor_protocol_error", "core_storage_failed", "internal_error", "environment_connection_timeout", "environment_unavailable", "environment_provisioning_failed", "authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "context_length_exceeded", "cyber_policy", "connection_failed"] as const;
 export type DiagnosticFailureCode = (typeof diagnosticFailureCodeValues)[number];
 export const diagnosticSourceValues = ["turn", "environment", "environment_input"] as const;
 export type DiagnosticSource = (typeof diagnosticSourceValues)[number];
@@ -561,7 +561,7 @@ export interface ProjectsPage {
   has_more: boolean;
 }
 export const projectsPageFields = ["data", "has_more"] as const;
-export const providerErrorCodeValues = ["authentication_error", "connection_failed", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "resource_not_found", "request_timeout", "invalid_request"] as const;
+export const providerErrorCodeValues = ["authentication_error", "connection_failed", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "resource_not_found", "invalid_request"] as const;
 export type ProviderErrorCode = (typeof providerErrorCodeValues)[number];
 export interface Range {
   end: string;
@@ -871,7 +871,7 @@ export interface SessionDiagnosticFailure {
 }
 export const sessionDiagnosticFailureFields = ["code", "failed_at", "params", "source", "turn_id"] as const;
 export const sessionDiagnosticFailureRequired = ["code", "failed_at", "params", "source"] as const;
-export const sessionDiagnosticFailureCodeValues = ["harness_error", "model_provider_required", "runtime_unavailable", "runtime_disconnected", "runtime_preparation_failed", "execution_interrupted", "delivery_unconfirmed", "input_rejected", "executor_protocol_error", "core_storage_failed", "internal_error", "environment_connection_timeout", "environment_unavailable", "environment_provisioning_failed", "authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "request_timeout", "context_length_exceeded", "cyber_policy", "connection_failed"] as const;
+export const sessionDiagnosticFailureCodeValues = ["harness_error", "model_provider_required", "runtime_unavailable", "runtime_disconnected", "runtime_preparation_failed", "execution_interrupted", "delivery_unconfirmed", "input_rejected", "executor_protocol_error", "core_storage_failed", "internal_error", "environment_connection_timeout", "environment_unavailable", "environment_provisioning_failed", "authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "context_length_exceeded", "cyber_policy", "connection_failed"] as const;
 export type SessionDiagnosticFailureCode = (typeof sessionDiagnosticFailureCodeValues)[number];
 export interface SessionDiagnostics {
   failure: SessionDiagnosticFailure | null;

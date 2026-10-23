@@ -18,11 +18,6 @@ type Storage interface {
 	LoadBundle(ctx context.Context, harness string) (Bundle, error)
 }
 
-// Reader lists the configured defaults without opening any bundle.
-type Reader interface {
-	List(ctx context.Context) ([]Configuration, error)
-}
-
 // Observer records a committed root Turn's outcome against the deployment
 // default revision its Session froze. It runs after the Turn's commit, outside
 // the execution lease, and the statement itself re-checks the committed

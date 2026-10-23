@@ -143,7 +143,7 @@ func TestStandaloneGatewayUsesExecutionCredentials(t *testing.T) {
 		err = json.NewDecoder(response.Body).Decode(&data)
 		response.Body.Close()
 		if token == secret {
-			if err != nil || response.StatusCode != http.StatusOK || data["workspace_id"] != "" || data["ws_url"] != wsURL {
+			if err != nil || response.StatusCode != http.StatusOK || data["ws_url"] != wsURL {
 				t.Fatalf("standalone bootstrap: %d %v %v", response.StatusCode, data, err)
 			}
 		} else if response.StatusCode != http.StatusUnauthorized {

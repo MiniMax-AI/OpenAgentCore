@@ -115,7 +115,7 @@ func cleanPath(p string) string {
 	return cleaned
 }
 
-// responseHeadersWithErrors adds the observed official response headers to
+// responseHeadersWithLog adds the observed official response headers to
 // every response of this handler, including errors, 401, 404, 405 and SSE
 // streams (HP-23/HP-24): a fresh random X-Request-Id, attached to the request
 // log context next to the trace carrier, OpenAI-Version, OpenAI-Processing-Ms
@@ -123,10 +123,6 @@ func cleanPath(p string) string {
 // Cache-Control extensions remain. Organization and project headers are not
 // reported: Core's project scope is configured, not account-derived. report
 // observes each emitted API error code.
-func responseHeadersWithErrors(next http.Handler, report func(string)) http.Handler {
-	return responseHeadersWithLog(next, report, nil)
-}
-
 func responseHeadersWithLog(next http.Handler, report func(string), logs *requestLogs) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := newRequestID()

@@ -203,8 +203,5 @@ type SupportedAgentKind struct {
 // HeartbeatPayload advertises only explicit engine descriptors. Missing
 // supported_agent_kinds establishes no engine availability or capabilities.
 type HeartbeatPayload struct {
-	Timestamp           int64                `json:"ts"`
-	ActiveRequests      int                  `json:"active_requests"`
-	DaemonVersion       string               `json:"daemon_version,omitempty"`
 	SupportedAgentKinds []SupportedAgentKind `json:"supported_agent_kinds,omitempty"`
 }

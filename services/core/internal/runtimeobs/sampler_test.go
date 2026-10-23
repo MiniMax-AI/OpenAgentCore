@@ -129,8 +129,6 @@ func TestSamplerSweepsEveryPageAndIsolatesSessionFailures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	now := time.Date(2026, 9, 23, 4, 0, 0, 0, time.UTC)
-	sampler.now = func() time.Time { now = now.Add(time.Second); return now }
 	result := sampler.Sweep(t.Context())
 	if !result.Complete || result.Listed != 3 || result.Observed != 2 || result.Failed != 1 {
 		t.Fatalf("unexpected sweep result: %+v", result)
