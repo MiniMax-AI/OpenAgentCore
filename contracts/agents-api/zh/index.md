@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: fd489e7a0eb5b5847ba9b1a0ac8ad4bbc73b315e012adb9c9d7a8facbfa79c7f
+source_hash: 025c67e723ae2e055c4674f5c721cb51bd2b59899f907ccc05b27ce70360f142
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -93,7 +93,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 在 Turn 中途接入流时，不会发送补发 Item 快照。
 - Items 列表会包含进行中和未完成的输出 Items，并保留失败函数结果中已提交的 `output`。
 - 错误消息会省略官方消息包含的 call 和 executor ID，但未知工具调用的消息会带上其 `call_id`。
-- 失败的 Turn 以官方名称报告模型失败类别，Runtime 或沙箱在执行环境中的失败报告为 `sandbox_error`。Core 的其他失败，例如缺少模型提供方、输入被拒绝或存储失败，一律报告 `internal_error`。消息是每个 code 对应的固定句子，不含原生文本。Subagent Turn 始终报告 `internal_error`。
+- 失败的 Turn 以官方名称报告模型失败类别，Runtime 断开连接或准备失败报告为 `sandbox_error`。Core 的其他失败，例如 Runtime 不可用、缺少模型提供方、输入被拒绝或存储失败，一律报告 `internal_error`。消息是每个 code 对应的固定句子，不含原生文本。Subagent Turn 始终报告 `internal_error`。
 - 与其他文本并存的空文本部分可被接受并存储。
 - 空输入会返回 400 `invalid_request`，附带通用消息和值为 null 的 param；官方响应为 `invalid_request_error`，param 为 `input`。
 - 一旦所有根级 Turn 均已进入终态，Session 用量即可用；官方读取会滞后数秒。

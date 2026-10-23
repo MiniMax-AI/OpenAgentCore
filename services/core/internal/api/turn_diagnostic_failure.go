@@ -60,8 +60,10 @@ func turnDiagnosticFailure(turn sessions.Turn) *DiagnosticFailure {
 
 // publicTurnErrors maps the diagnostics code to the official
 // SessionTurnErrorCodeResource with a fixed customer-safe sentence: native
-// model categories keep their names and Runtime or sandbox failures in the
-// execution environment are sandbox_error. Native text never reaches it.
+// model categories keep their names and a Runtime that disconnected or failed
+// its preparation is sandbox_error. runtime_unavailable stays internal_error
+// because it also covers Core failing to dispatch the Turn. Native text never
+// reaches it.
 var publicTurnErrors = map[string]string{
 	"context_length_exceeded": "The request exceeds the model's context window.",
 	"usage_limit_exceeded":    "The organization has reached a usage, plan, or billing limit.",
@@ -80,7 +82,7 @@ var publicTurnErrors = map[string]string{
 func publicTurnError(diagnosticCode string) *v1.TurnError {
 	code := diagnosticCode
 	switch diagnosticCode {
-	case "runtime_unavailable", "runtime_disconnected", "runtime_preparation_failed":
+	case "runtime_disconnected", "runtime_preparation_failed":
 		code = "sandbox_error"
 	}
 	if message, ok := publicTurnErrors[code]; ok {

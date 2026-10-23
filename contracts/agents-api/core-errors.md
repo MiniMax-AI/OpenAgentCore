@@ -106,7 +106,7 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 
 ## Diagnostic failure categories
 
-The [Session diagnostics](./session-diagnostics.md) routes return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
+The [Session diagnostics](./session-diagnostics.md) routes return these categories inside a successful 200 snapshot, not as an error envelope. A public `/v1` Turn error reports some of them under official codes, as [Differences from OpenAI](./index.md#differences-from-openai) describes. `params` is `{}` unless the table says otherwise.
 
 | Code | Stored cause or safe meaning |
 | --- | --- |

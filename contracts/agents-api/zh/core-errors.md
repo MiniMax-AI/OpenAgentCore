@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: fbdf667a44da9eb95dae54ca7fc54129d7f8d1b50e1d7e864f00a8ce1794860b
+source_hash: b2a6cd40a67bbe58fc78efa068a8ad0cf23cf62ad02e3c1456323fa66e9bb6ef
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -108,7 +108,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 ## 诊断失败类别 {#diagnostic-failure-categories}
 
-[Session 诊断](session-diagnostics.md)接口会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误保持不变。除非表格另有说明，否则 `params` 为 `{}`。
+[Session 诊断](session-diagnostics.md)接口会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误会以官方 code 报告其中一部分类别，见[与 OpenAI 的差异](index.md#differences-from-openai)。除非表格另有说明，否则 `params` 为 `{}`。
 
 | 代码 | 存储原因或安全含义 |
 | --- | --- |
