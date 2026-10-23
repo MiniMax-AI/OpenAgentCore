@@ -40,7 +40,10 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 	next, err := r.deployment.SetCompute(ctx, owner, phase, raw, until)
 	if err == nil {
 		log.Ctx(ctx).Info("Runtime compute phase saved", "allocation_id", owner.ID, "node_id", owner.NodeID, "from", owner.ComputePhase, "to", phase)
-		if phase == "suspended" {
+		switch phase {
+		case "running":
+			r.computeRunning()
+		case "suspended":
 			r.freedSlot()
 		}
 	}
