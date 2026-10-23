@@ -1,12 +1,12 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 6882e3564698e9233c9dab22935990c094235b53003f38ee674f5a8011995645
+source_hash: 0160c835973e50788d704cf432fabb64c5650e2cef0c81b173ca81d3e2a611bc
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装程序。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
 
-每个请求体、成功响应体和 daemon 错误体都是 `internal/machineapi/machineapi.go` 中的类型，节点配置除外：它的 `specification` 是[沙箱 Provider 协议](../../../docs/zh/sandbox-provider.md)中的类型。节点路由的错误体是 `/v1` 错误信封，不是 `machineapi` 类型。
+每个请求体和成功响应体都是 `internal/machineapi/machineapi.go` 中的类型，节点配置除外：它的 `specification` 是[沙箱 Provider 协议](../../../docs/zh/sandbox-provider.md)中的类型。下文各路由小节列出各自的错误。
 
 ## 路由 {#routes}
 
