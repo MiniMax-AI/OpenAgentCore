@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -21,7 +23,7 @@ func lifecycleTestNode(t *testing.T, s *Store) string {
 		t.Fatal(err)
 	}
 	id := uuid.NewString()
-	_, err = nodes.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: id, Credential: strings.Repeat("n", 64), Name: "second", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()})
+	_, err = nodes.Enroll(t.Context(), token, machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: id, Credential: strings.Repeat("n", 64), Name: "second", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()})
 	if err != nil {
 		t.Fatal(err)
 	}

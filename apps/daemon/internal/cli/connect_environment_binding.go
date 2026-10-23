@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
@@ -15,7 +17,7 @@ import (
 // This receipt contains identity only; executor credentials remain in their file.
 type environmentBinding struct {
 	RemoteURL           string                `json:"remote_url"`
-	Enrollment          environmentEnrollment `json:"enrollment"`
+	Enrollment          machineapi.Enrollment `json:"enrollment"`
 	LocalWorkspace      string                `json:"local_workspace"`
 	CapabilityDirectory string                `json:"capability_directory"`
 }
@@ -41,7 +43,7 @@ func readEnvironmentPrivateFile(path string) ([]byte, error) {
 	return runtimefs.ReadPrivatePath(path, 16*1024)
 }
 
-func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credentialFile string) error {
+func bindEnvironmentRuntime(remote string, bound machineapi.Enrollment, credentialFile string) error {
 	root, err := paths.Root()
 	if err != nil || !filepath.IsAbs(root) {
 		return errors.New("connect: absolute Runtime state directory required")

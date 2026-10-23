@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
@@ -206,7 +208,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	defer cancel()
 
 	bootCtx, bootCancel := context.WithTimeout(rootCtx, bootstrapTimeout)
-	var boot *transport.BootstrapResponse
+	var boot *machineapi.BootstrapResponse
 	var err error
 	if remote == "" {
 		boot, err = transport.Bootstrap(bootCtx, prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
@@ -323,7 +325,7 @@ func advertisedKinds(registry *agent.Registry, canExport bool) []proto.Supported
 	return kinds
 }
 
-func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, boot *transport.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
+func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, boot *machineapi.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
 	local, err := localworkspace.Load()
 	if err != nil {
 		return err

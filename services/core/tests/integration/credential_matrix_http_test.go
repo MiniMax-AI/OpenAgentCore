@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/api"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
@@ -115,7 +117,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	var enrollment api.SandboxEnrollmentToken
 	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{"max_active":2,"max_retained":2}`, &enrollment)
 	nodeID, nodeCredential := uuid.NewString(), strings.Repeat("n", 64)
-	enroll, _ := json.Marshal(deployment.Enrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
+	enroll, _ := json.Marshal(machineapi.NodeEnrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("docker"), CoreURL: "https://core.example"})
 	var node deployment.NodeIdentity
 	created("POST", "/api/v1/sandbox-node/enroll", enrollment.Token, string(enroll), &node)

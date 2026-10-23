@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -55,7 +57,7 @@ func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
-				done <- runSuspendLoop(ctx, dial, registry, &transport.BootstrapResponse{HeartbeatSeconds: 1}, agentCLIDiscovery{}, control)
+				done <- runSuspendLoop(ctx, dial, registry, &machineapi.BootstrapResponse{HeartbeatSeconds: 1}, agentCLIDiscovery{}, control)
 			}()
 			var first *websocket.Conn
 			select {
@@ -203,7 +205,7 @@ func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- runSuspendLoop(ctx, dial, agent.NewRegistry(), &transport.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
+		done <- runSuspendLoop(ctx, dial, agent.NewRegistry(), &machineapi.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
 	}()
 	var peer *websocket.Conn
 	select {
@@ -373,7 +375,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 	control := &suspendControl{path: filepath.Join(t.TempDir(), "control.json"), identity: suspendIdentity{EnvironmentID: environment}, signal: make(chan os.Signal, 1)}
 	finished := make(chan error, 1)
 	go func() {
-		finished <- runSuspendLoop(ctx, dial, registry, &transport.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
+		finished <- runSuspendLoop(ctx, dial, registry, &machineapi.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
 	}()
 	var peer *websocket.Conn
 	select {

@@ -9,6 +9,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
@@ -189,7 +191,7 @@ func (s *Service) CreateEnrollment(ctx context.Context, limits EnrollmentLimits)
 }
 
 // Enroll registers a node with a one-use enrollment token.
-func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (NodeIdentity, error) {
+func (s *Service) Enroll(ctx context.Context, token string, input machineapi.NodeEnrollment) (NodeIdentity, error) {
 	nodeID, err := parseID(input.NodeID)
 	if err != nil || !validNodeCredential(input.Credential) || !validDigest(input.BackendFingerprint) {
 		return NodeIdentity{}, ErrInvalidInput
@@ -304,7 +306,7 @@ func (s *Service) enrolledCapacity(d Record, spec sandbox.DeploymentSpec, host N
 }
 
 func identity(n StoredNode, provider string) NodeIdentity {
-	return NodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: n.DeploymentGeneration, NodeID: n.ID, InstallationID: n.InstallationID, Provider: provider, BackendFingerprint: n.BackendFingerprint, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained}
+	return NodeIdentity{NodeIdentity: machineapi.NodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: n.DeploymentGeneration, NodeID: n.ID, InstallationID: n.InstallationID, Provider: provider, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained}, BackendFingerprint: n.BackendFingerprint}
 }
 
 // AuthenticateNode checks a node credential and returns the node's identity.
@@ -382,21 +384,21 @@ func (s *Service) generationSpecification(tx NodeReads, d Record, generation uin
 }
 
 // NodeStatus reports the authenticated node's Core-owned presence.
-func (s *Service) NodeStatus(ctx context.Context, nodeID, credential string) (NodeStatus, error) {
+func (s *Service) NodeStatus(ctx context.Context, nodeID, credential string) (machineapi.NodeStatus, error) {
 	identity, err := s.AuthenticateNode(ctx, nodeID, credential)
 	if err != nil {
-		return NodeStatus{}, err
+		return machineapi.NodeStatus{}, err
 	}
 	nodes, err := s.reader.Nodes(ctx)
 	if err != nil {
-		return NodeStatus{}, err
+		return machineapi.NodeStatus{}, err
 	}
 	for _, n := range nodes {
 		if n.ID == identity.NodeID {
-			return NodeStatus{NodeIdentity: identity, Connected: n.Online, ProviderReady: n.Online && n.ServingReady}, nil
+			return machineapi.NodeStatus{NodeIdentity: identity.NodeIdentity, Connected: n.Online, ProviderReady: n.Online && n.ServingReady}, nil
 		}
 	}
-	return NodeStatus{}, ErrNodeCredential
+	return machineapi.NodeStatus{}, ErrNodeCredential
 }
 
 // NodeConfiguration is the read-only bootstrap of an enrollment token or node

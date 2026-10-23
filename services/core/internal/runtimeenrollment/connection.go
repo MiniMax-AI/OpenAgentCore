@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -55,15 +57,12 @@ func ConnectionHandler(s ConnectionStore, registry *runtimegateway.Registry) htt
 		case err != nil:
 			fail(http.StatusServiceUnavailable)
 		default:
-			status := "disconnected"
+			status := machineapi.ConnectionDisconnected
 			if connected {
-				status = "connected"
+				status = machineapi.ConnectionConnected
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(struct {
-				EnvironmentID string `json:"environment_id"`
-				Status        string `json:"status"`
-			}{environment, status})
+			_ = json.NewEncoder(w).Encode(machineapi.Connection{EnvironmentID: environment, Status: status})
 		}
 	})
 }

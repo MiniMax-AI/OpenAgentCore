@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -39,20 +41,20 @@ func webSpecificationFixture(t *testing.T, provider string) (*Store, *Store, dep
 	return s, w, view, input
 }
 
-func specificationNode(t *testing.T, s *Store, view deployment.View) deployment.Enrollment {
+func specificationNode(t *testing.T, s *Store, view deployment.View) machineapi.NodeEnrollment {
 	t.Helper()
 	return enrollNode(t, s, view, deployment.Capacity{MaxActive: 4, MaxRetained: 16})
 }
 
 // enrollNode enrolls an online node with capacity on the committed setup view.
-func enrollNode(t *testing.T, s *Store, view deployment.View, capacity deployment.Capacity) deployment.Enrollment {
+func enrollNode(t *testing.T, s *Store, view deployment.View, capacity deployment.Capacity) machineapi.NodeEnrollment {
 	t.Helper()
 	nodes := deploymentService(t, s)
 	token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: &capacity.MaxActive, MaxRetained: &capacity.MaxRetained}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := deployment.Enrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
+	input := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "specification fixture", Credential: strings.Repeat("n", 64), Provider: view.Provider,
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.placement.PublicURL()}
 	if _, err := nodes.Enroll(t.Context(), token, input); err != nil {
 		t.Fatal(err)
@@ -77,10 +79,10 @@ func TestSandboxSpecificationBootstrapReadDoesNotConsumeEnrollment(t *testing.T)
 	if _, err := nodes.NodeConfiguration(t.Context(), "", "invalid-token", 0); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("unauthenticated configuration read", err)
 	}
-	node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.placement.PublicURL()}
-	for _, change := range []func(*deployment.Enrollment){
-		func(n *deployment.Enrollment) { n.DeploymentGeneration++ },
-		func(n *deployment.Enrollment) { n.SpecificationDigest = strings.Repeat("c", 64) },
+	node := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "bootstrap", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: s.placement.PublicURL()}
+	for _, change := range []func(*machineapi.NodeEnrollment){
+		func(n *machineapi.NodeEnrollment) { n.DeploymentGeneration++ },
+		func(n *machineapi.NodeEnrollment) { n.SpecificationDigest = strings.Repeat("c", 64) },
 	} {
 		wrong := node
 		change(&wrong)

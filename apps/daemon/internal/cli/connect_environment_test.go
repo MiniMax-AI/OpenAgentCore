@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
 	"github.com/google/uuid"
 )
@@ -31,7 +33,7 @@ func TestEnvironmentConnectionURL(t *testing.T) {
 
 func TestEnvironmentEnrollmentAndBootstrap(t *testing.T) {
 	environment := uuid.NewString()
-	want := environmentEnrollment{uuid.NewString(), uuid.NewString(), environment, "/workspace"}
+	want := machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: environment, WorkspaceDirectory: "/workspace"}
 	var remote string
 	var enrolls, bootstraps int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +156,7 @@ func TestEnvironmentBindingPreservesIdentityAndHistory(t *testing.T) {
 	if err := os.Chmod(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
+	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
 	if err := saveEnvironmentBinding(root, want); err != nil {
 		t.Fatal(err)
 	}
@@ -191,7 +193,7 @@ func TestEnvironmentBindingAllowsOperatorFilePermissions(t *testing.T) {
 	if err := os.Chmod(root, 0700); err != nil {
 		t.Fatal(err)
 	}
-	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
+	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
 	if err := os.WriteFile(filepath.Join(root, "installed-bundle"), []byte("bundle"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +215,7 @@ func TestEnvironmentTargetCheckedBeforeCredentialTransmission(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
+	want := environmentBinding{"wss://core/api/v1/agent-daemon/ws", machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}, "/environment/workspace", "/environment/initialization/capabilities"}
 	if err := saveEnvironmentBinding(root, want); err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +232,8 @@ func TestEnvironmentTargetCheckedBeforeCredentialTransmission(t *testing.T) {
 
 func TestEnvironmentEnrollmentRejectsWrongIdentityAndWorkspace(t *testing.T) {
 	environment := uuid.NewString()
-	good := environmentEnrollment{uuid.NewString(), uuid.NewString(), environment, "/workspace"}
-	for _, mutate := range []func(*environmentEnrollment){func(b *environmentEnrollment) { b.EnvironmentID = uuid.NewString() }, func(b *environmentEnrollment) { b.DeviceID = "" }, func(b *environmentEnrollment) { b.SessionID = "invalid" }, func(b *environmentEnrollment) { b.WorkspaceDirectory = "relative" }} {
+	good := machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: environment, WorkspaceDirectory: "/workspace"}
+	for _, mutate := range []func(*machineapi.Enrollment){func(b *machineapi.Enrollment) { b.EnvironmentID = uuid.NewString() }, func(b *machineapi.Enrollment) { b.DeviceID = "" }, func(b *machineapi.Enrollment) { b.SessionID = "invalid" }, func(b *machineapi.Enrollment) { b.WorkspaceDirectory = "relative" }} {
 		bad := good
 		mutate(&bad)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(bad) }))
@@ -245,7 +247,7 @@ func TestEnvironmentEnrollmentRejectsWrongIdentityAndWorkspace(t *testing.T) {
 
 func TestEnvironmentEnrollmentAcceptsPhysicalWorkspaceSelection(t *testing.T) {
 	environment := uuid.NewString()
-	want := environmentEnrollment{uuid.NewString(), uuid.NewString(), environment, "/srv/runtime/workspace"}
+	want := machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: environment, WorkspaceDirectory: "/srv/runtime/workspace"}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _ = json.NewEncoder(w).Encode(want) }))
 	defer server.Close()
 	actual, err := enrollEnvironment(t.Context(), environmentClient(), server.URL, environment, "secret")

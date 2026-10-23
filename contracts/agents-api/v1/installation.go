@@ -21,16 +21,3 @@ type EnvironmentInstallation struct {
 	Commands  map[string]string  `json:"commands,omitempty"`
 	Message   string             `json:"message,omitempty"`
 }
-
-// NativeInstallGrantEnv names the environment variable that carries the short-lived installation grant from Core's command to the installer. It never carries an executor credential.
-const NativeInstallGrantEnv = "OAC_INSTALL_GRANT"
-
-// NativeInstallationContext is bootstrap metadata, not an execution protocol.
-type NativeInstallationContext struct {
-	Version         string `json:"version"`
-	ProtocolVersion string `json:"protocol_version"`
-	EnvironmentID   string `json:"environment_id"`
-	RemoteURL       string `json:"remote_url"`
-	Workspace       string `json:"workspace_directory"`
-	Harness         string `json:"harness"`
-}

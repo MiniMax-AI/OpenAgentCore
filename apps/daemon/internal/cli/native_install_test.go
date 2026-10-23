@@ -14,7 +14,8 @@ import (
 	"strings"
 	"testing"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/google/uuid"
 )
 
@@ -329,14 +330,14 @@ func TestNativeInstallationConnectCannotBypassValidation(t *testing.T) {
 
 func TestNativeInstallTakesGrantOutOfTheEnvironment(t *testing.T) {
 	rc, _, _, _ := nativeInstallFixture(t)
-	t.Setenv(v1.NativeInstallGrantEnv, "private-grant")
+	t.Setenv(machineapi.InstallGrantEnv, "private-grant")
 	// The endpoint is invalid so parsing stops before it contacts Core; the grant is already taken.
 	o, _ := parseNativeInstall(rc, []string{"--onboard-url", "https://core.example/other", "--non-interactive"})
 	if o.Authorization != "private-grant" {
 		t.Fatal("grant not read from the environment")
 	}
 	for _, entry := range withNativeEnv(nil) {
-		if strings.HasPrefix(entry, v1.NativeInstallGrantEnv+"=") {
+		if strings.HasPrefix(entry, machineapi.InstallGrantEnv+"=") {
 			t.Fatal("grant reaches child processes")
 		}
 	}

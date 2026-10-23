@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
@@ -71,7 +73,7 @@ func validateNativeInstallation(c nativeInstallation) error {
 	if _, err := environmentBase(c.Remote); err != nil {
 		return err
 	}
-	if !environmentUUID(c.Environment) {
+	if !machineapi.CanonicalUUID(c.Environment) {
 		return errors.New("install: --environment-id requires a canonical Environment ID")
 	}
 	for _, p := range []string{c.Workspace, c.Credential, c.CapabilityDirectory} {
