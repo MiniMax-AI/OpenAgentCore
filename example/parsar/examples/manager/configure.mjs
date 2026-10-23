@@ -6,16 +6,19 @@ import { createParsarClient } from "../../cli.mjs";
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 2) {
   const name = process.argv[i], value = process.argv[i + 1];
-  if (!['--url', '--agent-url', '--model', '--harness', '--agent-id', '--environment-id'].includes(name) || !value || args.has(name))
-    throw new Error("Usage: node configure.mjs --url URL --model MODEL_ID [--agent-url URL] [--harness codex|claude_sdk] [--agent-id UUID --environment-id UUID]");
+  if (!['--url', '--agent-url', '--web-url', '--model', '--harness', '--agent-id', '--environment-id'].includes(name) || !value || args.has(name))
+    throw new Error("Usage: node configure.mjs --url URL --model MODEL_ID [--agent-url URL] [--web-url URL] [--harness codex|claude_sdk] [--agent-id UUID --environment-id UUID]");
   args.set(name, value);
 }
 if (!args.has('--url') || !args.has('--model')) throw new Error("--url and --model are required.");
 const harness = args.get('--harness') || 'codex';
 if (!['codex', 'claude_sdk'].includes(harness)) throw new Error("This example requires the Node runtime in Codex or Claude Code.");
-const api = createParsarClient(args.get('--url'));
+const token = process.env.PARSAR_TOKEN;
+const api = createParsarClient(args.get('--url'), { token });
 const agentURL = args.get('--agent-url') || args.get('--url');
-createParsarClient(agentURL);
+createParsarClient(agentURL, { token });
+const webURL = new URL(args.get('--web-url') || args.get('--url')).origin;
+createParsarClient(args.get('--web-url') || args.get('--url'));
 const agentId = args.get('--agent-id') || randomUUID();
 const runtimeId = args.get('--environment-id') || randomUUID();
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
@@ -31,9 +34,9 @@ for (const [kind, id] of [['agents', agentId], ['runtimes', runtimeId]]) {
 console.error(JSON.stringify({ agent_id: agentId, environment_id: runtimeId, recovery: 'If a write fails, GET these IDs before retrying. Existing resources are never deleted automatically.' }));
 await api('PUT', `/app/runtimes/${runtimeId}`, {
   name: 'Parsar 管理环境',
-  description: '通过 Parsar CLI 管理当前工作空间的配置。使用可信内网中的 Parsar 地址。',
+  description: '通过 Parsar CLI 管理当前工作空间的配置。',
   environment: 'openai_hosted',
-  env: { PARSAR_URL: agentURL },
+  env: { PARSAR_URL: agentURL, PARSAR_WEB_URL: webURL, ...(token === undefined ? {} : { PARSAR_TOKEN: token }) },
   files: [
     { path: '/workspace/parsar.mjs', content: await readFile(new URL('../../cli.mjs', import.meta.url), 'utf8') },
     { path: '/workspace/PARSAR.md', content: await readFile(new URL('./GUIDE.md', import.meta.url), 'utf8') },
@@ -49,4 +52,4 @@ await api('PUT', `/app/agents/${agentId}`, {
   skill_ids: [], mcp_ids: [], capability_ids: [],
   ask_user: true, enabled: true,
 });
-console.log(JSON.stringify({ agent_id: agentId, environment_id: runtimeId, agent_url: `${new URL(args.get('--url')).origin}/#/agents/${agentId}` }, null, 2));
+console.log(JSON.stringify({ agent_id: agentId, environment_id: runtimeId, agent_url: `${webURL}/#/agents/${agentId}` }, null, 2));

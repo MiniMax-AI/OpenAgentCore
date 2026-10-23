@@ -31,7 +31,7 @@ Configuration lives only in templates and Agents; a conversation never overrides
 
 ## CLI and management Agent
 
-[cli.mjs](cli.mjs) is a dependency-free Node 22.13+ client of the same `/app` and exposed `/v1` routes as the UI. It adds no server endpoint, execution path or permission system. Set `PARSAR_URL` to the Parsar Web origin, not the Core URL. It inherits the deployment's trusted-network access: anyone who can reach Parsar can manage its resources. No Core key is passed to the CLI or Agent; do not expose this workspace publicly or grant the management environment to an untrusted Agent.
+[cli.mjs](cli.mjs) is a dependency-free Node 22.13+ client of the same `/app` and exposed `/v1` routes as the UI. It adds no product server endpoint or execution path. Set `PARSAR_URL` to the Parsar Web origin, not the Core URL. It inherits the deployment's trusted-network access: anyone who can reach Parsar can manage its resources. No Core key is passed to the CLI or Agent; do not expose this workspace publicly or grant the management environment to an untrusted Agent.
 
 ```sh
 export PARSAR_URL=http://127.0.0.1:18180
@@ -47,7 +47,7 @@ The same file is a JavaScript SDK:
 
 ```js
 import { createParsarClient } from "./cli.mjs";
-const parsar = createParsarClient(process.env.PARSAR_URL);
+const parsar = createParsarClient(process.env.PARSAR_URL, { token: process.env.PARSAR_TOKEN });
 const agents = await parsar("GET", "/app/agents");
 ```
 
@@ -60,6 +60,25 @@ node example/parsar/examples/manager/configure.mjs \
 ```
 
 `--url` is the address reached by the configuring process; `--agent-url` is the same server's address reachable from the sandbox, defaulting to `--url`. Use different addresses only when your deployment explicitly provides a proxy between them. The script prints resource IDs before writes and refuses to overwrite existing resources. Use `--agent-id` and `--environment-id` to choose IDs explicitly. If a later step fails, inspect the reported IDs; partial resources are retained. Open the returned Agent link and start a conversation, for example “创建一个能分析 Excel 的 Agent，复用现有模型，配置好环境后给我链接。” Created resources appear in the ordinary lists and remain editable there. Trials verify environment preparation and a first reply, not the complete business task. Shared templates may be trialled with another bound Agent.
+
+### Hosted sandboxes and an authenticated gateway
+
+The managed microsandbox deployment blocks private networks except its Core connection ([node defaults](../../docs/getting-started/nodes.md)). A LAN Web address can therefore work on the host and still return `ECONNREFUSED` inside the Agent. Do not weaken Core isolation or substitute its administration endpoint. Provide a public HTTPS gateway to Parsar with its own credential.
+
+[The Caddy example](examples/manager/Caddyfile) binds only to `127.0.0.1:18181`, requires a nonempty `PARSAR_TOKEN` on every forwarded request, exposes only `/app/*` and `/v1/*`, and removes the gateway credential before forwarding to Parsar. It rewrites Host and Origin to the exact `PARSAR_UPSTREAM` address expected by the existing server. It adds no Core access. The token grants the same workspace access as the internal Web UI; use a cryptographically random token, keep it in a private environment file, and give the management environment only to trusted Agents.
+
+With [Caddy](https://caddyserver.com/docs/install) and [cloudflared](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/) installed on the Parsar host, set `PARSAR_UPSTREAM` to its existing IPv4 address and port (for example `10.0.0.2:18180`) and load `PARSAR_TOKEN` from private storage. Start Caddy, then the tunnel in another process:
+
+```sh
+caddy run --config example/parsar/examples/manager/Caddyfile --adapter caddyfile
+cloudflared tunnel --url http://127.0.0.1:18181
+```
+
+Point the tunnel only at the authenticated gateway, never at the unauthenticated Parsar listener. Verify the public URL returns 401 without a token and with an incorrect token before use. The CLI reads `PARSAR_TOKEN` from its environment and sends it as a Bearer header; tokens require HTTPS (loopback HTTP is allowed for local tests), and redirects remain disabled. Generate a token, for example, with `node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))'` redirected to a mode-0600 file; do not paste it into a conversation or URL.
+
+Run the management example with `--url https://<tunnel-host> --web-url http://<Parsar-LAN-IP>:18180` and `PARSAR_TOKEN` loaded in the configuring process. The script stores the token as an environment value, which product reads redact, and sets `PARSAR_WEB_URL` for browser links. For an existing manager, update its environment's `PARSAR_URL`, `PARSAR_TOKEN`, `PARSAR_WEB_URL` and initial CLI/guide files through the ordinary GET/PUT flow, preserving the revision and other fields. Start a **new conversation** to use the updated environment; old conversations retain the previous address and files.
+
+Quick Tunnel URLs last only for that tunnel process and may change after restart. Keep the gateway and tunnel running, update the manager environment after a URL change, and use a new conversation. This preview gateway serves API calls, not public browser sessions or SSE. Stop the tunnel to revoke public access, or replace its token and restart Caddy to rotate the credential. Gateway checks run with `PARSAR_TEST_CADDY=/path/to/caddy node --test example/parsar/tests/gateway.test.mjs` while port 18181 is free.
 
 ## Web chat
 

@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 07585920e965e1f918091314221a45b9bcba9cc8a854ffec6226c75cf0f1a09f
+source_hash: 0f12ed529d6665495a48291b698a38d04e3664851dfefdc8c1a04e13e961edd1
 ---
 
 # Parsar 工作空间
@@ -36,7 +36,7 @@ pnpm --filter @oac/parsar-example dev
 
 ## CLI 与管理 Agent {#cli-and-management-agent}
 
-[cli.mjs](cli.mjs) 使用 Node 22.13+，无额外依赖，直接调用网页使用的 `/app` 和已开放的 `/v1` 接口，不新增服务端接口、执行路径或权限体系。`PARSAR_URL` 填 Parsar 网页地址，不是 Core 地址。权限沿用当前部署的可信网络边界：能访问 Parsar 的调用方可以管理资源。CLI 和 Agent 不持有 Core key；不要把工作空间直接开放到公网，也不要把管理环境交给不可信的 Agent。
+[cli.mjs](cli.mjs) 使用 Node 22.13+，无额外依赖，直接调用网页使用的 `/app` 和已开放的 `/v1` 接口，不新增产品服务端接口或执行路径。`PARSAR_URL` 填 Parsar 网页地址，不是 Core 地址。权限沿用当前部署的可信网络边界：能访问 Parsar 的调用方可以管理资源。CLI 和 Agent 不持有 Core key；不要把工作空间直接开放到公网，也不要把管理环境交给不可信的 Agent。
 
 ```sh
 export PARSAR_URL=http://127.0.0.1:18180
@@ -52,7 +52,7 @@ CLI 输出 JSON，`--file -` 从标准输入读取 JSON 请求体。不跟随重
 
 ```js
 import { createParsarClient } from "./cli.mjs";
-const parsar = createParsarClient(process.env.PARSAR_URL);
+const parsar = createParsarClient(process.env.PARSAR_URL, { token: process.env.PARSAR_TOKEN });
 const agents = await parsar("GET", "/app/agents");
 ```
 
@@ -65,6 +65,25 @@ node example/parsar/examples/manager/configure.mjs \
 ```
 
 `--url` 是配置脚本访问的地址；`--agent-url` 是沙箱能访问的同一台 Parsar 地址，默认等于 `--url`。只有部署确实提供地址间代理时，才使用不同地址。脚本在写入前输出资源 ID，拒绝覆盖已有资源；也可通过 `--agent-id` 和 `--environment-id` 指定 ID。若后续步骤失败，按输出的 ID 检查，已创建的部分会保留。打开返回的 Agent 链接发起对话，例如“创建一个能分析 Excel 的 Agent，复用现有模型，配置好环境后给我链接。”创建的资源直接出现在原有列表，仍可通过网页编辑。试运行只证明环境准备和首次回复正常，不代表完整业务任务通过；共享模板可能使用另一个绑定的 Agent 试运行。
+
+### 托管沙箱与认证入口 {#hosted-sandboxes-and-an-authenticated-gateway}
+
+托管 microsandbox 部署默认禁止访问私网，仅放行 Core 连接（见[节点默认设置](../../docs/zh/getting-started/nodes.md)）。因此主机能访问的内网页面地址，在 Agent 内仍可能报 `ECONNREFUSED`。不要放宽 Core 隔离规则或改用管理接口；应为 Parsar 提供带独立凭据的公网 HTTPS 入口。
+
+[Caddy 配置示例](examples/manager/Caddyfile) 只监听 `127.0.0.1:18181`，转发前必须验证非空的 `PARSAR_TOKEN`，仅开放 `/app/*` 和 `/v1/*`，并在转发到 Parsar 前删除入口凭据。Host 和 Origin 会改为现有服务要求的 `PARSAR_UPSTREAM` 地址，不增加 Core 权限。令牌拥有与内网页面相同的工作空间访问权限；使用密码学随机令牌，保存在私有环境文件中，只将管理环境分配给可信 Agent。
+
+在 Parsar 主机安装 [Caddy](https://caddyserver.com/docs/install) 和 [cloudflared](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/)，将 `PARSAR_UPSTREAM` 设为现有 Parsar IPv4 地址和端口（例如 `10.0.0.2:18180`），从私有存储加载 `PARSAR_TOKEN`。先运行 Caddy，再用另一个进程运行隧道：
+
+```sh
+caddy run --config example/parsar/examples/manager/Caddyfile --adapter caddyfile
+cloudflared tunnel --url http://127.0.0.1:18181
+```
+
+隧道只能指向认证入口，不可直接指向无认证的 Parsar 监听端口。使用前确认公网地址在没有令牌或令牌错误时均返回 401。CLI 自动从环境读取 `PARSAR_TOKEN` 并作为 Bearer 请求头发送；使用令牌时必须为 HTTPS（本地测试允许 loopback HTTP），仍不跟随重定向。可用 `node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))'` 生成令牌并重定向到权限为 0600 的文件，不要将令牌贴入对话或 URL。
+
+运行管理案例时传入 `--url https://<隧道域名> --web-url http://<Parsar内网IP>:18180`，并在配置进程中加载 `PARSAR_TOKEN`。脚本将令牌写入环境变量，产品读取时会隐藏其值，同时设置 `PARSAR_WEB_URL` 用于网页链接。已有管理 Agent 通过普通 GET/PUT 流程更新环境的 `PARSAR_URL`、`PARSAR_TOKEN`、`PARSAR_WEB_URL` 和初始 CLI、操作说明文件，保留 revision 与其他字段。更新后必须**新建对话**，已有对话仍使用旧地址和文件。
+
+Quick Tunnel 地址只在该隧道进程运行期间有效，重启可能换地址。保持入口和隧道运行，地址变化后更新管理环境并新建对话。该预览入口用于 API，不提供公网网页会话或 SSE。停止隧道即可关闭公网访问；替换令牌并重启 Caddy 可轮换凭据。端口 18181 空闲时，用 `PARSAR_TEST_CADDY=/path/to/caddy node --test example/parsar/tests/gateway.test.mjs` 验证入口。
 
 ## 网页聊天 {#web-chat}
 

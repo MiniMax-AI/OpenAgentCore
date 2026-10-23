@@ -21,9 +21,9 @@ async function fixture(t) {
   t.after(() => { server.closeAllConnections(); server.close(); store.close(); });
   return { url: `http://127.0.0.1:${config.port}`, store, modelId };
 }
-function run(file, args, url, input = '') {
+function run(file, args, url, input = '', token) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [file, ...args], { env: { ...process.env, PARSAR_URL: url }, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [file, ...args], { env: { ...process.env, PARSAR_URL: url, PARSAR_TOKEN: token }, stdio: ['pipe', 'pipe', 'pipe'] });
     let stdout = '', stderr = '';
     child.stdout.on('data', (chunk) => { stdout += chunk; });
     child.stderr.on('data', (chunk) => { stderr += chunk; });
@@ -68,16 +68,20 @@ test('CLI accepts JSON stdin and preserves server errors without echoing malform
 });
 
 test('SDK never follows redirects or accepts another origin or administration path', async (t) => {
-  let reached = 0;
-  const server = createServer((req, res) => { reached++; res.writeHead(302, { Location: 'http://127.0.0.1:1/private' }); res.end(); });
+  let reached = 0, redirected = 0;
+  const destination = createServer((req, res) => { redirected++; res.end('{}'); });
+  await new Promise((resolve) => destination.listen(0, '127.0.0.1', resolve));
+  t.after(() => { destination.closeAllConnections(); destination.close(); });
+  const server = createServer((req, res) => { reached++; res.writeHead(302, { Location: `http://127.0.0.1:${destination.address().port}/private` }); res.end(); });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   t.after(() => { server.closeAllConnections(); server.close(); });
-  const api = createParsarClient(`http://127.0.0.1:${server.address().port}`);
+  const api = createParsarClient(`http://127.0.0.1:${server.address().port}`, { token: randomUUID() });
   for (const path of ['https://elsewhere.example/app/agents', '//elsewhere.example/app/agents', '/core/v1/projects', '/app/../core/v1/projects', '/app/agents#fragment'])
     await assert.rejects(api('GET', path));
   assert.equal(reached, 0);
   await assert.rejects(api('GET', '/app/agents'));
   assert.equal(reached, 1);
+  assert.equal(redirected, 0);
   for (const base of ['https://user:secret@example.com', 'https://example.com/path', 'file:///tmp/file'])
     assert.throws(() => createParsarClient(base));
 });
@@ -99,4 +103,32 @@ test('manager example creates ordinary resources and never overwrites them on re
   assert.equal(again.code, 1);
   assert.match(again.stderr, /already exists/);
   assert.deepEqual(store.get('runtimes', runtimeId), runtime);
+});
+
+test('gateway token is sent only to the configured server and never over remote HTTP', async (t) => {
+  const token = randomUUID();
+  let headers;
+  const server = createServer((req, res) => { headers = req.headers; res.setHeader('Content-Type', 'application/json'); res.end('{}'); });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const url = `http://127.0.0.1:${server.address().port}`;
+  const result = await run(cli, ['GET', '/app/models'], url, '', token);
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(headers.authorization, `Bearer ${token}`);
+  assert.ok(!result.stdout.includes(token) && !result.stderr.includes(token));
+  assert.throws(() => createParsarClient('http://10.0.0.2:18180', { token }), /HTTPS/);
+  assert.throws(() => createParsarClient('https://example.com', { token: 'bad\r\nheader' }), /valid bearer/);
+});
+
+test('manager stores gateway access as a redacted environment value and returns the browser URL', async (t) => {
+  const { url, store, modelId } = await fixture(t), token = randomUUID();
+  const result = await run(configure, ['--url', url, '--agent-url', 'https://gateway.example', '--web-url', 'http://10.0.0.2:18180', '--model', modelId], url, '', token);
+  assert.equal(result.code, 0, result.stderr);
+  const ids = JSON.parse(result.stdout);
+  assert.equal(ids.agent_url, `http://10.0.0.2:18180/#/agents/${ids.agent_id}`);
+  const runtime = store.get('runtimes', ids.environment_id);
+  assert.equal(runtime.env.PARSAR_TOKEN, token);
+  assert.equal(runtime.env.PARSAR_WEB_URL, 'http://10.0.0.2:18180');
+  assert.equal((await createParsarClient(url)('GET', `/app/runtimes/${runtime.id}`)).env.PARSAR_TOKEN, null);
+  assert.ok(!result.stdout.includes(token) && !result.stderr.includes(token));
 });

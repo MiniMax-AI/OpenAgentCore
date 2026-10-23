@@ -1,6 +1,6 @@
 # Manage Parsar
 
-Use `node /workspace/parsar.mjs --help`. `PARSAR_URL` is already set to this workspace's Parsar server. The CLI uses Node 22.13+ without dependencies and prints JSON. All configuration changes go through the same API and validation as the Web UI. Do not edit databases or use Core administration endpoints.
+Use `node /workspace/parsar.mjs --help`. `PARSAR_URL` is already set to this workspace's Parsar API. The CLI uses Node 22.13+ without dependencies and prints JSON. If the deployment needs authentication, the CLI automatically reads `PARSAR_TOKEN`; never print, inspect, copy or include that token in commands, files, links or created resources. It is a Parsar gateway credential, not a Core key. All configuration changes go through the same API and validation as the Web UI. Do not edit databases or use Core administration endpoints.
 
 If that server is unreachable or denies access, stop and report the configured address and error. Do not scan ports, try other services, bypass authentication, or inspect Core hosts, credentials or internal APIs. Connectivity must be fixed by the deployment operator.
 
@@ -77,7 +77,7 @@ Writes are not automatically retried. If the connection fails, GET the same ID t
 
 After saving an Agent, `POST /app/runtimes/<runtime_id>/trial` starts a real environment trial. Poll `GET /app/runtimes/<runtime_id>/trial` until `state` becomes `succeeded` or `failed`. This checks environment preparation and a first reply; it does not prove business tools or the Agent's whole task work. The trial uses an enabled Agent bound to that template, which may differ when the template is shared. To test the specific Agent, open a new conversation with it and run a small representative task when requested.
 
-Return links using the actual `PARSAR_URL` origin:
+Return browser links using `PARSAR_WEB_URL` when set, otherwise `PARSAR_URL`. The authenticated API gateway may not serve Web pages; never put a token in a URL:
 
 - Agent: `/#/agents/<agent_id>`
 - New conversation: `/#/new?agent=<agent_id>`

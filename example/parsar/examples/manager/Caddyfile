@@ -1,0 +1,28 @@
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+# TLS terminates at the tunnel; this gateway is reachable only on loopback.
+:18181 {
+	bind 127.0.0.1
+	header Cache-Control no-store
+	@authorized {
+		expression `{env.PARSAR_TOKEN} != ""`
+		header Authorization "Bearer {$PARSAR_TOKEN}"
+		path /app/* /v1/*
+	}
+	handle @authorized {
+		reverse_proxy http://{$PARSAR_UPSTREAM} {
+			header_up Host {$PARSAR_UPSTREAM}
+			header_up Origin http://{$PARSAR_UPSTREAM}
+			header_up -Authorization
+			header_up -Cookie
+		}
+	}
+	handle {
+		header Content-Type application/json
+		respond `{"error":{"message":"A valid Parsar gateway token and API path are required."}}` 401
+	}
+}

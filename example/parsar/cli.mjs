@@ -26,16 +26,21 @@ Generate a UUID once before creating a resource. Save it for recovery.
 For edits, GET first, keep all fields and the revision, then PUT the full object.
 On an uncertain write, GET the same ID before retrying; writes are not retried.
 Uses the same trusted-network access as the Web UI. No Core key is needed.
+For an authenticated HTTPS gateway, set PARSAR_TOKEN to its access token.
 See examples/manager/GUIDE.md for complete creation examples.
 `;
 
 // The UI and this client share the server's validation, revisions and redaction.
-export function createParsarClient(baseURL) {
+export function createParsarClient(baseURL, { token } = {}) {
   const base = new URL(baseURL);
   if (
     !["http:", "https:"].includes(base.protocol) ||
     base.username || base.password || base.pathname !== "/" || base.search || base.hash
   ) throw new Error("PARSAR_URL must be an HTTP(S) origin without credentials or a path.");
+  if (token !== undefined && (
+    typeof token !== "string" || !/^[A-Za-z0-9._~+/-]+=*$/.test(token) ||
+    (base.protocol !== "https:" && !["127.0.0.1", "localhost", "[::1]"].includes(base.hostname))
+  )) throw new Error("PARSAR_TOKEN requires a valid bearer token and HTTPS (or loopback HTTP for local testing).");
   return async (method, path, body) => {
     if (!["GET", "PUT", "POST", "PATCH", "DELETE"].includes(method))
       throw new Error("Unsupported method.");
@@ -50,7 +55,7 @@ export function createParsarClient(baseURL) {
       method,
       redirect: "error",
       signal: AbortSignal.timeout(60_000),
-      headers: { Origin: base.origin, "Content-Type": "application/json" },
+      headers: { Origin: base.origin, "Content-Type": "application/json", ...(token === undefined ? {} : { Authorization: `Bearer ${token}` }) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const text = await response.text();
@@ -84,7 +89,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         try { body = JSON.parse(input); }
         catch { throw new Error("The input file must contain valid JSON."); }
       }
-      const result = await createParsarClient(process.env.PARSAR_URL)(method, path, body);
+      const result = await createParsarClient(process.env.PARSAR_URL, { token: process.env.PARSAR_TOKEN })(method, path, body);
       console.log(JSON.stringify(result, null, 2));
     }
   } catch (error) {
