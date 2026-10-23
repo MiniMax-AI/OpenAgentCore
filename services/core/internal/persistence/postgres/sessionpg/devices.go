@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -196,13 +197,13 @@ func (s *Store) TouchDevice(ctx context.Context, device string) (bool, error) {
 	return n > 0, err
 }
 
-func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error) {
+func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []proto.SupportedAgentKind) (bool, error) {
 	id, err := parseID(device)
 	if err != nil {
 		return false, err
 	}
 	if kinds == nil {
-		kinds = []runtimedevice.SupportedAgentKind{}
+		kinds = []proto.SupportedAgentKind{}
 	}
 	raw, err := json.Marshal(kinds)
 	if err != nil {

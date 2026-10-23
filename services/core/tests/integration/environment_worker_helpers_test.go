@@ -22,7 +22,7 @@ func enableWorkerEnvironment(t *testing.T, h *dispatchHarness) {
 			return false
 		}
 		info, _, _ := peer.AgentKindStatus("codex")
-		return info.Capabilities.Preparation && info.Capabilities.EnvironmentNone
+		return info.Capabilities.Preparation.IsSupported() && info.Capabilities.EnvironmentNone.IsSupported()
 	})
 }
 

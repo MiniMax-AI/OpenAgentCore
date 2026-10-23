@@ -3,8 +3,6 @@ package runtimegateway
 import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
-	"reflect"
 	"testing"
 )
 

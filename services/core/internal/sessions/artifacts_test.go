@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
 // exportFile is one entry of a test export.
@@ -213,7 +213,7 @@ func (s *fakeArtifactStorage) TouchDevice(context.Context, string) (bool, error)
 	return false, nil
 }
 
-func (s *fakeArtifactStorage) TouchAuthenticatedDevice(context.Context, string, string, []runtimedevice.SupportedAgentKind) (bool, error) {
+func (s *fakeArtifactStorage) TouchAuthenticatedDevice(context.Context, string, string, []proto.SupportedAgentKind) (bool, error) {
 	s.t.Fatal("unexpected call to TouchAuthenticatedDevice")
 	return false, nil
 }

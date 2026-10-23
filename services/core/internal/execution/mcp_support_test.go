@@ -9,7 +9,6 @@ import (
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 	"github.com/google/uuid"
@@ -26,7 +25,7 @@ func (c *recordingCredentials) MCPBearerToken(_ context.Context, command vaults.
 	return c.token, nil
 }
 
-func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, runtimedevice.KindCapabilities) {
+func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, proto.AgentKindCapabilities) {
 	t.Helper()
 	vault, credential := uuid.NewString(), uuid.NewString()
 	tool := json.RawMessage(`{"type":"mcp","server_label":"tickets","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example/tools"}}`)
@@ -36,8 +35,8 @@ func mcpSupportFixture(t *testing.T) (Snapshot, []proto.MCPHTTPServer, runtimede
 	if err != nil {
 		t.Fatal(err)
 	}
-	caps := runtimedevice.KindCapabilities{EnvironmentNone: true, MCPHTTPTools: true, MCPHTTPBearerAuth: true, MCPHTTPRequired: true,
-		Preparation: true}
+	caps := proto.AgentKindCapabilities{EnvironmentNone: proto.CapabilitySupported, MCPHTTPTools: proto.CapabilitySupported, MCPHTTPBearerAuth: proto.CapabilitySupported, MCPHTTPRequired: proto.CapabilitySupported,
+		Preparation: proto.CapabilitySupported}
 	return snapshot, tools.MCP, caps
 }
 
@@ -93,15 +92,15 @@ func TestMCPExecutionChecksRequireVerifiedCapabilityCombinations(t *testing.T) {
 				snapshot.Agent.Tools[0], _ = json.Marshal(tool)
 				switch missing {
 				case "mcp":
-					caps.MCPHTTPTools = false
+					caps.MCPHTTPTools = proto.CapabilityUnsupported
 				case "bearer":
-					caps.MCPHTTPBearerAuth = false
+					caps.MCPHTTPBearerAuth = proto.CapabilityUnsupported
 				case "placement":
-					caps.EnvironmentNone = false
+					caps.EnvironmentNone = proto.CapabilityUnsupported
 				case "required":
-					caps.MCPHTTPRequired = false
+					caps.MCPHTTPRequired = proto.CapabilityUnsupported
 				case "preparation":
-					caps.Preparation = false
+					caps.Preparation = proto.CapabilityUnsupported
 				case "environment":
 					snapshot.Environment = v1.Environment{}
 				}
@@ -127,7 +126,7 @@ func TestMCPAnonymousExecutionPreservesFrozenDecision(t *testing.T) {
 		for _, mode := range []string{"unattached", "frozen anonymous", "invalid binding"} {
 			t.Run(engine+"/"+mode, func(t *testing.T) {
 				snapshot, _, caps := mcpSupportFixture(t)
-				caps.MCPHTTPBearerAuth = false
+				caps.MCPHTTPBearerAuth = proto.CapabilityUnsupported
 				if mode == "unattached" {
 					snapshot.VaultIDs, snapshot.MCPCredentials = nil, nil
 				} else {
