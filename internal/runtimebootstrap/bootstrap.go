@@ -25,6 +25,11 @@ const PublicWorkspace = "/workspace"
 // RuntimeWorkspace is the workspace directory of the packaged Runtime layout.
 const RuntimeWorkspace = "/environment/workspace"
 
+// SuspendControlFile is where the Runtime daemon publishes its suspend control.
+// Its directory is private to the Runtime user. Providers enable the control by
+// setting OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE to it, and Core's wake command reads it.
+const SuspendControlFile = "/run/oac/daemon-suspend.json"
+
 var ErrInvalid = errors.New("invalid Runtime bootstrap input")
 
 // Connection is a current-version launch input, not Runtime's private auth store.

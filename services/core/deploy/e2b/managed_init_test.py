@@ -63,7 +63,9 @@ class ManagedStartupTest(unittest.TestCase):
             image_env = {'PATH': '/usr/local/bin:/usr/bin:/bin', 'OAC_RUNTIME_HOME': str(Path(temporary) / '.oac')}
             with patch.object(managed_init.shared, 'ROOT', root), patch.object(managed_init.shared, 'PROFILE', profile), \
                     patch.object(managed_init.shared, 'prepare_runtime', return_value=image_env), \
-                    patch.object(managed_init.os, 'fchown'), patch.object(managed_init.subprocess, 'Popen', process):
+                    patch.object(managed_init.os, 'fchown'), patch.object(managed_init.os, 'chown'), \
+                    patch.object(managed_init.contract, 'SUSPEND_CONTROL_FILE', str(Path(temporary) / 'run' / 'daemon-suspend.json')), \
+                    patch.object(managed_init.subprocess, 'Popen', process):
                 if failed:
                     with self.assertRaises(RuntimeError):
                         managed_init.initialize()
@@ -80,6 +82,7 @@ class ManagedStartupTest(unittest.TestCase):
                 self.assertNotIn(data['RuntimeBootstrap']['credential'], json.dumps(process.call_args.kwargs['env']))
                 self.assertEqual(json.loads(connection_file.read_text())['environment_id'], data['EnvironmentID'])
                 self.assertEqual(process.call_args.kwargs['user'], 1000)
+                self.assertEqual(process.call_args.kwargs['env']['OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE'], str(Path(temporary) / 'run' / 'daemon-suspend.json'))
                 if failed:
                     self.assertFalse((root / 'managed-ready.json').exists())
                 else:

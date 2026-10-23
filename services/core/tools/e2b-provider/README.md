@@ -50,9 +50,13 @@ An unknown Create is never repeated. A Create whose connection material was lost
 
 ## Inspection and cleanup
 
-Inspection uses SDK metadata and ID reads only. SDK `connect` is never used because it can resume paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
+Inspection uses SDK metadata and ID reads only. SDK `connect` is used only in Resume, because it resumes paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
 
 `CreateSettled` proves that the original Create and bootstrap can no longer mutate; it is independent of `BootstrapComplete`. An empty lookup never settles an unknown Create. Kill destroys every matching sandbox, confirms that none remains and only then records a settled tombstone; it returns `State=absent` with `CreateSettled`. A settled rejected Create with no sandbox IDs proves absence without a cloud request, so GetInfo and Kill still succeed when the key is invalid. Ordinary missing compute has no such proof.
+
+## Checkpoint operations
+
+One sandbox spans every generation of an allocation. Suspend pauses it with the SDK's native memory snapshot, and Resume reconnects to it with `connect`, so the daemon keeps running and wake uses the suspend control file. The receipt records the current generation, the pause operation and the resume operation. A generation other than the current one is `not_found`, and KillCompute and DeleteSnapshot never touch a sandbox that another generation owns. Resume records the attempt as dispatched before `connect` and never dispatches the same operation again. A snapshot that does not match the paused sandbox, its endpoint or its template build is `checkpoint_unusable` before any native call, and that result is durable for the operation. RenewCompute extends the lease of a running sandbox and otherwise observes like GetCompute.
 
 ## Observations
 

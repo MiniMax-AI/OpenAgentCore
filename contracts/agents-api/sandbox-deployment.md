@@ -220,7 +220,7 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | Independent workspace filesystem | Required: [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter), configured separately from compute | Unsupported | Unsupported |
 | Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and, as a quota request, `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota |
 | Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved | Absent: `metadata` is empty |
-| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `null`; Core does not suspend E2B sandboxes | `null` |
+| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`; Core pauses an idle E2B sandbox with the SDK's native pause | `null` |
 | Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes |
 | Enrollment-token `max_active`, `max_retained` | Both limits apply; an omitted limit is derived at enrollment | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` |
 | Node list and detail | Enrolled nodes | Empty list; detail returns 404 | Enrolled nodes |

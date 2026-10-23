@@ -125,6 +125,10 @@ type SandboxProvider interface {
 	RunCommandCompute(context.Context, Reference, Compute, Command) (CommandResult, error)
 	// ResumeCompute thaws only the same resident instance after an aborted pause.
 	ResumeCompute(context.Context, Reference, Compute) (ComputeState, error)
+	// RenewCompute extends the native lease of the exact running incarnation
+	// where the Provider has one, and otherwise observes exactly like
+	// GetCompute. It never revives stopped compute.
+	RenewCompute(context.Context, Reference, Compute) (ComputeState, error)
 
 	// The preparation cache keeps the Environment filesystem left by one finished
 	// preparation. Key is opaque and the adapter owns storage and lifetime. Both
@@ -143,7 +147,7 @@ var requiredOperations = []string{"Create", "GetInfo", "Renew", "Kill", "RunComm
 
 // checkpointOperations are all supported or all unsupported: partial cleanup or
 // restore support cannot safely own a compute incarnation.
-var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute"}
+var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute", "RenewCompute"}
 
 // preparationOperations are both supported or both unsupported.
 var preparationOperations = []string{"RestorePreparation", "SavePreparation"}
@@ -268,7 +272,7 @@ func ValidateOperations(operations providercontract.Operations) error {
 		}
 	}
 	for _, name := range checkpointOperations {
-		if operations[name].State != operations["Initial"].State {
+		if (operations[name].State == providercontract.Supported) != SupportsCheckpoint(operations) {
 			return fmt.Errorf("%w: incomplete checkpoint lifecycle", providercontract.ErrContract)
 		}
 	}
@@ -278,8 +282,10 @@ func ValidateOperations(operations providercontract.Operations) error {
 	return nil
 }
 
-func SupportsCheckpoint(p SandboxProvider) bool {
-	return providercontract.Require(p, "Initial") == nil
+// SupportsCheckpoint is the one predicate over a declaration: the checkpoint
+// operations are all supported or all unsupported, so Initial decides.
+func SupportsCheckpoint(operations providercontract.Operations) bool {
+	return operations["Initial"].State == providercontract.Supported
 }
 
 // ProcessPaths locates installed adapter helpers and their private state. The

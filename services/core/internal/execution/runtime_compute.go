@@ -60,8 +60,8 @@ func logComputeStep(ctx context.Context, owner deployment.Allocation, step strin
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
-	if err := providercontract.Require(p, "Initial"); err != nil {
-		return err
+	if !sandbox.SupportsCheckpoint(p.ProviderOperations()) {
+		return providercontract.Require(p, "Initial")
 	}
 	initial, err := p.Initial(ctx, runtimeReference(owner))
 	if err != nil {
@@ -81,8 +81,8 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.A
 func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
-	if err := providercontract.Require(p, "Initial"); err != nil {
-		return err
+	if !sandbox.SupportsCheckpoint(p.ProviderOperations()) {
+		return providercontract.Require(p, "Initial")
 	}
 	var state runtimeCompute
 	if json.Unmarshal(owner.ComputeState, &state) != nil || state.Current.ID == "" {
@@ -121,7 +121,14 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 
 func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
-	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
+	// With an open Runtime connection the observation also extends the native
+	// lease, as the disabled path does; otherwise it only observes.
+	peer, peerErr := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
+	observe := p.GetCompute
+	if peerErr == nil {
+		observe = p.RenewCompute
+	}
+	compute, err := observe(ctx, runtimeReference(owner), state.Current)
 	if errors.Is(err, sandbox.ErrNotFound) {
 		return r.releaseLostCompute(ctx, p, owner, state, err)
 	}
@@ -137,9 +144,8 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	if compute.Status != "running" || !compute.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
-	if err != nil {
-		return err
+	if peerErr != nil {
+		return peerErr
 	}
 	if _, err := r.deployment.CheckRunning(ctx, owner); err != nil {
 		return err

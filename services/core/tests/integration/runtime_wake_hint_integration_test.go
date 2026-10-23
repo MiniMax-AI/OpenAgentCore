@@ -38,6 +38,11 @@ func (p *wakeHintScanProvider) GetCompute(ctx context.Context, reference sandbox
 	return p.fakeCheckpointProvider.GetCompute(ctx, reference, compute)
 }
 
+// A running allocation with a connected Runtime is observed by RenewCompute.
+func (p *wakeHintScanProvider) RenewCompute(ctx context.Context, reference sandbox.Reference, compute sandbox.Compute) (sandbox.ComputeState, error) {
+	return p.GetCompute(ctx, reference, compute)
+}
+
 type wakeHintIntegrationTarget struct {
 	tenant      string
 	session     sessions.Session

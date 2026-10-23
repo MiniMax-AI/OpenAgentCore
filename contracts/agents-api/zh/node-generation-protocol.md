@@ -1,7 +1,7 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 090803f51d2e29d8900cfe8612b0eb21363a0fd2687daf3d368cc746dd65809f
+source_hash: 3648a80013f1ae90031430c5bdf28d6ee5b59f55dda4b168dfeb99ab5bcec3e2
 ---
 
 沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
@@ -81,6 +81,7 @@ Core 发送包含以下内容的 `request` 帧：
 | `initial` | `Initial` | 无 | `compute` |
 | `new_compute` | `NewCompute` | 大于零的计算 `generation` 和可选的 `snapshot` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
+| `renew_compute` | `RenewCompute` | `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | 无 |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
 | `command_compute` | `RunCommandCompute` | `compute` 和 `command` | `command` |

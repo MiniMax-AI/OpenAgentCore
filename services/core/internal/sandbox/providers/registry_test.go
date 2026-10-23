@@ -19,7 +19,7 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 	}{
 		{"docker", "nodes", "nodes", false},
 		{"microsandbox", "nodes", "nodes", true},
-		{"e2b", "direct", "e2b", false},
+		{"e2b", "direct", "e2b", true},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
 			d, err := registry.Describe(tc.kind, installation)

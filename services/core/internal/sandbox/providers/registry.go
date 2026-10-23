@@ -90,7 +90,7 @@ func (r *Registry) SupportsCheckpoint(kind string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return a.Operations()["Initial"].State == providercontract.Supported, nil
+	return sandbox.SupportsCheckpoint(a.Operations()), nil
 }
 
 // RetainedLimit keeps nodes without checkpoint support within their active capacity.
@@ -99,7 +99,7 @@ func (r *Registry) RetainedLimit(kind string, active, retained int) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	if a.Mode == sandbox.DeploymentNodes && a.Operations()["Initial"].State != providercontract.Supported {
+	if a.Mode == sandbox.DeploymentNodes && !sandbox.SupportsCheckpoint(a.Operations()) {
 		return active, nil
 	}
 	return retained, nil

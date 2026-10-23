@@ -81,7 +81,7 @@ func main() {
 	identity = append(identity, "InstallationID")
 	values := map[string]any{
 		"PROTOCOL_VERSION": e2b.ProtocolVersion, "SDK_VERSION": sdk,
-		"MAX_REQUEST": e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
+		"SUSPEND_CONTROL_FILE": runtimebootstrap.SuspendControlFile, "MAX_REQUEST": e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
 		"MAX_OUTPUT": e2b.MaxOutputBytes, "MAX_COMMAND_INPUT": e2b.MaxCommandInputBytes, "MAX_CREDENTIAL_REFERENCES": e2b.MaxCredentialReferences,
 		"OPERATIONS": e2b.HelperOperations(), "ERROR_CODES": e2b.HelperErrors(),
 		"REQUEST_FIELDS": fields(reflect.TypeFor[e2b.Request]()), "RESPONSE_FIELDS": fields(reflect.TypeFor[e2b.Response]()),
@@ -130,6 +130,21 @@ func fixtures() []byte {
 		copy.Operation = operation
 		if operation == "verify_credential" {
 			copy.References = []sandbox.Reference{r}
+		}
+		compute := sandbox.Compute{Name: "fixture", ID: "fixture-id"}
+		snapshot := sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "a", ExecutionClass: "e"}, Reference: "fixture:s-op", ID: "fixture-id", OperationID: "op", SourceName: "fixture", SourceID: "fixture-id"}
+		switch operation {
+		case "compute", "renew_compute", "resume_compute", "kill_compute":
+			copy.Compute = &compute
+		case "command_compute":
+			copy.Compute, copy.Command = &compute, &sandbox.Command{Args: []string{"true"}}
+		case "suspend":
+			copy.Suspend = &sandbox.SuspendRequest{Reference: r, OperationID: "op", Source: compute}
+		case "resume":
+			target := sandbox.Compute{Generation: 1, Name: "fixture-g1", RestoredFrom: &snapshot}
+			copy.Resume = &sandbox.ResumeRequest{Reference: r, OperationID: "op", Snapshot: snapshot, Target: target}
+		case "delete_snapshot":
+			copy.Snapshot = &snapshot
 		}
 		add("request", operation, true, copy)
 	}

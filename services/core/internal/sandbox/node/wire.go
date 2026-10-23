@@ -250,7 +250,7 @@ func (q request) validate() error {
 		if count == 0 || count == 1 && q.Snapshot != nil {
 			return nil
 		}
-	case "compute", "kill_compute", "resume_compute":
+	case "compute", "kill_compute", "resume_compute", "renew_compute":
 		if count == 1 && q.Compute != nil {
 			return nil
 		}
@@ -344,6 +344,9 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (respons
 			err = p.DeleteSnapshot(ctx, q.Reference, *q.Snapshot)
 		case "resume_compute":
 			state, err = p.ResumeCompute(ctx, q.Reference, *q.Compute)
+			out.State = &state
+		case "renew_compute":
+			state, err = p.RenewCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
 		case "command_compute":
 			command, err = p.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)

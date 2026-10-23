@@ -33,6 +33,9 @@ type lostComputeProvider struct {
 func (p *lostComputeProvider) GetCompute(_ context.Context, _ sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	return p.observe(c)
 }
+func (p *lostComputeProvider) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	return p.GetCompute(ctx, r, c)
+}
 func (p *lostComputeProvider) KillCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) error {
 	p.killed = append(p.killed, c)
 	if p.onKill != nil {

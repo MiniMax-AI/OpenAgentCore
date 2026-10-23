@@ -109,12 +109,9 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 	if copied.ProviderKind == "" || (copied.Mode != string(sandbox.DeploymentNodes) && copied.Mode != string(sandbox.DeploymentDirect)) {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
-	if copied.Mode == string(sandbox.DeploymentDirect) && copied.Suspension != nil {
-		return RuntimeProvider{}, sandbox.ErrInvalid
-	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if !sandbox.SupportsCheckpoint(config.Provider) || policy.Retention < time.Second {
+		if !sandbox.SupportsCheckpoint(config.Provider.ProviderOperations()) || policy.Retention < time.Second {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy

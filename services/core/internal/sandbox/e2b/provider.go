@@ -22,6 +22,8 @@ type Config struct {
 	Binary, StateDir, InstallationID, APIKey, Template, APIURL, Domain string
 	TimeoutSeconds                                                     int
 	Resources                                                          *sandbox.Resources
+	// Compatibility is derived from the other fields by NewWithCaller.
+	Compatibility sandbox.CheckpointCompatibility
 }
 
 // Discover uses the same pinned SDK helper without requiring a saved deployment.
@@ -149,6 +151,7 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 		resources := *c.Resources
 		c.Resources = &resources
 	}
+	c.Compatibility = c.compatibility()
 	return &Provider{config: c, caller: caller, now: time.Now}, nil
 }
 
@@ -194,12 +197,18 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 		}
 		connection = &value
 	}
-	out, err := p.caller.Call(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
+	return p.exchange(ctx, Request{Version: ProtocolVersion, Operation: operation, Config: p.config, Reference: r, Bootstrap: b, RuntimeBootstrap: connection, Command: command, Deadline: deadline})
+}
+
+// exchange sends one validated helper request and maps its sanitized outcome.
+func (p *Provider) exchange(ctx context.Context, q Request) (Response, error) {
+	operation, r := q.Operation, q.Reference
+	out, err := p.caller.Call(ctx, q)
 	if errors.Is(err, errHelperNotStarted) {
 		return unstarted(operation, r), sandbox.ErrComputeUnconfirmed
 	}
 	if err != nil || out.Version != ProtocolVersion {
-		if operation == "command" {
+		if operation == "command" || operation == "command_compute" {
 			return Response{}, sandbox.ErrCommandUnconfirmed
 		}
 		return Response{}, sandbox.ErrComputeUnconfirmed
@@ -224,6 +233,8 @@ func (p *Provider) call(ctx context.Context, operation string, r sandbox.Referen
 		return out, sandbox.ErrExists
 	case "not_found":
 		return out, sandbox.ErrNotFound
+	case "checkpoint_unusable":
+		return out, sandbox.ErrCheckpointUnusable
 	case "command_unconfirmed":
 		return out, sandbox.ErrCommandUnconfirmed
 	default:
@@ -286,16 +297,18 @@ func (p *Provider) Kill(ctx context.Context, r sandbox.Reference) error {
 	}
 	return err
 }
-func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
+func validCommand(c sandbox.Command) error {
 	if len(c.Args) == 0 || len(c.Stdin) > sandbox.MaxCommandInputBytes || c.Directory != "" && !filepath.IsAbs(c.Directory) {
-		return sandbox.CommandResult{}, sandbox.ErrInvalid
+		return sandbox.ErrInvalid
 	}
 	for _, arg := range c.Args {
 		if strings.ContainsRune(arg, 0) {
-			return sandbox.CommandResult{}, sandbox.ErrInvalid
+			return sandbox.ErrInvalid
 		}
 	}
-	out, err := p.call(ctx, "command", r, nil, &c)
+	return nil
+}
+func commandResult(out Response, err error) (sandbox.CommandResult, error) {
 	if err != nil {
 		return sandbox.CommandResult{}, err
 	}
@@ -303,6 +316,12 @@ func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbo
 		return sandbox.CommandResult{}, sandbox.ErrCommandUnconfirmed
 	}
 	return *out.Command, nil
+}
+func (p *Provider) RunCommand(ctx context.Context, r sandbox.Reference, c sandbox.Command) (sandbox.CommandResult, error) {
+	if err := validCommand(c); err != nil {
+		return sandbox.CommandResult{}, err
+	}
+	return commandResult(p.call(ctx, "command", r, nil, &c))
 }
 
 // A fresh allocation Create rejected before process startup has no cloud effects.

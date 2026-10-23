@@ -17,7 +17,7 @@ from sdk import restore, run
 from state import Failure, Receipt
 
 
-class ProviderTest(unittest.TestCase):
+class Fixture(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
@@ -60,6 +60,8 @@ class ProviderTest(unittest.TestCase):
     def record(self):
         return json.loads(next(Path(self.temporary.name).glob('*.json')).read_text())
 
+
+class ProviderTest(Fixture):
     def test_create_recover_and_never_replay(self):
         result = self.call('create')
         self.assertEqual(result['ErrorCode'], '')
@@ -320,6 +322,79 @@ class SDKTest(unittest.TestCase):
             run(client, {'Args': ['true']}, lambda: 3)
         self.assertEqual(result.exception.code, 'command_unconfirmed')
         client.commands.run.assert_called_once()
+
+
+class CheckpointTest(Fixture):
+    """One sandbox spans generations: pause keeps it and connect resumes it."""
+
+    def setUp(self):
+        super().setUp()
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.config['Compatibility'] = {'artifact_domain': 'a', 'execution_class': 'e'}
+        self.op = str(uuid4())
+
+    def compute(self, generation=0, restored=None):
+        return {'Generation': generation, 'Name': 'n%d' % generation, 'ID': 'owned-id', 'RestoredFrom': restored}
+
+    def suspend(self, observe=False):
+        self.request['Suspend'] = {'Reference': self.reference, 'OperationID': self.op, 'Source': self.compute(),
+                                   'Snapshot': None, 'ObserveOnly': observe}
+        return self.call('suspend')
+
+    def resume(self, snapshot, observe=False, op=None):
+        target = self.compute(1, snapshot)
+        self.request['Resume'] = {'Reference': self.reference, 'OperationID': op or self.op, 'Snapshot': snapshot,
+                                  'Target': target, 'ObserveOnly': observe}
+        return self.call('resume')
+
+    def paused(self):
+        self.cloud.state = SandboxState.PAUSED
+
+    def test_suspend_pauses_once_and_resume_advances_the_generation(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        result = self.suspend()
+        self.assertEqual(result['ErrorCode'], '')
+        snapshot = result['State']['Snapshot']
+        self.assertTrue(result['State']['SourceStopped'])
+        self.assertEqual(result['State']['Status'], 'paused')
+        self.assertEqual(self.suspend()['State']['Snapshot'], snapshot)
+        self.api.pause.assert_called_once()
+        self.api.connect.side_effect = lambda *a, **k: (setattr(self.cloud, 'state', 'running'), self.cloud)[1]
+        resumed = self.resume(snapshot)
+        self.assertEqual(resumed['ErrorCode'], '')
+        self.assertEqual(resumed['State']['Status'], 'running')
+        self.assertEqual(self.record()['generation'], 1)
+        self.api.connect.assert_called_once()
+        self.resume(snapshot)
+        self.api.connect.assert_called_once()
+
+    def test_superseded_generation_owns_nothing(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        self.api.connect.side_effect = lambda *a, **k: (setattr(self.cloud, 'state', 'running'), self.cloud)[1]
+        self.resume(snapshot)
+        self.request['Snapshot'] = snapshot
+        self.assertEqual(self.call('delete_snapshot')['ErrorCode'], '')
+        self.request['Compute'] = self.compute()
+        self.assertEqual(self.call('compute')['ErrorCode'], 'not_found')
+        self.assertEqual(self.call('kill_compute')['ErrorCode'], '')
+        self.api.kill.assert_not_called()
+
+    def test_unusable_snapshot_is_durable_and_never_connects(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        other = str(uuid4())
+        self.assertEqual(self.resume(dict(snapshot, OperationID=other))['ErrorCode'], 'checkpoint_unusable')
+        self.assertEqual(self.resume(snapshot)['ErrorCode'], 'checkpoint_unusable')
+        self.api.connect.assert_not_called()
+
+    def test_renew_compute_extends_only_a_running_lease(self):
+        self.request['Compute'] = self.compute()
+        self.assertEqual(self.call('renew_compute')['ErrorCode'], '')
+        self.api.set_timeout.assert_called_once()
+        self.paused()
+        self.assertEqual(self.call('renew_compute')['State']['Status'], 'paused')
+        self.api.set_timeout.assert_called_once()
 
 
 if __name__ == '__main__':

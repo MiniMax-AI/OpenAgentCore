@@ -14,48 +14,22 @@ func Operations() providercontract.Operations {
 		"Renew":              {State: providercontract.Supported},
 		"Kill":               {State: providercontract.Supported},
 		"RunCommand":         {State: providercontract.Supported},
-		"Initial":            {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"NewCompute":         {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"GetCompute":         {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"Suspend":            {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"Resume":             {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"KillCompute":        {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"DeleteSnapshot":     {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"RunCommandCompute":  {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
-		"ResumeCompute":      {State: providercontract.Unsupported, Reason: "e2b_does_not_support_checkpoints"},
+		"Initial":            {State: providercontract.Supported},
+		"NewCompute":         {State: providercontract.Supported},
+		"GetCompute":         {State: providercontract.Supported},
+		"Suspend":            {State: providercontract.Supported},
+		"Resume":             {State: providercontract.Supported},
+		"KillCompute":        {State: providercontract.Supported},
+		"DeleteSnapshot":     {State: providercontract.Supported},
+		"RunCommandCompute":  {State: providercontract.Supported},
+		"RenewCompute":       {State: providercontract.Supported},
+		"ResumeCompute":      {State: providercontract.Supported},
 		"RestorePreparation": {State: providercontract.Unsupported, Reason: "e2b_does_not_support_preparation_cache"},
 		"SavePreparation":    {State: providercontract.Unsupported, Reason: "e2b_does_not_support_preparation_cache"},
 		"Observe":            {State: providercontract.Supported},
 	}
 }
 func (*Provider) ProviderOperations() providercontract.Operations { return Operations() }
-func (p *Provider) Initial(context.Context, sandbox.Reference) (sandbox.Compute, error) {
-	return sandbox.Compute{}, &providercontract.UnsupportedError{Operation: "Initial", Reason: Operations()["Initial"].Reason}
-}
-func (p *Provider) NewCompute(context.Context, sandbox.Reference, uint64, *sandbox.SnapshotIdentity) (sandbox.Compute, error) {
-	return sandbox.Compute{}, &providercontract.UnsupportedError{Operation: "NewCompute", Reason: Operations()["NewCompute"].Reason}
-}
-func (p *Provider) GetCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
-	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "GetCompute", Reason: Operations()["GetCompute"].Reason}
-}
-func (p *Provider) Suspend(context.Context, sandbox.SuspendRequest) (sandbox.ComputeState, error) {
-	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "Suspend", Reason: Operations()["Suspend"].Reason}
-}
-func (p *Provider) Resume(context.Context, sandbox.ResumeRequest) (sandbox.ComputeState, error) {
-	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "Resume", Reason: Operations()["Resume"].Reason}
-}
-func (p *Provider) KillCompute(context.Context, sandbox.Reference, sandbox.Compute) error {
-	return &providercontract.UnsupportedError{Operation: "KillCompute", Reason: Operations()["KillCompute"].Reason}
-}
-func (p *Provider) DeleteSnapshot(context.Context, sandbox.Reference, sandbox.SnapshotIdentity) error {
-	return &providercontract.UnsupportedError{Operation: "DeleteSnapshot", Reason: Operations()["DeleteSnapshot"].Reason}
-}
-func (p *Provider) RunCommandCompute(context.Context, sandbox.Reference, sandbox.Compute, sandbox.Command) (sandbox.CommandResult, error) {
-	return sandbox.CommandResult{}, &providercontract.UnsupportedError{Operation: "RunCommandCompute", Reason: Operations()["RunCommandCompute"].Reason}
-}
-func (p *Provider) ResumeCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
-	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "ResumeCompute", Reason: Operations()["ResumeCompute"].Reason}
-}
 func (p *Provider) RestorePreparation(context.Context, sandbox.Reference, string) (bool, error) {
 	return false, &providercontract.UnsupportedError{Operation: "RestorePreparation", Reason: Operations()["RestorePreparation"].Reason}
 }

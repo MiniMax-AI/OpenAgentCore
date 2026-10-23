@@ -19,6 +19,7 @@ func Operations() providercontract.Operations {
 		"DeleteSnapshot":     {State: providercontract.Supported},
 		"RunCommandCompute":  {State: providercontract.Supported},
 		"ResumeCompute":      {State: providercontract.Supported},
+		"RenewCompute":       {State: providercontract.Supported},
 		"RestorePreparation": {State: providercontract.Supported},
 		"SavePreparation":    {State: providercontract.Supported},
 		"Observe":            {State: providercontract.Supported},
