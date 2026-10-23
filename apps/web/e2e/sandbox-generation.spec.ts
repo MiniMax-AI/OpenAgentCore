@@ -34,7 +34,12 @@ async function saveConfiguration(page: Page) {
 async function editE2B(page: Page, key?: string) {
   await page.getByRole("button", { name: "Change resources", exact: true }).click();
   await expect(page.getByLabel("API key", { exact: true })).toHaveValue("");
-  if (key !== undefined) await page.getByLabel("API key", { exact: true }).fill(key);
+  if (key !== undefined) {
+    // The wizard checks a replacement key by listing options, after a short settle.
+    const checked = page.waitForResponse((response) => response.url().endsWith(templateDiscoveryPath));
+    await page.getByLabel("API key", { exact: true }).fill(key);
+    await checked;
+  }
   await page.getByRole("button", { name: "Next", exact: true }).click();
 }
 

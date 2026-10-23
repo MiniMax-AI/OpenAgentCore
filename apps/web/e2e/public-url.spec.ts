@@ -31,7 +31,7 @@ test("explains an E2B rejection in the wizard, with a link to domain setup", asy
   await expect(address).toContainText("Set a public address before connecting; E2B sandboxes need an HTTPS one.");
   await page.getByRole("button", { name: "Save configuration" }).click();
   const rejection = page.locator(".wizard-rejection");
-  await expect(rejection).toContainText("E2B sandboxes need a public HTTPS address.");
+  await expect(rejection).toContainText("This sandbox provider needs a public HTTPS address.");
   await expect(rejection.getByRole("button", { name: "Managed in Settings" })).toBeVisible();
   // Nothing was saved and nothing is uncertain: no dialog, and the wizard stays on its review.
   await expect(page.getByRole("dialog")).toHaveCount(0);

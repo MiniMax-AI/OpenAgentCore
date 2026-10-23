@@ -306,7 +306,7 @@ test("shows the retained E2B build while a replacement key is checked", async ({
   await page.getByRole("button", { name: "Change resources" }).click();
   const edit = page.getByRole("dialog", { name: "Change resources" });
   const saved = "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b";
-  await expect(edit.getByLabel("Template build").first()).toContainText(saved);
+  await expect(edit.getByLabel("Template build")).toHaveValue(saved);
   await edit.getByLabel("API key").fill("replacement-fixture-key");
   await expect(edit.getByLabel("Template build").first()).toContainText(saved);
   await expect(edit.getByRole("button", { name: "Next" })).toBeEnabled();
