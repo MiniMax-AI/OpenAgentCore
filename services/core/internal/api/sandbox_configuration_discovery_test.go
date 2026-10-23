@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +13,7 @@ import (
 func TestSandboxE2BDiscoveryAuthenticationAndCredentialPrivacy(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
 	calls := 0
-	discover := func(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+	discover := func(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error) {
 		calls++
 		if kind != "e2b" || !strings.Contains(string(input.Credential), "private-test-key") {
 			t.Fatal("wrong request")
@@ -22,13 +21,10 @@ func TestSandboxE2BDiscoveryAuthenticationAndCredentialPrivacy(t *testing.T) {
 		if _, ok := ctx.Deadline(); !ok {
 			t.Fatal("unbounded discovery")
 		}
-		if strings.Contains(string(input.Query), "bad") {
-			return nil, sandbox.ErrConfigurationUnconfirmed
+		if len(input.Query.Path) == 1 && input.Query.Path[0] == "bad" {
+			return sandbox.ConfigurationOptions{}, sandbox.ErrConfigurationUnconfirmed
 		}
-		if strings.Contains(string(input.Query), "tpl_123") {
-			return json.RawMessage(`{"builds":[]}`), nil
-		}
-		return json.RawMessage(`{"templates":[]}`), nil
+		return sandbox.ConfigurationOptions{Options: []sandbox.ConfigurationOption{}}, nil
 	}
 	fakes.configurationDiscovery.discoverConfiguration = discover
 	h := newTestHandler(t, deps)
@@ -36,11 +32,11 @@ func TestSandboxE2BDiscoveryAuthenticationAndCredentialPrivacy(t *testing.T) {
 		token, path, body string
 		status            int
 	}{
-		{"caller", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{}}`, 401},
+		{"caller", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{"field":"template","path":[]}}`, 401},
 		{"administrator", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"unexpected":true}`, 400},
-		{"administrator", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{}}`, 200},
-		{"administrator", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{"template":"tpl_123"}}`, 200},
-		{"administrator", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{"template":"bad"}}`, 503},
+		{"administrator", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{"field":"template","path":[]}}`, 200},
+		{"administrator", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{"field":"template","path":["tpl_123"]}}`, 200},
+		{"administrator", "/core/v1/sandbox/providers/e2b/discovery", `{"credential":{"api_key":"private-test-key"},"query":{"field":"template","path":["bad"]}}`, 503},
 	} {
 		req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
 		req.Header.Set("Authorization", "Bearer "+tc.token)

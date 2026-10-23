@@ -275,7 +275,7 @@ paths:
         - Native Installation
   /api/v1/sandbox-node/configuration:
     get:
-      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
+      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose Provider credentials. Node files cannot override this specification.
       parameters:
         - description: Retained node UUID
           in: header

@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: fb035e336b49105be6cc6fb4ec72e2f62e98b7ca6ea696a907cdce2fd8824e9e
+source_hash: c20ea9f9af5f9f642b0df4fee8046aa4e97aabdaa53ffb07cf8a1022bbadc09a
 ---
 
 本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
@@ -106,7 +106,7 @@ source_hash: fb035e336b49105be6cc6fb4ec72e2f62e98b7ca6ea696a907cdce2fd8824e9e
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
 | 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 **在设置中管理** 前往 **设置 → 服务与部署**，且无需确认；使用 Docker 或 microsandbox 的 `resources` 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 **设置 → 沙箱与调度** 和 **沙箱监控** 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 **设置 → 沙箱与调度** 中 |
-| E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
+| E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导用输入的凭据逐级列出 discovered 字段的选项；E2B 先列出该密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
 | 节点 | `GET /core/v1/sandbox/nodes` | **节点** 页面；**概览** 上的机群；**沙箱监控** 中每个托管 Runtime 所在的节点。`provider_ready` 为 false 的在线节点为降级；**节点** 列表及节点页面中紧邻其状态的帮助提示显示 *沙箱提供商不可用*，目标准备原因（`rollout.diagnostic`，一个[就绪状态码](../getting-started/nodes.md#readiness-codes)）显示在其目标状态中。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，**节点** 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 **地址已过期**，而不是健康状态。**添加节点** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
 | 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | **节点** 中的节点页面：主机最近一次心跳报告的 CPU 忙碌占比、内存使用量和可用磁盘，以及 1 小时、6 小时或 24 小时内 CPU 与内存的历史记录；页面可见时每 30 秒刷新一次。**编辑节点** 读取节点的 `recommended_capacity` 作为推荐值 |

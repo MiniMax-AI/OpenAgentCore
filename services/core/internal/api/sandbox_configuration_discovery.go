@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"time"
 
@@ -14,18 +13,18 @@ import (
 // ConfigurationDiscovery asks a Sandbox Provider which configuration values
 // its credential can use.
 type ConfigurationDiscovery interface {
-	DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error)
+	DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error)
 }
 
 // @Summary Discover sandbox provider configuration
-// @Description Core key only. Uses transient write-only credentials. The provider validates configuration and query fields and returns safe catalog metadata. Does not save credentials, change a deployment or allocate compute. Discovery is not deployment admission.
+// @Description Core key only. Uses transient write-only credentials. The provider validates configuration and query fields and returns the options of one Discovered setup field. Does not save credentials, change a deployment or allocate compute. Discovery is not deployment admission.
 // @Tags Sandbox Manager
 // @Accept json
 // @Produce json
 // @Security DeploymentAdminAuth
 // @Param provider path string true "Registered provider kind"
 // @Param body body sandbox.ConfigurationDiscoveryInput true "Transient provider connection and query"
-// @Success 200 {object} map[string]interface{}
+// @Success 200 {object} sandbox.ConfigurationOptions
 // @Failure 400,401,500,503 {object} CoreErrorResponse
 // @Router /core/v1/sandbox/providers/{provider}/discovery [post]
 func (h *Handler) discoverSandboxConfiguration(w http.ResponseWriter, r *http.Request) {

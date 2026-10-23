@@ -33,7 +33,7 @@ type SandboxMutationResponse struct {
 type SandboxEnrollmentTokenRequest struct {
 	// An omitted limit is derived from the node's host when it enrolls.
 	MaxActive *int `json:"max_active,omitempty"`
-	// Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+	// Providers without checkpoint support never suspend, so Core replaces this with max_active; the others use both limits.
 	MaxRetained *int `json:"max_retained,omitempty"`
 }
 
@@ -87,7 +87,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 }
 
 // @Summary Retrieve sandbox deployment
-// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields. Provider metadata is what Core read when the selection was saved; this read does not call the Provider.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

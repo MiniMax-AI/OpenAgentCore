@@ -32,7 +32,6 @@ import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
 import { FleetReadNotice } from "../fleet/FleetReadNotice";
 import { SandboxResetNotice } from "../fleet/SandboxResetNotice";
 import { fleetSnapshot, useSandboxFleet } from "../fleet/use-sandbox-fleet";
-import { sandboxSize, templateBuildStatus } from "../sandbox/deployment-specification";
 import {
   hostedRuntimeRows,
   hostedRuntimeUsage,
@@ -131,17 +130,12 @@ export function SandboxMetricsPage() {
   );
 }
 
-/** An E2B deployment: what runs in its cloud now, and with what. */
+/** A direct deployment: what runs in the Provider's cloud now, and with what. */
 function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const { navigate } = useConsoleNavigation();
-  // An E2B selection may adopt its template build's size instead of saving one.
-  const resources = sandboxSize(deployment);
-  const build = deployment.metadata?.template_build;
-  const disk = build?.resources.root_disk_mib ?? null;
-  const status = templateBuildStatus(build);
-  const template = deployment.configuration?.template;
+  const resources = deployment.specification?.resources;
   return (
     <Section
       headingId="cloud-heading"
@@ -157,17 +151,7 @@ function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
           label={t("sandbox.cloud.size")}
           value={resources ? <>
             {t("sandbox.cores", { value: formatInteger(resources.cpus, locale) })} · {formatBytes(resources.memory_mib * 2 ** 20)}
-            {disk !== null ? <span className="kpi-unit">{t("sandbox.cloud.disk", { disk: formatBytes(disk * 2 ** 20) })}</span> : null}
           </> : MISSING}
-        />
-        <Kpi
-          label={t("sandbox.cloud.template")}
-          help={t("sandbox.cloud.templateHelp")}
-          tone={status === "notReady" ? "warning" : undefined}
-          value={<>
-            {t(`sandbox.cloud.build.${status}`)}
-            {template ? <code className="kpi-unit cloud-template" title={template}>{template}</code> : null}
-          </>}
         />
       </KpiStrip>
     </Section>
@@ -389,7 +373,7 @@ function RuntimeDialog({ row, showNode, onClose }: { row: HostedRuntimeRow | nul
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={lifecycleTone(shown)} label={lifecycleLabel(shown, t)} /></dd></div>
             <div><dt>{t("sandbox.configurationGeneration")}</dt><dd>{shown.deploymentGeneration ?? MISSING}</dd></div>
             <div><dt>{t("sandbox.uptime")}</dt><dd>{formatDuration(shown.uptimeSeconds)}</dd></div>
-            {/* Only E2B reports a sandbox's disk. */}
+            {/* Disk is shown only when the provider reports it. */}
             {observation.disk ? <div><dt>{t("sandbox.disk")}</dt><dd>{formatBytes(observation.disk.usage_bytes)} / {formatBytes(observation.disk.limit_bytes)}</dd></div> : null}
           </dl>
           {shown.session

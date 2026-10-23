@@ -342,8 +342,9 @@ async function sandboxRoute(request, response, path, url) {
       ["https://api.e2b.app", "e2b.app"],
     ].some(([apiURL, domain]) => input.configuration?.api_url === apiURL && input.configuration?.domain === domain);
     if (input.credential?.api_key !== "fixture-private-key" || !knownEndpoint) return error(response, 400, "Invalid E2B connection.");
-    if (!input.query?.template) return send(response, 200, { templates: [{ id: "template", names: ["fixture-runtime"] }] });
-    return send(response, 200, { builds: [{ id: "94be54a1-138c-4f30-bc87-b13686272dbe", cpus: 2, memory_mib: 2048 }] });
+    if (input.query?.field !== "template") return error(response, 400, "Invalid discovery field.");
+    if (input.query.path.length === 0) return send(response, 200, { options: [{ value: "template", label: "fixture-runtime · template", complete: false }] });
+    return send(response, 200, { options: [{ value: "template:94be54a1-138c-4f30-bc87-b13686272dbe", label: "94be54a1-138c-4f30-bc87-b13686272dbe", resources: { cpus: 2, memory_mib: 2048 }, complete: true }] });
   }
   // Retired even for authenticated callers; never reinterpret maintenance as reset.
   if (path === "/deployment/maintenance") return error(response, 404, "Not found.");

@@ -3,9 +3,9 @@ import { AgentCoreError } from "./client";
 import { SandboxAdminClient } from "./sandbox-client";
 
 const cases = [
-  { status: 400, code: "sandbox_credential_invalid", param: "credential", message: "The E2B API key was rejected." },
-  { status: 400, code: "sandbox_configuration_invalid", param: "configuration", message: "Select a ready immutable E2B template build with matching resources." },
-  { status: 409, code: "sandbox_credential_ownership", param: "credential", message: "This E2B key cannot manage the retained deployment. Reset before changing teams." },
+  { status: 400, code: "sandbox_credential_invalid", param: "credential", message: "The sandbox provider credential was rejected." },
+  { status: 400, code: "sandbox_configuration_invalid", param: "configuration", message: "Select a ready immutable provider configuration with matching resources." },
+  { status: 409, code: "sandbox_credential_ownership", param: "credential", message: "This credential cannot manage the retained deployment. Reset before changing accounts." },
 ] as const;
 const currentKey = "current-secret-canary";
 const storedKey = "stored-secret-canary";

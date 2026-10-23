@@ -25,7 +25,7 @@ export const overview = {
       localOnly: "Set a public address to connect applications and nodes.",
       title: "Get sandboxes ready",
       body: "Save where sandboxes run, then connect a node that is online and ready.",
-      bodyCloud: "Save the E2B account; its template build must be ready.",
+      bodyCloud: "Connect the sandbox provider account.",
       setup: "Set up sandboxes",
       addNode: "Add node",
       nodes: "Open Nodes",
@@ -68,7 +68,7 @@ export const overview = {
     slots: "Sandbox capacity",
     slotsHelp: "Active sandboxes against the active limit of online hosts.",
     cloudRunning: "Running sandboxes",
-    cloudRunningHelp: "Sandboxes Core currently holds in E2B's cloud. E2B sets no limit Core can read.",
+    cloudRunningHelp: "Sandboxes Core currently holds in the provider's cloud. The provider sets no limit Core can read.",
     attention: "Needs attention",
   },
   tiles: {
@@ -116,7 +116,7 @@ export const overview = {
   fleet: {
     previousGeneration: "Inventory was read for configuration generation {{observed}}; the current target is {{target}}. These are earlier observations.",
     title: "Fleet",
-    cloudHelp: "Core and the sandboxes it holds in E2B’s cloud. Select Core for Core metrics or E2B for Sandbox metrics.",
+    cloudHelp: "Core and the sandboxes it holds in the provider’s cloud. Select Core for Core metrics or the cloud for Sandbox metrics.",
     help: "Core and sandbox nodes, with availability and active sandboxes / limit. Select Core for Core metrics or a node for its page on Nodes. When the list is full, offline and degraded nodes appear first.",
     core: "Core",
     open: "{{name}}, {{state}}, sandboxes {{slots}}",
@@ -132,8 +132,8 @@ export const overview = {
     setUp: "Set up sandboxes",
     notSetUp: "Sandboxes are not set up yet.",
     cloud: {
-      name: "E2B cloud",
-      open: "E2B cloud, {{running}} running sandboxes",
+      name: "Provider cloud",
+      open: "Provider cloud, {{running}} running sandboxes",
       running: "{{count}} running",
       openBackend: "Sandbox backend",
     },

@@ -2,7 +2,6 @@ import type { AdminProject, CoreHarness } from "@oac/agents-client";
 
 import { nodeServingReady } from "../fleet/fleet-model";
 import { type FleetState } from "../fleet/use-sandbox-fleet";
-import { templateBuildStatus } from "../sandbox/deployment-specification";
 import { harnessReady } from "../system/harness-queries";
 
 /**
@@ -56,10 +55,8 @@ export function gettingStartedSteps(input: {
 
 /**
  * Own machines are ready once the deployment is saved and a node is online
- * with its provider ready; a direct Provider (E2B) once the deployment is
- * saved, since Core admits only a ready template build. Only a build Core reports as not ready leaves
- * the step to do; a selection saved before Core recorded its build has no
- * status and counts as done.
+ * with its provider ready; a direct Provider once the deployment is saved,
+ * since Core admits only a configuration it validated.
  */
 function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   if (fleet.status !== "ready") {
@@ -69,7 +66,7 @@ function sandboxStep(fleet: FleetState): GettingStartedSteps["sandboxes"] {
   const { deployment, nodes } = fleet.snapshot;
   if (!deployment.provider) return { state: "todo", action: "setup", cloud: false };
   if (deployment.mode === "direct") {
-    return { state: templateBuildStatus(deployment.metadata?.template_build) === "notReady" ? "todo" : "done", action: "nodes", cloud: true };
+    return { state: "done", action: "nodes", cloud: true };
   }
   if (nodes.some(nodeServingReady)) return { state: "done", action: "nodes", cloud: false };
   return { state: "todo", action: nodes.length ? "nodes" : "add-node", cloud: false };

@@ -25,7 +25,7 @@ export const overview = {
       localOnly: "设置公开地址后即可连接外部应用和节点。",
       title: "准备好沙箱",
       body: "保存沙箱的运行位置，再接入一台在线且就绪的节点。",
-      bodyCloud: "保存 E2B 账号，并等它的模板构建就绪。",
+      bodyCloud: "连接沙箱提供商账号。",
       setup: "设置沙箱",
       addNode: "添加节点",
       nodes: "打开节点",
@@ -68,7 +68,7 @@ export const overview = {
     slots: "沙箱容量",
     slotsHelp: "活跃沙箱数，相对于在线主机的活跃上限。",
     cloudRunning: "运行中的沙箱",
-    cloudRunningHelp: "Core 当前在 E2B 云端占用的沙箱。E2B 没有可供 Core 读取的上限。",
+    cloudRunningHelp: "Core 当前在提供商云端占用的沙箱。提供商没有可供 Core 读取的上限。",
     attention: "需要处理",
   },
   tiles: {
@@ -116,7 +116,7 @@ export const overview = {
   fleet: {
     previousGeneration: "资源清单读取于配置代次 {{observed}}，当前目标为 {{target}}。这里保留的是较早的观测。",
     title: "机群",
-    cloudHelp: "Core 与它在 E2B 云端持有的沙箱。选择 Core 打开 Core 监控，选择 E2B 打开沙箱监控。",
+    cloudHelp: "Core 与它在提供商云端持有的沙箱。选择 Core 打开 Core 监控，选择云端打开沙箱监控。",
     help: "Core 与沙箱节点的可用状态及活跃沙箱 / 上限。选择 Core 打开 Core 监控，选择节点打开它在节点页的详情。列表显示不下时，优先显示离线和异常节点。",
     core: "Core",
     open: "{{name}}，{{state}}，沙箱 {{slots}}",
@@ -132,8 +132,8 @@ export const overview = {
     setUp: "设置沙箱",
     notSetUp: "还没有设置沙箱。",
     cloud: {
-      name: "E2B 云端",
-      open: "E2B 云端，{{running}} 个运行中的沙箱",
+      name: "提供商云端",
+      open: "提供商云端，{{running}} 个运行中的沙箱",
       running: "{{count}} 个运行中",
       openBackend: "沙箱提供商",
     },

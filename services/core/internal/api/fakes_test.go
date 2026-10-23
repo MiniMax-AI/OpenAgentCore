@@ -172,10 +172,10 @@ func (f *fakeArtifactsReader) ReadSessionArtifact(a0 context.Context, a1 string,
 
 type fakeConfigurationDiscovery struct {
 	t                     testing.TB
-	discoverConfiguration func(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error)
+	discoverConfiguration func(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error)
 }
 
-func (f *fakeConfigurationDiscovery) DiscoverConfiguration(a0 context.Context, a1 string, a2 sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (f *fakeConfigurationDiscovery) DiscoverConfiguration(a0 context.Context, a1 string, a2 sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error) {
 	if f.discoverConfiguration == nil {
 		unexpectedCall(f.t, "DiscoverConfiguration")
 	}

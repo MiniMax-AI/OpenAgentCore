@@ -18,8 +18,8 @@ type AdminRuntimeObservation struct {
 // project observation shape, which stays unchanged.
 type AdminRuntimeObservationDetail struct {
 	v1.RuntimeObservation
-	// Current Runtime disk usage and capacity. E2B reports them; Docker and
-	// microsandbox observations return null.
+	// Current Runtime disk usage and capacity. Providers that cannot report
+	// them return null.
 	Disk *RuntimeDiskObservation `json:"disk" extensions:"x-nullable" binding:"required"`
 }
 

@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"testing"
@@ -82,6 +81,9 @@ func TestConfigurationRequirementsDoNotInventDependencies(t *testing.T) {
 			requirements := a.Configuration.Requirements()
 			requirements.Credential, requirements.PublicOrigin = credential, public
 			a.Configuration = registrationConfiguration{requirements: requirements}
+			if credential == sandbox.Required {
+				a.Setup.Fields = []sandbox.SetupField{{Name: "key", Secret: true, Label: sandbox.Text{EN: "Key", ZHCN: "密钥"}}}
+			}
 			if err := ValidateRegistration(a); err != nil {
 				t.Fatal(err)
 			}
@@ -122,9 +124,9 @@ func TestUnsupportedSetupOperationsMatchAuthoredReasons(t *testing.T) {
 	for kind, a := range registry.adapters {
 		requirements := a.Configuration.Requirements()
 		direct := sandbox.DirectConfig{Selection: sandbox.Selection{Provider: kind}}
-		discover := func(read func() (json.RawMessage, error)) func() error {
+		discover := func(read func() (sandbox.ConfigurationOptions, error)) func() error {
 			return func() error {
-				if result, err := read(); result != nil {
+				if result, err := read(); result.Options != nil {
 					return errors.New("fabricated catalog")
 				} else {
 					return err
@@ -137,10 +139,10 @@ func TestUnsupportedSetupOperationsMatchAuthoredReasons(t *testing.T) {
 			calls   []func() error
 		}{
 			{"DiscoverConfiguration", requirements.Discovery, []func() error{
-				discover(func() (json.RawMessage, error) {
+				discover(func() (sandbox.ConfigurationOptions, error) {
 					return a.Configuration.DiscoverConfiguration(t.Context(), sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 				}),
-				discover(func() (json.RawMessage, error) {
+				discover(func() (sandbox.ConfigurationOptions, error) {
 					return registry.DiscoverConfiguration(t.Context(), kind, sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 				}),
 			}},
@@ -170,8 +172,8 @@ func TestUnsupportedSetupOperationsMatchAuthoredReasons(t *testing.T) {
 // reports each as Unsupported.
 type contradictingConfiguration struct{ registrationConfiguration }
 
-func (contradictingConfiguration) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
-	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "not_ready"}
+func (contradictingConfiguration) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (sandbox.ConfigurationOptions, error) {
+	return sandbox.ConfigurationOptions{}, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "not_ready"}
 }
 func (contradictingConfiguration) DiscoverSelection(context.Context, sandbox.DirectConfig) (sandbox.Selection, error) {
 	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "not_ready"}
