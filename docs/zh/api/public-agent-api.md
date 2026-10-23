@@ -1,7 +1,7 @@
 ---
 title: "Agents API 指南"
 source: docs/api/public-agent-api.md
-source_hash: 83f4c5d7c0e5c748087e6baa51c792a7cd831e217b47980c65db7d04e9222140
+source_hash: bc22d7ef93e4284b122c25f39b15acb53eec314005b5273f9c9456638e727c67
 ---
 
 Core 在 `/v1` 提供 OpenAI Agents API。本指南用官方 OpenAI SDK 和普通 HTTP 两种方式演示每项常见任务，并说明 Core 与 OpenAI 的差异。如果尚未启动过 Session，请先阅读[运行第一个 Session](../getting-started/quickstart.md)。
@@ -577,7 +577,7 @@ HTTP 路径为 `/vaults`，需要 Beta 请求头。Session 从其 `vault_ids` �
 
 ## 诊断故障 {#diagnose-a-failure}
 
-1. 读取 Session 的 `status` 和 `error`，以及最新 Turn 的 `error`。失败的 Turn 只会报告通用的 `internal_error`。
+1. 读取 Session 的 `status` 和 `error`，以及最新 Turn 的 `error`。失败 Turn 的 `error.code` 给出模型失败类别、`sandbox_error` 或 `internal_error`。
 2. 检查 Environment 是否已连接，以及其 Harness 是否可用。
 3. 在 [Harness 能力](../../../contracts/agents-api/zh/harness-capabilities.md) 中检查 Harness、模型和工具的组合。
 4. 向管理员索取[Session 诊断](../../../contracts/agents-api/zh/session-diagnostics.md)，其中会指出故障类别；同时请查看[故障排查](../getting-started/troubleshooting.md)，了解服务日志、凭据和节点就绪状态。

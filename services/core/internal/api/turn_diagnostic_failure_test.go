@@ -155,6 +155,7 @@ func TestPublicTurnErrorFollowsDiagnosticClassification(t *testing.T) {
 		`{"error_code":"device_disconnected"}`:                                                                 "sandbox_error",
 		`{"error_code":"preparation_start_failed"}`:                                                            "sandbox_error",
 		`{"error_code":"model_provider_required"}`:                                                             "internal_error",
+		`{"error_code":"execution_unavailable"}`:                                                               "internal_error",
 		`{"error_code":"event_persistence_failed"}`:                                                            "internal_error",
 		``: "internal_error",
 	} {

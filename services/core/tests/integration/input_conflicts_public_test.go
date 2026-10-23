@@ -18,7 +18,8 @@ import (
 const conflictAgent = `"agent":{"id":"agent_conflicts","model":"fixture","tools":[],"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"}}`
 
 // Official error bodies for Session input rejections (EVT-11, EVT-12, ERR-22,
-// ERR-27). Every param is null and no message repeats caller input.
+// ERR-27). Every param is null and only the unknown tool call message names
+// the caller's call_id.
 const (
 	missingSessionBody = `{"error":{"message":"Resource not found.","type":"not_found_error","code":"not_found_error","param":null}}` + "\n"
 	otherTurnBody      = `{"error":{"message":"The tool call belongs to a different Turn.","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
