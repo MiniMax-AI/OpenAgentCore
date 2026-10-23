@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import shutil
 import stat
+import subprocess
 
 import distribution
 
@@ -34,6 +35,54 @@ def networks(installer):
 def containers(installer, installation_id):
     return installer.checked(list(COMMAND) + ["ps", "--all", "--filter", "label=io.oac.installation=" + installation_id,
                                               "--format", "{{.Names}}"], "Cannot inspect Docker containers").split()
+
+
+def image_identities(manifest, name):
+    """Both immutable IDs describe the same archive, as proven by the builder."""
+    identities = []
+    for field in ("images", "image_manifest_digests"):
+        mapping = manifest.get(field)
+        value = mapping.get(name) if isinstance(mapping, dict) else None
+        if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+            raise distribution.ArtifactError("Missing or invalid immutable image identity: " + name)
+        identities.append(value)
+    return tuple(identities)
+
+
+def run(arguments, timeout=30):
+    try:
+        return subprocess.run(arguments, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
+    except (OSError, subprocess.SubprocessError):
+        raise distribution.DistributionError("Cannot inspect or load the distribution image; check Docker access and disk space") from None
+
+
+def local_image(manifest, name):
+    """The local ID of the manifest's image when Docker already holds it, else None."""
+    expected = image_identities(manifest, name)
+    for identity in dict.fromkeys(expected):
+        result = run(list(COMMAND) + ["image", "inspect", identity, "--format", "{{.Id}} {{.Os}}/{{.Architecture}}"])
+        if result.returncode:
+            continue
+        fields = result.stdout.strip().split()
+        if len(fields) != 2 or fields[0] not in expected or fields[1] != "linux/amd64":
+            raise distribution.DistributionError("Docker image identity or platform differs from the distribution: " + name)
+        return fields[0]
+    return None
+
+
+def ensure_image(manifest, name, archive):
+    """Resolve a proven local ID; obtain a verified archive only on a cache miss."""
+    identity = local_image(manifest, name)
+    if identity is not None:
+        return identity
+    result = run(list(COMMAND) + ["load", "--input", str(archive())], timeout=1800)
+    if result.returncode:
+        raise distribution.DistributionError("Cannot load the distribution image; check Docker access and free disk space: " + name)
+    identity = local_image(manifest, name)
+    if identity is None:
+        raise distribution.DistributionError("Cannot verify the loaded distribution image: " + name)
+    return identity
 
 
 def preflight(installer):
@@ -86,12 +135,12 @@ def native_config(installer, root, args, manifest, runtime_image):
 
 
 def runtime_imported(installer, root, args, manifest):
-    return distribution.docker_image(manifest, "runtime", COMMAND) is not None
+    return local_image(manifest, "runtime") is not None
 
 
 def prepare_runtime(installer, root, args, manifest):
-    image = distribution.ensure_docker_image(
-        manifest, "runtime", lambda: distribution.runtime_archive(manifest, root, getattr(args, "disposable", False)), list(COMMAND))
+    image = ensure_image(
+        manifest, "runtime", lambda: distribution.runtime_archive(manifest, root, getattr(args, "disposable", False)))
     installer.drop_runtime_archives(root)
     name = network(args.installation_id)
     if name not in networks(installer):

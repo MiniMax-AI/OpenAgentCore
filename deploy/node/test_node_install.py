@@ -90,7 +90,7 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(host_microsandbox, "home", return_value=self.home / "m"),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
                       mock.patch.object(installer, "checked", side_effect=self.checked),
-                      mock.patch.object(installer.distribution, "docker_command", side_effect=self.docker_command),
+                      mock.patch.object(host_docker, "run", side_effect=self.docker_command),
                       mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"statically linked", b""))):
             patch.start()
             self.addCleanup(patch.stop)

@@ -8,7 +8,6 @@ from pathlib import Path
 import re
 import socket
 import stat
-import subprocess
 from contextlib import contextmanager
 import time
 import urllib.error
@@ -22,55 +21,6 @@ class DistributionError(Exception):
 
 class ArtifactError(DistributionError):
     """Transfer or immutable artifact provenance failed, not provider readiness."""
-
-
-def image_identities(manifest, name):
-    """Both immutable IDs describe the same archive, as proven by the builder."""
-    identities = []
-    for field in ('images', 'image_manifest_digests'):
-        mapping = manifest.get(field)
-        value = mapping.get(name) if isinstance(mapping, dict) else None
-        if not isinstance(value, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', value):
-            raise ArtifactError('Missing or invalid immutable image identity: ' + name)
-        identities.append(value)
-    return tuple(identities)
-
-
-def docker_command(arguments, timeout=30):
-    try:
-        return subprocess.run(arguments, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                              stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
-    except (OSError, subprocess.SubprocessError):
-        raise DistributionError('Cannot inspect or load the distribution image; check Docker access and disk space') from None
-
-
-def docker_image(manifest, name, docker=('docker',)):
-    """The local ID of the manifest's image when Docker already holds it, else None."""
-    expected = image_identities(manifest, name)
-    for identity in dict.fromkeys(expected):
-        result = docker_command(list(docker) + ['image', 'inspect', identity, '--format',
-                                                '{{.Id}} {{.Os}}/{{.Architecture}}'])
-        if result.returncode:
-            continue
-        fields = result.stdout.strip().split()
-        if len(fields) != 2 or fields[0] not in expected or fields[1] != 'linux/amd64':
-            raise DistributionError('Docker image identity or platform differs from the distribution: ' + name)
-        return fields[0]
-    return None
-
-
-def ensure_docker_image(manifest, name, archive, docker=('docker',)):
-    """Resolve a proven local ID; obtain a verified archive only on a cache miss."""
-    identity = docker_image(manifest, name, docker)
-    if identity is not None:
-        return identity
-    result = docker_command(list(docker) + ['load', '--input', str(archive())], timeout=1800)
-    if result.returncode:
-        raise DistributionError('Cannot load the distribution image; check Docker access and free disk space: ' + name)
-    identity = docker_image(manifest, name, docker)
-    if identity is None:
-        raise DistributionError('Cannot verify the loaded distribution image: ' + name)
-    return identity
 
 
 def digest(path):

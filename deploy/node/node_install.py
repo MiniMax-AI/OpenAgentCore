@@ -209,7 +209,6 @@ def metadata(source):
     if (not isinstance(manifest, dict) or manifest.get("platform") != "linux/amd64" or not re.fullmatch(r"[0-9a-f]{40}", manifest.get("source_commit", ""))
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
         raise InstallError("Unsupported node distribution")
-    distribution.image_identities(manifest, "runtime")
     for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items if item["role"] != "policy"):
         distribution.artifact(manifest, name)
     # Metadata stays on the console; artifact requests may redirect to the release.

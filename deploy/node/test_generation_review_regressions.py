@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 import distribution
+import host_docker
 import node_generations
 import node_install as installer
 import node_payload
@@ -120,10 +121,10 @@ class GenerationReviewRegressions(unittest.TestCase):
 
     def test_transfer_classification_excludes_provider_and_path_errors(self):
         with self.assertRaises(distribution.ArtifactError):
-            distribution.image_identities({}, 'runtime')
-        with mock.patch.object(distribution.subprocess, 'run', side_effect=OSError('private daemon detail')):
+            host_docker.image_identities({}, 'runtime')
+        with mock.patch.object(host_docker.subprocess, 'run', side_effect=OSError('private daemon detail')):
             with self.assertRaises(distribution.DistributionError) as got:
-                distribution.docker_command(['docker'])
+                host_docker.run(['docker'])
             self.assertNotIsInstance(got.exception, distribution.ArtifactError)
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp); (root / 'link').symlink_to('/missing')
