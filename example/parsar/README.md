@@ -29,6 +29,38 @@ Open http://127.0.0.1:18180. `OPENAI_BASE_URL` ends in `/v1`; remote endpoints r
 
 Configuration lives only in templates and Agents; a conversation never overrides it. Edits affect only new conversations. When the Agent or its environment template changes, an existing conversation says so and offers **用新配置开始新对话**.
 
+## CLI and management Agent
+
+[cli.mjs](cli.mjs) is a dependency-free Node 22.13+ client of the same `/app` and exposed `/v1` routes as the UI. It adds no server endpoint, execution path or permission system. Set `PARSAR_URL` to the Parsar Web origin, not the Core URL. It inherits the deployment's trusted-network access: anyone who can reach Parsar can manage its resources. No Core key is passed to the CLI or Agent; do not expose this workspace publicly or grant the management environment to an untrusted Agent.
+
+```sh
+export PARSAR_URL=http://127.0.0.1:18180
+node example/parsar/cli.mjs --help
+node example/parsar/cli.mjs GET /app/agents
+node example/parsar/cli.mjs uuid
+node example/parsar/cli.mjs PUT /app/runtimes/REPLACE_WITH_UUID --file environment.json
+```
+
+The CLI emits JSON; `--file -` reads a JSON body from stdin. It never follows redirects or retries writes automatically. Generate and retain each resource ID before creating it. After an uncertain write, GET that ID before retrying. Editing uses GET followed by PUT of the complete object, preserving its `revision` and untouched fields; a 409 requires rereading and reconciling the change. Environment variable values returned as `null` retain their saved values when sent back. The client handles JSON APIs; binary downloads, multipart uploads and SSE remain available through the existing Web UI/client.
+
+The same file is a JavaScript SDK:
+
+```js
+import { createParsarClient } from "./cli.mjs";
+const parsar = createParsarClient(process.env.PARSAR_URL);
+const agents = await parsar("GET", "/app/agents");
+```
+
+The [management example](examples/manager/configure.mjs) creates **parsar他爹** as an ordinary Agent plus an ordinary environment template containing the CLI and its [operation guide](examples/manager/GUIDE.md). It uses an existing model and the Node runtime included with hosted Codex or Claude Code; it does not require MCP or a special Agent type. Start Parsar with `OAC_EXAMPLE_HOST` set to a local LAN IPv4 reachable by both the configuring process and the sandbox (see [Run](#run)); the default loopback listener cannot serve a hosted sandbox:
+
+```sh
+node example/parsar/examples/manager/configure.mjs \
+  --url http://PARSAR_LAN_IP:18180 \
+  --model MODEL_ID --harness codex
+```
+
+`--url` is the address reached by the configuring process; `--agent-url` is the same server's address reachable from the sandbox, defaulting to `--url`. Use different addresses only when your deployment explicitly provides a proxy between them. The script prints resource IDs before writes and refuses to overwrite existing resources. Use `--agent-id` and `--environment-id` to choose IDs explicitly. If a later step fails, inspect the reported IDs; partial resources are retained. Open the returned Agent link and start a conversation, for example “创建一个能分析 Excel 的 Agent，复用现有模型，配置好环境后给我链接。” Created resources appear in the ordinary lists and remain editable there. Trials verify environment preparation and a first reply, not the complete business task. Shared templates may be trialled with another bound Agent.
+
 ## Web chat
 
 **新对话** opens the home page: choose an Agent, describe the work and send. The sidebar lists recent conversations; **全部对话** opens the full list with search, Agent, source and date filters, plus **运行记录**, **用量** and **审计日志**. Date filters use the browser’s local dates. Usage totals cover all matching records; missing usage remains unknown. Optional model prices are USD per million input/output tokens, frozen when a conversation starts; costs are estimates, not provider bills.

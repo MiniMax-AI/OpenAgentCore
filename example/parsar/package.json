@@ -8,7 +8,7 @@
     "build": "vite build",
     "start": "node server.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/server.test.mjs tests/product.test.mjs tests/feishu.test.mjs",
+    "test": "node --test tests/server.test.mjs tests/product.test.mjs tests/feishu.test.mjs tests/cli.test.mjs",
     "test:e2e": "playwright test --config playwright.config.ts",
     "test:live": "node tests/live.mjs"
   },

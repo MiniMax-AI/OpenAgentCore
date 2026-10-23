@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 4b8ee830e60b7952ec9b389b5ac94c6884499a743e71c1a8f1080bef0a6858be
+source_hash: 07585920e965e1f918091314221a45b9bcba9cc8a854ffec6226c75cf0f1a09f
 ---
 
 # Parsar 工作空间
@@ -33,6 +33,38 @@ pnpm --filter @oac/parsar-example dev
 | **对话** | 一个公开 Core Session，拥有独立的 Environment，在开始时冻结 Agent 和环境配置。 |
 
 配置只在模板和 Agent 中设定，对话不会覆盖。修改只影响新对话。Agent 或其环境模板变更后，已有对话会给出提示，并提供 **用新配置开始新对话**。
+
+## CLI 与管理 Agent {#cli-and-management-agent}
+
+[cli.mjs](cli.mjs) 使用 Node 22.13+，无额外依赖，直接调用网页使用的 `/app` 和已开放的 `/v1` 接口，不新增服务端接口、执行路径或权限体系。`PARSAR_URL` 填 Parsar 网页地址，不是 Core 地址。权限沿用当前部署的可信网络边界：能访问 Parsar 的调用方可以管理资源。CLI 和 Agent 不持有 Core key；不要把工作空间直接开放到公网，也不要把管理环境交给不可信的 Agent。
+
+```sh
+export PARSAR_URL=http://127.0.0.1:18180
+node example/parsar/cli.mjs --help
+node example/parsar/cli.mjs GET /app/agents
+node example/parsar/cli.mjs uuid
+node example/parsar/cli.mjs PUT /app/runtimes/REPLACE_WITH_UUID --file environment.json
+```
+
+CLI 输出 JSON，`--file -` 从标准输入读取 JSON 请求体。不跟随重定向，不自动重试写入。创建前先生成并保留资源 ID；写入结果不确定时，先 GET 同一个 ID。编辑时先 GET，修改后 PUT 完整对象，保留 `revision` 和未修改字段；遇到 409 需重新读取并核对修改。环境变量返回的 `null` 原样传回即可保留原值。客户端支持 JSON 接口；二进制下载、multipart 上传和 SSE 继续使用现有网页或客户端。
+
+同一个文件也可作为 JavaScript SDK 使用：
+
+```js
+import { createParsarClient } from "./cli.mjs";
+const parsar = createParsarClient(process.env.PARSAR_URL);
+const agents = await parsar("GET", "/app/agents");
+```
+
+[管理案例](examples/manager/configure.mjs) 用普通 Agent 和普通环境模板创建 **parsar他爹**。环境中包含 CLI 和[操作说明](examples/manager/GUIDE.md)，使用已有模型和托管 Codex、Claude Code 自带的 Node，无需 MCP 或特殊 Agent 类型。先将 `OAC_EXAMPLE_HOST` 设为配置脚本和沙箱都能访问的本机内网 IPv4，再启动 Parsar（见[运行](#run)）；默认的 loopback 监听无法服务托管沙箱：
+
+```sh
+node example/parsar/examples/manager/configure.mjs \
+  --url http://PARSAR_LAN_IP:18180 \
+  --model MODEL_ID --harness codex
+```
+
+`--url` 是配置脚本访问的地址；`--agent-url` 是沙箱能访问的同一台 Parsar 地址，默认等于 `--url`。只有部署确实提供地址间代理时，才使用不同地址。脚本在写入前输出资源 ID，拒绝覆盖已有资源；也可通过 `--agent-id` 和 `--environment-id` 指定 ID。若后续步骤失败，按输出的 ID 检查，已创建的部分会保留。打开返回的 Agent 链接发起对话，例如“创建一个能分析 Excel 的 Agent，复用现有模型，配置好环境后给我链接。”创建的资源直接出现在原有列表，仍可通过网页编辑。试运行只证明环境准备和首次回复正常，不代表完整业务任务通过；共享模板可能使用另一个绑定的 Agent 试运行。
 
 ## 网页聊天 {#web-chat}
 
