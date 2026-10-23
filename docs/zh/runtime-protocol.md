@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 56e2831e66c8638c833d1d296cce2d6597c6a808f34a60a29bde0a46d67b8c59
+source_hash: bf12f97d6420804e057223a02609bc4295d9169a834e2758bc0210ef70923efa
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -297,7 +297,7 @@ transport 与 execution 结果分开。Core 唯一 Run 订阅入口是 `Subscrib
 
 adapter 可以给 Run 的 `error` frame 添加 `code` 和 `http_status`。它们是可选的中性元数据，不是终结事件或公开错误契约；frame 文本、Usage、`done`、原生 Session 身份和取消回执保持原顺序与含义。
 
-接受的 code 为 `authentication_error`、`rate_limit_exceeded`、`usage_limit_exceeded`、`server_overloaded`、`server_error`、`invalid_request`、`resource_not_found`、`context_length_exceeded`、`cyber_policy` 和 `connection_failed`（[`engine_failure.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/engine_failure.go)）。仅 `connection_failed` 保留 `http_status`，且只能是 100 到 599 的整数；其他 status 都丢弃。值缺失、格式错误或未知时保持未分类错误，不丢弃 Usage 或 `done`。
+接受的 code 为 `authentication_error`、`rate_limit_exceeded`、`usage_limit_exceeded`、`server_overloaded`、`server_error`、`invalid_request`、`resource_not_found`、`request_timeout`、`context_length_exceeded`、`cyber_policy` 和 `connection_failed`（[`engine_failure.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/engine_failure.go)）。仅 `connection_failed` 保留 `http_status`，且只能是 100 到 599 的整数；其他 status 都丢弃。值缺失、格式错误或未知时保持未分类错误，不丢弃 Usage 或 `done`。
 
 Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engine_http_status`。一个 Run 可以有多个 `error` frame，例如 adapter 的分类失败之后跟着 Runtime 自己的结算失败；没有接受 code 的 frame 不改变已保存的分类，后来接受的 code 会替换它。分类从属于终结状态和 Core 的 `error_code`：不能将已完成或已取消 Turn 变成失败、隐藏不完整事件流，或覆盖持久化或取消回执失败。正常 delivery 和 terminal journal draining 使用同一提取逻辑。[Session 诊断](../../contracts/agents-api/zh/session-diagnostics.md)仅为 Core error 为 `engine_failed` 的失败 Turn 暴露类别。[Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) 和 [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) adapter 指南给出各 Harness 的映射。adapter 只依据结构化错误数据分类：Harness 自身的错误类型或状态，或 Harness 原样转交的模型提供商 JSON 错误 body，其 `error.code` 或 `error.type` 可以给出接受的 code。adapter 不依据错误文字分类。
 

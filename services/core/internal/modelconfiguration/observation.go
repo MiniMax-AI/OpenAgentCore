@@ -12,6 +12,7 @@ const (
 	ProviderServerOverloaded    ProviderErrorCode = "server_overloaded"
 	ProviderServerError         ProviderErrorCode = "server_error"
 	ProviderResourceNotFound    ProviderErrorCode = "resource_not_found"
+	ProviderRequestTimeout      ProviderErrorCode = "request_timeout"
 	ProviderInvalidRequest      ProviderErrorCode = "invalid_request"
 )
 
@@ -25,7 +26,7 @@ type Observation struct {
 // itself. Context-length and cyber-policy failures describe the request. The
 // observation statement's fence lists the same codes; testdata holds the cases
 // both are checked against.
-var providerErrorCodes = []ProviderErrorCode{ProviderAuthenticationError, ProviderConnectionFailed, ProviderRateLimitExceeded, ProviderUsageLimitExceeded, ProviderServerOverloaded, ProviderServerError, ProviderResourceNotFound, ProviderInvalidRequest}
+var providerErrorCodes = []ProviderErrorCode{ProviderAuthenticationError, ProviderConnectionFailed, ProviderRateLimitExceeded, ProviderUsageLimitExceeded, ProviderServerOverloaded, ProviderServerError, ProviderResourceNotFound, ProviderRequestTimeout, ProviderInvalidRequest}
 
 // ShouldObserveProvider reports whether a committed root Turn outcome says
 // something about its model provider: every completed Turn, and a failed Turn

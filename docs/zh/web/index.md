@@ -1,7 +1,7 @@
 ---
 title: "Web 控制台"
 source: docs/web/index.md
-source_hash: d8f267f45ad305a3c7280d98333aaa1fdfdf4d5cc5082a5781d5de7ab1bd56b4
+source_hash: c28ab8e8f10d5cb7ac6aea42ef4f9a111007a3833bf7949c037b2ce71a50ac19
 ---
 
 Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥登录，查看健康状态和用量，检查应用创建的内容，并管理项目、密钥、节点和设置。应用使用项目 API 密钥调用 `/v1`，不使用 Web。
@@ -29,7 +29,7 @@ Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥�
 | 资源 | Agent、Environment 模板、Skills、文件、Vault | 检查和允许的删除操作，显示各资源所属项目及创建密钥 |
 | 平台 | 项目与密钥 | 创建、重命名和归档项目；签发与撤销密钥；各项目的用量、写入历史和 API 调用方法 |
 | 平台 | 节点 | 添加、编辑和移除 microsandbox 或 Docker 节点；各节点的就绪状态、活跃与保留上限、主机 CPU 与内存及其历史、可用磁盘，以及分配及其在各计算阶段的已用时间 |
-| 平台 | 设置 | 平台配置，每个[运行时设置](../configuration.md#runtime-settings-web)一组 |
+| 平台 | 设置 | **沙箱与调度**、**工作区存储**、**模型与凭据** 和 **服务与部署**；参阅[配置](../configuration.md#runtime-settings-web) |
 
 缺失数据展示为缺失（—），不会当作零。[控制台 API 使用](console-api-usage.md)列出各页面读取内容及统计边界。
 

@@ -141,7 +141,7 @@ Session creation decrypts the default of the resolved Harness and freezes it in 
 The Harness and default-model reads include nullable `last_used_at`, `last_error_code` and `last_error_at`; PUT resets all three, even for the same bundle.
 
 - Completed root Turns record use only when their Session froze the exact current default revision.
-- Failed root Turns record only the native provider codes `authentication_error`, `connection_failed`, `rate_limit_exceeded`, `usage_limit_exceeded`, `server_overloaded`, `server_error`, `resource_not_found` and `invalid_request`. Input-policy, Core or Runtime, cancelled and waiting outcomes do not count.
+- Failed root Turns record only the native provider codes `authentication_error`, `connection_failed`, `rate_limit_exceeded`, `usage_limit_exceeded`, `server_overloaded`, `server_error`, `resource_not_found`, `request_timeout` and `invalid_request`. Input-policy, Core or Runtime, cancelled and waiting outcomes do not count.
 - A success keeps the earlier error; comparing the timestamps is a display convention.
 - Errors are throttled for 30 seconds regardless of code, and ordinary successes for 30 seconds; the first success after an error records recovery at once. For an unchanged revision this allows at most three effective writes in any 30-second window of database time.
 - Each observation has a one-second budget, including pool and row-lock acquisition, and cannot change the committed Turn. A crash, failure or throttle can omit the latest observation.

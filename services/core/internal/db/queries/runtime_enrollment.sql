@@ -27,7 +27,7 @@ WHERE devices.id = sqlc.arg(id) AND EXISTS (
 );
 
 -- name: ListEnrolledRuntimeBindings :many
-SELECT d.id AS device_id, d.tenant_id, e.id AS environment_id, e.session_id
+SELECT d.id AS device_id, d.tenant_id, e.id AS environment_id
 FROM devices d
 JOIN environments e ON e.id = d.environment_id
 JOIN sessions s ON s.id = e.session_id AND s.tenant_id = d.tenant_id

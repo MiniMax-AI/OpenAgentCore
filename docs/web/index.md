@@ -27,7 +27,7 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
 | Platform | Projects and keys | Create, rename and archive Projects; issue and revoke keys; each Project's usage, write history and how to call the API |
 | Platform | Nodes | Add, edit and remove microsandbox or Docker nodes; each node's readiness, active and retained limits, host CPU and memory with their history, free disk, and allocations with elapsed time in each compute phase |
-| Platform | Settings | Platform configuration, one group per [runtime setting](../configuration.md#runtime-settings-web) |
+| Platform | Settings | **Sandbox and scheduling**, **Workspace storage**, **Models and credentials**, and **Service and deployment**; see [configuration](../configuration.md#runtime-settings-web) |
 
 Missing data is shown as missing (—), never as zero. [Console API usage](./console-api-usage.md) lists what each page reads and how its figures are bounded.
 

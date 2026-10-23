@@ -30,6 +30,11 @@ it("preserves historical nulls and finite safe provisioning parameters", () => {
   expect(projectTurnDiagnostics(snapshot, id.toUpperCase(), turn.toUpperCase())).toEqual(snapshot);
 });
 
+it("accepts the Harness step Core records when the selected Harness is unavailable", () => {
+  const value = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params: { step: "harness", index: null, exit_code: null }, failed_at: null } };
+  expect(projectSessionDiagnostics(value, id)).toEqual(value);
+});
+
 it.each([
   (v: any) => { v.failure.error = "secret-canary"; },
   (v: any) => { v.failure.code = "input_secret-canary"; },
@@ -59,7 +64,7 @@ it.each([
   expect(() => projectSessionDiagnostics(value, id)).toThrow();
 });
 
-it.each(["authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "context_length_exceeded", "cyber_policy", "connection_failed"])("projects finite native category %s", (code) => {
+it.each(["authentication_error", "rate_limit_exceeded", "usage_limit_exceeded", "server_overloaded", "server_error", "invalid_request", "resource_not_found", "request_timeout", "context_length_exceeded", "cyber_policy", "connection_failed"])("projects finite native category %s", (code) => {
   const params = code === "connection_failed" ? { http_status: 503 } : {};
   const failed = { ...failure, code, params };
   expect(projectTurnDiagnostics({ ...snapshot, failure: failed }, id, turn).failure).toEqual(failed);
