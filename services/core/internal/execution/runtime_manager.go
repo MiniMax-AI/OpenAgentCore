@@ -34,6 +34,7 @@ type runtimeManager struct {
 	workspaceCursor     string
 	placementCursor     deployment.PlacementDemandCursor
 	placementWake       chan struct{}
+	scheduleWake        chan<- struct{}
 	workspaceGate       chan struct{}
 	sessions            sessions.Reader
 	sessionExecution    *sessions.ExecutionOperations
@@ -109,7 +110,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination, placementWake: m.placementWake,
+			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination, placementWake: m.placementWake, scheduleWake: m.scheduleWake,
 		}}
 		m.nodes[id] = n
 	}
@@ -138,6 +139,14 @@ func (m *runtimeManager) hintDestination(id string) {
 	}
 	select {
 	case n.lifecycle.wakeHints <- struct{}{}:
+	default:
+	}
+}
+
+// Work waiting for this compute may start now; the scheduler ticker recovers a missed wake.
+func (r *runtimeLifecycle) computeRunning() {
+	select {
+	case r.scheduleWake <- struct{}{}:
 	default:
 	}
 }
