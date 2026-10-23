@@ -1,14 +1,14 @@
 ---
 title: "配置公开地址"
 source: docs/getting-started/public-address.md
-source_hash: 18cf3655776a7bd22a09023a7764abf17461570371b846ef5ce4d1caa3d13a6f
+source_hash: 02eb5d34fb53a65e4cadb60ada04c98c5667e083141e56b8c5169683926a8249
 ---
 
 设置浏览器、节点、沙箱和应用访问 Core 所用的唯一源地址，并在其前面放置带 HTTPS 的反向代理。本指南面向将 Core 暴露到其所在机器之外的运维人员。
 
 ## 选择公开 URL {#choose-the-public-url}
 
-`OAC_PUBLIC_URL` 是应用、节点、沙箱和自托管执行器使用的源地址。Web 只接受其中的主机。Core 从中派生守护进程 WebSocket URL、自托管 `remote_url` 和每个沙箱的连接地址。它是不含路径的 http 或 https 源地址。
+`OAC_PUBLIC_URL` 是应用、节点、沙箱和自托管执行器使用的源地址。Web 只接受其中的主机。Core 从中派生其他地址，列在[`OAC_PUBLIC_URL`](../configuration.md#appendix-core-environment-without-the-installer)下。它是不含路径的 http 或 https 源地址。
 
 | 场景 | 公开 URL |
 | --- | --- |

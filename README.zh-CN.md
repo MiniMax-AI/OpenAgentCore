@@ -11,7 +11,7 @@
 
 [官网](https://openagentcore.dev/zh/) · [文档](https://openagentcore.dev/zh/docs/getting-started/) · [快速开始](#快速开始) · [参与贡献](CONTRIBUTING.md)
 
-[English](README.md) · **简体中文** · [日本語](README.ja.md)
+[English](README.md) · **简体中文**
 
 </div>
 

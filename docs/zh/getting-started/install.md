@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: ec59f9762d21e486cf84108e4dda087c9640095196527bb8059c6833279df8ec
+source_hash: 6f5dbf881566fe1be1c4ae0ae998066f8b6df43b6d489eb88a328a6868ab7706
 ---
 
 本指南带运维人员从一台空主机到可用的安装：在 Docker 下运行的 Core、Web 控制台和 PostgreSQL，一个沙箱提供商，一个默认模型和第一个项目 API 密钥。Web 的 **概览** 通过 **新手引导** 清单跟踪同样的步骤。
@@ -93,7 +93,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 1. 在 **项目与密钥** 中选择 **创建项目**，然后选择 **签发密钥**。对话框只显示一次密钥：复制并妥善保存。**如何调用** 卡片展示 API 基础 URL 和示例请求。
 2. 将密钥和 API 基础 URL 交给应用开发者，他们可以继续阅读[运行第一个 Session](./quickstart.md)。
 
-## 从其他机器访问 Core {#configure-the-domain-and-https}
+## 从其他机器访问 Core {#reach-core-from-other-machines}
 
 在一台机器上试用时，此步骤可选。应用、节点和沙箱通过同一个地址访问 Core，即公开 URL。局域网上用 HTTP 即可；超出局域网时，在前面放反向代理，并把公开 URL 设为它提供的 HTTPS 源地址。反向代理、端口以及之后如何修改地址，见[配置公开地址](./public-address.md)。
 

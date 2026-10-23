@@ -38,7 +38,7 @@ Every Agents API response, including errors and event streams, carries:
 
 ### Authentication
 
-`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. All keys of one Project act as the same caller: they share its resources and its Session creation retries. Core resolves the key and its Project in the database on every request, with no credential cache and a five-second timeout. Revoking a key or archiving its Project takes effect on the next request. All keys of a Project act as subject `service_account/project:<Project ID>`. [Projects and keys](./admin-api.md#projects-and-keys) describes key management.
+`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. Core resolves the key and its Project in the database on every request, with no credential cache and a five-second timeout. Revoking a key or archiving its Project takes effect on the next request. All keys of a Project act as subject `service_account/project:<Project ID>`. [Projects and keys](./admin-api.md#projects-and-keys) describes key management.
 
 The optional `OpenAI-Organization` and `OpenAI-Project` headers must, when sent, appear once and equal `core` and `proj_<Project ID>`; any other value rejects the key.
 

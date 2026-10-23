@@ -12,7 +12,7 @@ The routes follow the SDK pinned in [upstream.json](https://github.com/MiniMax-A
 - Public paths start at `/workspace`, which stands for the Environment's workspace directory wherever it is on the machine.
 - The Environment is looked up in the caller's Project first; a missing or foreign ID returns 404.
 - On an `openai_hosted` Environment that is still `pending`, both operations return 400 `the hosted environment is still provisioning; wait until it is connected before accessing files`. This check runs after request validation and before any source File lookup. Any other state proceeds, and an unreachable Runtime returns 503.
-- File operations wait within their existing request deadline for Environment initialization to complete; `connected` alone does not imply readiness, and failed initialization or exhausted execution capacity still returns 503.
+- File operations wait within their request deadline for Environment initialization to complete; `connected` alone does not imply readiness, and failed initialization or exhausted execution capacity still returns 503.
 - Listing and writing never start a Turn or send input to the model.
 
 ## List files
@@ -78,7 +78,7 @@ Unless the table names a code, the 400 errors have type and code `invalid_reques
 
 - Before sending any bytes, Core records the write under the Session lock. While input is pending, a Turn is running or an earlier write is unsettled, a new write returns 409 `turn_conflict`. An unsettled write also makes new messages to the Session return 409.
 - The Runtime checks the complete body against its digest before creating anything, so incomplete input creates nothing. A write that fails later can leave newly created empty parent directories.
-- Only a definite receipt from the Runtime settles a write, as committed or rejected. A rejected write publishes no destination file and releases the Session; newly created empty parent directories can remain. Storage or quota exhaustion confirmed before publication returns 503, while malformed input and destination conflicts retain their existing errors. If the connection drops, the request times out or no receipt arrives, the request returns 503 and the write stays unsettled, across Core restarts. Core never resends it and has no automatic recovery, so the Session accepts no further writes or messages. Reads still work.
+- Only a definite receipt from the Runtime settles a write, as committed or rejected. A rejected write publishes no destination file and releases the Session; newly created empty parent directories can remain. Storage or quota exhaustion confirmed before publication returns 503, while malformed input and destination conflicts retain their errors. If the connection drops, the request times out or no receipt arrives, the request returns 503 and the write stays unsettled, across Core restarts. Core never resends it and has no automatic recovery, so the Session accepts no further writes or messages. Reads still work.
 - Deleting the source File after its bytes were read does not affect the copy.
 
 ## Artifacts

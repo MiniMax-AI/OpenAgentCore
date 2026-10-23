@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 1f374322fcfd4a9fda8162004342162b1c3b8e3b5f12c2f2871f68bd593751da
+source_hash: ba9c6565567c1b4dcffb0c8f18731372b9e3c95e25f84dc0c3c2782c94161eb2
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -40,7 +40,7 @@ Beta 路由要求 `OpenAI-Beta` 标头中恰好有一个值，且该值必须等
 
 ### 身份验证 {#authentication}
 
-`/v1` 仅接受项目 API 密钥，形式为 `Authorization: Bearer <key>`。同一项目的所有密钥都视为同一调用方：它们共享该项目的资源和 Session 创建重试。Core 在每次请求时都在数据库中解析密钥及其项目，不缓存凭据，超时时间为五秒。撤销密钥或归档其项目会在下一次请求时生效。项目的所有密钥都使用主体 `service_account/project:<Project ID>`。[项目与密钥](admin-api.md#projects-and-keys) 介绍了密钥管理。
+`/v1` 仅接受项目 API 密钥，形式为 `Authorization: Bearer <key>`。Core 在每次请求时都在数据库中解析密钥及其项目，不缓存凭据，超时时间为五秒。撤销密钥或归档其项目会在下一次请求时生效。项目的所有密钥都使用主体 `service_account/project:<Project ID>`。[项目与密钥](admin-api.md#projects-and-keys) 介绍了密钥管理。
 
 可选的 `OpenAI-Organization` 和 `OpenAI-Project` 标头在发送时必须各出现一次，并分别等于 `core` 和 `proj_<Project ID>`；任何其他值都会导致密钥被拒绝。
 

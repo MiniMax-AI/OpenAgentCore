@@ -1,7 +1,7 @@
 ---
 title: "子 Agent"
 source: contracts/agents-api/subagents.md
-source_hash: 6c4fe5212d8473ff319fea4a6abf30d8038b75dd663dd9612ddad023adb918c7
+source_hash: d8341bfd7747152dea23afc930cf5fe07ff1ac4a58f503cb0e2ec5fe86060cb9
 ---
 
 启用 `multi_agent.enabled` 后，Harness 可以启动原生子 Agent。Core 通过锁定版本的 SDK（见 [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）中的六项 Subagent 读取操作公开它们，并根据适配器观察结果记录它们。当 `multi_agent.enabled=false` 时，Runtime 会移除原生子 Agent 工具。[Harness capabilities](harness-capabilities.md) 列出各 Harness 在哪些组合中支持子 Agent。

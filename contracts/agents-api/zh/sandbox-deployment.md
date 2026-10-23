@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 385786135904715e0b92b5978cade8a4313d4004610b4ea5a1310d0b6ff30900
+source_hash: 57d2c630e22ee6e6b7333c36bb042af74e820c1205bb9fb6d41cb8f54acd605d
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -41,7 +41,7 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `configuration` | 提供商的公开选择器。E2B：不可变的 `template` 构建以及可选且配套的 `api_url` 和 `domain`。Docker 和 microsandbox 仅接受 `{}` 或省略 |
 | `credential` | 提供商的只写凭据。E2B：`{api_key}`，首次设置时必填，在 PUT 中省略以保留当前密钥；null 或空密钥无效。Docker 和 microsandbox 拒绝该字段 |
 
-请求中没有 Core 地址。Core 根据安装公开 URL（`config.json` 中的 `public_url`，Core 对应 `OAC_PUBLIC_URL`）派生部署的 `core_url`：这是节点和沙箱客户机访问 Core 时使用的源地址。包含 `core_url` 的请求会像包含任何其他未知成员一样被拒绝，并返回 400 `invalid_request`。E2B 客户机从 E2B 云访问 Core，因此当公开 URL 为回环地址时，E2B 选择会被拒绝，并返回 409 `sandbox_configuration_error`。Docker 和 microsandbox 选择接受回环公开 URL，但这仅适用于本地开发，因为客户机的回环地址无法访问其主机。更改公开 URL 属于安装变更：使用旧地址注册的节点不会收到新沙箱，必须移除后重新添加。
+请求中没有 Core 地址。Core 根据安装公开 URL（`config.json` 中的 `public_url`，Core 对应 `OAC_PUBLIC_URL`）派生部署的 `core_url`：这是节点和沙箱客户机访问 Core 时使用的源地址。包含 `core_url` 的请求会像包含任何其他未知成员一样被拒绝，并返回 400 `invalid_request`。E2B 客户机从 E2B 云访问 Core，因此当公开 URL 为回环地址时，E2B 选择会被拒绝，并返回 409 `sandbox_configuration_error`。Docker 和 microsandbox 选择接受回环公开 URL，但这仅适用于本地开发，因为客户机的回环地址无法访问其主机。更改公开 URL 属于安装变更；参见[更改公开 URL](../../../docs/zh/getting-started/public-address.md#changing-the-public-url)。
 
 ### 资源 {#resources}
 
@@ -197,7 +197,7 @@ stateDiagram-v2
 
 节点容量独立于部署 specification 设置。`POST /core/v1/sandbox/enrollment-tokens` 接受可选的 `max_active` 和 `max_retained`，并返回 `{token, expires_at, enrollment_id}`；`enrollment_id` 是该命令的公共句柄，绝不是凭据。Core 将令牌与发送的限制一同存储，省略的限制保持未设置。节点注册时，Core 把每个显式限制原样复制给节点，并把每个未设置的限制设为注册请求中的主机测量值与当前 specification 的[推荐容量](#recommended-capacity)；限制未设置且没有主机测量值时，返回 409 `sandbox_node_host_unmeasured`，令牌保持未使用。只设置 `max_retained` 时，推导出的 `max_active` 不会超过它；只设置 `max_active` 时，推导出的 `max_retained` 会被提高到至少等于 `max_active`。microsandbox 会使用两个限制。Docker 绝不暂停，因此 Core 会在此处和 PATCH 中用 `max_active` 替换其 `max_retained`。E2B 没有节点，并返回 409 `sandbox_deployment_conflict`。节点不能提交限制，但未设置的限制取决于节点在注册时报告的主机测量值，范围限定在 1 到 1000000。其本地检查可以拒绝其无法运行的部署，但绝不会提高限制。显式值和之后的 PATCH 修改具有约束力：节点注册之后，Core 不再推导。[节点容量](../../../docs/zh/configuration.md#node-capacity)为操作员说明了这些限制。
 
-`GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`recommended_capacity`、`enrollment_id` 和 `core_url`。`recommended_capacity` 是 `{max_active, max_retained}`，即节点最新健康状态与当前 specification 的[推荐容量](#recommended-capacity)；在节点报告 CPU 数量或有效核数以及总内存之前，以及当前 specification 未通过校验时，为 null。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。请移除该节点并重新添加。
+`GET /core/v1/sandbox/nodes` 返回 `{data: [...]}`，其中每个节点包含 `id`、`name`、`provider`、`online`、`last_seen_at`、`created_at`、`max_active`、`max_retained`，计数项 `active`、`reserved`、`running`、`retained`、`snapshots` 和 `cleanup_pending`，以及 `provider_ready`、主机测量值 `cpu_count`、`available_memory_bytes` 和 `available_disk_bytes`、`rollout`、`recommended_capacity`、`enrollment_id` 和 `core_url`。`recommended_capacity` 是 `{max_active, max_retained}`，即节点最新健康状态与当前 specification 的[推荐容量](#recommended-capacity)；在节点报告 CPU 数量或有效核数以及总内存之前，以及当前 specification 未通过校验时，为 null。`enrollment_id` 是注册该节点的命令的句柄；如果 Core 没有该句柄，则为 null。`core_url` 是注册时的安装公开 URL；`core_url` 与当前公开 URL 不同的节点不会收到新放置。已放置到该节点的工作会继续在那里完成，包括已放置但尚未获得分配的 Environment；只要旧地址仍能访问 Core，其保留沙箱仍可恢复。参见[更改公开 URL](../../../docs/zh/getting-started/public-address.md#changing-the-public-url)。
 
 节点管理代次，因此其 `provider_ready` 取决于服务代次，目标代次的固定代码会出现在 `rollout.diagnostic` 中。节点会对首次失败的就绪检查进行分类，并且只发送代码；携带任何其他值的帧均无效，且 Core 绝不存储或返回探测文本或主机路径。这些代码是与提供商无关的类别：`provider_unavailable`、`host_unsupported`、`artifacts_unavailable`、`runtime_image_unavailable` 和 `capacity_insufficient`。[就绪代码](../../../docs/zh/getting-started/nodes.md#readiness-codes)给出了原因和操作员应采取的措施。Core 和节点必须来自同一发行包。
 

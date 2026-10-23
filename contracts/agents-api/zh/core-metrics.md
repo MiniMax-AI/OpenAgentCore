@@ -1,7 +1,7 @@
 ---
 title: "Core 指标"
 source: contracts/agents-api/core-metrics.md
-source_hash: 5843b943903b0a288e941998d365ed1d01fd282ea71feacadb3fe5f1bbb576a7
+source_hash: bb6125b122a9cb46664db9d9536c0e799a3e1b789daed0f62941c0bc2bed6405
 ---
 
 `GET /core/v1/metrics?range=1h|6h|24h|7d` 报告 Core 自身的健康状况：进程、执行队列与槽位、PostgreSQL 和后台任务。它要求 Core 密钥（[Core 管理 API](admin-api.md)）。
@@ -35,7 +35,7 @@ source_hash: 5843b943903b0a288e941998d365ed1d01fd282ea71feacadb3fe5f1bbb576a7
 | `service.revision` | 构建时注入的完整源代码提交；未注入时为 null |
 | `service.started_at` | 进程初始化时间 |
 | `service.execution_owner` | 此进程是否持有执行 worker 的数据库租约 |
-| `execution.slots_in_use`, `execution.slots_total` | 执行 worker 的活动 Session 预留数量及容量：[`OAC_EXECUTION_CONCURRENCY`](../../../docs/zh/configuration.md#settings)，默认为 4。Environment 输入、Turn 和文件工作共享槽位；不统计原生 Harness 子进程 |
+| `execution.slots_in_use`, `execution.slots_total` | 执行 worker 的活动 Session 预留数量及容量：[`OAC_EXECUTION_CONCURRENCY`](../../../docs/zh/configuration.md#settings)。Environment 输入、Turn 和文件工作共享槽位；不统计原生 Harness 子进程 |
 | `execution.queued_turns`, `execution.in_progress_turns` | 处于相应状态的根 Turn，包括已删除 Session 的 Turn。不统计 Subagent Turn 和为准备中 Environment 预留的输入 |
 | `execution.waiting_for_daemon` | Session 设备未连接的排队 Turn |
 | `execution.oldest_queued_seconds` | 最早排队 Turn 自 `created_at` 起的年龄 |

@@ -318,7 +318,7 @@ For comparison, an inline `openai_hosted` Session without a Template treats omit
 
 ### Preparation reuse
 
-Core may start a hosted Environment from the result of an earlier preparation in the same Project whose effective configuration, after Template composition, is identical, for up to 24 hours after that preparation. Each Session still gets its own copy. Setup commands and package installation then do not run again for this Session. Only `/environment` is reused (see the workspace filesystem scope); HOME and other compute-local changes are not. Setup must not create per-Session unique values, perform external side effects that must happen per Session, or fetch credentials that expire within 24 hours; configurations that need this must differ, for example in `env` or `files`. A Provider that does not declare the [preparation cache](../../docs/sandbox-provider.md#explicit-operation-contracts) always prepares in full.
+Core may start a hosted Environment from the result of an earlier preparation in the same Project whose effective configuration, after Template composition, is identical, for up to 24 hours after that preparation. Each Session still gets its own copy. Setup commands and package installation then do not run again for this Session. Only `/environment` is reused (see [Lifetime and filesystem scope](../../docs/workspace-provider.md#lifetime-and-filesystem-scope)); HOME and other compute-local changes are not. Setup must not create per-Session unique values, perform external side effects that must happen per Session, or fetch credentials that expire within 24 hours; configurations that need this must differ, for example in `env` or `files`. A Provider that does not declare the [preparation cache](../../docs/sandbox-provider.md#explicit-operation-contracts) always prepares in full.
 
 ### Restricted network
 
@@ -357,7 +357,7 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. The pinned SDK 3.13.0 drops a single file tuple during multipart extraction, so upload a single ZIP with raw HTTP. An upload holds at most 500 regular files and exactly one `SKILL.md`, 5 MiB compressed and 20 MiB expanded. [File resource semantics](./source-files.md#versions-and-metadata) owns default-version and deletion rules.
+The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. [Upload a bundle](./source-files.md#upload-a-bundle) owns the bundle format, upload limits and the SDK single-file limitation; [versions and metadata](./source-files.md#versions-and-metadata) owns default-version and deletion rules.
 
 A reference with an omitted or null version selects the default at Session creation, `"latest"` the latest version, and a positive version string that version. Template responses keep the unresolved selector (`version: null` for the default); Session metadata shows `{type, skill_id, version, name, description}` with a concrete version. A Session freezes the selected version's bytes and metadata in its creation transaction; later default changes, source deletion or Template updates cannot change it.
 
@@ -380,8 +380,7 @@ A Plugin is an inline ZIP with type, name and description whose single archive r
 
 Skills and their immutable versions are Project resources, independent of Sessions and native installations.
 
-- Version allocation and pointer changes serialize on the owning Skill row. The top-level name and description follow the default version in the same transaction; non-default uploads keep them. Version identities stay unique across concurrent uploads and deletion.
-- Bundles are encrypted with the service cipher, bound to Project, Skill and version. Metadata reads never load or decrypt bundles. Deleting a Skill reclaims its versions without affecting frozen Sessions.
+- Version allocation, default-version changes and serialization are defined in [Versions and metadata](./source-files.md#versions-and-metadata), and bundle encryption in [Upload a bundle](./source-files.md#upload-a-bundle). Metadata reads never load or decrypt bundles. Deleting a Skill reclaims its versions without affecting frozen Sessions.
 - References resolve inside the Session creation transaction, after the upsert establishes ownership. Referenced resources are locked in a stable order, and the version, metadata and bytes freeze together. Public reference metadata, unresolved Template intent and the resolved Runtime bundle stay distinct; a reference is never reported as inline.
 
 Inline and referenced Skills use the same confidential snapshot and installer. The Runtime installs them under `skills/<name>` in its capability root before setup and native execution. Adapters register only the selected Skill roots: Codex as explicit extra roots, MiniMax Code through its native catalog, and Claude as user Skills under its private state path, so native lists the bare names a local `~/.claude/skills` gives. Claude rejects a Skill that contains `.claude-plugin`, because native would load it as a plugin with its hooks and MCP servers. Skill roots activate no MCP servers; only [Plugin MCP](#plugin-mcp) does. Codex scans each Skill root recursively as it does locally, so a nested `SKILL.md` registers another native Skill. Native Harness configuration is never passed through wholesale.

@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: fef6bd64da44efaa4ab1943901667c68c749790c36974ffb15b1b2845d62a7eb
+source_hash: 16211a07449e565b8b6ad8856c0060140cd0a18ee16d16300ba969193afede74
 ---
 
 节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 或 Docker 时添加、修改和移除节点的运维人员；E2B 不需要节点。
@@ -112,7 +112,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 ## 跨节点的检查点恢复 {#checkpoint-recovery-across-nodes}
 
-microsandbox 跨节点检查点恢复要求在每个参与节点的安装命令加入 `--checkpoint-root /absolute/private/shared-store`。安装前将同一个私有 store 挂载到这些路径，并只允许 node 服务账户访问。默认使用节点本地私有 store，只支持在该节点恢复。检查点 store 独立于 workspace 存储，绝不能允许 guest 访问；[检查点转移契约](../sandbox-provider.md#checkpoint-transfer) 定义兼容性和保留要求。
+microsandbox 跨节点检查点恢复要求在每个参与节点的安装命令加入 `--checkpoint-root /absolute/private/shared-store`。安装前将同一个私有 store 挂载到这些路径，并只允许 node 服务账户访问。默认使用节点本地私有 store，只支持在该节点恢复。[检查点转移契约](../sandbox-provider.md#checkpoint-transfer) 定义 store 的隔离、兼容性和保留要求。
 
 microsandbox 的检查点执行兼容性包含主机内核和 CPU profile。因此，操作系统或 CPU profile 变化可能使保留的检查点不再兼容，甚至无法在原节点恢复。维护前，应为这些检查点保留具有匹配 execution class 且已就绪同一 generation 的节点；否则，相关请求会按[检查点保留策略](../sandbox-provider.md#checkpoint-transfer)等待。
 
