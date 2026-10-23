@@ -108,7 +108,7 @@ IMAGE_FILES = {"go.mod", "go.sum", "go.work", "go.work.sum", ".github/workflows/
 IMAGE_INPUTS = ("scripts/build-core", "scripts/build-e2b-provider", "deploy/distribution/", "services/core/tools/e2b-provider/",
                 "services/core/deploy/e2b/")
 # Generated outputs retain freshness checks even when the file is documentation.
-GENERATED_OUTPUTS = {"contracts/agents-api/harness-catalog.md", "contracts/agents-api/zh/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
+GENERATED_OUTPUTS = {"scripts/native-pins.json", "contracts/agents-api/harness-catalog.md", "contracts/agents-api/zh/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
                      "internal/harnessconfig/builtin/registry.go", "apps/daemon/internal/cli/harness_declarations.go"}
 
 

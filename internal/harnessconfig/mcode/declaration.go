@@ -17,8 +17,9 @@ const FunctionServerLabel = "functions"
 // Whitespace-only text is unsupported because the native runtime refuses such
 // prompts with "Local message content or attachments are required.".
 var Declaration = harnessconfig.Declaration{
-	Kind:  "mcode",
-	Label: "MiniMax Code",
+	Kind:   "mcode",
+	Label:  "MiniMax Code",
+	Native: harnessconfig.NativePackage{Component: "minimax", Version: "0.4.12"},
 	Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{
 		{Protocol: "anthropic"},
 		{Protocol: "responses"},

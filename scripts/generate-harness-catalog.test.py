@@ -22,7 +22,7 @@ schema = module("schema", "patch-agents-openapi.py")
 
 class HarnessCatalogTests(unittest.TestCase):
     def test_new_declaration_reaches_all_projections(self):
-        harnesses = [{"kind": "example", "label": "Example", "package": "example"}]
+        harnesses = [{"kind": "example", "label": "Example", "package": "example", "component": "example", "version": "1.0.0"}]
         generated = {**catalog.render_registrations(["example"]), **catalog.render_docs(harnesses)}
         generated["client"] = catalog.render_client(harnesses, ["responses"])
         for content in generated.values():

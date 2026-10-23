@@ -9,7 +9,7 @@ import (
 )
 
 func SupportsNativeSessionRecovery(version string) bool {
-	return strings.TrimSpace(version) == "codex-cli 0.153.4"
+	return strings.TrimSpace(version) == versionOutput
 }
 
 func (s *Session) recoverRoot(plan SessionPlan) (string, error) {
