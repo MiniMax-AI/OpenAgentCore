@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { parseStart } from "../dist/adapter.js";
+import { parseRequest } from "../dist/request.js";
 import { parseWorkspace, WorkspaceProfile } from "../dist/workspace.js";
 
 function fixture(t) {
@@ -15,7 +15,7 @@ function fixture(t) {
   }));
   const config = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
      env_names: ["ANTHROPIC_API_KEY", "HTTP_PROXY"] };
-  const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: "", cwd: dirs.workspace, workspace: config };
+  const request = { type: "executor_prepare", model: "fixture", system_prompt: "", cwd: dirs.workspace, workspace: config };
   const previous = process.env;
   process.env = { HOME: dirs.home, CLAUDE_CONFIG_DIR: dirs.state, ANTHROPIC_API_KEY: "fixture-secret",
     HTTP_PROXY: "http://fixture-proxy", UNSELECTED_CANARY: "must-not-inherit", NODE_OPTIONS: "unsafe",
@@ -26,19 +26,19 @@ function fixture(t) {
 
 test("workspace is explicit, typed and rejects external MCP declarations", t => {
   const { config, request } = fixture(t);
-  assert.deepEqual(parseStart(JSON.stringify(request)), request);
+  assert.deepEqual(parseRequest(JSON.stringify(request)), request);
   for (const fields of [{ mcp_http_servers: [] }, { functions: null }, { mcp_http_servers: null }]) {
-    assert.throws(() => parseStart(JSON.stringify({ ...request, ...fields })), /invalid_request/);
+    assert.throws(() => parseRequest(JSON.stringify({ ...request, ...fields })), /invalid_request/);
   }
   for (const workspace of [null, [], {}, { ...config, native: {} }, { ...config, env: {} },
     { ...config, env_names: ["ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"] },
     { ...config, env_names: ["NODE_OPTIONS"] }, { ...config, env_names: ["HOME"] }]) {
-    assert.throws(() => parseStart(JSON.stringify({ ...request, workspace })), /invalid_request/);
+    assert.throws(() => parseRequest(JSON.stringify({ ...request, workspace })), /invalid_request/);
   }
   const { workspace, ...ordinary } = request;
-  assert.deepEqual(parseStart(JSON.stringify(ordinary)), ordinary);
+  assert.deepEqual(parseRequest(JSON.stringify(ordinary)), ordinary);
   assert.equal(parseWorkspace(undefined, ordinary.cwd), undefined);
-  assert.deepEqual(parseStart(JSON.stringify({ ...ordinary, functions: [], mcp_http_servers: [] })),
+  assert.deepEqual(parseRequest(JSON.stringify({ ...ordinary, functions: [], mcp_http_servers: [] })),
     { ...ordinary, functions: [], mcp_http_servers: [] });
 });
 
@@ -95,7 +95,7 @@ test("Core declarations remove subagent and search tools only when declared", t 
 test("workspace functions are parsed", async t => {
   const { request } = fixture(t);
   const functions = [{ name: "lookup", description: "Lookup", parameters: { type: "object" } }];
-  assert.deepEqual(parseStart(JSON.stringify({ ...request, functions })).functions, functions);
+  assert.deepEqual(parseRequest(JSON.stringify({ ...request, functions })).functions, functions);
 });
 
 test("initialized environment is ordinary child environment on every layout", t => {
@@ -119,11 +119,11 @@ test("workspace discovery keeps the function boundary on the native tool set", t
   const { request } = fixture(t);
   const functions = [{name:"lookup", description:"Lookup", parameters:{type:"object"}, defer_loading:true}];
   const configured = {...request, tool_search:true, functions};
-  assert.deepEqual(parseStart(JSON.stringify(configured)), configured);
+  assert.deepEqual(parseRequest(JSON.stringify(configured)), configured);
 });
 
 test("web search control is the disabled or live mode", t => {
   const { request } = fixture(t);
-  assert.equal(parseStart(JSON.stringify({ ...request, web_search: "live" })).web_search, "live");
-  assert.throws(() => parseStart(JSON.stringify({ ...request, web_search: true })), /invalid_request/);
+  assert.equal(parseRequest(JSON.stringify({ ...request, web_search: "live" })).web_search, "live");
+  assert.throws(() => parseRequest(JSON.stringify({ ...request, web_search: true })), /invalid_request/);
 });

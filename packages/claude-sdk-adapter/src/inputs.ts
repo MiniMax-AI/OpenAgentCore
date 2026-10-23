@@ -19,7 +19,7 @@ export class Inputs implements AsyncIterable<SDKUserMessage> {
 
   constructor(prompt?: MessageInput) { if (prompt !== undefined) this.release(prompt); }
 
-  release(prompt: MessageInput): void {
+  private release(prompt: MessageInput): void {
     if (this.ended || this.submitted.size || prompt.length > 64) throw new Error("Invalid initial input.");
     this.enqueue(parseMessageInput(prompt));
   }

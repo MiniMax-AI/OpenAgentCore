@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import test from "node:test";
+import { assertFrame } from "./frames.mjs";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
@@ -24,7 +25,7 @@ async function listen() {
   return { url: `http://127.0.0.1:${server.address().port}/mcp`, close: () => server.close() };
 }
 
-// Run the production entrypoint: its explicitly supplied Inputs must also be held.
+// Run the production entrypoint: no input is released before required MCP readiness.
 const fixture = `
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
@@ -89,20 +90,33 @@ for (const mode of ["connected", "pending", "failed", "missing", "duplicate", "m
     try {
       const servers = [{ server_label: "fixture", server_url: mode === "unlistable" ? "http://127.0.0.1:1/mcp" : remote.url, allowed_tools: mode === "workspace-empty" ? [] : ["echo"], required: mode !== "optional" },
         { server_label: "optional", server_url: "https://optional.invalid/mcp", allowed_tools: [], required: false }];
-      child.stdin.write(JSON.stringify({ type: "start", model: "fixed", input: [{ content: [{ type: "input_text", text: "one input" }] }], system_prompt: "", cwd,
+      const prepare = { type: "executor_prepare", model: "fixed", system_prompt: "", cwd,
         ...(mode.includes("history") || mode === "resume" ? { resume: "native" } : {}),
-        ...(mode.startsWith("workspace-") ? {workspace:{home:cwd,state:cwd,scratch:cwd,capability_root:cwd,env_names:[],mcp:servers}} : {mcp_http_servers:servers}) }) + "\n");
+        ...(mode.startsWith("workspace-") ? {workspace:{home:cwd,state:cwd,scratch:cwd,capability_root:cwd,env_names:[],mcp:servers}} : {mcp_http_servers:servers}) };
+      child.stdin.write(JSON.stringify(prepare) + "\n");
+      // Readiness failures end the process before any input is accepted; otherwise one Turn runs.
+      const ready = ["connected", "resume", "optional", "workspace-connected", "workspace-empty", "wrong-history"].includes(mode);
+      if (ready) {
+        const until = Date.now() + 5000;
+        while (!stdout.includes("executor_ready") && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
+        child.stdin.write(JSON.stringify({ type: "turn_start", turn_id: "run", input: [{ content: [{ type: "input_text", text: "one input" }] }] }) + "\n");
+        while (!stdout.includes("turn_settled") && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
+        child.stdin.end();
+      }
       const exit = await closed;
       assert.equal(exit.signal, null, stderr);
       assert.equal(exit.code, 0, stderr);
-      const events = stdout.trim().split("\n").map(JSON.parse);
+      const events = stdout.trim().split("\n").filter(Boolean).map(JSON.parse);
+      events.forEach(event => assertFrame(event));
       const success = ["connected", "resume", "optional", "workspace-connected", "workspace-empty"].includes(mode);
-      assert.equal(events.at(-1).type, success ? "result" : "error");
+      assert.equal(events.some(e => e.type === "executor_ready"), ready);
+      assert.equal(events.some(e => e.type === "result"), success);
+      if (mode === "wrong-history") assert.ok(events.some(e => e.type === "error" && e.code === "execution_failed"));
       assert.equal(observations.filter(v => v.kind === "input").length, success || mode === "wrong-history" ? 1 : 0);
-      assert.equal(events.some(e => e.type === "prepared"), false);
       assert.equal(events.some(e => e.type === "input_ready"), success);
+      if (!ready) assert.equal(events.some(e => e.type === "turn_started"), false);
       if (mode === "missing-history") assert.equal(observations.length, 0);
-      if (mode === "cancelled") assert.equal(events.at(-1).code, "cancelled");
+      if (!ready && mode !== "cancelled" && mode !== "missing-history") assert.ok(events.every(e => e.type === "error"));
     } finally {
       remote.close();clearTimeout(timer);child.kill("SIGKILL");await closed;rmSync(cwd, { recursive: true, force: true });
     }

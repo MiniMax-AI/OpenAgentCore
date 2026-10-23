@@ -1,3 +1,5 @@
+//go:build unix
+
 package claudesdk
 
 import (
@@ -5,6 +7,8 @@ import (
 	"encoding/json"
 	"os"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 // The TypeScript bridge reads the same file in packages/claude-sdk-adapter/tests/bridge_frames.test.mjs.
@@ -65,7 +69,30 @@ func TestBridgeFramesMatchSharedFixtures(t *testing.T) {
 		var event bridgeEvent
 		if err := strict(raw, &event); err != nil {
 			t.Errorf("%s: %v", raw, err)
+			continue
 		}
+		if event.Type == "executor_ready" {
+			continue
+		}
+		// Whatever else the Turn makes of the frame, it must know the kind.
+		config, req := persistentConfig(t, "replay")
+		compact := new(bytes.Buffer)
+		if err := json.Compact(compact, raw); err != nil {
+			t.Fatal(err)
+		}
+		config.Env = append(config.Env, "SDK_REPLAY_FRAME="+compact.String())
+		owner, err := NewExecutorFactory(config)(t.Context(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, out := consumeExecutorTurn(t, owner, "run", "hello")
+		for envelope := range out {
+			var failure proto.ErrorPayload
+			if envelope.Type == proto.TypeError && envelope.DecodePayload(&failure) == nil && failure.Error == "claudesdk: unknown SDK bridge event" {
+				t.Errorf("Go does not handle bridge frame kind %q", event.Type)
+			}
+		}
+		_ = owner.Close(t.Context())
 	}
 }
 
