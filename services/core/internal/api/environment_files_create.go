@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"io"
 	"net/http"
 	"slices"
@@ -113,7 +114,7 @@ func (h *Handler) createEnvironmentFile(w http.ResponseWriter, r *http.Request) 
 		writeSessionsError(w, r, execution.ErrExecutionUnavailable)
 		return
 	}
-	size, err := h.Execution.Workspaces.WriteEnvironmentFile(r.Context(), environment, strings.TrimPrefix(*request.Path, "/workspace/"), data)
+	size, err := h.Execution.Workspaces.WriteEnvironmentFile(r.Context(), environment, strings.TrimPrefix(*request.Path, runtimebootstrap.PublicWorkspace+"/"), data)
 	if err != nil {
 		if !writeFieldError(w, environmentFileWriteError(err)) {
 			writeSessionsError(w, r, err)
@@ -168,7 +169,7 @@ func environmentFileCreatePathError(value string) error {
 			return errEnvironmentFileCreateComponents
 		}
 	}
-	if len(value) > 4096 || !utf8.ValidString(value) || strings.ContainsAny(value, "\\\x00\r\n") || !strings.HasPrefix(value, "/workspace/") {
+	if len(value) > 4096 || !utf8.ValidString(value) || strings.ContainsAny(value, "\\\x00\r\n") || !strings.HasPrefix(value, runtimebootstrap.PublicWorkspace+"/") {
 		return errEnvironmentFileCreatePath
 	}
 	return nil

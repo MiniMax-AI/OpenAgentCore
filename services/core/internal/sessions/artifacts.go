@@ -3,6 +3,7 @@ package sessions
 import (
 	"archive/tar"
 	"context"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"io"
 	"io/fs"
 	"strings"
@@ -173,7 +174,7 @@ func readArtifactExport(export io.Reader, put func(path string, size int64, cont
 		}
 		seen[header.Name] = true
 		total += header.Size
-		if err := put("/workspace/"+header.Name, header.Size, archive); err != nil {
+		if err := put(runtimebootstrap.PublicWorkspace+"/"+header.Name, header.Size, archive); err != nil {
 			return err
 		}
 	}
