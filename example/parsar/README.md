@@ -61,6 +61,8 @@ node example/parsar/examples/manager/configure.mjs \
 
 `--url` is the address reached by the configuring process; `--agent-url` is the same server's address reachable from the sandbox, defaulting to `--url`. Use different addresses only when your deployment explicitly provides a proxy between them. The script prints resource IDs before writes and refuses to overwrite existing resources. Use `--agent-id` and `--environment-id` to choose IDs explicitly. If a later step fails, inspect the reported IDs; partial resources are retained. Open the returned Agent link and start a conversation, for example “创建一个能分析 Excel 的 Agent，复用现有模型，配置好环境后给我链接。” Created resources appear in the ordinary lists and remain editable there. Trials verify environment preparation and a first reply, not the complete business task. Shared templates may be trialled with another bound Agent.
 
+You can also ask “帮我给这个 Agent 开通飞书机器人。” The manager follows its operation guide to reuse a bot or start registration, returns the authorization link for you to confirm, then binds the Agent and checks connection and delivery status. Enter existing application secrets only on **飞书接入**, never in chat. New setups default to private chat; group chat requires an explicit request. Registration and connection alone do not prove that a test message was received and answered.
+
 ### Hosted sandboxes and an authenticated gateway
 
 The managed microsandbox deployment blocks private networks except its Core connection ([node defaults](../../docs/getting-started/nodes.md)). A LAN Web address can therefore work on the host and still return `ECONNREFUSED` inside the Agent. Do not weaken Core isolation or substitute its administration endpoint. Provide a public HTTPS gateway to Parsar with its own credential.
@@ -169,3 +171,9 @@ pnpm --filter @oac/parsar-example test:live
 ```
 
 It executes a real model and leaves resources for inspection. Live Feishu acceptance requires a designated test bot with its scopes and an authorized chat; configuration alone does not verify delivery.
+
+### Chat media
+
+Web conversations preview PNG, JPEG, GIF and WebP Session Artifacts beside the reply and provide file downloads. Save outputs under `./outputs`; Markdown image/file links to their `/workspace/outputs/` paths resolve to the persisted artifacts. Other formats, including SVG, remain downloads; external image URLs are not fetched. Feishu sends each artifact as an image or file message, with a 5 MiB limit per nonempty attachment. Upload keys and message identities persist across retries; failed deliveries remain in **消息记录**. Audio and video are downloadable files, without inline playback.
+
+Bot registration returns `verification_url` and a relative `qr_url`. Show the authorization link and `![飞书授权二维码](<qr_url>)` with the returned path substituted. The PNG is generated inside Parsar, and `GET /app/feishu/provision/<bot_id>/qrcode` rejects expired or completed registrations. Web and Feishu use the same image; neither sends authorization URLs to a third-party QR service.

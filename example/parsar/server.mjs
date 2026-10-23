@@ -1,3 +1,4 @@
+import { readMediaBytes } from "./shared/media.mjs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createServer } from "node:http";
@@ -111,6 +112,10 @@ export function coreClient(config, fetchImpl = fetch) {
     });
     if (response.status >= 300 && response.status < 400)
       throw new AppError(502, "Core returned a redirect.");
+    if (response.ok && path.endsWith("/content")) {
+      try { return Buffer.from(await readMediaBytes(response)); }
+      catch (error) { if (error instanceof RangeError) throw new AppError(413, error.message); throw error; }
+    }
     const value =
       response.status === 202 || response.status === 204
         ? undefined
@@ -203,6 +208,11 @@ export function createHandler(
         if (!body || typeof body !== "object" || Array.isArray(body))
           throw new AppError(400, "Invalid request.");
         const value = await product(req.method, url.pathname, body);
+        if (Buffer.isBuffer(value)) {
+          res.writeHead(200, { "Content-Type": "image/png", "Cache-Control": "no-store" });
+          res.end(value);
+          return;
+        }
         res.writeHead(200, {
           "Content-Type": "application/json",
           "Cache-Control": "no-store",

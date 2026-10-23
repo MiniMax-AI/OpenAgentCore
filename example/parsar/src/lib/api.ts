@@ -5,6 +5,7 @@ import {
   type AgentTurn,
   type ListPage,
   type PageOptions,
+  type SessionArtifact,
 } from "@oac/agents-client";
 import type { StatusKind } from "../components/ui/status-icon";
 
@@ -78,4 +79,13 @@ export async function downloadArtifact(sessionId: string, file: { id: string; pa
   link.download = file.path.split("/").at(-1) || "artifact";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+export async function listSessionArtifacts(sessionId: string, options: PageOptions): Promise<ListPage<SessionArtifact>> {
+  const params = new URLSearchParams({ limit: String(options.limit || 50), order: options.order || "desc" });
+  if (options.after) params.set("after", options.after);
+  const response = await fetch(`/v1/agents/sessions/${encodeURIComponent(sessionId)}/artifacts?${params}`, { signal: options.signal });
+  const value = await response.json();
+  if (!response.ok) throw new Error(value.error?.message || tr("无法读取产物。"));
+  return value;
 }

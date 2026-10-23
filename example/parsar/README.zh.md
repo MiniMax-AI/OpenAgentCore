@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 81a11a0e5f71d5f54625e3c31792e7f3b5eccffd9b1191375ef4c8d595c5a0b3
+source_hash: 5f85077b8c9e40741c4a3e7ce3a637ca793d68d19acd729b76589e81248b4635
 ---
 
 # Parsar 工作空间
@@ -65,6 +65,8 @@ node example/parsar/examples/manager/configure.mjs \
 ```
 
 `--url` 是配置脚本访问的地址；`--agent-url` 是沙箱能访问的同一台 Parsar 地址，默认等于 `--url`。只有部署确实提供地址间代理时，才使用不同地址。脚本在写入前输出资源 ID，拒绝覆盖已有资源；也可通过 `--agent-id` 和 `--environment-id` 指定 ID。若后续步骤失败，按输出的 ID 检查，已创建的部分会保留。打开返回的 Agent 链接发起对话，例如“创建一个能分析 Excel 的 Agent，复用现有模型，配置好环境后给我链接。”创建的资源直接出现在原有列表，仍可通过网页编辑。试运行只证明环境准备和首次回复正常，不代表完整业务任务通过；共享模板可能使用另一个绑定的 Agent 试运行。
+
+也可以说“帮我给这个 Agent 开通飞书机器人。”管理 Agent 会按操作指南复用机器人或发起注册，给你授权链接，等你确认后绑定 Agent，再检查连接和投递状态。已有应用的密钥只在 **飞书接入** 页面填写，不发到聊天里。新接入默认仅开私聊，群聊需明确要求。注册成功、连接成功都不等于测试消息已经收到并回复。
 
 ### 托管沙箱与认证入口 {#hosted-sandboxes-and-an-authenticated-gateway}
 
@@ -174,3 +176,9 @@ pnpm --filter @oac/parsar-example test:live
 ```
 
 它会调用真实模型，并保留资源供检查。真实飞书验收需要一个具备相应权限的专用测试机器人和已授权的会话；仅完成配置并不能证明投递可用。
+
+### 聊天中的图片与文件
+
+网页会话在回复旁预览 PNG、JPEG、GIF 和 WebP 产物，并提供文件下载。将输出保存到 `./outputs`；Markdown 中指向 `/workspace/outputs/` 的图片和文件链接会对应到已保存的产物。SVG 等其他格式只提供下载，不加载外部图片地址。飞书将每个产物发送为图片或文件消息，单个附件不能为空且不能超过 5 MiB。上传标识和消息标识会保留以供重试，失败记录显示在**消息记录**中。音视频作为文件下载，暂不在聊天中播放。
+
+机器人注册返回 `verification_url` 和相对地址 `qr_url`。同时展示授权链接和 `![飞书授权二维码](<qr_url>)`，将占位符替换为返回的路径。PNG 由 Parsar 本地生成；注册过期或完成后，`GET /app/feishu/provision/<bot_id>/qrcode` 返回失效提示。网页和飞书使用同一张二维码，不会把授权地址发送给第三方二维码服务。

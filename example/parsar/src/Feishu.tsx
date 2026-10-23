@@ -1,4 +1,3 @@
-import { QRCodeSVG } from "qrcode.react";
 import {
   Dialog,
   DialogContent,
@@ -361,6 +360,7 @@ interface RegistrationState {
   id: string;
   status: "pending" | "success" | "error";
   verification_url: string;
+  qr_url: string;
   expires_at: number;
   interval: number;
   error?: string;
@@ -446,12 +446,7 @@ function QrCreate({ close }: { close: () => void }) {
       {status === "pending" ? (
         <>
           <div className="rounded-2xl border border-line p-4">
-            <QRCodeSVG
-              value={state.data!.verification_url}
-              size={200}
-              marginSize={1}
-              title={tr("飞书授权二维码")}
-            />
+            <img src={state.data!.qr_url} width={200} height={200} alt={tr("飞书授权二维码")} />
           </div>
           <p className="text-sm text-fg-muted">{tr("用飞书扫码，确认后自动完成")}</p>
           <a

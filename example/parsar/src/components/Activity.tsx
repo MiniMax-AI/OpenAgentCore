@@ -1,10 +1,12 @@
+import { MediaImage, ArtifactAttachment } from "./Media";
+import { artifactContentPath, qrImagePattern } from "../../shared/media.mjs";
 import { tr } from "../lib/i18n";
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Check, Copy, Terminal, ChevronRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import type { SessionItem } from "@oac/agents-client";
+import type { SessionItem, SessionArtifact } from "@oac/agents-client";
 import { Button } from "./ui/button";
 export function Thinking() {
   const reduce = useReducedMotion();
@@ -104,7 +106,14 @@ function Reasoning({ item }: { item: SessionItem }) {
   );
 }
 
-export function Activity({ item }: { item: SessionItem }) {
+const artifactPaths = (file: SessionArtifact) => [file.path, file.path.replace(/^\/workspace\//, "./"), file.path.replace(/^\/workspace\//, "")];
+export function Activity({ item, sessionId = "", artifacts = [] }: { item: SessionItem; sessionId?: string; artifacts?: SessionArtifact[] }) {
+  const resolveArtifact = (path = "") => [...artifacts].reverse().find((file) => artifactPaths(file).includes(path));
+  const mediaSource = (path = "") => {
+    if (qrImagePattern.test(path)) return path;
+    const artifact = resolveArtifact(path);
+    return artifact ? artifactContentPath(sessionId, artifact.id) : "";
+  };
   if (item.type === "reasoning") return <Reasoning item={item} />;
   if (item.type === "message") {
     const text =
@@ -117,9 +126,12 @@ export function Activity({ item }: { item: SessionItem }) {
     if (item.role === "user")
       return (
         <div className="flex justify-end py-3">
-          <p className="max-w-[80%] whitespace-pre-wrap break-words rounded-3xl bg-surface-muted px-5 py-3 text-base leading-relaxed">
+          <div className="max-w-[80%] whitespace-pre-wrap break-words rounded-3xl bg-surface-muted px-5 py-3 text-base leading-relaxed">
             {text}
-          </p>
+            {item.content?.filter((part) => part.type === "input_image").map((part, index) =>
+              typeof part.image_url === "string" && /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(part.image_url)
+                ? <img key={index} src={part.image_url} alt={tr("图片")} className="mt-2 max-h-80 max-w-full rounded-lg object-contain" /> : null)}
+          </div>
         </div>
       );
     return (
@@ -134,16 +146,14 @@ export function Activity({ item }: { item: SessionItem }) {
               h1: ({ children }) => <h2>{children}</h2>,
               pre: CodeBlock,
               a: ({ children, href }) => (
-                <a href={href} target="_blank" rel="noreferrer">
+                <a href={resolveArtifact(href) ? mediaSource(href) : href} target="_blank" rel="noreferrer">
                   {children}
                 </a>
               ),
-              img: ({ alt }) => (
-                <span>
-                  {alt || tr("图片")}
-                  {tr("（此示例不加载外部图片）")}
-                </span>
-              ),
+              img: ({ alt, src }) => {
+                const source = mediaSource(typeof src === "string" ? src : "");
+                return source ? <MediaImage src={source} alt={alt || tr("图片")} /> : <span>{alt || tr("图片")}{tr("（请将图片保存为会话产物后展示）")}</span>;
+              },
             }}
           >
             {text}
@@ -178,7 +188,7 @@ export function Activity({ item }: { item: SessionItem }) {
   );
 }
 
-export function SessionTimeline({ items }: { items: SessionItem[] }) {
+export function SessionTimeline({ items, sessionId = "", artifacts = [] }: { items: SessionItem[]; sessionId?: string; artifacts?: SessionArtifact[] }) {
   const groups: { id: string; entry?: SessionItem; steps: SessionItem[] }[] =
     [];
   for (const item of items) {
@@ -191,14 +201,26 @@ export function SessionTimeline({ items }: { items: SessionItem[] }) {
       else groups.push({ id: item.id, steps: [item] });
     }
   }
-  return groups.map((group) => (
+  const turnOrder = new Map<string, number>();
+  for (const item of items) if (!turnOrder.has(item.turn_id)) turnOrder.set(item.turn_id, turnOrder.size);
+  const availableArtifacts = (item: SessionItem) => artifacts
+    .filter((file) => (turnOrder.get(file.turn_id) ?? Infinity) <= (turnOrder.get(item.turn_id) ?? -1))
+    .sort((a, b) => turnOrder.get(a.turn_id)! - turnOrder.get(b.turn_id)!);
+  const lastGroup = new Map<string, string>();
+  for (const group of groups) lastGroup.set((group.entry || group.steps.at(-1))?.turn_id || "", group.id);
+  const files = (rows: SessionArtifact[]) => rows.map((file) => {
+    const inline = items.some((item) => item.turn_id === file.turn_id && item.role === "assistant" && item.content?.some((part) =>
+      typeof part.text === "string" && [...part.text.matchAll(/!\[[^\]\n]*\]\(([^)]+)\)/g)].some((match) => artifactPaths(file).includes(match[1] || ""))));
+    return <ArtifactAttachment key={file.id} sessionId={sessionId} file={file} preview={!inline} />;
+  });
+  return <>{groups.map((group) => (
     <div
       id={`item-${group.id}`}
       data-turn-key={group.entry?.role === "user" ? group.id : undefined}
       key={group.id}
     >
       {group.entry ? (
-        <Activity item={group.entry} />
+        <Activity item={group.entry} sessionId={sessionId} artifacts={availableArtifacts(group.entry)} />
       ) : (
         <details className="group/steps my-3 rounded-2xl border border-line-muted px-4 py-2.5">
           <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-fg-muted hover:text-fg">
@@ -215,6 +237,7 @@ export function SessionTimeline({ items }: { items: SessionItem[] }) {
           </div>
         </details>
       )}
+      {files(artifacts.filter((file) => lastGroup.get(file.turn_id) === group.id))}
     </div>
-  ));
+  ))}{files(artifacts.filter((file) => !lastGroup.has(file.turn_id)))}</>;
 }

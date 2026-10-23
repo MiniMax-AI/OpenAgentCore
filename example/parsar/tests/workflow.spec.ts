@@ -971,3 +971,76 @@ test("Agent engine options narrow to the selected Harness and reach new conversa
   await page.getByRole("button", { name: "会话详情" }).click();
   await expect(page.getByRole("dialog")).toContainText("网页搜索实时搜索");
 });
+
+test("chat previews authorization QR and artifact images, downloads files and keeps unsafe images out", async ({ page }) => {
+  await resources(page);
+  await agent(page);
+  await converse(page, "多媒体验收");
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+  const turnId = "d1111111-1111-4111-8111-111111111111";
+  const qrPath = "/app/feishu/provision/d2222222-2222-4222-8222-222222222222/qrcode";
+  const imageId = "d3333333-3333-4333-8333-333333333333";
+  const fileId = "d4444444-4444-4444-8444-444444444444";
+  const svgId = "d5555555-5555-4555-8555-555555555555";
+  const laterTurn = "d6666666-6666-4666-8666-666666666666";
+  const futureTurn = "d7777777-7777-4777-8777-777777777777";
+  const futureFile = "d8888888-8888-4888-8888-888888888888";
+  const { default: QRCode } = await import("qrcode");
+  const png = await QRCode.toBuffer("https://open.feishu.cn/page/cli?user_code=preview", { width: 240 });
+  let external = 0;
+  page.on("request", (request) => { if (request.url().includes("evil.example")) external++; });
+  await page.route("**" + qrPath, (route) => route.fulfill({ contentType: "image/png", body: png }));
+  await page.route(/\/items\?/, async (route) => {
+    const response = await route.fetch();
+    const value = await response.json();
+    const item = value.data.findLast((entry: any) => entry.role === "assistant");
+    item.turn_id = turnId;
+    item.content = [{ type: "output_text", text: `请用飞书扫码完成授权。\n\n[打开授权页面](https://open.feishu.cn/page/cli?user_code=preview)\n\n![飞书授权二维码](${qrPath})\n\n![结果图片](/workspace/outputs/chart.png)\n\n[结果文件](/workspace/outputs/report.txt)\n\n![不可信图片](https://evil.example/pixel.png)\n\n![SVG文件](/workspace/outputs/unsafe.svg)` }];
+    value.data.push(
+      { ...item, id: "e1111111-1111-4111-8111-111111111111", turn_id: laterTurn, content: [{ type: "output_text", text: "![历史结果图](/workspace/outputs/chart.png)\n\n[历史结果文件](/workspace/outputs/report.txt)" }] },
+      { ...item, id: "e2222222-2222-4222-8222-222222222222", turn_id: futureTurn, content: [{ type: "output_text", text: "现在更新文件版本。" }] },
+    );
+    value.last_id = value.data.at(-1).id;
+    await route.fulfill({ json: value });
+  });
+  await page.route(/\/artifacts\?/, async (route) => {
+    const response = await route.fetch();
+    const value = await response.json();
+    const base = value.data[0];
+    value.data = [
+      { ...base, id: imageId, turn_id: turnId, path: "/workspace/outputs/chart.png", size_bytes: png.length },
+      { ...base, id: fileId, turn_id: turnId, path: "/workspace/outputs/report.txt", size_bytes: 11 },
+      { ...base, id: svgId, turn_id: turnId, path: "/workspace/outputs/unsafe.svg", size_bytes: 80 },
+      { ...base, id: futureFile, turn_id: futureTurn, path: "/workspace/outputs/report.txt", size_bytes: 11 },
+    ];
+    await route.fulfill({ json: value });
+  });
+  await page.route("**/artifacts/*/content", (route) => route.fulfill({
+    contentType: "application/octet-stream",
+    body: route.request().url().includes(imageId) ? png : route.request().url().includes(svgId) ? Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="window.mediaExecuted=true"/>') : Buffer.from("hello media"),
+  }));
+  await page.reload();
+  await expect(page.getByRole("img", { name: "飞书授权二维码" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "结果图片" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "历史结果图" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "历史结果文件", exact: true })).toHaveAttribute("href", new RegExp(`/${fileId}/content$`));
+  await expect(page.getByRole("link", { name: "结果文件", exact: true })).toHaveAttribute("href", new RegExp(`/${fileId}/content$`));
+  await expect(page.getByText("此格式不支持预览，请下载文件查看。", { exact: true })).toBeVisible();
+  await expect(page.getByText("不可信图片（请将图片保存为会话产物后展示）", { exact: true })).toBeVisible();
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "下载 report.txt", exact: true }).first().click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe("report.txt");
+  const chunks = [];
+  for await (const chunk of (await download.createReadStream())!) chunks.push(chunk);
+  expect(Buffer.concat(chunks).toString()).toBe("hello media");
+  expect(external).toBe(0);
+  expect(await page.evaluate(() => (window as any).mediaExecuted)).toBeUndefined();
+  await page.getByRole("img", { name: "飞书授权二维码" }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: test.info().outputPath("media-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.getByRole("img", { name: "飞书授权二维码" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: test.info().outputPath("media-mobile.png") });
+});

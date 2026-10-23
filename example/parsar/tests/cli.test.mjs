@@ -10,12 +10,12 @@ import { openStore } from "../server/store.mjs";
 
 const cli = fileURLToPath(new URL('../cli.mjs', import.meta.url));
 const configure = fileURLToPath(new URL('../examples/manager/configure.mjs', import.meta.url));
-async function fixture(t) {
+async function fixture(t, fetchImpl = async () => { throw new Error('Unexpected Core request'); }) {
   const store = openStore(':memory:');
   const modelId = randomUUID();
   store.put('models', { id: modelId, name: 'Test model', enabled: true });
   const config = { host: '127.0.0.1', port: 0, target: 'https://core.example', key: 'server-only-core-key' };
-  const server = createServer(createHandler(config, { store, fetchImpl: async () => { throw new Error('Unexpected Core request'); } }));
+  const server = createServer(createHandler(config, { store, fetchImpl }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   config.port = server.address().port;
   t.after(() => { server.closeAllConnections(); server.close(); store.close(); });
@@ -131,4 +131,58 @@ test('manager stores gateway access as a redacted environment value and returns 
   assert.equal(runtime.env.PARSAR_WEB_URL, 'http://10.0.0.2:18180');
   assert.equal((await createParsarClient(url)('GET', `/app/runtimes/${runtime.id}`)).env.PARSAR_TOKEN, null);
   assert.ok(!result.stdout.includes(token) && !result.stderr.includes(token));
+});
+
+
+test('manager CLI registers, resumes and binds a bot without receiving its credentials', async (t) => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    assert.equal(url, 'https://accounts.feishu.cn/oauth/v1/app/registration');
+    assert.equal(init.redirect, 'error');
+    const action = init.body.get('action');
+    calls.push(action);
+    if (action === 'begin') return Response.json({ device_code: 'private-device', user_code: 'test-code', interval: 1, expires_in: 300 });
+    if (action === 'poll') return Response.json({ client_id: 'cli_0123456789abcdef', client_secret: 'private-bot-secret' });
+    assert.equal(action, 'init');
+    return Response.json({});
+  };
+  const { url, store, modelId } = await fixture(t, fetchImpl), api = createParsarClient(url);
+  const botId = randomUUID(), runtimeId = randomUUID(), agentId = randomUUID();
+  await api('PUT', `/app/runtimes/${runtimeId}`, { name: 'Business environment' });
+  await api('PUT', `/app/agents/${agentId}`, { name: 'Business Agent', instructions: 'Help with the requested work.', skill_ids: [], mcp_ids: [], model_id: modelId, runtime_id: runtimeId, harness: 'codex' });
+  const provision = (action) => run(cli, ['POST', `/app/feishu/provision/${botId}`, '--file', '-'], url, JSON.stringify({ action, name: 'Business bot' }));
+  const begin = await provision('begin');
+  assert.equal(begin.code, 0, begin.stderr);
+  assert.equal(JSON.parse(begin.stdout).status, 'pending');
+  assert.match(JSON.parse(begin.stdout).verification_url, /^https:\/\/open\.feishu\.cn\//);
+  const qrPath = JSON.parse(begin.stdout).qr_url;
+  const qr = await fetch(url + qrPath);
+  assert.equal(qr.status, 200);
+  assert.equal(qr.headers.get('content-type'), 'image/png');
+  assert.equal(qr.headers.get('cache-control'), 'no-store');
+  const png = Buffer.from(await qr.arrayBuffer());
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal((await fetch(url + qrPath, { headers: { origin: 'https://external.example' } })).status, 403);
+  await provision('begin');
+  assert.deepEqual(calls, ['init', 'begin']);
+  assert.equal((await api('GET', '/app/feishu/bots')).length, 0);
+  const poll = await provision('poll');
+  assert.equal(poll.code, 0, poll.stderr);
+  assert.equal(JSON.parse(poll.stdout).status, 'success');
+  assert.equal((await fetch(url + qrPath)).status, 410);
+  const bot = await api('GET', `/app/feishu/bots/${botId}`);
+  assert.equal(bot.enabled, false);
+  assert.equal(bot.has_app_secret, true);
+  const enabled = await api('PUT', `/app/feishu/bots/${botId}`, { ...bot, agent_id: agentId, enabled: true, direct: true, groups: false });
+  assert.equal(enabled.enabled, true);
+  assert.equal(enabled.groups, false);
+  assert.equal(store.get('feishu_bots', botId).app_secret, 'private-bot-secret');
+  await assert.rejects(api('PUT', `/app/feishu/bots/${botId}`, { ...bot, enabled: false }), { status: 409 });
+  await provision('poll');
+  assert.deepEqual(calls, ['init', 'begin', 'poll']);
+  const bots = await api('GET', '/app/feishu/bots');
+  assert.equal(bots[0].health.state, 'stopped');
+  assert.deepEqual(await api('GET', '/app/feishu/deliveries'), []);
+  const publicOutput = JSON.stringify([begin, poll, bot, enabled, bots]);
+  for (const secret of ['private-device', 'private-bot-secret', 'server-only-core-key']) assert.ok(!publicOutput.includes(secret));
 });

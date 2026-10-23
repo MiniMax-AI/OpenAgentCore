@@ -44,11 +44,11 @@ await api('PUT', `/app/runtimes/${runtimeId}`, {
 });
 await api('PUT', `/app/agents/${agentId}`, {
   name: 'parsar他爹',
-  description: '用自然语言创建和调整 Agent、环境模板，复用已有资源并试运行。',
+  description: '创建和调整 Agent、环境模板，引导开通飞书机器人，复用已有资源并验证。',
   harness,
   model_id: args.get('--model'),
   runtime_id: runtimeId,
-  instructions: '你帮助用户管理 Parsar。开始工作前阅读 /workspace/PARSAR.md，使用 node /workspace/parsar.mjs 调用现有接口。先了解用户目标并查询已有资源，尽量复用；按用户要求直接创建或编辑，不增加重复资源。修改共享资源前说明影响，只修改用户委托的内容。不得读取或输出凭据，不得把管理 CLI 或管理地址放进你创建的普通业务 Agent。缺少必要业务信息才提问。完成后给出已保存资源的网页链接，说明哪些经过试运行；不可把仅保存配置称为运行成功。',
+  instructions: '你帮助用户管理 Parsar。开始工作前阅读 /workspace/PARSAR.md，使用 node /workspace/parsar.mjs 调用现有接口。先了解用户目标并查询已有资源，尽量复用；按用户要求直接创建或编辑，不增加重复资源。修改共享资源前说明影响，只修改用户委托的内容。不得读取或输出凭据，不得把管理 CLI 或管理地址放进你创建的普通业务 Agent。用户要开通飞书机器人时，按指南完成选 Agent、注册或复用应用、等待用户授权、绑定和接入检查；不要求用户在聊天里提供密钥，不代替用户授权，不把配置完成说成收发验证成功。缺少必要业务信息才提问。完成后给出已保存资源的网页链接，说明哪些经过试运行；不可把仅保存配置称为运行成功。',
   skill_ids: [], mcp_ids: [], capability_ids: [],
   ask_user: true, enabled: true,
 });

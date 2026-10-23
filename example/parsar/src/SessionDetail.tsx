@@ -14,6 +14,7 @@ import {
   api,
   dateTime,
   readHistory,
+  listSessionArtifacts,
   sessionState,
   sessionTitle,
 } from "./lib/api";
@@ -65,6 +66,11 @@ export function SessionDetail({
       ]);
       return { session, items, turns: turns.reverse() };
     },
+    refetchInterval: 2000,
+  });
+  const artifacts = useQuery({
+    queryKey: ["timeline-artifacts", id],
+    queryFn: ({ signal }) => readHistory((options) => listSessionArtifacts(id, options), signal),
     refetchInterval: 2000,
   });
   const data = query.data;
@@ -206,12 +212,13 @@ export function SessionDetail({
                 aria-label={tr("会话过程")}
               >
                 <div className="mx-auto max-w-3xl px-6 py-10">
-                  <SessionTimeline items={live.items} />
+                  <SessionTimeline items={live.items} sessionId={id} artifacts={(artifacts.data || []).filter((file) => !superseded.has(file.turn_id))} />
                   {!live.items.length && (
                     <EmptyState title={tr("等待执行记录")} size="compact" />
                   )}
                   {data.session.status === "in_progress" &&
                     !(latestItem?.type === "reasoning" && latestItem.status === "in_progress") && <Thinking />}
+                  <ErrorNotice error={artifacts.error} retry={() => void artifacts.refetch()} />
                   <Questions session={data.session} />
                   {live.reconnecting && (
                     <p role="status" className="py-2 text-sm text-fg-muted">

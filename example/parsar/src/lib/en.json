@@ -488,5 +488,9 @@
   "近 7 天 · {{value0}} 轮对话": "Last 7 days · {{value0}} turns",
   "产物": "Outputs",
   "还没有生成的文件": "No files yet",
-  "正在思考": "Thinking"
+  "正在思考": "Thinking",
+  "图片暂不可用，可下载原文件。": "The image is unavailable. You can download the original file.",
+  "此格式不支持预览，请下载文件查看。": "Preview is unavailable for this format. Download the file to view it.",
+  "正在加载图片…": "Loading image…",
+  "（请将图片保存为会话产物后展示）": " (save the image as a session artifact to display it)"
 }

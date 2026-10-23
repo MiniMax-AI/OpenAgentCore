@@ -16,6 +16,11 @@ Use /app for product configuration and /v1 for exposed Core resources.
   GET  /app/runtimes               List environment templates
   GET  /app/models                 List configured models
   GET  /app/mcps                   List MCP connections
+  GET  /app/feishu/bots            List bots and connection health
+  GET  /app/feishu/bots/UUID       Read a bot before editing
+  PUT  /app/feishu/bots/UUID       Bind/enable a bot; preserve revision
+  POST /app/feishu/provision/UUID  Register: action begin or poll
+  GET  /app/feishu/deliveries      Check message delivery records
   GET  /v1/skills                  List Skills (follow has_more/after)
   PUT  /app/agents/UUID            Create or replace an Agent
   PUT  /app/runtimes/UUID          Create or replace an environment template

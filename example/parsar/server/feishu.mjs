@@ -1,3 +1,4 @@
+import { artifactContentPath, imageMime, maxMediaBytes, qrImages, qrImagePattern } from "../shared/media.mjs";
 import { createHash, randomUUID } from "node:crypto";
 const stableId = (value) => {
   const hex = createHash("sha256").update(value).digest("hex");
@@ -62,7 +63,7 @@ export function feishuAPI(store) {
             index < 100 ||
             ["queued", "submitting", "failed"].includes(row.state),
         )
-        .map(({ text, payload, event, resources, media, context, ...row }) => {
+        .map(({ text, payload, event, resources, media, uploaded_media, context, ...row }) => {
           const sessionId = store.get("feishu_threads", row.thread_id)?.session_id;
           return {
             ...row,
@@ -347,9 +348,14 @@ export function formatTurnCard(status, items = [], error, turn) {
       panels,
     );
   }
-  const answer = (messages.at(-1) || "").slice(0, 5000);
+  const answer = (status === "requires_action" ? messages.join("\n\n") : messages.at(-1) || "")
+    .replace(/!\[[^\]\n]*\]\((\/app\/feishu\/provision\/[a-f0-9-]{36}\/qrcode)\)/g, "（授权二维码见图片消息）")
+    .replace(/!?\[([^\]]*)\]\((?:\/workspace\/|\.\/)?outputs\/[^)]*\)/g, "$1（见附件）")
+    .slice(0, 5000);
   const body =
-    status === "completed"
+    status === "requires_action"
+      ? answer || "请回复上方的提问。"
+      : status === "completed"
       ? answer || "已完成处理。"
       : status === "cancelled"
         ? answer || "已按你的要求停止。"
@@ -442,6 +448,30 @@ export function feishuOperations(client) {
     return result.data;
   };
   return {
+    async upload(bytes, name) {
+      const image = !!imageMime(bytes);
+      const key = image ? "image_key" : "file_key";
+      const failure = (status, code) => {
+        // Feishu common error codes: generic-error-code; 99991400 is rate limiting.
+        const temporary = status >= 500 || [408, 409, 425, 429].includes(status) || [1500, 1503, 1551, 99991400].includes(code);
+        const definite = !temporary && (status >= 400 || (Number.isInteger(code) && code !== 0));
+        return new AppError(definite ? 422 : 503, definite
+          ? `飞书拒绝上传附件${Number.isInteger(code) ? `（错误码 ${code}）` : ""}，请检查机器人上传权限、文件格式和大小后重试。`
+          : "飞书附件上传暂未确认，将重试。");
+      };
+      let result;
+      try {
+        // The generated upload methods discard error codes. Keep the SDK's full envelope.
+        result = await client.request({
+          method: "POST", url: image ? "/open-apis/im/v1/images" : "/open-apis/im/v1/files",
+          headers: { "Content-Type": "multipart/form-data" },
+          data: image ? { image_type: "message", image: bytes } : { file_type: "stream", file_name: name, file: bytes },
+        });
+      } catch (error) { throw failure(error.response?.status, error.response?.data?.code); }
+      if (result?.code !== 0 || typeof result.data?.[key] !== "string" || !result.data[key])
+        throw failure(200, result?.code);
+      return { msg_type: image ? "image" : "file", content: JSON.stringify({ [key]: result.data[key] }) };
+    },
     async send(row) {
       const text =
         row.plain_text && /^ou_[a-zA-Z0-9_-]+$/.test(row.sender_id || "")
@@ -450,6 +480,7 @@ export function feishuOperations(client) {
       const data = {
         msg_type: row.plain_text ? "text" : "interactive",
         content: JSON.stringify(row.plain_text ? { text } : feishuCard(text)),
+        ...row.uploaded_media,
         uuid: row.id,
       };
       const result = row.reply_to
@@ -657,6 +688,26 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         created_at: stamp(),
         next_at: 0,
       });
+  };
+  const queueMedia = (thread, items, artifacts = []) => {
+    const sources = artifacts.map((file) => ({
+      id: `artifact:${file.id}`,
+      path: artifactContentPath(file.session_id, file.id),
+      name: file.path.split("/").at(-1) || "attachment",
+    }));
+    for (const item of items.filter((item) => item.type === "message" && item.role === "assistant")) {
+      const text = (item.content || []).filter((part) => part.type === "output_text").map((part) => part.text).join("\n");
+      for (const path of qrImages(text))
+        sources.push({ id: `${item.turn_id}:${path}`, path, name: "feishu-authorization.png" });
+    }
+    for (const source of sources) {
+      const id = stableId(`${thread.id}:media:${source.id}`);
+      if (store.get("feishu_outbound", id)) continue;
+      store.transaction(() => {
+        queueReply(id, thread, "");
+        store.put("feishu_outbound", { ...store.get("feishu_outbound", id), media: source });
+      });
+    }
   };
   const reject = (row, reason) => {
     store.put("feishu_inbound", {
@@ -1083,29 +1134,13 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       thread.active_outbound_id ||
       stableId(`${thread.first_message_id}:accepted`);
     let progress = store.get("feishu_outbound", progressId);
-    if (
-      progress?.sent_message_id &&
-      session.status === "requires_action" &&
-      !unseen.length
-    ) {
-      const text = statusCard("requires_action", "请回复上方的提问。");
-      if (thread.progress_text !== text) {
-        try {
-          await channel.edit(progress.sent_message_id, text, thread);
-          thread = { ...thread, progress_text: text };
-          store.put("feishu_threads", thread);
-          store.put("feishu_outbound", { ...progress, payload: text });
-        } catch {
-          // A deleted or uneditable progress card must not block result delivery.
-        }
-      }
-    }
-    if (progress && (session.status === "in_progress" || recovering) && !unseen.length) {
+    if ((progress || session.status === "requires_action") && (["in_progress", "requires_action"].includes(session.status) || recovering) && !unseen.length) {
       const items = (await history(sid, "items", thread.item_cursor)).filter(
         (item) => !ledger.superseded(run.id, item.turn_id),
       );
-      const text = formatTurnCard("in_progress", items, undefined, ledger.summary(run.id));
-      if (progress.sent_message_id) {
+      queueMedia(thread, items);
+      const text = formatTurnCard(session.status === "requires_action" ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id));
+      if (progress?.sent_message_id) {
         if (thread.progress_text !== text) {
           try {
             await channel.edit(progress.sent_message_id, text, thread);
@@ -1116,7 +1151,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
             // A deleted or uneditable progress card must not block result delivery.
           }
         }
-      } else if (progress.state === "queued" && progress.payload !== text) {
+      } else if (progress?.state === "queued" && progress.payload !== text) {
         progress = { ...progress, payload: text };
         store.put("feishu_outbound", progress);
         thread = { ...thread, progress_text: text };
@@ -1145,6 +1180,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     ]);
     for (const turn of unseen) {
       const turnItems = items.filter((item) => item.turn_id === turn.id);
+      queueMedia(thread, turnItems, artifacts.filter((file) => file.turn_id === turn.id));
       const text = formatTurnCard(
         turn.status,
         turnItems,
@@ -1285,8 +1321,19 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       try {
         const thread = store.get("feishu_threads", row.thread_id);
         const root = row.reply_to || thread?.root_id;
+        let uploaded = row.uploaded_media;
+        if (row.media && !uploaded) {
+          const bytes = qrImagePattern.test(row.media.path)
+            ? await product("GET", row.media.path, {})
+            : await core(row.media.path, "GET");
+          if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > maxMediaBytes)
+            throw new AppError(413, "附件为空或超过 5 MiB，请在网页会话中下载。");
+          uploaded = await channel.upload(bytes, row.media.name);
+          store.put("feishu_outbound", { ...store.get("feishu_outbound", row.id), uploaded_media: uploaded });
+        }
         const result = await channel.send({
           ...row,
+          uploaded_media: uploaded,
           reply_to: root,
           context_data: thread?.context_data,
           sender_id: thread?.sender_id,

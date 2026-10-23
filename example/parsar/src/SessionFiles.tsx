@@ -3,7 +3,7 @@ import { useRef } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Upload, Download } from "lucide-react";
 import { randomUuid, type ListPage, type SessionArtifact } from "@oac/agents-client";
-import { api, dateTime, downloadArtifact } from "./lib/api";
+import { api, dateTime, downloadArtifact, listSessionArtifacts } from "./lib/api";
 import { Button } from "./components/ui/button";
 import {
   Dialog,
@@ -70,16 +70,7 @@ export function SessionFiles({
       pageParam,
       signal,
     }): Promise<ListPage<SessionArtifact>> => {
-      const params = new URLSearchParams({ limit: "50", order: "desc" });
-      if (pageParam) params.set("after", pageParam);
-      const response = await fetch(
-        `/v1/agents/sessions/${encodeURIComponent(sessionId)}/artifacts?${params}`,
-        { signal },
-      );
-      const value = await response.json();
-      if (!response.ok)
-        throw new Error(value.error?.message || tr("无法读取产物。"));
-      return value;
+      return listSessionArtifacts(sessionId, { limit: 50, order: "desc", after: pageParam || undefined, signal });
     },
     getNextPageParam: (page) =>
       page.has_more ? page.last_id || undefined : undefined,

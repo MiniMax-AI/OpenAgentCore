@@ -1430,3 +1430,127 @@ test("web searches appear as readable steps in the Feishu record", async () => {
     /✓<\/font> 搜索网页 `OpenAgentCore release`/,
   );
 });
+
+test("Feishu delivers QR during authorization and artifact media once, retaining uploaded keys after a lost send", async (t) => {
+  const f = await feishu(t);
+  const uploads = [];
+  f.channel.rawClient.request = async ({ url, data, headers }) => {
+    assert.equal(headers["Content-Type"], "multipart/form-data");
+    const type = url.endsWith("/images") ? "image" : "file";
+    uploads.push({ type, data });
+    return { code: 0, data: { [type === "image" ? "image_key" : "file_key"]: `${type}-${uploads.length}` } };
+  };
+  const registrationId = randomUUID();
+  f.store.put("feishu_registration", {
+    id: registrationId, status: "pending", expires_at: Date.now() + 300000,
+    verification_url: "https://open.feishu.cn/page/cli?user_code=test-code",
+    device_code: "private-device",
+  });
+  let waiting = true;
+  const turnId = randomUUID(), imageId = randomUUID(), fileId = randomUUID();
+  const png = await (await import("qrcode")).default.toBuffer("media-test");
+  const core = async (path, ...args) => {
+    if (path.endsWith(`/${imageId}/content`)) return png;
+    if (path.endsWith(`/${fileId}/content`)) return Buffer.from("report content");
+    const value = await f.core(path, ...args);
+    if (path.includes("/turns")) return { data: [{ id: turnId, status: waiting ? "in_progress" : "completed" }], has_more: false };
+    if (path.includes("/items")) return { data: [{ id: randomUUID(), turn_id: turnId, type: "message", role: "assistant", content: [{ type: "output_text", text: `Scan [authorize](https://open.feishu.cn/page/cli?user_code=test-code)\n![飞书授权二维码](/app/feishu/provision/${registrationId}/qrcode)` }] }], has_more: false };
+    if (path.includes("/artifacts")) return { data: waiting ? [] : [
+      { id: imageId, session_id: path.split("/")[4], turn_id: turnId, path: "/workspace/outputs/chart.png", size_bytes: png.length },
+      { id: fileId, session_id: path.split("/")[4], turn_id: turnId, path: "/workspace/outputs/report.txt", size_bytes: 14 },
+    ], has_more: false };
+    if (args[0] === "GET") return { ...value, status: waiting ? "requires_action" : "idle" };
+    return value;
+  };
+  let worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  worker.receive("cli_0123456789abcdef", f.message);
+  await worker.tick();
+  assert.equal(uploads.length, 1, "QR is visible while waiting for the user");
+  assert.ok(f.sent.some((row) => row.data.msg_type === "interactive" && row.data.content.includes("https://open.feishu.cn/page/cli?user_code=test-code")), "authorization link stays visible on the waiting card");
+  assert.equal(f.sent.filter((row) => row.data.msg_type === "image").length, 1);
+  const originalReply = f.channel.rawClient.im.message.reply;
+  let lost = false;
+  f.channel.rawClient.im.message.reply = async (payload) => {
+    const result = await originalReply(payload);
+    if (payload.data.msg_type === "file" && !lost) { lost = true; throw new Error("lost response"); }
+    return result;
+  };
+  waiting = false;
+  const put = f.store.put;
+  let interrupted = false;
+  f.store.put = (kind, row) => {
+    if (!interrupted && kind === "feishu_outbound" && row.media?.name === "chart.png") {
+      interrupted = true;
+      throw new Error("injected persistence failure");
+    }
+    return put(kind, row);
+  };
+  await worker.tick();
+  assert.equal(interrupted, true);
+  assert.equal(f.store.list("feishu_outbound").filter((row) => row.payload === "" && !row.media).length, 0, "no partial empty reply survives the failed transaction");
+  f.store.put = put;
+  worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  await worker.tick();
+  assert.equal(uploads.length, 3);
+  assert.deepEqual(uploads.map((row) => row.type), ["image", "image", "file"]);
+  const pending = f.store.list("feishu_outbound").find((row) => row.media?.name === "report.txt");
+  assert.equal(pending.state, "queued");
+  assert.equal(pending.uploaded_media.msg_type, "file");
+  f.store.put("feishu_outbound", { ...pending, next_at: 0 });
+  worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  await worker.tick();
+  await worker.tick();
+  assert.equal(uploads.length, 3, "restart reuses the persisted upload key");
+  const sends = f.sent.filter((row) => row.data.msg_type === "file");
+  assert.equal(sends.length, 2);
+  assert.equal(sends[0].data.uuid, sends[1].data.uuid);
+  assert.equal(sends[0].data.content, sends[1].data.content);
+  assert.equal(f.store.get("feishu_outbound", pending.id).state, "delivered");
+  assert.equal(f.store.list("feishu_outbound").filter((row) => row.media).length, 3);
+  const publicRows = await f.api("GET", "/app/feishu/deliveries");
+  assert.ok(publicRows.every((row) => !row.media && !row.uploaded_media));
+});
+
+test("media limits apply to streamed bytes and active formats are never classified as images", async () => {
+  const { imageMime, readMediaBytes, maxMediaBytes, qrImages } = await import("../shared/media.mjs");
+  assert.equal(imageMime(Buffer.from('<svg onload="alert(1)"/>')), "");
+  assert.equal(imageMime(Buffer.from("RIFFxxxxFAKE")), "");
+  await assert.rejects(readMediaBytes(new Response(new Uint8Array(maxMediaBytes + 1))), RangeError);
+  assert.deepEqual(qrImages("![external](https://evil.example/image.png)"), []);
+  const transport = feishuOperations({ request: async ({ data }) => {
+    assert.equal(data.file_name, "picture.svg");
+    return { code: 0, data: { file_key: "file-svg" } };
+  } });
+  assert.equal((await transport.upload(Buffer.from("<svg/>"), "picture.svg")).msg_type, "file");
+});
+
+
+test("Feishu SDK uploads multipart bytes and preserves definite rejection and retryable errors", async (t) => {
+  const { createServer } = await import("node:http");
+  const { Client } = await import("@larksuiteoapi/node-sdk");
+  let code = 0, status = 200;
+  const server = createServer(async (req, res) => {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    res.setHeader("Content-Type", "application/json");
+    if (req.url.includes("/auth/")) return res.end(JSON.stringify({ code: 0, tenant_access_token: "fixture-token", app_access_token: "fixture-token", expire: 7200 }));
+    assert.equal(req.url, "/open-apis/im/v1/files");
+    assert.match(req.headers["content-type"], /multipart\/form-data; boundary=/);
+    assert.ok(Buffer.concat(chunks).includes(Buffer.from("binary-file-content")));
+    res.statusCode = status;
+    res.end(JSON.stringify({ code, msg: "credential-must-not-leak", data: code === 0 ? { file_key: "uploaded-file" } : undefined }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const client = new Client({ appId: "fixture-app", appSecret: "fixture-secret", domain: `http://127.0.0.1:${server.address().port}`, logger: { error() {}, warn() {}, info() {}, debug() {}, trace() {} } });
+  const upload = () => feishuOperations(client).upload(Buffer.from("binary-file-content"), "report.txt");
+  assert.equal((await upload()).msg_type, "file");
+  code = 99991672;
+  await assert.rejects(upload(), (error) => error.status === 422 && !error.message.includes("credential-must-not-leak"));
+  code = 99991400; status = 400;
+  await assert.rejects(upload(), { status: 503 });
+  code = 0; status = 503;
+  await assert.rejects(upload(), { status: 503 });
+  const disconnected = feishuOperations({ request: async () => { throw new Error("private-network-data"); } });
+  await assert.rejects(disconnected.upload(Buffer.from("file"), "file.txt"), (error) => error.status === 503 && !error.message.includes("private-network-data"));
+});

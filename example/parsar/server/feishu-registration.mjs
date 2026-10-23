@@ -1,3 +1,5 @@
+import QRCode from "qrcode";
+import { qrImagePattern } from "../shared/media.mjs";
 import { AppError, uuid, text } from "./store.mjs";
 
 // The SDK registerApp helper runs an in-memory polling loop and cannot resume a
@@ -9,6 +11,7 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
     id: row.id,
     status: row.status,
     verification_url: row.verification_url,
+    qr_url: `/app/feishu/provision/${row.id}/qrcode`,
     expires_at: row.expires_at,
     interval: row.interval,
     error: row.error,
@@ -46,6 +49,14 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
     return value;
   };
   return async (method, path, body) => {
+    const qrId = path.match(qrImagePattern)?.[1];
+    if (method === "GET" && qrId && uuid.test(qrId)) {
+      const row = store.get("feishu_registration", qrId);
+      if (!row) throw new AppError(404, "注册会话不存在。");
+      if (row.status !== "pending" || row.expires_at <= Date.now())
+        throw new AppError(410, "授权二维码已失效，请重新发起注册。");
+      return QRCode.toBuffer(row.verification_url, { width: 320, margin: 4 });
+    }
     const id = path.match(/^\/app\/feishu\/provision\/([a-f0-9-]{36})$/)?.[1];
     if (!id || !uuid.test(id)) throw new AppError(404, "Not found.");
     if (method !== "POST" || !["begin", "poll"].includes(body.action))
