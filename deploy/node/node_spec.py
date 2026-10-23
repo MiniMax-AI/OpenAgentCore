@@ -77,7 +77,7 @@ def validate(data, args):
         raise SpecificationError(PUBLIC_URL_CHANGED)
     try:
         provider, spec = data["provider"], data["specification"]
-        if (provider not in ("docker", "microsandbox") or data["installation_id"] != args.installation_id
+        if (_CONTRACT["providers"].get(provider, {}).get("mode") != "nodes" or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
                 or set(spec) - {"workspace"} != {"resources"}):
@@ -148,12 +148,10 @@ def fetch(args, token, retained, open_request, allow_enrollment=False, generatio
     return data
 
 
-def verify_provider(stored, configuration, runtime_image):
+def verify_provider(stored, configuration):
     spec, provider = configuration["specification"], configuration["provider"]
     if (stored.get("specification") != spec or stored.get("provider") != provider
             or stored.get("installation_id") != configuration["installation_id"]
             or stored.get("generation") != configuration["generation"]
             or stored.get("core_url") != configuration["core_url"] + "/api/v1"):
         raise SpecificationError("Retained node configuration differs from Core; preserve its state")
-    if provider == "docker" and stored.get("native", {}).get("image") != runtime_image:
-        raise SpecificationError("Retained Docker image differs; preserve the node and inspect its configuration")

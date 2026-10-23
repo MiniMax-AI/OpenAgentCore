@@ -31,7 +31,7 @@ class HelperTransferTests(unittest.TestCase):
             self.assertEqual(helper.read_bytes(), captured)
             self.assertEqual(stat.S_IMODE(helper.stat().st_mode), 0o600)
             with zipfile.ZipFile(helper) as archive:
-                self.assertEqual(set(archive.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"})
+                self.assertEqual(set(archive.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py"})
 
     @unittest.skipUnless(hasattr(os, "fork") and os.geteuid() == 0, "requires a disposable Linux root test environment")
     def test_real_service_uid_cannot_read_private_download_but_can_install_snapshot(self):
