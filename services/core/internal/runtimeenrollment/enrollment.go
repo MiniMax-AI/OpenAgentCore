@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -32,9 +34,7 @@ func EnrollmentHandler(s EnrollmentStore) http.Handler {
 			fail(http.StatusUnauthorized)
 			return
 		}
-		var input struct {
-			EnvironmentID string `json:"environment_id"`
-		}
+		var input machineapi.EnrollRequest
 		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096))
 		decoder.DisallowUnknownFields()
 		if len(r.URL.Query()) != 0 || decoder.Decode(&input) != nil || input.EnvironmentID == "" || decoder.Decode(new(any)) != io.EOF {
@@ -54,12 +54,7 @@ func EnrollmentHandler(s EnrollmentStore) http.Handler {
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("Cache-Control", "no-store")
-			_ = json.NewEncoder(w).Encode(struct {
-				DeviceID           string `json:"device_id"`
-				SessionID          string `json:"session_id"`
-				EnvironmentID      string `json:"environment_id"`
-				WorkspaceDirectory string `json:"workspace_directory"`
-			}{binding.DeviceID, binding.SessionID, binding.EnvironmentID, binding.WorkspaceDirectory})
+			_ = json.NewEncoder(w).Encode(machineapi.Enrollment{DeviceID: binding.DeviceID, SessionID: binding.SessionID, EnvironmentID: binding.EnvironmentID, WorkspaceDirectory: binding.WorkspaceDirectory})
 		}
 	})
 }

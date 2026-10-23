@@ -1,10 +1,12 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: f0b384850366cbbbe9a868c018963bd446b052432ed1617285f8e8bcf7c1569c
+source_hash: c5fbb966d2d68ba4c0b08cd47d4e09da58f03e9fd271f3998b7ec6f214510422
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装程序。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
+
+每个请求和响应体都是 `internal/machineapi/machineapi.go` 中的类型，节点配置除外：它的 `specification` 是[沙箱 Provider 协议](../../../docs/zh/sandbox-provider.md)中的类型。
 
 ## 路由 {#routes}
 

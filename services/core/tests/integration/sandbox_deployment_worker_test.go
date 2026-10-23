@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
@@ -62,7 +64,7 @@ func TestSandboxDeploymentWorkerActivatesWithoutRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodeID := uuid.NewString()
-	if _, err := deployments.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Remote", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}); err != nil {
+	if _, err := deployments.Enroll(t.Context(), token, machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Remote", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}); err != nil {
 		t.Fatal(err)
 	}
 	connect := func() {

@@ -5,10 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/google/uuid"
 )
 
-func environmentRuntimeFixture(t *testing.T) (root, workspace, credential string, bound environmentEnrollment) {
+func environmentRuntimeFixture(t *testing.T) (root, workspace, credential string, bound machineapi.Enrollment) {
 	t.Helper()
 	base := t.TempDir()
 	root, workspace = filepath.Join(base, "private"), filepath.Join(base, "workspace")
@@ -26,7 +28,7 @@ func environmentRuntimeFixture(t *testing.T) (root, workspace, credential string
 	for _, name := range []string{"OAC_RUNTIME_ENVIRONMENT_ID", "OAC_RUNTIME_SESSION_ID"} {
 		t.Setenv(name, "")
 	}
-	return root, workspace, credential, environmentEnrollment{uuid.NewString(), uuid.NewString(), uuid.NewString(), "/workspace"}
+	return root, workspace, credential, machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}
 }
 
 func TestBindEnvironmentRuntimeUsesCanonicalOperatorWorkspace(t *testing.T) {

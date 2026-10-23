@@ -7,9 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"io"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -48,35 +49,6 @@ type Health struct {
 	EffectiveCPUCores    *float64                   `json:"effective_cpu_cores"`
 	AvailableMemoryBytes *int64                     `json:"available_memory_bytes,omitempty"`
 	AvailableDiskBytes   *int64                     `json:"available_disk_bytes,omitempty"`
-}
-
-type EnrollmentRequest struct {
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	NodeID               string `json:"node_id"`
-	Credential           string `json:"credential"`
-	Name                 string `json:"name"`
-	Provider             string `json:"provider"`
-	BackendFingerprint   string `json:"backend_fingerprint"`
-	// The retained Core origin; Core refuses an enrollment whose address is not its public URL.
-	CoreURL string `json:"core_url"`
-	// The host measurements of Health. Core derives from them each limit the enrollment token leaves unset.
-	CPUCount           *int64   `json:"cpu_count,omitempty"`
-	EffectiveCPUCores  *float64 `json:"effective_cpu_cores,omitempty"`
-	TotalMemoryBytes   *int64   `json:"total_memory_bytes,omitempty"`
-	AvailableDiskBytes *int64   `json:"available_disk_bytes,omitempty"`
-}
-
-type EnrollmentResponse struct {
-	MaxActive            int    `json:"max_active"`
-	MaxRetained          int    `json:"max_retained"`
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	Connected            bool   `json:"connected,omitempty"`
-	ProviderReady        bool   `json:"provider_ready,omitempty"`
-	NodeID               string `json:"node_id"`
-	InstallationID       string `json:"installation_id"`
-	Provider             string `json:"provider"`
 }
 
 type request struct {

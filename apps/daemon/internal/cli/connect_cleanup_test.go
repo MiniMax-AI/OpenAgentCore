@@ -1,7 +1,5 @@
 package cli
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -9,15 +7,17 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 	"github.com/gorilla/websocket"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func TestReconnectWaitsForConfirmedRouterCleanup(t *testing.T) {
@@ -123,7 +123,7 @@ func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
 	})
 	finished := make(chan error, 1)
 	go func() {
-		boot := &transport.BootstrapResponse{HeartbeatSeconds: 60}
+		boot := &machineapi.BootstrapResponse{HeartbeatSeconds: 60}
 		if suspend {
 			control := &suspendControl{signal: make(chan os.Signal, 1)}
 			finished <- runSuspendLoop(ctx, dial, registry, boot, agentCLIDiscovery{}, control)

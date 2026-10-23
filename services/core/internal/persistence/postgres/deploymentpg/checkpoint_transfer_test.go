@@ -3,10 +3,12 @@ package deploymentpg_test
 import (
 	"encoding/json"
 	"errors"
-	"github.com/google/uuid"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
@@ -16,7 +18,7 @@ import (
 
 var checkpointClass = sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-archive", ExecutionClass: "fixture-machine"}
 
-func readyCheckpointNode(t *testing.T, f fixture, node deployment.Enrollment, view deployment.View, compatibility sandbox.CheckpointCompatibility) {
+func readyCheckpointNode(t *testing.T, f fixture, node machineapi.NodeEnrollment, view deployment.View, compatibility sandbox.CheckpointCompatibility) {
 	t.Helper()
 	connection := uuid.NewString()
 	epoch, err := f.adapter.OwnerEpoch(t.Context())
@@ -31,7 +33,7 @@ func readyCheckpointNode(t *testing.T, f fixture, node deployment.Enrollment, vi
 	}
 }
 
-func suspendedCheckpointOwner(t *testing.T, f fixture, changes *deployment.ExecutionOperations, installation string, node deployment.Enrollment, view deployment.View) deployment.Allocation {
+func suspendedCheckpointOwner(t *testing.T, f fixture, changes *deployment.ExecutionOperations, installation string, node machineapi.NodeEnrollment, view deployment.View) deployment.Allocation {
 	t.Helper()
 	owner := runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation)
 	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='suspended',compute_state='{"snapshot":{"ID":"snapshot","Compatibility":{"artifact_domain":"fixture-archive","execution_class":"fixture-machine"}}}',compute_retained_until=clock_timestamp()+interval '24 hours',compute_wake_requested=true WHERE id=$1`, owner.ID); err != nil {

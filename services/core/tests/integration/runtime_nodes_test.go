@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -233,7 +235,7 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
+	input := machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
 	if _, err := nodes.Enroll(t.Context(), token, input); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("mixed provider accepted", err)
 	}

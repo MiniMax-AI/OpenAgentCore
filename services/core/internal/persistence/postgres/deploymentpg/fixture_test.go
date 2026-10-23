@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
@@ -117,13 +119,13 @@ func (f fixture) initialize(t *testing.T, changes *deployment.ExecutionOperation
 
 // enroll issues an enrollment token and enrolls a node on the current
 // generation with it.
-func (f fixture) enroll(t *testing.T, view deployment.View, capacity deployment.Capacity) deployment.Enrollment {
+func (f fixture) enroll(t *testing.T, view deployment.View, capacity deployment.Capacity) machineapi.NodeEnrollment {
 	t.Helper()
 	token, err := f.service.CreateEnrollment(admin(t), deployment.EnrollmentLimits{MaxActive: &capacity.MaxActive, MaxRetained: &capacity.MaxRetained})
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := deployment.Enrollment{NodeID: uuid.NewString(), Name: "fixture node", Credential: strings.Repeat("n", 64), Provider: view.Provider,
+	input := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "fixture node", Credential: strings.Repeat("n", 64), Provider: view.Provider,
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: fixturePublicURL}
 	if _, err := f.service.Enroll(t.Context(), token.Token, input); err != nil {
 		t.Fatal(err)

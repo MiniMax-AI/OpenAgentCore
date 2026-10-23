@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
@@ -159,7 +161,7 @@ func TestSandboxSwitchRetiresNodesAndEnrollment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
+	node := machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Name: "Machine", Provider: "docker", Credential: strings.Repeat("c", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
 	if _, err := nodes.Enroll(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +361,7 @@ func TestUnspecifiedNodeDeploymentRejectedWithoutMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: spec.Digest("docker"), NodeID: uuid.NewString(), Name: "Legacy", Provider: "docker", Credential: strings.Repeat("l", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
+	node := machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: spec.Digest("docker"), NodeID: uuid.NewString(), Name: "Legacy", Provider: "docker", Credential: strings.Repeat("l", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
 	if _, err := nodes.Enroll(t.Context(), token, node); err != nil {
 		t.Fatal(err)
 	}

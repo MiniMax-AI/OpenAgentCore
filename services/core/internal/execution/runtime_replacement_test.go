@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
@@ -347,7 +349,7 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 		if err != nil {
 			t.Fatal(err)
 		}
-		node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "replacement node", Credential: strings.Repeat("n", 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: fixturePublicURL}
+		node := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "replacement node", Credential: strings.Repeat("n", 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: fixturePublicURL}
 		if _, err = service.Enroll(t.Context(), token.Token, node); err != nil {
 			t.Fatal(err)
 		}

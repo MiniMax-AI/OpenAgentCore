@@ -15,6 +15,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 )
 
 func TestNativeStartInterruptHelper(t *testing.T) {
@@ -39,7 +41,7 @@ func TestNativeStartInterruptCancelsEnrollment(t *testing.T) {
 		if err := readNativeJSON(filepath.Join(root, "daemon", "installation.json"), &config); err != nil {
 			return
 		}
-		_ = json.NewEncoder(w).Encode(environmentEnrollment{
+		_ = json.NewEncoder(w).Encode(machineapi.Enrollment{
 			DeviceID:           "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
 			SessionID:          "bbbbbbbb-1111-4111-8111-bbbbbbbbbbbb",
 			EnvironmentID:      config.Environment,
