@@ -4,7 +4,7 @@ title: "Machine connection API"
 
 Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons and the self-hosted installer. Each route accepts only the credential listed for it, never the Core key or a Project API key, and a console sign-in grants nothing here. The reverse proxy sends `/api/v1` directly to Core; Web never serves these routes.
 
-Every request and response body is a type of `internal/machineapi/machineapi.go`, except the node configuration, whose `specification` is the [Sandbox Provider protocol](../../docs/sandbox-provider.md) type.
+Every request body and successful response body is a type of `internal/machineapi/machineapi.go`, except the node configuration, whose `specification` is the [Sandbox Provider protocol](../../docs/sandbox-provider.md) type. Each route section below lists its errors.
 
 ## Routes
 

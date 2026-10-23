@@ -45,6 +45,7 @@ export const sandbox = {
   "Cancel editing": "取消编辑",
   "Replace saved key": "替换已保存的密钥",
   "Keep saved key": "保留已保存的密钥",
+  "Provider default": "服务商默认值",
   "Core is preparing the target configuration.": "Core 正在准备目标配置。",
   "Core reports no active preparation. This does not mean every node is ready.": "Core 报告当前没有正在进行的准备任务。这不代表所有节点都已就绪。",
   "Rollout state is unconfirmed. These are the last confirmed observations.": "配置更新状态尚未确认。当前显示的是上次确认的状态。",

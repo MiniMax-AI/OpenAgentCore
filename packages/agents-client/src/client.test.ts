@@ -136,7 +136,6 @@ function runtimeObservation(overrides: Record<string, unknown> = {}): Record<str
     cpu: {
       usage_seconds_total: 0,
       capacity_cores: 2,
-     
       utilization_ratio: null,
     },
     memory: { usage_bytes: 0, limit_bytes: 1024 },

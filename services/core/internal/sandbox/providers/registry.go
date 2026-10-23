@@ -112,13 +112,6 @@ func (r *Registry) ValidateSpecification(kind string, s sandbox.DeploymentSpec) 
 	}
 	return s.ValidatePolicy(kind, a.Policy)
 }
-func (r *Registry) ValidateResources(kind string, s sandbox.Resources) error {
-	a, e := r.Lookup(kind)
-	if e != nil {
-		return e
-	}
-	return s.ValidatePolicy(kind, a.Policy)
-}
 
 // Describe derives the description once for both preview and persistence.
 // Its fingerprint identifies a namespace, never mutable capacity or a credential.

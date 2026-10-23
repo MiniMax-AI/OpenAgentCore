@@ -72,7 +72,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				{"public origin requirement", func() error { _, err := registry.RequiresPublicOrigin(kind); return err }},
 				{"normalize", func() error { _, err := registry.Normalize(selection); return err }},
 				{"specification", func() error { return registry.ValidateSpecification(kind, selection.DeploymentSpec) }},
-				{"resources", func() error { return registry.ValidateResources(kind, selection.Resources) }},
+
 				{"description", func() error { _, err := registry.Describe(kind, uuid.NewString()); return err }},
 				{"decode input", func() error { _, err := registry.DecodeInput(kind, nil, nil); return err }},
 				{"encode", func() error { _, err := registry.Encode(kind, nil); return err }},

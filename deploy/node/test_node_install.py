@@ -352,6 +352,10 @@ class NodeInstallTests(unittest.TestCase):
         message = str(installer.registration_failure(b"node enrollment rejected (HTTP 409 sandbox_node_host_unmeasured)\n"))
         self.assertIn("explicit limits", message)
 
+    def test_hosts_cover_exactly_the_node_providers(self):
+        providers = installer.node_spec._CONTRACT["providers"]
+        self.assertEqual(set(installer.HOSTS), {name for name, rules in providers.items() if rules["mode"] == "nodes"})
+
     def test_changed_public_url_clears_unregistered_state_for_a_new_command(self):
         # Core refused the address before consuming the token, so it has no record of this node.
         self.register_stderr = b"node enrollment rejected (HTTP 409 sandbox_node_address_mismatch)\n"

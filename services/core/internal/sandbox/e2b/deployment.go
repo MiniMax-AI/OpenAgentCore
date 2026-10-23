@@ -39,11 +39,11 @@ func Setup() sandbox.SetupDeclaration {
 	}
 }
 
-// fieldNames lists the declared secret or non-secret field names.
-func fieldNames(secret bool) []string {
+// fieldNames lists the declared secret or non-secret field names, discovered ones only when asked.
+func fieldNames(secret, discovered bool) []string {
 	var names []string
 	for _, f := range Setup().Fields {
-		if f.Secret == secret {
+		if f.Secret == secret && (discovered || !f.Discovered) {
 			names = append(names, f.Name)
 		}
 	}

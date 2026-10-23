@@ -37,7 +37,8 @@ function serviceOf(provider: SandboxProvider, configuration: Values): number {
 /** The values of the connection fields a service sets, empty for a custom one. */
 function serviceValues(provider: SandboxProvider, index: number): Values {
   const setup = sandboxProviderSetup(provider);
-  return Object.fromEntries(setup.fields.filter((field) => !field.secret && !field.discovered).map((field) => [field.name, setup.presets[index]?.values[field.name] ?? ""]));
+  const values: Readonly<Record<string, string>> | undefined = setup.presets[index]?.values;
+  return Object.fromEntries(setup.fields.filter((field) => !field.secret && !field.discovered).map((field) => [field.name, values?.[field.name] ?? ""]));
 }
 
 const MIB = 2 ** 20;
@@ -313,7 +314,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
         <dl className="wizard-review">
           <div><dt>{t("Sandboxes run on")}</dt><dd>{where === "direct" ? setup?.label : `${t("Own machines")} · ${sandboxProviderLabel(provider ?? "", locale)}`}</dd></div>
           <div><dt>{t("Each sandbox")}</dt><dd>{sized ? sizeLabel(resources) : t("From the selected configuration")}{policy?.disk ? <span className="wizard-review-sub">{diskLabel(resources)}</span> : null}</dd></div>
-          {fields.filter((field) => !field.secret).map((field) => <div key={field.name}><dt>{text(field.label)}</dt><dd><code>{valueOf(field) || "—"}</code></dd></div>)}
+          {fields.filter((field) => !field.secret).map((field) => <div key={field.name}><dt>{text(field.label)}</dt><dd>{valueOf(field) ? <code>{valueOf(field)}</code> : t("Provider default")}</dd></div>)}
           {secretFields.length > 0 && editing ? <div><dt>{t("Credential")}</dt><dd>{t(replacementRequested ? "Replace saved key" : "Keep saved key")}</dd></div> : null}
           <div>
             <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
@@ -339,9 +340,11 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             {editing ? <button className="wizard-link" type="button" onClick={() => setReplacementRequested(false)}>{t("Keep saved key")}</button> : null}
           </p>
         ) : null}
-        <button className="wizard-link" type="button" onClick={() => setStep("advanced")}>
-          <SlidersHorizontal size={14} aria-hidden="true" />{t("Advanced settings")}
-        </button>
+        {sized ? (
+          <button className="wizard-link" type="button" onClick={() => setStep("advanced")}>
+            <SlidersHorizontal size={14} aria-hidden="true" />{t("Advanced settings")}
+          </button>
+        ) : null}
         <div className="wizard-nav">
           <button className="button ghost" type="button" onClick={back}><ArrowLeft size={14} aria-hidden="true" />{t("Back")}</button>
           <button className="button primary" type="button" disabled={!ready} onClick={() => void save()}>
@@ -498,7 +501,7 @@ function DiscoveredField({ id, provider, field, label, help, request, value, edi
     // The page remounts this field when the request changes.
   }, [picks, retry]);
 
-  if (!request && editing && value) {
+  if (!request && editing) {
     return <Field id={id} label={label} help={help} error={error}><input id={id} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="off" spellCheck={false} /></Field>;
   }
   const choose = (depth: number, option: SandboxConfigurationOption | undefined) => {

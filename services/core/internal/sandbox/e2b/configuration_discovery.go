@@ -19,7 +19,7 @@ func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input san
 		APIKey string `json:"api_key"`
 	}
 	path := input.Query.Path
-	if sandbox.DecodeConfigurationObject(input.Configuration, &connection, "api_url", "domain") != nil || sandbox.DecodeConfigurationObject(input.Credential, &credential, "api_key") != nil || len(path) > 1 {
+	if sandbox.DecodeConfigurationObject(input.Configuration, &connection, fieldNames(false, false)...) != nil || sandbox.DecodeConfigurationObject(input.Credential, &credential, fieldNames(true, false)...) != nil || len(path) > 1 {
 		return sandbox.ConfigurationOptions{}, sandbox.ErrInvalid
 	}
 	binary, _, err := InstalledPaths(paths)
@@ -39,6 +39,12 @@ func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input san
 		}
 		return sandbox.ConfigurationOptions{}, sandbox.ErrConfigurationUnconfirmed
 	}
+	return discoveryOptions(out, template), nil
+}
+
+// discoveryOptions maps templates to incomplete options and the ready builds of
+// the chosen template to complete ones.
+func discoveryOptions(out Response, template string) sandbox.ConfigurationOptions {
 	options := []sandbox.ConfigurationOption{}
 	for _, t := range out.Templates {
 		label := t.ID
@@ -50,5 +56,5 @@ func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input san
 	for _, b := range out.Builds {
 		options = append(options, sandbox.ConfigurationOption{Value: template + ":" + b.ID, Label: b.ID, Resources: &sandbox.Resources{CPUs: b.CPUs, MemoryMiB: b.MemoryMiB}, Complete: true})
 	}
-	return sandbox.ConfigurationOptions{Options: options}, nil
+	return sandbox.ConfigurationOptions{Options: options}
 }

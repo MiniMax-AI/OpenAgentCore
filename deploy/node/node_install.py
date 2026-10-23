@@ -146,6 +146,8 @@ def preflight(provider):
     """Check host access after dropping to the node service account."""
     if sys.version_info < (3, 9) or platform.system() != "Linux" or platform.machine() not in ("x86_64", "amd64") or os.getuid() == 0:
         raise InstallError("Run with Python 3.9+ as a non-root user on Linux amd64")
+    if provider not in HOSTS:
+        raise InstallError("This installer has no host support for the " + provider + " provider")
     HOSTS[provider].preflight(SELF)
 
 

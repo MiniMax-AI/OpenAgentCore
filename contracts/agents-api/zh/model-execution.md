@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 1ceb0a7799a57aa1e53b6354b0c4c6acd1002e328430c7a98dd0713f9f7a334b
+source_hash: 2ac821cd3d4635e6780e3cf517298225036a6d24317d1375bfdc44789959f55a
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -132,7 +132,7 @@ Core 会在写入 Session 前验证解析后的配置，并将其冻结在 Sessi
 | `PUT /core/v1/harnesses/{harness}/model-configuration` | 使用共享的提供商和原生参数校验器替换 `{model_provider, model, harness_config}` |
 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | 移除配置；幂等，返回 204 |
 
-PUT 要求提供 `model` 和完整的 `model_provider`；`harness_config` 默认为 `{}`。读取操作返回 `model`、`harness_config`、安全的 `model_provider` 视图（`protocol`、`base_url`、可选的 token 限制和 `api_key_configured`）、observations 和 `updated_at`，绝不返回密钥。该配置包使用自己的加密用途加密并绑定到 Harness。每次写入都会记录一条管理员审计条目（`resource_type: deployment_model_provider`，Harness 作为 `resource_id`，操作为 `set` 或 `delete`，`project_id` 为 null），且不包含密钥。在其他加密密钥下密封的默认值会安全失败：读取该默认值以及需要它的 Session 创建都会返回 500 `internal_error`，直到重新设置默认值。
+PUT 要求提供 `model` 和完整的 `model_provider`；`harness_config` 默认为 `{}`。读取操作返回 `model`、`harness_config`、安全的 `model_provider` 视图（`protocol`、`base_url`、可选的 token 限制和 `api_key_configured`）、observations 和 `updated_at`，绝不返回密钥。只有提供商密钥被加密，使用自己的加密用途并绑定到 Harness；其他字段是明文列。每次写入都会记录一条管理员审计条目（`resource_type: deployment_model_provider`，Harness 作为 `resource_id`，操作为 `set` 或 `delete`，`project_id` 为 null），且不包含密钥。在其他加密密钥下密封的默认值会安全失败：读取该默认值以及需要它的 Session 创建都会返回 500 `internal_error`，直到重新设置默认值。
 
 创建 Session 时，Core 会解密解析后 Harness 的默认值，并像处理其他配置包一样将其冻结在 Session 的加密快照中，因此更改或移除默认值绝不会影响现有 Session。execution-configuration 读取结果会显示冻结的安全视图，其来源为 `deployment`。提供商快照缺失或无效时会安全失败，并且不会回退到其他模型或提供商。
 
