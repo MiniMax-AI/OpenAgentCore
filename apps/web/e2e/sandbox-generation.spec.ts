@@ -212,7 +212,7 @@ test("a different E2B team leaves the committed configuration intact and require
   await editE2B(page, "fixture-other-team-key");
   const rejected = await saveConfiguration(page);
   expect(rejected.response.status()).toBe(409);
-  await expect(page.locator(".wizard-rejection")).toContainText("Reset before changing teams.");
+  await expect(page.locator(".wizard-rejection")).toContainText("Reset before changing accounts.");
   await expect(page.locator(".wizard-rejection")).toContainText("the saved configuration is unchanged");
   expect(await deploymentRead(page)).toEqual(before);
   await expect(page.getByRole("button", { name: "Save configuration", exact: true })).toBeDisabled();

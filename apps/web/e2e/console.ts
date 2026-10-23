@@ -45,7 +45,7 @@ export async function openConsole(page: Page, request: APIRequestContext, hash =
 /** Selects the ready build returned by the E2B discovery fixture. */
 export async function selectFixtureE2BBuild(page: Page) {
   await page.getByLabel("API key").fill("fixture-private-key");
-  const template = page.getByLabel("Template", { exact: true });
+  const template = page.getByLabel("Template build");
   await template.first().selectOption("template");
   await template.nth(1).selectOption("template:94be54a1-138c-4f30-bc87-b13686272dbe");
 }
