@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: a09c99bf3ad9782ffbf3d9d2f4d6313f93f39ee92ea5b919635a96a70b490edd
+source_hash: d79690e618d82c6b858dc40342198fc5b091ee56505816f551da80d100ef2c2e
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -25,7 +25,7 @@ source_hash: a09c99bf3ad9782ffbf3d9d2f4d6313f93f39ee92ea5b919635a96a70b490edd
 | [仅空白消息文本](message-content.md) | 已准入；原样交付 | 已准入；原生会丢弃它，全空白消息变为 `(no content)` | 已拒绝 |
 | [消息图像](message-content.md#images) | PNG、JPEG data URL：所有位置已验证；其他 data URL：已准入；远程 URL：已拒绝 | PNG、JPEG data URL：所有位置已验证；远程 URL 及 GIF、WebP data URL：已准入 | 已拒绝 |
 | `reasoning.effort` | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 | `low`、`medium`、`high`、`xhigh`、`max`：已准入 | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 |
-| `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | 已拒绝 | 已拒绝 |
+| `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | `auto`：已准入 | 已拒绝 |
 | 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`：已准入 | 已拒绝 | 已拒绝 |
 | 非 `medium` 的 `text.verbosity` | 已准入；由原生模型决定 | 已拒绝 | 已拒绝 |
 | [公开 token 用量](sessions-events.md) | 测量计数器 | Null | Null |

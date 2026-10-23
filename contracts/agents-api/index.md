@@ -94,6 +94,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Empty input returns 400 `invalid_request` with a generic message and a null param; the official response is `invalid_request_error` with param `input`.
 - Session usage is available as soon as every root Turn has settled; official reads lag by seconds.
 - U+0000 in Harness output, such as command output, reads as U+FFFD; the official service keeps it.
+- A `reasoning` Item carries what the Harness shows of its native reasoning: its native summary when it produces one, otherwise its native reasoning text, such as Codex raw reasoning or the thinking text the model API returns to Claude Code. Each native part is one `summary_text` part, and native reasoning without text is not reported, so Claude Code with the model provider's `thinking.display` `omitted` reports none. Codex streams the first native channel an item delivers, its summary or its raw reasoning text.
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 
@@ -123,7 +124,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Execution and history**
 
-- Codex reasoning summaries are requested but not projected as `reasoning` Items, and the stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
+- The stream does not emit Environment `pending` or `ready` events, or every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.

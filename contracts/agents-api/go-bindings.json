@@ -206,7 +206,7 @@
     "order": ["id", "turn_id", "type", "status", "role", "phase", "content", "command", "cwd", "duration_ms", "exit_code", "name", "call_id", "server_label", "arguments", "output", "error", "action", "agent_id", "sender_agent_id", "recipient_agent_id", "recipient_agent_ids", "model", "reasoning_effort", "summary"]
   },
   "ItemContent": {
-    "sources": ["#/components/schemas/MessageContentResource", "#/components/schemas/EncryptedContentResource"],
+    "sources": ["#/components/schemas/MessageContentResource", "#/components/schemas/EncryptedContentResource", "#/components/schemas/SummaryTextResource"],
     "fields": {
       "image_url": {"type": "string"}
     }

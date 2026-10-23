@@ -52,6 +52,7 @@ type bridgeEvent struct {
 	Code        string                              `json:"code"`
 	ItemID      string                              `json:"item_id"`
 	Message     *proto.OutputMessagePayload         `json:"message"`
+	Reasoning   *proto.ReasoningPayload             `json:"reasoning"`
 	Call        *proto.FunctionCallPayload          `json:"call"`
 	Withdrawn   *proto.FunctionCallWithdrawnPayload `json:"withdrawn"`
 	CallID      string                              `json:"call_id"`

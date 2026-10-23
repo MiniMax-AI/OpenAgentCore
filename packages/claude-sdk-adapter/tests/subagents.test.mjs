@@ -22,7 +22,9 @@ test("native child input owns its Turn and stable creation time; completion is n
   assert.equal(facts[0].fact.native_created_at, 1700000000);
   assert.equal(facts[0].fact.parent_turn_id, "root-turn");
   assert.equal(facts.filter(e => e.type === "subagent_turn").length, 2);
-  assert.deepEqual(facts.filter(e => e.type === "subagent_item").map(e => e.fact.kind), ["message", "reasoning", "output_message"]);
+  const kinds = history => history.filter(e => e.type === "subagent_item").map(e => e.fact.kind);
+  assert.deepEqual(kinds(projectHistory("root", root, children, { reasoning: true })), ["message", "reasoning", "output_message"]);
+  assert.deepEqual(kinds(facts), ["message", "output_message"]);
   assert.equal(facts.find(e => e.type === "subagent_turn" && e.fact.status === "completed").fact.completed_at_ms, 1700000000030);
   assert(!facts.some(e => e.type === "subagent_lifecycle"));
   assert.deepEqual(facts, projectHistory("root", structuredClone(root), structuredClone(children)));

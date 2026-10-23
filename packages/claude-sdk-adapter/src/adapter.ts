@@ -50,7 +50,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   const selected = [...(request.tool_search ? ["ToolSearch"] : []), ...(request.web_search === "live" ? ["WebSearch"] : [])];
   const declarations = request.workspace?.mcp ?? request.mcp_http_servers;
   const profile: MCPProfile | undefined = declarations === undefined ? undefined : new MCPProfile(declarations, names, id => subagents?.permitsActor(id) ?? id === undefined);
-  const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume, profile?.identities) : undefined;
+  const subagents = request.subagents ? new Subagents(request.cwd, request.subagents.max_concurrent, request.resume, profile?.identities, request.reasoning_summary) : undefined;
   const workspace = request.workspace === undefined ? undefined : new WorkspaceProfile(request.cwd, request.workspace, profile, subagents, request.web_search === "disabled");
   let commands = workspace ? new CommandObserver() : undefined;
   const observeSearch = workspace !== undefined || request.web_search === "live";
@@ -90,7 +90,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
   let failed = false;
   let cancellationFactsFailed = false;
   let structured = request.output_format ? new StructuredOutput() : undefined;
-  let messages = new MessageObserver();
+  let messages = new MessageObserver(request.reasoning_summary);
   let stream: ReturnType<typeof query> | undefined;
   let warm: WarmQuery | undefined;
   let nativeAlive = false;
@@ -170,7 +170,7 @@ export async function execute(request: Start | Prepare | ExecutorPrepare, emit: 
         turns.configure(stream,(input,output)=>{
           inputs=new Inputs(input);
           functions=new FunctionBridge(output);
-          messages=new MessageObserver();
+          messages=new MessageObserver(request.reasoning_summary);
           structured=request.output_format ? new StructuredOutput() : undefined;
           commands=workspace ? new CommandObserver() : undefined;
           searches=observeSearch ? new SearchObserver() : undefined;

@@ -14,7 +14,7 @@ func (s *Session) onAgentDelta(raw json.RawMessage) {
 	if !s.isRootTurn(p.ThreadID, p.TurnID) || p.Delta == "" || p.ItemID == "" {
 		return
 	}
-	_ = FoldDeltaIntoBuffer(s.bufs, "agent", p.ItemID, p.Delta)
+	_ = FoldDeltaIntoBuffer(s.bufs, p.ItemID, p.Delta)
 	seq := s.deltaSeq.Add(1)
 	env, err := proto.NewEnvelope(proto.TypeDelta, s.runID, proto.DeltaPayload{ItemID: p.ItemID, Delta: p.Delta, Sequence: seq})
 	if err != nil {
@@ -49,6 +49,10 @@ func (s *Session) onItemCompleted(raw json.RawMessage) {
 	// Record native application before observation backpressure can delay publication.
 	s.confirmFunctionResult(raw)
 	if !s.isRootTurn(p.ThreadID, p.TurnID) || p.Item.ID == "" {
+		return
+	}
+	if p.Item.Type == "reasoning" {
+		s.completeReasoning(p.Item)
 		return
 	}
 	envs, text, err := DispatchCompletedItem(s.runID, p.Item, s.bufs)

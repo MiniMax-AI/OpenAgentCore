@@ -86,8 +86,7 @@ type Session struct {
 	threadID   string
 	steering   steeringTurn
 
-	deltaSeq    atomic.Uint64
-	thinkingSeq atomic.Uint64
+	deltaSeq atomic.Uint64
 
 	bufs *ItemBuffers
 
@@ -99,6 +98,8 @@ type Session struct {
 	resumeUsageThreadID string
 	resumeUsageTotal    *TurnUsage
 	resolvedModel       string
+	// reasoningSummary reports that the Agent requested reasoning summaries.
+	reasoningSummary bool
 
 	finalTextMu sync.Mutex
 	finalText   string
@@ -125,8 +126,8 @@ func (s *Session) registerHandlers() {
 	rpc.OnNotification("item/completed", s.onItemCompleted)
 	rpc.OnNotification("item/agentMessage/delta", s.onAgentDelta)
 	rpc.OnNotification("item/commandExecution/outputDelta", s.onCommandOutput)
-	rpc.OnNotification("item/reasoning/textDelta", s.onReasoningDelta)
-	rpc.OnNotification("item/reasoning/summaryTextDelta", s.onReasoningDelta)
+	rpc.OnNotification("item/reasoning/textDelta", func(raw json.RawMessage) { s.onReasoningDelta("text", raw) })
+	rpc.OnNotification("item/reasoning/summaryTextDelta", func(raw json.RawMessage) { s.onReasoningDelta("summary", raw) })
 	rpc.OnNotification("thread/tokenUsage/updated", s.onUsageUpdated)
 	rpc.OnNotification("error", s.onErrorNotif)
 
@@ -143,21 +144,61 @@ func (s *Session) onTurnStarted(raw json.RawMessage) {
 	}
 }
 
-func (s *Session) onReasoningDelta(raw json.RawMessage) {
-	var p AgentMessageDeltaNotification
+// onReasoningDelta streams the first native channel a reasoning item delivers:
+// its summary, or the raw reasoning text of a model that has no summary. Each
+// native part is reported as its own part.
+func (s *Session) onReasoningDelta(channel string, raw json.RawMessage) {
+	var p ReasoningDeltaNotification
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return
 	}
-	if !s.isRootTurn(p.ThreadID, p.TurnID) || p.Delta == "" || p.ItemID == "" {
+	if !s.reasoningSummary || !s.isRootTurn(p.ThreadID, p.TurnID) || p.Delta == "" || p.ItemID == "" {
 		return
 	}
-	_ = FoldDeltaIntoBuffer(s.bufs, "reasoning", p.ItemID, p.Delta)
-	seq := s.thinkingSeq.Add(1)
-	env, err := proto.NewEnvelope(proto.TypeThinking, s.runID, proto.ThinkingPayload{Text: p.Delta, Sequence: seq})
-	if err != nil {
+	native := p.ContentIndex
+	if channel == "summary" {
+		native = p.SummaryIndex
+	}
+	stream, started := s.bufs.Reasoning[p.ItemID]
+	if started && stream.channel != channel {
 		return
 	}
-	s.trySend(env)
+	if started && stream.native != native {
+		stream.part++
+	}
+	stream.channel, stream.native = channel, native
+	s.bufs.Reasoning[p.ItemID] = stream
+	s.sendReasoning(p.ItemID, "in_progress", stream.part, p.Delta)
+}
+
+// completeReasoning ends a reasoning item. An item that streamed nothing is
+// reported whole from its completed body; one with no text is not reported.
+func (s *Session) completeReasoning(item ThreadItem) {
+	if !s.reasoningSummary {
+		return
+	}
+	_, streamed := s.bufs.Reasoning[item.ID]
+	delete(s.bufs.Reasoning, item.ID)
+	if !streamed {
+		part := 0
+		for _, text := range nativeReasoningParts(item) {
+			if text != "" {
+				s.sendReasoning(item.ID, "in_progress", part, text)
+				part++
+			}
+		}
+		if part == 0 {
+			return
+		}
+	}
+	s.sendReasoning(item.ID, "completed", 0, "")
+}
+
+func (s *Session) sendReasoning(id, status string, part int, delta string) {
+	env, err := proto.NewEnvelope(proto.TypeReasoning, s.runID, proto.ReasoningPayload{ID: id, Status: status, Index: part, Delta: delta})
+	if err == nil {
+		s.trySend(env)
+	}
 }
 
 func (s *Session) onTurnCompleted(raw json.RawMessage) {

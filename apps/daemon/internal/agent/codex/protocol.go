@@ -216,11 +216,10 @@ type ThreadItem struct {
 	ID   string `json:"id,omitempty"`
 
 	// agentMessage / reasoning
-	Phase       string   `json:"phase,omitempty"`
-	Text        string   `json:"text,omitempty"`
-	Summary     []string `json:"summary,omitempty"`
-	Content     []string `json:"content,omitempty"`
-	SummaryText string   `json:"summary_text,omitempty"`
+	Phase   string   `json:"phase,omitempty"`
+	Text    string   `json:"text,omitempty"`
+	Summary []string `json:"summary,omitempty"`
+	Content []string `json:"content,omitempty"`
 
 	// commandExecution
 	Command  string `json:"command,omitempty"`
@@ -283,7 +282,12 @@ type AgentMessageDeltaNotification struct {
 	Delta    string `json:"delta"`
 }
 
-type ReasoningDeltaNotification = AgentMessageDeltaNotification
+// ReasoningDeltaNotification is a summaryTextDelta (SummaryIndex) or a textDelta (ContentIndex).
+type ReasoningDeltaNotification struct {
+	AgentMessageDeltaNotification
+	SummaryIndex int `json:"summaryIndex"`
+	ContentIndex int `json:"contentIndex"`
+}
 
 type ThreadTokenUsageUpdatedNotification struct {
 	ThreadID   string     `json:"threadId"`

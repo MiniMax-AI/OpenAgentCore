@@ -122,6 +122,14 @@ func (s *session) runTurn(start startRequest, out chan<- proto.Envelope) {
 				break
 			}
 			emit(proto.TypeOutputMessage, message)
+		case "reasoning":
+			reasoning := event.Reasoning
+			if !start.ReasoningSummary || reasoning == nil || !reasoning.Valid() {
+				failure = fmt.Errorf("claudesdk: invalid reasoning observation")
+				s.invalidate()
+				break
+			}
+			emit(proto.TypeReasoning, reasoning)
 		case "function_call", "function_withdrawn", "function_applied":
 			if err := s.receiveFunction(event, start, emit); err != nil {
 				failure = err

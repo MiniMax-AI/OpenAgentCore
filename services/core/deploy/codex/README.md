@@ -23,7 +23,7 @@ The adapter applies Core's typed controls and opt-ins, described in the [Runtime
 - **`environment: none`.** The daemon forces `CODEX_EXEC_SERVER_URL=none` and confirms that Codex reports its `local` and `remote` environments as unknown before it starts or resumes a thread; a binary that cannot do this fails closed. The engine process runs on the bound device, which is not a user execution environment.
 - **Web search.** The control becomes Codex's `web_search` option (`disabled`, `cached` or `live`) with `tools.web_search` `context_size`, `allowed_domains` and `location`.
 - **Programmatic tool calling.** `enabled: true` turns on the native `code_mode` feature. An explicit disable turns off the native `code_mode`, `code_mode_only` and `code_mode_prewarm` features and checks managed requirements before a thread starts or resumes, rejecting a conflicting requirement.
-- **Reasoning, service tier and verbosity.** `reasoning.effort` and `reasoning.summary` become `model_reasoning_effort` and `model_reasoning_summary`, a non-`auto` service tier becomes `service_tier` and the text verbosity becomes `model_verbosity`.
+- **Reasoning, service tier and verbosity.** `reasoning.effort` and `reasoning.summary` become `model_reasoning_effort` and `model_reasoning_summary`, a null `reasoning.summary`, the official default, becomes `none` because Codex's own default depends on the model, a non-`auto` service tier becomes `service_tier` and the text verbosity becomes `model_verbosity`.
 - **Subagents.** Disabling Subagents turns off both native multi-agent feature generations, `multi_agent` and `multi_agent_v2`, overriding the operator's feature preferences.
 
 ## MCP servers

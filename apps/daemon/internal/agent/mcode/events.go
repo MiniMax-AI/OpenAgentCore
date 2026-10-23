@@ -41,7 +41,7 @@ func (s *Session) handle(frame rpcFrame) error {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}
-	if kind := event.Update.Kind; (kind == "agent_message_chunk" || kind == "agent_thought_chunk") && json.Unmarshal(event.Update.Content, &chunk) != nil {
+	if kind := event.Update.Kind; kind == "agent_message_chunk" && json.Unmarshal(event.Update.Content, &chunk) != nil {
 		return fmt.Errorf("mcode: invalid session update")
 	}
 	switch event.Update.Kind {
@@ -53,9 +53,6 @@ func (s *Session) handle(frame rpcFrame) error {
 		s.content.WriteString(text)
 		s.sequence++
 		s.emit(proto.TypeDelta, proto.DeltaPayload{Delta: text, Sequence: s.sequence})
-	case "agent_thought_chunk":
-		s.sequence++
-		s.emit(proto.TypeThinking, proto.ThinkingPayload{Text: chunk.Text, Sequence: s.sequence})
 	case "tool_call", "tool_call_update":
 		return s.emitTool(event.Update.toolUpdate)
 	}
