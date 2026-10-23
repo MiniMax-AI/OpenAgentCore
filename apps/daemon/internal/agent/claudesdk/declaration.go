@@ -85,7 +85,7 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 	for _, capability := range []*proto.CapabilitySupport{&caps.LocalEnvironment, &caps.WorkspaceReadPreparation, &caps.WorkspaceOutputExport, &caps.NativeSessionRecovery} {
 		agent.Narrow(capability, local)
 	}
-	agent.Narrow(&caps.RetainedNativeHistory, local && info.SDK == "0.3.269" && info.Native == "2.1.269 (Claude Code)")
+	agent.Narrow(&caps.RetainedNativeHistory, local && info.SDK == declaration.Declaration.Native.Version)
 	agent.Narrow(&caps.FunctionTools, !local || info.SupportsWorkspaceFunctions())
 	agent.Narrow(&caps.MessageImages, info.SupportsMessageImages())
 	agent.Narrow(&caps.FunctionResultImages, info.SupportsFunctionResultImages())

@@ -10,9 +10,9 @@ import (
 )
 
 func Installation() agent.Installation {
-	return agent.Installation{AgentKind: "claude_sdk", Version: declaration.Declaration.Native.Version, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" },
+	return agent.Installation{AgentKind: declaration.Declaration.Kind, Version: declaration.Declaration.Native.Version, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" },
 		Environment: func(dir, node string) map[string]string {
-			return map[string]string{"OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT": filepath.Join(dir, "dist", "main.js"), "OAC_RUNTIME_CLAUDE_SDK_NODE": node}
+			return map[string]string{claudeSDKEntrypointEnv: filepath.Join(dir, "dist", "main.js"), claudeSDKNodeEnv: node}
 		},
 		Check: func(ctx context.Context, dir, node string, env []string) error {
 			got, err := CheckRuntime(ctx, Config{Node: node, Entrypoint: filepath.Join(dir, "dist", "main.js"), Env: env})

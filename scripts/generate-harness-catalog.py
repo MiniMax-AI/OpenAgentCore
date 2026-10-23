@@ -138,6 +138,7 @@ NATIVE_PROJECTIONS = {
     "claude": {
         "scripts/native-harness-smoke.mjs": ["!== '{v}'", "info.sdk !== '{v}'"],
         "packages/claude-sdk-adapter/package.json": ['"@anthropic-ai/claude-agent-sdk": "{v}"'],
+        "services/core/deploy/claude/README.md": ["Agent SDK `{v}`"],
     },
     "minimax": {
         "scripts/build-mcode-runtime.sh": ["= {v}\n"],

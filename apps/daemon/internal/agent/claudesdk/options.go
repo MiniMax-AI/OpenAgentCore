@@ -30,7 +30,6 @@ type startRequest struct {
 	Subagents          *subagentOptions     `json:"subagents,omitempty"`
 	OutputFormat       *proto.OutputFormat  `json:"output_format,omitempty"`
 	Type               string               `json:"type"`
-	Input              proto.MessageInput   `json:"input,omitempty"`
 	Model              string               `json:"model"`
 	SystemPrompt       string               `json:"system_prompt"`
 	Cwd                string               `json:"cwd"`
@@ -42,7 +41,7 @@ type startRequest struct {
 }
 
 func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startRequest, []string, error) {
-	start := startRequest{Type: "start", Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, Functions: req.FunctionTools}
+	start := startRequest{Resume: req.AgentSessionID, RequireHistory: req.RequireExistingNativeSession, Functions: req.FunctionTools}
 	fail := func(reason string) (startRequest, []string, error) {
 		return startRequest{}, nil, fmt.Errorf("claudesdk: %s", reason)
 	}

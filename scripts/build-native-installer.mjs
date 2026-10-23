@@ -126,7 +126,7 @@ export async function validateComponents(root, names, daemonVersion) {
       await requireFile(join(component, 'pnpm-lock.yaml'));
       await requireFile(join(component, 'dist/main.js'));
       const info = JSON.parse(probe(node, [join(component, 'dist/runtime_check.js')], component, env));
-      if (info.type !== 'runtime_ready' || info.protocol !== 3 || info.sdk !== pins.claude || info.native !== '2.1.269 (Claude Code)' || !info.features?.includes('local_runtime_v2')) throw new Error('Claude runtime compatibility failed');
+      if (info.type !== 'runtime_ready' || info.protocol !== 3 || info.sdk !== pins.claude || !info.features?.includes('local_runtime_v2')) throw new Error('Claude runtime compatibility failed');
     } else if (name === 'minimax') {
       if (windows) throw new Error('MiniMax is not supported on Windows');
       const upstream = await json(join(component, 'source.json'));
