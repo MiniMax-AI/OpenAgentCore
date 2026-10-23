@@ -15,7 +15,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const Version = 1
+const Version = 2
 const MaxBytes = 16 * 1024
 
 // PublicWorkspace is the workspace path applications and Core use for a hosted Environment.
