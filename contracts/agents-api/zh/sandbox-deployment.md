@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 57d2c630e22ee6e6b7333c36bb042af74e820c1205bb9fb6d41cb8f54acd605d
+source_hash: 4b77c11fe9a80e4b6d200ca161ab53e006bfc46b185262ee858fc65d75b5112a
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -71,7 +71,9 @@ E2B 使用 `template-id:build-uuid` 形式的 `configuration.template`；构建 
 
 `POST /core/v1/sandbox/providers/{provider}/discovery` 恰好接受 `configuration`、`credential` 和 `query` 对象，总大小最多为 64 KiB，运行时间最多为 30 秒。未知成员和 null 对象会被拒绝。凭据仅用于该请求，绝不会被存储或返回；发现操作不会保存任何内容、不会更改部署、不会分配任何资源，也绝不会证明某项选择会被准入。Docker 和 microsandbox 会以 400 `sandbox_operation_unsupported` 拒绝该操作。
 
-对于 E2B，发布 `{"configuration": {"api_url": "…", "domain": "…"}, "credential": {"api_key": "…"}, "query": {}}` 可列出模板；添加 `"query": {"template": "template-id"}` 可列出该模板的就绪构建；官方端点可能会省略两个端点字段。结果为 `{"templates": [{"id": "…", "names": ["…"]}]}` 和 `{"builds": [{"id": "build-uuid", "cpus": 2, "memory_mib": 2048}]}`，两者都可能为空。固定版本 SDK 辅助工具读取 `GET /v2/templates` 并返回最多 200 条结果；达到限制或提供商失败会返回 503 和通用消息。部署写入操作会单独验证所选构建。
+发布 `{"configuration": {…}, "credential": {…}, "query": {"field": "…", "path": […]}}`，其中 `field` 是提供商声明为 discovered 的字段，`path` 是前几级已选择的值。结果为 `{"options": [{"value": "…", "label": "…", "resources": {"cpus": 2, "memory_mib": 2048}, "complete": true}]}`，可能为空。`complete: true` 的选项可保存为该字段的值，其余选项打开下一级。其他任何字段返回 400 `invalid_request_error`。
+
+E2B 把 `template` 声明为 discovered。空 `path` 列出该密钥的模板，`["template-id"]` 以 `template-id:build-uuid` 值列出该模板的就绪构建及其 CPU 数和内存；官方端点可以省略 `api_url` 和 `domain`。固定版本 SDK 辅助工具读取 `GET /v2/templates` 并返回最多 200 条结果；达到限制或提供商失败会返回 503 和通用消息。部署写入操作会单独验证所选构建。
 
 ## 安全响应 {#safe-response}
 
@@ -254,7 +256,7 @@ Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。
 
 ## 规范的节点规格 {#canonical-node-specification}
 
-`sandbox/deployment_contract.go`负责资源边界和规范字段顺序，每个已注册提供商的 `sandbox.DeploymentPolicy` 声明其要求；`sandbox/deployment.go`在 Core 中应用这些规则。安装程序会使用 `deploy/node/node_spec.py` 中生成的声明，TypeScript 客户端和 Web 使用 `packages/agents-client/src/deployment-contract.ts` 中生成的边界和提供商声明，因此不存在第二套限制或提供商列表。请在仓库根目录运行 `go run ./services/core/cmd/specification-contract -write` 重新生成两者；作为 `make check` 一部分的沙箱 Go 测试会拒绝过时的投影。
+`sandbox/deployment_contract.go`负责资源边界和规范字段顺序，每个已注册提供商的 `sandbox.DeploymentPolicy` 声明其要求；`sandbox/deployment.go`在 Core 中应用这些规则。安装程序会使用 `deploy/node/node_spec.py` 中生成的声明，TypeScript 客户端和 Web 使用 `packages/agents-client/src/deployment-contract.ts` 中生成的边界、提供商声明和各提供商的 setup 声明（`sandbox.SetupDeclaration`），因此不存在第二套限制或提供商列表。请在仓库根目录运行 `go run ./services/core/cmd/specification-contract -write` 重新生成两者；作为 `make check` 一部分的沙箱 Go 测试会拒绝过时的投影。
 
 规范摘要是紧凑 UTF-8 JSON 的 SHA-256，其中 `provider` 位于首位，其次是 `resources`。资源字段遵循契约的声明顺序；值为零的可选磁盘字段会被省略，必填字段则保持存在。摘要绝不会受传入字段顺序或空白字符影响。`services/core/internal/sandbox/testdata/deployment-contract.json`保存共享验收用例、精确的规范字节和摘要，Go 与 Python 测试都会使用这些内容。
 

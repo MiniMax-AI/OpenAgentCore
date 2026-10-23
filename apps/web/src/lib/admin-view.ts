@@ -24,7 +24,7 @@ export type ProjectSummary = Omit<AdminSummaryEntry, "usage"> & {
   usage: AdminSummaryEntry["usage"] | null;
 };
 
-/** A Runtime observation with its project; disk is E2B-only and null elsewhere. */
+/** A Runtime observation with its project; disk is null for a Provider that cannot report it. */
 export type OwnedRuntimeObservation = AdminRuntimeObservation["observation"] & { project_id: string };
 
 const PAGE = 100;

@@ -24,7 +24,7 @@ test("sets up sandboxes with Core's address read-only, never sending it", async 
 
 test("explains an E2B rejection in the wizard, with a link to domain setup", async ({ page, request }) => {
   await openConsole(page, request, "settings?id=sandbox", { sandbox: "none", installation: "local" });
-  await page.getByRole("button", { name: "E2B cloud" }).click();
+  await page.getByRole("button", { name: "E2B", exact: true }).click();
   await selectFixtureE2BBuild(page);
   await page.getByRole("button", { name: "Next" }).click();
   const address = page.getByRole("definition").filter({ hasText: "http://127.0.0.1:8091" });

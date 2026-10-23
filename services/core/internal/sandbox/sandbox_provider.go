@@ -309,6 +309,77 @@ type ConfigurationRequirements struct {
 	CredentialVerification providercontract.Support
 }
 
+// Text is operator-facing copy in every supported locale.
+type Text struct {
+	EN   string `json:"en"`
+	ZHCN string `json:"zh-CN"`
+}
+
+func (t Text) valid() bool { return t.EN != "" && t.ZHCN != "" }
+
+// SetupField is one value an operator enters to connect the Provider. A Secret
+// field is submitted as the credential, any other as configuration. An Optional
+// field may stay empty and the Provider supplies its default. A Discovered field
+// takes its value from DiscoverConfiguration. Help may be empty in both locales.
+type SetupField struct {
+	Name       string `json:"name"`
+	Secret     bool   `json:"secret"`
+	Optional   bool   `json:"optional"`
+	Discovered bool   `json:"discovered"`
+	Label      Text   `json:"label"`
+	Help       Text   `json:"help"`
+}
+
+// SetupPreset is a named set of field values, such as one hosted service.
+// CredentialURL, when set, is where the operator creates the credential.
+type SetupPreset struct {
+	Label         string            `json:"label"`
+	Values        map[string]string `json:"values"`
+	CredentialURL string            `json:"credential_url,omitempty"`
+}
+
+// SetupDeclaration is everything the console needs to set up one Provider.
+// Label is the Provider's proper noun. Cautions are risks an operator confirms
+// before choosing it. Recommended marks the default among Providers of one
+// deployment mode, and at most one does.
+type SetupDeclaration struct {
+	Label       string        `json:"label"`
+	Summary     Text          `json:"summary"`
+	Cautions    []Text        `json:"cautions"`
+	Recommended bool          `json:"recommended"`
+	Fields      []SetupField  `json:"fields"`
+	Presets     []SetupPreset `json:"presets"`
+}
+
+// Validate checks the declaration against the Provider's configuration
+// requirements: secret fields exist exactly when a credential is required,
+// discovered fields exactly when discovery is supported, and every text has
+// both locales.
+func (d SetupDeclaration) Validate(r ConfigurationRequirements) error {
+	secret, discovered := false, false
+	ok := d.Label != "" && d.Summary.valid()
+	names := map[string]bool{}
+	for _, f := range d.Fields {
+		ok = ok && f.Name != "" && !names[f.Name] && f.Label.valid() && (f.Help == Text{} || f.Help.valid())
+		names[f.Name] = true
+		secret, discovered = secret || f.Secret, discovered || f.Discovered
+		ok = ok && !(f.Secret && (f.Optional || f.Discovered))
+	}
+	for _, c := range d.Cautions {
+		ok = ok && c.valid()
+	}
+	for _, p := range d.Presets {
+		ok = ok && p.Label != ""
+		for name := range p.Values {
+			ok = ok && names[name]
+		}
+	}
+	if !ok || secret != (r.Credential == Required) || discovered != (r.Discovery.State == providercontract.Supported) {
+		return ErrInvalid
+	}
+	return nil
+}
+
 // DeploymentPolicy is the deployment declaration. Workspace, when present, means
 // the Provider runs every Environment on external storage; absent means its own
 // disk. Disk declares independent disk limits. DefaultResources is the size setup
@@ -395,12 +466,33 @@ type Built struct {
 	Quiescent func() bool
 }
 
-// ConfigurationDiscoveryInput is a transient read-only request. Query is typed
-// and validated by the adapter; it cannot select a compute mutation.
+// ConfigurationDiscoveryQuery selects the options of one Discovered field. Path
+// holds the values chosen at earlier levels, empty for the first level.
+type ConfigurationDiscoveryQuery struct {
+	Field string   `json:"field"`
+	Path  []string `json:"path"`
+}
+
+// ConfigurationDiscoveryInput is a transient read-only request. The adapter
+// validates Configuration and Credential; Query cannot select a compute mutation.
 type ConfigurationDiscoveryInput struct {
-	Configuration json.RawMessage `json:"configuration" swaggertype:"object"`
-	Credential    json.RawMessage `json:"credential" swaggertype:"object"`
-	Query         json.RawMessage `json:"query" swaggertype:"object"`
+	Configuration json.RawMessage             `json:"configuration" swaggertype:"object"`
+	Credential    json.RawMessage             `json:"credential" swaggertype:"object"`
+	Query         ConfigurationDiscoveryQuery `json:"query"`
+}
+
+// ConfigurationOption is one choice for a Discovered field. A Complete option's
+// Value is the field's value; any other is a Path element for the next level.
+type ConfigurationOption struct {
+	Value     string     `json:"value" binding:"required"`
+	Label     string     `json:"label" binding:"required"`
+	Resources *Resources `json:"resources,omitempty"`
+	Complete  bool       `json:"complete" binding:"required"`
+}
+
+// ConfigurationOptions is the result of one discovery level.
+type ConfigurationOptions struct {
+	Options []ConfigurationOption `json:"options" binding:"required"`
 }
 
 // ConfigurationAdapter owns all interpretation of provider configuration.
@@ -422,7 +514,7 @@ type ConfigurationAdapter interface {
 	Equal(a, b Configuration) (bool, error)
 	// DiscoverConfiguration lists the native catalog a credential can use,
 	// without a saved deployment.
-	DiscoverConfiguration(context.Context, ConfigurationDiscoveryInput, ProcessPaths) (json.RawMessage, error)
+	DiscoverConfiguration(context.Context, ConfigurationDiscoveryInput, ProcessPaths) (ConfigurationOptions, error)
 	// DiscoverSelection resolves a candidate's omitted native values before
 	// commit. Loading retained ownership never calls it.
 	DiscoverSelection(context.Context, DirectConfig) (Selection, error)

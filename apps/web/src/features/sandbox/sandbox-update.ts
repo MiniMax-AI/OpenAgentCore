@@ -1,12 +1,10 @@
-import type { UpdateSandboxDeployment } from "@oac/agents-client";
-
-/** Omission preserves the credential; every explicit key follows Core's replacement path. */
-export function e2bUpdateSelection(template: string, apiKey: string): Pick<UpdateSandboxDeployment, "configuration" | "credential"> {
-  const key = apiKey.trim();
-  return { configuration: { template: template.trim() }, ...(key ? { credential: { api_key: key } } : {}) };
+/** Omission preserves the credential; every explicit value follows Core's replacement path. */
+export function submittedCredential(entries: readonly (readonly [string, string])[]): { credential?: Record<string, string> } {
+  const entered = entries.filter(([, value]) => value);
+  return entered.length > 0 ? { credential: Object.fromEntries(entered) } : {};
 }
 
 /** Clearing a submitted secret must not silently convert replacement into retention. */
-export function e2bKeyReady(editing: boolean, replacementRequested: boolean, apiKey: string): boolean {
-  return apiKey.trim().length > 0 || (editing && !replacementRequested);
+export function credentialReady(editing: boolean, replacementRequested: boolean, entered: boolean): boolean {
+  return entered || (editing && !replacementRequested);
 }

@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -252,9 +251,9 @@ func (s strictStandIn) WriteEnvironmentFile(context.Context, sessions.Environmen
 	return 0, nil
 }
 
-func (s strictStandIn) DiscoverConfiguration(context.Context, string, sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (s strictStandIn) DiscoverConfiguration(context.Context, string, sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error) {
 	s.unexpected("DiscoverConfiguration")
-	return nil, nil
+	return sandbox.ConfigurationOptions{}, nil
 }
 
 func (s strictStandIn) InitializeSandboxDeployment(context.Context, sandbox.Selection) (deployment.View, error) {

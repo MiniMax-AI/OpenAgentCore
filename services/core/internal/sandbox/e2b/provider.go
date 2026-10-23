@@ -117,7 +117,7 @@ func validReference(r sandbox.Reference) bool {
 	return validID(r.TenantID) && validID(r.EnvironmentID) && validID(r.AllocationID)
 }
 func (c Config) Validate() error {
-	if c.Resources != nil && ValidateResources(*c.Resources) != nil {
+	if c.Resources != nil && c.Resources.ValidatePolicy("e2b", Policy()) != nil {
 		return sandbox.ErrInvalid
 	}
 	if !validID(c.InstallationID) || c.TimeoutSeconds < 1 || c.TimeoutSeconds > 86400 {

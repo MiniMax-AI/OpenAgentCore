@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -56,7 +55,7 @@ type generationAllocations interface {
 
 // DiscoverConfiguration asks a Provider which configuration values its
 // credential can use, with this installation's process paths.
-func (s *managedSetup) DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (s *managedSetup) DiscoverConfiguration(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error) {
 	return s.registry.DiscoverConfiguration(ctx, provider, input, s.processPaths)
 }
 

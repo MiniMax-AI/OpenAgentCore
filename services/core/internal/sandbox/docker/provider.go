@@ -39,7 +39,7 @@ func New(c *client.Client, config Config) (*Provider, error) {
 		return nil, sandbox.ErrInvalid
 	}
 	if config.Resources != nil {
-		if ValidateResources(*config.Resources) != nil {
+		if config.Resources.ValidatePolicy("docker", Policy()) != nil {
 			return nil, sandbox.ErrInvalid
 		}
 		resources := *config.Resources
