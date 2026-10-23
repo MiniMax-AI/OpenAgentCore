@@ -28,6 +28,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
@@ -145,6 +146,7 @@ type Executor interface {
 type Turn interface {
 	Session
 	DurableSteerer
+	FunctionResultSubmitter
 	// Success confirms closed output and settled native input, function and
 	// child-work obligations. Errors cannot prove cancellation.
 	AwaitSettlement(context.Context) (TurnSettlement, error)
@@ -182,10 +184,40 @@ type DurableSteerer interface {
 	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
 }
 
-// FunctionResultSubmitter delivers a result for an outstanding native call.
+// FunctionResultSubmitter is mandatory on every public Turn; support comes from the declaration. It delivers a result for an outstanding native call.
 // A successful return requires its native application receipt.
 type FunctionResultSubmitter interface {
 	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
+}
+
+// Protocol errors.
+
+// ErrUnsupportedOperation marks an intentional absence of optional behavior.
+// Implementations wrap it with a static reason and perform no native effects.
+// It is distinct from unavailable resources, failures and uncertain outcomes.
+var ErrUnsupportedOperation = errors.New("agent: unsupported operation")
+
+// ErrUnknownFunctionCall means the function call is no longer pending.
+var ErrUnknownFunctionCall = errors.New("agent: function call is no longer pending")
+
+// ErrSteeringNotReady means no input was sent because the turn is starting.
+var ErrSteeringNotReady = errors.New("agent: turn is not ready for input")
+
+// ErrSteeringInactive means no input was sent because the run ended or was cancelled.
+var ErrSteeringInactive = errors.New("agent: run is no longer active")
+
+// ErrSteeringRejected means the engine explicitly rejected the input.
+var ErrSteeringRejected = errors.New("agent: input rejected")
+
+// Installation is an optional adapter-owned native distribution contract.
+// It supplies activation paths and readiness checks, never execution or model
+// configuration. Runtime owns copying, checksums, publication and installation locks.
+type Installation struct {
+	AgentKind   string
+	Version     string
+	Supported   func() bool
+	Environment func(directory, node string) map[string]string
+	Check       func(context.Context, string, string, []string) error
 }
 
 // Kind registration.

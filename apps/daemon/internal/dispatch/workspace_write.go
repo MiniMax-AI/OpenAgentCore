@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -139,7 +139,7 @@ func rejectedWorkspaceWrite(code string) proto.WorkspaceWriteResultPayload {
 	return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: code}
 }
 
-func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int) proto.WorkspaceWriteResultPayload {
+func workspaceWriteResult(write localworkspace.WorkspaceWriteResult, err error, size int) proto.WorkspaceWriteResultPayload {
 	if err == nil && write.SizeBytes == int64(size) {
 		return proto.WorkspaceWriteResultPayload{Outcome: "completed", SizeBytes: size}
 	}
@@ -147,8 +147,8 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 		err    error
 		reason string
 	}{
-		{agent.ErrWorkspaceWriteDirectory, proto.WorkspaceWriteReasonDirectory},
-		{agent.ErrWorkspaceWriteUnsafe, proto.WorkspaceWriteReasonUnsafe},
+		{localworkspace.ErrWorkspaceWriteDirectory, proto.WorkspaceWriteReasonDirectory},
+		{localworkspace.ErrWorkspaceWriteUnsafe, proto.WorkspaceWriteReasonUnsafe},
 	} {
 		if errors.Is(err, conflict.err) {
 			return proto.WorkspaceWriteResultPayload{Outcome: "rejected", ErrorCode: "write_rejected", Reason: conflict.reason}
@@ -158,11 +158,11 @@ func workspaceWriteResult(write agent.WorkspaceWriteResult, err error, size int)
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceWriteUnsupported, "write_unsupported"},
-		{agent.ErrWorkspaceWriteUnavailable, "resource_unavailable"},
-		{agent.ErrWorkspaceWriteBusy, "write_capacity"},
-		{agent.ErrWorkspaceWriteInvalid, "invalid_request"},
-		{agent.ErrWorkspaceWriteRejected, "write_rejected"},
+		{localworkspace.ErrWorkspaceWriteUnsupported, "write_unsupported"},
+		{localworkspace.ErrWorkspaceWriteUnavailable, "resource_unavailable"},
+		{localworkspace.ErrWorkspaceWriteBusy, "write_capacity"},
+		{localworkspace.ErrWorkspaceWriteInvalid, "invalid_request"},
+		{localworkspace.ErrWorkspaceWriteRejected, "write_rejected"},
 	} {
 		if errors.Is(err, failure.err) {
 			return rejectedWorkspaceWrite(failure.code)

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -82,19 +81,9 @@ func executeWorkspaceRead(ctx context.Context, binding *localworkspace.Binding, 
 	if request.Operation == "directory" {
 		read, err := binding.ListWorkspaceDirectory(ctx, request.Path, request.MaxEntries)
 		if err != nil {
-			return workspaceReadResult(agent.WorkspaceReadResult{}, err, 0)
+			return workspaceReadResult(localworkspace.WorkspaceReadResult{}, err, 0)
 		}
-		if read.Entries == nil || len(read.Entries) > request.MaxEntries {
-			return workspaceReadResult(agent.WorkspaceReadResult{}, agent.ErrWorkspaceReadUncertain, 0)
-		}
-		directory := &proto.WorkspaceDirectoryResult{Entries: make([]proto.WorkspaceDirectoryEntry, 0, len(read.Entries)), Truncated: read.Truncated}
-		for _, entry := range read.Entries {
-			directory.Entries = append(directory.Entries, proto.WorkspaceDirectoryEntry{Name: entry.Name, Kind: entry.Kind, SizeBytes: entry.SizeBytes})
-		}
-		if !proto.ValidWorkspaceDirectory(directory, request.MaxEntries) {
-			return workspaceReadResult(agent.WorkspaceReadResult{}, agent.ErrWorkspaceReadUncertain, 0)
-		}
-		return proto.WorkspaceReadResultPayload{Outcome: "completed", Directory: directory, CloseAcknowledged: true}
+		return proto.WorkspaceReadResultPayload{Outcome: "completed", Directory: read, CloseAcknowledged: true}
 	}
 	read, err := binding.ReadWorkspaceFile(ctx, request.Path, request.MaxBytes)
 	return workspaceReadResult(read, err, request.MaxBytes)
@@ -104,7 +93,7 @@ func rejectedWorkspaceRead(code string) proto.WorkspaceReadResultPayload {
 	return proto.WorkspaceReadResultPayload{Outcome: "rejected", ErrorCode: code}
 }
 
-func workspaceReadResult(read agent.WorkspaceReadResult, err error, limit int) proto.WorkspaceReadResultPayload {
+func workspaceReadResult(read localworkspace.WorkspaceReadResult, err error, limit int) proto.WorkspaceReadResultPayload {
 	if err == nil && len(read.Data) <= limit && (!read.Truncated || len(read.Data) == limit) {
 		return proto.WorkspaceReadResultPayload{Outcome: "completed", Data: read.Data, Truncated: read.Truncated, CloseAcknowledged: true}
 	}
@@ -112,10 +101,10 @@ func workspaceReadResult(read agent.WorkspaceReadResult, err error, limit int) p
 		err  error
 		code string
 	}{
-		{agent.ErrWorkspaceReadUnavailable, "resource_unavailable"},
-		{agent.ErrWorkspaceReadBusy, "read_capacity"},
-		{agent.ErrWorkspaceReadInvalid, "invalid_request"},
-		{agent.ErrWorkspaceNotDirectory, proto.WorkspaceReadNotDirectory},
+		{localworkspace.ErrWorkspaceReadUnavailable, "resource_unavailable"},
+		{localworkspace.ErrWorkspaceReadBusy, "read_capacity"},
+		{localworkspace.ErrWorkspaceReadInvalid, "invalid_request"},
+		{localworkspace.ErrWorkspaceNotDirectory, proto.WorkspaceReadNotDirectory},
 		{fs.ErrNotExist, "not_found"},
 		{fs.ErrPermission, "permission_denied"},
 	} {

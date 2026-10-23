@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 35704f5aa719f0f151c6dde461ce5cf49863a517ef433b06829fd6fe6f9fe2bd
+source_hash: 7658191e20060c3227a3604a5095383bcddded2ea71970d0bdde74421396b36d
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -10,7 +10,7 @@ source_hash: 35704f5aa719f0f151c6dde461ce5cf49863a517ef433b06829fd6fe6f9fe2bd
 | --- | --- |
 | 调用方 | Runtime（[dispatch](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch)） |
 | 实现方 | Codex、Claude Code 和 MiniMax Code 适配器（[原生参考](#native-references)）。[Harness capabilities](harness-capabilities.md) 记录了每个 Harness 支持的功能。 |
-| 代码 | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go)：执行生命周期、扩展契约和注册方法。[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go)：每个 Harness 提供的 `Declaration`、声明注册表以及共享模型配置契约。 |
+| 代码 | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go)：执行生命周期、扩展契约、协议错误和注册方法。[`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go)：每个 Harness 提供的 `Declaration`、声明注册表以及共享模型配置契约。 |
 | 传输 | 进程内 Go 接口。Runtime 通过 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md)与 Core 通信。 |
 | 版本规则 | 接口变更须在同一次变更中修改本文和每个适配器。 |
 
@@ -52,7 +52,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 ## 架构规则 {#architecture-rules}
 
 [Complexity stays in the adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter) 和 [Core assembles, Harnesses run natively](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#core-assembles-harnesses-run-natively) 适用于每个 Harness。以下规则为 Harness 专有：
-- 将必需的生命周期声明、扩展接口和注册方法保留在 `agent/harness.go` 中。结果类型、错误和 Registry 存储可以保留在聚焦的文件中。
+- 将必需的生命周期声明、扩展接口和注册方法保留在 `agent/harness.go` 中。Registry 存储和非协议辅助代码保留在聚焦的文件中。
 - 使用现有的 `proto.SupportedAgentKind` 和 `AgentKindCapabilities` schema。不要添加第二套能力描述符或组合式可选接口。
 - 接入不要求功能完全一致。Harness 不必匹配彼此的可选功能，并且注册时不强制要求 MCP、函数、图像或详细程度控制。验证通用生命周期义务，并对每个声明的操作使用相同的公共断言。缺少声明或扩展实现会阻止接入；原生差异不会。
 - 声明是支持边界。未注册的 kind 以关闭方式失败，Runtime 心跳无法授权新的公共功能，也无法扩大声明：发现过程只能收窄。Schema 有效性、声明的支持范围和可用 Runtime 是相互独立的检查。
@@ -60,7 +60,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 
 ## 必需的适配器接口 {#required-adapter-interfaces}
 
-[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ExecutorFactory`、`Executor`、`Turn`（包括 `DurableSteerer`）和 `TurnSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。Turn 扩展接口应保持小而独立，但每个公共适配器都必须明确实现每一个接口。所有接口都使用中立协议类型。
+[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) 是接口入口。必需的生命周期包括 `ExecutorFactory`、`Executor`、`Turn`（包括 `DurableSteerer` 和 `FunctionResultSubmitter`）和 `TurnSettlement`。必需方法必须履行其原生义务；返回 Unsupported 并不构成对取消、回执、结算或清理的实现。Turn 扩展接口应保持小而独立，但每个公共适配器都必须明确实现每一个接口。所有接口都使用中立协议类型。
 
 例如，Codex 适配器保留其 app-server 和 thread，Claude 适配器保留一个流式 Query，MiniMax 适配器保留其 ACP 连接和原生 session。它们都公开相同的 Executor 和 Turn 契约。原生回调和资源保留在适配器内部；Runtime 负责准入、空闲过期和替换。取消通过 `agent.Session` 精确定位到目标 Turn，适配器则向 Runtime 提供原生完成证据。
 
@@ -263,7 +263,6 @@ Environment 验收使用 `services/core/tests/official_environment_{templates,se
 | Claude 输入所有权、取消和准备清理 | `claudesdk/executor_test.go`、`cancellation_test.go`、`preparation_test.go` |
 | MiniMax 取消退役、Start 失败和清理重试 | `mcode/executor_test.go`、`executor_backpressure_test.go` |
 | MiniMax 原生历史绑定 | `mcode/session_test.go` |
-| 无原生副作用或伪造结果的明确拒绝 | 每个适配器的 `unsupported_test.go` |
 
 ## 原生参考 {#native-references}
 

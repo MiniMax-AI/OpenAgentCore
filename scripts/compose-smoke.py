@@ -45,7 +45,7 @@ def prepare_payload(destination, revision, source_time):
             shutil.copyfile(path, sources / path.name)
         distribution.bootstraps(sources, source_time, revision)
         shutil.copyfile(sources / 'node-install.pyz', destination / 'node-install.pyz')
-    shutil.copyfile(ROOT / 'services/core/deploy/codex/seccomp.json', destination / 'runtime/seccomp.json')
+    shutil.copyfile(ROOT / 'services/core/internal/sandbox/docker/seccomp.json', destination / 'runtime/seccomp.json')
     (destination / 'manifest.json').write_text(json.dumps(
         {'source_commit': revision, 'platform': 'linux/amd64'}))
     distribution.checksums(destination)

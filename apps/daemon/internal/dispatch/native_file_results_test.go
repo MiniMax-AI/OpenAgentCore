@@ -3,6 +3,7 @@ package dispatch
 import (
 	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 	"io/fs"
@@ -14,13 +15,13 @@ func TestNativeDirectoryFailureMapping(t *testing.T) {
 		err           error
 		outcome, code string
 	}{
-		{agent.ErrWorkspaceNotDirectory, "rejected", proto.WorkspaceReadNotDirectory},
-		{agent.ErrWorkspaceReadInvalid, "rejected", "invalid_request"},
+		{localworkspace.ErrWorkspaceNotDirectory, "rejected", proto.WorkspaceReadNotDirectory},
+		{localworkspace.ErrWorkspaceReadInvalid, "rejected", "invalid_request"},
 		{fs.ErrNotExist, "rejected", "not_found"},
 		{fs.ErrPermission, "rejected", "permission_denied"},
-		{agent.ErrWorkspaceReadUncertain, "unknown", "read_unconfirmed"},
+		{localworkspace.ErrWorkspaceReadUncertain, "unknown", "read_unconfirmed"},
 	} {
-		got := workspaceReadResult(agent.WorkspaceReadResult{}, test.err, 0)
+		got := workspaceReadResult(localworkspace.WorkspaceReadResult{}, test.err, 0)
 		if got.Outcome != test.outcome || got.ErrorCode != test.code {
 			t.Fatal(test.err, got)
 		}
@@ -32,7 +33,7 @@ func TestLocalUploadUnknownRetainsOwner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := workspaceWriteResult(agent.WorkspaceWriteResult{}, errors.New("unconfirmed mutation"), 3)
+	got := workspaceWriteResult(localworkspace.WorkspaceWriteResult{}, errors.New("unconfirmed mutation"), 3)
 	if got.Outcome != "unknown" {
 		t.Fatal(got)
 	}

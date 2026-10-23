@@ -8,7 +8,7 @@ A **Harness** is a native agent engine (Codex, Claude Code, MiniMax Code) that r
 | --- | --- |
 | Caller | The Runtime ([dispatch](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/apps/daemon/internal/dispatch)) |
 | Implementations | The Codex, Claude Code and MiniMax Code adapters ([Native references](#native-references)). [Harness capabilities](./harness-capabilities.md) records what each supports. |
-| Code | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go): the execution lifecycle, the extension contracts and the registration methods. [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go): the `Declaration` every Harness provides, the registry of declarations and the shared model configuration contract. |
+| Code | [`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go): the execution lifecycle, the extension contracts, the protocol errors and the registration methods. [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go): the `Declaration` every Harness provides, the registry of declarations and the shared model configuration contract. |
 | Transport | In-process Go interfaces. The Runtime speaks the [Core–Runtime protocol](../../docs/runtime-protocol.md) to Core. |
 | Version rule | A change to the interfaces edits this page and every adapter in one change. |
 
@@ -50,7 +50,7 @@ Implement the mandatory text lifecycle and handle every extension explicitly. Qu
 ## Architecture rules
 
 [Complexity stays in the adapter](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#complexity-stays-in-the-adapter) and [Core assembles, Harnesses run natively](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/AGENTS.md#core-assembles-harnesses-run-natively) apply to every Harness. These rules are Harness-specific:
-- Keep required lifecycle declarations, extension interfaces and registration methods in `agent/harness.go`. Result types, errors and Registry storage may stay in focused files.
+- Keep required lifecycle declarations, extension interfaces and registration methods in `agent/harness.go`. Registry storage and helpers that are not protocol stay in focused files.
 - Use the existing `proto.SupportedAgentKind` and `AgentKindCapabilities` schema. Do not add a second capability descriptor or a combined optional interface.
 - Onboarding does not require feature equality. Harnesses need not match each other's optional features, and MCP, functions, images or verbosity control are not required to register. Verify the common lifecycle obligations and use the same public assertions for each declared operation. An omitted declaration or a missing extension implementation blocks onboarding; a native difference does not.
 - The declaration is the support boundary. An unregistered kind fails closed, and a Runtime heartbeat cannot authorize new public functionality or widen the declaration: discovery may only narrow it. Schema validity, declared support and the available Runtime are independent checks.
@@ -58,7 +58,7 @@ Implement the mandatory text lifecycle and handle every extension explicitly. Qu
 
 ## Required adapter interfaces
 
-[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) is the interface entry point. The required lifecycle is `ExecutorFactory`, `Executor`, `Turn` (including `DurableSteerer`) and `TurnSettlement`. Required methods perform their native obligations; returning Unsupported is not an implementation of cancellation, receipts, settlement or cleanup. Turn extension interfaces stay small and separate, but every public adapter implements each one explicitly. All use the neutral protocol types.
+[`agent/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/apps/daemon/internal/agent/harness.go) is the interface entry point. The required lifecycle is `ExecutorFactory`, `Executor`, `Turn` (including `DurableSteerer` and `FunctionResultSubmitter`) and `TurnSettlement`. Required methods perform their native obligations; returning Unsupported is not an implementation of cancellation, receipts, settlement or cleanup. Turn extension interfaces stay small and separate, but every public adapter implements each one explicitly. All use the neutral protocol types.
 
 For example, the Codex adapter keeps its app-server and thread, the Claude adapter one streaming Query, and the MiniMax adapter its ACP connection and native session. All expose the same Executor and Turn contract. Native callbacks and resources stay inside the adapter; the Runtime owns admission, idle expiry and replacement. Cancellation targets the exact Turn through `agent.Session`, and the adapter supplies native completion evidence to the Runtime.
 
@@ -261,7 +261,6 @@ Keep provider keys in private operator files, never in commits or logs. Existing
 | Claude input ownership, cancellation and preparation cleanup | `claudesdk/executor_test.go`, `cancellation_test.go`, `preparation_test.go` |
 | MiniMax cancellation retirement, failed Start and cleanup retry | `mcode/executor_test.go`, `executor_backpressure_test.go` |
 | MiniMax native history binding | `mcode/session_test.go` |
-| Explicit refusals without native effects or fabricated results | Each adapter's `unsupported_test.go` |
 
 ## Native references
 
