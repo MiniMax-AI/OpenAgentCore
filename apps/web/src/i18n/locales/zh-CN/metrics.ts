@@ -247,8 +247,8 @@ export const metrics = {
       historyBudget: "图表最多覆盖 {{limit}} 个 Session。",
       historyMixed: "各 Session 返回的时间桶宽度不一致。",
     },
-    runtimeMeta: "{{n}} 个中 {{active}} 个活跃 · CPU {{cpu}} · 内存 {{memory}}",
-    runtimeMetaSuspended: "{{n}} 个中 {{active}} 个活跃 · {{sleeping}} 个挂起 · CPU {{cpu}} · 内存 {{memory}}",
+    runtimeMeta: "{{n}} 个中 {{active}} 个活跃 · 内存 {{memory}}",
+    runtimeMetaSuspended: "{{n}} 个中 {{active}} 个活跃 · {{sleeping}} 个挂起 · 内存 {{memory}}",
     reason: {
       allocation_pending: "等待分配",
       runtime_not_running: "未运行",

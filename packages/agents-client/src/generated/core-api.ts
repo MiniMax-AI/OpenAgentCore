@@ -657,11 +657,10 @@ export const rolloutStateValues = ["settled", "preparing"] as const;
 export type RolloutState = (typeof rolloutStateValues)[number];
 export interface RuntimeCPUObservation {
   capacity_cores: number | null;
-  usage_cores: number | null;
   usage_seconds_total: number | null;
   utilization_ratio: number | null;
 }
-export const runtimeCPUObservationFields = ["capacity_cores", "usage_cores", "usage_seconds_total", "utilization_ratio"] as const;
+export const runtimeCPUObservationFields = ["capacity_cores", "usage_seconds_total", "utilization_ratio"] as const;
 export interface RuntimeDiskObservation {
   limit_bytes: number | null;
   usage_bytes: number | null;

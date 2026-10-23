@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { failedLast, useFailureToast } from "../../components/Toast";
 import { DashboardSkeleton } from "../../components/Skeleton";
 import { Kpi, KpiStrip, Section, SegmentedControl } from "../../components/console-ui";
-import { formatBytes, formatCores, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
+import { formatBytes, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { coreError } from "../../lib/core-error";
 import { RuntimeCharts } from "../metrics/RuntimeCharts";
 import { runtimeSampleGap } from "../metrics/sandbox-runtime";
@@ -85,9 +85,7 @@ export function SessionRuntimeSection({
   const sampleGap = observation ? runtimeSampleGap(observation) : null;
   const cpu = observation?.status === "observed" ? observation.cpu : null;
   const memory = observation?.status === "observed" ? observation.memory : null;
-  const cpuValue = cpu?.usage_cores != null && cpu.capacity_cores != null
-    ? t("runtime.cores", { used: formatCores(cpu.usage_cores, locale), capacity: formatCores(cpu.capacity_cores, locale) })
-    : cpu?.utilization_ratio != null ? formatPercent(cpu.utilization_ratio, locale) : MISSING;
+  const cpuValue = cpu?.utilization_ratio != null ? formatPercent(cpu.utilization_ratio, locale) : MISSING;
   const memoryValue = memory?.usage_bytes != null
     ? memory.limit_bytes != null ? `${formatBytes(memory.usage_bytes)} / ${formatBytes(memory.limit_bytes)}` : formatBytes(memory.usage_bytes)
     : MISSING;

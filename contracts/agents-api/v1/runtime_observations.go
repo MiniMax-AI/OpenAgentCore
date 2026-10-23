@@ -29,7 +29,6 @@ type RuntimeInstance struct {
 type RuntimeCPUObservation struct {
 	UsageSecondsTotal *float64 `json:"usage_seconds_total" extensions:"x-nullable" binding:"required" minimum:"0"`
 	CapacityCores     *float64 `json:"capacity_cores" extensions:"x-nullable" binding:"required" minimum:"5e-324"`
-	UsageCores        *float64 `json:"usage_cores" extensions:"x-nullable" binding:"required" minimum:"0"`
 	UtilizationRatio  *float64 `json:"utilization_ratio" extensions:"x-nullable" binding:"required" minimum:"0"`
 }
 
