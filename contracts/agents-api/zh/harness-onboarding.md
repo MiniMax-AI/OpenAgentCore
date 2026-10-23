@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 7658191e20060c3227a3604a5095383bcddded2ea71970d0bdde74421396b36d
+source_hash: b3bd31e1272d7788db048b986cae774f4bc52902e91669ef7a87f86594014e18
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -238,7 +238,7 @@ Runtime 对每个 Turn 的限制（结算等待、回执发送预算和输出通
 
 1. **契约测试。** 在名为 `TestSharedTextLifecycle` 的测试中，使用适配器准备好的 Executor 和确定性的原生夹具调用 `agent/contracttest.TextLifecycle`；`claudesdk/executor_test.go` 是参考实现。它检查独立的 Turn 流、原生所有者和历史连续性、持久化写入与应用回执、过期取消，以及取消后的健康继续执行。`make check-runtime-contract` 会将它与共享线协议、gateway、传输层和调度器测试、声明完整性检查以及每个适配器的 `TestUnsupportedExtensionsHaveNoNativeEffects` 一起运行。适配器测试还覆盖两个普通 Turn 共享一个原生进程或连接和历史、取消后执行另一个 Turn、过期取消和迟到事件、原生退出、清理失败、输入写入与应用回执、未知结果，以及每 Turn 新鲜的 usage、函数、输入和子项观察状态。必须说明夹具是受控夹具还是真实提供商。
 2. **共享集成。** `TestThirdHarnessPublicOnboarding` 让合成 Harness 通过公共 Session 和输入准入、Worker 设备选择、真实 WebSocket gateway、daemon Registry 和 Router、中立事件以及持久化终态投影运行。它在与 API 处理程序和调度器相同的 `execution.Policy` 中使用自定义不可变注册表，并检查已应用输入回执、已保存原生身份、继续执行、取消、不受支持的可选请求以及缺少强制 Runtime 支持。该夹具没有工作区、MCP 或公共函数，其注册仅保留在测试本地。它证明的是集成路径，而不是原生执行。
-3. **真实验收。** 使用锁定的官方 Python SDK 和针对 Core 的原始 HTTP、真实提供商 API、原生 Harness 以及专用数据库。验证初始执行、热后续执行、取消以及带继续执行的重启；记录原生所有者身份以及相同条件下的冷启动和热运行时间。对于工作区放置方式，还要验证 Files 和 Artifacts、工作区身份、公开响应中未出现凭据，以及外部历史会被拒绝。`services/core/tests/official_hosted_functions_native.py` 保存共享函数断言：成功和错误、原生文件输出和公共 Artifact 字节、重启后的同历史继续执行、外部结果拒绝以及待处理调用取消。合成运行或失败运行绝不计入。下面的选择性测试会在 `services/core/tests` 中针对真实 daemon 和模型运行锁定 SDK 夹具；设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`、`OAC_TEST_NATIVE_DAEMON_BIN`、`OAC_TEST_NATIVE_PROOF_DIR` 及其私有选项文件后，每项测试才会运行。选项文件是一个 JSON 对象，恰好包含 `model` 和 `model_provider`（即 `x_agents_core.model_provider` 的字段）；测试会将其设置为部署默认模型提供商，而夹具的 `environment: none` Session 会在创建时将其冻结。
+3. **真实验收。** 使用锁定的官方 Python SDK 和针对 Core 的原始 HTTP、真实提供商 API、原生 Harness 以及专用数据库。验证初始执行、热后续执行、取消以及带继续执行的重启；记录原生所有者身份以及相同条件下的冷启动和热运行时间。对于工作区放置方式，还要验证 Files 和 Artifacts、工作区身份、公开响应中未出现凭据，以及外部历史会被拒绝。合成运行或失败运行绝不计入。下面的选择性测试会在 `services/core/tests` 中针对真实 daemon 和模型运行锁定 SDK 夹具；设置 `OAC_TEST_OFFICIAL_SDK_PYTHON`、`OAC_TEST_NATIVE_DAEMON_BIN`、`OAC_TEST_NATIVE_PROOF_DIR` 及其私有选项文件后，每项测试才会运行。选项文件是一个 JSON 对象，恰好包含 `model` 和 `model_provider`（即 `x_agents_core.model_provider` 的字段）；测试会将其设置为部署默认模型提供商，而夹具的 `environment: none` Session 会在创建时将其冻结。
 4. **回归。** 现有 Harness 必须继续正常工作。先运行定向测试，然后运行 `make check`；API 更改后运行 `make openapi`，查询更改后运行 `make sqlc-generate`。
 5. **审查。** 遵循 [blind review workflow](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#review)。
 
@@ -252,7 +252,7 @@ Runtime 对每个 Turn 的限制（结算等待、回执发送预算和输出通
 | 延迟函数发现 | `TestNativeToolSearchPublicExecution` | `OAC_TEST_TOOL_SEARCH_REAL_OPTIONS` |
 | 禁用 Web 搜索和程序化工具调用 | `TestNativeToolPolicyPublicExecution` | `OAC_TEST_TOOL_POLICY_REAL_OPTIONS`、`OAC_TEST_TOOL_POLICY_ENGINE` |
 
-Environment 验收使用 `services/core/tests/official_environment_{templates,setup,skills,plugins,plugin_mcp,composition,initial_files,network,skill_references}.py`。对于组合式准备，请更改 Skill 默认值和模板，删除源文件，重试并重启；验证冻结字节、一次 setup 执行和 MCP 取消。`official_hosted_structured_native.py` 覆盖托管结构化输出。随每项验收结果记录精确源修订版本、原生版本和命令。
+随每项验收结果记录精确源修订版本、原生版本和命令。
 
 将提供商密钥保存在私有操作员文件中，绝不能放入提交或日志。相对于 `apps/daemon/internal/agent` 的现有定向测试如下：
 
