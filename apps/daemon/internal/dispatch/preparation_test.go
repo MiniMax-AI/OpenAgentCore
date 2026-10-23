@@ -72,22 +72,18 @@ func (p *controlledPreparation) CancellationOutcome() proto.DonePayload {
 const preparationEnvironmentID = "11111111-1111-4111-8111-111111111111"
 const preparationSessionID = "22222222-2222-4222-8222-222222222222"
 
+// preparationDirectories are the workspace and capability directories of the latest preparationWorkspace binding.
+var preparationDirectories struct{ workspace, capabilities string }
+
 func preparationWorkspace(t *testing.T) *localworkspace.Binding {
 	t.Helper()
 	runtimeHome := t.TempDir()
 	if err := os.Chmod(runtimeHome, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for name, value := range map[string]string{
-		"OAC_RUNTIME_ENVIRONMENT_ID":       preparationEnvironmentID,
-		"OAC_RUNTIME_SESSION_ID":           preparationSessionID,
-		"OAC_RUNTIME_WORKSPACE":            t.TempDir(),
-		"OAC_RUNTIME_CAPABILITY_DIRECTORY": t.TempDir(),
-		"OAC_RUNTIME_HOME":                 runtimeHome,
-	} {
-		t.Setenv(name, value)
-	}
-	binding, err := localworkspace.Load()
+	t.Setenv("OAC_RUNTIME_HOME", runtimeHome)
+	preparationDirectories.workspace, preparationDirectories.capabilities = t.TempDir(), t.TempDir()
+	binding, err := localworkspace.NewWithCapabilityDirectory(preparationEnvironmentID, preparationSessionID, preparationDirectories.workspace, preparationDirectories.capabilities)
 	if err != nil {
 		t.Fatal(err)
 	}

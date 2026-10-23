@@ -60,16 +60,12 @@ func discoverWithCheck(parent context.Context, options agent.DiscoveryOptions, d
 		return fail(fmt.Errorf("Claude SDK requires an explicit state root"))
 	}
 	config = Config{Node: node, Entrypoint: entrypoint, StateDir: filepath.Join(options.StateRoot, "daemon", options.Profile, "runtime", "claude-sdk")}
-	binding, err := localworkspace.Load()
-	if err != nil {
-		return fail(err)
-	}
-	if binding != nil {
+	if binding := localworkspace.Current(); binding != nil {
 		config.Node, err = filepath.EvalSymlinks(node)
 		if err != nil {
 			return fail(err)
 		}
-		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, os.Getenv("OAC_RUNTIME_WORKSPACE"))
+		config, err = ConfigureLocal(config, options.StateRoot, options.RuntimeRoot, binding.Workspace())
 		if err != nil {
 			return fail(err)
 		}

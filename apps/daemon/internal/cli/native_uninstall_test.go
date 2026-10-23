@@ -29,7 +29,7 @@ func TestNativeStartExitsOnPermanentRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 	rc := &runContext{stdout: new(bytes.Buffer), stderr: new(bytes.Buffer)}
-	err := runEnvironmentConnect(t.Context(), rc, "default", false, true, "ws"+strings.TrimPrefix(server.URL, "http")+"/api/v1/agent-daemon/ws", environment, credential)
+	err := runEnvironmentConnect(t.Context(), rc, "default", false, true, "ws"+strings.TrimPrefix(server.URL, "http")+"/api/v1/agent-daemon/ws", environment, credential, t.TempDir(), t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "run oac-daemon uninstall") || !strings.Contains(err.Error(), keyID) || strings.Contains(err.Error(), "private-canary") {
 		t.Fatalf("rejection: %v", err)
 	}

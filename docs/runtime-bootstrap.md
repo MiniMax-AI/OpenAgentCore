@@ -2,7 +2,7 @@
 title: "Runtime bootstrap"
 ---
 
-The Runtime bootstrap protocol connects a Sandbox Provider to the managed Runtime it starts. The Provider hands the Runtime one bootstrap file, which is the Runtime's only authentication input for that launch.
+The Runtime bootstrap protocol connects a Sandbox Provider to the managed Runtime it starts. The Provider hands the Runtime one bootstrap file, which is the Runtime's only authentication input for that launch and the only source of its Environment binding.
 
 | Property | Value |
 | --- | --- |
@@ -21,7 +21,7 @@ The Runtime bootstrap protocol connects a Sandbox Provider to the managed Runtim
 
 A successful launch proves only the handoff: an authenticated connection, prepared capabilities and execution readiness are separate observations under the [Core–Runtime protocol](./runtime-protocol.md), and the [Sandbox Provider protocol](./sandbox-provider.md#four-distinct-readiness-facts) lists what each one proves.
 
-Self-hosted executors and operator-provisioned devices get their daemon identity in other ways; the [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists every credential source. All of them enter the same Runtime execution loop.
+Self-hosted executors and operator-provisioned devices get their daemon identity in other ways, and their Environment binding from enrollment plus `oac-daemon connect --workspace` or the native installation; the [machine connection API](../contracts/agents-api/machine-api.md#credentials) lists every credential source. All of them enter the same Runtime execution loop.
 
 ## Startup order
 
@@ -50,6 +50,9 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `core_url` | HTTP(S) machine API base ending in `/api/v1`, without credentials, query or fragment |
 | `device_id` | Canonical nonzero UUID of the daemon identity Core issued |
 | `credential` | Nonempty daemon credential Core issued, without whitespace or NUL |
+| `environment_id` | Canonical nonzero UUID of the Environment the Runtime serves |
+| `session_id` | Canonical nonzero UUID of the Session whose native history the Runtime keeps |
+| `workspace` | Clean absolute directory of the workspace, `runtimebootstrap.RuntimeWorkspace` in the packaged Runtime layout. The Runtime serves it as `runtimebootstrap.PublicWorkspace` (`/workspace`), the path applications and Core use |
 
 The decoder rejects unknown, duplicate, missing and case-aliased fields, other versions and documents larger than `runtimebootstrap.MaxBytes`. Errors never include submitted values. A missing or malformed file fails before the daemon connects.
 

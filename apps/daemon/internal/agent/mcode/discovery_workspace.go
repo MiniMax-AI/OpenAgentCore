@@ -17,20 +17,16 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		*runtime = *agent.Unavailable(runtime.Info)
 		fmt.Fprintf(options.Stderr, "oac-daemon: mcode workspace unavailable: %v\n", err)
 	}
-	binding, err := localworkspace.Load()
-	if err != nil {
-		fail(err)
-		return nil
-	}
+	binding := localworkspace.Current()
 	if binding == nil {
 		narrowWorkspace(&runtime.Info.Capabilities, false)
 		return nil
 	}
-	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
+	node := runtimeNode()
 	if node == "" {
 		node = "node"
 	}
-	node, err = exec.LookPath(node)
+	node, err := exec.LookPath(node)
 	if err != nil {
 		fail(err)
 		return nil
@@ -50,7 +46,7 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		fail(err)
 		return nil
 	}
-	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_COMPANION"), os.Getenv("OAC_RUNTIME_WORKSPACE"))
+	c, err := ConfigureLocal(binary, node, os.Getenv("OAC_RUNTIME_MCODE_COMPANION"), binding.Workspace())
 	if err == nil {
 		err = CheckWorkspace(parent, c)
 	}

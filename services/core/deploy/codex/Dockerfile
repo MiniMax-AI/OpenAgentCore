@@ -14,7 +14,6 @@ COPY --chmod=0555 oac-daemon codex /usr/local/bin/
 COPY codex-resources /usr/local/codex-resources
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex \
-    OAC_RUNTIME_WORKSPACE=/environment/workspace \
     OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization \
     OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages \
     OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state

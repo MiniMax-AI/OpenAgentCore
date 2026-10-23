@@ -18,6 +18,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
@@ -29,7 +30,6 @@ import (
 func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 	for _, scenario := range []string{"resume", "rollback", "reconnect", "revoked", "wrong_operation"} {
 		t.Run(scenario, func(t *testing.T) {
-			t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 			var connections atomic.Int32
 			peers := make(chan *websocket.Conn, 3)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -188,7 +188,6 @@ func readLifecycleResult(t *testing.T, peer *websocket.Conn, kind string) proto.
 }
 
 func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 	peers := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
@@ -241,7 +240,6 @@ func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
 func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 	for _, scenario := range []string{"disconnect", "timeout", "revoked", "cancelled", "deleted"} {
 		t.Run(scenario, func(t *testing.T) {
-			t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 			var attempts atomic.Int32
 			peers := make(chan *websocket.Conn, 2)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -344,10 +342,10 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 	environment, session := uuid.NewString(), uuid.NewString()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", t.TempDir())
-	t.Setenv("OAC_RUNTIME_WORKSPACE", t.TempDir())
-	t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", t.TempDir())
-	t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", environment)
-	t.Setenv("OAC_RUNTIME_SESSION_ID", session)
+	if err := localworkspace.Bind(environment, session, t.TempDir(), t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(localworkspace.Unbind)
 	peers := make(chan *websocket.Conn, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)

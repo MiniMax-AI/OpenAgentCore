@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -85,13 +86,13 @@ func (b *Binding) initializeRuntime(ctx context.Context, input proto.RuntimeInit
 }
 
 func (b *Binding) initializationCWD(value string) (string, error) {
-	if value == "" || value == "/workspace" {
+	if value == "" || value == runtimebootstrap.PublicWorkspace {
 		return b.workspace, nil
 	}
-	if !strings.HasPrefix(value, "/workspace/") {
+	if !strings.HasPrefix(value, runtimebootstrap.PublicWorkspace+"/") {
 		return "", agentcapabilities.ErrInvalid
 	}
-	relative, err := nativeAPIPath(strings.TrimPrefix(value, "/workspace/"))
+	relative, err := nativeAPIPath(strings.TrimPrefix(value, runtimebootstrap.PublicWorkspace+"/"))
 	if err != nil {
 		return "", agentcapabilities.ErrInvalid
 	}
@@ -177,10 +178,10 @@ func configureRuntime(values map[string]string) error {
 }
 
 func (b *Binding) installInitialFile(ctx context.Context, input proto.RuntimeInitialFile, data []byte) (err error) {
-	if b.writer == nil || !strings.HasPrefix(input.Path, "/workspace/") || len(data) > proto.RuntimePrepareMaxBytes {
+	if b.writer == nil || !strings.HasPrefix(input.Path, runtimebootstrap.PublicWorkspace+"/") || len(data) > proto.RuntimePrepareMaxBytes {
 		return agentcapabilities.ErrInvalid
 	}
-	relative, err := nativeAPIPath(strings.TrimPrefix(input.Path, "/workspace/"))
+	relative, err := nativeAPIPath(strings.TrimPrefix(input.Path, runtimebootstrap.PublicWorkspace+"/"))
 	if err != nil {
 		return agentcapabilities.ErrInvalid
 	}

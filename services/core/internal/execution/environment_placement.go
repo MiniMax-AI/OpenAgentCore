@@ -3,6 +3,7 @@ package execution
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
@@ -10,8 +11,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
-
-const hostedWorkspaceDirectory = "/workspace"
 
 type environmentPlacement struct {
 	Plugins               []proto.PluginMetadata            `json:"plugins,omitempty"`
@@ -56,7 +55,7 @@ func parseEnvironmentPlacement(configuration json.RawMessage) (environmentPlacem
 		if local.WorkspaceDirectory != "" || agentcapabilities.ValidateDirectories(local.CapabilityDirectories) != nil {
 			return placement, sessions.ErrInvalidInput
 		}
-		placement.WorkspaceDirectory = hostedWorkspaceDirectory
+		placement.WorkspaceDirectory = runtimebootstrap.PublicWorkspace
 	case "self_hosted":
 		if !validSelfHostedPlacement(placement) {
 			return placement, sessions.ErrInvalidInput

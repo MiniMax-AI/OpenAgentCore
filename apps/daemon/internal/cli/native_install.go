@@ -388,15 +388,13 @@ func runStart(rc *runContext, args []string) error {
 	rc.installedKinds = nativeInstallationKinds(config.Harnesses)
 	defer func() { rc.installedKinds = previousKinds }()
 	values := nativeHarnessEnvironment(config.ComponentDirectory, config.Harnesses)
-	values["OAC_RUNTIME_WORKSPACE"] = config.Workspace
-	values["OAC_RUNTIME_CAPABILITY_DIRECTORY"] = config.CapabilityDirectory
 	values["OAC_RUNTIME_TOOL_ENV_FILE"] = config.ToolEnvironmentFile
 	for key, value := range values {
 		if err = os.Setenv(key, value); err != nil {
 			return err
 		}
 	}
-	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, true, true, config.Remote, config.Environment, config.Credential)
+	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, true, true, config.Remote, config.Environment, config.Credential, config.Workspace, config.CapabilityDirectory)
 }
 
 func useInstalledNativeHome() {
