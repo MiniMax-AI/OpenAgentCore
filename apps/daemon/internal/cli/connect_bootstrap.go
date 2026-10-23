@@ -3,6 +3,7 @@ package cli
 import (
 	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
@@ -17,6 +18,9 @@ func bootstrapProfile(path string) (*auth.Profile, error) {
 	input, err := runtimebootstrap.Decode(raw)
 	if err != nil {
 		return nil, err
+	}
+	if err = localworkspace.Bind(input.EnvironmentID, input.SessionID, input.Workspace, localworkspace.CapabilityDirectory); err != nil {
+		return nil, errors.New("connect: Runtime workspace binding unavailable")
 	}
 	return &auth.Profile{ServerURL: input.CoreURL, RuntimeID: input.DeviceID, RunnerCredential: input.Credential}, nil
 }

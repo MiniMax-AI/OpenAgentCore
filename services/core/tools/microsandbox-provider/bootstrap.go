@@ -63,7 +63,6 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()),
 		sdk.WithEnv(map[string]string{
 			"HOME": "/home/runtime", "OAC_RUNTIME_HOME": "/home/runtime/.oac",
-			"OAC_RUNTIME_ENVIRONMENT_ID": bootstrap.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bootstrap.SessionID,
 			"OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE": "/run/oac/daemon-suspend.json",
 		}))
 	if e != nil {

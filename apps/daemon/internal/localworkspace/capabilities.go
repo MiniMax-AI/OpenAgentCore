@@ -3,6 +3,7 @@ package localworkspace
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"os"
 	"path/filepath"
 	"strings"
@@ -198,8 +199,8 @@ func (b *Binding) resolveCapabilityDirectory(source string) (*os.Root, error) {
 	if agentcapabilities.ValidateLocalDirectories([]string{source}) != nil {
 		return nil, agentcapabilities.ErrInvalid
 	}
-	if source == "/workspace" || strings.HasPrefix(source, "/workspace/") {
-		source = filepath.Join(b.workspace, strings.TrimPrefix(source, "/workspace"))
+	if source == runtimebootstrap.PublicWorkspace || strings.HasPrefix(source, runtimebootstrap.PublicWorkspace+"/") {
+		source = filepath.Join(b.workspace, strings.TrimPrefix(source, runtimebootstrap.PublicWorkspace))
 	}
 	// Refuse recursive installation into the selected source itself.
 	if containsPath(source, b.capabilityRoot) || containsPath(b.capabilityRoot, source) {

@@ -37,7 +37,7 @@ class StartupTest(unittest.TestCase):
             profile = Path(temporary) / 'private/default'
             environment_file = Path(temporary) / 'image.json'
             environment_file.write_text(json.dumps({'HOME': '/home/runtime',
-                'OAC_RUNTIME_HOME': '/home/runtime/.oac', 'OAC_RUNTIME_WORKSPACE': '/environment/workspace'}))
+                'OAC_RUNTIME_HOME': '/home/runtime/.oac'}))
             (root / 'bootstrap.json').write_text(json.dumps(PAYLOAD))
             real_chmod = Path.chmod
 

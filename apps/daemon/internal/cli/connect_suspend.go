@@ -41,10 +41,7 @@ type suspendedRouter struct {
 }
 
 func newSuspendedRouter(conn *transport.Conn, registry *agent.Registry) (*suspendedRouter, error) {
-	local, err := localworkspace.Load()
-	if err != nil {
-		return nil, err
-	}
+	local := localworkspace.Current()
 	sender := &reconnectSender{conn: conn}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Log: obslog.Bg(), LocalWorkspace: local})
 	if err != nil {

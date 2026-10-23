@@ -145,7 +145,7 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 			return info, sandbox.ErrOwnership
 		}
 	}
-	options := runtimeContainerOptions(p.config, name, p.labels(b.Reference), []string{"OAC_RUNTIME_ENVIRONMENT_ID=" + b.EnvironmentID, "OAC_RUNTIME_SESSION_ID=" + b.SessionID})
+	options := runtimeContainerOptions(p.config, name, p.labels(b.Reference))
 	options.Config.Cmd = []string{"connect", "--profile", "default", "--bootstrap-file", "/home/runtime/runtime-bootstrap.json"}
 	v, e := p.client.ContainerCreate(ctx, options)
 	if errdefs.IsConflict(e) {

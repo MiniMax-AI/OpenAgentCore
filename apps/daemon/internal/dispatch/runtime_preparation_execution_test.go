@@ -33,7 +33,7 @@ func TestRuntimePreparationUnavailablePreventsNativeExecutor(t *testing.T) {
 				calls.Add(1)
 				return nil, errors.New("native factory must not be reached")
 			})
-			installation := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
+			installation := preparationDirectories.capabilities
 			if info, err := os.Stat(installation); err != nil || !info.IsDir() {
 				t.Fatalf("capability fixture is unavailable: %v", err)
 			}

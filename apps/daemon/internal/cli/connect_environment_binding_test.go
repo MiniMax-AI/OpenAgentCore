@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 
 	"github.com/google/uuid"
@@ -24,10 +25,7 @@ func environmentRuntimeFixture(t *testing.T) (root, workspace, credential string
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_HOME", root)
-	t.Setenv("OAC_RUNTIME_WORKSPACE", workspace)
-	for _, name := range []string{"OAC_RUNTIME_ENVIRONMENT_ID", "OAC_RUNTIME_SESSION_ID"} {
-		t.Setenv(name, "")
-	}
+	t.Cleanup(localworkspace.Unbind)
 	return root, workspace, credential, machineapi.Enrollment{DeviceID: uuid.NewString(), SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), WorkspaceDirectory: "/workspace"}
 }
 
@@ -38,7 +36,7 @@ func TestBindEnvironmentRuntimeUsesCanonicalOperatorWorkspace(t *testing.T) {
 			if physical {
 				bound.WorkspaceDirectory = workspace
 			}
-			if err := bindEnvironmentRuntime("wss://core/api/v1/agent-daemon/ws", bound, credential); err != nil {
+			if err := bindEnvironmentRuntime("wss://core/api/v1/agent-daemon/ws", bound, workspace, localworkspace.CapabilityDirectory); err != nil {
 				t.Fatal(err)
 			}
 			raw, err := readEnvironmentPrivateFile(filepath.Join(root, "daemon", "environment.json"))
@@ -49,15 +47,14 @@ func TestBindEnvironmentRuntimeUsesCanonicalOperatorWorkspace(t *testing.T) {
 			if decodeEnvironmentJSON(raw, &receipt) != nil || receipt.LocalWorkspace != workspace || receipt.Enrollment != bound {
 				t.Fatal("workspace identity changed", receipt)
 			}
-			if err := bindEnvironmentRuntime(receipt.RemoteURL, bound, credential); err != nil {
+			if err := bindEnvironmentRuntime(receipt.RemoteURL, bound, workspace, localworkspace.CapabilityDirectory); err != nil {
 				t.Fatal("same binding refused", err)
 			}
 			replacement := filepath.Join(filepath.Dir(workspace), "replacement")
 			if err := os.Mkdir(replacement, 0700); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("OAC_RUNTIME_WORKSPACE", replacement)
-			if err := bindEnvironmentRuntime(receipt.RemoteURL, bound, credential); err == nil {
+			if err := bindEnvironmentRuntime(receipt.RemoteURL, bound, replacement, localworkspace.CapabilityDirectory); err == nil {
 				t.Fatal("existing workspace identity replaced")
 			}
 			after, _ := os.ReadFile(filepath.Join(root, "daemon", "environment.json"))
@@ -73,9 +70,9 @@ func TestBindEnvironmentRuntimeUsesCanonicalOperatorWorkspace(t *testing.T) {
 }
 
 func TestBindEnvironmentRuntimeChecksIdentityAndPathValidity(t *testing.T) {
-	for _, kind := range []string{"relative", "unclean", "missing", "file", "symlink", "parent symlink", "workspace contains private", "workspace inside private", "foreign enrollment", "credential outside private", "identity conflict"} {
+	for _, kind := range []string{"relative", "unclean", "missing", "file", "symlink", "parent symlink", "workspace contains private", "workspace inside private", "foreign enrollment"} {
 		t.Run(kind, func(t *testing.T) {
-			root, workspace, credential, bound := environmentRuntimeFixture(t)
+			root, workspace, _, bound := environmentRuntimeFixture(t)
 			selected := workspace
 			switch kind {
 			case "relative":
@@ -113,17 +110,9 @@ func TestBindEnvironmentRuntimeChecksIdentityAndPathValidity(t *testing.T) {
 				}
 			case "foreign enrollment":
 				bound.WorkspaceDirectory = filepath.Join(filepath.Dir(workspace), "different")
-			case "credential outside private":
-				credential = filepath.Join(filepath.Dir(root), "credential")
-				if err := os.WriteFile(credential, []byte("private-test-credential"), 0600); err != nil {
-					t.Fatal(err)
-				}
-			case "identity conflict":
-				t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", uuid.NewString())
 			}
-			t.Setenv("OAC_RUNTIME_WORKSPACE", selected)
-			allowed := kind == "symlink" || kind == "parent symlink" || kind == "workspace contains private" || kind == "workspace inside private" || kind == "credential outside private"
-			err := bindEnvironmentRuntime("wss://core/api/v1/agent-daemon/ws", bound, credential)
+			allowed := kind == "symlink" || kind == "parent symlink" || kind == "workspace contains private" || kind == "workspace inside private"
+			err := bindEnvironmentRuntime("wss://core/api/v1/agent-daemon/ws", bound, selected, localworkspace.CapabilityDirectory)
 			if allowed {
 				if err != nil {
 					t.Fatal("operator layout rejected", err)

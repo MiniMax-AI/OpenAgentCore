@@ -96,7 +96,6 @@ func TestDisconnectedPumpRetainsExactExecutorUntilCleanup(t *testing.T) {
 }
 
 func testDisconnectedPumpCleanup(t *testing.T, suspend bool) {
-	t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 	peers := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)

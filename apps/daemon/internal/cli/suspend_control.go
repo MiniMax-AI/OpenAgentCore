@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
@@ -49,10 +50,11 @@ func newSuspendControl() (*suspendControl, error) {
 	if !ok || st.Uid != uint32(os.Getuid()) {
 		return nil, errors.New("connect: owned suspend control directory required")
 	}
-	environment := os.Getenv("OAC_RUNTIME_ENVIRONMENT_ID")
-	if environment == "" {
+	local := localworkspace.Current()
+	if local == nil {
 		return nil, errors.New("connect: suspend control requires an Environment binding")
 	}
+	environment := local.Environment()
 	start, err := suspendProcessStart(os.Getpid())
 	if err != nil {
 		return nil, err

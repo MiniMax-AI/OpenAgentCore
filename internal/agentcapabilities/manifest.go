@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ func ValidateDirectories(directories []string) error {
 		return ErrInvalid
 	}
 	for _, directory := range directories {
-		if directory != "/workspace" && !strings.HasPrefix(directory, "/workspace/") {
+		if directory != runtimebootstrap.PublicWorkspace && !strings.HasPrefix(directory, runtimebootstrap.PublicWorkspace+"/") {
 			return ErrInvalid
 		}
 	}

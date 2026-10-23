@@ -116,7 +116,7 @@ func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string)
 // exitOnRejection selects the native `start` behaviour: a permanent rejection
 // ends the process with the message as its error. Otherwise the process that
 // owns the connection parks (see parkEnvironment).
-func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background, exitOnRejection bool, remote, environment, credentialFile string) error {
+func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background, exitOnRejection bool, remote, environment, credentialFile, workspace, capabilityDirectory string) error {
 	base, err := environmentBase(remote)
 	if err != nil {
 		return err
@@ -154,7 +154,7 @@ func runEnvironmentConnect(parent context.Context, rc *runContext, profile strin
 	if err = parent.Err(); err != nil {
 		return err
 	}
-	if err = bindEnvironmentRuntime(remote, bound, credentialFile); err != nil {
+	if err = bindEnvironmentRuntime(remote, bound, workspace, capabilityDirectory); err != nil {
 		return err
 	}
 	if background && !daemonize.IsBackgroundChild() {

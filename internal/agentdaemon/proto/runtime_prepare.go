@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/google/uuid"
 )
 
@@ -177,7 +178,7 @@ func validWorkspacePath(value string, allowRoot bool) bool {
 	if len(value) > 4096 || !utf8.ValidString(value) || path.Clean(value) != value || strings.ContainsAny(value, "\\\x00\r\n") {
 		return false
 	}
-	return (allowRoot && value == "/workspace") || strings.HasPrefix(value, "/workspace/")
+	return (allowRoot && value == runtimebootstrap.PublicWorkspace) || strings.HasPrefix(value, runtimebootstrap.PublicWorkspace+"/")
 }
 
 func validRuntimeInitialization(p RuntimeInitialization) bool {

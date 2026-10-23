@@ -1,10 +1,10 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: fa560c06d329dc21212e9567bd36dfcdfec6d5f9e1d29ca7b08bc525587e80b5
+source_hash: 5a6b2fff6d4f54505022e783ebb4a4c20cc8602935842053416870786ee7bc74
 ---
 
-Runtime 引导协议连接沙箱提供商与其启动的托管 Runtime。提供商向 Runtime 交付一个引导文件，该文件是此次启动中 Runtime 唯一的认证输入。
+Runtime 引导协议连接沙箱提供商与其启动的托管 Runtime。提供商向 Runtime 交付一个引导文件，该文件是此次启动中 Runtime 唯一的认证输入，也是其 Environment 绑定的唯一来源。
 
 | 属性 | 内容 |
 | --- | --- |
@@ -23,7 +23,7 @@ Runtime 引导协议连接沙箱提供商与其启动的托管 Runtime。提供�
 
 启动成功仅证明交付完成：经过认证的连接、已准备的能力和执行就绪是 [Core–Runtime 协议](runtime-protocol.md) 下的独立观测；[沙箱提供商协议](sandbox-provider.md#four-distinct-readiness-facts) 列出各自证明的事实。
 
-自托管执行器和运维人员供应的设备通过其他方式获取 daemon 身份；[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出所有凭据来源。它们都进入同一 Runtime 执行循环。
+自托管执行器和运维人员供应的设备通过其他方式获取 daemon 身份，其 Environment 绑定来自注册以及 `oac-daemon connect --workspace` 或原生安装；[机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出所有凭据来源。它们都进入同一 Runtime 执行循环。
 
 ## 启动顺序 {#startup-order}
 
@@ -52,6 +52,9 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 | `core_url` | 以 `/api/v1` 结尾的 HTTP(S) 机器 API 基址，不含凭据、查询或片段 |
 | `device_id` | Core 签发的 daemon 身份的规范非零 UUID |
 | `credential` | Core 签发的非空 daemon 凭据，不含空白或 NUL |
+| `environment_id` | Runtime 所服务 Environment 的规范非零 UUID |
+| `session_id` | Runtime 保存其原生历史的 Session 的规范非零 UUID |
+| `workspace` | 工作区的干净绝对目录；打包的 Runtime 布局中为 `runtimebootstrap.RuntimeWorkspace`。Runtime 将其作为 `runtimebootstrap.PublicWorkspace`（`/workspace`）提供，这是应用与 Core 使用的路径 |
 
 解码器拒绝未知、重复、缺失和大小写别名字段，拒绝其他版本及超过 `runtimebootstrap.MaxBytes`的文档。错误不包含提交的值。文件缺失或格式错误时，daemon 在连接前失败。
 
