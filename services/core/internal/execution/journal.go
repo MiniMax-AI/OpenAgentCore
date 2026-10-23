@@ -59,7 +59,7 @@ func (j *journal) enqueue(env proto.Envelope) error {
 		return sessions.ErrInvalidInput
 	}
 	switch env.Type {
-	case proto.TypeDelta, proto.TypeOutputMessage, proto.TypeThinking, proto.TypeToolCall, proto.TypeCommandOutput, proto.TypeUsage,
+	case proto.TypeDelta, proto.TypeOutputMessage, proto.TypeReasoning, proto.TypeToolCall, proto.TypeCommandOutput, proto.TypeUsage,
 		proto.TypeError, proto.TypeDone, proto.TypePromptSteerAck, proto.TypeSubagentIdentity, proto.TypeSubagentLifecycle, proto.TypeSubagentTurn, proto.TypeSubagentItem, proto.TypeSubagentCoordination, "cancel_receipt":
 	default:
 		return nil

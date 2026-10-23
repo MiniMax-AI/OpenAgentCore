@@ -69,6 +69,7 @@ type runtimeLifecycle struct {
 	pendingWake     chan struct{}
 	hintDestination func(string)
 	placementWake   chan<- struct{}
+	scheduleWake    chan<- struct{}
 }
 
 func newRuntimeManager(owner Owner, deployments *deployment.Service, deploymentReader deployment.Reader, sessionReader sessions.Reader, registry *runtimegateway.Registry, config *RuntimeProvider) (*runtimeManager, error) {

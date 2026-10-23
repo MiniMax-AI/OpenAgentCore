@@ -40,9 +40,9 @@ function calls(rows: NativeRow[]): Map<string, Call> {
 }
 
 // With live, the children are still running: admitted names the ones native started in this Turn, and only their open Turn is projected.
-export type Projection = { live?: ReadonlyMap<string, string>; tools?: ReadonlyMap<string, ToolIdentity> };
+export type Projection = { live?: ReadonlyMap<string, string>; tools?: ReadonlyMap<string, ToolIdentity>; reasoning?: boolean };
 
-export function projectHistory(root: string, rootRows: NativeRow[], entries: Entry[], { live, tools = new Map() }: Projection = {}): Fact[] {
+export function projectHistory(root: string, rootRows: NativeRow[], entries: Entry[], { live, tools = new Map(), reasoning = false }: Projection = {}): Fact[] {
   const facts: Fact[] = [], children = new Map<string, Child>();
   const byParent = new Map<string, Map<string, Call>>([[root, calls(rootRows)]]);
   for (const entry of entries) byParent.set(entry.id, calls(entry.rows));
@@ -73,7 +73,7 @@ export function projectHistory(root: string, rootRows: NativeRow[], entries: Ent
     parent_turn_id: child.call.turn, source_item_id: child.call.id, name: typeof child.call.input.name === "string" ? child.call.input.name : null,
     instructions: null,
   } });
-  for (const child of ordered) facts.push(...(live ? [openTurn(child)] : projectChild(child, children, tools)));
+  for (const child of ordered) facts.push(...(live ? [openTurn(child)] : projectChild(child, children, tools, reasoning)));
   if (!live) for (const call of byParent.get(root)!.values()) {
     const coordination = coordinationFact(call, "", children);
     if (coordination) facts.push({ type: "subagent_coordination", fact: coordination });
@@ -118,7 +118,8 @@ function functionContent(content: unknown): Record<string, unknown>[] {
     : b.type === "image" && b.source?.type === "base64" ? { type: "input_image", image_url: `data:${b.source.media_type};base64,${b.source.data}` } : fail());
 }
 
-function projectChild(child: Child, children: Map<string, Child>, tools: ReadonlyMap<string, ToolIdentity>): Fact[] {
+// Thinking blocks project as reasoning only when the Agent requested summaries.
+function projectChild(child: Child, children: Map<string, Child>, tools: ReadonlyMap<string, ToolIdentity>, reasoning: boolean): Fact[] {
   const facts: Fact[] = [], turns: NativeRow[][] = [];
   for (const row of child.rows) {
     if (input(row)) turns.push([]);
@@ -152,7 +153,7 @@ function projectChild(child: Child, children: Map<string, Child>, tools: Readonl
       for (const block of blocks(row)) {
         if (block.type === "text" && typeof block.text === "string") message.text += block.text;
         else if (block.type === "thinking" && typeof block.thinking === "string") message.thinking += block.thinking;
-        const kind = block.type === "text" ? "text" : block.type === "thinking" ? "thinking" : block.type === "tool_use" ? "tool" : undefined;
+        const kind = block.type === "text" ? "text" : block.type === "thinking" && reasoning ? "thinking" : block.type === "tool_use" ? "tool" : undefined;
         if (kind) {
           const key = kind === "tool" ? block.id as string : id;
           if (!seen.has(kind + ":" + key)) { seen.add(kind + ":" + key); order.push({ id: key, kind }); }

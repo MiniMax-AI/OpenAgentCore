@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 581c5a36cd2df2fa35d96da7c0e4d8fcbc7e01f4d97d35a2351b39386b15b380
+source_hash: 9e02f5fc7ace233f2a17cd7d8fa53447794b95430bf7bf219b66ece33f96ca35
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -121,6 +121,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - `item.added` 和 `item.done` 始终携带 `output_index`；输入 Item 的该值为 null。函数结果只发出 `item.added`；`item.done` 用于代理输出。
 - 助手消息遵循以下单一顺序：先发送 `content` 为空的进行中 `item.added`，再发送文本为空的 `content_part.added`，然后发送 `output_text.delta` 事件、`output_text.done`、`content_part.done` 和 `item.done`。首次观察时已完整的消息（例如结构化输出）会在一个 `output_text.delta` 中逐字节发送全部文本。完整文本会替换此前累积的增量。
 - Codex 命令输出以 `agent.output.command_execution_output.delta` 流式传输，并携带命令的 Item ID 和输出索引。原生输出配额和文本转换规则适用，因此这些增量并非逐字节捕获的原始结果；完整 Item 才是权威结果。
+- reasoning Item 遵循以下单一顺序：先发送 `summary` 为空的进行中 `item.added`；然后按顺序对每个 `summary_text` 部分发送文本为空的 `reasoning_summary_part.added` 和 `reasoning_summary_text.delta` 事件，并在下一个部分开始或 Item 结束时发送 `reasoning_summary_text.done` 和 `reasoning_summary_part.done`；最后发送 `item.done`。被取消或失败的 Turn 截断的部分，其 `reasoning_summary_part.done` 的 `status` 为 `incomplete`，否则为 null。子 Turn 快照改写了先前文本时，新文本只出现在 done 事件中。
 - 已取消或失败的 Turn 会将其未完成的 Item 标记为 `incomplete`，并保留其部分内容。
 - 函数调用会一直保留在 `required_actions` 中，直到 Harness 应用其结果，或取消操作或 Turn 结束将其移除。重复通知不会发出新状态。
 
@@ -139,7 +140,8 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 | `mcp_call` | 服务器和工具标识、参数、结构化结果或错误 |
 | `function_call`、`function_call_output` | 关联的调用及其结果。结果始终携带 `output` 和 `error`；提交时省略这些字段则值为 null。存储的结果会保留提交时字段是否存在的信息。原生文件更改显示为 `apply_patch` 函数调用，更改内容作为参数，不会生成虚构结果 |
 | `web_search_call` | 支持的操作字段（`search`、`open_page`、`find_in_page`、`other`）；Claude Code 以 `search` 报告 `WebSearch`，以 `open_page` 报告 `WebFetch` |
-| `reasoning`、`agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态；reasoning 状态可以为 null |
+| `reasoning` | 一个原生推理 item，每个原生部分对应一个 `summary_text` 部分，仅在 Agent 设置了 `reasoning.summary` 时出现；为 null（默认）时，任何 Turn（根或子）都没有 `reasoning` Item 和 reasoning 事件。文本内容见 [OpenAI 兼容性](index.md#differences-from-openai)。子 Turn 的 Item 状态可以为 null |
+| `agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态 |
 
 工具失败不会导致其 Turn 失败。Session 的项目可以读取工具输出，其中可能包含该工具自己的诊断文本。
 

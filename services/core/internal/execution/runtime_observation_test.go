@@ -91,3 +91,34 @@ func TestComputeFailureObservationUsesCommittedReceipt(t *testing.T) {
 		})
 	}
 }
+
+func TestRunningComputeWakesScheduler(t *testing.T) {
+	fixture := workspaceSettlementFixtureWithSetup(t, &observationCaptureProvider{}, workspaceNodeSetup(t, true))
+	r, session := fixture.lifecycle, fixture.session
+	wake := make(chan struct{}, 1)
+	r.scheduleWake = wake
+	initial, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = fixture.pool.Exec(t.Context(), `UPDATE runtime_allocations SET compute_phase='waking',compute_revision=2,compute_retained_until=clock_timestamp()+interval '1 hour' WHERE id=$1`, initial.ID); err != nil {
+		t.Fatal(err)
+	}
+	waking, err := r.reader.EnvironmentAllocation(t.Context(), initial.Key())
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-wake:
+	default:
+	}
+	// A Turn admitted while the compute was suspended is bound only once it runs.
+	if _, err = r.saveCompute(t.Context(), waking, "running", runtimeCompute{Current: sandbox.Compute{ID: "source", Name: "source"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-wake:
+	default:
+		t.Fatal("running compute did not wake the scheduler")
+	}
+}

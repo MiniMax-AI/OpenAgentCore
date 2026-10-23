@@ -26,6 +26,7 @@ type startRequest struct {
 	NativeModelOptions *nativeModelOptions  `json:"native_model_options,omitempty"`
 	ToolSearch         bool                 `json:"tool_search,omitempty"`
 	WebSearch          string               `json:"web_search,omitempty"`
+	ReasoningSummary   bool                 `json:"reasoning_summary,omitempty"`
 	Subagents          *subagentOptions     `json:"subagents,omitempty"`
 	OutputFormat       *proto.OutputFormat  `json:"output_format,omitempty"`
 	Type               string               `json:"type"`
@@ -80,6 +81,7 @@ func prepareConfiguration(config Config, req proto.PromptRequestPayload) (startR
 	if controls := req.ExecutionControls; controls != nil && controls.WebSearch != nil {
 		start.WebSearch = controls.WebSearch.Mode
 	}
+	start.ReasoningSummary = req.ExecutionControls != nil && req.ExecutionControls.ReasoningSummary != ""
 	if req.ExecutionControls != nil && req.ExecutionControls.OutputFormat != nil {
 		format := req.ExecutionControls.OutputFormat
 		if format.Type != "json_schema" {

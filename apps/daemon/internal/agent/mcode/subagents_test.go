@@ -40,7 +40,8 @@ func TestSubagentSnapshotsKeepOwnHistoryAndStableNativeIdentity(t *testing.T) {
 	}
 	first := project(childSnapshot(t))
 	second := project(childSnapshot(t))
-	if len(first) != 6 {
+	// Native thinking is not reported: MiniMax Code admits no reasoning summary.
+	if len(first) != 5 {
 		t.Fatalf("got %d events", len(first))
 	}
 	for i, event := range first {
@@ -48,7 +49,7 @@ func TestSubagentSnapshotsKeepOwnHistoryAndStableNativeIdentity(t *testing.T) {
 			t.Fatal("cold snapshot identities changed")
 		}
 	}
-	if first[0].Type != proto.TypeSubagentIdentity || first[1].Type != proto.TypeSubagentTurn || first[5].Type != proto.TypeSubagentTurn {
+	if first[0].Type != proto.TypeSubagentIdentity || first[1].Type != proto.TypeSubagentTurn || first[4].Type != proto.TypeSubagentTurn {
 		t.Fatal("identity/turn/item ordering changed")
 	}
 	var input proto.SubagentItemPayload

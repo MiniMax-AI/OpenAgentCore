@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 1dbd446a9974495b9bb19cf19a8dd2ae1ce7706561366d3d985c42815e4d97ee
+source_hash: 7597a55282203a07f4f9f794ee548374b41e53a335be46d62c727aabb5c00bb3
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -98,6 +98,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 空输入会返回 400 `invalid_request`，附带通用消息和值为 null 的 param；官方响应为 `invalid_request_error`，param 为 `input`。
 - 一旦所有根级 Turn 均已进入终态，Session 用量即可用；官方读取会滞后数秒。
 - Harness 输出（例如命令输出）中的 U+0000 读取时为 U+FFFD；官方服务会保留该字符。
+- `reasoning` Item 携带 Harness 对其原生推理所展示的内容：Harness 产生原生摘要时为该摘要，否则为其原生推理文本，例如 Codex 的原始推理，或模型 API 返回给 Claude Code 的 thinking 文本。每个原生部分对应一个 `summary_text` 部分，没有文本的原生推理不会上报，因此模型提供方的 `thinking.display` 为 `omitted` 时，Claude Code 不上报推理。Codex 流式输出一个 item 先送达的原生通道，即摘要或原始推理文本。
 
 **Files、Skills、Environment files 和 Artifacts**（[Files and Skills](source-files.md)、[Environment files and Artifacts](environment-files.md)）
 
@@ -127,7 +128,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **执行和历史**
 
-- Codex 的推理摘要会被请求，但不会投影为 `reasoning` Item；流也不会发出 reasoning-summary 事件、Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
+- 流不会发出 Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
 - 除 [Turns and Items](sessions-events.md#turns-and-items) 中列出的变体外，其他原生 Item 变体不会被投影，而且 Items 无法修改。
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。

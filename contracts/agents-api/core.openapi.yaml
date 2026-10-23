@@ -2474,6 +2474,7 @@ definitions:
           - input_image
           - output_text
           - encrypted_content
+          - summary_text
         type: string
     required:
       - type

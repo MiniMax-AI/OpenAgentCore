@@ -81,6 +81,7 @@ func StartWorker(ctx context.Context, dispatcher *Dispatcher, owner Owner) (_ *W
 	if err != nil {
 		return nil, err
 	}
+	worker.runtimes.scheduleWake = worker.scheduleWake
 	defer func() {
 		if err != nil {
 			worker.runtimes.stop()

@@ -3,27 +3,30 @@ package codex
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
-// ItemBuffers holds the per-itemId text accumulators used to fold
-// delta notifications back into a single chunk on item/completed.
-// Codex streams reasoning and agentMessage in two channels — the
-// {reasoning,agentMessage}/delta notifications, plus the final item
-// body on item/completed. We keep both: deltas drive incremental UI
-// (TypeDelta / TypeThinking), and completed-item bodies anchor the
-// final text for the done event.
+// ItemBuffers holds per-itemId state for streamed notifications.
+// agentMessage deltas drive incremental TypeDelta frames while the completed
+// item anchors the final text. A reasoning item streams one of its two native
+// channels, recorded here from its first delta.
 type ItemBuffers struct {
-	Reasoning map[string]string
+	Reasoning map[string]reasoningStream
 	AgentText map[string]string
+}
+
+// reasoningStream is the native channel a reasoning item streams, the last
+// native part index seen on it and the reported part it maps to.
+type reasoningStream struct {
+	channel      string
+	native, part int
 }
 
 // NewItemBuffers returns an empty buffer set.
 func NewItemBuffers() *ItemBuffers {
 	return &ItemBuffers{
-		Reasoning: map[string]string{},
+		Reasoning: map[string]reasoningStream{},
 		AgentText: map[string]string{},
 	}
 }
@@ -36,7 +39,7 @@ func NewItemBuffers() *ItemBuffers {
 // item types we silence by intent:
 //
 //   - reasoning / agentMessage / userMessage: text is streamed via deltas
-//     and re-stamped in item/completed
+//     and re-stamped in item/completed; reasoning is reported by the Session
 //   - error: surfaced by turn/completed.status="failed" instead
 func DispatchStartedItem(runID string, item ThreadItem) ([]proto.Envelope, error) {
 	switch item.Type {
@@ -69,34 +72,14 @@ func DispatchStartedItem(runID string, item ThreadItem) ([]proto.Envelope, error
 }
 
 // DispatchCompletedItem folds an item.completed payload into envelopes.
-// Reasoning and agentMessage produce a final TypeThinking / TypeDelta
-// (delta+sequence=0) so the buffer drained by upstream deltas can be
-// flushed; tool-call variants produce an "after" envelope so the UI
-// gets a stage transition.
-//
-// emitFinalDelta=true asks the dispatch to emit a synthetic full-text
-// TypeDelta whose Sequence will be set by the caller using a session-
-// level monotonic counter; this is only needed when no deltas were
-// observed (item.completed arrived without any item/agentMessage/delta).
+// An agentMessage returns its text so the session can stamp it into
+// DonePayload.Content; tool-call variants produce an "after" envelope so the
+// UI gets a stage transition.
 //
 // Returns the agent text body for agentMessage items so the session can
 // stamp it into DonePayload.Content. Empty string for everything else.
 func DispatchCompletedItem(runID string, item ThreadItem, bufs *ItemBuffers) (envelopes []proto.Envelope, agentText string, err error) {
 	switch item.Type {
-	case "reasoning":
-		body := bufs.Reasoning[item.ID]
-		delete(bufs.Reasoning, item.ID)
-		if body == "" {
-			body = fallbackReasoningText(item)
-		}
-		if body == "" {
-			return nil, "", nil
-		}
-		env, err := proto.NewEnvelope(proto.TypeThinking, runID, proto.ThinkingPayload{Text: body})
-		if err != nil {
-			return nil, "", fmt.Errorf("codex: thinking envelope: %w", err)
-		}
-		return []proto.Envelope{env}, "", nil
 	case "agentMessage":
 		body := bufs.AgentText[item.ID]
 		delete(bufs.AgentText, item.ID)
@@ -123,22 +106,14 @@ func DispatchCompletedItem(runID string, item ThreadItem, bufs *ItemBuffers) (en
 	return nil, "", nil
 }
 
-// FoldDeltaIntoBuffer accumulates a delta string under the matching
-// itemId. Returns the running prefix so the caller can emit a
-// progressive TypeDelta / TypeThinking envelope for streaming UI.
-func FoldDeltaIntoBuffer(bufs *ItemBuffers, kind, itemID, delta string) string {
+// FoldDeltaIntoBuffer accumulates an agentMessage delta under its itemId and
+// returns the running text.
+func FoldDeltaIntoBuffer(bufs *ItemBuffers, itemID, delta string) string {
 	if delta == "" || itemID == "" {
 		return ""
 	}
-	switch kind {
-	case "agent":
-		bufs.AgentText[itemID] += delta
-		return bufs.AgentText[itemID]
-	case "reasoning":
-		bufs.Reasoning[itemID] += delta
-		return bufs.Reasoning[itemID]
-	}
-	return ""
+	bufs.AgentText[itemID] += delta
+	return bufs.AgentText[itemID]
 }
 
 func toolNameForItem(item ThreadItem) string {
@@ -203,32 +178,11 @@ func argMap(v any) map[string]any {
 	return map[string]any{"value": json.RawMessage(raw)}
 }
 
-func fallbackReasoningText(item ThreadItem) string {
-	if item.Text != "" {
-		return item.Text
-	}
-	if item.SummaryText != "" {
-		return item.SummaryText
-	}
+// nativeReasoningParts is what Codex shows for a completed reasoning item: its
+// summary when it has one, otherwise its raw reasoning text.
+func nativeReasoningParts(item ThreadItem) []string {
 	if len(item.Summary) > 0 {
-		var b strings.Builder
-		for i, s := range item.Summary {
-			if i > 0 {
-				b.WriteString("\n\n")
-			}
-			b.WriteString(s)
-		}
-		return b.String()
+		return item.Summary
 	}
-	if len(item.Content) > 0 {
-		var b strings.Builder
-		for i, s := range item.Content {
-			if i > 0 {
-				b.WriteString("\n\n")
-			}
-			b.WriteString(s)
-		}
-		return b.String()
-	}
-	return ""
+	return item.Content
 }
