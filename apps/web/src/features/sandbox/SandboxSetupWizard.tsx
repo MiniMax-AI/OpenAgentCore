@@ -112,6 +112,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   // Every declared field's value, secret ones included; a secret is cleared once a save was attempted.
   const [values, setValues] = useState<Values>(current?.configuration ?? {});
   const [replacementRequested, setReplacementRequested] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState<SandboxProvider | null>(current?.provider ?? null);
   const [confirming, setConfirming] = useState<SandboxProvider | null>(null);
@@ -267,7 +268,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
               );
             }
             if (field.discovered) {
-              return <DiscoveredField key={`${field.name}:${JSON.stringify(request)}`} id={fieldId} provider={provider!} field={field} label={text(field.label)} help={help} request={request} value={values[field.name] ?? ""} editing={Boolean(editing)} error={fieldError("configuration")} onChange={(value) => change(field, value)} />;
+              return <DiscoveredField key={`${field.name}:${JSON.stringify(request)}`} id={fieldId} provider={provider!} field={field} label={text(field.label)} help={help} request={request} value={values[field.name] ?? ""} editing={Boolean(editing)} error={fieldError("configuration")} onChange={(value) => change(field, value)} onChecking={setChecking} />;
             }
             return (
               <Field key={field.name} id={fieldId} label={text(field.label)} help={help}>
@@ -276,7 +277,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
             );
           })}
         </div>
-        <Nav onBack={back} onNext={() => setStep("review")} nextDisabled={!(keyReady && connectionReady)} t={t} />
+        <Nav onBack={back} onNext={() => setStep("review")} nextDisabled={!(keyReady && connectionReady) || checking} t={t} />
       </Question>
     );
   } else if (step === "size") {
@@ -469,15 +470,19 @@ type Level = "loading" | "error" | SandboxConfigurationOption[];
  * complete. The page remounts it when the connection changes. While updating
  * without a new credential it keeps the saved value in an input.
  */
-function DiscoveredField({ id, provider, field, label, help, request, value, editing, error, onChange }: {
+function DiscoveredField({ id, provider, field, label, help, request, value, editing, error, onChange, onChecking }: {
   id: string; provider: SandboxProvider; field: SandboxSetupField; label: string; help?: string; request: Omit<SandboxDiscoveryInput, "query"> | null;
-  value: string; editing: boolean; error: string | null; onChange: (value: string) => void;
+  value: string; editing: boolean; error: string | null; onChange: (value: string) => void; onChecking: (checking: boolean) => void;
 }) {
   const { t } = useTranslation("sandbox");
   const [picks, setPicks] = useState<SandboxConfigurationOption[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
   const [retry, setRetry] = useState(0);
   const open = picks.length === 0 || !picks[picks.length - 1]!.complete;
+  const last = levels[picks.length];
+  // The step cannot be left while the credential is still being checked, whether settling or loading.
+  const checking = Boolean(request) && open && (last === undefined || last === "loading");
+  useEffect(() => { onChecking(checking); return () => onChecking(false); }, [checking]);
   useEffect(() => {
     if (!request || !open) return;
     const depth = picks.length;
@@ -496,7 +501,6 @@ function DiscoveredField({ id, provider, field, label, help, request, value, edi
   if (!request && editing && value) {
     return <Field id={id} label={label} help={help} error={error}><input id={id} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="off" spellCheck={false} /></Field>;
   }
-  const last = levels[picks.length];
   const choose = (depth: number, option: SandboxConfigurationOption | undefined) => {
     setLevels((previous) => previous.slice(0, depth + 1));
     setPicks((previous) => option ? [...previous.slice(0, depth), option] : previous.slice(0, depth));
