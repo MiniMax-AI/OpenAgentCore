@@ -276,11 +276,6 @@ func TestNativeInstallationPlatformMismatchAndUnsupportedSelection(t *testing.T)
 	if _, err := selectedNativeHarnesses("anything"); err == nil {
 		t.Fatal("unknown Harness accepted")
 	}
-	if runtime.GOOS == "windows" {
-		if _, err := selectedNativeHarnesses("minimax"); err == nil {
-			t.Fatal("unsupported Windows MiniMax accepted")
-		}
-	}
 }
 
 func TestNativeInstallationDoesNotRepairMissingDaemon(t *testing.T) {

@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: f66f608093cc824add3215a9df520082b1679af1852ee213b7a6adfca40221ed
+source_hash: 049fe3c4d666a7b2f075597a6ee238f6be6e7e1e9f4cc259d48c08e12637b7d0
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -56,7 +56,7 @@ node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-每个平台有一个小型基础归档 `<os>-<arch>.tar.gz`（`oac-daemon` 和 `bundle.json`，后者列出每个组件及其每个文件的 SHA-256），以及每个组件一个归档，即 `<os>-<arch>-node` 和 `<os>-<arch>-<harness>`（MiniMax Code 不为 Windows 构建）。`build-native-installer.mjs` 生成它们。Core 按名称提供这些制品，不了解其内容；`oac-daemon install` 下载所需的组件。
+每个平台有一个小型基础归档 `<os>-<arch>.tar.gz`（`oac-daemon` 和 `bundle.json`，后者列出每个组件及其每个文件的 SHA-256），以及每个组件一个归档，即 `<os>-<arch>-node` 和 `<os>-<arch>-<harness>`。`build-native-installer.mjs` 生成它们。Core 按名称提供这些制品，不了解其内容；`oac-daemon install` 下载所需的组件。
 
 该目录会记录提交、Runtime 协议版本、每个制品的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<artifact>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外保留所有 Linux amd64 归档的一份副本，由其 `install.py` 复制到安装目录中供 Core 提供下载。其他平台由 Core 重定向到对应的发布资源；没有发布基址的目录没有这类 URL，因此其离线归档会保留所有归档。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
 
@@ -86,7 +86,7 @@ docker build --platform linux/amd64 -t oac-runtime:claude "${OAC_DEV_HOME:-$HOME
 
 第一步会将适配器和固定版本的 Claude Agent SDK（`packages/claude-sdk-adapter/package.json`）导出为适用于主机平台且带校验和的归档；第二步会验证该归档并添加守护进程。镜像步骤需要 `linux-x64-glibc` 归档，因此必须在带 glibc 的 Linux x86_64 上构建两者。请保持导出的归档不变。
 
-**MiniMax Code Runtime 镜像。** 使用 `packages/mcode-harness/source.json` 中固定修订版本的检出，并使用相同版本的 `@minimax-ai/code` npm 包提供原生依赖，以构建配套程序。配套程序构建可在 Linux x86_64 或 macOS arm64 上运行，并输出到一个新目录；对于 Linux Runtime 镜像，请在 Linux x86_64 上构建它（macOS arm64 仅用于原生安装程序）：
+**MiniMax Code Runtime 镜像。** 使用 `packages/mcode-harness/source.json` 中固定修订版本的检出，并使用相同版本的 `@minimax-ai/code` npm 包提供原生依赖，以构建配套程序。配套程序构建可在 Linux x86_64、macOS arm64 或 Windows x86_64（Git Bash 中）上运行，并输出到一个新目录；对于 Linux Runtime 镜像，请在 Linux x86_64 上构建它（macOS 和 Windows 上的构建仅用于原生安装程序）：
 
 ```sh
 MCODE_NATIVE_SOURCE=/absolute/minimax-code \

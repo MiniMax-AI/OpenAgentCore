@@ -12,7 +12,7 @@ import (
 
 func TestWorkspaceReadinessRejectsOldCleanupContract(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("MiniMax adapter supports Linux and macOS")
+		t.Skip("POSIX shell fixture")
 	}
 	for _, protocol := range []int{2, 3} {
 		t.Run(fmt.Sprint(protocol), func(t *testing.T) {

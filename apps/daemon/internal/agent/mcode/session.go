@@ -53,8 +53,8 @@ type Session struct {
 
 var _ agent.Session = (*Session)(nil)
 
-func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*Session, error) {
-	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: binary, Args: []string{"acp"}, Dir: opts.Dir, Env: opts.Env, NeedStdin: true})
+func launch(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, command []string) (*Session, error) {
+	process, err := clirunner.Start(clirunner.StartOptions{Parent: ctx, Binary: command[0], Args: append(slices.Clone(command[1:]), "acp"), Dir: opts.Dir, Env: opts.Env, NeedStdin: true})
 	if err != nil {
 		return nil, err
 	}

@@ -49,11 +49,11 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 			return nil, err
 		}
 		var opts launchOptions
-		binary := defaultBinary()
+		command := nativeCommand(defaultBinary(), defaultNode())
 		if frozen == nil {
 			opts, err = prepareOptions(runtimeRoot, req, nil)
 		} else {
-			binary = frozen.Binary
+			command = nativeCommand(frozen.Binary, frozen.Node)
 			opts, err = prepareWorkspaceOptions(runtimeRoot, *frozen, req)
 		}
 		if err != nil {
@@ -69,7 +69,7 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 		if opts.Functions != nil {
 			opts.MCP = append(opts.MCP, opts.Functions.mcpServer())
 		}
-		resource, err := newExecutor(ctx, req, opts, binary)
+		resource, err := newExecutor(ctx, req, opts, command)
 		if resource == nil {
 			return nil, err
 		}
@@ -77,8 +77,8 @@ func NewExecutorFactory(runtimeRoot string, config *WorkspaceConfig) agent.Execu
 	}
 }
 
-func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, binary string) (*executor, error) {
-	bootstrap, err := launch(ctx, req, opts, binary)
+func newExecutor(ctx context.Context, req proto.PromptRequestPayload, opts launchOptions, command []string) (*executor, error) {
+	bootstrap, err := launch(ctx, req, opts, command)
 	if err != nil {
 		opts.Functions.close()
 		return nil, err

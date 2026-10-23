@@ -10,7 +10,7 @@ import (
 )
 
 func Installation() agent.Installation {
-	return agent.Installation{AgentKind: "mcode", Version: SupportedVersion, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" },
+	return agent.Installation{AgentKind: "mcode", Version: SupportedVersion, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" },
 		Environment: func(dir, node string) map[string]string {
 			return map[string]string{"OAC_RUNTIME_MCODE_BIN": filepath.Join(dir, "native", "cli.js"), "OAC_RUNTIME_MCODE_NODE": node, "OAC_RUNTIME_MCODE_COMPANION": dir}
 		},

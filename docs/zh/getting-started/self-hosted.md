@@ -1,7 +1,7 @@
 ---
 title: "运行自托管 Session"
 source: docs/getting-started/self-hosted.md
-source_hash: de2bf583004e0aabb735d434133780e26f96e9912dd7e11100327b2f83f403c4
+source_hash: 396b1580ad57ab4c9d7beebd6b0cb37b254e2c48f6cb70b3a6b6f5996e98c07a
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行，例如工作站、虚拟机或容器，而不是 Core 管理的沙箱。本指南面向用 `oac-daemon` 连接此类机器并保持其运行的应用开发者。
@@ -19,7 +19,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 | --- | --- | --- | --- |
 | Linux amd64 | 支持 | 支持 | 支持 |
 | macOS arm64 | 支持 | 支持 | 支持 |
-| Windows amd64 | 支持 | 支持 | 不支持 |
+| Windows amd64 | 支持 | 支持 | 支持 |
 
 安装程序自带固定版本的 Node.js 和 Harness（列于 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
 
@@ -35,7 +35,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 机器需要：
 
 - 通过 HTTP 或 HTTPS 访问 Core，以及访问发布下载主机；如果 Core 已有本平台安装程序的离线副本，则无需后者（离线安装只带有 Linux amd64 的安装程序）；
-- 用于环境设置和 MiniMax Code 工具的 Bash；Windows 上需要 Git Bash，Claude Code 也要求它；
+- 用于环境设置的 Bash，Unix 上的 MiniMax Code 工具也使用它；Windows 上需要 Git Bash，Claude Code 也要求它。Windows 上的 MiniMax Code 与本地运行一样，在 PowerShell 中执行其 `bash` 工具；
 - Session 的软件包需要时，安装 Python 和 pip；
 - 环境设置所需的系统软件包。守护进程不运行 apt、sudo 或其他提权命令，请通过主机的常规管理方式安装。
 

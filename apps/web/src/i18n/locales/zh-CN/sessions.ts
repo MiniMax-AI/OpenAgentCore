@@ -186,7 +186,7 @@ export const sessions = {
       hostDone: "主机已连接",
       hostPending: "等待连接",
       title: "连接主机",
-      lifecycle: "使用当前账户安装和运行 daemon。可选择多个 Harness，其中必须包含此 Session 使用的 Harness；Windows 不支持 MiniMax。工作目录与此 Session 的配置保持一致。",
+      lifecycle: "使用当前账户安装和运行 daemon。可选择多个 Harness，其中必须包含此 Session 使用的 Harness。工作目录与此 Session 的配置保持一致。",
       steps: "复制命令并在自己的机器上运行，即可下载匹配的安装包、安装 Harness、启动 daemon 并验证连接。",
       archived: "此项目已归档，无法获取新的安装授权。",
       guide: "安装指南",

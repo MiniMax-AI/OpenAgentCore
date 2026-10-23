@@ -99,7 +99,7 @@ try {
   const script = resolve(`services/core/internal/nativeinstaller/assets/bootstrap.${windows ? 'ps1' : 'sh'}`);
   const bootstrapArgs = windows ? ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-Base', base] : [script, base];
   // Select every Harness of this platform so each Harness archive passes the installer's extraction and readiness checks.
-  const harnesses = windows ? ['codex', 'claude'] : ['codex', 'claude', 'minimax'];
+  const harnesses = ['codex', 'claude', 'minimax'];
   const result = await run(windows ? 'powershell.exe' : 'bash', [...bootstrapArgs, '--install-dir', installation], harnesses.join(',') + '\n\n');
   assert.equal(result.code, 0, `Interactive bootstrap failed: ${result.output}`);
   assert.match(result.output, /Daemon connection: connected/);

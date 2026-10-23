@@ -1,0 +1,2 @@
+# Bash rejects carriage returns, so shell scripts stay LF on Windows checkouts.
+*.sh text eol=lf

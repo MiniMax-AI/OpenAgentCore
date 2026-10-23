@@ -97,7 +97,7 @@ jobs:
           ./apps/daemon/internal/agent/codex
           ./apps/daemon/internal/agent/claudesdk
           ./apps/daemon/internal/agent/mcode
-          -run 'TestJSONRPCClientOwnsToolDescendants|TestSelfHostedToolEnvironment'
+          -run 'TestJSONRPCClientOwnsToolDescendants|TestSelfHostedToolEnvironment|TestNativeCommand|TestSelfHostedSkillDirectoryLink'
       - name: Native capability snapshots, files and installation
         id: files
         run: >-
@@ -124,8 +124,7 @@ jobs:
           rm -rf "$RUNNER_TEMP/claude-runtime/node_modules"
           pnpm --dir "$RUNNER_TEMP/claude-runtime" install --prod --frozen-lockfile --config.node-linker=hoisted --ignore-scripts
           npm install --prefix "$RUNNER_TEMP/native-tools" --no-save @openai/codex@0.153.4
-      - name: Restore or build the pinned MiniMax companion on Unix
-        if: runner.os != 'Windows'
+      - name: Restore or build the pinned MiniMax companion
         uses: ./.github/actions/mcode-companion
       - name: Package and exercise CLI-only installation, additions and reuse
         id: package

@@ -184,7 +184,7 @@ export const sessions = {
       hostDone: "Host connected",
       hostPending: "Awaiting connection",
       title: "Connect a host",
-      lifecycle: "Install and run the daemon with your current account. Choose one or more Harnesses; the Session Harness is required. Windows does not support MiniMax. The workspace remains the one selected for this Session.",
+      lifecycle: "Install and run the daemon with your current account. Choose one or more Harnesses; the Session Harness is required. The workspace remains the one selected for this Session.",
       steps: "Copy this command and run it on your machine. It downloads the matching installer, installs your Harnesses, starts the daemon and checks its connection.",
       archived: "This project is archived. New installation authorizations are unavailable.",
       guide: "Installation guide",

@@ -17,7 +17,7 @@ The Session brings its own model provider; the installation default never applie
 | --- | --- | --- | --- |
 | Linux amd64 | Supported | Supported | Supported |
 | macOS arm64 | Supported | Supported | Supported |
-| Windows amd64 | Supported | Supported | Not supported |
+| Windows amd64 | Supported | Supported | Supported |
 
 The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
@@ -33,7 +33,7 @@ Components install once per machine and version, in `components/<version>` under
 The machine needs:
 
 - HTTP or HTTPS access to Core, and to the release download host unless Core carries an offline copy of this platform's installer (an offline installation carries only Linux amd64);
-- Bash for environment setup and MiniMax Code tools; on Windows, Git Bash, which Claude Code also requires;
+- Bash for environment setup and, on Unix, MiniMax Code tools; on Windows, Git Bash, which Claude Code also requires. MiniMax Code on Windows runs its `bash` tool in PowerShell, as a local MiniMax Code run does;
 - Python and pip when the Session's packages need them;
 - any system packages your setup needs. The daemon never runs apt, sudo or another elevation command, so install them through the host's normal administration.
 
