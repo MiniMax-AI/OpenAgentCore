@@ -61,6 +61,10 @@ type Configuration struct {
 	ValidateNativeConfig func(proto.HarnessConfig) bool
 }
 
+// NativePackage names the native Harness package and its single supported version.
+// Component is the name of its native installer component.
+type NativePackage struct{ Component, Version string }
+
 // Declaration is everything a Harness states about itself, authored once in
 // internal/harnessconfig/<package>/declaration.go. The Runtime adapter binds it
 // to native execution, and Core admission validates every Session against it:
@@ -73,6 +77,9 @@ type Configuration struct {
 type Declaration struct {
 	// Kind is the public identifier; Label is its display name.
 	Kind, Label string
+	// Native is the pinned native package the Harness runs. Every projection of
+	// its name and version is generated from, or checked against, this value.
+	Native NativePackage
 	// Configuration declares model providers and native parameter validation.
 	Configuration
 	// Capabilities is the maximum the adapter supports on a capable host and the

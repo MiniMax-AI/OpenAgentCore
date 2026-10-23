@@ -1,7 +1,7 @@
 ---
 title: "运行自托管 Session"
 source: docs/getting-started/self-hosted.md
-source_hash: de2bf583004e0aabb735d434133780e26f96e9912dd7e11100327b2f83f403c4
+source_hash: b2f73a2c1f38ba263d2452a68e8dbf5f116167d23eb2036a6a6f768c70205a17
 ---
 
 `self_hosted` Session 在应用拥有的机器上运行，例如工作站、虚拟机或容器，而不是 Core 管理的沙箱。本指南面向用 `oac-daemon` 连接此类机器并保持其运行的应用开发者。
@@ -21,7 +21,7 @@ Session 自带模型提供商；安装默认模型不适用（[原因](../../../
 | macOS arm64 | 支持 | 支持 | 支持 |
 | Windows amd64 | 支持 | 支持 | 不支持 |
 
-安装程序自带固定版本的 Node.js 和 Harness（列于 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
+安装程序自带固定版本的 Node.js 和 Harness（Harness 版本见 [Harness 目录](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/harness-catalog.md)，Node.js 见 [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)），不修改这些工具的其他安装。在没有匹配安装程序的平台上，命令会失败。
 
 下载量取决于你安装的 Harness。安装程序（9 MiB）和 Node.js（59 MiB）始终需要，再加上 Codex 的 121 MiB、Claude Code 的 99 MiB 或 MiniMax Code 的 23 MiB，因此安装一个 Harness 的 Session 下载 90 到 189 MiB。Runtime 主目录和安装目录所在磁盘需要有空闲空间：
 

@@ -17,8 +17,9 @@ import (
 // Declaration is the only authored description of the Claude Code Harness. The
 // Runtime may narrow Capabilities to the installed bundle, never widen them.
 var Declaration = harnessconfig.Declaration{
-	Kind:  "claude_sdk",
-	Label: "Claude Code",
+	Kind:   "claude_sdk",
+	Label:  "Claude Code",
+	Native: harnessconfig.NativePackage{Component: "claude", Version: "0.3.269"},
 	Configuration: harnessconfig.Configuration{
 		ValidateNativeConfig: validateNativeConfig,
 		Providers:            []harnessconfig.Provider{{Protocol: "anthropic"}},

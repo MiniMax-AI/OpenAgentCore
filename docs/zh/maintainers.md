@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: c0ce961c1457daffdada461892d2e75a44efa15efce814f535c60b98b0b7a6fc
+source_hash: 4f856b71fa88a18950c6830dc906ef060ccf79f7514585606f0fdc9df94a89b5
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -48,7 +48,7 @@ ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`�
 
 ### 原生安装程序 {#native-installers}
 
-自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象会固定 Node.js 和 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会将该平台的各个归档上传为 `oac-native-installer-<OS>-<ARCH>` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录，输入目录中放入这三个构件的所有归档：
+自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象包含 Node.js 版本和由各 Harness 声明生成的 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会将该平台的各个归档上传为 `oac-native-installer-<OS>-<ARCH>` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录，输入目录中放入这三个构件的所有归档：
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
@@ -65,7 +65,7 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 
 三个维护的 Runtime 镜像共用固定摘要的基础镜像 `node:22.23.1-bookworm-slim`（含 `ca-certificates`、`bash`、`git`、`python3`、`python3-pip` 和 `ripgrep`），以及一个构建期调整：固定 Debian 登录 profile 会保留继承且已导出的 `PATH`，未设置 `PATH` 时仍使用 Debian 默认值。这样，登录和非登录工具都能使用 Runtime 初始化的包路径与用户路径，无需另一份包路径设置。组合镜像继承同一 profile。上游 profile 结构变化会使构建失败以便审查；自定义 shell 启动文件仍可以显式更改 `PATH`。
 
-**Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@0.153.4-linux-x64`（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
+**Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@<version>-linux-x64`，版本见 [Harness 目录](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/harness-catalog.md)（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
 
 ```sh
 export CODEX_CLI_DIR=/absolute/path/to/package

@@ -38,7 +38,7 @@ An Environment supplies execution resources. Managed E2B, Docker and microsandbo
 
 ## Steps
 
-1. **Pin the native source.** Record the upstream package version and source revision and document the native entry point next to the adapter.
+1. **Pin the native source.** Set the upstream package version in the declaration's `Native` field, which the adapter and `make check-harness-catalog` read for every other projection of the pin. Record the source revision and document the native entry point next to the adapter.
 2. **Implement the adapter** in `apps/daemon/internal/agent/<package>`, where `<package>` is the kind without underscores: an `ExecutorFactory`, an `Executor` and a `Turn` ([required interfaces](#required-adapter-interfaces), [lifetimes](#executor-and-turn-lifetimes)). Reuse the shared process, credential, configuration and local workspace helpers.
 3. **Write the declaration** in `internal/harnessconfig/<package>/declaration.go` and bind it to the adapter's discovery ([declare the Harness](#declare-the-harness), [register the adapter](#register-the-adapter)). Run `make generate-harness-catalog` to register both.
 4. **Package native prerequisites.** Add a Runtime image under `services/core/deploy/<kind>` and, optionally, [native installer participation](#native-installer-participation).
@@ -208,7 +208,7 @@ The declaration's ordered `protocols` list is the only source of accepted protoc
 
 ## Native installer participation
 
-An adapter may supply `agent.Installation` from `installation.go` in its own package: registered kind, pinned version, supported platforms, activation environment and a bounded readiness probe. Register it in `cli/native_harness.go` and add its pinned component to the native distribution builder. This optional contract does not change Executor and Turn semantics. The Runtime owns checksums, copying, locks and additive installation; adapters own native layout and probes. Validate installation and execution on each advertised platform. Missing or incompatible native content fails; it never installs itself during a Turn.
+An adapter may supply `agent.Installation` from `installation.go` in its own package: registered kind, pinned version (read from the declaration's `Native.Version`), supported platforms, activation environment and a bounded readiness probe. Register it in `cli/native_harness.go` and add its pinned component to the native distribution builder. This optional contract does not change Executor and Turn semantics. The Runtime owns checksums, copying, locks and additive installation; adapters own native layout and probes. Validate installation and execution on each advertised platform. Missing or incompatible native content fails; it never installs itself during a Turn.
 
 ## Native process ownership
 

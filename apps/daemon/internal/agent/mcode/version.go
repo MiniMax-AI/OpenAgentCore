@@ -4,16 +4,28 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/versionprobe"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 var ErrCLINotFound = errors.New("mcode CLI not found")
 
-const SupportedVersion = "0.4.12"
+var SupportedVersion = declaration.Declaration.Native.Version
 
-func defaultBinary() string { return binpath.MCode() }
+// binaryEnv pins the mcode executable in images where PATH is not under our
+// control, so the version probe and the run-time spawn resolve the same binary.
+const binaryEnv = "OAC_RUNTIME_MCODE_BIN"
+
+// defaultBinary is the trimmed binaryEnv override, else "mcode" on PATH. Read at call time.
+func defaultBinary() string {
+	if v := strings.TrimSpace(os.Getenv(binaryEnv)); v != "" {
+		return v
+	}
+	return "mcode"
+}
 
 func CheckCLIAvailable(ctx context.Context, binary string) (string, error) {
 	version, err := versionprobe.Check(ctx, binary, versionprobe.Config{Name: "mcode", DefaultBinary: defaultBinary(), MissingError: ErrCLINotFound, TrimBinary: true})

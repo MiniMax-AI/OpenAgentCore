@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: c5688b7362e0ede4a85200d3a66ee383bd71da23505429755adbc1888ce8dd60
+source_hash: bf3a297779def9925b30e6a77c3e5f28a1349964922242219bcf1fcaad9ef2af
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -40,7 +40,7 @@ Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以�
 
 ## 步骤 {#steps}
 
-1. **锁定原生来源。** 记录上游包版本和源修订版本，并在适配器旁记录原生入口点。
+1. **锁定原生来源。** 在声明的 `Native` 字段中设置上游包版本，适配器和 `make check-harness-catalog` 据此处理该版本的其他所有投影。记录源修订版本，并在适配器旁记录原生入口点。
 2. **实现适配器**，位置为 `apps/daemon/internal/agent/<package>`，其中 `<package>` 是去掉下划线的 kind：实现 `ExecutorFactory`、`Executor` 和 `Turn`（[required interfaces](#required-adapter-interfaces)、[lifetimes](#executor-and-turn-lifetimes)）。复用共享的进程、凭据、配置和本地工作区辅助函数。
 3. **编写声明**：在 `internal/harnessconfig/<package>/declaration.go` 中编写声明，并将其绑定到适配器的发现函数（[declare the Harness](#declare-the-harness)、[register the adapter](#register-the-adapter)）。运行 `make generate-harness-catalog` 完成两处注册。
 4. **打包原生先决条件。** 在 `services/core/deploy/<kind>` 下添加 Runtime 镜像，并可选添加 [native installer participation](#native-installer-participation)。
@@ -210,7 +210,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 
 ## 原生安装程序参与 {#native-installer-participation}
 
-适配器可以从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本、受支持平台、激活环境和有界就绪探测。在 `cli/native_harness.go` 中注册它，并将其锁定组件添加到原生分发构建器。此可选契约不会改变 Executor 和 Turn 语义。Runtime 负责校验和、复制、锁和增量安装；适配器负责原生布局和探测。必须在每个宣称的平台上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。
+适配器可以从自身包中的 `installation.go` 提供 `agent.Installation`：已注册 kind、锁定版本（取自声明的 `Native.Version`）、受支持平台、激活环境和有界就绪探测。在 `cli/native_harness.go` 中注册它，并将其锁定组件添加到原生分发构建器。此可选契约不会改变 Executor 和 Turn 语义。Runtime 负责校验和、复制、锁和增量安装；适配器负责原生布局和探测。必须在每个宣称的平台上验证安装和执行。原生内容缺失或不兼容时必须失败；绝不会在 Turn 期间自行安装。
 
 ## 原生进程所有权 {#native-process-ownership}
 

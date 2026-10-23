@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -41,7 +40,7 @@ func discoverWorkspace(parent context.Context, options agent.DiscoveryOptions, r
 		fail(err)
 		return nil
 	}
-	binary, err := exec.LookPath(binpath.MCode())
+	binary, err := exec.LookPath(defaultBinary())
 	if err != nil {
 		fail(err)
 		return nil
