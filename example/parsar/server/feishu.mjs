@@ -10,6 +10,7 @@ import { typicalWait, waitingHeadline } from "../shared/turn-status.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
 
 const stamp = () => Date.now();
+const sendExpired = (row) => row.first_attempt_at && stamp() - row.first_attempt_at >= 55 * 60000;
 export const publicFeishu = ({ app_secret, ...record }) => ({
   ...record,
   has_app_secret: !!app_secret,
@@ -27,8 +28,7 @@ export function feishuAPI(store) {
         throw new AppError(409, "此记录不需要手动重试。");
       if (
         kind === "feishu_outbound" &&
-        row.first_attempt_at &&
-        stamp() - row.first_attempt_at > 55 * 60000
+        sendExpired(row)
       )
         throw new AppError(
           409,
@@ -221,7 +221,7 @@ function statusCard(status, body, panels = []) {
       vertical_spacing: "8px",
       elements: [
         { tag: "markdown", text_size: "notation", content: `<font color='${color}'>${title}</font>` },
-        { tag: "markdown", content: excerpt(body, 12000) },
+        { tag: "markdown", content: excerpt(body, status === "requires_action" ? 8000 : 12000) },
         ...(panels.length ? [{ tag: "hr" }, ...panels.map(panel)] : []),
       ],
     },
@@ -295,12 +295,15 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
   const text = (item) => (item.content || []).filter((p) => p.type === "output_text").map((p) => (p.text || "").trim()).filter(Boolean).join("\n");
   const messages = items.filter((x) => x.type === "message" && x.role === "assistant");
   const latest = messages.at(-1);
-  const answer = (latest?.phase === "commentary" ? "" : latest ? text(latest) : "")
+  const readable = (value) => value
     .replace(/!\[[^\]\n]*\]\((\/app\/feishu\/provision\/[a-f0-9-]{36}\/qrcode)\)/g, "（授权二维码见图片消息）")
     .replace(/!?\[([^\]]*)\]\((?:\/workspace\/|\.\/)?outputs\/[^)]*\)/g, "$1（见附件）");
+  const authorization = messages.filter((item) => qrImages(text(item)).length);
+  const authorizationText = authorization.map((item) => readable(text(item))).join("\n\n");
+  const answer = latest?.phase === "commentary" || authorization.includes(latest) ? "" : latest ? readable(text(latest)) : "";
   const reasoning = items.filter((x) => x.type === "reasoning").flatMap((x) => x.summary || x.content || [])
     .map((p) => typeof p === "string" ? p : p?.text || "").filter(Boolean).join("\n\n");
-  const commentary = messages.filter((x) => status === "in_progress" || x !== latest || x.phase === "commentary").map(text).filter(Boolean).join("\n\n");
+  const commentary = messages.filter((x) => !authorization.includes(x) && (status === "in_progress" || x !== latest || x.phase === "commentary")).map(text).filter(Boolean).join("\n\n");
   const outputs = new Map(items.filter((x) => x.type === "function_call_output").map((x) => [x.call_id, x]));
   const steps = items.filter((x) => !["message", "agent_message", "reasoning", "function_call_output"].includes(x.type) && !(x.type === "function_call" && x.name === "ask_user"))
     .map((x) => {
@@ -324,13 +327,18 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
     const failed = steps.filter((x) => x.status === "failed").length;
     const count = steps.length ? `工具调用 ${steps.length} 次 · 完成 ${done} 次${failed ? ` · 失败 ${failed} 次` : ""}` : "";
     const typical = !last && turn?.expected_s && turn.stage !== "retrying" ? typicalWait.replace("{{value0}}", turn.expected_s) : "";
-    return statusCard(status, [`**${current}**`, grey([count, typical].filter(Boolean).join(" · "))].filter(Boolean).join("\n"), panels);
+    return statusCard(status, [`**${current}**`, grey([count, typical].filter(Boolean).join(" · ")), authorizationText].filter(Boolean).join("\n"), panels);
   }
+  const context = questions.some((action) => questionText(action, false).trim() === answer.trim()) ? "" : answer;
+  // Put the decision first; keep its explanation available without filling the chat.
+  // Authorization instructions stay visible alongside the separately sent QR.
+  const foldContext = status === "requires_action" && questions.length && context;
+  if (foldContext) panels.unshift({ title: "补充说明", content: excerpt(context, 4000) });
   const body = status === "requires_action"
-    ? [...questions.map((action) => questionText(action)), questions.some((action) => questionText(action, false).trim() === answer.trim()) ? "" : answer, grey("直接回复这条消息即可继续。")].filter(Boolean).join("\n\n")
-    : status === "completed" ? answer || "已完成处理。"
-    : status === "cancelled" ? answer || "已按你的要求停止。"
-    : [answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n");
+    ? [...questions.map((action) => questionText(action)), authorizationText, foldContext ? "" : context, grey("直接回复这条消息即可继续。")].filter(Boolean).join("\n\n")
+    : status === "completed" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已完成处理。"
+    : status === "cancelled" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已按你的要求停止。"
+    : [authorizationText, answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n");
   return statusCard(status, body, panels);
 }
 
@@ -463,12 +471,17 @@ export function feishuOperations(client) {
       return { id: value.message_id };
     },
     async edit(id, text) {
-      confirmed(
-        await client.im.message.patch({
-          path: { message_id: id },
-          data: { content: JSON.stringify(feishuCard(text)) },
-        }),
-      );
+      const result = await client.im.message.patch({
+        path: { message_id: id },
+        data: { content: JSON.stringify(feishuCard(text)) },
+      }).catch((error) => {
+        if (error.response?.data?.code) return error.response.data;
+        throw error;
+      });
+      // Documented PATCH errors: recalled, outside the edit window, deleted.
+      if ([230011, 230031, 230110].includes(result.code))
+        throw new AppError(410, "飞书卡片已不可更新。", "feishu_card_unavailable");
+      confirmed(result);
     },
     async resource(row, resource) {
       return (
@@ -835,7 +848,9 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         active_outbound_id: undefined,
         progress_text: undefined,
         display_after: undefined,
-        answered_call_id: undefined,
+        answered_call_ids: [],
+        awaiting_user_input: false,
+        observed_through: undefined,
       };
       store.put("feishu_threads", thread);
     };
@@ -853,7 +868,10 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         active_outbound_id: progressId,
         progress_text: text,
         display_after: row.display_after,
-        answered_call_id: row.event?.type === "agent.session.input.tool_result" ? row.event.call_id : undefined,
+        answered_call_ids: row.event?.type === "agent.session.input.tool_result"
+          ? [...new Set([...(thread.answered_call_ids || []), row.event.call_id])]
+          : thread.answered_call_ids,
+        awaiting_user_input: row.event?.type === "agent.session.input.message",
       };
       store.put("feishu_threads", thread);
       queueReply(
@@ -972,10 +990,14 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
                   },
                 ],
               });
-        // Freeze the display boundary before submitting an answer: Core may
+        // Freeze the display boundary before submitting any follow-up: Core may
         // acknowledge it before its resumed output becomes visible.
-        if (!row.event && answer) {
+        if (!row.event && event.type !== "agent.session.input.cancel") {
+          if (event.type === "agent.session.input.message" && thread.awaiting_user_input)
+            throw new AppError(409, "等待上一条输入出现在执行记录中。");
           const prior = await history(run.core_session_id, "items", thread.item_cursor);
+          if (thread.observed_through && !prior.some((item) => item.id === thread.observed_through))
+            throw new AppError(409, "等待执行记录更新后继续。");
           row = { ...row, display_after: prior.at(-1)?.id };
         }
         row = { ...row, state: "submitting", event };
@@ -1069,8 +1091,27 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         }
       }
     }
-    const questions = (session.required_actions || []).filter((action) => action.type === "function_call" && action.name === "ask_user" && action.call_id !== thread.answered_call_id);
-    const displayed = (items) => items.slice(items.findIndex((item) => item.id === thread.display_after) + 1);
+    let questions = (session.required_actions || []).filter((action) => action.type === "function_call" && action.name === "ask_user" && !thread.answered_call_ids?.includes(action.call_id));
+    const displayed = (items) => {
+      if (thread.observed_through && !items.some((item) => item.id === thread.observed_through)) return undefined;
+      let boundary = thread.display_after ? items.findIndex((item) => item.id === thread.display_after) : -1;
+      if (thread.display_after && boundary < 0) return undefined; // Wait for a snapshot that includes the submitted input's boundary.
+      const lastAnswer = thread.answered_call_ids?.at(-1);
+      if (lastAnswer) {
+        const answered = items.findIndex((item) => item.type === "function_call" && item.call_id === lastAnswer);
+        if (answered < 0) return undefined;
+        boundary = Math.max(boundary, answered);
+      }
+      const answeredCalls = new Set(items.filter((item) => item.type === "function_call_output").map((item) => item.call_id));
+      questions = questions.filter((action) => !answeredCalls.has(action.call_id));
+      const currentItems = items.slice(boundary + 1);
+      if (thread.awaiting_user_input) {
+        const input = currentItems.findIndex((item) => item.type === "message" && item.role === "user");
+        if (input < 0) return undefined;
+        return currentItems.slice(input + 1);
+      }
+      return currentItems;
+    };
     const recovering = ledger.recovering(run.id);
     // A Turn the monitor cancelled or retried is never reported; a failed or
     // stopped Turn waits until the monitor has decided not to retry it.
@@ -1092,22 +1133,31 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       stableId(`${thread.first_message_id}:accepted`);
     let progress = store.get("feishu_outbound", progressId);
     const progressReplyTo = progress?.reply_to || thread.root_id;
+    const questionBase = progress?.sent_message_id ? progress.id : thread.id;
     if ((progress || session.status === "requires_action") && (["in_progress", "requires_action"].includes(session.status) || recovering) && !unseen.length) {
-      const items = displayed(await history(sid, "items", thread.item_cursor)).filter(
+      const snapshot = await history(sid, "items", thread.item_cursor);
+      const currentItems = displayed(snapshot);
+      if (!currentItems) return;
+      const observedThrough = snapshot.at(-1)?.id;
+      if (thread.observed_through !== observedThrough || thread.awaiting_user_input) {
+        thread = { ...thread, observed_through: observedThrough, awaiting_user_input: false };
+        store.put("feishu_threads", thread);
+      }
+      const items = currentItems.filter(
         (item) => item.turn_id === turns.at(-1)?.id && !ledger.superseded(run.id, item.turn_id),
       );
       queueMedia(thread, items);
-      const text = formatTurnCard(session.status === "requires_action" && (!thread.answered_call_id || questions.length) ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id), questions);
+      const text = formatTurnCard(session.status === "requires_action" && questions.length ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id), questions);
       if (progress?.sent_message_id) {
         if (thread.progress_text !== text) {
           try {
             await channel.edit(progress.sent_message_id, text, thread);
             thread = { ...thread, progress_text: text };
             store.put("feishu_threads", thread);
-            store.put("feishu_outbound", { ...progress, payload: text });
-          } catch {
-            // A question must remain answerable even if its progress card was deleted.
-            if (questions.length) progress = undefined;
+            store.put("feishu_outbound", { ...progress, payload: text, state: "delivered", error: undefined });
+          } catch (error) {
+            // Unknown outcomes retry the same card; only confirmed loss replaces it.
+            if (questions.length && error.code === "feishu_card_unavailable") progress = undefined;
           }
         }
       } else if (progress?.state === "queued" && progress.payload !== text) {
@@ -1116,8 +1166,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         thread = { ...thread, progress_text: text };
         store.put("feishu_threads", thread);
       }
-      if ((!progress || progress.state === "failed" && !progress.sent_message_id) && questions.length) {
-        const questionId = stableId(`${thread.id}:question:${questions.map((x) => x.call_id).join(":")}`);
+      if ((!progress || progress.state === "failed" && !progress.sent_message_id && !sendExpired(progress)) && questions.length) {
+        const questionId = stableId(`${questionBase}:question:${questions.map((x) => x.call_id).join(":")}`);
         queueReply(questionId, thread, text, true, progressReplyTo);
         thread = { ...thread, active_outbound_id: questionId, progress_text: text };
         store.put("feishu_threads", thread);
@@ -1143,12 +1193,17 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       history(sid, "items", thread.item_cursor),
       history(sid, "artifacts", thread.artifact_cursor),
     ]);
+    const currentItems = displayed(items);
+    if (!currentItems) return;
     for (const turn of unseen) {
       const turnItems = items.filter((item) => item.turn_id === turn.id);
+      if (turn.status === "completed" && (thread.answered_call_ids || []).some((callId) =>
+        turnItems.some((item) => item.type === "function_call" && item.call_id === callId) &&
+        !turnItems.some((item) => item.type === "function_call_output" && item.call_id === callId))) return;
       queueMedia(thread, turnItems, artifacts.filter((file) => file.turn_id === turn.id));
       const text = formatTurnCard(
         turn.status,
-        displayed(turnItems),
+        currentItems.filter((item) => item.turn_id === turn.id),
         turn.status === "failed"
           ? ledger.summary(run.id)?.failure || explainFailure(turn.error)
           : turn.error?.message,
@@ -1157,7 +1212,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       if (progress?.sent_message_id) {
         try {
           await channel.edit(progress.sent_message_id, text, thread);
-          store.put("feishu_outbound", { ...progress, payload: text });
+          store.put("feishu_outbound", { ...progress, payload: text, state: "delivered", error: undefined });
           store.put("feishu_outbound", {
             id: receiptId,
             app_id: thread.app_id,
@@ -1180,8 +1235,9 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           };
           progress = undefined;
           continue;
-        } catch {
-          // A deleted or uneditable progress card falls back to sending a result card.
+        } catch (error) {
+          if (error.code !== "feishu_card_unavailable") throw error;
+          // A confirmed uneditable card falls back to sending a result card.
         }
       } else if (progress && progress.state === "queued") {
         store.put("feishu_outbound", { ...progress, payload: text });
@@ -1228,6 +1284,10 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       store.put("feishu_threads", {
         ...thread,
         turn_cursor: completed.at(-1).id,
+        answered_call_ids: (thread.answered_call_ids || []).filter((callId) => !items.some((item) => item.type === "function_call" && item.call_id === callId && ids.has(item.turn_id))),
+        display_after: ids.has(items.find((item) => item.id === thread.display_after)?.turn_id) ? undefined : thread.display_after,
+        awaiting_user_input: false,
+        observed_through: ids.has(items.find((item) => item.id === thread.observed_through)?.turn_id) ? undefined : thread.observed_through,
         item_cursor: cursor(items, thread.item_cursor),
         artifact_cursor: cursor(artifacts, thread.artifact_cursor),
       });
@@ -1268,10 +1328,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       )
         continue;
       // Never replay an uncertain send outside the Feishu’s one-hour deduplication window.
-      if (
-        row.first_attempt_at &&
-        stamp() - row.first_attempt_at >= 55 * 60000
-      ) {
+      if (sendExpired(row)) {
         store.put("feishu_outbound", {
           ...row,
           state: "failed",
@@ -1303,9 +1360,17 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           context_data: thread?.context_data,
           sender_id: thread?.sender_id,
         });
+        // A deduplicated retry can return the card sent before its ACK was lost.
+        // Apply the current payload before recording delivery as confirmed.
+        if (row.first_attempt_at && !row.media) {
+          store.put("feishu_outbound", { ...store.get("feishu_outbound", row.id), sent_message_id: result.id });
+          if (thread?.active_outbound_id === row.id)
+            store.put("feishu_threads", { ...thread, progress_text: undefined });
+          await channel.edit(result.id, row.payload, thread);
+        }
         if (thread && !thread.root_id)
           store.put("feishu_threads", {
-            ...thread,
+            ...store.get("feishu_threads", thread.id),
             root_id: result.id,
           });
         store.transaction(() => {

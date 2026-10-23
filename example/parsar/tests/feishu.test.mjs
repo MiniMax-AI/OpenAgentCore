@@ -1449,14 +1449,14 @@ test("Feishu delivers QR during authorization and artifact media once, retaining
     device_code: "private-device",
   });
   let waiting = true;
-  const turnId = randomUUID(), imageId = randomUUID(), fileId = randomUUID();
+  const turnId = randomUUID(), itemId = randomUUID(), imageId = randomUUID(), fileId = randomUUID();
   const png = await (await import("qrcode")).default.toBuffer("media-test");
   const core = async (path, ...args) => {
     if (path.endsWith(`/${imageId}/content`)) return png;
     if (path.endsWith(`/${fileId}/content`)) return Buffer.from("report content");
     const value = await f.core(path, ...args);
     if (path.includes("/turns")) return { data: [{ id: turnId, status: waiting ? "in_progress" : "completed" }], has_more: false };
-    if (path.includes("/items")) return { data: [{ id: randomUUID(), turn_id: turnId, type: "message", role: "assistant", content: [{ type: "output_text", text: `Scan [authorize](https://open.feishu.cn/page/cli?user_code=test-code)\n![飞书授权二维码](/app/feishu/provision/${registrationId}/qrcode)` }] }], has_more: false };
+    if (path.includes("/items")) return { data: [{ id: itemId, turn_id: turnId, type: "message", role: "assistant", content: [{ type: "output_text", text: `Scan [authorize](https://open.feishu.cn/page/cli?user_code=test-code)\n![飞书授权二维码](/app/feishu/provision/${registrationId}/qrcode)` }] }], has_more: false };
     if (path.includes("/artifacts")) return { data: waiting ? [] : [
       { id: imageId, session_id: path.split("/")[4], turn_id: turnId, path: "/workspace/outputs/chart.png", size_bytes: png.length },
       { id: fileId, session_id: path.split("/")[4], turn_id: turnId, path: "/workspace/outputs/report.txt", size_bytes: 14 },
@@ -1595,7 +1595,8 @@ test("resumed questions display only the current exchange, including on completi
   ];
   const card = JSON.parse(formatTurnCard("requires_action", items, undefined, undefined, [{ arguments: JSON.stringify({ question: "What should the bot do?", options: ["Documents", "Reports"] }) }]));
   assert.match(card.body.elements[1].content, /^What should the bot do/);
-  assert.match(card.body.elements[1].content, /CURRENT CONTEXT/);
+  assert.doesNotMatch(card.body.elements[1].content, /CURRENT CONTEXT/);
+  assert.match(card.body.elements[3].elements[0].content, /CURRENT CONTEXT/);
   assert.doesNotMatch(JSON.stringify(card), /OLD INVENTORY|old command|function_call_output|工具调用/);
   items.push({ type: "function_call_output", call_id: "q2", output: "Reports" }, message("DONE"));
   assert.doesNotMatch(formatTurnCard("completed", items), /CURRENT CONTEXT|OLD INVENTORY/);
@@ -1639,11 +1640,39 @@ test("waiting questions stay on one card and a reply never replays stale history
   assert.equal(f.sent.length, 2, "second question updates the reply card");
   assert.match(patches.at(-1).data.content, /SECOND QUESTION/);
   assert.doesNotMatch(patches.at(-1).data.content, /OLD INVENTORY|FIRST QUESTION/);
+  const currentItems = items;
+  items = items.slice(0, 2); // The pre-submission snapshot can also lag behind the question being answered.
   worker.receive("cli_0123456789abcdef", { ...dm, messageId: "answer2", content: "reports" });
   await worker.tick();
+  assert.equal(f.sent.length, 2, "do not submit against a snapshot older than the last displayed question");
+  items = currentItems;
+  const pendingAnswer = f.store.list("feishu_inbound").find((row) => row.message_id === "answer2");
+  f.store.put("feishu_inbound", { ...pendingAnswer, next_at: 0 });
+  await worker.tick();
   assert.equal(f.sent.length, 3);
-  items.push({ id: "reply2", turn_id: "same-turn", type: "function_call_output", call_id: "q2", output: "reports" }, message("done", "FINAL ANSWER"));
+  assert.doesNotMatch(f.sent[2].data.content, /CURRENT CONTEXT|SECOND QUESTION/);
+  const beforeCatchup = patches.length;
+  await worker.tick();
+  assert.ok(patches.slice(beforeCatchup).every((patch) => !/CURRENT CONTEXT|SECOND QUESTION/.test(patch.data.content)));
+  // Both history and required_actions can lag behind a previous question after restart.
+  const currentActions = actions;
+  items = items.slice(0, 2);
+  actions = [{ ...actions[0], call_id: "q1", arguments: { question: "FIRST QUESTION" } }];
+  const patchCount = patches.length;
+  worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  await worker.tick();
+  assert.equal(patches.length, patchCount, "an older snapshot must not overwrite the current card");
+  items = currentItems;
+  await worker.tick();
+  assert.ok(patches.slice(patchCount).every((patch) => !/FIRST QUESTION|OLD INVENTORY/.test(patch.data.content)));
+  actions = currentActions;
   status = "idle"; actions = [];
+  const beforeFinal = patches.length;
+  await worker.tick();
+  assert.equal(patches.length, beforeFinal, "completed status must not consume a reply whose tool result is still absent");
+  assert.equal(f.store.list("feishu_threads")[0].turn_cursor, undefined);
+  worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  items.push({ id: "reply2", turn_id: "same-turn", type: "function_call_output", call_id: "q2", output: "reports" }, message("done", "FINAL ANSWER"));
   await worker.tick();
   assert.equal(f.sent.length, 3);
   assert.match(patches.at(-1).data.content, /FINAL ANSWER/);
@@ -1659,10 +1688,12 @@ test("large multilingual diagnostics stay below the Feishu card payload limit", 
     ...Array.from({ length: 20 }, (_, i) => ({ type: "mcp_call", name: `tool${i}`, status: "completed", arguments: { input: large }, output: large })),
     { type: "message", role: "assistant", content: [{ type: "output_text", text: large }] },
   ];
-  const payload = formatTurnCard("completed", items);
-  assert.ok(Buffer.byteLength(payload) < 30000, String(Buffer.byteLength(payload)));
-  assert.match(payload, /展示最近 6 次/);
-  assert.match(payload, /内容较长，已截取/);
+  for (const status of ["completed", "requires_action"]) {
+    const payload = formatTurnCard(status, items, undefined, undefined, [{ arguments: { question: large, options: [large] } }]);
+    assert.ok(Buffer.byteLength(payload) < 30000, `${status}: ${Buffer.byteLength(payload)}`);
+    assert.match(payload, /展示最近 6 次/);
+    assert.match(payload, /内容较长，已截取/);
+  }
 });
 
 
@@ -1704,4 +1735,253 @@ test("identical question text is shown once and agent messages do not count as t
   assert.match(card.body.elements[1].content, /Writer/);
   assert.match(card.body.elements.at(-1).header.title.content, /工具调用 · 1 次/);
   assert.doesNotMatch(JSON.stringify(card), /agent_message|状态未知/);
+});
+
+
+test("authorization instructions stay visible across message phases and later replies", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const id = "11111111-1111-4111-8111-111111111111";
+  for (const phase of ["commentary", "final_answer"]) {
+    for (const status of ["in_progress", "requires_action", "completed"]) {
+      const card = JSON.parse(formatTurnCard(status, [
+        { type: "message", role: "assistant", phase, content: [{ type: "output_text", text: `请应用管理员扫码 [授权](https://open.feishu.cn/page/launcher?user_code=test)\n![QR](/app/feishu/provision/${id}/qrcode)` }] },
+        { type: "message", role: "assistant", phase: "commentary", content: [{ type: "output_text", text: "等待授权完成。" }] },
+      ], undefined, undefined, [{ arguments: { question: "授权完成后告诉我" } }]));
+      assert.match(card.body.elements[1].content, /请应用管理员扫码/);
+      assert.match(card.body.elements[1].content, /https:\/\/open.feishu.cn/);
+      assert.match(card.body.elements[1].content, /授权二维码见图片消息/);
+      assert.equal(JSON.stringify(card).split("user_code=test").length - 1, 1);
+    }
+  }
+});
+
+test("an uncertain progress send is updated after its deduplicated retry", async (t) => {
+  const f = await feishu(t);
+  let waiting = false, lose = true, rejectEdit = true, displayed = "", patches = 0;
+  const delivered = new Map();
+  f.channel.send = async (row) => {
+    if (!delivered.has(row.id)) {
+      delivered.set(row.id, { id: `om_${row.id}` });
+      displayed = row.payload;
+    }
+    if (lose) { lose = false; throw new Error("lost ACK"); }
+    return delivered.get(row.id);
+  };
+  f.channel.edit = async (_id, payload) => {
+    patches++;
+    if (rejectEdit) throw new AppError(422, "update rejected");
+    displayed = payload;
+  };
+  const core = async (path, method, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: [], has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: waiting ? "requires_action" : "in_progress", required_actions: waiting ? [{ type: "function_call", name: "ask_user", call_id: "question", arguments: { question: "Choose a purpose" } }] : [] };
+    return f.core(path, method, ...rest);
+  };
+  let worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  worker.receive("cli_0123456789abcdef", f.message);
+  await worker.tick();
+  waiting = true;
+  await worker.tick();
+  const pending = f.store.list("feishu_outbound").find((row) => row.state === "queued");
+  f.store.put("feishu_outbound", { ...pending, next_at: 0 });
+  worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  await worker.tick();
+  assert.ok(f.store.get("feishu_outbound", pending.id).sent_message_id, "retain the confirmed send receipt even if the update fails");
+  await worker.tick();
+  assert.equal(delivered.size, 1, "a failed update must not create another question card");
+  rejectEdit = false;
+  await worker.tick();
+  assert.equal(f.store.get("feishu_outbound", pending.id).state, "delivered");
+  assert.equal(delivered.size, 1);
+  assert.ok(patches > 0);
+  assert.match(displayed, /Choose a purpose/);
+});
+
+
+test("ordinary follow-ups exclude old content while Core publishes a delayed input", async (t) => {
+  const f = await feishu(t);
+  const config = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
+  const items = [{ id: "old", turn_id: "same-turn", type: "message", role: "assistant", content: [{ type: "output_text", text: "OLD EXCHANGE" }] }];
+  const patches = [];
+  f.channel.rawClient.im.message.patch = async (payload) => { patches.push(payload); return { code: 0 }; };
+  const core = async (path, method, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "same-turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: items, has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: "in_progress" };
+    return f.core(path, method, ...rest);
+  };
+  let worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
+  worker.receive("cli_0123456789abcdef", dm);
+  await worker.tick();
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "followup", content: "Focus on the report" });
+  await worker.tick();
+  assert.equal(f.sent.length, 2);
+  assert.doesNotMatch(f.sent[1].data.content, /OLD EXCHANGE/);
+  assert.equal(f.store.list("feishu_threads")[0].display_after, "old");
+  worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  await worker.tick();
+  items.push({ id: "late-old-output", turn_id: "same-turn", type: "message", role: "assistant", content: [{ type: "output_text", text: "OLD_LATE" }] });
+  const patchCount = patches.length;
+  await worker.tick();
+  assert.equal(patches.length, patchCount, "wait for the actual user input before showing late history");
+  items.push(
+    { id: "new-user", turn_id: "same-turn", type: "message", role: "user", content: [{ type: "input_text", text: "Focus on the report" }] },
+    { id: "new-output", turn_id: "same-turn", type: "message", role: "assistant", content: [{ type: "output_text", text: "CURRENT EXCHANGE" }] },
+  );
+  await worker.tick();
+  assert.match(patches.at(-1).data.content, /CURRENT EXCHANGE/);
+  assert.doesNotMatch(patches.at(-1).data.content, /OLD EXCHANGE/);
+  const complete = [...items];
+  items.splice(1);
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "third", content: "Now summarize" });
+  await worker.tick();
+  assert.equal(f.sent.length, 2, "an older snapshot cannot move the next input boundary backwards");
+  items.splice(0, items.length, ...complete);
+  const pending = f.store.list("feishu_inbound").find((row) => row.message_id === "third");
+  f.store.put("feishu_inbound", { ...pending, next_at: 0 });
+  await worker.tick();
+  assert.equal(f.sent.length, 3);
+  assert.doesNotMatch(f.sent[2].data.content, /CURRENT EXCHANGE|OLD/);
+  const beforeThird = patches.length;
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "fourth", content: "Keep it short" });
+  await worker.tick();
+  assert.equal(f.sent.length, 3, "rapid follow-ups wait for the previous input to become visible");
+  assert.equal(patches.length, beforeThird);
+  items.push({ id: "third-user", turn_id: "same-turn", type: "message", role: "user", content: [{ type: "input_text", text: "Now summarize" }] });
+  await worker.tick();
+  const fourth = f.store.list("feishu_inbound").find((row) => row.message_id === "fourth");
+  f.store.put("feishu_inbound", { ...fourth, next_at: 0 });
+  await worker.tick();
+  assert.equal(f.sent.length, 4);
+  assert.doesNotMatch(f.sent[3].data.content, /CURRENT EXCHANGE|OLD/);
+});
+
+
+test("question updates retry lost acknowledgements and replace only unavailable cards", async (t) => {
+  const f = await feishu(t);
+  let waiting = false, failure, question = "Choose a purpose", patches = 0;
+  f.channel.rawClient.im.message.patch = async () => {
+    patches++;
+    if (failure === "lost") throw new Error("lost update ACK");
+    if (failure === "deleted") return { code: 230110 };
+    return { code: 0 };
+  };
+  const core = async (path, method, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: [], has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: waiting ? "requires_action" : "in_progress", required_actions: waiting ? [{ type: "function_call", name: "ask_user", call_id: "question", arguments: { question } }] : [] };
+    return f.core(path, method, ...rest);
+  };
+  const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  worker.receive("cli_0123456789abcdef", f.message);
+  await worker.tick();
+  waiting = true; failure = "lost";
+  await worker.tick();
+  assert.equal(f.sent.length, 1, "a lost PATCH response must not duplicate the question");
+  const attempted = patches;
+  failure = undefined;
+  await worker.tick();
+  assert.equal(patches, attempted + 1);
+  assert.equal(f.sent.length, 1);
+  for (const value of ["Updated purpose", "Final purpose"]) {
+    question = value; failure = "deleted";
+    await worker.tick();
+    assert.match(f.sent.at(-1).data.content, new RegExp(value));
+  }
+  assert.equal(f.sent.length, 3, "each confirmed deleted card gets a distinct replacement");
+});
+
+
+test("an expired uncertain question send is never replaced with a new identity", async (t) => {
+  const f = await feishu(t);
+  let sends = 0;
+  f.channel.send = async () => { sends++; throw new Error("accepted but ACK lost"); };
+  const core = async (path, method, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: [], has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: "requires_action", required_actions: [{ type: "function_call", name: "ask_user", call_id: "question", arguments: { question: "Choose a purpose" } }] };
+    return f.core(path, method, ...rest);
+  };
+  const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  worker.receive("cli_0123456789abcdef", f.message);
+  await worker.tick();
+  const pending = f.store.list("feishu_outbound").find((row) => row.state === "queued");
+  f.store.put("feishu_outbound", { ...pending, first_attempt_at: Date.now() - 56 * 60000, next_at: 0 });
+  await worker.tick();
+  await worker.tick();
+  await worker.tick();
+  assert.equal(sends, 1);
+  assert.equal(f.store.list("feishu_outbound").length, 1);
+  assert.equal(f.store.get("feishu_outbound", pending.id).state, "failed");
+});
+
+
+test("answering one of multiple questions leaves the others visible", async (t) => {
+  const f = await feishu(t);
+  const config = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
+  const items = ["q1", "q2"].map((call_id) => ({ id: call_id, turn_id: "turn", type: "function_call", name: "ask_user", call_id }));
+  const actions = ["q1", "q2"].map((call_id) => ({ type: "function_call", name: "ask_user", call_id, turn_id: "turn", arguments: { question: `Question ${call_id}` } }));
+  const core = async (path, method, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: items, has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: "requires_action", required_actions: actions };
+    return f.core(path, method, ...rest);
+  };
+  const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
+  worker.receive("cli_0123456789abcdef", dm);
+  await worker.tick();
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "answer-first", content: "/answer q1 yes" });
+  await worker.tick();
+  assert.equal(f.sent.length, 2);
+  assert.match(f.sent[1].data.content, /Question q2/);
+  assert.doesNotMatch(f.sent[1].data.content, /Question q1/);
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "answer-second", content: "/answer q2 yes" });
+  await worker.tick();
+  assert.equal(f.sent.length, 3);
+  assert.doesNotMatch(f.sent[2].data.content, /Question q1|Question q2/);
+  const restarted = feishuWorker(f.store, core, f.api, async () => f.channel);
+  await restarted.tick();
+  assert.equal(f.sent.length, 3);
+});
+
+
+test("completed-turn cursors release answered questions before the next turn", async (t) => {
+  const f = await feishu(t);
+  const items = [{ id: "q1", turn_id: "t1", type: "function_call", name: "ask_user", call_id: "q1" }];
+  const turns = [{ id: "t1", status: "in_progress" }];
+  let actions = [{ type: "function_call", name: "ask_user", call_id: "q1", turn_id: "t1", arguments: { question: "Continue?" } }];
+  const patches = [];
+  f.channel.edit = async (_id, payload) => patches.push(payload);
+  const core = async (path, method, ...rest) => {
+    if (method === "GET" && (path.includes("/items") || path.includes("/turns"))) {
+      const rows = path.includes("/items") ? items : turns;
+      const after = new URL(path, "https://example.test").searchParams.get("after");
+      return { data: after ? rows.slice(rows.findIndex((row) => row.id === after) + 1) : rows, has_more: false };
+    }
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: actions.length ? "requires_action" : "in_progress", required_actions: actions };
+    return f.core(path, method, ...rest);
+  };
+  const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  worker.receive("cli_0123456789abcdef", f.message);
+  await worker.tick();
+  worker.receive("cli_0123456789abcdef", { ...f.message, messageId: "answer", rootId: f.message.messageId, content: "yes" });
+  await worker.tick();
+  items.push(
+    { id: "o1", turn_id: "t1", type: "function_call_output", call_id: "q1", output: "yes" },
+    { id: "a1", turn_id: "t1", type: "message", role: "assistant", content: [{ type: "output_text", text: "FIRST RESULT" }] },
+    { id: "u2", turn_id: "t2", type: "message", role: "user", content: [{ type: "input_text", text: "Next" }] },
+  );
+  turns[0].status = "completed";
+  turns.push({ id: "t2", status: "in_progress" });
+  actions = [];
+  await worker.tick();
+  items.push({ id: "a2", turn_id: "t2", type: "message", role: "assistant", content: [{ type: "output_text", text: "SECOND RESULT" }] });
+  turns[1].status = "completed";
+  await worker.tick();
+  assert.ok(patches.some((payload) => payload.includes("SECOND RESULT")) || f.sent.some((row) => row.data.content.includes("SECOND RESULT")));
 });
