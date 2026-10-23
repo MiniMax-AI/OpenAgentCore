@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: 4a9c00d1eed9fe51f9e8f2f08e00f1709ddc55eb1c650ed3a5380f44a5b71e1c
+source_hash: 17bdd8f0821388294d9454d9b6640a33df850756d34c40d0ee5b1551173fef07
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -54,7 +54,6 @@ Authorization: Bearer <Core key>
         "cpu": {
           "usage_seconds_total": 482.75,
           "capacity_cores": 2.0,
-          "usage_cores": null,
           "utilization_ratio": null
         },
         "memory": {
@@ -128,7 +127,6 @@ Authorization: Bearer <Core key>
 | --- | --- |
 | `usage_seconds_total` | 当前计算实例代次的累计 CPU 秒数（Docker、microsandbox）。 |
 | `capacity_cores` | 已配置的 CPU 容量，大于零。 |
-| `usage_cores` | 始终为 null。 |
 | `utilization_ratio` | 提供商报告的 `capacity_cores` 占比（E2B），不进行钳制；对于报告累计 CPU 时间的提供商为 null。 |
 
 ### `memory` {#memory}

@@ -7,9 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/google/uuid"
 )
 
@@ -40,21 +38,21 @@ type RuntimeInitialization struct {
 // Runtime resolves logical paths and owns installation destinations. Envelope.ID
 // identifies one connection-local transfer.
 type RuntimePreparePayload struct {
-	BudgetMS       int64                    `json:"budget_ms,omitempty"`
-	Step           string                   `json:"step"`
-	EnvironmentID  string                   `json:"environment_id,omitempty"`
-	SessionID      string                   `json:"session_id,omitempty"`
-	Action         string                   `json:"action,omitempty"`
-	Slot           int                      `json:"slot,omitempty"`
-	Skill          *agentskill.Metadata     `json:"skill,omitempty"`
-	Plugin         *agentplugin.Metadata    `json:"plugin,omitempty"`
-	File           *RuntimeInitialFile      `json:"file,omitempty"`
-	Initialization *RuntimeInitialization   `json:"initialization,omitempty"`
-	Sources        *agentcapabilities.Input `json:"sources,omitempty"`
-	SizeBytes      int                      `json:"size_bytes,omitempty"`
-	SHA256         string                   `json:"sha256,omitempty"`
-	Offset         int                      `json:"offset,omitempty"`
-	Data           []byte                   `json:"data,omitempty"`
+	BudgetMS       int64                  `json:"budget_ms,omitempty"`
+	Step           string                 `json:"step"`
+	EnvironmentID  string                 `json:"environment_id,omitempty"`
+	SessionID      string                 `json:"session_id,omitempty"`
+	Action         string                 `json:"action,omitempty"`
+	Slot           int                    `json:"slot,omitempty"`
+	Skill          *SkillMetadata         `json:"skill,omitempty"`
+	Plugin         *PluginMetadata        `json:"plugin,omitempty"`
+	File           *RuntimeInitialFile    `json:"file,omitempty"`
+	Initialization *RuntimeInitialization `json:"initialization,omitempty"`
+	Sources        *CapabilitySources     `json:"sources,omitempty"`
+	SizeBytes      int                    `json:"size_bytes,omitempty"`
+	SHA256         string                 `json:"sha256,omitempty"`
+	Offset         int                    `json:"offset,omitempty"`
+	Data           []byte                 `json:"data,omitempty"`
 }
 
 type RuntimePrepareResultPayload struct {
@@ -91,12 +89,12 @@ func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
 		switch p.Action {
 		case "skill":
 			if p.Skill == nil || p.Plugin != nil || p.Sources != nil || p.Slot != 0 ||
-				agentcapabilities.ValidateInput(agentcapabilities.Input{Skills: []agentskill.Metadata{*p.Skill}}) != nil {
+				ValidateCapabilitySources(CapabilitySources{Skills: []SkillMetadata{*p.Skill}}) != nil {
 				return false
 			}
 		case "plugin":
 			if p.Plugin == nil || p.Skill != nil || p.Sources != nil || p.Slot < 0 || p.Slot >= 50 ||
-				agentcapabilities.ValidateInput(agentcapabilities.Input{Plugins: []agentplugin.Metadata{*p.Plugin}}) != nil {
+				ValidateCapabilitySources(CapabilitySources{Plugins: []PluginMetadata{*p.Plugin}}) != nil {
 				return false
 			}
 		case "file":
@@ -109,7 +107,7 @@ func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
 			}
 		case "finalize":
 			if p.Skill != nil || p.Plugin != nil || p.Sources == nil || p.Slot != 0 ||
-				p.SizeBytes != 0 || p.SHA256 != "" || agentcapabilities.ValidateInput(*p.Sources) != nil {
+				p.SizeBytes != 0 || p.SHA256 != "" || ValidateCapabilitySources(*p.Sources) != nil {
 				return false
 			}
 		default:
@@ -180,7 +178,7 @@ func validWorkspacePath(value string, allowRoot bool) bool {
 	if len(value) > 4096 || !utf8.ValidString(value) || path.Clean(value) != value || strings.ContainsAny(value, "\\\x00\r\n") {
 		return false
 	}
-	return (allowRoot && value == "/workspace") || strings.HasPrefix(value, "/workspace/")
+	return (allowRoot && value == runtimebootstrap.PublicWorkspace) || strings.HasPrefix(value, runtimebootstrap.PublicWorkspace+"/")
 }
 
 func validRuntimeInitialization(p RuntimeInitialization) bool {

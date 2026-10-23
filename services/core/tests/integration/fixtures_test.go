@@ -94,8 +94,8 @@ func FixtureFileWrite(ctx context.Context, pool *pgxpool.Pool, tenantID, environ
 	}
 	write := row.EnvironmentFileWrite
 	return sessions.EnvironmentFileWrite{
-		Identity:      sessions.FileWriteIdentity{ID: uuid.UUID(write.ID.Bytes).String(), DeviceID: uuid.UUID(write.DeviceID.Bytes).String(), RequestSHA256: write.RequestSha256},
-		EnvironmentID: uuid.UUID(write.EnvironmentID.Bytes).String(), SessionID: uuid.UUID(row.SessionID.Bytes).String(), State: write.State, CreatedAt: write.CreatedAt.Time,
+		Identity: sessions.FileWriteIdentity{ID: uuid.UUID(write.ID.Bytes).String(), DeviceID: uuid.UUID(write.DeviceID.Bytes).String(), RequestSHA256: write.RequestSha256},
+		State:    write.State, CreatedAt: write.CreatedAt.Time,
 	}, nil
 }
 

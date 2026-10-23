@@ -3,6 +3,8 @@ package sessions
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"strings"
 	"testing"
 
@@ -16,7 +18,7 @@ import (
 type fakeStorage struct {
 	t              *testing.T
 	calls          []string
-	heartbeatKinds []runtimedevice.SupportedAgentKind
+	heartbeatKinds []proto.SupportedAgentKind
 
 	createDevice             func(DeviceRegistration) (ExecutionDevice, error)
 	revokeDevice             func() error
@@ -77,7 +79,7 @@ func (s *fakeStorage) TouchDevice(_ context.Context, device string) (bool, error
 	return s.touchDevice()
 }
 
-func (s *fakeStorage) TouchAuthenticatedDevice(_ context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error) {
+func (s *fakeStorage) TouchAuthenticatedDevice(_ context.Context, device, credentialHash string, kinds []proto.SupportedAgentKind) (bool, error) {
 	s.record("TouchAuthenticatedDevice", s.touchAuthenticatedDevice != nil, device, credentialHash)
 	s.heartbeatKinds = kinds
 	return s.touchAuthenticatedDevice()
@@ -173,7 +175,7 @@ func TestDeviceUseCases(t *testing.T) {
 		storage := &fakeStorage{t: t, touchDevice: returns(current), touchAuthenticatedDevice: returns(current)}
 		service := deviceService(t, storage)
 		runtime, err := service.TouchRuntimeHeartbeat(t.Context(), "device")
-		if err != nil || runtime != (runtimedevice.HeartbeatStatus{Liveness: "online", Deleted: !current}) {
+		if err != nil || runtime != (runtimedevice.HeartbeatStatus{Deleted: !current}) {
 			t.Fatalf("runtime heartbeat %+v, %v", runtime, err)
 		}
 		daemon, err := service.TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: "device", CredentialHash: credentialDigest})
@@ -238,9 +240,9 @@ func TestEnrollRuntimeBindsUnderTheSessionLock(t *testing.T) {
 
 func TestHeartbeatPassesRetainedHistoryDeclarationToAuthenticatedStorage(t *testing.T) {
 	storage := &fakeStorage{t: t, touchAuthenticatedDevice: returns(true)}
-	kinds := []runtimedevice.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: runtimedevice.KindCapabilities{RetainedNativeHistory: true}}}
+	kinds := []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{RetainedNativeHistory: proto.CapabilitySupported})}}
 	_, err := deviceService(t, storage).TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: "device", CredentialHash: credentialDigest, SupportedAgentKinds: kinds})
-	if err != nil || len(storage.heartbeatKinds) != 1 || !storage.heartbeatKinds[0].Capabilities.RetainedNativeHistory {
+	if err != nil || len(storage.heartbeatKinds) != 1 || !storage.heartbeatKinds[0].Capabilities.RetainedNativeHistory.IsSupported() {
 		t.Fatalf("declaration lost: %v", err)
 	}
 	_, err = deviceService(t, storage).TouchAgentDaemonHeartbeat(t.Context(), runtimedevice.Heartbeat{RuntimeID: "device", CredentialHash: credentialDigest})

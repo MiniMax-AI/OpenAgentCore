@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: d9f1160d3e7eda55c74d21eb186c694e5b6f56162b37c1e5ee7ff1248c57a4de
+source_hash: bfe56fff19cd4f24d10ff2315df45c912ff093e9181cb32d2edf5e2d22872fbd
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -92,7 +92,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 原生 Harness 放弃的函数调用（例如根关闭或中断子级时被丢弃的 Subagent 调用，或超过 120 秒超时的 MiniMax Code 调用）会被撤回：它不再是待执行操作，之后为它提交结果会返回 409 `conflict_error`。官方 API 没有撤回机制。
 - 在 Turn 中途接入流时，不会发送补发 Item 快照。
 - Items 列表会包含进行中和未完成的输出 Items，并保留失败函数结果中已提交的 `output`。
-- 错误消息会省略官方消息包含的 call 和 executor ID。
+- 错误消息会省略官方消息包含的 call 和 executor ID，但未知工具调用的消息会带上其 `call_id`。
+- 失败的 Turn 以官方名称报告模型失败类别，Runtime 断开连接或准备失败报告为 `sandbox_error`。Core 的其他失败，例如 Runtime 不可用、缺少模型提供方、输入被拒绝或存储失败，一律报告 `internal_error`。消息是每个 code 对应的固定句子，不含原生文本。Subagent Turn 始终报告 `internal_error`。
 - 与其他文本并存的空文本部分可被接受并存储。
 - 对于既没有图像、也没有非空白文本的函数结果，Claude Code 会向模型显示其自身的占位文本；函数错误文本的首尾空白会被去除。
 - 空输入会返回 400 `invalid_request`，附带通用消息和值为 null 的 param；官方响应为 `invalid_request_error`，param 为 `input`。

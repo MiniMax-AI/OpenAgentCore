@@ -43,7 +43,7 @@ func TestDockerProviderLifecycle(t *testing.T) {
 	if image == "" {
 		t.Skip("explicit Docker fixture image required")
 	}
-	seccomp, e := os.ReadFile("../../../deploy/codex/seccomp.json")
+	seccomp, e := os.ReadFile("seccomp.json")
 	if e != nil {
 		t.Fatal(e)
 	}

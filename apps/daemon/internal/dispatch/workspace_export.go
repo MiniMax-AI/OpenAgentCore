@@ -46,7 +46,7 @@ func (r *Router) handleWorkspaceExport(ctx context.Context, env proto.Envelope) 
 			return errors.New("dispatch: workspace export request already pending")
 		}
 	}
-	_, code := r.workspaceResourceLocked(proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
+	code := r.workspaceReadAdmissionLocked(proto.WorkspaceReadPayload{Handle: request.Handle, EnvironmentID: request.EnvironmentID})
 	p := r.preparations[request.Handle]
 	if u != nil || r.workspaceWrite != nil || !r.localWorkspace.CanExport() || code != "" || p == nil || p.executor != nil {
 		r.mu.Unlock()

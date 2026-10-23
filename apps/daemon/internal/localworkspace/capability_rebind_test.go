@@ -3,6 +3,8 @@ package localworkspace
 import (
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/google/uuid"
 )
@@ -11,7 +13,7 @@ func TestFinalizeRebindsIdenticalRestoredInstallation(t *testing.T) {
 	first, _ := testBinding(t)
 	source := t.TempDir()
 	writeSourceSkill(t, source, "restored")
-	input := agentcapabilities.Input{Directories: []string{source}}
+	input := proto.CapabilitySources{Directories: []string{source}}
 	root, unlock, err := first.openCapabilities(t.Context(), false)
 	if err != nil {
 		t.Fatal(err)
@@ -25,7 +27,7 @@ func TestFinalizeRebindsIdenticalRestoredInstallation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = next.loadCapabilitySnapshot(root, agentcapabilities.Input{}, next.capabilityIdentity(), false); err == nil {
+	if _, err = next.loadCapabilitySnapshot(root, proto.CapabilitySources{}, next.capabilityIdentity(), false); err == nil {
 		t.Fatal("different selection accepted")
 	}
 	if _, err = next.loadCapabilitySnapshot(root, input, next.capabilityIdentity(), false); err != nil {

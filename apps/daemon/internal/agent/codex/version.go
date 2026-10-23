@@ -5,21 +5,27 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/binpath"
 )
 
 // InstallURL points operators at the Codex install instructions when
 // the daemon can see the adapter but not the CLI binary.
 const InstallURL = "https://github.com/openai/codex"
 
-// defaultBinary is the executable to probe and spawn: binpath.Codex()
-// honours the OAC_RUNTIME_CODEX_BIN override so a bare-name PATH lookup can
-// be bypassed in images where PATH is not under our control. A function
-// rather than a const so the env is read at call time.
-func defaultBinary() string { return binpath.Codex() }
+// binaryEnv pins the codex executable in images where PATH is not under our
+// control, so the version probe and the run-time spawn resolve the same binary.
+const binaryEnv = "OAC_RUNTIME_CODEX_BIN"
+
+// defaultBinary is the executable to probe and spawn: the trimmed binaryEnv
+// override, else "codex" on PATH. Read at call time.
+func defaultBinary() string {
+	if v := strings.TrimSpace(os.Getenv(binaryEnv)); v != "" {
+		return v
+	}
+	return "codex"
+}
 
 // ErrCLINotFound is returned by CheckCLIAvailable when the binary
 // cannot be located on PATH. Callers use errors.Is to distinguish an

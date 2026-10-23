@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 const publicMCP = `{"type":"mcp","server_label":"records","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example.test/tools"}}`
@@ -192,6 +194,21 @@ func TestSessionMCPKeepsToolOrderAndStripsSavedHeaders(t *testing.T) {
 	}
 	if _, err := resolveSessionTools([]json.RawMessage{saved, function, saved}); err == nil {
 		t.Fatal("duplicate MCP server labels were admitted")
+	}
+}
+
+func TestSessionReadOmitsMCPHeaders(t *testing.T) {
+	stored, err := resolveMCPTool(json.RawMessage(`{"type":"mcp","server_label":"records","transport":{"type":"http","server_url":"https://mcp.example.test","headers":{"X-Tenant":"a"}}}`), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(configuration{Agent: v1.Agent{ID: "agent", Model: "fixture", Tools: []json.RawMessage{stored}}, Environment: v1.Environment{Type: "none"}})
+	response, err := sessionResponse(sessions.Session{Configuration: raw}, "")
+	if err != nil || !strings.Contains(string(stored), "X-Tenant") {
+		t.Fatal(err)
+	}
+	if got := string(response.Agent.Tools[0]); strings.Contains(got, "headers") || !strings.Contains(got, `"transport":{"type":"http","server_url":"https://mcp.example.test"}`) {
+		t.Fatalf("Session read: %s", got)
 	}
 }
 

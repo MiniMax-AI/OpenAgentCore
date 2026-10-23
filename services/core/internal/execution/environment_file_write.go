@@ -102,7 +102,7 @@ func (w *Worker) runFileWrite(owner context.Context, request fileWriteRequest) f
 		return unavailable
 	}
 	info, found, known := peer.AgentKindStatus(session.Engine)
-	if !known || !found || !info.Available || !info.Capabilities.LocalEnvironment {
+	if !known || !found || !info.Available || !info.Capabilities.LocalEnvironment.IsSupported() {
 		return unavailable
 	}
 	dataDigest := sha256.Sum256(request.data)

@@ -10,7 +10,7 @@ import (
 )
 
 func TestWorkspaceDirectorySharesReadCorrelationAndFrameBound(t *testing.T) {
-	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 	defer s.Close("test")
 	request := proto.WorkspaceReadPayload{Handle: "prepared", EnvironmentID: "environment", MaxEntries: proto.WorkspaceDirectoryMaxEntries}
 	done := make(chan error, 1)
@@ -75,7 +75,7 @@ func TestWorkspaceDirectoryRequiresExplicitWireTruncation(t *testing.T) {
 		{"truncated", `{"entries":[{"name":"dir","kind":"directory","size_bytes":null}],"truncated":true}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
 			done := make(chan error, 1)
 			go func() {

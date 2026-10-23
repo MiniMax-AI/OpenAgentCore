@@ -4,6 +4,8 @@ title: "Machine connection API"
 
 Machines call Core under `/api/v1`: sandbox nodes, Runtime daemons and the self-hosted installer. Each route accepts only the credential listed for it, never the Core key or a Project API key, and a console sign-in grants nothing here. The reverse proxy sends `/api/v1` directly to Core; Web never serves these routes.
 
+Every request body and successful response body is a type of `internal/machineapi/machineapi.go`, except the node configuration, whose `specification` is the [Sandbox Provider protocol](../../docs/sandbox-provider.md) type. Each route section below lists its errors.
+
 ## Routes
 
 | Route | Caller | Credential | Contract |
@@ -101,7 +103,7 @@ The credential is checked before any deployment state, so a rejected credential,
 
 ### Daemon bootstrap
 
-`POST /api/v1/agent-daemon/bootstrap` with the daemon credential and `{"device_id": "…"}` returns `device_id`, `workspace_id`, `ws_url` (derived from `OAC_PUBLIC_URL`, never from request headers), `heartbeat_seconds` and `protocol_version`. The daemon then dials `ws_url` as the [Core–Runtime protocol](../../docs/runtime-protocol.md#ownership-and-connection) describes.
+`POST /api/v1/agent-daemon/bootstrap` with the daemon credential and `{"device_id": "…"}` returns `device_id`, `ws_url` (derived from `OAC_PUBLIC_URL`, never from request headers) and `heartbeat_seconds`. The daemon then dials `ws_url` as the [Core–Runtime protocol](../../docs/runtime-protocol.md#ownership-and-connection) describes.
 
 The bootstrap and WebSocket routes share one error body, `{"error": code, "detail": text}`: 400 `missing_params`, `missing_device_id` or `bad_json`; 401 `missing_bearer`, `unknown_device` or `bad_credential`; 403 `wrong_runtime_type`; 500 `internal`; and on the WebSocket 426 `incompatible_version` when `version` is not Core's exact Runtime protocol version.
 

@@ -99,7 +99,6 @@ export interface HostedRuntimeUsage {
   pending: number;
   /** Runtimes with a current CPU and memory sample. */
   observed: number;
-  cpuUsageCores: number | null;
   cpuCapacityCores: number | null;
   memoryUsageBytes: number | null;
   memoryLimitBytes: number | null;
@@ -115,7 +114,6 @@ export function hostedRuntimeUsage(observations: readonly OwnedRuntimeObservatio
     sleeping: hosted.filter((observation) => observation.lifecycle_state === "sleeping").length,
     pending: hosted.filter((observation) => observation.lifecycle_state === "pending" || observation.lifecycle_state === "transitioning").length,
     observed: observed.length,
-    cpuUsageCores: sumKnown(observed.map((observation) => observation.cpu?.usage_cores)),
     cpuCapacityCores: sumKnown(observed.map((observation) => observation.cpu?.capacity_cores)),
     memoryUsageBytes: sumKnown(observed.map((observation) => observation.memory?.usage_bytes)),
     memoryLimitBytes: sumKnown(observed.map((observation) => observation.memory?.limit_bytes)),

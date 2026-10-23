@@ -57,9 +57,6 @@ func (fixtureControl) Declaration() workspacefs.Declaration {
 }
 func (fixtureControl) Check(context.Context) error { return nil }
 func (c fixtureControl) Create(_ context.Context, r workspacefs.Reference, _ uint32) (workspacefs.Attachment, error) {
-	return c.Observe(context.Background(), r)
-}
-func (c fixtureControl) Observe(_ context.Context, r workspacefs.Reference) (workspacefs.Attachment, error) {
 	return workspacefs.Attachment{Reference: r, ConfigurationID: c.configuration, Kind: workspacefs.AttachmentHostDirectory, Native: json.RawMessage(`{}`)}, nil
 }
 func (fixtureControl) Delete(context.Context, workspacefs.Reference) error { return nil }

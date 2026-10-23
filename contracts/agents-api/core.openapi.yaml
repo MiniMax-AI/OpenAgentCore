@@ -74,8 +74,8 @@ definitions:
         allOf:
           - $ref: '#/definitions/api.RuntimeDiskObservation'
         description: |-
-          Current Runtime disk usage and capacity. E2B reports them; Docker and
-          microsandbox observations return null.
+          Current Runtime disk usage and capacity. Providers that cannot report
+          them return null.
         x-nullable: true
       environment_id:
         format: uuid
@@ -731,8 +731,9 @@ definitions:
         allOf:
           - $ref: '#/definitions/sandbox.Resources'
         description: |-
-          Per-sandbox limits, required for Docker and microsandbox. E2B may omit
-          them; Core then uses the validated template build's cpus and memory_mib.
+          Per-sandbox limits, required for a Provider that declares default
+          resources. Another Provider may omit them; Core then uses the cpus and
+          memory_mib of the configuration it validated.
     required:
       - expected_generation
     type: object
@@ -750,8 +751,9 @@ definitions:
         allOf:
           - $ref: '#/definitions/sandbox.Resources'
         description: |-
-          Per-sandbox limits, required for Docker and microsandbox. E2B may omit
-          them; Core then uses the validated template build's cpus and memory_mib.
+          Per-sandbox limits, required for a Provider that declares default
+          resources. Another Provider may omit them; Core then uses the cpus and
+          memory_mib of the configuration it validated.
     required:
       - expected_generation
     type: object
@@ -775,7 +777,7 @@ definitions:
         description: An omitted limit is derived from the node's host when it enrolls.
         type: integer
       max_retained:
-        description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+        description: Providers without checkpoint support never suspend, so Core replaces this with max_active; the others use both limits.
         type: integer
     type: object
   api.SandboxIdlePolicyInput:
@@ -1349,7 +1351,7 @@ definitions:
       compute_phase:
         type: string
       compute_phase_changed_at:
-        description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+        description: The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
         type: string
         x-nullable: true
       created_at:
@@ -1543,7 +1545,7 @@ definitions:
       max_active:
         type: integer
       max_retained:
-        description: Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+        description: A Provider that does not checkpoint never suspends, so Core replaces this with max_active; a Provider that checkpoints uses both limits.
         type: integer
       name:
         type: string
@@ -1871,7 +1873,40 @@ definitions:
       credential:
         type: object
       query:
-        type: object
+        $ref: '#/definitions/sandbox.ConfigurationDiscoveryQuery'
+    type: object
+  sandbox.ConfigurationDiscoveryQuery:
+    properties:
+      field:
+        type: string
+      path:
+        items:
+          type: string
+        type: array
+    type: object
+  sandbox.ConfigurationOption:
+    properties:
+      complete:
+        type: boolean
+      label:
+        type: string
+      resources:
+        $ref: '#/definitions/sandbox.Resources'
+      value:
+        type: string
+    required:
+      - complete
+      - label
+      - value
+    type: object
+  sandbox.ConfigurationOptions:
+    properties:
+      options:
+        items:
+          $ref: '#/definitions/sandbox.ConfigurationOption'
+        type: array
+    required:
+      - options
     type: object
   sandbox.DeploymentMode:
     enum:
@@ -2662,10 +2697,6 @@ definitions:
         minimum: 5e-324
         type: number
         x-nullable: true
-      usage_cores:
-        minimum: 0
-        type: number
-        x-nullable: true
       usage_seconds_total:
         minimum: 0
         type: number
@@ -2676,7 +2707,6 @@ definitions:
         x-nullable: true
     required:
       - capacity_cores
-      - usage_cores
       - usage_seconds_total
       - utilization_ratio
     type: object
@@ -6916,7 +6946,7 @@ paths:
         - Core Administration
   /core/v1/sandbox/deployment:
     get:
-      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
+      description: Core key only. Does not grant project resource access. Responses contain only explicit safe fields. Provider metadata is what Core read when the selection was saved; this read does not call the Provider.
       produces:
         - application/json
       responses:
@@ -6999,7 +7029,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects a provider and its enforced resource limits. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
+      description: Selects a provider and its enforced resource limits. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. A Provider that requires a public origin returns 409 sandbox_configuration_error while the public URL is loopback. Credentials are write-only. A Provider without default resources may omit resources to adopt the validated configuration's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body
@@ -7042,7 +7072,7 @@ paths:
     put:
       consumes:
         - application/json
-      description: 'Requires the observed generation, the same backend type and no active reset. E2B same-team changes apply online: allocations retain immutable generation and current credentials; omitted api_key preserves it, explicit submission including the same key verifies and advances generation. Other teams require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.'
+      description: 'Requires the observed generation, the same backend type and no active reset. Credential-holding Providers apply same-account changes online: allocations retain immutable generation and current credentials; an omitted credential preserves it, explicit submission including the same credential verifies and advances generation. Other accounts require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.'
       parameters:
         - description: Replacement deployment selection
           in: body
@@ -7447,7 +7477,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Core key only. Uses transient write-only credentials. The provider validates configuration and query fields and returns safe catalog metadata. Does not save credentials, change a deployment or allocate compute. Discovery is not deployment admission.
+      description: Core key only. Uses transient write-only credentials. The provider validates configuration and query fields and returns the options of one Discovered setup field. Does not save credentials, change a deployment or allocate compute. Discovery is not deployment admission.
       parameters:
         - description: Registered provider kind
           in: path
@@ -7466,8 +7496,7 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/sandbox.ConfigurationOptions'
         "400":
           description: Bad Request
           schema:

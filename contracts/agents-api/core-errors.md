@@ -38,7 +38,7 @@ These have null `param` and no `details`. A Core `401 invalid_admin_key` therefo
 
 ## Sandbox provider verification
 
-A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-deployment.md#reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
+A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-deployment.md#e2b-key-replacement)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
 
 | HTTP | Code | Meaning | `param` |
 | --- | --- | --- | --- |
@@ -106,7 +106,7 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 
 ## Diagnostic failure categories
 
-The [Session diagnostics](./session-diagnostics.md) routes return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
+The [Session diagnostics](./session-diagnostics.md) routes return these categories inside a successful 200 snapshot, not as an error envelope. A public `/v1` Turn error reports some of them under official codes, as [Differences from OpenAI](./index.md#differences-from-openai) describes. `params` is `{}` unless the table says otherwise.
 
 | Code | Stored cause or safe meaning |
 | --- | --- |
@@ -118,7 +118,7 @@ The [Session diagnostics](./session-diagnostics.md) routes return these categori
 | `server_error` | Native server failure classification |
 | `invalid_request` | Native request rejection |
 | `resource_not_found` | Native resource/model not found |
-| `request_timeout` | Reserved neutral timeout category; no current adapter producer |
+| `request_timeout` | Native provider timeout classification |
 | `context_length_exceeded` | Native context limit classification |
 | `cyber_policy` | Native cyber policy rejection |
 | `connection_failed` | Native connection failure; params contain `http_status`, an integer in 100–599 or null |

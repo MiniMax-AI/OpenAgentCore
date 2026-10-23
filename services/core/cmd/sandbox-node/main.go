@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
@@ -116,9 +118,9 @@ func run(ctx context.Context, args []string) error {
 	if err != nil {
 		return fmt.Errorf("local provider readiness check failed (%s): %w", sandbox.NodeDiagnostic(err), err)
 	}
-	stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, node.EnrollmentRequest{Name: *name})
+	stored, err := node.Enroll(ctx, *coreURL, *stateDir, token, machineapi.NodeEnrollment{Name: *name})
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(os.Stdout).Encode(node.EnrollmentResponse{MaxActive: stored.Identity.MaxActive, MaxRetained: stored.Identity.MaxRetained, SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
+	return json.NewEncoder(os.Stdout).Encode(machineapi.NodeIdentity{MaxActive: stored.Identity.MaxActive, MaxRetained: stored.Identity.MaxRetained, SpecificationDigest: stored.Identity.SpecificationDigest, DeploymentGeneration: stored.Identity.DeploymentGeneration, NodeID: stored.Identity.NodeID, InstallationID: stored.Identity.InstallationID, Provider: stored.Identity.Provider})
 }

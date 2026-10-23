@@ -55,7 +55,7 @@ const server = createServer(async (request, response) => {
   }
   if (!secret || request.headers.authorization !== `Bearer ${secret}`) return json(401, {});
   if (url.pathname.endsWith('/enroll')) return json(200, { device_id: device, session_id: session, environment_id: environment, workspace_directory: workspace });
-  if (url.pathname.endsWith('/bootstrap')) return json(200, { device_id: device, workspace_id: session, ws_url: remote, heartbeat_seconds: 15, protocol_version: protocol });
+  if (url.pathname.endsWith('/bootstrap')) return json(200, { device_id: device, ws_url: remote, heartbeat_seconds: 15 });
   if (url.pathname.endsWith('/connection')) return json(200, { environment_id: environment, status: connected ? 'connected' : 'disconnected' });
   return json(404, {});
 });

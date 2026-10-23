@@ -46,7 +46,7 @@ A distribution carries the docs listed in `BUNDLED_DOCS` in `scripts/core-distri
 
 ### Native installers
 
-Self-hosted machines install `oac-daemon` from per-platform native installers: Linux amd64, macOS arm64 and Windows amd64. Each is built on its own OS by the `native-check` workflow (`scripts/build-native-installer.mjs`, whose `pins` object fixes the Node.js and Harness versions) and verified on every selected native check. Manual packaging runs and release checks upload the platform's archives as `oac-native-installer-<OS>-<ARCH>` for seven days; ordinary PR and main checks do not upload successful packages. For a local distribution, download the three artifacts from a `native-check` run on that exact commit (a manual run or the release run; pull-request runs build the merge commit and do not match), then assemble the catalog from that checkout, with all archives of the three artifacts in one input directory:
+Self-hosted machines install `oac-daemon` from per-platform native installers: Linux amd64, macOS arm64 and Windows amd64. Each is built on its own OS by the `native-check` workflow (`scripts/build-native-installer.mjs`, whose `pins` object holds the Node.js version and the Harness versions generated from their declarations) and verified on every selected native check. Manual packaging runs and release checks upload the platform's archives as `oac-native-installer-<OS>-<ARCH>` for seven days; ordinary PR and main checks do not upload successful packages. For a local distribution, download the three artifacts from a `native-check` run on that exact commit (a manual run or the release run; pull-request runs build the merge commit and do not match), then assemble the catalog from that checkout, with all archives of the three artifacts in one input directory:
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
@@ -63,7 +63,7 @@ The catalog records the commit, the Runtime protocol version, each artifact's SH
 
 The three maintained Runtime images share the digest-pinned base `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep`, and a build-time adjustment to the pinned Debian login profile: an inherited, exported `PATH` is preserved, while an unset `PATH` receives Debian’s defaults. This keeps the Runtime’s initialized package and user paths available in login and non-login tools without another package-path setting. The combined image inherits the same profile. A changed upstream profile fails the build for review; custom shell startup files can still explicitly change `PATH`.
 
-**Codex Runtime image.** Extract the official npm package `@openai/codex@0.153.4-linux-x64` under `~/.oac` (for example with `npm pack --ignore-scripts` and `tar -xzf`), then:
+**Codex Runtime image.** Extract the official npm package `@openai/codex@<version>-linux-x64` at the version in the [Harness catalog](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/harness-catalog.md) under `~/.oac` (for example with `npm pack --ignore-scripts` and `tar -xzf`), then:
 
 ```sh
 export CODEX_CLI_DIR=/absolute/path/to/package

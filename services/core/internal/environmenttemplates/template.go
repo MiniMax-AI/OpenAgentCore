@@ -4,9 +4,10 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 )
 
@@ -20,7 +21,7 @@ type Template struct {
 	Packages              v1.EnvironmentPackages
 	Files                 []environmentconfig.InitialFileMetadata
 	Skills                []environmentconfig.SkillMetadata
-	Plugins               []agentplugin.Metadata
+	Plugins               []proto.PluginMetadata
 	CapabilityDirectories []string
 	CreatedAt             time.Time
 	UpdatedAt             time.Time

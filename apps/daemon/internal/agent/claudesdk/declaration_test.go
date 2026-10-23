@@ -12,6 +12,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/contracttest"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
 )
 
 func TestClaudeSDKInvalidPathsFailBeforeProbe(t *testing.T) {
@@ -47,7 +48,7 @@ func TestClaudeSDKFeatureDiscovery(t *testing.T) {
 	t.Setenv(claudeSDKNodeEnv, node)
 	for _, features := range [][]string{nil, {"mcp_http_tools"}, {"mcp_http_bearer_auth"}, {"mcp_http_tools", "mcp_http_bearer_auth"}, {"mcp_http_required"}, {"mcp_http_tools", "mcp_http_required"}, {"subagent_resources"}, {"structured_output"}} {
 		out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: &strings.Builder{}, Stderr: &strings.Builder{}}, Declaration.Info(), func(context.Context, Config) (RuntimeInfo, error) {
-			info := RuntimeInfo{SDK: "0.3.269", Native: "2.1.269 (Claude Code)", Features: features}
+			info := RuntimeInfo{SDK: declaration.Declaration.Native.Version, Native: "native", Features: features}
 			return info, nil
 		})
 		supported := len(features) > 0 && features[0] == "mcp_http_tools"
@@ -75,7 +76,7 @@ func TestDiscoveryOnlyNarrowsDeclaration(t *testing.T) {
 	t.Setenv(claudeSDKNodeEnv, node)
 	features := []string{"message_images", "function_result_images", "tool_search", "structured_output", "subagent_resources", "mcp_http_tools", "mcp_http_bearer_auth", "mcp_http_required"}
 	out := discoverWithCheck(t.Context(), agent.DiscoveryOptions{RuntimeRoot: root, StateRoot: t.TempDir(), Profile: "default", Stdout: io.Discard, Stderr: io.Discard}, Declaration.Info(), func(context.Context, Config) (RuntimeInfo, error) {
-		return RuntimeInfo{SDK: "0.3.269", Native: "2.1.269 (Claude Code)", Features: features}, nil
+		return RuntimeInfo{SDK: declaration.Declaration.Native.Version, Native: "native", Features: features}, nil
 	})
 	if out == nil || !out.Info.Available {
 		t.Fatal("runtime unavailable")

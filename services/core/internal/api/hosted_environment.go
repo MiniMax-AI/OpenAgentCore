@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentnetwork"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agentnetwork"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -78,7 +80,7 @@ func decodePreparedEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 	if kind == "openai_hosted" && agentcapabilities.ValidateDirectories(env.CapabilityDirectories) != nil {
 		return nil, sessions.ErrInvalidInput
 	}
-	if kind == "self_hosted" && agentcapabilities.ValidateSourceDirectories([]string{env.WorkspaceDirectory}) != nil {
+	if kind == "self_hosted" && proto.ValidateSourceDirectories([]string{env.WorkspaceDirectory}) != nil {
 		return nil, sessions.ErrInvalidInput
 	}
 	return env, nil

@@ -8,13 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"sync"
 )
 
 func TestCapacityRefreshUsesAuthenticatedCoreIdentity(t *testing.T) {
 	id := identity()
 	var stored StoredIdentity
-	approved := EnrollmentResponse{SpecificationDigest: id.SpecificationDigest, DeploymentGeneration: id.DeploymentGeneration, NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8}
+	approved := machineapi.NodeStatus{NodeIdentity: machineapi.NodeIdentity{SpecificationDigest: id.SpecificationDigest, DeploymentGeneration: id.DeploymentGeneration, NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/sandbox-node/identity" || r.URL.Query().Get("node_id") != id.NodeID || r.Header.Get("Authorization") != "Bearer "+stored.Credential {
 			t.Error("identity refresh lacked retained authority")

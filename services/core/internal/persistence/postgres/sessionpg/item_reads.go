@@ -14,8 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-var _ sessions.ItemReader = (*Store)(nil)
-
 func (s *Store) ListItems(ctx context.Context, tenantID, sessionID, cursor string, limit int, ascending bool) (sessions.ItemPage, error) {
 	if limit < 1 || limit > 100 {
 		return sessions.ItemPage{}, sessions.ErrInvalidInput

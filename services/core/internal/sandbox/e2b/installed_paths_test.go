@@ -36,8 +36,8 @@ func TestConfigurationDiscoveryUsesSuppliedProcessPaths(t *testing.T) {
 	}
 	input := sandbox.ConfigurationDiscoveryInput{Credential: json.RawMessage(`{"api_key":"synthetic-key"}`)}
 	result, err := (ConfigurationAdapter{}).DiscoverConfiguration(t.Context(), input, paths)
-	if err != nil || string(result) != `{"templates":[]}` {
-		t.Fatalf("configured discovery: %s %v", result, err)
+	if err != nil || len(result.Options) != 0 {
+		t.Fatalf("configured discovery: %v %v", result, err)
 	}
 	if _, err := (ConfigurationAdapter{}).DiscoverConfiguration(t.Context(), input, sandbox.ProcessPaths{}); !errors.Is(err, sandbox.ErrConfigurationUnconfirmed) {
 		t.Fatalf("missing roots: %v", err)

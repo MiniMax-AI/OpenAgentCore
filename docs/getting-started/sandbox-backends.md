@@ -26,8 +26,8 @@ Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a 
 
 ## Select the backend in Web
 
-1. Open **Settings → Sandbox and scheduling**. The setup wizard asks where sandboxes run: **Own machines** (microsandbox or Docker) or **E2B cloud**.
-2. Choose the backend and the sandbox size. Web proposes the [default size the Provider declares](../sandbox-provider.md#register-the-provider-kind) as **Standard**.
+1. Open **Settings → Sandbox and scheduling**. The setup wizard asks **Where should sandboxes run?**: **Own machines** (microsandbox or Docker) or **E2B**.
+2. For **Own machines**, choose the backend and the sandbox size. Web proposes the [default size the Provider declares](../sandbox-provider.md#register-the-provider-kind) as **Standard**, and **Advanced settings** on the review page holds the exact CPU, memory and disk values. E2B declares no default size, so its review page has no **Advanced settings**.
 3. Choose **Save configuration**. The choice is stored in Core's database.
 
 For **Own machines**, continue with [Add and manage nodes](./nodes.md). For microsandbox, first [Set up workspace storage](./workspace-storage.md). For checkpoint recovery across microsandbox nodes, see [Checkpoint recovery across nodes](./nodes.md#checkpoint-recovery-across-nodes).
@@ -37,8 +37,10 @@ For **Own machines**, continue with [Add and manage nodes](./nodes.md). For micr
 E2B needs no nodes, but its sandboxes call Core from E2B's cloud, so Core needs a public HTTPS URL that is not loopback; see [Configure the public address](./public-address.md).
 
 1. Build a template from the Runtime image with [Build a template](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md#build-a-template). Its output records the immutable `templateID:build_UUID` value.
-2. In the setup wizard, choose **E2B cloud**, enter the **E2B API key**, and select the template build or enter its `templateID:build_UUID`. The key must belong to the team that owns the template.
+2. In the setup wizard, choose **E2B**. Under **Connect E2B**, pick a **Service** or enter a custom **Sandbox API URL** and **Sandbox data-plane domain**, enter the **API key**, then select the **Template build** from the list Web loads with that key, template first and then its ready build. The key must belong to the team that owns the template.
 3. Choose **Save configuration**. Core stores the key encrypted and never returns it.
+
+When you edit a saved E2B configuration, leave the **API key** blank to keep the saved key. The **Template build** then stays an editable text field holding the saved `templateID:build_UUID`. Entering a key makes Web load the list again.
 
 The key and template rules, including key replacement, are in [Initial setup and same-provider changes](../../contracts/agents-api/sandbox-deployment.md#initial-setup-and-same-provider-changes).
 

@@ -137,7 +137,7 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	}
 	if placement.Type == "openai_hosted" {
 		info, found, known := peer.AgentKindStatus(owner.Engine)
-		if !known || !found || !info.Available || w.dispatcher.validateEnvironmentHistory(owner.Engine, environment, info.Capabilities.RetainedNativeHistory) != nil {
+		if !known || !found || !info.Available || w.dispatcher.validateEnvironmentHistory(owner.Engine, environment, info.Capabilities.RetainedNativeHistory.IsSupported()) != nil {
 			*failure = sessions.ProvisioningFailure{Step: sessions.ProvisioningHarness}
 			return sessions.ErrInvalidInput
 		}

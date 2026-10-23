@@ -3,7 +3,6 @@ package modelconfiguration
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -58,7 +57,7 @@ func TestNewServiceRequiresStorage(t *testing.T) {
 	}
 }
 
-func TestReplacePassesTheCompleteBundleWithItsSafeColumns(t *testing.T) {
+func TestReplacePassesTheKeyWithItsColumns(t *testing.T) {
 	stored := Configuration{Harness: "codex", Model: "fixture-model"}
 	var record Record
 	storage := &fakeStorage{t: t, replace: func(_ context.Context, r Record) (Configuration, error) {
@@ -73,8 +72,8 @@ func TestReplacePassesTheCompleteBundleWithItsSafeColumns(t *testing.T) {
 		record.Provider != (v1.ModelProviderView{Protocol: "responses", BaseURL: "https://model.example/v1", APIKeyConfigured: true}) {
 		t.Fatalf("safe columns: %+v", record)
 	}
-	if !reflect.DeepEqual(record.Configuration, validConfiguration()) {
-		t.Fatalf("bundle: %+v", record.Configuration)
+	if record.APIKey != validConfiguration().ModelProvider.APIKey {
+		t.Fatalf("key: %q", record.APIKey)
 	}
 }
 

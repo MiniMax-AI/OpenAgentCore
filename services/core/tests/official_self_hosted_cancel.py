@@ -132,7 +132,7 @@ def main():
             unknown = raw.post(endpoint + session_id + "/events", json={"events": missing_function},
                                headers={"Idempotency-Key": str(uuid.uuid4()), "Authorization": "Bearer " + token})
             assert unknown.json() == {"error": {"type": "invalid_request_error", "code": "invalid_request_error",
-                                                "param": None, "message": "Unknown pending tool call."}}
+                                                "param": None, "message": "Unknown pending tool call: unknown-function"}}
             raw_submit(session_id, "foreign-cancel", expected=404, key_token=settings["foreign_token"])
             for missing in (result["deleted_id"], str(uuid.uuid4())):
                 sdk_submit(missing, "missing-cancel", expected=404)

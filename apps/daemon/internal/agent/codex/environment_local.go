@@ -11,6 +11,5 @@ func SupportsLocalEnvironment(version string) bool {
 	if !SupportsNativeSessionRecovery(version) || (runtime.GOOS != "linux" && runtime.GOOS != "darwin" && runtime.GOOS != "windows") {
 		return false
 	}
-	binding, err := localworkspace.Load()
-	return err == nil && binding != nil
+	return localworkspace.Current() != nil
 }

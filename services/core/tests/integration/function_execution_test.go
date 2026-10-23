@@ -37,7 +37,7 @@ func newFunctionHarnessWith(t *testing.T, configuration string) *dispatchHarness
 	for {
 		peer, _ := h.registry.LookupDevice(h.device.ID)
 		info, _, _ := peer.AgentKindStatus("codex")
-		if info.Capabilities.FunctionTools {
+		if info.Capabilities.FunctionTools.IsSupported() {
 			return h
 		}
 		if time.Now().After(deadline) {

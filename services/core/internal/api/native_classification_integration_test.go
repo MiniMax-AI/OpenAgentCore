@@ -72,14 +72,38 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 				t.Fatal(err)
 			}
 			eventBytes, _ := json.Marshal(events)
-			if strings.Contains(string(eventBytes), "canary") || strings.Contains(string(eventBytes), "engine_error") || strings.Contains(string(eventBytes), "http_status") {
+			if strings.Contains(string(eventBytes), "canary") || strings.Contains(string(eventBytes), "private.example") || strings.Contains(string(eventBytes), "http_status") {
 				t.Fatal("private metadata entered SSE")
 			}
-			// Remove only additive private fields. All public response bytes must match.
+			// The Turn read and its stream event publish the same category: official names stay, anything else is internal_error.
+			public := code
+			if code == "secret-canary" {
+				public = "internal_error"
+			}
+			if !strings.Contains(string(before[1]), `"error":{"code":"`+public+`"`) {
+				t.Fatal("Turn error code", before[1])
+			}
+			streamed := false
+			for _, change := range events {
+				if change.Event.Type == "agent.session.turn.failed" {
+					event, err := streamResponse(session, change, "")
+					if err != nil || event.Turn == nil || event.Turn.Error == nil || event.Turn.Error.Code != public {
+						t.Fatal("streamed Turn error", err, event.Turn)
+					}
+					streamed = true
+				}
+			}
+			if !streamed {
+				t.Fatal("no agent.session.turn.failed event")
+			}
+			// Remove only the private fields; every other public response must keep its bytes.
 			if _, err = pool.Exec(t.Context(), `UPDATE turns SET outcome=outcome-'engine_error_code'-'engine_http_status' WHERE id=$1`, receipt.TurnID); err != nil {
 				t.Fatal(err)
 			}
 			for i, path := range paths {
+				if i == 1 {
+					continue
+				}
 				w := diagnosticRequest(h, path, "Bearer caller")
 				if w.Code != 200 || !bytes.Equal(before[i], w.Body.Bytes()) {
 					t.Fatal("private classification changed public response", path, w.Body)

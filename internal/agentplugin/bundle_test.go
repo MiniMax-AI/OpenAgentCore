@@ -5,12 +5,14 @@ import (
 	"bytes"
 	"io/fs"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestPluginPreservesMultipleSkillRootsAndSharedResources(t *testing.T) {
 	files := pluginFixture()
 	files[".mcp.json"] = []byte(`{"mcpServers":{}}`)
-	bundle, err := Read(pluginArchive(t, files, 0600), Metadata{Type: "inline", Name: "proof", Description: "Use shared resources."})
+	bundle, err := Read(pluginArchive(t, files, 0600), proto.PluginMetadata{Type: "inline", Name: "proof", Description: "Use shared resources."})
 	if err != nil || len(bundle.Skills) != 2 {
 		t.Fatalf("plugin rejected: %v", err)
 	}
@@ -26,7 +28,7 @@ func TestPluginPreservesMultipleSkillRootsAndSharedResources(t *testing.T) {
 	if !found {
 		t.Fatal("package-relative resource was dropped")
 	}
-	if _, err := Read(pluginArchive(t, files, 0600), Metadata{Type: "inline", Name: "other", Description: "Use shared resources."}); err == nil {
+	if _, err := Read(pluginArchive(t, files, 0600), proto.PluginMetadata{Type: "inline", Name: "other", Description: "Use shared resources."}); err == nil {
 		t.Fatal("mismatched public identity accepted")
 	}
 }
@@ -50,12 +52,12 @@ func TestPluginRejectsUnqualifiedActivationAndUnsafeLayout(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			files := pluginFixture()
 			files[tc.path] = []byte(tc.body)
-			if _, err := Read(pluginArchive(t, files, 0600), Metadata{Type: "inline", Name: "proof", Description: "Use shared resources."}); err == nil {
+			if _, err := Read(pluginArchive(t, files, 0600), proto.PluginMetadata{Type: "inline", Name: "proof", Description: "Use shared resources."}); err == nil {
 				t.Fatal("invalid Plugin accepted")
 			}
 		})
 	}
-	if _, err := Read(pluginArchive(t, pluginFixture(), fs.ModeSymlink|0600), Metadata{Type: "inline", Name: "proof", Description: "Use shared resources."}); err == nil {
+	if _, err := Read(pluginArchive(t, pluginFixture(), fs.ModeSymlink|0600), proto.PluginMetadata{Type: "inline", Name: "proof", Description: "Use shared resources."}); err == nil {
 		t.Fatal("symlink members accepted")
 	}
 }

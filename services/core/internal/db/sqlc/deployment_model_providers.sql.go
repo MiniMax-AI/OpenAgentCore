@@ -24,18 +24,33 @@ func (q *Queries) DeleteDeploymentModelProvider(ctx context.Context, harness str
 }
 
 const getDeploymentModelProviderSecret = `-- name: GetDeploymentModelProviderSecret :one
-SELECT encrypted_config, revision FROM deployment_model_providers WHERE harness = $1
+SELECT protocol, base_url, context_window, max_output_tokens, model, harness_config, encrypted_api_key, revision FROM deployment_model_providers WHERE harness = $1
 `
 
 type GetDeploymentModelProviderSecretRow struct {
-	EncryptedConfig []byte      `json:"encrypted_config"`
+	Protocol        string      `json:"protocol"`
+	BaseUrl         string      `json:"base_url"`
+	ContextWindow   int32       `json:"context_window"`
+	MaxOutputTokens int32       `json:"max_output_tokens"`
+	Model           string      `json:"model"`
+	HarnessConfig   []byte      `json:"harness_config"`
+	EncryptedApiKey []byte      `json:"encrypted_api_key"`
 	Revision        pgtype.UUID `json:"revision"`
 }
 
 func (q *Queries) GetDeploymentModelProviderSecret(ctx context.Context, harness string) (GetDeploymentModelProviderSecretRow, error) {
 	row := q.db.QueryRow(ctx, getDeploymentModelProviderSecret, harness)
 	var i GetDeploymentModelProviderSecretRow
-	err := row.Scan(&i.EncryptedConfig, &i.Revision)
+	err := row.Scan(
+		&i.Protocol,
+		&i.BaseUrl,
+		&i.ContextWindow,
+		&i.MaxOutputTokens,
+		&i.Model,
+		&i.HarnessConfig,
+		&i.EncryptedApiKey,
+		&i.Revision,
+	)
 	return i, err
 }
 
@@ -91,11 +106,11 @@ func (q *Queries) ListDeploymentModelProviders(ctx context.Context) ([]ListDeplo
 }
 
 const upsertDeploymentModelProvider = `-- name: UpsertDeploymentModelProvider :one
-INSERT INTO deployment_model_providers (harness, protocol, base_url, context_window, max_output_tokens, model, harness_config, encrypted_config, revision, updated_at)
+INSERT INTO deployment_model_providers (harness, protocol, base_url, context_window, max_output_tokens, model, harness_config, encrypted_api_key, revision, updated_at)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, clock_timestamp())
 ON CONFLICT (harness) DO UPDATE SET protocol = EXCLUDED.protocol, base_url = EXCLUDED.base_url,
     context_window = EXCLUDED.context_window, max_output_tokens = EXCLUDED.max_output_tokens,
-    model = EXCLUDED.model, harness_config = EXCLUDED.harness_config, encrypted_config = EXCLUDED.encrypted_config, revision = EXCLUDED.revision, updated_at = EXCLUDED.updated_at,
+    model = EXCLUDED.model, harness_config = EXCLUDED.harness_config, encrypted_api_key = EXCLUDED.encrypted_api_key, revision = EXCLUDED.revision, updated_at = EXCLUDED.updated_at,
     last_used_at = NULL, last_error_code = NULL, last_error_at = NULL, recovery_pending = false
 RETURNING harness, protocol, base_url, context_window, max_output_tokens, model, harness_config, updated_at, last_used_at, last_error_code, last_error_at
 `
@@ -108,7 +123,7 @@ type UpsertDeploymentModelProviderParams struct {
 	MaxOutputTokens int32       `json:"max_output_tokens"`
 	Model           string      `json:"model"`
 	HarnessConfig   []byte      `json:"harness_config"`
-	EncryptedConfig []byte      `json:"encrypted_config"`
+	EncryptedApiKey []byte      `json:"encrypted_api_key"`
 	Revision        pgtype.UUID `json:"revision"`
 }
 
@@ -135,7 +150,7 @@ func (q *Queries) UpsertDeploymentModelProvider(ctx context.Context, arg UpsertD
 		arg.MaxOutputTokens,
 		arg.Model,
 		arg.HarnessConfig,
-		arg.EncryptedConfig,
+		arg.EncryptedApiKey,
 		arg.Revision,
 	)
 	var i UpsertDeploymentModelProviderRow

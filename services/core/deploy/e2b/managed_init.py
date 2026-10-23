@@ -44,8 +44,6 @@ def initialize():
     binding = identity(payload)
     shared.write_private(root / 'managed-launch.json', binding)
     environment = shared.prepare_runtime()
-    environment.update(OAC_RUNTIME_ENVIRONMENT_ID=payload['EnvironmentID'],
-                       OAC_RUNTIME_SESSION_ID=payload['SessionID'])
     connection = Path(environment['OAC_RUNTIME_HOME']).parent / 'runtime-bootstrap.json'
     shared.write_private(connection, payload['RuntimeBootstrap'], owner=1000)
     source.unlink()

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -30,8 +32,8 @@ func nodesTokenDigest(token string) string {
 }
 
 // nodesEnrollment is a valid enrollment of a new node on view.
-func nodesEnrollment(view deployment.View, name, credential string) deployment.Enrollment {
-	return deployment.Enrollment{NodeID: uuid.NewString(), Name: name, Credential: strings.Repeat(credential, 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("b", 64),
+func nodesEnrollment(view deployment.View, name, credential string) machineapi.NodeEnrollment {
+	return machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: name, Credential: strings.Repeat(credential, 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("b", 64),
 		SpecificationDigest: view.SpecificationDigest, DeploymentGeneration: view.Generation, CoreURL: fixturePublicURL}
 }
 
@@ -78,12 +80,12 @@ func TestEnrollmentDerivesUnsetLimitsFromHost(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
-	host := func(input deployment.Enrollment) deployment.Enrollment {
+	host := func(input machineapi.NodeEnrollment) machineapi.NodeEnrollment {
 		cpus, memory, disk := int64(64), int64(256<<30), int64(8<<40)
 		input.CPUCount, input.TotalMemoryBytes, input.AvailableDiskBytes = &cpus, &memory, &disk
 		return input
 	}
-	enroll := func(limits deployment.EnrollmentLimits, input deployment.Enrollment) (deployment.NodeIdentity, error) {
+	enroll := func(limits deployment.EnrollmentLimits, input machineapi.NodeEnrollment) (deployment.NodeIdentity, error) {
 		token, err := f.service.CreateEnrollment(t.Context(), limits)
 		if err != nil {
 			t.Fatal(err)
@@ -141,7 +143,7 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 	changes, _ := f.execution(t)
 	unknown := strings.Repeat("u", 64)
 	// Before initialization the deployment is unavailable.
-	early := deployment.Enrollment{NodeID: uuid.NewString(), Name: "early", Credential: strings.Repeat("e", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
+	early := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "early", Credential: strings.Repeat("e", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		SpecificationDigest: strings.Repeat("d", 64), DeploymentGeneration: 1, CoreURL: fixturePublicURL}
 	if _, err := f.service.Enroll(t.Context(), unknown, early); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("uninitialized deployment judged before the token", err)
@@ -167,13 +169,13 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name   string
-		change func(*deployment.Enrollment)
+		change func(*machineapi.NodeEnrollment)
 		want   error
 	}{
-		{"provider", func(e *deployment.Enrollment) { e.Provider = "microsandbox" }, deployment.ErrInvalidInput},
-		{"generation", func(e *deployment.Enrollment) { e.DeploymentGeneration++ }, deployment.ErrSpecificationMismatch},
-		{"specification", func(e *deployment.Enrollment) { e.SpecificationDigest = strings.Repeat("0", 64) }, deployment.ErrSpecificationMismatch},
-		{"address", func(e *deployment.Enrollment) { e.CoreURL = "https://other.example" }, deployment.ErrNodeAddressMismatch},
+		{"provider", func(e *machineapi.NodeEnrollment) { e.Provider = "microsandbox" }, deployment.ErrInvalidInput},
+		{"generation", func(e *machineapi.NodeEnrollment) { e.DeploymentGeneration++ }, deployment.ErrSpecificationMismatch},
+		{"specification", func(e *machineapi.NodeEnrollment) { e.SpecificationDigest = strings.Repeat("0", 64) }, deployment.ErrSpecificationMismatch},
+		{"address", func(e *machineapi.NodeEnrollment) { e.CoreURL = "https://other.example" }, deployment.ErrNodeAddressMismatch},
 	} {
 		input := nodesEnrollment(view, "refused", "r")
 		tc.change(&input)
@@ -285,7 +287,7 @@ func TestEnrollmentReplay(t *testing.T) {
 	}
 	other := input
 	other.Credential = strings.Repeat("o", 64)
-	for _, candidate := range []deployment.Enrollment{input, other} {
+	for _, candidate := range []machineapi.NodeEnrollment{input, other} {
 		if _, err := f.service.Enroll(t.Context(), second.Token, candidate); !errors.Is(err, deployment.ErrNodeExists) {
 			t.Fatal("enrolled node ID reused", err)
 		}

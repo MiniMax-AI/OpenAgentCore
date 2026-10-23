@@ -125,7 +125,6 @@ export const sessions = {
     observed: "Observed",
     range: "Time range",
     ranges: { "1h": "1h", "6h": "6h", "24h": "24h" },
-    cores: "{{used}} of {{capacity}} cores",
     observationFailed: "The Runtime observation could not be loaded: {{reason}}",
     historyUnavailable: "Core keeps no Runtime history for this Session.",
     historyFailed: "Runtime history could not be loaded: {{reason}}",

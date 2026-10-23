@@ -37,7 +37,7 @@ func (ConfigurationAdapter) Requirements() sandbox.ConfigurationRequirements {
 }
 func (ConfigurationAdapter) DecodeInput(public, secret json.RawMessage) (sandbox.Configuration, error) {
 	var p publicConfiguration
-	if err := sandbox.DecodeConfigurationObject(public, &p, "template", "api_url", "domain"); err != nil {
+	if err := sandbox.DecodeConfigurationObject(public, &p, fieldNames(false, true)...); err != nil {
 		return nil, err
 	}
 	c := &DeploymentConfiguration{Template: p.Template, APIURL: p.APIURL, Domain: p.Domain}
@@ -45,7 +45,7 @@ func (ConfigurationAdapter) DecodeInput(public, secret json.RawMessage) (sandbox
 		var credential struct {
 			APIKey string `json:"api_key"`
 		}
-		if err := sandbox.DecodeConfigurationObject(secret, &credential, "api_key"); err != nil {
+		if err := sandbox.DecodeConfigurationObject(secret, &credential, fieldNames(true, true)...); err != nil {
 			return nil, err
 		}
 		if credential.APIKey == "" {
@@ -81,7 +81,7 @@ func (ConfigurationAdapter) Encode(value sandbox.Configuration) (sandbox.Configu
 func (ConfigurationAdapter) Decode(record sandbox.ConfigurationRecord) (sandbox.Configuration, error) {
 	var p publicConfiguration
 	var m buildMetadata
-	if sandbox.DecodeConfigurationObject(record.Public, &p, "template", "api_url", "domain") != nil || sandbox.DecodeConfigurationObject(record.Metadata, &m, "template_build") != nil {
+	if sandbox.DecodeConfigurationObject(record.Public, &p, fieldNames(false, true)...) != nil || sandbox.DecodeConfigurationObject(record.Metadata, &m, "template_build") != nil {
 		return nil, sandbox.ErrInvalid
 	}
 	c := &DeploymentConfiguration{Template: p.Template, APIURL: p.APIURL, Domain: p.Domain, APIKey: string(record.Secret)}

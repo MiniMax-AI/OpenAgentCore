@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -30,7 +32,7 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodeID := uuid.NewString()
-	if _, err := nodes.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Archive fixture", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}); err != nil {
+	if _, err := nodes.Enroll(t.Context(), token, machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Archive fixture", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}); err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, nodeID)

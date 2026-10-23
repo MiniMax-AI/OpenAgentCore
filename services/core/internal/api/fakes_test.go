@@ -7,6 +7,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/adminaudit"
@@ -170,10 +172,10 @@ func (f *fakeArtifactsReader) ReadSessionArtifact(a0 context.Context, a1 string,
 
 type fakeConfigurationDiscovery struct {
 	t                     testing.TB
-	discoverConfiguration func(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error)
+	discoverConfiguration func(ctx context.Context, provider string, input sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error)
 }
 
-func (f *fakeConfigurationDiscovery) DiscoverConfiguration(a0 context.Context, a1 string, a2 sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (f *fakeConfigurationDiscovery) DiscoverConfiguration(a0 context.Context, a1 string, a2 sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error) {
 	if f.discoverConfiguration == nil {
 		unexpectedCall(f.t, "DiscoverConfiguration")
 	}
@@ -189,9 +191,9 @@ type fakeDeployment struct {
 	updateNode          func(context.Context, string, deployment.NodeUpdate) error
 	removeNode          func(context.Context, string) error
 	createEnrollment    func(context.Context, deployment.EnrollmentLimits) (deployment.EnrollmentToken, error)
-	enroll              func(context.Context, string, deployment.Enrollment) (deployment.NodeIdentity, error)
+	enroll              func(context.Context, string, machineapi.NodeEnrollment) (deployment.NodeIdentity, error)
 	nodeConfiguration   func(context.Context, string, string, uint64) (deployment.NodeConfiguration, error)
-	nodeStatus          func(context.Context, string, string) (deployment.NodeStatus, error)
+	nodeStatus          func(context.Context, string, string) (machineapi.NodeStatus, error)
 	decodeConfiguration func(string, json.RawMessage, json.RawMessage) (sandbox.Configuration, error)
 }
 
@@ -237,7 +239,7 @@ func (f *fakeDeployment) CreateEnrollment(a0 context.Context, a1 deployment.Enro
 	return f.createEnrollment(a0, a1)
 }
 
-func (f *fakeDeployment) Enroll(a0 context.Context, a1 string, a2 deployment.Enrollment) (deployment.NodeIdentity, error) {
+func (f *fakeDeployment) Enroll(a0 context.Context, a1 string, a2 machineapi.NodeEnrollment) (deployment.NodeIdentity, error) {
 	if f.enroll == nil {
 		unexpectedCall(f.t, "Enroll")
 	}
@@ -251,7 +253,7 @@ func (f *fakeDeployment) NodeConfiguration(a0 context.Context, a1 string, a2 str
 	return f.nodeConfiguration(a0, a1, a2, a3)
 }
 
-func (f *fakeDeployment) NodeStatus(a0 context.Context, a1 string, a2 string) (deployment.NodeStatus, error) {
+func (f *fakeDeployment) NodeStatus(a0 context.Context, a1 string, a2 string) (machineapi.NodeStatus, error) {
 	if f.nodeStatus == nil {
 		unexpectedCall(f.t, "NodeStatus")
 	}

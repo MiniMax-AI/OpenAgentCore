@@ -5,6 +5,8 @@ import (
 	"math"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
@@ -69,7 +71,7 @@ func (s *Service) recommendations(ctx context.Context) (func(NodeHealth) *Capaci
 }
 
 // enrollmentHealth is the host an enrollment reports, validated like a health report.
-func enrollmentHealth(e Enrollment) (NodeHealth, error) {
+func enrollmentHealth(e machineapi.NodeEnrollment) (NodeHealth, error) {
 	observed := time.Now()
 	return normalizeHealth(NodeHealth{CPUCount: e.CPUCount, AvailableDiskBytes: e.AvailableDiskBytes, Host: &NodeHost{EffectiveCPUCores: e.EffectiveCPUCores, TotalMemoryBytes: e.TotalMemoryBytes, AvailableDiskBytes: e.AvailableDiskBytes, ObservedAt: &observed}})
 }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { StructuredOutput } from "../dist/structured_output.js";
-import { parseStart } from "../dist/request.js";
+import { parseRequest } from "../dist/request.js";
 const call = (id, extra={}) => ({type:'assistant', session_id:'session', parent_tool_use_id:null, message:{content:[{type:'tool_use',id,name:'StructuredOutput',input:{}}]},...extra});
 const receipt = (id,error=false) => ({type:'user',session_id:'session',parent_tool_use_id:null,message:{content:[{type:'tool_result',tool_use_id:id,is_error:error}]}});
 const result = {type:'result',subtype:'success',is_error:false,structured_output:{number:9007199254740992},result:'{"number":9007199254740993}'};
@@ -22,8 +22,8 @@ test('unrelated or failed results cannot publish a candidate',()=>{
  }
 });
 test('output configuration combines with agents and MCP',()=>{
- const r={type:'start',input: [{ content: [{ type: "input_text", text: 'hello' }] }],model:'model',system_prompt:'',cwd:'/tmp',output_format:{type:'json_schema',schema:{type:'object'}}};
- assert.deepEqual(parseStart(JSON.stringify(r)),r);
- for(const change of [{subagents:{max_concurrent:1}},{mcp_http_servers:[]}]) assert.deepEqual(parseStart(JSON.stringify({...r,...change})),{...r,...change});
- for(const change of [{output_format:{type:'text',schema:{}}}]) assert.throws(()=>parseStart(JSON.stringify({...r,...change})));
+ const r={type:'executor_prepare',model:'model',system_prompt:'',cwd:'/tmp',output_format:{type:'json_schema',schema:{type:'object'}}};
+ assert.deepEqual(parseRequest(JSON.stringify(r)),r);
+ for(const change of [{subagents:{max_concurrent:1}},{mcp_http_servers:[]}]) assert.deepEqual(parseRequest(JSON.stringify({...r,...change})),{...r,...change});
+ for(const change of [{output_format:{type:'text',schema:{}}}]) assert.throws(()=>parseRequest(JSON.stringify({...r,...change})));
 });

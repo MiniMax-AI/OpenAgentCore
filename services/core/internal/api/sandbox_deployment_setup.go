@@ -14,8 +14,9 @@ import (
 
 type SandboxDeploymentInput struct {
 	ExpectedGeneration *uint64 `json:"expected_generation" binding:"required"`
-	// Per-sandbox limits, required for Docker and microsandbox. E2B may omit
-	// them; Core then uses the validated template build's cpus and memory_mib.
+	// Per-sandbox limits, required for a Provider that declares default
+	// resources. Another Provider may omit them; Core then uses the cpus and
+	// memory_mib of the configuration it validated.
 	Resources     sandbox.Resources `json:"resources"`
 	Provider      string            `json:"provider"`
 	Configuration json.RawMessage   `json:"configuration" swaggertype:"object"`
@@ -50,7 +51,7 @@ type DeploymentReset interface {
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider and its enforced resource limits. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. E2B returns 409 sandbox_configuration_error while the public URL is loopback. E2B credentials are write-only. E2B may omit resources to adopt the validated template build's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
+// @Description Selects a provider and its enforced resource limits. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. A Provider that requires a public origin returns 409 sandbox_configuration_error while the public URL is loopback. Credentials are write-only. A Provider without default resources may omit resources to adopt the validated configuration's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -83,7 +84,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 }
 
 // @Summary Change the sandbox deployment configuration
-// @Description Requires the observed generation, the same backend type and no active reset. E2B same-team changes apply online: allocations retain immutable generation and current credentials; omitted api_key preserves it, explicit submission including the same key verifies and advances generation. Other teams require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.
+// @Description Requires the observed generation, the same backend type and no active reset. Credential-holding Providers apply same-account changes online: allocations retain immutable generation and current credentials; an omitted credential preserves it, explicit submission including the same credential verifies and advances generation. Other accounts require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth

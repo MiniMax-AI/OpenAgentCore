@@ -124,10 +124,28 @@ export const capacityFields = ["max_active", "max_retained"] as const;
 export interface ConfigurationDiscoveryInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
-  query?: Record<string, unknown>;
+  query?: ConfigurationDiscoveryQuery;
 }
 export const configurationDiscoveryInputFields = ["configuration", "credential", "query"] as const;
 export const configurationDiscoveryInputRequired = [] as const;
+export interface ConfigurationDiscoveryQuery {
+  field?: string;
+  path?: string[];
+}
+export const configurationDiscoveryQueryFields = ["field", "path"] as const;
+export const configurationDiscoveryQueryRequired = [] as const;
+export interface ConfigurationOption {
+  complete: boolean;
+  label: string;
+  resources?: SandboxResources;
+  value: string;
+}
+export const configurationOptionFields = ["complete", "label", "resources", "value"] as const;
+export const configurationOptionRequired = ["complete", "label", "value"] as const;
+export interface ConfigurationOptions {
+  options: ConfigurationOption[];
+}
+export const configurationOptionsFields = ["options"] as const;
 export interface CoreAPIError {
   code: string | null;
   details?: Record<string, unknown>;
@@ -657,11 +675,10 @@ export const rolloutStateValues = ["settled", "preparing"] as const;
 export type RolloutState = (typeof rolloutStateValues)[number];
 export interface RuntimeCPUObservation {
   capacity_cores: number | null;
-  usage_cores: number | null;
   usage_seconds_total: number | null;
   utilization_ratio: number | null;
 }
-export const runtimeCPUObservationFields = ["capacity_cores", "usage_cores", "usage_seconds_total", "utilization_ratio"] as const;
+export const runtimeCPUObservationFields = ["capacity_cores", "usage_seconds_total", "utilization_ratio"] as const;
 export interface RuntimeDiskObservation {
   limit_bytes: number | null;
   usage_bytes: number | null;

@@ -435,7 +435,7 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 			for {
 				peer, _ := h.registry.LookupDevice(h.device.ID)
 				info, _, _ := peer.AgentKindStatus("codex")
-				if info.Capabilities.DurableInputReceipts == (missing != "durable_input_receipts") && info.Capabilities.Preparation == (missing != "preparation") && info.Capabilities.ExecutionControls == (missing != "execution_controls") && info.Capabilities.DurableTurns == (missing != "durable_turns") && info.Capabilities.SubagentControl == (missing != "subagent_control") && info.Capabilities.ToolObservations == (missing != "tool_observations") && info.Capabilities.EnvironmentNone == (missing != "environment_none") {
+				if info.Capabilities.DurableInputReceipts.IsSupported() == (missing != "durable_input_receipts") && info.Capabilities.Preparation.IsSupported() == (missing != "preparation") && info.Capabilities.ExecutionControls.IsSupported() == (missing != "execution_controls") && info.Capabilities.DurableTurns.IsSupported() == (missing != "durable_turns") && info.Capabilities.SubagentControl.IsSupported() == (missing != "subagent_control") && info.Capabilities.ToolObservations.IsSupported() == (missing != "tool_observations") && info.Capabilities.EnvironmentNone.IsSupported() == (missing != "environment_none") {
 					break
 				}
 				if time.Now().After(deadline) {

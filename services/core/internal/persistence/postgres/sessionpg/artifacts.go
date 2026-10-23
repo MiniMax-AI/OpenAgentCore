@@ -17,7 +17,6 @@ import (
 )
 
 var (
-	_ sessions.ArtifactReader  = (*Store)(nil)
 	_ sessions.ArtifactStorage = (*Store)(nil)
 )
 

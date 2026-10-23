@@ -2,7 +2,6 @@ package localworkspace
 
 import (
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +20,7 @@ func TestNativeDirectoryAPI(t *testing.T) {
 		t.Fatal(got, err)
 	}
 	for _, path := range []string{"missing", "nested/data.bin"} {
-		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 10); !errors.Is(err, agent.ErrWorkspaceNotDirectory) {
+		if _, err := b.ListWorkspaceDirectory(t.Context(), path, 10); !errors.Is(err, ErrWorkspaceNotDirectory) {
 			t.Fatal(path, err)
 		}
 	}
@@ -47,7 +46,7 @@ func TestNativeFileReadPrefixAndEntryKinds(t *testing.T) {
 	if err != nil || got.Truncated || len(got.Data) != 3 {
 		t.Fatal(got, err)
 	}
-	if _, err = b.ReadWorkspaceFile(t.Context(), "nested", 3); !errors.Is(err, agent.ErrWorkspaceReadInvalid) {
+	if _, err = b.ReadWorkspaceFile(t.Context(), "nested", 3); !errors.Is(err, ErrWorkspaceReadInvalid) {
 		t.Fatal(err)
 	}
 	if _, err = b.ReadWorkspaceFile(t.Context(), "missing", 3); !os.IsNotExist(err) {

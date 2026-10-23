@@ -19,36 +19,18 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 )
-
-// BootstrapResponse mirrors gateway/handler.go's Bootstrap response.
-type BootstrapResponse struct {
-	DeviceID         string `json:"device_id"`
-	WorkspaceID      string `json:"workspace_id"`
-	WSURL            string `json:"ws_url"`
-	HeartbeatSeconds int    `json:"heartbeat_seconds"`
-	ProtocolVersion  string `json:"protocol_version"`
-}
-
-// HeartbeatInterval defends against the server returning 0 — a zero
-// heartbeat means "never ping" which guarantees a 60s timeout, so we
-// fall back to 15s instead of silently breaking liveness.
-func (b BootstrapResponse) HeartbeatInterval() time.Duration {
-	if b.HeartbeatSeconds <= 0 {
-		return 15 * time.Second
-	}
-	return time.Duration(b.HeartbeatSeconds) * time.Second
-}
 
 // Bootstrap calls POST <serverURL>/agent-daemon/bootstrap with the
 // device's runner_credential as a bearer token.
-func Bootstrap(ctx context.Context, serverURL, deviceID, credential, daemonVersion string) (*BootstrapResponse, error) {
+func Bootstrap(ctx context.Context, serverURL, deviceID, credential, daemonVersion string) (*machineapi.BootstrapResponse, error) {
 	return BootstrapWithClient(ctx, http.DefaultClient, serverURL, deviceID, credential, daemonVersion)
 }
 
 // BootstrapWithClient lets a connection entry point enforce its redirect policy.
-func BootstrapWithClient(ctx context.Context, client *http.Client, serverURL, deviceID, credential, daemonVersion string) (*BootstrapResponse, error) {
+func BootstrapWithClient(ctx context.Context, client *http.Client, serverURL, deviceID, credential, daemonVersion string) (*machineapi.BootstrapResponse, error) {
 	if strings.TrimSpace(serverURL) == "" {
 		return nil, fmt.Errorf("transport.Bootstrap: serverURL required")
 	}
@@ -58,7 +40,7 @@ func BootstrapWithClient(ctx context.Context, client *http.Client, serverURL, de
 	if strings.TrimSpace(credential) == "" {
 		return nil, fmt.Errorf("transport.Bootstrap: credential required")
 	}
-	body, err := json.Marshal(map[string]string{"device_id": deviceID})
+	body, err := json.Marshal(machineapi.BootstrapRequest{DeviceID: deviceID})
 	if err != nil {
 		return nil, fmt.Errorf("transport.Bootstrap: marshal body: %w", err)
 	}
@@ -86,7 +68,7 @@ func BootstrapWithClient(ctx context.Context, client *http.Client, serverURL, de
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("transport.Bootstrap: server returned %s: %s", resp.Status, strings.TrimSpace(string(raw)))
 	}
-	var out BootstrapResponse
+	var out machineapi.BootstrapResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("transport.Bootstrap: decode response: %w", err)
 	}
@@ -117,7 +99,7 @@ func joinURL(base, path string) (string, error) {
 // is derived from serverBase by swapping http→ws / https→wss. Non-
 // absolute ws_url is rejected — the server-side handler is the only
 // component that knows the externally-reachable host.
-func DeriveWSURL(boot BootstrapResponse, serverBase string) (string, error) {
+func DeriveWSURL(boot machineapi.BootstrapResponse, serverBase string) (string, error) {
 	if abs := strings.TrimSpace(boot.WSURL); abs != "" {
 		u, err := url.Parse(abs)
 		if err != nil {

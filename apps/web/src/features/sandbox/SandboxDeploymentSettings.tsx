@@ -1,18 +1,15 @@
 import { useState, type ReactNode } from "react";
-import type { UpdateSandboxDeployment, SandboxDeployment } from "@oac/agents-client";
+import { sandboxProviderSetup, type UpdateSandboxDeployment, type SandboxDeployment } from "@oac/agents-client";
 import { useTranslation } from "react-i18next";
 import { Modal } from "../../components/Modal";
 import { HelpTip, RefreshButton } from "../../components/console-ui";
 import { formatBytes, formatPeriod, MISSING } from "../../lib/format";
-import type { ParseKeys } from "i18next";
 import { sandboxProviderLabel } from "../../lib/sandbox-labels";
 import { Fact } from "../system/Fact";
-import { sandboxSize, templateBuildSize, templateBuildStatus } from "./deployment-specification";
 import { SandboxRolloutSummary } from "./SandboxRolloutSummary";
 import { SandboxSetupWizard } from "./SandboxSetupWizard";
 
 const MIB = 2 ** 20;
-const buildStatusLabel: Record<ReturnType<typeof templateBuildStatus>, ParseKeys<"sandbox">> = { ready: "Ready", notReady: "Not ready", unknown: "Unknown state" };
 
 export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdate, writeFailure, onRefresh, refreshing, pending }: {
   deployment: SandboxDeployment;
@@ -30,10 +27,8 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
   const [changing, setChanging] = useState(false);
   const [editKey, setEditKey] = useState(0);
   const spec = deployment.specification;
-  // An E2B selection may adopt its template build's size instead of saving one.
-  const size = sandboxSize(deployment);
-  const build = deployment.metadata?.template_build;
-  const buildSize = templateBuildSize(deployment);
+  const size = deployment.specification?.resources;
+  const setup = deployment.provider ? sandboxProviderSetup(deployment.provider) : null;
   const sizeLabel = (value: { cpus: number; memory_mib: number }) => t("{{cpus}} CPU · {{memory}}", { cpus: value.cpus, memory: formatBytes(value.memory_mib * MIB) });
   const canEdit = fresh && !deployment.reset;
   const change = () => { setEditKey((key) => key + 1); setChanging(true); };
@@ -43,7 +38,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
         <h2 id="sandbox-provider-heading">{t("Deployment provider")}</h2>
         <HelpTip label={tNavigation("details")}>
           {t("One provider serves this deployment. Reset it before choosing a different backend.")}
-          {deployment.mode === "direct" ? ` ${t("Core creates E2B sandboxes directly. No node enrollment is needed.")} ${t("Saved configuration does not confirm execution readiness. Session and Environment state report actual execution.")}` : ""}
+          {deployment.mode === "direct" ? ` ${t("Core creates {{provider}} sandboxes directly. No node enrollment is needed.", { provider: setup?.label })} ${t("Saved configuration does not confirm execution readiness. Session and Environment state report actual execution.")}` : ""}
           <dl className="sandbox-summary">
             {deployment.suspension ? <div><dt>{t("Idle suspension")}</dt><dd>{t("After {{idle}} · kept {{retention}}", { idle: formatPeriod(deployment.suspension.idle_seconds, i18n.resolvedLanguage), retention: formatPeriod(deployment.suspension.retention_seconds, i18n.resolvedLanguage) })}</dd></div> : null}
             <div><dt>{t("Allocated resources")}</dt><dd>{deployment.resources?.allocations ?? t("Unknown state")}</dd></div>
@@ -59,16 +54,8 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
     <div className="settings-rows">
       <Fact label={t("Provider")}>{sandboxProviderLabel(deployment.provider, locale)}</Fact>
       <Fact label={t("Each sandbox")} help={spec?.workspace && !spec.workspace.capacity_quota ? t("Workspace storage is configured by the operator; no capacity quota is enforced.") : undefined}>{size ? `${sizeLabel(size)}${size.root_disk_mib ? ` · ${t("Root disk {{root}} · external workspace", { root: formatBytes(size.root_disk_mib * MIB) })}` : ""}` : MISSING}</Fact>
-      {deployment.provider === "e2b" ? <>
-        <Fact label={t("Sandbox API URL")}><code className="system-code">{deployment.configuration?.api_url}</code></Fact>
-        <Fact label={t("Sandbox data-plane domain")}><code className="system-code">{deployment.configuration?.domain}</code></Fact>
-        <Fact label={t("Template build")} help={deployment.configuration?.template || t("Unknown state")}>{[
-          t(buildStatusLabel[templateBuildStatus(build)]),
-          ...(buildSize ? [sizeLabel(buildSize)] : []),
-          ...(build?.resources.root_disk_mib != null ? [t("{{disk}} disk", { disk: formatBytes(build.resources.root_disk_mib * MIB) })] : []),
-        ].join(" · ")}</Fact>
-        <Fact label={t("E2B credential")}>{t(deployment.credential_configured ? "Configured" : "Not configured")}</Fact>
-      </> : null}
+      {setup?.fields.filter((field) => !field.secret).map((field) => <Fact key={field.name} label={field.label[locale]}><code className="system-code">{deployment.configuration?.[field.name] || MISSING}</code></Fact>)}
+      {setup?.credential === "required" ? <Fact label={t("Credential")}>{t(deployment.credential_configured ? "Configured" : "Not configured")}</Fact> : null}
       <SandboxRolloutSummary deployment={deployment} stale={!fresh} />
     </div>
     {!deployment.reset ? <Modal open={changing} title={t("Change resources")} wide onClose={() => { if (!pending) setChanging(false); }} footer={<><RefreshButton onClick={onRefresh} refreshing={refreshing} disabled={pending} label={t("Refresh sandbox state")} /><button type="button" className="button outline" disabled={pending} onClick={() => setChanging(false)}>{t("Cancel editing")}</button></>}>
@@ -76,7 +63,7 @@ export function SandboxDeploymentSettings({ deployment, disabled, fresh, onUpdat
         key={editKey}
         coreUrl={deployment.core_url}
         expectedGeneration={deployment.generation}
-        current={deployment.provider ? { provider: deployment.provider, specification: deployment.specification, e2bTemplate: deployment.configuration?.template, e2bAPIURL: deployment.configuration?.api_url, e2bDomain: deployment.configuration?.domain } : undefined}
+        current={deployment.provider ? { provider: deployment.provider, specification: deployment.specification, configuration: deployment.configuration } : undefined}
         disabled={disabled || !canEdit}
         editing
         onSubmit={async (input) => { if (await onUpdate(input)) setChanging(false); }}

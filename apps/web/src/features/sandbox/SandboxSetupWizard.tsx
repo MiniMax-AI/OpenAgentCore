@@ -1,8 +1,8 @@
-import { AgentCoreError, deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxE2BReadyBuild, type SandboxE2BTemplate, type SandboxProvider, type SandboxResources, type SandboxSpecification } from "@oac/agents-client";
+import { AgentCoreError, deploymentContract, sandboxProviderSetup, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxConfigurationOption, type SandboxDiscoveryInput, type SandboxProvider, type SandboxResources, type SandboxSetupField, type SandboxSpecification } from "@oac/agents-client";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
-import { ArrowLeft, ArrowRight, Box, Cloud, Cpu, ExternalLink, Server, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ArrowRight, Cloud, ExternalLink, Server, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -17,55 +17,34 @@ import type { ParseKeys } from "i18next";
 import { sandboxConfigurationRejection, sandboxProviderLabel } from "../../lib/sandbox-labels";
 import { defaultSandboxResources, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
 import { workspaceStorageQuery } from "../settings/workspace-storage";
-import { e2bKeyReady, e2bUpdateSelection } from "./sandbox-update";
+import { credentialReady, submittedCredential } from "./sandbox-update";
 import { sandboxAdmin } from "./sandbox-queries";
 import "./sandbox-wizard.css";
 
 type Where = "nodes" | "direct";
-type Step = "where" | "backend" | "e2b" | "size" | "review" | "advanced";
+type Step = "where" | "backend" | "connection" | "size" | "review" | "advanced";
 type Preset = "small" | "standard" | "large";
 type Size = Preset | "current" | "custom";
-type E2BService = "sandbase" | "official" | "custom";
-const E2B_PRESETS = {
-  sandbase: { apiURL: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai" },
-  official: { apiURL: "https://api.e2b.app", domain: "e2b.app" },
-} as const;
-const E2B_KEY_CONSOLES = {
-  sandbase: "https://www.sandbase.ai/console/keys",
-  official: "https://e2b.dev/dashboard?tab=api-keys",
-} as const;
-function e2bService(apiURL?: string): E2BService {
-  if (!apiURL) return "sandbase";
-  if (apiURL === E2B_PRESETS.official.apiURL) return "official";
-  return apiURL === E2B_PRESETS.sandbase.apiURL ? "sandbase" : "custom";
+type Values = Record<string, string>;
+const kinds = Object.keys(deploymentContract.providers) as SandboxProvider[];
+const providersOf = (mode: Where) => kinds.filter((kind) => deploymentContract.providers[kind].mode === mode);
+
+/** The service whose values the configuration holds, or -1 for a custom one. */
+function serviceOf(provider: SandboxProvider, configuration: Values): number {
+  return sandboxProviderSetup(provider).presets.findIndex((preset) => Object.entries(preset.values).every(([name, value]) => configuration[name] === value));
+}
+
+/** The values of the connection fields a service sets, empty for a custom one. */
+function serviceValues(provider: SandboxProvider, index: number): Values {
+  const setup = sandboxProviderSetup(provider);
+  const values: Readonly<Record<string, string>> | undefined = setup.presets[index]?.values;
+  return Object.fromEntries(setup.fields.filter((field) => !field.secret && !field.discovered).map((field) => [field.name, values?.[field.name] ?? ""]));
 }
 
 const MIB = 2 ** 20;
 const bounds = Object.fromEntries(deploymentContract.resources.map(({ name, min, max }) => [name, `${min}–${max}`]));
 const resourceBounds = { cpus: bounds.cpus, memory: bounds.memory_mib, disk: deploymentContract.minimum_disk };
 const EASE = [0.16, 1, 0.3, 1] as const;
-// Core accepts a template ID of up to 128 characters and a canonical, non-nil build UUID.
-const TEMPLATE = /^[a-zA-Z0-9_-]{1,128}:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
-function validTemplate(value: string): boolean {
-  const build = TEMPLATE.exec(value)?.[1];
-  return build !== undefined && /[^0-]/.test(build);
-}
-
-export function validEndpoint(apiURL: string, domain: string): boolean {
-  const publicName = (host: string) => host.length <= 253 && host.includes(".") && !/^[0-9.]+$/.test(host) &&
-    !host.endsWith(".local") && !host.endsWith(".localhost") &&
-    host.split(".").every((label) => label.length <= 63 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
-  if (!apiURL && !domain) return true;
-  if (!apiURL || !domain || apiURL.length > 512 || !publicName(domain)) return false;
-  try {
-    const url = new URL(apiURL);
-    return url.protocol === "https:" && url.origin === apiURL && !url.username && !url.password &&
-      !url.port && publicName(url.hostname) && (url.hostname === domain || url.hostname.endsWith(`.${domain}`));
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Per-sandbox presets around the Provider's declared default size: half and
  * double of it, disks included where the default declares them. A Provider
@@ -91,23 +70,24 @@ function presetOf(provider: SandboxProvider, resources: SandboxResources): Prese
 
 /**
  * Hosted sandbox setup as pages, one decision each: where sandboxes run,
- * which backend (own machines, microsandbox preselected) or the E2B account,
- * how big each sandbox is (only for a Provider that declares a default size:
- * E2B sandboxes take the template build's size), then a review. The Provider's
- * declarations decide the size and disk inputs. Advanced settings hold the
- * complete form.
+ * which backend (own machines, the recommended one preselected) or the
+ * Provider's connection, how big each sandbox is (only for a Provider that
+ * declares a default size), then a review. A Provider's setup declaration
+ * decides its connection fields, services, cautions and discovered options; the
+ * Provider's resource declarations decide the size and disk inputs. Advanced
+ * settings hold the complete size form.
  * `current` pre-selects the saved choices when a deployment changes. Keeping
  * the backend keeps its saved size; another backend starts from its defaults.
- * E2B updates can retain the saved key.
- * Docker isolates less than microsandbox, so choosing it takes a confirmation,
- * once per wizard session; a saved Docker deployment has already made it.
+ * An update can retain the saved credential.
+ * A Provider that declares cautions takes a confirmation, once per wizard
+ * session; a saved deployment has already made it.
  * Core's address is config.json's `public_url`: the review only shows it, and
  * a configuration Core rejects for it is explained here, where it was saved.
  */
 type WizardProps = {
   coreUrl: string;
   expectedGeneration: number;
-  current?: { provider: SandboxProvider; specification?: SandboxSpecification; e2bTemplate?: string; e2bAPIURL?: string; e2bDomain?: string };
+  current?: { provider: SandboxProvider; specification?: SandboxSpecification; configuration?: Values };
   disabled: boolean;
 } & ({ editing: true; onSubmit: (input: UpdateSandboxDeployment) => Promise<void> } |
   { editing?: false; onSubmit: (input: InitializeSandboxDeployment) => Promise<void> });
@@ -118,10 +98,11 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const id = useId();
   const locale = i18n.resolvedLanguage?.startsWith("zh") ? "zh-CN" : "en";
   const currentMode: Where | null = current ? deploymentContract.providers[current.provider].mode : null;
-  const [step, setStep] = useState<Step>(editing ? currentMode === "direct" ? "e2b" : "size" : "where");
+  const [step, setStep] = useState<Step>(editing ? currentMode === "direct" ? "connection" : "size" : "where");
   const [where, setWhere] = useState<Where | null>(currentMode);
   const [provider, setProvider] = useState<SandboxProvider | null>(current?.provider ?? null);
   const policy = provider ? deploymentContract.providers[provider] : null;
+  const setup = provider ? sandboxProviderSetup(provider) : null;
   const saved = provider && current ? savedSpecification(provider, current.provider, current.specification) : null;
   // The selected storage sizes a first initialization; a saved specification takes precedence.
   const storage = useQuery(workspaceStorageQuery).data;
@@ -129,25 +110,15 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   // Choosing a Provider that declares a default size replaces this placeholder.
   const [resources, setResources] = useState<SandboxResources>(current?.specification?.resources ?? { cpus: 0, memory_mib: 0 });
   const [size, setSize] = useState<Size>(current?.specification ? presetOf(current.provider, current.specification.resources) ?? "current" : "standard");
-  const [apiKey, setApiKey] = useState("");
+  // Every declared field's value, secret ones included; a secret is cleared once a save was attempted.
+  const [values, setValues] = useState<Values>(current?.configuration ?? {});
   const [replacementRequested, setReplacementRequested] = useState(false);
-  const [template, setTemplate] = useState(current?.e2bTemplate ?? "");
-  const [service, setService] = useState<E2BService>(e2bService(current?.e2bAPIURL));
-  const [apiURL, setAPIURL] = useState(current?.e2bAPIURL ?? E2B_PRESETS[e2bService(current?.e2bAPIURL) as keyof typeof E2B_PRESETS]?.apiURL ?? "");
-  const [domain, setDomain] = useState(current?.e2bDomain ?? E2B_PRESETS[e2bService(current?.e2bAPIURL) as keyof typeof E2B_PRESETS]?.domain ?? "");
-  const keyConsoleURL = service !== "custom" && apiURL === E2B_PRESETS[service].apiURL && domain === E2B_PRESETS[service].domain
-    ? E2B_KEY_CONSOLES[service] : null;
-  const [templates, setTemplates] = useState<SandboxE2BTemplate[]>([]);
-  const [builds, setBuilds] = useState<SandboxE2BReadyBuild[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState(current?.e2bTemplate?.split(":")[0] ?? "");
-  const [discovery, setDiscovery] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [buildDiscovery, setBuildDiscovery] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [discoveryRetry, setDiscoveryRetry] = useState(0);
+  const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [dockerConfirmed, setDockerConfirmed] = useState(current?.provider === "docker");
-  const [confirmingDocker, setConfirmingDocker] = useState(false);
-  const keepMicrosandbox = useRef<HTMLButtonElement>(null);
-  // Core's reason for rejecting the saved configuration, such as E2B with a loopback public_url.
+  const [confirmed, setConfirmed] = useState<SandboxProvider | null>(current?.provider ?? null);
+  const [confirming, setConfirming] = useState<SandboxProvider | null>(null);
+  const goBack = useRef<HTMLButtonElement>(null);
+  // Core's reason for rejecting the saved configuration, such as a loopback public_url.
   const [rejection, setRejection] = useState<string | null>(null);
   const [fieldRejection, setFieldRejection] = useState<unknown>(null);
   const fieldError = (param: string) => coreFieldError(fieldRejection, param, tCommon);
@@ -156,50 +127,38 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const installation = useQuery(installationQuery);
   const address = coreUrl || installation.data?.public_url || null;
   const { navigate } = useConsoleNavigation();
+  const text = (value: { readonly en: string; readonly "zh-CN": string }) => value[locale];
 
-  useEffect(() => {
-    setTemplates([]); setBuilds([]); setDiscovery("idle"); setBuildDiscovery("idle");
-    if (provider !== "e2b" || !apiKey.trim() || !validEndpoint(apiURL.trim(), domain.trim())) return;
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => {
-      setDiscovery("loading");
-      void sandboxAdmin.listE2BTemplates({ api_key: apiKey.trim(), api_url: apiURL.trim(), domain: domain.trim() }, { signal: controller.signal })
-        .then((items) => { if (!controller.signal.aborted) { setTemplates(items); setDiscovery("ready"); } })
-        .catch(() => { if (!controller.signal.aborted) setDiscovery("error"); });
-    }, 500);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [provider, apiKey, apiURL, domain, discoveryRetry]);
-
-  useEffect(() => {
-    setBuilds([]); setBuildDiscovery("idle");
-    if (discovery !== "ready" || !selectedTemplate || !templates.some((item) => item.id === selectedTemplate)) return;
-    const controller = new AbortController();
-    setBuildDiscovery("loading");
-    void sandboxAdmin.listE2BReadyBuilds(selectedTemplate, { api_key: apiKey.trim(), api_url: apiURL.trim(), domain: domain.trim() }, { signal: controller.signal })
-      .then((items) => { if (!controller.signal.aborted) { setBuilds(items); setBuildDiscovery("ready"); } })
-      .catch(() => { if (!controller.signal.aborted) setBuildDiscovery("error"); });
-    return () => controller.abort();
-  }, [discovery, selectedTemplate, templates, apiKey, apiURL, domain, discoveryRetry]);
-
-  function changeConnection(key: string, url: string, dataDomain: string) {
-    setApiKey(key); setAPIURL(url); setDomain(dataDomain);
-    setTemplate(""); setSelectedTemplate(""); setTemplates([]); setBuilds([]);
+  const fields = setup?.fields ?? [];
+  const secretFields = fields.filter((field) => field.secret);
+  const valueOf = (field: SandboxSetupField) => (values[field.name] ?? "").trim();
+  // A connection change invalidates the discovered values; a secret edited while updating keeps the saved ones.
+  function change(field: SandboxSetupField, value: string) {
+    const resets = field.secret && editing ? [] : fields.filter((other) => other.discovered);
+    setValues((previous) => ({ ...previous, ...Object.fromEntries(resets.map((other) => [other.name, ""])), [field.name]: value }));
+    setFieldRejection(null);
   }
-
-  // Initial setup requires a key; an update may retain the committed key.
-  const keyReady = e2bKeyReady(Boolean(editing), replacementRequested, apiKey);
-  const connectionChanged = Boolean(editing && (apiURL.trim() !== (current?.e2bAPIURL || E2B_PRESETS.official.apiURL) || domain.trim() !== (current?.e2bDomain || E2B_PRESETS.official.domain)));
-  const e2bReady = provider !== "e2b" || (keyReady && validTemplate(template.trim()) && validEndpoint(apiURL.trim(), domain.trim()) && (!editing || !connectionChanged || apiKey.trim().length > 0));
+  const service = provider ? serviceOf(provider, values) : -1;
+  // Discovery waits for the credential and every required value it depends on.
+  const dependencies = fields.filter((field) => !field.discovered && !field.optional);
+  const request: Omit<SandboxDiscoveryInput, "query"> | null = dependencies.length > 0 && dependencies.every((field) => valueOf(field)) ? {
+    configuration: Object.fromEntries(fields.filter((field) => !field.secret && !field.discovered).map((field) => [field.name, valueOf(field)] as const).filter(([, value]) => value)),
+    credential: Object.fromEntries(secretFields.map((field) => [field.name, valueOf(field)])),
+  } : null;
+  // Initial setup requires the credential; an update may retain the committed one.
+  const keyReady = credentialReady(Boolean(editing), replacementRequested, secretFields.every((field) => valueOf(field)));
+  const connectionReady = fields.every((field) => field.secret || field.optional || valueOf(field));
   // A Provider without a declared default size takes it from its configuration, so the selection sends no resources.
   const sized = Boolean(policy?.default_resources);
   const sizeReady = provider !== null && (!sized || validSandboxResources(provider, resources, workspace));
-  const ready = provider !== null && e2bReady && sizeReady && !disabled && !busy;
+  const ready = provider !== null && keyReady && connectionReady && sizeReady && !disabled && !busy;
 
-  const order: Step[] = editing ? where === "direct" ? ["e2b", "review"] : ["size", "review"] : where === "direct" ? ["where", "e2b", "review"] : ["where", "backend", "size", "review"];
+  const connects = where === "direct";
+  const order: Step[] = editing ? connects ? ["connection", "review"] : ["size", "review"] : connects ? ["where", "connection", "review"] : ["where", "backend", "size", "review"];
   const index = Math.max(0, order.indexOf(step === "advanced" ? "review" : step));
   const back = () => setStep(step === "advanced" ? "review" : order[Math.max(0, index - 1)]!);
 
-  // The saved backend keeps its size; another starts from its declared default size.
+  // The saved backend keeps its saved size and connection; another starts from its declared defaults.
   function choose(next: SandboxProvider) {
     if (next !== provider) {
       setRejection(null);
@@ -207,15 +166,19 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       const proposed = kept?.resources ?? defaultSandboxResources(next);
       if (proposed) setResources(proposed);
       setSize(kept ? presetOf(next, kept.resources) ?? "current" : "standard");
+      setValues(kept ? current?.configuration ?? {} : serviceValues(next, 0));
     }
     setProvider(next);
   }
 
-  function selectDocker() {
-    setConfirmingDocker(false);
-    setDockerConfirmed(true);
-    choose("docker");
-    setStep("size");
+  function proceed(next: SandboxProvider) {
+    setConfirming(null);
+    choose(next);
+    setStep(deploymentContract.providers[next].mode === "direct" ? "connection" : "size");
+  }
+  function select(next: SandboxProvider) {
+    if (sandboxProviderSetup(next).cautions.length > 0 && confirmed !== next) setConfirming(next);
+    else proceed(next);
   }
 
   async function save(event?: FormEvent) {
@@ -226,9 +189,10 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       const selection = {
         provider, expected_generation: expectedGeneration,
         ...(sized ? { resources } : {}),
+        ...(fields.length ? { configuration: Object.fromEntries(fields.filter((field) => !field.secret).map((field) => [field.name, valueOf(field)])) } : {}),
+        ...submittedCredential(secretFields.map((field) => [field.name, valueOf(field)])),
       };
-      if (editing) await onSubmit({ ...selection, ...(provider === "e2b" ? { ...e2bUpdateSelection(template, apiKey), configuration: { template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
-      else await onSubmit({ ...selection, ...(provider === "e2b" ? { credential: { api_key: apiKey.trim() }, configuration: { template: template.trim(), api_url: apiURL.trim(), domain: domain.trim() } } : {}) });
+      await onSubmit(selection);
     } catch (error) {
       // A configuration Core rejected is explained here; the page reports every other failure.
       const reason = sandboxConfigurationRejection(error, locale);
@@ -236,13 +200,13 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       setRejection(reason);
       setFieldRejection(error);
       if (error instanceof AgentCoreError && error.param) {
-        if (["credential", "configuration", "e2b.api_url", "e2b.domain"].includes(error.param) && error.code !== "sandbox_credential_ownership") setStep("e2b");
+        if (["credential", "configuration"].includes(error.param) && error.code !== "sandbox_credential_ownership") setStep("connection");
         else if (error.param.startsWith("resources.")) setStep("advanced");
       }
       setResetRequired(error instanceof AgentCoreError && ["sandbox_credential_ownership", "sandbox_reset_required"].includes(error.code ?? ""));
       setAddressRejected(error instanceof AgentCoreError && error.code === "sandbox_configuration_error");
     } finally {
-      setApiKey("");
+      setValues((previous) => ({ ...previous, ...Object.fromEntries(secretFields.map((field) => [field.name, ""])) }));
       setBusy(false);
     }
   }
@@ -252,77 +216,69 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
 
   let page: ReactNode;
   if (step === "where") {
+    const hosted = providersOf("direct");
+    const help = [...hosted.map((kind) => `${sandboxProviderSetup(kind).label}: ${text(sandboxProviderSetup(kind).summary)}`), t("Own machines run sandboxes on hosts you add.")].join(" ");
     page = (
-      <Question title={t("Where should sandboxes run?")} help={t("E2B runs sandboxes in its cloud: no machines to manage, billed by E2B. Own machines run them on hosts you add, with microsandbox (recommended) or Docker.")}>
+      <Question title={t("Where should sandboxes run?")} help={help}>
         <div className="wizard-choices">
-          <Choice icon={Cloud} title={t("E2B cloud")} selected={where === "direct"} onClick={() => { setWhere("direct"); choose("e2b"); setStep("e2b"); }} />
-          <Choice icon={Server} title={t("Own machines")} selected={where === "nodes"} onClick={() => { setWhere("nodes"); setApiKey(""); if (policy?.mode !== "nodes") choose("microsandbox"); setStep("backend"); }} />
+          {hosted.map((kind) => <Choice key={kind} icon={Cloud} title={sandboxProviderSetup(kind).label} selected={provider === kind} onClick={() => { setWhere("direct"); select(kind); }} />)}
+          {providersOf("nodes").length > 0 ? <Choice icon={Server} title={t("Own machines")} selected={where === "nodes"} onClick={() => {
+            setWhere("nodes");
+            setValues({});
+            if (policy?.mode !== "nodes") choose(providersOf("nodes").find((kind) => sandboxProviderSetup(kind).recommended) ?? providersOf("nodes")[0]!);
+            setStep("backend");
+          }} /> : null}
         </div>
       </Question>
     );
   } else if (step === "backend") {
+    const backends = providersOf("nodes");
     page = (
-      <Question title={t("Which sandbox backend?")} help={t("microsandbox, the recommended default, runs each sandbox as a lightweight virtual machine: stronger isolation and a root disk size limit, with each sandbox's /environment on workspace storage, but the host needs KVM. Docker runs each sandbox as a container on the host's kernel: CPU and memory limits but no disk quota, for trusted workloads or hosts without KVM.")}>
+      <Question title={t("Which sandbox backend?")} help={backends.map((kind) => `${sandboxProviderSetup(kind).label}: ${text(sandboxProviderSetup(kind).summary)}`).join(" ")}>
         <div className="wizard-choices">
-          <Choice icon={Cpu} title="microsandbox" badge={t("Recommended")} selected={provider === "microsandbox"} onClick={() => { choose("microsandbox"); setStep("size"); }} />
-          <Choice icon={Box} title="Docker" selected={provider === "docker"} onClick={() => { if (dockerConfirmed) selectDocker(); else setConfirmingDocker(true); }} />
+          {backends.map((kind) => <Choice key={kind} title={sandboxProviderSetup(kind).label} badge={sandboxProviderSetup(kind).recommended ? t("Recommended") : undefined} selected={provider === kind} onClick={() => select(kind)} />)}
         </div>
         <Nav onBack={back} t={t} />
       </Question>
     );
-  } else if (step === "e2b") {
+  } else if (step === "connection" && setup) {
+    const preset = setup.presets[service];
     page = (
-      <Question title={t("Connect E2B")}>
+      <Question title={t("Connect {{provider}}", { provider: setup.label })}>
         <div className="wizard-fields">
-          <Field id={`${id}-service`} label={t("E2B provider")}>
-            <select id={`${id}-service`} value={service} onChange={(event) => {
-              const next = event.target.value as E2BService;
-              setService(next);
-              const preset = next === "custom" ? { apiURL: "", domain: "" } : E2B_PRESETS[next];
-              changeConnection("", preset.apiURL, preset.domain);
-            }}>
-              <option value="sandbase">SandBase Sandbox</option>
-              <option value="official">E2B</option>
-              <option value="custom">{t("Other E2B-compatible provider")}</option>
-            </select>
-          </Field>
-          <Field id={`${id}-key`} label={t("E2B API key")} error={fieldError("credential")} help={t(editing ? "Leave blank to keep the saved key. Any key you enter is verified as a replacement, even if unchanged." : "The key is write-only: Core encrypts it and never shows it again.")} afterHelp={keyConsoleURL ? (
-            <a className="wizard-key-console" href={keyConsoleURL} target="_blank" rel="noopener noreferrer">
-              {t("Console → API keys")} <ExternalLink size={11} aria-hidden="true" />
-            </a>
-          ) : null}>
-            <input id={`${id}-key`} type="password" autoComplete="off" spellCheck={false} value={apiKey} onChange={(event) => { if (editing) { setApiKey(event.target.value); setTemplates([]); setBuilds([]); } else changeConnection(event.target.value, apiURL, domain); setReplacementRequested(Boolean(event.target.value.trim())); setFieldRejection(null); }} />
-          </Field>
-          {discovery === "loading" ? <p role="status">{t("Loading templates…")}</p> : null}
-          {discovery === "error" ? <p role="alert">{t("Could not load templates. Check the key and provider connection.")} <button type="button" className="wizard-link" onClick={() => setDiscoveryRetry((value) => value + 1)}>{t("Try again")}</button></p> : null}
-          {discovery === "ready" && templates.length === 0 ? <p role="status">{t("No templates are visible to this key.")}</p> : null}
-          {editing && !apiKey.trim() ? <Field id={`${id}-saved-template`} label={t("Template build")} error={fieldError("configuration")}><input id={`${id}-saved-template`} value={template} onChange={(event) => setTemplate(event.target.value)} /></Field> : <>
-          <Field id={`${id}-template`} label={t("Template")}>
-            <select id={`${id}-template`} value={selectedTemplate} disabled={discovery !== "ready"} onChange={(event) => { setSelectedTemplate(event.target.value); setTemplate(""); }}>
-              <option value="">{t("Select a template")}</option>
-              {editing && selectedTemplate && !templates.some((item) => item.id === selectedTemplate) ? <option value={selectedTemplate}>{t("Current")} · {selectedTemplate}</option> : null}
-              {templates.map((item) => <option key={item.id} value={item.id}>{item.names[0] ? `${item.names[0]} · ` : ""}{item.id}</option>)}
-            </select>
-          </Field>
-          {buildDiscovery === "loading" ? <p role="status">{t("Loading ready builds…")}</p> : null}
-          {buildDiscovery === "error" ? <p role="alert">{t("Could not load builds.")} <button type="button" className="wizard-link" onClick={() => setDiscoveryRetry((value) => value + 1)}>{t("Try again")}</button></p> : null}
-          {buildDiscovery === "ready" && builds.length === 0 ? <p role="status">{t("This template has no ready builds.")}</p> : null}
-          <Field id={`${id}-build`} label={t("Template build")} help={t("Core validates the exact ready build again when you save.")}>
-            <select id={`${id}-build`} value={template} disabled={buildDiscovery !== "ready"} onChange={(event) => setTemplate(event.target.value)}>
-              <option value="">{t("Select a ready build")}</option>
-              {editing && template && !builds.some((item) => `${selectedTemplate}:${item.id}` === template) ? <option value={template}>{t("Current")} · {template}</option> : null}
-              {builds.map((item) => <option key={item.id} value={`${selectedTemplate}:${item.id}`}>{item.id} · {item.cpus} CPU / {item.memory_mib} MiB</option>)}
-            </select>
-          </Field>
-          </>}
-          <Field id={`${id}-api-url`} label={t("Sandbox API URL")} help={t("The selected provider supplies a default. You can edit it for a compatible endpoint.")}>
-            <input id={`${id}-api-url`} type="url" value={apiURL} onChange={(event) => changeConnection(apiKey, event.target.value, domain)} placeholder="https://sandbox.example.com" autoComplete="off" spellCheck={false} />
-          </Field>
-          <Field id={`${id}-domain`} label={t("Sandbox data-plane domain")} error={(apiURL || domain) && !validEndpoint(apiURL.trim(), domain.trim()) ? t("Enter both a public HTTPS API origin and a domain.") : null}>
-            <input id={`${id}-domain`} value={domain} onChange={(event) => changeConnection(apiKey, apiURL, event.target.value)} placeholder="sandbox.example.com" autoComplete="off" spellCheck={false} />
-          </Field>
+          {setup.presets.length > 0 ? (
+            <Field id={`${id}-service`} label={t("Service")}>
+              <select id={`${id}-service`} value={service} onChange={(event) => setValues(serviceValues(provider!, Number(event.target.value)))}>
+                {setup.presets.map((entry, position) => <option key={entry.label} value={position}>{entry.label}</option>)}
+                <option value={-1}>{t("Other compatible service")}</option>
+              </select>
+            </Field>
+          ) : null}
+          {fields.map((field) => {
+            const fieldId = `${id}-${field.name}`;
+            const help = field.help.en ? text(field.help) : undefined;
+            if (field.secret) {
+              return (
+                <Field key={field.name} id={fieldId} label={text(field.label)} error={fieldError("credential")} help={t(editing ? "Leave blank to keep the saved key. Any key you enter is verified as a replacement, even if unchanged." : "The key is write-only: Core encrypts it and never shows it again.")} afterHelp={preset?.credential_url ? (
+                  <a className="wizard-key-console" href={preset.credential_url} target="_blank" rel="noopener noreferrer">
+                    {t("Console → API keys")} <ExternalLink size={11} aria-hidden="true" />
+                  </a>
+                ) : null}>
+                  <input id={fieldId} type="password" autoComplete="off" spellCheck={false} value={values[field.name] ?? ""} onChange={(event) => { change(field, event.target.value); setReplacementRequested(Boolean(event.target.value.trim())); }} />
+                </Field>
+              );
+            }
+            if (field.discovered) {
+              return <DiscoveredField key={`${field.name}:${JSON.stringify(request)}`} id={fieldId} provider={provider!} field={field} label={text(field.label)} help={help} request={request} value={values[field.name] ?? ""} editing={Boolean(editing)} error={fieldError("configuration")} onChange={(value) => change(field, value)} onChecking={setChecking} />;
+            }
+            return (
+              <Field key={field.name} id={fieldId} label={text(field.label)} help={help}>
+                <input id={fieldId} value={values[field.name] ?? ""} onChange={(event) => change(field, event.target.value)} autoComplete="off" spellCheck={false} />
+              </Field>
+            );
+          })}
         </div>
-        <Nav onBack={back} onNext={() => setStep("review")} nextDisabled={!e2bReady} t={t} />
+        <Nav onBack={back} onNext={() => setStep("review")} nextDisabled={!(keyReady && connectionReady) || checking} t={t} />
       </Question>
     );
   } else if (step === "size") {
@@ -356,18 +312,16 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
     page = (
       <Question title={t("Review and save")}>
         <dl className="wizard-review">
-          <div><dt>{t("Sandboxes run on")}</dt><dd>{where === "direct" ? t("E2B cloud") : `${t("Own machines")} · ${sandboxProviderLabel(provider ?? "", locale)}`}</dd></div>
-          <div><dt>{t("Each sandbox")}</dt><dd>{sized ? sizeLabel(resources) : t("From the template build")}{policy?.disk ? <span className="wizard-review-sub">{diskLabel(resources)}</span> : null}</dd></div>
-          {provider === "e2b" ? <div><dt>{t("Template build")}</dt><dd><code>{template || "—"}</code></dd></div> : null}
-          {provider === "e2b" ? <div><dt>{t("Sandbox API URL")}</dt><dd><code>{apiURL || "https://api.e2b.app"}</code></dd></div> : null}
-          {provider === "e2b" ? <div><dt>{t("Sandbox data-plane domain")}</dt><dd><code>{domain || "e2b.app"}</code></dd></div> : null}
-          {provider === "e2b" && editing ? <div><dt>{t("E2B credential")}</dt><dd>{t(replacementRequested ? "Replace saved key" : "Keep saved key")}</dd></div> : null}
+          <div><dt>{t("Sandboxes run on")}</dt><dd>{where === "direct" ? setup?.label : `${t("Own machines")} · ${sandboxProviderLabel(provider ?? "", locale)}`}</dd></div>
+          <div><dt>{t("Each sandbox")}</dt><dd>{sized ? sizeLabel(resources) : t("From the selected configuration")}{policy?.disk ? <span className="wizard-review-sub">{diskLabel(resources)}</span> : null}</dd></div>
+          {fields.filter((field) => !field.secret).map((field) => <div key={field.name}><dt>{text(field.label)}</dt><dd>{valueOf(field) ? <code>{valueOf(field)}</code> : t("Provider default")}</dd></div>)}
+          {secretFields.length > 0 && editing ? <div><dt>{t("Credential")}</dt><dd>{t(replacementRequested ? "Replace saved key" : "Keep saved key")}</dd></div> : null}
           <div>
             <dt>{t("Core address")}<HelpTip>{t("The address nodes and sandboxes use to reach Core.")}</HelpTip></dt>
             <dd>
               {address ? <code>{address}</code> : "—"}
               <span className="wizard-review-sub">{t("Managed in Settings")}</span>
-              {installation.data?.local_only ? <span className="wizard-review-caution">{t("Set a public address before connecting remote nodes; E2B sandboxes need an HTTPS one.")}</span> : null}
+              {installation.data?.local_only ? <span className="wizard-review-caution">{setup?.public_origin === "required" ? t("Set a public address before connecting; {{provider}} sandboxes need an HTTPS one.", { provider: setup.label }) : t("Set a public address before connecting remote nodes.")}</span> : null}
             </dd>
           </div>
         </dl>
@@ -379,16 +333,18 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           </div>
         ) : null}
         {/* Initial setup needs the cleared key re-entered; updates may keep the saved key. */}
-        {provider === "e2b" && !keyReady ? (
+        {!keyReady ? (
           <p className="wizard-key-again">
-            {t("Enter the E2B key again to save.")}
-            <button className="wizard-link" type="button" onClick={() => setStep("e2b")}>{t("Enter the key")}</button>
+            {t("Enter the key again to save.")}
+            <button className="wizard-link" type="button" onClick={() => setStep("connection")}>{t("Enter the key")}</button>
             {editing ? <button className="wizard-link" type="button" onClick={() => setReplacementRequested(false)}>{t("Keep saved key")}</button> : null}
           </p>
         ) : null}
-        <button className="wizard-link" type="button" onClick={() => setStep("advanced")}>
-          <SlidersHorizontal size={14} aria-hidden="true" />{t("Advanced settings")}
-        </button>
+        {sized ? (
+          <button className="wizard-link" type="button" onClick={() => setStep("advanced")}>
+            <SlidersHorizontal size={14} aria-hidden="true" />{t("Advanced settings")}
+          </button>
+        ) : null}
         <div className="wizard-nav">
           <button className="button ghost" type="button" onClick={back}><ArrowLeft size={14} aria-hidden="true" />{t("Back")}</button>
           <button className="button primary" type="button" disabled={!ready} onClick={() => void save()}>
@@ -402,7 +358,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       <Question title={t("Advanced settings")}>
         <form className="wizard-fields" onSubmit={(event) => { event.preventDefault(); setStep("review"); }}>
           {sized ? <fieldset className="wizard-group">
-            <legend>{t("Each sandbox")}<HelpTip>{t("{{cpus}} CPUs, {{memory}} MiB of memory. microsandbox disks are at least {{disk}} MiB.", resourceBounds)}</HelpTip></legend>
+            <legend>{t("Each sandbox")}<HelpTip>{t("{{cpus}} CPUs, {{memory}} MiB of memory. Disks are at least {{disk}} MiB.", resourceBounds)}</HelpTip></legend>
             <div className="wizard-grid">
               <NumberField error={fieldError("resources.cpus")} id={`${id}-cpus`} label={t("CPUs")} value={resources.cpus} onChange={(cpus) => { setSize("custom"); setResources({ ...resources, cpus }); setFieldRejection(null); }} />
               <NumberField error={fieldError("resources.memory_mib")} id={`${id}-memory`} label={t("Memory (MiB)")} value={resources.memory_mib} onChange={(memory_mib) => { setSize("custom"); setResources({ ...resources, memory_mib }); setFieldRejection(null); }} />
@@ -412,11 +368,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
               </> : null}
             </div>
           </fieldset> : null}
-          {provider === "e2b" ? (
-            <Field id={`${id}-template-advanced`} label={t("Template build")} error={fieldError("configuration") ?? (template && !validTemplate(template.trim()) ? t("Enter a template ID and build UUID separated by a colon.") : null)}>
-              <input id={`${id}-template-advanced`} value={template} onChange={(event) => { setTemplate(event.target.value); setFieldRejection(null); }} autoComplete="off" spellCheck={false} />
-            </Field>
-          ) : null}
           <div className="wizard-nav">
             <span />
             <button className="button primary" type="submit" disabled={!sizeReady}>{t("Done")}<ArrowRight size={14} aria-hidden="true" /></button>
@@ -447,19 +398,17 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
       {/* Portaled: the sliding page's transform would otherwise contain the fixed backdrop. */}
       {createPortal(
         <Modal
-          open={confirmingDocker}
-          title={t("Use Docker instead of microsandbox?")}
-          initialFocus={keepMicrosandbox}
-          onClose={() => setConfirmingDocker(false)}
+          open={confirming !== null}
+          title={t("Use {{provider}}?", { provider: confirming ? sandboxProviderSetup(confirming).label : "" })}
+          initialFocus={goBack}
+          onClose={() => setConfirming(null)}
           footer={<>
-            <button type="button" className="button outline" onClick={selectDocker}>{t("Use Docker")}</button>
-            <button ref={keepMicrosandbox} type="button" className="button primary" onClick={() => setConfirmingDocker(false)}>{t("Keep microsandbox")}</button>
+            <button type="button" className="button outline" onClick={() => { if (confirming) { setConfirmed(confirming); proceed(confirming); } }}>{t("Use {{provider}}", { provider: confirming ? sandboxProviderSetup(confirming).label : "" })}</button>
+            <button ref={goBack} type="button" className="button primary" onClick={() => setConfirming(null)}>{t("Back")}</button>
           </>}
         >
-          <ul className="wizard-docker-risks">
-            <li><strong>{t("Weaker isolation")}</strong>{t("Containers share the host's kernel, so a container escape reaches the host. microsandbox runs each sandbox in its own microVM.")}</li>
-            <li><strong>{t("Root-equivalent access")}</strong>{t("The node's service account joins the docker group, which is equivalent to root on that host.")}</li>
-            <li><strong>{t("Limited use")}</strong>{t("Docker suits only trusted workloads, or hosts without KVM.")}</li>
+          <ul className="wizard-cautions">
+            {confirming ? sandboxProviderSetup(confirming).cautions.map((caution) => <li key={caution.en}>{text(caution)}</li>) : null}
           </ul>
         </Modal>,
         document.body,
@@ -513,5 +462,70 @@ function Nav({ onBack, onNext, nextDisabled, t }: { onBack: () => void; onNext?:
       <button className="button ghost" type="button" onClick={onBack}><ArrowLeft size={14} aria-hidden="true" />{t("Back")}</button>
       {onNext ? <button className="button primary" type="button" disabled={nextDisabled} onClick={onNext}>{t("Next")}<ArrowRight size={14} aria-hidden="true" /></button> : null}
     </div>
+  );
+}
+
+type Level = "loading" | "error" | SandboxConfigurationOption[];
+
+/**
+ * A field whose value the Provider offers for the entered credential: one select
+ * per level, each loaded after the option chosen above it, until an option is
+ * complete. The page remounts it when the connection changes. While updating
+ * without a new credential it keeps the saved value in an input.
+ */
+function DiscoveredField({ id, provider, field, label, help, request, value, editing, error, onChange, onChecking }: {
+  id: string; provider: SandboxProvider; field: SandboxSetupField; label: string; help?: string; request: Omit<SandboxDiscoveryInput, "query"> | null;
+  value: string; editing: boolean; error: string | null; onChange: (value: string) => void; onChecking: (checking: boolean) => void;
+}) {
+  const { t } = useTranslation("sandbox");
+  const [picks, setPicks] = useState<SandboxConfigurationOption[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
+  const [retry, setRetry] = useState(0);
+  const open = picks.length === 0 || !picks[picks.length - 1]!.complete;
+  const last = levels[picks.length];
+  // The step cannot be left while the credential is still being checked, whether settling or loading.
+  const checking = Boolean(request) && open && (last === undefined || last === "loading");
+  useEffect(() => { onChecking(checking); return () => onChecking(false); }, [checking]);
+  useEffect(() => {
+    if (!request || !open) return;
+    const depth = picks.length;
+    const controller = new AbortController();
+    // Typing the credential settles for half a second before the first read.
+    const timer = window.setTimeout(() => {
+      setLevels((previous) => [...previous.slice(0, depth), "loading"]);
+      void sandboxAdmin.discoverConfiguration(provider, { ...request, query: { field: field.name, path: picks.map((pick) => pick.value) } }, { signal: controller.signal })
+        .then((options) => { if (!controller.signal.aborted) setLevels((previous) => [...previous.slice(0, depth), options]); })
+        .catch(() => { if (!controller.signal.aborted) setLevels((previous) => [...previous.slice(0, depth), "error"]); });
+    }, depth === 0 ? 500 : 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+    // The page remounts this field when the request changes.
+  }, [picks, retry]);
+
+  if (!request && editing) {
+    return <Field id={id} label={label} help={help} error={error}><input id={id} value={value} onChange={(event) => onChange(event.target.value)} autoComplete="off" spellCheck={false} /></Field>;
+  }
+  const choose = (depth: number, option: SandboxConfigurationOption | undefined) => {
+    setLevels((previous) => previous.slice(0, depth + 1));
+    setPicks((previous) => option ? [...previous.slice(0, depth), option] : previous.slice(0, depth));
+    onChange(option?.complete ? option.value : "");
+  };
+  const selects = Array.from({ length: Math.max(1, Math.min(picks.length + 1, levels.length)) }, (_, depth) => {
+    const level = levels[depth];
+    const options = Array.isArray(level) ? level : [];
+    const pick = picks[depth];
+    return (
+      <select key={depth} id={depth === 0 ? id : `${id}-${depth}`} aria-label={label} value={pick?.value ?? ""} disabled={options.length === 0} onChange={(event) => choose(depth, options.find((option) => option.value === event.target.value))}>
+        <option value="">{depth === 0 && editing && value ? `${t("Current")} · ${value}` : t("Select {{field}}", { field: label })}</option>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}{option.resources ? ` · ${t("{{cpus}} CPU · {{memory}}", { cpus: option.resources.cpus, memory: formatBytes(option.resources.memory_mib * MIB) })}` : ""}</option>)}
+      </select>
+    );
+  });
+  return (
+    <Field id={id} label={label} help={help} error={error}>
+      {selects}
+      {last === "loading" ? <p role="status">{t("Loading options…")}</p> : null}
+      {last === "error" ? <p role="alert">{t("Could not load options. Check the credential and provider connection.")} <button type="button" className="wizard-link" onClick={() => setRetry((count) => count + 1)}>{t("Try again")}</button></p> : null}
+      {Array.isArray(last) && last.length === 0 ? <p role="status">{t("No options are available for this credential.")}</p> : null}
+    </Field>
   );
 }

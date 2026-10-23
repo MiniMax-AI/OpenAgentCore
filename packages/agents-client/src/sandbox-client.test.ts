@@ -122,24 +122,25 @@ describe("strict sandbox administration projections", () => {
 });
 
 describe("Core sandbox credential boundaries", () => {
-  it("uses Core-key routes for transient template discovery and projects safe fields", async () => {
+  it("uses a Core-key route for transient discovery and projects safe fields", async () => {
+    const build = { value: "tpl_123:00000000-0000-0000-0000-000000000001", label: "00000000-0000-0000-0000-000000000001", resources: { cpus: 2, memory_mib: 2048 }, complete: true };
     const fetch = vi.fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(response({ templates: [{ id: "tpl_123", names: ["runtime"] }] }))
-      .mockResolvedValueOnce(response({ builds: [{ id: "00000000-0000-0000-0000-000000000001", cpus: 2, memory_mib: 2048 }] }));
+      .mockResolvedValueOnce(response({ options: [{ value: "tpl_123", label: "runtime", complete: false }] }))
+      .mockResolvedValueOnce(response({ options: [build] }));
     const client = new SandboxAdminClient({ fetch });
-    const input = { api_key: "private-test-key", api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai" };
-    expect(await client.listE2BTemplates(input)).toHaveLength(1);
-    expect(await client.listE2BReadyBuilds("tpl_123", input)).toHaveLength(1);
+    const input = { configuration: { api_url: "https://sandbox.sandbase.ai" }, credential: { api_key: "private-test-key" }, query: { field: "template", path: [] as string[] } };
+    expect(await client.discoverConfiguration("e2b", input)).toHaveLength(1);
+    expect(await client.discoverConfiguration("e2b", { ...input, query: { field: "template", path: ["tpl_123"] } })).toEqual([build]);
     expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/core/v1/sandbox/providers/e2b/discovery", "/core/v1/sandbox/providers/e2b/discovery"]);
     expect(fetch.mock.calls.every(([, init]) => init?.method === "POST" && !new Headers(init?.headers).has("Authorization") && String(init?.body).includes("private-test-key"))).toBe(true);
   });
 
   it("rejects extra fields in credentialed discovery responses", async () => {
-    const input = { api_key: "private-test-key" };
-    const templates = new SandboxAdminClient({ fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ templates: [], builds: [] })) });
-    const builds = new SandboxAdminClient({ fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ builds: [], templates: [] })) });
-    await expect(templates.listE2BTemplates(input)).rejects.toMatchObject({ code: "invalid_admin_response" });
-    await expect(builds.listE2BReadyBuilds("tpl_123", input)).rejects.toMatchObject({ code: "invalid_admin_response" });
+    const input = { configuration: {}, credential: { api_key: "private-test-key" }, query: { field: "template", path: [] as string[] } };
+    for (const body of [{ options: [], templates: [] }, { options: [{ value: "a", label: "a", complete: false, id: "a" }] }, { options: [{ value: "a", label: "a" }] }]) {
+      const client = new SandboxAdminClient({ fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(body)) });
+      await expect(client.discoverConfiguration("e2b", input)).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
   });
 
   it("defaults to /core/v1/sandbox and is not a /v1 client", async () => {
@@ -285,7 +286,7 @@ describe("hosted provider configuration", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
   it("projects public-URL rejection to fixed copy even when the upstream message reflects a key", async () => {
-    const rejection = { message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null, type: "reflected" };
+    const rejection = { message: "This sandbox provider reaches Core over the internet. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null, type: "reflected" };
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(response({ error: rejection }, 409))
       .mockResolvedValueOnce(response({ error: { ...rejection, message: rejection.message + e2b.api_key } }, 409));
@@ -397,7 +398,7 @@ it("keeps omitted-key public-URL errors actionable without reflecting a stored k
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_configuration_error", message: `arbitrary upstream ${secret}`, param: secret, details: { credential: secret } } }, 409));
   const client = new SandboxAdminClient({ fetch });
   const error = await client.updateDeployment({ provider: "e2b", expected_generation: 1, configuration: { template: e2bDeployment.configuration.template } }).catch(error => error);
-  expect(error).toMatchObject({ status: 409, code: "sandbox_configuration_error", param: null, message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback." });
+  expect(error).toMatchObject({ status: 409, code: "sandbox_configuration_error", param: null, message: "This sandbox provider reaches Core over the internet. Set an HTTPS public URL that is not loopback." });
   expect(JSON.stringify(error)).not.toContain(secret);
   expect(error.message).not.toContain(secret);
   expect(error.details).toBeUndefined();

@@ -128,11 +128,7 @@ func (s *session) SubmitFunctionResult(ctx context.Context, result proto.Functio
 	if err := result.ValidateContent(); err != nil {
 		return err
 	}
-	data, err := json.Marshal(struct {
-		Type   string `json:"type"`
-		TurnID string `json:"turn_id"`
-		proto.FunctionResultPayload
-	}{Type: "function_result", TurnID: s.runID, FunctionResultPayload: result})
+	data, err := json.Marshal(functionResultFrame{Type: "function_result", TurnID: s.runID, FunctionResultPayload: result})
 	if err != nil {
 		return err
 	}

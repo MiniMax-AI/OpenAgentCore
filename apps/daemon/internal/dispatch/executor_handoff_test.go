@@ -228,6 +228,10 @@ func TestPreparedDonePublishesAfterExecutorHandoff(t *testing.T) {
 }
 
 // These fixtures exercise settlement only; active input is deliberately rejected.
+func (*terminalHandoffTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return agent.ErrUnsupportedOperation
+}
+
 func (*terminalHandoffTurn) SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error {
 	return agent.ErrSteeringRejected
 }

@@ -24,7 +24,7 @@ func testBinding(t *testing.T) (*Binding, proto.PromptRequestPayload) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}, AgentStateKey: session}
+	return b, proto.PromptRequestPayload{LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &proto.CapabilitySources{}}, AgentStateKey: session}
 }
 
 func TestBindingRejectsScopeOverrides(t *testing.T) {

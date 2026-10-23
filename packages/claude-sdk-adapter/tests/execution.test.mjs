@@ -2,85 +2,45 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-// Exercise execute() against controlled SDK event interleavings. The native child
-// is real, but these cases are not live provider acceptance.
+// Exercise execute() against a controlled SDK event interleaving. The native child
+// is real, but this case is not live provider acceptance.
 const fixture = `
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-const sdk = 'export async function getSessionInfo(){return {sessionId:"native"};} export function query(options){return globalThis.queryFixture(options);} export function startup(){throw new Error("Unexpected preparation");}';
+import { sdkSource, startupFrom, runTurn } from ${JSON.stringify(new URL("./executor_run.mjs", import.meta.url).href)};
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "@anthropic-ai/claude-agent-sdk") return {url:"data:text/javascript,"+encodeURIComponent(sdk),shortCircuit:true};
+  if (specifier === "@anthropic-ai/claude-agent-sdk") return {url:"data:text/javascript,"+encodeURIComponent(sdkSource),shortCircuit:true};
   return next(specifier,context);
 }});
-const { execute } = await import(${JSON.stringify(new URL("../dist/adapter.js", import.meta.url).href)});
-const { Inputs } = await import(${JSON.stringify(new URL("../dist/inputs.js", import.meta.url).href)});
-const { FunctionBridge } = await import(${JSON.stringify(new URL("../dist/function_bridge.js", import.meta.url).href)});
-const mode = process.argv[1];
-const events = [];
-const inputs = new Inputs([{ content: [{ type: "input_text", text: "opening text" }] }]);
 const abort = new AbortController();
-let invocation;
-let functions;
-const emit = async event => {
-  events.push(event);
-  if (event.type === "input_ready") inputs.submit({type:"steer",input_id:"extra",input:[{content:[{type:"input_text",text:"later text"}]}]});
-  if (mode === "later-function" && event.type === "usage" && !invocation) {
-    // The SDK dispatches MCP controls independently while the output consumer is
-    // yielding the previous native turn's result. This call belongs to the next turn.
-    invocation = functions.invoke({id:"call-next",name:"lookup",arguments:{}},abort.signal);
-    invocation.catch(() => {});
-  }
-};
-functions = new FunctionBridge(emit);
-const init = {type:"system",subtype:"init",session_id:"native",tools:mode === "later-function"?["mcp__functions__lookup"]:[],mcp_servers:mode === "later-function"?[{name:"functions",status:"connected"}]:[]};
-const result = (uuid, ids, failed = false) => ({type:"result",uuid,session_id:"native",user_message_uuids:ids,
-  subtype:failed?"error_during_execution":"success",is_error:failed,result:"later answer",
-  usage:{input_tokens:2,output_tokens:1},modelUsage:{},total_cost_usd:0.01});
-globalThis.queryFixture = ({prompt,options}) => {
+globalThis.startupFixture = startupFrom(({prompt, options}) => {
   assert.equal(options.effort, "high");
   assert.deepEqual(options.thinking, {type:"enabled",budgetTokens:1024});
   assert.equal(options.model, "fixture");
   assert.equal(options.systemPrompt, "Translate.");
   assert.deepEqual(options.settings, {env:{CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:"1",DISABLE_AUTOUPDATER:"1"}});
-  const child = options.spawnClaudeCodeProcess({command:process.execPath,args:["-e","process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"],env:process.env,signal:abort.signal});
   return {
-    close(){child.stdin.end();},
     async *[Symbol.asyncIterator](){
       const iterator = prompt[Symbol.asyncIterator]();
       const first = (await iterator.next()).value;
-      yield init;
+      yield {type:"system",subtype:"init",session_id:"native",tools:[],mcp_servers:[]};
       const second = (await iterator.next()).value;
-      if(mode === "error-receipt") { yield result("failed",[first.uuid,second.uuid],true); return; }
-      yield result("first",[first.uuid]);
-      assert.ok(invocation,"next turn's control request did not reach the pending ledger");
-      yield init;
-      functions.submit(JSON.stringify({type:"function_result",call_id:"call-next",delivery_id:"delivery",success:true,content:[{type:"input_text",text:"value"}]}));
-      await invocation;
-      yield {type:"user",session_id:"native",parent_tool_use_id:null,message:{role:"user",content:[{type:"tool_result",tool_use_id:"call-next",content:[{type:"text",text:"value"}],is_error:false}]}};
-      yield result("second",[second.uuid]);
+      yield {type:"result",uuid:"failed",session_id:"native",user_message_uuids:[first.uuid,second.uuid],subtype:"error_during_execution",is_error:true,
+        result:"later answer",usage:{input_tokens:2,output_tokens:1},modelUsage:{},total_cost_usd:0.01};
     },
   };
-};
-await execute({type:"start",input: [{ content: [{ type: "input_text", text: "opening text" }] }],model:"fixture",system_prompt:"Translate.",cwd:process.cwd(),native_model_options:{effort:"high",thinking:{type:"enabled",budgetTokens:1024}},
-  ...(mode === "later-function" ? {functions:[{name:"lookup",description:"fixture",parameters:{type:"object",properties:{}}}]} : {})},emit,abort,functions,inputs);
-assert.equal(inputs.complete,true);
+});
+const {frames:events} = await runTurn({type:"executor_prepare",model:"fixture",system_prompt:"Translate.",cwd:process.cwd(),native_model_options:{effort:"high",thinking:{type:"enabled",budgetTokens:1024}}},
+  abort,[{ content: [{ type: "input_text", text: "opening text" }] }],
+  async (frame, turns) => { if (frame.type === "input_ready") await turns.submit({type:"steer",turn_id:"run",input_id:"extra",input:[{content:[{type:"input_text",text:"later text"}]}]}); });
 assert.equal(events.filter(e=>e.type === "input_applied" && e.input_id === "extra").length,1);
-if(mode === "error-receipt") {
-  assert.equal(events.at(-1).type,"error");
-  assert.equal(events.at(-1).code,"execution_failed");
-  assert.equal(events.filter(e=>e.type === "usage").length,1);
-  assert.equal(events.some(e=>e.type === "result"),false);
-} else {
-  assert.equal(events.at(-1).type,"result");
-  assert.equal(events.filter(e=>e.type === "function_applied").length,1);
-  assert.equal(events.filter(e=>e.type === "usage").length,2);
-  assert.equal(events.some(e=>e.type === "error"),false);
-}
+assert.equal(events.at(-1).type,"error");
+assert.equal(events.at(-1).code,"execution_failed");
+assert.equal(events.filter(e=>e.type === "usage").length,1);
+assert.equal(events.some(e=>e.type === "result"),false);
 `;
 
-for (const mode of ["error-receipt", "later-function"]) {
-  test(`native result lifecycle: ${mode}`, { timeout: 15000 }, () => {
-    const child = spawnSync(process.execPath, ["--input-type=module", "-e", fixture, mode], { encoding: "utf8", timeout: 10000 });
-    assert.equal(child.status, 0, child.stderr || child.error?.message);
-  });
-}
+test("a failed native result keeps usage and receipts without a result", { timeout: 15000 }, () => {
+  const child = spawnSync(process.execPath, ["--input-type=module", "-e", fixture], { encoding: "utf8", timeout: 10000 });
+  assert.equal(child.status, 0, child.stderr || child.error?.message);
+});

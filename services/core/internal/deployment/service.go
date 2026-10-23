@@ -116,14 +116,15 @@ func (s *Service) setup(d Record) (Setup, error) {
 }
 
 // describe adds the provider's declared operations, suspension policy and
-// credential use.
+// credential use. The idle policy lives in the stored deployment row, so a
+// setup that is not read from it leaves IdleSeconds zero.
 func (s *Service) describe(setup Setup) (Setup, error) {
 	adapter, err := s.registry.Lookup(setup.Provider)
 	if err != nil {
 		return Setup{}, err
 	}
 	setup.Operations = adapter.Operations()
-	if setup.Suspension, err = s.suspension(setup.Provider, 300); err != nil {
+	if setup.Suspension, err = s.suspension(setup.Provider, 0); err != nil {
 		return Setup{}, err
 	}
 	setup.UsesCredential, err = s.registry.UsesCredential(setup.Provider)

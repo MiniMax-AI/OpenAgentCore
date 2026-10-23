@@ -1,4 +1,4 @@
-import { AgentCoreError, sandboxConfigurationUnconfirmed, type SandboxProvider } from "@oac/agents-client";
+import { AgentCoreError, sandboxConfigurationUnconfirmed, sandboxProviderSetup, type SandboxProvider } from "@oac/agents-client";
 import i18n, { type SupportedLanguage } from "../i18n";
 import { coreError, knownCoreError } from "./core-error";
 import type { ParseKeys } from "i18next";
@@ -31,7 +31,7 @@ export function sandboxRequestError(error: unknown, locale: SupportedLanguage): 
  * read Core again before trusting what it shows. The status alone decides: no
  * response at all (a network failure or an abort), a 408 timeout or a 5xx (an
  * unreadable response is a 502). Any other 4xx is Core's clear refusal, and
- * nothing changed, even when the client withheld its reason for an E2B key.
+ * nothing changed, even when the client withheld its reason for a credential.
  */
 export function sandboxWriteUncertain(error: unknown): boolean {
   if (!(error instanceof AgentCoreError)) return true;
@@ -40,7 +40,7 @@ export function sandboxWriteUncertain(error: unknown): boolean {
 
 /**
  * The reason for a refused deployment configuration whose code the console
- * explains, such as E2B with a loopback public_url; null for any other failure.
+ * explains, such as a Provider that needs a public HTTPS address behind a loopback public_url; null for any other failure.
  * Nothing was saved, so the administrator corrects the cause and saves again.
  */
 export function sandboxConfigurationRejection(error: unknown, locale: SupportedLanguage = "en"): string | null {
@@ -48,7 +48,5 @@ export function sandboxConfigurationRejection(error: unknown, locale: SupportedL
 }
 
 export function sandboxProviderLabel(provider: SandboxProvider | "", locale: SupportedLanguage): string {
-  if (provider === "docker") return "Docker";
-  if (provider === "microsandbox") return "microsandbox";
-  return i18n.getFixedT(locale, "sandbox")(provider === "e2b" ? "E2B cloud" : "Unknown state");
+  return provider === "" ? i18n.getFixedT(locale, "sandbox")("Unknown state") : sandboxProviderSetup(provider).label;
 }

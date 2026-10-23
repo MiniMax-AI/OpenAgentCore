@@ -6,16 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 	"io/fs"
 	"os"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/google/uuid"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
+	"github.com/google/uuid"
 )
 
 const Directory = "/environment/initialization/capabilities"
@@ -24,15 +24,6 @@ const MaxSkills = 50
 const MaxSnapshotBytes = 50 << 20
 
 var ErrInvalid = errors.New("capability installation unavailable or unsupported")
-
-// InstalledSkill contains Runtime-owned paths, never public resource metadata.
-type InstalledSkill struct {
-	// InstallationRoot is resolved by Runtime and never persisted or accepted over wire.
-	InstallationRoot string              `json:"-"`
-	Metadata         agentskill.Metadata `json:"metadata"`
-	RelativeRoot     string              `json:"relative_root"`
-	PackageRoot      string              `json:"package_root"`
-}
 
 // Identity binds an installation to one immutable Environment and Session.
 type Identity struct {
@@ -45,26 +36,19 @@ type Identity struct {
 type DirectoryResolver func(string) (*os.Root, error)
 
 type Manifest struct {
-	Identity        Identity         `json:"identity"`
-	SelectionSHA256 string           `json:"selection_sha256"`
-	Version         int              `json:"version"`
-	Skills          []InstalledSkill `json:"skills"`
-	Plugins         []string         `json:"plugins,omitempty"`
-	MCP             []InstalledMCP   `json:"-"`
+	Identity        Identity               `json:"identity"`
+	SelectionSHA256 string                 `json:"selection_sha256"`
+	Version         int                    `json:"version"`
+	Skills          []proto.InstalledSkill `json:"skills"`
+	Plugins         []string               `json:"plugins,omitempty"`
+	MCP             []InstalledMCP         `json:"-"`
 }
 
 // InstalledMCP is resolved from a frozen package at load time. The manifest
 // stores the package root, not a second copy of configuration or credentials.
 type InstalledMCP struct {
 	PackageRoot string
-	Server      agentplugin.MCPServer
-}
-
-// Input describes frozen sources; directory contents are observed after setup.
-type Input struct {
-	Skills      []agentskill.Metadata  `json:"skills,omitempty"`
-	Plugins     []agentplugin.Metadata `json:"plugins,omitempty"`
-	Directories []string               `json:"directories,omitempty"`
+	Server      proto.PluginMCPServer
 }
 
 // ValidateDirectories preserves the managed public workspace-path contract.
@@ -73,7 +57,7 @@ func ValidateDirectories(directories []string) error {
 		return ErrInvalid
 	}
 	for _, directory := range directories {
-		if directory != "/workspace" && !strings.HasPrefix(directory, "/workspace/") {
+		if directory != runtimebootstrap.PublicWorkspace && !strings.HasPrefix(directory, runtimebootstrap.PublicWorkspace+"/") {
 			return ErrInvalid
 		}
 	}
@@ -101,7 +85,7 @@ func validRelative(value string) bool {
 	return value != "." && fs.ValidPath(value) && !strings.ContainsAny(value, "\\\x00\r\n")
 }
 
-func (m *Manifest) add(metadata agentskill.Metadata, root, pkg string) error {
+func (m *Manifest) add(metadata proto.SkillMetadata, root, pkg string) error {
 	if !validRelative(root) || !validRelative(pkg) || (root != pkg && !strings.HasPrefix(root, pkg+"/")) || len(m.Skills) >= MaxSkills {
 		return ErrInvalid
 	}
@@ -110,7 +94,7 @@ func (m *Manifest) add(metadata agentskill.Metadata, root, pkg string) error {
 			return ErrInvalid
 		}
 	}
-	m.Skills = append(m.Skills, InstalledSkill{Metadata: metadata, RelativeRoot: root, PackageRoot: pkg})
+	m.Skills = append(m.Skills, proto.InstalledSkill{Metadata: metadata, RelativeRoot: root, PackageRoot: pkg})
 	return nil
 }
 
@@ -161,30 +145,8 @@ func validSelectionHash(value string) bool {
 	return err == nil && len(digest) == sha256.Size && hex.EncodeToString(digest) == value
 }
 
-// ValidateInput bounds source selections without reading archives or directories.
-// Portable manifest grammar is checked by the shared Skill and Plugin parsers.
-func ValidateInput(input Input) error {
-	if len(input.Skills) > MaxSkills || len(input.Plugins) > 50 || ValidateSourceDirectories(input.Directories) != nil {
-		return ErrInvalid
-	}
-	validMetadata := func(kind, name, description string) bool {
-		return kind == "inline" && name != "" && description != "" && utf8.ValidString(name) && utf8.ValidString(description)
-	}
-	for _, skill := range input.Skills {
-		if !validMetadata(skill.Type, skill.Name, skill.Description) {
-			return ErrInvalid
-		}
-	}
-	for _, plugin := range input.Plugins {
-		if !validMetadata(plugin.Type, plugin.Name, plugin.Description) {
-			return ErrInvalid
-		}
-	}
-	return nil
-}
-
-func selectionHash(input Input) (string, error) {
-	if ValidateInput(input) != nil {
+func selectionHash(input proto.CapabilitySources) (string, error) {
+	if proto.ValidateCapabilitySources(input) != nil {
 		return "", ErrInvalid
 	}
 	// omitempty gives nil and empty selections the same canonical representation;
@@ -199,7 +161,7 @@ func selectionHash(input Input) (string, error) {
 
 // ValidateSelection checks reconnect configuration without revisiting sources.
 // Use it only with a manifest returned by Load.
-func ValidateSelection(manifest Manifest, input Input, identity Identity) error {
+func ValidateSelection(manifest Manifest, input proto.CapabilitySources, identity Identity) error {
 	digest, err := selectionHash(input)
 	if err != nil || validateIdentity(identity) != nil || manifest.Version != 1 || manifest.Identity != identity || manifest.SelectionSHA256 != digest {
 		return ErrInvalid

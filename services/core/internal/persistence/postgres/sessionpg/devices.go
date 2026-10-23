@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -103,8 +104,7 @@ func loadSessionDevice(ctx context.Context, q *sqlc.Queries, tenant, session pgt
 }
 
 // GetDeviceCredential reads a device's credential for the Runtime gateway. A
-// malformed or unknown device has no credential. The standalone service
-// assigns no product WorkspaceID.
+// malformed or unknown device has no credential.
 func (s *Store) GetDeviceCredential(ctx context.Context, device string) (runtimedevice.Credential, bool, error) {
 	id, err := pgunit.ParseID(device)
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *Store) ListEnrolledRuntimeBindings(ctx context.Context) ([]sessions.Enr
 	for _, row := range rows {
 		result = append(result, sessions.EnrolledRuntimeBinding{
 			DeviceID: optionalID(row.DeviceID), TenantID: optionalID(row.TenantID),
-			EnvironmentID: optionalID(row.EnvironmentID), SessionID: optionalID(row.SessionID),
+			EnvironmentID: optionalID(row.EnvironmentID),
 		})
 	}
 	return result, nil
@@ -197,13 +197,13 @@ func (s *Store) TouchDevice(ctx context.Context, device string) (bool, error) {
 	return n > 0, err
 }
 
-func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error) {
+func (s *Store) TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []proto.SupportedAgentKind) (bool, error) {
 	id, err := parseID(device)
 	if err != nil {
 		return false, err
 	}
 	if kinds == nil {
-		kinds = []runtimedevice.SupportedAgentKind{}
+		kinds = []proto.SupportedAgentKind{}
 	}
 	raw, err := json.Marshal(kinds)
 	if err != nil {

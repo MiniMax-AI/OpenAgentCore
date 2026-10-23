@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
@@ -34,7 +36,7 @@ const (
 //
 // The daemon credential comes from a Provider bootstrap file
 // (--bootstrap-file), self-hosted Environment enrollment
-// (--remote/--environment-id/--credential-file) or the saved profile
+// (--remote/--environment-id/--credential-file/--workspace) or the saved profile
 // written by oac-core-device.
 //
 // -b re-execs the binary in the background with stdio redirected to
@@ -48,6 +50,7 @@ func runConnect(ctx *runContext, args []string) error {
 		remote         = fs.String("remote", "", "self-hosted Environment remote_url, unchanged")
 		environment    = fs.String("environment-id", "", "self-hosted Environment ID")
 		bootstrapFile  = fs.String("bootstrap-file", "", "absolute path to Provider-to-Runtime connection JSON")
+		workspace      = fs.String("workspace", "", "existing absolute workspace directory of a self-hosted Environment")
 		credentialFile = fs.String("credential-file", "", "absolute path to protected executor credential JSON")
 	)
 	if err := fs.Parse(args); err != nil {
@@ -67,7 +70,7 @@ func runConnect(ctx *runContext, args []string) error {
 	}
 	var bootstrapped *auth.Profile
 	if *bootstrapFile != "" {
-		if *remote != "" || *environment != "" || *credentialFile != "" || fs.NArg() != 0 {
+		if *remote != "" || *environment != "" || *credentialFile != "" || *workspace != "" || fs.NArg() != 0 {
 			return errors.New("connect: bootstrap input cannot be combined with enrollment options")
 		}
 		bootstrapped, err = bootstrapProfile(*bootstrapFile)
@@ -75,13 +78,13 @@ func runConnect(ctx *runContext, args []string) error {
 			return err
 		}
 	}
-	if *remote != "" || *environment != "" || *credentialFile != "" {
+	if *remote != "" || *environment != "" || *credentialFile != "" || *workspace != "" {
 		if fs.NArg() != 0 {
 			return errors.New("connect: Environment enrollment cannot use positional arguments")
 		}
 		connectCtx, stop := daemonize.NotifyContext(context.Background())
 		defer stop()
-		return runEnvironmentConnect(connectCtx, ctx, *profile, *background, false, *remote, *environment, *credentialFile)
+		return runEnvironmentConnect(connectCtx, ctx, *profile, *background, false, *remote, *environment, *credentialFile, *workspace, localworkspace.CapabilityDirectory)
 	}
 
 	// -b mode: parent forks, child re-enters with sentinel env set
@@ -206,7 +209,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	defer cancel()
 
 	bootCtx, bootCancel := context.WithTimeout(rootCtx, bootstrapTimeout)
-	var boot *transport.BootstrapResponse
+	var boot *machineapi.BootstrapResponse
 	var err error
 	if remote == "" {
 		boot, err = transport.Bootstrap(bootCtx, prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
@@ -323,11 +326,8 @@ func advertisedKinds(registry *agent.Registry, canExport bool) []proto.Supported
 	return kinds
 }
 
-func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, boot *transport.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
-	local, err := localworkspace.Load()
-	if err != nil {
-		return err
-	}
+func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.Registry, boot *machineapi.BootstrapResponse, agentCLIs agentCLIDiscovery) error {
+	local := localworkspace.Current()
 	router, err := dispatch.New(dispatch.Config{
 		Registry:       registry,
 		Sender:         conn,
@@ -345,9 +345,6 @@ func pumpConn(parentCtx context.Context, conn *transport.Conn, registry *agent.R
 	conn.StartHeartbeats(parentCtx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
 		kinds := advertisedKinds(registry, local.CanExport())
 		return proto.HeartbeatPayload{
-			Timestamp:           time.Now().Unix(),
-			ActiveRequests:      router.ActiveRuns(),
-			DaemonVersion:       Version,
 			SupportedAgentKinds: kinds,
 		}
 	}, obslog.Bg().With("component", "heartbeat"))

@@ -29,7 +29,7 @@ class ProviderTest(unittest.TestCase):
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret')}
         self.request['RuntimeBootstrap'] = {
-            'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
+            'version': 2, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
             'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',

@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 9e02f5fc7ace233f2a17cd7d8fa53447794b95430bf7bf219b66ece33f96ca35
+source_hash: 45b743284c8a03aa016c1b874f6dbeb578e7ec7afcbc565bdcafba333481c950
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -71,7 +71,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 | Turn 在当前状态下无法接受的输入，例如取消后提交的结果，或 Turn 已结束且未存储结果后提交的结果 | 409 `conflict_error` | "The Turn cannot accept this input in its current state." |
 | 与该调用已存储结果不同的结果，无论其 Turn 结束之前还是之后 | 409 `conflict_error` | "The tool call already has a different result." |
 | 相同 `Idempotency-Key` 搭配不同批次 | 409 `idempotency_conflict` | "This idempotency key was used with different input." |
-| `call_id` 未标识该 Session 的任何函数调用的结果 | 400 `invalid_request_error`, param null | "Unknown pending tool call." |
+| `call_id` 未标识该 Session 的任何函数调用的结果 | 400 `invalid_request_error`, param null | "Unknown pending tool call: {call_id}" |
 | 为该 Session 的某个调用提交结果，但 `turn_id` 标识另一个 Turn、未知 Turn ID，或不是 Turn ID 的值 | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
 | 缺失、格式错误或来自其他作用域的 Session | 404 `not_found_error` | "Resource not found." |
 | 预留的批次在 Turn 启动前超过五分钟截止时间 | 409 `environment_input_expired` | "The environment input deadline elapsed before admission." |
@@ -80,7 +80,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 | `self_hosted` Environment 失败后提交新输入、Environment 失败时输入已在等待，或 Environment 已过期 | 409 `environment_unavailable` | "The environment is no longer available for new input." |
 | Session Harness 无法处理的消息，例如 MiniMax Code 上仅含空白的文本 | 400 `unsupported_or_invalid_configuration` | 见[仅含空白的文本](message-content.md#whitespace-only-text) |
 
-`turn_id` 为空或 `call_id` 为空白时，会返回通用的 400 `invalid_request`。错误消息绝不会重复调用方输入或内部标识符。
+`turn_id` 为空或 `call_id` 为空白时，会返回通用的 400 `invalid_request`。除未知工具调用的消息按官方 SDK 的预期给出其 `call_id` 外，错误消息绝不会重复调用方输入或内部标识符。
 
 ## 创建 Session 时的初始输入 {#initial-input-at-session-creation}
 
@@ -129,7 +129,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-semantics.md)）。游标是同一 Session 内的 ID。
 
-**Turn。** Session Turn 路由只包含根 Turn，按创建时间、再按 ID 排序；在该路由中使用子 Turn ID 会返回 404。失败的 Turn 包含 `error: {code: "internal_error", message: "The execution could not complete."}`，绝不包含引擎原始诊断信息。管理员可通过[Session 诊断](session-diagnostics.md)读取失败类别。
+**Turn。** Session Turn 路由只包含根 Turn，按创建时间、再按 ID 排序；在该路由中使用子 Turn ID 会返回 404。失败 Turn 的 `error` 包含官方 `code` 和该 code 对应的固定消息，绝不包含引擎原始诊断信息；[与 OpenAI 的差异](index.md#differences-from-openai)列出 Core 报告的 code。流中的快照与读取返回相同的 `error`。管理员可通过[Session 诊断](session-diagnostics.md)读取失败类别。
 
 **Item。** Item 按首次观察时间、再按其在 Session 中的位置、最后按 ID 排序。更新和重试绝不会移动 Item，也不会更改其 `output_index`；`output_index` 是 Item 在该 Turn 输出 Item 中从零开始的位置，输入 Item 没有此值。读取操作使用已存储的历史索引，绝不会根据原生日志重新构建该索引。Item 列表包含仍在进行中或尚未完成的 Item。
 

@@ -69,7 +69,7 @@ Checks run in this order: request validation, Session lookup, retry lookup, the 
 | Input the Turn cannot accept in its state, such as a result after cancellation or after its Turn ended without a stored result | 409 `conflict_error` | "The Turn cannot accept this input in its current state." |
 | A result that differs from the call's stored result, before or after its Turn ends | 409 `conflict_error` | "The tool call already has a different result." |
 | The same `Idempotency-Key` with a different batch | 409 `idempotency_conflict` | "This idempotency key was used with different input." |
-| A result whose `call_id` names no function call of this Session | 400 `invalid_request_error`, param null | "Unknown pending tool call." |
+| A result whose `call_id` names no function call of this Session | 400 `invalid_request_error`, param null | "Unknown pending tool call: {call_id}" |
 | A result for a call of this Session whose `turn_id` names another Turn, an unknown Turn ID or a value that is not a Turn ID | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
 | A missing, malformed or foreign Session | 404 `not_found_error` | "Resource not found." |
 | A reserved batch whose five-minute deadline passed before a Turn started | 409 `environment_input_expired` | "The environment input deadline elapsed before admission." |
@@ -78,7 +78,7 @@ Checks run in this order: request validation, Session lookup, retry lookup, the 
 | New input after a `self_hosted` Environment failed, input already waiting when the Environment failed, or an expired Environment | 409 `environment_unavailable` | "The environment is no longer available for new input." |
 | A message the Session's Harness cannot take, such as whitespace-only text on MiniMax Code | 400 `unsupported_or_invalid_configuration` | See [whitespace-only text](./message-content.md#whitespace-only-text) |
 
-An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Error messages never repeat caller input or internal identifiers.
+An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Apart from the unknown tool call message, which names its `call_id` as the official SDK expects, error messages never repeat caller input or internal identifiers.
 
 ## Initial input at Session creation
 
@@ -127,7 +127,7 @@ A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only
 
 Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-semantics.md)). Cursors are IDs within the same Session.
 
-**Turns.** Session Turn routes hold root Turns only, ordered by creation time then ID; a child Turn ID returns 404 there. A failed Turn has `error: {code: "internal_error", message: "The execution could not complete."}` and never raw engine diagnostics. Administrators read the failure category through [Session diagnostics](./session-diagnostics.md).
+**Turns.** Session Turn routes hold root Turns only, ordered by creation time then ID; a child Turn ID returns 404 there. A failed Turn's `error` has an official `code` and a fixed message for that code, never raw engine diagnostics; [Differences from OpenAI](./index.md#differences-from-openai) lists the codes Core reports. Stream snapshots report the same `error` as reads. Administrators read the failure category through [Session diagnostics](./session-diagnostics.md).
 
 **Items.** Items are ordered by the time they were first observed, then by their position in the Session, then by ID. Updates and retries never move an Item or change its `output_index`, a zero-based position among the Turn's output Items; input Items have none. Reads use the stored history index and never rebuild it from native journals. The Items list includes Items that are still in progress or incomplete.
 

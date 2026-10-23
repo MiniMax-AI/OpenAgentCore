@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
@@ -39,10 +41,7 @@ type suspendedRouter struct {
 }
 
 func newSuspendedRouter(conn *transport.Conn, registry *agent.Registry) (*suspendedRouter, error) {
-	local, err := localworkspace.Load()
-	if err != nil {
-		return nil, err
-	}
+	local := localworkspace.Current()
 	sender := &reconnectSender{conn: conn}
 	router, err := dispatch.New(dispatch.Config{Registry: registry, Sender: sender, Log: obslog.Bg(), LocalWorkspace: local})
 	if err != nil {
@@ -57,7 +56,7 @@ func (s *suspendedRouter) shutdown() {
 
 // runSuspendLoop uses the ordinary connection authentication and dispatch chain.
 // Only an acknowledged, fully drained suspension retains a Router across sockets.
-func runSuspendLoop(ctx context.Context, dial transport.DialFn, registry *agent.Registry, boot *transport.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) error {
+func runSuspendLoop(ctx context.Context, dial transport.DialFn, registry *agent.Registry, boot *machineapi.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) error {
 	for ctx.Err() == nil {
 		conn, err := transport.Reconnect(ctx, dial, transport.DefaultBackoff, nil)
 		if err != nil {
@@ -89,7 +88,7 @@ func runSuspendLoop(ctx context.Context, dial transport.DialFn, registry *agent.
 	return nil
 }
 
-func serveSuspendLifecycle(ctx context.Context, conn *transport.Conn, dial transport.DialFn, state *suspendedRouter, boot *transport.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) error {
+func serveSuspendLifecycle(ctx context.Context, conn *transport.Conn, dial transport.DialFn, state *suspendedRouter, boot *machineapi.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) error {
 	defer func() { _ = conn.Close() }()
 	for {
 		request, err := state.pump(ctx, conn, boot, discovery, control)
@@ -150,14 +149,14 @@ func (s *suspendedRouter) reconnectSuspension(ctx context.Context, dial transpor
 	}
 }
 
-func (s *suspendedRouter) heartbeats(ctx context.Context, conn *transport.Conn, boot *transport.BootstrapResponse, discovery agentCLIDiscovery) {
+func (s *suspendedRouter) heartbeats(ctx context.Context, conn *transport.Conn, boot *machineapi.BootstrapResponse, discovery agentCLIDiscovery) {
 	conn.StartHeartbeats(ctx, boot.HeartbeatInterval(), func() proto.HeartbeatPayload {
 		kinds := advertisedKinds(s.registry, s.local.CanExport())
-		return proto.HeartbeatPayload{Timestamp: time.Now().Unix(), ActiveRequests: s.router.ActiveRuns(), DaemonVersion: Version, SupportedAgentKinds: kinds}
+		return proto.HeartbeatPayload{SupportedAgentKinds: kinds}
 	}, obslog.Bg())
 }
 
-func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *transport.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) (*proto.EnvironmentSuspendPayload, error) {
+func (s *suspendedRouter) pump(ctx context.Context, conn *transport.Conn, boot *machineapi.BootstrapResponse, discovery agentCLIDiscovery, control *suspendControl) (*proto.EnvironmentSuspendPayload, error) {
 	s.heartbeats(ctx, conn, boot, discovery)
 	for {
 		select {

@@ -10,8 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
 
 type nativeInstallOptions struct {
@@ -24,8 +25,8 @@ type nativeInstallOptions struct {
 func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, error) {
 	var o nativeInstallOptions
 	// Take the grant first and drop it from the environment, which start, the daemon and Harnesses inherit.
-	o.Authorization = os.Getenv(v1.NativeInstallGrantEnv)
-	_ = os.Unsetenv(v1.NativeInstallGrantEnv)
+	o.Authorization = os.Getenv(machineapi.InstallGrantEnv)
+	_ = os.Unsetenv(machineapi.InstallGrantEnv)
 	flags := newFlagSet("install")
 	flags.StringVar(&o.OnboardURL, "onboard-url", "", "Core installation endpoint")
 	flags.StringVar(&o.Remote, "remote", "", "Environment remote_url from Core")

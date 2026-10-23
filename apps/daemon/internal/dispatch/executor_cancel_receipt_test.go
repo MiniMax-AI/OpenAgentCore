@@ -103,6 +103,10 @@ func (t *receiptCancelTurn) AwaitSettlement(ctx context.Context) (agent.TurnSett
 func (t *receiptCancelTurn) CancellationOutcome() proto.DonePayload {
 	return proto.DonePayload{Content: "observed", Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-session"}}
 }
+func (*receiptCancelTurn) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return agent.ErrUnsupportedOperation
+}
+
 func (t *receiptCancelTurn) SteerWithReceipt(ctx context.Context, _ proto.PromptSteerPayload, written func()) error {
 	written()
 	close(t.written)

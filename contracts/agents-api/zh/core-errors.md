@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 9229fb99268c1b3f5a97a4c97e762faaf0e45bada46e6b1f82d28798e090d205
+source_hash: b2a6cd40a67bbe58fc78efa068a8ad0cf23cf62ad02e3c1456323fa66e9bb6ef
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -40,7 +40,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 ## 沙箱提供商验证 {#sandbox-provider-verification}
 
-当 `POST` 或 `PUT /core/v1/sandbox/deployment`（[sandbox deployment](sandbox-deployment.md#reset)）的提供商像 E2B 一样验证凭据或配置时，请求会因以下固定错误而失败。这些错误均不会返回提供商文本、模板名称、密钥或资源数量。
+当 `POST` 或 `PUT /core/v1/sandbox/deployment`（[sandbox deployment](sandbox-deployment.md#e2b-key-replacement)）的提供商像 E2B 一样验证凭据或配置时，请求会因以下固定错误而失败。这些错误均不会返回提供商文本、模板名称、密钥或资源数量。
 
 | HTTP | 代码 | 含义 | `param` |
 | --- | --- | --- | --- |
@@ -108,7 +108,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 ## 诊断失败类别 {#diagnostic-failure-categories}
 
-[Session 诊断](session-diagnostics.md)接口会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误保持不变。除非表格另有说明，否则 `params` 为 `{}`。
+[Session 诊断](session-diagnostics.md)接口会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误会以官方 code 报告其中一部分类别，见[与 OpenAI 的差异](index.md#differences-from-openai)。除非表格另有说明，否则 `params` 为 `{}`。
 
 | 代码 | 存储原因或安全含义 |
 | --- | --- |
@@ -120,7 +120,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `server_error` | 原生服务器故障分类 |
 | `invalid_request` | 原生请求被拒绝 |
 | `resource_not_found` | 未找到原生资源或模型 |
-| `request_timeout` | 保留的中性超时类别；当前没有适配器生成该类别 |
+| `request_timeout` | 原生提供商超时分类 |
 | `context_length_exceeded` | 原生上下文限制分类 |
 | `cyber_policy` | 原生网络安全策略拒绝 |
 | `connection_failed` | 原生连接故障；params 包含 `http_status`，其值为 100–599 范围内的整数或 null |

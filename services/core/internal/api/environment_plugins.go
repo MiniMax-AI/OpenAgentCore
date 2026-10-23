@@ -3,7 +3,8 @@ package api
 import (
 	"encoding/json"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -31,12 +32,12 @@ func decodeEnvironmentPlugins(raw json.RawMessage) ([]environmentconfig.Plugin, 
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, environmentconfig.Plugin{Metadata: agentplugin.Metadata{Type: input.Type, Name: input.Name, Description: input.Description}, Archive: body})
+		result = append(result, environmentconfig.Plugin{Metadata: proto.PluginMetadata{Type: input.Type, Name: input.Name, Description: input.Description}, Archive: body})
 	}
 	return result, environmentconfig.ValidatePlugins(result)
 }
 
-func pluginResponse(plugins []agentplugin.Metadata) []json.RawMessage {
+func pluginResponse(plugins []proto.PluginMetadata) []json.RawMessage {
 	result := make([]json.RawMessage, 0, len(plugins))
 	for _, plugin := range plugins {
 		raw, _ := json.Marshal(plugin)
@@ -55,7 +56,7 @@ func storedPlugins(raw json.RawMessage) ([]json.RawMessage, error) {
 	}
 	seen := map[string]bool{}
 	for _, entry := range entries {
-		var metadata agentplugin.Metadata
+		var metadata proto.PluginMetadata
 		if decodeInputObject(entry, &metadata, "type", "name", "description") != nil || metadata.Type != "inline" || metadata.Name == "" || metadata.Description == "" || seen[metadata.Name] {
 			return nil, sessions.ErrInvalidInput
 		}

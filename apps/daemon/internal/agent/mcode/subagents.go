@@ -51,9 +51,15 @@ type nativeSubagentTask struct {
 	Metadata                                   struct{ ChildSessionID, ParentSessionID, ParentTurnID, SubTurnID, ExecutionMode string }
 }
 
+const nodeEnv = "OAC_RUNTIME_MCODE_NODE"
+const companionEnv = "OAC_RUNTIME_MCODE_COMPANION"
+
+// runtimeNode is the Node executable the installation or image provides for the companion scripts.
+func runtimeNode() string { return os.Getenv(nodeEnv) }
+
 func subagentReader() (string, string, error) {
-	node := os.Getenv("OAC_RUNTIME_MCODE_NODE")
-	reader := filepath.Join(os.Getenv("OAC_RUNTIME_MCODE_COMPANION"), "subagent-snapshot.mjs")
+	node := runtimeNode()
+	reader := filepath.Join(os.Getenv(companionEnv), "subagent-snapshot.mjs")
 	for _, path := range []string{node, reader} {
 		resolved, err := filepath.EvalSymlinks(path)
 		if err != nil || !filepath.IsAbs(path) || resolved != path {

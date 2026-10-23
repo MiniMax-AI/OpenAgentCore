@@ -3,6 +3,7 @@ package execution
 import (
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -22,7 +23,7 @@ func admissionOf(snapshot Snapshot) harnessconfig.Admission {
 	agent := snapshot.Agent
 	workspace := snapshot.Environment.WorkspaceDirectory
 	if snapshot.Environment.Type == "openai_hosted" {
-		workspace = hostedWorkspaceDirectory
+		workspace = runtimebootstrap.PublicWorkspace
 	}
 	return harnessconfig.Admission{
 		TextFormat:         agent.Text.Format.Type,

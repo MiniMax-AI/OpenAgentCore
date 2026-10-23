@@ -1,11 +1,7 @@
 import { ExecutorTurns } from "./executor_protocol.js";
-import { WorkspaceDirectories } from "./workspace_directories.js";
-import { WorkspaceReads } from "./workspace_reads.js";
-import { Inputs } from "./inputs.js";
-import { FunctionBridge } from "./function_bridge.js";
 import { createInterface } from "node:readline";
-import { execute, type Event } from "./adapter.js";
-import { immediateInput, parseRequest, preparedInput } from "./request.js";
+import { execute } from "./adapter.js";
+import { parseRequest } from "./request.js";
 
 const abort = new AbortController();
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
@@ -13,7 +9,7 @@ const stop = () => abort.abort();
 process.once("SIGTERM", stop);
 process.once("SIGINT", stop);
 lines.once("close", stop);
-const emit = (event: Event | {type:string;[key:string]:unknown}): Promise<void> => new Promise((resolve, reject) => {
+const emit = (event: {type:string;[key:string]:unknown}): Promise<void> => new Promise((resolve, reject) => {
   process.stdout.write(JSON.stringify(event) + "\n", error => error ? reject(error) : resolve());
 });
 try {
@@ -21,48 +17,24 @@ try {
   const first = await input.next();
   if (first.done || Buffer.byteLength(first.value) > 1024 * 1024) throw new Error("invalid_request");
   const request = parseRequest(first.value);
-  let phase = request.type === "prepare" ? "preparing" : "running";
-  let invalid = false;
-  const output = async (event: Event) => {
-    if (event.type === "prepared") phase = "prepared";
-    await emit(invalid && (event.type === "error" || event.type === "result") ? { type: "error", code: "invalid_request" } : event);
-  };
-  const functions = new FunctionBridge(output);
-  const reads = new WorkspaceReads(output, abort);
-  const directories = new WorkspaceDirectories(output, abort);
-  const prompts = new Inputs(immediateInput(request));
-  const turns=request.type==="executor_prepare" ? new ExecutorTurns(emit,abort) : undefined;
+  const turns = new ExecutorTurns(emit, abort);
   const incoming = (async () => {
     try {
       for await (const line of { [Symbol.asyncIterator]: () => input }) {
         if (Buffer.byteLength(line) > 1024 * 1024) throw new Error("Invalid input.");
-        const value: unknown = JSON.parse(line);
-        if (value && typeof value === "object" && "type" in value && value.type === "workspace_read") {
-          reads.submit(value as Record<string, unknown>);
-        } else if (value && typeof value === "object" && "type" in value && value.type === "workspace_directory") {
-          directories.submit(value as Record<string, unknown>);
-        } else if(turns) {
-          if(!value || typeof value!=="object" || Array.isArray(value)) throw new Error("invalid_request");
-          const control=value as Record<string,unknown>;
-          if(control.type==="turn_start") await turns.start(control);
-          else if(control.type==="turn_cancel") await turns.cancel(control);
-          else await turns.submit(control);
-        } else if (request.type === "prepare" && phase !== "running") {
-          if (phase !== "prepared" || abort.signal.aborted) throw new Error("invalid_request");
-          prompts.release(preparedInput(value));
-          phase = "running";
-        } else if (value && typeof value === "object" && "type" in value && value.type === "steer") {
-          for (const event of prompts.submit(value)) await output(event);
-        } else functions.submit(line);
+        const control: unknown = JSON.parse(line);
+        if (!control || typeof control !== "object" || Array.isArray(control)) throw new Error("invalid_request");
+        const value = control as Record<string, unknown>;
+        if (value.type === "turn_start") await turns.start(value);
+        else if (value.type === "turn_cancel") await turns.cancel(value);
+        else await turns.submit(value);
       }
     }
-    catch { invalid = request.type === "prepare"; abort.abort(); }
+    catch { abort.abort(); }
   })();
-  try { await execute(request, output, abort, functions, prompts, reads, directories, turns); }
-  catch { await output({ type: "error", code: "execution_failed" }); }
+  try { await execute(request, emit, abort, turns); }
+  catch { await emit({ type: "error", code: "execution_failed" }); }
   finally {
-    prompts.close();
-    functions.close();
     lines.removeListener("close", stop);
     lines.close();
     process.stdin.destroy();

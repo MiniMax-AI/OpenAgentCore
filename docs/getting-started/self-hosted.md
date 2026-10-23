@@ -19,7 +19,7 @@ The Session brings its own model provider; the installation default never applie
 | macOS arm64 | Supported | Supported | Supported |
 | Windows amd64 | Supported | Supported | Not supported |
 
-The installer brings its own pinned Node.js and Harness versions (listed in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
+The installer brings its own pinned Node.js and Harness versions (Harnesses in the [Harness catalog](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/harness-catalog.md), Node.js in [`scripts/build-native-installer.mjs`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/scripts/build-native-installer.mjs)) and leaves other installations of those tools untouched. On a platform without a matching installer, the command fails.
 
 The download depends on the Harnesses you install. The installer (9 MiB) and Node.js (59 MiB) are always needed, plus 121 MiB for Codex, 99 MiB for Claude Code or 23 MiB for MiniMax Code, so a Session with one Harness downloads 90 to 189 MiB. Free space is needed on the disk that holds the Runtime home and the installation directory:
 

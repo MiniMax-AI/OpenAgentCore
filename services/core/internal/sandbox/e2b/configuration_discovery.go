@@ -2,14 +2,15 @@ package e2b
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (json.RawMessage, error) {
+// DiscoverConfiguration lists templates for the declared template field, then
+// the ready builds of the template chosen at the first level.
+func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (sandbox.ConfigurationOptions, error) {
 	var connection struct {
 		APIURL string `json:"api_url"`
 		Domain string `json:"domain"`
@@ -17,31 +18,43 @@ func (ConfigurationAdapter) DiscoverConfiguration(ctx context.Context, input san
 	var credential struct {
 		APIKey string `json:"api_key"`
 	}
-	var query struct {
-		Template string `json:"template,omitempty"`
-	}
-	if sandbox.DecodeConfigurationObject(input.Configuration, &connection, "api_url", "domain") != nil || sandbox.DecodeConfigurationObject(input.Credential, &credential, "api_key") != nil || sandbox.DecodeConfigurationObject(input.Query, &query, "template") != nil {
-		return nil, sandbox.ErrInvalid
+	path := input.Query.Path
+	if sandbox.DecodeConfigurationObject(input.Configuration, &connection, fieldNames(false, false)...) != nil || sandbox.DecodeConfigurationObject(input.Credential, &credential, fieldNames(true, false)...) != nil || len(path) > 1 {
+		return sandbox.ConfigurationOptions{}, sandbox.ErrInvalid
 	}
 	binary, _, err := InstalledPaths(paths)
 	if err != nil {
-		return nil, sandbox.ErrConfigurationUnconfirmed
+		return sandbox.ConfigurationOptions{}, sandbox.ErrConfigurationUnconfirmed
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	out, err := Discover(ctx, &ProcessCaller{}, binary, credential.APIKey, connection.APIURL, connection.Domain, query.Template)
+	template := ""
+	if len(path) == 1 {
+		template = path[0]
+	}
+	out, err := Discover(ctx, &ProcessCaller{}, binary, credential.APIKey, connection.APIURL, connection.Domain, template)
 	if err != nil {
 		if errors.Is(err, sandbox.ErrInvalid) {
-			return nil, sandbox.ErrConfigurationSelection
+			return sandbox.ConfigurationOptions{}, sandbox.ErrConfigurationSelection
 		}
-		return nil, sandbox.ErrConfigurationUnconfirmed
+		return sandbox.ConfigurationOptions{}, sandbox.ErrConfigurationUnconfirmed
 	}
-	if query.Template == "" {
-		return json.Marshal(struct {
-			Templates []TemplateSummary `json:"templates"`
-		}{out.Templates})
+	return discoveryOptions(out, template), nil
+}
+
+// discoveryOptions maps templates to incomplete options and the ready builds of
+// the chosen template to complete ones.
+func discoveryOptions(out Response, template string) sandbox.ConfigurationOptions {
+	options := []sandbox.ConfigurationOption{}
+	for _, t := range out.Templates {
+		label := t.ID
+		if len(t.Names) > 0 {
+			label = t.Names[0] + " · " + t.ID
+		}
+		options = append(options, sandbox.ConfigurationOption{Value: t.ID, Label: label})
 	}
-	return json.Marshal(struct {
-		Builds []ReadyBuild `json:"builds"`
-	}{out.Builds})
+	for _, b := range out.Builds {
+		options = append(options, sandbox.ConfigurationOption{Value: template + ":" + b.ID, Label: b.ID, Resources: &sandbox.Resources{CPUs: b.CPUs, MemoryMiB: b.MemoryMiB}, Complete: true})
+	}
+	return sandbox.ConfigurationOptions{Options: options}
 }

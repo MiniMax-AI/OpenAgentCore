@@ -1,10 +1,10 @@
 ---
 title: 工作区文件系统协议
 source: docs/workspace-provider.md
-source_hash: 2afa36a287c1b4268fef271f18ae094f74d1fc61d8c841bfbe21e9dbabd86cd6
+source_hash: 06a170d6966d003c9294254c2f2e851d26916731c5c227013d272fc86eb454eb
 ---
 
-工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建、观察和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
+工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
 
 | | |
 | --- | --- |
@@ -23,7 +23,7 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 ## 实现适配器 {#implement-an-adapter}
 
 1. 定义 `Parameters` 和可选凭据，并实现 `Normalize`（[标识与配置](#identity-and-configuration)）。
-2. 在 `Control` 中实现 `Declaration`、`Check`、`Create`、`Observe` 和 `Delete`，在 `Resolver` 中实现 `Resolve`（[操作与结果](#operations-and-outcomes)）。
+2. 在 `Control` 中实现 `Declaration`、`Check`、`Create` 和 `Delete`，在 `Resolver` 中实现 `Resolve`（[操作与结果](#operations-and-outcomes)）。
 3. 声明挂载类型、用户扩展属性支持和配额强制执行（[能力验证](#capability-validation)）。
 4. 每个对象保持单一写入方，仅在 Core 授权时删除（[生命周期与文件系统范围](#lifetime-and-filesystem-scope)）。
 
@@ -51,14 +51,13 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 
 适配器注册一个 `Adapter` 实现，其三个角色相互独立且均为必需。`Normalize(parameters, credential)` 在不执行 I/O 的情况下验证并规范化参数、编码凭据输入；缺少必需凭据或提供参数不使用的凭据均为 `ErrInvalid`；编码后的凭据是有效输入且编码结果不变，因此 Core 可以使用已存储的凭据重新选择保留的配置。`Control(ConfigurationRecord)` 在 Core 中使用解密后的凭据构造控制适配器。`Resolver(Configuration)` 仅根据公开配置构造节点解析器。构造过程不执行文件系统或网络操作。
 
-每个控制适配器实现 `Declaration`、`Check`、`Create`、`Observe` 和 `Delete`；每个节点挂载适配器实现 `Resolve`。不得使用可选旁路接口、隐式替换适配器或 nil 实现回退。
+每个控制适配器实现 `Declaration`、`Check`、`Create` 和 `Delete`；每个节点挂载适配器实现 `Resolve`。不得使用可选旁路接口、隐式替换适配器或 nil 实现回退。
 
 | 操作 | 必需语义 |
 | --- | --- |
 | `Declaration()` | 描述所选配置已经验证的挂载、用户扩展属性和配额行为。 |
 | `Check(ctx)` | 验证配置和可用性，不创建对象。 |
 | `Create(ctx, reference, capacityMiB)` | 创建归属对象或收敛到其现有挂载凭据，不覆盖数据；重试与并发调用使用同一不可变引用和获准容量。正容量须在成功返回前实际强制执行，并在每次重试时重新验证。 |
-| `Observe(ctx, reference)` | 返回现有对象的绑定挂载凭据，不创建、修复或准备对象。 |
 | `Delete(ctx, reference)` | Core 授权删除且确认计算资源停止后，收敛到已验证归属对象的终态删除。 |
 | `Resolve(ctx, binding)` | 验证原生归属并为本地计算解析挂载。 |
 
@@ -73,7 +72,7 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 | `ErrNotFound` | 对象不存在 |
 | `ErrUnsupported` | 不支持的组合 |
 
-观察到不存在不证明先前变更已结束。超时或上下文取消只结束调用方的等待，不证明原生操作停止或回滚。结果未知时 Core 保留归属。Core 可以使用同一持久化不可变引用和配置重试 `Create` 或 `Delete`，包括收到 `ErrUnconfirmed` 后；绝不能通过替换新对象标识重试结果不确定的操作。
+对象不存在不证明先前变更已结束。超时或上下文取消只结束调用方的等待，不证明原生操作停止或回滚。结果未知时 Core 保留归属。Core 可以使用同一持久化不可变引用和配置重试 `Create` 或 `Delete`，包括收到 `ErrUnconfirmed` 后；绝不能通过替换新对象标识重试结果不确定的操作。
 
 同一引用的重试与并发收敛是适配器必须提供的保证。`Create` 保留现有对象数据并返回该归属对象的挂载凭据，绝不重新初始化存活对象。重复或并发的 `Delete` 调用收敛到同一终态删除。一旦记录终态删除，并发、延迟或重试的 `Create` 均不得使对象复活，`Resolve` 也不得暴露该对象。允许保留删除元数据，并在先前进行中的操作结束后继续清理。这些保证适用于存储生命周期操作，不表示超时时变更已结束，也不提供分布式计算隔离。
 

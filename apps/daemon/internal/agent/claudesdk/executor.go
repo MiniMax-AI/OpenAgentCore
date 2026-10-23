@@ -1,6 +1,7 @@
 package claudesdk
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -55,8 +56,6 @@ func NewExecutorFactory(config Config) agent.ExecutorFactory {
 		if err != nil {
 			return nil, err
 		}
-		base.reads.supported = slices.Contains(info.Features, "workspace_read")
-		base.directories.supported = slices.Contains(info.Features, "workspace_directory")
 		e := &executor{base: base, start: start, ready: make(chan error, 1), done: make(chan struct{}), nativeID: start.Resume}
 		go e.read()
 		if err = e.write(start); err == nil {
@@ -124,7 +123,8 @@ func (e *executor) write(value any) error {
 func (e *executor) read() {
 	stderrDone := make(chan struct{})
 	go func() { _, _ = io.Copy(io.Discard, e.base.process.Stderr); close(stderrDone) }()
-	scanner := e.base.bridgeOutput()
+	scanner := bufio.NewScanner(e.base.process.Stdout)
+	scanner.Buffer(make([]byte, 64*1024), 2*1024*1024)
 	ready := false
 	readyFailure := errors.New("claudesdk: Executor readiness failed")
 	for scanner.Scan() {
@@ -167,8 +167,6 @@ func (e *executor) read() {
 	}
 	<-stderrDone
 	_ = e.base.process.Wait()
-	e.base.stopWorkspaceReads()
-	e.base.stopWorkspaceDirectories()
 	e.mu.Lock()
 	e.invalid = true
 	if e.active != nil {
@@ -201,11 +199,7 @@ func (e *executor) StartTurn(ctx context.Context, run string, input proto.Messag
 	go s.runTurn(start, out)
 	// Once the write is attempted, a lost receipt has an unknown input outcome.
 	stopWrite := context.AfterFunc(ctx, s.invalidate)
-	err := e.write(struct {
-		Type   string             `json:"type"`
-		TurnID string             `json:"turn_id"`
-		Input  proto.MessageInput `json:"input"`
-	}{"turn_start", run, input})
+	err := e.write(turnStartFrame{"turn_start", run, input})
 	stopWrite()
 	if err != nil {
 		s.invalidate()
@@ -305,11 +299,4 @@ func (s *session) invalidate() {
 		s.owner.invalid = true
 		s.process.Cancel()
 	}
-}
-
-func (e *executor) ReadWorkspaceFile(ctx context.Context, path string, maxBytes int) (agent.WorkspaceReadResult, error) {
-	return e.base.ReadWorkspaceFile(ctx, path, maxBytes)
-}
-func (e *executor) ListWorkspaceDirectory(ctx context.Context, path string, maxEntries int) (agent.WorkspaceDirectoryResult, error) {
-	return e.base.ListWorkspaceDirectory(ctx, path, maxEntries)
 }

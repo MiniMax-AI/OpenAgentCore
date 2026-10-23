@@ -33,7 +33,7 @@ func TestClaudeMCPWaitsForCapableRuntime(t *testing.T) {
 				awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "Claude MCP heartbeat", func() bool {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
 					info, found, known := peer.AgentKindStatus("claude_sdk")
-					return known && found && info.Capabilities.MCPHTTPTools == (authenticated || required) && !info.Capabilities.MCPHTTPBearerAuth && !info.Capabilities.MCPHTTPRequired
+					return known && found && info.Capabilities.MCPHTTPTools.IsSupported() == (authenticated || required) && !info.Capabilities.MCPHTTPBearerAuth.IsSupported() && !info.Capabilities.MCPHTTPRequired.IsSupported()
 				})
 				input := h.message("start", "Use declared tools only")
 				if prebound {
@@ -109,7 +109,7 @@ func TestClaudeMCPUnsupportedSnapshotRejectedBeforeClaim(t *testing.T) {
 			deadline := time.Now().Add(3 * time.Second)
 			for {
 				peer, _ := h.registry.LookupDevice(h.device.ID)
-				if info, _, _ := peer.AgentKindStatus("claude_sdk"); info.Capabilities.MCPHTTPBearerAuth {
+				if info, _, _ := peer.AgentKindStatus("claude_sdk"); info.Capabilities.MCPHTTPBearerAuth.IsSupported() {
 					break
 				}
 				if time.Now().After(deadline) {

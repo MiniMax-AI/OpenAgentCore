@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: f9a66794bab8aca97b88712a67451271ea96d825f35b20288f94c98d42523f1a
+source_hash: 986ab6e6ef3979a672f2e49f7c75346e7bfff327d9de1a6138e7f5c75b55d720
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -51,7 +51,7 @@ sequenceDiagram
 
 ## 版本 {#versioning}
 
-wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go)，独立于 heartbeat 报告的 Runtime 构建版本。Core 仅接受精确匹配，包括 patch 部分。不匹配时，在任何 dispatch 前返回 HTTP 426 `incompatible_version`；daemon 将其视为永久错误并停止重连。应一起部署版本匹配的两端；payload 或其语义的任何变更都会改变 `proto.Version`。
+wire 版本为 [`proto.Version`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/version.go)，独立于 Runtime 构建版本。Core 仅接受精确匹配，包括 patch 部分。不匹配时，在任何 dispatch 前返回 HTTP 426 `incompatible_version`；daemon 将其视为永久错误并停止重连。应一起部署版本匹配的两端；payload 或其语义的任何变更都会改变 `proto.Version`。
 
 ## 能力声明 {#capability-declarations}
 
@@ -110,13 +110,16 @@ Core 对 `usage` 和 `resume` 没有准入规则。
 | --- | --- | --- |
 | `runtime_prepare` | `runtime_prepare_result` | [初始化与能力传输](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/runtime_prepare.go) |
 | `execution_prepare`, `execution_start`, `execution_release` | `preparation_status` | [执行准入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/preparation.go) |
-| `prompt_cancel` | `delta`, `reasoning`, `output_message`, `tool_call`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
+| `prompt_cancel` | `delta`, `reasoning`, `output_message`, `tool_call`, `command_output`, `usage`, `error`, `done`, `heartbeat`, `interaction_decision_ack` | [请求](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/outbound.go)、[事件与能力](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/inbound.go) |
 | `prompt_steer` | `prompt_steer_ack` | [活动输入回执](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/steering.go) |
 | `function_result` | `function_call`, `function_call_withdrawn`, `interaction_decision_ack` | [Function 调用](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/functions.go) |
 | `workspace_read`, `workspace_write`, `workspace_export` | 对应的 `*_result` | [读取](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_read.go)、[写入](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_write.go)、[导出](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/workspace_export.go) |
 | `environment_quiesce`, `environment_resume` | `environment_quiesced`, `environment_resumed` | [暂停 fencing](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/suspend.go) |
+| 无 | `subagent_identity`, `subagent_lifecycle`, `subagent_turn`, `subagent_item`, `subagent_coordination` | [Subagent 观察](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/subagents.go) |
 
 初始、已准备和活动输入使用同一[有序 MessageInput](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/message_input.go)。Adapter 保留消息与内容顺序，并明确拒绝不支持的内容；仅文本 transport 拒绝图像内容而不丢弃它。[消息输入契约](../../contracts/agents-api/zh/message-content.md)负责公开图像 profile、空白规则和各 Harness 的原生转换。
+
+Run 的 adapter 按以下顺序报告 Subagent：先发送带已验证原生身份的 `subagent_identity`，再为每个 child 拥有的 Turn 发送 `subagent_turn`（先 active，再终态快照），其间发送 `subagent_item` 快照。`subagent_lifecycle` 报告成功的原生效果，例如重新打开，绝不表示任务完成或断连。`subagent_coordination` 以通用词汇报告原生协调操作，对 root 直接发送，或作为 `subagent_item` 的 payload 发送。每个 payload 的范围由已认证的 Run envelope 决定，只携带原生标识；所有公开资源 ID 由 Core 拥有。只有声明 `subagent_observations` 的 adapter 才发送这些消息。
 
 Subagent 发起调用时，`function_call` 携带 `native_id` 和 `turn_id`，含义与 `subagent_turn` 中相同；Run 自身发起的调用两者均为空。Adapter 在调用之前发送该子级的 `subagent_identity` 和 `subagent_turn`，Core 用同一个 `call_id` 的 `function_result` 作答。
 
@@ -292,17 +295,17 @@ transport 与 execution 结果分开。Core 唯一 Run 订阅入口是 `Subscrib
 
 ## 原生故障分类 {#native-failure-classification}
 
-adapter 可以给 Run 的 `error` frame 添加 `code` 和 `http_status`。它们是可选的中性元数据，不是终结事件或公开错误契约；frame 文本、Usage、`done`、原生 Session 身份和取消回执保持原顺序与含义。
+adapter 可以给 Run 的 `error` frame 添加 `code` 和 `http_status`。它们是可选的中性元数据，不是终结事件；frame 文本、Usage、`done`、原生 Session 身份和取消回执保持原顺序与含义。
 
 接受的 code 为 `authentication_error`、`rate_limit_exceeded`、`usage_limit_exceeded`、`server_overloaded`、`server_error`、`invalid_request`、`resource_not_found`、`request_timeout`、`context_length_exceeded`、`cyber_policy` 和 `connection_failed`（[`engine_failure.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/agentdaemon/proto/engine_failure.go)）。仅 `connection_failed` 保留 `http_status`，且只能是 100 到 599 的整数；其他 status 都丢弃。值缺失、格式错误或未知时保持未分类错误，不丢弃 Usage 或 `done`。
 
-Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engine_http_status`。一个 Run 可以有多个 `error` frame，例如 adapter 的分类失败之后跟着 Runtime 自己的结算失败；没有接受 code 的 frame 不改变已保存的分类，后来接受的 code 会替换它。分类从属于终结状态和 Core 的 `error_code`：不能将已完成或已取消 Turn 变成失败、隐藏不完整事件流，或覆盖持久化或取消回执失败。正常 delivery 和 terminal journal draining 使用同一提取逻辑。[Session 诊断](../../contracts/agents-api/zh/session-diagnostics.md)仅为 Core error 为 `engine_failed` 的失败 Turn 暴露类别。[Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) 和 [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) adapter 指南给出各 Harness 的映射。adapter 只依据结构化错误数据分类：Harness 自身的错误类型或状态，或 Harness 原样转交的模型提供商 JSON 错误 body，其 `error.code` 或 `error.type` 可以给出接受的 code。adapter 不依据错误文字分类。
+Core 在 Turn outcome 中将接受的值保存为 `engine_error_code` 和 `engine_http_status`。一个 Run 可以有多个 `error` frame，例如 adapter 的分类失败之后跟着 Runtime 自己的结算失败；没有接受 code 的 frame 不改变已保存的分类，后来接受的 code 会替换它。分类从属于终结状态和 Core 的 `error_code`：不能将已完成或已取消 Turn 变成失败、隐藏不完整事件流，或覆盖持久化或取消回执失败。正常 delivery 和 terminal journal draining 使用同一提取逻辑。只有 Core error 为 `engine_failed` 的失败 Turn 会暴露类别：[Session 诊断](../../contracts/agents-api/zh/session-diagnostics.md)给出该类别，公开 Turn 的 `error.code` 以官方名称报告它。[Codex](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md) 和 [Claude Code](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/claude/README.md) adapter 指南给出各 Harness 的映射。adapter 只依据结构化错误数据分类：Harness 自身的错误类型或状态，或 Harness 原样转交的模型提供商 JSON 错误 body，其 `error.code` 或 `error.type` 可以给出接受的 code。adapter 不依据错误文字分类。
 
 ## 工作区操作 {#workspace-operations}
 
 无需运行 Turn 的工作区读取使用只读 preparation profile：带 `workspace_read_only` 的 `execution_prepare`，要求 `workspace_read_preparation` 能力。仅接受绑定的 Environment 和 resource 身份；不包含 execution option、model 与 MCP 凭据、原生 Session continuation、model 或 tool 输入，owner 拒绝 `execution_start`。Runtime 从绑定的本地工作区提供读取，不启动 Harness 进程。profile 在 Runtime 放弃该 preparation 的所有权后发布 `released`；旧 status snapshot 不发布成功。release 请求、HTTP 断连或远端 socket 关闭本身都不确认释放。
 
-`workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果携带有限数量的单路径组件 UTF-8 名称，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。
+`workspace_read` 在同一已认证设备连接上，针对现有 preparation handle 或它已转移给的 Run，使用精确冻结的 Environment 身份；调用方不能提供 socket、凭据或 workspace root。`operation: directory` 列出一个 workspace 相对目录（空路径选择根目录），字节与条目限制互斥。结果携带有限数量的单路径组件 UTF-8 名称，并包含 entry kind、普通文件大小和明确截断信息；仅在目录访问与 handle 清理结算后返回。此层没有快照、递归或分页。字节读取与目录读取共享目标检查、关联、容量和保留的操作等待。被拒绝的结果携带 `invalid_request`、`resource_unavailable`、`read_capacity`、`not_found` 和 `permission_denied` 之一；路径不存在、是普通文件或符号链接的目录读取携带 `not_directory`。
 
 准入前，请求 payload 与 correlation ID 受限；过长 ID 不回显，过大的 trace metadata 不进入回复。原始 read result 受限于 transport frame 之内。这些是私有 transport 限制，不是公开 Files 参数。成功读取要求完整字节或明确截断，并确认原生 close。安全的原生拒绝不携带字节；中断或有歧义的读取保持未知，并停止该 owner 的后续读取。已 dispatch 的读取在 observer 取消以及资源转移或释放后仍保留有限时等待方，资源关闭阻止新准入。gateway 限制订阅，不在重连后重试或重放读取；重复的 pending operation ID 不能启动另一次读取。
 

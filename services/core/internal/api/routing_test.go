@@ -617,7 +617,7 @@ func TestAgentsResponseHeaders(t *testing.T) {
 	// The ID is attached to the request log context, and a stream that flushes
 	// before writing still reports its processing time.
 	var logged string
-	stream := responseHeadersWithErrors(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	stream := responseHeadersWithLog(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logged, _ = log.RequestIDFromContext(r.Context())
 		w.Header().Set("Content-Type", "text/event-stream")
 		controller := http.NewResponseController(w)
@@ -628,7 +628,7 @@ func TestAgentsResponseHeaders(t *testing.T) {
 			t.Error(err)
 		}
 		_, _ = io.WriteString(w, ": connected\n\n")
-	}), func(string) {})
+	}), func(string) {}, nil)
 	server := httptest.NewServer(stream)
 	defer server.Close()
 	response, err := server.Client().Get(server.URL)

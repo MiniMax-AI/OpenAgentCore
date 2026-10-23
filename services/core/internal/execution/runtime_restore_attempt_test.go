@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -154,7 +156,7 @@ func TestCheckpointTransferRoutesBeforeTargetIO(t *testing.T) {
 				t.Fatal(err)
 			}
 			targetNode := uuid.NewString()
-			node := deployment.Enrollment{NodeID: targetNode, Name: "checkpoint target", Credential: strings.Repeat("t", 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("c", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: fixturePublicURL}
+			node := machineapi.NodeEnrollment{NodeID: targetNode, Name: "checkpoint target", Credential: strings.Repeat("t", 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("c", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: fixturePublicURL}
 			if _, err = r.deployments.Enroll(t.Context(), token.Token, node); err != nil {
 				t.Fatal(err)
 			}

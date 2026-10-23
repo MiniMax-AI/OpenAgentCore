@@ -118,9 +118,9 @@ func awaitFixtureCapabilities(t *testing.T, h *dispatchHarness, caps proto.Agent
 			return false
 		}
 		info, _, known := peer.AgentKindStatus("codex")
-		return known && info.Capabilities.Preparation == caps.Preparation.IsSupported() &&
-			info.Capabilities.LocalEnvironment == caps.LocalEnvironment.IsSupported() &&
-			info.Capabilities.DurableInputReceipts == caps.DurableInputReceipts.IsSupported() &&
-			info.Capabilities.WorkspaceOutputExport == caps.WorkspaceOutputExport.IsSupported()
+		return known && info.Capabilities.Preparation.IsSupported() == caps.Preparation.IsSupported() &&
+			info.Capabilities.LocalEnvironment.IsSupported() == caps.LocalEnvironment.IsSupported() &&
+			info.Capabilities.DurableInputReceipts.IsSupported() == caps.DurableInputReceipts.IsSupported() &&
+			info.Capabilities.WorkspaceOutputExport.IsSupported() == caps.WorkspaceOutputExport.IsSupported()
 	})
 }

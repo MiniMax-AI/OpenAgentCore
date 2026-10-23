@@ -1,12 +1,7 @@
 package codex
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/google/uuid"
 	"os"
 	"path/filepath"
 	"testing"
@@ -14,8 +9,11 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
+	"github.com/google/uuid"
 )
 
 type preparationWireSender chan proto.Envelope
@@ -36,26 +34,18 @@ func TestPreparationRouterRetainsActualNativeChild(t *testing.T) {
 			if err := os.Chmod(root, 0700); err != nil {
 				t.Fatal(err)
 			}
-			t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", filepath.Join(t.TempDir(), "capabilities"))
 			t.Setenv("OAC_TEST_EXECUTOR_MODE", "complete")
 			environment, session, workspace := uuid.NewString(), uuid.NewString(), filepath.Join(root, "harness")
 			if err := os.MkdirAll(workspace, 0700); err != nil {
 				t.Fatal(err)
 			}
-			for key, value := range map[string]string{
-				"OAC_RUNTIME_ENVIRONMENT_ID": environment,
-				"OAC_RUNTIME_SESSION_ID":     session,
-				"OAC_RUNTIME_WORKSPACE":      workspace,
-			} {
-				t.Setenv(key, value)
-			}
-			binding, err := localworkspace.Load()
+			binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, workspace, filepath.Join(t.TempDir(), "capabilities"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			req.AgentStateKey = session
 			req.DisableExecutionEnvironment = false
-			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}
+			req.LocalEnvironment = &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &proto.CapabilitySources{}}
 			registry := agent.NewRegistry()
 			registry.RegisterKind(proto.SupportedAgentKind{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{LocalEnvironment: proto.CapabilitySupported, FunctionTools: proto.CapabilitySupported})}, harnessconfig.Configuration{})
 			prepared := make(chan *Prepared, 1)

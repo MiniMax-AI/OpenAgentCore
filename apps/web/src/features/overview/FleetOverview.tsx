@@ -22,14 +22,13 @@ export function overviewNodes(nodes: readonly SandboxNode[]): SandboxNode[] {
     .map(({ node }) => node);
 }
 
-/** E2B's cloud in place of machines: what Core holds there. */
+/** The provider's cloud in place of machines: what Core holds there. */
 export interface CloudHost {
   running: number;
   pending: number;
-  template: string | null;
 }
 
-/** A compact fleet inventory: Core, then E2B's cloud or the nodes; each row opens its page. */
+/** A compact fleet inventory: Core, then the provider's cloud or the nodes; each row opens its page. */
 export function FleetOverview({ nodes, cloud, coreLabel, coreTone, onOpenNode, onOpenCloud, onOpenCore }: {
   nodes: readonly SandboxNode[];
   /** A direct deployment: Core links to the Provider's cloud instead of to machines. */

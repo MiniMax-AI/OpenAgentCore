@@ -4,14 +4,15 @@ package cli
 
 import (
 	"encoding/json"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestWindowsRuntimeMCPPackageManagers(t *testing.T) {
@@ -137,7 +138,7 @@ func TestWindowsRuntimeMCPExplicitPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("Path", os.Getenv("PATH"))
-	manifest := agentcapabilities.Manifest{MCP: []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: agentplugin.MCPServer{Name: "test", Type: "stdio", Command: "selected-node", Args: []string{fixture}, CWD: directory, EnvVars: []string{"PATH", "OAC_MCP_FIXTURE_VALUE"}}}}}
+	manifest := agentcapabilities.Manifest{MCP: []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: proto.PluginMCPServer{Name: "test", Type: "stdio", Command: "selected-node", Args: []string{fixture}, CWD: directory, EnvVars: []string{"PATH", "OAC_MCP_FIXTURE_VALUE"}}}}}
 	invocation, err := resolveMCPInvocation(manifest, directory, "plugins/0", "test", map[string]string{"PATH": directory, "OAC_MCP_FIXTURE_VALUE": "selected"})
 	if err != nil {
 		t.Fatal(err)

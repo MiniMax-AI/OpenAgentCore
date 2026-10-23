@@ -39,18 +39,18 @@ type Snapshot struct {
 	Revision      uuid.UUID
 }
 
-// Record is a validated deployment default ready to store: its safe columns
-// and the complete bundle, provider key included, which storage seals to the
-// Harness. Storage assigns a new revision to each Record it stores.
+// Record is a validated deployment default ready to store: its columns and the
+// provider key, which storage seals to the Harness. Storage assigns a new
+// revision to each Record it stores.
 type Record struct {
 	Harness       string
 	Provider      v1.ModelProviderView
 	Model         string
 	HarnessConfig json.RawMessage
-	Configuration v1.ModelConfigurationInput
+	APIKey        string
 }
 
-// Bundle is an opened stored bundle and the revision read with it.
+// Bundle is a stored default with its key opened and the revision read with it.
 type Bundle struct {
 	Configuration v1.ModelConfigurationInput
 	Revision      uuid.UUID

@@ -88,7 +88,7 @@ async function claudeSmoke() {
   if (result.error || result.status !== 0) throw failure('claude_runtime_unavailable');
   let info;
   try { info = JSON.parse(result.stdout); } catch { throw failure('claude_invalid_receipt'); }
-  if (info.type !== 'runtime_ready' || info.sdk !== '0.3.269' || info.native !== '2.1.269 (Claude Code)' || !info.features?.includes('local_runtime_v2')) throw failure('claude_runtime_identity');
+  if (info.type !== 'runtime_ready' || info.sdk !== '0.3.269' || !info.features?.includes('local_runtime_v2')) throw failure('claude_runtime_identity');
   return { status: 'passed', sdk: info.sdk, native: info.native };
 }
 

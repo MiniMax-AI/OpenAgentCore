@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -31,7 +33,7 @@ func TestSandboxSpecificationRoundTripAndClaimStays(t *testing.T) {
 				t.Fatal("saved deployment lost its resources or Runtime provenance", err)
 			}
 			preview, err := f.service.SetupForSelection(view.InstallationID, input)
-			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || !reflect.DeepEqual(preview.Suspension, setup.Suspension) || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
+			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || (preview.Suspension == nil) != (setup.Suspension == nil) || preview.Suspension != nil && preview.Suspension.RetentionSeconds != setup.Suspension.RetentionSeconds || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
 				t.Fatal("preview and persisted normalized deployment disagree", err)
 			}
 			input.ExpectedGeneration = view.Generation
@@ -80,7 +82,7 @@ func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
 	if err != nil || uuid.Validate(issued.ID) != nil || issued.Token == "" {
 		t.Fatal(issued.ID, err)
 	}
-	input := deployment.Enrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "docker",
+	input := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "docker",
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: "https://other.example"}
 	if _, err := f.service.Enroll(t.Context(), issued.Token, input); !errors.Is(err, deployment.ErrNodeAddressMismatch) {
 		t.Fatal("enrolled a node that uses another Core address", err)
