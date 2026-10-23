@@ -166,7 +166,7 @@ test("Feishu settings redact secrets, default-deny chat dispatch and persist ing
   assert.ok(f.sent.every((x) => x.data.reply_in_thread));
   assert.equal(f.sent[0].data.msg_type, "interactive");
   assert.match(
-    JSON.parse(f.sent[0].data.content).header.title.content,
+    JSON.parse(f.sent[0].data.content).config.summary.content,
     /已完成/,
   );
   await restarted.tick();
@@ -1025,6 +1025,7 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
       command:
         "/bin/bash -lc 'cat /workspace/.agents/skills/lark-shared/SKILL.md'",
       duration_ms: 420,
+      status: "completed",
     },
   ];
   const worker = feishuWorker(
@@ -1075,20 +1076,20 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   assert.equal(f.sent.length, 1);
   const firstCard = JSON.parse(f.sent[0].data.content);
   assert.equal(firstCard.schema, "2.0");
-  assert.equal(firstCard.header.title.content, "处理中");
-  assert.equal(firstCard.header.template, "blue");
-  const [current, thinkingPanel, stepsPanel] = firstCard.body.elements;
-  assert.match(current.content, /正在思考下一步/);
-  assert.match(current.content, /已完成 1 步/);
+  assert.equal(firstCard.config.summary.content, "处理中");
+  assert.equal(firstCard.header, undefined);
+  const [, current, , thinkingPanel, stepsPanel] = firstCard.body.elements;
+  assert.match(current.content, /正在整理结果/);
+  assert.match(current.content, /工具调用 1 次 · 完成 1 次/);
   assert.doesNotMatch(current.content, /先读取飞书技能文档/);
   assert.equal(thinkingPanel.tag, "collapsible_panel");
   assert.equal(thinkingPanel.expanded, false);
-  assert.match(thinkingPanel.header.title.content, /思考过程/);
+  assert.match(thinkingPanel.header.title.content, /过程说明/);
   assert.match(thinkingPanel.elements[0].content, /先读取飞书技能文档/);
-  assert.match(stepsPanel.header.title.content, /执行记录 · 1 步/);
+  assert.match(stepsPanel.header.title.content, /工具调用 · 1 次/);
   assert.match(
-    stepsPanel.elements[0].content,
-    /✓<\/font> 运行命令 `cat \/workspace\/\.agents\/skills\/lark-shared\/SKILL\.md`/,
+    stepsPanel.elements[0].elements[0].text.content,
+    /cat \/workspace\/\.agents\/skills\/lark-shared\/SKILL\.md/,
   );
 
   finishTurn = true;
@@ -1103,12 +1104,12 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   assert.equal(f.sent.length, 1, "must not send a second card or text ping");
   assert.equal(patches.length, 1, "must patch the existing card in place");
   const patchedCard = JSON.parse(patches[0].data.content);
-  assert.equal(patchedCard.header.title.content, "已完成");
-  assert.equal(patchedCard.header.template, "green");
-  const [answer, thoughts, record] = patchedCard.body.elements;
+  assert.equal(patchedCard.config.summary.content, "已完成");
+  assert.equal(patchedCard.header, undefined);
+  const [, answer, , thoughts, record] = patchedCard.body.elements;
   assert.equal(answer.content, "你好！我是飞书工作助手。");
   assert.match(thoughts.elements[0].content, /先读取飞书技能文档/);
-  assert.match(record.header.title.content, /执行记录 · 1 步/);
+  assert.match(record.header.title.content, /工具调用 · 1 次/);
   assert.doesNotMatch(
     JSON.stringify(patchedCard),
     /任务编号|在 Web 会话下载|Parsar/,
@@ -1377,7 +1378,7 @@ test("Feishu private informational and rejected commands retain the active conve
   );
 });
 
-test("failed turns turn the card red, keep the error visible and mark failed steps", async () => {
+test("failure remains visible without a banner and empty detail panels are omitted", async () => {
   const { formatTurnCard, feishuCard } = await import("../server/feishu.mjs");
   const card = JSON.parse(
     formatTurnCard(
@@ -1393,10 +1394,11 @@ test("failed turns turn the card red, keep the error visible and mark failed ste
       "permission denied",
     ),
   );
-  assert.equal(card.header.template, "red");
-  assert.equal(card.header.title.content, "执行失败");
-  assert.match(card.body.elements[0].content, /<font color='red'>permission denied<\/font>/);
-  assert.match(card.body.elements[2].elements[0].content, /<font color='red'>✗<\/font> 运行命令/);
+  assert.equal(card.header, undefined);
+  assert.equal(card.config.summary.content, "执行失败");
+  assert.match(card.body.elements[0].content, /color='red'/);
+  assert.match(card.body.elements[1].content, /<font color='red'>permission denied<\/font>/);
+  assert.match(card.body.elements[3].elements[0].header.title.content, /失败 · 运行命令/);
   const quiet = JSON.parse(
     formatTurnCard("completed", [
       { type: "message", role: "assistant", content: [{ type: "output_text", text: "答案" }] },
@@ -1404,13 +1406,13 @@ test("failed turns turn the card red, keep the error visible and mark failed ste
   );
   assert.deepEqual(
     quiet.body.elements.map((element) => element.tag),
-    ["markdown", "collapsible_panel", "collapsible_panel"],
+    ["markdown", "markdown"],
   );
-  assert.match(quiet.body.elements[2].header.title.content, /执行记录 · 0 步/);
+  assert.equal(quiet.body.elements[1].content, "答案");
   const plain = feishuCard("已请求取消，等待 Agent 确认停止。");
   assert.equal(plain.header, undefined);
   assert.equal(plain.body.elements[0].content, "已请求取消，等待 Agent 确认停止。");
-  assert.equal(feishuCard("执行失败\n\n环境准备失败").header.template, "red");
+  assert.match(feishuCard("执行失败\n\n环境准备失败").body.elements[0].content, /color='red'/);
 });
 
 test("web searches appear as readable steps in the Feishu record", async () => {
@@ -1426,8 +1428,8 @@ test("web searches appear as readable steps in the Feishu record", async () => {
     ]),
   );
   assert.match(
-    card.body.elements[2].elements[0].content,
-    /✓<\/font> 搜索网页 `OpenAgentCore release`/,
+    card.body.elements[3].elements[0].header.title.content,
+    /完成 · 搜索网页 · OpenAgentCore release/,
   );
 });
 
@@ -1553,4 +1555,153 @@ test("Feishu SDK uploads multipart bytes and preserves definite rejection and re
   await assert.rejects(upload(), { status: 503 });
   const disconnected = feishuOperations({ request: async () => { throw new Error("private-network-data"); } });
   await assert.rejects(disconnected.upload(Buffer.from("file"), "file.txt"), (error) => error.status === 503 && !error.message.includes("private-network-data"));
+});
+
+test("card details join tool results, retain useful diagnostics and count calls once", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const card = JSON.parse(formatTurnCard("in_progress", [
+    { type: "reasoning", summary: [{ text: "先检查接口，再处理结果。" }] },
+    { type: "function_call", call_id: "lookup", name: "lookup", arguments: { query: "invoice" }, status: "completed" },
+    { type: "function_call_output", call_id: "lookup", status: "failed", error: "permission denied", output: "<at id=all>not a mention</at>```" },
+    { type: "command_execution", command: "pwd", cwd: "/workspace", output: "/workspace", exit_code: 0, duration_ms: 420, status: "completed" },
+    { type: "mcp_call", name: "read", server_label: "docs", arguments: { id: 3 }, status: "incomplete" },
+  ]));
+  assert.match(card.body.elements[1].content, /工具调用 3 次 · 完成 1 次 · 失败 1 次/);
+  const panels = card.body.elements.filter((x) => x.tag === "collapsible_panel");
+  assert.equal(panels[0].header.title.content.includes("思考摘要"), true);
+  const tools = panels.at(-1);
+  assert.match(tools.header.title.content, /3 次/);
+  assert.match(tools.elements[0].header.title.content, /失败/);
+  const literal = tools.elements[0].elements[0].text;
+  assert.equal(literal.tag, "plain_text");
+  assert.match(literal.content, /invoice/);
+  assert.match(literal.content, /permission denied/);
+  assert.match(literal.content, /<at id=all>/);
+  assert.match(tools.elements[1].elements[0].text.content, /退出码\n0/);
+  assert.match(tools.elements[1].header.title.content, /0.4s/);
+  assert.match(tools.elements[2].header.title.content, /未完成/);
+});
+
+test("resumed questions display only the current exchange, including on completion", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const message = (value) => ({ type: "message", role: "assistant", content: [{ type: "output_text", text: value }] });
+  const items = [
+    message("OLD INVENTORY"),
+    { type: "command_execution", command: "old command", status: "completed" },
+    { type: "function_call", call_id: "q1", name: "ask_user" },
+    { type: "function_call_output", call_id: "q1", status: "completed", output: "create a bot" },
+    message("CURRENT CONTEXT"),
+    { type: "function_call", call_id: "q2", name: "ask_user" },
+  ];
+  const card = JSON.parse(formatTurnCard("requires_action", items, undefined, undefined, [{ arguments: JSON.stringify({ question: "What should the bot do?", options: ["Documents", "Reports"] }) }]));
+  assert.match(card.body.elements[1].content, /^What should the bot do/);
+  assert.match(card.body.elements[1].content, /CURRENT CONTEXT/);
+  assert.doesNotMatch(JSON.stringify(card), /OLD INVENTORY|old command|function_call_output|工具调用/);
+  items.push({ type: "function_call_output", call_id: "q2", output: "Reports" }, message("DONE"));
+  assert.doesNotMatch(formatTurnCard("completed", items), /CURRENT CONTEXT|OLD INVENTORY/);
+});
+
+test("waiting questions stay on one card and a reply never replays stale history while Core catches up", async (t) => {
+  const f = await feishu(t);
+  const config = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
+  const patches = [];
+  f.channel.rawClient.im.message.patch = async (payload) => { patches.push(payload); return { code: 0 }; };
+  const message = (id, text) => ({ id, turn_id: "same-turn", type: "message", role: "assistant", content: [{ type: "output_text", text }] });
+  let items = [message("old", "OLD INVENTORY"), { id: "ask1", turn_id: "same-turn", type: "function_call", name: "ask_user", call_id: "q1" }];
+  let actions = [{ type: "function_call", name: "ask_user", call_id: "q1", turn_id: "same-turn", arguments: { question: "FIRST QUESTION" } }];
+  let status = "requires_action";
+  const core = async (path, method, body, key) => {
+    if (method === "GET" && path.includes("/items")) return { data: items, has_more: false };
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "same-turn", status: status === "idle" ? "completed" : "in_progress" }], has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status, required_actions: actions };
+    return f.core(path, method, body, key);
+  };
+  let worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
+  worker.receive("cli_0123456789abcdef", dm);
+  await worker.tick();
+  assert.equal(f.sent.length, 1, "question belongs to the progress card");
+  assert.match(f.sent[0].data.content, /FIRST QUESTION/);
+  await worker.tick();
+  assert.equal(f.sent.length, 1);
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "answer1", content: "create a bot" });
+  await worker.tick();
+  assert.equal(f.sent.length, 2);
+  assert.doesNotMatch(f.sent[1].data.content, /OLD INVENTORY|FIRST QUESTION/);
+  // Restart with the persisted boundary before Core publishes the answer result.
+  worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  await worker.tick();
+  assert.equal(f.sent.length, 2);
+  items.push({ id: "reply1", turn_id: "same-turn", type: "function_call_output", call_id: "q1", output: "create a bot" }, message("new", "CURRENT CONTEXT"), { id: "ask2", turn_id: "same-turn", type: "function_call", name: "ask_user", call_id: "q2" });
+  actions = [{ ...actions[0], call_id: "q2", arguments: { question: "SECOND QUESTION" } }];
+  await worker.tick();
+  assert.equal(f.sent.length, 2, "second question updates the reply card");
+  assert.match(patches.at(-1).data.content, /SECOND QUESTION/);
+  assert.doesNotMatch(patches.at(-1).data.content, /OLD INVENTORY|FIRST QUESTION/);
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "answer2", content: "reports" });
+  await worker.tick();
+  assert.equal(f.sent.length, 3);
+  items.push({ id: "reply2", turn_id: "same-turn", type: "function_call_output", call_id: "q2", output: "reports" }, message("done", "FINAL ANSWER"));
+  status = "idle"; actions = [];
+  await worker.tick();
+  assert.equal(f.sent.length, 3);
+  assert.match(patches.at(-1).data.content, /FINAL ANSWER/);
+  assert.doesNotMatch(patches.at(-1).data.content, /OLD INVENTORY|CURRENT CONTEXT|SECOND QUESTION/);
+});
+
+test("large multilingual diagnostics stay below the Feishu card payload limit", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const large = '大\\\\"\n'.repeat(10000);
+  const items = [
+    { type: "reasoning", summary: [{ text: large }] },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: large }] },
+    ...Array.from({ length: 20 }, (_, i) => ({ type: "mcp_call", name: `tool${i}`, status: "completed", arguments: { input: large }, output: large })),
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: large }] },
+  ];
+  const payload = formatTurnCard("completed", items);
+  assert.ok(Buffer.byteLength(payload) < 30000, String(Buffer.byteLength(payload)));
+  assert.match(payload, /展示最近 6 次/);
+  assert.match(payload, /内容较长，已截取/);
+});
+
+
+test("an undelivered failed progress card cannot hide a later question", async (t) => {
+  const f = await feishu(t);
+  let waiting = false, rejectSend = true;
+  const send = f.channel.send;
+  f.channel.send = async (row) => {
+    if (rejectSend) throw new AppError(422, "definite send failure");
+    return send(row);
+  };
+  const core = async (path, method, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: [], has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: waiting ? "requires_action" : "in_progress", required_actions: waiting ? [{ type: "function_call", name: "ask_user", call_id: "question", arguments: { question: "Choose a purpose" } }] : [] };
+    return f.core(path, method, ...rest);
+  };
+  const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  worker.receive("cli_0123456789abcdef", f.message);
+  await worker.tick();
+  const failed = f.store.list("feishu_outbound").find((x) => x.state === "failed");
+  assert.ok(failed);
+  waiting = true; rejectSend = false;
+  await worker.tick();
+  await worker.tick();
+  assert.equal(f.sent.length, 1);
+  assert.match(f.sent[0].data.content, /Choose a purpose/);
+  assert.equal(f.store.get("feishu_outbound", failed.id).state, "failed");
+});
+
+test("identical question text is shown once and agent messages do not count as tools", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const card = JSON.parse(formatTurnCard("requires_action", [
+    { type: "create_subagent_call", status: "completed" },
+    { type: "agent_message", content: "subagent progress" },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "Which bot?" }] },
+  ], undefined, undefined, [{ arguments: { question: "Which bot?", options: ["Writer", "Analyst"] } }]));
+  assert.equal(card.body.elements[1].content.split("Which bot?").length - 1, 1);
+  assert.match(card.body.elements[1].content, /Writer/);
+  assert.match(card.body.elements.at(-1).header.title.content, /工具调用 · 1 次/);
+  assert.doesNotMatch(JSON.stringify(card), /agent_message|状态未知/);
 });

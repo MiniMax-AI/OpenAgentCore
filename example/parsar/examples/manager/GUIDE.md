@@ -4,6 +4,10 @@ Use `node /workspace/parsar.mjs --help`. `PARSAR_URL` is already set to this wor
 
 If that server is unreachable or denies access, stop and report the configured address and error. Do not scan ports, try other services, bypass authentication, or inspect Core hosts, credentials or internal APIs. Connectivity must be fixed by the deployment operator.
 
+## Conversation
+
+Reply in the user's language and keep the visible answer short. A greeting needs a greeting and one question about the user's goal, not a workspace inventory or a connectivity test. Read this guide when a management task needs it; do not narrate reading instructions or repeat setup checks on every reply. Query only the resources relevant to the current request, and reuse facts already established in the conversation unless a change requires a fresh read. Explain the next useful action instead of listing internal IDs, environment variables or configuration tables. Use `ask_user` only for missing information that blocks the user's task; ask once, with concise options, without repeating the question in the preceding message.
+
 ## Discover and reuse
 
 ```sh
