@@ -3,19 +3,19 @@ import { createServer } from "node:http";
 import test from "node:test";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { parseStart } from "../dist/adapter.js";
+import { parseRequest } from "../dist/request.js";
 import { MCPProfile } from "../dist/mcp.js";
 
 const reference = "OAC_RUNTIME_MCP_BEARER_" + "A".repeat(26);
 const server = { server_label: "private", server_url: "https://example.invalid/mcp", allowed_tools: ["echo.v1"], bearer_token_env_var: reference };
-const start = servers => ({ type: "start", input: [{ content: [{ type: "input_text", text: "hello" }] }], model: "fixture", system_prompt: "", cwd: "/tmp", mcp_http_servers: servers });
+const start = servers => ({ type: "executor_prepare", model: "fixture", system_prompt: "", cwd: "/tmp", mcp_http_servers: servers });
 
 test("bearer references remain literal in native configuration and private status is not retained", t => {
   const token = "fixture-private-bearer+/==";
   process.env[reference] = token;
   t.after(() => { delete process.env[reference]; });
   const declarations = [server, { server_label: "anonymous", server_url: "http://example.invalid/mcp", allowed_tools: [] }];
-  const parsed = parseStart(JSON.stringify(start(declarations)));
+  const parsed = parseRequest(JSON.stringify(start(declarations)));
   const profile = new MCPProfile(parsed.mcp_http_servers, []);
   assert.equal(profile.servers.private.headers.Authorization, "Bearer ${" + reference + "}");
   assert.equal(profile.servers.anonymous.headers.Authorization, "");
@@ -35,8 +35,8 @@ test("untrusted header expressions, raw tokens and non-HTTPS authenticated decla
     { ...server, headers: { "X-Tenant": 1 } },
     { ...server, server_url: "http://example.invalid/mcp" },
     ...[null, "", "ANTHROPIC_AUTH_TOKEN", "OAC_RUNTIME_MCP_BEARER_", "${OPERATOR_TOKEN}", reference + ":-fallback"].map(bearer_token_env_var => ({ ...server, bearer_token_env_var })),
-  ]) assert.throws(() => parseStart(JSON.stringify(start([invalid]))));
-  assert.throws(() => parseStart(JSON.stringify(start([server, { ...server, server_label: "other" }]))));
+  ]) assert.throws(() => parseRequest(JSON.stringify(start([invalid]))));
+  assert.throws(() => parseRequest(JSON.stringify(start([server, { ...server, server_label: "other" }]))));
 });
 
 test("custom headers reach the native configuration beside the bearer", t => {

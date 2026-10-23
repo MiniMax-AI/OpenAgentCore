@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MCPProfile } from "../dist/mcp.js";
 import { parseEnvironmentMCP } from "../dist/mcp_environment.js";
-import { immediateInput, parseStart } from "../dist/request.js";
+import { parseRequest } from "../dist/request.js";
 import { WorkspaceProfile } from "../dist/workspace.js";
 
 const stdio = { server_label: "installed", command: process.execPath, allowed_tools: null,
@@ -24,16 +24,15 @@ function fixture(t, declarations = [stdio]) {
   const previous = process.env;
   process.env = { HOME: dirs.home, CLAUDE_CONFIG_DIR: dirs.state, ANTHROPIC_AUTH_TOKEN: "model-secret" };
   t.after(() => { process.env = previous; rmSync(root, { recursive: true, force: true }); });
-  const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: "", cwd: dirs.work, workspace: config };
+  const request = { type: "executor_prepare", model: "fixture", system_prompt: "", cwd: dirs.work, workspace: config };
   return { dirs, config, request };
 }
 
 test("installed MCP projection uses the common Runtime launcher", t => {
   const { request } = fixture(t);
-  assert.deepEqual(parseStart(JSON.stringify(request)), request);
+  assert.deepEqual(parseRequest(JSON.stringify(request)), request);
   const structured = { ...request, output_format: { type: "json_schema", schema: { type: "object" } } };
-  assert.deepEqual(parseStart(JSON.stringify(structured)), structured);
-  assert.equal(immediateInput(request), undefined);
+  assert.deepEqual(parseRequest(JSON.stringify(structured)), structured);
   assert.deepEqual(parseEnvironmentMCP([stdio]), [stdio]);
   for (const value of [[stdio, stdio], [{ ...stdio, command: "relative" }], [{ ...stdio, env: { TOKEN: "secret" } }],
     [{ ...stdio, args: ["-c", "untrusted"] }], [{ ...stdio, allowed_tools: ["*"] }],
@@ -129,7 +128,7 @@ test("MCP identity validation preserves host functions and ordinary child enviro
 test("public workspace HTTP preserves required startup and null versus empty allowlists", t => {
   const http = {server_label:"remote",server_url:"https://example.invalid/mcp",allowed_tools:[],required:true};
   const {dirs,config,request}=fixture(t,[http]);
-  assert.deepEqual(parseStart(JSON.stringify(request)),request);
+  assert.deepEqual(parseRequest(JSON.stringify(request)),request);
   for(const allowed_tools of [null,[],["prove"]]) {
     const declaration={...http,allowed_tools};
     assert.deepEqual(parseEnvironmentMCP([declaration]),[declaration]);

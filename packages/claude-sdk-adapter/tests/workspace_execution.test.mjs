@@ -8,12 +8,11 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "nod
 import { registerHooks } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-const sdk = 'export function getSessionInfo(...args){return globalThis.historyFixture(...args);} export function query(options){return globalThis.queryFixture(options);} export function startup(){throw new Error("Unexpected preparation");}';
+import { sdkSource, startupFrom, runTurn } from ${JSON.stringify(new URL("./executor_run.mjs", import.meta.url).href)};
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "@anthropic-ai/claude-agent-sdk") return {url:"data:text/javascript,"+encodeURIComponent(sdk),shortCircuit:true};
+  if (specifier === "@anthropic-ai/claude-agent-sdk") return {url:"data:text/javascript,"+encodeURIComponent(sdkSource),shortCircuit:true};
   return next(specifier,context);
 }});
-const { execute } = await import(${JSON.stringify(new URL("../dist/adapter.js", import.meta.url).href)});
 const root = realpathSync(mkdtempSync(join(tmpdir(), "oac-workspace-execute-")));
 const dirs = Object.fromEntries(["workspace", "home", "state", "scratch", "deps", "capability"].map(name => {
   const path = join(root, name); mkdirSync(path); return [name, path];
@@ -24,7 +23,7 @@ writeFileSync(join(dirs.capability, "pkg", "skill", "SKILL.md"), "---\\nname: fi
 const workspace = { home: dirs.home, state: dirs.state, scratch: dirs.scratch,
     env_names: ["ANTHROPIC_API_KEY"], ...(mode.startsWith("skills") ? { capability_root: dirs.capability,
       skills: [{ metadata: { type: "inline", name: "fixture", description: "Fixture." }, relative_root: "pkg/skill", package_root: "pkg" }] } : {}) };
-const request = { type: "start", input: [{ content: [{ type: "input_text", text: "fixture" }] }], model: "fixture", system_prompt: mode === "instructions" ? "Be brief." : "", cwd: dirs.workspace,
+const request = { type: "executor_prepare", model: "fixture", system_prompt: mode === "instructions" ? "Be brief." : "", cwd: dirs.workspace,
   workspace, ...(mode.startsWith("resume") ? { resume: "native" } : {}),
   ...(mode.startsWith("functions") ? { functions: [{ name: "lookup", description: "Lookup", parameters: { type: "object" }, defer_loading: false }] } : {}) };
 process.env.HOME = dirs.home;
@@ -42,7 +41,7 @@ globalThis.historyFixture = async (id, options) => {
   assert.equal(process.env.CLAUDE_CONFIG_DIR, dirs.state);
   return mode === "resume-missing" ? undefined : { sessionId: "native" };
 };
-globalThis.queryFixture = ({prompt, options}) => {
+globalThis.startupFixture = startupFrom(({prompt, options}) => {
   calls.push("query");
   assert.equal(options.env.UNSELECTED_CANARY, "must-not-inherit");
   assert.equal(options.env.ANTHROPIC_API_KEY, "fixture-secret");
@@ -53,9 +52,7 @@ globalThis.queryFixture = ({prompt, options}) => {
   assert.deepEqual(options.settings, {env:{CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:"1",DISABLE_AUTOUPDATER:"1"}});
   assert.deepEqual(options.systemPrompt, {type:"preset",preset:"claude_code",...(mode === "instructions" ? {append:"Be brief."} : {})});
   assert.equal(options.resume, request.resume);
-  const child = options.spawnClaudeCodeProcess({ command: process.execPath, env: options.env, signal: abort.signal,
-    args: ["-e", "const assert=require('node:assert/strict');assert.equal(process.env.UNSELECTED_CANARY,'must-not-inherit');assert.equal(process.env.ANTHROPIC_API_KEY,'fixture-secret');process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"] });
-  return { close() { child.stdin.end(); }, async *[Symbol.asyncIterator]() {
+  return { async *[Symbol.asyncIterator]() {
     const first = (await prompt[Symbol.asyncIterator]().next()).value;
     yield { type: "system", subtype: "init", session_id: "native", mcp_servers: request.functions ? [{ name: "functions", status: "connected" }] : [],
       tools: ["Bash", "Read", "Edit", ...(mode === "functions" ? ["mcp__functions__lookup"] : []), ...(mode.startsWith("skills") ? ["Skill"] : [])],
@@ -69,19 +66,20 @@ globalThis.queryFixture = ({prompt, options}) => {
         message:{content:[{type:"tool_result",tool_use_id:"observed",content:"observed",is_error:false}]},
         tool_use_result:{stdout:"observed",stderr:"",interrupted:false}};
       if (mode !== "commands-success") yield call("unfinished");
-      if (mode === "commands-cancel") {abort.abort();return;}
+      if (mode === "commands-cancel") {await globalThis.cancelTurn();return;}
     }
     yield { type: "result", uuid: "result", session_id: "native", user_message_uuids: [first.uuid],
       subtype: "success", is_error: false, result: "fixture", usage: {input_tokens:1,output_tokens:1}, modelUsage:{} };
   } };
-};
+}, { args: ["-e", "const assert=require('node:assert/strict');assert.equal(process.env.UNSELECTED_CANARY,'must-not-inherit');assert.equal(process.env.ANTHROPIC_API_KEY,'fixture-secret');process.stdin.resume();process.stdin.on('end',()=>process.exit(0));"] });
+const input = [{ content: [{ type: "input_text", text: "fixture" }] }];
 try {
   if (mode === "resume-mismatch") {
     process.env.CLAUDE_CONFIG_DIR = dirs.home;
-    await assert.rejects(execute(request, async e => events.push(e), abort), /invalid_request/);
+    await assert.rejects(runTurn(request, abort, input), /invalid_request/);
     assert.deepEqual(calls, []);
   } else {
-    await execute(request, async e => events.push(e), abort);
+    events.push(...(await runTurn(request, abort, input)).frames);
     if (mode === "resume-missing") {
       assert.deepEqual(calls, ["history"]);
       assert.deepEqual(events, [{type:"error",code:"history_unavailable"}]);

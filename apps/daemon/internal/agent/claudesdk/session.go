@@ -31,6 +31,32 @@ type session struct {
 	outcome   proto.DonePayload
 }
 
+// Frames the Executor writes to the bridge; bridgeEvent is what the bridge sends back.
+// packages/claude-sdk-adapter/fixtures/bridge-frames.json is checked against both.
+type turnStartFrame struct {
+	Type   string             `json:"type"`
+	TurnID string             `json:"turn_id"`
+	Input  proto.MessageInput `json:"input"`
+}
+
+type turnCancelFrame struct {
+	Type   string `json:"type"`
+	TurnID string `json:"turn_id"`
+}
+
+type steerFrame struct {
+	Type    string             `json:"type"`
+	TurnID  string             `json:"turn_id"`
+	InputID string             `json:"input_id"`
+	Input   proto.MessageInput `json:"input"`
+}
+
+type functionResultFrame struct {
+	Type   string `json:"type"`
+	TurnID string `json:"turn_id"`
+	proto.FunctionResultPayload
+}
+
 type bridgeEvent struct {
 	EngineErrorCode json.RawMessage `json:"engine_error_code"`
 	TurnID          string          `json:"turn_id"`
