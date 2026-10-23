@@ -312,7 +312,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(json.loads((self.bundle / "manifest.json").read_text())["artifact_base_url"], "")
 
     def test_bootstraps_include_shared_downloader_and_are_reproducible(self):
-        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "distribution.py", "node_spec.py"):
+        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py", "distribution.py", "node_spec.py"):
             (self.bundle / name).write_text("# " + name + "\n")
         distribution.bootstraps(self.bundle, "1700000000", "a" * 40)
         first = (self.bundle / "node-install.pyz").read_bytes()
@@ -320,7 +320,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(first, (self.bundle / "node-install.pyz").read_bytes())
         self.assertFalse((self.bundle / "oac.pyz").exists())
         with zipfile.ZipFile(self.bundle / "node-install.pyz") as contents:
-            self.assertEqual(set(contents.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"})
+            self.assertEqual(set(contents.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py"})
             self.assertEqual(contents.read("__main__.py"), (self.bundle / "node_install.py").read_bytes())
 
 

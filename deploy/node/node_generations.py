@@ -37,7 +37,7 @@ def helper_archive(args, installer):
     archive = io.BytesIO()
     source_dir = Path(installer.__file__).parent
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
-        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py"):
+        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py"):
             package.write(source_dir / name, "__main__.py" if name == "node_install.py" else name)
     return archive.getvalue()
 
@@ -122,22 +122,7 @@ def owned_root(args, installer):
 def image_available(value, installer):
     """Whether the installation's Runtime that this configuration names is still on the node."""
     try:
-        if value["provider"] == "docker":
-            seccomp = Path(value["native"]["seccomp_file"])
-            installer.existing_file(seccomp)
-            json.loads(seccomp.read_text())
-            raw = installer.checked(list(installer.DOCKER) + ["image", "inspect", value["native"]["image"], "--format", "{{.Id}} {{.Os}}/{{.Architecture}}"], "Cannot inspect pinned image")
-            return raw.strip() == value["native"]["image"] + " linux/amd64"
-        micro = value["native"]
-        for key in ("helper_path", "runtime_path", "firmware_path"):
-            if not installer.existing_file(Path(micro[key])):
-                return False
-        if (installer.file_digest(Path(micro["runtime_path"])) != micro["runtime_sha256"]
-                or installer.file_digest(Path(micro["firmware_path"])) != micro["firmware_sha256"]):
-            return False
-        env = dict(os.environ, MSB_BACKEND="local", MSB_HOME=micro["runtime_home"], MSB_PATH=micro["runtime_path"], MSB_LIBKRUNFW_PATH=micro["firmware_path"])
-        image = json.loads(installer.checked([micro["runtime_path"], "image", "inspect", micro["image"], "--format", "json"], "Cannot inspect pinned image", env=env))
-        return image.get("digest") == micro["image"].split("@", 1)[1] and image.get("architecture") == "amd64" and image.get("os") == "linux"
+        return installer.HOSTS[value["provider"]].image_available(installer, value)
     except (installer.InstallError, OSError, ValueError):
         return False
 
@@ -161,7 +146,7 @@ def prepare(args, installer):
         base = installer.private_json(root / "provider.json")
         value = retained_configs(root, installer).get(args.generation)
         if value is not None:
-            installer.node_spec.verify_provider(value, configuration, value.get("native", {}).get("image"))
+            installer.verify_retained(value, configuration, value.get("native", {}).get("image"))
         else:
             value = copy.deepcopy(base)
             value["generation"], value["specification"] = args.generation, configuration["specification"]
