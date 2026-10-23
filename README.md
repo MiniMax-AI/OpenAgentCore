@@ -11,7 +11,7 @@ The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or Mi
 
 [Website](https://openagentcore.dev/) · [Documentation](https://openagentcore.dev/docs/getting-started/) · [Quickstart](#quickstart) · [Contributing](CONTRIBUTING.md)
 
-**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
+**English** · [简体中文](README.zh-CN.md)
 
 </div>
 

@@ -136,7 +136,6 @@ A new provider takes these steps:
 6. Supply the distribution artifacts for the adapter and its helper, and offer the provider to operators through the registered configuration contract.
 7. Web's setup step, deployment summary and client projection name each provider. Add the new provider to `apps/web` until the protocol declares configuration fields.
 
-
 A node configuration, `sandbox.NodeConfig`, holds `provider`, `generation`, `installation_id`, `core_url`, `specification` and the adapter's opaque `native` object. `providers.Build` validates `provider`, `generation`, `installation_id` and `specification`, and passes the configuration with ephemeral `sandbox.LocalOptions` to `BuildLocal`, which decodes `native` strictly. The caller explicitly selects standalone registration or single-provider execution with `Standalone`, or generation-owned execution with a canonical absolute node state directory in `GenerationStateDirectory`. Missing or mixed contexts are rejected. The adapter owns generation-specific native preparation and readiness checks. Microsandbox binds helper leases to the installation, generation and specification digest, then checks the pinned image after platform, capacity and artifact readiness.
 
 ### Registration validation
@@ -252,6 +251,7 @@ A Provider relies on these rules:
 - A retained checkpoint resumes on its original node when it is eligible, or on another eligible node through [checkpoint transfer](#checkpoint-transfer). Core owns the snapshot's retention deadline, and the daemon has no timer for it.
 - A consumed snapshot never rolls a running generation back. Consumed artifacts and old compute are deleted, so suspension cycles never build a chain of writable disks.
 - Deletion, revocation and retention expiry win over wake, up to the final database compare-and-swap. Unknown cleanup identities are kept until owned resources are confirmed absent.
+
 ### Checkpoint transfer
 
 A checkpoint-capable generation reports `CheckpointCompatibility`: opaque `ArtifactDomain` and `ExecutionClass` tokens. Every verified `SnapshotIdentity` carries the same qualification. Core compares these values without interpreting CPU features, filesystem paths or storage implementations. A restore destination must be online and ready for the allocation's immutable deployment generation, match both tokens, and have active capacity plus a retained slot when moving from another node. The allocation, Device and Session identities remain unchanged. The Session and deployment transaction commits the destination route, placement and exact restore intent before target-side native work. No capacity or compatible destination leaves the retained snapshot owned until its configured deadline. The target must already hold that exact generation; Core does not automatically prepare historical generations on new nodes. A node keeps a superseded generation's provider until its checkpoint retention obligations end.

@@ -36,7 +36,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Environments | retrieve | Implemented; Session-scoped ([ownership](./environments.md#resources-and-states)). The pinned contract rejects `environment.environment_id`; existing hosted Environments cannot be attached across Sessions. Workspaces shared across Sessions belong to the application ([Projects own assets](../../docs/concepts.md#projects-own-assets)) | [Environments](./environments.md) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](./environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](./environments.md#templates) |
-| Vaults | create, retrieve, list, delete | Implemented; no archive operation | [Vaults and Credentials](./vaults.md) |
+| Vaults | create, retrieve, list, delete | Implemented | [Vaults and Credentials](./vaults.md) |
 | Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth` | [Vaults and Credentials](./vaults.md) |
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
@@ -80,7 +80,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Core rejects an inline `authorization` on a Session MCP transport, an `Authorization` entry in `headers` and a nonempty stdio `env`: credentials come only from Vaults (`credential_id`) and environment values only from the Environment (`env_vars`) ([MCP](./execution-tools.md#mcp)).
 - A `stdio` MCP server needs a workspace placement and the origin `environment`. Claude Code starts the server in its workspace directory, so `cwd` must equal it, with its whole process environment, which also holds the model provider key and other servers' Vault bearer tokens, and it needs `allowed_tools` null. MiniMax Code starts the server in its private home directory, so it rejects every `stdio` server ([MCP](./execution-tools.md#mcp)).
 - Claude rejects an MCP `server_url` or `headers` value containing `${`, because the native client expands `${VAR}` in both from a process environment that holds Core-held credentials.
-- Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returned 200.
+- Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returns 200.
 
 **Input, events and history** ([Sessions, events and history](./sessions-events.md), [message content](./message-content.md))
 
@@ -98,7 +98,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 
-- File uploads hold up to 512 MiB; the official limit is 512 MB. The Files list returns up to 10,000 Files by default, and a `purpose` filter other than `user_data` returns an empty page.
+- File uploads hold up to 512 MiB; the official limit is 512 MB. A `purpose` filter other than `user_data` returns an empty page.
 - Skill version numbers are never reused, and uploads and deletions of one Skill run one at a time.
 - Environment files work on `self_hosted` Environments, which the official service refuses.
 - Creating an Environment file over an existing regular file returns the "must not traverse symlinks or overwrite existing files" message. A parent symbolic link that stays inside the workspace is followed, and a parent that escapes the workspace or is a regular file gets a generic 400; the official service rejects symbolic-link parents.
@@ -118,7 +118,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Configuration and tools**
 
-- A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- A `reasoning.effort`, `reasoning.summary`, `service_tier`, `text.verbosity`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
 - Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input.
 - Model-derived reasoning defaults are not resolved.
 
@@ -135,7 +135,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Environments and Templates**
 
-- Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the existing [input reservation deadline](./environments.md#reservations).
+- Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the [input reservation deadline](./environments.md#reservations).
 - MiniMax Code does not declare `retained_native_history`, so it cannot run on microsandbox, which keeps every Environment on workspace storage; Core rejects the Session ([Harness capabilities](./harness-capabilities.md)).
 - Only `enabled` networking runs, so Sessions that need `disabled` or `restricted` are rejected ([restricted network policy](./environments.md#restricted-network)).
 - `packages.system` is rejected; system packages must be preinstalled.
@@ -148,7 +148,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Vaults and Credentials**
 
-- There is no archive lifecycle, storage-key rotation or re-encryption.
+- There is no storage-key rotation or re-encryption.
 - OAuth refresh happens only at dispatch: there is no refresh on a provider 401, no mid-Turn replacement and no withdrawal of a token already sent to a Runtime.
 - Input sent to a Session whose selected Credential was deleted is admitted and then fails at dispatch.
 - Credential creation takes no `Idempotency-Key`.

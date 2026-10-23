@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: f50217dd1fc465626ac7135a46b69cea0ee40fc14fd30141e23813018192cb5c
+source_hash: 6b609956acde1748bfc1762ba5428959a88de8b42cbcaa9297fb89c1c2c013bb
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -320,7 +320,7 @@ Session 会先应用模板，然后应用自身字段。组合仅在加密 Sessi
 
 ### 准备复用 {#preparation-reuse}
 
-Core 可以用同一 Project 中较早一次准备的结果启动托管 Environment，前提是两者在 Template 组合之后的有效配置完全相同，且距该次准备不超过 24 小时。每个 Session 仍然得到自己的副本。此时设置命令和包安装不会为该 Session 再次运行。只复用 `/environment`（见工作区文件系统范围），HOME 和其他与计算实例本地相关的改动不会复用。设置过程不得产生每个 Session 唯一的值，不得执行必须按 Session 发生的外部副作用，也不得获取 24 小时内就会过期的凭据；需要这些行为的配置必须有所不同，例如在 `env` 或 `files` 上。未声明[准备缓存](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)的提供商始终完整准备。
+Core 可以用同一 Project 中较早一次准备的结果启动托管 Environment，前提是两者在 Template 组合之后的有效配置完全相同，且距该次准备不超过 24 小时。每个 Session 仍然得到自己的副本。此时设置命令和包安装不会为该 Session 再次运行。只复用 `/environment`（见[生命周期与文件系统范围](../../../docs/zh/workspace-provider.md#lifetime-and-filesystem-scope)），HOME 和其他与计算实例本地相关的改动不会复用。设置过程不得产生每个 Session 唯一的值，不得执行必须按 Session 发生的外部副作用，也不得获取 24 小时内就会过期的凭据；需要这些行为的配置必须有所不同，例如在 `env` 或 `files` 上。未声明[准备缓存](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)的提供商始终完整准备。
 
 ### 受限网络 {#restricted-network}
 
@@ -359,7 +359,7 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-固定版本的 `/v1/skills` 资源、版本及内容路由使用项目 API 密钥，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。固定版本 SDK 3.13.0 在多部分内容提取过程中会丢弃单文件 tuple，因此应使用原始 HTTP 上传单个 ZIP。一次上传最多包含 500 个常规文件，并且必须恰好包含一个 `SKILL.md`；压缩后为 5 MiB，展开后为 20 MiB。[File resource semantics](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
+固定版本的 `/v1/skills` 资源、版本及内容路由使用项目 API 密钥，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。[Upload a bundle](source-files.md#upload-a-bundle) 负责 bundle 格式、上传限制和 SDK 单文件限制；[versions and metadata](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
 
 省略或传入 null 版本的引用会在 Session 创建时选择默认版本，`"latest"` 会选择最新版本，正版本号字符串则选择该版本。模板响应会保留未解析的选择器（默认版本为 `version: null`）；Session 元数据会显示 `{type, skill_id, version, name, description}`，其中版本为具体值。Session 会在其创建事务中冻结所选版本的字节和元数据；之后默认版本发生变化、源被删除或模板被更新，都无法改变这些内容。
 
@@ -382,8 +382,7 @@ Plugin 是带有 type、name 和 description 的内联 ZIP，其单个归档根�
 
 Skills 及其不可变版本是项目资源，独立于 Session 和原生安装。
 
-- 版本分配和指针变更会在所属 Skill 行上串行化。顶层 name 和 description 在同一事务中跟随默认版本；非默认上传不会更改它们。在并发上传和删除过程中，版本身份始终唯一。
-- Bundle 使用服务密码进行加密，并绑定到项目、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
+- 版本分配、默认版本变更和串行化由 [Versions and metadata](source-files.md#versions-and-metadata) 定义，Bundle 加密由 [Upload a bundle](source-files.md#upload-a-bundle) 定义。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
 - 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的模板意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
 
 内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则将其作为私有状态路径下的用户 Skills，使原生列出与本地 `~/.claude/skills` 相同的裸名称。Claude 拒绝包含 `.claude-plugin` 的 Skill，因为原生会将其作为插件加载，连同其 hooks 和 MCP 服务器。Skill 根目录不会启用 MCP 服务器，只有 [Plugin MCP](#plugin-mcp) 会启用。Codex 与本地运行一样递归扫描每个 Skill 根目录，因此嵌套的 `SKILL.md` 会注册另一个原生 Skill。原生 Harness 配置绝不会整体透传。

@@ -24,7 +24,7 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
 | `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
 | `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | `auto`: admitted | Rejected |
-| `service_tier` other than `auto` | `default`, `flex`, `priority`: admitted | Rejected | Rejected |
+| `service_tier` other than `auto` | `default`, `flex`, `priority`, `fast`: admitted | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
 | [Public token usage](./sessions-events.md) | Measured counters | Null | Null |
 
@@ -39,7 +39,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | [Structured output](./execution-tools.md#structured-output) | Admitted on all placements | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |
-| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | `live` admitted on all placements; `cached` and `enabled` rejected | Rejected |
+| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements; `enabled` is rejected together with `multi_agent` | `live` admitted on all placements; `cached` and `enabled` rejected | Rejected |
 | [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Verified: `none`, with `allowed_tools` null and `required` false only; rejected elsewhere |
 | [Environment-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted; `allowed_tools` null and `required` false only |
 | [Stdio MCP](./execution-tools.md#mcp) | Admitted: hosted, self-hosted | Admitted: hosted, self-hosted; `cwd` must be the workspace directory and `allowed_tools` null | Rejected |

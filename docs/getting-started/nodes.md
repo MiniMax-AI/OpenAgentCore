@@ -110,7 +110,7 @@ The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation
 
 ## Checkpoint recovery across nodes
 
-For microsandbox checkpoint recovery across nodes, add `--checkpoint-root /absolute/private/shared-store` to the installer command on each participating node. Mount the same private store at those paths before installation and grant only the node service account access. The default is a private node-local store and supports recovery on that node. The checkpoint store is separate from workspace storage and must never be guest-accessible; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns compatibility and retention requirements.
+For microsandbox checkpoint recovery across nodes, add `--checkpoint-root /absolute/private/shared-store` to the installer command on each participating node. Mount the same private store at those paths before installation and grant only the node service account access. The default is a private node-local store and supports recovery on that node. The [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns the store's isolation, compatibility and retention requirements.
 
 microsandbox includes the host kernel and CPU profile in its checkpoint execution compatibility. An OS or CPU-profile change can therefore make retained checkpoints incompatible even on their original node. Before maintenance, keep a node with the matching execution class and the same ready generation available for those checkpoints; otherwise their requests wait under the [checkpoint retention policy](../sandbox-provider.md#checkpoint-transfer).
 
