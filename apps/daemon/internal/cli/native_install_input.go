@@ -37,7 +37,6 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 	flags.StringVar(&o.Directory, "install-dir", "", "installation directory (default <Runtime home>/environments/<environment-id>; Runtime home is OAC_RUNTIME_HOME or ~/.oac)")
 	flags.StringVar(&o.Bundle, "bundle-dir", "", "native distribution directory (defaults beside the executable)")
 	flags.StringVar(&o.Harness, "harness", "", "comma-separated codex,claude,minimax")
-	flags.BoolVar(&o.Interactive, "interactive", false, "ask for missing installation options")
 	flags.BoolVar(&o.NonInteractive, "non-interactive", false, "require command-line options; never prompt")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -48,8 +47,8 @@ func parseNativeInstall(rc *runContext, args []string) (nativeInstallOptions, er
 		// flag errors can contain supplied values, including accidental secrets.
 		return o, errors.New("install: invalid arguments; run install --help (use --credential-file for credentials)")
 	}
-	if flags.NArg() != 0 || (o.Interactive && o.NonInteractive) {
-		return o, errors.New("install: unexpected arguments or conflicting interaction modes")
+	if flags.NArg() != 0 {
+		return o, errors.New("install: unexpected arguments")
 	}
 	if err := prepareOnboarding(&o); err != nil {
 		return o, err

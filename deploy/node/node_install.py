@@ -1187,7 +1187,7 @@ def install_system(args, token):
             root_file(SYSTEM_RECORDS / (args.installation_id + ".json"), json_text(dict(entry, pending=True)), replace=True)
         else:  # A registered node's service takes the new proxy even when the node step stops.
             refresh_service(args.installation_id, root, provider, proxy)
-        args.system, args.provider = True, provider
+        args.provider = provider
         run_as(account, prepare_service_node, args, token, helper_archive)
         if record is None:
             root_file(SYSTEM_RECORDS / (args.installation_id + ".json"), json_text(entry), replace=True)
@@ -1440,7 +1440,7 @@ def wait_ready(root, args, timeout=60):
         remaining = deadline - time.monotonic()
         if remaining > 0:
             time.sleep(min(2, remaining))
-    journal = ("sudo journalctl -u " if getattr(args, "system", False) else "journalctl --user -u ") + unit_name(args.installation_id)
+    journal = "sudo journalctl -u " + unit_name(args.installation_id)
     raise InstallError(detail + "; state and service are retained. Inspect " + journal + ", then rerun the installation command")
 
 

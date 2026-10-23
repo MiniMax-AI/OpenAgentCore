@@ -514,9 +514,8 @@ class NodeInstallTests(unittest.TestCase):
         self.assertIn("\nStatus\n  Core connection: connected\n  Sandbox Provider: Docker (ready)\n", text)
         self.assertIn("\nNode\n", text)
         self.assertIn("\nManage\n", text)
-        scope = ""
-        self.assertIn("  Status: systemctl" + scope + " status oac-node-", text)
-        self.assertIn("  Logs: journalctl" + scope + " -u oac-node-", text)
+        self.assertIn("  Status: systemctl status oac-node-", text)
+        self.assertIn("  Logs: journalctl -u oac-node-", text)
         self.assertNotIn("synthetic-once-token", text)
         self.assertNotIn("\033[", text)
 
