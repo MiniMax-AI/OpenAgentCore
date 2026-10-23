@@ -25,26 +25,11 @@ export function normalizeSandboxNodeDiagnostic(value: string): SandboxNodeDiagno
 
 /** A registered Provider kind; deploymentContract.providers holds each one's declaration. */
 export type SandboxProvider = keyof typeof deploymentContract.providers;
-/** Operator-facing copy in every supported locale. */
-export interface SandboxSetupText { readonly en: string; readonly "zh-CN": string }
-/** One value an operator enters: a secret one is the credential, any other configuration. */
-export interface SandboxSetupField { readonly name: string; readonly secret: boolean; readonly optional: boolean; readonly discovered: boolean; readonly label: SandboxSetupText; readonly help: SandboxSetupText }
-/** A named set of field values, such as one hosted service. */
-export interface SandboxSetupPreset { readonly label: string; readonly values: Readonly<Record<string, string>>; readonly credential_url?: string }
 /** What the console needs to set up one Provider, generated from the Provider's declaration. */
-export interface SandboxProviderSetup {
-  readonly label: string;
-  readonly summary: SandboxSetupText;
-  readonly cautions: readonly SandboxSetupText[];
-  readonly recommended: boolean;
-  readonly fields: readonly SandboxSetupField[];
-  readonly presets: readonly SandboxSetupPreset[];
-  readonly credential: "required" | "not_required";
-  readonly public_origin: "required" | "not_required";
-  readonly discovery: boolean;
-}
+export type SandboxProviderSetup = (typeof deploymentContract.providers)[SandboxProvider]["setup"];
+export type SandboxSetupField = SandboxProviderSetup["fields"][number];
 export function sandboxProviderSetup(provider: SandboxProvider): SandboxProviderSetup {
-  return deploymentContract.providers[provider].setup as SandboxProviderSetup;
+  return deploymentContract.providers[provider].setup;
 }
 /** Client-generated, never a Core code: a deployment write whose rejection could echo the key and is withheld. */
 export const sandboxConfigurationUnconfirmed = "sandbox_configuration_unconfirmed";
