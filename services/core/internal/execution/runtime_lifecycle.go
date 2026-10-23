@@ -467,7 +467,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if r.config.Suspension != nil && environment.Initialization == "complete" {
 		return r.enableCompute(ctx, owner)
 	}
-	if peer, err := r.registry.LookupDevice(owner.DeviceID); err != nil || peer.IsClosed() {
+	if _, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID); err != nil {
 		return nil
 	}
 	renewed, err := provider.Renew(ctx, runtimeReference(owner))

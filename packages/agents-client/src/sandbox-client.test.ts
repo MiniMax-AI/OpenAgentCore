@@ -44,11 +44,11 @@ const allocation = {
   state: "running", compute_phase: "running", compute_phase_changed_at: null, diagnostic: "", initialization: "ready", created_at: created,
 };
 const unconfigured = {
-  credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
+  credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, suspension: null };
 const docker = {
   configuration: {}, metadata: {},
   ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
-  resources: { allocations: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, specification_digest: "0".repeat(64),
+  resources: { allocations: 2, running: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, specification_digest: "0".repeat(64),
 };
 const microsandbox = {
   ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 } },
@@ -254,7 +254,7 @@ describe("hosted provider configuration", () => {
   const e2b = { api_key: "test-only-secret", template: "runtime:00000000-0000-0000-0000-000000000001" };
   it("writes E2B configuration and generation without beta headers or browser credentials", async () => {
     const deployment = {
-      ...e2bDeployment, generation: 2, resources: { allocations: 0, pending: 0 },
+      ...e2bDeployment, generation: 2, resources: { allocations: 0, running: 0, pending: 0 },
       configuration: { template: e2b.template, api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 24063 } } },
     };
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response(deployment));

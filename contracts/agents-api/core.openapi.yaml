@@ -1637,9 +1637,12 @@ definitions:
         type: integer
       pending:
         type: integer
+      running:
+        type: integer
     required:
       - allocations
       - pending
+      - running
     type: object
   deployment.Rollout:
     properties:

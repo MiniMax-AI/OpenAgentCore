@@ -118,7 +118,7 @@ test("settings content width does not constrain the reset dialog backdrop", asyn
 test("reset progress actions stay inside settings on narrow screens", async ({ page, request }) => {
   await page.setViewportSize({ width: 375, height: 844 });
   await openConsole(page, request, "settings?id=sandbox");
-  await setDeployment(request, { resources: { allocations: 1, pending: 0 }, reset: { clear: "auto", requested_at: "2026-10-13T08:00:00Z", deadline_at: "2026-10-13T09:00:00Z", forced_at: null, remaining: { busy: 1, idle: 0, cleanup: 0, on_offline_nodes: 0, offline_nodes: [] } } });
+  await setDeployment(request, { resources: { allocations: 1, running: 1, pending: 0 }, reset: { clear: "auto", requested_at: "2026-10-13T08:00:00Z", deadline_at: "2026-10-13T09:00:00Z", forced_at: null, remaining: { busy: 1, idle: 0, cleanup: 0, on_offline_nodes: 0, offline_nodes: [] } } });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   const region = page.getByRole("region", { name: "Reset in progress" });
   await expect(region).toBeVisible();

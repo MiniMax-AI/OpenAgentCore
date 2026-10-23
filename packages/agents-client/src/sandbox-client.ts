@@ -160,7 +160,7 @@ function projectDeployment(value: unknown): SandboxDeployment {
   const suspension = deployment.suspension === null ? null : members(deployment.suspension, suspensionFields);
   const configured = hasOwn(deployment, "specification");
   valid(strings(deployment, ["installation_id", "core_url"]) && (deployment.provider === "" || (typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider))) && isOneOf(deploymentModeValues, deployment.mode) &&
-    [deployment.owner_epoch, deployment.generation, resources.allocations, resources.pending].every(isNonnegativeInteger) &&
+    [deployment.owner_epoch, deployment.generation, resources.allocations, resources.running, resources.pending].every(isNonnegativeInteger) &&
     (suspension === null || [suspension.idle_seconds, suspension.retention_seconds].every(isNonnegativeInteger)) &&
     configured === hasOwn(deployment, "specification_digest") && (!configured || (typeof deployment.specification_digest === "string" && deployment.specification_digest !== "")));
   return {

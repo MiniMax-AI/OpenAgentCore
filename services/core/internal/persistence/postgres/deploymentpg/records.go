@@ -75,7 +75,7 @@ func record(d sqlc.RuntimeDeployment, cipher *credentialcrypto.Cipher, open bool
 }
 
 func snapshot(row sqlc.GetSandboxDeploymentSnapshotRow) (deployment.Snapshot, error) {
-	result := deployment.Snapshot{Record: record(row.RuntimeDeployment, nil, false), Resources: deployment.Resources{Allocations: row.Allocations, Pending: row.Pending}}
+	result := deployment.Snapshot{Record: record(row.RuntimeDeployment, nil, false), Resources: deployment.Resources{Allocations: row.Allocations, Running: row.Running, Pending: row.Pending}}
 	if err := json.Unmarshal(row.Rollout, &result.Rollout); err != nil {
 		return deployment.Snapshot{}, err
 	}

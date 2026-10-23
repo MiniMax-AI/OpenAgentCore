@@ -316,7 +316,7 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
 
 function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
   if (fleet?.deployment.mode !== "direct") return null;
-  return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending };
+  return { running: fleet.deployment.resources.running, pending: fleet.deployment.resources.pending };
 }
 
 /** Core and its sandbox nodes (or the Provider's cloud) as an inventory; each row opens its page. */

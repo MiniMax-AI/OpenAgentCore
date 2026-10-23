@@ -209,8 +209,9 @@ export type DeploymentMode = (typeof deploymentModeValues)[number];
 export interface DeploymentResources {
   allocations: number;
   pending: number;
+  running: number;
 }
-export const deploymentResourcesFields = ["allocations", "pending"] as const;
+export const deploymentResourcesFields = ["allocations", "pending", "running"] as const;
 export interface DeploymentSpec {
   resources: SandboxResources;
   workspace?: Declaration;
