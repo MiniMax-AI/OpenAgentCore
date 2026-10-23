@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 )
 
@@ -90,7 +91,7 @@ type DeviceStorage interface {
 	TouchDevice(ctx context.Context, device string) (bool, error)
 	// TouchAuthenticatedDevice records that the device was seen with the
 	// credential and reports whether that credential still has authority.
-	TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []runtimedevice.SupportedAgentKind) (bool, error)
+	TouchAuthenticatedDevice(ctx context.Context, device, credentialHash string, kinds []proto.SupportedAgentKind) (bool, error)
 	// WithEnrollment authenticates the executor credential for the
 	// Environment, then runs apply in the transaction of the Environment's
 	// Session, with the Environment and what the Session lock shows. A

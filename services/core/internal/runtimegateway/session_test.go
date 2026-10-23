@@ -374,26 +374,26 @@ func TestSession_HeartbeatPersistsSupportedAgentKinds(t *testing.T) {
 	if len(got.SupportedAgentKinds) != 3 {
 		t.Fatalf("SupportedAgentKinds len = %d, want 3: %#v", len(got.SupportedAgentKinds), got.SupportedAgentKinds)
 	}
-	byKind := map[string]runtimedevice.SupportedAgentKind{}
+	byKind := map[string]proto.SupportedAgentKind{}
 	for _, info := range got.SupportedAgentKinds {
 		byKind[info.Kind] = info
 	}
 	claude := byKind["fake_alpha"]
-	if !claude.Available || claude.Version != "1.2.3" || !claude.Capabilities.Streaming || !claude.Capabilities.Usage || !claude.Capabilities.Resume {
+	if !claude.Available || claude.Version != "1.2.3" || !claude.Capabilities.Streaming.IsSupported() || !claude.Capabilities.Usage.IsSupported() || !claude.Capabilities.Resume.IsSupported() {
 		t.Fatalf("fake_alpha descriptor not converted: %#v", claude)
 	}
 	fake_beta := byKind["fake_beta"]
-	if fake_beta.Available || fake_beta.Version != "missing" || !fake_beta.Capabilities.Streaming {
+	if fake_beta.Available || fake_beta.Version != "missing" || !fake_beta.Capabilities.Streaming.IsSupported() {
 		t.Fatalf("fake_beta descriptor not converted: %#v", fake_beta)
 	}
-	if !byKind["codex"].Capabilities.ExecutionControls || claude.Capabilities.ExecutionControls || fake_beta.Capabilities.ExecutionControls || !byKind["codex"].Capabilities.ToolObservations || claude.Capabilities.ToolObservations || fake_beta.Capabilities.ToolObservations || !byKind["codex"].Capabilities.SubagentControl || claude.Capabilities.SubagentControl || fake_beta.Capabilities.SubagentControl || !byKind["codex"].Capabilities.EnvironmentNone || claude.Capabilities.EnvironmentNone || fake_beta.Capabilities.EnvironmentNone || !byKind["codex"].Capabilities.MessageItems {
+	if !byKind["codex"].Capabilities.ExecutionControls.IsSupported() || claude.Capabilities.ExecutionControls.IsSupported() || fake_beta.Capabilities.ExecutionControls.IsSupported() || !byKind["codex"].Capabilities.ToolObservations.IsSupported() || claude.Capabilities.ToolObservations.IsSupported() || fake_beta.Capabilities.ToolObservations.IsSupported() || !byKind["codex"].Capabilities.SubagentControl.IsSupported() || claude.Capabilities.SubagentControl.IsSupported() || fake_beta.Capabilities.SubagentControl.IsSupported() || !byKind["codex"].Capabilities.EnvironmentNone.IsSupported() || claude.Capabilities.EnvironmentNone.IsSupported() || fake_beta.Capabilities.EnvironmentNone.IsSupported() || !byKind["codex"].Capabilities.MessageItems.IsSupported() {
 		t.Fatalf("capabilities not preserved: %#v", byKind)
 	}
-	if !byKind["codex"].Capabilities.MCPHTTPTools || claude.Capabilities.MCPHTTPTools || fake_beta.Capabilities.MCPHTTPTools {
+	if !byKind["codex"].Capabilities.MCPHTTPTools.IsSupported() || claude.Capabilities.MCPHTTPTools.IsSupported() || fake_beta.Capabilities.MCPHTTPTools.IsSupported() {
 		t.Fatalf("HTTP MCP capability not preserved: %#v", byKind)
 	}
 	codex, found, known := sess.AgentKindStatus("codex")
-	if !found || !known || !codex.Capabilities.MCPHTTPTools {
+	if !found || !known || !codex.Capabilities.MCPHTTPTools.IsSupported() {
 		t.Fatalf("capabilities absent from live session: %#v", codex)
 	}
 }

@@ -35,7 +35,7 @@ func TestStructuredOutputDispatchRechecksOperationQualification(t *testing.T) {
 	peer, _ := h.registry.LookupDevice(h.device.ID)
 	for deadline := time.Now().Add(3 * time.Second); ; {
 		info, found, known := peer.AgentKindStatus("fixture_harness")
-		if known && found && info.Capabilities.StructuredOutput {
+		if known && found && info.Capabilities.StructuredOutput.IsSupported() {
 			break
 		}
 		if time.Now().After(deadline) {

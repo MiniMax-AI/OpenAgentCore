@@ -22,7 +22,7 @@ func TestExecutionPersistsMessageObservations(t *testing.T) {
 			t.Fatal(err)
 		}
 		info, _, _ := peer.AgentKindStatus("codex")
-		if info.Capabilities.MessageItems {
+		if info.Capabilities.MessageItems.IsSupported() {
 			break
 		}
 		if time.Now().After(deadline) {

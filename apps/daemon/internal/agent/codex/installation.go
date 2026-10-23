@@ -21,7 +21,7 @@ func Installation() agent.Installation {
 		}
 		return filepath.Join(dir, "bin", name)
 	}
-	return agent.Installation{AgentKind: "codex", Version: declaration.Declaration.Native.Version, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" },
+	return agent.Installation{AgentKind: declaration.Declaration.Kind, Version: declaration.Declaration.Native.Version, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" || runtime.GOOS == "windows" },
 		Environment: func(dir, node string) map[string]string {
 			return map[string]string{binaryEnv: binary(dir)}
 		},

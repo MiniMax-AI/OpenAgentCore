@@ -114,7 +114,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				peer, err = registry.LookupDevice(owner.DeviceID)
 				if err == nil {
 					info, _, known := peer.AgentKindStatus("codex")
-					if known && info.Capabilities.FunctionTools {
+					if known && info.Capabilities.FunctionTools.IsSupported() {
 						break
 					}
 				}

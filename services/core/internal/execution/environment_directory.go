@@ -129,8 +129,8 @@ func (w *Worker) directoryDeviceReady(ctx context.Context, id, engine string, pl
 		return false
 	}
 	info, found, known := peer.AgentKindStatus(engine)
-	placementReady := info.Capabilities.LocalEnvironment
-	return known && found && info.Available && placementReady && (!prepare || (info.Capabilities.Preparation && info.Capabilities.WorkspaceReadPreparation))
+	placementReady := info.Capabilities.LocalEnvironment.IsSupported()
+	return known && found && info.Available && placementReady && (!prepare || (info.Capabilities.Preparation.IsSupported() && info.Capabilities.WorkspaceReadPreparation.IsSupported()))
 }
 
 func readEnvironmentDirectory(ctx context.Context, peer *runtimegateway.Session, request proto.WorkspaceReadPayload) directoryReadResult {

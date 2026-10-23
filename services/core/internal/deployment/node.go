@@ -70,7 +70,7 @@ type Node struct {
 type NodeUpdate struct {
 	Name      string `json:"name" binding:"required"`
 	MaxActive int    `json:"max_active" binding:"required"`
-	// Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+	// A Provider that does not checkpoint never suspends, so Core replaces this with max_active; a Provider that checkpoints uses both limits.
 	MaxRetained int `json:"max_retained"`
 }
 
