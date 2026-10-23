@@ -1,6 +1,6 @@
 import type { SavedAgent } from "@oac/agents-client";
 import { ArrowLeft, Bot, ListTree, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useFailureToast } from "../../components/Toast";
@@ -12,7 +12,7 @@ import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatCompact, formatDateTime, formatInteger, formatPercent, formatRelative, MISSING } from "../../lib/format";
 import { harnessNames, protocolNames } from "../../lib/harness-labels";
-import { admin, CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
+import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import "./AgentCatalog.css";
 import { type ProjectSummary } from "../../lib/admin-view";
 import { refreshAgentSummaries, useAgentSummaries } from "./agent-summaries";

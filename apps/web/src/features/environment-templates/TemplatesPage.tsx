@@ -11,7 +11,7 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime, MISSING } from "../../lib/format";
-import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
+import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import { TemplateDetailPage } from "./TemplateDetail";
 import { filterTemplates, templateName } from "./template-name";
 import "./EnvironmentTemplatesView.css";

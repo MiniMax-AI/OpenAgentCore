@@ -15,7 +15,6 @@ function daemonUrl(publicUrl) {
 
 export function buildDemo(now = Math.floor(Date.now() / 1000), publicUrl = "https://core.example.com") {
   seed = 42;
-  const models = ["gpt-5.1-codex", "claude-sonnet-5", "MiniMax-M2", "gpt-5.1-mini"];
   const agents = agentDefinitions.map((definition, index) => ({
     id: `agent_${index + 1}${uuid().slice(0, 6)}`, object: "agent", model: definition.model, name: definition.name, instructions: definition.instructions,
     metadata: definition.metadata, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: definition.reasoning, service_tier: "auto",

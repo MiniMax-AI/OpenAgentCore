@@ -27,10 +27,6 @@ export function tickIndices(length: number, maximum = 6): number[] {
   return indices;
 }
 
-export function formatCompactNumber(value: number, locale?: string): string {
-  return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: value >= 1000 ? 1 : 0 }).format(value);
-}
-
 export function formatBucketTime(seconds: number, bucketSeconds: number, spanSeconds: number, locale?: string): string {
   const date = new Date(seconds * 1000);
   if (spanSeconds > 36 * 3600) {

@@ -124,11 +124,6 @@ export function keyFlowReducer(flow: KeyFlow, event: KeyFlowEvent): KeyFlow {
   }
 }
 
-/** The plaintext currently held by a flow, if any. */
-export function pendingPlaintext(flow: KeyFlow): AdminIssuedAPIKey | null {
-  return flow.step === "issued" ? flow.issued : null;
-}
-
 /** Active keys first, then newest first. */
 export function sortKeys(keys: readonly AdminAPIKey[]): AdminAPIKey[] {
   return [...keys].sort((a, b) => Number(a.revoked_at !== null) - Number(b.revoked_at !== null) || Date.parse(b.created_at) - Date.parse(a.created_at) || a.id.localeCompare(b.id));

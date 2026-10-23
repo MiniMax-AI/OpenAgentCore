@@ -15,8 +15,6 @@ import {
 } from "./generated/core-api";
 import type { ReadOptions } from "./types";
 
-/** Checked against Core's shared node-diagnostics.json fixture. */
-export const sandboxNodeDiagnostics = nodeDiagnosticCodeValues;
 /** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. The client reads an unknown future value as provider_unavailable. */
 export type SandboxNodeDiagnostic = NodeDiagnosticCode;
 

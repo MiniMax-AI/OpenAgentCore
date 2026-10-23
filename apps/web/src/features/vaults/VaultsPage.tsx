@@ -11,7 +11,7 @@ import { useConsoleNavigation } from "../../lib/console-navigation";
 import { coreError } from "../../lib/core-error";
 import { useDeleteFlow } from "../../lib/delete-flow";
 import { formatDateTime } from "../../lib/format";
-import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, readAllPages, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
+import { CreatorCell, CreatorHeading, forgetCreators, ProjectFilter, ProjectName, projectClient, useCreators, useProjectCollection, useProjects, type Owned } from "../../lib/projects";
 import "./vaults.css";
 import { collections } from "../../lib/queries";
 import { DetailSkeleton, TableSkeleton } from "../../components/Skeleton";
@@ -148,7 +148,7 @@ function VaultDetail({ projectId, vaultId }: { projectId: string; vaultId: strin
   const { t: tPages } = useTranslation("pages");
   const { t: tCommon } = useTranslation();
   const locale = i18n.resolvedLanguage;
-  const { navigate, back: goBack } = useConsoleNavigation();
+  const { back: goBack } = useConsoleNavigation();
   const { byId } = useProjects();
   const project = byId.get(projectId);
   // The Vault opens from the cache (or its list row) at once; its Credentials read beside it.

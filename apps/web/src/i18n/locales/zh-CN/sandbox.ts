@@ -100,7 +100,6 @@ export const sandbox = {
   "Sandbox state changed. Close this dialog and review the current state.": "沙箱状态已改变。请关闭对话框并查看当前状态。",
   "Node state could not be read": "无法读取节点状态",
   "Node enrollment is paused while reset is in progress.": "重置过程中暂停注册节点。",
-  "Reset the sandbox deployment before changing this configuration.": "请先重置沙箱部署，再更改此配置。",
   "Core records these sandboxes as suspended. Their next Turn requests a resume when compatible capacity is available. They count toward the retained limit, not the active one.": "Core 将这些沙箱记录为已挂起。下一个 Turn 会在兼容容量可用时请求恢复。它们占用保留名额，不占活跃名额。",
   "The most sandboxes this node holds at once: starting, running and suspended.": "这台节点同时最多容纳的沙箱数，包括启动中、运行中和已挂起的。",
   "Edit node": "编辑节点",

@@ -5,10 +5,6 @@ import { appendCollectionPage } from "../../lib/collection-pagination";
 
 export const SKILLS_PAGE_SIZE = 20;
 
-export function isAbortError(error: unknown): boolean {
-  return (error instanceof DOMException || error instanceof Error) && error.name === "AbortError";
-}
-
 /** Core rejects deleting the default while other versions remain (400 invalid_value on `version`). */
 export function isDefaultVersionConflict(error: unknown): boolean {
   return error instanceof AgentCoreError && error.status === 400 && error.code === "invalid_value" && error.param === "version";
@@ -87,17 +83,6 @@ export async function downloadSkillArchive(
     : skillArchiveFilename(skill.name, skill.default_version);
   save(content.data, filename);
   return filename;
-}
-
-/** Reads the next Skill page (newest first) and appends it to the loaded rows. */
-export async function readSkillsPage(
-  core: Pick<ProjectClient, "listSkills">,
-  loaded: readonly Skill[],
-  after: string | undefined,
-  signal?: AbortSignal,
-): Promise<{ values: Skill[]; nextAfter: string | null }> {
-  const page = await core.listSkills({ after, limit: SKILLS_PAGE_SIZE, order: "desc", signal });
-  return appendCollectionPage(loaded, page, after);
 }
 
 /** Reads the next version page (highest version first) and appends it to the loaded rows. */

@@ -211,30 +211,6 @@ a {
   text-decoration-skip-ink: auto;
 }
 
-/* theme switches swap every token at once — freeze transitions so the flip
- * is one clean repaint instead of hundreds of mismatched color fades */
-.theme-switching *,
-.theme-switching *::before,
-.theme-switching *::after {
-  transition: none !important;
-}
-
-/* touch: :hover sticks after a tap, so neutralize row/header hovers there */
-@media (hover: none) {
-  .records-row:hover > .records-cell {
-    background: transparent;
-  }
-
-  .records-row:hover > td.is-colsel {
-    background: color-mix(in srgb, var(--accent) 4%, var(--surface));
-  }
-
-  .records-header-button:hover {
-    background: transparent;
-    color: var(--ink-2);
-  }
-}
-
 /* Tailwind v4 resets buttons to cursor:default — anything
  * clickable must invite the click */
 button:not(:disabled),
@@ -256,73 +232,6 @@ textarea:focus-visible,
 select:focus-visible,
 [contenteditable]:focus-visible {
   outline: none;
-}
-
-.animated-underline {
-  position: relative;
-  display: inline-block;
-}
-
-.animated-underline::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 1px;
-  content: "";
-  background: currentColor;
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 280ms var(--ease-link);
-}
-
-a:hover .animated-underline::after,
-a:focus-visible .animated-underline::after {
-  transform: scaleX(1);
-}
-
-/* ══════════════════════════════════════════════════════════
- * COMPONENT-SPECIFIC — StreamingText / ContextCards
- * Favicon source avatars.
- * Copy this block only alongside StreamingText / ContextCards; it is not part of the
- * generic foundation above.
- * ══════════════════════════════════════════════════════════ */
-.source-avatar {
-  box-shadow: 0 0 0 1px oklch(0.21 0.034 263.436 / 0.1);
-}
-
-.dark .source-avatar {
-  box-shadow: 0 0 0 1px oklch(1 0 0 / 0.08);
-}
-
-/* ── primitive spacing system ─────────────────────────────
- * Shared optical offsets for small demo cards. Use these
- * instead of hand-tuning 10/12/14px per component.
- */
-
-.primitive-card-pad {
-  padding: 12px;
-}
-
-.primitive-card-bar {
-  padding: 10px 12px;
-}
-
-.primitive-card-footer {
-  padding: 10px;
-}
-
-.primitive-table-cell {
-  padding: 10px 12px;
-}
-
-.primitive-icon-button {
-  display: inline-flex;
-  width: 28px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-control);
 }
 
 /* ── shared keyframes ─────────────────────────────────── */
@@ -347,114 +256,6 @@ a:focus-visible .animated-underline::after {
   }
 }
 
-.home-reveal {
-  will-change: opacity, transform, filter;
-}
-
-
-/* ── filter table electric status colors ─────────────────── */
-
-/* ══════════════════════════════════════════════════════════
- * COMPONENT-SPECIFIC — FilterTable
- * Electric status-pill colors.
- * Copy this block only alongside FilterTable; it is not part of the
- * generic foundation above.
- * ══════════════════════════════════════════════════════════ */
-.filter-status-todo,
-.filter-status-progress,
-.filter-status-done {
-  border: 1px solid transparent;
-}
-
-/* ══════════════════════════════════════════════════════════
- * COMPONENT-SPECIFIC — InsightCards
- * Liveline chart tooltip + cursor.
- * Copy this block only alongside InsightCards; it is not part of the
- * generic foundation above.
- * ══════════════════════════════════════════════════════════ */
-.insight-chart-stage {
-  overflow: hidden;
-}
-
-.insight-chart-cursor {
-  position: absolute;
-  z-index: 4;
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--ink);
-  opacity: 0.26;
-  pointer-events: none;
-}
-
-.insight-chart-tooltip-anchor {
-  position: absolute;
-  z-index: 5;
-  top: 8px;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.insight-chart-tooltip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 5px 9px;
-  border: 1px solid var(--line-strong);
-  border-radius: 8px;
-  color: var(--tooltip-fg);
-  background: var(--tooltip-bg);
-  box-shadow: var(--shadow-overlay);
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.insight-chart-tooltip-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.insight-chart-tooltip-dot {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 8px;
-  border-radius: 50%;
-}
-
-/* Status pills share the same base-hue → color-mix derivation as .records-tag,
- * so both components stay consistent across light and dark. */
-.filter-status-todo {
-  --tag-base: oklch(0.757 0.153 66.401);
-}
-.filter-status-progress {
-  --tag-base: oklch(0.671 0.118 219.351);
-}
-.filter-status-done {
-  --tag-base: oklch(0.652 0.131 162.865);
-}
-
-.filter-status-todo,
-.filter-status-progress,
-.filter-status-done {
-  color: color-mix(in srgb, var(--tag-base) 92%, var(--ink));
-  background: color-mix(in srgb, var(--tag-base) 20%, var(--surface));
-  border-color: color-mix(in srgb, var(--tag-base) 34%, var(--surface));
-}
-
-/* Dark mode — a richer, saturated same-hue fill
- * with bright same-hue text and no visible border (light mode keeps the soft
- * tinted pastels above). Applies to both the records grid and status pills. */
-.dark .records-tag,
-.dark .filter-status-todo,
-.dark .filter-status-progress,
-.dark .filter-status-done {
-  color: color-mix(in srgb, var(--tag-base) 86%, white);
-  background: color-mix(in srgb, var(--tag-base) 34%, var(--surface));
-  border-color: color-mix(in srgb, var(--tag-base) 34%, var(--surface));
-}
-
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -474,39 +275,6 @@ a:focus-visible .animated-underline::after {
   }
 }
 
-/* ── StreamText primitive ─────────────────────────────────
- * Fast character reveal: the newest few characters carry a
- * soft, masked blur so the leading edge resolves smoothly as
- * text flows in. The caret holds solid while streaming, then
- * blinks once the string settles. */
-/* ══════════════════════════════════════════════════════════
- * COMPONENT-SPECIFIC — StreamText
- * The streaming caret + tail.
- * Copy this block only alongside StreamText; it is not part of the
- * generic foundation above.
- * ══════════════════════════════════════════════════════════ */
-.stream-tail {
-  filter: blur(1.6px);
-  -webkit-mask-image: linear-gradient(to right, oklch(0 0 0) 20%, oklch(0 0 0 / 0.2));
-  mask-image: linear-gradient(to right, oklch(0 0 0) 20%, oklch(0 0 0 / 0.2));
-}
-
-.stream-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1.05em;
-  margin-left: 1.5px;
-  translate: 0 -0.5px;
-  border-radius: 1px;
-  background: var(--ink);
-  vertical-align: text-bottom;
-  animation: caret-blink 1s step-end infinite;
-}
-
-.stream-caret.is-streaming {
-  animation: none;
-}
-
 @keyframes caret-blink {
   0%,
   100% {
@@ -514,17 +282,6 @@ a:focus-visible .animated-underline::after {
   }
   50% {
     opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .stream-caret {
-    animation: none;
-  }
-  .stream-tail {
-    filter: none;
-    -webkit-mask-image: none;
-    mask-image: none;
   }
 }
 
