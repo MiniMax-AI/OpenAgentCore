@@ -127,7 +127,6 @@ export const sessions = {
     observed: "观测时间",
     range: "时间范围",
     ranges: { "1h": "1 小时", "6h": "6 小时", "24h": "24 小时" },
-    cores: "{{used}} / {{capacity}} 核",
     observationFailed: "无法加载 Runtime 观测：{{reason}}",
     historyUnavailable: "Core 没有保留此 Session 的 Runtime 历史。",
     historyFailed: "无法加载 Runtime 历史：{{reason}}",

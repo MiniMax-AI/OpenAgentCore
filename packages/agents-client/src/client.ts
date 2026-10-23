@@ -951,7 +951,6 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     cpu = {
       usage_seconds_total: nullableRuntimeNumber(value.cpu.usage_seconds_total),
       capacity_cores: nullableRuntimeNumber(value.cpu.capacity_cores),
-      usage_cores: nullableRuntimeNumber(value.cpu.usage_cores),
       utilization_ratio: nullableRuntimeNumber(value.cpu.utilization_ratio),
     };
     if (

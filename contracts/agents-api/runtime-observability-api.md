@@ -52,7 +52,6 @@ The list has one row for every Session of every Project that is not deleted, inc
         "cpu": {
           "usage_seconds_total": 482.75,
           "capacity_cores": 2.0,
-          "usage_cores": null,
           "utilization_ratio": null
         },
         "memory": {
@@ -126,7 +125,6 @@ All fields are finite nonnegative numbers or null. Zero is an observed zero; nul
 | --- | --- |
 | `usage_seconds_total` | Cumulative CPU seconds of the current compute incarnation (Docker, microsandbox). |
 | `capacity_cores` | Configured CPU capacity, greater than zero. |
-| `usage_cores` | Always null. |
 | `utilization_ratio` | Provider-reported share of `capacity_cores` (E2B), not clamped; null for providers that report cumulative CPU time. |
 
 ### `memory`

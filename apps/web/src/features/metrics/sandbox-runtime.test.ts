@@ -59,9 +59,8 @@ describe("hosted Runtime projections", () => {
   it("sums only reported CPU and memory and counts lifecycle states", () => {
     expect(hostedRuntimeUsage(load.observations)).toEqual({
       hosted: 3, active: 1, sleeping: 1, pending: 1, observed: 2,
-      cpuUsageCores: 0.5, cpuCapacityCores: 2, memoryUsageBytes: 100, memoryLimitBytes: 400,
+      cpuCapacityCores: 2, memoryUsageBytes: 100, memoryLimitBytes: 400,
     });
-    expect(hostedRuntimeUsage([load.observations[1]!]).cpuUsageCores).toBeNull();
   });
 
   it("places each Runtime on its host and derives uptime only from a current sample", () => {

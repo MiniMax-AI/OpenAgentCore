@@ -23,7 +23,7 @@ import { TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
-import { formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatPercent, MISSING } from "../../lib/format";
+import { formatBytes, formatClock, formatCompact, formatDuration, formatInteger, formatPercent, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
 import { coreError } from "../../lib/core-error";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, RuntimeDurableHistoryIncompleteError, type RuntimeDurableRange } from "../dashboard/runtime-history";
@@ -241,7 +241,6 @@ function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: R
               active: formatInteger(usage.active, locale),
               n: formatInteger(usage.hosted, locale),
               sleeping: formatInteger(usage.sleeping, locale),
-              cpu: usage.cpuUsageCores === null ? MISSING : t("sandbox.cores", { value: formatCores(usage.cpuUsageCores, locale) }),
               memory: usage.memoryUsageBytes === null ? MISSING : formatBytes(usage.memoryUsageBytes),
             })}
           </span>
@@ -318,12 +317,7 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
                   {showNode ? <td><NodeLink node={row.node} /></td> : null}
                   {sampleGap ? <td colSpan={2} className="table-muted">{t(`sandbox.reason.${sampleGap}`)}</td> : <>
                   <td>
-                    {cpu?.usage_cores != null ? (
-                      <span className="table-meter">
-                        <Meter value={cpu.usage_cores} limit={cpu.capacity_cores} label={t("sandbox.cpu")} />
-                        <span>{formatCores(cpu.usage_cores, locale)} / {t("sandbox.cores", { value: formatCores(cpu.capacity_cores, locale) })}</span>
-                      </span>
-                    ) : cpu?.utilization_ratio != null ? (
+                    {cpu?.utilization_ratio != null ? (
                       // Providers that report only a utilization ratio: show it as a share of the sandbox's CPU.
                       <span className="table-meter">
                         <Meter value={cpu.utilization_ratio} limit={1} label={t("sandbox.cpu")} />

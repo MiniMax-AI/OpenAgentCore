@@ -247,8 +247,8 @@ export const metrics = {
       historyBudget: "Charts cover at most {{limit}} Sessions.",
       historyMixed: "Sessions returned different bucket widths.",
     },
-    runtimeMeta: "{{active}} of {{n}} active · CPU {{cpu}} · memory {{memory}}",
-    runtimeMetaSuspended: "{{active}} of {{n}} active · {{sleeping}} suspended · CPU {{cpu}} · memory {{memory}}",
+    runtimeMeta: "{{active}} of {{n}} active · memory {{memory}}",
+    runtimeMetaSuspended: "{{active}} of {{n}} active · {{sleeping}} suspended · memory {{memory}}",
     reason: {
       allocation_pending: "Allocation pending",
       runtime_not_running: "Not running",

@@ -136,7 +136,7 @@ function runtimeObservation(overrides: Record<string, unknown> = {}): Record<str
     cpu: {
       usage_seconds_total: 0,
       capacity_cores: 2,
-      usage_cores: null,
+     
       utilization_ratio: null,
     },
     memory: { usage_bytes: 0, limit_bytes: 1024 },
@@ -2771,13 +2771,13 @@ describe("OpenAIAgentsClient", () => {
     ["invalid lifecycle state", () => ({ ...runtimeObservation(), lifecycle_state: "paused" })],
     ["invalid mode/instance", () => ({ ...runtimeObservation(), mode: "none" })],
     ["negative CPU", () => ({ ...runtimeObservation(), cpu: {
-      usage_seconds_total: -1, capacity_cores: 2, usage_cores: null, utilization_ratio: null,
+      usage_seconds_total: -1, capacity_cores: 2, utilization_ratio: null,
     } })],
     ["non-numeric CPU", () => ({ ...runtimeObservation(), cpu: {
-      usage_seconds_total: "NaN", capacity_cores: 2, usage_cores: null, utilization_ratio: null,
+      usage_seconds_total: "NaN", capacity_cores: 2, utilization_ratio: null,
     } })],
     ["zero CPU capacity", () => ({ ...runtimeObservation(), cpu: {
-      usage_seconds_total: 1, capacity_cores: 0, usage_cores: null, utilization_ratio: null,
+      usage_seconds_total: 1, capacity_cores: 0, utilization_ratio: null,
     } })],
     ["unsafe memory", () => ({ ...runtimeObservation(), memory: {
       usage_bytes: Number.MAX_SAFE_INTEGER + 1, limit_bytes: 1024,

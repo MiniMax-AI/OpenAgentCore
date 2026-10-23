@@ -187,7 +187,7 @@ func TestAdminRuntimeObservationProjectsReportedUtilizationAndDisk(t *testing.T)
 	}
 	raw, _ := json.Marshal(value)
 	for _, want := range []string{
-		`"cpu":{"usage_seconds_total":null,"capacity_cores":2,"usage_cores":null,"utilization_ratio":0.1955}`,
+		`"cpu":{"usage_seconds_total":null,"capacity_cores":2,"utilization_ratio":0.1955}`,
 		`"memory":{"usage_bytes":183836672,"limit_bytes":2079141888}`,
 		`"disk":{"usage_bytes":1593188352,"limit_bytes":23511863296}`,
 	} {

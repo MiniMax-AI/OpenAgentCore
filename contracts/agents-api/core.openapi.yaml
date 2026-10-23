@@ -2658,10 +2658,6 @@ definitions:
         minimum: 5e-324
         type: number
         x-nullable: true
-      usage_cores:
-        minimum: 0
-        type: number
-        x-nullable: true
       usage_seconds_total:
         minimum: 0
         type: number
@@ -2672,7 +2668,6 @@ definitions:
         x-nullable: true
     required:
       - capacity_cores
-      - usage_cores
       - usage_seconds_total
       - utilization_ratio
     type: object
