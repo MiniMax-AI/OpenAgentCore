@@ -538,18 +538,20 @@ test("thinking stays in the conversation, streams a preview, and restores comple
   await expect(thinking.getByRole("button", { name: "正在思考…", exact: true })).toBeVisible();
   await expect(thinking.getByText("先检查约束。", { exact: true }).first()).toBeVisible();
   await expect(page.locator("details").filter({ has: thinking })).toHaveCount(0);
-  await request.post("http://127.0.0.1:18181/reasoning-output?phase=done");
+  await request.post("http://127.0.0.1:18181/reasoning-output?phase=done&long=1");
   const toggle = thinking.getByRole("button", { name: "思考过程", exact: true });
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await toggle.click();
-  await expect(thinking.locator("div")).toHaveText("已核对约束。\n\n第二步完成。");
+  await page.waitForResponse((response) => response.url().includes("/items?") && response.ok());
+  await expect(toggle).toBeInViewport();
+  await expect(thinking.locator("div")).toHaveText("已核对约束。\n\n" + "第二步完成。".repeat(500));
   await page.reload();
   await expect(thinking).toHaveCount(1);
   await expect(toggle).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await toggle.press("Enter");
   await expect(thinking.locator("div")).toBeVisible();
-  await expect(thinking.locator("div")).toHaveText("已核对约束。\n\n第二步完成。");
+  await expect(thinking.locator("div")).toHaveText("已核对约束。\n\n" + "第二步完成。".repeat(500));
 });
 
 test("thinking without a replayed baseline immediately recovers authoritative history", async ({ page, request }) => {

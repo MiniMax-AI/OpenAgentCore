@@ -190,6 +190,10 @@ export function SessionDetail({
               )}
               <div
                 ref={setViewportElement}
+                onClickCapture={(event) => {
+                  if ((event.target as Element).closest("button[aria-expanded], summary"))
+                    followOutput.current = false;
+                }}
                 onScroll={(event) => {
                   const element = event.currentTarget;
                   followOutput.current =

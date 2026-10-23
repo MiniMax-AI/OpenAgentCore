@@ -90,7 +90,7 @@ createServer(async (req, res) => {
       summary("part.added", { part: { type: "summary_text", text: "" } });
       summary("text.delta", { delta: "先检查约束。" });
     } else if (phase === "done") {
-      reasoningItem.summary = [{ type: "summary_text", text: "已核对约束。" }, { type: "summary_text", text: "第二步完成。" }];
+      reasoningItem.summary = [{ type: "summary_text", text: "已核对约束。" }, { type: "summary_text", text: "第二步完成。".repeat(url.searchParams.has("long") ? 500 : 1) }];
       summary("text.done", { text: reasoningItem.summary[0].text });
       summary("part.done", { part: reasoningItem.summary[0], status: null });
       summary("part.added", { summary_index: 1, part: { type: "summary_text", text: "" } });
