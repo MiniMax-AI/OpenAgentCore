@@ -69,7 +69,7 @@ Checks run in this order: request validation, Session lookup, retry lookup, the 
 | Input the Turn cannot accept in its state, such as a result after cancellation or after its Turn ended without a stored result | 409 `conflict_error` | "The Turn cannot accept this input in its current state." |
 | A result that differs from the call's stored result, before or after its Turn ends | 409 `conflict_error` | "The tool call already has a different result." |
 | The same `Idempotency-Key` with a different batch | 409 `idempotency_conflict` | "This idempotency key was used with different input." |
-| A result whose `call_id` names no function call of this Session | 400 `invalid_request_error`, param null | "Unknown pending tool call." |
+| A result whose `call_id` names no function call of this Session | 400 `invalid_request_error`, param null | "Unknown pending tool call: {call_id}" |
 | A result for a call of this Session whose `turn_id` names another Turn, an unknown Turn ID or a value that is not a Turn ID | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
 | A missing, malformed or foreign Session | 404 `not_found_error` | "Resource not found." |
 | A reserved batch whose five-minute deadline passed before a Turn started | 409 `environment_input_expired` | "The environment input deadline elapsed before admission." |

@@ -89,7 +89,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 - A function call the native Harness abandons, such as a Subagent call dropped when the root closes or interrupts the child or a MiniMax Code call past its 120 s timeout, is withdrawn: it stops being a required action and a later result for it returns 409 `conflict_error`. The official API has no withdrawal.
 - Attaching to the stream mid-Turn sends no catch-up Item snapshots.
 - The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
-- Error messages omit the call and executor IDs that official messages include.
+- Error messages omit the call and executor IDs that official messages include, except that the unknown tool call message names its `call_id`.
+- A failed Turn reports the model failure categories under their official names and `sandbox_error` for Runtime or sandbox failures in the execution environment. Every other Core failure, such as a missing model provider, a rejected input or a storage failure, reports `internal_error`. The message is a fixed sentence per code and never carries native text. Subagent Turns always report `internal_error`.
 - An empty text part beside other text is accepted and stored.
 - Empty input returns 400 `invalid_request` with a generic message and a null param; the official response is `invalid_request_error` with param `input`.
 - Session usage is available as soon as every root Turn has settled; official reads lag by seconds.

@@ -16,7 +16,8 @@ assert source.get("vcs_info", {}).get("commit_id") == pin["commit"]
 
 # Expected (type, code, message) by status; None skips the message check.
 MISSING = ("not_found_error", "not_found_error", "Resource not found.")
-UNKNOWN_CALL = ("invalid_request_error", "invalid_request_error", "Unknown pending tool call.")
+def unknown_call(call_id):
+    return ("invalid_request_error", "invalid_request_error", f"Unknown pending tool call: {call_id}")
 OTHER_TURN = ("invalid_request_error", "invalid_request_error", "The tool call belongs to a different Turn.")
 INVALID = ("invalid_request_error", "invalid_request", None)
 KEY_REUSE = ("conflict_error", "idempotency_conflict", None)
@@ -47,10 +48,10 @@ with OpenAI(api_key=token, base_url=base+"/v1", max_retries=0,
     output = [{"type":"input_text","text":""}, {"type":"input_image","image_url":"data:image/png;base64,AA=="}, {"type":"input_text","text":"last"}]
     message = {"type":"agent.session.input.message","input":[{"role":"user","content":[{"type":"input_text","text":"follow up"}]}]}
     batch = [result("a", success=False, error="failure", output=output), result("b", success=True, output=None, error=None), result("c", success=True), message, {"type":"agent.session.input.cancel"}]
-    submit(api, [message, result("rollback", success=True), result("missing", success=True)], "rollback", 400, UNKNOWN_CALL)
+    submit(api, [message, result("rollback", success=True), result("missing", success=True)], "rollback", 400, unknown_call("missing"))
     submit(api, [result("a", str(uuid.uuid4()), success=True)], "other-turn", 400, OTHER_TURN)
     submit(api, [message, result("rollback", "turn_malformed", success=True)], "malformed-turn", 400, OTHER_TURN)
-    submit(api, [result("a", success=True)], "other-session", 400, UNKNOWN_CALL, other)
+    submit(api, [result("a", success=True)], "other-session", 400, unknown_call("a"), other)
     submit(api, [message, result("rollback", success=None)], "malformed", 400, INVALID)
     stranger = api.with_options(api_key=foreign)
     submit(stranger, [result("a", success=True)], "foreign", 404, MISSING)

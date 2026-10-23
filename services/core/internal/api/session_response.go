@@ -27,7 +27,7 @@ func sessionResponse(session sessions.Session, executorURL string) (v1.Session, 
 			return v1.Session{}, errors.New("unsupported stored tool configuration")
 		}
 		if tool.Type != "tool_search" {
-			tools = append(tools, projectedMCPCredential(raw, cfg))
+			tools = append(tools, projectedMCPCredential(withoutMCPHeaders(raw), cfg))
 		}
 	}
 	cfg.Agent.Tools = tools
@@ -104,6 +104,22 @@ func sessionResponse(session sessions.Session, executorURL string) (v1.Session, 
 		response.RequiredActions = []v1.RequiredAction{}
 	}
 	return response, nil
+}
+
+// withoutMCPHeaders drops the stored HTTP headers of an MCP tool. The pinned
+// Session read shape carries only type and server_url; dispatch keeps reading
+// the headers from the stored configuration.
+func withoutMCPHeaders(raw json.RawMessage) json.RawMessage {
+	var tool v1.MCPTool
+	if json.Unmarshal(raw, &tool) != nil || tool.Type != "mcp" || tool.Transport.Headers == nil {
+		return raw
+	}
+	tool.Transport.Headers = nil
+	projected, err := json.Marshal(tool)
+	if err != nil {
+		return raw
+	}
+	return projected
 }
 
 func sessionEnvironment(session sessions.Session, kind, executorURL string) (v1.SessionEnvironment, error) {
