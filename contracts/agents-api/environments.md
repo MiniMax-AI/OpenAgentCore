@@ -106,7 +106,7 @@ The application owns the machine. It creates the Session with a clean absolute `
 
 ## Input admission
 
-Session input goes through `POST /agents/sessions/{id}/events` in ordered batches of 1–64 events. On an Environment-bearing Session, Core reserves input that cannot start yet until the Environment is connected and prepared.
+Session input goes through `POST /agents/sessions/{id}/events` in ordered batches of 1–16384 events. On an Environment-bearing Session, Core reserves input that cannot start yet until the Environment is connected and prepared.
 
 A valid node-backed creation can wait for compute capacity after committing. Initial input uses the same reservation and deadline while waiting; creating without input still requests Environment preparation. [Placement and generation selection](./sandbox-deployment.md#generation-ownership-and-rollout) define the scheduling rules.
 
