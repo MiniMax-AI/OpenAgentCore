@@ -39,21 +39,21 @@ func ValidateInputKey(key string) error {
 	return nil
 }
 
-// ValidateInputs checks and normalizes an input batch: 1..64 messages,
-// cancellations and function results whose nonempty JSON object payloads total
-// at most 512 KiB, an empty cancellation payload and a well-formed function
-// result. It returns the normalized batch and its encoding, the batch's retry
-// identity.
+// ValidateInputs checks and normalizes an input batch: 1..16384 messages (the
+// official events bound), cancellations and function results whose nonempty
+// JSON object payloads total at most 2 MiB, which fits 16384 minimal messages,
+// an empty cancellation payload and a well-formed function result. It returns
+// the normalized batch and its encoding, the batch's retry identity.
 func ValidateInputs(inputs []Input) ([]Input, json.RawMessage, error) {
-	if len(inputs) == 0 || len(inputs) > 64 {
-		return nil, nil, fmt.Errorf("%w: input batch must contain 1..64 events", ErrInvalidInput)
+	if len(inputs) == 0 || len(inputs) > 16384 {
+		return nil, nil, fmt.Errorf("%w: input batch must contain 1..16384 events", ErrInvalidInput)
 	}
 	batch := make([]Input, len(inputs))
 	size := 0
 	for i, input := range inputs {
 		size += len(input.Payload)
-		if size > 512*1024 || len(input.Payload) == 0 || (input.Kind != "message" && input.Kind != "cancel" && input.Kind != "tool_result") {
-			return nil, nil, fmt.Errorf("%w: input payloads must be nonempty and total at most 512 KiB", ErrInvalidInput)
+		if size > 2<<20 || len(input.Payload) == 0 || (input.Kind != "message" && input.Kind != "cancel" && input.Kind != "tool_result") {
+			return nil, nil, fmt.Errorf("%w: input payloads must be nonempty and total at most 2 MiB", ErrInvalidInput)
 		}
 		payload, err := jsonobject.Normalize(input.Payload)
 		if err != nil {
