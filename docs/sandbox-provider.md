@@ -52,7 +52,7 @@ Isolation belongs to the provider's infrastructure, not the daemon; see [Runtime
 
 A backend without a native renewable lease, such as Docker, still keeps Core's hosted expiry and cleanup requirements. Every adapter implements `RunCommand` and its tests exercise it, but Core's orchestration does not call it; only the node transport forwards it. Confidential command input travels in `Command.Stdin`, never in arguments or logs, and the result keeps byte order, bounded output and the actual exit status.
 
-`Bootstrap.Workspace` and `ResumeRequest.Workspace` carry an external workspace binding exactly when the Provider's `DeploymentPolicy.Workspace` is declared; the Provider obligations for it are in [Attachment](./workspace-provider.md#attachment).
+`Bootstrap.Workspace` and `ResumeRequest.Workspace` carry an external workspace binding exactly when the Provider's `DeploymentPolicy.Workspace` is declared; the Provider obligations for it are in [Attachment](./workspace-provider.md#attachment). Core sets `Bootstrap.SuspendControl` exactly when the Provider declares checkpoint support, and the Provider passes it unchanged in the [Runtime bootstrap](./runtime-bootstrap.md).
 
 ### Explicit operation contracts
 

@@ -467,7 +467,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if r.config.Suspension != nil && environment.Initialization == "complete" {
 		return r.enableCompute(ctx, owner)
 	}
-	if _, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID); err != nil {
+	if !r.runtimeConnected(owner.DeviceID) {
 		return nil
 	}
 	renewed, err := provider.Renew(ctx, runtimeReference(owner))
@@ -479,6 +479,13 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	}
 	_, err = r.deployment.CheckRunning(ctx, owner)
 	return err
+}
+
+// runtimeConnected is the renewal condition: running compute keeps its native
+// lease while the allocation's Runtime holds an open connection.
+func (r *runtimeLifecycle) runtimeConnected(device string) bool {
+	peer, err := r.registry.LookupDevice(device)
+	return err == nil && !peer.IsClosed()
 }
 
 // Environment identity owns connectivity; preparation has an independent owner.

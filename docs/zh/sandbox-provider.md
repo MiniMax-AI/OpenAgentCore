@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 8685196568aa5999018e746979b6c85f59873e6fe520ce14e73f91d7a23facff
+source_hash: 0ffc892ad458e104e5e9eba3427429b3f82e7376bfdf3eeac0c9653cee434db1
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -54,7 +54,7 @@ source_hash: 8685196568aa5999018e746979b6c85f59873e6fe520ce14e73f91d7a23facff
 
 Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expiry 和 cleanup 要求。每个 adapter 都实现 `RunCommand`，测试也执行它，但 Core 编排不调用它；只有 node transport 转发。机密命令输入通过 `Command.Stdin` 传输，不放在参数或日志中；结果保留字节顺序、有界输出和实际退出状态。
 
-`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 仅当提供商的 `DeploymentPolicy.Workspace` 已声明时才携带外部工作区绑定；提供商对此的义务见[挂载](workspace-provider.md#attachment)。
+`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 仅当提供商的 `DeploymentPolicy.Workspace` 已声明时才携带外部工作区绑定；提供商对此的义务见[挂载](workspace-provider.md#attachment)。Core 仅在提供商声明支持 checkpoint 时设置 `Bootstrap.SuspendControl`，提供商将其原样放入 [Runtime bootstrap](runtime-bootstrap.md)。
 
 ### 明确的操作契约 {#explicit-operation-contracts}
 

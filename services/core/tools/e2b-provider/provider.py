@@ -18,7 +18,7 @@ from helper_contract_generated import (PROTOCOL_VERSION, OPERATIONS, REQUEST_FIE
 
 PREFIX = 'oac_'
 FIELDS = ('InstallationID', *REFERENCE_FIELDS)
-PENDING_PAUSE_SETTLE_SECONDS = 600  # a pause request finishes in seconds; ten minutes proves it did not take effect
+PENDING_PAUSE_SETTLE_SECONDS = 600  # a pause request settles in seconds; one still unpaused after ten minutes is taken as not applied
 
 # Exits 78 unless the template carries the startup script and a contract for this Runtime bootstrap version.
 TEMPLATE_CHECK = """import importlib.util, os, sys

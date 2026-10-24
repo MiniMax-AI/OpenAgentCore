@@ -123,11 +123,11 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	defer func() { err = withObservationOwner(owner, err) }()
 	// With an open Runtime connection the observation also extends the native
 	// lease, as the disabled path does; otherwise it only observes.
-	peer, peerErr := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	observe := p.GetCompute
-	if peerErr == nil {
+	if r.runtimeConnected(owner.DeviceID) {
 		observe = p.RenewCompute
 	}
+	peer, peerErr := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
 	compute, err := observe(ctx, runtimeReference(owner), state.Current)
 	if errors.Is(err, sandbox.ErrNotFound) {
 		return r.releaseLostCompute(ctx, p, owner, state, err)
