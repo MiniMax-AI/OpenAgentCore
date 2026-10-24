@@ -177,20 +177,31 @@ func (c CheckpointCompatibility) Validate() error {
 	return nil
 }
 
+// MaxSnapshotEvidenceBytes bounds SnapshotIdentity.Evidence.
+const MaxSnapshotEvidenceBytes = 4096
+
 // SnapshotIdentity is provider evidence from a verified full snapshot. Core
 // persists it unchanged and records consumption separately; it never invents
 // paths, checksums, native checkpoint fields, or source identity.
+// Evidence is the Provider's private verification evidence: Core and the node
+// proxy store and return it unchanged and never interpret it.
 type SnapshotIdentity struct {
 	Compatibility    CheckpointCompatibility
 	Reference        string
 	ID               string
-	Digest           string
-	CheckpointID     string
-	CheckpointRoot   string
+	Evidence         string
 	OperationID      string
 	SourceGeneration uint64
 	SourceName       string
 	SourceID         string
+}
+
+// Validate checks the fields Core relies on.
+func (s SnapshotIdentity) Validate() error {
+	if len(s.Evidence) > MaxSnapshotEvidenceBytes {
+		return ErrInvalid
+	}
+	return s.Compatibility.Validate()
 }
 
 type ComputeState struct {

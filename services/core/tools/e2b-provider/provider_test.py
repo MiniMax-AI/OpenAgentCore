@@ -19,6 +19,7 @@ import provider
 from provider import Provider
 from sdk import restore, run
 from state import Failure, Receipt
+from helper_contract_generated import PROTOCOL_VERSION
 
 
 class Fixture(unittest.TestCase):
@@ -28,7 +29,7 @@ class Fixture(unittest.TestCase):
         self.reference = {key: str(uuid4()) for key in ['TenantID', 'EnvironmentID', 'AllocationID']}
         self.config = {'StateDir': self.temporary.name, 'InstallationID': str(uuid4()),
                        'APIKey': 'private-account-secret', 'Template': 'test:' + str(uuid4()), 'TimeoutSeconds': 120}
-        self.request = {'Version': 1, 'Operation': 'create', 'Config': self.config,
+        self.request = {'Version': PROTOCOL_VERSION, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True)}

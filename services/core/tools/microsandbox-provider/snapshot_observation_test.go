@@ -181,7 +181,7 @@ func TestLostCaptureResponseStillExposesOwnedIdentityWhenCheckpointIsDamaged(t *
 				if err != nil {
 					t.Fatal(err)
 				}
-				snapshot := wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(request.Config, request.Reference, operation), ID: "exact-snapshot", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: operation, SourceName: source.Name, SourceID: source.ID}
+				snapshot := wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(request.Config, request.Reference, operation), ID: "exact-snapshot", Evidence: wire.SnapshotEvidence("digest", "checkpoint", "root"), OperationID: operation, SourceName: source.Name, SourceID: source.ID}
 				dir := b.checkpointDirectory(operation)
 				if err = privateDirectory(dir); err != nil {
 					t.Fatal(err)
@@ -254,7 +254,7 @@ func TestUnusableCheckpointClosesAdmissionDurably(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				q.Snapshot = wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(request.Config, request.Reference, q.OperationID), ID: "id", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: q.OperationID, SourceName: wire.Name(request.Config, request.Reference, 0), SourceID: "local:source"}
+				q.Snapshot = wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(request.Config, request.Reference, q.OperationID), ID: "id", Evidence: wire.SnapshotEvidence("digest", "checkpoint", "root"), OperationID: q.OperationID, SourceName: wire.Name(request.Config, request.Reference, 0), SourceID: "local:source"}
 				dir := b.checkpointDirectory(q.OperationID)
 				if err = privateDirectory(dir); err != nil {
 					t.Fatal(err)

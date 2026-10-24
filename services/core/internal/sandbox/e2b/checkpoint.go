@@ -32,7 +32,7 @@ func (p *Provider) name(r sandbox.Reference, generation uint64) string {
 }
 
 func (p *Provider) validSnapshot(r sandbox.Reference, s sandbox.SnapshotIdentity) bool {
-	return s.Compatibility.Validate() == nil && validID(s.OperationID) && s.SourceName == p.name(r, s.SourceGeneration) &&
+	return s.Validate() == nil && validID(s.OperationID) && s.SourceName == p.name(r, s.SourceGeneration) &&
 		s.Reference == s.SourceName+":s-"+s.OperationID && s.SourceID != "" && s.ID != ""
 }
 
