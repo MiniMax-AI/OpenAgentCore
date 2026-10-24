@@ -55,6 +55,27 @@ func (q *Queries) CreateFunctionCall(ctx context.Context, arg CreateFunctionCall
 	return result.RowsAffected(), nil
 }
 
+const findFunctionCallTurn = `-- name: FindFunctionCallTurn :one
+SELECT turn_id, executor_call_id FROM function_calls WHERE session_id = $1 AND call_id = $2
+`
+
+type FindFunctionCallTurnParams struct {
+	SessionID pgtype.UUID `json:"session_id"`
+	CallID    string      `json:"call_id"`
+}
+
+type FindFunctionCallTurnRow struct {
+	TurnID         pgtype.UUID `json:"turn_id"`
+	ExecutorCallID string      `json:"executor_call_id"`
+}
+
+func (q *Queries) FindFunctionCallTurn(ctx context.Context, arg FindFunctionCallTurnParams) (FindFunctionCallTurnRow, error) {
+	row := q.db.QueryRow(ctx, findFunctionCallTurn, arg.SessionID, arg.CallID)
+	var i FindFunctionCallTurnRow
+	err := row.Scan(&i.TurnID, &i.ExecutorCallID)
+	return i, err
+}
+
 const functionItemResult = `-- name: FunctionItemResult :one
 SELECT result FROM function_calls
 WHERE session_id = $1 AND turn_id = $2 AND call_id = $3

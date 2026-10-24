@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/jsonobject"
 )
 
@@ -87,6 +90,9 @@ type FunctionResultTx interface {
 	// FindResultTurn reads the Session's Turn that a result names and reports
 	// whether the Session has it. A malformed ID names no Turn.
 	FindResultTurn(ctx context.Context, turn string) (Turn, bool, error)
+	// FindCallTurn reads the Turn that holds the Session's call, with the
+	// call's executor identity, and reports whether the Session has the call.
+	FindCallTurn(ctx context.Context, call string) (Turn, string, bool, error)
 	// MatchFunctionResult compares result with the Turn's call.
 	MatchFunctionResult(ctx context.Context, turn, call string, result json.RawMessage) (FunctionResultMatch, error)
 	// SubmitFunctionResult saves the result of the Turn's call.
@@ -99,12 +105,27 @@ type FunctionResultTx interface {
 // and returns that Turn, which the result's input joins. It never creates a
 // Turn. A result whose Turn does not have the call is
 // ErrFunctionCallTurnMismatch when another Turn of the Session has it and
-// ErrUnknownFunctionCall otherwise; the answer depends only on the Session's
+// ErrUnknownFunctionCall otherwise; a Subagent Turn that made the call stands
+// for the root Turn that holds it; the answer depends only on the Session's
 // own calls.
 func AdmitFunctionResult(ctx context.Context, tx FunctionResultTx, input FunctionResultInput) (Turn, error) {
 	turn, found, err := tx.FindResultTurn(ctx, input.TurnID)
 	if err != nil {
 		return Turn{}, err
+	}
+	if _, malformed := uuid.Parse(input.TurnID); !found && malformed == nil {
+		// A result may name the Subagent Turn that made the call, as the
+		// call's Session event does. The child's function Item identity is
+		// derived from its Turn and the call's executor identity, so a match
+		// proves the call was made there; the result joins the root Turn
+		// holding the call.
+		holder, executor, held, err := tx.FindCallTurn(ctx, input.CallID)
+		if err != nil {
+			return Turn{}, err
+		}
+		if held && items.Identity(input.TurnID, "tool:"+executor) == input.CallID {
+			turn, found = holder, true
+		}
 	}
 	if found {
 		match, err := tx.MatchFunctionResult(ctx, turn.ID, input.CallID, input.Result)

@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: d88acdb94153f3974e66adbdb9443706ae47adef280cae71b03fdf896bdfe579
+source_hash: 44b540ff6827f818d8bc4cbaa6dc5fc9929bbf82a15c66edeb604909ecb6b110
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -32,7 +32,7 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 
 原生 Harness 可能在应用结果之前放弃调用，例如根 Turn 关闭或中断了发起该调用的 Subagent，或 MiniMax Code 的 MCP 客户端使该调用超时。该调用随即不再是待执行操作，Turn 继续运行，并在没有待执行操作时回到 `in_progress`；之后为它提交的 `function_call_output` 会像取消后的结果一样被拒绝。被放弃的调用没有应用回执。
 
-Subagent 发起的函数调用是运行该子级的根 Turn 的待执行操作：`turn_id` 是该根 Turn，`call_id` 等于 [Subagent 路由](subagents.md#public-reads)上该子级 `function_call` Item 的 `call_id`。使用该 `call_id` 和根 Turn ID，以 `function_call_output` / `tool_result` 作答；子级的 Turn ID 不是 Session Turn，会得到“另一个 Turn 的调用”的 400。Subagent 的 HTTP MCP 调用是该子级历史中的 `mcp_call` Item。
+Subagent 发起的函数调用是运行该子级的根 Turn 的待执行操作：`turn_id` 是该根 Turn，`call_id` 等于 [Subagent 路由](subagents.md#public-reads)上该子级 `function_call` Item 的 `call_id`。使用该 `call_id`，以及根 Turn ID 或该调用的 `agent.session.turn.item.added` 事件所标明的子级 Turn ID（官方 SDK 发送的即是后者），以 `function_call_output` / `tool_result` 作答；其他 Turn ID 会得到“另一个 Turn 的调用”的 400。Subagent 的 HTTP MCP 调用是该子级历史中的 `mcp_call` Item。
 
 ### 待执行操作与恢复 {#required-actions-and-recovery}
 
