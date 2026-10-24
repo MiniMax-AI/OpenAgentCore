@@ -5,29 +5,10 @@ import (
 	"errors"
 	"reflect"
 	"testing"
-	"time"
 )
 
-func TestDecideCancellation(t *testing.T) {
-	requested := turnWith(TurnWaiting)
-	requested.CancelRequestedAt = time.Unix(1700000000, 0)
-	for name, test := range map[string]struct {
-		turn Turn
-		want turnCancellation
-	}{
-		"queued":            {turnWith(TurnQueued), cancellationEndsTurn},
-		"waiting":           {turnWith(TurnWaiting), cancellationReportsActivity},
-		"waiting requested": {requested, cancellationRequested},
-		"in progress":       {turnWith(TurnInProgress), cancellationRequested},
-	} {
-		if got := decideCancellation(test.turn); got != test.want {
-			t.Errorf("%s: %v", name, got)
-		}
-	}
-}
-
-// CancelTurn decides from the Turn read before the request, and settles with
-// the Turn read after it.
+// CancelTurn ends a queued Turn with the Turn read after the request, and only
+// records the request for a Turn that started.
 func TestCancelTurn(t *testing.T) {
 	usage := json.RawMessage(`{"input_tokens":1}`)
 	t.Run("queued ends cancelled", func(t *testing.T) {
@@ -43,22 +24,9 @@ func TestCancelTurn(t *testing.T) {
 			t.Fatalf("end %+v", ends)
 		}
 	})
-	t.Run("waiting reports activity", func(t *testing.T) {
-		cancelling := turnWith(TurnWaiting)
-		cancelling.CancelRequestedAt = time.Unix(1700000001, 0)
-		var changes []SessionChange
-		f := &fakeTx{t: t, requestTurnCancel: done, loadTurn: returns(cancelling), loadUsage: returns(usage), appendChanges: collect(&changes)}
-		if err := CancelTurn(t.Context(), f, turnWith(TurnWaiting)); err != nil {
-			t.Fatal(err)
-		}
-		assertCalls(t, f, "RequestTurnCancel "+testTurn, "LoadTurn "+testTurn, "LoadUsage", "AppendChanges agent.session.in_progress")
-		if !reflect.DeepEqual(changes, []SessionChange{ActivityChange(cancelling, usage, nil)}) {
-			t.Fatalf("changes %+v", changes)
-		}
-	})
-	t.Run("in progress only requests", func(t *testing.T) {
+	t.Run("waiting only requests", func(t *testing.T) {
 		f := &fakeTx{t: t, requestTurnCancel: done}
-		if err := CancelTurn(t.Context(), f, turnWith(TurnInProgress)); err != nil {
+		if err := CancelTurn(t.Context(), f, turnWith(TurnWaiting)); err != nil {
 			t.Fatal(err)
 		}
 		assertCalls(t, f, "RequestTurnCancel "+testTurn)

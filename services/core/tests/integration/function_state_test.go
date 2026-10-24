@@ -102,9 +102,10 @@ func TestFunctionStateCancellationAndTerminalCleanup(t *testing.T) {
 						t.Fatal(err)
 					}
 				}
-				assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 0)
+				// The Turn keeps waiting with its required action, and no activity is journaled, until it ends.
+				assertFunctionState(t, s, tenant, session.ID, sessions.TurnWaiting, 1)
 				changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, before)
-				if err != nil || len(changes) != 1 || changes[0].Event.Type != "agent.session.in_progress" || len(changes[0].RequiredActions) != 0 || changes[0].Turn.CancelRequestedAt.IsZero() {
+				if err != nil || len(changes) != 0 {
 					t.Fatal(changes, err)
 				}
 			}

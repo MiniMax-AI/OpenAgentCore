@@ -206,9 +206,12 @@ func TestLoadRequiredActionsReadsPendingCalls(t *testing.T) {
 		t.Fatal(string(encoded), err)
 	}
 	exec(t, pool, `UPDATE turns SET cancel_requested_at = clock_timestamp() WHERE id = $1`, f.turn)
-	// The Turn as the caller read it still waits; the read of its calls sees
-	// the requested cancellation.
-	if actions, err := LoadRequiredActions(t.Context(), q, f.session, TurnFromRow(row)); err != nil || actions == nil || len(actions) != 0 {
+	// A waiting Turn keeps its actions until it ends, also after a cancellation request.
+	row, err = q.GetTurn(t.Context(), sqlc.GetTurnParams{TenantID: f.tenant, SessionID: f.session, ID: f.turn})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actions, err := LoadRequiredActions(t.Context(), q, f.session, TurnFromRow(row)); err != nil || len(actions) != 2 {
 		t.Fatalf("cancelling Turn actions %+v %v", actions, err)
 	}
 }
