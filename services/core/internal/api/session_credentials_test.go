@@ -15,7 +15,7 @@ import (
 func TestMCPCredentialReferenceIsSchemaNotAuthorization(t *testing.T) {
 	for _, saved := range []bool{false, true} {
 		input := strings.TrimSuffix(publicMCP, "}") + `,"credential_id":"unresolved-reference"}`
-		raw, err := resolveMCPTool(json.RawMessage(input), saved)
+		raw, err := resolveMCPTool(json.RawMessage(input), "tools[0]", saved)
 		var output v1.MCPTool
 		if err != nil || json.Unmarshal(raw, &output) != nil || output.CredentialID == nil || *output.CredentialID != "unresolved-reference" {
 			t.Fatal("saved/effective schema resolved or lost the caller credential reference", err)

@@ -32,6 +32,12 @@ func resolveSessionAgent(input sessionRequest, saved *v1.SavedAgent) (v1.Agent, 
 	}
 	resolved, err := resolveSavedAgent(request)
 	if err != nil {
+		// Saved-Agent resolution names members from the request root; the inline
+		// agent lives under agent.
+		var field *fieldError
+		if errors.As(err, &field) && field.param != "" && input.Agent != nil {
+			err = &fieldError{param: "agent." + field.param, message: field.message}
+		}
 		return v1.Agent{}, err
 	}
 	var override v1.SavedAgentConfiguration

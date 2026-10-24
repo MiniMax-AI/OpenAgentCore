@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -11,9 +13,10 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
-// resolveMCPTool canonicalizes a declaration whose pinned shape was checked at
-// decode. Core keeps its local limits.
-func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
+// resolveMCPTool canonicalizes a declaration whose pinned shape and server_label
+// were checked at decode. Core keeps its local limits, and a rejection names the
+// offending member under at, the declaration's path.
+func resolveMCPTool(raw json.RawMessage, at string, saved bool) (json.RawMessage, error) {
 	var input v1.MCPToolInput
 	var transport struct {
 		Type          string            `json:"type"`
@@ -29,8 +32,8 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 	if err := errors.Join(json.Unmarshal(raw, &input), json.Unmarshal(input.Transport, &transport)); err != nil {
 		return nil, &storedDataError{err}
 	}
-	if strings.TrimSpace(input.ServerLabel) == "" {
-		return nil, errors.New("MCP tools require type=mcp and a nonempty server_label.")
+	reject := func(member, message string) error {
+		return &fieldError{param: at + "." + member, message: message}
 	}
 	stdio := transport.Type == "stdio"
 	// The official service saves an omitted or null origin on an HTTP server as
@@ -45,19 +48,19 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		origin = *input.ConnectionOrigin
 	}
 	if stdio && origin != "environment" {
-		return nil, errors.New("MCP stdio servers run in the Environment; connection_origin must be environment.")
+		return nil, reject("connection_origin", "MCP stdio servers run in the Environment; connection_origin must be environment.")
 	}
 	if input.CredentialID != nil && (*input.CredentialID == "" || stdio) {
-		return nil, errors.New("MCP credential_id must be null or a nonempty string, and stdio servers take none.")
+		return nil, reject("credential_id", "MCP credential_id must be null or a nonempty string, and stdio servers take none.")
 	}
 	if len(input.RequestMetadata) != 0 {
-		return nil, errors.New("No engine sends MCP request_metadata.")
+		return nil, reject("request_metadata", "No engine sends MCP request_metadata.")
 	}
 	var allowed *[]string
 	if input.AllowedTools != nil {
-		for _, name := range input.AllowedTools {
+		for i, name := range input.AllowedTools {
 			if name == "" {
-				return nil, errors.New("MCP allowed_tools requires nonempty string names.")
+				return nil, reject(fmt.Sprintf("allowed_tools[%d]", i), "MCP allowed_tools requires nonempty string names.")
 			}
 		}
 		allowed = &input.AllowedTools
@@ -66,32 +69,51 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		ConnectionOrigin: origin, CredentialID: input.CredentialID, RequestMetadata: map[string]json.RawMessage{}}
 	if stdio {
 		if len(transport.Env) != 0 {
-			return nil, errors.New("Inline MCP env is not supported; declare env_vars and set the values in the Environment.")
+			return nil, reject("transport.env", "Inline MCP env is not supported; declare env_vars and set the values in the Environment.")
 		}
 		args, envVars := append([]string{}, transport.Args...), append([]string{}, transport.EnvVars...)
-		if !(proto.MCPStdio{Command: transport.Command, Args: args, Cwd: transport.Cwd, EnvVars: envVars}).Valid() {
-			return nil, errors.New("MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters.")
+		// Valid is the one definition of a startable declaration; each probe
+		// varies one member over a valid remainder to name the member at fault.
+		for _, probe := range []struct {
+			member string
+			stdio  proto.MCPStdio
+		}{
+			{"command", proto.MCPStdio{Command: transport.Command, Cwd: "/"}},
+			{"args", proto.MCPStdio{Command: "x", Args: args, Cwd: "/"}},
+			{"cwd", proto.MCPStdio{Command: "x", Cwd: transport.Cwd}},
+			{"env_vars", proto.MCPStdio{Command: "x", Cwd: "/", EnvVars: envVars}},
+		} {
+			if !probe.stdio.Valid() {
+				return nil, reject("transport."+probe.member, "MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters.")
+			}
 		}
 		tool.Transport = v1.MCPTransport{Type: "stdio", Command: transport.Command, Args: &args, Cwd: transport.Cwd, EnvVars: &envVars}
 		return json.Marshal(tool)
 	}
 	if transport.Type != "http" {
-		return nil, errors.New("MCP supports the http and stdio transports only.")
+		return nil, reject("transport.type", "MCP supports the http and stdio transports only.")
 	}
 	u, err := url.Parse(transport.ServerURL)
 	if err != nil || u.Hostname() == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.Fragment != "" {
-		return nil, errors.New("MCP server_url must be an absolute HTTP(S) URL without credentials or fragment.")
+		return nil, reject("transport.server_url", "MCP server_url must be an absolute HTTP(S) URL without credentials or fragment.")
 	}
 	if transport.Authorization != nil {
-		return nil, errors.New("Inline MCP authorization is not supported; use credential_id.")
+		return nil, reject("transport.authorization", "Inline MCP authorization is not supported; use credential_id.")
 	}
+	names, seen := make([]string, 0, len(transport.Headers)), map[string]bool{}
 	for name := range transport.Headers {
-		if strings.EqualFold(name, "Authorization") {
-			return nil, errors.New("MCP headers cannot carry Authorization; use credential_id.")
-		}
+		names = append(names, name)
 	}
-	if !agentplugin.ValidHTTPHeaders(transport.Headers) {
-		return nil, errors.New("MCP headers require valid HTTP names and values, with names unique ignoring case.")
+	sort.Strings(names)
+	for _, name := range names {
+		if strings.EqualFold(name, "Authorization") {
+			return nil, reject("transport.headers."+name, "MCP headers cannot carry Authorization; use credential_id.")
+		}
+		lower := strings.ToLower(name)
+		if seen[lower] || !agentplugin.ValidHTTPHeaders(map[string]string{name: transport.Headers[name]}) {
+			return nil, reject("transport.headers."+name, "MCP headers require valid HTTP names and values, with names unique ignoring case.")
+		}
+		seen[lower] = true
 	}
 	tool.Transport = v1.MCPTransport{Type: "http", ServerURL: transport.ServerURL}
 	if len(transport.Headers) != 0 {

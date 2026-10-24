@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
@@ -11,7 +12,6 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 	tools := make([]json.RawMessage, len(input))
 	functions := make([]v1.FunctionToolInput, 0, len(input))
 	positions := make([]int, 0, len(input))
-	servers := map[string]bool{}
 	search := false
 	controls := map[string]bool{}
 	for i, raw := range input {
@@ -43,18 +43,10 @@ func resolveSessionTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			search = true
 			tools[i], _ = json.Marshal(kind)
 		case "mcp":
-			resolved, err := resolveMCPTool(raw, false)
+			resolved, err := resolveMCPTool(raw, fmt.Sprintf("tools[%d]", i), false)
 			if err != nil {
 				return nil, err
 			}
-			var tool v1.MCPTool
-			if err := json.Unmarshal(resolved, &tool); err != nil {
-				return nil, &storedDataError{err}
-			}
-			if servers[tool.ServerLabel] {
-				return nil, errors.New("Execution requires distinct MCP server labels.")
-			}
-			servers[tool.ServerLabel] = true
 			tools[i] = resolved
 		case "function":
 			var function v1.FunctionToolInput

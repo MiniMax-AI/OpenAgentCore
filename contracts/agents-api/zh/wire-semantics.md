@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: ba9c6565567c1b4dcffb0c8f18731372b9e3c95e25f84dc0c3c2782c94161eb2
+source_hash: 584693a4da4f4a304f2bd6a7c8edd83f10cc5f9550f6237dc3cca2368756854d
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -174,6 +174,7 @@ Agent 创建和更新正文以及 Session 创建中的内联 `agent`，会在其
 | 不支持的枚举值 | JSON 路径 | `Invalid value: '<value>'. Supported values are: ...`，后跟已锁定的值 |
 | 整数低于最小值 | JSON 路径 | `Invalid '<path>': integer below minimum value. Expected a value >= 1, but got <n> instead.` |
 | 重复的函数名称、多个 `web_search`、多个 `tool_search` | null | `duplicate function tool name: <name>`、`duplicate web_search tool`、`duplicate tool_search tool` |
+| MCP `server_label` 含 `[A-Za-z0-9_-]` 以外的字符，或被后面的工具重复 | 出错工具的 `tools[<i>].server_label` | 说明原因的句子 |
 | Function `parameters` 的字符串根 `type` 不是 `object` | null | `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<type>"'.` |
 | `text.format` JSON schema 的字符串根 `type` 不是 `object` | null | `agent.text.format.schema must have top-level type "object"; got "<type>"`，Agent 请求上也会返回此消息 |
 
@@ -188,7 +189,6 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 | 配置 | 消息 |
 | --- | --- |
 | Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
-| 函数名称为空或重复 | "Function names must be nonempty and unique." |
 | 两个使用同一标签的 MCP 服务器 | "Execution requires distinct MCP server labels." |
 | 未声明 `retained_native_history` 的 Harness，运行在把每个 Environment 都放在 workspace 存储上的 sandbox provider 上（[Harness 能力](harness-capabilities.md)） | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
