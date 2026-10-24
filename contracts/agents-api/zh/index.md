@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 685e26e496e369c1eb2b1b093ec2e26e6fb6fbdf082ec1b877d9c638b0ac17e6
+source_hash: d3d542a34c7cf38c798a2ec85373f9d554f83892f7c47b6773783b7dcf230c62
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -64,7 +64,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 **列表**（[lists](wire-semantics.md#lists)）
 
-- 将已删除的 Agent 或 Session 用作游标时会返回 404；官方服务仍可从该游标继续分页。
+- 将已删除的 Agent 用作游标时会返回 404；官方服务仍可从该游标继续分页。
 - 使用来自其他 Session 的 Turn 游标、与 Vault ID 相等的 Credential 游标，或不是 Skill ID 的 Skills 游标时，都会返回 404。
 - Vault 和 Credential 列表会按照固定版本 SDK 的描述钳制负数 `limit`；官方服务返回 400。
 

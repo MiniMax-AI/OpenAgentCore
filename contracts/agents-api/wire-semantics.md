@@ -126,7 +126,7 @@ A `limit` that is not a decimal integer, including an empty value, returns 400 `
 
 ### Cursors
 
-`after` names a resource of the same list, inside its already resolved parent and tenant. The parent is resolved first: a missing or foreign parent returns its 404 before the cursor is read. A cursor that does not resolve, whether random, malformed, of another type, of another parent, deleted or of another tenant, returns:
+`after` names a resource of the same list, inside its already resolved parent and tenant. The parent is resolved first: a missing or foreign parent returns its 404 before the cursor is read. A cursor that does not resolve, whether random, malformed, of another type, of another parent, deleted or of another tenant, returns the response below. A deleted Session still resolves as a Sessions cursor and the page continues from its position, as on the official service; a deleted Agent does not resolve:
 
 | Lists | Response |
 | --- | --- |
