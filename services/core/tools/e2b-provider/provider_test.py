@@ -143,6 +143,13 @@ class ProviderTest(Fixture):
         self.assertEqual(self.api.list.call_args.kwargs['api_url'], self.config['APIURL'])
         self.assertEqual(self.api.list.call_args.kwargs['domain'], self.config['Domain'])
 
+    def test_info_without_a_domain_is_on_the_configured_one(self):
+        self.api.get_info.return_value = SimpleNamespace(
+            sandbox_id='owned-id', sandbox_domain=None, state='running', metadata=self.cloud.metadata,
+            template_id=self.cloud.template_id, cpu_count=self.cloud.cpu_count, memory_mb=self.cloud.memory_mb)
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.assertEqual(self.call('renew')['ErrorCode'], '')
+
     def test_create_refuses_foreign_data_plane_before_envd(self):
         self.cloud.sandbox_domain = 'foreign.example'
         self.assertEqual(self.call('create')['ErrorCode'], 'ownership')
