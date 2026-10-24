@@ -51,9 +51,6 @@ func prepareOptions(runtimeRoot string, req proto.PromptRequestPayload, workspac
 	}
 	opts := req.AgentOptions
 	prompt := optionString(opts, "system_prompt")
-	if len(prompt) > 32*1024 {
-		return result, fmt.Errorf("mcode: combined instructions exceed the CLI's 32 KiB limit")
-	}
 	if err := os.WriteFile(filepath.Join(result.DataDir, "AGENTS.md"), []byte(prompt), 0o600); err != nil {
 		return result, err
 	}
