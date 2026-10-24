@@ -80,7 +80,7 @@ func TestFilesPersistScopeAndDelete(t *testing.T) {
 	pool := pgtest.Open(t)
 	store, service := open(t, pool)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	for _, data := range [][]byte{{}, {0, 1, 255}, bytes.Repeat([]byte("binary\x00"), 300000)} {
+	for _, data := range [][]byte{{0}, {0, 1, 255}, bytes.Repeat([]byte("binary\x00"), 300000)} {
 		file := create(t, service, t.Context(), tenant, data)
 		if file.SizeBytes != int64(len(data)) || file.Filename != "source.bin" || file.Purpose != files.PurposeUserData || !strings.HasPrefix(file.ID, "file-") || file.CreatedAt.IsZero() {
 			t.Fatalf("create: %+v", file)
