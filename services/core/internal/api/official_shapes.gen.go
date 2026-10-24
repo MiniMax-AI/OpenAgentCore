@@ -207,4 +207,224 @@ var (
 		}}, nullable: true}},
 		{"x_agents_core", shape{}},
 	}}
+	createAgentSessionParams = shape{kind: objectValue, members: []member{
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+		{"agent", shape{kind: openObject}},
+		{"agent_id", shape{kind: stringValue}},
+		{"environment", shape{kind: openObject, required: true}},
+		{"vault_ids", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+		{"input", shape{kind: stringOrArrayValue, items: &shape{kind: objectValue, members: []member{
+			{"type", shape{kind: enumValue, values: []string{"message"}}},
+			{"role", shape{kind: enumValue, values: []string{"user"}, required: true}},
+			{"content", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"input_text", "input_image"}, variants: map[string][]member{
+				"input_text": {
+					{"text", shape{kind: stringValue, required: true}},
+				},
+				"input_image": {
+					{"image_url", shape{kind: stringValue, required: true}},
+				},
+			}}, required: true}},
+		}}, nullable: true}},
+		{"stream", shape{kind: booleanValue}},
+		{"x_agents_core", shape{}},
+	}}
+	updateAgentSessionParams = shape{kind: objectValue, members: []member{
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+	}}
+	createVaultParams = shape{kind: objectValue, members: []member{
+		{"name", shape{kind: stringValue}},
+		{"metadata", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+	}}
+	createVaultCredentialParams = shape{kind: objectValue, members: []member{
+		{"name", shape{kind: stringValue, required: true}},
+		{"auth", shape{kind: unionValue, values: []string{"mcp_oauth", "static_bearer"}, variants: map[string][]member{
+			"mcp_oauth": {
+				{"mcp_server_url", shape{kind: stringValue, required: true}},
+				{"access_token", shape{kind: stringValue, required: true}},
+				{"expires_at", shape{kind: stringValue, nullable: true}},
+				{"refresh", shape{kind: objectValue, members: []member{
+					{"token_endpoint", shape{kind: stringValue, required: true}},
+					{"client_id", shape{kind: stringValue, required: true}},
+					{"resource", shape{kind: stringValue, nullable: true}},
+					{"scope", shape{kind: stringValue, nullable: true}},
+					{"refresh_token", shape{kind: stringValue, required: true}},
+					{"token_endpoint_auth", shape{kind: unionValue, values: []string{"none", "client_secret_basic", "client_secret_post"}, variants: map[string][]member{
+						"none": {},
+						"client_secret_basic": {
+							{"client_secret", shape{kind: stringValue, required: true}},
+						},
+						"client_secret_post": {
+							{"client_secret", shape{kind: stringValue, required: true}},
+						},
+					}, required: true}},
+				}, nullable: true}},
+			},
+			"static_bearer": {
+				{"mcp_server_url", shape{kind: stringValue, required: true}},
+				{"token", shape{kind: stringValue, required: true}},
+			},
+		}, required: true}},
+	}}
+	rotateVaultCredentialParams = shape{kind: objectValue, members: []member{
+		{"auth", shape{kind: unionValue, values: []string{"mcp_oauth", "static_bearer"}, variants: map[string][]member{
+			"mcp_oauth": {
+				{"access_token", shape{kind: stringValue, nullable: true}},
+				{"expires_at", shape{kind: stringValue, nullable: true}},
+				{"refresh", shape{kind: objectValue, members: []member{
+					{"refresh_token", shape{kind: stringValue, nullable: true}},
+					{"scope", shape{kind: stringValue, nullable: true}},
+					{"token_endpoint_auth", shape{kind: unionValue, values: []string{"client_secret_basic", "client_secret_post"}, variants: map[string][]member{
+						"client_secret_basic": {
+							{"client_secret", shape{kind: stringValue, nullable: true}},
+						},
+						"client_secret_post": {
+							{"client_secret", shape{kind: stringValue, nullable: true}},
+						},
+					}, nullable: true}},
+				}, nullable: true}},
+			},
+			"static_bearer": {
+				{"token", shape{kind: stringValue, required: true}},
+			},
+		}, required: true}},
+	}}
+	createEnvironmentTemplateParams = shape{kind: objectValue, members: []member{
+		{"packages", shape{kind: objectValue, members: []member{
+			{"python", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+			{"system", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+			{"npm", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+		}, nullable: true}},
+		{"setup_commands", shape{kind: arrayValue, items: &shape{kind: objectValue, members: []member{
+			{"command", shape{kind: stringValue, required: true}},
+			{"cwd", shape{kind: stringValue, nullable: true}},
+		}}, nullable: true}},
+		{"network", shape{kind: openObject, nullable: true}},
+		{"env", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+		{"capability_directories", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+		{"skills", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"skill_reference", "inline"}, variants: map[string][]member{
+			"skill_reference": {
+				{"skill_id", shape{kind: stringValue, required: true}},
+				{"version", shape{kind: stringValue, nullable: true}},
+			},
+			"inline": {
+				{"name", shape{kind: stringValue, required: true}},
+				{"description", shape{kind: stringValue, required: true}},
+				{"source", shape{kind: unionValue, values: []string{"base64"}, variants: map[string][]member{
+					"base64": {
+						{"media_type", shape{kind: enumValue, values: []string{"application/zip"}, required: true}},
+						{"data", shape{kind: stringValue, required: true}},
+					},
+				}, required: true}},
+			},
+		}}, nullable: true}},
+		{"plugins", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"inline"}, variants: map[string][]member{
+			"inline": {
+				{"name", shape{kind: stringValue, required: true}},
+				{"description", shape{kind: stringValue, required: true}},
+				{"source", shape{kind: unionValue, values: []string{"base64"}, variants: map[string][]member{
+					"base64": {
+						{"media_type", shape{kind: enumValue, values: []string{"application/zip"}, required: true}},
+						{"data", shape{kind: stringValue, required: true}},
+					},
+				}, required: true}},
+			},
+		}}, nullable: true}},
+		{"files", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"file_id", "inline"}, variants: map[string][]member{
+			"file_id": {
+				{"file_id", shape{kind: stringValue, required: true}},
+				{"path", shape{kind: stringValue, required: true}},
+			},
+			"inline": {
+				{"data", shape{kind: stringValue, required: true}},
+				{"path", shape{kind: stringValue, required: true}},
+			},
+		}}, nullable: true}},
+		{"name", shape{kind: stringValue, nullable: true}},
+	}}
+	updateEnvironmentTemplateParams = shape{kind: objectValue, members: []member{
+		{"name", shape{kind: stringValue, nullable: true}},
+		{"packages", shape{kind: objectValue, members: []member{
+			{"python", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+			{"system", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+			{"npm", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+		}, nullable: true}},
+		{"setup_commands", shape{kind: arrayValue, items: &shape{kind: objectValue, members: []member{
+			{"command", shape{kind: stringValue, required: true}},
+			{"cwd", shape{kind: stringValue, nullable: true}},
+		}}, nullable: true}},
+		{"network", shape{kind: openObject, nullable: true}},
+		{"env", shape{kind: mapValue, items: &shape{kind: stringValue}, nullable: true}},
+		{"capability_directories", shape{kind: arrayValue, items: &shape{kind: stringValue}, nullable: true}},
+		{"skills", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"skill_reference", "inline"}, variants: map[string][]member{
+			"skill_reference": {
+				{"skill_id", shape{kind: stringValue, required: true}},
+				{"version", shape{kind: stringValue, nullable: true}},
+			},
+			"inline": {
+				{"name", shape{kind: stringValue, required: true}},
+				{"description", shape{kind: stringValue, required: true}},
+				{"source", shape{kind: unionValue, values: []string{"base64"}, variants: map[string][]member{
+					"base64": {
+						{"media_type", shape{kind: enumValue, values: []string{"application/zip"}, required: true}},
+						{"data", shape{kind: stringValue, required: true}},
+					},
+				}, required: true}},
+			},
+		}}, nullable: true}},
+		{"plugins", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"inline"}, variants: map[string][]member{
+			"inline": {
+				{"name", shape{kind: stringValue, required: true}},
+				{"description", shape{kind: stringValue, required: true}},
+				{"source", shape{kind: unionValue, values: []string{"base64"}, variants: map[string][]member{
+					"base64": {
+						{"media_type", shape{kind: enumValue, values: []string{"application/zip"}, required: true}},
+						{"data", shape{kind: stringValue, required: true}},
+					},
+				}, required: true}},
+			},
+		}}, nullable: true}},
+		{"files", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"file_id", "inline"}, variants: map[string][]member{
+			"file_id": {
+				{"file_id", shape{kind: stringValue, required: true}},
+				{"path", shape{kind: stringValue, required: true}},
+			},
+			"inline": {
+				{"data", shape{kind: stringValue, required: true}},
+				{"path", shape{kind: stringValue, required: true}},
+			},
+		}}, nullable: true}},
+	}}
+	createSessionEventsParams = shape{kind: objectValue, members: []member{
+		{"events", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"agent.session.input.message", "agent.session.input.cancel", "agent.session.input.tool_result"}, variants: map[string][]member{
+			"agent.session.input.message": {
+				{"input", shape{kind: arrayValue, items: &shape{kind: objectValue, members: []member{
+					{"type", shape{kind: enumValue, values: []string{"message"}}},
+					{"role", shape{kind: enumValue, values: []string{"user"}, required: true}},
+					{"content", shape{kind: arrayValue, items: &shape{kind: unionValue, values: []string{"input_text", "input_image"}, variants: map[string][]member{
+						"input_text": {
+							{"text", shape{kind: stringValue, required: true}},
+						},
+						"input_image": {
+							{"image_url", shape{kind: stringValue, required: true}},
+						},
+					}}, required: true}},
+				}}, required: true}},
+			},
+			"agent.session.input.cancel": {},
+			"agent.session.input.tool_result": {
+				{"turn_id", shape{kind: stringValue, required: true}},
+				{"call_id", shape{kind: stringValue, required: true}},
+				{"success", shape{kind: booleanValue, required: true}},
+				{"output", shape{kind: stringOrArrayValue, items: &shape{kind: unionValue, values: []string{"input_text", "input_image"}, variants: map[string][]member{
+					"input_text": {
+						{"text", shape{kind: stringValue, required: true}},
+					},
+					"input_image": {
+						{"image_url", shape{kind: stringValue, required: true}},
+					},
+				}}, nullable: true}},
+				{"error", shape{kind: stringValue, nullable: true}},
+			},
+		}}, required: true}},
+	}}
 )

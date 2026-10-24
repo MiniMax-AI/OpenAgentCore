@@ -36,7 +36,7 @@ func TestInitialInputUsesExecutionAdmissionAndSharedMessageValidation(t *testing
 			t.Fatal(execution.input, err)
 		}
 	}
-	for _, value := range []string{`[{"type":null,"role":"user","content":[{"type":"input_text","text":"x"}]}]`, `[{"type":"","role":"user","content":[{"type":"input_text","text":"x"}]}]`, `0`, `true`, `{}`, `[]`, `""`, `[{"role":"user","content":[]}]`, `[{"role":"user","content":[{"type":"input_text","text":""}]}]`, `[{"role":"user","unknown":true,"content":[{"type":"input_text","text":"x"}]}]`, `[{"role":"user","content":[{"type":"input_text","text":"x","unknown":true}]}]`, `[{"role":"assistant","content":[{"type":"input_text","text":"x"}]}]`} {
+	for _, value := range []string{`0`, `true`, `{}`, `[]`, `""`, `[{"role":"user","content":[]}]`, `[{"role":"user","content":[{"type":"input_text","text":""}]}]`, `[{"role":"user","unknown":true,"content":[{"type":"input_text","text":"x"}]}]`, `[{"role":"user","content":[{"type":"input_text","text":"x","unknown":true}]}]`, `[{"role":"assistant","content":[{"type":"input_text","text":"x"}]}]`} {
 		if _, err := initialSessionInputs(json.RawMessage(value)); err == nil {
 			t.Fatal("invalid initial input accepted", value)
 		}

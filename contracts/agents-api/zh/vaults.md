@@ -1,7 +1,7 @@
 ---
 title: "Vault 与 Credential"
 source: contracts/agents-api/vaults.md
-source_hash: b27509949dca26f064cda765ea97229e3325dee3ff650b17fa332a756409cf34
+source_hash: 1a57ba70173f8a000b6b0cb74eb7fa6a6c688b4f71d7e617b4fdfb60e6d6fef5
 ---
 
 Vault 是项目所有的 Credential 容器。Credential 保存一个 HTTPS MCP server 的秘密：`static_bearer` token 或 `mcp_oauth` grant。Session 在 `vault_ids` 中关联 Vault；Core 在创建 Session 时为每个 HTTP MCP server 选择一个 Credential，只在分派工作时将解密 token 交给 Runtime。秘密只能写入：任何读取都不返回 token、refresh token、client secret 或密文。
@@ -60,7 +60,7 @@ MCP tool 可以通过 `credential_id` 指定 Credential；未指定时，Core �
 
 | 字段 | 规则 |
 | --- | --- |
-| `name` | 可选；省略保持 `null`，显式 `null` 被拒绝。字符串去除首尾空白后必须为 1–256 UTF-8 字节 |
+| `name` | 可选；省略保持 `null`，显式 `null` 被拒绝。字符串去除首尾空白后必须为 1–256 UTF-8 字节（param 为 `name`） |
 | `metadata` | 省略或 `null` 转为 `{}`。值必须为字符串；其他类型返回 400 `invalid_request_error`，param 为 `metadata.<key>`。编码后对象上限 64 KiB，无键值对数量或长度限制 |
 
 Vault 读取包含 `id`、`object: "vault"`、`created_at`、`name` 和 `metadata`。没有更新路由。
@@ -69,7 +69,7 @@ Vault 读取包含 `id`、`object: "vault"`、`created_at`、`name` 和 `metadat
 
 ## Credential {#credentials}
 
-创建需要 `name`（去除首尾空白后 1–256 UTF-8 字节）和 `auth` 对象，`type` 为 `static_bearer` 或 `mcp_oauth`。`mcp_server_url` 必须是无 userinfo、无 fragment 的绝对 HTTPS URL；Core 逐字节保留，包括 query，不执行 DNS 或 HTTP 请求。
+创建需要 `name`（去除首尾空白后 1–256 UTF-8 字节）和 `auth` 对象，`type` 为 `static_bearer` 或 `mcp_oauth`。`mcp_server_url` 必须是无 userinfo、无 fragment 的绝对 HTTPS URL；Core 逐字节保留，包括 query，不执行 DNS 或 HTTP 请求。字段错误以该字段作为 param，例如 `auth.type`、`auth.access_token` 或 `auth.mcp_server_url`；未知成员或缺失成员使用官方的 `Unknown parameter` 或 `Missing required parameter` 消息（[请求验证](wire-semantics.md#configuration-validation)）。
 
 Credential 读取包含 `id`、`vault_id`、`name`、`object: "vault.credential"`、`created_at`、`updated_at` 和 `auth`。`auth` 包含 `type`、`mcp_server_url`；OAuth Credential 还包含 `expires_at` 和 `refresh`，后者包含 `client_id`、`token_endpoint`、`token_endpoint_auth.type`、`resource` 和 `scope`。读取和列表无需 storage key。
 

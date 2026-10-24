@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -35,44 +34,26 @@ type VaultsReader interface {
 
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
-	if !ok {
-		return
-	}
-	if writeFieldError(w, metadataTypeError(raw)) {
+	if !ok || writeFieldError(w, validateBody(raw, createVaultParams)) {
 		return
 	}
 	var request struct {
-		Name     json.RawMessage    `json:"name"`
-		Metadata map[string]*string `json:"metadata"`
+		Name     *string           `json:"name"`
+		Metadata map[string]string `json:"metadata"`
 	}
-	if decodeInputObject(raw, &request, "name", "metadata") != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
-		return
-	}
+	_ = json.Unmarshal(raw, &request)
 	input := vaults.CreateVault{TenantID: tenantID(r)}
-	if len(request.Name) > 0 {
-		var name *string
-		if json.Unmarshal(request.Name, &name) != nil || name == nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", "name must be a string.")
-			return
-		}
-		trimmed, err := normalizedVaultName(*name)
+	if request.Name != nil {
+		name, err := normalizedVaultName(*request.Name)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			writeFieldError(w, err)
 			return
 		}
-		input.Name = &trimmed
+		input.Name = &name
 	}
 	// Vault metadata has no pair or character limits, only the storage limits.
-	var err error
-	input.Metadata, err = stringMetadata(request.Metadata)
-	if err == nil {
-		err = metadataFieldError(metadata.ValidateStorable(input.Metadata))
-	}
-	if err != nil {
-		if !writeFieldError(w, err) {
-			writeError(w, http.StatusBadRequest, "invalid_request", "metadata values must be strings.")
-		}
+	input.Metadata = metadataOrEmpty(request.Metadata)
+	if writeFieldError(w, metadataFieldError(metadata.ValidateStorable(input.Metadata))) {
 		return
 	}
 	vault, err := h.Vaults.CreateVault(r.Context(), input)
@@ -103,7 +84,7 @@ func vaultResponse(vault vaults.Vault) v1.Vault {
 func normalizedVaultName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if len(name) == 0 || len(name) > 256 {
-		return "", errors.New("name must contain 1 to 256 UTF-8 bytes after trimming.")
+		return "", &fieldError{param: "name", message: "name must contain 1 to 256 UTF-8 bytes after trimming."}
 	}
 	return name, nil
 }

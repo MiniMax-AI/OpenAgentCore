@@ -61,7 +61,7 @@ On `openai_hosted` and `self_hosted` Sessions, messages sent while a Turn runs j
 
 ### Input errors
 
-Checks run in this order: request validation, Session lookup, retry lookup, the Environment file-write gate for batches with a message, the pending-input gate, then each event in batch order. A rejected batch writes nothing and leaves any pending action unchanged. Every 409 has type `conflict_error` ([error envelope](./wire-semantics.md)).
+Checks run in this order: [request validation](./wire-semantics.md#configuration-validation), whose paths start with `events[i]`, Session lookup, retry lookup, the Environment file-write gate for batches with a message, the pending-input gate, then each event in batch order. A rejected batch writes nothing and leaves any pending action unchanged. Every 409 has type `conflict_error` ([error envelope](./wire-semantics.md)).
 
 | Case | Status and code | Message |
 | --- | --- | --- |

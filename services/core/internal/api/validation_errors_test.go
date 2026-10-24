@@ -166,16 +166,11 @@ func TestMetadataValidationUsesOfficialFields(t *testing.T) {
 			if want := map[bool]int{true: 0, false: 3}[op.limited]; s.writes != want {
 				t.Fatalf("rejected metadata reached storage: %d writes", s.writes)
 			}
-			// Type errors precede the generic whole-body error. Agent bodies follow
-			// the pinned shape walk, which reports unknown members first.
+			// The pinned shape walk reports unknown members first.
 			body := strings.Replace(fmt.Sprintf(op.body, `{"k":1}`), "{", `{"unsupported_field":true,`, 1)
-			want := "metadata.k"
-			if strings.HasPrefix(op.name, "agent") {
-				want = "unsupported_field"
-			}
 			w := credentialRequest(h, op.method, op.path, body)
-			if code, param, _ := errorFields(t, w); w.Code != http.StatusBadRequest || code != "invalid_request_error" || param == nil || *param != want {
-				t.Fatalf("metadata type did not precede generic error: %d %s", w.Code, w.Body)
+			if code, param, _ := errorFields(t, w); w.Code != http.StatusBadRequest || code != "invalid_request_error" || param == nil || *param != "unsupported_field" {
+				t.Fatalf("unknown member did not precede metadata type: %d %s", w.Code, w.Body)
 			}
 			for _, tc := range accepted {
 				before := s.writes
@@ -250,8 +245,8 @@ func TestTemplateNetworkRejectionsUseOfficialCode(t *testing.T) {
 	if s.writes != 0 {
 		t.Fatal("rejected network reached storage")
 	}
-	// Other unsupported template installation fields keep their local code.
-	for _, body := range []string{`{"unsupported":true,"network":{"access":"restricted","allowed_domains":["*.example.com"]}}`, `{"network":{"access":"restricted","allowed_domains":"example.com"}}`, `{"packages":{"cargo":["x"]}}`} {
+	// A network the walker leaves to the local parser keeps its local code.
+	for _, body := range []string{`{"network":{"access":"restricted","allowed_domains":"example.com"}}`} {
 		w := credentialRequest(h, http.MethodPost, "/v1/agents/environments/templates", body)
 		if code, _, _ := errorFields(t, w); w.Code != http.StatusBadRequest || code != "unsupported_or_invalid_configuration" {
 			t.Fatalf("%s: %d %s", body, w.Code, w.Body)

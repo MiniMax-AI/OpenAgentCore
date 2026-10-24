@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: ba9c6565567c1b4dcffb0c8f18731372b9e3c95e25f84dc0c3c2782c94161eb2
+source_hash: d0f79917769e661a91eb074d0237ca03905b46ecc70e291965154d8f293bfaec
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -176,6 +176,8 @@ Agent 创建和更新正文以及 Session 创建中的内联 `agent`，会在其
 | 重复的函数名称、多个 `web_search`、多个 `tool_search` | null | `duplicate function tool name: <name>`、`duplicate web_search tool`、`duplicate tool_search tool` |
 | Function `parameters` 的字符串根 `type` 不是 `object` | null | `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<type>"'.` |
 | `text.format` JSON schema 的字符串根 `type` 不是 `object` | null | `agent.text.format.schema must have top-level type "object"; got "<type>"`，Agent 请求上也会返回此消息 |
+
+Session 创建和更新、Vault 创建、Credential 创建和更新、Environment Template 创建和更新以及 Session events，会在各自解码之前，按同样方式根据已锁定的正文形状进行检查。param 是 JSON 路径，例如 `metadata`、`input[0].role`、`input[0].content[0].type`、`events[0].input[0].role`、`auth.type`、`auth.access_token`、`env.KEY` 或 `name`。`input` 和函数结果的 `output` 接受字符串或数组，其他类型会报告 `expected a string or an array`。Session 的 `agent` 和 `environment` 以及 Template 的 `network` 使用各自的解析器，并先检查其是否为对象。已锁定 schema 未表达的规则以字段作为 param，并给出说明该规则的消息：Vault 和 Credential 的 `name`（去除首尾空白后 1–256 UTF-8 字节）、Template 的 `name`（1–256 个字符）、非空的 `auth.token` 和 `auth.access_token`、HTTPS 的 `auth.mcp_server_url` 和 `auth.refresh.token_endpoint`、RFC 3339 的 `auth.expires_at`、环境变量名（`env.<name>`），以及没有任何可更改内容的 Credential 更新（param 为 `auth`）。
 
 在同一个对象内，Core 会先报告联合类型的 `type`，然后报告未知成员，再按文档顺序报告成员值，最后按固定 schema 的顺序报告缺失成员；先检查 tools，再检查 `text`，并在重复项和 schema 根检查之前检查整个对象。没有字符串根 `type` 的 schema 不会被检查。Function 和 output schema、`request_metadata` 和 `x_agents_core` 使用各自的解析器。更新正文和 Session 内联 Agent 会在查找 Agent 之前进行验证，因此属于当前租户、属于外部租户、缺失和格式错误的 Agent ID 会得到相同的响应。
 

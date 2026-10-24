@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: cc519d898ede4653a4e8abd0d59da6da9d88e2da1587870a75d5b1bab8809fe0
+source_hash: 7fc839cfe5b649a341475fdb7e0e565b173a6af1a41b66daae2cb51800b98b7b
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -63,7 +63,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 ### 输入错误 {#input-errors}
 
-检查按以下顺序执行：请求验证、Session 查找、重试查找、针对包含消息的批次的 Environment 文件写入门控、待处理输入门控，最后按批次顺序检查每个事件。被拒绝的批次不会写入任何内容，也不会改变任何待处理操作。所有 409 响应的 `type` 都是 `conflict_error`（[错误封装](wire-semantics.md)）。
+检查按以下顺序执行：[请求验证](wire-semantics.md#configuration-validation)（路径以 `events[i]` 开头）、Session 查找、重试查找、针对包含消息的批次的 Environment 文件写入门控、待处理输入门控，最后按批次顺序检查每个事件。被拒绝的批次不会写入任何内容，也不会改变任何待处理操作。所有 409 响应的 `type` 都是 `conflict_error`（[错误封装](wire-semantics.md)）。
 
 | 情况 | 状态和代码 | 消息 |
 | --- | --- | --- |
