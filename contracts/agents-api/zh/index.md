@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 45ccd7e7fce53589dbf27fc82e75b59b61fffe5fc40a3bbbb8003a8dfd230cba
+source_hash: afc5f4073341abbc15adb539ae44efd8c5d575d0e5ae2ec3028739cbf6538ea7
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -79,9 +79,11 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Claude Code 在 `environment: none` 上启用 live 搜索时只有 `WebSearch`，因此搜索只产生 `search` 动作，不会打开页面（[网页搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)）。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
+- Codex 拒绝同时使用程序化工具调用和 `multi_agent`。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
 - `stdio` MCP 服务器需要工作区部署位置和 `environment` 来源。Claude Code 在其工作区目录中启动服务器，因此 `cwd` 必须与之相同；服务器继承整个进程环境，其中也有模型提供方密钥和其他服务器的 Vault bearer 令牌；且 `allowed_tools` 须为 null。MiniMax Code 在其私有主目录中启动服务器，因此拒绝所有 `stdio` 服务器（[MCP](execution-tools.md#mcp)）。
+- Core 拒绝非空的 MCP `request_metadata`、`connection_origin` 为 `service` 的 `stdio` 服务器，以及空白的 `server_label`、空的 `credential_id` 和空的 `allowed_tools` 名称；固定版本的 schema 允许这些值但没有定义其含义（400，并说明原因）。
 - Claude 会拒绝包含 `${` 的 MCP `server_url` 或 `headers` 值，因为原生客户端会从持有 Core 所持凭据的进程环境中展开这两处的 `${VAR}`。
 - 在 events 202 之后立即删除 Session 会返回 409，因为 Core 会在同一事务中准入该 Turn；官方服务返回 200。
 
@@ -133,6 +135,8 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
+- Runtime 协议接受 `agent_message` 和 `interrupt_subagent_call` Item，但没有 Harness 适配器会产生它们。
+- 原生文件变更没有对应的官方 Item 类型（[Turns and Items](sessions-events.md#turns-and-items)）。
 - 以 `/` 开头的消息到达 MiniMax Code 时末尾多一个空行，否则 ACP 会将其作为操作员命令执行。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
 - 图像上的 `file_id` 和 `detail` 会被拒绝；每个 Harness 声明自己接受哪些 `image_url`（[消息内容](message-content.md#images)）。
@@ -148,6 +152,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **Files 和 Environment files**
 
 - Files 仅接受 `purpose=user_data`；不支持其他 `purpose` 值、`expires_after` 和 Uploads API。
+- Skills 创建路由接受单个 `files` 部分，但当 `files` 是单个文件而不是列表时，固定版本的 SDK 不会发送任何部分（[上传 bundle](source-files.md#upload-a-bundle)）。
 - 结果不确定的 Environment file 写入不会自动重试或恢复；它会阻止后续写入以及向 Session 发送消息。
 
 **Vaults 和 Credentials**
