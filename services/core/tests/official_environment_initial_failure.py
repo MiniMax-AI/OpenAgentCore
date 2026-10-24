@@ -77,7 +77,7 @@ def main():
         assert list(api.beta.agents.sessions.turns.list(session_id)) == []
         assert list(api.beta.agents.sessions.items.list(session_id)) == []
         environment = api.beta.agents.environments.retrieve(settings["environment_id"])
-        assert environment.status == "pending"
+        assert environment.status == "disconnected"
         for suffix in ("", "/events", "/turns", "/items"):
             assert raw.get("/agents/sessions/" + session_id + suffix, headers={"Authorization": "Bearer " + settings["foreign_token"]}).status_code == 404
     print(json.dumps({"status": "private_initial_failure_public_reads_and_live_events_verified", "session_id": session_id,
