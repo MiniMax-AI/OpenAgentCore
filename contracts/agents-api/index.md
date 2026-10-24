@@ -88,7 +88,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - Input to a `none` Session is admitted synchronously; Core does not emulate the official asynchronous admission window.
 - An events request takes at most 64 events ([send input](./sessions-events.md#send-input)); the official limit is 16384.
-- A function result that resumes a waiting Turn emits `turn.in_progress`, and cancelling a Turn that waits on a function result emits an interim `agent.session.in_progress`.
+- A function result that resumes a waiting Turn emits `turn.in_progress`.
 - A function call the native Harness abandons, such as a Subagent call dropped when the root closes or interrupts the child or a MiniMax Code call past its 120 s timeout, is withdrawn: it stops being a required action and a later result for it returns 409 `conflict_error`. The official API has no withdrawal.
 - Attaching to the stream mid-Turn sends no catch-up Item snapshots.
 - The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
