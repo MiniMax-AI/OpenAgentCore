@@ -42,8 +42,8 @@ func ValidateInputKey(key string) error {
 // ValidateInputs checks and normalizes an input batch: 1..16384 messages (the
 // official events bound), cancellations and function results whose nonempty
 // JSON object payloads total at most 2 MiB, which fits 16384 minimal messages,
-// an empty cancellation payload and a well-formed function result. It returns the normalized batch and its encoding, the batch's retry
-// identity.
+// an empty cancellation payload and a well-formed function result. It returns
+// the normalized batch and its encoding, the batch's retry identity.
 func ValidateInputs(inputs []Input) ([]Input, json.RawMessage, error) {
 	if len(inputs) == 0 || len(inputs) > 16384 {
 		return nil, nil, fmt.Errorf("%w: input batch must contain 1..16384 events", ErrInvalidInput)
