@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 )
@@ -12,7 +13,7 @@ import (
 // resolve yet.
 func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 	tools := make([]json.RawMessage, 0, len(input))
-	for _, raw := range input {
+	for i, raw := range input {
 		var kind struct {
 			Type string `json:"type"`
 		}
@@ -40,7 +41,7 @@ func resolveSavedTools(input []json.RawMessage) ([]json.RawMessage, error) {
 			}
 			value = resolved
 		case "mcp":
-			resolved, err := resolveMCPTool(raw, true)
+			resolved, err := resolveMCPTool(raw, fmt.Sprintf("tools[%d]", i), true)
 			if err != nil {
 				return nil, err
 			}

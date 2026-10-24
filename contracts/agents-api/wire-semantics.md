@@ -172,6 +172,7 @@ Agent create and update bodies and the inline `agent` of Session create are chec
 | Unsupported enum value | JSON path | `Invalid value: '<value>'. Supported values are: ...` with the pinned values |
 | Integer below minimum | JSON path | `Invalid '<path>': integer below minimum value. Expected a value >= 1, but got <n> instead.` |
 | Repeated function name, more than one `web_search`, more than one `tool_search` | null | `duplicate function tool name: <name>`, `duplicate web_search tool`, `duplicate tool_search tool` |
+| An MCP `server_label` outside `[A-Za-z0-9_-]`, or one repeated by a later tool | `tools[<i>].server_label` of the offending tool | A sentence stating the cause |
 | Function `parameters` with a string root `type` other than `object` | null | `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<type>"'.` |
 | `text.format` JSON schema with a string root `type` other than `object` | null | `agent.text.format.schema must have top-level type "object"; got "<type>"`, also on Agent requests |
 
@@ -187,7 +188,6 @@ A Session's effective configuration must also pass execution admission, which ap
 | --- | --- |
 | A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
 | A function name that is blank or repeated | "Function names must be nonempty and unique." |
-| Two MCP servers with one label | "Execution requires distinct MCP server labels." |
 | A Harness that does not declare `retained_native_history`, on a sandbox provider that keeps every Environment on workspace storage ([Harness capabilities](./harness-capabilities.md)) | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
 A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](./execution-tools.md).

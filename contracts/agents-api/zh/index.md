@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 685e26e496e369c1eb2b1b093ec2e26e6fb6fbdf082ec1b877d9c638b0ac17e6
+source_hash: df55ebb5944519c816174227de855fc1468c34ae188dfac4ea3e220914c25365
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -83,7 +83,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
 - `stdio` MCP 服务器需要工作区部署位置和 `environment` 来源。Claude Code 在其工作区目录中启动服务器，因此 `cwd` 必须与之相同；服务器继承整个进程环境，其中也有模型提供方密钥和其他服务器的 Vault bearer 令牌；且 `allowed_tools` 须为 null。MiniMax Code 在其私有主目录中启动服务器，因此拒绝所有 `stdio` 服务器（[MCP](execution-tools.md#mcp)）。
-- Core 拒绝非空的 MCP `request_metadata`，因为没有 Harness 能发送它；同样拒绝 `connection_origin` 为 `service` 的 `stdio` 服务器，以及空白的 `server_label`、空的 `credential_id` 和空的 `allowed_tools` 名称，固定版本的 schema 允许这些值但没有定义其含义（400，并说明原因）。
+- Core 拒绝非空的 MCP `request_metadata`，因为没有 Harness 能发送它；同样拒绝 `connection_origin` 为 `service` 的 `stdio` 服务器，以及空的 `credential_id` 和空的 `allowed_tools` 名称，固定版本的 schema 允许这些值但没有定义其含义（400 `invalid_request_error`，指出成员并说明原因）。
 - Claude 会拒绝包含 `${` 的 MCP `server_url` 或 `headers` 值，因为原生客户端会从持有 Core 所持凭据的进程环境中展开这两处的 `${VAR}`。
 - 在 events 202 之后立即删除 Session 会返回 409，因为 Core 会在同一事务中准入该 Turn；官方服务返回 200。
 
