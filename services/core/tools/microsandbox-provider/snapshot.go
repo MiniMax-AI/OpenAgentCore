@@ -80,7 +80,7 @@ func (b backend) openSnapshot(ctx context.Context, operation string, source wire
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
 	compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: artifact.Labels()["io.oac.artifact_domain"], ExecutionClass: artifact.Labels()["io.oac.execution_class"]}
-	return artifact, wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(b.q.Config, b.q.Reference, operation), ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}, nil
+	return artifact, wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(b.q.Config, b.q.Reference, operation), ID: artifact.ID(), OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}, nil
 }
 
 // inspectSnapshot verifies a fresh capture before its identity is published.
@@ -96,7 +96,7 @@ func (b backend) inspectSnapshot(ctx context.Context, operation string, source w
 	if report.Digest != artifact.Digest() || report.Checkpoint == nil || report.Checkpoint.Root == "" || report.Checkpoint.Kind == "" {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
-	identity.CheckpointRoot = report.Checkpoint.Root
+	identity.Evidence = wire.SnapshotEvidence(artifact.Digest(), artifact.State().Checkpoint.CheckpointID, report.Checkpoint.Root)
 	if wire.ValidateSnapshot(b.q.Config, b.q.Reference, identity) != nil {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}

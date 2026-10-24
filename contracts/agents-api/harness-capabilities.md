@@ -20,6 +20,7 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | --- | --- | --- | --- |
 | Text Turns, active input, cancellation, restart and continuation | Verified on all placements | Verified on all placements | Verified on all placements |
 | [Files and Artifacts](./environment-files.md) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted |
+| Agent `instructions` | Admitted | Admitted | At most 32 KiB; longer instructions are rejected |
 | [Whitespace-only message text](./message-content.md) | Admitted; delivered unchanged | Admitted; native drops it, and an all-blank message becomes `(no content)` | Rejected |
 | [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
 | `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
@@ -59,7 +60,7 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | [Initial files, setup commands, Skills and Plugins](./environments.md#runtime-capability-preparation) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Capability directories | Admitted | Admitted | Admitted |
 | npm and Python packages | Admitted | Admitted | Admitted |
-| `packages.system` | Rejected when nonempty | Rejected when nonempty | Rejected when nonempty |
+| `packages.system` other than null or `[]` | Rejected | Rejected | Rejected |
 | Network `disabled` or `restricted` | Rejected | Rejected | Rejected |
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, with literal headers or HTTPS bearer | Verified: self-hosted; admitted: hosted; literal headers or HTTPS bearer |

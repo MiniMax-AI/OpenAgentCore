@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: bd03ebf9e556b71091fed42d1ba52b2002207962ccc4f7c3765104c82bddc3b5
+source_hash: 8913afc18b99b847850a857e387e1a230085525ce5f1b28abd5a440abc9dcf16
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -22,6 +22,7 @@ source_hash: bd03ebf9e556b71091fed42d1ba52b2002207962ccc4f7c3765104c82bddc3b5
 | --- | --- | --- | --- |
 | 文本 Turn、活动输入、取消、重启与继续 | 所有位置已验证 | 所有位置已验证 | 所有位置已验证 |
 | [文件与 Artifact](environment-files.md) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管 |
+| Agent `instructions` | 已准入 | 已准入 | 最多 32 KiB；更长的 instructions 会被拒绝 |
 | [仅空白消息文本](message-content.md) | 已准入；原样交付 | 已准入；原生会丢弃它，全空白消息变为 `(no content)` | 已拒绝 |
 | [消息图像](message-content.md#images) | PNG、JPEG data URL：所有位置已验证；其他 data URL：已准入；远程 URL：已拒绝 | PNG、JPEG data URL：所有位置已验证；远程 URL 及 GIF、WebP data URL：已准入 | 已拒绝 |
 | `reasoning.effort` | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 | `low`、`medium`、`high`、`xhigh`、`max`：已准入 | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 |
@@ -61,7 +62,7 @@ Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、P
 | [初始文件、设置命令、Skill 与 Plugin](environments.md#runtime-capability-preparation) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | 能力目录 | 已准入 | 已准入 | 已准入 |
 | npm 与 Python 包 | 已准入 | 已准入 | 已准入 |
-| `packages.system` | 非空时拒绝 | 非空时拒绝 | 非空时拒绝 |
+| null 或 `[]` 以外的 `packages.system` | 已拒绝 | 已拒绝 | 已拒绝 |
 | 网络 `disabled` 或 `restricted` | 已拒绝 | 已拒绝 | 已拒绝 |
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，字面值头或 HTTPS bearer | 已验证：自托管；已准入：托管；字面值头或 HTTPS bearer |

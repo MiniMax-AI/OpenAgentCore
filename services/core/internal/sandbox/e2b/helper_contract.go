@@ -11,7 +11,7 @@ import (
 //go:generate go run ./internal/contractgen
 
 // This adapter-private boundary is documented in tools/e2b-provider/README.md.
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
 const MaxResponseBytes = 16 * 1024 * 1024

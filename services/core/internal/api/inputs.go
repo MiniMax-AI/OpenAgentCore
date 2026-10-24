@@ -21,7 +21,7 @@ type InputAdmission interface {
 }
 
 func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
-	raw, ok := readJSONObjectLimit(w, r, 4<<20, "Request exceeds 4 MiB.")
+	raw, ok := readJSONObject(w, r)
 	if !ok {
 		return
 	}
@@ -77,7 +77,7 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func executionInputs(events []json.RawMessage) ([]sessions.Input, error) {
-	if len(events) == 0 || len(events) > 16384 {
+	if len(events) == 0 || len(events) > sessions.MaxInputBatch {
 		return nil, sessions.ErrInvalidInput
 	}
 	inputs := make([]sessions.Input, 0, len(events))

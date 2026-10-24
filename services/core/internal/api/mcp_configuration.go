@@ -51,7 +51,7 @@ func resolveMCPTool(raw json.RawMessage, saved bool) (json.RawMessage, error) {
 		return nil, errors.New("MCP credential_id must be null or a nonempty string, and stdio servers take none.")
 	}
 	if len(input.RequestMetadata) != 0 {
-		return nil, errors.New("Nonempty MCP request_metadata is not supported yet.")
+		return nil, errors.New("No engine sends MCP request_metadata.")
 	}
 	var allowed *[]string
 	if input.AllowedTools != nil {

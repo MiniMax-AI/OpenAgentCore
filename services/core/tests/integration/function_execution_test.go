@@ -141,9 +141,9 @@ func TestExecutionSubagentFunctionCallIsARequiredActionOfTheRootTurn(t *testing.
 	if err != nil || state.LastTurn.ID != input.TurnID || state.LastTurn.Status != sessions.TurnWaiting || len(childItems.Data) != 1 || childItems.Data[0].CallID != action.CallID {
 		t.Fatal(state, childItems, err)
 	}
-	// The official SDK answers with the child Turn ID of the call's event.
+	// The root Turn answers the call; the child Turn ID answer has its own test.
 	answer := json.RawMessage(`{"success":true,"output":"saved"}`)
-	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, items.Identity(child.ID, "turn:child-turn"), action.CallID, answer); err != nil {
+	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, action.CallID, answer); err != nil {
 		t.Fatal(err)
 	}
 	var reply proto.FunctionResultPayload

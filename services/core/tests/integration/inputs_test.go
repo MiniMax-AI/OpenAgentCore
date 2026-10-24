@@ -94,6 +94,19 @@ func reserveEnvironmentInput(t *testing.T, s *Store, tenant, session, key string
 	return got
 }
 
+// The largest batch the events route admits fits an Environment reservation.
+func TestEnvironmentInputReservationHoldsTheLargestBatch(t *testing.T) {
+	s, _ := testStore(t)
+	tenant, session := environmentInputSession(t, s)
+	inputs := make([]sessions.Input, sessions.MaxInputBatch)
+	for i := range inputs {
+		inputs[i] = messageInput("input")
+	}
+	if _, err := sessionService(t, s).ReserveEnvironmentInput(t.Context(), tenant, session.ID, "largest", inputs); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // cancelEnvironmentInput cancels the Session's pending Environment input as
 // Session cancellation does, then reads the reservation back.
 func cancelEnvironmentInput(ctx context.Context, s *Store, tenant, session, reservation string) (sessions.EnvironmentInputReservation, error) {
