@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: afc5f4073341abbc15adb539ae44efd8c5d575d0e5ae2ec3028739cbf6538ea7
+source_hash: 4bccb4aaa93b5773708c46915447791443532cc3d0a9705124ee9e5812c5bf05
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
