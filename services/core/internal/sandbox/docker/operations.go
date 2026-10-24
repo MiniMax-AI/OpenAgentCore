@@ -23,6 +23,7 @@ func Operations() providercontract.Operations {
 		"DeleteSnapshot":     {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
 		"RunCommandCompute":  {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
 		"ResumeCompute":      {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
+		"RenewCompute":       {State: providercontract.Unsupported, Reason: "docker_does_not_support_checkpoints"},
 		"RestorePreparation": {State: providercontract.Unsupported, Reason: "docker_does_not_support_preparation_cache"},
 		"SavePreparation":    {State: providercontract.Unsupported, Reason: "docker_does_not_support_preparation_cache"},
 		"Observe":            {State: providercontract.Supported},
@@ -55,6 +56,9 @@ func (p *Provider) RunCommandCompute(context.Context, sandbox.Reference, sandbox
 }
 func (p *Provider) ResumeCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
 	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "ResumeCompute", Reason: Operations()["ResumeCompute"].Reason}
+}
+func (p *Provider) RenewCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
+	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "RenewCompute", Reason: Operations()["RenewCompute"].Reason}
 }
 func (p *Provider) RestorePreparation(context.Context, sandbox.Reference, string) (bool, error) {
 	return false, &providercontract.UnsupportedError{Operation: "RestorePreparation", Reason: Operations()["RestorePreparation"].Reason}

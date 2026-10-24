@@ -16,6 +16,7 @@ var operationMethods = map[string]string{
 	"delete_snapshot":     "DeleteSnapshot",
 	"command_compute":     "RunCommandCompute",
 	"resume_compute":      "ResumeCompute",
+	"renew_compute":       "RenewCompute",
 	"restore_preparation": "RestorePreparation",
 	"save_preparation":    "SavePreparation",
 	"observe":             "Observe",

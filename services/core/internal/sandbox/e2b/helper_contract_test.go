@@ -66,6 +66,7 @@ func validManagedExchange(data []byte) bool {
 	_ = json.Unmarshal(bootstrapBytes, &expected)
 	delete(expected, "CoreURL")
 	delete(expected, "Credential")
+	delete(expected, "SuspendControl")
 	expected["InstallationID"] = nil
 	expected["RuntimeBootstrap"] = nil
 	if workspace, present := fields["Workspace"]; present {

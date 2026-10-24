@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 4b77c11fe9a80e4b6d200ca161ab53e006bfc46b185262ee858fc65d75b5112a
+source_hash: 673ae35810faa99f2a3fa480f6b487b4b8a3e7a21a47a4b1fa9c22df6bc53845
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -81,7 +81,7 @@ GET 和成功的写入操作会返回 `installation_id`、`provider`、`core_url
 
 - `metadata.template_build` 为 `{status, resources: {cpus, memory_mib, root_disk_mib}}`：这是保存选择时 Core 通过固定版本 SDK 读取的构建。GET 绝不会调用 E2B，因此 E2B 中断期间该操作仍保持低成本。验证仅接受 CPU 数量和内存与所选值一致的 `ready` 构建；`root_disk_mib` 是构建的原生磁盘大小，Core 不会强制执行该值。未知值为 null，`metadata: {}` 表示未记录任何观测，在不提供凭据的情况下提交完全相同的 PUT 也不会刷新它。
 - 所选提供商声明 checkpoint 支持时，`suspension` 为 `{idle_seconds, retention_seconds}`，即 Core 的 [suspension policy](../../../docs/zh/sandbox-provider.md#suspension)；其他部署（包括未配置的部署）返回 null。
-- 请求中的 `resources` 和响应中的 `specification.resources` 是每个沙箱的限制。响应中的 `resources.allocations` 和 `resources.pending` 分别计算尚未释放的分配，以及尚未分配沙箱的待处理托管 Environment。
+- 请求中的 `resources` 和响应中的 `specification.resources` 是每个沙箱的限制。响应中的 `resources.allocations` 和 `resources.pending` 分别计算尚未释放的分配，以及尚未分配沙箱的待处理托管 Environment；`resources.running` 计算计算资源正在运行的未释放分配，因此不含已挂起的分配。
 - 未配置的部署具有空的提供商且没有 specification。Docker 和 microsandbox 使用 `mode: nodes`；E2B 使用 `mode: direct`，且没有合成节点。
 - `generation` 标识已保存的选择。`owner_epoch` 用于对执行所有者和节点连接进行栅栏隔离；它不能替代 `expected_generation`。
 - `specification_digest` 是服务器对提供商、限制和派生的工作区能力回执的标识；注册过程会原样回显该值。
@@ -225,7 +225,7 @@ Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。
 | 独立工作区文件系统 | 必需：[Kernel NFS adapter](../../../docs/zh/workspace-provider.md#kernel-nfs-adapter)，与计算资源分开配置 | 不支持 | 不支持 |
 | 部署 `specification.resources` | `cpus`、`memory_mib`、`root_disk_mib`，以及作为配额请求的 `environment_disk_mib` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 | `cpus` 和 `memory_mib`；无磁盘配额 |
 | 部署 `metadata.template_build` | 不存在：`metadata` 为空 | Core 保存选择时读取到的构建 | 不存在：`metadata` 为空 |
-| 部署 `suspension` | `{idle_seconds, retention_seconds}` | `null`；Core 不暂停 E2B 沙箱 | `null` |
+| 部署 `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`；Core 用 SDK 的原生 pause 暂停空闲的 E2B 沙箱 | `null` |
 | 部署 `resources.allocations`、`resources.pending` | 所有节点的总数 | Core 中尚未释放的 E2B 沙箱，以及正在等待沙箱的托管 Environment | 所有节点的总数 |
 | 注册令牌 `max_active`、`max_retained` | 两个限制均适用；省略的限制在注册时推导 | 先执行 400 容量检查，然后返回 409 `sandbox_deployment_conflict`；E2B 没有节点 | `max_retained` 始终等于 `max_active` |
 | 节点列表和详情 | 已注册节点 | 空列表；详情返回 404 | 已注册节点 |

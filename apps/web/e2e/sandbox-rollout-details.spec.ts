@@ -9,7 +9,7 @@ test("keeps rollout summary brief and opens all Core observations in details", a
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
     const response = await route.fetch();
     const deployment = await response.json();
-    await route.fulfill({ response, json: { ...deployment, generation: 4, resources: { allocations: 8, pending: 0 }, rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, unknown: 4 } } } });
+    await route.fulfill({ response, json: { ...deployment, generation: 4, resources: { allocations: 8, running: 8, pending: 0 }, rollout: { state: "settled", previous_generation_sandboxes: 8, nodes: { ready: 1, preparing: 0, failed: 2, unknown: 4 } } } });
   });
   await openConsole(page, request, "settings?id=sandbox");
   const summary = page.getByRole("region", { name: "Configuration rollout", exact: true });

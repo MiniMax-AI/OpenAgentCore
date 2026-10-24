@@ -166,7 +166,7 @@ func runEnvironmentConnect(parent context.Context, rc *runContext, profile strin
 		return err
 	}
 	prof := auth.Profile{ServerURL: base, RuntimeID: bound.DeviceID, RunnerCredential: credential}
-	return rejected(mainLoopRemote(parent, rc, profile, prof, discovery, remote))
+	return rejected(mainLoopRemote(parent, rc, profile, prof, discovery, remote, false))
 }
 
 var (

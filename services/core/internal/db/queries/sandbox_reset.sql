@@ -100,6 +100,7 @@ held AS (
 SELECT sqlc.embed(d),
     (SELECT count(*) FROM classified WHERE NOT pending)::bigint AS allocations,
     (SELECT count(*) FROM classified WHERE pending)::bigint AS pending,
+    (SELECT count(*) FROM runtime_allocations a WHERE a.state = 'running' AND a.compute_phase IN ('running', 'disabled'))::bigint AS running,
     jsonb_build_object(
         'busy', (SELECT count(*) FROM classified WHERE category = 'busy'),
         'idle', (SELECT count(*) FROM classified WHERE category = 'idle'),

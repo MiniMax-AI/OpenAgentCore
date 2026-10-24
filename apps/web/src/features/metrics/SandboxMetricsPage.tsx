@@ -145,7 +145,7 @@ function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
     >
       <p className="detail-note">{t("sandbox.cloud.counts")}</p>
       <KpiStrip label={t("sandbox.cloud.title")}>
-        <Kpi label={t("sandbox.cloud.running")} help={t("sandbox.cloud.runningHelp")} value={formatInteger(deployment.resources.allocations, locale)} />
+        <Kpi label={t("sandbox.cloud.running")} help={t("sandbox.cloud.runningHelp")} value={formatInteger(deployment.resources.running, locale)} />
         <Kpi label={t("sandbox.cloud.pending")} value={formatInteger(deployment.resources.pending, locale)} />
         <Kpi
           label={t("sandbox.cloud.size")}

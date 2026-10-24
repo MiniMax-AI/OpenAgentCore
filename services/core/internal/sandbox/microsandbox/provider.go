@@ -261,6 +261,11 @@ func (p *Provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c Com
 	return p.state(ctx, Request{Operation: "resume_compute", Reference: r, Compute: c})
 }
 
+// RenewCompute observes: a microsandbox VM has no native lease.
+func (p *Provider) RenewCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
+	return p.GetCompute(ctx, r, c)
+}
+
 func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generation uint64, snapshot *SnapshotIdentity) (Compute, error) {
 	if err := ctx.Err(); err != nil {
 		return Compute{}, err

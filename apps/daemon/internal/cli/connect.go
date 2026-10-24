@@ -69,11 +69,12 @@ func runConnect(ctx *runContext, args []string) error {
 		return fmt.Errorf("connect: %w", err)
 	}
 	var bootstrapped *auth.Profile
+	var suspendEnabled bool
 	if *bootstrapFile != "" {
 		if *remote != "" || *environment != "" || *credentialFile != "" || *workspace != "" || fs.NArg() != 0 {
 			return errors.New("connect: bootstrap input cannot be combined with enrollment options")
 		}
-		bootstrapped, err = bootstrapProfile(*bootstrapFile)
+		bootstrapped, suspendEnabled, err = bootstrapProfile(*bootstrapFile)
 		if err != nil {
 			return err
 		}
@@ -118,7 +119,7 @@ func runConnect(ctx *runContext, args []string) error {
 		}
 	}
 
-	return mainLoop(ctx, *profile, prof, agentCLIs)
+	return mainLoop(ctx, *profile, prof, agentCLIs, suspendEnabled)
 }
 
 // spawnBackground forks the daemon into the background. Parent
@@ -189,11 +190,11 @@ func spawnBackground(ctx context.Context, rc *runContext, profile string, argv [
 // background process. SIGINT / SIGTERM cancels the root context, which
 // unblocks the read pump and any in-flight Send so the daemon exits
 // without orphaning agent subprocesses.
-func mainLoop(rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery) error {
-	return mainLoopRemote(context.Background(), rc, profile, prof, agentCLIs, "")
+func mainLoop(rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery, suspend bool) error {
+	return mainLoopRemote(context.Background(), rc, profile, prof, agentCLIs, "", suspend)
 }
 
-func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery, remote string) error {
+func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof auth.Profile, agentCLIs agentCLIDiscovery, remote string, suspend bool) error {
 	// Route through obs/log so daemon log lines pick up the same
 	// trace_id / span_id auto-injection as the server side — when the
 	// daemon adopts an envelope's trace, every log call under that ctx
@@ -229,7 +230,7 @@ func mainLoopRemote(parent context.Context, rc *runContext, profile string, prof
 	registry := agent.NewRegistry()
 	registerAgentKinds(registry, agentCLIs)
 
-	control, err := newSuspendControl()
+	control, err := newSuspendControl(suspend)
 	if err != nil {
 		return err
 	}

@@ -10,7 +10,7 @@ const reset: SandboxReset = {
 };
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({ credential_configured: false, configuration: {}, metadata: {},
   rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "installation-a", provider: "docker", core_url: "https://core.example", reset,
-  owner_epoch: 1, generation: 2, mode: "nodes", resources: { allocations: 2, pending: 0 }, suspension: null, ...overrides,
+  owner_epoch: 1, generation: 2, mode: "nodes", resources: { allocations: 2, running: 2, pending: 0 }, suspension: null, ...overrides,
 });
 const clients: QueryClient[] = [];
 const cache = () => { const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } }); clients.push(client); return client; };

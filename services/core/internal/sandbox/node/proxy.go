@@ -166,6 +166,10 @@ func (p *provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c san
 	return p.state(ctx, request{Operation: "resume_compute", Reference: r, Compute: &c})
 }
 
+func (p *provider) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	return p.state(ctx, request{Operation: "renew_compute", Reference: r, Compute: &c})
+}
+
 // GenerationProvider routes every operation with allocation-owned generation,
 // distinct from the request's compute generation. declared is the kind's
 // registered operations.

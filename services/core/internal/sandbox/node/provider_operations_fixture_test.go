@@ -24,6 +24,7 @@ func (*fakeProvider) ProviderOperations() providercontract.Operations {
 		"DeleteSnapshot":     {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"RunCommandCompute":  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"ResumeCompute":      {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"RenewCompute":       {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"RestorePreparation": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"SavePreparation":    {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"Observe":            {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
@@ -56,6 +57,9 @@ func (*fakeProvider) RunCommandCompute(context.Context, sandbox.Reference, sandb
 func (*fakeProvider) ResumeCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
 	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "ResumeCompute", Reason: "fixture_operation_not_supported"}
 }
+func (*fakeProvider) RenewCompute(context.Context, sandbox.Reference, sandbox.Compute) (sandbox.ComputeState, error) {
+	return sandbox.ComputeState{}, &providercontract.UnsupportedError{Operation: "RenewCompute", Reason: "fixture_operation_not_supported"}
+}
 func (*fakeProvider) Observe(context.Context, runtimeobs.Target) (runtimeobs.Sample, error) {
 	return runtimeobs.Sample{}, &providercontract.UnsupportedError{Operation: "Observe", Reason: "fixture_operation_not_supported"}
 }
@@ -75,6 +79,7 @@ func (*observationProvider) ProviderOperations() providercontract.Operations {
 		"DeleteSnapshot":     {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"RunCommandCompute":  {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"ResumeCompute":      {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
+		"RenewCompute":       {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"RestorePreparation": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"SavePreparation":    {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"},
 		"Observe":            {State: providercontract.Supported},

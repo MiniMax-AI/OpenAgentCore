@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 7b5d8c6ff67f76a8d005aa2a3e1fdfdd6ea06e7856baf20a6d26e21ea1287475
+source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
 ---
 
 本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
@@ -116,7 +116,7 @@ source_hash: 7b5d8c6ff67f76a8d005aa2a3e1fdfdd6ea06e7856baf20a6d26e21ea1287475
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 **清理主机** 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | **沙箱监控**：每个项目的托管 Runtime，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |
 
-E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.allocations` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。
+E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.running` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。
 
 ## 写入 {#writes}
 
