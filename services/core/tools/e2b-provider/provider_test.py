@@ -425,6 +425,15 @@ class CheckpointTest(Fixture):
         self.assertEqual(self.record()['resume']['status'], 'dispatched')
         self.assertNotIn(self.op, self.record().get('closed', {}))
 
+    def test_old_pending_pause_is_settled_by_observation(self):
+        self.assertEqual(self.suspend()['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.suspend(observe=True)['ErrorCode'], 'unconfirmed')
+        with patch('provider.time.time', return_value=time.time() + provider.PENDING_PAUSE_SETTLE_SECONDS + 1):
+            result = self.suspend(observe=True)
+        self.assertEqual((result['ErrorCode'], result['State']['Status']), ('', 'running'))
+        self.assertNotIn('Snapshot', result['State'])
+        self.assertEqual(self.record()['pause']['status'], 'not_taken')
+
     def test_renew_compute_extends_only_a_running_lease(self):
         self.request['Compute'] = self.compute()
         self.assertEqual(self.call('renew_compute')['ErrorCode'], '')

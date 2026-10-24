@@ -18,6 +18,8 @@ from helper_contract_generated import (PROTOCOL_VERSION, OPERATIONS, REQUEST_FIE
 
 PREFIX = 'oac_'
 FIELDS = ('InstallationID', *REFERENCE_FIELDS)
+PENDING_PAUSE_SETTLE_SECONDS = 600  # a pause request finishes in seconds; ten minutes proves it did not take effect
+
 # Exits 78 unless the template carries the startup script and a contract for this Runtime bootstrap version.
 TEMPLATE_CHECK = """import importlib.util, os, sys
 root, version = sys.argv[1], int(sys.argv[2])
@@ -388,13 +390,17 @@ class Provider:
         cloud = self.current(source)
         if cloud.state == 'running' and not request['ObserveOnly']:
             # Record the attempt before the native call; pause of a paused sandbox is a no-op.
-            self.receipt.save(pause={'operation_id': operation, 'status': 'pending'})
+            self.receipt.save(pause={'operation_id': operation, 'status': 'pending', 'at': time.time()})
             Sandbox.pause(cloud.sandbox_id, **self.options())
             cloud = self.qualified(self.owns(Sandbox.get_info(cloud.sandbox_id, **self.options())))
         pause = (self.receipt.data or {}).get('pause') or {}
         if cloud.state != 'paused' or pause.get('operation_id') != operation:
             # A dispatched pause may still take effect, so running is never reported for it.
             pending = pause.get('operation_id') == operation and pause.get('status') == 'pending'
+            if pending and request['ObserveOnly'] and cloud.state == 'running' and time.time() - pause.get('at', time.time()) > PENDING_PAUSE_SETTLE_SECONDS:
+                # Observation proves the long-dispatched pause did not take effect; close it as not taken.
+                self.receipt.save(pause={'operation_id': operation, 'status': 'not_taken'})
+                return self.state(source, cloud)
             if request['ObserveOnly'] and not pending:
                 return self.state(source, cloud)
             raise Failure('unconfirmed')
