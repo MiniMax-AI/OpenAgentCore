@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: ba9c6565567c1b4dcffb0c8f18731372b9e3c95e25f84dc0c3c2782c94161eb2
+source_hash: 1d087e0f29e20f091416cc7bd3293e754c610f2335e2d66456f5205706d9983a
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -128,7 +128,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 ### 游标 {#cursors}
 
-`after` 指定同一列表中的某个资源，并且该资源必须位于已经解析出的父资源和租户内。首先解析父资源：父资源缺失或属于外部租户时，会先返回其 404，然后才读取游标。无法解析的游标，无论是随机值、格式错误、类型不同、父资源不同、已删除还是属于其他租户，均返回：
+`after` 指定同一列表中的某个资源，并且该资源必须位于已经解析出的父资源和租户内。首先解析父资源：父资源缺失或属于外部租户时，会先返回其 404，然后才读取游标。无法解析的游标，无论是随机值、格式错误、类型不同、父资源不同、已删除还是属于其他租户，均返回下表中的响应。已删除的 Session 仍可作为 Sessions 游标解析，并从其位置继续分页，与官方服务一致；已删除的 Agent 无法解析：
 
 | 列表 | 响应 |
 | --- | --- |
