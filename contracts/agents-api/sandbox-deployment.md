@@ -227,7 +227,7 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | Node `retained`, `snapshots`, `max_retained` | Suspended sandboxes are `retained` minus `active`; `snapshots` also includes retained snapshots during restore or cleanup | Not applicable | Docker never suspends: `retained` equals `active`, `snapshots` is 0 and `max_retained` equals `max_active` |
 | Node `host.available_disk_bytes` | Free space on the filesystem of the node state directory; sandbox disks have their own quotas | Not applicable | Free space on the filesystem of the node state directory, not a container's disk |
 | Allocation `compute_phase`, `compute_phase_changed_at` | Includes `suspended`; the timestamp describes the current phase, not snapshot expiry | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation |
-| Runtime observation `cpu`, `memory` | From the VM: `cpu.usage_seconds_total`, CPU and memory limits, memory usage | From E2B metrics: `cpu.utilization_ratio` and `capacity_cores`, memory usage and limit; no cumulative CPU time | From Docker stats: `cpu.usage_seconds_total`, CPU and memory limits, memory usage |
+| Runtime observation `memory` | From the VM: memory limit and usage | From E2B metrics: memory usage and limit | From Docker stats: memory limit and usage |
 | Runtime observation `disk` | `null` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota |
 | Runtime observation `lifecycle_state: sleeping` | While suspended | Never | Never |
 | Runtime history CPU | Derived from cumulative CPU time | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time |

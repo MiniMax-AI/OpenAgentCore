@@ -132,9 +132,6 @@ func runtimeObservationResponse(observation runtimeobs.Observation) (v1.RuntimeO
 		startedAt := observation.Sample.StartedAt.Unix()
 		result.StartedAt = &startedAt
 	}
-	if observation.Sample.CPUUsageSecondsTotal != nil || observation.Sample.CPUCapacityCores != nil || observation.Sample.CPUUtilizationRatio != nil {
-		result.CPU = &v1.RuntimeCPUObservation{UsageSecondsTotal: observation.Sample.CPUUsageSecondsTotal, CapacityCores: observation.Sample.CPUCapacityCores, UtilizationRatio: observation.Sample.CPUUtilizationRatio}
-	}
 	if observation.Sample.MemoryUsageBytes != nil || observation.Sample.MemoryLimitBytes != nil {
 		result.Memory = &v1.RuntimeMemoryObservation{UsageBytes: observation.Sample.MemoryUsageBytes, LimitBytes: observation.Sample.MemoryLimitBytes}
 	}

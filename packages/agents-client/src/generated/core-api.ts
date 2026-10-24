@@ -26,7 +26,6 @@ export interface AdminRuntimeObservation {
 export const adminRuntimeObservationFields = ["observation", "project_id"] as const;
 export interface AdminRuntimeObservationDetail {
   allocation_created_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   disk: RuntimeDiskObservation | null;
   environment_id: string | null;
   id: string;
@@ -43,7 +42,7 @@ export interface AdminRuntimeObservationDetail {
   started_at: number | null;
   status: AdminRuntimeObservationDetailStatus;
 }
-export const adminRuntimeObservationDetailFields = ["allocation_created_at", "cpu", "disk", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
+export const adminRuntimeObservationDetailFields = ["allocation_created_at", "disk", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
 export const adminRuntimeObservationDetailLifecycleStateValues = ["active", "sleeping", "transitioning", "pending", "stopped"] as const;
 export type AdminRuntimeObservationDetailLifecycleState = (typeof adminRuntimeObservationDetailLifecycleStateValues)[number];
 export const adminRuntimeObservationDetailModeValues = ["none", "self_hosted", "openai_hosted"] as const;
@@ -674,12 +673,6 @@ export interface RolloutNodes {
 export const rolloutNodesFields = ["failed", "preparing", "ready", "unknown"] as const;
 export const rolloutStateValues = ["settled", "preparing"] as const;
 export type RolloutState = (typeof rolloutStateValues)[number];
-export interface RuntimeCPUObservation {
-  capacity_cores: number | null;
-  usage_seconds_total: number | null;
-  utilization_ratio: number | null;
-}
-export const runtimeCPUObservationFields = ["capacity_cores", "usage_seconds_total", "utilization_ratio"] as const;
 export interface RuntimeDiskObservation {
   limit_bytes: number | null;
   usage_bytes: number | null;
@@ -782,7 +775,6 @@ export interface RuntimeMemoryObservation {
 export const runtimeMemoryObservationFields = ["limit_bytes", "usage_bytes"] as const;
 export interface RuntimeObservation {
   allocation_created_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   environment_id: string | null;
   id: string;
   instance: RuntimeInstance;
@@ -798,7 +790,7 @@ export interface RuntimeObservation {
   started_at: number | null;
   status: RuntimeObservationStatus;
 }
-export const runtimeObservationFields = ["allocation_created_at", "cpu", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
+export const runtimeObservationFields = ["allocation_created_at", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
 export const runtimeObservationLifecycleStateValues = ["active", "sleeping", "transitioning", "pending", "stopped"] as const;
 export type RuntimeObservationLifecycleState = (typeof runtimeObservationLifecycleStateValues)[number];
 export const runtimeObservationModeValues = ["none", "self_hosted", "openai_hosted"] as const;

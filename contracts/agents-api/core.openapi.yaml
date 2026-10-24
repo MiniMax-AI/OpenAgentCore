@@ -66,10 +66,6 @@ definitions:
         minimum: 0
         type: integer
         x-nullable: true
-      cpu:
-        allOf:
-          - $ref: '#/definitions/v1.RuntimeCPUObservation'
-        x-nullable: true
       disk:
         allOf:
           - $ref: '#/definitions/api.RuntimeDiskObservation'
@@ -143,7 +139,6 @@ definitions:
         type: string
     required:
       - allocation_created_at
-      - cpu
       - disk
       - environment_id
       - id
@@ -2694,25 +2689,6 @@ definitions:
     required:
       - type
     type: object
-  v1.RuntimeCPUObservation:
-    properties:
-      capacity_cores:
-        minimum: 5e-324
-        type: number
-        x-nullable: true
-      usage_seconds_total:
-        minimum: 0
-        type: number
-        x-nullable: true
-      utilization_ratio:
-        minimum: 0
-        type: number
-        x-nullable: true
-    required:
-      - capacity_cores
-      - usage_seconds_total
-      - utilization_ratio
-    type: object
   v1.RuntimeHistory:
     properties:
       coverage:
@@ -3056,10 +3032,6 @@ definitions:
         minimum: 0
         type: integer
         x-nullable: true
-      cpu:
-        allOf:
-          - $ref: '#/definitions/v1.RuntimeCPUObservation'
-        x-nullable: true
       environment_id:
         format: uuid
         type: string
@@ -3126,7 +3098,6 @@ definitions:
         type: string
     required:
       - allocation_created_at
-      - cpu
       - environment_id
       - id
       - instance

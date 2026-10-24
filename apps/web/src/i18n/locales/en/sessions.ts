@@ -118,9 +118,8 @@ export const sessions = {
   },
   runtime: {
     title: "Runtime",
-    help: "CPU and memory of this Session's hosted sandbox as observed by Core, and the samples Core retained for the chosen range.",
+    help: "Current memory of this Session's hosted sandbox as observed by Core, and the CPU and memory samples Core retained for the chosen range.",
     state: "State",
-    cpu: "CPU",
     memory: "Memory",
     observed: "Observed",
     range: "Time range",
