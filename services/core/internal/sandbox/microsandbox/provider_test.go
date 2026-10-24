@@ -173,8 +173,10 @@ func TestSnapshotReceiptIsRequired(t *testing.T) {
 	if err := ValidateSnapshot(c, r, s); err != nil {
 		t.Fatal(err)
 	}
-	s.Receipt = "digest"
-	if ValidateSnapshot(c, r, s) == nil {
-		t.Fatal("malformed receipt accepted")
+	for _, receipt := range []string{"digest", "digest  /root", "digest checkpoint "} {
+		s.Receipt = receipt
+		if ValidateSnapshot(c, r, s) == nil {
+			t.Fatal("malformed receipt accepted", receipt)
+		}
 	}
 }

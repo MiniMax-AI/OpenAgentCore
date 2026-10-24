@@ -78,7 +78,8 @@ func SnapshotReceipt(digest, checkpointID, root string) string {
 }
 
 func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
-	if s.Validate() != nil || !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || strings.Count(s.Receipt, " ") < 2 || strings.HasPrefix(s.Receipt, " ") {
+	receipt := strings.SplitN(s.Receipt, " ", 3)
+	if s.Validate() != nil || !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || len(receipt) != 3 || receipt[0] == "" || receipt[1] == "" || receipt[2] == "" {
 		return sandbox.ErrInvalid
 	}
 	return nil
