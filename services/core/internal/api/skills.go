@@ -57,39 +57,27 @@ func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, skillResponseResource(value))
 }
 
+var skillUpdateShape = shape{kind: objectValue, members: []member{{"default_version", requiredString}}}
+
 func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBodyLimit(w, r, 64<<10, "Request exceeds 64 KiB.")
 	if !ok {
 		return
 	}
-	raw, err := jsonObjectBody(body)
-	if err != nil {
-		writeFieldError(w, err)
-		return
-	}
-	if field, found := unknownBodyField(raw, "default_version"); found {
-		if !echoableField(field) {
-			writeFieldError(w, errUnknownParameter)
+	// The Skills routes keep their own body rules; a well-formed object reports
+	// its field errors first.
+	if json.Valid(body) && jsonValueKind(body) == "an object" {
+		if err := checkValue("", body, skillUpdateShape); err != nil {
+			writeFieldError(w, err)
 			return
 		}
-		writeFieldError(w, &fieldError{param: field, message: "Unknown parameter: '" + field + "'."})
+	}
+	var input v1.SkillUpdateRequest
+	if decodeInputObject(body, &input, "default_version") != nil {
+		writeSkillsError(w, r, skills.ErrInvalidInput)
 		return
 	}
-	var input struct {
-		DefaultVersion json.RawMessage `json:"default_version"`
-	}
-	_ = json.Unmarshal(raw, &input)
-	var version string
-	if len(input.DefaultVersion) == 0 {
-		writeFieldError(w, missingParameter("default_version"))
-		return
-	}
-	if err := checkValue("default_version", input.DefaultVersion, shape{kind: stringValue}); err != nil {
-		writeFieldError(w, err)
-		return
-	}
-	_ = json.Unmarshal(input.DefaultVersion, &version)
-	value, err := h.Skills.SetDefaultVersion(r.Context(), skills.SetDefaultVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Version: version})
+	value, err := h.Skills.SetDefaultVersion(r.Context(), skills.SetDefaultVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Version: input.DefaultVersion})
 	if err != nil {
 		writeSkillsError(w, r, err)
 		return
