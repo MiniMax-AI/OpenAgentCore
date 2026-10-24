@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: eb7282383dcac86723189824b0391c7dd50336257db922a1fce2b2f2d2153049
+source_hash: 15550304b85596e09cbeb4cc6d7253a4bdd64ffd6adc58a539511e0c939f7ad6
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -55,7 +55,7 @@ stateDiagram-v2
 
 Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
-Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
+Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
 
 托管的外层 Environment 必须排除权限范围更广的应用程序凭据和其他租户的机密。
 
