@@ -81,7 +81,7 @@ func main() {
 	identity = append(identity, "InstallationID")
 	values := map[string]any{
 		"PROTOCOL_VERSION": e2b.ProtocolVersion, "SDK_VERSION": sdk,
-		"SUSPEND_CONTROL_FILE": runtimebootstrap.SuspendControlFile, "MAX_REQUEST": e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
+		"SUSPEND_CONTROL_FILE": runtimebootstrap.SuspendControlFile, "RUNTIME_BOOTSTRAP_VERSION": runtimebootstrap.Version, "MAX_REQUEST": e2b.MaxRequestBytes, "MAX_RESPONSE": e2b.MaxResponseBytes,
 		"MAX_OUTPUT": e2b.MaxOutputBytes, "MAX_COMMAND_INPUT": e2b.MaxCommandInputBytes, "MAX_CREDENTIAL_REFERENCES": e2b.MaxCredentialReferences,
 		"OPERATIONS": e2b.HelperOperations(), "ERROR_CODES": e2b.HelperErrors(),
 		"REQUEST_FIELDS": fields(reflect.TypeFor[e2b.Request]()), "RESPONSE_FIELDS": fields(reflect.TypeFor[e2b.Response]()),

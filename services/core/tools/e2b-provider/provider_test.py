@@ -3,7 +3,10 @@ import copy
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -12,6 +15,7 @@ from uuid import uuid4
 from e2b import SandboxState
 from e2b.exceptions import AuthenticationException, SandboxNotFoundException
 
+import provider
 from provider import Provider
 from sdk import restore, run
 from state import Failure, Receipt
@@ -322,6 +326,20 @@ class SDKTest(unittest.TestCase):
             run(client, {'Args': ['true']}, lambda: 3)
         self.assertEqual(result.exception.code, 'command_unconfirmed')
         client.commands.run.assert_called_once()
+
+
+class TemplateCheckTest(unittest.TestCase):
+    def exit_code(self, files):
+        with tempfile.TemporaryDirectory() as root:
+            for name, text in files.items():
+                Path(root, name).write_text(text)
+            return subprocess.run([sys.executable, '-I', '-c', provider.TEMPLATE_CHECK, root, '3']).returncode
+
+    def test_template_needs_startup_script_and_current_bootstrap_version(self):
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 3'}), 0)
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 2'}), 78)
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': ''}), 78)
+        self.assertEqual(self.exit_code({'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 3'}), 78)
 
 
 class CheckpointTest(Fixture):

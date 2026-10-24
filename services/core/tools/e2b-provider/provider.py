@@ -14,10 +14,23 @@ from e2b.exceptions import AuthenticationException, FileNotFoundException, Sandb
 from sdk import connection_material, definitely_rejected, list_builds, list_templates, read_metrics, restore, run, sdk_options, validate_deployment, verify_team_template
 from state import Failure, Receipt, private_root, read_receipt
 from helper_contract_generated import (PROTOCOL_VERSION, OPERATIONS, REQUEST_FIELDS, REFERENCE_FIELDS,
-    MAX_CREDENTIAL_REFERENCES, MANAGED_BOOTSTRAP_FIELDS, MANAGED_BOOTSTRAP_REQUIRED_FIELDS)
+    MAX_CREDENTIAL_REFERENCES, MANAGED_BOOTSTRAP_FIELDS, MANAGED_BOOTSTRAP_REQUIRED_FIELDS, RUNTIME_BOOTSTRAP_VERSION)
 
 PREFIX = 'oac_'
 FIELDS = ('InstallationID', *REFERENCE_FIELDS)
+# Exits 78 unless the template carries the startup script and a contract for this Runtime bootstrap version.
+TEMPLATE_CHECK = """import importlib.util, os, sys
+root, version = sys.argv[1], int(sys.argv[2])
+script = os.path.join(root, 'managed_init.py')
+try:
+    spec = importlib.util.spec_from_file_location('template_contract', os.path.join(root, 'helper_contract_generated.py'))
+    contract = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(contract)
+    current = getattr(contract, 'RUNTIME_BOOTSTRAP_VERSION', None)
+except Exception:
+    current = None
+sys.exit(78 if not os.path.isfile(script) or not os.access(script, os.R_OK) or current != version else 0)
+"""
 COMPUTE_OPERATIONS = ('compute', 'renew_compute', 'resume_compute', 'suspend', 'resume', 'kill_compute', 'delete_snapshot', 'command_compute')
 
 
@@ -235,8 +248,7 @@ class Provider:
             self.receipt.save(status='configuration_rejected', settled=True)
             raise
         # Validate the current template entry point before writing any credential.
-        check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c',
-                    "import os,sys; sys.exit(78 if not os.path.isfile('/opt/oac-e2b/managed_init.py') or not os.access('/opt/oac-e2b/managed_init.py', os.R_OK) else 0)"]},
+        check = run(cloud, {'Args': ['/usr/bin/python3', '-I', '-c', TEMPLATE_CHECK, '/opt/oac-e2b', str(RUNTIME_BOOTSTRAP_VERSION)]},
                     self.remaining, user='root')
         if check['ExitCode'] != 0:
             self.receipt.save(status='bootstrap_failed', settled=True)
@@ -382,7 +394,8 @@ class Provider:
         pause = (self.receipt.data or {}).get('pause') or {}
         if cloud.state != 'paused' or pause.get('operation_id') != operation:
             # A dispatched pause may still take effect, so running is never reported for it.
-            if request['ObserveOnly'] and not (pause.get('operation_id') == operation and pause.get('status') == 'pending'):
+            pending = pause.get('operation_id') == operation and pause.get('status') == 'pending'
+            if request['ObserveOnly'] and not pending:
                 return self.state(source, cloud)
             raise Failure('unconfirmed')
         self.receipt.save(pause={'operation_id': operation, 'status': 'paused'})

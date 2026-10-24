@@ -220,7 +220,7 @@ func (p *Provider) exchange(ctx context.Context, q Request) (Response, error) {
 	case "":
 		return out, nil
 	case "template_invalid":
-		return out, fmt.Errorf("%w: This E2B template lacks the current Runtime startup entry point. Build a template with this release's build-template.py and select it in the sandbox deployment.", sandbox.ErrInvalid)
+		return out, fmt.Errorf("%w: This E2B template lacks the current Runtime startup entry point or was built for another Runtime bootstrap version. Build a template with this release's build-template.py and select it in the sandbox deployment.", sandbox.ErrInvalid)
 	case "team_mismatch":
 		return out, sandbox.ErrCredentialOwnership
 	case "unauthorized":

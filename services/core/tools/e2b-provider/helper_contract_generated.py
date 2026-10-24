@@ -14,5 +14,6 @@ PROTOCOL_VERSION = 1
 REFERENCE_FIELDS = ["TenantID","EnvironmentID","AllocationID"]
 REQUEST_FIELDS = ["Version","Operation","Config","Reference","References","Bootstrap","RuntimeBootstrap","Command","Compute","Suspend","Resume","Snapshot","Deadline"]
 RESPONSE_FIELDS = ["Version","Info","Command","State","ErrorCode","DeploymentValid","TemplateBuild","Templates","Builds","Observation"]
+RUNTIME_BOOTSTRAP_VERSION = 3
 SDK_VERSION = "2.51.0"
 SUSPEND_CONTROL_FILE = "/run/oac/daemon-suspend.json"
