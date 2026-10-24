@@ -80,7 +80,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - A Session's `agent.tools` omits `tool_search` declarations.
 - Core rejects an inline `authorization` on a Session MCP transport, an `Authorization` entry in `headers` and a nonempty stdio `env`: credentials come only from Vaults (`credential_id`) and environment values only from the Environment (`env_vars`) ([MCP](./execution-tools.md#mcp)).
 - A `stdio` MCP server needs a workspace placement and the origin `environment`. Claude Code starts the server in its workspace directory, so `cwd` must equal it, with its whole process environment, which also holds the model provider key and other servers' Vault bearer tokens, and it needs `allowed_tools` null. MiniMax Code starts the server in its private home directory, so it rejects every `stdio` server ([MCP](./execution-tools.md#mcp)).
-- Core rejects nonempty MCP `request_metadata`, a `stdio` server whose `connection_origin` is `service`, and a blank `server_label`, an empty `credential_id` and an empty `allowed_tools` name, which the pinned schema allows without defining their meaning (400 with the reason).
+- Core rejects nonempty MCP `request_metadata`, which no Harness can send, as well as a `stdio` server whose `connection_origin` is `service`, a blank `server_label`, an empty `credential_id` and an empty `allowed_tools` name, which the pinned schema allows without defining their meaning (400 with the reason).
 - Claude rejects an MCP `server_url` or `headers` value containing `${`, because the native client expands `${VAR}` in both from a process environment that holds Core-held credentials.
 - Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returns 200.
 
@@ -122,7 +122,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 **Configuration and tools**
 
 - A `reasoning.effort`, `reasoning.summary`, `service_tier`, `text.verbosity`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input.
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
 
 **Execution and history**
@@ -133,7 +133,9 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Pinned Codex can lose command output emitted before its stream subscription.
 - Claude Code and MiniMax Code report no public usage.
 - `agent_message` and `interrupt_subagent_call` Items are accepted by the Runtime protocol, but no Harness adapter produces them.
-- Native file changes have no official Item type ([Turns and Items](./sessions-events.md#turns-and-items)).
+- Codex file changes have no official Item type ([Turns and Items](./sessions-events.md#turns-and-items)).
+- An events request takes at most 64 events ([send input](./sessions-events.md#send-input)); the official limit is 16384.
+- Claude Code runs at most 64 messages in one Turn, counting its opening input; a Turn that receives more fails with `internal_error`.
 - MiniMax Code receives a message that starts with `/` with a trailing blank line, because ACP otherwise runs it as an operator command.
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
 - `file_id` and `detail` on images are rejected; each Harness declares which `image_url` values it accepts ([message content](./message-content.md#images)).

@@ -10,7 +10,7 @@ import (
 )
 
 func TestSystemPackagesRejectedAtEveryInput(t *testing.T) {
-	for _, value := range []string{`["jq"]`} {
+	for _, value := range []string{`["jq"]`, `"jq"`} {
 		packages := `"packages":{"npm":["semver"],"python":["packaging"],"system":` + value + `}`
 		t.Run(value, func(t *testing.T) {
 			if _, err := decodeTemplateInput([]byte("{" + packages + "}")); !errors.Is(err, errSystemPackages) {

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 4bccb4aaa93b5773708c46915447791443532cc3d0a9705124ee9e5812c5bf05
+source_hash: 42cc662098c7cb8fab1edc5e2104a8becabd9bce23cf1bb2b709a23d7e2e5c81
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -83,7 +83,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
 - `stdio` MCP 服务器需要工作区部署位置和 `environment` 来源。Claude Code 在其工作区目录中启动服务器，因此 `cwd` 必须与之相同；服务器继承整个进程环境，其中也有模型提供方密钥和其他服务器的 Vault bearer 令牌；且 `allowed_tools` 须为 null。MiniMax Code 在其私有主目录中启动服务器，因此拒绝所有 `stdio` 服务器（[MCP](execution-tools.md#mcp)）。
-- Core 拒绝非空的 MCP `request_metadata`、`connection_origin` 为 `service` 的 `stdio` 服务器，以及空白的 `server_label`、空的 `credential_id` 和空的 `allowed_tools` 名称；固定版本的 schema 允许这些值但没有定义其含义（400，并说明原因）。
+- Core 拒绝非空的 MCP `request_metadata`，因为没有 Harness 能发送它；同样拒绝 `connection_origin` 为 `service` 的 `stdio` 服务器，以及空白的 `server_label`、空的 `credential_id` 和空的 `allowed_tools` 名称，固定版本的 schema 允许这些值但没有定义其含义（400，并说明原因）。
 - Claude 会拒绝包含 `${` 的 MCP `server_url` 或 `headers` 值，因为原生客户端会从持有 Core 所持凭据的进程环境中展开这两处的 `${VAR}`。
 - 在 events 202 之后立即删除 Session 会返回 409，因为 Core 会在同一事务中准入该 Turn；官方服务返回 200。
 
@@ -125,7 +125,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 **配置和工具**
 
 - 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`text.verbosity`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入。
+- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
 
 **执行和历史**
@@ -136,7 +136,9 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
 - Runtime 协议接受 `agent_message` 和 `interrupt_subagent_call` Item，但没有 Harness 适配器会产生它们。
-- 原生文件变更没有对应的官方 Item 类型（[Turns and Items](sessions-events.md#turns-and-items)）。
+- Codex 文件变更没有对应的官方 Item 类型（[Turns and Items](sessions-events.md#turns-and-items)）。
+- 一次 events 请求最多包含 64 个事件（[发送输入](sessions-events.md#send-input)）；官方上限为 16384。
+- Claude Code 一个 Turn 最多处理 64 条消息（含开头输入）；收到更多消息的 Turn 以 `internal_error` 失败。
 - 以 `/` 开头的消息到达 MiniMax Code 时末尾多一个空行，否则 ACP 会将其作为操作员命令执行。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
 - 图像上的 `file_id` 和 `detail` 会被拒绝；每个 Harness 声明自己接受哪些 `image_url`（[消息内容](message-content.md#images)）。

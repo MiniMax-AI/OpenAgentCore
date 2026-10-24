@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 2984a8001807449fb923cecbd50fae872c1de9a4a1575ebb055d155b32c361ed
+source_hash: 39522a7a452c151c4348d8aaeef007411dba07d2d78b37f031cb7cde4f5dfa33
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -45,9 +45,9 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 ## 发送输入 {#send-input}
 
-`POST /v1/agents/sessions/{session_id}/events` 接收包含 1 到 16384 个事件的有序数组：`agent.session.input.message`、`agent.session.input.cancel` 和 `agent.session.input.tool_result`。整个批次以原子方式接纳；批次存储后且在任何 Harness 读取它之前，响应为无正文的 202。接纳绝不表示已在原生侧应用。
+`POST /v1/agents/sessions/{session_id}/events` 接收包含 1 到 64 个事件的有序数组：`agent.session.input.message`、`agent.session.input.cancel` 和 `agent.session.input.tool_result`。整个批次以原子方式接纳；批次存储后且在任何 Harness 读取它之前，响应为无正文的 202。接纳绝不表示已在原生侧应用。
 
-- **限制。** 请求正文最多为 4 MiB，单次请求存储的输入最多为 2 MiB。
+- **限制。** 请求正文最多为 1 MiB，单次请求存储的输入最多为 512 KiB。
 - **空值批次。** 将 `events` 显式设为 `null` 无效。
 - **空批次。** `{"events": []}` 会检查 Session 是否存在并返回 202。它不会创建 Turn、Item 或重试标识。
 - **重试。** 最长 128 字节的 `Idempotency-Key` 标识整个有序批次。相同密钥和批次会再次返回 202，而不会重复接纳任何内容；相同密钥搭配另一个批次会返回 409 `idempotency_conflict`。不带密钥的请求始终是新请求。
@@ -111,7 +111,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - **生命周期。** 流会跨 Turn 保持打开，并在 Turn 失败后继续存在。流会在 Session 被删除时，或在 [Environment 初始化失败](#environment-initialization-failure)产生终止 `agent.session.failed` 后结束；在该失败之后打开的流会保持打开。每 15 秒发送一次 keepalive 注释。
 - **缓冲区。** Core 为每个 Session 最多保留 256 个事件和 64 MiB 事件，必要时还会额外容纳一个更大的事件。读取方落后于缓冲区时，会收到一个 `error` 事件，其 type 为 `server_error`、code 为 `stream_interrupted`，随后流会关闭。套接字写入阻塞五秒也会关闭流。执行过程绝不会等待读取方。
 - **密钥重新检查。** 打开的流在空闲期间以及发送输出前，每秒最多重新检查一次原始项目 API 密钥。撤销密钥或归档项目会关闭流，身份验证失败也会关闭流。重新检查使用正常的五秒身份验证超时，并且等待期间不会发送任何 Session 数据。已经发送的字节无法收回。
-- **仅根工作。** 子 Turn 和子 Item 不发布 Session 事件；`agent.session.subagent.*` 事件和根协调 Item 会发布。请通过 [Subagent 资源](subagents.md)读取子工作。
+- **仅根工作。** 子 Turn 和子 Item 不发布 Session 事件，Subagent 的 `function_call` Item 除外；`agent.session.subagent.*` 事件和根协调 Item 会发布。请通过 [Subagent 资源](subagents.md)读取子工作。
 
 ### 事件规则 {#event-rules}
 
@@ -138,7 +138,7 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 | `message` | 用户或助手内容片段。Harness 报告阶段时，`phase` 为其阶段（`commentary`、`final_answer`），否则为 null |
 | `command_execution` | 命令、报告的输出、退出代码、持续时间和工作目录 |
 | `mcp_call` | 服务器和工具标识、参数、结构化结果或错误 |
-| `function_call`、`function_call_output` | 关联的调用及其结果。结果始终携带 `output` 和 `error`；提交时省略这些字段则值为 null。存储的结果会保留提交时字段是否存在的信息。原生文件更改显示为 `apply_patch` 函数调用，更改内容作为参数，不会生成虚构结果 |
+| `function_call`、`function_call_output` | 关联的调用及其结果。结果始终携带 `output` 和 `error`；提交时省略这些字段则值为 null。存储的结果会保留提交时字段是否存在的信息。Codex 文件更改显示为 `apply_patch` 函数调用，更改内容作为参数，不会生成虚构结果 |
 | `web_search_call` | 支持的操作字段（`search`、`open_page`、`find_in_page`、`other`）；Claude Code 以 `search` 报告 `WebSearch`，以 `open_page` 报告 `WebFetch` |
 | `reasoning` | 一个原生推理 item，每个原生部分对应一个 `summary_text` 部分，仅在 Agent 设置了 `reasoning.summary` 时出现；为 null（默认）时，任何 Turn（根或子）都没有 `reasoning` Item 和 reasoning 事件。文本内容见 [OpenAI 兼容性](index.md#differences-from-openai)。子 Turn 的 Item 状态可以为 null |
 | `agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态 |
