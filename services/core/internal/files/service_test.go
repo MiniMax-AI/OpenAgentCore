@@ -78,6 +78,9 @@ func TestCreateRejectsWithoutStoring(t *testing.T) {
 			return Upload{Filename: "a", Purpose: "assistants"}, nil
 		}, ErrInvalidInput},
 		"upload failure": {func(io.Writer) (Upload, error) { return Upload{}, uploadFailure }, uploadFailure},
+		"empty content": {func(io.Writer) (Upload, error) {
+			return Upload{Filename: "a", Purpose: PurposeUserData}, nil
+		}, ErrEmpty},
 		"content beyond the limit": {func(w io.Writer) (Upload, error) {
 			_, err := w.Write(make([]byte, 1))
 			if err != nil {
