@@ -158,7 +158,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - There is no storage-key rotation or re-encryption.
 - OAuth refresh happens only at dispatch: there is no refresh on a provider 401, no mid-Turn replacement and no withdrawal of a token already sent to a Runtime.
-- Input sent to a Session whose selected Credential was deleted is admitted and then fails at dispatch.
 - Credential creation takes no `Idempotency-Key`.
 
 **Sessions**

@@ -57,8 +57,9 @@ type Dispatcher struct {
 }
 
 // Credentials opens the bearer token of a Session's frozen MCP credential
-// binding.
+// binding and checks that the bound Credentials still exist.
 type Credentials interface {
+	CheckMCPCredentials(context.Context, vaults.CheckMCPCredentials) error
 	MCPBearerToken(context.Context, vaults.MCPBearerToken) (string, error)
 }
 

@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 const DefaultExecutionConcurrency = 4
@@ -118,6 +120,9 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 	if err := w.dispatcher.validateEngineInputs(value.Engine, value.Configuration, inputs); err != nil {
 		return nil, err
 	}
+	if err := w.checkInputCredentials(ctx, value, key, inputs); err != nil {
+		return nil, err
+	}
 	if preparedEnvironmentConfiguration(value.Configuration) {
 		return w.submitEnvironmentInputs(ctx, value, key, inputs)
 	}
@@ -125,6 +130,31 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 		return nil, sessions.ErrInvalidInput
 	}
 	return w.admitInputs(ctx, tenant, session, key, inputs)
+}
+
+// checkInputCredentials rejects a message that would start a Turn whose
+// Session's frozen MCP Credential was deleted, as creation rejects an absent
+// one. It runs before and outside the admission transaction, and a retry of a
+// batch the Session already admitted is never rejected. A deletion after the
+// check still fails at dispatch.
+func (w *Worker) checkInputCredentials(ctx context.Context, session sessions.Session, key string, inputs []sessions.Input) error {
+	if (session.LastTurn != nil && !sessions.TerminalStatus(session.LastTurn.Status)) ||
+		!slices.ContainsFunc(inputs, func(input sessions.Input) bool { return input.Kind == "message" }) {
+		return nil
+	}
+	var snapshot Snapshot
+	if json.Unmarshal(session.Configuration, &snapshot) != nil || len(snapshot.MCPCredentials) == 0 {
+		return nil
+	}
+	err := w.dispatcher.Credentials.CheckMCPCredentials(ctx, vaults.CheckMCPCredentials{TenantID: session.TenantID, VaultIDs: snapshot.VaultIDs, Bindings: snapshot.MCPCredentials})
+	var selection *vaults.MCPCredentialSelectionError
+	if !errors.As(err, &selection) {
+		return err
+	}
+	if replay, probeErr := w.dispatcher.Sessions.InputAdmitted(ctx, session.TenantID, session.ID, key, inputs); probeErr != nil || replay {
+		return probeErr
+	}
+	return err
 }
 
 // CreateSession validates execution support before the pooled Session
