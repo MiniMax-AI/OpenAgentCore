@@ -159,17 +159,18 @@ func AdmitFunctionResult(ctx context.Context, tx FunctionResultTx, input Functio
 // or its application receipt.
 type PendingFunctionCallsTx interface {
 	// LoadPendingFunctionCalls reads the Turn's calls without an application
-	// receipt, in creation order, while the Turn is in progress or waiting and
-	// no cancellation was requested, and none otherwise.
+	// receipt, in creation order, while the Turn is in progress or waiting, and
+	// none otherwise.
 	LoadPendingFunctionCalls(ctx context.Context, turn string) ([]FunctionCall, error)
 }
 
 // LoadRequiredActions returns the function calls a Turn requires the caller to
 // answer as public required actions: its pending calls while it accepts
-// results, and none otherwise.
+// results, or while it waits after a cancellation request and has not ended,
+// and none otherwise.
 func LoadRequiredActions(ctx context.Context, tx PendingFunctionCallsTx, turn Turn) ([]v1.FunctionCallAction, error) {
 	actions := make([]v1.FunctionCallAction, 0)
-	if !acceptsFunctionResults(turn) {
+	if !acceptsFunctionResults(turn) && turn.Status != TurnWaiting {
 		return actions, nil
 	}
 	calls, err := tx.LoadPendingFunctionCalls(ctx, turn.ID)

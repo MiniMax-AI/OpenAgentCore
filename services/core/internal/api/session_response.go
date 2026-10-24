@@ -53,7 +53,7 @@ func sessionResponse(session sessions.Session, executorURL string) (v1.Session, 
 		switch turn.Status {
 		case sessions.TurnQueued, sessions.TurnInProgress, sessions.TurnWaiting:
 			response.Status = "in_progress"
-			if turn.CancelRequestedAt.IsZero() && len(session.RequiredActions) > 0 {
+			if len(session.RequiredActions) > 0 {
 				response.Status = "requires_action"
 				for _, action := range session.RequiredActions {
 					response.RequiredActions = append(response.RequiredActions, v1.RequiredAction{

@@ -156,6 +156,9 @@ func (o *ExecutionOperations) RecordFunctionCall(ctx context.Context, tenant, se
 func (o *ExecutionOperations) PendingFunctionCalls(ctx context.Context, tenant, session, turn string) ([]FunctionCall, error) {
 	calls := make([]FunctionCall, 0)
 	err := o.storage.WithFunctionTurn(ctx, tenant, session, turn, func(ctx context.Context, tx FunctionTx, current Turn) error {
+		if !acceptsFunctionResults(current) {
+			return nil
+		}
 		pending, err := tx.LoadPendingFunctionCalls(ctx, current.ID)
 		calls = append(calls, pending...)
 		return err

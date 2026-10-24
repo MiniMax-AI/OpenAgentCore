@@ -46,3 +46,20 @@ func TestFunctionStateEventsUseTheirOwnSnapshot(t *testing.T) {
 		}
 	}
 }
+
+func TestWaitingTurnReadsRequiresActionAfterCancellationRequest(t *testing.T) {
+	session := sessions.Session{ID: "session", CreatedAt: time.Now(), Metadata: map[string]string{},
+		Configuration:   json.RawMessage(`{"agent":{"id":"agent_test","model":"model","tools":[]},"environment":{"type":"none"}}`),
+		RequiredActions: []v1.FunctionCallAction{{Type: "function_call", CallID: "call", Name: "lookup", TurnID: "turn"}},
+		LastTurn:        &sessions.Turn{ID: "turn", Status: sessions.TurnWaiting, CancelRequestedAt: time.Now()},
+	}
+	value, err := sessionResponse(session, "")
+	if err != nil || value.Status != "requires_action" || len(value.RequiredActions) != 1 {
+		t.Fatal(value, err)
+	}
+	session.LastTurn.Status = sessions.TurnCancelled
+	session.RequiredActions = nil
+	if value, err = sessionResponse(session, ""); err != nil || value.Status != "idle" {
+		t.Fatal(value, err)
+	}
+}
