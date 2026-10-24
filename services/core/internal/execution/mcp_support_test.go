@@ -187,3 +187,7 @@ func TestMCPStdioAdmission(t *testing.T) {
 		t.Fatal(err, servers.MCP)
 	}
 }
+
+func (c *recordingCredentials) CheckMCPCredentials(context.Context, vaults.CheckMCPCredentials) error {
+	return nil
+}

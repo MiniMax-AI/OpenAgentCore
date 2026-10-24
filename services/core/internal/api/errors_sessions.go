@@ -8,13 +8,17 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 // writeInputError reports Session input admission failures. Input that the
 // Session cannot accept in its current state is the official conflict_error;
 // Idempotency-Key reuse keeps Core's local idempotency_conflict code.
 func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
+	var selection *vaults.MCPCredentialSelectionError
 	switch {
+	case errors.As(err, &selection):
+		writeVaultsError(w, r, err)
 	case errors.Is(err, sessions.ErrInputPending):
 		writeError(w, http.StatusConflict, "conflict_error", "Earlier input to this Session is still pending.")
 	case errors.Is(err, sessions.ErrTurnConflict):

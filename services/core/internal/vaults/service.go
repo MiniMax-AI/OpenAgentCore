@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -224,6 +225,41 @@ func (s *Service) ResolveMCPCredentials(ctx context.Context, command ResolveMCPC
 		bindings = append(bindings, binding)
 	}
 	return bindings, nil
+}
+
+// CheckMCPCredentials asks whether the Credentials a Session's frozen bindings
+// name still exist in its attached Vaults.
+type CheckMCPCredentials struct {
+	TenantID string
+	VaultIDs []string
+	Bindings []MCPCredentialBinding
+}
+
+// CheckMCPCredentials reads metadata only. A binding whose Credential, or whose
+// Vault, was deleted reports the creation-time selection error for a
+// Credential absent from the attached Vaults.
+func (s *Service) CheckMCPCredentials(ctx context.Context, command CheckMCPCredentials) error {
+	tenant, ok := canonicalID(command.TenantID)
+	if !ok {
+		return ErrInvalidInput
+	}
+	attached, err := attachedVaultIDs(command.VaultIDs)
+	if err != nil {
+		return err
+	}
+	for _, binding := range command.Bindings {
+		if binding.CredentialID == "" {
+			continue
+		}
+		matches, err := s.storage.FindMCPCredentials(ctx, MCPCredentialQuery{TenantID: tenant, VaultIDs: attached, ServerURL: binding.ServerURL, CredentialID: binding.CredentialID})
+		if err != nil {
+			return err
+		}
+		if !slices.ContainsFunc(matches, func(match MCPCredentialMatch) bool { return match.VaultID == binding.VaultID }) {
+			return mcpCredentialNotAttached(binding.CredentialID)
+		}
+	}
+	return nil
 }
 
 // MCPBearerToken asks for the bearer token of a Session's frozen binding.

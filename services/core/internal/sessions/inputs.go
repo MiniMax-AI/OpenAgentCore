@@ -372,6 +372,27 @@ func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string,
 	return receipts, nil
 }
 
+// InputAdmitted reports whether the Session already admitted the batch under
+// key, directly or through an Environment input reservation, so a retry
+// replays it.
+func (s *Service) InputAdmitted(ctx context.Context, tenant, session, key string, inputs []Input) (bool, error) {
+	_, encoded, err := ValidateInputs(inputs)
+	if err != nil {
+		return false, err
+	}
+	var admitted bool
+	err = s.storage.WithInputs(ctx, tenant, session, func(ctx context.Context, tx InputTx) error {
+		receipts, matches, err := tx.LoadInputBatch(ctx, key, encoded)
+		if err != nil {
+			return err
+		}
+		reservation, _, err := tx.FindInputReservation(ctx, key, encoded)
+		admitted = (len(receipts) > 0 && matches) || reservation != nil
+		return err
+	})
+	return admitted, err
+}
+
 // FunctionCall retains public identity and its opaque execution-adapter reference.
 type FunctionCall struct {
 	CallID, ExecutorCallID, Name string
