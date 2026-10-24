@@ -24,7 +24,7 @@ func (h *Handler) sourceFileContent(w http.ResponseWriter, r *http.Request) {
 
 // serveStoredContent streams the body read supplies. It returns read's error
 // while no response has started; after that, a failure aborts the response.
-func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(context.Context, func(string, int64, io.Reader) error) error) error {
+func serveStoredContent(w http.ResponseWriter, r *http.Request, contentType string, read func(context.Context, func(string, int64, io.Reader) error) error) error {
 	deadline := time.Now().Add(sourceTransferTimeout)
 	if http.NewResponseController(w).SetWriteDeadline(deadline) != nil {
 		writeError(w, http.StatusServiceUnavailable, "file_transfer_unavailable", "Bounded file transfer is unavailable.")
@@ -34,7 +34,7 @@ func serveStoredContent(w http.ResponseWriter, r *http.Request, read func(contex
 	defer cancel()
 	started := false
 	err := read(ctx, func(filename string, size int64, body io.Reader) error {
-		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Type", contentType)
 		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
 		w.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		w.Header().Set("Cache-Control", "no-store")

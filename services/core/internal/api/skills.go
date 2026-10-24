@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -61,12 +62,34 @@ func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var input v1.SkillUpdateRequest
-	if decodeInputObject(body, &input, "default_version") != nil || input.DefaultVersion == "" {
-		writeSkillsError(w, r, skills.ErrInvalidInput)
+	raw, err := jsonObjectBody(body)
+	if err != nil {
+		writeFieldError(w, err)
 		return
 	}
-	value, err := h.Skills.SetDefaultVersion(r.Context(), skills.SetDefaultVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Version: input.DefaultVersion})
+	if field, found := unknownBodyField(raw, "default_version"); found {
+		if !echoableField(field) {
+			writeFieldError(w, errUnknownParameter)
+			return
+		}
+		writeFieldError(w, &fieldError{param: field, message: "Unknown parameter: '" + field + "'."})
+		return
+	}
+	var input struct {
+		DefaultVersion json.RawMessage `json:"default_version"`
+	}
+	_ = json.Unmarshal(raw, &input)
+	var version string
+	if len(input.DefaultVersion) == 0 {
+		writeFieldError(w, missingParameter("default_version"))
+		return
+	}
+	if err := checkValue("default_version", input.DefaultVersion, shape{kind: stringValue}); err != nil {
+		writeFieldError(w, err)
+		return
+	}
+	_ = json.Unmarshal(input.DefaultVersion, &version)
+	value, err := h.Skills.SetDefaultVersion(r.Context(), skills.SetDefaultVersion{TenantID: tenantID(r), SkillID: skills.PathID(chi.URLParam(r, "skill_id")), Version: version})
 	if err != nil {
 		writeSkillsError(w, r, err)
 		return
