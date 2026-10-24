@@ -25,10 +25,7 @@ func rejectSystemPackages(raw json.RawMessage) error {
 		return nil
 	}
 	var system []json.RawMessage
-	if json.Unmarshal(value, &system) != nil {
-		return sessions.ErrInvalidInput
-	}
-	if len(system) != 0 {
+	if json.Unmarshal(value, &system) != nil || len(system) != 0 {
 		return errSystemPackages
 	}
 	return nil

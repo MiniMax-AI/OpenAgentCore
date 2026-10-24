@@ -43,9 +43,9 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Later re
 
 ## Send input
 
-`POST /v1/agents/sessions/{session_id}/events` takes an ordered array of 1 to 16384 events: `agent.session.input.message`, `agent.session.input.cancel` and `agent.session.input.tool_result`. The whole batch is admitted atomically, and the response is 202 with no body once the batch is stored, before any Harness reads it. Admission never confirms native application.
+`POST /v1/agents/sessions/{session_id}/events` takes an ordered array of 1 to 64 events: `agent.session.input.message`, `agent.session.input.cancel` and `agent.session.input.tool_result`. The whole batch is admitted atomically, and the response is 202 with no body once the batch is stored, before any Harness reads it. Admission never confirms native application.
 
-- **Limits.** The request body is at most 4 MiB, and the stored input of one request at most 2 MiB.
+- **Limits.** The request body is at most 1 MiB, and the stored input of one request at most 512 KiB.
 - **Null batch.** An explicit `null` for `events` is invalid.
 - **Empty batch.** `{"events": []}` checks that the Session exists and returns 202. It creates no Turn, Item or retry identity.
 - **Retries.** An `Idempotency-Key` of up to 128 bytes identifies the whole ordered batch. The same key and batch return 202 again without admitting anything twice; the same key with another batch returns 409 `idempotency_conflict`. A request without a key is always new.
@@ -109,7 +109,7 @@ A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only
 - **Lifetime.** The stream stays open across Turns and after a Turn fails. It ends when the Session is deleted or after the terminal `agent.session.failed` of an [Environment initialization failure](#environment-initialization-failure); a stream opened after that failure stays open. A keepalive comment is sent every 15 seconds.
 - **Buffer.** Core keeps at most 256 events and 64 MiB of events per Session, plus one larger event when needed. A reader that falls behind the buffer receives an `error` event with type `server_error` and code `stream_interrupted`, and the stream closes. A socket write that blocks for five seconds also closes it. Execution never waits for a reader.
 - **Key recheck.** An open stream checks the original Project key at most once per second while idle and before sending output. Revoking the key or archiving the Project closes the stream, and so does an authentication failure. A recheck uses the normal five-second authentication timeout and sends no Session data while it waits. Bytes already sent cannot be recalled.
-- **Root work only.** Child Turns and child Items publish no Session events; `agent.session.subagent.*` events and root coordination Items do. Read child work through the [Subagent resources](./subagents.md).
+- **Root work only.** Child Turns and child Items publish no Session events, except a Subagent's `function_call` Item, published once as `item.added`; `agent.session.subagent.*` events and root coordination Items do. Read child work through the [Subagent resources](./subagents.md).
 
 ### Event rules
 
@@ -119,7 +119,7 @@ A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only
 - `item.added` and `item.done` always carry `output_index`, null for input Items. Function results emit `item.added` only; `item.done` is for agent output.
 - An assistant message follows one sequence: `item.added` in progress with empty `content`, `content_part.added` with empty text, `output_text.delta` events, `output_text.done`, `content_part.done` and `item.done`. A message first observed complete, such as structured output, sends its whole text in one `output_text.delta`, byte for byte. The completed text replaces the accumulated deltas.
 - Codex command output streams as `agent.output.command_execution_output.delta` with the command's Item ID and output index. Native output quotas and text conversion apply, so the deltas are not a byte-exact capture; the completed Item is authoritative.
-- A reasoning Item follows one sequence: `item.added` in progress with an empty `summary`; for each `summary_text` part in order, `reasoning_summary_part.added` with empty text, `reasoning_summary_text.delta` events, then `reasoning_summary_text.done` and `reasoning_summary_part.done` once the next part starts or the Item ends; then `item.done`. `reasoning_summary_part.done` has `status` `incomplete` for a part a cancelled or failed Turn cut off, otherwise null. A child Turn snapshot that rewrites earlier text reports it only in the done events.
+- A reasoning Item follows one sequence: `item.added` in progress with an empty `summary`; for each `summary_text` part in order, `reasoning_summary_part.added` with empty text, `reasoning_summary_text.delta` events, then `reasoning_summary_text.done` and `reasoning_summary_part.done` once the next part starts or the Item ends; then `item.done`. `reasoning_summary_part.done` has `status` `incomplete` for a part a cancelled or failed Turn cut off, otherwise null.
 - A cancelled or failed Turn marks its unfinished Items `incomplete` and keeps their partial content.
 - A function call stays in `required_actions` until the Harness applies its result, or cancellation or the Turn's end removes it. A repeated notification emits no new state.
 
@@ -136,7 +136,7 @@ Turn and Item lists take `after`, `limit` and `order` ([list rules](./wire-seman
 | `message` | User or assistant content parts. `phase` is the Harness's phase when it reports one (`commentary`, `final_answer`), otherwise null |
 | `command_execution` | Command, reported output, exit code, duration and working directory |
 | `mcp_call` | Server and tool identity, arguments, structured result or error |
-| `function_call`, `function_call_output` | A linked call and its result. The result always carries `output` and `error`, null when the submission omitted them; stored results keep the submitted field presence. Native file changes appear as an `apply_patch` function call with the changes as arguments and no invented result |
+| `function_call`, `function_call_output` | A linked call and its result. The result always carries `output` and `error`, null when the submission omitted them; stored results keep the submitted field presence. Codex file changes appear as an `apply_patch` function call with the changes as arguments and no invented result |
 | `web_search_call` | The supported action fields (`search`, `open_page`, `find_in_page`, `other`); Claude Code reports `search` for `WebSearch` and `open_page` for `WebFetch` |
 | `reasoning` | One native reasoning item, each native part one `summary_text` part, present only when the Agent sets `reasoning.summary`; with it null (the default) no `reasoning` Items or reasoning events appear for any Turn, root or child. [OpenAI compatibility](./index.md#differences-from-openai) describes the text. Status can be null on a child Turn's Item |
 | `agent_message` and the Subagent coordination calls | See [Subagents](./subagents.md). `agent_message` has no status |

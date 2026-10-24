@@ -136,26 +136,16 @@ func TestValidateInputs(t *testing.T) {
 	}
 	for name, inputs := range map[string][]Input{
 		"no inputs":            nil,
-		"16385 inputs":         make([]Input, 16385),
+		"65 inputs":            make([]Input, 65),
 		"unsupported kind":     {messageInput("ok"), {Kind: "unsupported", Payload: json.RawMessage(`{}`)}},
 		"missing payload":      {{Kind: "message"}},
 		"array payload":        {{Kind: "message", Payload: json.RawMessage(`[]`)}},
 		"cancel with a target": {{Kind: "cancel", Payload: json.RawMessage(`{"target":"other"}`)}},
-		"over 2 MiB":           {messageInput(strings.Repeat("x", 1200*1024)), messageInput(strings.Repeat("y", 1200*1024))},
+		"over 512 KiB":         {messageInput(strings.Repeat("x", 300*1024)), messageInput(strings.Repeat("y", 300*1024))},
 	} {
 		if _, _, err := ValidateInputs(inputs); !errors.Is(err, ErrInvalidInput) {
 			t.Errorf("%s: %v", name, err)
 		}
-	}
-}
-
-func TestValidateInputsFitsTheOfficialMaximum(t *testing.T) {
-	inputs := make([]Input, 16384)
-	for i := range inputs {
-		inputs[i] = messageInput("a")
-	}
-	if _, _, err := ValidateInputs(inputs); err != nil {
-		t.Fatal(err)
 	}
 }
 
