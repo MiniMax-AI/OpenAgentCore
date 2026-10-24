@@ -11,16 +11,16 @@ def verify_session_create_requests(client, spec):
     # agent_id is str and stream is a boolean literal union without None.
     sessions = client.beta.agents.sessions
     before = {session.id for session in sessions.list()}
-    # Non-string metadata values use the official code and metadata.<key> param.
+    # Field errors use the official code and the field path as param.
     invalid = [
-        ({"stream": None}, None), ({"stream": "false"}, None), ({"stream": 0}, None),
-        ({"agent_id": None}, None), ({"agent_id": 0}, None),
+        ({"stream": None}, "stream"), ({"stream": "false"}, "stream"), ({"stream": 0}, "stream"),
+        ({"agent_id": None}, "agent_id"), ({"agent_id": 0}, "agent_id"),
         ({"metadata": {"label": None}}, "metadata.label"),
         ({"metadata": {"empty": "", "label": None}}, "metadata.label"),
-        ({"metadata": {"label": 0}}, "metadata.label"), ({"metadata": []}, None),
+        ({"metadata": {"label": 0}}, "metadata.label"), ({"metadata": []}, "metadata"),
         # Member names match exactly: a case variant is an unknown member, not an
         # alias that replaces the field (req_6ba2a50c71a4410f87a1baac855e82df).
-        ({"Metadata": {"label": "case"}}, None), ({"Input": "Case variant."}, None), ({"STREAM": False}, None),
+        ({"Metadata": {"label": "case"}}, "Metadata"), ({"Input": "Case variant."}, "Input"), ({"STREAM": False}, "STREAM"),
         ({"environment": {**spec["environment"], "Type": "self_hosted"}}, None),
     ]
     headers = {"Authorization": f"Bearer {client.api_key}", "OpenAI-Beta": "agents=v1"}
