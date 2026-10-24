@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 685e26e496e369c1eb2b1b093ec2e26e6fb6fbdf082ec1b877d9c638b0ac17e6
+source_hash: 0ea008d94e810213158b88360bc64c97f936a252fe4d59ba474719c8920bff69
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -98,6 +98,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 错误消息会省略官方消息包含的 call 和 executor ID，但未知工具调用的消息会带上其 `call_id`。
 - 失败的 Turn 以官方名称报告模型失败类别，Runtime 断开连接或准备失败报告为 `sandbox_error`。Core 的其他失败，例如 Runtime 不可用、缺少模型提供方、输入被拒绝或存储失败，一律报告 `internal_error`。消息是每个 code 对应的固定句子，不含原生文本。Subagent Turn 始终报告 `internal_error`。
 - 与其他文本并存的空文本部分可被接受并存储。
+- 对于既没有图像、也没有非空白文本的函数结果，Claude Code 会向模型显示其自身的占位文本；函数错误文本的首尾空白会被去除。
 - 空输入会返回 400 `invalid_request`，附带通用消息和值为 null 的 param；官方响应为 `invalid_request_error`，param 为 `input`。
 - 一旦所有根级 Turn 均已进入终态，Session 用量即可用；官方读取会滞后数秒。
 - Harness 输出（例如命令输出）中的 U+0000 读取时为 U+FFFD；官方服务会保留该字符。

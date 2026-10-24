@@ -95,6 +95,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Error messages omit the call and executor IDs that official messages include, except that the unknown tool call message names its `call_id`.
 - A failed Turn reports the model failure categories under their official names and `sandbox_error` for a Runtime that disconnected or failed its preparation. Every other Core failure, such as an unavailable Runtime, a missing model provider, a rejected input or a storage failure, reports `internal_error`. The message is a fixed sentence per code and never carries native text. Subagent Turns always report `internal_error`.
 - An empty text part beside other text is accepted and stored.
+- Claude Code shows the model its own placeholder text for a function result with no image and no non-blank text, and trims surrounding whitespace from function error text.
 - Empty input returns 400 `invalid_request` with a generic message and a null param; the official response is `invalid_request_error` with param `input`.
 - Session usage is available as soon as every root Turn has settled; official reads lag by seconds.
 - U+0000 in Harness output, such as command output, reads as U+FFFD; the official service keeps it.

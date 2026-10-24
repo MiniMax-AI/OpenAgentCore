@@ -100,9 +100,12 @@ export class FunctionBridge {
         this.cancelUnanswered(block.tool_use_id);
         continue;
       }
-      // Native error results join MCP text blocks; retain the original parts in the host.
-      const matches = result.success ? matchesNativeContent(result.content, block.content) :
-        block.content === result.content.map(part => part.type === "input_text" ? part.text : "").join("\n");
+      // Native error results join and trim MCP text blocks; retain the original parts in the host.
+      // The native harness replaces a result without an image or visible text with its own
+      // placeholder, so the outcome alone confirms a blank result.
+      const matches = isBlankResult(result.content) ? isNativeText(block.content) :
+        result.success ? matchesNativeContent(result.content, block.content) :
+        block.content === result.content.map(part => part.type === "input_text" ? part.text : "").join("\n").trim();
       if (!!block.is_error !== !result.success || !matches) {
         throw new Error("Native function response differs from submitted result.");
       }
@@ -145,4 +148,13 @@ function matchesNativeContent(content: InputContent[], actual: unknown): boolean
   return expected.every((part, index) => part.type === "image"
     ? actual[index]?.type === "image" || actual[index]?.type === "text"
     : isDeepStrictEqual(part, actual[index]));
+}
+
+function isBlankResult(content: InputContent[]): boolean {
+  return content.every(part => part.type === "input_text" && !part.text.trim());
+}
+
+function isNativeText(actual: unknown): boolean {
+  return typeof actual === "string" ||
+    Array.isArray(actual) && actual.every(part => part?.type === "text" && typeof part.text === "string");
 }
