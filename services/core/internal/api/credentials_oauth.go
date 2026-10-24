@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/url"
 	"regexp"
@@ -10,115 +11,78 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func credentialHTTPSURL(value *string) bool {
-	if value == nil {
-		return false
+// The helpers below check the Core-local rules that the pinned schema does not
+// express; each names its field.
+func nonEmptyString(path, value string) error {
+	if value == "" {
+		return &fieldError{param: path, message: path + " must be a nonempty string."}
 	}
-	u, err := url.Parse(*value)
-	return err == nil && u.Scheme == "https" && u.Hostname() != "" && u.User == nil && u.Fragment == ""
+	return nil
+}
+
+func httpsURL(path, value string) error {
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.Fragment != "" {
+		return &fieldError{param: path, message: path + " must be an absolute HTTPS URL without userinfo or a fragment."}
+	}
+	return nil
 }
 
 var credentialTimestamp = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)$`)
 
-func credentialExpiry(value *string) bool {
-	if value == nil {
-		return true
-	}
-	if !credentialTimestamp.MatchString(*value) {
-		return false
-	}
-	_, err := time.Parse(time.RFC3339Nano, *value)
-	return err == nil
-}
-
-// credentialAuthType reads the exact type member; a case variant is unknown.
-func credentialAuthType(raw json.RawMessage) string {
-	var fields map[string]json.RawMessage
-	var value string
-	if json.Unmarshal(raw, &fields) != nil || json.Unmarshal(fields["type"], &value) != nil {
-		return ""
-	}
-	return value
-}
-
-// oauthCredentialCreate parses an mcp_oauth creation; the caller sets the
-// tenant and Vault.
-func oauthCredentialCreate(raw json.RawMessage, name string) (vaults.CreateOAuthCredential, error) {
-	var auth v1.CredentialAuthInput
-	input := vaults.CreateOAuthCredential{Name: name}
-	if decodeInputObject(raw, &auth, "type", "mcp_server_url", "access_token", "expires_at", "refresh") != nil || auth.Type != "mcp_oauth" || auth.AccessToken == nil || *auth.AccessToken == "" || !credentialHTTPSURL(auth.MCPServerURL) || !credentialExpiry(auth.ExpiresAt) {
-		return input, vaults.ErrInvalidInput
-	}
-	input.MCPServerURL, input.AccessToken = *auth.MCPServerURL, *auth.AccessToken
-	input.OAuth.ExpiresAt = auth.ExpiresAt
-	if r := auth.Refresh; r != nil {
-		if r.ClientID == nil || r.RefreshToken == nil || !credentialHTTPSURL(r.TokenEndpoint) || r.TokenEndpointAuth == nil {
-			return input, vaults.ErrInvalidInput
+func credentialExpiry(path string, value *string) error {
+	if value != nil {
+		if _, err := time.Parse(time.RFC3339Nano, *value); err != nil || !credentialTimestamp.MatchString(*value) {
+			return &fieldError{param: path, message: path + " must be an RFC 3339 timestamp."}
 		}
+	}
+	return nil
+}
+
+// oauthCredentialCreate parses an mcp_oauth creation whose shape is checked;
+// the caller sets the tenant and Vault.
+func oauthCredentialCreate(auth v1.CredentialAuthInput, name string) (vaults.CreateOAuthCredential, error) {
+	input := vaults.CreateOAuthCredential{Name: name, MCPServerURL: *auth.MCPServerURL, AccessToken: *auth.AccessToken}
+	input.OAuth.ExpiresAt = auth.ExpiresAt
+	err := cmp.Or(httpsURL("auth.mcp_server_url", input.MCPServerURL), nonEmptyString("auth.access_token", input.AccessToken), credentialExpiry("auth.expires_at", auth.ExpiresAt))
+	if r := auth.Refresh; err == nil && r != nil {
 		a := r.TokenEndpointAuth
-		switch a.Type {
-		case "none":
-			// Presence of client_secret is invalid even when explicitly null.
-			var fields struct {
-				Refresh struct {
-					Auth json.RawMessage `json:"token_endpoint_auth"`
-				} `json:"refresh"`
-			}
-			if json.Unmarshal(raw, &fields) != nil || decodeInputObject(fields.Refresh.Auth, &struct {
-				Type string `json:"type"`
-			}{}, "type") != nil {
-				return input, vaults.ErrInvalidInput
-			}
-		case "client_secret_basic", "client_secret_post":
-			if a.ClientSecret == nil {
-				return input, vaults.ErrInvalidInput
-			}
+		if a.ClientSecret != nil {
 			input.ClientSecret = *a.ClientSecret
-		default:
-			return input, vaults.ErrInvalidInput
 		}
 		input.RefreshToken = *r.RefreshToken
 		input.OAuth.Refresh = &vaults.OAuthRefreshMetadata{ClientID: *r.ClientID, TokenEndpoint: *r.TokenEndpoint, TokenEndpointAuth: a.Type, Resource: r.Resource, Scope: r.Scope}
+		err = httpsURL("auth.refresh.token_endpoint", *r.TokenEndpoint)
 	}
-	return input, nil
+	return input, err
 }
 
-// oauthCredentialUpdate parses an mcp_oauth patch; the caller sets the
-// Credential's identity.
-func oauthCredentialUpdate(raw json.RawMessage) (vaults.UpdateOAuthCredential, error) {
-	var auth v1.CredentialAuthReplacement
-	var input vaults.UpdateOAuthCredential
-	if decodeInputObject(raw, &auth, "type", "access_token", "expires_at", "refresh") != nil || auth.Type != "mcp_oauth" {
-		return input, vaults.ErrInvalidInput
-	}
-	input.AccessToken = auth.AccessToken
-	if input.AccessToken != nil && *input.AccessToken == "" {
-		return input, vaults.ErrInvalidInput
+// oauthCredentialUpdate parses an mcp_oauth patch whose shape is checked; the
+// caller sets the Credential's identity.
+func oauthCredentialUpdate(auth v1.CredentialAuthReplacement) (vaults.UpdateOAuthCredential, error) {
+	input := vaults.UpdateOAuthCredential{AccessToken: auth.AccessToken}
+	var err error
+	if input.AccessToken != nil {
+		err = nonEmptyString("auth.access_token", *input.AccessToken)
 	}
 	if len(auth.ExpiresAt) > 0 {
 		input.ExpiresAtSet = true
-		if json.Unmarshal(auth.ExpiresAt, &input.ExpiresAt) != nil || !credentialExpiry(input.ExpiresAt) {
-			return input, vaults.ErrInvalidInput
-		}
+		_ = json.Unmarshal(auth.ExpiresAt, &input.ExpiresAt)
+		err = cmp.Or(err, credentialExpiry("auth.expires_at", input.ExpiresAt))
 	}
 	if r := auth.Refresh; r != nil {
 		input.Refresh = &vaults.OAuthRefreshUpdate{RefreshToken: r.RefreshToken}
 		if len(r.Scope) > 0 {
 			input.Refresh.ScopeSet = true
-			if json.Unmarshal(r.Scope, &input.Refresh.Scope) != nil {
-				return input, vaults.ErrInvalidInput
-			}
+			_ = json.Unmarshal(r.Scope, &input.Refresh.Scope)
 		}
 		if a := r.TokenEndpointAuth; a != nil {
-			if a.Type != "client_secret_basic" && a.Type != "client_secret_post" {
-				return input, vaults.ErrInvalidInput
-			}
 			input.Refresh.TokenEndpointAuthType, input.Refresh.ClientSecret = a.Type, a.ClientSecret
 		}
 	}
-	if input.AccessToken == nil && !input.ExpiresAtSet && (input.Refresh == nil ||
+	if err == nil && input.AccessToken == nil && !input.ExpiresAtSet && (input.Refresh == nil ||
 		(input.Refresh.RefreshToken == nil && input.Refresh.ClientSecret == nil && !input.Refresh.ScopeSet)) {
-		return input, vaults.ErrInvalidInput
+		err = &fieldError{param: "auth", message: "auth requires access_token, expires_at or refresh to update."}
 	}
-	return input, nil
+	return input, err
 }
