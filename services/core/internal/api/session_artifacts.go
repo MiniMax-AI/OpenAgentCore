@@ -60,7 +60,7 @@ func (h *Handler) deleteSessionArtifact(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) sessionArtifactContent(w http.ResponseWriter, r *http.Request) {
-	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
+	err := serveStoredContent(w, r, "application/octet-stream", func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
 		return h.ArtifactsReader.ReadSessionArtifact(ctx, tenantID(r), chi.URLParam(r, "session_id"), chi.URLParam(r, "artifact_id"), func(a sessions.Artifact, body io.Reader) error {
 			return consume(path.Base(a.Path), a.SizeBytes, body)
 		})

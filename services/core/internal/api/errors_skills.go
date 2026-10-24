@@ -23,6 +23,8 @@ func writeSkillsError(w http.ResponseWriter, r *http.Request, err error) {
 		} else {
 			writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
 		}
+	case errors.Is(err, skills.ErrVersionNotFound):
+		writeError(w, http.StatusNotFound, "", "Skill version not found.", "default_version")
 	case errors.Is(err, skills.ErrNotFound):
 		code := "not_found_error"
 		if skillsRoute {

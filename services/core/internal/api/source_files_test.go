@@ -240,7 +240,7 @@ func TestEnvironmentSourceCopyEnforcesScopeUnionAndSize(t *testing.T) {
 
 func TestStoredContentDoesNotCompleteTruncatedResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveStoredContent(w, r, func(_ context.Context, consume func(string, int64, io.Reader) error) error {
+		serveStoredContent(w, r, "application/octet-stream", func(_ context.Context, consume func(string, int64, io.Reader) error) error {
 			return consume("source.bin", 3, strings.NewReader("x"))
 		})
 	}))
