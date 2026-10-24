@@ -2127,6 +2127,7 @@ export class OpenAIAgentsClient implements AgentCore {
       cacheControl !== "no-store" ||
       nosniff?.toLowerCase() !== "nosniff"
     ) {
+      await response.body?.cancel().catch(() => undefined);
       return invalidSourceFileContent("OpenAgentCore returned invalid Source File content headers.");
     }
     const data = await readExactSourceFileBody(response, Number(contentLength));
