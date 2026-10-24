@@ -118,8 +118,8 @@ func resolveFunctionCall(ctx context.Context, tx NativeSubagents, call FunctionC
 
 // RecordFunctionCall records a call an executor reported for its Turn and
 // journals the Turn's required actions with it. A call a Subagent made takes
-// the identity of the child's function Item and is published as that Item. A retry of the recorded call
-// changes nothing.
+// the identity of the child's function Item and is published as that Item. A
+// retry of the recorded call changes nothing.
 func (o *ExecutionOperations) RecordFunctionCall(ctx context.Context, tenant, session, turn string, call FunctionCall) error {
 	if err := validateFunctionCall(call); err != nil {
 		return err
