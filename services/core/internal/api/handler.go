@@ -130,7 +130,7 @@ func (h *Handler) createSession(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if writeFieldError(w, metadataTypeError(raw)) {
+	if writeFieldError(w, validateBody(raw, createAgentSessionParams)) {
 		return
 	}
 	var request decodedSessionRequest
