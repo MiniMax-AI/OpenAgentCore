@@ -30,7 +30,7 @@ A function declaration requires `name`, `description` and a JSON Schema in `para
 
 The native Harness can abandon a call before it applies a result, for example when the root Turn closes or interrupts the Subagent that made it, or when MiniMax Code's MCP client times the call out. The call then stops being a required action, the Turn continues and returns to `in_progress` when no required action is left, and a later `function_call_output` for it is rejected like a result after cancellation. An abandoned call has no application receipt.
 
-A function call made by a Subagent is a required action of the root Turn that runs the child. Its `turn_id` is that root Turn, and its `call_id` equals the `call_id` of the child's `function_call` Item on the [Subagent routes](./subagents.md#public-reads). Answer it with `function_call_output` / `tool_result` under that `call_id` and the root Turn ID; the child's Turn ID is not a Session Turn and gets the 400 for a call of another Turn. A Subagent's HTTP MCP calls are `mcp_call` Items in the child's history.
+A function call made by a Subagent is a required action of the root Turn that runs the child. Its `turn_id` is that root Turn, and its `call_id` equals the `call_id` of the child's `function_call` Item on the [Subagent routes](./subagents.md#public-reads). Answer it with `function_call_output` / `tool_result` under that `call_id` and either the root Turn ID or the child Turn ID that the call's `agent.session.turn.item.added` event names, which is what the official SDK sends; any other Turn ID gets the 400 for a call of another Turn. A Subagent's HTTP MCP calls are `mcp_call` Items in the child's history.
 
 ### Required actions and recovery
 
