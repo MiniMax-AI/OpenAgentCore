@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 6b609956acde1748bfc1762ba5428959a88de8b42cbcaa9297fb89c1c2c013bb
+source_hash: 2a2b2dd17bcd90fa1c4c261da8d109404314b723d43329042070e4179d00d810
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -224,7 +224,7 @@ Executor 接纳仅验证已冻结的描述符。准备所有者会在调用原�
 daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。准备过程中只会安装用户目录中的依赖项。
 
 - 系统依赖必须预先安装在托管镜像中，或由自托管机器的所有者安装。缺少可执行文件或库时，需要该依赖的操作会失败。
-- 模板和内联配置都会拒绝 `packages.system`，包括 null 或空列表（400，param `packages.system`）。软件包响应仍会包含官方要求的 `system: []`。
+- `packages.system` 接受 null 或空列表（表示没有系统软件包），模板和内联配置会拒绝非空列表（400，param `packages.system`）。软件包响应包含官方要求的 `system: []`，因此读取到的配置可以原样回传。
 - npm 会安装到本地 prefix，Python/pip 会安装到 Runtime 软件包目录下的本地 target；Node/npm 和 Python/pip 必须已经安装。其依赖项可被每个工作目录中的原生工具看到。
 - 设置命令使用 Bash 运行；在 Windows 上必须使用 Git Bash，且不能由其他 shell 替代。默认工作目录为 `/workspace`。
 - 在 Windows 上，npm 安装以及名为 `npm` 或 `npx` 的 stdio MCP 命令（包括其 `.cmd` shim）会通过 Node 调用 npm 的 JavaScript 入口点运行，而不经过额外的 shell。
