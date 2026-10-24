@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -82,10 +83,39 @@ func validateAgentConfiguration(path string, raw json.RawMessage, root shape) er
 	if value := fields["text"]; jsonValueKind(value) == "an object" {
 		_ = json.Unmarshal(value, &text)
 	}
+	if err := checkMCPLabels(path, tools); err != nil {
+		return err
+	}
 	if text.Format == nil {
 		return configurationConflict(tools, "", nil)
 	}
 	return configurationConflict(tools, text.Format.Type, text.Format.Schema)
+}
+
+var mcpServerLabel = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// checkMCPLabels rejects an MCP server_label outside [A-Za-z0-9_-] and a label
+// repeated by a later tool, naming the offending tool's server_label.
+func checkMCPLabels(path string, tools []json.RawMessage) error {
+	seen := map[string]bool{}
+	for i, raw := range tools {
+		var tool struct {
+			Type        string `json:"type"`
+			ServerLabel string `json:"server_label"`
+		}
+		if json.Unmarshal(raw, &tool) != nil || tool.Type != "mcp" {
+			continue
+		}
+		param := joinPath(path, fmt.Sprintf("tools[%d].server_label", i))
+		if !mcpServerLabel.MatchString(tool.ServerLabel) {
+			return &fieldError{param: param, message: "MCP server_label may contain only letters, digits, underscores and hyphens."}
+		}
+		if seen[tool.ServerLabel] {
+			return &fieldError{param: param, message: "MCP server_label must be unique across the tools."}
+		}
+		seen[tool.ServerLabel] = true
+	}
+	return nil
 }
 
 func checkValue(path string, raw json.RawMessage, s shape) error {
