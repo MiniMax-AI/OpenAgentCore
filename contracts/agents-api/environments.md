@@ -222,7 +222,7 @@ Executor admission validates only the frozen descriptor. The preparation owner m
 The daemon runs as its launching account and never uses sudo or raises its permissions. Only user-directory dependencies install during preparation.
 
 - System dependencies must be preinstalled in the managed image or by the owner of a self-hosted machine. A missing executable or library fails the operation that needs it.
-- `packages.system` accepts null or an empty list, meaning no system packages, and rejects a nonempty list in Templates and inline configuration (400, param `packages.system`). Package responses carry the official required `system: []`, so a read configuration can be sent back unchanged.
+- `packages.system` accepts null or an empty list, meaning no system packages, and rejects any other value in Templates and inline configuration (400, param `packages.system`). Package responses carry the official required `system: []`, so a read configuration can be sent back unchanged.
 - npm installs into a local prefix and Python/pip into a local target under the Runtime package directory; Node/npm and Python/pip must already be installed. Their dependencies are visible to native tools in every working directory.
 - Setup commands run with Bash; on Windows, Git Bash is required and no other shell substitutes. The default working directory is `/workspace`.
 - On Windows, npm installation and stdio MCP commands named `npm` or `npx` (including their `.cmd` shims) run through npm's JavaScript entry point with Node, without an extra shell.

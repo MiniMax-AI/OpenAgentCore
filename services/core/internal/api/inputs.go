@@ -77,7 +77,7 @@ func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func executionInputs(events []json.RawMessage) ([]sessions.Input, error) {
-	if len(events) == 0 || len(events) > 64 {
+	if len(events) == 0 || len(events) > sessions.MaxInputBatch {
 		return nil, sessions.ErrInvalidInput
 	}
 	inputs := make([]sessions.Input, 0, len(events))

@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 39522a7a452c151c4348d8aaeef007411dba07d2d78b37f031cb7cde4f5dfa33
+source_hash: cc519d898ede4653a4e8abd0d59da6da9d88e2da1587870a75d5b1bab8809fe0
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -111,7 +111,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - **生命周期。** 流会跨 Turn 保持打开，并在 Turn 失败后继续存在。流会在 Session 被删除时，或在 [Environment 初始化失败](#environment-initialization-failure)产生终止 `agent.session.failed` 后结束；在该失败之后打开的流会保持打开。每 15 秒发送一次 keepalive 注释。
 - **缓冲区。** Core 为每个 Session 最多保留 256 个事件和 64 MiB 事件，必要时还会额外容纳一个更大的事件。读取方落后于缓冲区时，会收到一个 `error` 事件，其 type 为 `server_error`、code 为 `stream_interrupted`，随后流会关闭。套接字写入阻塞五秒也会关闭流。执行过程绝不会等待读取方。
 - **密钥重新检查。** 打开的流在空闲期间以及发送输出前，每秒最多重新检查一次原始项目 API 密钥。撤销密钥或归档项目会关闭流，身份验证失败也会关闭流。重新检查使用正常的五秒身份验证超时，并且等待期间不会发送任何 Session 数据。已经发送的字节无法收回。
-- **仅根工作。** 子 Turn 和子 Item 不发布 Session 事件，Subagent 的 `function_call` Item 除外；`agent.session.subagent.*` 事件和根协调 Item 会发布。请通过 [Subagent 资源](subagents.md)读取子工作。
+- **仅根工作。** 子 Turn 和子 Item 不发布 Session 事件，Subagent 的 `function_call` Item 除外，它只以 `item.added` 发布一次；`agent.session.subagent.*` 事件和根协调 Item 会发布。请通过 [Subagent 资源](subagents.md)读取子工作。
 
 ### 事件规则 {#event-rules}
 
@@ -121,7 +121,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - `item.added` 和 `item.done` 始终携带 `output_index`；输入 Item 的该值为 null。函数结果只发出 `item.added`；`item.done` 用于代理输出。
 - 助手消息遵循以下单一顺序：先发送 `content` 为空的进行中 `item.added`，再发送文本为空的 `content_part.added`，然后发送 `output_text.delta` 事件、`output_text.done`、`content_part.done` 和 `item.done`。首次观察时已完整的消息（例如结构化输出）会在一个 `output_text.delta` 中逐字节发送全部文本。完整文本会替换此前累积的增量。
 - Codex 命令输出以 `agent.output.command_execution_output.delta` 流式传输，并携带命令的 Item ID 和输出索引。原生输出配额和文本转换规则适用，因此这些增量并非逐字节捕获的原始结果；完整 Item 才是权威结果。
-- reasoning Item 遵循以下单一顺序：先发送 `summary` 为空的进行中 `item.added`；然后按顺序对每个 `summary_text` 部分发送文本为空的 `reasoning_summary_part.added` 和 `reasoning_summary_text.delta` 事件，并在下一个部分开始或 Item 结束时发送 `reasoning_summary_text.done` 和 `reasoning_summary_part.done`；最后发送 `item.done`。被取消或失败的 Turn 截断的部分，其 `reasoning_summary_part.done` 的 `status` 为 `incomplete`，否则为 null。子 Turn 快照改写了先前文本时，新文本只出现在 done 事件中。
+- reasoning Item 遵循以下单一顺序：先发送 `summary` 为空的进行中 `item.added`；然后按顺序对每个 `summary_text` 部分发送文本为空的 `reasoning_summary_part.added` 和 `reasoning_summary_text.delta` 事件，并在下一个部分开始或 Item 结束时发送 `reasoning_summary_text.done` 和 `reasoning_summary_part.done`；最后发送 `item.done`。被取消或失败的 Turn 截断的部分，其 `reasoning_summary_part.done` 的 `status` 为 `incomplete`，否则为 null。
 - 已取消或失败的 Turn 会将其未完成的 Item 标记为 `incomplete`，并保留其部分内容。
 - 函数调用会一直保留在 `required_actions` 中，直到 Harness 应用其结果，或取消操作或 Turn 结束将其移除。重复通知不会发出新状态。
 
