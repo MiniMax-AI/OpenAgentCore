@@ -271,7 +271,7 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Sandbox
 		}
 		return r.wakeCompute(ctx, p, next, state)
 	}
-	if result.Snapshot.Compatibility.Validate() != nil {
+	if result.Snapshot.Validate() != nil {
 		return sandbox.ErrOwnership
 	}
 	state.Snapshot = result.Snapshot
@@ -345,7 +345,7 @@ func (r *runtimeLifecycle) expire(ctx context.Context, owner deployment.Allocati
 
 func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
-	if state.Snapshot == nil || state.Snapshot.Compatibility.Validate() != nil || state.Rollback || state.RestoreID == "" {
+	if state.Snapshot == nil || state.Snapshot.Validate() != nil || state.Rollback || state.RestoreID == "" {
 		return sandbox.ErrOwnership
 	}
 	if state.Target == nil {

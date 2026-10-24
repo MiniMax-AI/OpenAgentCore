@@ -26,7 +26,7 @@ func testRef() sandbox.Reference {
 func testSnapshot() SnapshotIdentity {
 	c, r := testConfig(), testRef()
 	op := "55555555-5555-4555-8555-555555555555"
-	return SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "domain", ExecutionClass: "class"}, Reference: SnapshotReference(c, r, op), ID: "snap_exact", Digest: "digest", CheckpointID: "checkpoint", CheckpointRoot: "root", OperationID: op, SourceName: Name(c, r, 0), SourceID: "local:4"}
+	return SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "domain", ExecutionClass: "class"}, Reference: SnapshotReference(c, r, op), ID: "snap_exact", Receipt: SnapshotReceipt("digest", "checkpoint", "root"), OperationID: op, SourceName: Name(c, r, 0), SourceID: "local:4"}
 }
 func deadline(t *testing.T) context.Context {
 	t.Helper()
@@ -165,5 +165,16 @@ func TestImageMustUseCompletePinnedOCIManifestDigest(t *testing.T) {
 		if c.Validate() == nil {
 			t.Fatalf("unqualified image admitted: %s", image)
 		}
+	}
+}
+
+func TestSnapshotReceiptIsRequired(t *testing.T) {
+	c, r, s := testConfig(), testRef(), testSnapshot()
+	if err := ValidateSnapshot(c, r, s); err != nil {
+		t.Fatal(err)
+	}
+	s.Receipt = "digest"
+	if ValidateSnapshot(c, r, s) == nil {
+		t.Fatal("malformed receipt accepted")
 	}
 }

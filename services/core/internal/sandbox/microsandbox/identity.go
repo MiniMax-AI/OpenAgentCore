@@ -71,8 +71,14 @@ func ValidateCompute(c Config, r sandbox.Reference, v Compute) error {
 	}
 	return nil
 }
+
+// SnapshotReceipt encodes the native digest, checkpoint ID and checkpoint root; the root is last because it may contain spaces.
+func SnapshotReceipt(digest, checkpointID, root string) string {
+	return digest + " " + checkpointID + " " + root
+}
+
 func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
-	if s.Compatibility.Validate() != nil || !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || s.Digest == "" || s.CheckpointID == "" || s.CheckpointRoot == "" {
+	if s.Validate() != nil || !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || strings.Count(s.Receipt, " ") < 2 || strings.HasPrefix(s.Receipt, " ") {
 		return sandbox.ErrInvalid
 	}
 	return nil

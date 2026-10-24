@@ -380,7 +380,7 @@ class Provider:
 
     def snapshot(self, operation, source, cloud):
         return {'Compatibility': self.config['Compatibility'], 'Reference': source['Name'] + ':s-' + operation,
-                'ID': cloud.sandbox_id, 'Digest': '', 'CheckpointID': '', 'CheckpointRoot': '',
+                'ID': cloud.sandbox_id, 'Receipt': '',
                 'OperationID': operation, 'SourceGeneration': source['Generation'], 'SourceName': source['Name'],
                 'SourceID': cloud.sandbox_id}
 
