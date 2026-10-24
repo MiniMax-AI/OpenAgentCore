@@ -71,7 +71,7 @@ type SetDefaultVersion struct {
 func (s *Service) SetDefaultVersion(ctx context.Context, c SetDefaultVersion) (Skill, error) {
 	number, err := ParseVersion(c.Version)
 	if err != nil {
-		return Skill{}, ErrInvalidInput
+		return Skill{}, ErrVersionNotFound
 	}
 	return s.storage.SetDefaultVersion(ctx, c.TenantID, c.SkillID, number)
 }
