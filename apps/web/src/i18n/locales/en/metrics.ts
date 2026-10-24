@@ -211,7 +211,6 @@ export const metrics = {
     runtimeUnavailable: "Runtime observations are unavailable. {{reason}}",
     runtimeStale: "Refresh failed; showing the previous observations. {{reason}}",
     runtimePartial: "Session details were not read for {{unread}} Runtimes (over the read limit) and could not be read for {{failed}}. Those rows show the Session ID only.",
-    cpu: "CPU",
     cores: "{{value}} cores",
     memory: "Memory",
     disk: "Disk",

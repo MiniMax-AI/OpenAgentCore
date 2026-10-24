@@ -211,7 +211,6 @@ export const metrics = {
     runtimeUnavailable: "Runtime 观测不可用。{{reason}}",
     runtimeStale: "刷新失败，显示的是上次的观测。{{reason}}",
     runtimePartial: "有 {{unread}} 个 Runtime 超过读取上限、{{failed}} 个读取失败，未读取 Session 详情，这些行只显示 Session ID。",
-    cpu: "CPU",
     cores: "{{value}} 核",
     memory: "内存",
     disk: "磁盘",

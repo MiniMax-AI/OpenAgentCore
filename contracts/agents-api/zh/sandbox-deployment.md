@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 673ae35810faa99f2a3fa480f6b487b4b8a3e7a21a47a4b1fa9c22df6bc53845
+source_hash: 279d5e0a8587dd866ff19f4d653fc91ab3f6026cf043bca57af104c34ecfc45c
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -232,7 +232,7 @@ Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。
 | 节点 `retained`、`snapshots`、`max_retained` | 已暂停沙箱数为 `retained` 减去 `active`；`snapshots` 还包含恢复或清理期间保留的快照 | 不适用 | Docker 绝不暂停：`retained` 等于 `active`，`snapshots` 为 0，`max_retained` 等于 `max_active` |
 | 节点 `host.available_disk_bytes` | 节点状态目录所在文件系统的可用空间；沙箱磁盘有自己的配额 | 不适用 | 节点状态目录所在文件系统的可用空间，而不是容器的磁盘 |
 | 分配 `compute_phase`、`compute_phase_changed_at` | 包含 `suspended`；时间表示当前阶段的起点，不是快照到期时间 | 不适用：没有节点分配 | 始终为 `disabled`，在释放前计为运行中；该时间为分配创建时间 |
-| Runtime 观测 `cpu`、`memory` | 来自 VM：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 | 来自 E2B 指标：`cpu.utilization_ratio` 和 `capacity_cores`、内存使用量和限制；无累计 CPU 时间 | 来自 Docker stats：`cpu.usage_seconds_total`、CPU 和内存限制、内存使用量 |
+| Runtime 观测 `memory` | 来自 VM：内存限制和使用量 | 来自 E2B 指标：内存使用量和限制 | 来自 Docker stats：内存限制和使用量 |
 | Runtime 观测 `disk` | `null` | E2B `diskUsed` 和 `diskTotal`；模板未报告时为 `null` | `null`：无磁盘配额 |
 | Runtime 观测 `lifecycle_state: sleeping` | 暂停期间 | 从不 | 从不 |
 | Runtime 历史 CPU | 根据累计 CPU 时间派生 | 每个时间桶中 E2B 所报告使用率比值的平均值 | 根据累计 CPU 时间派生 |

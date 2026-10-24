@@ -23,7 +23,7 @@ import { TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
-import { formatBytes, formatClock, formatCompact, formatDuration, formatInteger, formatPercent, MISSING } from "../../lib/format";
+import { formatBytes, formatClock, formatCompact, formatDuration, formatInteger, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
 import { coreError } from "../../lib/core-error";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, RuntimeDurableHistoryIncompleteError, type RuntimeDurableRange } from "../dashboard/runtime-history";
@@ -277,7 +277,6 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
               <th scope="col"><span className="column-help">{t("sandbox.status")}<HelpTip>{t("sandbox.statusHelp")}</HelpTip></span></th>
               {showProject ? <th scope="col">{tCommon("project.column")}</th> : null}
               {showNode ? <th scope="col">{t("sandbox.node")}</th> : null}
-              <th scope="col">{t("sandbox.cpu")}</th>
               <th scope="col">{t("sandbox.memory")}</th>
               <th scope="col" className="numeric">{t("sandbox.uptime")}</th>
               <th scope="col" className="numeric">{t("sandbox.tokens")}</th>
@@ -288,7 +287,6 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
               const { observation, session } = row;
               const observed = observation.status === "observed";
               const sampleGap = runtimeSampleGap(observation);
-              const cpu = observed ? observation.cpu : null;
               const memory = observed ? observation.memory : null;
               const open = () => onOpen(observation.session_id);
               return (
@@ -299,16 +297,7 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
                   <td><StatusDot tone={lifecycleTone(row)} label={lifecycleLabel(row, t)} /></td>
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
                   {showNode ? <td><NodeLink node={row.node} /></td> : null}
-                  {sampleGap ? <td colSpan={2} className="table-muted">{t(`sandbox.reason.${sampleGap}`)}</td> : <>
-                  <td>
-                    {cpu?.utilization_ratio != null ? (
-                      // Providers that report only a utilization ratio: show it as a share of the sandbox's CPU.
-                      <span className="table-meter">
-                        <Meter value={cpu.utilization_ratio} limit={1} label={t("sandbox.cpu")} />
-                        <span>{formatPercent(cpu.utilization_ratio, locale)}</span>
-                      </span>
-                    ) : <span className="table-muted">{MISSING}</span>}
-                  </td>
+                  {sampleGap ? <td className="table-muted">{t(`sandbox.reason.${sampleGap}`)}</td> : <>
                   <td>
                     {memory?.usage_bytes != null ? (
                       <span className="table-meter">

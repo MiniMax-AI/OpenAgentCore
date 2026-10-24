@@ -56,10 +56,10 @@ describe("hosted Runtime projections", () => {
     expect(one.sessions.map((entry) => entry.id)).toEqual(["b"]);
   });
 
-  it("sums only reported CPU and memory and counts lifecycle states", () => {
+  it("sums only reported memory and counts lifecycle states", () => {
     expect(hostedRuntimeUsage(load.observations)).toEqual({
       hosted: 3, active: 1, sleeping: 1, pending: 1, observed: 2,
-      cpuCapacityCores: 2, memoryUsageBytes: 100, memoryLimitBytes: 400,
+      memoryUsageBytes: 100, memoryLimitBytes: 400,
     });
   });
 
