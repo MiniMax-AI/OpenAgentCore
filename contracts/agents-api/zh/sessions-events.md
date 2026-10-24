@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 45b743284c8a03aa016c1b874f6dbeb578e7ec7afcbc565bdcafba333481c950
+source_hash: 2984a8001807449fb923cecbd50fae872c1de9a4a1575ebb055d155b32c361ed
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -45,9 +45,9 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 ## 发送输入 {#send-input}
 
-`POST /v1/agents/sessions/{session_id}/events` 接收包含 1 到 64 个事件的有序数组：`agent.session.input.message`、`agent.session.input.cancel` 和 `agent.session.input.tool_result`。整个批次以原子方式接纳；批次存储后且在任何 Harness 读取它之前，响应为无正文的 202。接纳绝不表示已在原生侧应用。
+`POST /v1/agents/sessions/{session_id}/events` 接收包含 1 到 16384 个事件的有序数组：`agent.session.input.message`、`agent.session.input.cancel` 和 `agent.session.input.tool_result`。整个批次以原子方式接纳；批次存储后且在任何 Harness 读取它之前，响应为无正文的 202。接纳绝不表示已在原生侧应用。
 
-- **限制。** 请求正文最多为 1 MiB，单次请求存储的输入最多为 512 KiB。
+- **限制。** 请求正文最多为 4 MiB，单次请求存储的输入最多为 2 MiB。
 - **空值批次。** 将 `events` 显式设为 `null` 无效。
 - **空批次。** `{"events": []}` 会检查 Session 是否存在并返回 202。它不会创建 Turn、Item 或重试标识。
 - **重试。** 最长 128 字节的 `Idempotency-Key` 标识整个有序批次。相同密钥和批次会再次返回 202，而不会重复接纳任何内容；相同密钥搭配另一个批次会返回 409 `idempotency_conflict`。不带密钥的请求始终是新请求。

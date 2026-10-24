@@ -43,9 +43,9 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Later re
 
 ## Send input
 
-`POST /v1/agents/sessions/{session_id}/events` takes an ordered array of 1 to 64 events: `agent.session.input.message`, `agent.session.input.cancel` and `agent.session.input.tool_result`. The whole batch is admitted atomically, and the response is 202 with no body once the batch is stored, before any Harness reads it. Admission never confirms native application.
+`POST /v1/agents/sessions/{session_id}/events` takes an ordered array of 1 to 16384 events: `agent.session.input.message`, `agent.session.input.cancel` and `agent.session.input.tool_result`. The whole batch is admitted atomically, and the response is 202 with no body once the batch is stored, before any Harness reads it. Admission never confirms native application.
 
-- **Limits.** The request body is at most 1 MiB, and the stored input of one request at most 512 KiB.
+- **Limits.** The request body is at most 4 MiB, and the stored input of one request at most 2 MiB.
 - **Null batch.** An explicit `null` for `events` is invalid.
 - **Empty batch.** `{"events": []}` checks that the Session exists and returns 202. It creates no Turn, Item or retry identity.
 - **Retries.** An `Idempotency-Key` of up to 128 bytes identifies the whole ordered batch. The same key and batch return 202 again without admitting anything twice; the same key with another batch returns 409 `idempotency_conflict`. A request without a key is always new.

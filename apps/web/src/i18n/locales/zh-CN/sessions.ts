@@ -120,9 +120,8 @@ export const sessions = {
   },
   runtime: {
     title: "Runtime",
-    help: "Core 观测到的此 Session 托管沙箱的 CPU 和内存，以及所选时间范围内 Core 保留的采样。",
+    help: "Core 观测到的此 Session 托管沙箱当前内存，以及所选时间范围内 Core 保留的 CPU 和内存采样。",
     state: "状态",
-    cpu: "CPU",
     memory: "内存",
     observed: "观测时间",
     range: "时间范围",

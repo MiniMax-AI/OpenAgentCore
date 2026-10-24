@@ -13,7 +13,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -605,7 +604,7 @@ func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses 
 	if err != nil {
 		return err
 	}
-	checkpointSupported := adapter.Operations()["Initial"].State == providercontract.Supported
+	checkpointSupported := sandbox.SupportsCheckpoint(adapter.Operations())
 	seen := map[uint64]bool{}
 	for _, status := range statuses {
 		if status.Checkpoint != nil && (status.State != "ready" || !checkpointSupported || status.Checkpoint.Validate() != nil) || status.State == "ready" && checkpointSupported && status.Checkpoint == nil {

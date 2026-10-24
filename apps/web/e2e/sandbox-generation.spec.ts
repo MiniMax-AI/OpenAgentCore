@@ -58,7 +58,7 @@ test("online configuration retains existing resources and stops rapid polling wh
   await expect(rollout(page)).toBeVisible();
   const before = await inventory(page);
   expect(before.allocations.length).toBeGreaterThan(0);
-  await setDeployment(request, { resources: { allocations: before.allocations.length, pending: 0 } });
+  await setDeployment(request, { resources: { allocations: before.allocations.length, running: before.allocations.length, pending: 0 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
   await page.getByRole("button", { name: "Change resources", exact: true }).click();
   await page.getByRole("button", { name: /^Large/ }).click();

@@ -14,7 +14,7 @@ import type {
   TextParam, TextResource, TokenUsageResource, TurnResource, VaultCredentialResource,
   VaultResource, VaultStatusParam, } from "./generated/public-api";
 import type {
-  CoreHarness as CoreHarnessResource, ModelConfigurationSupport as ModelConfigurationSupportResource, RuntimeCPUObservation,
+  CoreHarness as CoreHarnessResource, ModelConfigurationSupport as ModelConfigurationSupportResource,
   RuntimeMemoryObservation, RuntimeObservationLifecycleState, RuntimeObservationReason,
 } from "./generated/core-api";
 
@@ -735,7 +735,7 @@ export interface CreateSessionStreamOptions extends StreamOptions {
 
 // Generated /core/v1 types keep their schema names in ./generated/core-api.
 export type {
-  HarnessModelConfiguration, RuntimeCPUObservation, RuntimeHistory, RuntimeMemoryObservation, RuntimeObservationReason, SessionExecutionConfiguration,
+  HarnessModelConfiguration, RuntimeHistory, RuntimeMemoryObservation, RuntimeObservationReason, SessionExecutionConfiguration,
 } from "./generated/core-api";
 
 export type RuntimeUnavailableReason = Exclude<RuntimeObservationReason, "runtime_mode_not_observable">;
@@ -764,7 +764,6 @@ export interface RuntimeObservedObservation extends RuntimeObservationBase {
   allocation_created_at: number | null;
   observed_at: number;
   started_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   memory: RuntimeMemoryObservation | null;
 }
 

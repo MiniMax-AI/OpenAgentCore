@@ -21,13 +21,12 @@ func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "control.json")
-	t.Setenv(suspendControlEnv, path)
 	environment := uuid.NewString()
 	if err := localworkspace.Bind(environment, uuid.NewString(), t.TempDir(), t.TempDir()); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(localworkspace.Unbind)
-	control, err := newSuspendControl()
+	control, err := openSuspendControl(path)
 	if err != nil {
 		t.Fatal(err)
 	}

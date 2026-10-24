@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 199dc6de344085e9b8c1048e7e8808aa40353878865061236e1a919ad689e28b
+source_hash: 0ffc892ad458e104e5e9eba3427429b3f82e7376bfdf3eeac0c9653cee434db1
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -54,7 +54,7 @@ source_hash: 199dc6de344085e9b8c1048e7e8808aa40353878865061236e1a919ad689e28b
 
 Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expiry 和 cleanup 要求。每个 adapter 都实现 `RunCommand`，测试也执行它，但 Core 编排不调用它；只有 node transport 转发。机密命令输入通过 `Command.Stdin` 传输，不放在参数或日志中；结果保留字节顺序、有界输出和实际退出状态。
 
-`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 仅当提供商的 `DeploymentPolicy.Workspace` 已声明时才携带外部工作区绑定；提供商对此的义务见[挂载](workspace-provider.md#attachment)。
+`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 仅当提供商的 `DeploymentPolicy.Workspace` 已声明时才携带外部工作区绑定；提供商对此的义务见[挂载](workspace-provider.md#attachment)。Core 仅在提供商声明支持 checkpoint 时设置 `Bootstrap.SuspendControl`，提供商将其原样放入 [Runtime bootstrap](runtime-bootstrap.md)。
 
 ### 明确的操作契约 {#explicit-operation-contracts}
 
@@ -64,10 +64,10 @@ Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expir
 | --- | --- | --- |
 | `Create`、`GetInfo`、`Renew`、`Kill`、`RunCommand` | 支持 | Allocation 生命周期与有界命令 |
 | `Observe` | 明确决定 | 检查所有权、只读地观测一个 allocation |
-| `Initial`、`NewCompute`、`GetCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteSnapshot`、`RunCommandCompute` | 所有 checkpoint 方法决定一致；仅 `nodes` 注册可以支持 | 精确计算实例、捕获与恢复、保留源恢复和清理 |
+| `Initial`、`NewCompute`、`GetCompute`、`RenewCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteSnapshot`、`RunCommandCompute` | 所有 checkpoint 方法决定一致 | 精确计算实例、捕获与恢复、保留源恢复和清理 |
 | `RestorePreparation`、`SavePreparation` | 两者决定一致 | 复用已完成的 Environment 准备结果 |
 
-`Initial` 和 `NewCompute` 构造 compute reference，不分配资源；`ResumeCompute` 在暂停中止后仅解冻同一驻留实例；`RunCommandCompute` 在一个精确 compute incarnation 中运行有界命令。Core 使用 `RunCommandCompute` 在恢复后唤醒 parked daemon（[`runtime_compute_wake.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute_wake.go)）。
+`Initial` 和 `NewCompute` 构造 compute reference，不分配资源；`ResumeCompute` 在暂停中止后仅解冻同一驻留实例；`RenewCompute` 在提供商有原生租约时延长精确运行实例的租约，否则与 `GetCompute` 完全一样只做观察；`RunCommandCompute` 在一个精确 compute incarnation 中运行有界命令。Core 使用 `RunCommandCompute` 在恢复后唤醒 parked daemon（[`runtime_compute_wake.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute_wake.go)）。
 
 `SavePreparation(reference, key)` 在准备完整完成后保存该分配初始 compute 中准备写入 `/environment` 的内容（workspace、packages 和 initialization，从不包括 Runtime 状态），`RestorePreparation(reference, key)` 把已保存的内容放回，没有有效条目时返回 `false`。`key` 是不透明的：Core 由 Project 和所有进入准备的内容推导它，从不使用 Environment、Session、Harness 或 Agent，提供商也从不解释它。存储、按 Runtime 镜像划分范围、过期和淘汰由提供商负责。条目在保存后 24 小时内有效，恢复不得使用已过期的条目。Core 在 Runtime 连接后调用 `RestorePreparation`，命中时只发送 `finalize` 操作即完成初始化。未命中时完整准备并调用 `SavePreparation`；保存错误只记录日志，不会使 Session 失败。两者都未声明的提供商始终完整准备。microsandbox 适配器在 Runtime home 下的私有目录中为每个 key 保存一个归档。
 
@@ -111,7 +111,7 @@ Microsandbox 在返回创建不存在回执前永久关闭初始 Create 准入�
 
 `ErrInvalid`、`ErrOwnership`、`ErrExists`、`ErrNotFound`、`ErrComputeUnconfirmed`、`ErrCommandUnconfirmed`，以及仅用于 `Resume` 的 `ErrCheckpointUnusable` 保持其定义含义。未分类原生或 transport error 表示未知，不授权重试 mutation。Core 不将提供商 diagnostics 读作生命周期事实，也不暴露原生错误文本或凭据；node transport 将错误映射为固定 code，直接 SDK 细节保持私有。
 
-Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`；原样持久化 operation ID 与提供商 snapshot provenance。suspend 或 resume 的 `ObserveOnly` 仅观察上次尝试，不启动另一 capture 或 restore。`ResumeCompute` 仅解冻保留源，不冷启动已停止源。清理针对精确 compute incarnation 和 snapshot，不针对当前同名实例。只有所属节点已验证精确 incarnation 不再存在时，`GetCompute` 才返回 `ErrNotFound`；同名但 native ID 不同的实例为 `ErrOwnership`，节点或提供商不可达属于未知结果。`ComputeState.Status` 为 `stopped` 或 `crashed` 表示 adapter 已验证该精确 incarnation 的进程不再存在；其记录或磁盘可保留到 `KillCompute` 将其移除。`paused`、没有 Runtime 连接的 `running` 和未知状态均不证明进程已终止。声明 checkpoint 支持前阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
+Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`；原样持久化 operation ID 与提供商 snapshot provenance。suspend 或 resume 的 `ObserveOnly` 仅观察上次尝试，不启动另一 capture 或 restore。`ResumeCompute` 仅解冻保留源，不冷启动已停止源。`RenewCompute` 从不复活已停止的 compute；运行中 allocation 的 Runtime 保持连接时，Core 调用它而不是 `GetCompute`，因为 `Renew` 只寻址初始 incarnation。清理针对精确 compute incarnation 和 snapshot，不针对当前同名实例。只有所属节点已验证精确 incarnation 不再存在时，`GetCompute` 才返回 `ErrNotFound`；同名但 native ID 不同的实例为 `ErrOwnership`，节点或提供商不可达属于未知结果。`ComputeState.Status` 为 `stopped` 或 `crashed` 表示 adapter 已验证该精确 incarnation 的进程不再存在；其记录或磁盘可保留到 `KillCompute` 将其移除。`paused`、没有 Runtime 连接的 `running` 和未知状态均不证明进程已终止。声明 checkpoint 支持前阅读 [`runtime_compute.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/execution/runtime_compute.go) 及其失败测试。
 
 ### 四个独立就绪事实 {#four-distinct-readiness-facts}
 
@@ -146,7 +146,7 @@ node 配置 `sandbox.NodeConfig` 包含 `provider`、`generation`、`installatio
 
 - `nodes` 注册仅有 `BuildLocal`，`direct` 注册仅有 `BuildDirect`；缺失、混合或未知 mode 被拒绝。
 - configuration adapter 与完整 operation 声明都是必需项，因此不完整注册不能发布部分投影。声明的默认大小必须通过 `ValidatePolicy("", Policy)`。
-- Checkpoint 仅准入 `nodes` 注册，因为公共 lifecycle 只暂停 node allocation；声明 checkpoint 的 `direct` 提供商会被注册拒绝。注册不携带 suspension 数值：Core 对每个声明 checkpoint 支持的提供商应用同一个 [suspension policy](#suspension)。
+- Checkpoint 对两种模式都准入：公共 lifecycle 对 `direct` allocation 的暂停、保留、恢复和清理与 node allocation 完全一致，只是没有 node。注册不携带 suspension 数值：Core 对每个声明 checkpoint 支持的提供商应用同一个 [suspension policy](#suspension)。
 
 configuration adapter 必须非 nil，包括其具体值。每个 `ConfigurationRequirements` 字段都需要明确有效的决定：`Credential` 和 `PublicOrigin` 为 `Required` 或 `NotRequired`，`Discovery`、`SelectionDiscovery` 和 `CredentialVerification` 使用共享 supported 或 unsupported 声明并携带安全 reason。新增 requirement field 需要明确更新验证，不继承已有决定。要求凭据不承诺支持 `VerifyCredential` 操作。这些检查证明注册完整，不证明原生 SDK 行为正确；constructor 和 adapter 契约测试仍然适用。
 
@@ -195,7 +195,7 @@ stateDiagram-v2
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 
-声明了 checkpoint 操作（`Initial`、`NewCompute`、`GetCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteSnapshot`、`RunCommandCompute`）的提供商，使 Core 能把空闲 allocation 暂停为快照，并在同一或另一个兼容 node 上恢复。Core 记录 allocation 的 `compute_phase`；未声明 checkpoint 支持的提供商为 `disabled`，其余阶段按下图变化。删除、归档、重置和保留期到期会在完成[Core 对提供商的保证](#what-core-guarantees-to-a-provider)中描述的清理后，从任意阶段释放 allocation。
+声明了 checkpoint 操作（`Initial`、`NewCompute`、`GetCompute`、`RenewCompute`、`Suspend`、`Resume`、`ResumeCompute`、`KillCompute`、`DeleteSnapshot`、`RunCommandCompute`）的提供商，使 Core 能把空闲 allocation 暂停为快照，并在同一或另一个兼容 node 上恢复。Core 记录 allocation 的 `compute_phase`；未声明 checkpoint 支持的提供商为 `disabled`，其余阶段按下图变化。删除、归档、重置和保留期到期会在完成[Core 对提供商的保证](#what-core-guarantees-to-a-provider)中描述的清理后，从任意阶段释放 allocation。
 
 ```mermaid
 stateDiagram-v2
@@ -261,6 +261,8 @@ Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中
 `Suspend` 只有在持久发布已验证的完整检查点、停止精确 source compute，并结清 source 本地 capture 与 cleanup 义务后，才能报告 `SourceStopped`。Core 先持久化快照，再标记 suspended；仅原生资源不存在并不足够。`Suspend.ObserveOnly` 可以为同一 operation 已验证的快照完成检查点发布和源清理，但不能重新捕获快照，也不能停止已经恢复 running 的源。此前已发布的检查点缺失或损坏时，`ObserveOnly` 可以返回其精确持久 ownership receipt，标记 `Status: unknown` 和 `SourceStopped: false`，供清理使用；该 receipt 不证明检查点当前可用，也不证明源不存在。`Resume` 仍在执行前验证检查点。完成源结清屏障后，source node 不可用不再阻止恢复。删除和正常到期可以将空闲 suspended allocation 的清理路由转给同一 artifact domain 内的在线 node；删除不要求 execution class 匹配。清理目标必须已提供同一不可变 generation，且有 retained 容量。没有这样的 node 时，清理保持 pending，不释放所有权；运维需恢复符合条件的 node 或其容量。未知 running 或 restoring writer 不会仅因 node 不可达而迁移。
 
 恢复用 `Resume.ObserveOnly` 观察已持久化的 target 与 operation。`RestoreAttemptClosed` 是精确 operation ID，不是通用 absence 标志：adapter 只有在持久关闭从未进入原生执行的 attempt，并隔离该 ID 的所有迟到请求后才能返回。如果 adapter 能证明当前调用在派发原生恢复之前失败，也可以关闭已持久 admitted 的 attempt。microsandbox adapter 对创建该 admission 的 fresh 请求，在派发原生恢复之前的任何失败上执行这种关闭。wire deadline 到期或未分类失败会关闭该 attempt，Core 随后持久化新的 operation ID。快照缺失、未通过身份或完整性校验，或未通过 adapter 对当前 generation 的资格检查（例如资源、workspace 或 runtime image 不匹配）时，也会关闭该 attempt，并报告为 `ErrCheckpointUnusable`。该结果是持久的：同一 operation 的 `Resume.ObserveOnly` 会再次报告它，该 operation ID 的迟到请求仍被隔离。一旦已派发原生恢复，提供商不会返回它。收到 `ErrCheckpointUnusable` 后，Core 不再恢复该快照，并[立即结束其保留](#cold-replacement-after-checkpoint-retention)。一旦已派发原生恢复，结果未知的 attempt 保留相同 target、所有权与原始 retention deadline；原生列表缺失、helper 死亡或超时都不授权重放。这种恢复可能一直不可用，直到显式删除或正常保留期到期；等待中的 input 可能达到其公共 deadline。用户删除仍需精确原生 settlement，之后才能释放资源与所有权。
+
+E2B adapter 使用 SDK 的原生 pause 与 `connect` 做 checkpoint。一个 sandbox 跨越 allocation 的所有 generation：`Suspend` 以内存快照暂停它，daemon 因此存活，`Resume` 重新连接同一个 sandbox。helper 的私有 receipt 记录当前 generation，所以被取代的 generation 返回 `ErrNotFound`，`KillCompute` 和 `DeleteSnapshot` 从不触碰由其他 generation 拥有的 sandbox。`CheckpointCompatibility` 指明 endpoint、安装和模板构建，不匹配的快照在任何原生调用之前即为 `ErrCheckpointUnusable`。E2B 没有独立的 workspace 文件系统，因此保留期到期走下面的未满足条件分支。
 
 microsandbox adapter 要求显式的私有 `checkpoint_root`，位于所有 guest 可访问文件系统之外。目录权限为 `0700`，私有 namespace marker 标识真实检查点存储。默认安装创建 node 本地私有 store。跨 node 恢复要求运维为参与 node 挂载同一个私有 store，挂载路径可以不同。每个保留的检查点都是 guest 内存与根磁盘层的未压缩原生快照，因此共享 store 要为每次挂起和跨 node 恢复承载这部分数据量。Runtime state 目录与 workspace binding 都不用于推导该 root。adapter 在恢复前再次验证检查点、外部文件系统身份和原生 execution class。恢复 RAM 与文件描述符不保证外部 TCP 连接连续，也不保证应用副作用可安全重放。
 

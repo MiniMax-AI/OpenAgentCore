@@ -9,8 +9,6 @@ import (
 	"os"
 )
 
-const suspendControlEnv = "OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE"
-
 type suspendIdentity struct {
 	EnvironmentID string
 	SuspendID     string
@@ -21,8 +19,8 @@ type suspendControl struct {
 	lastResumed *proto.EnvironmentSuspendPayload
 }
 
-func newSuspendControl() (*suspendControl, error) {
-	if os.Getenv(suspendControlEnv) != "" {
+func newSuspendControl(enabled bool) (*suspendControl, error) {
+	if enabled {
 		return nil, errors.New("hosted suspension requires Linux")
 	}
 	return nil, nil

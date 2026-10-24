@@ -67,6 +67,8 @@ var Declaration = harnessconfig.Declaration{
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
+	// Native MiniMax Code ignores global instructions (AGENTS.md) over 32 KiB.
+	MaxInstructionsBytes: 32 * 1024,
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
 		if err := harnessconfig.RequireObjectSchemas(functions); err != nil {
 			return err

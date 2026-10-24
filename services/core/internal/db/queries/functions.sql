@@ -23,6 +23,9 @@ SELECT EXISTS (
     SELECT 1 FROM function_calls WHERE session_id = sqlc.arg(session_id) AND call_id = sqlc.arg(call_id)
 )::boolean AS found;
 
+-- name: FindFunctionCallTurn :one
+SELECT turn_id, executor_call_id FROM function_calls WHERE session_id = $1 AND call_id = $2;
+
 -- name: MatchFunctionResult :one
 SELECT (result IS NOT NULL)::boolean AS submitted, COALESCE(result = sqlc.arg(result)::jsonb, false)::boolean AS matches,
     withdrawn

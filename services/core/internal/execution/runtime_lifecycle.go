@@ -109,12 +109,9 @@ func validatedRuntimeProvider(config *RuntimeProvider, registry *runtimegateway.
 	if copied.ProviderKind == "" || (copied.Mode != string(sandbox.DeploymentNodes) && copied.Mode != string(sandbox.DeploymentDirect)) {
 		return RuntimeProvider{}, sandbox.ErrInvalid
 	}
-	if copied.Mode == string(sandbox.DeploymentDirect) && copied.Suspension != nil {
-		return RuntimeProvider{}, sandbox.ErrInvalid
-	}
 	if config.Suspension != nil {
 		policy := *config.Suspension
-		if !sandbox.SupportsCheckpoint(config.Provider) || policy.Retention < time.Second {
+		if !sandbox.SupportsCheckpoint(config.Provider.ProviderOperations()) || policy.Retention < time.Second {
 			return RuntimeProvider{}, sandbox.ErrInvalid
 		}
 		copied.Suspension = &policy
@@ -280,6 +277,7 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
 		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token,
+		SuspendControl: sandbox.SupportsCheckpoint(provider.ProviderOperations()),
 	})
 	logComputeStep(ctx, owner, "create", started, err)
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {
@@ -469,7 +467,7 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	if r.config.Suspension != nil && environment.Initialization == "complete" {
 		return r.enableCompute(ctx, owner)
 	}
-	if peer, err := r.registry.LookupDevice(owner.DeviceID); err != nil || peer.IsClosed() {
+	if !r.runtimeConnected(owner.DeviceID) {
 		return nil
 	}
 	renewed, err := provider.Renew(ctx, runtimeReference(owner))
@@ -481,6 +479,13 @@ func (r *runtimeLifecycle) observe(ctx context.Context, owner deployment.Allocat
 	}
 	_, err = r.deployment.CheckRunning(ctx, owner)
 	return err
+}
+
+// runtimeConnected is the renewal condition: running compute keeps its native
+// lease while the allocation's Runtime holds an open connection.
+func (r *runtimeLifecycle) runtimeConnected(device string) bool {
+	peer, err := r.registry.LookupDevice(device)
+	return err == nil && !peer.IsClosed()
 }
 
 // Environment identity owns connectivity; preparation has an independent owner.

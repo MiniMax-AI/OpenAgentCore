@@ -97,6 +97,9 @@ type Declaration struct {
 	// text. Unsupported Harnesses reject them at admission; Core never trims or
 	// pads model input to fit a Harness.
 	WhitespaceOnlyText proto.CapabilitySupport
+	// MaxInstructionsBytes is the native limit on an Agent's instructions in
+	// bytes; zero declares none. Admission rejects longer instructions.
+	MaxInstructionsBytes int
 	// ValidateConfiguration adds pure restrictions on a saved Agent and
 	// Environment.
 	ValidateConfiguration func(Admission) error
@@ -141,6 +144,9 @@ func (d Declaration) ValidateDeclaration() error {
 	}
 	if d.WhitespaceOnlyText != proto.CapabilitySupported && d.WhitespaceOnlyText != proto.CapabilityUnsupported {
 		return errors.New("harnessconfig: whitespace-only text support must be declared")
+	}
+	if d.MaxInstructionsBytes < 0 {
+		return errors.New("harnessconfig: invalid instructions limit")
 	}
 	if len(d.Placements) == 0 || !validChoices(d.Placements, "none", "openai_hosted", "self_hosted") {
 		return errors.New("harnessconfig: invalid placements")

@@ -11,6 +11,8 @@ describe("suspension settings", () => {
     expect(html).toContain('id="sandbox-idle-seconds"');
     expect(html).toContain('value="300"');
     expect(html).toContain("24 hours");
+    expect(html).toContain("Edit node");
+    expect(renderToStaticMarkup(<SuspensionForm deployment={{ ...deployment, mode: "direct" }} disabled={false} onSave={async () => true} />)).not.toContain("Edit node");
     expect(renderToStaticMarkup(<SuspensionForm deployment={{ ...deployment, suspension: null }} disabled onSave={async () => true} />)).toBe("");
   });
 });

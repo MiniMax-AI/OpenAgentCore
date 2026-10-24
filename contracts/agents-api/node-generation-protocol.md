@@ -79,6 +79,7 @@ Each operation carries its own arguments and returns the following result on suc
 | `initial` | `Initial` | None | `compute` |
 | `new_compute` | `NewCompute` | Positive compute `generation` and optional `snapshot` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
+| `renew_compute` | `RenewCompute` | `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | None |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
 | `command_compute` | `RunCommandCompute` | `compute` and `command` | `command` |

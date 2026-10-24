@@ -44,6 +44,11 @@ def initialize():
     binding = identity(payload)
     shared.write_private(root / 'managed-launch.json', binding)
     environment = shared.prepare_runtime()
+    # The daemon publishes its suspend control here; Core's wake command reads it.
+    control = Path(contract.SUSPEND_CONTROL_FILE)
+    control.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chown(control.parent, 1000, 1000)
+    control.parent.chmod(0o700)
     connection = Path(environment['OAC_RUNTIME_HOME']).parent / 'runtime-bootstrap.json'
     shared.write_private(connection, payload['RuntimeBootstrap'], owner=1000)
     source.unlink()

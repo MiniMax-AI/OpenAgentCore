@@ -114,7 +114,7 @@ The list carries each Harness's configuration, so the console does not read `GET
 | Remove node | `DELETE /core/v1/sandbox/nodes/{node_id}` | Confirmed node removal; the row goes only after Core acknowledges the deletion, and a Clean up the host dialog then gives the host's uninstall command (requiring root or sudo; for a node enrolled with another address than the deployment's, also with `--force`, which skips the installer's confirmation with Core) |
 | Runtime observations | `GET /core/v1/sandbox/runtime-observations` | Sandbox metrics: hosted Runtimes of every project, each labelled with its project; an E2B sandbox's dialog adds its `observation.disk` as used / limit (null elsewhere) |
 
-An E2B deployment has no nodes; its API key is write-only. Overview and Sandbox metrics count its running and starting sandboxes from the deployment's `resources.allocations` and `resources.pending`, while the hosted Runtime rows come from Runtime observations. The two sources refresh independently, so the console does not infer retention or cleanup from their difference.
+An E2B deployment has no nodes; its API key is write-only. Overview and Sandbox metrics count its running and starting sandboxes from the deployment's `resources.running` and `resources.pending`, while the hosted Runtime rows come from Runtime observations. The two sources refresh independently, so the console does not infer retention or cleanup from their difference.
 
 ## Writes
 

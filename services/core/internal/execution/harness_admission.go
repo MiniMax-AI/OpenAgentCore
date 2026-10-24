@@ -3,6 +3,7 @@ package execution
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -39,6 +40,9 @@ func admissionOf(snapshot Snapshot) harnessconfig.Admission {
 func validateDeclaredConfiguration(declaration harnessconfig.Declaration, snapshot Snapshot) error {
 	if snapshot.Agent.Text.Format.Type == "json_schema" && !declaration.Capabilities.StructuredOutput.IsSupported() {
 		return errors.New("Structured output is not supported by this engine.")
+	}
+	if limit := declaration.MaxInstructionsBytes; limit > 0 && snapshot.Agent.Instructions != nil && len(*snapshot.Agent.Instructions) > limit {
+		return fmt.Errorf("Instructions exceed this engine's limit of %d bytes.", limit)
 	}
 	if declaration.ValidateConfiguration != nil {
 		if err := declaration.ValidateConfiguration(admissionOf(snapshot)); err != nil {
