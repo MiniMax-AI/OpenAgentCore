@@ -13,7 +13,7 @@ The account key is stored encrypted in Core's database and is write-only. It rea
 | Helper operation | Core use | Behavior |
 | --- | --- | --- |
 | `create` | `Create` | Creates the sandbox once and runs `managed_init.py`; see [Create](#create) |
-| `inspect` | `GetInfo` | Reads the sandbox by recorded ID, or by ownership metadata when no ID is recorded, and checks ownership, domain, template and resources |
+| `inspect` | `GetInfo` | Reads the sandbox by recorded ID, or by ownership metadata when no ID is recorded, and checks ownership, domain (an omitted domain is the configured one), template and resources |
 | `renew` | `Renew` | Extends the lease of the running sandbox to the configured timeout, then rereads it |
 | `kill` | `Kill` | Destroys every matching sandbox and confirms that none remains |
 | `command` | `RunCommand` | Runs one bounded command as the Runtime user on a running sandbox whose bootstrap completed; output is limited to 1 MiB per stream |
@@ -40,7 +40,7 @@ The request and credentials arrive on standard input; standard output carries on
 
 ## Receipts and state directory
 
-The state directory is the fixed `/state/e2b` ([private Provider state](../../../../docs/configuration.md#compose-installations)). It must be owned by the helper's user and grant no group or other access, and it lives on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
+The state directory is the fixed `/state/e2b` ([private Provider state](../../../../docs/configuration.md#compose-installations)), which Core creates when it loads the Provider. It must be owned by the helper's user and grant no group or other access, and it lives on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
 
 A helper holds its allocation's lock until the SDK operation returns, even after Core's caller times out. Core tracks the helper's actual exit, and a credential change waits for running helpers without killing them. Helper exit never proves that a remote Create settled. Core serializes lifecycle requests per allocation and never replays Create.
 

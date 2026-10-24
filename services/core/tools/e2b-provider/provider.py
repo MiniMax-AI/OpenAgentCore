@@ -145,7 +145,9 @@ class Provider:
 
     def check_domain(self, cloud):
         domain = self.options()['domain']
-        sandbox_domain = cloud.sandbox_domain
+        # The API may omit the domain of a sandbox on the configured one: SDK
+        # Sandbox objects then fill in that domain, SandboxInfo leaves None.
+        sandbox_domain = domain if cloud.sandbox_domain is None else cloud.sandbox_domain
         if not isinstance(sandbox_domain, str) or not (
                 sandbox_domain == domain or sandbox_domain.endswith('.' + domain)):
             raise Failure('ownership')

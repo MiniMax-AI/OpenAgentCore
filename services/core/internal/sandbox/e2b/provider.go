@@ -167,6 +167,10 @@ func newDirect(c sandbox.DirectConfig) (*Provider, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The adapter owns its private directory under the state root.
+	if err := os.Mkdir(state, 0o700); err != nil && !errors.Is(err, os.ErrExist) {
+		return nil, errors.New("E2B provider cannot create its private state directory")
+	}
 	// Only a candidate that omitted its resources has none; its validation
 	// reads them from the template build before the candidate is rebuilt.
 	var resources *sandbox.Resources
