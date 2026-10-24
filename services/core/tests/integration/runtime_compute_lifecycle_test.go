@@ -92,7 +92,7 @@ func (p *fakeCheckpointProvider) Suspend(_ context.Context, q sandbox.SuspendReq
 		if _, exists := p.snapshots[q.OperationID]; exists {
 			return sandbox.ComputeState{}, errors.New("capture replayed")
 		}
-		p.snapshots[q.OperationID] = sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, Reference: "snapshot-" + q.OperationID, ID: uuid.NewString(), Receipt: "verified checkpoint private", OperationID: q.OperationID, SourceGeneration: q.Source.Generation, SourceName: q.Source.Name, SourceID: q.Source.ID}
+		p.snapshots[q.OperationID] = sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, Reference: "snapshot-" + q.OperationID, ID: uuid.NewString(), Evidence: "verified checkpoint private", OperationID: q.OperationID, SourceGeneration: q.Source.Generation, SourceName: q.Source.Name, SourceID: q.Source.ID}
 		state.Status = "paused"
 		p.computes[q.Source.Name] = state
 		if p.loseCapture {

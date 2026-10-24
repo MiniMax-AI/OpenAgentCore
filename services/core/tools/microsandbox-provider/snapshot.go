@@ -96,7 +96,7 @@ func (b backend) inspectSnapshot(ctx context.Context, operation string, source w
 	if report.Digest != artifact.Digest() || report.Checkpoint == nil || report.Checkpoint.Root == "" || report.Checkpoint.Kind == "" {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
-	identity.Receipt = wire.SnapshotReceipt(artifact.Digest(), artifact.State().Checkpoint.CheckpointID, report.Checkpoint.Root)
+	identity.Evidence = wire.SnapshotEvidence(artifact.Digest(), artifact.State().Checkpoint.CheckpointID, report.Checkpoint.Root)
 	if wire.ValidateSnapshot(b.q.Config, b.q.Reference, identity) != nil {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
