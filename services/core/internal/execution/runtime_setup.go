@@ -35,14 +35,16 @@ type unconfirmedError struct{ cause error }
 func (*unconfirmedError) Error() string   { return "environment initialization operation unconfirmed" }
 func (e *unconfirmedError) Unwrap() error { return e.cause }
 
+var errOwnershipLost = errors.New("Core lost ownership of the initialization")
+
 var errRuntimeConnectionChanged = errors.New("Runtime connection changed during initialization")
 
 // stepLabel is the fixed label of the operation in step timing.
-func (operation runtimeSetupOperation) stepLabel() string {
+func (operation runtimeSetupOperation) stepLabel() sessions.InitializationLabel {
 	if operation.Request.Initialization != nil {
-		return operation.Request.Initialization.Action
+		return sessions.InitializationLabel(operation.Request.Initialization.Action)
 	}
-	return operation.Request.Action
+	return sessions.InitializationLabel(operation.Request.Action)
 }
 
 // step reports the Runtime-measured timing of an operation that ran.
@@ -51,17 +53,19 @@ func (operation runtimeSetupOperation) step(result proto.RuntimePrepareResultPay
 		return sessions.InitializationStep{}, false
 	}
 	step := sessions.InitializationStep{Step: operation.stepLabel(), DurationMS: result.DurationMS}
-	if step.Step == "setup" {
+	if step.Step == sessions.InitializationSetup {
 		step.Index = &operation.Index
 	}
 	return step, true
 }
 
 // provisioningCategory classifies a failure without a confirmed failed step.
-func provisioningCategory(err error) string {
+func provisioningCategory(err error) sessions.ProvisioningCategory {
 	var confirmed *runtimeStepFailure
 	var unconfirmed *unconfirmedError
 	switch {
+	case errors.Is(err, errOwnershipLost):
+		return sessions.ProvisioningCoreRestart
 	case errors.Is(err, context.DeadlineExceeded):
 		return sessions.ProvisioningTimeout
 	case errors.Is(err, runtimegateway.ErrSessionClosed), errors.Is(err, runtimegateway.ErrDeviceNotRegistered), errors.Is(err, errRuntimeConnectionChanged):

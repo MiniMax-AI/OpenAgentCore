@@ -1,3 +1,5 @@
+import type { ProvisioningCategory } from "@oac/agents-client";
+
 export const diagnostics = {
   providerUnknown: "还没有记录",
   providerStale: "记录尚未确认",
@@ -68,10 +70,10 @@ export const diagnostics = {
     unconfirmed: "Runtime 未确认结果。",
     rejected: "Runtime 拒绝了该操作。",
     operation_failed: "Runtime 报告操作失败。",
-    core_error: "Core 无法读取已存储的配置。",
-    core_restart: "准备期间 Core 重启。",
-    compute_released: "准备完成前沙箱已结束。",
-  },
+    core_error: "Core 无法读取、校验或记录初始化状态。",
+    core_restart: "Core 失去了初始化的所有权。",
+    compute_released: "沙箱已被释放或从未创建。",
+  } satisfies Record<ProvisioningCategory, string>,
   initializationTitle: "初始化",
   unavailable: "失败详情不可用",
   unavailableHelp: "诊断读取失败或与当前状态不一致，请刷新后重试。",

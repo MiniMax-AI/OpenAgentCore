@@ -107,7 +107,7 @@ func TestDiagnosticsHostedFailureOverridesInputWithoutParsingReason(t *testing.T
 	session := hostedFailureSession()
 	session.EnvironmentInputActivity = &sessions.EnvironmentInputActivity{Status: "failed", Failure: "environment_unavailable", LastActiveAt: time.Now()}
 	session.LastTurn = &sessions.Turn{ID: uuid.NewString(), SessionID: session.ID, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed"}`)}
-	step, index, exit, category := "setup", 2, 7, "timeout"
+	step, index, exit, category := "setup", 2, 7, sessions.ProvisioningTimeout
 	session.EnvironmentInitializationSteps = []sessions.InitializationStep{{Step: "npm", DurationMS: 4100}, {Step: "setup", Index: &index, DurationMS: 5200}}
 	for _, detail := range []*sessions.ProvisioningFailureDetail{nil, {Step: &step, Index: &index, ExitCode: &exit}, {Category: &category}} {
 		session.EnvironmentFailure = &sessions.EnvironmentFailure{Reason: "private-secret-canary setup_commands[99] exit 254", Detail: detail}
@@ -133,5 +133,16 @@ func TestDiagnosticStatusMatchesOfficialSession(t *testing.T) {
 	diagnostic, _ := reflect.TypeFor[SessionDiagnostics]().FieldByName("Status")
 	if diagnostic.Type != official.Type || diagnostic.Tag.Get("enums") != official.Tag.Get("enums") {
 		t.Fatal("diagnostics must preserve the pinned official Session status set")
+	}
+}
+
+func TestDiagnosticStepEnumMatchesDeclaredLabels(t *testing.T) {
+	field, _ := reflect.TypeFor[InitializationStepTiming]().FieldByName("Step")
+	var declared []string
+	for _, label := range sessions.InitializationLabels {
+		declared = append(declared, string(label))
+	}
+	if field.Tag.Get("enums") != strings.Join(declared, ",") {
+		t.Fatal("OpenAPI step enum differs from the declared labels", field.Tag.Get("enums"))
 	}
 }

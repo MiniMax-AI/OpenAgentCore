@@ -100,6 +100,7 @@ RESOURCE_RULES = (
 )
 EXACT_INPUTS = {
     "services/core/internal/sandbox/testdata/node-diagnostics.json": ("web", "web-acceptance", "example"),
+    "services/core/internal/sessions/testdata/provisioning-categories.json": ("web", "web-acceptance", "example"),
     "services/core/internal/sandbox/testdata/deployment-contract.json": ("distribution",),
     "services/core/internal/sandbox/e2b/testdata/configuration-selectors.json": ("distribution",),
 }

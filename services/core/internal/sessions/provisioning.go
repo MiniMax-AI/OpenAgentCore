@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -16,10 +17,10 @@ type EnvironmentFailure struct {
 // ProvisioningFailureDetail is private, fixed-category evidence from a confirmed
 // initialization receipt. It never contains command text, paths or Runtime output.
 type ProvisioningFailureDetail struct {
-	Step     *string `json:"step"`
-	Index    *int    `json:"index"`
-	ExitCode *int    `json:"exit_code"`
-	Category *string `json:"category,omitempty"`
+	Step     *string               `json:"step"`
+	Index    *int                  `json:"index"`
+	ExitCode *int                  `json:"exit_code"`
+	Category *ProvisioningCategory `json:"category,omitempty"`
 }
 
 // ProvisioningFailureReason is the safe reason for an Environment that
@@ -27,38 +28,62 @@ type ProvisioningFailureDetail struct {
 // old receipts, bootstrap rejection and Core restart during initialization.
 const ProvisioningFailureReason = "Failed to provision environment: initialization did not complete"
 
-// Failure categories for an Environment that failed without a confirmed failed
-// step, recorded privately beside the generic public reason.
+// ProvisioningCategory classifies an Environment that failed without a confirmed
+// failed step. It is recorded privately beside the generic public reason.
+type ProvisioningCategory string
+
 const (
 	// ProvisioningTimeout: the initialization budget or a transfer budget expired.
-	ProvisioningTimeout = "timeout"
+	ProvisioningTimeout ProvisioningCategory = "timeout"
 	// ProvisioningRuntimeDisconnected: the Runtime connection closed or changed.
-	ProvisioningRuntimeDisconnected = "runtime_disconnected"
+	ProvisioningRuntimeDisconnected ProvisioningCategory = "runtime_disconnected"
 	// ProvisioningUnconfirmed: the effect of an operation is unknown or its receipt is missing or invalid.
-	ProvisioningUnconfirmed = "unconfirmed"
+	ProvisioningUnconfirmed ProvisioningCategory = "unconfirmed"
 	// ProvisioningRejected: the Runtime refused an operation before applying it.
-	ProvisioningRejected = "rejected"
+	ProvisioningRejected ProvisioningCategory = "rejected"
 	// ProvisioningOperationFailed: the Runtime confirmed failure of an operation with no public step label.
-	ProvisioningOperationFailed = "operation_failed"
-	// ProvisioningCoreError: Core could not read or validate the stored configuration.
-	ProvisioningCoreError = "core_error"
-	// ProvisioningCoreRestart: the initialization owner was lost, so progress is unknown.
-	ProvisioningCoreRestart = "core_restart"
-	// ProvisioningComputeReleased: the Environment's compute ended before initialization completed.
-	ProvisioningComputeReleased = "compute_released"
+	ProvisioningOperationFailed ProvisioningCategory = "operation_failed"
+	// ProvisioningCoreError: Core failed to read, validate or record initialization state.
+	ProvisioningCoreError ProvisioningCategory = "core_error"
+	// ProvisioningCoreRestart: Core lost ownership of the initialization, by restart or lease loss.
+	ProvisioningCoreRestart ProvisioningCategory = "core_restart"
+	// ProvisioningComputeReleased: the sandbox was released or never created before initialization completed.
+	ProvisioningComputeReleased ProvisioningCategory = "compute_released"
 )
 
-var provisioningCategories = map[string]bool{
-	ProvisioningTimeout: true, ProvisioningRuntimeDisconnected: true, ProvisioningUnconfirmed: true, ProvisioningRejected: true,
-	ProvisioningOperationFailed: true, ProvisioningCoreError: true, ProvisioningCoreRestart: true, ProvisioningComputeReleased: true,
+// ProvisioningCategories is the one authored category set. The shared fixture
+// testdata/provisioning-categories.json checks the client and Web projections.
+var ProvisioningCategories = []ProvisioningCategory{
+	ProvisioningTimeout, ProvisioningRuntimeDisconnected, ProvisioningUnconfirmed, ProvisioningRejected,
+	ProvisioningOperationFailed, ProvisioningCoreError, ProvisioningCoreRestart, ProvisioningComputeReleased,
+}
+
+// InitializationLabel is the fixed label of one initialization operation in step timing.
+type InitializationLabel string
+
+const (
+	InitializationFile      InitializationLabel = "file"
+	InitializationSkill     InitializationLabel = "skill"
+	InitializationPlugin    InitializationLabel = "plugin"
+	InitializationConfigure InitializationLabel = "configure"
+	InitializationNPM       InitializationLabel = "npm"
+	InitializationPython    InitializationLabel = "python"
+	InitializationSetup     InitializationLabel = "setup"
+	InitializationFinalize  InitializationLabel = "finalize"
+)
+
+// InitializationLabels is the one authored label set; the diagnostics OpenAPI enum is checked against it.
+var InitializationLabels = []InitializationLabel{
+	InitializationFile, InitializationSkill, InitializationPlugin, InitializationConfigure,
+	InitializationNPM, InitializationPython, InitializationSetup, InitializationFinalize,
 }
 
 // InitializationStep is the Runtime-reported duration of one initialization
 // operation that ran. Step is a fixed label and Index is set for setup commands.
 type InitializationStep struct {
-	Step       string `json:"step"`
-	Index      *int   `json:"index"`
-	DurationMS int64  `json:"duration_ms"`
+	Step       InitializationLabel `json:"step"`
+	Index      *int                `json:"index"`
+	DurationMS int64               `json:"duration_ms"`
 }
 
 // Provisioning step kinds for ProvisioningFailure.Step.
@@ -79,7 +104,7 @@ type ProvisioningFailure struct {
 	Step     string
 	Index    int
 	ExitCode int
-	Category string
+	Category ProvisioningCategory
 }
 
 // Reason renders the public Session error. The setup_commands and Python package
@@ -123,7 +148,7 @@ func (f ProvisioningFailure) Detail() *ProvisioningFailureDetail {
 // and returns nil for a missing or unknown step without a known category.
 func SanitizedProvisioningDetail(f ProvisioningFailureDetail) *ProvisioningFailureDetail {
 	if f.Step == nil {
-		if f.Category == nil || !provisioningCategories[*f.Category] {
+		if f.Category == nil || !slices.Contains(ProvisioningCategories, *f.Category) {
 			return nil
 		}
 		value := *f.Category

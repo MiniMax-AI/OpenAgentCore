@@ -1,3 +1,5 @@
+import type { ProvisioningCategory } from "@oac/agents-client";
+
 export const diagnostics = {
   providerUnknown: "Not recorded yet",
   providerStale: "Observation unconfirmed",
@@ -68,10 +70,10 @@ export const diagnostics = {
     unconfirmed: "The Runtime did not confirm the result.",
     rejected: "The Runtime rejected the operation.",
     operation_failed: "The Runtime reported a failed operation.",
-    core_error: "Core could not read the stored configuration.",
-    core_restart: "Core restarted during preparation.",
-    compute_released: "The sandbox ended before preparation completed.",
-  },
+    core_error: "Core could not read, validate or record the initialization state.",
+    core_restart: "Core lost ownership of the initialization.",
+    compute_released: "The sandbox was released or never created.",
+  } satisfies Record<ProvisioningCategory, string>,
   initializationTitle: "Initialization",
   unavailable: "Failure details unavailable",
   unavailableHelp: "The diagnostics read failed or no longer matches this status. Refresh to check again.",

@@ -1,7 +1,7 @@
 ---
 title: "Session 诊断"
 source: contracts/agents-api/session-diagnostics.md
-source_hash: 2cb616097b200b1c2ed46c20fb28ed1b0e1cff4677e505ee418a2922042c8a03
+source_hash: d2159eddd1995bac506cb753a243b9ac063aba0f87c1854e2f97e885f9bb624f
 ---
 
 管理员通过两个需要 Core 密钥的路由读取 Session 或 Turn 失败的原因，它们报告失败类别和 Item 接收时间。
@@ -38,11 +38,11 @@ source_hash: 2cb616097b200b1c2ed46c20fb28ed1b0e1cff4677e505ee418a2922042c8a03
 | `unconfirmed` | 某个操作的效果未知，或其回执缺失或无效 |
 | `rejected` | Runtime 在应用前拒绝了某个操作 |
 | `operation_failed` | Runtime 确认某个没有公开步骤标签的操作失败，例如 Plugin 或快照终结 |
-| `core_error` | Core 无法读取或校验已存储的配置 |
-| `core_restart` | 初始化所有者丢失，包括跨 Core 重启 |
-| `compute_released` | Environment 的计算资源在初始化完成前已结束 |
+| `core_error` | Core 无法读取、校验或记录初始化状态 |
+| `core_restart` | Core 失去了初始化的所有权，原因是重启或租约丢失 |
+| `compute_released` | 沙箱在初始化完成前已被释放或从未创建；初始化已完成的 Environment 不会设置此值 |
 
-`initialization_steps` 按顺序列出该 Environment 的初始化运行过的操作，来自同一快照，适用于任何 Session 状态。每项包含 `step`（`file`、`skill`、`plugin`、`configure`、`npm`、`python`、`setup` 或 `finalize`）、`index`（`setup` 为设置命令位置，其他为 null）和 `duration_ms`，即 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md)中 Runtime 测得的应用时间。仅 Runtime 以 `completed` 或 `failed` 结果报告的操作会出现，因此命中准备缓存时只列出 `finalize`，未确认的操作不会出现。Core 还会为每项写一条 `Environment initialization step` 日志，包含 Session、Environment、`step`、`index` 和 `duration_ms`。在任何操作运行之前列表为空。
+`initialization_steps` 按顺序列出该 Environment 的初始化运行过的操作，来自同一快照，适用于任何 Session 状态。每项包含 `step`（`file`、`skill`、`plugin`、`configure`、`npm`、`python`、`setup` 或 `finalize`）、`index`（`setup` 为设置命令位置，其他为 null）和 `duration_ms`，即 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md)中 Runtime 测得的应用时间。仅 Runtime 以 `completed` 或 `failed` 结果报告的操作会出现，因此命中准备缓存时只列出 `finalize`，未确认的操作不会出现。Core 还会为每项写一条 `Environment initialization step` 日志，包含 Session、Environment、`step`、`index` 和 `duration_ms`。Core 在初始化结束时（无论成败）存储该列表，并在每一步完成时记录日志。在任何操作运行之前列表为空。
 
 ## Turn 快照与 Item 回执时间 {#turn-snapshot-and-item-receipt-timing}
 

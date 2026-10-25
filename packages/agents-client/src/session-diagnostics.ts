@@ -9,11 +9,13 @@ import {
   type TurnDiagnostics as TurnDiagnosticsResource,
 } from "./generated/core-api";
 
+// provisioningCategoryValues is checked against the Go set by the shared fixture in session-diagnostics.test.ts.
 // ItemDiagnosticTiming holds Core receipt intervals, distinct from the public tool-reported duration_ms.
 export type { DiagnosticFailureCode, InitializationStepTiming, ItemDiagnosticTiming };
 // The schema types params as a free-form object; each code that carries params has one of these shapes.
 export const provisioningCategoryValues = ["timeout", "runtime_disconnected", "unconfirmed", "rejected", "operation_failed", "core_error", "core_restart", "compute_released"] as const;
-export type ProvisioningFailureParams = { step: "setup" | "python" | "npm" | "file" | "skill" | "harness" | null; index: number | null; exit_code: number | null; category: (typeof provisioningCategoryValues)[number] | null };
+export type ProvisioningCategory = (typeof provisioningCategoryValues)[number];
+export type ProvisioningFailureParams = { step: "setup" | "python" | "npm" | "file" | "skill" | "harness" | null; index: number | null; exit_code: number | null; category: ProvisioningCategory | null };
 export type ConnectionFailureParams = { http_status: number | null };
 export type DiagnosticFailure = Omit<DiagnosticFailureResource, "params"> & { params: Record<string, never> | ProvisioningFailureParams | ConnectionFailureParams };
 export type SessionDiagnosticFailure = DiagnosticFailure & Pick<SessionDiagnosticFailureResource, "source" | "turn_id">;
@@ -60,7 +62,7 @@ export function projectSessionDiagnostics(value: unknown, sessionId: string): Se
       projected.turn_id = f.turn_id as string;
     }
   } else if (value.failure !== null) return invalidAdminResponse();
-  if (!Array.isArray(value.initialization_steps) || value.initialization_steps.length > 200) return invalidAdminResponse();
+  if (!Array.isArray(value.initialization_steps)) return invalidAdminResponse();
   const initialization_steps: InitializationStepTiming[] = value.initialization_steps.map((step: unknown) => {
     if (!isRecord(step) || !exactFields(step, initializationStepTimingFields) || !isOneOf(initializationStepTimingStepValues, step.step) ||
         !Number.isSafeInteger(step.duration_ms) || (step.duration_ms as number) < 0 ||

@@ -96,7 +96,7 @@ func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) 
 	}
 	response := SessionDiagnostics{Object: "core.session_diagnostics", SessionID: public.ID, Status: public.Status, InitializationSteps: []InitializationStepTiming{}}
 	for _, step := range session.EnvironmentInitializationSteps {
-		response.InitializationSteps = append(response.InitializationSteps, InitializationStepTiming{Step: step.Step, Index: step.Index, DurationMS: step.DurationMS})
+		response.InitializationSteps = append(response.InitializationSteps, InitializationStepTiming{Step: string(step.Step), Index: step.Index, DurationMS: step.DurationMS})
 	}
 	if public.Status == "failed" {
 		failure := SessionDiagnosticFailure{DiagnosticFailure: DiagnosticFailure{Code: "internal_error", Params: CoreErrorDetails{}}}
@@ -185,7 +185,7 @@ func provisioningFailureParams(detail *sessions.ProvisioningFailureDetail) CoreE
 		params["index"] = CoreErrorNumber(float64(*detail.Index))
 	}
 	if detail.Category != nil {
-		params["category"] = CoreErrorString(*detail.Category)
+		params["category"] = CoreErrorString(string(*detail.Category))
 	}
 	if detail.ExitCode != nil {
 		params["exit_code"] = CoreErrorNumber(float64(*detail.ExitCode))

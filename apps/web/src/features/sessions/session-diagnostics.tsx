@@ -14,7 +14,7 @@ export const DiagnosticScope = createContext<Scope | null>(null);
 
 export function sessionDiagnosticsQuery(projectId: string, session: AgentSession) {
   return queryOptions({
-    queryKey: [...sessionKey(projectId, session.id), "diagnostics", "session", session.status, session.last_active_at],
+    queryKey: [...sessionKey(projectId, session.id), "diagnostics", "session", session.status],
     queryFn: ({ signal }) => admin.retrieveSessionDiagnostics(projectId, session.id, { signal }),
     enabled: session.status === "failed",
     retry: false,

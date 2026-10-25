@@ -98,12 +98,13 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 	failure := sessions.ProvisioningFailure{}
 	steps := []sessions.InitializationStep{}
 	err := w.prepareEnvironment(operation, owner, &failure, &steps)
-	// Steps that ran stay recorded for a failed initialization as well.
-	record, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-	defer stop()
-	if recordErr := w.dispatcher.sessionExecution.RecordEnvironmentInitializationSteps(record, owner, steps); recordErr != nil && err == nil {
-		err = recordErr
+	// Steps stay recorded for a failed initialization too, but a write failure never fails
+	// one that succeeded. Each step was already logged when it finished.
+	recordSteps, stopSteps := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	if recordErr := w.dispatcher.sessionExecution.RecordEnvironmentInitializationSteps(recordSteps, owner, steps); recordErr != nil {
+		log.Warn(ctx, "Environment initialization steps not recorded", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)
 	}
+	stopSteps()
 	if err == nil {
 		err = w.dispatcher.sessionExecution.CompleteEnvironmentInitialization(operation, owner)
 		if err == nil {
@@ -111,11 +112,13 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 		}
 	}
 	if err != nil {
-		log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)
-		// A later scan settles an unrecorded failure; it never retries the setup.
 		if failure.Step == "" && failure.Category == "" {
 			failure.Category = provisioningCategory(err)
 		}
+		log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID, "step", failure.Step, "category", string(failure.Category))
+		// A later scan settles an unrecorded failure; it never retries the setup.
+		record, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer stop()
 		_ = w.dispatcher.sessionExecution.FailEnvironmentInitialization(record, owner, failure)
 	}
 }
@@ -154,6 +157,9 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 	operations := setupOperations(setup)
 	step := func(index int) error {
 		err := w.lease.CheckOwnership(ctx)
+		if err != nil {
+			err = errors.Join(errOwnershipLost, err)
+		}
 		if err == nil {
 			var currentPeer = peer
 			currentPeer, err = w.dispatcher.authorizedPeer(ctx, owner.DeviceID)

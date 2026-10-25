@@ -36,11 +36,11 @@ Provisioning parameters come from the confirmed structured receipt, persisted in
 | `unconfirmed` | An operation's effect is unknown, or its receipt is missing or invalid |
 | `rejected` | The Runtime refused an operation before applying it |
 | `operation_failed` | The Runtime confirmed a failed operation that has no public step label, such as a Plugin or snapshot finalization |
-| `core_error` | Core could not read or validate the stored configuration |
-| `core_restart` | The initialization owner was lost, including across a Core restart |
-| `compute_released` | The Environment's compute ended before initialization completed |
+| `core_error` | Core failed to read, validate or record initialization state |
+| `core_restart` | Core lost ownership of the initialization, by restart or lease loss |
+| `compute_released` | The sandbox was released or never created before initialization completed; never set for an Environment whose initialization completed |
 
-`initialization_steps` lists the operations the Environment's initialization ran, in order, from the same snapshot and for any Session status. Each entry has `step` (`file`, `skill`, `plugin`, `configure`, `npm`, `python`, `setup` or `finalize`), `index` (the setup command position for `setup`, otherwise null) and `duration_ms`, the Runtime-measured application time from the [Core–Runtime protocol](../../docs/runtime-protocol.md). Only operations whose result the Runtime reported with a `completed` or `failed` outcome appear, so a preparation-cache hit lists only `finalize`, and an unconfirmed operation is absent. Core also writes one `Environment initialization step` log line per entry with the Session, Environment, `step`, `index` and `duration_ms`. The list is empty before any operation ran.
+`initialization_steps` lists the operations the Environment's initialization ran, in order, from the same snapshot and for any Session status. Each entry has `step` (`file`, `skill`, `plugin`, `configure`, `npm`, `python`, `setup` or `finalize`), `index` (the setup command position for `setup`, otherwise null) and `duration_ms`, the Runtime-measured application time from the [Core–Runtime protocol](../../docs/runtime-protocol.md). Only operations whose result the Runtime reported with a `completed` or `failed` outcome appear, so a preparation-cache hit lists only `finalize`, and an unconfirmed operation is absent. Core also writes one `Environment initialization step` log line per entry with the Session, Environment, `step`, `index` and `duration_ms`. Core stores the list when the initialization ends, successfully or not, and logs each step as it finishes. The list is empty before any operation ran.
 
 ## Turn snapshot and Item receipt timing
 

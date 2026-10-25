@@ -132,16 +132,39 @@ func TestRuntimeSetupReportsStepTimingAndCategories(t *testing.T) {
 	if _, ok = setup.step(proto.RuntimePrepareResultPayload{Outcome: "unknown"}); ok {
 		t.Fatal("unconfirmed operation reported as run")
 	}
-	for want, err := range map[string]error{
+	for want, err := range map[sessions.ProvisioningCategory]error{
 		sessions.ProvisioningTimeout:             &unconfirmedError{cause: context.DeadlineExceeded},
 		sessions.ProvisioningRuntimeDisconnected: &unconfirmedError{cause: runtimegateway.ErrSessionClosed},
 		sessions.ProvisioningUnconfirmed:         &unconfirmedError{},
 		sessions.ProvisioningRejected:            &runtimeStepFailure{rejected: true},
 		sessions.ProvisioningOperationFailed:     &runtimeStepFailure{},
 		sessions.ProvisioningCoreError:           sessions.ErrInvalidInput,
+		sessions.ProvisioningCoreRestart:         errors.Join(errOwnershipLost, context.DeadlineExceeded),
 	} {
 		if got := provisioningCategory(err); got != want {
 			t.Fatalf("category %s, want %s", got, want)
+		}
+	}
+}
+
+func TestRuntimeSetupLabelsAreDeclared(t *testing.T) {
+	setup := environmentconfig.Setup{
+		Skills:                []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "s", Version: "1", Name: "n", Description: "d"}}},
+		Plugins:               []environmentconfig.Plugin{{Metadata: proto.PluginMetadata{Type: "inline", Name: "p", Description: "d"}}},
+		Commands:              []environmentconfig.SetupCommand{{Command: "c"}},
+		CapabilityDirectories: []string{"/workspace/generated"},
+	}
+	setup.Packages.NPM, setup.Packages.Python = []string{"a"}, []string{"b"}
+	labels := map[sessions.InitializationLabel]bool{sessions.InitializationFile: true}
+	for _, operation := range setupOperations(setup) {
+		labels[operation.stepLabel()] = true
+	}
+	if len(labels) != len(sessions.InitializationLabels) {
+		t.Fatal("operations and declared labels differ", labels)
+	}
+	for _, label := range sessions.InitializationLabels {
+		if !labels[label] {
+			t.Fatal("undeclared or unproduced label", label)
 		}
 	}
 }

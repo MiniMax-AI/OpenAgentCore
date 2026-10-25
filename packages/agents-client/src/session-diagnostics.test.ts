@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { AdminClient } from "./admin-client";
-import { projectSessionDiagnostics, projectTurnDiagnostics } from "./session-diagnostics";
+import provisioningCategoryFixture from "../../../services/core/internal/sessions/testdata/provisioning-categories.json";
+import { projectSessionDiagnostics, projectTurnDiagnostics, provisioningCategoryValues } from "./session-diagnostics";
 
 const id = "a113b7db-c689-4dfc-af9a-04bd0e466f11";
 const turn = "729dab72-a9ea-4d0a-a38c-1b45e46233a9";
@@ -98,4 +99,8 @@ it.each([
   ["provisioning step", () => projectSessionDiagnostics({ ...session, failure: { ...provisioning, params: { ...provisioning.params, step: ["setup"] } } }, id)],
 ] as const)("rejects arrays in %s", (_field, project) => {
   expect(project).toThrow();
+});
+
+it("keeps the provisioning categories equal to the Core set", () => {
+  expect([...provisioningCategoryValues]).toEqual(provisioningCategoryFixture);
 });

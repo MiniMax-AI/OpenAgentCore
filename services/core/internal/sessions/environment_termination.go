@@ -149,6 +149,10 @@ func TerminateEnvironment(ctx context.Context, tx EnvironmentTerminationTx, comp
 	}
 	termination := decideEnvironmentTermination(environment.Status, computeExpired)
 	if termination == terminationFails {
+		if environment.Initialization == "complete" {
+			// The category describes a failed initialization, which this was not.
+			detail = nil
+		}
 		return FailEnvironment(ctx, tx, environment, reason, detail)
 	}
 	return TrackInputActivity(ctx, tx, func(ctx context.Context) error {
