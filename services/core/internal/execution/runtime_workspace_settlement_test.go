@@ -110,6 +110,10 @@ func workspaceSettlementFixtureWithSetup(t *testing.T, provider sandbox.SandboxP
 		t.Fatal(err)
 	}
 	session := created.Session
+	// The fixture's Environment is already prepared.
+	if _, err := pool.Exec(t.Context(), `UPDATE environments SET initialization='complete' WHERE id=$1`, session.Environment.ID); err != nil {
+		t.Fatal(err)
+	}
 	if nodeID != "" {
 		if _, err := operations.EnsurePlacement(t.Context(), deployment.AllocationKey{TenantID: session.TenantID, EnvironmentID: session.Environment.ID}, installation); err != nil {
 			t.Fatal(err)

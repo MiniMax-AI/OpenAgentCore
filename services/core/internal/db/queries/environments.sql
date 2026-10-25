@@ -1,6 +1,7 @@
 -- name: CreateEnvironment :exec
 INSERT INTO environments (id, session_id, initialization)
-VALUES ($1, $2, CASE WHEN EXISTS (SELECT 1 FROM initial_environment_files WHERE session_id = $2)
+VALUES ($1, $2, CASE WHEN (SELECT configuration->'environment'->>'type' FROM sessions WHERE id = $2) = 'openai_hosted'
+ OR EXISTS (SELECT 1 FROM initial_environment_files WHERE session_id = $2)
  OR EXISTS (SELECT 1 FROM environment_setups WHERE session_id = $2) THEN 'pending' ELSE 'complete' END);
 
 -- name: GetEnvironment :one

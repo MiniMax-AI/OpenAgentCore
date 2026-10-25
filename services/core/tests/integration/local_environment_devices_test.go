@@ -24,6 +24,10 @@ func localEnvironment(t *testing.T, s *Store, tenant string) (sessions.Session, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The fixture's Environment is already prepared.
+	if _, err := s.pool.Exec(t.Context(), `UPDATE environments SET initialization='complete' WHERE id=$1`, environment.ID); err != nil {
+		t.Fatal(err)
+	}
 	return session, environment
 }
 

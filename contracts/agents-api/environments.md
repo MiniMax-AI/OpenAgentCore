@@ -255,7 +255,7 @@ stateDiagram-v2
 - Each file, Skill or Plugin transfer has a two-minute staging budget. Configure, package installation, setup commands and snapshot finalization share the whole initialization’s 30-minute budget, whose remaining duration Core carries on each operation and the Runtime enforces. Initial input keeps its five-minute admission deadline, so large installations should start from an idle Session.
 - A running initialization whose owner is lost, including across a Core restart, fails as unconfirmed; nothing is replayed. A completed Environment never reinstalls on reconnect or native recovery, so later user changes survive.
 - Failure is terminal for the Session but destroys neither compute nor files.
-- An `openai_hosted` Environment journals `agent.session.environment.pending` in the transaction that starts its initialization and `agent.session.environment.ready` in the one that completes it, each exactly once. A `self_hosted` Environment emits neither.
+- Every `openai_hosted` Environment starts `pending`, including one with no files or setup, and journals `agent.session.environment.pending` in the transaction that starts its initialization and `agent.session.environment.ready` in the one that completes it, each exactly once. Core journals `agent.session.environment.connected` when the Runtime connects, which is usually before initialization starts. A `self_hosted` Environment emits neither `pending` nor `ready`, and starts `complete` unless it has files or setup.
 
 A failed initialization records the events and Session state that [Environment initialization failure](./sessions-events.md#environment-initialization-failure) defines. The reason names only the step and its exit status:
 

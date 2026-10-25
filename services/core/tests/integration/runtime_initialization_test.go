@@ -216,3 +216,42 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 		t.Fatal("initialization events", lifecycle)
 	}
 }
+
+func TestHostedEnvironmentWithoutSetupIsInitialized(t *testing.T) {
+	s, key := configuredStore(t)
+	tenant := uuid.NewString()
+	creation, err := createSession(t.Context(), s, tenant, WithFixtureModelProvider(sessions.CreateSession{
+		Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := creation.Session
+	if initializationState(t, s, tenant, session.Environment.ID) != "pending" {
+		t.Fatal("hosted Environment without setup did not start pending")
+	}
+	provider := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
+	provider.apply = func(request proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
+		t.Error("empty initialization sent a Runtime operation", request.Action)
+		return completedInitialization(request, nil)
+	}
+	worker, _ := managedWorkerMode(t, s, key, provider, true)
+	if _, err := worker.ProvisionEnvironment(t.Context(), tenant, session.Environment.ID, key); err != nil {
+		t.Fatal(err)
+	}
+	awaitInitialization(t, s, tenant, session.Environment.ID, "complete")
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lifecycle []string
+	for _, change := range changes {
+		if change.Event.Type == "agent.session.environment.pending" || change.Event.Type == "agent.session.environment.ready" {
+			lifecycle = append(lifecycle, change.Event.Type)
+		}
+	}
+	if !reflect.DeepEqual(lifecycle, []string{"agent.session.environment.pending", "agent.session.environment.ready"}) {
+		t.Fatal("initialization events", lifecycle)
+	}
+}
