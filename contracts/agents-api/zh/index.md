@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 27f86ff815bee7a3bfe69a5fb4706cea7f5c5103e5718b5a5b227822e3e259ac
+source_hash: 1ba11a295c62e532fae58388b09d54a065648642ee17aed10081a36c65ef64f5
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -114,7 +114,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - `env` 不能设置 Core 保留的 `OPENAI_API_KEY`（[env](environments.md#env-and-setup-commands)）；官方服务接受该变量。
 - 没有待处理输入的 `self_hosted` Session 不会请求连接（[活动状态](environments.md#activity-and-required-actions)）；一个未使用的官方 Session 在创建约五分钟后转为 `requires_action`，原因为 `environment_connection`，之后删除它返回 409。
 - hosted Environment 只在初始化完成时发出一次 `ready`，不会像一个官方 Session 那样在之后每个 Turn 之前再次发出；它还会发出 `connected` 和 `disconnected`，而该官方 Session 没有。
-- hosted Environment 通常的顺序是 `connected`、`pending`、`ready`，因为 Core 在 Runtime 连接时、开始初始化之前就记录 `connected`；此时最后一个 Environment 事件显示 `ready`，而 Environment 处于 `connected`。
+- hosted Environment 的 `connected` 和 `pending` 先后顺序不固定：Core 在观察到 Runtime 连接时记录 `connected`，在该 Runtime 上开始初始化时记录 `pending`。`ready` 在两者之后，因此最后一个 Environment 事件可能显示 `ready`，而 Environment 处于 `connected`。
 
 **Files、Skills、Environment files 和 Artifacts**（[Files and Skills](source-files.md)、[Environment files and Artifacts](environment-files.md)）
 
