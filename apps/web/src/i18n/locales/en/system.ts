@@ -78,7 +78,7 @@ export const system = {
       setTitle: "Set default model configuration for {{harness}}",
       replaceTitle: "Replace default model configuration for {{harness}}",
       modelName: "Used for new Sessions when the application does not specify a model. Enter an exact model ID accepted by this provider.",
-      baseUrlInvalid: "Enter an HTTP or HTTPS URL with a hostname and no credentials, query or fragment, such as https://api.example.com/v1.",
+      baseUrlInvalid: "Enter an HTTPS URL, or an HTTP URL to a loopback or private IP address, with no credentials, query or fragment, such as https://api.example.com/v1.",
       apiKeyHelp: "Required every time. Core encrypts it and never shows it again.",
       contextHelp: "The model's context window, in tokens. Optional.",
       outputHelp: "The most tokens the model writes in one response. Optional; it needs a context window at least as large.",
