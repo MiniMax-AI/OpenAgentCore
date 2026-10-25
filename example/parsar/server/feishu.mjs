@@ -199,9 +199,9 @@ function panel({ title, content, elements }) {
     vertical_spacing: "8px",
     padding: "0px 0px 8px 0px",
     header: {
-      title: { tag: "markdown", content: grey(title) },
+      title: { tag: "markdown", content: title },
       width: "fill",
-      padding: "8px 0px 8px 0px",
+      padding: "6px 0px 6px 0px",
       icon: { tag: "standard_icon", token: "down-small-ccm_outlined", size: "16px 16px" },
       icon_position: "right",
       icon_expanded_angle: -180,
@@ -210,20 +210,21 @@ function panel({ title, content, elements }) {
   };
 }
 
-// One restrained status line replaces the large colored banner.
-function statusCard(status, body, panels = []) {
-  const [title, color] = cardTones[status] || cardTones.failed;
+// Feishu rejects cards above about 30 KB of JSON.
+const cardBudget = 28000;
+const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
+
+function statusCard(status, body, elements = []) {
+  const [title, template] = cardTones[status] || cardTones.failed;
   return JSON.stringify({
     schema: "2.0",
     config: { update_multi: true, summary: { content: title } },
+    // The colored header carries the status, so the body starts with the content.
+    header: { title: { tag: "plain_text", content: title }, template },
     body: {
-      padding: "16px 16px 12px 16px",
+      padding: "12px 16px 12px 16px",
       vertical_spacing: "8px",
-      elements: [
-        { tag: "markdown", text_size: "notation", content: `<font color='${color}'>${title}</font>` },
-        { tag: "markdown", content: excerpt(body, status === "requires_action" ? 8000 : 12000) },
-        ...(panels.length ? [{ tag: "hr" }, ...panels.map(panel)] : []),
-      ],
+      elements: [{ tag: "markdown", content: body }, ...elements],
     },
   });
 }
@@ -258,7 +259,7 @@ function step(item) {
   if (item.type === "command_execution" || typeof item.command === "string") {
     const command = String(item.command || "").replace(/\s+/g, " ").trim()
       .replace(/^\/bin\/(?:ba|z)?sh -lc (['"])([\s\S]*)\1$/, "$2");
-    return ["运行命令", command.length > 56 ? `${command.slice(0, 55)}…` : command];
+    return ["运行", command];
   }
   if (item.type === "mcp_call") return ["调用工具", [item.server_label, item.name].filter(Boolean).join(" · ")];
   if (item.type === "function_call") return ["调用工具", item.name || ""];
@@ -267,19 +268,55 @@ function step(item) {
   return ["执行步骤", item.name || item.type || ""];
 }
 
-function stepPanel(item) {
+const clip = (value, limit) => {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+};
+// Markdown and Feishu tags stay literal inside a one-line title.
+const literal = (value) => value.replace(/[<>]/g, "").replaceAll("`", "'");
+
+// One tool call: what ran stays visible; its result folds away.
+function toolRow(item) {
   const [label, detail] = step(item);
-  const state = { completed: "完成", failed: "失败", incomplete: "未完成", in_progress: "进行中" }[item.status] || "状态未知";
-  const duration = typeof item.duration_ms === "number" ? ` · ${(item.duration_ms / 1000).toFixed(1)}s` : "";
+  const state = item.status === "failed"
+    ? "<font color='red'>失败</font>"
+    : item.status === "in_progress"
+      ? grey("进行中")
+      : item.status === "incomplete"
+        ? grey("未完成")
+        : typeof item.duration_ms === "number"
+        ? grey(`${(item.duration_ms / 1000).toFixed(1)}s`)
+        : "";
+  const title = [grey(label), detail ? `\`${literal(clip(detail, 200))}\`` : "", state].filter(Boolean).join(" ");
   const fields = [
-    ["命令", item.command], ["工作目录", item.cwd], ["参数", item.arguments ?? item.action],
+    ["参数", item.command ? undefined : item.arguments ?? item.action],
     ["输出", item.output], ["错误", item.error], ["退出码", item.exit_code],
   ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+  if (!fields.length) return { tag: "markdown", content: title };
   // Plain text keeps tool output literal, including code fences and mention markup.
   return panel({
-    title: `${state} · ${label}${detail ? ` · ${excerpt(detail, 180).replace(/[<>]/g, "")}` : ""}${duration}`,
-    elements: [{ tag: "div", text: { tag: "plain_text", content: excerpt(fields.map(([name, value]) => `${name}\n${excerpt(value, 700)}`).join("\n\n") || "暂无详细输出。", 1000) } }],
+    title,
+    elements: [{ tag: "div", text: { tag: "plain_text", content: excerpt(fields.map(([name, value]) => `${name}\n${excerpt(value, 1200)}`).join("\n\n"), 1600) } }],
   });
+}
+
+// Thinking folds behind its first sentence; commentary is short and shown as is.
+function timelineRow(entry) {
+  if (entry.type === "say") return { tag: "markdown", content: excerpt(entry.text, 800) };
+  if (entry.type === "think")
+    return panel({ title: `${grey("思考")} ${literal(clip(entry.text.split("\n").find((line) => line.trim()) || "", 40))}`, content: excerpt(entry.text, 1500) });
+  return toolRow(entry.item);
+}
+
+// The oldest rows leave the card first when it would grow past Feishu's limit.
+function fitRows(rows, budget) {
+  const kept = [...rows];
+  let dropped = 0;
+  while (kept.length > 1 && bytes(kept) > budget) {
+    kept.shift();
+    dropped++;
+  }
+  return dropped ? [{ tag: "markdown", content: grey(`更早的 ${dropped} 步见网页对话`) }, ...kept] : kept;
 }
 
 // A tool-result answer resumes the same Core Turn. Display only the exchange
@@ -289,6 +326,8 @@ function exchangeItems(items) {
   const boundary = items.findLastIndex((x) => x.type === "message" && x.role === "user" || x.type === "function_call_output" && questions.has(x.call_id));
   return items.slice(boundary + 1);
 }
+
+const recentRows = 4;
 
 export function formatTurnCard(status, items = [], error, turn, questions = []) {
   items = exchangeItems(items);
@@ -301,45 +340,54 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
   const authorization = messages.filter((item) => qrImages(text(item)).length);
   const authorizationText = authorization.map((item) => readable(text(item))).join("\n\n");
   const answer = latest?.phase === "commentary" || authorization.includes(latest) ? "" : latest ? readable(text(latest)) : "";
-  const reasoning = items.filter((x) => x.type === "reasoning").flatMap((x) => x.summary || x.content || [])
-    .map((p) => typeof p === "string" ? p : p?.text || "").filter(Boolean).join("\n\n");
-  const commentary = messages.filter((x) => !authorization.includes(x) && (status === "in_progress" || x !== latest || x.phase === "commentary")).map(text).filter(Boolean).join("\n\n");
   const outputs = new Map(items.filter((x) => x.type === "function_call_output").map((x) => [x.call_id, x]));
-  const steps = items.filter((x) => !["message", "agent_message", "reasoning", "function_call_output"].includes(x.type) && !(x.type === "function_call" && x.name === "ask_user"))
-    .map((x) => {
-      const output = x.type === "function_call" ? outputs.get(x.call_id) : undefined;
-      return output ? { ...x, status: output.status, output: output.output, error: output.error } : x;
-    });
-  const panels = [];
-  if (reasoning) panels.push({ title: "思考摘要", content: excerpt(reasoning, 3000) });
-  if (commentary) panels.push({ title: "过程说明", content: excerpt(commentary, 1500) });
-  if (steps.length) panels.push({
-    title: `工具调用 · ${steps.length} 次`,
-    elements: [
-      ...(steps.length > 6 ? [{ tag: "markdown", content: grey(`展示最近 6 次，共 ${steps.length} 次；完整记录保留在网页会话。`) }] : []),
-      ...steps.slice(-6).map(stepPanel),
-    ],
+  // Thinking, commentary and tool calls in the order they happened.
+  const entries = items.flatMap((x) => {
+    if (x.type === "reasoning") {
+      const thought = (x.summary || x.content || []).map((p) => typeof p === "string" ? p : p?.text || "").filter(Boolean).join("\n\n").trim();
+      return thought ? [{ type: "think", text: thought }] : [];
+    }
+    if (x.type === "message") {
+      const said = x.role === "assistant" && !authorization.includes(x) && (status === "in_progress" || x !== latest || x.phase === "commentary") ? readable(text(x)) : "";
+      return said ? [{ type: "say", text: said }] : [];
+    }
+    if (["agent_message", "function_call_output"].includes(x.type) || (x.type === "function_call" && x.name === "ask_user")) return [];
+    const output = x.type === "function_call" ? outputs.get(x.call_id) : undefined;
+    return [{ type: "tool", item: output ? { ...x, status: output.status, output: output.output, error: output.error } : x }];
   });
+  const rows = entries.map(timelineRow);
+  const tools = entries.filter((entry) => entry.type === "tool").map((entry) => entry.item);
   if (status === "in_progress") {
     const last = items.filter((x) => x.role !== "user" && x.type !== "function_call_output").at(-1);
     const current = !last ? waitingHeadline(turn) : last.type === "message" ? "正在整理回复" : last.type === "reasoning" ? "正在思考" : last.status === "in_progress" ? `正在${step(last)[0]}` : "正在整理结果";
-    const done = steps.filter((x) => x.status === "completed").length;
-    const failed = steps.filter((x) => x.status === "failed").length;
-    const count = steps.length ? `工具调用 ${steps.length} 次 · 完成 ${done} 次${failed ? ` · 失败 ${failed} 次` : ""}` : "";
     const typical = !last && turn?.expected_s && turn.stage !== "retrying" ? typicalWait.replace("{{value0}}", turn.expected_s) : "";
-    return statusCard(status, [`**${current}**`, grey([count, typical].filter(Boolean).join(" · ")), authorizationText].filter(Boolean).join("\n"), panels);
+    const progress = rows.length ? `${rows.length} 步` : typical;
+    const body = excerpt([`**${current}**${progress ? ` ${grey(`· ${progress}`)}` : ""}`, authorizationText].filter(Boolean).join("\n"), 8000);
+    const earlier = rows.slice(0, -recentRows), recent = rows.slice(-recentRows);
+    const budget = cardBudget - bytes(body);
+    const shown = fitRows(recent, budget);
+    const fold = earlier.length ? [panel({ title: grey(`更早的 ${earlier.length} 步`), elements: fitRows(earlier, budget - bytes(shown)) })] : [];
+    return statusCard(status, body, [...fold, ...shown]);
   }
   const context = questions.some((action) => questionText(action, false).trim() === answer.trim()) ? "" : answer;
   // Put the decision first; keep its explanation available without filling the chat.
   // Authorization instructions stay visible alongside the separately sent QR.
   const foldContext = status === "requires_action" && questions.length && context;
-  if (foldContext) panels.unshift({ title: "补充说明", content: excerpt(context, 4000) });
-  const body = status === "requires_action"
+  const body = excerpt(status === "requires_action"
     ? [...questions.map((action) => questionText(action)), authorizationText, foldContext ? "" : context, grey("直接回复这条消息即可继续。")].filter(Boolean).join("\n\n")
     : status === "completed" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已完成处理。"
     : status === "cancelled" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已按你的要求停止。"
-    : [authorizationText, answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n");
-  return statusCard(status, body, panels);
+    : [authorizationText, answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n"), status === "requires_action" ? 8000 : 12000);
+  const elements = [];
+  if (foldContext) elements.push(panel({ title: grey("补充说明"), content: excerpt(context, 4000) }));
+  // A failure shows the step that failed right under its cause.
+  const failedTool = status === "failed" ? tools.findLast((item) => item.status === "failed") : undefined;
+  if (failedTool) elements.push(toolRow(failedTool));
+  if (rows.length) {
+    const budget = cardBudget - bytes(body) - bytes(elements);
+    elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, budget) }));
+  }
+  return statusCard(status, body, elements.length ? [{ tag: "hr" }, ...elements] : []);
 }
 
 export async function createFeishuTransport(settings, receive) {
