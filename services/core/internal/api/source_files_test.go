@@ -214,6 +214,7 @@ func TestSourceFilesRejectIncompleteOrUnsupportedMultipart(t *testing.T) {
 	}{
 		{[]string{"file"}, "x", "purpose", "Missing required parameter: 'purpose'."},
 		{[]string{"file", "purpose=batch"}, "x", "purpose", "Only purpose user_data is supported."},
+		{[]string{"purpose=user_data"}, "x", "purpose", "A file part is required."},
 		{[]string{"file", "purpose=user_data"}, "", nil, "File is empty."},
 	} {
 		f := &sourceFilesFixture{}

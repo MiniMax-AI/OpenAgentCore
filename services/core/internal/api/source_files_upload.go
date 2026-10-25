@@ -86,7 +86,8 @@ func readSourceUpload(r *http.Request, dst io.Writer) (files.Upload, error) {
 	case input.Purpose != files.PurposeUserData:
 		return input, &fieldError{param: "purpose", message: "Only purpose user_data is supported."}
 	case !seen["file"]:
-		return input, files.ErrInvalidInput
+		// The official service names purpose for a missing file part too.
+		return input, &fieldError{param: "purpose", message: "A file part is required."}
 	}
 	return input, nil
 }
