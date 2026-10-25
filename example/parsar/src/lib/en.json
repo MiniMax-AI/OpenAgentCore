@@ -506,5 +506,6 @@
   "进行中 · {{value0}}": "Running · {{value0}}",
   "现在没有正在执行的对话": "Nothing is running right now",
   "最近完成": "Recently finished",
-  "已停止": "Stopped"
+  "已停止": "Stopped",
+  "{{value0}} 个进行中": "{{value0}} running"
 }

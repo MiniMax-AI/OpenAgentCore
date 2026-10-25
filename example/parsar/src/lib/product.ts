@@ -139,6 +139,13 @@ export const useResources = <T>(kind: string) =>
 export const useProviders = () => useResources<ProviderProfile>("providers");
 export const useModels = () => useResources<ModelProfile>("models");
 export const useAgents = () => useResources<AgentProfile>("agents");
+// Running and recent Turns; the sidebar count and the 运行 view share it.
+export const useTurnOverview = () =>
+  useQuery({
+    queryKey: ["turns"],
+    queryFn: () => product<TurnOverview>("turns"),
+    refetchInterval: 2000,
+  });
 export const useRuntimes = () => useResources<RuntimeProfile>("runtimes");
 export const useMCPs = () => useResources<MCPProfile>("mcps");
 export const useSessions = () =>

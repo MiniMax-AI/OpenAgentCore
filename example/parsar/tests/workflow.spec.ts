@@ -1053,13 +1053,18 @@ test("the runs view shows running conversations with their stage, stops them and
   await page.getByLabel("继续对话").fill("Delayed response");
   await page.getByRole("button", { name: "发送", exact: true }).click();
   await expect(page.getByRole("button", { name: "取消执行" })).toBeVisible();
-  await page.goto("/#/runs");
+  // The entry under 新对话 shows how many conversations are running.
+  const entry = page.getByRole("link", { name: /^运行/ });
+  await expect(entry.getByLabel("1 个进行中")).toHaveText("1");
+  await entry.click();
+  await expect(entry).toHaveAttribute("aria-current", "page");
   const running = page.getByRole("region", { name: "进行中" });
   await expect(running.getByRole("heading", { name: "Delayed response" })).toBeVisible();
   await expect(running).toContainText(/正在启动|执行中|正在思考/);
   await expect(page.getByRole("term").filter({ hasText: "进行中" }).locator("+ dd")).toHaveText("1");
   await running.getByRole("button", { name: "停止 Delayed response" }).click();
   await expect(running).toContainText("现在没有正在执行的对话", { timeout: 15000 });
+  await expect(entry.getByLabel(/个进行中/)).toHaveCount(0);
   const recent = page.getByRole("region", { name: "最近完成" });
   await expect(recent.getByRole("heading", { name: "Delayed response" })).toBeVisible();
   await expect(recent.getByRole("img", { name: "已停止" })).toBeVisible();

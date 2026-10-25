@@ -1,15 +1,10 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { randomUuid } from "@oac/agents-client";
 import { Play } from "lucide-react";
 import { tr } from "./lib/i18n";
 import { api, dateTime } from "./lib/api";
-import {
-  product,
-  useAgents,
-  type TurnOverview,
-  type TurnRow,
-} from "./lib/product";
+import { product, useAgents, useTurnOverview, type TurnRow } from "./lib/product";
 import { stageLabel, typicalWait } from "../shared/turn-status.mjs";
 import { ErrorNotice, PageHeader, RecordTabs } from "./components/shared";
 import { Button } from "./components/ui/button";
@@ -223,11 +218,7 @@ export function Runs() {
   const [agentFilter, setAgentFilter] = useState("");
   const [source, setSource] = useState("");
   const [now, setNow] = useState(Date.now());
-  const overview = useQuery({
-    queryKey: ["turns"],
-    queryFn: () => product<TurnOverview>("turns"),
-    refetchInterval: 2000,
-  });
+  const overview = useTurnOverview();
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);

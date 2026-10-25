@@ -1,6 +1,7 @@
 import { tr } from "./lib/i18n";
 import { useEffect, useState } from "react";
 import {
+  Activity,
   Bot,
   BookOpen,
   Server,
@@ -15,7 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Capabilities } from "./Capabilities";
 import { Records, Audit } from "./Records";
 import { Settings, type WorkspaceSettings } from "./Settings";
-import { product, useSessions } from "./lib/product";
+import { product, useSessions, useTurnOverview } from "./lib/product";
 import { Feishu } from "./Feishu";
 import { Runtimes } from "./Resources";
 import { Agents } from "./Agents";
@@ -28,6 +29,37 @@ import { cn } from "./lib/utils";
 import { setTheme, useTheme } from "./lib/theme";
 
 const currentRoute = () => location.hash.slice(1) || "/";
+
+// The live entry under 新对话: how many conversations are running right now.
+function RunsLink({ selected }: { selected: boolean }) {
+  const running = useTurnOverview().data?.stats.running || 0;
+  return (
+    <a
+      href="#/runs"
+      aria-current={selected ? "page" : undefined}
+      className={cn(
+        "flex h-9 shrink-0 items-center gap-3 rounded-[10px] px-3 text-sm transition-colors duration-150 sm:mt-1",
+        selected
+          ? "bg-surface font-medium text-fg app-shadow-control"
+          : "text-fg-muted hover:app-hover hover:text-fg",
+      )}
+    >
+      <Activity
+        strokeWidth={1.7}
+        className={cn("h-4 w-4 shrink-0", selected ? "text-fg" : "text-fg-subtle")}
+      />
+      <span>{tr("运行")}</span>
+      {running > 0 && (
+        <span
+          aria-label={tr("{{value0}} 个进行中", { value0: running })}
+          className="ml-auto rounded-full bg-status-running/15 px-2 text-sm font-medium tabular-nums text-status-running"
+        >
+          {running}
+        </span>
+      )}
+    </a>
+  );
+}
 
 function NavLink({
   href,
@@ -207,6 +239,7 @@ export function App() {
           <SquarePen strokeWidth={1.7} className="h-4 w-4" />
           {tr("新对话")}
         </a>
+        <RunsLink selected={path === "/runs"} />
         <RecentConversations activeId={sessionId} />
         <nav
           aria-label={tr("主导航")}
