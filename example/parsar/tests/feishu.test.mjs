@@ -267,7 +267,7 @@ test("Feishu commands do not poison new topics and rejected controls do not bloc
     ...f.message,
     messageId: "om_cancel",
     rootId: "om_first",
-    content: "/cancel",
+    content: "/stop",
   });
   await w.tick();
   assert.ok(
@@ -530,7 +530,7 @@ test("Feishu cancellation bypasses busy follow-ups and withdraws them permanentl
     ...f.message,
     messageId: "om_stop",
     rootId: "om_first",
-    content: "/cancel",
+    content: "/stop",
   });
   await w.tick();
   assert.deepEqual(events, [
@@ -554,7 +554,7 @@ test("Feishu can withdraw an unstarted conversation and recover a lost creation 
     ...f.message,
     messageId: "om_stop",
     rootId: "om_first",
-    content: "/cancel",
+    content: "/stop",
   });
   await w.tick();
   assert.equal(f.receipts.size, 0);
@@ -570,7 +570,7 @@ test("Feishu can withdraw an unstarted conversation and recover a lost creation 
     ...f.message,
     messageId: "om_cancel_pending",
     rootId: "om_new",
-    content: "/cancel",
+    content: "/stop",
   });
   await w.tick();
   assert.equal(f.store.list("sessions").length, 1);
@@ -924,25 +924,27 @@ test("Feishu context never reads earlier group messages", async () => {
   assert.equal(context.notice, "");
 });
 
-test("Feishu group reset explains how to start a fresh conversation", async (t) => {
+test("/clear in a topic stops its work and the next message there starts a new conversation", async (t) => {
   const f = await feishu(t),
     worker = f.create();
   worker.receive("cli_0123456789abcdef", f.message);
   await worker.tick();
-  const run = f.store.list("sessions")[0];
-  worker.receive("cli_0123456789abcdef", {
-    ...f.message,
-    messageId: "om_reset",
-    rootId: "om_first",
-    content: "/new",
-  });
+  const [run] = f.store.list("sessions");
+  f.resources.get(run.core_session_id).status = "in_progress";
+  worker.receive("cli_0123456789abcdef", { ...f.message, messageId: "om_clear", rootId: "om_first", content: "/clear" });
   await worker.tick();
-  assert.ok(
-    f.store
-      .list("feishu_outbound")
-      .some((row) => row.payload.includes("群聊请另开话题")),
-  );
-  assert.equal(f.store.list("sessions")[0].id, run.id);
+  const stopped = f.calls.find((x) => x.body?.events?.[0].type === "agent.session.input.cancel");
+  assert.ok(stopped, "running work in the cleared conversation is stopped");
+  assert.ok(stopped.path.includes(run.core_session_id));
+  assert.ok(f.store.list("feishu_outbound").some((row) => row.payload.includes("已清空这个话题的上下文")));
+  worker.receive("cli_0123456789abcdef", { ...f.message, messageId: "om_after", rootId: "om_first", content: "Start over" });
+  await worker.tick();
+  const sessions = f.store.list("sessions");
+  assert.equal(sessions.length, 2, "the topic now has a new conversation");
+  const fresh = sessions.find((row) => row.id !== run.id);
+  assert.equal(fresh.name, "Start over");
+  assert.equal(f.store.list("feishu_threads").length, 1, "the topic keeps one thread");
+  assert.equal(f.store.list("feishu_threads")[0].session_id, fresh.id);
 });
 
 test("Feishu terminal results survive histories beyond one hundred pages", async (t) => {
@@ -1078,14 +1080,16 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   assert.equal(firstCard.schema, "2.0");
   assert.equal(firstCard.config.summary.content, "处理中");
   assert.deepEqual(firstCard.header, { title: { tag: "plain_text", content: "处理中" }, template: "blue" });
-  // One chronological timeline: commentary as text, the command visible.
+  // One chronological timeline: only commentary stays open.
   const [current, said, ran] = firstCard.body.elements;
   assert.match(current.content, /正在整理结果/);
   assert.match(current.content, /2 步/);
   assert.equal(said.tag, "markdown");
   assert.equal(said.content, "先读取飞书技能文档。");
-  assert.equal(ran.tag, "markdown", "a command without output has nothing to fold");
-  assert.match(ran.content, /运行.*`cat \/workspace\/\.agents\/skills\/lark-shared\/SKILL\.md`.*0\.4s/);
+  assert.equal(ran.tag, "collapsible_panel");
+  assert.equal(ran.expanded, false);
+  assert.match(ran.header.title.content, /运行.*`cat \/workspace\/\.agents\/skills\/lark-shar…`.*0\.4s/);
+  assert.match(ran.elements[0].content, /`cat \/workspace\/\.agents\/skills\/lark-shared\/SKILL\.md`/);
 
   finishTurn = true;
   items.push({
@@ -1109,7 +1113,7 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   assert.equal(process.expanded, false);
   assert.match(process.header.title.content, /处理过程 · 2 步/);
   assert.equal(process.elements[0].content, "先读取飞书技能文档。");
-  assert.match(process.elements[1].content, /`cat \/workspace/);
+  assert.match(process.elements[1].elements[0].content, /`cat \/workspace/);
   assert.doesNotMatch(
     JSON.stringify(patchedCard),
     /任务编号|在 Web 会话下载|Parsar/,
@@ -1556,7 +1560,7 @@ test("Feishu SDK uploads multipart bytes and preserves definite rejection and re
   await assert.rejects(disconnected.upload(Buffer.from("file"), "file.txt"), (error) => error.status === 503 && !error.message.includes("private-network-data"));
 });
 
-test("the timeline joins tool results, keeps commands visible and folds their diagnostics", async () => {
+test("consecutive tool calls fold into one row, each joined with its result and folding its diagnostics", async () => {
   const { formatTurnCard } = await import("../server/feishu.mjs");
   const card = JSON.parse(formatTurnCard("in_progress", [
     { type: "reasoning", summary: [{ text: "先检查接口，再处理结果。" }] },
@@ -1565,10 +1569,13 @@ test("the timeline joins tool results, keeps commands visible and folds their di
     { type: "command_execution", command: "pwd", cwd: "/workspace", output: "/workspace", exit_code: 0, duration_ms: 420, status: "completed" },
     { type: "mcp_call", name: "read", server_label: "docs", arguments: { id: 3 }, status: "incomplete" },
   ]));
-  const [current, thought, lookup, pwd, read] = card.body.elements;
-  assert.match(current.content, /4 步/);
+  const [current, thought, calls] = card.body.elements;
+  assert.match(current.content, /2 步/);
   assert.match(thought.header.title.content, /思考.*先检查接口/);
   assert.equal(thought.elements[0].content, "先检查接口，再处理结果。");
+  assert.equal(calls.tag, "collapsible_panel");
+  assert.match(calls.header.title.content, /调用 3 次工具.*<font color='red'>失败 1 次<\/font>/);
+  const [lookup, pwd, read] = calls.elements;
   assert.match(lookup.header.title.content, /调用工具.*`lookup`.*<font color='red'>失败<\/font>/);
   const literal = lookup.elements[0].text;
   assert.equal(literal.tag, "plain_text");
@@ -1689,7 +1696,7 @@ test("large multilingual diagnostics stay below the Feishu card payload limit", 
   for (const status of ["in_progress", "completed", "requires_action"]) {
     const payload = formatTurnCard(status, items, undefined, undefined, [{ arguments: { question: large, options: [large] } }]);
     assert.ok(Buffer.byteLength(payload) < 30000, `${status}: ${Buffer.byteLength(payload)}`);
-    assert.match(payload, /更早的 \d+ 步见网页对话/, "the oldest rows leave the card first");
+    assert.match(payload, /更早的 \d+ (步|次调用)见网页对话/, "the oldest rows leave the card first");
     assert.match(payload, /内容较长，已截取/);
   }
 });
@@ -1986,14 +1993,17 @@ test("completed-turn cursors release answered questions before the next turn", a
 
 test("a running card shows the latest four steps and folds the earlier ones", async () => {
   const { formatTurnCard } = await import("../server/feishu.mjs");
-  const items = Array.from({ length: 7 }, (_, i) => ({ type: "command_execution", command: `step ${i + 1}`, duration_ms: 1000, status: "completed" }));
-  items.push({ type: "command_execution", command: "step 8", status: "in_progress" });
+  const items = [1, 2, 3, 4].flatMap((i) => [
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: `说明 ${i}` }] },
+    { type: "command_execution", command: `step ${i}`, duration_ms: 1000, status: i === 4 ? "in_progress" : "completed" },
+  ]);
   const [current, earlier, ...recent] = JSON.parse(formatTurnCard("in_progress", items)).body.elements;
+  const label = (row) => row.tag === "markdown" ? row.content : row.header.title.content.match(/`(.*)`/)[1];
   assert.match(current.content, /正在运行.*8 步/);
   assert.equal(earlier.tag, "collapsible_panel");
   assert.equal(earlier.expanded, false);
   assert.match(earlier.header.title.content, /更早的 4 步/);
-  assert.deepEqual(earlier.elements.map((row) => row.content.match(/`(.*)`/)[1]), ["step 1", "step 2", "step 3", "step 4"]);
-  assert.deepEqual(recent.map((row) => row.content.match(/`(.*)`/)[1]), ["step 5", "step 6", "step 7", "step 8"]);
-  assert.match(recent.at(-1).content, /进行中/);
+  assert.deepEqual(earlier.elements.map(label), ["说明 1", "step 1", "说明 2", "step 2"]);
+  assert.deepEqual(recent.map(label), ["说明 3", "step 3", "说明 4", "step 4"]);
+  assert.match(recent.at(-1).header.title.content, /进行中/);
 });

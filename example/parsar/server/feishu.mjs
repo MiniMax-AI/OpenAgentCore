@@ -275,19 +275,21 @@ const clip = (value, limit) => {
 // Markdown and Feishu tags stay literal inside a one-line title.
 const literal = (value) => value.replace(/[<>]/g, "").replaceAll("`", "'");
 
-// One tool call: what ran stays visible; its result folds away.
-function toolRow(item) {
-  const [label, detail] = step(item);
-  const state = item.status === "failed"
+const toolState = (item) =>
+  item.status === "failed"
     ? "<font color='red'>失败</font>"
     : item.status === "in_progress"
       ? grey("进行中")
       : item.status === "incomplete"
         ? grey("未完成")
         : typeof item.duration_ms === "number"
-        ? grey(`${(item.duration_ms / 1000).toFixed(1)}s`)
-        : "";
-  const title = [grey(label), detail ? `\`${literal(clip(detail, 200))}\`` : "", state].filter(Boolean).join(" ");
+          ? grey(`${(item.duration_ms / 1000).toFixed(1)}s`)
+          : "";
+
+// One tool call: the command is the title, its result folds below it.
+function toolRow(item) {
+  const [label, detail] = step(item);
+  const title = [grey(label), detail ? `\`${literal(clip(detail, 200))}\`` : "", toolState(item)].filter(Boolean).join(" ");
   const fields = [
     ["参数", item.command ? undefined : item.arguments ?? item.action],
     ["输出", item.output], ["错误", item.error], ["退出码", item.exit_code],
@@ -300,23 +302,44 @@ function toolRow(item) {
   });
 }
 
-// Thinking folds behind its first sentence; commentary is short and shown as is.
+// Consecutive tool calls fold into one row; each call folds again inside it.
+function toolsRow(items) {
+  const failed = items.filter((item) => item.status === "failed").length;
+  const state = items.some((item) => item.status === "in_progress")
+    ? grey("进行中")
+    : failed
+      ? `<font color='red'>失败 ${failed} 次</font>`
+      : items.every((item) => typeof item.duration_ms === "number")
+        ? grey(`${(items.reduce((sum, item) => sum + item.duration_ms, 0) / 1000).toFixed(1)}s`)
+        : "";
+  const [label, detail] = step(items[0]);
+  const title = items.length === 1
+    ? [grey(label), detail ? `\`${literal(clip(detail, 40))}\`` : "", state]
+    : [grey(items.every((item) => step(item)[0] === "运行") ? `运行 ${items.length} 条命令` : `调用 ${items.length} 次工具`), state];
+  return panel({ title: title.filter(Boolean).join(" "), elements: items.map(toolRow) });
+}
+
+// Only commentary stays open; thinking and tool calls fold behind one line.
 function timelineRow(entry) {
   if (entry.type === "say") return { tag: "markdown", content: excerpt(entry.text, 800) };
   if (entry.type === "think")
     return panel({ title: `${grey("思考")} ${literal(clip(entry.text.split("\n").find((line) => line.trim()) || "", 40))}`, content: excerpt(entry.text, 1500) });
-  return toolRow(entry.item);
+  return toolsRow(entry.items);
 }
 
-// The oldest rows leave the card first when it would grow past Feishu's limit.
-function fitRows(rows, budget) {
+// The oldest rows leave the card first when it would grow past Feishu's
+// limit; a single row that is still too large sheds its oldest calls.
+function fitRows(rows, budget, unit = "步") {
   const kept = [...rows];
   let dropped = 0;
   while (kept.length > 1 && bytes(kept) > budget) {
     kept.shift();
     dropped++;
   }
-  return dropped ? [{ tag: "markdown", content: grey(`更早的 ${dropped} 步见网页对话`) }, ...kept] : kept;
+  const [only] = kept;
+  if (kept.length === 1 && bytes(kept) > budget && only.elements?.length > 1)
+    kept[0] = { ...only, elements: fitRows(only.elements, budget - (bytes(only) - bytes(only.elements)), "次调用") };
+  return dropped ? [{ tag: "markdown", content: grey(`更早的 ${dropped} ${unit}见网页对话`) }, ...kept] : kept;
 }
 
 // A tool-result answer resumes the same Core Turn. Display only the exchange
@@ -355,7 +378,13 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
     const output = x.type === "function_call" ? outputs.get(x.call_id) : undefined;
     return [{ type: "tool", item: output ? { ...x, status: output.status, output: output.output, error: output.error } : x }];
   });
-  const rows = entries.map(timelineRow);
+  const grouped = entries.reduce((rows, entry) => {
+    const last = rows.at(-1);
+    if (entry.type === "tool" && last?.type === "tools") last.items.push(entry.item);
+    else rows.push(entry.type === "tool" ? { type: "tools", items: [entry.item] } : entry);
+    return rows;
+  }, []);
+  const rows = grouped.map(timelineRow);
   const tools = entries.filter((entry) => entry.type === "tool").map((entry) => entry.item);
   if (status === "in_progress") {
     const last = items.filter((x) => x.role !== "user" && x.type !== "function_call_output").at(-1);
@@ -623,7 +652,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     if (store.get("feishu_inbound", id)) return;
     let thread =
       message.chatType === "p2p" &&
-      !["/new", "/reset"].includes(message.content.trim())
+      message.content.trim() !== "/clear"
         ? store
             .list("feishu_threads")
             .find(
@@ -862,25 +891,11 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   const inbound = async (row) => {
     let thread = store.get("feishu_threads", row.thread_id);
     if (!thread) return reject(row, "话题关联不可用，请在 Web 中检查。");
-    if (["/new", "/reset", "/help"].includes(row.text)) {
-      queueReply(
-        stableId(`${row.id}:command`),
-        thread,
-        row.text === "/help"
-          ? "直接发送消息即可对话。/new 开始新对话（群聊请另开话题并 @机器人）；/cancel 停止执行；/answer <call_id> <回答> 回复 Agent 的提问。"
-          : row.chat_type === "p2p"
-            ? "新对话已就绪，请直接发送消息。"
-            : "群聊请另开话题并 @机器人，开始新对话。当前话题保持不变。",
-      );
-      store.put("feishu_inbound", { ...row, state: "delivered" });
-      return;
-    }
-    const media = await mediaFor(row);
-    row = store.get("feishu_inbound", row.id);
-    const rotateP2PThread = () => {
+    // A new Session for this chat or topic; the next message starts it.
+    const rotateThread = () => {
       thread = {
         ...thread,
-        root_id: row.message_id,
+        root_id: row.chat_type === "p2p" ? row.message_id : thread.root_id,
         agent_id: store.get("feishu_bots", configId).agent_id,
         session_id: randomUUID(),
         session_ids: [
@@ -902,13 +917,40 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       };
       store.put("feishu_threads", thread);
     };
+    if (["/clear", "/help"].includes(row.text)) {
+      if (row.text === "/clear") {
+        // Work in the cleared conversation would continue unseen; stop it.
+        const previous = row.chat_type === "p2p"
+          ? store.list("feishu_threads").filter((t) => t.id !== thread.id && t.app_id === thread.app_id && t.chat_id === thread.chat_id && t.sender_id === thread.sender_id && t.chat_type === "p2p").at(-1)
+          : thread;
+        const run = previous && store.get("sessions", previous.session_id);
+        if (run?.core_session_id)
+          await core(`/v1/agents/sessions/${run.core_session_id}/events`, "POST", { events: [{ type: "agent.session.input.cancel" }] }, `${row.id}:clear`).catch(() => {});
+        // A private chat already got a fresh thread on receipt; a topic keeps its root.
+        if (row.chat_type !== "p2p" && thread.first_message_id !== row.id) rotateThread();
+      }
+      queueReply(
+        stableId(`${row.id}:command`),
+        thread,
+        row.text === "/help"
+          ? "直接发送消息即可对话。/clear 清空上下文，开始新对话；/stop 停止当前任务；/answer <call_id> <回答> 回复 Agent 的提问。"
+          : row.chat_type === "p2p"
+            ? "已清空上下文，直接发送消息即可开始新对话。"
+            : "已清空这个话题的上下文，接着在话题里发消息即可开始新对话。",
+      );
+      store.put("feishu_inbound", { ...row, state: "delivered" });
+      return;
+    }
+    const media = await mediaFor(row);
+    row = store.get("feishu_inbound", row.id);
+
     if (
       thread.first_message_id !== row.id &&
       row.chat_type === "p2p" &&
       !row.text.startsWith("/") &&
       store.get("sessions", thread.session_id)?.deleted_at
     )
-      rotateP2PThread();
+      rotateThread();
     const progress = (text) => {
       const progressId = stableId(`${row.id}:accepted`);
       thread = {
@@ -955,24 +997,24 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         return reject(
           row,
           row.chat_type === "p2p"
-            ? "此对话已不可用，请发送 /new 开始新对话。"
+            ? "此对话已不可用，请发送 /clear 开始新对话。"
             : "此对话已不可用，请另开话题并 @机器人。",
         );
       if (!run.core_session_id) run = await sessions(run.id, {});
       if (
         row.text.startsWith("/") &&
-        row.text !== "/cancel" &&
+        row.text !== "/stop" &&
         !row.text.startsWith("/answer ")
       )
         return reject(
           row,
-          "支持的命令：/new、/cancel、/answer、/help。其他消息会交给 Agent。",
+          "支持的命令：/clear、/stop、/answer、/help。其他消息会交给 Agent。",
         );
       try {
         if (
           media.files.length &&
           !row.files_uploaded &&
-          row.text !== "/cancel"
+          row.text !== "/stop"
         ) {
           const session = await core(
             `/v1/agents/sessions/${run.core_session_id}`,
@@ -992,7 +1034,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           store.put("feishu_inbound", row);
         }
         let answer;
-        if (!row.event && row.text !== "/cancel") {
+        if (!row.event && row.text !== "/stop") {
           const session = await core(
             `/v1/agents/sessions/${run.core_session_id}`,
             "GET",
@@ -1021,7 +1063,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         const event =
           row.event ||
           answer ||
-          (row.text === "/cancel"
+          (row.text === "/stop"
             ? { type: "agent.session.input.cancel" }
             : {
                 type: "agent.session.input.message",
@@ -1063,11 +1105,11 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       } catch (error) {
         if (
           row.chat_type === "p2p" &&
-          row.text !== "/cancel" &&
+          row.text !== "/stop" &&
           (error?.code === "environment_unavailable" ||
             /environment is no longer available/i.test(error?.message || ""))
         ) {
-          rotateP2PThread();
+          rotateThread();
           row = {
             ...row,
             state: "queued",
@@ -1079,7 +1121,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         }
         throw error;
       }
-      if (row.text === "/cancel")
+      if (row.text === "/stop")
         queueReply(
           stableId(`${row.id}:cancel`),
           thread,
@@ -1476,7 +1518,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     const cancellations = new Map();
     for (const row of rows)
       if (
-        row.text === "/cancel" &&
+        row.text === "/stop" &&
         ["queued", "submitting"].includes(row.state)
       )
         cancellations.set(row.thread_id, row);
@@ -1502,7 +1544,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       let row = store.get("feishu_inbound", original.id);
       if (
         !allowed(row.app_id, row.chat_type) ||
-        row.text === "/cancel" ||
+        row.text === "/stop" ||
         ["delivered", "failed", "rejected"].includes(row.state) ||
         blocked.has(row.thread_id)
       )
