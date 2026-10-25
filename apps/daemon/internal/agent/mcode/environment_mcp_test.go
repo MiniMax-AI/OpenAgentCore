@@ -11,11 +11,10 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 func environmentMCPFixture() proto.EnvironmentMCP {
-	return proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/fixture", Server: agentplugin.MCPServer{
+	return proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/fixture", Server: proto.PluginMCPServer{
 		Name: "proof.server", Type: "stdio", Command: "never-exec-before-sandbox", Args: []string{"private-argument"},
 		EnvVars: []string{"USER_SELECTED"}, CWD: "resources",
 	}}
@@ -77,7 +76,7 @@ func TestEnvironmentMCPRejectsUnqualifiedAuthorityBeforePreparation(t *testing.T
 			req.LocalEnvironment.MCP = []proto.EnvironmentMCP{environmentMCPFixture()}
 			switch name {
 			case "http-bearer-insecure", "http-bearer-missing":
-				req.LocalEnvironment.MCP[0].Server = agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
+				req.LocalEnvironment.MCP[0].Server = proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}
 				if name == "http-bearer-missing" {
 					req.LocalEnvironment.MCP[0].Server.BearerTokenEnvVar = "SELECTED_TOKEN"
 				}
@@ -177,7 +176,7 @@ func mcpRegistryEntry(server, segment, tool, toolSegment string) map[string]any 
 func TestEnvironmentHTTPMCPUsesEphemeralACPConfiguration(t *testing.T) {
 	for _, authenticated := range []bool{false, true} {
 		c, req, record := workspaceFixture(t)
-		item := proto.EnvironmentMCP{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}
+		item := proto.EnvironmentMCP{Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}
 		const token = "private-mcp-canary"
 		if authenticated {
 			value := token

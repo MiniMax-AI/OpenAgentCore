@@ -91,7 +91,7 @@ Core-hosted Sessions that bring no model provider use their Harness's default mo
 1. On **Projects and keys**, choose **Create project**, then **Issue key**. The dialog shows the key once: copy it and keep it safe. Its **How to call** card shows the API base URL and sample requests.
 2. Give the key and the API base URL to the application developer. They continue with [Run your first Session](./quickstart.md).
 
-## Reach Core from other machines {#configure-the-domain-and-https}
+## Reach Core from other machines
 
 This step is optional for a trial on one machine. Applications, nodes and sandboxes reach Core at one address, the public URL. HTTP is enough on the local network; beyond it, put a reverse proxy in front and set the public URL to the HTTPS origin it serves. [Configure the public address](./public-address.md) covers the reverse proxy, ports and changing the address later.
 

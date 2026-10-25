@@ -30,11 +30,20 @@ type SessionDiagnosticFailure struct {
 	TurnID string           `json:"turn_id,omitempty"`
 }
 
+// InitializationStepTiming is the Runtime-measured duration of one Environment initialization operation that ran.
+type InitializationStepTiming struct {
+	Step       string `json:"step" enums:"file,skill,plugin,configure,npm,python,setup,finalize" binding:"required"`
+	Index      *int   `json:"index" extensions:"x-nullable" binding:"required"`
+	DurationMS int64  `json:"duration_ms" binding:"required"`
+}
+
 type SessionDiagnostics struct {
 	Object    string                    `json:"object" enums:"core.session_diagnostics" binding:"required"`
 	SessionID string                    `json:"session_id" binding:"required"`
 	Status    string                    `json:"status" enums:"idle,in_progress,requires_action,failed" binding:"required"`
 	Failure   *SessionDiagnosticFailure `json:"failure" extensions:"x-nullable" binding:"required"`
+	// InitializationSteps lists the operations the Environment's initialization ran, in order.
+	InitializationSteps []InitializationStepTiming `json:"initialization_steps" binding:"required"`
 }
 
 type ItemDiagnosticTiming struct {
@@ -85,7 +94,10 @@ func (h *Handler) getSessionDiagnostics(w http.ResponseWriter, r *http.Request) 
 		writeSessionsError(w, r, err)
 		return
 	}
-	response := SessionDiagnostics{Object: "core.session_diagnostics", SessionID: public.ID, Status: public.Status}
+	response := SessionDiagnostics{Object: "core.session_diagnostics", SessionID: public.ID, Status: public.Status, InitializationSteps: []InitializationStepTiming{}}
+	for _, step := range session.EnvironmentInitializationSteps {
+		response.InitializationSteps = append(response.InitializationSteps, InitializationStepTiming{Step: string(step.Step), Index: step.Index, DurationMS: step.DurationMS})
+	}
 	if public.Status == "failed" {
 		failure := SessionDiagnosticFailure{DiagnosticFailure: DiagnosticFailure{Code: "internal_error", Params: CoreErrorDetails{}}}
 		switch {
@@ -162,7 +174,7 @@ func diagnosticTime(value time.Time) *time.Time {
 }
 
 func provisioningFailureParams(detail *sessions.ProvisioningFailureDetail) CoreErrorDetails {
-	params := CoreErrorDetails{"step": CoreErrorNull(), "index": CoreErrorNull(), "exit_code": CoreErrorNull()}
+	params := CoreErrorDetails{"step": CoreErrorNull(), "index": CoreErrorNull(), "exit_code": CoreErrorNull(), "category": CoreErrorNull()}
 	if detail == nil {
 		return params
 	}
@@ -171,6 +183,9 @@ func provisioningFailureParams(detail *sessions.ProvisioningFailureDetail) CoreE
 	}
 	if detail.Index != nil {
 		params["index"] = CoreErrorNumber(float64(*detail.Index))
+	}
+	if detail.Category != nil {
+		params["category"] = CoreErrorString(string(*detail.Category))
 	}
 	if detail.ExitCode != nil {
 		params["exit_code"] = CoreErrorNumber(float64(*detail.ExitCode))

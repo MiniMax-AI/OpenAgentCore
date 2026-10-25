@@ -17,8 +17,9 @@ import (
 // Declaration is the only authored description of the Claude Code Harness. The
 // Runtime may narrow Capabilities to the installed bundle, never widen them.
 var Declaration = harnessconfig.Declaration{
-	Kind:  "claude_sdk",
-	Label: "Claude Code",
+	Kind:   "claude_sdk",
+	Label:  "Claude Code",
+	Native: harnessconfig.NativePackage{Component: "claude", Version: "0.3.269"},
 	Configuration: harnessconfig.Configuration{
 		ValidateNativeConfig: validateNativeConfig,
 		Providers:            []harnessconfig.Provider{{Protocol: "anthropic"}},
@@ -52,9 +53,11 @@ var Declaration = harnessconfig.Declaration{
 		MCPHTTPRequired:          proto.CapabilitySupported,
 		MCPHTTPBearerAuth:        proto.CapabilitySupported,
 	},
-	// The SDK takes effort low to max. It has no verbosity, summary or service
-	// tier. Native REPL runs tool calls inside model-written code, outside the root
-	// tool_use and tool_result records that function receipts and tool observations
+	// The SDK takes effort low to max. Its thinking blocks are the reasoning
+	// text, so a summary request takes only auto; there is no concise or
+	// detailed setting. It has no verbosity or service tier. Native REPL runs
+	// tool calls inside model-written code, outside the root tool_use and
+	// tool_result records that function receipts and tool observations
 	// read, so enabling programmatic tool calling is rejected. Native WebSearch and
 	// WebFetch are live and have no cached mode or settings: disabled removes them,
 	// and live and an absent control keep them on workspace placements. On none,
@@ -63,6 +66,7 @@ var Declaration = harnessconfig.Declaration{
 	Execution: harnessconfig.ExecutionOptions{
 		WebSearchModes:          []string{"disabled", "live"},
 		ReasoningEfforts:        []string{"low", "medium", "high", "xhigh", "max"},
+		ReasoningSummaries:      []string{"auto"},
 		ProgrammaticToolCalling: []bool{false},
 		TextVerbosities:         []string{"medium"},
 	},

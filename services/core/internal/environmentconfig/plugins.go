@@ -1,12 +1,15 @@
 package environmentconfig
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+import (
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+)
 
 const maxPluginsArchiveBytes = 10 << 20
 
 // Plugin separates safe identity from confidential immutable input.
 type Plugin struct {
-	Metadata agentplugin.Metadata `json:"metadata"`
+	Metadata proto.PluginMetadata `json:"metadata"`
 	Archive  []byte               `json:"archive"`
 }
 
@@ -37,8 +40,8 @@ func ValidatePlugins(plugins []Plugin) error {
 }
 
 // PluginMetadata returns the public metadata of every Plugin in order.
-func (s Setup) PluginMetadata() []agentplugin.Metadata {
-	result := make([]agentplugin.Metadata, 0, len(s.Plugins))
+func (s Setup) PluginMetadata() []proto.PluginMetadata {
+	result := make([]proto.PluginMetadata, 0, len(s.Plugins))
 	for _, plugin := range s.Plugins {
 		result = append(result, plugin.Metadata)
 	}

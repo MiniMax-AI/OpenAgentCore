@@ -130,12 +130,11 @@ func (k FileWriteIdentity) Valid() bool {
 }
 
 type EnvironmentFileWrite struct {
-	Identity                 FileWriteIdentity
-	EnvironmentID, SessionID string
-	State                    string
-	CreatedAt                time.Time
-	SettledAt                *time.Time
-	Replayed                 bool
+	Identity  FileWriteIdentity
+	State     string
+	CreatedAt time.Time
+	SettledAt *time.Time
+	Replayed  bool
 }
 
 // ValidateRetainedHistory checks the selected external filesystem and Harness combination.

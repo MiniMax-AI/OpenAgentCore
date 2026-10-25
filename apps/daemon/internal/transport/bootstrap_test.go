@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 )
 
@@ -32,10 +34,8 @@ func TestBootstrapSendsBearerAndDeviceID(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"device_id":         "rt_abc",
-			"workspace_id":      "ws_xyz",
 			"ws_url":            "wss://example/agent-daemon/ws",
 			"heartbeat_seconds": 15,
-			"protocol_version":  "0.3.0",
 		})
 	}))
 	defer srv.Close()
@@ -44,7 +44,7 @@ func TestBootstrapSendsBearerAndDeviceID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if resp.DeviceID != "rt_abc" || resp.WorkspaceID != "ws_xyz" {
+	if resp.DeviceID != "rt_abc" {
 		t.Errorf("unexpected response: %+v", resp)
 	}
 	if resp.WSURL != "wss://example/agent-daemon/ws" {
@@ -68,7 +68,6 @@ func TestBootstrapHeartbeatIntervalDefaultsToFifteen(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"device_id":         "rt",
-			"workspace_id":      "ws",
 			"ws_url":            "",
 			"heartbeat_seconds": 0, // server forgot to set it
 		})
@@ -118,7 +117,7 @@ func TestBootstrapRejectsEmptyInputs(t *testing.T) {
 }
 
 func TestDeriveWSURLPrefersAbsolute(t *testing.T) {
-	got, err := transport.DeriveWSURL(transport.BootstrapResponse{WSURL: "wss://prod/agent-daemon/ws"}, "https://anything")
+	got, err := transport.DeriveWSURL(machineapi.BootstrapResponse{WSURL: "wss://prod/agent-daemon/ws"}, "https://anything")
 	if err != nil {
 		t.Fatalf("DeriveWSURL: %v", err)
 	}
@@ -135,7 +134,7 @@ func TestDeriveWSURLFallsBackToServerBase(t *testing.T) {
 		{"https://core.example.com/api", "wss://core.example.com/api/agent-daemon/ws"},
 	}
 	for _, tc := range cases {
-		got, err := transport.DeriveWSURL(transport.BootstrapResponse{WSURL: ""}, tc.base)
+		got, err := transport.DeriveWSURL(machineapi.BootstrapResponse{WSURL: ""}, tc.base)
 		if err != nil {
 			t.Errorf("DeriveWSURL(%q): %v", tc.base, err)
 			continue
@@ -147,14 +146,14 @@ func TestDeriveWSURLFallsBackToServerBase(t *testing.T) {
 }
 
 func TestDeriveWSURLRejectsRelativeWSURL(t *testing.T) {
-	_, err := transport.DeriveWSURL(transport.BootstrapResponse{WSURL: "/agent-daemon/ws"}, "https://x")
+	_, err := transport.DeriveWSURL(machineapi.BootstrapResponse{WSURL: "/agent-daemon/ws"}, "https://x")
 	if err == nil {
 		t.Fatal("DeriveWSURL accepted relative ws_url")
 	}
 }
 
 func TestDeriveWSURLRejectsBadScheme(t *testing.T) {
-	_, err := transport.DeriveWSURL(transport.BootstrapResponse{WSURL: ""}, "ftp://example")
+	_, err := transport.DeriveWSURL(machineapi.BootstrapResponse{WSURL: ""}, "ftp://example")
 	if err == nil {
 		t.Fatal("DeriveWSURL accepted ftp scheme")
 	}

@@ -102,7 +102,7 @@ export function OverviewPage() {
   const activity = useMemo(() => (sessions ? sessionActivity(sessions.map((entry) => entry.value), now) : null), [now, sessions]);
   const attention = useMemo(() => (sessions ? attentionSessions(sessions, activityStart(now)) : null), [now, sessions]);
   const capacity = fleet ? capacitySummary(fleet.nodes) : null;
-  // An E2B deployment has no machines: capacity is what Core holds in E2B's cloud.
+  // A direct deployment has no machines: capacity is what Core holds in the Provider's cloud.
   const cloud = cloudHost(fleet);
   const failuresLastHour = sessions ? recentFailures(sessions.map((entry) => entry.value), now) : null;
 
@@ -316,10 +316,10 @@ function fleetDetail(state: FleetState, t: TFunction<"overview">): string {
 
 function cloudHost(fleet: FleetSnapshot | null): CloudHost | null {
   if (fleet?.deployment.mode !== "direct") return null;
-  return { running: fleet.deployment.resources.allocations, pending: fleet.deployment.resources.pending, template: fleet.deployment.configuration?.template || null };
+  return { running: fleet.deployment.resources.running, pending: fleet.deployment.resources.pending };
 }
 
-/** Core and its sandbox nodes (or E2B's cloud) as an inventory; each row opens its page. */
+/** Core and its sandbox nodes (or the Provider's cloud) as an inventory; each row opens its page. */
 function FleetCard({ fleetState, core, localOnly }: { fleetState: FleetState; core: CoreStatus; localOnly: boolean }) {
   const { t } = useTranslation("overview");
   const { navigate } = useConsoleNavigation();

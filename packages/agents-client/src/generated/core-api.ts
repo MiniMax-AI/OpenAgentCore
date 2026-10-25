@@ -26,7 +26,6 @@ export interface AdminRuntimeObservation {
 export const adminRuntimeObservationFields = ["observation", "project_id"] as const;
 export interface AdminRuntimeObservationDetail {
   allocation_created_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   disk: RuntimeDiskObservation | null;
   environment_id: string | null;
   id: string;
@@ -43,7 +42,7 @@ export interface AdminRuntimeObservationDetail {
   started_at: number | null;
   status: AdminRuntimeObservationDetailStatus;
 }
-export const adminRuntimeObservationDetailFields = ["allocation_created_at", "cpu", "disk", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
+export const adminRuntimeObservationDetailFields = ["allocation_created_at", "disk", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
 export const adminRuntimeObservationDetailLifecycleStateValues = ["active", "sleeping", "transitioning", "pending", "stopped"] as const;
 export type AdminRuntimeObservationDetailLifecycleState = (typeof adminRuntimeObservationDetailLifecycleStateValues)[number];
 export const adminRuntimeObservationDetailModeValues = ["none", "self_hosted", "openai_hosted"] as const;
@@ -124,10 +123,28 @@ export const capacityFields = ["max_active", "max_retained"] as const;
 export interface ConfigurationDiscoveryInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
-  query?: Record<string, unknown>;
+  query?: ConfigurationDiscoveryQuery;
 }
 export const configurationDiscoveryInputFields = ["configuration", "credential", "query"] as const;
 export const configurationDiscoveryInputRequired = [] as const;
+export interface ConfigurationDiscoveryQuery {
+  field?: string;
+  path?: string[];
+}
+export const configurationDiscoveryQueryFields = ["field", "path"] as const;
+export const configurationDiscoveryQueryRequired = [] as const;
+export interface ConfigurationOption {
+  complete: boolean;
+  label: string;
+  resources?: SandboxResources;
+  value: string;
+}
+export const configurationOptionFields = ["complete", "label", "resources", "value"] as const;
+export const configurationOptionRequired = ["complete", "label", "value"] as const;
+export interface ConfigurationOptions {
+  options: ConfigurationOption[];
+}
+export const configurationOptionsFields = ["options"] as const;
 export interface CoreAPIError {
   code: string | null;
   details?: Record<string, unknown>;
@@ -191,8 +208,9 @@ export type DeploymentMode = (typeof deploymentModeValues)[number];
 export interface DeploymentResources {
   allocations: number;
   pending: number;
+  running: number;
 }
-export const deploymentResourcesFields = ["allocations", "pending"] as const;
+export const deploymentResourcesFields = ["allocations", "pending", "running"] as const;
 export interface DeploymentSpec {
   resources: SandboxResources;
   workspace?: Declaration;
@@ -321,6 +339,14 @@ export interface HostHistoryPoint {
   start: string;
 }
 export const hostHistoryPointFields = ["available_disk_bytes_min", "cpu_utilization_max", "memory_used_bytes_max", "start"] as const;
+export interface InitializationStepTiming {
+  duration_ms: number;
+  index: number | null;
+  step: InitializationStepTimingStep;
+}
+export const initializationStepTimingFields = ["duration_ms", "index", "step"] as const;
+export const initializationStepTimingStepValues = ["file", "skill", "plugin", "configure", "npm", "python", "setup", "finalize"] as const;
+export type InitializationStepTimingStep = (typeof initializationStepTimingStepValues)[number];
 export interface Installation {
   address_bindings: AddressBindings;
   api_base_url: string;
@@ -655,13 +681,6 @@ export interface RolloutNodes {
 export const rolloutNodesFields = ["failed", "preparing", "ready", "unknown"] as const;
 export const rolloutStateValues = ["settled", "preparing"] as const;
 export type RolloutState = (typeof rolloutStateValues)[number];
-export interface RuntimeCPUObservation {
-  capacity_cores: number | null;
-  usage_cores: number | null;
-  usage_seconds_total: number | null;
-  utilization_ratio: number | null;
-}
-export const runtimeCPUObservationFields = ["capacity_cores", "usage_cores", "usage_seconds_total", "utilization_ratio"] as const;
 export interface RuntimeDiskObservation {
   limit_bytes: number | null;
   usage_bytes: number | null;
@@ -764,7 +783,6 @@ export interface RuntimeMemoryObservation {
 export const runtimeMemoryObservationFields = ["limit_bytes", "usage_bytes"] as const;
 export interface RuntimeObservation {
   allocation_created_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   environment_id: string | null;
   id: string;
   instance: RuntimeInstance;
@@ -780,7 +798,7 @@ export interface RuntimeObservation {
   started_at: number | null;
   status: RuntimeObservationStatus;
 }
-export const runtimeObservationFields = ["allocation_created_at", "cpu", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
+export const runtimeObservationFields = ["allocation_created_at", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
 export const runtimeObservationLifecycleStateValues = ["active", "sleeping", "transitioning", "pending", "stopped"] as const;
 export type RuntimeObservationLifecycleState = (typeof runtimeObservationLifecycleStateValues)[number];
 export const runtimeObservationModeValues = ["none", "self_hosted", "openai_hosted"] as const;
@@ -875,11 +893,12 @@ export const sessionDiagnosticFailureCodeValues = ["harness_error", "model_provi
 export type SessionDiagnosticFailureCode = (typeof sessionDiagnosticFailureCodeValues)[number];
 export interface SessionDiagnostics {
   failure: SessionDiagnosticFailure | null;
+  initialization_steps: InitializationStepTiming[];
   object: "core.session_diagnostics";
   session_id: string;
   status: SessionDiagnosticsStatus;
 }
-export const sessionDiagnosticsFields = ["failure", "object", "session_id", "status"] as const;
+export const sessionDiagnosticsFields = ["failure", "initialization_steps", "object", "session_id", "status"] as const;
 export const sessionDiagnosticsStatusValues = ["idle", "in_progress", "requires_action", "failed"] as const;
 export type SessionDiagnosticsStatus = (typeof sessionDiagnosticsStatusValues)[number];
 export interface SessionExecutionConfiguration {

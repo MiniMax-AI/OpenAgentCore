@@ -21,7 +21,8 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -52,7 +53,7 @@ func newFakeCore(t *testing.T, workspace string) (*fakeCore, string) {
 				w.WriteHeader(core.status)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(v1.NativeInstallationContext{Version: Version, ProtocolVersion: proto.Version, EnvironmentID: environment,
+			_ = json.NewEncoder(w).Encode(machineapi.InstallationContext{Version: Version, ProtocolVersion: proto.Version, EnvironmentID: environment,
 				RemoteURL: strings.Replace(core.URL, "http://", "ws://", 1) + "/api/v1/agent-daemon/ws", Workspace: workspace, Harness: nativeHarnesses["codex"].AgentKind})
 		default:
 			name, ext, _ := strings.Cut(strings.TrimPrefix(r.URL.Path, "/api/v1/agent-daemon/install/"+Version+"/"+runtime.GOOS+"-"+runtime.GOARCH+"-"), ".")
@@ -105,7 +106,7 @@ func (c *fakeCore) add(t *testing.T, name string) nativeComponent {
 
 func nativeDownloadInstall(t *testing.T, core *fakeCore, bundle string, extra ...string) error {
 	t.Helper()
-	t.Setenv(v1.NativeInstallGrantEnv, "grant")
+	t.Setenv(machineapi.InstallGrantEnv, "grant")
 	out := new(bytes.Buffer)
 	rc := &runContext{stdin: strings.NewReader(""), stdout: out, stderr: out}
 	o, err := parseNativeInstall(rc, append([]string{"--non-interactive", "--onboard-url", core.URL + "/api/v1/agent-daemon/installation", "--bundle-dir", bundle, "--harness", "codex"}, extra...))

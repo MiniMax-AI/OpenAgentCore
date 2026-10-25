@@ -11,7 +11,7 @@ A Harness receives one frozen model provider bundle, defined by [`modelprovider.
 | Field | Meaning |
 | --- | --- |
 | `protocol` | The upstream API: `anthropic`, `responses` or `chat_completions`, not an engine. The selected Harness must support it natively |
-| `base_url` | An HTTPS URL with a valid host, without credentials, query or fragment |
+| `base_url` | An HTTPS URL with a valid host, or an HTTP URL whose host is a loopback or private IP address, without credentials, query or fragment. Loopback is the machine the Harness runs on: in a Core-managed sandbox, the sandbox itself |
 | `api_key` | Nonempty, at most 16 KiB, without NUL, CR or LF |
 | `context_window`, `max_output_tokens` | Optional nonnegative integers, with output no larger than context. Use the real model's limits |
 
@@ -130,7 +130,7 @@ The deployment default is a runtime setting stored in Core: one complete model c
 | `PUT /core/v1/harnesses/{harness}/model-configuration` | Replace `{model_provider, model, harness_config}` using the shared provider and native-parameter validators |
 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | Remove it; idempotent, 204 |
 
-PUT requires `model` and a complete `model_provider`; `harness_config` defaults to `{}`. Reads return `model`, `harness_config`, the safe `model_provider` view (`protocol`, `base_url`, optional token limits and `api_key_configured`), observations and `updated_at`, never the key. The bundle is encrypted with its own purpose and bound to the Harness. Each write records an administrator audit entry (`resource_type: deployment_model_provider`, the Harness as `resource_id`, action `set` or `delete`, `project_id` null) without the key. A default sealed under another encryption key fails closed: reading it, and Session creation that needs it, return 500 `internal_error` until the default is set again.
+PUT requires `model` and a complete `model_provider`; `harness_config` defaults to `{}`. Reads return `model`, `harness_config`, the safe `model_provider` view (`protocol`, `base_url`, optional token limits and `api_key_configured`), observations and `updated_at`, never the key. Only the provider key is encrypted, with its own purpose and bound to the Harness; the other fields are plain columns. Each write records an administrator audit entry (`resource_type: deployment_model_provider`, the Harness as `resource_id`, action `set` or `delete`, `project_id` null) without the key. A default sealed under another encryption key fails closed: reading it, and Session creation that needs it, return 500 `internal_error` until the default is set again.
 
 Session creation decrypts the default of the resolved Harness and freezes it in the Session's encrypted snapshot like any other bundle, so changing or removing the default never reaches existing Sessions. The execution-configuration read shows the frozen safe view with source `deployment`. A missing or invalid provider snapshot fails closed, with no fallback to another model or provider.
 

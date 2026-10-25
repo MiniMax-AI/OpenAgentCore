@@ -48,7 +48,7 @@ func (r *Registry) Build(config sandbox.NodeConfig, options sandbox.LocalOptions
 	if config.Specification.Workspace != nil && options.Workspace == nil {
 		return nil, closeProvider, sandbox.ErrInvalid
 	}
-	if err := adapter.ValidateSpecification(config.Specification); err != nil {
+	if err := config.Specification.ValidatePolicy(config.Provider, adapter.Policy); err != nil {
 		return nil, closeProvider, err
 	}
 	id, err := uuid.Parse(config.InstallationID)

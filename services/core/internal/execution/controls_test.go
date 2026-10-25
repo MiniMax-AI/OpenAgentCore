@@ -10,7 +10,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/harnesstest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -86,7 +85,7 @@ func TestExecutionControlsCarryOnlyOfficialValues(t *testing.T) {
 			snapshot := Snapshot{Agent: tc.agent}
 			before, _ := json.Marshal(snapshot)
 			for _, nativeID := range []string{"", "native-session"} {
-				request, err := (&Dispatcher{}).executionRequest(t.Context(), sessions.Session{ID: "session"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{NativeSessionID: nativeID})
+				request, err := (&Dispatcher{}).executionRequest(t.Context(), sessions.Session{ID: "session"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{NativeSessionID: nativeID})
 				if err != nil || !reflect.DeepEqual(*request.ExecutionControls, tc.want) || request.AgentSessionID != nativeID {
 					t.Fatalf("%+v %v", request.ExecutionControls, err)
 				}

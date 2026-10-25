@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/google/uuid"
@@ -148,7 +147,7 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 		t.Run(environment, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.RequireExistingNativeSession = true
-			cwd, err := allocCodexHome(testStateRoot(t), req.AgentStateKey)
+			cwd, err := allocSessionDir(testStateRoot(t), req.AgentStateKey)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -158,7 +157,7 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 					t.Fatal(err)
 				}
 				req.DisableExecutionEnvironment = false
-				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}, WorkspaceRoot: cwd}
+				req.LocalEnvironment = &proto.LocalEnvironment{ID: uuid.NewString(), WorkspaceDirectory: "/workspace", CapabilitySources: &proto.CapabilitySources{}, WorkspaceRoot: cwd}
 			}
 			e, err := testExecutor(t, "complete", req, cfg)
 			if err != nil {

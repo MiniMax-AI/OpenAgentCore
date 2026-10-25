@@ -174,7 +174,7 @@ func TestPublicMCPHTTPPreparationChecksBeforeNewAndResumedThread(t *testing.T) {
 				t.Fatal(err)
 			}
 			assertPreparationOnly(t, root)
-			home, err := allocCodexHome(testStateRoot(t), req.AgentStateKey)
+			home, err := allocSessionDir(testStateRoot(t), req.AgentStateKey)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -9,8 +9,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
@@ -289,7 +290,7 @@ func TestSkillsAndPluginsSealedAndPreserved(t *testing.T) {
 	ctx := t.Context()
 	setup := environmentconfig.Setup{
 		Skills:                []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "inline", Name: "proof", Description: "A proof."}, Archive: archive(t, map[string]string{"proof/SKILL.md": "---\nname: proof\ndescription: A proof.\n---\nskill-private-canary"})}},
-		Plugins:               []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin-proof", Description: "A proof."}, Archive: archive(t, map[string]string{"proof/.codex-plugin/plugin.json": `{"name":"plugin-proof","description":"A proof.","skills":"./skills"}`, "proof/skills/proof/SKILL.md": "---\nname: proof\ndescription: A proof.\n---\nplugin-private-canary"})}},
+		Plugins:               []environmentconfig.Plugin{{Metadata: proto.PluginMetadata{Type: "inline", Name: "plugin-proof", Description: "A proof."}, Archive: archive(t, map[string]string{"proof/.codex-plugin/plugin.json": `{"name":"plugin-proof","description":"A proof.","skills":"./skills"}`, "proof/skills/proof/SKILL.md": "---\nname: proof\ndescription: A proof.\n---\nplugin-private-canary"})}},
 		CapabilityDirectories: []string{"/workspace/generated"},
 	}
 	tenant, foreign := uuid.NewString(), uuid.NewString()

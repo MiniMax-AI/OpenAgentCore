@@ -18,7 +18,7 @@ func TestRuntimeProtocolUnknownEffectRetainsObservationFailure(t *testing.T) {
 			writer := &recoveringWriter{}
 			j := journal{writer: writer, next: 1}
 			events := make(chan proto.Envelope, 1)
-			usage, err := proto.NewEnvelope(proto.TypeUsage, "run", proto.Usage{InputTokens: 7})
+			usage, err := proto.NewEnvelope(proto.TypeUsage, "run", proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -43,7 +43,7 @@ func TestRuntimeProtocolUnknownEffectRetainsObservationFailure(t *testing.T) {
 				t.Fatal(err)
 			}
 			if persisted.ErrorCode != reason || persisted.EngineErrorCode != "" || persisted.EngineHTTPStatus != nil ||
-				persisted.Done.SourceCompletedAtMS != nil || persisted.Done.Usage.InputTokens != 7 || persisted.AppliedThrough != 1 {
+				persisted.Done.SourceCompletedAtMS != nil || persisted.Done.Usage.Tokens.InputTokens != 7 || persisted.AppliedThrough != 1 {
 				t.Fatalf("unknown result changed into native terminal evidence: %+v", persisted)
 			}
 			if len(writer.events) != 1 || writer.events[0].Kind != proto.TypeUsage {

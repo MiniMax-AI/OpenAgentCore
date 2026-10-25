@@ -12,15 +12,13 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/google/uuid"
 )
 
 func skillPreparation() proto.RuntimePreparePayload {
 	return proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "skill",
-		Skill: &agentskill.Metadata{Type: "inline", Name: "example", Description: "Example"}}
+		Skill: &proto.SkillMetadata{Type: "inline", Name: "example", Description: "Example"}}
 }
 
 type capabilityOutcome struct {
@@ -67,7 +65,7 @@ func noCapabilityFrame(t *testing.T, s *Session) {
 }
 
 func TestCapabilitiesTransfersMoreThanFrameLimitAndCorrelates(t *testing.T) {
-	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 	defer s.Close("test")
 	data := bytes.Repeat([]byte{0, 255, 3}, 2<<20)
 	id := uuid.NewString()
@@ -115,9 +113,9 @@ func TestCapabilitiesTransfersMoreThanFrameLimitAndCorrelates(t *testing.T) {
 }
 
 func TestCapabilitiesFinalizeTransfersNoArchive(t *testing.T) {
-	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 	defer s.Close("test")
-	request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &agentcapabilities.Input{}}
+	request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "finalize", Sources: &proto.CapabilitySources{}}
 	id := uuid.NewString()
 	done := beginCapabilities(s, t.Context(), id, request, nil)
 	env := nextCapabilityFrame(t, s)
@@ -137,12 +135,12 @@ func TestCapabilitiesFinalizeTransfersNoArchive(t *testing.T) {
 }
 
 func TestCapabilitiesRefusesConflictingArchiveBeforeSending(t *testing.T) {
-	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 	defer s.Close("test")
 	for _, mutate := range []func(*proto.RuntimePreparePayload){
 		func(p *proto.RuntimePreparePayload) { p.SHA256 = "incorrect" },
 		func(p *proto.RuntimePreparePayload) { p.SizeBytes = 999 },
-		func(p *proto.RuntimePreparePayload) { p.Sources = &agentcapabilities.Input{} },
+		func(p *proto.RuntimePreparePayload) { p.Sources = &proto.CapabilitySources{} },
 	} {
 		request := skillPreparation()
 		mutate(&request)
@@ -163,7 +161,7 @@ func TestCapabilitiesStopsAtTerminalOrMalformedReceipt(t *testing.T) {
 		"unsafe code":         {Outcome: "rejected", ErrorCode: "private detail"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
 			id := uuid.NewString()
 			done := beginCapabilities(s, t.Context(), id, skillPreparation(), []byte("data"))
@@ -183,7 +181,7 @@ func TestCapabilitiesStopsAtTerminalOrMalformedReceipt(t *testing.T) {
 }
 
 func TestCapabilitiesRejectsWrongChunkReceipt(t *testing.T) {
-	s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+	s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 	defer s.Close("test")
 	id := uuid.NewString()
 	done := beginCapabilities(s, t.Context(), id, skillPreparation(), []byte("data"))
@@ -201,7 +199,7 @@ func TestCapabilitiesRejectsWrongChunkReceipt(t *testing.T) {
 func TestCapabilitiesConnectionOwnershipAndUnknownInterruption(t *testing.T) {
 	for _, closeConnection := range []bool{false, true} {
 		t.Run(map[bool]string{false: "deadline", true: "disconnect"}[closeConnection], func(t *testing.T) {
-			s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
 			ctx, cancel := context.WithTimeout(t.Context(), 150*time.Millisecond)
 			defer cancel()
@@ -238,7 +236,7 @@ func TestCapabilitiesConnectionOwnershipAndUnknownInterruption(t *testing.T) {
 func TestRuntimeInitialFileChunking(t *testing.T) {
 	for _, size := range []int{0, (4 << 20) + 1} {
 		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
 			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "file", File: &proto.RuntimeInitialFile{Path: "/workspace/project/file"}}
 			data := bytes.Repeat([]byte("z"), size)
@@ -288,7 +286,7 @@ func TestRuntimeInitialFileChunking(t *testing.T) {
 func TestRuntimeInitializationNoDataAndExitReceipt(t *testing.T) {
 	for _, exit := range []int{0, 42, 256} {
 		t.Run(fmt.Sprint(exit), func(t *testing.T) {
-			s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
 			request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: "echo test"}}
 			if _, err := s.PrepareRuntime(t.Context(), uuid.NewString(), request, []byte("forbidden")); err == nil {
@@ -333,7 +331,7 @@ func TestRuntimePreparationSeparatesTransferAndApplyBudgets(t *testing.T) {
 	for _, commit := range []bool{false, true} {
 		t.Run(fmt.Sprint(commit), func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+				s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 				defer s.Close("test")
 				request := proto.RuntimePreparePayload{BudgetMS: 300000, EnvironmentID: uuid.NewString(), SessionID: uuid.NewString(), Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "configure"}}
 				id := uuid.NewString()
@@ -374,7 +372,7 @@ func TestRuntimePreparationSeparatesTransferAndApplyBudgets(t *testing.T) {
 func TestRuntimePreparationCommittedApplyStopsWaitingOnDisconnectOrCallerDeadline(t *testing.T) {
 	for _, disconnect := range []bool{false, true} {
 		t.Run(fmt.Sprint(disconnect), func(t *testing.T) {
-			s := newTestSession(newFakeConn(), "device", "tenant", "test", nil, nil)
+			s := newTestSession(newFakeConn(), "device", "test", nil, nil)
 			defer s.Close("test")
 			ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 			defer cancel()

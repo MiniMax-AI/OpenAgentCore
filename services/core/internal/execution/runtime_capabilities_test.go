@@ -8,7 +8,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
@@ -29,7 +28,7 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 	archive := []byte("opaque archive bytes must be expanded only by Runtime")
 	setup := environmentconfig.Setup{
 		Skills:                []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "private-reference", Version: "1", Name: "example", Description: "Safe description"}, Archive: archive}},
-		Plugins:               []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "Safe plugin"}, Archive: archive}},
+		Plugins:               []environmentconfig.Plugin{{Metadata: proto.PluginMetadata{Type: "inline", Name: "plugin", Description: "Safe plugin"}, Archive: archive}},
 		Commands:              []environmentconfig.SetupCommand{{Command: "prepare directory"}},
 		CapabilityDirectories: []string{"/workspace/generated"},
 	}
@@ -40,7 +39,7 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 	owner := agentcapabilities.Identity{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString()}
 	for _, op := range operations {
 		peer := &capabilityFixture{outcome: "completed"}
-		if err := runRuntimeSetup(initializationTestContext(t), peer, owner, op); err != nil {
+		if _, err := runRuntimeSetup(initializationTestContext(t), peer, owner, op); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := uuid.Parse(peer.requestID); err != nil {
@@ -64,14 +63,14 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 func TestRuntimeCapabilitiesConfirmedAndUnknownFailures(t *testing.T) {
 	for _, outcome := range []string{"failed", "rejected", "unknown", "unexpected"} {
 		peer := &capabilityFixture{outcome: outcome}
-		err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "finalize"}})
+		_, err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "finalize"}})
 		var confirmed *runtimeStepFailure
 		if err == nil || errors.As(err, &confirmed) != (outcome == "failed" || outcome == "rejected") {
 			t.Fatal(outcome, err)
 		}
 	}
 	peer := &capabilityFixture{outcome: "completed", err: errors.New(setupCanary)}
-	err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{}})
+	_, err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{}})
 	if err == nil || bytes.Contains([]byte(err.Error()), []byte(setupCanary)) {
 		t.Fatal("transport error leaked or succeeded", err)
 	}

@@ -102,8 +102,6 @@ type Control interface {
 	// Declaration.CapacityQuota; the object's allocated bytes and inodes are then
 	// bounded by it before Create returns, and a retry verifies that bound.
 	Create(ctx context.Context, reference Reference, capacityMiB uint32) (Attachment, error)
-	// Observe returns ErrNotFound for absence, which does not settle a mutation.
-	Observe(context.Context, Reference) (Attachment, error)
 	// Delete retries and concurrent calls for the same Reference converge on
 	// terminal deletion. Concurrent or late Create cannot resurrect the object.
 	Delete(context.Context, Reference) error

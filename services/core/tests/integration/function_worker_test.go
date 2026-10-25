@@ -54,7 +54,7 @@ func TestWorkerWaitsForToolCapabilities(t *testing.T) {
 				for {
 					peer, _ := h.registry.LookupDevice(h.device.ID)
 					info, _, _ := peer.AgentKindStatus("codex")
-					if info.Capabilities.Preparation == caps.Preparation.IsSupported() && info.Capabilities.DurableInputReceipts == caps.DurableInputReceipts.IsSupported() && info.Capabilities.ExecutionControls == caps.ExecutionControls.IsSupported() && info.Capabilities.FunctionTools == caps.FunctionTools.IsSupported() && info.Capabilities.ToolObservations == caps.ToolObservations.IsSupported() && info.Capabilities.MCPHTTPTools == caps.MCPHTTPTools.IsSupported() && info.Capabilities.MCPHTTPBearerAuth == caps.MCPHTTPBearerAuth.IsSupported() && info.Capabilities.MCPHTTPRequired == caps.MCPHTTPRequired.IsSupported() {
+					if info.Capabilities.Preparation.IsSupported() == caps.Preparation.IsSupported() && info.Capabilities.DurableInputReceipts.IsSupported() == caps.DurableInputReceipts.IsSupported() && info.Capabilities.ExecutionControls.IsSupported() == caps.ExecutionControls.IsSupported() && info.Capabilities.FunctionTools.IsSupported() == caps.FunctionTools.IsSupported() && info.Capabilities.ToolObservations.IsSupported() == caps.ToolObservations.IsSupported() && info.Capabilities.MCPHTTPTools.IsSupported() == caps.MCPHTTPTools.IsSupported() && info.Capabilities.MCPHTTPBearerAuth.IsSupported() == caps.MCPHTTPBearerAuth.IsSupported() && info.Capabilities.MCPHTTPRequired.IsSupported() == caps.MCPHTTPRequired.IsSupported() {
 						break
 					}
 					if time.Now().After(deadline) {

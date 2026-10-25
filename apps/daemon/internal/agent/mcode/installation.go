@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/installroot"
+	declaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 	"path/filepath"
 	"runtime"
 )
 
 func Installation() agent.Installation {
-	return agent.Installation{AgentKind: "mcode", Version: SupportedVersion, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" },
+	return agent.Installation{AgentKind: declaration.Declaration.Kind, Version: SupportedVersion, Supported: func() bool { return runtime.GOOS == "linux" || runtime.GOOS == "darwin" },
 		Environment: func(dir, node string) map[string]string {
-			return map[string]string{"OAC_RUNTIME_MCODE_BIN": filepath.Join(dir, "native", "cli.js"), "OAC_RUNTIME_MCODE_NODE": node, "OAC_RUNTIME_MCODE_COMPANION": dir}
+			return map[string]string{binaryEnv: filepath.Join(dir, "native", "cli.js"), nodeEnv: node, companionEnv: dir}
 		},
 		Check: func(ctx context.Context, dir, node string, env []string) error {
 			got, err := installroot.Probe(ctx, node, []string{filepath.Join(dir, "native", "cli.js"), "--version"}, env, dir)

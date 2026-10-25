@@ -7,9 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"io"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -18,7 +19,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 7
+const ProtocolVersion = 9
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
@@ -48,35 +49,6 @@ type Health struct {
 	EffectiveCPUCores    *float64                   `json:"effective_cpu_cores"`
 	AvailableMemoryBytes *int64                     `json:"available_memory_bytes,omitempty"`
 	AvailableDiskBytes   *int64                     `json:"available_disk_bytes,omitempty"`
-}
-
-type EnrollmentRequest struct {
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	NodeID               string `json:"node_id"`
-	Credential           string `json:"credential"`
-	Name                 string `json:"name"`
-	Provider             string `json:"provider"`
-	BackendFingerprint   string `json:"backend_fingerprint"`
-	// The retained Core origin; Core refuses an enrollment whose address is not its public URL.
-	CoreURL string `json:"core_url"`
-	// The host measurements of Health. Core derives from them each limit the enrollment token leaves unset.
-	CPUCount           *int64   `json:"cpu_count,omitempty"`
-	EffectiveCPUCores  *float64 `json:"effective_cpu_cores,omitempty"`
-	TotalMemoryBytes   *int64   `json:"total_memory_bytes,omitempty"`
-	AvailableDiskBytes *int64   `json:"available_disk_bytes,omitempty"`
-}
-
-type EnrollmentResponse struct {
-	MaxActive            int    `json:"max_active"`
-	MaxRetained          int    `json:"max_retained"`
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	Connected            bool   `json:"connected,omitempty"`
-	ProviderReady        bool   `json:"provider_ready,omitempty"`
-	NodeID               string `json:"node_id"`
-	InstallationID       string `json:"installation_id"`
-	Provider             string `json:"provider"`
 }
 
 type request struct {
@@ -197,6 +169,8 @@ func errorCode(err error) string {
 		return "not_found"
 	case errors.Is(err, sandbox.ErrCommandUnconfirmed):
 		return "command_unconfirmed"
+	case errors.Is(err, sandbox.ErrCheckpointUnusable):
+		return "checkpoint_unusable"
 	default:
 		return "unconfirmed"
 	}
@@ -233,6 +207,8 @@ func responseError(out response) error {
 		return sandbox.ErrNotFound
 	case "command_unconfirmed":
 		return sandbox.ErrCommandUnconfirmed
+	case "checkpoint_unusable":
+		return sandbox.ErrCheckpointUnusable
 	default:
 		return sandbox.ErrComputeUnconfirmed
 	}
@@ -274,7 +250,7 @@ func (q request) validate() error {
 		if count == 0 || count == 1 && q.Snapshot != nil {
 			return nil
 		}
-	case "compute", "kill_compute", "resume_compute":
+	case "compute", "kill_compute", "resume_compute", "renew_compute":
 		if count == 1 && q.Compute != nil {
 			return nil
 		}
@@ -368,6 +344,9 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (respons
 			err = p.DeleteSnapshot(ctx, q.Reference, *q.Snapshot)
 		case "resume_compute":
 			state, err = p.ResumeCompute(ctx, q.Reference, *q.Compute)
+			out.State = &state
+		case "renew_compute":
+			state, err = p.RenewCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
 		case "command_compute":
 			command, err = p.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)

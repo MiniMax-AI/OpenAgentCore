@@ -79,7 +79,7 @@ func (q *Queries) EnrollRuntimeDevice(ctx context.Context, arg EnrollRuntimeDevi
 }
 
 const listEnrolledRuntimeBindings = `-- name: ListEnrolledRuntimeBindings :many
-SELECT d.id AS device_id, d.tenant_id, e.id AS environment_id, e.session_id
+SELECT d.id AS device_id, d.tenant_id, e.id AS environment_id
 FROM devices d
 JOIN environments e ON e.id = d.environment_id
 JOIN sessions s ON s.id = e.session_id AND s.tenant_id = d.tenant_id
@@ -92,7 +92,6 @@ type ListEnrolledRuntimeBindingsRow struct {
 	DeviceID      pgtype.UUID `json:"device_id"`
 	TenantID      pgtype.UUID `json:"tenant_id"`
 	EnvironmentID pgtype.UUID `json:"environment_id"`
-	SessionID     pgtype.UUID `json:"session_id"`
 }
 
 func (q *Queries) ListEnrolledRuntimeBindings(ctx context.Context) ([]ListEnrolledRuntimeBindingsRow, error) {
@@ -104,12 +103,7 @@ func (q *Queries) ListEnrolledRuntimeBindings(ctx context.Context) ([]ListEnroll
 	items := []ListEnrolledRuntimeBindingsRow{}
 	for rows.Next() {
 		var i ListEnrolledRuntimeBindingsRow
-		if err := rows.Scan(
-			&i.DeviceID,
-			&i.TenantID,
-			&i.EnvironmentID,
-			&i.SessionID,
-		); err != nil {
+		if err := rows.Scan(&i.DeviceID, &i.TenantID, &i.EnvironmentID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

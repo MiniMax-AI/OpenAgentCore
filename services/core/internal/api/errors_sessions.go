@@ -8,13 +8,17 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
 // writeInputError reports Session input admission failures. Input that the
 // Session cannot accept in its current state is the official conflict_error;
 // Idempotency-Key reuse keeps Core's local idempotency_conflict code.
 func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
+	var selection *vaults.MCPCredentialSelectionError
 	switch {
+	case errors.As(err, &selection):
+		writeVaultsError(w, r, err)
 	case errors.Is(err, sessions.ErrInputPending):
 		writeError(w, http.StatusConflict, "conflict_error", "Earlier input to this Session is still pending.")
 	case errors.Is(err, sessions.ErrTurnConflict):
@@ -29,6 +33,7 @@ func writeInputError(w http.ResponseWriter, r *http.Request, err error) {
 // and Environment configuration checks they perform.
 func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 	var cursor *sessions.CursorError
+	var unknownCall *sessions.UnknownFunctionCallError
 	switch {
 	case errors.Is(err, projects.ErrArchived):
 		// Executor credential management checks the Project in its own
@@ -61,8 +66,9 @@ func writeSessionsError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, sessions.ErrNotIdle):
 		// Observed official status, type, code, null param and message.
 		writeError(w, http.StatusConflict, "conflict_error", "session must be durably idle or failed without required actions before deletion")
-	case errors.Is(err, sessions.ErrUnknownFunctionCall):
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "Unknown pending tool call.")
+	case errors.As(err, &unknownCall):
+		// The official SDK recognizes a lost race by this exact message.
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "Unknown pending tool call: "+unknownCall.CallID)
 	case errors.Is(err, sessions.ErrFunctionCallTurnMismatch):
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "The tool call belongs to a different Turn.")
 	case errors.Is(err, sessions.ErrFunctionResultConflict):

@@ -1,8 +1,9 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AgentCoreError, OpenAIAgentsClient } from "./client";
-import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, sandboxNodeDiagnostics, type SandboxNode } from "./sandbox-client";
+import { SandboxAdminClient, normalizeSandboxNodeDiagnostic, type SandboxNode } from "./sandbox-client";
 
 import { deploymentContract } from "./deployment-contract";
+import { nodeDiagnosticCodeValues } from "./generated/core-api";
 import nodeDiagnosticFixture from "../../../services/core/internal/sandbox/testdata/node-diagnostics.json";
 
 function response(value: unknown, status = 200) { return new Response(JSON.stringify(value), { status }); }
@@ -43,11 +44,11 @@ const allocation = {
   state: "running", compute_phase: "running", compute_phase_changed_at: null, diagnostic: "", initialization: "ready", created_at: created,
 };
 const unconfigured = {
-  credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
+  credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, suspension: null };
 const docker = {
   configuration: {}, metadata: {},
   ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
-  resources: { allocations: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, specification_digest: "0".repeat(64),
+  resources: { allocations: 2, running: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, specification_digest: "0".repeat(64),
 };
 const microsandbox = {
   ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 } },
@@ -121,24 +122,25 @@ describe("strict sandbox administration projections", () => {
 });
 
 describe("Core sandbox credential boundaries", () => {
-  it("uses Core-key routes for transient template discovery and projects safe fields", async () => {
+  it("uses a Core-key route for transient discovery and projects safe fields", async () => {
+    const build = { value: "tpl_123:00000000-0000-0000-0000-000000000001", label: "00000000-0000-0000-0000-000000000001", resources: { cpus: 2, memory_mib: 2048 }, complete: true };
     const fetch = vi.fn<typeof globalThis.fetch>()
-      .mockResolvedValueOnce(response({ templates: [{ id: "tpl_123", names: ["runtime"] }] }))
-      .mockResolvedValueOnce(response({ builds: [{ id: "00000000-0000-0000-0000-000000000001", cpus: 2, memory_mib: 2048 }] }));
+      .mockResolvedValueOnce(response({ options: [{ value: "tpl_123", label: "runtime", complete: false }] }))
+      .mockResolvedValueOnce(response({ options: [build] }));
     const client = new SandboxAdminClient({ fetch });
-    const input = { api_key: "private-test-key", api_url: "https://sandbox.sandbase.ai", domain: "sandbox.sandbase.ai" };
-    expect(await client.listE2BTemplates(input)).toHaveLength(1);
-    expect(await client.listE2BReadyBuilds("tpl_123", input)).toHaveLength(1);
+    const input = { configuration: { api_url: "https://sandbox.sandbase.ai" }, credential: { api_key: "private-test-key" }, query: { field: "template", path: [] as string[] } };
+    expect(await client.discoverConfiguration("e2b", input)).toHaveLength(1);
+    expect(await client.discoverConfiguration("e2b", { ...input, query: { field: "template", path: ["tpl_123"] } })).toEqual([build]);
     expect(fetch.mock.calls.map(([url]) => url)).toEqual(["/core/v1/sandbox/providers/e2b/discovery", "/core/v1/sandbox/providers/e2b/discovery"]);
     expect(fetch.mock.calls.every(([, init]) => init?.method === "POST" && !new Headers(init?.headers).has("Authorization") && String(init?.body).includes("private-test-key"))).toBe(true);
   });
 
   it("rejects extra fields in credentialed discovery responses", async () => {
-    const input = { api_key: "private-test-key" };
-    const templates = new SandboxAdminClient({ fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ templates: [], builds: [] })) });
-    const builds = new SandboxAdminClient({ fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ builds: [], templates: [] })) });
-    await expect(templates.listE2BTemplates(input)).rejects.toMatchObject({ code: "invalid_admin_response" });
-    await expect(builds.listE2BReadyBuilds("tpl_123", input)).rejects.toMatchObject({ code: "invalid_admin_response" });
+    const input = { configuration: {}, credential: { api_key: "private-test-key" }, query: { field: "template", path: [] as string[] } };
+    for (const body of [{ options: [], templates: [] }, { options: [{ value: "a", label: "a", complete: false, id: "a" }] }, { options: [{ value: "a", label: "a" }] }]) {
+      const client = new SandboxAdminClient({ fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(body)) });
+      await expect(client.discoverConfiguration("e2b", input)).rejects.toMatchObject({ code: "invalid_admin_response" });
+    }
   });
 
   it("defaults to /core/v1/sandbox and is not a /v1 client", async () => {
@@ -252,7 +254,7 @@ describe("hosted provider configuration", () => {
   const e2b = { api_key: "test-only-secret", template: "runtime:00000000-0000-0000-0000-000000000001" };
   it("writes E2B configuration and generation without beta headers or browser credentials", async () => {
     const deployment = {
-      ...e2bDeployment, generation: 2, resources: { allocations: 0, pending: 0 },
+      ...e2bDeployment, generation: 2, resources: { allocations: 0, running: 0, pending: 0 },
       configuration: { template: e2b.template, api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 24063 } } },
     };
     const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async () => response(deployment));
@@ -284,7 +286,7 @@ describe("hosted provider configuration", () => {
     expect(fetch).toHaveBeenCalledTimes(2);
   });
   it("projects public-URL rejection to fixed copy even when the upstream message reflects a key", async () => {
-    const rejection = { message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null, type: "reflected" };
+    const rejection = { message: "This sandbox provider reaches Core over the internet. Set an HTTPS public URL that is not loopback.", code: "sandbox_configuration_error", param: null, type: "reflected" };
     const fetch = vi.fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(response({ error: rejection }, 409))
       .mockResolvedValueOnce(response({ error: { ...rejection, message: rejection.message + e2b.api_key } }, 409));
@@ -396,7 +398,7 @@ it("keeps omitted-key public-URL errors actionable without reflecting a stored k
   const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_configuration_error", message: `arbitrary upstream ${secret}`, param: secret, details: { credential: secret } } }, 409));
   const client = new SandboxAdminClient({ fetch });
   const error = await client.updateDeployment({ provider: "e2b", expected_generation: 1, configuration: { template: e2bDeployment.configuration.template } }).catch(error => error);
-  expect(error).toMatchObject({ status: 409, code: "sandbox_configuration_error", param: null, message: "E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback." });
+  expect(error).toMatchObject({ status: 409, code: "sandbox_configuration_error", param: null, message: "This sandbox provider reaches Core over the internet. Set an HTTPS public URL that is not loopback." });
   expect(JSON.stringify(error)).not.toContain(secret);
   expect(error.message).not.toContain(secret);
   expect(error.details).toBeUndefined();
@@ -417,7 +419,7 @@ it.each(["unknown", "preparing", "failed"])("does not erase old serving readines
 
 describe("shared node diagnostic contract", () => {
   it("checks the client declaration against the Go diagnostic fixture", () => {
-    expect([...sandboxNodeDiagnostics].sort()).toEqual([...nodeDiagnosticFixture].sort());
+    expect([...nodeDiagnosticCodeValues].sort()).toEqual([...nodeDiagnosticFixture].sort());
     expect(normalizeSandboxNodeDiagnostic("future_code")).toBe("provider_unavailable");
   });
   it.each(nodeDiagnosticFixture)("preserves %s through the rollout projection", async (diagnostic) => {

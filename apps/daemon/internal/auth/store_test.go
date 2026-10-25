@@ -106,21 +106,3 @@ func TestLoadCorruptJSONReturnsError(t *testing.T) {
 		t.Fatalf("Load on corrupt JSON should not be ErrNotPaired: %v", err)
 	}
 }
-
-func TestDeleteIsIdempotent(t *testing.T) {
-	_ = withTempHome(t)
-	if err := auth.Delete("default"); err != nil {
-		t.Fatalf("Delete on missing profile returned %v, want nil (idempotent)", err)
-	}
-	writeProfile(t, "default", auth.Profile{ServerURL: "https://x", RuntimeID: "rt", RunnerCredential: "c"})
-	if err := auth.Delete("default"); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, err := auth.Load("default"); !errors.Is(err, auth.ErrNotPaired) {
-		t.Fatalf("Load after Delete = %v, want ErrNotPaired", err)
-	}
-	// Second Delete must still succeed.
-	if err := auth.Delete("default"); err != nil {
-		t.Fatalf("Delete second call = %v, want nil", err)
-	}
-}

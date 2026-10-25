@@ -147,13 +147,6 @@ pre {
   letter-spacing: -0.01em;
 }
 
-.brand-product,
-.brand-lockup .brand-product {
-  color: var(--ink-3);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
 .console-nav .nav-label {
   padding: 14px 8px 6px;
   color: var(--ink-3);
@@ -258,7 +251,6 @@ pre {
   }
 
   .console-nav .nav-label,
-  .brand-product,
   .console-account-menu > button > span {
     display: none;
   }
@@ -525,7 +517,6 @@ pre {
 .field input,
 .field textarea,
 .field select,
-.select-control select,
 .search-control {
   min-height: var(--control-height);
   color: var(--ink);
@@ -556,7 +547,6 @@ pre {
 .field input:hover,
 .field textarea:hover,
 .field select:hover,
-.select-control select:hover,
 .search-control:hover {
   background-color: var(--hover-2);
 }
@@ -564,7 +554,6 @@ pre {
 .field input:focus,
 .field textarea:focus,
 .field select:focus,
-.select-control select:focus-visible,
 .search-control:focus-within {
   outline: none;
   background-color: var(--surface);
@@ -572,8 +561,7 @@ pre {
   box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint);
 }
 
-.field > span,
-.field > .field-label {
+.field > span {
   color: var(--ink-2);
   font-size: 12.5px;
   font-weight: 500;
@@ -581,35 +569,18 @@ pre {
 
 /* On the canvas (toolbars, headers) a control is a ringed white surface, like a
    secondary button; inside cards and dialogs it is a filled field. */
-.list-toolbar .search-control,
-.list-toolbar .select-control select,
-.page-header .select-control select,
-.console-section-header .select-control select {
+.list-toolbar .search-control {
   background-color: var(--surface);
   box-shadow: var(--shadow-btn);
 }
 
-.list-toolbar .search-control:hover,
-.list-toolbar .select-control select:hover,
-.page-header .select-control select:hover,
-.console-section-header .select-control select:hover {
+.list-toolbar .search-control:hover {
   background-color: var(--inset);
 }
 
-.list-toolbar .search-control:focus-within,
-.list-toolbar .select-control select:focus-visible,
-.page-header .select-control select:focus-visible,
-.console-section-header .select-control select:focus-visible {
+.list-toolbar .search-control:focus-within {
   background-color: var(--surface);
   box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-tint);
-}
-
-.select-control select {
-  height: var(--control-height);
-  padding: 0 30px 0 10px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='m1 1 4 4 4-4' stroke='%239096a2' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 11px center;
 }
 
 .search-control {
@@ -837,11 +808,6 @@ pre {
   border-radius: 999px;
   box-shadow: var(--shadow-hairline);
 }
-
-.pill-green { color: var(--green); background: var(--green-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--green) 28%, transparent); }
-.pill-orange { color: var(--orange); background: var(--orange-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--orange) 28%, transparent); }
-.pill-red { color: var(--red); background: var(--red-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--red) 28%, transparent); }
-.pill-accent { color: var(--accent-ink); background: var(--accent-tint); box-shadow: 0 0 0 1px color-mix(in oklch, var(--accent) 28%, transparent); }
 
 .meter {
   height: 5px;

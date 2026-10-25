@@ -2,6 +2,7 @@ package sessionpg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/google/uuid"
@@ -102,6 +103,21 @@ func (t *environmentTx) CompleteInitialization(ctx context.Context, environment 
 	}
 	count, err := t.q.CompleteEnvironmentInitialization(ctx, id)
 	return count == 1, err
+}
+
+func (t *environmentTx) RecordInitializationSteps(ctx context.Context, environment string, steps []sessions.InitializationStep) error {
+	id, err := parseID(environment)
+	if err != nil {
+		return err
+	}
+	if steps == nil {
+		steps = []sessions.InitializationStep{}
+	}
+	raw, err := json.Marshal(steps)
+	if err != nil {
+		return err
+	}
+	return t.q.RecordEnvironmentInitializationSteps(ctx, sqlc.RecordEnvironmentInitializationStepsParams{ID: id, Steps: raw})
 }
 
 func (t *environmentTx) FailInitialization(ctx context.Context, environment string) error {

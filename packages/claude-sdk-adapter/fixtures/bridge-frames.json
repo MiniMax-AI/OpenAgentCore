@@ -1,0 +1,87 @@
+{
+  "to_bridge": [
+    {
+      "type": "executor_prepare",
+      "model": "claude-fixture",
+      "system_prompt": "Answer briefly.",
+      "cwd": "/tmp",
+      "resume": "native-session",
+      "native_model_options": { "effort": "high", "thinking": { "type": "enabled", "budgetTokens": 2048, "display": "summarized" } },
+      "output_format": { "type": "json_schema", "schema": { "type": "object" } },
+      "subagents": { "max_concurrent": 2 },
+      "tool_search": true,
+      "reasoning_summary": true,
+      "web_search": "live",
+      "functions": [{ "name": "lookup", "description": "Look a value up.", "parameters": { "type": "object" }, "defer_loading": true }],
+      "mcp_http_servers": [{
+        "server_label": "docs",
+        "server_url": "https://example.com/mcp",
+        "allowed_tools": ["search"],
+        "required": true,
+        "bearer_token_env_var": "OAC_RUNTIME_MCP_BEARER_AAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "headers": { "x-fixture": "1" }
+      }]
+    },
+    {
+      "type": "executor_prepare",
+      "model": "claude-fixture",
+      "system_prompt": "",
+      "cwd": "/tmp",
+      "require_history": true,
+      "workspace": {
+        "tool_env": { "FIXTURE": "1" },
+        "capability_root": "/tmp",
+        "mcp": [{
+          "server_label": "local",
+          "command": "/usr/bin/runtime",
+          "args": ["runtime-mcp-exec", "/tmp", "mcp/local", "local"],
+          "allowed_tools": null
+        }, {
+          "server_label": "declared",
+          "command": "server",
+          "args": [],
+          "allowed_tools": null,
+          "declared": true
+        }],
+        "skills": [{ "metadata": { "type": "inline", "name": "fixture", "description": "A fixture skill." }, "relative_root": "skills/fixture", "package_root": "skills" }],
+        "home": "/tmp",
+        "state": "/tmp",
+        "scratch": "/tmp",
+        "env_names": ["ANTHROPIC_API_KEY"]
+      }
+    },
+    { "type": "turn_start", "turn_id": "run-1", "input": [{ "content": [{ "type": "input_text", "text": "Hello" }] }] },
+    { "type": "turn_cancel", "turn_id": "run-1" },
+    { "type": "steer", "turn_id": "run-1", "input_id": "input-1", "input": [{ "content": [{ "type": "input_text", "text": "Also this" }] }] },
+    { "type": "function_result", "turn_id": "run-1", "call_id": "call-1", "delivery_id": "delivery-1", "success": true, "content": [{ "type": "input_text", "text": "42" }] }
+  ],
+  "from_bridge": [
+    { "type": "executor_ready", "protocol": 3 },
+    { "type": "turn_started", "turn_id": "run-1" },
+    { "type": "turn_settled", "turn_id": "run-1", "confirmed": true, "reusable": false, "reason": "native_error" },
+    { "type": "input_ready", "turn_id": "run-1", "session_id": "native-session" },
+    { "type": "input_closed", "turn_id": "run-1", "session_id": "native-session" },
+    { "type": "input_applied", "turn_id": "run-1", "input_id": "input-1" },
+    { "type": "input_rejected", "turn_id": "run-1", "input_id": "input-1" },
+    { "type": "delta", "turn_id": "run-1", "item_id": "message-1", "delta": "Hi" },
+    { "type": "output_message", "turn_id": "run-1", "message": { "id": "message-1", "status": "completed", "text": "Hi" } },
+    { "type": "reasoning", "turn_id": "run-1", "reasoning": { "id": "message-1:0", "status": "in_progress", "delta": "Thinking" } },
+    { "type": "function_call", "turn_id": "run-1", "call": { "call_id": "call-1", "name": "lookup", "arguments": { "text": "x" }, "native_id": "child-1", "turn_id": "child-turn-1" } },
+    { "type": "function_withdrawn", "turn_id": "run-1", "withdrawn": { "call_id": "call-1", "native_id": "child-1", "turn_id": "child-turn-1" } },
+    { "type": "function_applied", "turn_id": "run-1", "call_id": "call-1", "delivery_id": "delivery-1" },
+    { "type": "command_observation", "turn_id": "run-1", "session_id": "native-session", "id": "tool-1", "stage": "after", "observation": { "kind": "command", "status": "completed", "command": "ls", "output": "a" } },
+    { "type": "search_observation", "turn_id": "run-1", "session_id": "native-session", "id": "tool-2", "stage": "before", "observation": { "kind": "web_search", "status": "in_progress", "action": { "type": "search", "query": "oac" } } },
+    { "type": "mcp_observation", "turn_id": "run-1", "id": "tool-3", "stage": "after", "observation": { "kind": "mcp", "status": "completed", "server": "docs", "name": "search", "arguments": {}, "output": "ok", "error": null } },
+    { "type": "subagent_identity", "turn_id": "run-1", "fact": { "native_id": "child-1" } },
+    { "type": "subagent_turn", "turn_id": "run-1", "fact": { "native_id": "child-1" } },
+    { "type": "subagent_item", "turn_id": "run-1", "fact": { "native_id": "child-1" } },
+    { "type": "subagent_coordination", "turn_id": "run-1", "fact": { "native_id": "child-1" } },
+    {
+      "type": "usage", "turn_id": "run-1", "session_id": "native-session", "result_id": "result-1",
+      "usage": { "usage": { "input_tokens": 1 }, "modelUsage": {}, "total_cost_usd": 0.01, "subtype": "success", "is_error": false,
+        "scopes": { "usage": "native_turn_main_loop", "modelUsage": "query_cumulative", "total_cost_usd": "query_cumulative_estimate" } }
+    },
+    { "type": "result", "turn_id": "run-1", "session_id": "native-session", "text": "Hi" },
+    { "type": "error", "turn_id": "run-1", "code": "execution_failed", "engine_error_code": "rate_limit", "session_id": "native-session", "result_id": "result-1" }
+  ]
+}

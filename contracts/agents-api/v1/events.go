@@ -21,8 +21,9 @@ func itemEvent(eventType string) bool {
 
 // MarshalJSON keeps the nullable top-level usage on terminal Turn events only,
 // a nullable output_index on every Item event (EVT-09), a nullable error param
-// on error events and a nullable turn_id on Environment events. Subagent events
-// carry no session_id; their Subagent names the Session.
+// on error events, a nullable status on reasoning summary part completions and
+// a nullable turn_id on Environment events. Subagent events carry no
+// session_id; their Subagent names the Session.
 func (e SessionEvent) MarshalJSON() ([]byte, error) {
 	type wire SessionEvent
 	switch {
@@ -43,6 +44,12 @@ func (e SessionEvent) MarshalJSON() ([]byte, error) {
 			wire
 			OutputIndex *int32 `json:"output_index"`
 		}{wire(e), e.OutputIndex})
+	case e.Type == "agent.session.turn.reasoning_summary_part.done":
+		e.Usage = nil
+		return json.Marshal(struct {
+			wire
+			Status *string `json:"status"`
+		}{wire(e), e.Status})
 	case strings.HasPrefix(e.Type, "agent.session.environment."):
 		e.Usage = nil
 		var turn *string

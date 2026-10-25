@@ -16,15 +16,14 @@ import (
 // Adapter describes configuration and transport independently of compute operations.
 // Native operation support comes from the adapter-owned complete declaration.
 type Adapter struct {
-	NodeArtifacts         []providerassets.Artifact
-	Policy                sandbox.DeploymentPolicy
-	Configuration         sandbox.ConfigurationAdapter
-	BuildLocal            func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error)
-	BuildDirect           func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
-	Mode                  sandbox.DeploymentMode
-	Operations            func() providercontract.Operations
-	ValidateSpecification func(sandbox.DeploymentSpec) error
-	ValidateResources     func(sandbox.Resources) error
+	NodeArtifacts []providerassets.Artifact
+	Policy        sandbox.DeploymentPolicy
+	Setup         sandbox.SetupDeclaration
+	Configuration sandbox.ConfigurationAdapter
+	BuildLocal    func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error)
+	BuildDirect   func(sandbox.DirectConfig) (sandbox.SandboxProvider, error)
+	Mode          sandbox.DeploymentMode
+	Operations    func() providercontract.Operations
 }
 
 // Registry holds the registered adapters. Core and the node program each build
@@ -39,20 +38,17 @@ func Builtin() *Registry {
 	return &Registry{adapters: map[string]Adapter{
 		"docker": {
 			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-			Policy:        docker.Policy(), Operations: docker.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: docker.BuildNode,
-			ValidateSpecification: docker.ValidateSpecification, ValidateResources: docker.ValidateResources,
-			Configuration: nodeConfigurationAdapter{docker.ValidateSpecification},
+			Policy:        docker.Policy(), Setup: docker.Setup(), Operations: docker.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: docker.BuildNode,
+			Configuration: nodeConfigurationAdapter{"docker", docker.Policy()},
 		},
 		"microsandbox": {
 			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...),
-			Policy:        microsandbox.Policy(), Operations: microsandbox.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: microsandbox.BuildNode,
-			ValidateSpecification: microsandbox.ValidateSpecification, ValidateResources: microsandbox.ValidateResources,
-			Configuration: nodeConfigurationAdapter{microsandbox.ValidateSpecification},
+			Policy:        microsandbox.Policy(), Setup: microsandbox.Setup(), Operations: microsandbox.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: microsandbox.BuildNode,
+			Configuration: nodeConfigurationAdapter{"microsandbox", microsandbox.Policy()},
 		},
 		"e2b": {
-			Policy: e2b.Policy(), Operations: e2b.Operations, Mode: sandbox.DeploymentDirect, BuildDirect: e2b.BuildDirect,
-			Configuration:         e2b.ConfigurationAdapter{},
-			ValidateSpecification: e2b.ValidateSpecification, ValidateResources: e2b.ValidateResources,
+			Policy: e2b.Policy(), Setup: e2b.Setup(), Operations: e2b.Operations, Mode: sandbox.DeploymentDirect, BuildDirect: e2b.BuildDirect,
+			Configuration: e2b.ConfigurationAdapter{},
 		},
 	}}
 }
@@ -94,7 +90,7 @@ func (r *Registry) SupportsCheckpoint(kind string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return a.Operations()["Initial"].State == providercontract.Supported, nil
+	return sandbox.SupportsCheckpoint(a.Operations()), nil
 }
 
 // RetainedLimit keeps nodes without checkpoint support within their active capacity.
@@ -103,7 +99,7 @@ func (r *Registry) RetainedLimit(kind string, active, retained int) (int, error)
 	if err != nil {
 		return 0, err
 	}
-	if a.Mode == sandbox.DeploymentNodes && a.Operations()["Initial"].State != providercontract.Supported {
+	if a.Mode == sandbox.DeploymentNodes && !sandbox.SupportsCheckpoint(a.Operations()) {
 		return active, nil
 	}
 	return retained, nil
@@ -114,14 +110,7 @@ func (r *Registry) ValidateSpecification(kind string, s sandbox.DeploymentSpec) 
 	if e != nil {
 		return e
 	}
-	return a.ValidateSpecification(s)
-}
-func (r *Registry) ValidateResources(kind string, s sandbox.Resources) error {
-	a, e := r.Lookup(kind)
-	if e != nil {
-		return e
-	}
-	return a.ValidateResources(s)
+	return s.ValidatePolicy(kind, a.Policy)
 }
 
 // Describe derives the description once for both preview and persistence.
@@ -138,18 +127,37 @@ func (r *Registry) Describe(kind, installation string) (sandbox.Description, err
 	return sandbox.Description{Mode: a.Mode, BackendFingerprint: sandbox.BackendFingerprint(kind, namespace+":"+installation)}, nil
 }
 
-// DeploymentContract projects the registered modes and policies into the node
-// installer and the TypeScript client; no second provider list exists in
-// another language.
+// DeploymentContract projects the registered modes, policies and setup
+// declarations into the node installer and the TypeScript client; no second
+// provider list exists in another language. At most one Provider per mode is
+// recommended.
 func (r *Registry) DeploymentContract() (python, typescript string, err error) {
 	providers := make(map[string]sandbox.ProviderProjection, len(r.adapters))
+	recommended := map[sandbox.DeploymentMode]bool{}
 	for kind := range r.adapters {
 		a, err := r.Lookup(kind)
 		if err != nil {
 			return "", "", err
 		}
-		providers[kind] = sandbox.ProviderProjection{Mode: a.Mode, DeploymentPolicy: a.Policy}
+		if a.Setup.Recommended {
+			if recommended[a.Mode] {
+				return "", "", fmt.Errorf("%w: several recommended %s providers", providercontract.ErrContract, a.Mode)
+			}
+			recommended[a.Mode] = true
+		}
+		requirements := a.Configuration.Requirements()
+		setup := a.Setup
+		setup.Cautions, setup.Fields, setup.Presets = nonNil(setup.Cautions), nonNil(setup.Fields), nonNil(setup.Presets)
+		providers[kind] = sandbox.ProviderProjection{Mode: a.Mode, DeploymentPolicy: a.Policy, Setup: &sandbox.ProviderSetup{SetupDeclaration: setup,
+			Credential: requirements.Credential, PublicOrigin: requirements.PublicOrigin, Discovery: requirements.Discovery.State == providercontract.Supported}}
 	}
 	python, typescript = sandbox.DeploymentContract(providers)
 	return python, typescript, nil
+}
+
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
 }

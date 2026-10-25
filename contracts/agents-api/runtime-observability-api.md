@@ -49,12 +49,6 @@ The list has one row for every Session of every Project that is not deleted, inc
         "resolved_at": 1789953021,
         "observed_at": 1789953020,
         "started_at": 1789951220,
-        "cpu": {
-          "usage_seconds_total": 482.75,
-          "capacity_cores": 2.0,
-          "usage_cores": null,
-          "utilization_ratio": null
-        },
         "memory": {
           "usage_bytes": 805306368,
           "limit_bytes": 2147483648
@@ -96,7 +90,6 @@ This returns one `RuntimeObservation`, without `disk`. It accepts no query param
 | `resolved_at` | integer | Unix seconds when Core resolved this row. |
 | `observed_at` | integer or null | Unix seconds of the provider sample; null without a sample. |
 | `started_at` | integer or null | Unix seconds when the current compute incarnation started. |
-| `cpu` | object or null | Null when no CPU value was observed. |
 | `memory` | object or null | Null when no memory value was observed. |
 
 `lifecycle_state` comes from Core's allocation records, never from the sample:
@@ -117,17 +110,6 @@ This returns one `RuntimeObservation`, without `disk`. It accepts no query param
 | `allocation_id` | The managed allocation, which identifies the compute of a managed Session; null otherwise. |
 | `device_id` | The Runtime device bound to the managed allocation, when there is one; null otherwise. |
 | `connection_generation` | Always null: Core does not observe self-hosted connections. |
-
-### `cpu`
-
-All fields are finite nonnegative numbers or null. Zero is an observed zero; null is unavailable.
-
-| Field | Meaning |
-| --- | --- |
-| `usage_seconds_total` | Cumulative CPU seconds of the current compute incarnation (Docker, microsandbox). |
-| `capacity_cores` | Configured CPU capacity, greater than zero. |
-| `usage_cores` | Always null. |
-| `utilization_ratio` | Provider-reported share of `capacity_cores` (E2B), not clamped; null for providers that report cumulative CPU time. |
 
 ### `memory`
 

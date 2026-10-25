@@ -15,8 +15,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
-var _ sessions.SubagentReader = (*Store)(nil)
-
 func (s *Store) GetSubagent(ctx context.Context, tenantID, sessionID, subagentID string) (v1.Subagent, error) {
 	var result v1.Subagent
 	err := s.withPublicSession(ctx, tenantID, sessionID, func(ctx context.Context, q *sqlc.Queries, session pgtype.UUID) error {

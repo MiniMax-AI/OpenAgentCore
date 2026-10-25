@@ -1,7 +1,5 @@
 package dispatch_test
 
-import "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
-
 import (
 	"context"
 	"errors"
@@ -14,9 +12,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/dispatch"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 )
 
 type controlledPreparation struct {
@@ -74,22 +72,18 @@ func (p *controlledPreparation) CancellationOutcome() proto.DonePayload {
 const preparationEnvironmentID = "11111111-1111-4111-8111-111111111111"
 const preparationSessionID = "22222222-2222-4222-8222-222222222222"
 
+// preparationDirectories are the workspace and capability directories of the latest preparationWorkspace binding.
+var preparationDirectories struct{ workspace, capabilities string }
+
 func preparationWorkspace(t *testing.T) *localworkspace.Binding {
 	t.Helper()
 	runtimeHome := t.TempDir()
 	if err := os.Chmod(runtimeHome, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	for name, value := range map[string]string{
-		"OAC_RUNTIME_ENVIRONMENT_ID":       preparationEnvironmentID,
-		"OAC_RUNTIME_SESSION_ID":           preparationSessionID,
-		"OAC_RUNTIME_WORKSPACE":            t.TempDir(),
-		"OAC_RUNTIME_CAPABILITY_DIRECTORY": t.TempDir(),
-		"OAC_RUNTIME_HOME":                 runtimeHome,
-	} {
-		t.Setenv(name, value)
-	}
-	binding, err := localworkspace.Load()
+	t.Setenv("OAC_RUNTIME_HOME", runtimeHome)
+	preparationDirectories.workspace, preparationDirectories.capabilities = t.TempDir(), t.TempDir()
+	binding, err := localworkspace.NewWithCapabilityDirectory(preparationEnvironmentID, preparationSessionID, preparationDirectories.workspace, preparationDirectories.capabilities)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +105,7 @@ func localPreparationHarness(t *testing.T) *harness {
 }
 
 func preparationRequest() proto.ExecutionPreparePayload {
-	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: preparationSessionID, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}}
+	return proto.ExecutionPreparePayload{SessionID: preparationSessionID, Configuration: proto.PromptRequestPayload{AgentKind: "prepared", AgentStateKey: preparationSessionID, LocalEnvironment: &proto.LocalEnvironment{ID: preparationEnvironmentID, WorkspaceDirectory: "/workspace", CapabilitySources: &proto.CapabilitySources{}}}}
 }
 
 func preparationRouter(t *testing.T, sender dispatch.Sender, timeout time.Duration, factory preparationFactory) *dispatch.Router {

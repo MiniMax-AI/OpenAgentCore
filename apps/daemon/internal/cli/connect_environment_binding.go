@@ -6,16 +6,19 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
 
 // This receipt contains identity only; executor credentials remain in their file.
 type environmentBinding struct {
 	RemoteURL           string                `json:"remote_url"`
-	Enrollment          environmentEnrollment `json:"enrollment"`
+	Enrollment          machineapi.Enrollment `json:"enrollment"`
 	LocalWorkspace      string                `json:"local_workspace"`
 	CapabilityDirectory string                `json:"capability_directory"`
 }
@@ -41,7 +44,7 @@ func readEnvironmentPrivateFile(path string) ([]byte, error) {
 	return runtimefs.ReadPrivatePath(path, 16*1024)
 }
 
-func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credentialFile string) error {
+func bindEnvironmentRuntime(remote string, bound machineapi.Enrollment, workspace, capabilityDirectory string) error {
 	root, err := paths.Root()
 	if err != nil || !filepath.IsAbs(root) {
 		return errors.New("connect: absolute Runtime state directory required")
@@ -49,7 +52,6 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	if err = runtimefs.EnsurePrivateDir(root); err != nil {
 		return errors.New("connect: Runtime state directory unavailable")
 	}
-	workspace := os.Getenv("OAC_RUNTIME_WORKSPACE")
 	if workspace == "/" || agentcapabilities.ValidateLocalDirectories([]string{workspace}) != nil {
 		return errors.New("connect: clean absolute Runtime workspace required")
 	}
@@ -57,36 +59,13 @@ func bindEnvironmentRuntime(remote string, bound environmentEnrollment, credenti
 	if statErr != nil || !info.IsDir() {
 		return errors.New("connect: existing Runtime workspace required")
 	}
-	if bound.WorkspaceDirectory != "/workspace" && bound.WorkspaceDirectory != workspace {
+	if bound.WorkspaceDirectory != runtimebootstrap.PublicWorkspace && bound.WorkspaceDirectory != workspace {
 		return errors.New("connect: enrollment does not match the Runtime workspace")
 	}
-	identity := map[string]string{"OAC_RUNTIME_ENVIRONMENT_ID": bound.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bound.SessionID}
-	for key, value := range identity {
-		if previous := os.Getenv(key); previous != "" && previous != value {
-			return errors.New("connect: conflicting Runtime identity")
-		}
-	}
-	capabilityDirectory := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
-	if capabilityDirectory == "" {
-		capabilityDirectory = localworkspace.CapabilityDirectory
-	}
-	if _, err := localworkspace.NewWithCapabilityDirectory(bound.EnvironmentID, bound.SessionID, workspace, capabilityDirectory); err != nil {
+	if err := localworkspace.Bind(bound.EnvironmentID, bound.SessionID, workspace, capabilityDirectory); err != nil {
 		return errors.New("connect: local Runtime layout unavailable")
 	}
-	want := environmentBinding{RemoteURL: remote, Enrollment: bound, LocalWorkspace: workspace, CapabilityDirectory: capabilityDirectory}
-	if err = saveEnvironmentBinding(root, want); err != nil {
-		return err
-	}
-	for key, value := range identity {
-		if err = os.Setenv(key, value); err != nil {
-			return errors.New("connect: Runtime identity configuration failed")
-		}
-	}
-	local, err := localworkspace.Load()
-	if err != nil || local == nil {
-		return errors.New("connect: Runtime binding unavailable")
-	}
-	return nil
+	return saveEnvironmentBinding(root, environmentBinding{RemoteURL: remote, Enrollment: bound, LocalWorkspace: workspace, CapabilityDirectory: capabilityDirectory})
 }
 
 func saveEnvironmentBinding(root string, want environmentBinding) error {

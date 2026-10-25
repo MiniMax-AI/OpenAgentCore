@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -167,7 +169,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
 	h := newTestHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
 	p := h.Proxy(uuid.NewString(), docker.Operations(), 1)
-	if sandbox.SupportsCheckpoint(p) {
+	if sandbox.SupportsCheckpoint(p.ProviderOperations()) {
 		t.Fatal("docker advertised checkpoint")
 	}
 	_, err := p.GetInfo(context.Background(), reference())
@@ -234,14 +236,14 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			_ = json.NewEncoder(w).Encode(EnrollmentResponse{SpecificationDigest: id.SpecificationDigest, DeploymentGeneration: id.DeploymentGeneration, NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8})
+			_ = json.NewEncoder(w).Encode(machineapi.NodeStatus{NodeIdentity: machineapi.NodeIdentity{SpecificationDigest: id.SpecificationDigest, DeploymentGeneration: id.DeploymentGeneration, NodeID: id.NodeID, InstallationID: id.InstallationID, Provider: id.Provider, MaxActive: 2, MaxRetained: 8}})
 			return
 		}
 		if r.URL.Path != "/api/v1/sandbox-node/enroll" || r.Header.Get("Authorization") != "Bearer enrollment" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		var body EnrollmentRequest
+		var body machineapi.NodeEnrollment
 		if json.NewDecoder(r.Body).Decode(&body) != nil || body.Credential != stored.Credential || body.NodeID != id.NodeID {
 			t.Error("unpersisted credential used")
 		}
@@ -266,10 +268,10 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = Enroll(context.Background(), server.URL, dir, "enrollment", EnrollmentRequest{Name: "test"}); err == nil {
+	if _, err = Enroll(context.Background(), server.URL, dir, "enrollment", machineapi.NodeEnrollment{Name: "test"}); err == nil {
 		t.Fatal("lost response reported success")
 	}
-	recovered, err := Enroll(context.Background(), server.URL, dir, "enrollment", EnrollmentRequest{Name: "test"})
+	recovered, err := Enroll(context.Background(), server.URL, dir, "enrollment", machineapi.NodeEnrollment{Name: "test"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +282,7 @@ func TestEnrollmentLostResponseRecoversWithPersistedCredential(t *testing.T) {
 	if retry, err := InitIdentity(dir, server.URL, id); err != nil || retry != recovered {
 		t.Fatal("register retry treated absent local capacity as an override", err)
 	}
-	if _, err := Enroll(t.Context(), server.URL, dir, "consumed", EnrollmentRequest{Name: "test"}); err != nil || enrollments != 1 {
+	if _, err := Enroll(t.Context(), server.URL, dir, "consumed", machineapi.NodeEnrollment{Name: "test"}); err != nil || enrollments != 1 {
 		t.Fatal("register retry failed to recover approved identity", err)
 	}
 }

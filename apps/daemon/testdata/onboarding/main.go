@@ -146,6 +146,11 @@ func (s *session) SteerWithReceipt(_ context.Context, p proto.PromptSteerPayload
 	return nil
 }
 
+// The fixture declares no function tools.
+func (s *session) SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error {
+	return fmt.Errorf("%w: fixture has no function tools", agent.ErrUnsupportedOperation)
+}
+
 func (s *session) AwaitSettlement(ctx context.Context) (agent.TurnSettlement, error) {
 	select {
 	case <-s.settled:

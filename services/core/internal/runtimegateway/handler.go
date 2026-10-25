@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/gorilla/websocket"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
@@ -127,7 +129,7 @@ func (h *Handler) WS(w http.ResponseWriter, r *http.Request) {
 			h.cfg.Log("agentdaemon gateway: heartbeat on connect: %v", hbErr)
 		}
 	}
-	sess := NewSession(conn, auth.DeviceID, auth.WorkspaceID, version, h.cfg.Registry, h.cfg.Log)
+	sess := NewSession(conn, auth.DeviceID, version, h.cfg.Registry, h.cfg.Log)
 	sess.heartbeat = h.cfg.Heartbeat
 	sess.archivedCancellations = h.cfg.ArchivedCancellations
 	sess.credentialHash = runtimedevice.HashCredential(token)
@@ -155,9 +157,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, http.StatusUnauthorized, "missing_bearer", "Authorization: Bearer <runner_credential> required")
 		return
 	}
-	var body struct {
-		DeviceID string `json:"device_id"`
-	}
+	var body machineapi.BootstrapRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeAuthError(w, http.StatusBadRequest, "bad_json", err.Error())
 		return
@@ -174,13 +174,7 @@ func (h *Handler) Bootstrap(w http.ResponseWriter, r *http.Request) {
 		writeAuthError(w, status, code, err.Error())
 		return
 	}
-	resp := map[string]any{
-		"device_id":         auth.DeviceID,
-		"workspace_id":      auth.WorkspaceID,
-		"ws_url":            h.cfg.PublicWSURL,
-		"heartbeat_seconds": int(h.cfg.HeartbeatInterval.Seconds()),
-		"protocol_version":  proto.Version,
-	}
+	resp := machineapi.BootstrapResponse{DeviceID: auth.DeviceID, WSURL: h.cfg.PublicWSURL, HeartbeatSeconds: int(h.cfg.HeartbeatInterval.Seconds())}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
@@ -204,10 +198,7 @@ func bearerFromAuthHeader(r *http.Request) string {
 func writeAuthError(w http.ResponseWriter, status int, code, detail string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error":  code,
-		"detail": detail,
-	})
+	_ = json.NewEncoder(w).Encode(machineapi.AuthError{Error: code, Detail: detail})
 }
 
 // mapAuthError translates a typed auth error into (HTTP status,

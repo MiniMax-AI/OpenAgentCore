@@ -40,7 +40,10 @@ func (r *runtimeLifecycle) saveCompute(ctx context.Context, owner deployment.All
 	next, err := r.deployment.SetCompute(ctx, owner, phase, raw, until)
 	if err == nil {
 		log.Ctx(ctx).Info("Runtime compute phase saved", "allocation_id", owner.ID, "node_id", owner.NodeID, "from", owner.ComputePhase, "to", phase)
-		if phase == "suspended" {
+		switch phase {
+		case "running":
+			r.computeRunning()
+		case "suspended":
 			r.freedSlot()
 		}
 	}
@@ -57,8 +60,8 @@ func logComputeStep(ctx context.Context, owner deployment.Allocation, step strin
 func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.Allocation) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
-	if err := providercontract.Require(p, "Initial"); err != nil {
-		return err
+	if !sandbox.SupportsCheckpoint(p.ProviderOperations()) {
+		return providercontract.Require(p, "Initial")
 	}
 	initial, err := p.Initial(ctx, runtimeReference(owner))
 	if err != nil {
@@ -78,8 +81,8 @@ func (r *runtimeLifecycle) enableCompute(ctx context.Context, owner deployment.A
 func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.Allocation) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
 	p := r.config.Provider
-	if err := providercontract.Require(p, "Initial"); err != nil {
-		return err
+	if !sandbox.SupportsCheckpoint(p.ProviderOperations()) {
+		return providercontract.Require(p, "Initial")
 	}
 	var state runtimeCompute
 	if json.Unmarshal(owner.ComputeState, &state) != nil || state.Current.ID == "" {
@@ -118,7 +121,14 @@ func (r *runtimeLifecycle) observeCompute(ctx context.Context, owner deployment.
 
 func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
-	compute, err := p.GetCompute(ctx, runtimeReference(owner), state.Current)
+	// With an open Runtime connection the observation also extends the native
+	// lease, as the disabled path does; otherwise it only observes.
+	observe := p.GetCompute
+	if r.runtimeConnected(owner.DeviceID) {
+		observe = p.RenewCompute
+	}
+	peer, peerErr := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
+	compute, err := observe(ctx, runtimeReference(owner), state.Current)
 	if errors.Is(err, sandbox.ErrNotFound) {
 		return r.releaseLostCompute(ctx, p, owner, state, err)
 	}
@@ -134,9 +144,8 @@ func (r *runtimeLifecycle) idleCompute(ctx context.Context, p sandbox.SandboxPro
 	if compute.Status != "running" || !compute.BootstrapComplete {
 		return sandbox.ErrComputeUnconfirmed
 	}
-	peer, err := authorizedRuntimePeer(ctx, r.sessions, r.registry, owner.DeviceID)
-	if err != nil {
-		return err
+	if peerErr != nil {
+		return peerErr
 	}
 	if _, err := r.deployment.CheckRunning(ctx, owner); err != nil {
 		return err
@@ -262,7 +271,7 @@ func (r *runtimeLifecycle) captureCompute(ctx context.Context, p sandbox.Sandbox
 		}
 		return r.wakeCompute(ctx, p, next, state)
 	}
-	if result.Snapshot.Compatibility.Validate() != nil {
+	if result.Snapshot.Validate() != nil {
 		return sandbox.ErrOwnership
 	}
 	state.Snapshot = result.Snapshot
@@ -316,7 +325,11 @@ func (r *runtimeLifecycle) restoreIdleCompute(ctx context.Context, p sandbox.San
 // early. Core decides eligibility and demand; a refusal changes nothing, and
 // the expired allocation is observed and cleaned up as at its deadline.
 func (r *runtimeLifecycle) expireForDemand(ctx context.Context, owner deployment.Allocation) error {
-	err := r.deployment.ExpireCheckpointForDemand(ctx, owner)
+	return r.expire(ctx, owner, r.deployment.ExpireCheckpointForDemand)
+}
+
+func (r *runtimeLifecycle) expire(ctx context.Context, owner deployment.Allocation, end func(context.Context, deployment.Allocation) error) error {
+	err := end(ctx, owner)
 	if errors.Is(err, deployment.ErrNotIdle) || errors.Is(err, deployment.ErrAllocationConflict) {
 		return nil
 	}
@@ -332,7 +345,7 @@ func (r *runtimeLifecycle) expireForDemand(ctx context.Context, owner deployment
 
 func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.SandboxProvider, owner deployment.Allocation, state runtimeCompute, observeOnly bool) (err error) {
 	defer func() { err = withObservationOwner(owner, err) }()
-	if state.Snapshot == nil || state.Snapshot.Compatibility.Validate() != nil || state.Rollback || state.RestoreID == "" {
+	if state.Snapshot == nil || state.Snapshot.Validate() != nil || state.Rollback || state.RestoreID == "" {
 		return sandbox.ErrOwnership
 	}
 	if state.Target == nil {
@@ -366,6 +379,11 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 	started := time.Now()
 	result, err := p.Resume(ctx, sandbox.ResumeRequest{Workspace: workspace, Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
 	logComputeStep(ctx, owner, "resume", started, err)
+	if errors.Is(err, sandbox.ErrCheckpointUnusable) {
+		// The Provider closed this attempt before native dispatch. Never restore
+		// the snapshot again: expire it and continue by ordinary expiry cleanup.
+		return r.expire(ctx, owner, r.deployment.ExpireUnusableCheckpoint)
+	}
 	if err != nil {
 		return err
 	}

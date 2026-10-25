@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next";
 import { failedLast, useFailureToast } from "../../components/Toast";
 import { DashboardSkeleton } from "../../components/Skeleton";
 import { Kpi, KpiStrip, Section, SegmentedControl } from "../../components/console-ui";
-import { formatBytes, formatCores, formatDateTime, formatPercent, formatRelative, MISSING } from "../../lib/format";
+import { formatBytes, formatDateTime, formatRelative, MISSING } from "../../lib/format";
 import { coreError } from "../../lib/core-error";
 import { RuntimeCharts } from "../metrics/RuntimeCharts";
 import { runtimeSampleGap } from "../metrics/sandbox-runtime";
@@ -83,11 +83,7 @@ export function SessionRuntimeSection({
   // The same state and sample reason as Sandbox metrics' Hosted Runtimes.
   const stateLabel = observation?.lifecycle_state ? tMetrics(`sandbox.lifecycle.${observation.lifecycle_state}`) : MISSING;
   const sampleGap = observation ? runtimeSampleGap(observation) : null;
-  const cpu = observation?.status === "observed" ? observation.cpu : null;
   const memory = observation?.status === "observed" ? observation.memory : null;
-  const cpuValue = cpu?.usage_cores != null && cpu.capacity_cores != null
-    ? t("runtime.cores", { used: formatCores(cpu.usage_cores, locale), capacity: formatCores(cpu.capacity_cores, locale) })
-    : cpu?.utilization_ratio != null ? formatPercent(cpu.utilization_ratio, locale) : MISSING;
   const memoryValue = memory?.usage_bytes != null
     ? memory.limit_bytes != null ? `${formatBytes(memory.usage_bytes)} / ${formatBytes(memory.limit_bytes)}` : formatBytes(memory.usage_bytes)
     : MISSING;
@@ -109,7 +105,6 @@ export function SessionRuntimeSection({
     >
       <KpiStrip label={t("runtime.title")}>
         <Kpi label={t("runtime.state")} value={stateLabel} />
-        <Kpi label={t("runtime.cpu")} value={cpuValue} />
         <Kpi label={t("runtime.memory")} value={memoryValue} />
         <Kpi label={t("runtime.observed")} value={sampleGap ? tMetrics(`sandbox.reason.${sampleGap}`) : observedAt === null ? MISSING : <span title={formatDateTime(observedAt, locale)}>{formatRelative(observedAt, Math.floor(Date.now() / 1000), locale)}</span>} tone={sampleGap ? "warning" : undefined} />
       </KpiStrip>

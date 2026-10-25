@@ -9,7 +9,7 @@ import (
 )
 
 // @Summary Read the active configuration for node installation
-// @Description Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
+// @Description Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose Provider credentials. Node files cannot override this specification.
 // @Tags Sandbox Node
 // @Produce json
 // @Security NodeEnrollmentAuth

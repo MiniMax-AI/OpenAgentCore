@@ -30,7 +30,7 @@ test("sets, replaces and clears a harness's default model configuration, and kee
   await set.getByLabel("Default model ID").fill("fixture-model");
   await expect(set).toContainText("Used for new Sessions when the application does not specify a model.");
   // Every rejected URL stays local; Enter cannot bypass validation or write a secret.
-  for (const url of ["http://model.example/v1", "ftp://model.example", "https://user:password@model.example/v1", "https://@model.example/v1", "https:model.example/v1", "https://model.example/v1?token=x", "https://model.example/v1#fragment", "https://model.example/v1?", "https://model.example/v1#", "not a URL"]) {
+  for (const url of ["ftp://model.example", "https://user:password@model.example/v1", "https://@model.example/v1", "https:model.example/v1", "https://model.example/v1?token=x", "https://model.example/v1#fragment", "https://model.example/v1?", "https://model.example/v1#", "not a URL"]) {
     await set.getByLabel("Base URL").fill(url);
     await expect(set.getByLabel("Base URL")).toHaveAttribute("aria-invalid", "true");
     await expect(set.getByRole("button", { name: "Save", exact: true })).toBeDisabled();

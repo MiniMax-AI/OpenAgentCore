@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"os"
 	"path/filepath"
 	"testing"
@@ -24,7 +23,7 @@ func TestNativeFileCreateAndNoReplace(t *testing.T) {
 		if err != nil || got.SizeBytes != int64(size) {
 			t.Fatal(size, got, err)
 		}
-		if _, err = b.WriteWorkspaceFile(t.Context(), name, []byte("overwrite")); !errors.Is(err, agent.ErrWorkspaceWriteUnsafe) {
+		if _, err = b.WriteWorkspaceFile(t.Context(), name, []byte("overwrite")); !errors.Is(err, ErrWorkspaceWriteUnsafe) {
 			t.Fatal("existing file replaced", err)
 		}
 		raw, err := os.ReadFile(filepath.Join(b.workspace, filepath.FromSlash(name)))
@@ -32,7 +31,7 @@ func TestNativeFileCreateAndNoReplace(t *testing.T) {
 			t.Fatal("file content changed", err)
 		}
 	}
-	if _, err := b.WriteWorkspaceFile(t.Context(), "nested", nil); !errors.Is(err, agent.ErrWorkspaceWriteDirectory) {
+	if _, err := b.WriteWorkspaceFile(t.Context(), "nested", nil); !errors.Is(err, ErrWorkspaceWriteDirectory) {
 		t.Fatal(err)
 	}
 	if _, err := b.WriteWorkspaceFile(t.Context(), "after-rejection", nil); err != nil {
@@ -51,16 +50,16 @@ func TestNativeFileCreateAndNoReplace(t *testing.T) {
 func TestNativeFileAdmission(t *testing.T) {
 	b := nativeFileBinding(t)
 	for _, path := range []string{"", ".", "..", "/etc/passwd", "a/../b", "a//b", "a\\b", "a\nb"} {
-		if _, err := b.WriteWorkspaceFile(t.Context(), path, nil); !errors.Is(err, agent.ErrWorkspaceWriteInvalid) {
+		if _, err := b.WriteWorkspaceFile(t.Context(), path, nil); !errors.Is(err, ErrWorkspaceWriteInvalid) {
 			t.Fatal(path, err)
 		}
 	}
-	if _, err := b.WriteWorkspaceFile(t.Context(), "large", make([]byte, WriteMaxBytes+1)); !errors.Is(err, agent.ErrWorkspaceWriteInvalid) {
+	if _, err := b.WriteWorkspaceFile(t.Context(), "large", make([]byte, WriteMaxBytes+1)); !errors.Is(err, ErrWorkspaceWriteInvalid) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if _, err := b.WriteWorkspaceFile(ctx, "cancelled", nil); !errors.Is(err, agent.ErrWorkspaceWriteUnavailable) {
+	if _, err := b.WriteWorkspaceFile(ctx, "cancelled", nil); !errors.Is(err, ErrWorkspaceWriteUnavailable) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(b.workspace, "cancelled")); !os.IsNotExist(err) {
@@ -69,11 +68,11 @@ func TestNativeFileAdmission(t *testing.T) {
 	b.writer.mu.Lock()
 	_, err := b.WriteWorkspaceFile(t.Context(), "busy", nil)
 	b.writer.mu.Unlock()
-	if !errors.Is(err, agent.ErrWorkspaceWriteBusy) {
+	if !errors.Is(err, ErrWorkspaceWriteBusy) {
 		t.Fatal(err)
 	}
 	b.writer.uncertain = true
-	if _, err = b.WriteWorkspaceFile(t.Context(), "uncertain", nil); !errors.Is(err, agent.ErrWorkspaceWriteUncertain) {
+	if _, err = b.WriteWorkspaceFile(t.Context(), "uncertain", nil); !errors.Is(err, ErrWorkspaceWriteUncertain) {
 		t.Fatal(err)
 	}
 }

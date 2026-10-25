@@ -6,14 +6,13 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/vaults"
 )
 
-func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, caps runtimedevice.KindCapabilities, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
+func (d *Dispatcher) executionRequest(ctx context.Context, session sessions.Session, snapshot Snapshot, caps proto.AgentKindCapabilities, bound sessions.ExecutionBinding) (proto.PromptRequestPayload, error) {
 	recoverNativeSession := bound.HasStartedTurn && bound.NativeSessionID == ""
-	if recoverNativeSession && !caps.NativeSessionRecovery {
+	if recoverNativeSession && !caps.NativeSessionRecovery.IsSupported() {
 		return proto.PromptRequestPayload{}, errors.New("native session recovery is unavailable")
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)

@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: 9229fb99268c1b3f5a97a4c97e762faaf0e45bada46e6b1f82d28798e090d205
+source_hash: 1424dc3288c244cb3be78bb2070530bdc0b5aec8474c1ab943611bee335fdca7
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -40,7 +40,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 ## 沙箱提供商验证 {#sandbox-provider-verification}
 
-当 `POST` 或 `PUT /core/v1/sandbox/deployment`（[sandbox deployment](sandbox-deployment.md#reset)）的提供商像 E2B 一样验证凭据或配置时，请求会因以下固定错误而失败。这些错误均不会返回提供商文本、模板名称、密钥或资源数量。
+当 `POST` 或 `PUT /core/v1/sandbox/deployment`（[sandbox deployment](sandbox-deployment.md#e2b-key-replacement)）的提供商像 E2B 一样验证凭据或配置时，请求会因以下固定错误而失败。这些错误均不会返回提供商文本、模板名称、密钥或资源数量。
 
 | HTTP | 代码 | 含义 | `param` |
 | --- | --- | --- | --- |
@@ -60,7 +60,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `invalid_name` | `name` | `max_length`：项目和节点为 128，项目 API 密钥为 80 | 名称未通过相应资源的验证器 |
 | `invalid_node_capacity` | `max_active` 或 `max_retained` | `min`：1，`max`：1000000 | 容量无效；保留容量还必须至少等于活动容量 |
 | `invalid_model_provider` | null | 省略 | 必须提供完整的模型提供商配置包 |
-| `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS，且不得包含凭据、查询或片段 |
+| `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS（回环或私有 IP 地址也可以用 HTTP），且不得包含凭据、查询或片段 |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` 和 `allowed_protocols`，来自该构建的适配器目录 | 协议未知，或所选 Harness 不支持该协议 |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`：16384 | 密钥为空、过长或包含禁止字符 |
 | `model_provider_token_limits_invalid` | `context_window` 或 `max_output_tokens` | 省略 | 限制为负数、`max_output_tokens` 超过已设置的 `context_window`，或 Harness 没有已设置限制的原生设置 |
@@ -108,7 +108,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 
 ## 诊断失败类别 {#diagnostic-failure-categories}
 
-[Session 诊断](session-diagnostics.md)接口会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误保持不变。除非表格另有说明，否则 `params` 为 `{}`。
+[Session 诊断](session-diagnostics.md)接口会在成功的 200 快照内返回以下类别，而不是以错误封装的形式返回。公开 `/v1` 的 Turn 错误会以官方 code 报告其中一部分类别，见[与 OpenAI 的差异](index.md#differences-from-openai)。除非表格另有说明，否则 `params` 为 `{}`。
 
 | 代码 | 存储原因或安全含义 |
 | --- | --- |
@@ -120,7 +120,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `server_error` | 原生服务器故障分类 |
 | `invalid_request` | 原生请求被拒绝 |
 | `resource_not_found` | 未找到原生资源或模型 |
-| `request_timeout` | 保留的中性超时类别；当前没有适配器生成该类别 |
+| `request_timeout` | 原生提供商超时分类 |
 | `context_length_exceeded` | 原生上下文限制分类 |
 | `cyber_policy` | 原生网络安全策略拒绝 |
 | `connection_failed` | 原生连接故障；params 包含 `http_status`，其值为 100–599 范围内的整数或 null |
@@ -136,7 +136,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `internal_error` | 结果未知或格式错误；不返回原始值 |
 | `environment_connection_timeout` | 初始输入连接截止时间已过 |
 | `environment_unavailable` | 初始输入所需 Environment 不可用 |
-| `environment_provisioning_failed` | 托管预置失败；params 包含来自已清理回执的可空 `step`、`index`、`exit_code` |
+| `environment_provisioning_failed` | 托管预置失败；params 包含来自已清理回执的可空 `step`、`index`、`exit_code`，以及用于没有已确认步骤的失败的 `category` |
 
 数据库故障属于错误，绝不会产生空快照或健康快照。绝不会解析预置原因或原生消息以确定类别或参数。
 

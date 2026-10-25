@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
 )
 
@@ -15,7 +14,11 @@ func writeFilesError(w http.ResponseWriter, r *http.Request, err error, notFound
 	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 		return
 	}
+	var field *fieldError
 	switch {
+	case errors.As(err, &field):
+		// The Files routes keep their non-beta error envelope.
+		writeError(w, http.StatusBadRequest, "", field.message, field.param)
 	case errors.Is(err, files.ErrNotFound):
 		code := "not_found_error"
 		// The Files routes keep their non-beta error envelope.
@@ -25,11 +28,11 @@ func writeFilesError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusNotFound, code, "Resource not found.", notFoundParam...)
 	case errors.Is(err, files.ErrTooLarge):
 		writeContentTooLarge(w)
+	case errors.Is(err, files.ErrEmpty):
+		writeError(w, http.StatusBadRequest, "", "File is empty.")
 	case errors.Is(err, files.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid resource identifier or request limits.")
 	default:
-		// Storage failures can include submitted values; do not log the error.
-		log.Ctx(r.Context()).Error("oac-core persistence operation failed")
-		writeError(w, http.StatusInternalServerError, "internal_error", "The operation could not be completed.")
+		writeInternalError(w, r)
 	}
 }

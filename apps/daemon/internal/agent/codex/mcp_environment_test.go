@@ -8,14 +8,13 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 func TestEnvironmentMCPProjectsIsolatedStdioAndPrivateHTTPReferences(t *testing.T) {
 	token := "user-token"
 	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{
-		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "must-not-be-native-command", Args: []string{"private-argument"}}},
-		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/1", BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.com/mcp", HTTPHeaders: map[string]string{"X-Key": "literal-${DO_NOT_EXPAND}"}}},
+		{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/0", Server: proto.PluginMCPServer{Name: "local", Type: "stdio", Command: "must-not-be-native-command", Args: []string{"private-argument"}}},
+		{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/1", BearerToken: &token, Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.com/mcp", HTTPHeaders: map[string]string{"X-Key": "literal-${DO_NOT_EXPAND}"}}},
 	}}
 	servers, env, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local})
 	if err != nil || len(servers) != 2 || len(env) != 1 {
@@ -58,7 +57,7 @@ func TestSessionMCPHeadersReachNativeConfig(t *testing.T) {
 
 func TestEnvironmentMCPRejectsUnqualifiedCredentialChanges(t *testing.T) {
 	token := "user-token"
-	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{BearerToken: &token, Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "http://example.com/mcp"}}}}
+	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{BearerToken: &token, Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "http://example.com/mcp"}}}}
 	if _, _, err := runtimeMCPServers(proto.PromptRequestPayload{LocalEnvironment: local}); err == nil {
 		t.Fatal("plaintext bearer accepted")
 	}

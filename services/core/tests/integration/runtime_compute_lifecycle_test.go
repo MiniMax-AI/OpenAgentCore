@@ -38,7 +38,7 @@ type fakeCheckpointProvider struct {
 	captures, restores, captureObservations, restoreObservations int
 	computeKills, snapshotDeletes, wakeCommands                  int
 	promptFrames                                                 atomic.Int32
-	quiesces, resumes                                            atomic.Int32
+	quiesces, resumes, renews                                    atomic.Int32
 	loseCapture, loseRestore, rejectQuiesce                      bool
 	beforeQuiesce                                                func()
 }
@@ -92,7 +92,7 @@ func (p *fakeCheckpointProvider) Suspend(_ context.Context, q sandbox.SuspendReq
 		if _, exists := p.snapshots[q.OperationID]; exists {
 			return sandbox.ComputeState{}, errors.New("capture replayed")
 		}
-		p.snapshots[q.OperationID] = sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, Reference: "snapshot-" + q.OperationID, ID: uuid.NewString(), Digest: "verified", CheckpointID: "checkpoint", CheckpointRoot: "private", OperationID: q.OperationID, SourceGeneration: q.Source.Generation, SourceName: q.Source.Name, SourceID: q.Source.ID}
+		p.snapshots[q.OperationID] = sandbox.SnapshotIdentity{Compatibility: sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}, Reference: "snapshot-" + q.OperationID, ID: uuid.NewString(), Evidence: "verified checkpoint private", OperationID: q.OperationID, SourceGeneration: q.Source.Generation, SourceName: q.Source.Name, SourceID: q.Source.ID}
 		state.Status = "paused"
 		p.computes[q.Source.Name] = state
 		if p.loseCapture {
@@ -161,6 +161,10 @@ func (p *fakeCheckpointProvider) DeleteSnapshot(_ context.Context, _ sandbox.Ref
 	p.snapshotDeletes++
 	delete(p.snapshots, s.OperationID)
 	return nil
+}
+func (p *fakeCheckpointProvider) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	p.renews.Add(1)
+	return p.GetCompute(ctx, r, c)
 }
 func (p *fakeCheckpointProvider) ResumeCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
 	state, err := p.GetCompute(ctx, r, c)
@@ -273,6 +277,12 @@ type computeLifecycleFixture struct {
 }
 
 func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *computeLifecycleFixture {
+	return newComputeLifecycleFixtureFor(t, "microsandbox", maxActive, maxRetained)
+}
+
+// newComputeLifecycleFixtureFor runs the fixture on a nodes deployment, or on a
+// direct one (e2b) where allocations have no node.
+func newComputeLifecycleFixtureFor(t *testing.T, provider string, maxActive, maxRetained int) *computeLifecycleFixture {
 	t.Helper()
 	s, _ := newManagedTestStore(t)
 	registry := runtimegateway.NewRegistry()
@@ -288,13 +298,15 @@ func newComputeLifecycleFixture(t *testing.T, maxActive, maxRetained int) *compu
 		}
 		server.Close()
 	})
-	f := &computeLifecycleFixture{t: t, store: s, provider: p, key: webDeployment(t, s, "microsandbox"), policy: execution.RuntimeSuspensionPolicy{Retention: time.Hour}}
+	f := &computeLifecycleFixture{t: t, store: s, provider: p, key: webDeployment(t, s, provider), policy: execution.RuntimeSuspensionPolicy{Retention: time.Hour}}
 	view, err := deploymentService(t, s).View(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.sql(`UPDATE runtime_deployment SET idle_seconds=30`)
-	f.node = enrollNode(t, s, view, deployment.Capacity{MaxActive: maxActive, MaxRetained: maxRetained}).NodeID
+	if provider == "microsandbox" {
+		f.node = enrollNode(t, s, view, deployment.Capacity{MaxActive: maxActive, MaxRetained: maxRetained}).NodeID
+	}
 	f.start()
 	return f
 }
@@ -303,7 +315,9 @@ func (f *computeLifecycleFixture) start() {
 	t.Helper()
 	w := startWebWorker(t, f.store, f.provider.registry, f.key, f.provider, &f.policy)
 	// The Worker's claim starts a new owner epoch, in which the node reconnects.
-	onlineManagerNode(t, f.store, f.node)
+	if f.node != "" {
+		onlineManagerNode(t, f.store, f.node)
+	}
 	var once sync.Once
 	stop := func() {
 		once.Do(func() { ctx, cancel := context.WithCancel(context.Background()); cancel(); _ = w.Run(ctx) })
@@ -389,6 +403,28 @@ func TestRuntimeComputeLifecycleIdleSuspendAndQueuedSameSessionWake(t *testing.T
 	}
 	if f.provider.promptFrames.Load() != 0 {
 		t.Fatal("lifecycle sent native execution input")
+	}
+}
+
+// A direct allocation has no node and follows the same suspend and wake flow.
+func TestRuntimeComputeLifecycleDirectIdleSuspendAndWake(t *testing.T) {
+	f := newComputeLifecycleFixtureFor(t, "e2b", 1, 2)
+	tenant, _, env, owner := f.create()
+	f.complete(owner)
+	suspended := f.phase(tenant, env.ID, "suspended")
+	if f.provider.renews.Load() == 0 {
+		t.Fatal("running compute was observed without renewing its native lease")
+	}
+	if f.provider.captures != 1 || f.provider.computeKills != 1 || len(f.provider.snapshots) != 1 || suspended.NodeID != "" {
+		t.Fatal("direct capture did not release source compute")
+	}
+	f.queued(suspended)
+	awake := f.phase(tenant, env.ID, "running")
+	if awake.ID != owner.ID || f.provider.creates != 1 || f.provider.restores != 1 {
+		t.Fatal("direct wake replaced the allocation")
+	}
+	if awake.NodeID != "" {
+		t.Fatal("direct allocation gained a node")
 	}
 }
 

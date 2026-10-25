@@ -1,7 +1,7 @@
 ---
 title: "API 行为"
 source: contracts/agents-api/wire-semantics.md
-source_hash: 1f374322fcfd4a9fda8162004342162b1c3b8e3b5f12c2f2871f68bd593751da
+source_hash: 6f57c50e736d1837b3609209812438063cc96c24c145ffe9302a93d5f9c7746f
 ---
 
 已锁定版本的 OpenAI Python SDK（[upstream.json](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）定义了 `/v1` 路由、字段和类型。本页面说明这些类型未作规定之处 Core 的行为，例如状态码、错误字段、默认值和列表边界，以及 Core 与官方服务存在差异的地方。[OpenAI 兼容性](index.md) 列出了这些差异和尚存缺口；[Sessions, events and history](sessions-events.md)、[message content](message-content.md)、[Vaults](vaults.md)、[source Files and Skills](source-files.md) 和 [Environment files and Artifacts](environment-files.md) 分别负责各自资源的规则。
@@ -40,7 +40,7 @@ Beta 路由要求 `OpenAI-Beta` 标头中恰好有一个值，且该值必须等
 
 ### 身份验证 {#authentication}
 
-`/v1` 仅接受项目 API 密钥，形式为 `Authorization: Bearer <key>`。同一项目的所有密钥都视为同一调用方：它们共享该项目的资源和 Session 创建重试。Core 在每次请求时都在数据库中解析密钥及其项目，不缓存凭据，超时时间为五秒。撤销密钥或归档其项目会在下一次请求时生效。项目的所有密钥都使用主体 `service_account/project:<Project ID>`。[项目与密钥](admin-api.md#projects-and-keys) 介绍了密钥管理。
+`/v1` 仅接受项目 API 密钥，形式为 `Authorization: Bearer <key>`。Core 在每次请求时都在数据库中解析密钥及其项目，不缓存凭据，超时时间为五秒。撤销密钥或归档其项目会在下一次请求时生效。项目的所有密钥都使用主体 `service_account/project:<Project ID>`。[项目与密钥](admin-api.md#projects-and-keys) 介绍了密钥管理。
 
 可选的 `OpenAI-Organization` 和 `OpenAI-Project` 标头在发送时必须各出现一次，并分别等于 `core` 和 `proj_<Project ID>`；任何其他值都会导致密钥被拒绝。
 
@@ -128,7 +128,7 @@ Vault 和 Credential 列表接受标量 `status`、`status[]` 条目或两者，
 
 ### 游标 {#cursors}
 
-`after` 指定同一列表中的某个资源，并且该资源必须位于已经解析出的父资源和租户内。首先解析父资源：父资源缺失或属于外部租户时，会先返回其 404，然后才读取游标。无法解析的游标，无论是随机值、格式错误、类型不同、父资源不同、已删除还是属于其他租户，均返回：
+`after` 指定同一列表中的某个资源，并且该资源必须位于已经解析出的父资源和租户内。首先解析父资源：父资源缺失或属于外部租户时，会先返回其 404，然后才读取游标。无法解析的游标，无论是随机值、格式错误、类型不同、父资源不同、已删除还是属于其他租户，均返回下表中的响应。已删除的 Session 仍可作为 Sessions 游标解析，并从其位置继续分页，与官方服务一致；已删除的 Agent 无法解析：
 
 | 列表 | 响应 |
 | --- | --- |
@@ -174,8 +174,11 @@ Agent 创建和更新正文以及 Session 创建中的内联 `agent`，会在其
 | 不支持的枚举值 | JSON 路径 | `Invalid value: '<value>'. Supported values are: ...`，后跟已锁定的值 |
 | 整数低于最小值 | JSON 路径 | `Invalid '<path>': integer below minimum value. Expected a value >= 1, but got <n> instead.` |
 | 重复的函数名称、多个 `web_search`、多个 `tool_search` | null | `duplicate function tool name: <name>`、`duplicate web_search tool`、`duplicate tool_search tool` |
+| MCP `server_label` 含 `[A-Za-z0-9_-]` 以外的字符，或被后面的工具重复 | 出错工具的 `tools[<i>].server_label` | 说明原因的句子 |
 | Function `parameters` 的字符串根 `type` 不是 `object` | null | `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<type>"'.` |
 | `text.format` JSON schema 的字符串根 `type` 不是 `object` | null | `agent.text.format.schema must have top-level type "object"; got "<type>"`，Agent 请求上也会返回此消息 |
+
+Session 创建和更新、Vault 创建、Credential 创建和更新、Environment Template 创建和更新以及 Session events，会在各自解码之前，按同样方式根据已锁定的正文形状进行检查。param 是 JSON 路径，例如 `metadata`、`input[0].role`、`input[0].content[0].type`、`events[0].input[0].role`、`auth.type`、`auth.access_token`、`env.KEY` 或 `name`。`input` 和函数结果的 `output` 接受字符串或数组，其他类型会报告 `expected a string or an array`。Session 的 `agent` 和 `environment` 以及 Template 的 `network` 使用各自的解析器，并先检查其是否为对象。已锁定 schema 未表达的规则以字段作为 param，并给出说明该规则的消息：Vault 和 Credential 的 `name`（去除首尾空白后 1–256 UTF-8 字节）、Template 的 `name`（1–256 个字符）、非空的 `auth.token` 和 `auth.access_token`、HTTPS 的 `auth.mcp_server_url` 和 `auth.refresh.token_endpoint`、RFC 3339 的 `auth.expires_at`、环境变量名（`env.<name>`），以及没有任何可更改内容的 Credential 更新（param 为 `auth`）。
 
 在同一个对象内，Core 会先报告联合类型的 `type`，然后报告未知成员，再按文档顺序报告成员值，最后按固定 schema 的顺序报告缺失成员；先检查 tools，再检查 `text`，并在重复项和 schema 根检查之前检查整个对象。没有字符串根 `type` 的 schema 不会被检查。Function 和 output schema、`request_metadata` 和 `x_agents_core` 使用各自的解析器。更新正文和 Session 内联 Agent 会在查找 Agent 之前进行验证，因此属于当前租户、属于外部租户、缺失和格式错误的 Agent ID 会得到相同的响应。
 
@@ -189,7 +192,6 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 | --- | --- |
 | Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
 | 函数名称为空或重复 | "Function names must be nonempty and unique." |
-| 两个使用同一标签的 MCP 服务器 | "Execution requires distinct MCP server labels." |
 | 未声明 `retained_native_history` 的 Harness，运行在把每个 Environment 都放在 workspace 存储上的 sandbox provider 上（[Harness 能力](harness-capabilities.md)） | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
 每 Session 的 `tools` 替换可以允许一个其已保存 tools 原本会被拒绝的 Session。每种工具和 Harness 的支持情况见 [execution and tools](execution-tools.md)。

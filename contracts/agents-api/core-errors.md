@@ -38,7 +38,7 @@ These have null `param` and no `details`. A Core `401 invalid_admin_key` therefo
 
 ## Sandbox provider verification
 
-A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-deployment.md#reset)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
+A `POST` or `PUT /core/v1/sandbox/deployment` ([sandbox deployment](./sandbox-deployment.md#e2b-key-replacement)) whose provider verifies a credential or configuration, as E2B does, fails with these fixed errors. None returns provider text, a template name, a key or a resource count.
 
 | HTTP | Code | Meaning | `param` |
 | --- | --- | --- | --- |
@@ -58,7 +58,7 @@ Each code returns HTTP 400 with `type: "invalid_request_error"`. A missing, malf
 | `invalid_name` | `name` | `max_length`: 128 for Projects and nodes, 80 for Project keys | The name failed the resource's validator |
 | `invalid_node_capacity` | `max_active` or `max_retained` | `min`: 1, `max`: 1000000 | Capacity is invalid; retained capacity must also be at least active capacity |
 | `invalid_model_provider` | null | omitted | A complete model-provider bundle is required |
-| `model_provider_base_url_invalid` | `base_url` | omitted | Requires HTTPS without credentials, query or fragment |
+| `model_provider_base_url_invalid` | `base_url` | omitted | Requires HTTPS, or HTTP to a loopback or private IP address, without credentials, query or fragment |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` and `allowed_protocols`, from the build's adapter catalog | The protocol is unknown or unsupported by the selected Harness |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`: 16384 | The key is empty, too long or contains a prohibited character |
 | `model_provider_token_limits_invalid` | `context_window` or `max_output_tokens` | omitted | A limit is negative, `max_output_tokens` exceeds a set `context_window`, or the Harness has no native setting for a set limit |
@@ -106,7 +106,7 @@ These codes have null `param` and no `details`. [Sandbox deployment](./sandbox-d
 
 ## Diagnostic failure categories
 
-The [Session diagnostics](./session-diagnostics.md) routes return these categories inside a successful 200 snapshot, not as an error envelope. Public `/v1` Turn errors do not change. `params` is `{}` unless the table says otherwise.
+The [Session diagnostics](./session-diagnostics.md) routes return these categories inside a successful 200 snapshot, not as an error envelope. A public `/v1` Turn error reports some of them under official codes, as [Differences from OpenAI](./index.md#differences-from-openai) describes. `params` is `{}` unless the table says otherwise.
 
 | Code | Stored cause or safe meaning |
 | --- | --- |
@@ -118,7 +118,7 @@ The [Session diagnostics](./session-diagnostics.md) routes return these categori
 | `server_error` | Native server failure classification |
 | `invalid_request` | Native request rejection |
 | `resource_not_found` | Native resource/model not found |
-| `request_timeout` | Reserved neutral timeout category; no current adapter producer |
+| `request_timeout` | Native provider timeout classification |
 | `context_length_exceeded` | Native context limit classification |
 | `cyber_policy` | Native cyber policy rejection |
 | `connection_failed` | Native connection failure; params contain `http_status`, an integer in 100–599 or null |
@@ -134,7 +134,7 @@ The [Session diagnostics](./session-diagnostics.md) routes return these categori
 | `internal_error` | Unknown or malformed outcome; no raw value is returned |
 | `environment_connection_timeout` | Initial input connection deadline expired |
 | `environment_unavailable` | Environment unavailable for initial input |
-| `environment_provisioning_failed` | Hosted provisioning failure; params contain nullable `step`, `index`, `exit_code` from a sanitized receipt |
+| `environment_provisioning_failed` | Hosted provisioning failure; params contain nullable `step`, `index`, `exit_code` from a sanitized receipt, and `category` for a failure without a confirmed step |
 
 A database failure is an error, never an empty or healthy snapshot. Provisioning reasons and native messages are never parsed for categories or parameters.
 

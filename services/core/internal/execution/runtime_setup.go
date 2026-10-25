@@ -8,6 +8,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -20,9 +21,64 @@ type runtimeSetupOperation struct {
 	Index   int
 }
 
-type runtimeStepFailure struct{ exitCode int }
+type runtimeStepFailure struct {
+	exitCode int
+	rejected bool
+}
 
 func (*runtimeStepFailure) Error() string { return "environment initialization operation failed" }
+
+// unconfirmedError reports an operation whose effect or receipt is unknown. It
+// keeps the cause for classification and never renders it.
+type unconfirmedError struct{ cause error }
+
+func (*unconfirmedError) Error() string   { return "environment initialization operation unconfirmed" }
+func (e *unconfirmedError) Unwrap() error { return e.cause }
+
+var errOwnershipLost = errors.New("Core lost ownership of the initialization")
+
+var errRuntimeConnectionChanged = errors.New("Runtime connection changed during initialization")
+
+// stepLabel is the fixed label of the operation in step timing.
+func (operation runtimeSetupOperation) stepLabel() sessions.InitializationLabel {
+	if operation.Request.Initialization != nil {
+		return sessions.InitializationLabel(operation.Request.Initialization.Action)
+	}
+	return sessions.InitializationLabel(operation.Request.Action)
+}
+
+// step reports the Runtime-measured timing of an operation that ran.
+func (operation runtimeSetupOperation) step(result proto.RuntimePrepareResultPayload) (sessions.InitializationStep, bool) {
+	if result.Outcome != "completed" && result.Outcome != "failed" {
+		return sessions.InitializationStep{}, false
+	}
+	step := sessions.InitializationStep{Step: operation.stepLabel(), DurationMS: result.DurationMS}
+	if step.Step == sessions.InitializationSetup {
+		step.Index = &operation.Index
+	}
+	return step, true
+}
+
+// provisioningCategory classifies a failure without a confirmed failed step.
+func provisioningCategory(err error) sessions.ProvisioningCategory {
+	var confirmed *runtimeStepFailure
+	var unconfirmed *unconfirmedError
+	switch {
+	case errors.Is(err, errOwnershipLost):
+		return sessions.ProvisioningCoreRestart
+	case errors.Is(err, context.DeadlineExceeded):
+		return sessions.ProvisioningTimeout
+	case errors.Is(err, runtimegateway.ErrSessionClosed), errors.Is(err, runtimegateway.ErrDeviceNotRegistered), errors.Is(err, errRuntimeConnectionChanged):
+		return sessions.ProvisioningRuntimeDisconnected
+	case errors.As(err, &confirmed) && confirmed.rejected:
+		return sessions.ProvisioningRejected
+	case errors.As(err, &confirmed):
+		return sessions.ProvisioningOperationFailed
+	case errors.As(err, &unconfirmed):
+		return sessions.ProvisioningUnconfirmed
+	}
+	return sessions.ProvisioningCoreError
+}
 
 func (operation runtimeSetupOperation) provisioningFailure(exitCode int) sessions.ProvisioningFailure {
 	action := operation.Request.Action
@@ -69,7 +125,7 @@ func setupOperations(setup environmentconfig.Setup) []runtimeSetupOperation {
 		result = append(result, operation)
 	}
 	if len(setup.Skills)+len(setup.Plugins)+len(setup.CapabilityDirectories) > 0 {
-		sources := agentcapabilities.Input{Plugins: setup.PluginMetadata(), Directories: setup.CapabilityDirectories}
+		sources := proto.CapabilitySources{Plugins: setup.PluginMetadata(), Directories: setup.CapabilityDirectories}
 		for _, skill := range setup.Skills {
 			sources.Skills = append(sources.Skills, skill.InstallationMetadata())
 		}
@@ -82,31 +138,31 @@ type runtimePreparer interface {
 	PrepareRuntime(context.Context, string, proto.RuntimePreparePayload, []byte) (proto.RuntimePrepareResultPayload, error)
 }
 
-func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, operation runtimeSetupOperation) error {
+func runRuntimeSetup(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, operation runtimeSetupOperation) (proto.RuntimePrepareResultPayload, error) {
 	if peer == nil {
-		return errors.New("environment initialization request unavailable")
+		return proto.RuntimePrepareResultPayload{}, errors.New("environment initialization request unavailable")
 	}
 	deadline, bounded := ctx.Deadline()
 	budget := time.Until(deadline).Milliseconds()
 	if !bounded || budget <= 0 || budget > proto.RuntimePrepareMaxBudgetMS || ctx.Err() != nil {
-		return errors.New("environment initialization budget unavailable")
+		return proto.RuntimePrepareResultPayload{}, errors.New("environment initialization budget unavailable")
 	}
 	request := operation.Request
 	request.BudgetMS = budget
 	request.EnvironmentID, request.SessionID = identity.EnvironmentID, identity.SessionID
 	result, err := peer.PrepareRuntime(ctx, uuid.NewString(), request, operation.Data)
 	if err == nil && result.Outcome == "completed" {
-		return nil
+		return result, nil
 	}
 	if err == nil && (result.Outcome == "rejected" || result.Outcome == "failed") {
-		return &runtimeStepFailure{exitCode: result.ExitCode}
+		return result, &runtimeStepFailure{exitCode: result.ExitCode, rejected: result.Outcome == "rejected"}
 	}
-	return errors.New("environment initialization operation unconfirmed")
+	return result, &unconfirmedError{cause: err}
 }
 
-func installInitialFile(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, file environmentconfig.InitialFileMetadata, body []byte) error {
+func installInitialFile(ctx context.Context, peer runtimePreparer, identity agentcapabilities.Identity, file environmentconfig.InitialFileMetadata, body []byte) (proto.RuntimePrepareResultPayload, error) {
 	if file.SizeBytes == nil || *file.SizeBytes != int64(len(body)) || len(body) > environmentconfig.MaxInitialFileBytes {
-		return errors.New("environment initialization request unavailable")
+		return proto.RuntimePrepareResultPayload{}, errors.New("environment initialization request unavailable")
 	}
 	return runRuntimeSetup(ctx, peer, identity, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "file", File: &proto.RuntimeInitialFile{Path: file.Path}}, Data: body})
 }

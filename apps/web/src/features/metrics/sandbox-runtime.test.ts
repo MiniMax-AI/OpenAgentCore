@@ -5,7 +5,7 @@ import type { SandboxAllocation } from "@oac/agents-client";
 import { hostedObservation, node, session } from "../overview/test-fixtures";
 import { hostedRuntimeRows, hostedRuntimeUsage, loadHostedRuntimes, matchesRuntime, runtimeSampleGap, runtimeSnapshot } from "./sandbox-runtime";
 
-const none = { ...hostedObservation("plain", "p1"), mode: "none", instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", cpu: null, memory: null } as unknown as ReturnType<typeof hostedObservation>;
+const none = { ...hostedObservation("plain", "p1"), mode: "none", instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", memory: null } as unknown as ReturnType<typeof hostedObservation>;
 
 describe("loadHostedRuntimes", () => {
   it("keeps hosted observations, reads their Sessions through their project and bounds the reads", async () => {
@@ -37,8 +37,8 @@ describe("hosted Runtime projections", () => {
   const load = {
     observations: [
       hostedObservation("a", "p1"),
-      hostedObservation("b", "p2", { lifecycle_state: "sleeping", status: "observed", cpu: null, memory: null }),
-      hostedObservation("c", "p2", { lifecycle_state: "pending", status: "unavailable", reason: "allocation_pending", cpu: null, memory: null, observed_at: null }),
+      hostedObservation("b", "p2", { lifecycle_state: "sleeping", status: "observed", memory: null }),
+      hostedObservation("c", "p2", { lifecycle_state: "pending", status: "unavailable", reason: "allocation_pending", memory: null, observed_at: null }),
     ],
     sessions: new Map([["a", session("a", { metadata: { title: "Nightly build" } })], ["b", session("b")]]),
     unread: 0,
@@ -56,12 +56,11 @@ describe("hosted Runtime projections", () => {
     expect(one.sessions.map((entry) => entry.id)).toEqual(["b"]);
   });
 
-  it("sums only reported CPU and memory and counts lifecycle states", () => {
+  it("sums only reported memory and counts lifecycle states", () => {
     expect(hostedRuntimeUsage(load.observations)).toEqual({
       hosted: 3, active: 1, sleeping: 1, pending: 1, observed: 2,
-      cpuUsageCores: 0.5, cpuCapacityCores: 2, memoryUsageBytes: 100, memoryLimitBytes: 400,
+      memoryUsageBytes: 100, memoryLimitBytes: 400,
     });
-    expect(hostedRuntimeUsage([load.observations[1]!]).cpuUsageCores).toBeNull();
   });
 
   it("places each Runtime on its host and derives uptime only from a current sample", () => {
@@ -78,7 +77,7 @@ describe("hosted Runtime projections", () => {
   });
 
   it("names a missing sample only for a sandbox Core records as active", () => {
-    const missing = { status: "unavailable", observed_at: null, started_at: null, cpu: null, memory: null } as const;
+    const missing = { status: "unavailable", observed_at: null, started_at: null, memory: null } as const;
     expect(runtimeSampleGap(hostedObservation("a", "p", { ...missing, reason: "sample_timeout" }))).toBe("sample_timeout");
     expect(runtimeSampleGap(hostedObservation("b", "p", { ...missing, lifecycle_state: "sleeping", reason: "runtime_not_running" }))).toBeNull();
     expect(runtimeSampleGap(hostedObservation("c", "p"))).toBeNull();

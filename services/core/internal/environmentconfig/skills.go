@@ -1,6 +1,7 @@
 package environmentconfig
 
 import (
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
 )
@@ -23,8 +24,8 @@ type Skill struct {
 }
 
 // InstallationMetadata removes public reference identity at the installer boundary.
-func (s Skill) InstallationMetadata() agentskill.Metadata {
-	return agentskill.Metadata{Type: "inline", Name: s.Metadata.Name, Description: s.Metadata.Description}
+func (s Skill) InstallationMetadata() proto.SkillMetadata {
+	return proto.SkillMetadata{Type: "inline", Name: s.Metadata.Name, Description: s.Metadata.Description}
 }
 
 const maxSkillsArchiveBytes = 10 << 20

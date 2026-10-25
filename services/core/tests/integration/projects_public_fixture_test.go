@@ -24,7 +24,7 @@ func fixtureProjects(t testing.TB, s *Store) (*projectpg.Store, *projects.Servic
 // fixtureProjectsReader reads Projects from the database and resolves Project
 // keys from the test's fixture keys.
 type fixtureProjectsReader struct {
-	projects.Reader
+	*projectpg.Store
 	keys fixtureKeyResolver
 }
 

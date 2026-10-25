@@ -325,7 +325,7 @@ def bootstraps(bundle, epoch, revision):
     bundle = pathlib.Path(bundle)
     with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
         modules = (("node_install.py", "__main__.py"), ("distribution.py", "distribution.py"),
-                   *((name, name) for name in ("node_spec.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py")))
+                   *((name, name) for name in ("node_spec.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py")))
         for original, packaged in modules:
             target = pathlib.Path(directory) / packaged
             shutil.copyfile(bundle / original, target)

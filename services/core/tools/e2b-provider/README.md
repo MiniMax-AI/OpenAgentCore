@@ -13,10 +13,16 @@ The account key is stored encrypted in Core's database and is write-only. It rea
 | Helper operation | Core use | Behavior |
 | --- | --- | --- |
 | `create` | `Create` | Creates the sandbox once and runs `managed_init.py`; see [Create](#create) |
-| `inspect` | `GetInfo` | Reads the sandbox by recorded ID, or by ownership metadata when no ID is recorded, and checks ownership, domain, template and resources |
+| `inspect` | `GetInfo` | Reads the sandbox by recorded ID, or by ownership metadata when no ID is recorded, and checks ownership, domain (an omitted domain is the configured one), template and resources |
 | `renew` | `Renew` | Extends the lease of the running sandbox to the configured timeout, then rereads it |
 | `kill` | `Kill` | Destroys every matching sandbox and confirms that none remains |
 | `command` | `RunCommand` | Runs one bounded command as the Runtime user on a running sandbox whose bootstrap completed; output is limited to 1 MiB per stream |
+| `compute`, `renew_compute` | `GetCompute`, `RenewCompute` | One sandbox spans every generation of an allocation, and the receipt records the current generation, the pause and the resume. Any other generation is `not_found`. `renew_compute` extends a running sandbox's lease and otherwise observes like `compute` |
+| `suspend` | `Suspend` | Pauses the sandbox with the SDK's native memory snapshot, so the daemon survives and the paused sandbox is the snapshot. A pause that is dispatched but not seen complete is `unconfirmed`, never running |
+| `resume` | `Resume` | Records the attempt as dispatched, then reconnects with `connect`; the same operation is never dispatched twice and a failure after dispatch is `unconfirmed`. A snapshot that does not match the paused sandbox, its endpoint or its template build is `checkpoint_unusable` before any native call, durably for the operation |
+| `resume_compute` | `ResumeCompute` | Thaws the source only while it is running |
+| `kill_compute`, `delete_snapshot` | `KillCompute`, `DeleteSnapshot` | Destroy the sandbox only for the generation that owns it; a superseded generation owns nothing |
+| `command_compute` | `RunCommandCompute` | Runs one bounded command, such as the wake command, on the running current sandbox |
 | `validate_deployment` | Deployment setup | Reads the template's builds and requires the exact build to be ready with the configured CPU and memory. Without configured resources the selection adopts the build's CPU and memory. Returns the build's status, CPU, memory and reported disk for Core to record; bounded to 30 seconds |
 | `list_templates`, `list_builds` | [Configuration discovery](../../../../contracts/agents-api/sandbox-deployment.md#configuration-discovery) | Pages the key's visible templates (`GET /v2/templates`) or one template's ready builds, with a transient key. Results are capped at 200 and write no receipt |
 | `observe` | Runtime observations | One allocation; see [Observations](#observations) |
@@ -30,11 +36,11 @@ Compatible endpoints must return the SDK 2.51.0 template-list and template-build
 
 Run `go generate ./services/core/internal/sandbox/e2b` from the repository root after changing these declarations. `make check-e2b-provider` and the Go adapter tests reject stale projections; both languages consume generated valid and invalid exchanges covering wire types, extra fields, operation/reference bounds and managed-bootstrap fields. The helper build copies those fixtures with its source before running the pinned-SDK suite.
 
-The boundary has version 1. The request and credentials arrive on standard input; standard output carries one bounded response with a sanitized error code. The helper removes ambient `E2B_*` and `PYTHON*` variables and calls the SDK only with the request's explicit API origin and sandbox domain. Each receipt is bound to those selectors, and a receipt without them belongs to the official endpoints (`https://api.e2b.app`, `e2b.app`). An endpoint change keeps earlier generations on their original API and sandbox domain; the candidate key must verify all retained ownership before an online switch.
+The request and credentials arrive on standard input; standard output carries one bounded response with a sanitized error code. The helper removes ambient `E2B_*` and `PYTHON*` variables and calls the SDK only with the request's explicit API origin and sandbox domain. Each receipt is bound to those selectors, and a receipt without them belongs to the official endpoints (`https://api.e2b.app`, `e2b.app`). An endpoint change keeps earlier generations on their original API and sandbox domain; the candidate key must verify all retained ownership before an online switch.
 
 ## Receipts and state directory
 
-`OAC_E2B_STATE_DIR` ([configuration](../../../../docs/configuration.md#appendix-core-environment-without-the-installer)) must already exist, be owned by the helper's user and grant no group or other access. Keep it on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
+The state directory is the fixed `/state/e2b` ([private Provider state](../../../../docs/configuration.md#compose-installations)), which Core creates when it loads the Provider. It must be owned by the helper's user and grant no group or other access, and it lives on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
 
 A helper holds its allocation's lock until the SDK operation returns, even after Core's caller times out. Core tracks the helper's actual exit, and a credential change waits for running helpers without killing them. Helper exit never proves that a remote Create settled. Core serializes lifecycle requests per allocation and never replays Create.
 
@@ -50,7 +56,7 @@ An unknown Create is never repeated. A Create whose connection material was lost
 
 ## Inspection and cleanup
 
-Inspection uses SDK metadata and ID reads only. SDK `connect` is never used because it can resume paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
+Inspection uses SDK metadata and ID reads only. SDK `connect` is used only in Resume, because it resumes paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
 
 `CreateSettled` proves that the original Create and bootstrap can no longer mutate; it is independent of `BootstrapComplete`. An empty lookup never settles an unknown Create. Kill destroys every matching sandbox, confirms that none remains and only then records a settled tombstone; it returns `State=absent` with `CreateSettled`. A settled rejected Create with no sandbox IDs proves absence without a cloud request, so GetInfo and Kill still succeed when the key is invalid. Ordinary missing compute has no such proof.
 

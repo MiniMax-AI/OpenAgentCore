@@ -3,6 +3,7 @@ package execution
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
@@ -25,6 +26,22 @@ func TestAcceptedEnginePlacements(t *testing.T) {
 				t.Fatalf("%s/%s: %v", engine, placement, err)
 			}
 		}
+	}
+}
+
+func TestDeclaredInstructionsLimit(t *testing.T) {
+	session := func(engine string, size int) error {
+		raw := json.RawMessage(`{"agent":{"model":"fixture","instructions":"` + strings.Repeat("x", size) + `"},"environment":{"type":"none"}}`)
+		return (Policy{}).ValidateSessionConfiguration(engine, raw)
+	}
+	if err := session("mcode", 32*1024); err != nil {
+		t.Fatal("limit-sized instructions rejected", err)
+	}
+	if err := session("mcode", 32*1024+1); err == nil {
+		t.Fatal("instructions over the declared limit accepted")
+	}
+	if err := session("codex", 32*1024+1); err != nil {
+		t.Fatal("a Harness without a declared limit rejected instructions", err)
 	}
 }
 

@@ -259,14 +259,6 @@
   font-size: 13px;
 }
 
-.wizard-missing {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--orange);
-  font-weight: 500;
-}
-
 @media (max-width: 640px) {
   .wizard-choices-3 {
     grid-template-columns: minmax(0, 1fr);
@@ -330,7 +322,7 @@
   font-size: 13px;
 }
 
-/* After a save attempt the E2B key is gone; this says so beside the way back to it. */
+/* After a save attempt the key is gone; this says so beside the way back to it. */
 .sandbox-wizard .wizard-key-again {
   display: flex;
   flex-wrap: wrap;
@@ -359,8 +351,8 @@
   margin: 0;
 }
 
-/* What Docker gives up against microsandbox, in its confirmation. */
-.wizard-docker-risks {
+/* The risks a Provider declares, in its confirmation. */
+.wizard-cautions {
   display: grid;
   gap: 12px;
   margin: 0;
@@ -370,13 +362,6 @@
   list-style: none;
 }
 
-.wizard-docker-risks li {
-  display: grid;
-  gap: 2px;
+.wizard-cautions li {
   color: var(--ink-2);
-}
-
-.wizard-docker-risks strong {
-  color: var(--ink);
-  font-weight: 600;
 }

@@ -51,11 +51,6 @@ export function formatDuration(seconds: number | null | undefined): string {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
-export function formatCores(value: number | null | undefined, locale?: string): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return MISSING;
-  return value.toLocaleString(locale, { maximumFractionDigits: value < 10 ? 2 : 1 });
-}
-
 /** Unix seconds of an RFC 3339 timestamp, for the formatters below; null when absent or unparseable. */
 export function epochSeconds(value: string | null | undefined): number | null {
   if (!value) return null;

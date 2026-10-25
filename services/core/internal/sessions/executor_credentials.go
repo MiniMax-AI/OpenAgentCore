@@ -13,23 +13,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 )
 
-// ExecutorCredentialReader authenticates Environment executor credentials and
-// reads a Project's credentials for an Environment.
-type ExecutorCredentialReader interface {
-	// AuthenticateEnvironmentExecutor checks, in one database snapshot, that
-	// the credential whose SHA-256 digest is given is current for the
-	// Environment and belongs to its Session's creator, and returns the
-	// Session's tenant. Any other credential is ErrNotFound.
-	AuthenticateEnvironmentExecutor(ctx context.Context, environment, digest string) (string, error)
-	// ProjectExecutorCredentialState reads, in one snapshot, the connection
-	// facts of the tenant's self_hosted Environment and the metadata of the
-	// credentials restricted to it that the Project's principal holds, oldest
-	// first. An invalid principal is ErrInvalidInput; an Environment of a
-	// publicly deleted Session, another type or another tenant is ErrNotFound.
-	// The snapshot ends before any live observation of the connection.
-	ProjectExecutorCredentialState(ctx context.Context, project identity.Principal, environment string) (ExecutorCredentialState, error)
-}
-
 type IssuedExecutorCredential struct {
 	KeyID         string `json:"key_id" binding:"required"`
 	EnvironmentID string `json:"environment_id,omitempty"`

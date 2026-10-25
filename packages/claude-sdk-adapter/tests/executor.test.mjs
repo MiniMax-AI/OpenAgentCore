@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import test from "node:test";
+import { assertFrame } from "./frames.mjs";
 
 const fixture = `
 import assert from "node:assert/strict";
@@ -19,7 +20,7 @@ globalThis.startupFixture=async({options})=>{
   const [a,b]=InMemoryTransport.createLinkedPair();
   await Promise.all([client.connect(a),options.mcpServers.functions.instance.connect(b)]);
  }
- let queried=false,interrupt,number=0;
+ let queried=false,interrupt,number=0,later;
  const close=()=>{child.stdin.end();interrupt?.()};
  options.abortController.signal.addEventListener('abort',close);
  return {close,query(prompt){assert.equal(queried,false);queried=true;process.send({type:'query'});return {
@@ -31,6 +32,18 @@ globalThis.startupFixture=async({options})=>{
     const text=user.message.content[0].text;
     process.send({type:'input',text});
     yield {type:'system',subtype:'init',session_id:'native',tools:client ? ['mcp__functions__lookup'] : [],mcp_servers:client ? [{name:'functions',status:'connected'}] : []};
+    if(process.argv[1]==='later-function'){
+     // The call is dispatched independently of the result stream and belongs to the next native turn.
+     if(number===1){
+      later=client.callTool({name:'lookup',arguments:{text},_meta:{'claudecode/toolUseId':'later-call'}});
+      await new Promise(resolve=>process.once('message',resolve));
+     }else{
+      const called=await later;
+      yield {type:'user',session_id:'native',parent_tool_use_id:null,message:{content:[{type:'tool_result',tool_use_id:'later-call',content:called.content,is_error:called.isError}]}};
+     }
+     yield {type:'result',uuid:'result-'+number,session_id:'native',user_message_uuids:[user.uuid],subtype:'success',is_error:false,result:'answer-'+number,usage:{input_tokens:1,output_tokens:1},modelUsage:{},total_cost_usd:0};
+     continue;
+    }
     if(client){
      if(text==='pending-function'){
       void client.callTool({name:'lookup',arguments:{text},_meta:{'claudecode/toolUseId':'pending-call'}}).catch(()=>{});
@@ -70,7 +83,7 @@ async function launch(t,mode="normal") {
  const child=spawn(process.execPath,["--input-type=module","-e",fixture,mode],{stdio:["pipe","pipe","pipe","ipc"]});
  const events=[],observations=[];let buffer="",stderr="";
  child.stdout.setEncoding("utf8");child.stderr.setEncoding("utf8");
- child.stdout.on("data",data=>{buffer+=data;while(buffer.includes("\n")){const end=buffer.indexOf("\n");events.push(JSON.parse(buffer.slice(0,end)));buffer=buffer.slice(end+1)}});
+ child.stdout.on("data",data=>{buffer+=data;while(buffer.includes("\n")){const end=buffer.indexOf("\n");{const event=JSON.parse(buffer.slice(0,end));assertFrame(event);events.push(event)}buffer=buffer.slice(end+1)}});
  child.stderr.on("data",data=>{stderr+=data});child.on("message",event=>observations.push(event));
  const closed=new Promise(resolve=>child.once("close",(code,signal)=>resolve({code,signal})));
  t.after(async()=>{child.kill("SIGKILL");await closed});
@@ -78,7 +91,7 @@ async function launch(t,mode="normal") {
  const send=value=>child.stdin.write(JSON.stringify(value)+"\n");
  const start=(id,text)=>send({type:"turn_start",turn_id:id,input:[{content:[{type:"input_text",text}]}]});
  send({type:"executor_prepare",cwd:"/tmp",model:"fixture",system_prompt:"",
- ...(mode==="features" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
+ ...(mode==="features" || mode==="later-function" || mode.startsWith("pending-function") ? {functions:[{name:"lookup",description:"lookup",parameters:{type:"object",properties:{text:{type:"string"}}}}]} : {})});
  await wait(()=>events.some(event=>event.type==="executor_ready"));
  assert.equal(observations.filter(event=>event.type==="input").length,0);
  return {child,events,observations,closed,wait,send,start};
@@ -201,4 +214,19 @@ test("executor preparation reports missing native history before readiness",{tim
  child.stdin.end(JSON.stringify({type:"executor_prepare",cwd:"/tmp",model:"fixture",system_prompt:"",resume:"native"})+"\n");
  assert.equal(await closed,0);
  assert.deepEqual(stdout.trim().split("\n").map(line=>JSON.parse(line)),[{type:"error",code:"history_unavailable"}]);
+});
+
+test("a function call outstanding across a native result is applied by the next native turn of the same Turn", {timeout:10000}, async t => {
+ const {child,events,closed,wait,send,start}=await launch(t,"later-function");
+ start("only","later-function");
+ await wait(()=>events.some(event=>event.type==="function_call"));
+ send({type:"steer",turn_id:"only",input_id:"extra",input:[{content:[{type:"input_text",text:"later text"}]}]});
+ child.send({type:"go"});
+ await wait(()=>events.filter(event=>event.type==="usage").length===1);
+ send({type:"function_result",turn_id:"only",call_id:"later-call",delivery_id:"delivery",success:true,content:[{type:"input_text",text:"value"}]});
+ await wait(()=>events.some(event=>event.type==="turn_settled"));
+ assert.equal(events.filter(event=>event.type==="function_applied").length,1);
+ assert.equal(events.filter(event=>event.type==="usage").length,2);
+ assert.equal(events.find(event=>event.type==="turn_settled").confirmed,true);
+ child.stdin.end();assert.deepEqual(await closed,{code:0,signal:null});
 });

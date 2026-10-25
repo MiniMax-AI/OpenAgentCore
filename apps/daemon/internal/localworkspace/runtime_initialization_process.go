@@ -25,9 +25,7 @@ func initializationBash() (string, error) {
 	// Git Bash preserves setup's Bash syntax. Never substitute cmd.exe, PowerShell
 	// or the Windows WSL launcher for a missing Bash implementation.
 	candidates := []string{}
-	if explicit := os.Getenv("CLAUDE_CODE_GIT_BASH_PATH"); explicit != "" {
-		candidates = append(candidates, explicit)
-	} else if git, err := exec.LookPath("git.exe"); err == nil {
+	if git, err := exec.LookPath("git.exe"); err == nil {
 		candidates = append(candidates, filepath.Join(filepath.Dir(git), "..", "bin", "bash.exe"), filepath.Join(filepath.Dir(git), "bash.exe"))
 	}
 	for _, candidate := range candidates {

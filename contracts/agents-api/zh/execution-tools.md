@@ -1,7 +1,7 @@
 ---
 title: "执行工具"
 source: contracts/agents-api/execution-tools.md
-source_hash: d88acdb94153f3974e66adbdb9443706ae47adef280cae71b03fdf896bdfe579
+source_hash: 7783010b0968214d235d349fd60d1ee6096f0ab9d33d58397d90bb0fd935cded
 ---
 
 Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在 `text.format` 中声明输出 schema。本契约说明 Core 如何验证声明、哪些内容跨越 Runtime 边界，以及调用方如何恢复待执行操作。[Harness 能力](harness-capabilities.md)列出各 Harness 在不同部署位置支持的操作。原生工作区工具和 Environment Plugin MCP 属于 [Environment](environments.md#skills-plugins-and-environment-mcp)。
@@ -32,7 +32,7 @@ Agent 在 `tools` 中声明应用函数、控制项和 MCP 服务器，并可在
 
 原生 Harness 可能在应用结果之前放弃调用，例如根 Turn 关闭或中断了发起该调用的 Subagent，或 MiniMax Code 的 MCP 客户端使该调用超时。该调用随即不再是待执行操作，Turn 继续运行，并在没有待执行操作时回到 `in_progress`；之后为它提交的 `function_call_output` 会像取消后的结果一样被拒绝。被放弃的调用没有应用回执。
 
-Subagent 发起的函数调用是运行该子级的根 Turn 的待执行操作：`turn_id` 是该根 Turn，`call_id` 等于 [Subagent 路由](subagents.md#public-reads)上该子级 `function_call` Item 的 `call_id`。使用该 `call_id` 和根 Turn ID，以 `function_call_output` / `tool_result` 作答；子级的 Turn ID 不是 Session Turn，会得到“另一个 Turn 的调用”的 400。Subagent 的 HTTP MCP 调用是该子级历史中的 `mcp_call` Item。
+Subagent 发起的函数调用是运行该子级的根 Turn 的待执行操作：`turn_id` 是该根 Turn，`call_id` 等于 [Subagent 路由](subagents.md#public-reads)上该子级 `function_call` Item 的 `call_id`。使用该 `call_id`，以及根 Turn ID 或该调用的 `agent.session.turn.item.added` 事件所标明的子级 Turn ID（官方 SDK 发送的即是后者），以 `function_call_output` / `tool_result` 作答；其他 Turn ID 会得到“另一个 Turn 的调用”的 400。Subagent 的 HTTP MCP 调用是该子级历史中的 `mcp_call` Item。
 
 ### 待执行操作与恢复 {#required-actions-and-recovery}
 
@@ -92,7 +92,7 @@ Core 发送 `PromptRequestPayload.ToolSearch` 和每个 `FunctionTool.DeferLoadi
 }
 ```
 
-- `server_label` 非空且在 Session 中唯一。接受 `http` 和 `stdio` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `request_metadata` 被拒绝，消息为 "Nonempty MCP request_metadata is not supported yet."；内联 `authorization` 被拒绝，消息为 "Inline MCP authorization is not supported; use credential_id."。`headers` 为非机密标头，名称和值须为有效的 HTTP 名称和值，且名称不区分大小写唯一，会与 bearer 一同原样传给原生 Harness；`Authorization` 标头被拒绝，因为凭据只通过 Vault 凭据进入。Claude 会拒绝 `server_url` 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。
+- `server_label` 只含字母、数字、下划线和连字符，且在各工具之间唯一；违反时返回 400 `invalid_request_error`，并指出出错工具的 `server_label`。被拒绝的传输成员以同样方式指出，例如 `tools[0].transport.cwd`，Session 内联 Agent 的路径以 `agent.` 开头。接受 `http` 和 `stdio` 传输；`server_url` 为不带凭据或片段的绝对 HTTP 或 HTTPS URL。非空 `request_metadata` 被拒绝，消息为 "No engine sends MCP request_metadata."；内联 `authorization` 被拒绝，消息为 "Inline MCP authorization is not supported; use credential_id."。`headers` 为非机密标头，名称和值须为有效的 HTTP 名称和值，且名称不区分大小写唯一，会与 bearer 一同原样传给原生 Harness；`Authorization` 标头被拒绝，因为凭据只通过 Vault 凭据进入。Claude 会拒绝 `server_url` 或标头值中的 `${`（[原生差异](index.md#differences-from-openai)）。
 - [公开 MCP 连接来源](environments.md#public-mcp-connection-origin)定义来源默认值、部署位置和凭据权限；[Harness 能力](harness-capabilities.md#tools)定义各 Harness 支持范围。
 - 省略或 null 的 `allowed_tools` 允许所有服务器工具；`[]` 不允许任何工具。
 - `required: true` 使原生线程创建和冷恢复等待服务器初始化；失败会停止执行，不替换保留历史。它要求 Runtime 的 `mcp_http_required` 能力。等待期间公开工作可被接受或排队。

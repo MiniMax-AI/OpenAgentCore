@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
@@ -19,7 +21,7 @@ func TestDeviceCredentialCarriesPersistedAllocationNode(t *testing.T) {
 		t.Fatal(err)
 	}
 	remote := uuid.NewString()
-	_, err = nodes.Enroll(t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
+	_, err = nodes.Enroll(t.Context(), token, machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: remote, Credential: strings.Repeat("x", 64),
 		Name: "remote", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()})
 	if err != nil {
 		t.Fatal(err)

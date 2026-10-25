@@ -1,0 +1,20 @@
+{"phase": "api_round_trip", "seconds": 0.195}
+{"phase": "api_round_trip", "seconds": 0.195}
+{"phase": "api_round_trip", "seconds": 0.28}
+{"phase": "api_round_trip", "seconds": 0.203}
+{"phase": "api_round_trip", "seconds": 0.206}
+{"phase": "api_round_trip", "seconds": 0.196}
+{"phase": "api_round_trip", "seconds": 0.195}
+{"phase": "api_round_trip", "seconds": 0.293}
+{"phase": "api_round_trip", "seconds": 0.202}
+{"phase": "api_round_trip", "seconds": 0.283}
+{"phase": "lifecycle", "sample": 0, "create": 1.792, "cpu_count": 2, "memory_mb": 4096, "pause": 1.675, "resume_connect": 3.431, "resume_command": 1.14}
+{"phase": "lifecycle", "sample": 1, "create": 0.566, "cpu_count": 2, "memory_mb": 4096, "pause": 0.736, "resume_connect": 0.35, "resume_command": 0.88}
+{"phase": "lifecycle", "sample": 2, "create": 0.757, "cpu_count": 2, "memory_mb": 4096, "pause": 2.479, "resume_connect": 0.352, "resume_command": 0.832}
+{"phase": "lifecycle", "sample": 3, "create": 0.668, "cpu_count": 2, "memory_mb": 4096, "pause": 1.404, "resume_connect": 0.359, "resume_command": 0.281}
+{"phase": "lifecycle", "sample": 4, "create": 1.125, "cpu_count": 2, "memory_mb": 4096, "pause": 2.007, "resume_connect": 0.352, "resume_command": 0.248}
+{"phase": "lifecycle", "sample": 5, "create": 0.874, "cpu_count": 2, "memory_mb": 4096, "pause": 1.003, "resume_connect": 0.338, "resume_command": 0.858}
+{"phase": "lifecycle", "sample": 6, "create": 0.583, "cpu_count": 2, "memory_mb": 4096, "pause": 1.048, "resume_connect": 0.323, "resume_command": 0.248}
+{"phase": "lifecycle", "sample": 7, "create": 0.58, "cpu_count": 2, "memory_mb": 4096, "pause": 0.657, "resume_connect": 0.308, "resume_command": 0.287}
+{"phase": "lifecycle", "sample": 8, "create": 0.505, "cpu_count": 2, "memory_mb": 4096, "pause": 0.726, "resume_connect": 0.363, "resume_command": 0.285}
+{"phase": "lifecycle", "sample": 9, "create": 0.516, "cpu_count": 2, "memory_mb": 4096, "pause": 1.037, "resume_connect": 0.362, "resume_command": 0.253}

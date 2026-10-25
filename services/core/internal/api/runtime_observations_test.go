@@ -85,7 +85,7 @@ func TestRuntimeObservationRoutesUseSessionIdentityAndExactNullability(t *testin
 		t.Fatalf("observation returned %d: %s", response.Code, response.Body)
 	}
 	var value v1.RuntimeObservation
-	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.ID != sessionID || value.SessionID != sessionID || value.Instance.Kind != "none" || value.EnvironmentID != nil || value.ProviderType != nil || value.ObservedAt != nil || value.CPU != nil || value.Memory != nil || value.Reason == nil || *value.Reason != "runtime_mode_not_observable" {
+	if json.Unmarshal(response.Body.Bytes(), &value) != nil || value.ID != sessionID || value.SessionID != sessionID || value.Instance.Kind != "none" || value.EnvironmentID != nil || value.ProviderType != nil || value.ObservedAt != nil || value.Memory != nil || value.Reason == nil || *value.Reason != "runtime_mode_not_observable" {
 		t.Fatalf("invalid unsupported observation: %s", response.Body)
 	}
 }
@@ -104,16 +104,15 @@ func TestRuntimeObservationRoutesRejectQueries(t *testing.T) {
 }
 
 func TestRuntimeObservationResponsePreservesObservedZero(t *testing.T) {
-	zeroCPU := float64(0)
 	zeroMemory := uint64(0)
 	now := time.Date(2026, 9, 22, 8, 0, 0, 0, time.UTC)
 	sessionID, environmentID := uuid.NewString(), uuid.NewString()
 	value, err := runtimeObservationResponse(runtimeobs.Observation{
 		Target: runtimeobs.Target{SessionID: sessionID, EnvironmentID: environmentID, Mode: runtimeobs.ModeManaged, Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), DeviceID: uuid.NewString(), AllocationState: "running", ComputePhase: "running", AllocationCreatedAt: now.Add(-time.Hour)}},
 		Status: runtimeobs.StatusObserved, ProviderType: "docker", ResolvedAt: now,
-		Sample: &runtimeobs.Sample{ObservedAt: now, CPUUsageSecondsTotal: &zeroCPU, MemoryUsageBytes: &zeroMemory},
+		Sample: &runtimeobs.Sample{ObservedAt: now, MemoryUsageBytes: &zeroMemory},
 	})
-	if err != nil || value.LifecycleState == nil || *value.LifecycleState != "active" || value.CPU == nil || value.CPU.UsageSecondsTotal == nil || *value.CPU.UsageSecondsTotal != 0 || value.Memory == nil || value.Memory.UsageBytes == nil || *value.Memory.UsageBytes != 0 {
+	if err != nil || value.LifecycleState == nil || *value.LifecycleState != "active" || value.Memory == nil || value.Memory.UsageBytes == nil || *value.Memory.UsageBytes != 0 {
 		t.Fatalf("observed zero was lost: %+v %v", value, err)
 	}
 }
@@ -170,15 +169,14 @@ func TestRuntimeObservationResponseRejectsTimesOutsidePublicContract(t *testing.
 
 func timePointer(value time.Time) *time.Time { return &value }
 
-func TestAdminRuntimeObservationProjectsReportedUtilizationAndDisk(t *testing.T) {
+func TestAdminRuntimeObservationProjectsDisk(t *testing.T) {
 	now := time.Date(2026, 9, 25, 10, 31, 37, 0, time.UTC)
-	ratio, cores := .1955, 2.0
 	memoryUsed, memoryTotal, diskUsed, diskTotal := uint64(183836672), uint64(2079141888), uint64(1593188352), uint64(23511863296)
 	observation := runtimeobs.Observation{
 		Target: runtimeobs.Target{SessionID: uuid.NewString(), EnvironmentID: uuid.NewString(), Mode: runtimeobs.ModeManaged,
 			Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), AllocationState: "running", ComputePhase: "disabled", AllocationCreatedAt: now.Add(-time.Minute)}},
 		Status: runtimeobs.StatusObserved, ProviderType: "e2b", ResolvedAt: now,
-		Sample: &runtimeobs.Sample{ObservedAt: now, StartedAt: timePointer(now.Add(-time.Minute)), CPUUtilizationRatio: &ratio, CPUCapacityCores: &cores,
+		Sample: &runtimeobs.Sample{ObservedAt: now, StartedAt: timePointer(now.Add(-time.Minute)),
 			MemoryUsageBytes: &memoryUsed, MemoryLimitBytes: &memoryTotal, DiskUsageBytes: &diskUsed, DiskLimitBytes: &diskTotal},
 	}
 	value, err := adminRuntimeObservationResponse(observation)
@@ -187,7 +185,6 @@ func TestAdminRuntimeObservationProjectsReportedUtilizationAndDisk(t *testing.T)
 	}
 	raw, _ := json.Marshal(value)
 	for _, want := range []string{
-		`"cpu":{"usage_seconds_total":null,"capacity_cores":2,"usage_cores":null,"utilization_ratio":0.1955}`,
 		`"memory":{"usage_bytes":183836672,"limit_bytes":2079141888}`,
 		`"disk":{"usage_bytes":1593188352,"limit_bytes":23511863296}`,
 	} {

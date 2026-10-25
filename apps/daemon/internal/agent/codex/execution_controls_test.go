@@ -17,8 +17,8 @@ func TestExecutionControlsMapToNativeSettings(t *testing.T) {
 		controls *proto.ExecutionControls
 		want     [][2]string
 	}{
-		{"absent controls send nothing", nil, nil},
-		{"empty controls send nothing", &proto.ExecutionControls{}, nil},
+		{"absent controls turn summaries off", nil, nil},
+		{"empty controls turn summaries off", &proto.ExecutionControls{}, nil},
 		{"verbosity", &proto.ExecutionControls{TextVerbosity: "high"}, [][2]string{{"model_verbosity", `"high"`}}},
 		{"search without settings", &proto.ExecutionControls{WebSearch: &proto.WebSearchControl{Mode: "live", ContextSize: "medium"}},
 			[][2]string{{"web_search", `"live"`}, {"tools.web_search.context_size", `"medium"`}}},
@@ -37,8 +37,15 @@ func TestExecutionControlsMapToNativeSettings(t *testing.T) {
 				t.Fatal(err)
 			}
 			plan.Cleanup()
-			if want := append(append([][2]string{}, base...), tc.want...); !reflect.DeepEqual(plan.ExtraConfig, want) {
+			want := append([][2]string{}, base...)
+			if tc.controls == nil || tc.controls.ReasoningSummary == "" {
+				want = append(want, [2]string{"model_reasoning_summary", `"none"`})
+			}
+			if want = append(want, tc.want...); !reflect.DeepEqual(plan.ExtraConfig, want) {
 				t.Fatalf("config = %v, want %v", plan.ExtraConfig, want)
+			}
+			if plan.ReasoningSummary != (tc.controls != nil && tc.controls.ReasoningSummary != "") {
+				t.Fatalf("reasoning summary gate = %v", plan.ReasoningSummary)
 			}
 		})
 	}

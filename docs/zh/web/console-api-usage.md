@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: d14848610e56678c0de35ed6796b4631c5cd42b8a1f0d25366e224a4ff878e44
+source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
 ---
 
 本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
@@ -91,7 +91,7 @@ source_hash: d14848610e56678c0de35ed6796b4631c5cd42b8a1f0d25366e224a4ff878e44
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 列出 Harnesses | `GET /core/v1/harnesses` | **设置 → 模型与凭据** 的 **默认模型配置** 卡片：每个 Harness 的就绪状态（`enabled` 且已设置模型配置时为 **就绪**，否则为 **未设置模型提供商** 或 **已禁用**）、`default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 **使用详情**；**概览** 的 **新手引导**（默认 Harness 为 **就绪**；没有默认 Harness 时，任意 Harness 为 **就绪**） |
+| 列出 Harnesses | `GET /core/v1/harnesses` | **设置 → 模型与凭据** 的 **默认模型配置** 卡片：每个 Harness 的就绪状态（[就绪状态](../configuration.md#runtime-settings-web)）、`default`、不含密钥的模型配置，以及来自配置中 `last_used_at`、`last_error_code` 和 `last_error_at` 的 **使用详情**；**概览** 的 **新手引导**（默认 Harness 为 **就绪**；没有默认 Harness 时，任意 Harness 为 **就绪**） |
 | 设置或替换 | `PUT /core/v1/harnesses/{harness}/model-configuration` | **设置** 或 **替换**：提交包含只写提供商密钥的完整模型配置；该密钥绝不预填，写入也绝不重试；400 会在表单中显示 Core 的消息；随后再次读取列表 |
 | 清除 | `DELETE /core/v1/harnesses/{harness}/model-configuration` | **清除**，需确认，随后再次读取列表 |
 
@@ -105,8 +105,8 @@ source_hash: d14848610e56678c0de35ed6796b4631c5cd42b8a1f0d25366e224a4ff878e44
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 **在设置中管理** 前往 **设置 → 服务与部署**，且无需确认；使用 Docker 或 microsandbox 的 `resources` 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。E2B 的 `metadata.template_build`（状态、CPU、内存、磁盘）会显示在 **设置 → 沙箱与调度** 和 **沙箱监控** 中；当缺少 `specification.resources` 时，它还会确定每个 Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 **设置 → 沙箱与调度** 中 |
-| E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导先列出输入的 E2B 密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
+| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 **在设置中管理** 前往 **设置 → 服务与部署**，且无需确认；使用 Docker 或 microsandbox 的 `resources` 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。**沙箱监控** 用 `specification.resources` 显示每个 E2B Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 **设置 → 沙箱与调度** 中 |
+| E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导用输入的凭据逐级列出 discovered 字段的选项；E2B 先列出该密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
 | 节点 | `GET /core/v1/sandbox/nodes` | **节点** 页面；**概览** 上的机群；**沙箱监控** 中每个托管 Runtime 所在的节点。`provider_ready` 为 false 的在线节点为降级；**节点** 列表及节点页面中紧邻其状态的帮助提示显示 *沙箱提供商不可用*，目标准备原因（`rollout.diagnostic`，一个[就绪状态码](../getting-started/nodes.md#readiness-codes)）显示在其目标状态中。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，**节点** 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 **地址已过期**，而不是健康状态。**添加节点** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
 | 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | **节点** 中的节点页面：主机最近一次心跳报告的 CPU 忙碌占比、内存使用量和可用磁盘，以及 1 小时、6 小时或 24 小时内 CPU 与内存的历史记录；页面可见时每 30 秒刷新一次。**编辑节点** 读取节点的 `recommended_capacity` 作为推荐值 |
@@ -116,7 +116,7 @@ source_hash: d14848610e56678c0de35ed6796b4631c5cd42b8a1f0d25366e224a4ff878e44
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 **清理主机** 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | **沙箱监控**：每个项目的托管 Runtime，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |
 
-E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.allocations` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。
+E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控** 根据部署的 `resources.running` 和 `resources.pending` 统计其正在运行和正在启动的 Sandbox，而托管 Runtime 行来自 Runtime 观测。两个来源独立刷新，因此控制台不会根据两者之间的差异推断保留或清理状态。
 
 ## 写入 {#writes}
 

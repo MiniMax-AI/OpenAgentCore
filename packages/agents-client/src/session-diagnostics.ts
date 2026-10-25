@@ -2,17 +2,20 @@ import { canonicalUuid, exactFields, isOneOf, isRecord, sameResourceId } from ".
 import { invalidAdminResponse } from "./admin-projection";
 import { turnStatusResourceValues } from "./generated/public-api";
 import {
-  diagnosticFailureFields, itemDiagnosticTimingFields, sessionDiagnosticFailureFields, sessionDiagnosticFailureRequired,
+  diagnosticFailureFields, initializationStepTimingFields, initializationStepTimingStepValues, itemDiagnosticTimingFields, sessionDiagnosticFailureFields, sessionDiagnosticFailureRequired,
   diagnosticSourceValues, sessionDiagnosticsFields, sessionDiagnosticsStatusValues, turnDiagnosticsFields,
-  type DiagnosticFailure as DiagnosticFailureResource, type DiagnosticFailureCode, type ItemDiagnosticTiming,
+  type DiagnosticFailure as DiagnosticFailureResource, type DiagnosticFailureCode, type InitializationStepTiming, type ItemDiagnosticTiming,
   type SessionDiagnosticFailure as SessionDiagnosticFailureResource, type SessionDiagnostics as SessionDiagnosticsResource,
   type TurnDiagnostics as TurnDiagnosticsResource,
 } from "./generated/core-api";
 
+// provisioningCategoryValues is checked against the Go set by the shared fixture in session-diagnostics.test.ts.
 // ItemDiagnosticTiming holds Core receipt intervals, distinct from the public tool-reported duration_ms.
-export type { DiagnosticFailureCode, ItemDiagnosticTiming };
+export type { DiagnosticFailureCode, InitializationStepTiming, ItemDiagnosticTiming };
 // The schema types params as a free-form object; each code that carries params has one of these shapes.
-export type ProvisioningFailureParams = { step: "setup" | "python" | "npm" | "system" | "file" | "skill" | null; index: number | null; exit_code: number | null };
+export const provisioningCategoryValues = ["timeout", "runtime_disconnected", "unconfirmed", "rejected", "operation_failed", "core_error", "core_restart", "compute_released"] as const;
+export type ProvisioningCategory = (typeof provisioningCategoryValues)[number];
+export type ProvisioningFailureParams = { step: "setup" | "python" | "npm" | "file" | "skill" | "harness" | null; index: number | null; exit_code: number | null; category: ProvisioningCategory | null };
 export type ConnectionFailureParams = { http_status: number | null };
 export type DiagnosticFailure = Omit<DiagnosticFailureResource, "params"> & { params: Record<string, never> | ProvisioningFailureParams | ConnectionFailureParams };
 export type SessionDiagnosticFailure = DiagnosticFailure & Pick<SessionDiagnosticFailureResource, "source" | "turn_id">;
@@ -33,10 +36,10 @@ function failure(value: unknown, codes: readonly DiagnosticFailureCode[], sessio
   let params: DiagnosticFailure["params"] = {};
   if (value.code === "environment_provisioning_failed") {
     const p = value.params;
-    if (!exactFields(p, fields("step", "index", "exit_code")) || (p.step !== null && (typeof p.step !== "string" || !["setup", "python", "npm", "system", "file", "skill"].includes(p.step))) ||
+    if (!exactFields(p, fields("step", "index", "exit_code", "category")) || (p.category !== null && (!isOneOf(provisioningCategoryValues, p.category) || p.step !== null)) || (p.step !== null && (typeof p.step !== "string" || !["setup", "python", "npm", "file", "skill", "harness"].includes(p.step))) ||
         (p.index !== null && (!Number.isSafeInteger(p.index) || (p.index as number) < 0 || p.step !== "setup")) ||
-        (p.exit_code !== null && (!Number.isSafeInteger(p.exit_code) || (p.exit_code as number) < 1 || (p.exit_code as number) > 255 || !["setup", "python", "npm", "system"].includes(p.step ?? "")))) return invalidAdminResponse();
-    params = { step: p.step as ProvisioningFailureParams["step"], index: p.index as number | null, exit_code: p.exit_code as number | null };
+        (p.exit_code !== null && (!Number.isSafeInteger(p.exit_code) || (p.exit_code as number) < 1 || (p.exit_code as number) > 255 || !["setup", "python", "npm"].includes(p.step ?? "")))) return invalidAdminResponse();
+    params = { step: p.step as ProvisioningFailureParams["step"], index: p.index as number | null, exit_code: p.exit_code as number | null, category: p.category as ProvisioningFailureParams["category"] };
   } else if (value.code === "connection_failed") {
     const p = value.params;
     if (!exactFields(p, fields("http_status")) || (p.http_status !== null && (!Number.isSafeInteger(p.http_status) || (p.http_status as number) < 100 || (p.http_status as number) > 599))) return invalidAdminResponse();
@@ -59,7 +62,14 @@ export function projectSessionDiagnostics(value: unknown, sessionId: string): Se
       projected.turn_id = f.turn_id as string;
     }
   } else if (value.failure !== null) return invalidAdminResponse();
-  return { object: "core.session_diagnostics", session_id: value.session_id as string, status: value.status, failure: projected };
+  if (!Array.isArray(value.initialization_steps)) return invalidAdminResponse();
+  const initialization_steps: InitializationStepTiming[] = value.initialization_steps.map((step: unknown) => {
+    if (!isRecord(step) || !exactFields(step, initializationStepTimingFields) || !isOneOf(initializationStepTimingStepValues, step.step) ||
+        !Number.isSafeInteger(step.duration_ms) || (step.duration_ms as number) < 0 ||
+        (step.step === "setup" ? !Number.isSafeInteger(step.index) || (step.index as number) < 0 : step.index !== null)) return invalidAdminResponse();
+    return { step: step.step, index: step.index as number | null, duration_ms: step.duration_ms as number };
+  });
+  return { object: "core.session_diagnostics", session_id: value.session_id as string, status: value.status, failure: projected, initialization_steps };
 }
 
 export function projectTurnDiagnostics(value: unknown, sessionId: string, turnId: string): TurnDiagnostics {

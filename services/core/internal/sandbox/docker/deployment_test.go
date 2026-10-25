@@ -109,7 +109,7 @@ func TestManagedDriftRejectsBeforeBootstrapAndRetainsCleanup(t *testing.T) {
 }
 
 func TestNilManagedLimitsKeepCallerManagedDefaults(t *testing.T) {
-	options := runtimeContainerOptions(Config{}, "fixture", nil, nil)
+	options := runtimeContainerOptions(Config{}, "fixture", nil)
 	if options.HostConfig.NanoCPUs != 2e9 || options.HostConfig.Memory != 2*1024*1024*1024 {
 		t.Fatal("caller-managed defaults changed")
 	}

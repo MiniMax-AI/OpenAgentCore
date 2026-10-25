@@ -11,7 +11,6 @@ import {
   keyFlowReducer,
   keyNameProblem,
   matchesProject,
-  pendingPlaintext,
   projectNameProblem,
   sortKeys,
   type KeyFlow,
@@ -77,12 +76,12 @@ describe("issuing a key", () => {
 
   it("keeps the plaintext until the operator confirms it was saved, then drops it", () => {
     const shown = run([{ type: "openIssue", project }, { type: "setName", name: "bob-laptop" }, { type: "started" }, { type: "issued", projectId: project.id, key: issued }]);
-    expect(pendingPlaintext(shown)?.key).toBe(secret);
+    expect(shown).toMatchObject({ step: "issued", issued: { key: secret } });
     // Cancelling or closing the dialog never discards a key shown only once.
     expect(keyFlowReducer(shown, { type: "cancel" })).toBe(shown);
     const hidden = keyFlowReducer(shown, { type: "hideIssued" });
     expect(hidden).toMatchObject({ step: "issued", open: false });
-    expect(pendingPlaintext(hidden)?.key).toBe(secret);
+    expect(hidden).toMatchObject({ issued: { key: secret } });
     // A second issuance cannot start while this one waits.
     expect(keyFlowReducer(hidden, { type: "openIssue", project })).toBe(hidden);
     const saved = keyFlowReducer(hidden, { type: "saved" });

@@ -37,7 +37,7 @@ func directoryWorkerBeforeStart(t *testing.T, before func(*dispatchHarness, sess
 	}
 	awaitDaemonRemoteCondition(t, t.Context(), 3*time.Second, "read preparation capability", func() bool {
 		info, _, _ := peer.AgentKindStatus("codex")
-		return info.Capabilities.WorkspaceReadPreparation
+		return info.Capabilities.WorkspaceReadPreparation.IsSupported()
 	})
 	var w *execution.Worker
 	if before != nil {

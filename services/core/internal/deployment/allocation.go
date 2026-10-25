@@ -64,7 +64,7 @@ func (k AllocationKey) parse() (AllocationKey, error) {
 
 // NewAllocation is an allocation to store with its dedicated device.
 type NewAllocation struct {
-	ID, EnvironmentID, DeviceID, ProviderKey string
+	ID, DeviceID, ProviderKey string
 	// NodeID is empty when no node serves the allocation.
 	NodeID     string
 	Generation uint64
@@ -159,7 +159,7 @@ type NodeAllocation struct {
 	EnvironmentID        string `json:"environment_id" binding:"required"`
 	State                string `json:"state" binding:"required"`
 	ComputePhase         string `json:"compute_phase" binding:"required"`
-	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended microsandbox allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
+	// The time the allocation entered its current compute_phase, or null when unknown; an allocation that existed before Core recorded it reports null until its next phase change. For a suspended allocation, this time plus the deployment's snapshot retention tells roughly when Core reclaims it.
 	ComputePhaseChangedAt *time.Time `json:"compute_phase_changed_at" extensions:"x-nullable" binding:"required"`
 	Initialization        string     `json:"initialization" binding:"required"`
 	CreatedAt             time.Time  `json:"created_at" binding:"required"`

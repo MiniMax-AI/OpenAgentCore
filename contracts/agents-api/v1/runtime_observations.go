@@ -15,7 +15,6 @@ type RuntimeObservation struct {
 	ResolvedAt          int64                     `json:"resolved_at" binding:"required" minimum:"0"`
 	ObservedAt          *int64                    `json:"observed_at" extensions:"x-nullable" binding:"required" minimum:"0"`
 	StartedAt           *int64                    `json:"started_at" extensions:"x-nullable" binding:"required" minimum:"0"`
-	CPU                 *RuntimeCPUObservation    `json:"cpu" extensions:"x-nullable" binding:"required"`
 	Memory              *RuntimeMemoryObservation `json:"memory" extensions:"x-nullable" binding:"required"`
 }
 
@@ -24,13 +23,6 @@ type RuntimeInstance struct {
 	AllocationID         *string `json:"allocation_id" extensions:"x-nullable" binding:"required" format:"uuid"`
 	DeviceID             *string `json:"device_id" extensions:"x-nullable" binding:"required" format:"uuid"`
 	ConnectionGeneration *string `json:"connection_generation" extensions:"x-nullable" binding:"required" format:"uuid"`
-}
-
-type RuntimeCPUObservation struct {
-	UsageSecondsTotal *float64 `json:"usage_seconds_total" extensions:"x-nullable" binding:"required" minimum:"0"`
-	CapacityCores     *float64 `json:"capacity_cores" extensions:"x-nullable" binding:"required" minimum:"5e-324"`
-	UsageCores        *float64 `json:"usage_cores" extensions:"x-nullable" binding:"required" minimum:"0"`
-	UtilizationRatio  *float64 `json:"utilization_ratio" extensions:"x-nullable" binding:"required" minimum:"0"`
 }
 
 type RuntimeMemoryObservation struct {

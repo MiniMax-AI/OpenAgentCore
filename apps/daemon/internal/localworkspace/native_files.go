@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/google/uuid"
 )
@@ -28,18 +27,17 @@ func nativeAPIPath(path string) (string, error) {
 	return filepath.Localize(path)
 }
 
-func (b *Binding) listNativeDirectory(ctx context.Context, path string, limit int) (agent.WorkspaceDirectoryResult, error) {
-	result := agent.WorkspaceDirectoryResult{Entries: []agent.WorkspaceDirectoryEntry{}}
+func (b *Binding) listNativeDirectory(ctx context.Context, path string, limit int) (*proto.WorkspaceDirectoryResult, error) {
 	if b == nil || ctx.Err() != nil {
-		return result, agent.ErrWorkspaceReadUnavailable
+		return nil, ErrWorkspaceReadUnavailable
 	}
 	local, err := nativeAPIPath(path)
 	if err != nil {
-		return result, agent.ErrWorkspaceReadInvalid
+		return nil, ErrWorkspaceReadInvalid
 	}
 	root, err := os.OpenRoot(b.workspace)
 	if err != nil {
-		return result, agent.ErrWorkspaceReadUnavailable
+		return nil, ErrWorkspaceReadUnavailable
 	}
 	defer root.Close()
 	if local != "." {
@@ -48,38 +46,38 @@ func (b *Binding) listNativeDirectory(ctx context.Context, path string, limit in
 			partial = filepath.Join(partial, part)
 			info, err := root.Lstat(partial)
 			if errors.Is(err, fs.ErrPermission) {
-				return result, fs.ErrPermission
+				return nil, fs.ErrPermission
 			}
 			if err != nil || !info.IsDir() {
-				return result, agent.ErrWorkspaceNotDirectory
+				return nil, ErrWorkspaceNotDirectory
 			}
 		}
 	}
 	dir, err := openNativePath(root, local)
 	if errors.Is(err, fs.ErrPermission) {
-		return result, fs.ErrPermission
+		return nil, fs.ErrPermission
 	}
 	if err != nil {
-		return result, agent.ErrWorkspaceNotDirectory
+		return nil, ErrWorkspaceNotDirectory
 	}
 	defer dir.Close()
 	entries, err := dir.ReadDir(limit + 1)
 	if err != nil && err != io.EOF {
-		return result, agent.ErrWorkspaceNotDirectory
+		return nil, ErrWorkspaceNotDirectory
 	}
 	if ctx.Err() != nil {
-		return result, agent.ErrWorkspaceReadUnavailable
+		return nil, ErrWorkspaceReadUnavailable
 	}
-	result.Truncated = len(entries) > limit
-	if result.Truncated {
+	truncated := len(entries) > limit
+	if truncated {
 		entries = entries[:limit]
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
-	wire := &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}, Truncated: result.Truncated}
+	result := &proto.WorkspaceDirectoryResult{Entries: []proto.WorkspaceDirectoryEntry{}, Truncated: truncated}
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
-			return result, agent.ErrWorkspaceReadUncertain
+			return nil, ErrWorkspaceReadUncertain
 		}
 		item := proto.WorkspaceDirectoryEntry{Name: entry.Name(), Kind: "other"}
 		switch {
@@ -92,26 +90,23 @@ func (b *Binding) listNativeDirectory(ctx context.Context, path string, limit in
 		case info.Mode()&os.ModeSymlink != 0:
 			item.Kind = "symlink"
 		}
-		wire.Entries = append(wire.Entries, item)
+		result.Entries = append(result.Entries, item)
 	}
-	if !proto.ValidWorkspaceDirectory(wire, limit) {
-		return result, agent.ErrWorkspaceReadInvalid
-	}
-	for _, item := range wire.Entries {
-		result.Entries = append(result.Entries, agent.WorkspaceDirectoryEntry{Name: item.Name, Kind: item.Kind, SizeBytes: item.SizeBytes})
+	if !proto.ValidWorkspaceDirectory(result, limit) {
+		return nil, ErrWorkspaceReadInvalid
 	}
 	return result, nil
 }
 
-func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte) (agent.WorkspaceWriteResult, error) {
-	result := agent.WorkspaceWriteResult{}
+func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte) (WorkspaceWriteResult, error) {
+	result := WorkspaceWriteResult{}
 	local, err := nativeAPIPath(path)
 	if err != nil {
-		return result, agent.ErrWorkspaceWriteInvalid
+		return result, ErrWorkspaceWriteInvalid
 	}
 	root, err := os.OpenRoot(b.workspace)
 	if err != nil {
-		return result, agent.ErrWorkspaceWriteUnavailable
+		return result, ErrWorkspaceWriteUnavailable
 	}
 	defer root.Close()
 	if err = root.MkdirAll(filepath.Dir(local), 0700); err != nil {
@@ -135,24 +130,24 @@ func (b *Binding) writeNativeFile(ctx context.Context, path string, data []byte)
 	if err = root.Link(temporary, local); err != nil {
 		if info, e := root.Lstat(local); e == nil {
 			if info.IsDir() {
-				return result, agent.ErrWorkspaceWriteDirectory
+				return result, ErrWorkspaceWriteDirectory
 			}
-			return result, agent.ErrWorkspaceWriteUnsafe
+			return result, ErrWorkspaceWriteUnsafe
 		} else if errors.Is(e, fs.ErrNotExist) {
 			return result, unpublishedWriteError(err)
 		}
-		return result, agent.ErrWorkspaceWriteRejected
+		return result, ErrWorkspaceWriteRejected
 	}
-	return agent.WorkspaceWriteResult{SizeBytes: int64(len(data))}, nil
+	return WorkspaceWriteResult{SizeBytes: int64(len(data))}, nil
 }
 
 // unpublishedWriteError applies only before this operation publishes a file.
 // Parent directories or a temporary file may already have been created.
 func unpublishedWriteError(err error) error {
 	if storageExhausted(err) {
-		return agent.ErrWorkspaceWriteUnavailable
+		return ErrWorkspaceWriteUnavailable
 	}
-	return agent.ErrWorkspaceWriteRejected
+	return ErrWorkspaceWriteRejected
 }
 
 const artifactFileBytes int64 = 200 << 20
@@ -291,21 +286,21 @@ func (r nativeContextReader) Read(data []byte) (int, error) {
 
 // ReadWorkspaceFile returns the existing protocol's bounded prefix; the wire
 // has no offset field. Non-regular entries cannot become unbounded streams.
-func (b *Binding) ReadWorkspaceFile(ctx context.Context, path string, limit int) (agent.WorkspaceReadResult, error) {
-	result := agent.WorkspaceReadResult{}
+func (b *Binding) ReadWorkspaceFile(ctx context.Context, path string, limit int) (WorkspaceReadResult, error) {
+	result := WorkspaceReadResult{}
 	if b == nil || ctx.Err() != nil {
-		return result, agent.ErrWorkspaceReadUnavailable
+		return result, ErrWorkspaceReadUnavailable
 	}
 	if path == "" || limit < 1 || limit > proto.WorkspaceReadMaxBytes {
-		return result, agent.ErrWorkspaceReadInvalid
+		return result, ErrWorkspaceReadInvalid
 	}
 	local, err := nativeAPIPath(path)
 	if err != nil {
-		return result, agent.ErrWorkspaceReadInvalid
+		return result, ErrWorkspaceReadInvalid
 	}
 	root, err := os.OpenRoot(b.workspace)
 	if err != nil {
-		return result, agent.ErrWorkspaceReadUnavailable
+		return result, ErrWorkspaceReadUnavailable
 	}
 	defer root.Close()
 	info, err := root.Lstat(local)
@@ -313,7 +308,7 @@ func (b *Binding) ReadWorkspaceFile(ctx context.Context, path string, limit int)
 		return result, err
 	}
 	if !info.Mode().IsRegular() {
-		return result, agent.ErrWorkspaceReadInvalid
+		return result, ErrWorkspaceReadInvalid
 	}
 	file, err := openNativePath(root, local)
 	if err != nil {
@@ -322,14 +317,14 @@ func (b *Binding) ReadWorkspaceFile(ctx context.Context, path string, limit int)
 	defer file.Close()
 	info, err = file.Stat()
 	if err != nil {
-		return result, agent.ErrWorkspaceReadUncertain
+		return result, ErrWorkspaceReadUncertain
 	}
 	if !info.Mode().IsRegular() {
-		return result, agent.ErrWorkspaceReadInvalid
+		return result, ErrWorkspaceReadInvalid
 	}
 	raw, err := io.ReadAll(io.LimitReader(nativeContextReader{ctx: ctx, reader: file}, int64(limit)+1))
 	if err != nil {
-		return result, agent.ErrWorkspaceReadUncertain
+		return result, ErrWorkspaceReadUncertain
 	}
 	result.Truncated = len(raw) > limit
 	if result.Truncated {

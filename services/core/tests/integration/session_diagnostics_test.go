@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -251,6 +252,38 @@ func TestDiagnosticProvisioningDetailAtomicAndPrivate(t *testing.T) {
 	snap, err = sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
 	if err != nil || snap.EnvironmentFailure.Detail != nil {
 		t.Fatal("unsafe private detail projected", snap.EnvironmentFailure, err)
+	}
+}
+
+func TestDiagnosticInitializationStepsAndFailureCategory(t *testing.T) {
+	s, installation := configuredStore(t)
+	tenant := uuid.NewString()
+	session, err := s.CreateSession(t.Context(), tenant, environmentInput("step-timing", "openai_hosted", "/workspace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer := executionWriter(t, s)
+	owner, err := deploymentExecution(t, writer).ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(uuid.NewString()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	runtimeSuspensionSQL(t, s.pool, "UPDATE environments SET initialization='running' WHERE id=$1", owner.EnvironmentID)
+	preparation := sessions.EnvironmentInitialization{EnvironmentID: owner.EnvironmentID, SessionID: owner.SessionID, TenantID: owner.TenantID, DeviceID: owner.DeviceID}
+	index := 1
+	steps := []sessions.InitializationStep{{Step: "npm", DurationMS: 4100}, {Step: "setup", Index: &index, DurationMS: 5200}}
+	execution := sessionExecution(t, writer.lease)
+	if err = execution.RecordEnvironmentInitializationSteps(t.Context(), preparation, steps); err != nil {
+		t.Fatal(err)
+	}
+	if err = execution.FailEnvironmentInitialization(t.Context(), preparation, sessions.ProvisioningFailure{Category: sessions.ProvisioningTimeout}); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := sessionAdapter(s).GetSession(t.Context(), tenant, session.ID)
+	if err != nil || !reflect.DeepEqual(snap.EnvironmentInitializationSteps, steps) {
+		t.Fatal("steps not persisted", snap.EnvironmentInitializationSteps, err)
+	}
+	if failure := snap.EnvironmentFailure; failure == nil || failure.Reason != sessions.ProvisioningFailureReason || failure.Detail == nil || failure.Detail.Step != nil || *failure.Detail.Category != sessions.ProvisioningTimeout {
+		t.Fatal("category not persisted beside the generic reason", snap.EnvironmentFailure)
 	}
 }
 

@@ -29,7 +29,7 @@ q=json.load(sys.stdin)
 with (pathlib.Path(q['Config']['StateDir'])/'requests').open('a') as f: f.write(json.dumps(q)+'\n')
 info=dict(q['Reference'],State='running',ProviderID='owned',CreateSettled=True)
 if q['Operation']=='kill': info['State']='absent'
-print(json.dumps({'Version':1,'Info':info}))
+print(json.dumps({'Version':2,'Info':info}))
 `
 	if err := os.WriteFile(helper, []byte(script), 0700); err != nil {
 		t.Fatal(err)
@@ -132,7 +132,7 @@ code = ''
 if k == 'revoked': code = 'unauthorized'
 elif k == 'unconfirmed': code = 'unconfirmed'
 elif not (k.startswith('team-a') and template in ('owned-a', 'new-a') or k == 'team-b' and template == 'public-b'): code = 'team_mismatch'
-result = {'Version': 1, 'ErrorCode': code}
+result = {'Version': 2, 'ErrorCode': code}
 if not code:
     result['DeploymentValid'] = True
     if q['Operation'] == 'validate_deployment':

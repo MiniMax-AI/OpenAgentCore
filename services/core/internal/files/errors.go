@@ -11,4 +11,6 @@ var (
 	ErrInvalidInput = errors.New("invalid file request")
 	// ErrTooLarge reports content beyond the operation's limit.
 	ErrTooLarge = errors.New("file exceeds the content limit")
+	// ErrEmpty reports an upload without content.
+	ErrEmpty = errors.New("file is empty")
 )

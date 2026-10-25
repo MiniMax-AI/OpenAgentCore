@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 var testIdentity = Identity{
@@ -66,8 +66,8 @@ func TestBundleAndLocalDirectoryInventoriesAgree(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			bundled, local, source := openTestRoot(t), openTestRoot(t), openTestRoot(t)
 			files := map[string][]byte{"SKILL.md": skillManifest("proof"), "resource.txt": []byte("preserved")}
-			skill := agentskill.Metadata{Type: "inline", Name: "proof", Description: "Check proof."}
-			input := Input{Skills: []agentskill.Metadata{skill}}
+			skill := proto.SkillMetadata{Type: "inline", Name: "proof", Description: "Check proof."}
+			input := proto.CapabilitySources{Skills: []proto.SkillMetadata{skill}}
 			if plugin {
 				files = map[string][]byte{
 					".codex-plugin/plugin.json": []byte(`{"name":"package","description":"Package proof.","skills":"./skills","mcpServers":"./.mcp.json"}`),
@@ -75,8 +75,8 @@ func TestBundleAndLocalDirectoryInventoriesAgree(t *testing.T) {
 					"skills/proof/SKILL.md":     skillManifest("proof"),
 					"proof.py":                  []byte("# Preserved server.\n"),
 				}
-				metadata := agentplugin.Metadata{Type: "inline", Name: "package", Description: "Package proof."}
-				input = Input{Plugins: []agentplugin.Metadata{metadata}}
+				metadata := proto.PluginMetadata{Type: "inline", Name: "package", Description: "Package proof."}
+				input = proto.CapabilitySources{Plugins: []proto.PluginMetadata{metadata}}
 				if err := InstallPlugin(bundled, 0, testArchive(t, files), metadata); err != nil {
 					t.Fatal(err)
 				}
@@ -86,7 +86,7 @@ func TestBundleAndLocalDirectoryInventoriesAgree(t *testing.T) {
 			for path, content := range files {
 				writeWorkspace(t, source, path, content)
 			}
-			localInput := Input{Directories: []string{"/caller/capabilities"}}
+			localInput := proto.CapabilitySources{Directories: []string{"/caller/capabilities"}}
 			resolve := func(path string) (*os.Root, error) {
 				if path != "/caller/capabilities" {
 					t.Fatalf("unexpected source: %s", path)
@@ -129,7 +129,7 @@ func TestSnapshotIdentityAndSourceLifetime(t *testing.T) {
 	source, first, second := openTestRoot(t), openTestRoot(t), openTestRoot(t)
 	writeWorkspace(t, source, "SKILL.md", skillManifest("proof"))
 	writeWorkspace(t, source, "resource.txt", []byte("first"))
-	input := Input{Directories: []string{"/caller/source"}}
+	input := proto.CapabilitySources{Directories: []string{"/caller/source"}}
 	resolve := func(string) (*os.Root, error) { return source.OpenRoot(".") }
 	if err := Finalize(first, input, testIdentity, resolve); err != nil {
 		t.Fatal(err)
@@ -168,14 +168,14 @@ func TestSnapshotIdentityAndSourceLifetime(t *testing.T) {
 
 func TestEmptySnapshotAndRequiredBinding(t *testing.T) {
 	installed := openTestRoot(t)
-	if err := Finalize(installed, Input{}, testIdentity, nil); err != nil {
+	if err := Finalize(installed, proto.CapabilitySources{}, testIdentity, nil); err != nil {
 		t.Fatal(err)
 	}
 	manifest, err := Load(installed)
 	if err != nil || len(manifest.Skills) != 0 || len(manifest.MCP) != 0 {
 		t.Fatalf("empty snapshot: %+v %v", manifest, err)
 	}
-	if ValidateSelection(manifest, Input{Skills: []agentskill.Metadata{}, Plugins: []agentplugin.Metadata{}, Directories: []string{}}, testIdentity) != nil {
+	if ValidateSelection(manifest, proto.CapabilitySources{Skills: []proto.SkillMetadata{}, Plugins: []proto.PluginMetadata{}, Directories: []string{}}, testIdentity) != nil {
 		t.Fatal("nil/empty selections differ")
 	}
 	for _, scenario := range []string{"identity", "hash", "hash-uppercase", "old-manifest"} {
@@ -204,7 +204,7 @@ func TestEmptySnapshotAndRequiredBinding(t *testing.T) {
 			}
 		})
 	}
-	skill := agentskill.Metadata{Type: "inline", Name: "proof", Description: "Check proof."}
+	skill := proto.SkillMetadata{Type: "inline", Name: "proof", Description: "Check proof."}
 	if InstallSkill(installed, testArchive(t, map[string][]byte{"SKILL.md": skillManifest("proof")}), skill) == nil {
 		t.Fatal("completed snapshot accepted a late import")
 	}
@@ -215,7 +215,7 @@ func TestPartialAndOversizedSnapshotsFailClosed(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			source, installed := openTestRoot(t), openTestRoot(t)
 			writeWorkspace(t, source, "SKILL.md", skillManifest("proof"))
-			input := Input{Directories: []string{"/caller/source"}}
+			input := proto.CapabilitySources{Directories: []string{"/caller/source"}}
 			switch scenario {
 			case "temporary-manifest":
 				writeWorkspace(t, installed, ManifestName+".tmp", []byte("partial"))
@@ -224,7 +224,7 @@ func TestPartialAndOversizedSnapshotsFailClosed(t *testing.T) {
 			case "unexpected-bundle":
 				writeWorkspace(t, installed, "skills/other/SKILL.md", skillManifest("other"))
 			case "missing-bundle":
-				input.Skills = []agentskill.Metadata{{Type: "inline", Name: "missing", Description: "Check proof."}}
+				input.Skills = []proto.SkillMetadata{{Type: "inline", Name: "missing", Description: "Check proof."}}
 			case "oversized":
 				file, err := source.OpenFile("large", os.O_CREATE|os.O_WRONLY, 0600)
 				if err != nil {
@@ -272,10 +272,10 @@ func TestInstallerRejectsSourceRootSymlinksAndInvalidSkills(t *testing.T) {
 	if err := source.Symlink("real", "alias"); err != nil {
 		t.Fatal(err)
 	}
-	if Finalize(installed, Input{Directories: []string{"/workspace/alias"}}, testIdentity, workspaceResolver(source)) == nil {
+	if Finalize(installed, proto.CapabilitySources{Directories: []string{"/workspace/alias"}}, testIdentity, workspaceResolver(source)) == nil {
 		t.Fatal("source alias accepted")
 	}
-	metadata := agentskill.Metadata{Type: "inline", Name: "proof", Description: "Check proof."}
+	metadata := proto.SkillMetadata{Type: "inline", Name: "proof", Description: "Check proof."}
 	if InstallSkill(installed, testArchive(t, map[string][]byte{"SKILL.md": skillManifest("different")}), metadata) == nil {
 		t.Fatal("mismatched Skill metadata installed")
 	}
@@ -292,7 +292,7 @@ func TestInstallRejectsAliasedParent(t *testing.T) {
 	if err := root.Symlink("other", "skills"); err != nil {
 		t.Fatal(err)
 	}
-	metadata := agentskill.Metadata{Type: "inline", Name: "proof", Description: "Check proof."}
+	metadata := proto.SkillMetadata{Type: "inline", Name: "proof", Description: "Check proof."}
 	if InstallSkill(root, testArchive(t, map[string][]byte{"SKILL.md": skillManifest("proof")}), metadata) == nil {
 		t.Fatal("aliased installation parent accepted")
 	}
@@ -304,7 +304,7 @@ func TestInstallRejectsAliasedParent(t *testing.T) {
 func TestFailedDirectoryCaptureCannotBeReplayed(t *testing.T) {
 	source, installed := openTestRoot(t), openTestRoot(t)
 	writeWorkspace(t, source, "first/SKILL.md", skillManifest("first"))
-	input := Input{Directories: []string{"/workspace/first", "/workspace/second"}}
+	input := proto.CapabilitySources{Directories: []string{"/workspace/first", "/workspace/second"}}
 	if Finalize(installed, input, testIdentity, workspaceResolver(source)) == nil {
 		t.Fatal("missing second source accepted")
 	}
@@ -320,7 +320,7 @@ func TestFailedDirectoryCaptureCannotBeReplayed(t *testing.T) {
 }
 
 func TestSelectionDigestKeepsSourceOrderAndMetadata(t *testing.T) {
-	input := Input{Directories: []string{"/one", "/two"}, Skills: []agentskill.Metadata{{Type: "inline", Name: "proof", Description: "Check proof."}}}
+	input := proto.CapabilitySources{Directories: []string{"/one", "/two"}, Skills: []proto.SkillMetadata{{Type: "inline", Name: "proof", Description: "Check proof."}}}
 	digest, err := selectionHash(input)
 	if err != nil {
 		t.Fatal(err)
@@ -329,8 +329,8 @@ func TestSelectionDigestKeepsSourceOrderAndMetadata(t *testing.T) {
 	swapped := input
 	swapped.Directories = []string{"/two", "/one"}
 	changed := input
-	changed.Skills = []agentskill.Metadata{{Type: "inline", Name: "proof", Description: "Changed."}}
-	for _, selection := range []Input{swapped, changed} {
+	changed.Skills = []proto.SkillMetadata{{Type: "inline", Name: "proof", Description: "Changed."}}
+	for _, selection := range []proto.CapabilitySources{swapped, changed} {
 		if ValidateSelection(manifest, selection, testIdentity) == nil {
 			t.Fatal("changed selection accepted")
 		}

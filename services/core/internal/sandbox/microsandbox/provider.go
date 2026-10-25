@@ -67,6 +67,8 @@ func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 		return out, sandbox.ErrNotFound
 	case "command_unconfirmed":
 		return out, sandbox.ErrCommandUnconfirmed
+	case "checkpoint_unusable":
+		return out, sandbox.ErrCheckpointUnusable
 	case "metrics_unavailable":
 		return out, runtimeobs.ErrUnavailable
 	default:
@@ -257,6 +259,11 @@ func (p *Provider) SavePreparation(ctx context.Context, r sandbox.Reference, key
 // It never starts stopped compute or restores a checkpoint.
 func (p *Provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
 	return p.state(ctx, Request{Operation: "resume_compute", Reference: r, Compute: c})
+}
+
+// RenewCompute observes: a microsandbox VM has no native lease.
+func (p *Provider) RenewCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
+	return p.GetCompute(ctx, r, c)
 }
 
 func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generation uint64, snapshot *SnapshotIdentity) (Compute, error) {

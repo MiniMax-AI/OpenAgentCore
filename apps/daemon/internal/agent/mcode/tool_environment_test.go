@@ -8,8 +8,9 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/google/uuid"
 )
 
@@ -33,20 +34,17 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 	write(filepath.Join(plugin, ".codex-plugin", "plugin.json"), `{"name":"remote","description":"Credential fixture","mcpServers":"./.mcp.json"}`)
 	write(filepath.Join(plugin, ".mcp.json"), `{"mcpServers":{"remote":{"type":"http","url":"https://example.invalid/mcp","bearer_token_env_var":"MCP_TEST_TOKEN"}}}`)
 	environment, session := uuid.NewString(), uuid.NewString()
-	t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", environment)
-	t.Setenv("OAC_RUNTIME_SESSION_ID", session)
-	t.Setenv("OAC_RUNTIME_WORKSPACE", config.Directory)
-	t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", t.TempDir())
+	capabilityDirectory := t.TempDir()
 	req.AgentStateKey = session
 	req.LocalEnvironment.ID, req.LocalEnvironment.WorkspaceDirectory = environment, config.Directory
 	req.LocalEnvironment.Capabilities = true
-	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{plugin}}
+	req.LocalEnvironment.CapabilitySources = &proto.CapabilitySources{Directories: []string{plugin}}
 	for _, resume := range []bool{false, true} {
 		if resume {
 			req.AgentSessionID = "native-1"
 			write(source, `{"MCP_TEST_TOKEN":"changed","TOOL_SECRET":"changed"}`)
 		}
-		binding, err := localworkspace.Load()
+		binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, config.Directory, capabilityDirectory)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,7 +97,7 @@ func TestWorkspaceCredentialsRemainInRuntimeSnapshotAcrossReconnect(t *testing.T
 	if err := os.Remove(filepath.Join(initialization, "tool-env.json")); err != nil {
 		t.Fatal(err)
 	}
-	binding, err := localworkspace.Load()
+	binding, err := localworkspace.NewWithCapabilityDirectory(environment, session, config.Directory, capabilityDirectory)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -44,7 +44,7 @@ export function buildAdmin(now, base, resources) {
     vaults: resources.vaults.filter(of("vault", projectId)),
   });
 
-  const keyRef = (project, k) => ({ id: k.id, name: k.name, prefix: k.prefix, kind: "issued", revoked_at: k.revoked_at ? iso(k.revoked_at) : null });
+  const keyRef = (k) => ({ id: k.id, name: k.name, prefix: k.prefix, kind: "issued", revoked_at: k.revoked_at ? iso(k.revoked_at) : null });
   // Deterministic creator per resource: rotate through the project's keys; one in seven is unknown.
   const creators = new Map();
   let turn = 0;
@@ -52,7 +52,7 @@ export function buildAdmin(now, base, resources) {
     const cacheKey = `${type}:${id}`;
     if (!creators.has(cacheKey)) {
       turn += 1;
-      creators.set(cacheKey, turn % 7 === 0 ? null : keyRef(project, project.keys[turn % project.keys.length]));
+      creators.set(cacheKey, turn % 7 === 0 ? null : keyRef(project.keys[turn % project.keys.length]));
     }
     return creators.get(cacheKey);
   };
@@ -61,7 +61,7 @@ export function buildAdmin(now, base, resources) {
     const own = collections(project.id);
     const list = [];
     const push = (at, action, type, id, parent = "", creatorType = type) => {
-      const creator = action === "create" ? creatorFor(project, creatorType, id) : keyRef(project, project.keys[list.length % project.keys.length]);
+      const creator = action === "create" ? creatorFor(project, creatorType, id) : keyRef(project.keys[list.length % project.keys.length]);
       list.push({ id: `op_${project.id.slice(5)}_${list.length}`, created_at: iso(at), api_key: creator, action, resource_type: type, resource_id: id, parent_id: parent, request_id: `req_${list.length}`, trace_id: `${list.length}`.padStart(32, "0") });
     };
     for (const agent of own.agents) { push(agent.created_at, "create", "agent", agent.id); if (agent.updated_at > agent.created_at) push(agent.updated_at, "update", "agent", agent.id); }

@@ -1,8 +1,4 @@
-/* Platform › Projects and keys: list, detail and the one-time key. */
 
-.project-source.config {
-  color: var(--fg-muted);
-}
 
 /* Up to six short facts sit on one line. */
 .projects-page .resource-facts {

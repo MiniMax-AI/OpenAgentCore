@@ -80,7 +80,7 @@ export const system: TranslationShape<typeof english> = {
       setTitle: "设置 {{harness}} 的默认模型配置",
       replaceTitle: "替换 {{harness}} 的默认模型配置",
       modelName: "应用未指定模型时，新 Session 使用此模型。请填写该服务接受的准确模型 ID。",
-      baseUrlInvalid: "请输入包含主机名、不含账号密码、查询参数或片段的 HTTPS URL，例如 https://api.example.com/v1。",
+      baseUrlInvalid: "请输入 HTTPS URL，或指向回环、私有 IP 地址的 HTTP URL，不含账号密码、查询参数或片段，例如 https://api.example.com/v1。",
       apiKeyHelp: "每次都必须填写。Core 会加密保存，之后不再显示。",
       contextHelp: "模型的上下文窗口，单位为 token。可选。",
       outputHelp: "模型单次回复最多输出的 token 数。可选；填写时，上下文窗口必须不小于它。",

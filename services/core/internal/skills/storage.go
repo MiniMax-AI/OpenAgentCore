@@ -63,7 +63,6 @@ type Reader interface {
 	// Skills lists one page of the tenant's Skills in creation order, then by
 	// ID; a nil After starts at the first Skill.
 	Skills(ctx context.Context, tenantID string, page SkillPageQuery) (Page, error)
-	Version(ctx context.Context, tenantID string, skillID uuid.UUID, version int64) (Version, error)
 	// VersionByID finds a version anywhere in the tenant, so a list cursor can
 	// tell another Skill's version from a missing one.
 	VersionByID(ctx context.Context, tenantID string, id uuid.UUID) (Version, error)

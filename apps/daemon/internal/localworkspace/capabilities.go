@@ -3,6 +3,7 @@ package localworkspace
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,7 +74,6 @@ func (b *Binding) Prepare(ctx context.Context, r proto.PromptRequestPayload) (pr
 		local.MCP, err = resolveEnvironmentMCP(manifest.MCP, values)
 		for i := range local.MCP {
 			local.MCP[i].InstallationRoot = b.capabilityRoot
-			local.MCP[i].WorkspaceRoot = b.workspace
 		}
 		if err != nil {
 			return r, err
@@ -141,7 +141,7 @@ func (b *Binding) ApplyRuntimePreparation(ctx context.Context, input proto.Runti
 	return ctx.Err()
 }
 
-func (b *Binding) loadCapabilitySnapshot(root *os.Root, input agentcapabilities.Input, identity agentcapabilities.Identity, completed bool) (agentcapabilities.Manifest, error) {
+func (b *Binding) loadCapabilitySnapshot(root *os.Root, input proto.CapabilitySources, identity agentcapabilities.Identity, completed bool) (agentcapabilities.Manifest, error) {
 	if _, err := root.Lstat(agentcapabilities.ManifestName); errors.Is(err, os.ErrNotExist) {
 		if completed || agentcapabilities.Finalize(root, input, identity, b.resolveCapabilityDirectory) != nil {
 			return agentcapabilities.Manifest{}, agentcapabilities.ErrInvalid
@@ -199,8 +199,8 @@ func (b *Binding) resolveCapabilityDirectory(source string) (*os.Root, error) {
 	if agentcapabilities.ValidateLocalDirectories([]string{source}) != nil {
 		return nil, agentcapabilities.ErrInvalid
 	}
-	if source == "/workspace" || strings.HasPrefix(source, "/workspace/") {
-		source = filepath.Join(b.workspace, strings.TrimPrefix(source, "/workspace"))
+	if source == runtimebootstrap.PublicWorkspace || strings.HasPrefix(source, runtimebootstrap.PublicWorkspace+"/") {
+		source = filepath.Join(b.workspace, strings.TrimPrefix(source, runtimebootstrap.PublicWorkspace))
 	}
 	// Refuse recursive installation into the selected source itself.
 	if containsPath(source, b.capabilityRoot) || containsPath(b.capabilityRoot, source) {

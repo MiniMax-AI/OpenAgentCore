@@ -1,22 +1,20 @@
 import { AgentCoreError } from "./client";
 import { CoreRequester, type CoreClientOptions } from "./core-request";
 import { deploymentContract } from "./deployment-contract";
-import { hasOwn, isNonnegativeInteger, isOneOf, isRecord, onlyFields, sameResourceId, schemaFields } from "./response-projection";
+import { hasOwn, isNonnegativeInteger, isOneOf, isRecord, sameResourceId, schemaFields } from "./response-projection";
 import {
   attachmentKindValues,
   deploymentResourcesFields, deploymentSpecFields, deploymentSpecRequired, deploymentViewFields, deploymentModeValues, deploymentViewRequired,
   hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields,
-  capacityFields, nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
+  capacityFields, configurationOptionFields, configurationOptionRequired, configurationOptionsFields, nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
   resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues,
   sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
-  type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
+  type ConfigurationOption, type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
   type NodeHost, type NodeRollout, type NodeUpdate, type Reset, type ResetOfflineNode, type ResetRequest, type Rollout,
   type SandboxIdlePolicyInput, type SandboxDeploymentInput, type SandboxEnrollmentToken, type SandboxResources as SandboxResourcesResource,
 } from "./generated/core-api";
 import type { ReadOptions } from "./types";
 
-/** Checked against Core's shared node-diagnostics.json fixture. */
-export const sandboxNodeDiagnostics = nodeDiagnosticCodeValues;
 /** Fixed reason a node's provider is not ready. Core omits the field while the provider is ready, so read it as falsy (undefined) then. The client reads an unknown future value as provider_unavailable. */
 export type SandboxNodeDiagnostic = NodeDiagnosticCode;
 
@@ -27,6 +25,12 @@ export function normalizeSandboxNodeDiagnostic(value: string): SandboxNodeDiagno
 
 /** A registered Provider kind; deploymentContract.providers holds each one's declaration. */
 export type SandboxProvider = keyof typeof deploymentContract.providers;
+/** What the console needs to set up one Provider, generated from the Provider's declaration. */
+export type SandboxProviderSetup = (typeof deploymentContract.providers)[SandboxProvider]["setup"];
+export type SandboxSetupField = SandboxProviderSetup["fields"][number];
+export function sandboxProviderSetup(provider: SandboxProvider): SandboxProviderSetup {
+  return deploymentContract.providers[provider].setup;
+}
 /** Client-generated, never a Core code: a deployment write whose rejection could echo the key and is withheld. */
 export const sandboxConfigurationUnconfirmed = "sandbox_configuration_unconfirmed";
 const sandboxConfigurationParams = new Set<unknown>([...deploymentContract.resources.map(({ name }) => `resources.${name}`)]);
@@ -46,37 +50,35 @@ export type SandboxNode = Node;
 export type SandboxEnrollment = SandboxEnrollmentToken;
 /** One node with its host observation and complete UTC buckets of host history. */
 export type SandboxNodeDetail = NodeDetail;
-/** A node's name and sandbox limits, with a retained limit of at least the active one. Under Docker, Core sets the retained limit to the active one. */
+/** A node's name and sandbox limits, with a retained limit of at least the active one. Core sets the retained limit to the active one on a Provider without checkpoint support. */
 export type SandboxNodeUpdate = NodeUpdate;
 export type SandboxAllocation = NodeAllocation;
 
-// The schema types each Provider's configuration, credential and metadata as free-form objects; the client names E2B's.
+// The schema types each Provider's configuration and credential as free-form objects; their members are the Provider's declared setup fields.
 /**
  * Core derives the deployment's address from the installation public URL; a `core_url` member is rejected.
- * `expected_generation` is required, zero for first setup. Docker and microsandbox require `resources`;
- * E2B may omit `resources` to adopt its template build's CPU and memory, and always runs that build.
+ * `expected_generation` is required, zero for first setup. A Provider that declares default resources requires `resources`;
+ * another may omit them to adopt the size of the configuration it validated.
  */
 export type InitializeSandboxDeployment = Omit<SandboxDeploymentInput, "provider" | "configuration" | "credential"> & {
   provider: SandboxProvider;
-  configuration?: SandboxE2BConfiguration;
-  /** Write-only. Omission on update preserves the current credential. */
-  credential?: { api_key: string };
+  /** The declared non-secret field values. */
+  configuration?: Record<string, string>;
+  /** Write-only, the declared secret field values. Omission on update preserves the current credential. */
+  credential?: Record<string, string>;
 };
 export type UpdateSandboxDeployment = InitializeSandboxDeployment;
-export type SandboxDeployment = Omit<DeploymentView, "provider" | "configuration" | "metadata"> & {
+export type SandboxDeployment = Omit<DeploymentView, "provider" | "configuration"> & {
   provider: SandboxProvider | "";
-  configuration?: SandboxE2BConfiguration;
-  metadata?: { template_build?: SandboxE2BTemplateBuild };
+  configuration?: Record<string, string>;
 };
-export interface SandboxE2BConfiguration { template?: string; api_url?: string; domain?: string }
-/** The fixed E2B build as Core read it when the selection was saved; unknown values are null. */
-export interface SandboxE2BTemplateBuild {
-  status: string | null;
-  resources: { cpus: number | null; memory_mib: number | null; root_disk_mib: number | null };
+/** One choice for a discovered field: a complete option's value is the field's value, another's is the next path element. */
+export type SandboxConfigurationOption = ConfigurationOption;
+export interface SandboxDiscoveryInput {
+  configuration: Record<string, string>;
+  credential: Record<string, string>;
+  query: { field: string; path: string[] };
 }
-export interface SandboxE2BDiscoveryInput { api_key: string; api_url?: string; domain?: string }
-export interface SandboxE2BTemplate { id: string; names: string[] }
-export interface SandboxE2BReadyBuild { id: string; cpus: number; memory_mib: number }
 export type SandboxNodeHistoryRange = "1h" | "6h" | "24h";
 
 function invalidSandboxResponse(): never {
@@ -107,17 +109,6 @@ function projectSpecification(value: unknown): SandboxSpecification {
     result.workspace = { attachment: workspace.attachment, user_xattr: workspace.user_xattr, capacity_quota: workspace.capacity_quota };
   }
   return result;
-}
-/** The adapter's public projection has no credential member. */
-function projectE2B(configuration: unknown, metadata: unknown): Pick<SandboxDeployment, "configuration" | "metadata"> {
-  const config = members(configuration, ["template", "api_url", "domain"]);
-  valid(strings(config, ["template", "api_url", "domain"]));
-  const facts = members(metadata, ["template_build"], []);
-  if (!hasOwn(facts, "template_build")) return { configuration: { ...config }, metadata: {} };
-  const build = members(facts.template_build, ["status", "resources"]);
-  const resources = members(build.resources, ["cpus", "memory_mib", "root_disk_mib"]);
-  valid((build.status === null || typeof build.status === "string") && Object.values(resources).every(nullable(isNonnegativeInteger)));
-  return { configuration: { ...config }, metadata: { template_build: { status: build.status as string | null, resources: { ...resources } as SandboxE2BTemplateBuild["resources"] } } };
 }
 /** Counts and blocker identities are one Core snapshot, never reconstructed from node lists. */
 function projectReset(value: unknown, held: number): SandboxReset | null {
@@ -154,24 +145,27 @@ function projectNodeRollout(value: unknown, online: unknown): SandboxNodeRollout
 }
 /** Configured deployments carry a validated public configuration and observation object. */
 function projectDeployment(value: unknown): SandboxDeployment {
-  const e2b = isRecord(value) && value.provider === "e2b";
   // A selected Provider always has its configuration and metadata; no Provider has neither.
   const selected = isRecord(value) && value.provider !== "";
   const deployment = members(value, deploymentViewFields, selected ? [...deploymentViewRequired, "configuration", "metadata"] : deploymentViewRequired);
   valid(selected || (!hasOwn(deployment, "configuration") && !hasOwn(deployment, "metadata")));
   valid(typeof deployment.credential_configured === "boolean");
-  if (!e2b && deployment.provider !== "") { members(deployment.configuration, []); members(deployment.metadata, []); valid(deployment.credential_configured === false); }
+  if (selected) {
+    valid(typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider) && isRecord(deployment.metadata));
+    const setup = sandboxProviderSetup(deployment.provider as SandboxProvider);
+    const configuration = members(deployment.configuration, setup.fields.filter((field) => !field.secret).map((field) => field.name));
+    valid(strings(configuration, Object.keys(configuration)) && (setup.credential === "required" || deployment.credential_configured === false));
+  }
   const resources = members(deployment.resources, deploymentResourcesFields);
   const suspension = deployment.suspension === null ? null : members(deployment.suspension, suspensionFields);
   const configured = hasOwn(deployment, "specification");
   valid(strings(deployment, ["installation_id", "core_url"]) && (deployment.provider === "" || (typeof deployment.provider === "string" && hasOwn(deploymentContract.providers, deployment.provider))) && isOneOf(deploymentModeValues, deployment.mode) &&
-    [deployment.owner_epoch, deployment.generation, resources.allocations, resources.pending].every(isNonnegativeInteger) &&
+    [deployment.owner_epoch, deployment.generation, resources.allocations, resources.running, resources.pending].every(isNonnegativeInteger) &&
     (suspension === null || [suspension.idle_seconds, suspension.retention_seconds].every(isNonnegativeInteger)) &&
     configured === hasOwn(deployment, "specification_digest") && (!configured || (typeof deployment.specification_digest === "string" && deployment.specification_digest !== "")));
   return {
     ...deployment, rollout: projectRollout(deployment.rollout, deployment.mode, Number(resources.allocations) + Number(resources.pending)), reset: projectReset(deployment.reset, Number(resources.allocations) + Number(resources.pending)), resources: { ...resources } as unknown as SandboxDeployment["resources"], suspension: suspension && { ...suspension } as unknown as SandboxDeployment["suspension"],
     ...(configured ? { specification: projectSpecification(deployment.specification) } : {}),
-    ...(e2b ? projectE2B(deployment.configuration, deployment.metadata) : {}),
   } as unknown as SandboxDeployment;
 }
 
@@ -227,20 +221,15 @@ export class SandboxAdminClient {
     this.#core = new CoreRequester(options.baseUrl ?? "/core/v1/sandbox", options.token, options.fetch, invalidSandboxResponse);
   }
 
-  async listE2BTemplates(input: SandboxE2BDiscoveryInput, options?: ReadOptions): Promise<SandboxE2BTemplate[]> {
-    const value = await this.#core.json("/providers/e2b/discovery", options, "POST", { configuration: { api_url: input.api_url, domain: input.domain }, credential: { api_key: input.api_key }, query: {} });
-    if (!isRecord(value) || !onlyFields(value, new Set(["templates"])) || !Array.isArray(value.templates) || value.templates.length > 200) invalidSandboxResponse();
-    return value.templates.map((item) => {
-      if (!isRecord(item) || !onlyFields(item, new Set(["id", "names"])) || typeof item.id !== "string" || !Array.isArray(item.names) || !item.names.every((name) => typeof name === "string")) invalidSandboxResponse();
-      return { id: item.id, names: item.names };
-    });
-  }
-  async listE2BReadyBuilds(templateId: string, input: SandboxE2BDiscoveryInput, options?: ReadOptions): Promise<SandboxE2BReadyBuild[]> {
-    const value = await this.#core.json("/providers/e2b/discovery", options, "POST", { configuration: { api_url: input.api_url, domain: input.domain }, credential: { api_key: input.api_key }, query: { template: templateId } });
-    if (!isRecord(value) || !onlyFields(value, new Set(["builds"])) || !Array.isArray(value.builds) || value.builds.length > 200) invalidSandboxResponse();
-    return value.builds.map((item) => {
-      if (!isRecord(item) || !onlyFields(item, new Set(["id", "cpus", "memory_mib"])) || typeof item.id !== "string" || !isNonnegativeInteger(item.cpus) || !isNonnegativeInteger(item.memory_mib)) invalidSandboxResponse();
-      return { id: item.id, cpus: item.cpus, memory_mib: item.memory_mib };
+  /** The options of one discovered setup field after the values chosen at earlier levels. */
+  async discoverConfiguration(provider: SandboxProvider, input: SandboxDiscoveryInput, options?: ReadOptions): Promise<SandboxConfigurationOption[]> {
+    const value = members(await this.#core.json(`/providers/${encodeURIComponent(provider)}/discovery`, options, "POST", input), configurationOptionsFields);
+    valid(Array.isArray(value.options) && value.options.length <= 200);
+    return (value.options as unknown[]).map((entry) => {
+      const option = members(entry, configurationOptionFields, configurationOptionRequired);
+      valid(typeof option.value === "string" && typeof option.label === "string" && typeof option.complete === "boolean");
+      if (hasOwn(option, "resources")) valid(Object.values(members(option.resources, sandboxResourcesFields, sandboxResourcesRequired)).every(isNonnegativeInteger));
+      return { ...option } as unknown as SandboxConfigurationOption;
     });
   }
 
@@ -280,10 +269,10 @@ export class SandboxAdminClient {
           sandbox_reset_in_progress: "A sandbox reset is in progress.",
           sandbox_not_configured: "The sandbox deployment is not configured.",
           sandbox_in_use: "Hosted sandbox resources still belong to this deployment.",
-          sandbox_credential_ownership: "This E2B key cannot manage the retained deployment. Reset before changing teams.",
-          sandbox_credential_invalid: "The E2B API key was rejected.",
-          sandbox_configuration_invalid: "Select a ready immutable E2B template build with matching resources.",
-          sandbox_verification_unconfirmed: "E2B verification could not be confirmed. Refresh before submitting again.",
+          sandbox_credential_ownership: "This credential cannot manage the retained deployment. Reset before changing accounts.",
+          sandbox_credential_invalid: "The sandbox provider credential was rejected.",
+          sandbox_configuration_invalid: "Select a ready immutable provider configuration with matching resources.",
+          sandbox_verification_unconfirmed: "Sandbox provider verification could not be confirmed. Refresh before submitting again.",
         };
         if (error.code && Object.hasOwn(messages, error.code)) {
           // Credential-bearing errors expose fixed local copy and allowlisted
@@ -300,7 +289,7 @@ export class SandboxAdminClient {
       // This code has one fixed Core meaning. Never forward its raw message or
       // param: an omitted key cannot be used to detect a reflected stored key.
       if (error instanceof AgentCoreError && error.status === 409 && error.code === "sandbox_configuration_error") {
-        throw new AgentCoreError("E2B sandboxes reach Core over the internet. Set an HTTPS public URL that is not loopback.", 409, "sandbox_configuration_error", null);
+        throw new AgentCoreError("This sandbox provider reaches Core over the internet. Set an HTTPS public URL that is not loopback.", 409, "sandbox_configuration_error", null);
       }
       // Any other credential-bearing rejection may reflect the key in any error field.
       throw new AgentCoreError("Sandbox configuration could not be confirmed. Refresh before submitting again.", error instanceof AgentCoreError ? error.status : 0, sandboxConfigurationUnconfirmed);

@@ -11,7 +11,6 @@ import vaultCredentials182d from "./fixtures/parsar-182d333d/vault-credentials.j
 import turnResources from "./fixtures/parsar-0438880a/turn-resources.json";
 import toolProfiles from "./fixtures/parsar-2b34ea46/tool-profiles.json";
 import type {
-  AnonymousHttpMcpToolInput,
   McpToolInput,
   AgentsCoreSelection,
   SavedAgentCoreInput,
@@ -20,8 +19,6 @@ import type {
   AgentSnapshot,
   ModelProviderInput,
   ModelProviderView,
-  ModelConfigurationInput,
-  ModelConfigurationView,
   HarnessConfig,
   AgentCore,
   AgentSession,
@@ -30,11 +27,9 @@ import type {
   AgentTurn,
   AgentSessionEnvironmentEvent,
   CreateAgentInput,
-  EnvironmentConnectionAction,
   EnvironmentFileList,
   EnvironmentFileCreateInput,
   EnvironmentResourceStatus,
-  FunctionCallAction,
   InlineAgentInput,
   OpenAIHostedAgentEnvironment,
   OpenAIHostedAgentEnvironmentInput,
@@ -51,11 +46,9 @@ import type {
   UnknownSessionItem,
   SessionItem,
   SessionInputEvent,
-  SessionMessageInputEvent,
   SessionToolResultInputEvent,
   SessionEnvironmentStatus,
   TokenUsage,
-  TurnStatus,
   UpdateAgentInput,
   Vault,
   VaultCredential,
@@ -113,7 +106,7 @@ describe("Parsar dadf64a7 basic managed Environment profile", () => {
 describe("Parsar dadf64a7 ordered Session input batch", () => {
   it("pins the three exact public wire variants and their ordered nested inputs", () => {
     const events = eventBatchDadf64.request.events as SessionInputEvent[];
-    const message = events[0] as SessionMessageInputEvent;
+    const message = events[0] as Extract<SessionInputEvent, { type: "agent.session.input.message" }>;
     const result = events[2] as SessionToolResultInputEvent;
 
     expect(eventBatchDadf64.revision).toBe("dadf64a76bde58255281f3b6c3e939f8b556be09");
@@ -130,7 +123,7 @@ describe("Parsar dadf64a7 ordered Session input batch", () => {
       { type: "input_text", text: "" },
       { type: "input_image", image_url: "data:image/png;base64,AA==" },
     ]);
-    expectTypeOf<SessionMessageInputEvent["input"]>().toEqualTypeOf<import("./types").InputMessage[]>();
+    expectTypeOf<typeof message.input>().toEqualTypeOf<import("./types").InputMessage[]>();
     expectTypeOf<SessionToolResultInputEvent["output"]>()
       .toEqualTypeOf<string | import("./types").FunctionResultContent[] | null | undefined>();
   });
@@ -170,7 +163,7 @@ describe("Parsar 2b34ea46 bounded tool profiles", () => {
 
   it("captures the two Web-configurable write shapes without credentials or browser MCP", () => {
     const functionTool = toolProfiles.write_profiles.function;
-    const mcpTool = toolProfiles.write_profiles.anonymous_http_mcp as AnonymousHttpMcpToolInput;
+    const mcpTool = toolProfiles.write_profiles.anonymous_http_mcp;
 
     expect(functionTool.defer_loading).toBe(false);
     expect(functionTool.parameters.type).toBe("object");
@@ -214,8 +207,6 @@ describe("Core harness selection extension", () => {
     expectTypeOf<AgentSnapshot["x_agents_core"]>().toEqualTypeOf<AgentsCoreSelection | null | undefined>();
     expectTypeOf<ModelProviderView>().not.toExtend<ModelProviderInput>();
     expectTypeOf<ModelProviderInput>().not.toExtend<ModelProviderView>();
-    expectTypeOf<ModelConfigurationInput>().not.toExtend<ModelConfigurationView>();
-    expectTypeOf<ModelConfigurationView>().not.toExtend<ModelConfigurationInput>();
     expectTypeOf<SavedAgentCoreInput["harness_config"]>().toEqualTypeOf<HarnessConfig | undefined>();
     expectTypeOf<AgentsCoreSelection["harness_config"]>().toEqualTypeOf<HarnessConfig | undefined>();
     expectTypeOf<SavedAgentCore>().not.toExtend<SavedAgentCoreInput>();
@@ -322,8 +313,8 @@ describe("Parsar 8cc2898c Environment protocol types", () => {
 
   it("models both required action variants without inventing shared fields", () => {
     const actions = fixture.required_actions as RequiredAction[];
-    const functionCall = actions[0] as FunctionCallAction;
-    const environmentConnection = actions[1] as EnvironmentConnectionAction;
+    const functionCall = actions[0] as Extract<RequiredAction, { type: "function_call" }>;
+    const environmentConnection = actions[1] as Extract<RequiredAction, { type: "environment_connection" }>;
 
     expect(functionCall.type).toBe("function_call");
     expect(functionCall.arguments).toEqual({ query: "fixture" });
@@ -418,7 +409,7 @@ describe("Parsar 0438880a Turn observability resources", () => {
       "completed",
       "failed",
       "cancelled",
-    ] satisfies TurnStatus[]);
+    ] satisfies AgentTurn["status"][]);
     expect(turns[0]?.started_at).toBeNull();
     expect(turns[0]?.usage).toBeNull();
     expect(turns[3]?.completed_at).toBe(1700000068);

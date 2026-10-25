@@ -34,3 +34,15 @@ func TestDiscoveryUsesTransientConnectionAndChecksHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDiscoveryOptionsMapTemplatesAndBuilds(t *testing.T) {
+	templates := discoveryOptions(Response{Templates: []TemplateSummary{{ID: "tpl_1", Names: []string{"web"}}}}, "").Options
+	if len(templates) != 1 || templates[0].Value != "tpl_1" || templates[0].Complete || templates[0].Label != "web · tpl_1" {
+		t.Fatal(templates)
+	}
+	build := uuid.NewString()
+	builds := discoveryOptions(Response{Builds: []ReadyBuild{{ID: build, CPUs: 2, MemoryMiB: 2048}}}, "tpl_1").Options
+	if len(builds) != 1 || builds[0].Value != "tpl_1:"+build || !builds[0].Complete || builds[0].Resources == nil || builds[0].Resources.CPUs != 2 || builds[0].Resources.MemoryMiB != 2048 {
+		t.Fatal(builds)
+	}
+}

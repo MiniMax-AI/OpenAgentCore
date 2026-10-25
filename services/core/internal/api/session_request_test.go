@@ -23,19 +23,19 @@ func TestSessionCreateFieldPresence(t *testing.T) {
 	}{
 		{"omitted", ``, 201, nil, ""},
 		{"false stream", `,"stream":false`, 201, nil, ""},
-		{"null stream", `,"stream":null`, 400, nil, ""},
-		{"whitespace null stream", `,"stream": null `, 400, nil, ""},
-		{"string stream", `,"stream":"false"`, 400, nil, ""},
-		{"numeric stream", `,"stream":0`, 400, nil, ""},
-		{"null agent ID", `,"agent_id":null`, 400, nil, ""},
-		{"numeric agent ID", `,"agent_id":0`, 400, nil, ""},
+		{"null stream", `,"stream":null`, 400, nil, "stream"},
+		{"whitespace null stream", `,"stream": null `, 400, nil, "stream"},
+		{"string stream", `,"stream":"false"`, 400, nil, "stream"},
+		{"numeric stream", `,"stream":0`, 400, nil, "stream"},
+		{"null agent ID", `,"agent_id":null`, 400, nil, "agent_id"},
+		{"numeric agent ID", `,"agent_id":0`, 400, nil, "agent_id"},
 		{"null metadata", `,"metadata":null`, 201, nil, ""},
 		{"empty metadata", `,"metadata":{}`, 201, nil, ""},
 		{"string metadata", `,"metadata":{"empty":"","label":"中文🧪"}`, 201, map[string]string{"empty": "", "label": "中文🧪"}, ""},
 		{"null metadata value", `,"metadata":{"label":null}`, 400, nil, "metadata.label"},
 		{"mixed metadata values", `,"metadata":{"empty":"","label":null}`, 400, nil, "metadata.label"},
 		{"numeric metadata value", `,"metadata":{"label":0}`, 400, nil, "metadata.label"},
-		{"array metadata", `,"metadata":[]`, 400, nil, ""},
+		{"array metadata", `,"metadata":[]`, 400, nil, "metadata"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			handler, saved, _ := testHandler(t, admitSessions)

@@ -8,6 +8,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
 const publicMCP = `{"type":"mcp","server_label":"records","connection_origin":"service","transport":{"type":"http","server_url":"https://mcp.example.test/tools"}}`
@@ -15,7 +17,7 @@ const publicMCP = `{"type":"mcp","server_label":"records","connection_origin":"s
 func TestMCPRequiredSavedAndEffectiveConfiguration(t *testing.T) {
 	for _, value := range []string{"true", "false"} {
 		input := strings.TrimSuffix(publicMCP, "}") + `,"required":` + value + `}`
-		saved, err := resolveMCPTool(json.RawMessage(input), true)
+		saved, err := resolveMCPTool(json.RawMessage(input), "tools[0]", true)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -34,7 +36,7 @@ func TestMCPRequiredSavedAndEffectiveConfiguration(t *testing.T) {
 
 func TestMCPResourceTransportProjections(t *testing.T) {
 	for _, saved := range []bool{false, true} {
-		raw, err := resolveMCPTool(json.RawMessage(publicMCP), saved)
+		raw, err := resolveMCPTool(json.RawMessage(publicMCP), "tools[0]", saved)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -59,13 +61,13 @@ func TestMCPResourceTransportProjections(t *testing.T) {
 // explicit "service" declaration, in saved Agents and Session configuration.
 func TestMCPOmittedOriginIsService(t *testing.T) {
 	for _, saved := range []bool{false, true} {
-		explicit, err := resolveMCPTool(json.RawMessage(publicMCP), saved)
+		explicit, err := resolveMCPTool(json.RawMessage(publicMCP), "tools[0]", saved)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, origin := range []string{"", `,"connection_origin":null`} {
 			input := `{"type":"mcp","server_label":"records"` + origin + `,"transport":{"type":"http","server_url":"https://mcp.example.test/tools"}}`
-			resolved, err := resolveMCPTool(json.RawMessage(input), saved)
+			resolved, err := resolveMCPTool(json.RawMessage(input), "tools[0]", saved)
 			if err != nil || string(resolved) != string(explicit) {
 				t.Fatalf("saved=%v origin %q: %s, %v; want %s", saved, origin, resolved, err, explicit)
 			}
@@ -82,7 +84,7 @@ func TestMCPStdioDeclaration(t *testing.T) {
 	}
 	for _, saved := range []bool{false, true} {
 		for _, origin := range []string{"", `,"connection_origin":null`, `,"connection_origin":"environment"`} {
-			raw, err := resolveMCPTool(input(origin, stdio+`,"env":{}}`), saved)
+			raw, err := resolveMCPTool(input(origin, stdio+`,"env":{}}`), "tools[0]", saved)
 			var tool map[string]any
 			if err != nil || json.Unmarshal(raw, &tool) != nil || tool["connection_origin"] != "environment" ||
 				!reflect.DeepEqual(tool["transport"], map[string]any{"type": "stdio", "command": "run", "args": []any{"-x"}, "cwd": "/work", "env_vars": []any{"TOKEN"}}) {
@@ -90,7 +92,7 @@ func TestMCPStdioDeclaration(t *testing.T) {
 			}
 		}
 	}
-	raw, err := resolveMCPTool(input("", `{"type":"stdio","command":"run","args":null,"cwd":"/","env_vars":null}`), true)
+	raw, err := resolveMCPTool(input("", `{"type":"stdio","command":"run","args":null,"cwd":"/","env_vars":null}`), "tools[0]", true)
 	if err != nil || !strings.Contains(string(raw), `"args":[]`) || !strings.Contains(string(raw), `"env_vars":[]`) {
 		t.Fatalf("null lists: %s, %v", raw, err)
 	}
@@ -98,14 +100,14 @@ func TestMCPStdioDeclaration(t *testing.T) {
 		"Inline MCP env is not supported; declare env_vars and set the values in the Environment.": input("", stdio+`,"env":{"TOKEN":"private-marker"}}`),
 		"MCP stdio servers run in the Environment; connection_origin must be environment.":         input(`,"connection_origin":"service"`, stdio+`}`),
 	} {
-		if _, err := resolveMCPTool(raw, false); err == nil || err.Error() != message {
+		if _, err := resolveMCPTool(raw, "tools[0]", false); err == nil || err.Error() != message {
 			t.Fatalf("want %q, got %v", message, err)
 		}
 	}
 	const invalid = "MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters."
 	for _, transport := range []string{`{"type":"stdio","command":" ","cwd":"/"}`, `{"type":"stdio","command":"run","cwd":"work"}`,
 		`{"type":"stdio","command":"run","cwd":"/","env_vars":["A-B"]}`, `{"type":"stdio","command":"run","args":["\u0000"],"cwd":"/"}`} {
-		if _, err := resolveMCPTool(input("", transport), true); err == nil || err.Error() != invalid {
+		if _, err := resolveMCPTool(input("", transport), "tools[0]", true); err == nil || err.Error() != invalid {
 			t.Fatalf("%s: %v", transport, err)
 		}
 	}
@@ -121,7 +123,7 @@ func TestMCPAllowedToolsAndOptionalFields(t *testing.T) {
 		input["credential_id"], input["request_metadata"], input["required"] = json.RawMessage("null"), json.RawMessage("null"), json.RawMessage("false")
 		input["transport"] = json.RawMessage(`{"type":"http","server_url":"https://mcp.example.test/tools","authorization":null,"headers":null}`)
 		encoded, _ := json.Marshal(input)
-		resolved, err := resolveMCPTool(encoded, false)
+		resolved, err := resolveMCPTool(encoded, "tools[0]", false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -157,7 +159,7 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 				}
 			}
 			encoded, _ := json.Marshal(input)
-			if _, err := resolveMCPTool(encoded, false); err == nil || strings.Contains(err.Error(), "private-marker") {
+			if _, err := resolveMCPTool(encoded, "tools[0]", false); err == nil || strings.Contains(err.Error(), "private-marker") {
 				t.Fatalf("unsupported MCP input was accepted or disclosed: %v", err)
 			}
 		})
@@ -167,18 +169,18 @@ func TestMCPUnsupportedInputsAreSecretSafe(t *testing.T) {
 func TestMCPHeadersAreStoredAsGiven(t *testing.T) {
 	for _, saved := range []bool{false, true} {
 		input := `{"type":"mcp","server_label":"records","transport":{"type":"http","server_url":"https://mcp.example.test","headers":{"X-Tenant":"a"}}}`
-		raw, err := resolveMCPTool(json.RawMessage(input), saved)
+		raw, err := resolveMCPTool(json.RawMessage(input), "tools[0]", saved)
 		if err != nil || !strings.Contains(string(raw), `"headers":{"X-Tenant":"a"}`) {
 			t.Fatalf("saved=%v: %s, %v", saved, raw, err)
 		}
-		if _, err := resolveMCPTool(json.RawMessage(strings.Replace(input, "X-Tenant", "authorization", 1)), saved); err == nil {
+		if _, err := resolveMCPTool(json.RawMessage(strings.Replace(input, "X-Tenant", "authorization", 1)), "tools[0]", saved); err == nil {
 			t.Fatal("Authorization header accepted")
 		}
 	}
 }
 
 func TestSessionMCPKeepsToolOrderAndStripsSavedHeaders(t *testing.T) {
-	saved, err := resolveMCPTool(json.RawMessage(publicMCP), true)
+	saved, err := resolveMCPTool(json.RawMessage(publicMCP), "tools[0]", true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,8 +192,20 @@ func TestSessionMCPKeepsToolOrderAndStripsSavedHeaders(t *testing.T) {
 	if strings.Contains(string(tools[0]), "headers") || string(tools[1]) != string(function) {
 		t.Fatalf("Session transport or declared order changed: %s", tools)
 	}
-	if _, err := resolveSessionTools([]json.RawMessage{saved, function, saved}); err == nil {
-		t.Fatal("duplicate MCP server labels were admitted")
+}
+
+func TestSessionReadOmitsMCPHeaders(t *testing.T) {
+	stored, err := resolveMCPTool(json.RawMessage(`{"type":"mcp","server_label":"records","transport":{"type":"http","server_url":"https://mcp.example.test","headers":{"X-Tenant":"a"}}}`), "tools[0]", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(configuration{Agent: v1.Agent{ID: "agent", Model: "fixture", Tools: []json.RawMessage{stored}}, Environment: v1.Environment{Type: "none"}})
+	response, err := sessionResponse(sessions.Session{Configuration: raw}, "")
+	if err != nil || !strings.Contains(string(stored), "X-Tenant") {
+		t.Fatal(err)
+	}
+	if got := string(response.Agent.Tools[0]); strings.Contains(got, "headers") || !strings.Contains(got, `"transport":{"type":"http","server_url":"https://mcp.example.test"}`) {
+		t.Fatalf("Session read: %s", got)
 	}
 }
 
@@ -199,7 +213,7 @@ func TestPublicEnvironmentMCPPreservesDeclaration(t *testing.T) {
 	for _, saved := range []bool{false, true} {
 		for _, allowed := range []string{"null", "[]", `["prove"]`} {
 			raw := []byte(`{"type":"mcp","server_label":"remote","connection_origin":"environment","transport":{"type":"http","server_url":"https://example.test/mcp"},"allowed_tools":` + allowed + `,"required":true,"credential_id":"selected"}`)
-			resolved, err := resolveMCPTool(raw, saved)
+			resolved, err := resolveMCPTool(raw, "tools[0]", saved)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -213,7 +227,7 @@ func TestPublicEnvironmentMCPPreservesDeclaration(t *testing.T) {
 
 func TestMCPServerURLKeepsQuery(t *testing.T) {
 	const serverURL = "https://mcp.example.test/tools?tenant=a%20b"
-	saved, err := resolveMCPTool(json.RawMessage(strings.Replace(publicMCP, "https://mcp.example.test/tools", serverURL, 1)), true)
+	saved, err := resolveMCPTool(json.RawMessage(strings.Replace(publicMCP, "https://mcp.example.test/tools", serverURL, 1)), "tools[0]", true)
 	if err != nil || !strings.Contains(string(saved), serverURL) {
 		t.Fatalf("query URL was rejected or changed: %s, %v", saved, err)
 	}

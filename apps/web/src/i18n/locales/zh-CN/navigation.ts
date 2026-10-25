@@ -1,5 +1,4 @@
 export const navigation = {
-  console: "控制台",
   mainNavigation: "控制台导航",
   groups: {
     monitor: "监控",
@@ -31,7 +30,5 @@ export const navigation = {
   lightTheme: "浅色主题",
   darkTheme: "深色主题",
   language: "语言",
-  english: "English",
-  chinese: "简体中文",
   appearanceSettings: "语言和外观",
 } as const;

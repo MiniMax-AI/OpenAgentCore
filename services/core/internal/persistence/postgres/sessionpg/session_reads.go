@@ -39,7 +39,8 @@ func (s *Store) ListSessions(ctx context.Context, tenantID, cursor string, limit
 	err = s.units.Snapshot(ctx, func(ctx context.Context, tx pgx.Tx) error {
 		q := sqlc.New(tx)
 		if cursor != "" {
-			after, err := q.GetSession(ctx, sqlc.GetSessionParams{TenantID: tenant, ID: pgunit.PathID(cursor)})
+			// A deleted Session still anchors the page position.
+			after, err := q.GetSessionCursor(ctx, sqlc.GetSessionCursorParams{TenantID: tenant, ID: pgunit.PathID(cursor)})
 			if err != nil {
 				return err
 			}
@@ -291,6 +292,9 @@ func loadSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 		}
 		session.Environment = &value
 		session.EnvironmentFailure = environmentFailure(environment.Environment)
+		if err := json.Unmarshal(environment.Environment.InitializationSteps, &session.EnvironmentInitializationSteps); err != nil {
+			return session, err
+		}
 		state, err := LoadEnvironmentInput(ctx, q, id)
 		if err != nil {
 			return session, err

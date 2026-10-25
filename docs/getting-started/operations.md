@@ -127,7 +127,7 @@ Core records which key made each public resource write; the retention of that hi
 
 A recoverable backup contains one consistent, stopped-write set. A database dump or Core volume export alone does not include independent workspace storage or node compute state. Restore the data volume together with the installation directory from the same backup, which holds the release that wrote it.
 
-### Single-host backup and restore {#single-host-backup}
+### Single-host backup and restore
 
 For an installation whose data all lives in its Docker volume, with no independent workspace storage and no node state to keep, the data volume and the installation directory are the whole backup. This recipe uses a Unix shell and the PostgreSQL image the installation already pulled.
 
@@ -164,8 +164,7 @@ An installation with independent workspace storage or nodes needs the full proce
 - Every independent workspace namespace selected by current or retained objects, even when it is outside the installation volume. Back up its entire root, including `.oac-storage-root`, object identities, staging, live data, trash and deletion markers. Preserve numeric ownership, modes, links and extended attributes, including every `user.*` attribute. Copying only `live/data` loses lifecycle evidence and can resurrect deleted identities. [Workspace storage](../workspace-provider.md#kernel-nfs-adapter) owns the layout and ownership requirements.
 - For a [quota mode](../workspace-provider.md#quota-mode) namespace, the entire XFS filesystem holding the export as one block-level copy: a storage or LVM snapshot, or an image of the frozen or unmounted device. Only such a copy keeps project IDs, quota limits, inode identities, the filesystem UUID and the `oac-workspace-quota` journal consistent. A file-level copy, `tar`, `rsync` or `xfsdump` loses them; the command then refuses the restored objects instead of serving them unbounded.
 - Each node's state directory, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, and its provider storage: Docker volumes or microsandbox's store. Include all compute and snapshot resources still referenced by the database. See [when a node host fails](./nodes.md#when-a-node-host-fails).
-
-- Each private `checkpoint_root` in its entirety, including `.oac-checkpoint-store`, checkpoints, operation journals, lock files and tombstones, together with the matching Core database. It is separate from the native SDK store and independent workspace namespace. Preserve its identity and private ownership; the [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns its lifecycle.
+- Each private `checkpoint_root` in its entirety, including `.oac-checkpoint-store`, checkpoints, operation journals, lock files and tombstones, together with the matching Core database. The [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns its identity, ownership and lifecycle.
 
 ### Establish a stopped-write window
 
@@ -192,7 +191,7 @@ Keep application ingress and Core/node services stopped while restoring. Fence o
 
 Restore matching secrets and database state, the complete independent filesystem namespaces and any required node identities/provider stores before starting Core. Preserve the database's configuration and namespace UUIDs, object identities and deletion markers; do not run first-time namespace initialization over restored storage. Restore a quota mode filesystem by writing its block-level copy to the backing device and mounting it with `prjquota` at the configured mount point; never run `oac-workspace-quota init` over it, and do not mount the copy beside the original, which has the same filesystem UUID. Reestablish the configured mount paths and service UIDs, then validate the mounted filesystem, ownership and xattrs from each participating service context. [Set up workspace storage](./workspace-storage.md) owns deployment setup.
 
-The cold released baseline resumes only qualified native history after new compute admission. A backup containing retained checkpoints also depends on the matching native runtime, node identity, provider store and external filesystem identities. File-level restore can change inode identity and prevent strict checkpoint restore even when file bytes match. This procedure does not promise portable memory snapshots or restoration onto an arbitrary replacement node; preserve unresolved ownership rather than substituting a new sandbox.
+A cold restore resumes only qualified native history after new compute admission. A backup containing retained checkpoints also depends on the matching native runtime, node identity, provider store and external filesystem identities. File-level restore can change inode identity and prevent strict checkpoint restore even when file bytes match. This procedure restores onto the original node identities; [checkpoint transfer](../sandbox-provider.md#checkpoint-transfer) defines when another node can restore a checkpoint. Preserve unresolved ownership rather than substituting a new sandbox.
 
 Start the database, Core and node services only after their restored dependencies are complete; keep ingress restricted while checking them. In an isolated rehearsal, verify a retained Session's files and native continuation on fresh compute where qualified, confirm that deleted objects cannot be reopened, and check that no old writer can access the restored namespace. Record the results before relying on the backup for recovery.
 

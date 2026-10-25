@@ -188,15 +188,10 @@ html[data-theme="dark"] .brand-mark {
   filter: invert(1);
 }
 
-.brand-name,
-.brand-product {
+.brand-name {
   overflow: hidden;
   font-size: 14px;
   text-overflow: ellipsis;
-}
-
-.brand-product {
-  color: var(--fg-muted);
 }
 
 .main-nav {
@@ -565,39 +560,6 @@ html[data-theme="dark"] .brand-mark {
 
 .search-control input::placeholder {
   color: var(--fg-muted);
-}
-
-/* Shared ledger primitives. */
-
-.ledger {
-  min-height: 0;
-  flex: 1;
-  overflow: auto;
-}
-
-.ledger-row {
-  display: grid;
-  grid-template-columns:
-    minmax(220px, 2fr) minmax(140px, 1fr) 72px 100px 124px;
-  min-width: 760px;
-  align-items: center;
-  padding: 0 14px 0 24px;
-  column-gap: 10px;
-}
-
-.ledger-row {
-  position: relative;
-  height: 36px;
-  color: var(--fg);
-  font-size: 13px;
-  line-height: 18px;
-  border-bottom: 1px solid var(--line);
-  transition: background-color 150ms var(--ease-settle);
-}
-
-.ledger-row:hover,
-.ledger-row:focus-within {
-  background: var(--hover);
 }
 
 .status-icon {
@@ -2051,17 +2013,6 @@ button.trace-step-row:hover {
   line-height: 16px;
 }
 
-.field > .field-label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-weight: 400;
-  line-height: 16px;
-}
-
 .field input,
 .field textarea,
 .field select {
@@ -2338,26 +2289,6 @@ button.trace-step-row:hover {
 
 .vaults-page .page-header > div:first-child {
   min-width: 0;
-}
-
-.vault-credentials {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-muted);
-}
-
-.vault-credentials h3 {
-  display: flex;
-  justify-content: space-between;
-  margin: 0 0 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.vault-credentials h3 span {
-  color: var(--fg-muted);
 }
 
 @media (max-width: 640px) {

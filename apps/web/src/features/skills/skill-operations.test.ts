@@ -1,14 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AgentCoreError, type Skill, type SkillList, type SkillVersion, type SkillVersionList } from "@oac/agents-client";
+import type { Skill, SkillVersion } from "@oac/agents-client";
 
 import type { ProjectClient } from "../../lib/projects";
-import i18n from "../../i18n";
 import {
   downloadSkillArchive,
   filterSkills,
-  isDefaultVersionConflict,
-  readSkillsPage,
   skillArchiveFilename,
   versionDeleteState,
 } from "./skill-operations";
@@ -41,10 +38,6 @@ function version(number: string, overrides: Partial<SkillVersion> = {}): SkillVe
   };
 }
 
-function coreError(status: number, code: string | null = null, param: string | null = null, message = "Core said no."): AgentCoreError {
-  return new AgentCoreError(message, status, code, param);
-}
-
 
 
 describe("Skill version deletion states", () => {
@@ -71,16 +64,6 @@ describe("Skill list helpers", () => {
     expect(filterSkills(skills, "  REPORT ").map((skill) => skill.name)).toEqual(["report"]);
     expect(filterSkills(skills, "issues").map((skill) => skill.name)).toEqual(["triage"]);
     expect(filterSkills(skills, "")).toHaveLength(2);
-  });
-
-  it("reads pages newest first with the Skill cursor", async () => {
-    const listSkills = vi.fn(async (): Promise<SkillList> => ({
-      object: "list", data: [skillFixture({ id: "skill_c" })], has_more: true, first_id: "skill_c", last_id: "skill_c",
-    }));
-    const page = await readSkillsPage({ listSkills }, [skillFixture({ id: "skill_d" })], "skill_d");
-    expect(listSkills).toHaveBeenCalledWith({ after: "skill_d", limit: 20, order: "desc", signal: undefined });
-    expect(page.values.map((skill) => skill.id)).toEqual(["skill_d", "skill_c"]);
-    expect(page.nextAfter).toBe("skill_c");
   });
 
   it("names archives after the Skill and version", () => {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
@@ -95,33 +97,35 @@ func decideFunctionWithdrawal(turn Turn, call FunctionCall) (bool, error) {
 }
 
 // resolveFunctionCall gives a call a Subagent made the identity of the child's
-// function Item. A child the Session has not published, or a malformed native
-// identity, is ErrInvalidInput.
-func resolveFunctionCall(ctx context.Context, tx NativeSubagents, call FunctionCall) (FunctionCall, error) {
+// function Item, and returns the child Turn's ID, empty for a root call. A
+// child the Session has not published, or a malformed native identity, is
+// ErrInvalidInput.
+func resolveFunctionCall(ctx context.Context, tx NativeSubagents, call FunctionCall) (FunctionCall, string, error) {
 	if call.Subagent == "" && call.SubagentTurn == "" {
-		return call, nil
+		return call, "", nil
 	}
 	if !validNativeIdentity(call.Subagent) || !validNativeIdentity(call.SubagentTurn) {
-		return call, ErrInvalidInput
+		return call, "", ErrInvalidInput
 	}
 	child, err := visibleSubagent(ctx, tx, call.Subagent)
 	if err != nil {
-		return call, err
+		return call, "", err
 	}
-	call.CallID = items.Identity(items.Identity(child.ID, "turn:"+call.SubagentTurn), "tool:"+call.ExecutorCallID)
-	return call, nil
+	turn := items.Identity(child.ID, "turn:"+call.SubagentTurn)
+	call.CallID = items.Identity(turn, "tool:"+call.ExecutorCallID)
+	return call, turn, nil
 }
 
 // RecordFunctionCall records a call an executor reported for its Turn and
 // journals the Turn's required actions with it. A call a Subagent made takes
-// the identity of the child's function Item. A retry of the recorded call
-// changes nothing.
+// the identity of the child's function Item and is published as that Item. A
+// retry of the recorded call changes nothing.
 func (o *ExecutionOperations) RecordFunctionCall(ctx context.Context, tenant, session, turn string, call FunctionCall) error {
 	if err := validateFunctionCall(call); err != nil {
 		return err
 	}
 	return o.storage.WithFunctionTurn(ctx, tenant, session, turn, func(ctx context.Context, tx FunctionTx, current Turn) error {
-		call, err := resolveFunctionCall(ctx, tx, call)
+		call, childTurn, err := resolveFunctionCall(ctx, tx, call)
 		if err != nil {
 			return err
 		}
@@ -136,6 +140,13 @@ func (o *ExecutionOperations) RecordFunctionCall(ctx context.Context, tenant, se
 		if err := tx.CreateFunctionCall(ctx, current.ID, call); err != nil {
 			return err
 		}
+		if childTurn != "" {
+			// The official SDK answers calls from this event; child Items publish nothing else.
+			item := v1.Item{ID: call.CallID, TurnID: childTurn, Type: "function_call", Status: "in_progress", Name: call.Name, CallID: call.CallID, Arguments: call.Arguments}
+			if err := tx.AppendChanges(ctx, ItemChanges(items.Change{Item: item}, nil)...); err != nil {
+				return err
+			}
+		}
 		return settleFunctionState(ctx, tx, current)
 	})
 }
@@ -145,6 +156,9 @@ func (o *ExecutionOperations) RecordFunctionCall(ctx context.Context, tenant, se
 func (o *ExecutionOperations) PendingFunctionCalls(ctx context.Context, tenant, session, turn string) ([]FunctionCall, error) {
 	calls := make([]FunctionCall, 0)
 	err := o.storage.WithFunctionTurn(ctx, tenant, session, turn, func(ctx context.Context, tx FunctionTx, current Turn) error {
+		if !acceptsFunctionResults(current) {
+			return nil
+		}
 		pending, err := tx.LoadPendingFunctionCalls(ctx, current.ID)
 		calls = append(calls, pending...)
 		return err
@@ -189,7 +203,7 @@ func (o *ExecutionOperations) WithdrawFunctionCall(ctx context.Context, tenant, 
 		return ErrInvalidInput
 	}
 	return o.storage.WithFunctionTurn(ctx, tenant, session, turn, func(ctx context.Context, tx FunctionTx, current Turn) error {
-		call, err := resolveFunctionCall(ctx, tx, call)
+		call, _, err := resolveFunctionCall(ctx, tx, call)
 		if err != nil {
 			return err
 		}

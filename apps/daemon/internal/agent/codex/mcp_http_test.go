@@ -21,7 +21,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		{ConnectionOrigin: "service", ServerLabel: "blocked", ServerURL: "http://127.0.0.1:12345/mcp", AllowedTools: &denyAll},
 	}
 	req := proto.PromptRequestPayload{AgentStateKey: "public-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
-	plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t)))
+	plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t), t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		!slices.Contains(plan.ExtraConfig, [2]string{"shell_environment_policy.exclude", `["OAC_RUNTIME_MCP_*"]`}) {
 		t.Fatal("native profile kept only credential isolation")
 	}
-	home, err := allocCodexHome(testStateRoot(t), req.AgentStateKey)
+	home, err := allocSessionDir(testStateRoot(t), req.AgentStateKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestPublicMCPHTTPPlanOwnsConfigurationAndPreservesHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	servers = []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "replacement", ServerURL: "https://new.example/mcp"}}
-	second, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t)))
+	second, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t), t.TempDir()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +91,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		}
 	}
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	home, err := allocCodexHome(testStateRoot(t), "credentials")
+	home, err := allocSessionDir(testStateRoot(t), "credentials")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestPublicMCPHTTPRejectsInvalidProfileAndStoredCredentials(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := proto.PromptRequestPayload{AgentStateKey: "credentials", DisableExecutionEnvironment: true, MCPHTTPServers: &valid}
-	if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t))); err == nil {
+	if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t), t.TempDir())); err == nil {
 		t.Fatal("existing MCP credentials accepted")
 	}
 	if after, err := os.ReadFile(path); err != nil || !reflect.DeepEqual(after, stored) {

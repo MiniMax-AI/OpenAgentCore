@@ -80,7 +80,7 @@ func (b backend) openSnapshot(ctx context.Context, operation string, source wire
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
 	compatibility := sandbox.CheckpointCompatibility{ArtifactDomain: artifact.Labels()["io.oac.artifact_domain"], ExecutionClass: artifact.Labels()["io.oac.execution_class"]}
-	return artifact, wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(b.q.Config, b.q.Reference, operation), ID: artifact.ID(), Digest: artifact.Digest(), CheckpointID: state.Checkpoint.CheckpointID, OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}, nil
+	return artifact, wire.SnapshotIdentity{Compatibility: compatibility, Reference: wire.SnapshotReference(b.q.Config, b.q.Reference, operation), ID: artifact.ID(), OperationID: operation, SourceName: source.Name, SourceID: source.ID, SourceGeneration: source.Generation}, nil
 }
 
 // inspectSnapshot verifies a fresh capture before its identity is published.
@@ -96,7 +96,7 @@ func (b backend) inspectSnapshot(ctx context.Context, operation string, source w
 	if report.Digest != artifact.Digest() || report.Checkpoint == nil || report.Checkpoint.Root == "" || report.Checkpoint.Kind == "" {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
-	identity.CheckpointRoot = report.Checkpoint.Root
+	identity.Evidence = wire.SnapshotEvidence(artifact.Digest(), artifact.State().Checkpoint.CheckpointID, report.Checkpoint.Root)
 	if wire.ValidateSnapshot(b.q.Config, b.q.Reference, identity) != nil {
 		return nil, wire.SnapshotIdentity{}, sandbox.ErrOwnership
 	}
@@ -307,24 +307,35 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	}
 	// Admission is durable before any native import/restore operation. A prior
 	// admitted operation with no visible target remains unknown, never replayed.
+	// The fresh dispatch that created the admission closes it on any failure
+	// before RestoreSandbox, since no guest execution can have occurred.
 	artifact, e := b.restoreSource(ctx, q.Snapshot)
+	if e == nil {
+		e = qualifySnapshotResources(b.q.Config, artifact.Labels())
+	}
+	if e == nil {
+		e = qualifyWorkspace(artifact.Labels(), b.q.Workspace)
+	}
+	if e == nil {
+		e = qualifyRuntimeImage(ctx, b.q.Config, artifact.ImageManifestDigest())
+	}
 	if e != nil {
-		return wire.State{}, e
-	}
-	if e = qualifySnapshotResources(b.q.Config, artifact.Labels()); e != nil {
-		return wire.State{}, e
-	}
-	if err := qualifyWorkspace(artifact.Labels(), b.q.Workspace); err != nil {
-		return wire.State{}, err
-	}
-	if err := qualifyRuntimeImage(ctx, b.q.Config, artifact.ImageManifestDigest()); err != nil {
-		return wire.State{}, err
+		if q.ObserveOnly {
+			return wire.State{}, e
+		}
+		return wire.State{}, b.closeUndispatchedRestore(q, e)
 	}
 	_, _, e = b.inspectOwned(ctx, q.Target)
 	if e == nil {
 		return b.completeRestore(ctx, q, q.Target)
 	}
 	if !sdk.IsKind(e, sdk.ErrSandboxNotFound) {
+		// A failed target lookup proves nothing about the snapshot: close only.
+		if !q.ObserveOnly {
+			if err := b.closeRestore(q, false); err != nil {
+				return wire.State{}, err
+			}
+		}
 		return wire.State{}, e
 	}
 	if q.ObserveOnly || q.Target.ID != "" {

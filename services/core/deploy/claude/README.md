@@ -6,7 +6,7 @@ Native tools run with the daemon user's permissions; the outer sandbox provides 
 
 ## Native pin and readiness
 
-The bundle pins Claude Agent SDK `0.3.269` ([`package.json`](../../../../packages/claude-sdk-adapter/package.json)), which reports native Claude Code `2.1.269`. The bridge uses protocol 3 for a prepared Executor with separately identified Turns; the Go adapter's readiness and Executor checks reject any other protocol version ([`readiness.go`](../../../../apps/daemon/internal/agent/claudesdk/readiness.go), [`executor.go`](../../../../apps/daemon/internal/agent/claudesdk/executor.go)).
+The bundle pins Claude Agent SDK `0.3.269` ([`package.json`](../../../../packages/claude-sdk-adapter/package.json)), which fixes the native Claude Code it bundles. The bridge uses protocol 3 for a prepared Executor with separately identified Turns; the Go adapter's readiness and Executor checks reject any other protocol version ([`readiness.go`](../../../../apps/daemon/internal/agent/claudesdk/readiness.go), [`executor.go`](../../../../apps/daemon/internal/agent/claudesdk/executor.go)).
 
 Workspace execution requires the bundle to report the `workspace_tools`, `workspace_prepare`, `workspace_command_observations` and `local_runtime_v2` features; matching SDK versions alone do not establish compatibility. Function tools in workspace execution additionally require `workspace_functions`. The native installer rejects a bundle that lacks the workspace features ([`installation.go`](../../../../apps/daemon/internal/agent/claudesdk/installation.go)).
 
@@ -33,7 +33,7 @@ The bridge ([`native_failure.ts`](../../../../packages/claude-sdk-adapter/src/na
 | `server_error` right after an `api_retry` whose `error_status` is null, with no model output between them | `connection_failed` |
 | any other `server_error` | `server_error` |
 
-Claude Code `2.1.269` reports both a request that got no HTTP response, such as a failed DNS lookup, a refused connection or a timeout, and a server error in a response that already started streaming as `server_error` without a status. Only the first comes right after an `api_retry` whose `error_status` is null, with no model output in between. Claude Code retries such a request up to 10 times, with backoff that grows to about 35 seconds, so a model host that does not resolve or refuses connections fails the Turn after about three minutes. The adapter leaves that bound as it is.
+The pinned Claude Code reports both a request that got no HTTP response, such as a failed DNS lookup, a refused connection or a timeout, and a server error in a response that already started streaming as `server_error` without a status. Only the first comes right after an `api_retry` whose `error_status` is null, with no model output in between. Claude Code retries such a request up to 10 times, with backoff that grows to about 35 seconds, so a model host that does not resolve or refuses connections fails the Turn after about three minutes. The adapter leaves that bound as it is.
 
 `unknown`, `max_output_tokens` and other results stay unclassified. The bridge drops the classification when any other error ends the Turn, when cleanup fails or when no native process ran. The Go adapter keeps it only for the reported failed result of the same native Session, and only after it received the Turn settlement ([`executor_turn.go`](../../../../apps/daemon/internal/agent/claudesdk/executor_turn.go)).
 
@@ -43,10 +43,10 @@ Claude Code `2.1.269` reports both a request that got no HTTP response, such as 
 
 | Item | Value |
 | --- | --- |
-| Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep` |
+| Base | The [shared Runtime base](../../../../docs/maintainers.md#runtime-images-and-helpers) |
 | Programs | `/usr/local/bin/oac-daemon` and the SDK bundle at `/opt/claude-sdk` |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node`, `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node`, `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build runs the bundle's `runtime_check.js` against its entry point. The distribution copies `/opt/claude-sdk` into the combined Runtime image. Sandboxes run the image with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).

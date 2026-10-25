@@ -3,24 +3,19 @@ package modelconfiguration
 import "context"
 
 // Storage keeps one deployment default per Harness and seals and opens its
-// bundle. Replace and Delete record the administrator
+// provider key. Replace and Delete record the administrator
 // mutation in the same transaction, from the provenance the context carries;
 // an audit failure aborts the change.
 type Storage interface {
-	// Replace seals and stores record under a new revision and clears the
+	// Replace seals the key and stores record under a new revision and clears the
 	// observations of the revision it replaces.
 	Replace(ctx context.Context, record Record) (Configuration, error)
 	// Delete removes the Harness's default. Removing a missing default succeeds
 	// and is audited too.
 	Delete(ctx context.Context, harness string) error
-	// LoadBundle opens the Harness's bundle and returns it with its revision.
+	// LoadBundle opens the Harness's key and returns it with its revision.
 	// A Harness without a default is ErrNotFound, checked before the key.
 	LoadBundle(ctx context.Context, harness string) (Bundle, error)
-}
-
-// Reader lists the configured defaults without opening any bundle.
-type Reader interface {
-	List(ctx context.Context) ([]Configuration, error)
 }
 
 // Observer records a committed root Turn's outcome against the deployment

@@ -15,6 +15,9 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/codex"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/installroot"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent/mcode"
+	claudedeclaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/claudesdk"
+	codexdeclaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/codex"
+	mcodedeclaration "github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/mcode"
 )
 
 func nativeExe(name string) string {
@@ -69,7 +72,9 @@ func withNativeEnv(values map[string]string) []string {
 
 // Installation registration is local to Runtime; Core does not see native paths.
 var nativeHarnesses = map[string]agent.Installation{
-	"codex": codex.Installation(), "claude": claudesdk.Installation(), "minimax": mcode.Installation(),
+	codexdeclaration.Declaration.Native.Component:  codex.Installation(),
+	claudedeclaration.Declaration.Native.Component: claudesdk.Installation(),
+	mcodedeclaration.Declaration.Native.Component:  mcode.Installation(),
 }
 var probeNativeInstallation = checkNativeInstallation
 

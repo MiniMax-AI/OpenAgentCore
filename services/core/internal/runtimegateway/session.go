@@ -73,7 +73,6 @@ type SessionLogger func(format string, args ...any)
 // violating gorilla's "single writer" requirement.
 type Session struct {
 	DeviceID      string
-	WorkspaceID   string
 	DaemonVersion string
 	ConnectedAt   time.Time
 
@@ -96,7 +95,7 @@ type Session struct {
 	// sending execution_prepare so unsupported engines fail on the server.
 	kindsMu        sync.RWMutex
 	kindsSeen      bool
-	supportedKinds []runtimedevice.SupportedAgentKind
+	supportedKinds []proto.SupportedAgentKind
 
 	// Subscribers keyed by runID. The read loop only sends on these
 	// channels; Unsubscribe is the only place that closes them.
@@ -137,11 +136,10 @@ type Session struct {
 // NewSession wires a freshly-upgraded WS connection into a Session. The session
 // does NOT start its goroutines automatically — Start runs once the handler is
 // ready so the session can't race with response writes.
-func NewSession(conn WSConn, deviceID, workspaceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
+func NewSession(conn WSConn, deviceID, daemonVersion string, reg *Registry, log SessionLogger) *Session {
 	now := time.Now()
 	return &Session{
 		DeviceID:      deviceID,
-		WorkspaceID:   workspaceID,
 		DaemonVersion: daemonVersion,
 		ConnectedAt:   now,
 		conn:          conn,
@@ -188,30 +186,30 @@ func (s *Session) LastSeen() time.Time {
 // AgentKindStatus returns the latest advertised descriptor for kind.
 // found=false means the daemon has not advertised that kind; snapshotKnown
 // distinguishes "no heartbeat yet" from "heartbeat arrived and omitted it".
-func (s *Session) AgentKindStatus(kind string) (info runtimedevice.SupportedAgentKind, found bool, snapshotKnown bool) {
+func (s *Session) AgentKindStatus(kind string) (info proto.SupportedAgentKind, found bool, snapshotKnown bool) {
 	kind = strings.TrimSpace(kind)
 	if kind == "" {
-		return runtimedevice.SupportedAgentKind{}, false, false
+		return proto.SupportedAgentKind{}, false, false
 	}
 	s.kindsMu.RLock()
 	seen := s.kindsSeen
-	kinds := make([]runtimedevice.SupportedAgentKind, len(s.supportedKinds))
+	kinds := make([]proto.SupportedAgentKind, len(s.supportedKinds))
 	copy(kinds, s.supportedKinds)
 	s.kindsMu.RUnlock()
 	if !seen {
-		return runtimedevice.SupportedAgentKind{}, false, false
+		return proto.SupportedAgentKind{}, false, false
 	}
 	for _, candidate := range kinds {
 		if candidate.Kind == kind {
 			return candidate, true, true
 		}
 	}
-	return runtimedevice.SupportedAgentKind{}, false, true
+	return proto.SupportedAgentKind{}, false, true
 }
 
 // setSupportedAgentKinds reports whether these are the session's first kinds.
-func (s *Session) setSupportedAgentKinds(kinds []runtimedevice.SupportedAgentKind) (first bool) {
-	copyKinds := make([]runtimedevice.SupportedAgentKind, len(kinds))
+func (s *Session) setSupportedAgentKinds(kinds []proto.SupportedAgentKind) (first bool) {
+	copyKinds := make([]proto.SupportedAgentKind, len(kinds))
 	copy(copyKinds, kinds)
 	s.kindsMu.Lock()
 	first = !s.kindsSeen
@@ -398,7 +396,7 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		s.Close("invalid heartbeat declaration")
 		return
 	}
-	kinds := deviceKindsFromHeartbeat(p)
+	kinds := p.SupportedAgentKinds
 	if s.setSupportedAgentKinds(kinds) {
 		s.reg.announce()
 	}
@@ -411,9 +409,6 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 	status, err := s.heartbeat.TouchAgentDaemonHeartbeat(ctx, runtimedevice.Heartbeat{
 		RuntimeID:           s.DeviceID,
 		CredentialHash:      s.credentialHash,
-		DaemonVersion:       p.DaemonVersion,
-		ActiveRequests:      p.ActiveRequests,
-		HeartbeatTimestamp:  p.Timestamp,
 		SupportedAgentKinds: kinds,
 	})
 	if err != nil {
@@ -432,46 +427,6 @@ func (s *Session) handleHeartbeat(env proto.Envelope) {
 		// the current owner.
 		s.CloseWithCode(CloseRuntimeDeleted, "runtime retired")
 	}
-}
-
-func deviceKindsFromHeartbeat(p proto.HeartbeatPayload) []runtimedevice.SupportedAgentKind {
-	out := make([]runtimedevice.SupportedAgentKind, 0, len(p.SupportedAgentKinds))
-	for _, info := range p.SupportedAgentKinds {
-		out = append(out, runtimedevice.SupportedAgentKind{
-			Kind:      info.Kind,
-			Available: info.Available,
-			Version:   info.Version,
-			Capabilities: runtimedevice.KindCapabilities{
-				Streaming:             info.Capabilities.Streaming.IsSupported(),
-				Usage:                 info.Capabilities.Usage.IsSupported(),
-				Resume:                info.Capabilities.Resume.IsSupported(),
-				DurableTurns:          info.Capabilities.DurableTurns.IsSupported(),
-				DurableInputReceipts:  info.Capabilities.DurableInputReceipts.IsSupported(),
-				NativeSessionRecovery: info.Capabilities.NativeSessionRecovery.IsSupported(),
-				RetainedNativeHistory: info.Capabilities.RetainedNativeHistory.IsSupported(),
-				MessageItems:          info.Capabilities.MessageItems.IsSupported(),
-
-				ToolObservations:         info.Capabilities.ToolObservations.IsSupported(),
-				EnvironmentNone:          info.Capabilities.EnvironmentNone.IsSupported(),
-				LocalEnvironment:         info.Capabilities.LocalEnvironment.IsSupported(),
-				Preparation:              info.Capabilities.Preparation.IsSupported(),
-				WorkspaceReadPreparation: info.Capabilities.WorkspaceReadPreparation.IsSupported(),
-				WorkspaceOutputExport:    info.Capabilities.WorkspaceOutputExport.IsSupported(),
-				StructuredOutput:         info.Capabilities.StructuredOutput.IsSupported(),
-				ToolSearch:               info.Capabilities.ToolSearch.IsSupported(),
-				MessageImages:            info.Capabilities.MessageImages.IsSupported(),
-				FunctionResultImages:     info.Capabilities.FunctionResultImages.IsSupported(),
-				ExecutionControls:        info.Capabilities.ExecutionControls.IsSupported(),
-				SubagentControl:          info.Capabilities.SubagentControl.IsSupported(),
-				SubagentObservations:     info.Capabilities.SubagentObservations.IsSupported(),
-				FunctionTools:            info.Capabilities.FunctionTools.IsSupported(),
-				MCPHTTPTools:             info.Capabilities.MCPHTTPTools.IsSupported(),
-				MCPHTTPRequired:          info.Capabilities.MCPHTTPRequired.IsSupported(),
-				MCPHTTPBearerAuth:        info.Capabilities.MCPHTTPBearerAuth.IsSupported(),
-			},
-		})
-	}
-	return out
 }
 
 func (s *Session) dispatch(env proto.Envelope) {

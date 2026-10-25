@@ -1,7 +1,6 @@
 package writeaudit
 
 import (
-	"context"
 	"errors"
 	"time"
 )
@@ -9,13 +8,6 @@ import (
 // ErrInvalidQuery reports a provenance query with an invalid tenant, filter,
 // page size or cursor.
 var ErrInvalidQuery = errors.New("invalid write audit query")
-
-// Reader reads write provenance as safe read models, never request bodies or
-// credentials.
-type Reader interface {
-	GetResourceOwners(ctx context.Context, tenantID, resourceType string, resourceIDs []string) ([]ResourceOwner, error)
-	ListWriteOperations(ctx context.Context, tenantID string, filter Filter) (Page, error)
-}
 
 // APIKey is the recorded identity of the key that made a write, with its
 // current revocation time.

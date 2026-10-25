@@ -15,7 +15,6 @@ function daemonUrl(publicUrl) {
 
 export function buildDemo(now = Math.floor(Date.now() / 1000), publicUrl = "https://core.example.com") {
   seed = 42;
-  const models = ["gpt-5.1-codex", "claude-sonnet-5", "MiniMax-M2", "gpt-5.1-mini"];
   const agents = agentDefinitions.map((definition, index) => ({
     id: `agent_${index + 1}${uuid().slice(0, 6)}`, object: "agent", model: definition.model, name: definition.name, instructions: definition.instructions,
     metadata: definition.metadata, multi_agent: { enabled: false, max_concurrent_subagents: null }, reasoning: definition.reasoning, service_tier: "auto",
@@ -101,11 +100,11 @@ export function buildDemo(now = Math.floor(Date.now() / 1000), publicUrl = "http
   });
   const observations = sessions.map((session) => {
     const base = { id: session.id, object: "agent.runtime_observation", session_id: session.id, resolved_at: now };
-    if (session.environment.type === "none") return { ...base, environment_id: null, mode: "none", provider_type: null, instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", allocation_created_at: null, observed_at: null, started_at: null, cpu: null, memory: null };
-    if (session.environment.type === "self_hosted") return { ...base, environment_id: session.environment.id, mode: "self_hosted", provider_type: null, instance: { kind: "self_hosted_connection", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", allocation_created_at: null, observed_at: null, started_at: null, cpu: null, memory: null };
+    if (session.environment.type === "none") return { ...base, environment_id: null, mode: "none", provider_type: null, instance: { kind: "none", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", allocation_created_at: null, observed_at: null, started_at: null, memory: null };
+    if (session.environment.type === "self_hosted") return { ...base, environment_id: session.environment.id, mode: "self_hosted", provider_type: null, instance: { kind: "self_hosted_connection", allocation_id: null, device_id: null, connection_generation: null }, lifecycle_state: null, status: "unsupported", reason: "runtime_mode_not_observable", allocation_created_at: null, observed_at: null, started_at: null, memory: null };
     const allocation = allocations.find((entry) => entry.session_id === session.id);
     const sleeping = allocation.compute_phase === "suspended";
-    return { ...base, environment_id: session.environment.id, mode: "openai_hosted", provider_type: "docker", instance: { kind: "managed_allocation", allocation_id: allocation.id, device_id: null, connection_generation: null }, lifecycle_state: sleeping ? "sleeping" : "active", status: "observed", reason: null, allocation_created_at: session.created_at, observed_at: now - 2, started_at: session.created_at, cpu: sleeping ? null : { usage_seconds_total: 600 + Math.floor(rand() * 4000), capacity_cores: 2, usage_cores: Number((rand() * 1.6).toFixed(2)), utilization_ratio: null }, memory: sleeping ? null : { usage_bytes: Math.floor((0.4 + rand() * 1.4) * 2 ** 30), limit_bytes: 2 * 2 ** 30 } };
+    return { ...base, environment_id: session.environment.id, mode: "openai_hosted", provider_type: "docker", instance: { kind: "managed_allocation", allocation_id: allocation.id, device_id: null, connection_generation: null }, lifecycle_state: sleeping ? "sleeping" : "active", status: "observed", reason: null, allocation_created_at: session.created_at, observed_at: now - 2, started_at: session.created_at, memory: sleeping ? null : { usage_bytes: Math.floor((0.4 + rand() * 1.4) * 2 ** 30), limit_bytes: 2 * 2 ** 30 } };
   });
   // Added after everything else is generated, so the seeded data above does not change.
   agents.push(...providerAgentDefinitions.map((definition, index) => ({

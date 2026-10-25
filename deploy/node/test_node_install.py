@@ -23,6 +23,8 @@ import urllib.error
 from types import SimpleNamespace
 from unittest import mock
 
+import host_docker
+import host_microsandbox
 import node_install as installer
 import node_spec
 
@@ -85,7 +87,7 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(installer, "wait_ready"),
                       mock.patch.object(installer, "open_request", side_effect=self.configuration_response),
                       mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=self.artifact_response)),
-                      mock.patch.object(installer, "micro_home", return_value=self.home / "m"),
+                      mock.patch.object(host_microsandbox, "home", return_value=self.home / "m"),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
                       mock.patch.object(installer, "checked", side_effect=self.checked),
                       mock.patch.object(installer.distribution, "docker_command", side_effect=self.docker_command),
@@ -122,8 +124,8 @@ class NodeInstallTests(unittest.TestCase):
         self.manifest["artifacts"] = {name: {"filename": name.replace("/", "-") + "-" + self.manifest["source_commit"],
                                              "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
                                       for name, raw in self.payloads.items() if name.startswith("native/") or name == "images/runtime.tar.gz"}
-        self.manifest["microsandbox"] = {"runtime_sha256": hashlib.sha256(self.payloads[installer.MICRO[1]]).hexdigest(),
-                                         "firmware_sha256": hashlib.sha256(self.payloads[installer.MICRO[2]]).hexdigest()}
+        self.manifest["microsandbox"] = {"runtime_sha256": hashlib.sha256(self.payloads[host_microsandbox.ARTIFACTS[1]]).hexdigest(),
+                                         "firmware_sha256": hashlib.sha256(self.payloads[host_microsandbox.ARTIFACTS[2]]).hexdigest()}
         self.manifest["artifacts"]["images/runtime.tar.gz"].update(unpacked_sha256=hashlib.sha256(b"runtime archive").hexdigest(), unpacked_size=len(b"runtime archive"))
         self.payloads["manifest.json"] = json.dumps(self.manifest).encode()
         self.payloads["SHA256SUMS"] = "".join(hashlib.sha256(raw).hexdigest() + "  " + name + "\n"
@@ -188,7 +190,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertEqual(config["native"]["image"], self.manifest["images"]["runtime"])
         self.assertEqual(config["core_url"], self.args.core_url + "/api/v1")
         self.assertEqual(config["installation_id"], self.args.installation_id)
-        self.assertFalse((self.root / installer.MICRO[0]).exists())
+        self.assertFalse((self.root / host_microsandbox.ARTIFACTS[0]).exists())
         unit = (system / "units" / ("oac-node-" + self.args.installation_id + ".service")).read_text()
         self.assertIn(" run --config ", unit)
         self.assertIn("KillMode=process", unit)
@@ -350,6 +352,10 @@ class NodeInstallTests(unittest.TestCase):
         message = str(installer.registration_failure(b"node enrollment rejected (HTTP 409 sandbox_node_host_unmeasured)\n"))
         self.assertIn("explicit limits", message)
 
+    def test_hosts_cover_exactly_the_node_providers(self):
+        providers = installer.node_spec._CONTRACT["providers"]
+        self.assertEqual(set(installer.HOSTS), {name for name, rules in providers.items() if rules["mode"] == "nodes"})
+
     def test_changed_public_url_clears_unregistered_state_for_a_new_command(self):
         # Core refused the address before consuming the token, so it has no record of this node.
         self.register_stderr = b"node enrollment rejected (HTTP 409 sandbox_node_address_mismatch)\n"
@@ -415,7 +421,7 @@ class NodeInstallTests(unittest.TestCase):
                 self.args.provider = provider
                 self.image_present = True
                 with mock.patch.object(installer.distribution, "runtime_archive") as archive:
-                    installer.prepare_runtime(self.root, self.args, self.manifest)
+                    installer.HOSTS[provider].prepare_runtime(installer, self.root, self.args, self.manifest)
                 archive.assert_not_called()
         self.assertFalse(any("load" in call for call, _ in self.calls))
 
@@ -466,11 +472,11 @@ class NodeInstallTests(unittest.TestCase):
             self.service_steps.append("wait_ready" if function is installer.wait_ready else function.__name__)
             with mock.patch.object(installer.Path, "home", return_value=Path(account.pw_dir)):
                 function(*arguments)
-        for patch in (mock.patch.multiple(installer, SERVICE_HOME=service_home, SERVICE_UID=os.getuid(), SYSTEM_RECORDS=system / "etc",
+        for patch in (mock.patch.multiple(host_docker, CHILD_CONFIG=system / "docker-config", SOCKET=system / "docker.sock"),
+                      mock.patch.multiple(installer, SERVICE_HOME=service_home, SERVICE_UID=os.getuid(), SYSTEM_RECORDS=system / "etc",
                                           SYSTEM_UNITS=system / "units", SYSTEM_LOCKS=system / "run",
-                                          CHILD_DOCKER_CONFIG=system / "docker-config",
                                           SYSTEMD_RUNNING=system / "systemd", SELINUX_ENFORCE=system / "selinux",
-                                          DOCKER_SOCKET=system / "docker.sock", run_as=run_as,
+                                          run_as=run_as,
                                           service_account=lambda: self.account),
                       mock.patch.object(installer.shutil, "which", side_effect=lambda tool: None if tool == "docker" and not self.docker_installed else "/usr/bin/" + tool),
                       mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["oac-node"] if self.joined else [])),
@@ -495,7 +501,7 @@ class NodeInstallTests(unittest.TestCase):
             with self.subTest(uid=uid), mock.patch.dict(os.environ, {"SUDO_UID": uid}):
                 stream = io.StringIO()
                 with contextlib.redirect_stdout(stream):
-                    installer.node_output.summary(self.root, self.args, "oac-node-example.service", "oac-node")
+                    installer.node_output.summary(self.root, self.args, "oac-node-example.service", "oac-node", "Docker")
                 self.assertIn("  Status: " + prefix + "systemctl status oac-node-example.service", stream.getvalue())
                 self.assertIn("  Logs: " + prefix + "journalctl -u oac-node-example.service -f", stream.getvalue())
 
@@ -514,9 +520,8 @@ class NodeInstallTests(unittest.TestCase):
         self.assertIn("\nStatus\n  Core connection: connected\n  Sandbox Provider: Docker (ready)\n", text)
         self.assertIn("\nNode\n", text)
         self.assertIn("\nManage\n", text)
-        scope = ""
-        self.assertIn("  Status: systemctl" + scope + " status oac-node-", text)
-        self.assertIn("  Logs: journalctl" + scope + " -u oac-node-", text)
+        self.assertIn("  Status: systemctl status oac-node-", text)
+        self.assertIn("  Logs: journalctl -u oac-node-", text)
         self.assertNotIn("synthetic-once-token", text)
         self.assertNotIn("\033[", text)
 
@@ -827,7 +832,7 @@ class NodeInstallTests(unittest.TestCase):
                   os.readlink("/proc/self/fd/0"), os.environ["DOCKER_CONFIG"], tty))
         output = io.StringIO()
         self.service_step(probe, output)
-        self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(installer.CHILD_DOCKER_CONFIG) + " tty=unavailable",
+        self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(host_docker.CHILD_CONFIG) + " tty=unavailable",
                       output.getvalue())
 
     def test_service_user_output_reaches_the_terminal_as_plain_text(self):
@@ -1084,35 +1089,35 @@ class NodePrerequisiteTests(unittest.TestCase):
 
     def test_microsandbox_short_home_is_stable_and_rejects_long_user_home(self):
         with mock.patch.object(installer.Path, "home", return_value=Path("/home/node")):
-            first = installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe")
-            self.assertEqual(first, installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe"))
+            first = host_microsandbox.home(installer, "94be54a1-138c-4f30-bc87-b13686272dbe")
+            self.assertEqual(first, host_microsandbox.home(installer, "94be54a1-138c-4f30-bc87-b13686272dbe"))
             self.assertLessEqual(len(os.fsencode(first)), 48)
         for length in (28, 29):
             with mock.patch.object(installer.Path, "home", return_value=Path("/" + "h" * (length - 1))):
                 if length == 28:
-                    self.assertEqual(len(os.fsencode(installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe"))), 48)
+                    self.assertEqual(len(os.fsencode(host_microsandbox.home(installer, "94be54a1-138c-4f30-bc87-b13686272dbe"))), 48)
                 else:
                     with self.assertRaisesRegex(installer.InstallError, "HOME is too long"):
-                        installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe")
+                        host_microsandbox.home(installer, "94be54a1-138c-4f30-bc87-b13686272dbe")
         with mock.patch.object(installer.Path, "home", return_value=Path("/home/" + "long" * 20)):
             with self.assertRaisesRegex(installer.InstallError, "HOME is too long"):
-                installer.micro_home("94be54a1-138c-4f30-bc87-b13686272dbe")
+                host_microsandbox.home(installer, "94be54a1-138c-4f30-bc87-b13686272dbe")
 
 
 class CheckpointRootTests(unittest.TestCase):
     def test_identity_is_private_stable_and_not_recreated(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "checkpoints"
-            installer.prepare_checkpoint_root(root)
+            host_microsandbox.prepare_checkpoint_root(installer, root)
             marker = root / ".oac-checkpoint-store"
             first = marker.read_bytes()
-            installer.prepare_checkpoint_root(root)
+            host_microsandbox.prepare_checkpoint_root(installer, root)
             self.assertEqual(first, marker.read_bytes())
             self.assertEqual(stat.S_IMODE(root.stat().st_mode), 0o700)
             self.assertEqual(stat.S_IMODE(marker.stat().st_mode), 0o600)
             marker.write_text("incomplete")
             with self.assertRaises(installer.InstallError):
-                installer.prepare_checkpoint_root(root)
+                host_microsandbox.prepare_checkpoint_root(installer, root)
 
     def test_foreign_contents_and_symlink_are_not_adopted(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -1120,12 +1125,12 @@ class CheckpointRootTests(unittest.TestCase):
             root.mkdir()
             (root / "unowned").write_bytes(b"data")
             with self.assertRaisesRegex(installer.InstallError, "unowned"):
-                installer.prepare_checkpoint_root(root)
+                host_microsandbox.prepare_checkpoint_root(installer, root)
             (root / "unowned").unlink()
             marker = root / ".oac-checkpoint-store"
             marker.symlink_to(Path(temporary) / "missing")
             with self.assertRaises(installer.InstallError):
-                installer.prepare_checkpoint_root(root)
+                host_microsandbox.prepare_checkpoint_root(installer, root)
 
 
 if __name__ == "__main__":

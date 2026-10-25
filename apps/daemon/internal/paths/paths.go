@@ -34,8 +34,7 @@ func ValidateProfile(name string) error {
 	return nil
 }
 
-// Root returns ~/.oac. Honours OAC_RUNTIME_HOME for tests /
-// sandbox environments without a writable home.
+// Root returns ~/.oac, or the operator-selected OAC_RUNTIME_HOME when set.
 func Root() (string, error) {
 	if override := os.Getenv("OAC_RUNTIME_HOME"); override != "" {
 		if !filepath.IsAbs(override) || filepath.Clean(override) != override {

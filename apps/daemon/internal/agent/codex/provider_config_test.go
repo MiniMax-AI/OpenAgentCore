@@ -54,31 +54,18 @@ func TestWriteCodexProviderConfig_PinsResponsesWire(t *testing.T) {
 func TestWriteCodexProviderConfig_FullProvider(t *testing.T) {
 	dir := t.TempDir()
 	cfg := providerConfig{
-		Name:        "mygw",
 		BaseURL:     "https://platform-api.example.com/v1",
 		BearerToken: "sk-test-fixture",
 		WireAPI:     "responses",
-		HTTPHeaders: map[string]string{
-			"X-Sub-Module": "codex-internal",
-			"X-Request-ID": "abc",
-		},
-		QueryParams: map[string]string{
-			"api-version": "2025-04-01-preview",
-		},
 	}
 	if err := writeCodexProviderConfig(dir, cfg); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	body := mustReadFile(t, filepath.Join(dir, "config.toml"))
 	for _, want := range []string{
-		`name = "mygw"`,
+		`name = "OpenAgentCore"`,
 		`base_url = "https://platform-api.example.com/v1"`,
 		`env_key = "OAC_CODEX_PROVIDER_API_KEY"`,
-		`[model_providers.oac.http_headers]`,
-		`"X-Sub-Module" = "codex-internal"`,
-		`"X-Request-ID" = "abc"`,
-		`[model_providers.oac.query_params]`,
-		`"api-version" = "2025-04-01-preview"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("config.toml missing %q\n---\n%s", want, body)
@@ -227,6 +214,18 @@ func TestModelConnectionRetriesStayBounded(t *testing.T) {
 	}
 }
 
+// An active Codex goal starts native turns on its own whenever its thread is
+// idle, which would run work after the Turn ends.
+func TestGoalsStayDisabled(t *testing.T) {
+	plan, err := BuildSessionPlan(t.TempDir(), "goals", map[string]any{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(plan.DisableFeatures, "goals") {
+		t.Fatal("goals stay enabled")
+	}
+}
+
 func TestProviderCredentialOnlyInNativeLoopEnvironment(t *testing.T) {
 	root := t.TempDir()
 	const token = "synthetic-private-provider-token"
@@ -264,7 +263,7 @@ func TestProviderCredentialOnlyInNativeLoopEnvironment(t *testing.T) {
 func TestExplicitStateRootSurvivesRuntimeReplacement(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	first, err := allocCodexHome(state, "stable-session")
+	first, err := allocSessionDir(state, "stable-session")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +272,7 @@ func TestExplicitStateRootSurvivesRuntimeReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	second, err := allocCodexHome(state, "stable-session")
+	second, err := allocSessionDir(state, "stable-session")
 	if err != nil || second != first {
 		t.Fatal("instance identity changed native history", err)
 	}
@@ -284,7 +283,7 @@ func TestExplicitStateRootSurvivesRuntimeReplacement(t *testing.T) {
 	if err = os.WriteFile(unavailable, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = allocCodexHome(unavailable, "stable-session"); err == nil {
+	if _, err = allocSessionDir(unavailable, "stable-session"); err == nil {
 		t.Fatal("unavailable explicit root fell back")
 	}
 }

@@ -83,6 +83,9 @@ func TestArchiveWaitingCleanupReceiptBarrier(t *testing.T) {
 				t.Fatal(err)
 			}
 			session := created.Session
+			if _, err := pool.Exec(t.Context(), `UPDATE environments SET initialization='complete' WHERE id=$1`, session.Environment.ID); err != nil {
+				t.Fatal(err)
+			}
 			secret := uuid.NewString()
 			key := deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: session.Environment.ID}
 			owner, err := leased.Deployment.ReserveAllocation(t.Context(), key, installation, runtimedevice.HashCredential(secret))

@@ -10,7 +10,7 @@ import (
 
 func TestMessageObservationKeepsNativeBoundaries(t *testing.T) {
 	out := make(chan proto.Envelope, 16)
-	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig(testStateRoot(t))}
+	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), bufs: NewItemBuffers(), cfg: defaultSessionConfig(testStateRoot(t), t.TempDir())}
 	s.setThreadID("thread")
 	s.onTurnStarted(json.RawMessage(`{"threadId":"thread","turn":{"id":"turn"}}`))
 	s.onItemStarted(json.RawMessage(`{"threadId":"thread","turnId":"turn","item":{"type":"agentMessage","id":"a","phase":"commentary"}}`))

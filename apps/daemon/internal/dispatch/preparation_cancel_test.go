@@ -206,7 +206,7 @@ func TestPreparedCancellationFailuresRemainConservative(t *testing.T) {
 			p := &cancellationPreparation{controlledPreparation: &controlledPreparation{closed: make(chan struct{})}}
 			p.start = func(_ context.Context, id string, _ proto.MessageInput, out chan<- proto.Envelope) (agent.Session, error) {
 				session = &fakeSession{out: out, closeOutOnCancel: true}
-				out <- mustEnv(t, proto.TypeUsage, id, proto.UsagePayload{Usage: proto.Usage{InputTokens: 3}})
+				out <- mustEnv(t, proto.TypeUsage, id, proto.UsagePayload{Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 3}}})
 				close(entered)
 				<-allowReturn
 				return session, errors.New("controlled late Start failure")

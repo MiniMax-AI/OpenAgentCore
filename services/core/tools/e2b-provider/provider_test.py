@@ -3,7 +3,10 @@ import copy
 from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
@@ -12,24 +15,26 @@ from uuid import uuid4
 from e2b import SandboxState
 from e2b.exceptions import AuthenticationException, SandboxNotFoundException
 
+import provider
 from provider import Provider
 from sdk import restore, run
 from state import Failure, Receipt
+from helper_contract_generated import PROTOCOL_VERSION
 
 
-class ProviderTest(unittest.TestCase):
+class Fixture(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.reference = {key: str(uuid4()) for key in ['TenantID', 'EnvironmentID', 'AllocationID']}
         self.config = {'StateDir': self.temporary.name, 'InstallationID': str(uuid4()),
                        'APIKey': 'private-account-secret', 'Template': 'test:' + str(uuid4()), 'TimeoutSeconds': 120}
-        self.request = {'Version': 1, 'Operation': 'create', 'Config': self.config,
+        self.request = {'Version': PROTOCOL_VERSION, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
-                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret')}
+                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True)}
         self.request['RuntimeBootstrap'] = {
-            'version': 1, 'core_url': self.request['Bootstrap']['CoreURL'],
+            'version': 3, 'suspend_control': True, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
             'credential': self.request['Bootstrap']['Credential']}
         self.cloud = Mock(sandbox_id='owned-id', sandbox_domain='e2b.app', _envd_version='0.5.0',
@@ -60,6 +65,8 @@ class ProviderTest(unittest.TestCase):
     def record(self):
         return json.loads(next(Path(self.temporary.name).glob('*.json')).read_text())
 
+
+class ProviderTest(Fixture):
     def test_create_recover_and_never_replay(self):
         result = self.call('create')
         self.assertEqual(result['ErrorCode'], '')
@@ -135,6 +142,13 @@ class ProviderTest(unittest.TestCase):
         self.call('inspect')
         self.assertEqual(self.api.list.call_args.kwargs['api_url'], self.config['APIURL'])
         self.assertEqual(self.api.list.call_args.kwargs['domain'], self.config['Domain'])
+
+    def test_info_without_a_domain_is_on_the_configured_one(self):
+        self.api.get_info.return_value = SimpleNamespace(
+            sandbox_id='owned-id', sandbox_domain=None, state='running', metadata=self.cloud.metadata,
+            template_id=self.cloud.template_id, cpu_count=self.cloud.cpu_count, memory_mb=self.cloud.memory_mb)
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.assertEqual(self.call('renew')['ErrorCode'], '')
 
     def test_create_refuses_foreign_data_plane_before_envd(self):
         self.cloud.sandbox_domain = 'foreign.example'
@@ -320,6 +334,121 @@ class SDKTest(unittest.TestCase):
             run(client, {'Args': ['true']}, lambda: 3)
         self.assertEqual(result.exception.code, 'command_unconfirmed')
         client.commands.run.assert_called_once()
+
+
+class TemplateCheckTest(unittest.TestCase):
+    def exit_code(self, files):
+        with tempfile.TemporaryDirectory() as root:
+            for name, text in files.items():
+                Path(root, name).write_text(text)
+            return subprocess.run([sys.executable, '-I', '-c', provider.TEMPLATE_CHECK, root, '3']).returncode
+
+    def test_template_needs_startup_script_and_current_bootstrap_version(self):
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 3'}), 0)
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 2'}), 78)
+        self.assertEqual(self.exit_code({'managed_init.py': '', 'helper_contract_generated.py': ''}), 78)
+        self.assertEqual(self.exit_code({'helper_contract_generated.py': 'RUNTIME_BOOTSTRAP_VERSION = 3'}), 78)
+
+
+class CheckpointTest(Fixture):
+    """One sandbox spans generations: pause keeps it and connect resumes it."""
+
+    def setUp(self):
+        super().setUp()
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.config['Compatibility'] = {'artifact_domain': 'a', 'execution_class': 'e'}
+        self.op = str(uuid4())
+
+    def compute(self, generation=0, restored=None):
+        return {'Generation': generation, 'Name': 'n%d' % generation, 'ID': 'owned-id', 'RestoredFrom': restored}
+
+    def suspend(self, observe=False):
+        self.request['Suspend'] = {'Reference': self.reference, 'OperationID': self.op, 'Source': self.compute(),
+                                   'Snapshot': None, 'ObserveOnly': observe}
+        return self.call('suspend')
+
+    def resume(self, snapshot, observe=False, op=None):
+        target = self.compute(1, snapshot)
+        self.request['Resume'] = {'Reference': self.reference, 'OperationID': op or self.op, 'Snapshot': snapshot,
+                                  'Target': target, 'ObserveOnly': observe}
+        return self.call('resume')
+
+    def paused(self):
+        self.cloud.state = SandboxState.PAUSED
+
+    def test_suspend_pauses_once_and_resume_advances_the_generation(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        result = self.suspend()
+        self.assertEqual(result['ErrorCode'], '')
+        snapshot = result['State']['Snapshot']
+        self.assertTrue(result['State']['SourceStopped'])
+        self.assertEqual(result['State']['Status'], 'paused')
+        self.assertEqual(self.suspend()['State']['Snapshot'], snapshot)
+        self.api.pause.assert_called_once()
+        self.api.connect.side_effect = lambda *a, **k: (setattr(self.cloud, 'state', 'running'), self.cloud)[1]
+        resumed = self.resume(snapshot)
+        self.assertEqual(resumed['ErrorCode'], '')
+        self.assertEqual(resumed['State']['Status'], 'running')
+        self.assertEqual(self.record()['generation'], 1)
+        self.api.connect.assert_called_once()
+        self.resume(snapshot)
+        self.api.connect.assert_called_once()
+
+    def test_superseded_generation_owns_nothing(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        self.api.connect.side_effect = lambda *a, **k: (setattr(self.cloud, 'state', 'running'), self.cloud)[1]
+        self.resume(snapshot)
+        self.request['Snapshot'] = snapshot
+        self.assertEqual(self.call('delete_snapshot')['ErrorCode'], '')
+        self.request['Compute'] = self.compute()
+        self.assertEqual(self.call('compute')['ErrorCode'], 'not_found')
+        self.assertEqual(self.call('kill_compute')['ErrorCode'], '')
+        self.api.kill.assert_not_called()
+
+    def test_unusable_snapshot_is_durable_and_never_connects(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        other = str(uuid4())
+        self.assertEqual(self.resume(dict(snapshot, OperationID=other))['ErrorCode'], 'checkpoint_unusable')
+        self.assertEqual(self.resume(snapshot)['ErrorCode'], 'checkpoint_unusable')
+        self.api.connect.assert_not_called()
+
+    def test_unseen_pause_never_reports_running(self):
+        self.assertEqual(self.suspend()['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.suspend(observe=True)['ErrorCode'], 'unconfirmed')
+
+    def test_drift_before_dispatch_is_unusable(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        self.cloud.template_id = 'drifted'
+        self.assertEqual(self.resume(snapshot)['ErrorCode'], 'checkpoint_unusable')
+        self.api.connect.assert_not_called()
+
+    def test_failure_after_dispatch_stays_open(self):
+        self.api.pause.side_effect = lambda *a, **k: self.paused()
+        snapshot = self.suspend()['State']['Snapshot']
+        self.api.connect.side_effect = SandboxNotFoundException()
+        self.assertEqual(self.resume(snapshot)['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.record()['resume']['status'], 'dispatched')
+        self.assertNotIn(self.op, self.record().get('closed', {}))
+
+    def test_old_pending_pause_is_settled_by_observation(self):
+        self.assertEqual(self.suspend()['ErrorCode'], 'unconfirmed')
+        self.assertEqual(self.suspend(observe=True)['ErrorCode'], 'unconfirmed')
+        with patch('provider.time.time', return_value=time.time() + provider.PENDING_PAUSE_SETTLE_SECONDS + 1):
+            result = self.suspend(observe=True)
+        self.assertEqual((result['ErrorCode'], result['State']['Status']), ('', 'running'))
+        self.assertNotIn('Snapshot', result['State'])
+        self.assertEqual(self.record()['pause']['status'], 'not_taken')
+
+    def test_renew_compute_extends_only_a_running_lease(self):
+        self.request['Compute'] = self.compute()
+        self.assertEqual(self.call('renew_compute')['ErrorCode'], '')
+        self.api.set_timeout.assert_called_once()
+        self.paused()
+        self.assertEqual(self.call('renew_compute')['State']['Status'], 'paused')
+        self.api.set_timeout.assert_called_once()
 
 
 if __name__ == '__main__':

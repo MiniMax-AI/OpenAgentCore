@@ -24,7 +24,7 @@ import {
   verbosityResourceValues,
 } from "./generated/public-api";
 import {
-  runtimeCPUObservationFields, runtimeInstanceFields, runtimeMemoryObservationFields, runtimeObservationFields,
+  runtimeInstanceFields, runtimeMemoryObservationFields, runtimeObservationFields,
   runtimeObservationLifecycleStateValues, runtimeObservationModeValues, runtimeObservationReasonValues, runtimeObservationStatusValues,
 } from "./generated/core-api";
 import { projectTokenUsage } from "./usage-projection";
@@ -931,7 +931,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
       observedAt > value.resolved_at
     )) ||
     (!observed && (
-      observedAt !== null || startedAt !== null || value.cpu !== null || value.memory !== null
+      observedAt !== null || startedAt !== null || value.memory !== null
     )) ||
     (value.status === "unsupported" && (
       (!isNone && !isSelfHosted) || value.reason !== "runtime_mode_not_observable"
@@ -942,23 +942,6 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     (startedAt !== null && observedAt !== null && startedAt > observedAt) ||
     (allocationCreatedAt !== null && allocationCreatedAt > value.resolved_at)
   ) return invalidRuntimeObservation();
-
-  let cpu: RuntimeObservation["cpu"] = null;
-  if (value.cpu !== null) {
-    if (!observed || !isRecord(value.cpu) || !exactFields(value.cpu, runtimeCPUObservationFields)) {
-      return invalidRuntimeObservation();
-    }
-    cpu = {
-      usage_seconds_total: nullableRuntimeNumber(value.cpu.usage_seconds_total),
-      capacity_cores: nullableRuntimeNumber(value.cpu.capacity_cores),
-      usage_cores: nullableRuntimeNumber(value.cpu.usage_cores),
-      utilization_ratio: nullableRuntimeNumber(value.cpu.utilization_ratio),
-    };
-    if (
-      Object.values(cpu).every((entry) => entry === null) ||
-      (cpu.capacity_cores !== null && cpu.capacity_cores === 0)
-    ) return invalidRuntimeObservation();
-  }
 
   let memory: RuntimeObservation["memory"] = null;
   if (value.memory !== null) {
@@ -984,7 +967,7 @@ export function projectRuntimeObservation(value: unknown, expectedSessionId?: st
     status: value.status, reason: value.reason as RuntimeObservation["reason"],
     lifecycle_state: value.lifecycle_state as RuntimeObservation["lifecycle_state"],
     allocation_created_at: allocationCreatedAt, resolved_at: value.resolved_at,
-    observed_at: observedAt, started_at: startedAt, cpu, memory,
+    observed_at: observedAt, started_at: startedAt, memory,
   } as RuntimeObservation;
 }
 

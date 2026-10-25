@@ -13,7 +13,6 @@ on:
       - docs.json
       - package.json
       - pnpm-workspace.yaml
-      - .npmrc
       - Makefile
       - .github/actions/node/**
       - .github/workflows/website.yml

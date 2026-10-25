@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: a09c99bf3ad9782ffbf3d9d2f4d6313f93f39ee92ea5b919635a96a70b490edd
+source_hash: 8913afc18b99b847850a857e387e1a230085525ce5f1b28abd5a440abc9dcf16
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -22,11 +22,12 @@ source_hash: a09c99bf3ad9782ffbf3d9d2f4d6313f93f39ee92ea5b919635a96a70b490edd
 | --- | --- | --- | --- |
 | 文本 Turn、活动输入、取消、重启与继续 | 所有位置已验证 | 所有位置已验证 | 所有位置已验证 |
 | [文件与 Artifact](environment-files.md) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管 |
+| Agent `instructions` | 已准入 | 已准入 | 最多 32 KiB；更长的 instructions 会被拒绝 |
 | [仅空白消息文本](message-content.md) | 已准入；原样交付 | 已准入；原生会丢弃它，全空白消息变为 `(no content)` | 已拒绝 |
 | [消息图像](message-content.md#images) | PNG、JPEG data URL：所有位置已验证；其他 data URL：已准入；远程 URL：已拒绝 | PNG、JPEG data URL：所有位置已验证；远程 URL 及 GIF、WebP data URL：已准入 | 已拒绝 |
 | `reasoning.effort` | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 | `low`、`medium`、`high`、`xhigh`、`max`：已准入 | `none`、`minimal`、`low`、`medium`、`high`、`xhigh`、`max`：已准入 |
-| `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | 已拒绝 | 已拒绝 |
-| 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`：已准入 | 已拒绝 | 已拒绝 |
+| `reasoning.summary` | `concise`、`detailed`、`auto`：已准入 | `auto`：已准入 | 已拒绝 |
+| 非 `auto` 的 `service_tier` | `default`、`flex`、`priority`、`fast`：已准入 | 已拒绝 | 已拒绝 |
 | 非 `medium` 的 `text.verbosity` | 已准入；由原生模型决定 | 已拒绝 | 已拒绝 |
 | [公开 token 用量](sessions-events.md) | 测量计数器 | Null | Null |
 
@@ -41,7 +42,7 @@ source_hash: a09c99bf3ad9782ffbf3d9d2f4d6313f93f39ee92ea5b919635a96a70b490edd
 | [结构化输出](execution-tools.md#structured-output) | 所有位置已准入 | 所有位置已验证 | 已拒绝 |
 | [延迟函数发现](execution-tools.md#deferred-function-discovery) | 已拒绝 | 已验证：`none`、自托管；已准入：托管 | 已拒绝 |
 | [禁用 Web 搜索与程序化工具调用](execution-tools.md#web-search-and-programmatic-tool-calling) | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 | 已验证：`none`；已准入：托管、自托管 |
-| Web 搜索 `cached` 或 `live`，以及程序化工具调用 `enabled` | 所有位置已准入 | `live` 在所有位置已准入；`cached` 和 `enabled` 已拒绝 | 已拒绝 |
+| Web 搜索 `cached` 或 `live`，以及程序化工具调用 `enabled` | 所有位置已准入；`enabled` 与 `multi_agent` 同时出现时被拒绝 | `live` 在所有位置已准入；`cached` 和 `enabled` 已拒绝 | 已拒绝 |
 | [服务端来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：`none`；其他位置拒绝 | 已验证：`none`；其他位置拒绝 | 已验证：`none`，仅 `allowed_tools` null、`required` false；其他位置拒绝 |
 | [Environment 来源 HTTP MCP](environments.md#public-mcp-connection-origin) | 已验证：托管、自托管 | 已验证：托管、自托管 | 已验证：托管、自托管；仅 `allowed_tools` null、`required` false |
 | [stdio MCP](execution-tools.md#mcp) | 已准入：托管、自托管 | 已准入：托管、自托管；`cwd` 须为工作区目录，`allowed_tools` 须为 null | 已拒绝 |
@@ -61,7 +62,7 @@ Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、P
 | [初始文件、设置命令、Skill 与 Plugin](environments.md#runtime-capability-preparation) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | 能力目录 | 已准入 | 已准入 | 已准入 |
 | npm 与 Python 包 | 已准入 | 已准入 | 已准入 |
-| `packages.system` | 已拒绝 | 已拒绝 | 已拒绝 |
+| null 或 `[]` 以外的 `packages.system` | 已拒绝 | 已拒绝 | 已拒绝 |
 | 网络 `disabled` 或 `restricted` | 已拒绝 | 已拒绝 | 已拒绝 |
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，字面值头或 HTTPS bearer | 已验证：自托管；已准入：托管；字面值头或 HTTPS bearer |

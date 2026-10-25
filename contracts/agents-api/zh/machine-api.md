@@ -1,10 +1,12 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: f3e9a3cd478fcc16f466cf749e49ace8cd49bd8769e9698f6e7a0edacad3c5f7
+source_hash: 0160c835973e50788d704cf432fabb64c5650e2cef0c81b173ca81d3e2a611bc
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装程序。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
+
+每个请求体和成功响应体都是 `internal/machineapi/machineapi.go` 中的类型，节点配置除外：它的 `specification` 是[沙箱 Provider 协议](../../../docs/zh/sandbox-provider.md)中的类型。下文各路由小节列出各自的错误。
 
 ## 路由 {#routes}
 
@@ -103,7 +105,7 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 
 ### daemon 引导 {#daemon-bootstrap}
 
-`POST /api/v1/agent-daemon/bootstrap` 携带 daemon 凭据及 `{"device_id": "…"}`，返回 `device_id`、`workspace_id`、`ws_url`（从 `OAC_PUBLIC_URL` 推导，不使用请求头）、`heartbeat_seconds` 和 `protocol_version`。daemon 随后按 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#ownership-and-connection)连接 `ws_url`。
+`POST /api/v1/agent-daemon/bootstrap` 携带 daemon 凭据及 `{"device_id": "…"}`，返回 `device_id`、`ws_url`（从 `OAC_PUBLIC_URL` 推导，不使用请求头）和 `heartbeat_seconds`。daemon 随后按 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#ownership-and-connection)连接 `ws_url`。
 
 引导和 WebSocket 路由共享错误体 `{"error": code, "detail": text}`：400 `missing_params`、`missing_device_id` 或 `bad_json`；401 `missing_bearer`、`unknown_device` 或 `bad_credential`；403 `wrong_runtime_type`；500 `internal`；WebSocket 的 `version` 不等于 Core 精确 Runtime 协议版本时返回 426 `incompatible_version`。
 

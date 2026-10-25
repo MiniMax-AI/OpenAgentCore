@@ -1,7 +1,7 @@
 ---
 title: "子 Agent"
 source: contracts/agents-api/subagents.md
-source_hash: 6c4fe5212d8473ff319fea4a6abf30d8038b75dd663dd9612ddad023adb918c7
+source_hash: 11575ce73f7f00cb2fefd775d97899ac2439f04e0655a4980269bdb982740ad7
 ---
 
 启用 `multi_agent.enabled` 后，Harness 可以启动原生子 Agent。Core 通过锁定版本的 SDK（见 [`upstream.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/upstream.json)）中的六项 Subagent 读取操作公开它们，并根据适配器观察结果记录它们。当 `multi_agent.enabled=false` 时，Runtime 会移除原生子 Agent 工具。[Harness capabilities](harness-capabilities.md) 列出各 Harness 在哪些组合中支持子 Agent。
@@ -26,7 +26,7 @@ source_hash: 6c4fe5212d8473ff319fea4a6abf30d8038b75dd663dd9612ddad023adb918c7
 子级工作仅出现在子 Agent 路由上。
 
 - Session 的 `turns.list` 和 `turns.retrieve` 仅返回根级 Turns。将子级 Turn ID 作为路径参数或列表游标使用时，会返回与不存在的 Turn 相同的 404；Core 的 404 消息与官方消息不同。
-- Session 事件流和创建流仅传输根级工作：子级 Turns 及其 Items 不会发布任何 `agent.session.turn.*` 或 Item 内容事件。`agent.session.subagent.*` 事件和根级协调 Items 仍会保留。创建流仍会在根级收敛到 idle 状态时结束。
+- Session 事件流和创建流仅传输根级工作：子级 Turns 及其 Items 不会发布任何 `agent.session.turn.*` 或 Item 内容事件，但 Subagent 的函数调用会将其 `function_call` Item 作为 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID。`agent.session.subagent.*` 事件和根级协调 Items 仍会保留。创建流仍会在根级收敛到 idle 状态时结束。
 - 子级 Turn 的 `agent_id` 是 Session 的 Agent ID（即直接子级的 `parent_agent_id`，也是 `create_subagent_call` 的 `agent_id`）；`subagent_id` 标识该子级。嵌套子级遵循相同规则。根级 Turns 带有 `subagent_id: null`。
 - Session Items 始终归根级所有；继承的原生父级对话记录不属于子级工作。Session 用量仅汇总根级 Turns。
 

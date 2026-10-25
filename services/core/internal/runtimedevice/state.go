@@ -1,56 +1,16 @@
 // Package device defines persistence data shared by daemon gateways and their stores.
 package runtimedevice
 
+import "github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 // HeartbeatStatus is the post-heartbeat liveness the runner uses to
 // detect state changes.
 type HeartbeatStatus struct {
-	Liveness string
 	// Deleted is true when the heartbeat UPDATE matched zero rows,
 	// meaning the runtime was soft-deleted (or never existed). The
 	// gateway uses this to send a permanent WS close frame so the
 	// daemon stops reconnecting.
 	Deleted bool
-}
-
-// KindCapabilities mirrors the daemon heartbeat capability
-// shape after gateway-level normalization. Persistence stays separate from wire protocol structs.
-type KindCapabilities struct {
-	SubagentObservations  bool `json:"subagent_observations,omitempty"`
-	Streaming             bool `json:"streaming,omitempty"`
-	Usage                 bool `json:"usage,omitempty"`
-	Resume                bool `json:"resume,omitempty"`
-	NativeSessionRecovery bool `json:"native_session_recovery,omitempty"`
-	RetainedNativeHistory bool `json:"retained_native_history,omitempty"`
-	MessageItems          bool `json:"message_items,omitempty"`
-
-	ToolObservations         bool `json:"tool_observations,omitempty"`
-	EnvironmentNone          bool `json:"environment_none,omitempty"`
-	LocalEnvironment         bool `json:"local_environment,omitempty"`
-	Preparation              bool `json:"preparation,omitempty"`
-	WorkspaceReadPreparation bool `json:"workspace_read_preparation,omitempty"`
-	WorkspaceOutputExport    bool `json:"workspace_output_export,omitempty"`
-	// ExecutionControls accepts the typed execution controls.
-	ExecutionControls    bool `json:"execution_controls,omitempty"`
-	StructuredOutput     bool `json:"structured_output,omitempty"`
-	ToolSearch           bool `json:"tool_search,omitempty"`
-	MessageImages        bool `json:"message_images,omitempty"`
-	FunctionResultImages bool `json:"function_result_images,omitempty"`
-	SubagentControl      bool `json:"subagent_control,omitempty"`
-	FunctionTools        bool `json:"function_tools,omitempty"`
-	MCPHTTPTools         bool `json:"mcp_http_tools,omitempty"`
-	MCPHTTPRequired      bool `json:"mcp_http_required,omitempty"`
-	MCPHTTPBearerAuth    bool `json:"mcp_http_bearer_auth,omitempty"`
-	DurableInputReceipts bool `json:"durable_input_receipts,omitempty"`
-	DurableTurns         bool `json:"durable_turns,omitempty"`
-}
-
-// SupportedAgentKind is the sanitized runtime.config view
-// of one daemon-side agent_kind.
-type SupportedAgentKind struct {
-	Kind         string           `json:"kind"`
-	Available    bool             `json:"available"`
-	Version      string           `json:"version,omitempty"`
-	Capabilities KindCapabilities `json:"capabilities,omitempty"`
 }
 
 // Heartbeat is the WebSocket daemon heartbeat
@@ -59,8 +19,5 @@ type Heartbeat struct {
 	RuntimeID string
 	// CredentialHash comes from gateway authentication, never a daemon frame.
 	CredentialHash      string
-	DaemonVersion       string
-	ActiveRequests      int
-	HeartbeatTimestamp  int64
-	SupportedAgentKinds []SupportedAgentKind
+	SupportedAgentKinds []proto.SupportedAgentKind
 }

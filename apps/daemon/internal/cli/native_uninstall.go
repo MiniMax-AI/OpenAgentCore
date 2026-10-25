@@ -107,8 +107,9 @@ func runUninstall(rc *runContext, args []string) error {
 	// Only empty directories go; anything left belongs to the user.
 	_ = os.Remove(filepath.Join(root, "daemon"))
 	if kept {
-		// Windows keeps the running executable open until this process exits.
-		deleteAfterExit(root)
+		// Windows keeps the running executable open until this process exits;
+		// the helper starts last so its short wait begins at exit.
+		defer deleteAfterExit(root)
 	} else {
 		_ = os.Remove(root)
 	}

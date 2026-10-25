@@ -16,10 +16,17 @@ var errSystemPackages = &fieldError{
 
 func rejectSystemPackages(raw json.RawMessage) error {
 	var packages map[string]json.RawMessage
-	if json.Unmarshal(raw, &packages) == nil {
-		if _, supplied := packages["system"]; supplied {
-			return errSystemPackages
-		}
+	if json.Unmarshal(raw, &packages) != nil {
+		return nil
+	}
+	// The official schema reads back `system: []`, so null and an empty list mean none.
+	value, supplied := packages["system"]
+	if !supplied {
+		return nil
+	}
+	var system []json.RawMessage
+	if json.Unmarshal(value, &system) != nil || len(system) != 0 {
+		return errSystemPackages
 	}
 	return nil
 }
@@ -67,10 +74,11 @@ func decodeEnvironmentSetup(fields map[string]json.RawMessage) (environmentconfi
 	}
 	if value, ok := fields["packages"]; ok && !bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		var input struct {
-			NPM    []*string `json:"npm"`
-			Python []*string `json:"python"`
+			NPM    []*string       `json:"npm"`
+			Python []*string       `json:"python"`
+			System json.RawMessage `json:"system"` // checked by rejectSystemPackages
 		}
-		if decodeInputObject(value, &input, "npm", "python") != nil {
+		if decodeInputObject(value, &input, "npm", "python", "system") != nil {
 			return result, sessions.ErrInvalidInput
 		}
 		for name, entries := range map[string][]*string{"npm": input.NPM, "python": input.Python} {

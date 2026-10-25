@@ -22,7 +22,7 @@ func TestMCPHTTPBearerPlanSeparatesServersAndProcesses(t *testing.T) {
 	req := proto.PromptRequestPayload{AgentStateKey: "retained-mcp", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
 	seen := map[string]bool{}
 	for range 2 {
-		plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t)))
+		plan, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t), t.TempDir()))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -58,7 +58,7 @@ func TestMCPHTTPBearerRejectsInvalidTokensWithoutPersistence(t *testing.T) {
 	for _, token := range []string{"", "=", " has-space", "has-space ", "has space", "line\r\ninjection", "nul\x00byte", "opaque中文", "middle=padding", "punctuation:invalid"} {
 		servers := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "tools", ServerURL: "https://tools.example/mcp", BearerToken: &token}}
 		req := proto.PromptRequestPayload{AgentStateKey: "invalid-bearer", DisableExecutionEnvironment: true, MCPHTTPServers: &servers}
-		if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t))); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
+		if _, _, err := prepareSessionPlan(t.Context(), req, defaultSessionConfig(testStateRoot(t), t.TempDir())); err == nil || err.Error() != "invalid HTTPS MCP bearer credential" {
 			t.Fatal("invalid bearer value accepted or unsafe error returned")
 		}
 	}

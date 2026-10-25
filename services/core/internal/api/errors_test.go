@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -195,5 +196,16 @@ func TestSharedPersistenceErrors(t *testing.T) {
 		if response.Code != test.status || !strings.Contains(response.Body.String(), test.body) {
 			t.Errorf("%v: %d %s", test.err, response.Code, response.Body)
 		}
+	}
+}
+
+// A client that has gone gets no error report: its ended context is the failure.
+func TestInternalErrorAfterClientAbort(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	response := httptest.NewRecorder()
+	writeAgentsError(response, httptest.NewRequest(http.MethodGet, "/v1/agents", nil).WithContext(ctx), context.Canceled)
+	if response.Body.Len() != 0 {
+		t.Fatal(response.Body)
 	}
 }

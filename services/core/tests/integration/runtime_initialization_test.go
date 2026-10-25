@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -168,7 +166,7 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	fileBody := bytes.Repeat([]byte("bounded bytes"), 12000)
 	session, environment := hostedFailureSession(t, s, tenant, sessions.CreateSession{
 		InitialFiles:   []environmentconfig.InitialFile{{Type: "inline", Path: "/workspace/first", Data: fileBody}},
-		Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Plugins: []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "A plugin."}, Archive: archive.Bytes()}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}, Python: []string{"packaging==24.2"}}, Commands: []environmentconfig.SetupCommand{{Command: "read installed bundles and create directory"}}, CapabilityDirectories: []string{"/workspace/generated"}},
+		Initialization: environmentconfig.Setup{Skills: []environmentconfig.Skill{hostedFailureSkill(t)}, Plugins: []environmentconfig.Plugin{{Metadata: proto.PluginMetadata{Type: "inline", Name: "plugin", Description: "A plugin."}, Archive: archive.Bytes()}}, Packages: v1.EnvironmentPackages{NPM: []string{"is-number@7.0.0"}, Python: []string{"packaging==24.2"}}, Commands: []environmentconfig.SetupCommand{{Command: "read installed bundles and create directory"}}, CapabilityDirectories: []string{"/workspace/generated"}},
 	})
 	provider := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
 	var actions []string
@@ -203,5 +201,57 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	allocation, err := deploymentStore(s).EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: tenant, EnvironmentID: environment.ID})
 	if err != nil || initializationState(t, s, allocation.TenantID, allocation.EnvironmentID) != "complete" {
 		t.Fatal("initialization incomplete", allocation, err)
+	}
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lifecycle []string
+	for _, change := range changes {
+		if change.Event.Type == "agent.session.environment.pending" || change.Event.Type == "agent.session.environment.ready" {
+			lifecycle = append(lifecycle, change.Event.Type)
+		}
+	}
+	if !reflect.DeepEqual(lifecycle, []string{"agent.session.environment.pending", "agent.session.environment.ready"}) {
+		t.Fatal("initialization events", lifecycle)
+	}
+}
+
+func TestHostedEnvironmentWithoutSetupIsInitialized(t *testing.T) {
+	s, key := configuredStore(t)
+	tenant := uuid.NewString()
+	creation, err := createSession(t.Context(), s, tenant, WithFixtureModelProvider(sessions.CreateSession{
+		Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(),
+		Configuration: json.RawMessage(`{"agent":{"model":"test-model"},"environment":{"type":"openai_hosted","network":{"access":"disabled"}}}`),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	session := creation.Session
+	if initializationState(t, s, tenant, session.Environment.ID) != "pending" {
+		t.Fatal("hosted Environment without setup did not start pending")
+	}
+	provider := &initializingProvider{lifecycleProvider: lifecycleProvider{resources: map[string]sandbox.Info{}}}
+	provider.apply = func(request proto.RuntimePreparePayload, _ []byte) proto.RuntimePrepareResultPayload {
+		t.Error("empty initialization sent a Runtime operation", request.Action)
+		return completedInitialization(request, nil)
+	}
+	worker, _ := managedWorkerMode(t, s, key, provider, true)
+	if _, err := worker.ProvisionEnvironment(t.Context(), tenant, session.Environment.ID, key); err != nil {
+		t.Fatal(err)
+	}
+	awaitInitialization(t, s, tenant, session.Environment.ID, "complete")
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lifecycle []string
+	for _, change := range changes {
+		if change.Event.Type == "agent.session.environment.pending" || change.Event.Type == "agent.session.environment.ready" {
+			lifecycle = append(lifecycle, change.Event.Type)
+		}
+	}
+	if !reflect.DeepEqual(lifecycle, []string{"agent.session.environment.pending", "agent.session.environment.ready"}) {
+		t.Fatal("initialization events", lifecycle)
 	}
 }

@@ -16,9 +16,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
-	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
 )
@@ -65,7 +66,7 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 		return nil
 	}
 	if o.OnboardURL == "" || o.Authorization == "" {
-		return errors.New("install: --onboard-url and " + v1.NativeInstallGrantEnv + " are required together")
+		return errors.New("install: --onboard-url and " + machineapi.InstallGrantEnv + " are required together")
 	}
 	const suffix = "/api/v1/agent-daemon/installation"
 	if !strings.HasSuffix(o.OnboardURL, suffix) {
@@ -76,14 +77,14 @@ func prepareOnboarding(o *nativeInstallOptions) error {
 	if _, err := environmentBase(remote); err != nil {
 		return err
 	}
-	var info v1.NativeInstallationContext
+	var info machineapi.InstallationContext
 	if err := installationRequest(context.Background(), o.OnboardURL, o.Authorization, nil, &info); err != nil {
 		return err
 	}
 	if info.Version != Version || !proto.VersionCompatible(info.ProtocolVersion) {
 		return errors.New("install: installer does not match Core; obtain a fresh command from the target Core")
 	}
-	if info.RemoteURL != remote || !environmentUUID(info.EnvironmentID) {
+	if info.RemoteURL != remote || !machineapi.CanonicalUUID(info.EnvironmentID) {
 		return errors.New("install: Core returned an invalid connection binding")
 	}
 	if (o.Remote != "" && o.Remote != info.RemoteURL) || (o.Environment != "" && o.Environment != info.EnvironmentID) || (o.Workspace != "" && o.Workspace != info.Workspace) || o.Credential != "" {
@@ -145,7 +146,7 @@ func prepareOnboardingCredential(ctx context.Context, o *nativeInstallOptions, h
 	} else {
 		return err
 	}
-	err := installationRequest(ctx, o.OnboardURL+"/claim", o.Authorization, map[string]string{"executor_token": secret}, nil)
+	err := installationRequest(ctx, o.OnboardURL+"/claim", o.Authorization, machineapi.InstallationClaim{ExecutorToken: secret}, nil)
 	if errors.Is(err, errCredentialClaimed) {
 		// This directory holds no installation, and Core never accepts this secret.
 		_ = held.Remove("executor-credential.json")
@@ -214,12 +215,9 @@ func installedEnvironmentConnected(ctx context.Context, base, environment, secre
 	if response.StatusCode != http.StatusOK {
 		return false, nil
 	}
-	var result struct {
-		Environment string `json:"environment_id"`
-		Status      string `json:"status"`
-	}
-	if json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&result) != nil || result.Environment != environment {
+	var result machineapi.Connection
+	if json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&result) != nil || result.EnvironmentID != environment {
 		return false, errors.New("Daemon connection: invalid status returned by Core")
 	}
-	return result.Status == "connected", nil
+	return result.Status == machineapi.ConnectionConnected, nil
 }

@@ -2,12 +2,12 @@ package localworkspace
 
 import (
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
-	"os"
-	"strings"
 	"sync"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
@@ -37,21 +37,29 @@ func NewWithCapabilityDirectory(environment, session, workspace, directory strin
 	return b, nil
 }
 
-func Load() (*Binding, error) {
-	values := []string{os.Getenv("OAC_RUNTIME_ENVIRONMENT_ID"), os.Getenv("OAC_RUNTIME_SESSION_ID"), os.Getenv("OAC_RUNTIME_WORKSPACE")}
-	capabilityDirectory := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
-	if strings.Join(values, "") == "" && capabilityDirectory == "" {
-		return nil, nil
-	}
-	if capabilityDirectory == "" {
-		capabilityDirectory = CapabilityDirectory
-	}
-	b, err := NewWithCapabilityDirectory(values[0], values[1], values[2], capabilityDirectory)
+var current *Binding
+
+// Bind freezes the Runtime's Environment binding for this process. It runs once, before any Harness discovery.
+func Bind(environment, session, workspace, capabilityDirectory string) error {
+	b, err := NewWithCapabilityDirectory(environment, session, workspace, capabilityDirectory)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return b, nil
+	current = b
+	return nil
 }
+
+// Unbind clears the Binding set by Bind.
+func Unbind() { current = nil }
+
+// Current returns the Binding set by Bind, or nil when the Runtime serves no dedicated Environment.
+func Current() *Binding { return current }
+
+// Workspace is the directory bound as the Environment's workspace.
+func (b *Binding) Workspace() string { return b.workspace }
+
+// Environment is the bound Environment ID.
+func (b *Binding) Environment() string { return b.environment }
 
 // Configure validates the reference before supplying the immutable local cwd.
 func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPayload, error) {
@@ -64,10 +72,10 @@ func (b *Binding) Configure(r proto.PromptRequestPayload) (proto.PromptRequestPa
 	}
 	if !r.WorkspaceReadOnly {
 		local := *r.LocalEnvironment
-		if local.WorkspaceDirectory != "/workspace" && local.WorkspaceDirectory != b.workspace {
+		if local.WorkspaceDirectory != runtimebootstrap.PublicWorkspace && local.WorkspaceDirectory != b.workspace {
 			return r, errors.New("request does not match the local workspace selection")
 		}
-		if local.CapabilitySources == nil || agentcapabilities.ValidateInput(*local.CapabilitySources) != nil {
+		if local.CapabilitySources == nil || proto.ValidateCapabilitySources(*local.CapabilitySources) != nil {
 			return r, agentcapabilities.ErrInvalid
 		}
 		sources := *local.CapabilitySources

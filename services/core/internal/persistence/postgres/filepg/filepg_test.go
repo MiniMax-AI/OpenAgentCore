@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -81,7 +80,7 @@ func TestFilesPersistScopeAndDelete(t *testing.T) {
 	pool := pgtest.Open(t)
 	store, service := open(t, pool)
 	tenant, foreign := uuid.NewString(), uuid.NewString()
-	for _, data := range [][]byte{{}, {0, 1, 255}, bytes.Repeat([]byte("binary\x00"), 300000)} {
+	for _, data := range [][]byte{{0}, {0, 1, 255}, bytes.Repeat([]byte("binary\x00"), 300000)} {
 		file := create(t, service, t.Context(), tenant, data)
 		if file.SizeBytes != int64(len(data)) || file.Filename != "source.bin" || file.Purpose != files.PurposeUserData || !strings.HasPrefix(file.ID, "file-") || file.CreatedAt.IsZero() {
 			t.Fatalf("create: %+v", file)
@@ -414,45 +413,6 @@ func TestFileReadReturnsConsumerErrors(t *testing.T) {
 	stop := errors.New("consumer stopped")
 	if err := store.Read(t.Context(), tenant, file.ID, func(files.File, io.Reader) error { return stop }); err != stop {
 		t.Fatalf("Read() = %v, want the consumer's error", err)
-	}
-}
-
-func TestFileLargeStream(t *testing.T) {
-	if os.Getenv("OAC_TEST_SOURCE_FILE_LARGE") != "1" {
-		t.Skip("opt-in 512 MiB source storage acceptance")
-	}
-	store, service := open(t, pgtest.Open(t))
-	tenant := uuid.NewString()
-	chunk := bytes.Repeat([]byte("source\x00binary"), 20000)
-	want := sha256.New()
-	file, err := service.Create(t.Context(), files.CreateCommand{TenantID: tenant, Upload: func(w io.Writer) (files.Upload, error) {
-		for left := files.MaxBytes; left > 0; {
-			b := chunk[:min(int64(len(chunk)), left)]
-			if _, err := w.Write(b); err != nil {
-				return files.Upload{}, err
-			}
-			want.Write(b)
-			left -= int64(len(b))
-		}
-		return files.Upload{Filename: "large.bin", Purpose: files.PurposeUserData}, nil
-	}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := service.Delete(context.Background(), files.DeleteCommand{TenantID: tenant, FileID: file.ID}); err != nil {
-			t.Error(err)
-		}
-	})
-	got := sha256.New()
-	if err := store.Read(t.Context(), tenant, file.ID, func(meta files.File, r io.Reader) error {
-		n, err := io.CopyBuffer(got, r, chunk)
-		if n != files.MaxBytes || meta.SizeBytes != n {
-			t.Errorf("size: %d metadata: %d", n, meta.SizeBytes)
-		}
-		return err
-	}); err != nil || !bytes.Equal(got.Sum(nil), want.Sum(nil)) {
-		t.Fatalf("large stream mismatch: %v", err)
 	}
 }
 

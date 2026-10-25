@@ -16,7 +16,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 	"github.com/google/uuid"
 )
 
@@ -59,7 +58,7 @@ func capabilityBegin(environment, session string, body []byte) proto.RuntimePrep
 	digest := sha256.Sum256(body)
 	return proto.RuntimePreparePayload{
 		BudgetMS: 300000, Step: "begin", Action: "skill", EnvironmentID: environment, SessionID: session,
-		Skill:     &agentskill.Metadata{Type: "inline", Name: "proof", Description: "A proof."},
+		Skill:     &proto.SkillMetadata{Type: "inline", Name: "proof", Description: "A proof."},
 		SizeBytes: len(body), SHA256: hex.EncodeToString(digest[:]),
 	}
 }
@@ -249,7 +248,7 @@ func TestRuntimePreparationCancellationKeepsOwnershipUntilApplyStops(t *testing.
 	sender.frames = make(chan proto.Envelope)
 	ctx, cancel := context.WithCancel(context.Background())
 	id := uuid.NewString()
-	request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &agentcapabilities.Input{}}
+	request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &proto.CapabilitySources{}}
 	owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
 	close(owner.ready)
 	r.runtimePreparation = owner
@@ -440,5 +439,27 @@ func TestRuntimePreparationHonorsBeginBudgetDuringStaging(t *testing.T) {
 		synctest.Wait()
 		capabilitiesReceipt(t, sender, id, "rejected")
 		shutdownCapabilitiesRouter(t, r)
+	})
+}
+
+func TestRuntimePreparationReportsApplyDuration(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sender, environment, session := capabilitiesTestRouter(t)
+		_, cancel := context.WithCancel(t.Context())
+		id := uuid.NewString()
+		request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &proto.CapabilitySources{}}
+		owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+		close(owner.ready)
+		r.runtimePreparation = owner
+		r.shutdownWG.Add(1)
+		go r.runRuntimePreparationTransfer(t.Context(), owner, func(context.Context, proto.RuntimePreparePayload, []byte) error {
+			time.Sleep(1500 * time.Millisecond)
+			return nil
+		})
+		synctest.Wait()
+		got := capabilitiesReceipt(t, sender, id, "completed")
+		if got.DurationMS != 1500 || !proto.ValidRuntimePrepareResult(got, "completed", 0, 0) {
+			t.Fatalf("apply duration not reported: %+v", got)
+		}
 	})
 }

@@ -21,8 +21,8 @@ type Executor struct {
 	closeMu  sync.Mutex
 }
 
-func PrepareExecutor(ctx context.Context, stateRoot string, req proto.PromptRequestPayload) (agent.Executor, error) {
-	return newExecutor(ctx, req, defaultSessionConfig(stateRoot))
+func PrepareExecutor(ctx context.Context, stateRoot, runtimeRoot string, req proto.PromptRequestPayload) (agent.Executor, error) {
+	return newExecutor(ctx, req, defaultSessionConfig(stateRoot, runtimeRoot))
 }
 
 func newExecutor(ctx context.Context, req proto.PromptRequestPayload, cfg sessionConfig) (*Executor, error) {
@@ -72,7 +72,7 @@ func (e *Executor) StartTurn(ctx context.Context, runID string, input proto.Mess
 		functions: functions, observeSubagentIdentities: base.observeSubagentIdentities,
 		cfg: base.cfg, rpc: base.rpc, cancelCtx: turnCtx, cancelFn: cancel,
 		waitDone: make(chan struct{}), outputDone: make(chan struct{}), cleanup: func() {},
-		bufs: NewItemBuffers(), resolvedModel: base.resolvedModel, runID: runID, out: out}
+		bufs: NewItemBuffers(), resolvedModel: base.resolvedModel, reasoningSummary: base.reasoningSummary, runID: runID, out: out}
 	if previous != nil {
 		s.threadID = previous.currentThreadID()
 		s.retiredTurns = make(map[string]bool, len(previous.retiredTurns)+1)
@@ -172,8 +172,8 @@ func (e *Executor) Close(ctx context.Context) error {
 
 var _ agent.Executor = (*Executor)(nil)
 
-func NewExecutorFactory(stateRoot string) agent.ExecutorFactory {
+func NewExecutorFactory(stateRoot, runtimeRoot string) agent.ExecutorFactory {
 	return func(ctx context.Context, req proto.PromptRequestPayload) (agent.Executor, error) {
-		return PrepareExecutor(ctx, stateRoot, req)
+		return PrepareExecutor(ctx, stateRoot, runtimeRoot, req)
 	}
 }

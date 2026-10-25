@@ -1,3 +1,5 @@
+import type { ProvisioningCategory } from "@oac/agents-client";
+
 export const diagnostics = {
   providerUnknown: "Not recorded yet",
   providerStale: "Observation unconfirmed",
@@ -61,7 +63,18 @@ export const diagnostics = {
   exitCode: "Exit code {{code}}.",
   httpStatus: "HTTP {{status}}.",
   unreachableHost: "Then check that the URL's host resolves and is reachable from the Session's sandbox, or from the host of a self-hosted Session.",
-  step: { setup: "setup", python: "Python dependencies", npm: "npm dependencies", system: "system packages", file: "file preparation", skill: "Skill preparation" },
+  step: { setup: "setup", python: "Python dependencies", npm: "npm dependencies", file: "file preparation", skill: "Skill preparation", harness: "Harness preparation", plugin: "Plugin preparation", configure: "environment configuration", finalize: "finalization" },
+  category: {
+    timeout: "The preparation timed out.",
+    runtime_disconnected: "The Runtime disconnected.",
+    unconfirmed: "The Runtime did not confirm the result.",
+    rejected: "The Runtime rejected the operation.",
+    operation_failed: "The Runtime reported a failed operation.",
+    core_error: "Core could not read, validate or record the initialization state.",
+    core_restart: "Core lost ownership of the initialization.",
+    compute_released: "The sandbox was released or never created.",
+  } satisfies Record<ProvisioningCategory, string>,
+  initializationTitle: "Initialization",
   unavailable: "Failure details unavailable",
   unavailableHelp: "The diagnostics read failed or no longer matches this status. Refresh to check again.",
   checking: "Checking failure details",

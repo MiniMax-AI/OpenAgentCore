@@ -7,6 +7,7 @@ import (
 	"time"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 )
 
@@ -19,7 +20,7 @@ func TurnChanges(turn Turn, created bool) []SessionChange {
 	if turn.Status == TurnWaiting {
 		return nil
 	}
-	turn.Outcome = nil
+	turn.Outcome = failureClassification(turn.Outcome)
 	kind := turn.Status
 	if created {
 		kind = "created"
@@ -33,7 +34,7 @@ func TurnChanges(turn Turn, created bool) []SessionChange {
 // usage. The snapshot of a Turn that ended is settled: it marks that Turn's
 // end, while an input reserved during its Artifact capture is newer work.
 func ActivityChange(turn Turn, usage json.RawMessage, actions []v1.FunctionCallAction) SessionChange {
-	turn.Outcome = nil
+	turn.Outcome = failureClassification(turn.Outcome)
 	status := "in_progress"
 	if TerminalStatus(turn.Status) {
 		status = "idle"
@@ -47,6 +48,31 @@ func ActivityChange(turn Turn, usage json.RawMessage, actions []v1.FunctionCallA
 		Event: v1.SessionEvent{Type: "agent.session." + status}, Turn: &turn,
 		SessionUsage: usage, RequiredActions: actions, Settled: TerminalStatus(turn.Status),
 	}
+}
+
+// failureClassification keeps only the categories a failed Turn's public error
+// is classified from: Core's error code and the normalized model category. A
+// journaled snapshot then reports the same error as a read, while native codes,
+// text, HTTP status and the Runtime's result stay out of the journal.
+func failureClassification(outcome json.RawMessage) json.RawMessage {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(outcome, &fields) != nil {
+		return nil
+	}
+	var failure struct {
+		ErrorCode       string `json:"error_code"`
+		EngineErrorCode string `json:"engine_error_code,omitempty"`
+	}
+	var native string
+	// Malformed optional metadata cannot hide Core's error code.
+	_ = json.Unmarshal(fields["error_code"], &failure.ErrorCode)
+	_ = json.Unmarshal(fields["engine_error_code"], &native)
+	failure.EngineErrorCode, _ = proto.NormalizeEngineFailure(native, nil)
+	if failure.ErrorCode == "" {
+		return nil
+	}
+	value, _ := json.Marshal(failure)
+	return value
 }
 
 // ArtifactSettlement is what a Turn that ended does with the Artifacts it

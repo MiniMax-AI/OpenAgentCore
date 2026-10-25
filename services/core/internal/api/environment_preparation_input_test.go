@@ -46,7 +46,7 @@ func TestPreparationExtensionRejectsAmbiguousAndPlacementInput(t *testing.T) {
 		`{"environment":{"type":"self_hosted","workspace_directory":"/work"},"x_agents_core":{"environment":{"workspace_directory":"/other"}}}`,
 		`{"environment":{"type":"self_hosted","workspace_directory":"/work","capability_directories":[]},"x_agents_core":{"environment":{"capability_directories":[]}}}`,
 		`{"environment":{"type":"openai_hosted","env":null},"x_agents_core":{"environment":{"env":{"KEY":"value"}}}}`,
-		`{"environment":{"type":"self_hosted","workspace_directory":"/work"},"x_agents_core":{"environment":{"packages":{"system":[]}}}}`,
+		`{"environment":{"type":"self_hosted","workspace_directory":"/work"},"x_agents_core":{"environment":{"packages":{"system":["jq"]}}}}`,
 	} {
 		var request decodedSessionRequest
 		if err := json.Unmarshal([]byte(input), &request); err != nil {

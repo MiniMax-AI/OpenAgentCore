@@ -8,25 +8,25 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
 func TestInstalledCapabilitiesPreserveSourcesWithoutRescanning(t *testing.T) {
 	workspace := openTestRoot(t)
 	installed := openTestRoot(t)
-	inline := agentskill.Metadata{Type: "inline", Name: "inline", Description: "Check proof."}
+	inline := proto.SkillMetadata{Type: "inline", Name: "inline", Description: "Check proof."}
 	if err := writeTree(installed, "skills/inline", []agentbundle.File{{Path: "SKILL.md", Data: skillManifest("inline")}}); err != nil {
 		t.Fatal(err)
 	}
-	plugin := agentplugin.Metadata{Type: "inline", Name: "package", Description: "Package proof."}
+	plugin := proto.PluginMetadata{Type: "inline", Name: "package", Description: "Package proof."}
 	if err := InstallPlugin(installed, 0, testPlugin(t, "bundled"), plugin); err != nil {
 		t.Fatal(err)
 	}
 	writeWorkspace(t, workspace, "generated/nested/SKILL.md", skillManifest("generated"))
 	writeWorkspace(t, workspace, "generated/shared/proof.txt", []byte("original-resource"))
-	input := Input{Skills: []agentskill.Metadata{inline}, Plugins: []agentplugin.Metadata{plugin}, Directories: []string{"/workspace/generated"}}
+	input := proto.CapabilitySources{Skills: []proto.SkillMetadata{inline}, Plugins: []proto.PluginMetadata{plugin}, Directories: []string{"/workspace/generated"}}
 	if err := Finalize(installed, input, testIdentity, workspaceResolver(workspace)); err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestDirectoryDiscoveryDoesNotActivateChildPluginMCP(t *testing.T) {
 	writeWorkspace(t, workspace, "parent/child/.codex-plugin/plugin.json", []byte(`{"name":"remote","description":"Remote","skills":"./skills","mcpServers":"./.mcp.json"}`))
 	writeWorkspace(t, workspace, "parent/child/.mcp.json", []byte(`{"mcpServers":{"remote":{"type":"http","url":"https://example.com"}}}`))
 	writeWorkspace(t, workspace, "parent/child/skills/proof/SKILL.md", skillManifest("proof"))
-	if err := Finalize(installed, Input{Directories: []string{"/workspace/parent"}}, testIdentity, workspaceResolver(workspace)); err != nil {
+	if err := Finalize(installed, proto.CapabilitySources{Directories: []string{"/workspace/parent"}}, testIdentity, workspaceResolver(workspace)); err != nil {
 		t.Fatal(err)
 	}
 	manifest, err := Load(installed)
@@ -72,7 +72,7 @@ func TestDirectoryDiscoveryDoesNotActivateChildPluginMCP(t *testing.T) {
 		t.Fatal("parent directory activated child Plugin MCP")
 	}
 	exact := openTestRoot(t)
-	if err := Finalize(exact, Input{Directories: []string{"/workspace/parent/child"}}, testIdentity, workspaceResolver(workspace)); err != nil {
+	if err := Finalize(exact, proto.CapabilitySources{Directories: []string{"/workspace/parent/child"}}, testIdentity, workspaceResolver(workspace)); err != nil {
 		t.Fatal(err)
 	}
 	manifest, err = Load(exact)
@@ -86,7 +86,7 @@ func TestInvalidDirectorySnapshotsNeverPublish(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			workspace, installed := openTestRoot(t), openTestRoot(t)
 			writeWorkspace(t, workspace, "first/SKILL.md", skillManifest("proof"))
-			input := Input{Directories: []string{"/workspace/first"}}
+			input := proto.CapabilitySources{Directories: []string{"/workspace/first"}}
 			switch scenario {
 			case "missing":
 				input.Directories = []string{"/workspace/missing"}

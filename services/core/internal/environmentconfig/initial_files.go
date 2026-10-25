@@ -1,6 +1,7 @@
 package environmentconfig
 
 import (
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"path"
 	"strings"
 	"unicode/utf8"
@@ -34,7 +35,7 @@ func ValidateInitialFiles(files []InitialFile) error {
 	total := 0
 	seen := map[string]bool{}
 	for _, f := range files {
-		if !utf8.ValidString(f.Path) || strings.ContainsAny(f.Path, "\\\x00\r\n") || len(f.Path) > 4096 || !strings.HasPrefix(f.Path, "/workspace/") || path.Clean(f.Path) != f.Path || seen[f.Path] {
+		if !utf8.ValidString(f.Path) || strings.ContainsAny(f.Path, "\\\x00\r\n") || len(f.Path) > 4096 || !strings.HasPrefix(f.Path, runtimebootstrap.PublicWorkspace+"/") || path.Clean(f.Path) != f.Path || seen[f.Path] {
 			return ErrInvalid
 		}
 		seen[f.Path] = true

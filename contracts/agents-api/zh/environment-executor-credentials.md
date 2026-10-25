@@ -1,7 +1,7 @@
 ---
 title: "执行器凭据"
 source: contracts/agents-api/environment-executor-credentials.md
-source_hash: bd7758cbe88d35995dcdffafc381f4a1d6b36ef70f9d0932f88d4d3b67ec1ab6
+source_hash: bc6bfa4cdaa4a82694fc3b2936aa50f1e00ae7feecea05f7c67401bb5816f185
 ---
 
 执行器凭据允许 `oac-daemon` 为一个 `self_hosted` Environment 注册并连接。它只授权该 Environment 的私有 daemon 传输（`/api/v1/agent-daemon/*`），不授权 `/v1`、`/core/v1`、sandbox node 注册或项目资源。项目的 principal 是其执行 principal。Core 只保存密钥摘要。

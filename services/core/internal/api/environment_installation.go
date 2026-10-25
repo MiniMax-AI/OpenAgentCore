@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/identity"
@@ -96,7 +98,7 @@ func (h *Handler) installationAuthorization(w http.ResponseWriter, r *http.Reque
 // @Description Accepts a short-lived Environment installation Bearer authorization, not a Project or Core key. Returns frozen connection constraints; it does not claim or rotate credentials.
 // @Tags Native Installation
 // @Produce json
-// @Success 200 {object} v1.NativeInstallationContext
+// @Success 200 {object} machineapi.InstallationContext
 // @Failure 401,404,503 {object} CoreErrorResponse
 // @Router /api/v1/agent-daemon/installation [post]
 func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Request) {
@@ -119,18 +121,14 @@ func (h *Handler) prepareNativeInstallation(w http.ResponseWriter, r *http.Reque
 		writeSessionsError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, v1.NativeInstallationContext{Version: h.Execution.NativeInstaller.Version, ProtocolVersion: proto.Version, EnvironmentID: claim.Environment, RemoteURL: h.Execution.ExecutorURL, Workspace: response.Environment.WorkspaceDirectory, Harness: session.Engine})
-}
-
-type NativeInstallationClaim struct {
-	ExecutorToken string `json:"executor_token"`
+	writeJSON(w, http.StatusOK, machineapi.InstallationContext{Version: h.Execution.NativeInstaller.Version, ProtocolVersion: proto.Version, EnvironmentID: claim.Environment, RemoteURL: h.Execution.ExecutorURL, Workspace: response.Environment.WorkspaceDirectory, Harness: session.Engine})
 }
 
 // @Summary Claim an Environment's installation credential
 // @Description A valid installation Bearer authorization can claim one connect-only key. The client persists its generated secret before submitting it. Retries must present that same secret; a different, rotated or revoked credential is never replaced.
 // @Tags Native Installation
 // @Accept json
-// @Param body body api.NativeInstallationClaim true "Locally persisted executor secret"
+// @Param body body machineapi.InstallationClaim true "Locally persisted executor secret"
 // @Success 204
 // @Failure 400,401,409,503 {object} CoreErrorResponse
 // @Router /api/v1/agent-daemon/installation/claim [post]
@@ -143,7 +141,7 @@ func (h *Handler) claimNativeInstallation(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	var input NativeInstallationClaim
+	var input machineapi.InstallationClaim
 	if decodeInputObject(raw, &input, "executor_token") != nil {
 		writeSessionsError(w, r, sessions.ErrInvalidInput)
 		return

@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 5766fdb6de7cdf07f02de16e2fdaf3fea0ce4d3b357d5648f15e9d709483b819
+source_hash: 3e138165ee27672531124d2c156d24e087fb6904e60f828635990dd1d3eb8626
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -39,7 +39,7 @@ Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源
 | Environments | retrieve | 已实现；以 Session 为范围（[归属](environments.md#resources-and-states)）。固定版本契约会拒绝 `environment.environment_id`；已有 hosted Environment 无法跨 Session 关联。跨 Session 共享的工作区属于应用（[项目拥有资产](../../../docs/zh/concepts.md#projects-own-assets)） | [Environments](environments.md) |
 | Environment files | create, list | 已实现；列表不会递归 | [Environment files and Artifacts](environment-files.md) |
 | Environment 模板 | create, retrieve, update, list, delete | 已实现；执行限制列于 [known gaps](#known-gaps) | [Environment 模板](environments.md#templates) |
-| Vaults | create, retrieve, list, delete | 已实现；没有归档操作 | [Vaults and Credentials](vaults.md) |
+| Vaults | create, retrieve, list, delete | 已实现 | [Vaults and Credentials](vaults.md) |
 | Vault Credentials | create, retrieve, update, list, delete | 已支持 `static_bearer` 和 `mcp_oauth` | [Vaults and Credentials](vaults.md) |
 | Files | create, retrieve, list, delete, content | 已支持 `purpose=user_data`；内容下载会被拒绝 | [Files and Skills](source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | 已实现 | [Files and Skills](source-files.md) |
@@ -59,12 +59,14 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - JSON 数组请求体会被拒绝；官方服务会将 `[]` 读取为 `{}`。
 - 存储的字符串中含有 U+0000 时会返回 400；官方服务会存储该字符。
 - 未找到消息从不会指明具体资源；Core 会给完整的元数据键加引号，而官方消息会将其缩略。
+- 资源 ID 均为 UUID；官方 ID 带有类型前缀，例如 Session 的 `sess_`。
 - UUID 标识符也可按其他拼写形式解析，例如大写形式或带花括号的形式。
 - 对于重复的查询键，Files 路由会保留本地 `unsupported_parameter` 代码。
+- Core 不处理 CORS；官方服务会发送 CORS 标头。
 
 **列表**（[lists](wire-semantics.md#lists)）
 
-- 将已删除的 Agent 或 Session 用作游标时会返回 404；官方服务仍可从该游标继续分页。
+- 将已删除的 Agent 用作游标时会返回 404；官方服务仍可从该游标继续分页。
 - 使用来自其他 Session 的 Turn 游标、与 Vault ID 相等的 Credential 游标，或不是 Skill ID 的 Skills 游标时，都会返回 404。
 - Vault 和 Credential 列表会按照固定版本 SDK 的描述钳制负数 `limit`；官方服务返回 400。
 
@@ -79,31 +81,50 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Claude Code 在 `environment: none` 上启用 live 搜索时只有 `WebSearch`，因此搜索只产生 `search` 动作，不会打开页面（[网页搜索](./execution-tools.md#web-search-and-programmatic-tool-calling)）。
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
+- Codex 拒绝同时使用程序化工具调用和 `multi_agent`。
+- Codex 不启用原生 goals（`create_goal`、`get_goal` 和 `update_goal`），因为处于活动状态的 goal 会在 Turn 结束后自行启动新的 turn（[Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)）。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
 - `stdio` MCP 服务器需要工作区部署位置和 `environment` 来源。Claude Code 在其工作区目录中启动服务器，因此 `cwd` 必须与之相同；服务器继承整个进程环境，其中也有模型提供方密钥和其他服务器的 Vault bearer 令牌；且 `allowed_tools` 须为 null。MiniMax Code 在其私有主目录中启动服务器，因此拒绝所有 `stdio` 服务器（[MCP](execution-tools.md#mcp)）。
+- Core 拒绝非空的 MCP `request_metadata`，因为没有 Harness 能发送它；同样拒绝 `connection_origin` 为 `service` 的 `stdio` 服务器，以及空的 `credential_id` 和空的 `allowed_tools` 名称，固定版本的 schema 允许这些值但没有定义其含义（400，并说明原因）。
 - Claude 会拒绝包含 `${` 的 MCP `server_url` 或 `headers` 值，因为原生客户端会从持有 Core 所持凭据的进程环境中展开这两处的 `${VAR}`。
+- 每个 Harness 都会拒绝其原生客户端保留的 MCP 标签，例如 Claude Code 上的 `functions`（[MCP](execution-tools.md#mcp)）。
+- 无法连接的 MCP 服务器由原生方式处理：可选服务器的工具缺失，必需服务器使启动失败（[MCP](execution-tools.md#mcp)）。Core 不复现官方的 Item 和 Turn 失败形态。
 - 在 events 202 之后立即删除 Session 会返回 409，因为 Core 会在同一事务中准入该 Turn；官方服务返回 200。
+- hosted Environment 运行 setup 期间，若没有待处理输入，删除 Session 会成功；官方服务返回 409。
 
 **输入、事件和历史**（[Sessions, events and history](sessions-events.md)、[message content](message-content.md)）
 
 - 提交给 `none` Session 的输入会同步完成准入；Core 不会模拟官方异步准入窗口。
-- 用于恢复等待中 Turn 的函数结果会发出 `turn.in_progress`；取消正在等待函数结果的 Turn 会发出临时 `agent.session.in_progress`。
+- 一次 events 请求最多包含 64 个事件（[发送输入](sessions-events.md#send-input)）；官方上限为 16384。
+- 用于恢复等待中 Turn 的函数结果会发出 `turn.in_progress`。
 - 原生 Harness 放弃的函数调用（例如根关闭或中断子级时被丢弃的 Subagent 调用，或超过 120 秒超时的 MiniMax Code 调用）会被撤回：它不再是待执行操作，之后为它提交结果会返回 409 `conflict_error`。官方 API 没有撤回机制。
 - 在 Turn 中途接入流时，不会发送补发 Item 快照。
 - Items 列表会包含进行中和未完成的输出 Items，并保留失败函数结果中已提交的 `output`。
-- 错误消息会省略官方消息包含的 call 和 executor ID。
+- 错误消息会省略官方消息包含的 call 和 executor ID，但未知工具调用的消息会带上其 `call_id`。
+- 失败的 Turn 以官方名称报告模型失败类别，Runtime 断开连接或准备失败报告为 `sandbox_error`。Core 的其他失败，例如 Runtime 不可用、缺少模型提供方、输入被拒绝或存储失败，一律报告 `internal_error`。消息是每个 code 对应的固定句子，不含原生文本。Subagent Turn 始终报告 `internal_error`。
 - 与其他文本并存的空文本部分可被接受并存储。
 - 空输入会返回 400 `invalid_request`，附带通用消息和值为 null 的 param；官方响应为 `invalid_request_error`，param 为 `input`。
 - 一旦所有根级 Turn 均已进入终态，Session 用量即可用；官方读取会滞后数秒。
+- Harness 输出（例如命令输出）中的 U+0000 读取时为 U+FFFD；官方服务会保留该字符。
+- `reasoning` Item 携带 Harness 对其原生推理所展示的内容：Harness 产生原生摘要时为该摘要，否则为其原生推理文本，例如 Codex 的原始推理，或模型 API 返回给 Claude Code 的 thinking 文本。每个原生部分对应一个 `summary_text` 部分，没有文本的原生推理不会上报，因此模型提供方的 `thinking.display` 为 `omitted` 时，Claude Code 不上报推理。Codex 流式输出一个 item 先送达的原生通道，即摘要或原始推理文本。
+
+**Environments 和模板**（[Environments](environments.md)）
+
+- `openai_hosted` 和模板的 `capability_directories` 必须位于 `/workspace` 内；官方服务也接受 `/etc` 等系统路径（[能力目录](environments.md#plugins-and-capability-directories)）。
+- `env` 不能设置 Core 保留的 `OPENAI_API_KEY`（[env](environments.md#env-and-setup-commands)）；官方服务接受该变量。
+- 没有待处理输入的 `self_hosted` Session 不会请求连接（[活动状态](environments.md#activity-and-required-actions)）；一个未使用的官方 Session 在创建约五分钟后转为 `requires_action`，原因为 `environment_connection`，之后删除它返回 409。
+- hosted Environment 只在初始化完成时发出一次 `ready`，不会像一个官方 Session 那样在之后每个 Turn 之前再次发出；它还会发出 `connected` 和 `disconnected`，而该官方 Session 没有。
+- hosted Environment 的 `connected` 和 `pending` 先后顺序不固定：Core 在观察到 Runtime 连接时记录 `connected`，在该 Runtime 上开始初始化时记录 `pending`。`ready` 在两者之后，因此最后一个 Environment 事件可能显示 `ready`，而 Environment 处于 `connected`。
 
 **Files、Skills、Environment files 和 Artifacts**（[Files and Skills](source-files.md)、[Environment files and Artifacts](environment-files.md)）
 
-- 文件上传上限为 512 MiB；官方上限为 512 MB。Files 列表默认最多返回 10,000 个 Files，`purpose` 过滤值不是 `user_data` 时会返回空页面。
+- 文件上传上限为 512 MiB；官方上限为 512 MB。`purpose` 过滤值不是 `user_data` 时会返回空页面。
 - Skill 版本号绝不复用，并且针对某个 Skill 的上传和删除会串行执行。
 - Environment files 可用于 `self_hosted` Environments，而官方服务会拒绝。
 - 在已有常规文件上创建 Environment file 会返回 "must not traverse symlinks or overwrite existing files" 消息。若父级符号链接仍位于工作区内，则会跟随该链接；若父级逸出工作区或父级本身是常规文件，则会返回通用 400；官方服务会拒绝父级符号链接。
-- Artifact ID 均为 UUID。
+- 文件名长度为 1–1,024 字节；官方服务接受空文件名和更长的文件名。
+- `SKILL.md` front matter 中 `name`、`description`、`license`、`compatibility` 和 `metadata` 以外的键会被拒绝；官方服务接受未知键（[上传 bundle](source-files.md#upload-a-bundle)）。
 
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
@@ -114,22 +135,26 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 更新时显式为 OAuth `access_token`、`refresh` 或 `token_endpoint_auth` 指定 `null`，会保留已存储的值。
 - 静态令牌要成功运行，必须是 RFC 6750 `b64token`；其他已存储令牌会在派发时失败。
 - Vault 元数据上限为 64 KiB，且没有键对或长度限制；名称去除首尾空白后为 1–256 字节。
+- Credential 的 `mcp_server_url` 按原样存储和匹配；官方服务会把其 scheme 和 host 转为小写。
 
 ## 已知缺口 {#known-gaps}
 
 **配置和工具**
 
-- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
-- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入。
+- 所选 Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`text.verbosity`、`web_search` 模式或设置、`programmatic_tool_calling` 取值，会被保存，但在 Session 准入时被拒绝（[Harness 能力](harness-capabilities.md#execution-and-input)）。
+- Harness 对工具、结构化输出、延迟发现、subagents 和 MCP 的支持因 Harness 和部署位置而异；请参阅 [Harness capabilities](harness-capabilities.md)。MiniMax Code 不支持图像输入，且 `instructions` 最多 32 KiB。
 - 由模型推导出的推理默认值不会被解析确定。
 
 **执行和历史**
 
-- Codex 的推理摘要会被请求，但不会投影为 `reasoning` Item；流也不会发出 reasoning-summary 事件、Environment 的 `pending` 或 `ready` 事件，也不会覆盖固定版本中的所有临时 tool-output 变体。
+- 流不会覆盖固定版本中的所有临时 tool-output 变体。
 - 除 [Turns and Items](sessions-events.md#turns-and-items) 中列出的变体外，其他原生 Item 变体不会被投影，而且 Items 无法修改。
 - 如果取消导致函数结果无法应用，该结果将永远不会作为 Item 出现。
 - 固定版本的 Codex 可能会丢失在订阅其流之前发出的命令输出。
 - Claude Code 和 MiniMax Code 都不报告公共用量。
+- Runtime 协议接受 `agent_message` 和 `interrupt_subagent_call` Item，但没有 Harness 适配器会产生它们。
+- Codex 文件变更没有对应的官方 Item 类型（[Turns and Items](sessions-events.md#turns-and-items)）。
+- Claude Code 一个 Turn 最多处理 64 条消息（含开头输入，见 [Runtime 边界](message-content.md#runtime-boundary)）；收到更多消息的 Turn 以 `internal_error` 失败。
 - 以 `/` 开头的消息到达 MiniMax Code 时末尾多一个空行，否则 ACP 会将其作为操作员命令执行。
 - 对于原生副作用，Core 不提供崩溃安全或恰好一次保证；已认领的工作若不重放，会在重启后失败。
 - 图像上的 `file_id` 和 `detail` 会被拒绝；每个 Harness 声明自己接受哪些 `image_url`（[消息内容](message-content.md#images)）。
@@ -139,19 +164,20 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - MiniMax Code 未声明 `retained_native_history`，因此无法在 microsandbox 上运行（其每个 Environment 都使用工作区存储）；Core 会拒绝该 Session（[Harness 能力](./harness-capabilities.md)）。
 - 只有 `enabled` 网络可以运行，因此需要 `disabled` 或 `restricted` 的 Session 会被拒绝（[restricted network policy](environments.md#restricted-network)）。
-- `packages.system` 会被拒绝；系统软件包必须预先安装。
+- 除 null 或空列表以外的 `packages.system` 都会被拒绝；系统软件包必须预先安装。
+- `Environment.files` 列出 Session 创建时记录的文件；之后通过 Environment files API 创建的文件不会出现。
 - 冷续接不恢复进程内存、后台进程或临时系统盘修改，已完成的 setup 不会重放（参见 [Environment 持久化](environments.md#runtime-capability-preparation)）。在使用保留 NFS 存储的兼容 microsandbox 节点上，Codex 和 Claude Code 已通过[检查点转移](../../../docs/zh/sandbox-provider.md#checkpoint-transfer)以及[已确认的计算丢失](../../../docs/zh/sandbox-provider.md#confirmed-compute-loss)后续接的资格验证。接管未确认停止的旧写入者、主机崩溃时的持久性及任意崩溃受损历史的完整性仍未通过资格验证。
 
 **Files 和 Environment files**
 
 - Files 仅接受 `purpose=user_data`；不支持其他 `purpose` 值、`expires_after` 和 Uploads API。
+- Skills 创建路由接受单个 `files` 部分，但当 `files` 是单个文件而不是列表时，固定版本的 SDK 不会发送任何部分（[上传 bundle](source-files.md#upload-a-bundle)）。
 - 结果不确定的 Environment file 写入不会自动重试或恢复；它会阻止后续写入以及向 Session 发送消息。
 
 **Vaults 和 Credentials**
 
-- 没有归档生命周期、存储密钥轮换或重新加密。
+- 没有存储密钥轮换或重新加密。
 - OAuth 刷新仅在派发时执行：提供商返回 401 时不会刷新，不会在 Turn 中途替换令牌，也不会撤回已发送给 Runtime 的令牌。
-- 发送到所选 Credential 已被删除的 Session 的输入会先通过准入，随后在派发时失败。
 - 创建 Credential 时不接受 `Idempotency-Key`。
 
 **Sessions**
@@ -162,14 +188,20 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 ### 尚未与官方服务核实的内容 {#unverified-against-the-official-service}
 
 - 当一个请求存在多项故障时的错误顺序，以及错误处理、默认值和载荷限制的总体一致性。
-- Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
+- Subagent 的函数调用：Core 将其作为运行该子级的根 Turn 的待执行操作，`turn_id` 为该 Turn，并把子级的 `function_call` Item 以 `agent.session.turn.item.added` 发布一次，`turn_id` 为子级 Turn ID，`output_index` 为 null；结果可以指定其中任一 Turn。该 Turn 为 `waiting`、Session 为 `requires_action`，根输出可继续，`call_id` 等于该子级 `function_call` Item 的 `call_id`。Claude Code 在根 Turn 收敛时才发布子级的 Item，晚于该待执行操作。
+- 官方服务是否发出 Environment `pending` 以及何时发出：Core 在 hosted Environment 初始化开始时发出，而仅有的一个官方样本只显示了创建约 29 秒后的 `ready`。
 - Subagent 子级 Turns 和待处理的 Environment file 写入是否会阻止 Session 删除。
 - 官方服务在待处理输入错误与未知结果目标之间的先后顺序。
+- 最新 Turn 失败的 Session 是否接受新输入：Core 会开始新的 Turn，而一个官方样本拒绝了该输入。
+- 等待中的 Turn 恢复或被取消时的事件顺序。
+- 有多个待处理函数调用的 Turn：Core 在同一个 `requires_action` 中列出全部调用；官方样本中没有并行调用。
+- Subagent 的任务文本和嵌套：Core 把原生任务提示放在 `create_subagent_call` 的内容中，而一个官方样本省略了它；嵌套子级的 `agent_id` 和子级的输入 Item 没有官方样本。
+- 模板 `env` 与 Session `env` 并存：Core 按键合并，以 Session 的值为准（[继承](environments.md#inheritance)）。
 - npm、initial-file 和 Skill 安装的失败原因没有官方样本。
 - Codex 对文本旁的空文本部分、失败函数结果中的图像或远程引用图像的行为。
 - 在 Core 返回 405 的路由上，官方服务的 `HEAD` 行为。
 - 精确主机名之外的 Environment 模板主机名形式，以及 `disabled` 与域结合使用的情况。
-- Files 发生变化时的 purpose 筛选和分页；官方 Skill 上传限制和错误时机。
-- Environment file 列表的默认值（limit 为 20、默认路径为工作区根目录、不递归、page-token 失效）、50 MiB 的 `file_id` 复制上限，以及创建时的检查顺序。
+- Files 发生变化时的 purpose 筛选和分页；官方 Skill 上传限制和错误时机，以及 Skill 版本号格式错误时的错误。
+- Environment file 列表的默认值（limit 为 20、默认路径为工作区根目录、page-token 失效）、50 MiB 的 `file_id` 复制上限，以及创建时的检查顺序。
 - Artifact 对硬链接、特殊文件和链接形式的 `outputs` 目录的捕获，内容字节变化后的重新发布，以及内容标头和范围。
-- Vault 和 Credential 的错误与重试语义、并发写入下的分页、删除后的可见性、依据官方规范化处理进行精确 URL 匹配、OAuth 刷新的时机和错误，以及受限密钥范围。
+- Vault 和 Credential 的错误与重试语义、并发写入下的分页、删除后的可见性、OAuth 刷新的时机和错误，以及受限密钥范围。

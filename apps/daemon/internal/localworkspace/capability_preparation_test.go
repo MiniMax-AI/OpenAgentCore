@@ -27,7 +27,7 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 	source := t.TempDir()
 	writeSourceSkill(t, source, "first")
 	req.LocalEnvironment.Capabilities = true
-	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{source}}
+	req.LocalEnvironment.CapabilitySources = &proto.CapabilitySources{Directories: []string{source}}
 	configured, err := b.Configure(req)
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestPreparationFreezesLocalContentsAcrossReconnect(t *testing.T) {
 	// Reusing a snapshot under another selection cannot start native work, even
 	// for another Session.
 	local := *configured.LocalEnvironment
-	local.CapabilitySources = &agentcapabilities.Input{}
+	local.CapabilitySources = &proto.CapabilitySources{}
 	changed := configured
 	changed.LocalEnvironment = &local
 	if _, err = b.Prepare(t.Context(), changed); err == nil {
@@ -104,7 +104,7 @@ func TestPreparationUsesOperatorSourcesAndLeavesFailuresInert(t *testing.T) {
 	}
 	root.Close()
 	req.LocalEnvironment.Capabilities = true
-	req.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{source, t.TempDir()}}
+	req.LocalEnvironment.CapabilitySources = &proto.CapabilitySources{Directories: []string{source, t.TempDir()}}
 	configured, err := b.Configure(req)
 	if err != nil {
 		t.Fatal(err)

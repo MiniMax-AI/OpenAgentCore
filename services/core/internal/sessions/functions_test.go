@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/items"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ type fakeFunctionTx struct {
 
 	loadPendingFunctionCalls func() ([]FunctionCall, error)
 	findResultTurn           func() (Turn, bool, error)
+	findCallTurn             func() (Turn, string, bool, error)
 	matchFunctionResult      func() (FunctionResultMatch, error)
 	submitFunctionResult     func() error
 	hasFunctionCall          func() (bool, error)
@@ -40,6 +42,11 @@ func (f *fakeFunctionTx) LoadPendingFunctionCalls(_ context.Context, turn string
 func (f *fakeFunctionTx) FindResultTurn(_ context.Context, turn string) (Turn, bool, error) {
 	f.record("FindResultTurn", f.findResultTurn != nil, turn)
 	return f.findResultTurn()
+}
+
+func (f *fakeFunctionTx) FindCallTurn(_ context.Context, call string) (Turn, string, bool, error) {
+	f.record("FindCallTurn", f.findCallTurn != nil, call)
+	return f.findCallTurn()
 }
 
 func (f *fakeFunctionTx) MatchFunctionResult(_ context.Context, turn, call string, result json.RawMessage) (FunctionResultMatch, error) {
@@ -199,6 +206,19 @@ func TestAdmitFunctionResult(t *testing.T) {
 		}
 		assertCalls(t, f.fakeTx, find, match, submit)
 	})
+	t.Run("a Subagent Turn stands for the root Turn holding its call", func(t *testing.T) {
+		const child = "7c1ad0f2-5e0c-4e5e-9b43-0d1c4c6a1f10"
+		call := items.Identity(child, "tool:native")
+		for name, executor := range map[string]string{"made there": "native", "made elsewhere": "other"} {
+			f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}, findResultTurn: func() (Turn, bool, error) { return Turn{}, false, nil },
+				findCallTurn: func() (Turn, string, bool, error) { return waiting, executor, true, nil }, hasFunctionCall: returns(true),
+				matchFunctionResult: returns(FunctionResultMatch{Recorded: true}), submitFunctionResult: done}
+			turn, err := AdmitFunctionResult(t.Context(), f, FunctionResultInput{TurnID: child, CallID: call, Result: input.Result})
+			if (name == "made there") != (err == nil) || (err == nil && turn.ID != testTurn) || (err != nil && !errors.Is(err, ErrFunctionCallTurnMismatch)) {
+				t.Errorf("%s: %v %v", name, turn, err)
+			}
+		}
+	})
 	t.Run("identical retry keeps the saved result", func(t *testing.T) {
 		completed := turnWith(TurnCompleted)
 		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}, findResultTurn: found(completed), matchFunctionResult: returns(FunctionResultMatch{Recorded: true, Submitted: true, Matches: true})}
@@ -235,13 +255,13 @@ func TestAdmitFunctionResult(t *testing.T) {
 			"unknown Turn and call":        {false, false, ErrUnknownFunctionCall},
 		} {
 			f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}, hasFunctionCall: returns(test.elsewhere), matchFunctionResult: returns(FunctionResultMatch{}),
-				findResultTurn: func() (Turn, bool, error) { return waiting, test.turnFound, nil }}
+				findResultTurn: func() (Turn, bool, error) { return waiting, test.turnFound, nil }, findCallTurn: func() (Turn, string, bool, error) { return Turn{}, "", false, nil }}
 			if _, err := AdmitFunctionResult(t.Context(), f, input); !errors.Is(err, test.want) {
 				t.Errorf("%s: %v", name, err)
 			}
 			want := []string{find, match, "HasFunctionCall call"}
 			if !test.turnFound {
-				want = []string{find, "HasFunctionCall call"}
+				want = []string{find, "FindCallTurn call", "HasFunctionCall call"}
 			}
 			assertCalls(t, f.fakeTx, want...)
 		}
@@ -251,7 +271,7 @@ func TestAdmitFunctionResult(t *testing.T) {
 			"find":   {fakeTx: &fakeTx{t: t}, findResultTurn: func() (Turn, bool, error) { return Turn{}, false, errStorage }},
 			"match":  {fakeTx: &fakeTx{t: t}, findResultTurn: found(waiting), matchFunctionResult: func() (FunctionResultMatch, error) { return FunctionResultMatch{}, errStorage }},
 			"submit": {fakeTx: &fakeTx{t: t}, findResultTurn: found(waiting), matchFunctionResult: returns(FunctionResultMatch{Recorded: true}), submitFunctionResult: func() error { return errStorage }},
-			"classify": {fakeTx: &fakeTx{t: t}, findResultTurn: func() (Turn, bool, error) { return Turn{}, false, nil },
+			"classify": {fakeTx: &fakeTx{t: t}, findResultTurn: func() (Turn, bool, error) { return Turn{}, false, nil }, findCallTurn: func() (Turn, string, bool, error) { return Turn{}, "", false, nil },
 				hasFunctionCall: func() (bool, error) { return false, errStorage }},
 		} {
 			if _, err := AdmitFunctionResult(t.Context(), f, input); !errors.Is(err, errStorage) {
@@ -263,9 +283,10 @@ func TestAdmitFunctionResult(t *testing.T) {
 
 func TestLoadRequiredActions(t *testing.T) {
 	calls := []FunctionCall{testCall, {CallID: "second", ExecutorCallID: "native-second", Name: "search", Arguments: json.RawMessage(`{}`), Result: json.RawMessage(`{"success":true}`)}}
-	for _, status := range []string{TurnInProgress, TurnWaiting} {
+	// A waiting Turn keeps its required actions after a cancellation request, until it ends.
+	for _, turn := range []Turn{turnWith(TurnInProgress), turnWith(TurnWaiting), cancelling(TurnWaiting)} {
 		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}, loadPendingFunctionCalls: returns(calls)}
-		actions, err := LoadRequiredActions(t.Context(), f, turnWith(status))
+		actions, err := LoadRequiredActions(t.Context(), f, turn)
 		if err != nil || len(actions) != 2 {
 			t.Fatal(actions, err)
 		}
@@ -280,7 +301,7 @@ func TestLoadRequiredActions(t *testing.T) {
 			}
 		}
 	}
-	for _, turn := range []Turn{turnWith(TurnQueued), cancelling(TurnWaiting), turnWith(TurnCompleted)} {
+	for _, turn := range []Turn{turnWith(TurnQueued), cancelling(TurnInProgress), turnWith(TurnCompleted)} {
 		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}}
 		actions, err := LoadRequiredActions(t.Context(), f, turn)
 		if err != nil || actions == nil || len(actions) != 0 {

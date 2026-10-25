@@ -32,10 +32,7 @@ func (s *session) Cancel(ctx context.Context) error {
 		if current {
 			stopWrite := context.AfterFunc(ctx, s.invalidate)
 			defer stopWrite()
-			if err := s.owner.write(struct {
-				Type   string `json:"type"`
-				TurnID string `json:"turn_id"`
-			}{"turn_cancel", s.runID}); err != nil {
+			if err := s.owner.write(turnCancelFrame{"turn_cancel", s.runID}); err != nil {
 				s.invalidate()
 			}
 		}

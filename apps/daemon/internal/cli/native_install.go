@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/paths"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimefs"
@@ -71,7 +73,7 @@ func validateNativeInstallation(c nativeInstallation) error {
 	if _, err := environmentBase(c.Remote); err != nil {
 		return err
 	}
-	if !environmentUUID(c.Environment) {
+	if !machineapi.CanonicalUUID(c.Environment) {
 		return errors.New("install: --environment-id requires a canonical Environment ID")
 	}
 	for _, p := range []string{c.Workspace, c.Credential, c.CapabilityDirectory} {
@@ -347,7 +349,6 @@ func runStart(rc *runContext, args []string) error {
 	ctx, stop := daemonize.NotifyContext(context.Background())
 	defer stop()
 	flags := newFlagSet("start")
-	foreground := flags.Bool("foreground", false, "stay attached to this terminal")
 	if err := flags.Parse(args); err != nil {
 		return errors.New("start: invalid arguments")
 	}
@@ -387,15 +388,13 @@ func runStart(rc *runContext, args []string) error {
 	rc.installedKinds = nativeInstallationKinds(config.Harnesses)
 	defer func() { rc.installedKinds = previousKinds }()
 	values := nativeHarnessEnvironment(config.ComponentDirectory, config.Harnesses)
-	values["OAC_RUNTIME_WORKSPACE"] = config.Workspace
-	values["OAC_RUNTIME_CAPABILITY_DIRECTORY"] = config.CapabilityDirectory
 	values["OAC_RUNTIME_TOOL_ENV_FILE"] = config.ToolEnvironmentFile
 	for key, value := range values {
 		if err = os.Setenv(key, value); err != nil {
 			return err
 		}
 	}
-	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, !*foreground, true, config.Remote, config.Environment, config.Credential)
+	return runEnvironmentConnect(ctx, rc, paths.DefaultProfile, true, true, config.Remote, config.Environment, config.Credential, config.Workspace, config.CapabilityDirectory)
 }
 
 func useInstalledNativeHome() {

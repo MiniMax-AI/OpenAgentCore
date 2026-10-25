@@ -19,7 +19,7 @@ import { SessionPage } from "./features/sessions/SessionPage";
 import { SkillsPage } from "./features/skills/SkillsPage";
 import { SettingsPage } from "./features/settings/SettingsPage";
 import { VaultsPage } from "./features/vaults/VaultsPage";
-import { consoleDepth, ConsoleNavigationContext, useConsoleNavigation, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
+import { consoleDepth, ConsoleNavigationContext, hashWithParams, routeParamsFromHash, type ConsoleIntent, type RouteParams } from "./lib/console-navigation";
 import { consoleHashForView, consoleNavParent, consoleViewFromHash, type ConsoleView } from "./lib/console-routes";
 import { ProjectsProvider, useProjects } from "./lib/projects";
 import { collectionQuery, collections, filesCollection, queryClient, type CollectionSpec } from "./lib/queries";
@@ -120,7 +120,11 @@ function ConsoleShell() {
     <ConsoleNavigationContext.Provider value={navigation}>
       <ConsoleTourContext.Provider value={openTour}>
         <div className="app-shell">
-          <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
+          {/* The router owns the URL fragment, so the link moves focus instead of navigating. */}
+          <a className="skip-link" href="#main-content" onClick={(event) => {
+            event.preventDefault();
+            document.getElementById("main-content")?.focus();
+          }}>{t("skipToContent")}</a>
           <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} onGettingStarted={() => navigate("overview", {}, "getting-started")} />
           <main className="app-main" id="main-content" tabIndex={-1}>
             <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>

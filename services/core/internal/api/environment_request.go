@@ -3,8 +3,9 @@ package api
 import (
 	"encoding/json"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -27,7 +28,7 @@ func decodeSessionEnvironment(raw json.RawMessage) (*v1.Environment, error) {
 		return decodeHostedEnvironment(raw)
 	case "self_hosted":
 		fields = append(fields, "workspace_directory", "capability_directories")
-		if agentcapabilities.ValidateSourceDirectories([]string{environment.WorkspaceDirectory}) != nil || agentcapabilities.ValidateSourceDirectories(environment.CapabilityDirectories) != nil {
+		if proto.ValidateSourceDirectories([]string{environment.WorkspaceDirectory}) != nil || proto.ValidateSourceDirectories(environment.CapabilityDirectories) != nil {
 			return nil, sessions.ErrInvalidInput
 		}
 	default:

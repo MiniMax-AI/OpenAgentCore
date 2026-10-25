@@ -16,7 +16,7 @@ import { sessionTitle } from "../../lib/session-title";
 import { forgetDeleted } from "../resources/detail-queries";
 import { ExecutorCredentialsSection } from "./ExecutorCredentialsSection";
 import { SessionDeleteDialog, type SessionDeleteTarget } from "./SessionDeleteDialog";
-import { DiagnosticScope, SessionFailureDetails } from "./session-diagnostics";
+import { DiagnosticScope, InitializationSteps, SessionFailureDetails } from "./session-diagnostics";
 import { sessionKey } from "./session-queries";
 import { isSessionActive, turnAnchorId } from "./session-history";
 import { environmentKind, isDeletable } from "./session-log";
@@ -150,6 +150,7 @@ export function SessionPage() {
               {session.vault_ids.length ? session.vault_ids.map((id) => <CopyableId key={id} id={id} compact />) : MISSING}
             </dd>
           </div>
+          <InitializationSteps projectId={projectId} session={session} />
           {waiting.length ? <div><dt>{t("detail.waitingFor")}</dt><dd className="session-fact-stack">{waiting.map((entry, index) => <span key={index}>{entry}</span>)}{session.required_actions.some((action) => action.type === "function_call") ? <span className="detail-note">{t("detail.applicationAction")}</span> : null}</dd></div> : null}
           {metadata.length ? (
             <div>

@@ -23,7 +23,7 @@ import { TableSkeleton } from "../../components/Skeleton";
 import { useFailureToast } from "../../components/Toast";
 import { ListToolbar, listSummary, NameCell, SearchField } from "../../components/list-ui";
 import { useConsoleNavigation } from "../../lib/console-navigation";
-import { formatBytes, formatClock, formatCompact, formatCores, formatDuration, formatInteger, formatPercent, MISSING } from "../../lib/format";
+import { formatBytes, formatClock, formatCompact, formatDuration, formatInteger, MISSING } from "../../lib/format";
 import { projectClient, ProjectName, useProjects } from "../../lib/projects";
 import { coreError } from "../../lib/core-error";
 import { loadRuntimeDurableSnapshot, RUNTIME_DURABLE_RANGES, RuntimeDurableHistoryIncompleteError, type RuntimeDurableRange } from "../dashboard/runtime-history";
@@ -32,7 +32,6 @@ import { RUNTIME_SNAPSHOT_REFRESH_MS } from "../dashboard/runtime-snapshot";
 import { FleetReadNotice } from "../fleet/FleetReadNotice";
 import { SandboxResetNotice } from "../fleet/SandboxResetNotice";
 import { fleetSnapshot, useSandboxFleet } from "../fleet/use-sandbox-fleet";
-import { sandboxSize, templateBuildStatus } from "../sandbox/deployment-specification";
 import {
   hostedRuntimeRows,
   hostedRuntimeUsage,
@@ -131,17 +130,12 @@ export function SandboxMetricsPage() {
   );
 }
 
-/** An E2B deployment: what runs in its cloud now, and with what. */
+/** A direct deployment: what runs in the Provider's cloud now, and with what. */
 function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
   const { t, i18n } = useTranslation("metrics");
   const locale = i18n.resolvedLanguage;
   const { navigate } = useConsoleNavigation();
-  // An E2B selection may adopt its template build's size instead of saving one.
-  const resources = sandboxSize(deployment);
-  const build = deployment.metadata?.template_build;
-  const disk = build?.resources.root_disk_mib ?? null;
-  const status = templateBuildStatus(build);
-  const template = deployment.configuration?.template;
+  const resources = deployment.specification?.resources;
   return (
     <Section
       headingId="cloud-heading"
@@ -151,23 +145,13 @@ function CloudSection({ deployment }: { deployment: SandboxDeployment }) {
     >
       <p className="detail-note">{t("sandbox.cloud.counts")}</p>
       <KpiStrip label={t("sandbox.cloud.title")}>
-        <Kpi label={t("sandbox.cloud.running")} help={t("sandbox.cloud.runningHelp")} value={formatInteger(deployment.resources.allocations, locale)} />
+        <Kpi label={t("sandbox.cloud.running")} help={t("sandbox.cloud.runningHelp")} value={formatInteger(deployment.resources.running, locale)} />
         <Kpi label={t("sandbox.cloud.pending")} value={formatInteger(deployment.resources.pending, locale)} />
         <Kpi
           label={t("sandbox.cloud.size")}
           value={resources ? <>
             {t("sandbox.cores", { value: formatInteger(resources.cpus, locale) })} · {formatBytes(resources.memory_mib * 2 ** 20)}
-            {disk !== null ? <span className="kpi-unit">{t("sandbox.cloud.disk", { disk: formatBytes(disk * 2 ** 20) })}</span> : null}
           </> : MISSING}
-        />
-        <Kpi
-          label={t("sandbox.cloud.template")}
-          help={t("sandbox.cloud.templateHelp")}
-          tone={status === "notReady" ? "warning" : undefined}
-          value={<>
-            {t(`sandbox.cloud.build.${status}`)}
-            {template ? <code className="kpi-unit cloud-template" title={template}>{template}</code> : null}
-          </>}
         />
       </KpiStrip>
     </Section>
@@ -241,7 +225,6 @@ function HostedRuntimeSection({ state, stale, fleet, range, onOpen }: { state: R
               active: formatInteger(usage.active, locale),
               n: formatInteger(usage.hosted, locale),
               sleeping: formatInteger(usage.sleeping, locale),
-              cpu: usage.cpuUsageCores === null ? MISSING : t("sandbox.cores", { value: formatCores(usage.cpuUsageCores, locale) }),
               memory: usage.memoryUsageBytes === null ? MISSING : formatBytes(usage.memoryUsageBytes),
             })}
           </span>
@@ -294,7 +277,6 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
               <th scope="col"><span className="column-help">{t("sandbox.status")}<HelpTip>{t("sandbox.statusHelp")}</HelpTip></span></th>
               {showProject ? <th scope="col">{tCommon("project.column")}</th> : null}
               {showNode ? <th scope="col">{t("sandbox.node")}</th> : null}
-              <th scope="col">{t("sandbox.cpu")}</th>
               <th scope="col">{t("sandbox.memory")}</th>
               <th scope="col" className="numeric">{t("sandbox.uptime")}</th>
               <th scope="col" className="numeric">{t("sandbox.tokens")}</th>
@@ -305,7 +287,6 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
               const { observation, session } = row;
               const observed = observation.status === "observed";
               const sampleGap = runtimeSampleGap(observation);
-              const cpu = observed ? observation.cpu : null;
               const memory = observed ? observation.memory : null;
               const open = () => onOpen(observation.session_id);
               return (
@@ -316,21 +297,7 @@ function RuntimeTable({ rows, showProject, showNode, onOpen }: { rows: HostedRun
                   <td><StatusDot tone={lifecycleTone(row)} label={lifecycleLabel(row, t)} /></td>
                   {showProject ? <td><ProjectName project={byId.get(observation.project_id)} /></td> : null}
                   {showNode ? <td><NodeLink node={row.node} /></td> : null}
-                  {sampleGap ? <td colSpan={2} className="table-muted">{t(`sandbox.reason.${sampleGap}`)}</td> : <>
-                  <td>
-                    {cpu?.usage_cores != null ? (
-                      <span className="table-meter">
-                        <Meter value={cpu.usage_cores} limit={cpu.capacity_cores} label={t("sandbox.cpu")} />
-                        <span>{formatCores(cpu.usage_cores, locale)} / {t("sandbox.cores", { value: formatCores(cpu.capacity_cores, locale) })}</span>
-                      </span>
-                    ) : cpu?.utilization_ratio != null ? (
-                      // Providers that report only a utilization ratio: show it as a share of the sandbox's CPU.
-                      <span className="table-meter">
-                        <Meter value={cpu.utilization_ratio} limit={1} label={t("sandbox.cpu")} />
-                        <span>{formatPercent(cpu.utilization_ratio, locale)}</span>
-                      </span>
-                    ) : <span className="table-muted">{MISSING}</span>}
-                  </td>
+                  {sampleGap ? <td className="table-muted">{t(`sandbox.reason.${sampleGap}`)}</td> : <>
                   <td>
                     {memory?.usage_bytes != null ? (
                       <span className="table-meter">
@@ -395,7 +362,7 @@ function RuntimeDialog({ row, showNode, onClose }: { row: HostedRuntimeRow | nul
             <div><dt>{t("sandbox.status")}</dt><dd><StatusDot tone={lifecycleTone(shown)} label={lifecycleLabel(shown, t)} /></dd></div>
             <div><dt>{t("sandbox.configurationGeneration")}</dt><dd>{shown.deploymentGeneration ?? MISSING}</dd></div>
             <div><dt>{t("sandbox.uptime")}</dt><dd>{formatDuration(shown.uptimeSeconds)}</dd></div>
-            {/* Only E2B reports a sandbox's disk. */}
+            {/* Disk is shown only when the provider reports it. */}
             {observation.disk ? <div><dt>{t("sandbox.disk")}</dt><dd>{formatBytes(observation.disk.usage_bytes)} / {formatBytes(observation.disk.limit_bytes)}</dd></div> : null}
           </dl>
           {shown.session

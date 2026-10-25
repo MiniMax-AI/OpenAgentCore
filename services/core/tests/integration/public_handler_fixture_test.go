@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -80,7 +79,7 @@ func publicHandler(t testing.TB, s *Store, keys fixtureKeyResolver, engine strin
 	deployments := deploymentService(t, s)
 	deps := api.Dependencies{
 		Engine: engine, CoreKeys: admin, InstallationBindings: deployments,
-		Projects: projectService, ProjectsReader: fixtureProjectsReader{Reader: projectStore, keys: keys},
+		Projects: projectService, ProjectsReader: fixtureProjectsReader{Store: projectStore, keys: keys},
 		ModelProviders: modelConfigurationService, ModelProvidersReader: modelConfigurationStore,
 		Vaults: vaultService, VaultsReader: vaultStore,
 		Files: fileService, FilesReader: fileStore,
@@ -131,7 +130,7 @@ func fixtureFiles(t testing.TB, s *Store) (*filepg.Store, *files.Service) {
 
 // storeKeys resolves Project keys from the database, as production does.
 func storeKeys(*Store) func(*api.Dependencies) {
-	return func(d *api.Dependencies) { d.ProjectsReader = d.ProjectsReader.(fixtureProjectsReader).Reader }
+	return func(d *api.Dependencies) { d.ProjectsReader = d.ProjectsReader.(fixtureProjectsReader).Store }
 }
 
 // withCoreKeys replaces the Core key.
@@ -252,9 +251,9 @@ func (s strictStandIn) WriteEnvironmentFile(context.Context, sessions.Environmen
 	return 0, nil
 }
 
-func (s strictStandIn) DiscoverConfiguration(context.Context, string, sandbox.ConfigurationDiscoveryInput) (json.RawMessage, error) {
+func (s strictStandIn) DiscoverConfiguration(context.Context, string, sandbox.ConfigurationDiscoveryInput) (sandbox.ConfigurationOptions, error) {
 	s.unexpected("DiscoverConfiguration")
-	return nil, nil
+	return sandbox.ConfigurationOptions{}, nil
 }
 
 func (s strictStandIn) InitializeSandboxDeployment(context.Context, sandbox.Selection) (deployment.View, error) {

@@ -64,6 +64,9 @@ type InitializationTx interface {
 	// CompleteInitialization completes the running preparation of the live
 	// Environment and reports whether it did.
 	CompleteInitialization(ctx context.Context, environment string) (bool, error)
+	// RecordInitializationSteps stores the operation durations of the
+	// Environment's running preparation.
+	RecordInitializationSteps(ctx context.Context, environment string, steps []InitializationStep) error
 	// FailInitialization marks the Environment's preparation failed unless it
 	// completed.
 	FailInitialization(ctx context.Context, environment string) error
@@ -175,14 +178,38 @@ func (o *ExecutionOperations) advanceInitialization(ctx context.Context, owner E
 // device.
 func (o *ExecutionOperations) ClaimEnvironmentInitialization(ctx context.Context, owner EnvironmentInitialization) error {
 	return o.advanceInitialization(ctx, owner, func(ctx context.Context, tx InitializationTx, environment Environment) (bool, error) {
-		return tx.ClaimInitialization(ctx, environment.ID)
+		return journalInitialization(ctx, tx, environment, "pending", tx.ClaimInitialization)
 	})
 }
 
 // CompleteEnvironmentInitialization completes the claimed preparation.
 func (o *ExecutionOperations) CompleteEnvironmentInitialization(ctx context.Context, owner EnvironmentInitialization) error {
 	return o.advanceInitialization(ctx, owner, func(ctx context.Context, tx InitializationTx, environment Environment) (bool, error) {
-		return tx.CompleteInitialization(ctx, environment.ID)
+		return journalInitialization(ctx, tx, environment, "ready", tx.CompleteInitialization)
+	})
+}
+
+// journalInitialization applies one initialization transition and, when it
+// applied to a hosted Environment, journals the matching
+// agent.session.environment.<status> change in the same transaction. Self-hosted
+// Environments are prepared by the user and emit neither event.
+func journalInitialization(ctx context.Context, tx InitializationTx, environment Environment, status string, transition func(context.Context, string) (bool, error)) (bool, error) {
+	kind, err := EnvironmentType(environment.Configuration)
+	if err != nil {
+		return false, err
+	}
+	applied, err := transition(ctx, environment.ID)
+	if err != nil || !applied || kind != "openai_hosted" {
+		return applied, err
+	}
+	return true, tx.AppendChanges(ctx, EnvironmentStateChange(environment.ID, kind, status))
+}
+
+// RecordEnvironmentInitializationSteps stores the operation durations of the
+// claimed preparation, before it completes or fails.
+func (o *ExecutionOperations) RecordEnvironmentInitializationSteps(ctx context.Context, owner EnvironmentInitialization, steps []InitializationStep) error {
+	return o.withInitialization(ctx, owner, func(ctx context.Context, tx InitializationTx, environment Environment) error {
+		return tx.RecordInitializationSteps(ctx, environment.ID, steps)
 	})
 }
 

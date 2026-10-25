@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
 )
@@ -18,14 +18,14 @@ func TestSessionModelExecutionNeverFallsBack(t *testing.T) {
 	reader, _ := testSessions(t, pgtest.Open(t), nil)
 	d := Dispatcher{SessionsReader: reader}
 	session := sessions.Session{TenantID: uuid.NewString(), ID: uuid.NewString(), Engine: "codex"}
-	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
+	if _, err := d.executionRequest(t.Context(), session, Snapshot{ModelProviderConfigured: true}, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{}); !errors.Is(err, sessions.ErrNotFound) {
 		t.Fatal("missing Session credentials fell back", err)
 	}
 	// A none device without a frozen provider uses its own provider environment:
 	// Core sends only the Agent's model and instructions.
 	instructions := "Keep this instruction."
 	snapshot := Snapshot{Agent: v1.Agent{Model: "device-model", Instructions: &instructions}, Environment: v1.Environment{Type: "none"}}
-	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, runtimedevice.KindCapabilities{}, sessions.ExecutionBinding{})
+	request, err := d.executionRequest(t.Context(), sessions.Session{Engine: "codex"}, snapshot, proto.AgentKindCapabilities{}, sessions.ExecutionBinding{})
 	if err != nil || !reflect.DeepEqual(request.AgentOptions, map[string]any{"model": "device-model", "system_prompt": &instructions}) {
 		t.Fatal("none Session received adapter options Core does not own", request.AgentOptions, err)
 	}

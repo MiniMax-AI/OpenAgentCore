@@ -93,6 +93,7 @@ held AS (
 SELECT d.singleton, d.installation_id, d.backend_fingerprint, d.updated_at, d.provider_kind, d.owner_epoch, d.generation, d.mode, d.provider_credential, d.specification, d.reset_clear, d.reset_requested_at, d.reset_deadline_at, d.reset_forced_at, d.reset_audit, d.provider_config, d.provider_metadata, d.idle_seconds,
     (SELECT count(*) FROM classified WHERE NOT pending)::bigint AS allocations,
     (SELECT count(*) FROM classified WHERE pending)::bigint AS pending,
+    (SELECT count(*) FROM runtime_allocations a WHERE a.state = 'running' AND a.compute_phase IN ('running', 'disabled'))::bigint AS running,
     jsonb_build_object(
         'busy', (SELECT count(*) FROM classified WHERE category = 'busy'),
         'idle', (SELECT count(*) FROM classified WHERE category = 'idle'),
@@ -117,6 +118,7 @@ type GetSandboxDeploymentSnapshotRow struct {
 	RuntimeDeployment RuntimeDeployment `json:"runtime_deployment"`
 	Allocations       int64             `json:"allocations"`
 	Pending           int64             `json:"pending"`
+	Running           int64             `json:"running"`
 	Remaining         []byte            `json:"remaining"`
 	Rollout           []byte            `json:"rollout"`
 }
@@ -145,6 +147,7 @@ func (q *Queries) GetSandboxDeploymentSnapshot(ctx context.Context) (GetSandboxD
 		&i.RuntimeDeployment.IdleSeconds,
 		&i.Allocations,
 		&i.Pending,
+		&i.Running,
 		&i.Remaining,
 		&i.Rollout,
 	)

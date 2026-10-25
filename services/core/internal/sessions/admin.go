@@ -1,7 +1,6 @@
 package sessions
 
 import (
-	"context"
 	"time"
 )
 
@@ -27,19 +26,4 @@ type AdminAssetCounts struct {
 	Files                int64 `json:"files" binding:"required"`
 	Vaults               int64 `json:"vaults" binding:"required"`
 	Credentials          int64 `json:"credentials" binding:"required"`
-}
-
-// AdminReader reads the administrator's cross-Project Session views.
-type AdminReader interface {
-	// ListAdminRuntimeTargets pages the live Sessions of the tenants by
-	// creation time, then ID, ascending or descending, after the Session
-	// after. A limit outside 1 to 100 or a malformed tenant is
-	// ErrInvalidInput; an after Session that is malformed, deleted or
-	// outside the tenants is ErrNotFound.
-	ListAdminRuntimeTargets(ctx context.Context, tenants []string, after string, limit int, ascending bool) (AdminRuntimeTargetPage, error)
-	// ReadAdminSummary counts the tenant's assets and visits each live Session
-	// the filter selects, with GetSession's activity and the ID of the key that
-	// created it, nil when none is recorded, from one read-only snapshot. A
-	// malformed tenant is ErrInvalidInput; an error from visit ends the read.
-	ReadAdminSummary(ctx context.Context, tenant string, filter AdminSummaryFilter, visit func(Session, *string) error) (AdminAssetCounts, error)
 }

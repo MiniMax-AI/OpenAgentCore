@@ -33,13 +33,13 @@ func TestRuntimePreparationUnavailablePreventsNativeExecutor(t *testing.T) {
 				calls.Add(1)
 				return nil, errors.New("native factory must not be reached")
 			})
-			installation := os.Getenv("OAC_RUNTIME_CAPABILITY_DIRECTORY")
+			installation := preparationDirectories.capabilities
 			if info, err := os.Stat(installation); err != nil || !info.IsDir() {
 				t.Fatalf("capability fixture is unavailable: %v", err)
 			}
 			request := preparationRequest()
 			request.Configuration.LocalEnvironment.Capabilities = true
-			request.Configuration.LocalEnvironment.CapabilitySources = &agentcapabilities.Input{Directories: []string{source}}
+			request.Configuration.LocalEnvironment.CapabilitySources = &proto.CapabilitySources{Directories: []string{source}}
 			if err := r.Handle(t.Context(), mustEnv(t, proto.TypeExecutionPrepare, "missing-capability", request)); err != nil {
 				t.Fatalf("valid frozen selection rejected before preparation: %v", err)
 			}

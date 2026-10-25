@@ -36,11 +36,11 @@ func helperTurn(scanner *bufio.Scanner, request *startRequest) (func(bridgeEvent
 		os.Exit(4)
 	}
 	var start struct {
-		Type   string          `json:"type"`
-		TurnID string          `json:"turn_id"`
-		Input  json.RawMessage `json:"input"`
+		Type   string             `json:"type"`
+		TurnID string             `json:"turn_id"`
+		Input  proto.MessageInput `json:"input"`
 	}
-	if json.Unmarshal(scanner.Bytes(), &start) != nil || start.Type != "turn_start" || start.TurnID == "" || json.Unmarshal(start.Input, &request.Input) != nil {
+	if json.Unmarshal(scanner.Bytes(), &start) != nil || start.Type != "turn_start" || start.TurnID == "" {
 		os.Exit(5)
 	}
 	return helperTurnOutput(scanner, start.TurnID)

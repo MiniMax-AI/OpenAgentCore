@@ -68,9 +68,26 @@ func TestSubagentProfileRejectsRequirementsThatForceUnobservableFeatures(t *test
 
 func TestSubagentItemSnapshotSkipsUnmappedItemTypes(t *testing.T) {
 	for _, item := range []string{`{"type":"imageView","id":"i1","path":"/x.png"}`, `{"type":"contextCompaction","id":"c1"}`} {
-		kind, _, _, err := subagentItemSnapshot(json.RawMessage(item), "completed")
+		kind, _, _, err := subagentItemSnapshot(json.RawMessage(item), "completed", true)
 		if err != nil || kind != "" {
 			t.Fatal(item, kind, err)
+		}
+	}
+}
+
+func TestSubagentReasoningIsReportedOnlyWhenRequestedWithText(t *testing.T) {
+	for _, test := range []struct {
+		item      string
+		requested bool
+		want      string
+	}{
+		{`{"type":"reasoning","id":"r1","summary":["plan","next"]}`, true, `{"status":"completed","summary":[{"text":"plan","type":"summary_text"},{"text":"next","type":"summary_text"}]}`},
+		{`{"type":"reasoning","id":"r1","summary":["plan"]}`, false, ""},
+		{`{"type":"reasoning","id":"r1"}`, true, ""},
+	} {
+		kind, body, _, err := subagentItemSnapshot(json.RawMessage(test.item), "completed", test.requested)
+		if err != nil || string(body) != test.want || (kind == "") != (test.want == "") {
+			t.Fatal(test.item, test.requested, kind, string(body), err)
 		}
 	}
 }

@@ -1,6 +1,6 @@
 # Codex Runtime
 
-The Codex adapter ([`agent/codex`](../../../../apps/daemon/internal/agent/codex)) runs the native Codex CLI through its app-server protocol inside the daemon. This page holds the Codex-specific adapter rules, the Codex Runtime image and the Docker sandbox settings that every Docker Runtime uses. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
+The Codex adapter ([`agent/codex`](../../../../apps/daemon/internal/agent/codex)) runs the native Codex CLI through its app-server protocol inside the daemon. This page holds the Codex-specific adapter rules, and the Codex Runtime image. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
 Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 
@@ -12,9 +12,11 @@ The adapter accepts only Codex `0.153.4`: installation and recovery checks requi
 
 Codex accepts only the `responses` model protocol ([`harnessconfig/codex`](../../../../internal/harnessconfig/codex/declaration.go)). A Chat Completions or Anthropic provider is rejected; nothing converts between protocols. [Model execution](../../../../contracts/agents-api/model-execution.md#deployment-defaults) owns provider selection, including the per-Harness deployment default.
 
-Each Session has its own `CODEX_HOME` at `<StateRoot>/daemon/agent-sessions/<state key>/`, where the Runtime supplies `<StateRoot>` from the [state directory setting](../../../../docs/configuration.md#runtime-resource-directories). Native history stays there; Runtime device credentials stay in the Runtime home. The state layout alone does not qualify cross-node native continuation. The adapter regenerates that directory's `config.toml` on every prompt: the Session's frozen provider bundle becomes the `[model_providers.oac]` block, with `wire_api` `responses`, and the thread is pinned to that provider, so Codex never falls back to its built-in `openai` provider. Provider bearer credentials use the native `env_key` reference and enter the model-loop child process environment; they are not written into retained `config.toml`. The adapter excludes that variable from native shell environments with `shell_environment_policy.exclude` and disables `shell_snapshot`, whose capture in the pinned native version can otherwise persist the model-loop environment. This retains native thread history without retaining native shell snapshots; it introduces no user setting.
+Each Session has its own `CODEX_HOME` at `<StateRoot>/daemon/agent-sessions/<state key>/`, where the Runtime supplies `<StateRoot>` from the [state directory setting](../../../../docs/configuration.md#runtime-resource-directories). Native history stays there; Runtime device credentials stay in the Runtime home. Codex's SQLite databases, `CODEX_SQLITE_HOME`, take the same path under the Runtime home on the compute's own disk, because on NFS workspace storage they made preparing each new Session about 1.1 s slower. Compute replacement loses nothing the Session needs: Codex rebuilds its thread index and history views from the rollouts in `CODEX_HOME` and reads a thread's dynamic tools from its rollout, goals are disabled as described below, and the adapter uses none of the other databases. The state layout alone does not qualify cross-node native continuation. The adapter regenerates that directory's `config.toml` on every prompt: the Session's frozen provider bundle becomes the `[model_providers.oac]` block, with `wire_api` `responses`, and the thread is pinned to that provider, so Codex never falls back to its built-in `openai` provider. Provider bearer credentials use the native `env_key` reference and enter the model-loop child process environment; they are not written into retained `config.toml`. The adapter excludes that variable from native shell environments with `shell_environment_policy.exclude` and disables `shell_snapshot`, whose capture in the pinned native version can otherwise persist the model-loop environment. This retains native thread history without retaining native shell snapshots; it introduces no user setting.
 
 By default Codex retries a failed model connection forever, waiting up to 60 seconds between attempts, so a Turn whose model host is unreachable stays in progress with no events. The adapter disables that `unbounded_connection_retries` feature, so Codex falls back to its bounded defaults: up to 4 retries per request and 5 per response stream. A model host that does not resolve or refuses connections then fails the Turn with `connection_failed` within about a minute, depending on how long each lookup or connection attempt takes. Retries start only after a request fails, so slow responses are unaffected, and a stream still ends after Codex's 300 seconds without data. Codex sets no connect timeout: against a host that silently drops connections, each of the 30 attempts waits for the operating system's connect timeout.
+
+Codex's `goals` feature is on by default: when a thread with an active goal goes idle, Codex starts another turn toward the goal on its own, so its tools and model calls would keep running after the Turn ends, outside any Turn the API reports. The adapter disables it, so the model is not offered `create_goal`, `get_goal` or `update_goal`.
 
 ## Execution controls
 
@@ -23,7 +25,7 @@ The adapter applies Core's typed controls and opt-ins, described in the [Runtime
 - **`environment: none`.** The daemon forces `CODEX_EXEC_SERVER_URL=none` and confirms that Codex reports its `local` and `remote` environments as unknown before it starts or resumes a thread; a binary that cannot do this fails closed. The engine process runs on the bound device, which is not a user execution environment.
 - **Web search.** The control becomes Codex's `web_search` option (`disabled`, `cached` or `live`) with `tools.web_search` `context_size`, `allowed_domains` and `location`.
 - **Programmatic tool calling.** `enabled: true` turns on the native `code_mode` feature. An explicit disable turns off the native `code_mode`, `code_mode_only` and `code_mode_prewarm` features and checks managed requirements before a thread starts or resumes, rejecting a conflicting requirement.
-- **Reasoning, service tier and verbosity.** `reasoning.effort` and `reasoning.summary` become `model_reasoning_effort` and `model_reasoning_summary`, a non-`auto` service tier becomes `service_tier` and the text verbosity becomes `model_verbosity`.
+- **Reasoning, service tier and verbosity.** `reasoning.effort` and `reasoning.summary` become `model_reasoning_effort` and `model_reasoning_summary`, a null `reasoning.summary`, the official default, becomes `none` because Codex's own default depends on the model, a non-`auto` service tier becomes `service_tier` and the text verbosity becomes `model_verbosity`.
 - **Subagents.** Disabling Subagents turns off both native multi-agent feature generations, `multi_agent` and `multi_agent_v2`, overriding the operator's feature preferences.
 
 ## MCP servers
@@ -62,16 +64,16 @@ Codex `0.153.4` reports a provider HTTP 400 as `other` and puts the provider's e
 
 ## Runtime image
 
-[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` executable and `codex-resources`.
+[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` and `codex-code-mode-host` executables and `codex-resources`. Native `code_mode` runs its scripts in `codex-code-mode-host`, which Codex finds beside its executable.
 
 | Item | Value |
 | --- | --- |
-| Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep`, the same base and package layer as the Claude and MiniMax images |
-| Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex` (mode 0555) and `/usr/local/codex-resources` |
+| Base | The [shared Runtime base](../../../../docs/maintainers.md#runtime-images-and-helpers) |
+| Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex`, `/usr/local/bin/codex-code-mode-host` (mode 0555) and `/usr/local/codex-resources` |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
-The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executable and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).
+The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executables and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).
 
 The [Docker adapter](../../../../docs/sandbox-provider.md#docker-adapter) owns the shared container lifecycle and isolation settings.

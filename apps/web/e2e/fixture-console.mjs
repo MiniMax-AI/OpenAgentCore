@@ -82,18 +82,18 @@ function nodeRollout(previous = 0) {
 }
 
 function unconfiguredDeployment(generation = 0, ownerEpoch = 3) {
-  return { installation_id: INSTALLATION_ID, provider: "", credential_configured: false, core_url: publicUrl(), reset: null, rollout: noNodeRollout(), owner_epoch: ownerEpoch, generation, mode: "", resources: { allocations: 0, pending: 0 }, suspension: null };
+  return { installation_id: INSTALLATION_ID, provider: "", credential_configured: false, core_url: publicUrl(), reset: null, rollout: noNodeRollout(), owner_epoch: ownerEpoch, generation, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, suspension: null };
 }
 
 function configuredDeployment() {
-  return { installation_id: INSTALLATION_ID, provider: "docker", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 } }, specification_digest: "fixture", suspension: null };
+  return { installation_id: INSTALLATION_ID, provider: "docker", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 } }, specification_digest: "fixture", suspension: null };
 }
 /** The E2B template build as Core read it when the selection was saved. */
 const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
 
 // E2B runs sandboxes in its cloud: no nodes, only what Core holds there.
 function e2bDeployment() {
-  return { ...configuredDeployment(), provider: "e2b", mode: "direct", rollout: noNodeRollout(), resources: { allocations: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, configuration: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } };
+  return { ...configuredDeployment(), provider: "e2b", mode: "direct", rollout: noNodeRollout(), resources: { allocations: 3, running: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, configuration: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } };
 }
 
 function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", installers = true, artifacts = "docker,microsandbox") {
@@ -293,7 +293,7 @@ function adminRead(response, path, url) {
     if (m[2] === "diagnostics") {
       const failedTurn = (state.turns.get(session.id) ?? []).findLast((turn) => turn.status === "failed");
       return send(response, 200, { object: "core.session_diagnostics", session_id: session.id, status: session.status,
-        failure: session.status === "failed" ? { source: failedTurn ? "turn" : "environment_input", ...(failedTurn ? { turn_id: failedTurn.id } : {}), code: "internal_error", params: {}, failed_at: null } : null });
+        failure: session.status === "failed" ? { source: failedTurn ? "turn" : "environment_input", ...(failedTurn ? { turn_id: failedTurn.id } : {}), code: "internal_error", params: {}, failed_at: null } : null, initialization_steps: [] });
     }
     const diagnostics = m[2].match(/^turns\/([^/]+)\/diagnostics$/);
     if (diagnostics) {
@@ -342,8 +342,9 @@ async function sandboxRoute(request, response, path, url) {
       ["https://api.e2b.app", "e2b.app"],
     ].some(([apiURL, domain]) => input.configuration?.api_url === apiURL && input.configuration?.domain === domain);
     if (input.credential?.api_key !== "fixture-private-key" || !knownEndpoint) return error(response, 400, "Invalid E2B connection.");
-    if (!input.query?.template) return send(response, 200, { templates: [{ id: "template", names: ["fixture-runtime"] }] });
-    return send(response, 200, { builds: [{ id: "94be54a1-138c-4f30-bc87-b13686272dbe", cpus: 2, memory_mib: 2048 }] });
+    if (input.query?.field !== "template") return error(response, 400, "Invalid discovery field.");
+    if (input.query.path.length === 0) return send(response, 200, { options: [{ value: "template", label: "fixture-runtime · template", complete: false }] });
+    return send(response, 200, { options: [{ value: "template:94be54a1-138c-4f30-bc87-b13686272dbe", label: "94be54a1-138c-4f30-bc87-b13686272dbe", resources: { cpus: 2, memory_mib: 2048 }, complete: true }] });
   }
   // Retired even for authenticated callers; never reinterpret maintenance as reset.
   if (path === "/deployment/maintenance") return error(response, 404, "Not found.");
@@ -418,7 +419,7 @@ async function sandboxRoute(request, response, path, url) {
     if (!initialize && !e2b) {
       for (const node of state.nodes) node.rollout = { state: node.online ? "preparing" : "unknown", ready_generation: node.rollout.ready_generation };
     }
-    const held = initialize ? { allocations: 0, pending: 0 } : previous.resources;
+    const held = initialize ? { allocations: 0, running: 0, pending: 0 } : previous.resources;
     state.deployment = {
       ...configuredDeployment(), provider: input.provider, mode: e2b ? "direct" : "nodes",
       generation: previous.generation + 1, owner_epoch: previous.owner_epoch,
@@ -533,7 +534,7 @@ const tokenLimit = (value) => value === undefined || (Number.isInteger(value) &&
 const jsonKind = (value) => Array.isArray(value) ? "an array" : typeof value === "string" ? "a string" : typeof value === "boolean" ? "a boolean" : Number.isInteger(value) ? "an integer" : "a number";
 
 /** The first rule a provider body breaks, in Core's order and words; null when valid. */
-function providerProblem(harness, input) {
+function providerProblem(input) {
   if (Object.keys(input).some((key) => !PROVIDER_FIELDS.has(key)) || ["protocol", "base_url", "api_key"].some((key) => typeof input[key] !== "string") ||
     !tokenLimit(input.context_window) || !tokenLimit(input.max_output_tokens)) return PROVIDER_SHAPE;
   if (!httpsBase(input.base_url)) return "model provider requires an HTTPS base_url without credentials, query or fragment";
@@ -581,7 +582,7 @@ async function harnessRoute(request, response, path) {
   if (typeof input.model !== "string" || !input.model.trim()) return error(response, 400, "A model ID is required.", "model_configuration_model_invalid");
   if (input.harness_config !== undefined && (!input.harness_config || typeof input.harness_config !== "object" || Array.isArray(input.harness_config))) return error(response, 400, "Harness configuration must be an object.", "harness_config_invalid");
   if (!support(harness).protocols.includes(input.model_provider?.protocol)) return error(response, 400, "This harness does not support this protocol.", "model_provider_protocol_unsupported");
-  const problem = providerProblem(harness, input.model_provider ?? {});
+  const problem = providerProblem(input.model_provider ?? {});
   if (problem) return error(response, 400, problem, "invalid_request_error");
   entry.provider = {
     object: "core.model_configuration", harness, model: input.model, harness_config: input.harness_config ?? {},

@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestCapabilityPathsStayRuntimeOwnedAndDoNotGateReads(t *testing.T) {
 	binding, request := testBinding(t)
 	request.LocalEnvironment.CapabilityRoot = "/caller/installation"
-	request.LocalEnvironment.Skills = []agentcapabilities.InstalledSkill{{RelativeRoot: "caller/private", PackageRoot: "caller", InstallationRoot: "/caller/installation"}}
+	request.LocalEnvironment.Skills = []proto.InstalledSkill{{RelativeRoot: "caller/private", PackageRoot: "caller", InstallationRoot: "/caller/installation"}}
 	secret := "private-mcp-marker"
 	request.LocalEnvironment.MCP = []proto.EnvironmentMCP{{PackageRoot: "caller/private", BearerToken: &secret}}
 	raw, err := json.Marshal(request.LocalEnvironment)

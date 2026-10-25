@@ -52,8 +52,8 @@ type SessionPlan struct {
 	// SystemPrompt is forwarded as developerInstructions on thread/start.
 	SystemPrompt string
 
-	// ModelReasoningEffort is frozen for launch and every native Turn.
-	ModelReasoningEffort string
+	// ReasoningSummary reports that the Agent requested reasoning summaries.
+	ReasoningSummary bool
 
 	// OutputSchema is the frozen public JSON Schema sent as outputSchema on every
 	// native root Turn.
@@ -78,10 +78,11 @@ type SessionPlan struct {
 func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
 	plan := SessionPlan{
 		// Harnesses run unattended: Codex never offers its ask-the-user tool,
-		// and an unreachable model host fails the Turn after the provider's
-		// bounded retries instead of waiting for the network forever.
+		// an unreachable model host fails the Turn after the provider's
+		// bounded retries instead of waiting for the network forever, and no
+		// goal starts native turns of its own after the Turn ends.
 		ExtraConfig:     [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
-		DisableFeatures: []string{"unbounded_connection_retries"},
+		DisableFeatures: []string{"unbounded_connection_retries", "goals"},
 		Cleanup:         func() {},
 	}
 
@@ -100,7 +101,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 	plan.Model = stringOpt(opts, "model")
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
 
-	codexHome, err := allocCodexHome(stateRoot, agentStateKey)
+	codexHome, err := allocSessionDir(stateRoot, agentStateKey)
 	if err != nil {
 		return plan, err
 	}
@@ -160,10 +161,14 @@ func excludeFromShellEnvironment(plan *SessionPlan, pattern string) {
 // absent control sends nothing, so Codex keeps its native default; Codex itself
 // ignores a value the selected model does not support.
 func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls) {
+	set := func(key, value string) { plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value}) }
+	if controls == nil || controls.ReasoningSummary == "" {
+		// The official default is no reasoning summary, while Codex defaults to a model-dependent one.
+		set("model_reasoning_summary", strconv("none"))
+	}
 	if controls == nil {
 		return
 	}
-	set := func(key, value string) { plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value}) }
 	if search := controls.WebSearch; search != nil {
 		set("web_search", strconv(search.Mode))
 		set("tools.web_search.context_size", strconv(search.ContextSize))
@@ -189,10 +194,10 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 		plan.OutputSchema = format.Schema
 	}
 	if controls.ReasoningEffort != "" {
-		plan.ModelReasoningEffort = controls.ReasoningEffort
 		set("model_reasoning_effort", strconv(controls.ReasoningEffort))
 	}
 	if controls.ReasoningSummary != "" {
+		plan.ReasoningSummary = true
 		set("model_reasoning_summary", strconv(controls.ReasoningSummary))
 	}
 	if controls.ServiceTier != "" {
@@ -207,9 +212,9 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 // helpers
 // ---------------------------------------------------------------------------
 
-func allocCodexHome(root, agentStateKey string) (string, error) {
+func allocSessionDir(root, agentStateKey string) (string, error) {
 	if strings.TrimSpace(agentStateKey) == "" {
-		return "", fmt.Errorf("codex: agentStateKey required for CODEX_HOME allocation")
+		return "", fmt.Errorf("codex: agentStateKey required for a Session directory")
 	}
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
 		return "", fmt.Errorf("codex: state root must be a clean absolute directory")
@@ -227,7 +232,7 @@ func allocCodexHome(root, agentStateKey string) (string, error) {
 	dirParts := append([]string{root, "daemon", "agent-sessions"}, safeParts...)
 	dir := filepath.Join(dirParts...)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("codex: create CODEX_HOME %s: %w", dir, err)
+		return "", fmt.Errorf("codex: create Session directory %s: %w", dir, err)
 	}
 	return dir, nil
 }

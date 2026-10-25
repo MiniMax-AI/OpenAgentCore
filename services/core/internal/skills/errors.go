@@ -12,6 +12,9 @@ var (
 	// Malformed identifiers and other tenants' resources are indistinguishable
 	// from missing ones.
 	ErrNotFound = errors.New("skill not found")
+	// ErrVersionNotFound reports a version number that names no version of an
+	// existing Skill.
+	ErrVersionNotFound = errors.New("skill version not found")
 	// ErrInvalidInput reports an invalid archive, version, page limit or tenant.
 	ErrInvalidInput = errors.New("invalid skill request")
 	// ErrDefaultVersion rejects deleting the default version while other

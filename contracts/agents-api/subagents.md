@@ -24,7 +24,7 @@ Lists use `after`, `limit` (default 20) and `order` (default `desc`) and return 
 Child work appears only on the Subagent routes.
 
 - Session `turns.list` and `turns.retrieve` return root Turns only. A child Turn ID, as a path or a list cursor, returns the same 404 as a missing Turn; Core's 404 message differs from the official one.
-- The Session event stream and the creation stream carry root work only: child Turns and their Items publish no `agent.session.turn.*` or Item content events. `agent.session.subagent.*` events and root coordination Items stay. The creation stream still ends on the root's settled idle state.
+- The Session event stream and the creation stream carry root work only: child Turns and their Items publish no `agent.session.turn.*` or Item content events, except that a Subagent's function call publishes its `function_call` Item once as `agent.session.turn.item.added`, with the child Turn ID as `turn_id`. `agent.session.subagent.*` events and root coordination Items stay. The creation stream still ends on the root's settled idle state.
 - A child Turn's `agent_id` is the Session's Agent ID (a direct child's `parent_agent_id` and the `create_subagent_call` `agent_id`); `subagent_id` identifies the child. Nested children follow the same rule. Root Turns have `subagent_id: null`.
 - Session Items stay root-owned; inherited native parent transcripts are not child work. Session usage sums root Turns only.
 
@@ -32,7 +32,7 @@ Active includes idle. A successful close records the native time; a successful r
 
 ## Adapter contract
 
-Adapters report Subagent facts through `internal/agentdaemon/proto/subagents.go` over the existing authenticated Run and execution journal. There is no separate transport, scheduler or model and tool loop.
+Adapters report Subagent facts through `internal/agentdaemon/proto/subagents.go` over the authenticated Run and execution journal. There is no separate transport, scheduler or model and tool loop.
 
 | Fact | Adapter obligation |
 | --- | --- |

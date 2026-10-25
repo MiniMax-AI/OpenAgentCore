@@ -38,7 +38,7 @@ Every Agents API response, including errors and event streams, carries:
 
 ### Authentication
 
-`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. All keys of one Project act as the same caller: they share its resources and its Session creation retries. Core resolves the key and its Project in the database on every request, with no credential cache and a five-second timeout. Revoking a key or archiving its Project takes effect on the next request. All keys of a Project act as subject `service_account/project:<Project ID>`. [Projects and keys](./admin-api.md#projects-and-keys) describes key management.
+`/v1` accepts only a Project API key as `Authorization: Bearer <key>`. Core resolves the key and its Project in the database on every request, with no credential cache and a five-second timeout. Revoking a key or archiving its Project takes effect on the next request. All keys of a Project act as subject `service_account/project:<Project ID>`. [Projects and keys](./admin-api.md#projects-and-keys) describes key management.
 
 The optional `OpenAI-Organization` and `OpenAI-Project` headers must, when sent, appear once and equal `core` and `proj_<Project ID>`; any other value rejects the key.
 
@@ -126,7 +126,7 @@ A `limit` that is not a decimal integer, including an empty value, returns 400 `
 
 ### Cursors
 
-`after` names a resource of the same list, inside its already resolved parent and tenant. The parent is resolved first: a missing or foreign parent returns its 404 before the cursor is read. A cursor that does not resolve, whether random, malformed, of another type, of another parent, deleted or of another tenant, returns:
+`after` names a resource of the same list, inside its already resolved parent and tenant. The parent is resolved first: a missing or foreign parent returns its 404 before the cursor is read. A cursor that does not resolve, whether random, malformed, of another type, of another parent, deleted or of another tenant, returns the response below. A deleted Session still resolves as a Sessions cursor and the page continues from its position, as on the official service; a deleted Agent does not resolve:
 
 | Lists | Response |
 | --- | --- |
@@ -172,8 +172,11 @@ Agent create and update bodies and the inline `agent` of Session create are chec
 | Unsupported enum value | JSON path | `Invalid value: '<value>'. Supported values are: ...` with the pinned values |
 | Integer below minimum | JSON path | `Invalid '<path>': integer below minimum value. Expected a value >= 1, but got <n> instead.` |
 | Repeated function name, more than one `web_search`, more than one `tool_search` | null | `duplicate function tool name: <name>`, `duplicate web_search tool`, `duplicate tool_search tool` |
+| An MCP `server_label` outside `[A-Za-z0-9_-]`, or one repeated by a later tool | `tools[<i>].server_label` of the offending tool | A sentence stating the cause |
 | Function `parameters` with a string root `type` other than `object` | null | `Invalid schema for function '<name>': schema must be a JSON Schema of 'type: "object"', got 'type: "<type>"'.` |
 | `text.format` JSON schema with a string root `type` other than `object` | null | `agent.text.format.schema must have top-level type "object"; got "<type>"`, also on Agent requests |
+
+Session create and update, Vault create, Credential create and update, Environment Template create and update and Session events are checked the same way against their pinned bodies, before their own decoding. The param is the JSON path, such as `metadata`, `input[0].role`, `input[0].content[0].type`, `events[0].input[0].role`, `auth.type`, `auth.access_token`, `env.KEY` or `name`. `input` and a function result `output` take a string or an array, and any other type reports `expected a string or an array`. The Session `agent` and `environment` and the Template `network` keep their own parsers and are first checked to be objects. Rules the pinned schema does not express report the field as param with a message that names the rule: Vault and Credential `name` (1–256 UTF-8 bytes after trimming), Template `name` (1–256 characters), a nonempty `auth.token` and `auth.access_token`, an HTTPS `auth.mcp_server_url` and `auth.refresh.token_endpoint`, an RFC 3339 `auth.expires_at`, environment variable names (`env.<name>`) and a Credential update with nothing to change (param `auth`).
 
 Within one object Core reports a union's `type` first, then unknown members, then member values in document order, then missing members in the pinned schema's order; tools before `text`, and the whole object before the duplicate and schema-root checks. Schemas without a string root `type` are not checked. Function and output schemas, `request_metadata` and `x_agents_core` keep their own parsers. Update bodies and the inline Session agent are validated before the Agent lookup, so owned, foreign, missing and malformed Agent IDs give the same response.
 
@@ -187,7 +190,6 @@ A Session's effective configuration must also pass execution admission, which ap
 | --- | --- |
 | A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting, `programmatic_tool_calling` value or `text.verbosity` the Harness does not declare | A message naming the field, such as `reasoning.effort "max" is not supported by this Harness.`; see [tool policy](./execution-tools.md#web-search-and-programmatic-tool-calling) and [Harness capabilities](./harness-capabilities.md#execution-and-input) |
 | A function name that is blank or repeated | "Function names must be nonempty and unique." |
-| Two MCP servers with one label | "Execution requires distinct MCP server labels." |
 | A Harness that does not declare `retained_native_history`, on a sandbox provider that keeps every Environment on workspace storage ([Harness capabilities](./harness-capabilities.md)) | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
 A per-Session `tools` replacement admits a Session whose saved tools would be rejected. Support for each tool and Harness is in [execution and tools](./execution-tools.md).

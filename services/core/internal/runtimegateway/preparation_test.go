@@ -5,12 +5,11 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 )
 
 func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T) {
 	registry := NewRegistry()
-	s := newTestSession(newFakeConn(), "device", "tenant", "test", registry, nil)
+	s := newTestSession(newFakeConn(), "device", "test", registry, nil)
 	defer s.Close("test")
 	sub, err := s.SubscribePreparation("request")
 	if err != nil {
@@ -48,7 +47,7 @@ func TestPreparationSubscriptionHasNoRunIdentityAndOrdersRevisions(t *testing.T)
 
 func TestPreparationCloseAndOverflowDoNotInventRunEvents(t *testing.T) {
 	for _, overflow := range []bool{false, true} {
-		s := newTestSession(newFakeConn(), "device", "tenant", "test", NewRegistry(), nil)
+		s := newTestSession(newFakeConn(), "device", "test", NewRegistry(), nil)
 		sub, err := s.SubscribePreparation("request")
 		if err != nil {
 			t.Fatal(err)
@@ -74,12 +73,5 @@ func TestPreparationCloseAndOverflowDoNotInventRunEvents(t *testing.T) {
 			t.Fatal(sub.Err())
 		}
 		s.Close("test")
-	}
-}
-
-func TestPreparationCapabilitySurvivesHeartbeatMapping(t *testing.T) {
-	kinds := deviceKindsFromHeartbeat(proto.HeartbeatPayload{SupportedAgentKinds: []proto.SupportedAgentKind{{Kind: "codex", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{Preparation: proto.CapabilitySupported, LocalEnvironment: proto.CapabilitySupported, WorkspaceReadPreparation: proto.CapabilitySupported, NativeSessionRecovery: proto.CapabilitySupported})}}})
-	if len(kinds) != 1 || (!kinds[0].Capabilities.Preparation || !kinds[0].Capabilities.LocalEnvironment || !kinds[0].Capabilities.WorkspaceReadPreparation || !kinds[0].Capabilities.NativeSessionRecovery) {
-		t.Fatal("preparation capability lost")
 	}
 }

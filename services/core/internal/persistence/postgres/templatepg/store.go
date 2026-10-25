@@ -33,7 +33,6 @@ type Store struct {
 
 var (
 	_ environmenttemplates.Storage = (*Store)(nil)
-	_ environmenttemplates.Reader  = (*Store)(nil)
 )
 
 // New returns a Store that seals and opens confidential configuration with

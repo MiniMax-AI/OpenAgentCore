@@ -257,7 +257,6 @@ func TestRuntimeInitializationSetupUsesBashAndPhysicalWorkspace(t *testing.T) {
 func TestRuntimeInitializationMissingDependenciesAndInvalidRequests(t *testing.T) {
 	b := initializationFixture(t)
 	t.Setenv("PATH", t.TempDir())
-	t.Setenv("CLAUDE_CODE_GIT_BASH_PATH", "")
 	if err := b.initializeRuntime(t.Context(), proto.RuntimeInitialization{Action: "configure"}); err != nil {
 		t.Fatal(err)
 	}

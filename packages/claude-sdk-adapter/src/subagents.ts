@@ -15,7 +15,7 @@ export class Subagents {
   private session = "";
   private transcript = "";
   private hydrated = false;
-  constructor(private readonly cwd: string, private readonly limit: number, private resume: string | undefined, private readonly tools: ReadonlyMap<string, ToolIdentity> = new Map()) {
+  constructor(private readonly cwd: string, private readonly limit: number, private resume: string | undefined, private readonly tools: ReadonlyMap<string, ToolIdentity> = new Map(), private readonly reasoning = false) {
     if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("invalid_request");
   }
   get complete(): boolean { return this.pending.size === 0 && this.running.size === 0; }
@@ -63,7 +63,7 @@ export class Subagents {
     const id = this.actors.get(call);
     if (id === undefined) return;
     if (!this.transcript || !this.known.has(id)) throw new Error("native child history is missing");
-    const { facts } = await readHistory(this.session, this.transcript, this.cwd, { child: id, live: this.admitted, tools: this.tools });
+    const { facts } = await readHistory(this.session, this.transcript, this.cwd, { child: id, live: this.admitted, tools: this.tools, reasoning: this.reasoning });
     return { native_id: id, turn_id: facts[facts.length - 1].fact.turn_id as string, facts };
   }
   readonly stopped: HookCallback = async input => {
@@ -107,7 +107,7 @@ export class Subagents {
   async facts(cancelledAt?: number): Promise<Fact[]> {
     if (!this.session || !this.transcript) { if (!this.known.size) return []; throw new Error("native child history is missing"); }
     if (cancelledAt === undefined && (this.pending.size || this.running.size)) throw new Error("native child work is unsettled");
-    const history = await readHistory(this.session, this.transcript, this.cwd, { tools: this.tools, ...(cancelledAt === undefined ? {} : { cancelled: { at: cancelledAt, admitted: this.admitted } }) });
+    const history = await readHistory(this.session, this.transcript, this.cwd, { tools: this.tools, reasoning: this.reasoning, ...(cancelledAt === undefined ? {} : { cancelled: { at: cancelledAt, admitted: this.admitted } }) });
     if ([...this.known].some(id => !history.ids.includes(id))) throw new Error("native child history is missing");
     return history.facts.filter(event => event.type !== "subagent_coordination" || this.observedCalls.has(event.fact.id as string));
   }

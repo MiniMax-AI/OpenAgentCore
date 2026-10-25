@@ -3,6 +3,7 @@ package sandbox
 import (
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -20,5 +21,16 @@ func TestOperationGroupsPartitionTheInterface(t *testing.T) {
 	slices.Sort(groups)
 	if !slices.Equal(methods, groups) {
 		t.Fatalf("SandboxProvider operations %v, groups %v", methods, groups)
+	}
+}
+
+func TestSnapshotEvidenceIsBounded(t *testing.T) {
+	s := SnapshotIdentity{Compatibility: CheckpointCompatibility{ArtifactDomain: "domain", ExecutionClass: "class"}, Evidence: strings.Repeat("e", MaxSnapshotEvidenceBytes)}
+	if s.Validate() != nil {
+		t.Fatal("bounded evidence rejected")
+	}
+	s.Evidence += "e"
+	if s.Validate() == nil {
+		t.Fatal("oversized evidence accepted")
 	}
 }

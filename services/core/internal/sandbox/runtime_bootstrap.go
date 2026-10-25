@@ -8,5 +8,7 @@ func (b Bootstrap) RuntimeConnection() runtimebootstrap.Connection {
 	return runtimebootstrap.Connection{
 		Version: runtimebootstrap.Version, CoreURL: b.CoreURL,
 		DeviceID: b.DeviceID, Credential: b.Credential,
+		EnvironmentID: b.EnvironmentID, SessionID: b.SessionID, Workspace: runtimebootstrap.RuntimeWorkspace,
+		SuspendControl: b.SuspendControl,
 	}
 }

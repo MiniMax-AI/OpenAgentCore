@@ -76,11 +76,8 @@ def prepare_runtime():
     # Disable E2B's unused passwordless sudo account before unprivileged startup.
     subprocess.run(['usermod', '--lock', '--shell', '/usr/sbin/nologin', 'user'], check=True)
     environment = json.loads(IMAGE_ENV.read_text())
-    if (environment.get('OAC_RUNTIME_HOME') != '/home/runtime/.oac'
-            or environment.get('OAC_RUNTIME_WORKSPACE') != '/environment/workspace'
-            or any(key in environment for key in ['OAC_RUNTIME_ENVIRONMENT_ID',
-                                                 'OAC_RUNTIME_SESSION_ID'])):
-        raise ValueError('Image must contain an unbound packaged Runtime profile')
+    if environment.get('OAC_RUNTIME_HOME') != '/home/runtime/.oac':
+        raise ValueError('Image must contain the packaged Runtime profile')
     environment['PATH'] = '/usr/local/bin:/usr/bin:/bin'
     subprocess.run(['mount', '--bind', '/environment/workspace', '/workspace'], check=True)
     PROFILE.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -115,6 +112,7 @@ def initialize():
         child = subprocess.Popen(
             ['/usr/local/bin/oac-daemon', 'connect', '--profile', 'default',
              '--remote', payload['remote_url'], '--environment-id', payload['environment_id'],
+             '--workspace', '/environment/workspace',
              '--credential-file', str(credential)],
             cwd='/environment/workspace', env=environment, user=1000, group=1000,
             extra_groups=[], start_new_session=True, stdin=subprocess.DEVNULL,

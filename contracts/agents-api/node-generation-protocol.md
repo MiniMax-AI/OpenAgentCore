@@ -79,6 +79,7 @@ Each operation carries its own arguments and returns the following result on suc
 | `initial` | `Initial` | None | `compute` |
 | `new_compute` | `NewCompute` | Positive compute `generation` and optional `snapshot` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
+| `renew_compute` | `RenewCompute` | `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | None |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
 | `command_compute` | `RunCommandCompute` | `compute` and `command` | `command` |
@@ -98,6 +99,7 @@ The `response` frame carries `id` and `connection_id`. A successful response car
 | --- | --- |
 | `invalid`, `ownership`, `exists`, `not_found` | `ErrInvalid`, `ErrOwnership`, `ErrExists`, `ErrNotFound` |
 | `command_unconfirmed` | `ErrCommandUnconfirmed` |
+| `checkpoint_unusable` | `ErrCheckpointUnusable`, a `resume` outcome |
 | `observation_unavailable`, `runtime_not_running` | The observation outcomes |
 | `unsupported` | The operation is declared unsupported; see below |
 | `unconfirmed`, or any other value | The outcome is unknown |

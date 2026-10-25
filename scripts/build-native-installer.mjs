@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Package trusted, already-built native artifacts. This does not install on a host.
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 
-export const pins = { node: '22.22.0', codex: '0.153.4', claude: '0.3.269', minimax: '0.4.12' };
+export const pins = { node: '22.22.0', ...JSON.parse(readFileSync(new URL('./native-pins.json', import.meta.url), 'utf8')) };
 const platforms = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
 const architectures = { x64: 'amd64', arm64: 'arm64' };
 const inside = (root, path) => {
@@ -26,11 +27,12 @@ async function outputRealPath(path) {
 
 // Flatten contained links, including directory links used by pnpm exports. Every
 // traversal checks its resolved target; active ancestors detect directory cycles.
-export async function copyComponent(source, destination) {
+export async function copyComponent(source, destination, omit = []) {
   const root = await realpath(source);
   if (!(await stat(root)).isDirectory()) throw new Error('Component source must be a directory');
   const files = {};
   async function visit(path, target, ancestors) {
+    if (omit.includes(relative(destination, target).split(sep).join('/'))) return;
     const resolved = await realpath(path);
     if (!inside(root, resolved)) throw new Error('Component link escapes its source');
     const info = await stat(resolved);
@@ -65,6 +67,14 @@ function probe(command, args, cwd, env) {
   if (result.error || result.status !== 0) throw new Error('Native component compatibility probe failed');
   return result.stdout.trim();
 }
+// Files that only build or install tooling and that no Harness or the daemon loads at run time.
+// pnpm is the CI runner's global install, not part of the Node distribution. better-sqlite3 loads only
+// build/Release/better_sqlite3.node, with SQLite compiled in; deps/ and src/ are its compiler inputs.
+// Names cover the Unix and Windows layouts.
+const buildOnly = {
+  node: ['bin/pnpm', 'bin/pnpx', 'lib/node_modules/pnpm', 'node_modules/pnpm', 'pnpm', 'pnpm.cmd', 'pnpm.ps1', 'pnpx', 'pnpx.cmd', 'pnpx.ps1'],
+  minimax: ['native/node_modules/better-sqlite3/deps', 'native/node_modules/better-sqlite3/src', 'native/node_modules/better-sqlite3/binding.gyp'],
+};
 const json = async path => JSON.parse(await readFile(path, 'utf8'));
 const requireFile = async path => { if (!(await stat(path)).isFile()) throw new Error('Required component file is missing'); };
 
@@ -125,7 +135,7 @@ export async function validateComponents(root, names, daemonVersion) {
       await requireFile(join(component, 'pnpm-lock.yaml'));
       await requireFile(join(component, 'dist/main.js'));
       const info = JSON.parse(probe(node, [join(component, 'dist/runtime_check.js')], component, env));
-      if (info.type !== 'runtime_ready' || info.protocol !== 3 || info.sdk !== pins.claude || info.native !== '2.1.269 (Claude Code)' || !info.features?.includes('local_runtime_v2')) throw new Error('Claude runtime compatibility failed');
+      if (info.type !== 'runtime_ready' || info.protocol !== 3 || info.sdk !== pins.claude || !info.features?.includes('local_runtime_v2')) throw new Error('Claude runtime compatibility failed');
     } else if (name === 'minimax') {
       if (windows) throw new Error('MiniMax is not supported on Windows');
       const upstream = await json(join(component, 'source.json'));
@@ -159,7 +169,7 @@ export async function buildBundle(options) {
     await copyFile(options.daemon, daemon); await chmod(daemon, 0o755);
     await mkdir(join(staging, 'components'));
     const components = {};
-    for (const name of ['node', ...names]) components[name] = { version: pins[name], files: await copyComponent(options[name], join(staging, 'components', name)) };
+    for (const name of ['node', ...names]) components[name] = { version: pins[name], files: await copyComponent(options[name], join(staging, 'components', name), buildOnly[name]) };
     await prepareNodeEntrypoints(join(staging, 'components', 'node'), components.node.files);
     if (components.minimax) {
       const component = join(staging, 'components', 'minimax');

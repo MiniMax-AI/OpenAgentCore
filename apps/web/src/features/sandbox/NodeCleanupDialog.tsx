@@ -22,8 +22,8 @@ export interface NodeCleanup {
  * host (deploy/node/node_install.py `uninstall_system`).
  * The installer first confirms with Core, at the node's own address, that the
  * node is removed, which holds from the removal on. The command uses sudo unless the shell is already root. A node enrolled with an earlier address may find it gone; then
- * `--force` skips only that confirmation. It keeps Docker images and volumes and
- * deletes a microsandbox store once Core confirmed the removal; the uninstaller
+ * `--force` skips only that confirmation. It keeps images and volumes and
+ * deletes the sandbox store once Core confirmed the removal; the uninstaller
  * prints what it kept. Like Add node's, the command downloads from the installation's public
  * URL, which the dialog reads (again, if it is not at hand): until it is read, if
  * the read fails (with Try again), or while other machines can't use it, the
@@ -50,7 +50,7 @@ export function NodeCleanupDialog({ cleanup, open, onClose }: { cleanup: NodeCle
         ? join(t("To remove a node's service and files from its host, run this on the host."), t("Core must no longer list the node, so remove it on this page first. A host that never registered needs no removal."))
         : t("{{name}} is removed from Core. To remove its service and files from the host, run:", { name: cleanup.name })}</p>
       <CommandBlock key={command()} value={command()} label={t("Uninstall command")} autoFocus />
-      <p className="sandbox-cleanup-note">{t("It keeps Docker images and volumes; a microsandbox store goes once Core confirmed the removal.")}</p>
+      <p className="sandbox-cleanup-note">{t("It keeps images and volumes; the sandbox store goes once Core confirmed the removal.")}</p>
       {cleanup.oldAddress !== null ? <details className="sandbox-host-requirements">
         <summary>{t("Old Core address gone?")}</summary>
         <div className="sandbox-cleanup-details">

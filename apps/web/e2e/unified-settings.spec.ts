@@ -118,7 +118,7 @@ test("settings content width does not constrain the reset dialog backdrop", asyn
 test("reset progress actions stay inside settings on narrow screens", async ({ page, request }) => {
   await page.setViewportSize({ width: 375, height: 844 });
   await openConsole(page, request, "settings?id=sandbox");
-  await setDeployment(request, { resources: { allocations: 1, pending: 0 }, reset: { clear: "auto", requested_at: "2026-10-13T08:00:00Z", deadline_at: "2026-10-13T09:00:00Z", forced_at: null, remaining: { busy: 1, idle: 0, cleanup: 0, on_offline_nodes: 0, offline_nodes: [] } } });
+  await setDeployment(request, { resources: { allocations: 1, running: 1, pending: 0 }, reset: { clear: "auto", requested_at: "2026-10-13T08:00:00Z", deadline_at: "2026-10-13T09:00:00Z", forced_at: null, remaining: { busy: 1, idle: 0, cleanup: 0, on_offline_nodes: 0, offline_nodes: [] } } });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   const region = page.getByRole("region", { name: "Reset in progress" });
   await expect(region).toBeVisible();
@@ -150,4 +150,16 @@ test("a phone scrolls wide tables inside their frames and keeps every Settings t
   for (const tab of await tabs.all()) await expect(tab).toBeInViewport({ ratio: 1 });
   await expect(page.getByRole("table", { name: "Startup settings" }).getByRole("columnheader", { name: "Restarts", exact: true })).toBeInViewport({ ratio: 1 });
   expect(await pageScrollsSideways()).toBe(false);
+});
+
+test("skip to content moves focus to the page and keeps its route", async ({ page, request }) => {
+  await openConsole(page, request, "settings?id=storage");
+  const current = page.getByRole("navigation").getByRole("button", { name: "Workspace storage", exact: true });
+  await expect(current).toHaveAttribute("aria-current", "page");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#main-content")).toBeFocused();
+  await expect(current).toHaveAttribute("aria-current", "page");
+  expect(new URL(page.url()).hash).toBe("#settings?id=storage");
 });

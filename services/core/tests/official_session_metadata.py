@@ -51,13 +51,14 @@ def verify_session_metadata(client, other, invalid, spec, expect_error):
             expect_error(ConflictError, lambda: sessions.create(**spec, metadata=metadata, extra_headers=retry))
 
         invalid_fields = [
-            {"metadata": []}, {"metadata": "value"}, {"metadata": False},
-            {"agent": spec["agent"]}, {"environment": spec["environment"]},
-            {"tenant_id": str(uuid.uuid4())}, {"Metadata": {}},
+            ({"metadata": []}, "metadata"), ({"metadata": "value"}, "metadata"), ({"metadata": False}, "metadata"),
+            ({"agent": spec["agent"]}, "agent"), ({"environment": spec["environment"]}, "environment"),
+            ({"tenant_id": str(uuid.uuid4())}, "tenant_id"), ({"Metadata": {}}, "Metadata"),
         ]
-        for fields in invalid_fields:
+        for fields, param in invalid_fields:
             response = raw.post(url, headers=headers, json=fields)
-            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request"
+            assert response.status_code == 400 and response.json()["error"]["code"] == "invalid_request_error"
+            assert response.json()["error"]["param"] == param, response.text
             expect_error(BadRequestError, lambda: sessions.update(first.id, extra_body=fields))
             assert sessions.retrieve(first.id) == current
         # Metadata values and limits report the official code, param and message.

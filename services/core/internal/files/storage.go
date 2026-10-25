@@ -14,16 +14,3 @@ type Storage interface {
 	// Delete removes the File and its content, or returns ErrNotFound.
 	Delete(ctx context.Context, tenantID, fileID string) error
 }
-
-// Reader reads a tenant's Files.
-type Reader interface {
-	// Get returns the File's metadata, or ErrNotFound.
-	Get(ctx context.Context, tenantID, fileID string) (File, error)
-	// List returns one page. An After cursor that names no File of the tenant
-	// returns ErrNotFound.
-	List(ctx context.Context, tenantID string, query ListQuery) (Page, error)
-	// Read passes consume the File's metadata and content from one snapshot, so
-	// a concurrent Delete never truncates a read it admitted. It returns
-	// consume's error unchanged.
-	Read(ctx context.Context, tenantID, fileID string, consume func(File, io.Reader) error) error
-}

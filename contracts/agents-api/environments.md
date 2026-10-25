@@ -53,7 +53,7 @@ stateDiagram-v2
 
 Session environment events carry Session and Environment identity and an optional Turn identity, and never configuration, credentials, registration IDs or revisions. A Session's `required_actions` can contain `{type: "environment_connection", environment_id}`, separate from function calls. Environment connection, Session status and Turn status are independent.
 
-Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment derives its Project and immutable configuration from the owning Session. Its first state is `pending`. After the Session is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A Session with `none` has no Environment.
+Core creates the Environment record in the Session creation transaction; the Session upsert picks the retry winner, and retries never create or repair an Environment. The Environment derives its Project and immutable configuration from the owning Session. Its first state is `pending`; a `self_hosted` Environment reads `disconnected` until its first connection. After the Session is deleted, reads hide the Environment while Core keeps the record for settlement and cleanup. A Session with `none` has no Environment.
 
 A managed outer Environment must exclude broader application credentials and other tenants’ secrets.
 
@@ -222,7 +222,7 @@ Executor admission validates only the frozen descriptor. The preparation owner m
 The daemon runs as its launching account and never uses sudo or raises its permissions. Only user-directory dependencies install during preparation.
 
 - System dependencies must be preinstalled in the managed image or by the owner of a self-hosted machine. A missing executable or library fails the operation that needs it.
-- `packages.system` is rejected in Templates and inline configuration, including a null or empty list (400, param `packages.system`). Package responses still carry the official required `system: []`.
+- `packages.system` accepts null or an empty list, meaning no system packages, and rejects any other value in Templates and inline configuration (400, param `packages.system`). Package responses carry the official required `system: []`, so a read configuration can be sent back unchanged.
 - npm installs into a local prefix and Python/pip into a local target under the Runtime package directory; Node/npm and Python/pip must already be installed. Their dependencies are visible to native tools in every working directory.
 - Setup commands run with Bash; on Windows, Git Bash is required and no other shell substitutes. The default working directory is `/workspace`.
 - On Windows, npm installation and stdio MCP commands named `npm` or `npx` (including their `.cmd` shims) run through npm's JavaScript entry point with Node, without an extra shell.
@@ -255,6 +255,7 @@ stateDiagram-v2
 - Each file, Skill or Plugin transfer has a two-minute staging budget. Configure, package installation, setup commands and snapshot finalization share the whole initialization’s 30-minute budget, whose remaining duration Core carries on each operation and the Runtime enforces. Initial input keeps its five-minute admission deadline, so large installations should start from an idle Session.
 - A running initialization whose owner is lost, including across a Core restart, fails as unconfirmed; nothing is replayed. A completed Environment never reinstalls on reconnect or native recovery, so later user changes survive.
 - Failure is terminal for the Session but destroys neither compute nor files.
+- Every `openai_hosted` Environment starts `pending`, including one with no files or setup, and journals `agent.session.environment.pending` in the transaction that starts its initialization and `agent.session.environment.ready` in the one that completes it, each exactly once. Core journals `agent.session.environment.connected` when it observes the Runtime's connection, before or after `pending`. A `self_hosted` Environment emits neither `pending` nor `ready`, and starts `complete` unless it has files or setup.
 
 A failed initialization records the events and Session state that [Environment initialization failure](./sessions-events.md#environment-initialization-failure) defines. The reason names only the step and its exit status:
 
@@ -318,7 +319,7 @@ For comparison, an inline `openai_hosted` Session without a Template treats omit
 
 ### Preparation reuse
 
-Core may start a hosted Environment from the result of an earlier preparation in the same Project whose effective configuration, after Template composition, is identical, for up to 24 hours after that preparation. Each Session still gets its own copy. Setup commands and package installation then do not run again for this Session. Only `/environment` is reused (see the workspace filesystem scope); HOME and other compute-local changes are not. Setup must not create per-Session unique values, perform external side effects that must happen per Session, or fetch credentials that expire within 24 hours; configurations that need this must differ, for example in `env` or `files`. A Provider that does not declare the [preparation cache](../../docs/sandbox-provider.md#explicit-operation-contracts) always prepares in full.
+Core may start a hosted Environment from the result of an earlier preparation in the same Project whose effective configuration, after Template composition, is identical, for up to 24 hours after that preparation. Each Session still gets its own copy. Setup commands and package installation then do not run again for this Session. Only `/environment` is reused (see [Lifetime and filesystem scope](../../docs/workspace-provider.md#lifetime-and-filesystem-scope)); HOME and other compute-local changes are not. Setup must not create per-Session unique values, perform external side effects that must happen per Session, or fetch credentials that expire within 24 hours; configurations that need this must differ, for example in `env` or `files`. A Provider that does not declare the [preparation cache](../../docs/sandbox-provider.md#explicit-operation-contracts) always prepares in full.
 
 ### Restricted network
 
@@ -357,7 +358,7 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. The pinned SDK 3.13.0 drops a single file tuple during multipart extraction, so upload a single ZIP with raw HTTP. An upload holds at most 500 regular files and exactly one `SKILL.md`, 5 MiB compressed and 20 MiB expanded. [File resource semantics](./source-files.md#versions-and-metadata) owns default-version and deletion rules.
+The pinned `/v1/skills` resource, version and content routes use the Project API key without the Agents beta header. ZIP uploads use `files` and directory uploads repeated `files[]`. [Upload a bundle](./source-files.md#upload-a-bundle) owns the bundle format, upload limits and the SDK single-file limitation; [versions and metadata](./source-files.md#versions-and-metadata) owns default-version and deletion rules.
 
 A reference with an omitted or null version selects the default at Session creation, `"latest"` the latest version, and a positive version string that version. Template responses keep the unresolved selector (`version: null` for the default); Session metadata shows `{type, skill_id, version, name, description}` with a concrete version. A Session freezes the selected version's bytes and metadata in its creation transaction; later default changes, source deletion or Template updates cannot change it.
 
@@ -380,8 +381,7 @@ A Plugin is an inline ZIP with type, name and description whose single archive r
 
 Skills and their immutable versions are Project resources, independent of Sessions and native installations.
 
-- Version allocation and pointer changes serialize on the owning Skill row. The top-level name and description follow the default version in the same transaction; non-default uploads keep them. Version identities stay unique across concurrent uploads and deletion.
-- Bundles are encrypted with the service cipher, bound to Project, Skill and version. Metadata reads never load or decrypt bundles. Deleting a Skill reclaims its versions without affecting frozen Sessions.
+- Version allocation, default-version changes and serialization are defined in [Versions and metadata](./source-files.md#versions-and-metadata), and bundle encryption in [Upload a bundle](./source-files.md#upload-a-bundle). Metadata reads never load or decrypt bundles. Deleting a Skill reclaims its versions without affecting frozen Sessions.
 - References resolve inside the Session creation transaction, after the upsert establishes ownership. Referenced resources are locked in a stable order, and the version, metadata and bytes freeze together. Public reference metadata, unresolved Template intent and the resolved Runtime bundle stay distinct; a reference is never reported as inline.
 
 Inline and referenced Skills use the same confidential snapshot and installer. The Runtime installs them under `skills/<name>` in its capability root before setup and native execution. Adapters register only the selected Skill roots: Codex as explicit extra roots, MiniMax Code through its native catalog, and Claude as user Skills under its private state path, so native lists the bare names a local `~/.claude/skills` gives. Claude rejects a Skill that contains `.claude-plugin`, because native would load it as a plugin with its hooks and MCP servers. Skill roots activate no MCP servers; only [Plugin MCP](#plugin-mcp) does. Codex scans each Skill root recursively as it does locally, so a nested `SKILL.md` registers another native Skill. Native Harness configuration is never passed through wholesale.

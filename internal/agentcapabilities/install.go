@@ -7,12 +7,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentbundle"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentskill"
 )
 
-func InstallSkill(root *os.Root, archive []byte, metadata agentskill.Metadata) error {
+func InstallSkill(root *os.Root, archive []byte, metadata proto.SkillMetadata) error {
 	if unfinished(root) != nil {
 		return ErrInvalid
 	}
@@ -23,7 +25,7 @@ func InstallSkill(root *os.Root, archive []byte, metadata agentskill.Metadata) e
 	return writeTree(root, "skills/"+metadata.Name, files)
 }
 
-func InstallPlugin(root *os.Root, slot int, archive []byte, metadata agentplugin.Metadata) error {
+func InstallPlugin(root *os.Root, slot int, archive []byte, metadata proto.PluginMetadata) error {
 	if slot < 0 || slot >= 50 || unfinished(root) != nil {
 		return ErrInvalid
 	}
@@ -36,7 +38,7 @@ func InstallPlugin(root *os.Root, slot int, archive []byte, metadata agentplugin
 
 // Finalize captures declared directories once after setup and binds the snapshot.
 // It emits an installation artifact, not another lifecycle or public catalog.
-func Finalize(installed *os.Root, input Input, identity Identity, resolve DirectoryResolver) error {
+func Finalize(installed *os.Root, input proto.CapabilitySources, identity Identity, resolve DirectoryResolver) error {
 	digest, err := selectionHash(input)
 	if err != nil || validateIdentity(identity) != nil || (len(input.Directories) > 0 && resolve == nil) {
 		return ErrInvalid
@@ -47,7 +49,7 @@ func Finalize(installed *os.Root, input Input, identity Identity, resolve Direct
 	if validateStaged(installed, input) != nil {
 		return ErrInvalid
 	}
-	manifest := Manifest{Version: 1, Identity: identity, SelectionSHA256: digest, Skills: []InstalledSkill{}}
+	manifest := Manifest{Version: 1, Identity: identity, SelectionSHA256: digest, Skills: []proto.InstalledSkill{}}
 	total := 0
 	count := func(files []agentbundle.File) error {
 		for _, file := range files {
@@ -109,7 +111,7 @@ func Finalize(installed *os.Root, input Input, identity Identity, resolve Direct
 
 // Rebind gives an installation restored from an earlier preparation the identity
 // of this Session. The earlier preparation must have had the identical selection.
-func Rebind(installed *os.Root, manifest *Manifest, input Input, identity Identity) error {
+func Rebind(installed *os.Root, manifest *Manifest, input proto.CapabilitySources, identity Identity) error {
 	digest, err := selectionHash(input)
 	if err != nil || validateIdentity(identity) != nil || manifest.Version != 1 || manifest.SelectionSHA256 != digest {
 		return ErrInvalid
@@ -226,7 +228,7 @@ func Load(root *os.Root) (Manifest, error) {
 // Only selected, fully imported bundles may precede finalization. A leftover
 // directory capture or temporary manifest is an incomplete installation, not a
 // reason to silently recapture mutable sources.
-func validateStaged(root *os.Root, input Input) error {
+func validateStaged(root *os.Root, input proto.CapabilitySources) error {
 	expected := map[string]map[string]bool{"skills": {}, "plugins": {}}
 	for _, skill := range input.Skills {
 		expected["skills"][skill.Name] = true

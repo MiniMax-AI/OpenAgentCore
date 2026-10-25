@@ -107,19 +107,22 @@ func TestDiagnosticsHostedFailureOverridesInputWithoutParsingReason(t *testing.T
 	session := hostedFailureSession()
 	session.EnvironmentInputActivity = &sessions.EnvironmentInputActivity{Status: "failed", Failure: "environment_unavailable", LastActiveAt: time.Now()}
 	session.LastTurn = &sessions.Turn{ID: uuid.NewString(), SessionID: session.ID, Status: sessions.TurnFailed, Outcome: json.RawMessage(`{"error_code":"engine_failed"}`)}
-	step, index, exit := "setup", 2, 7
-	for _, detail := range []*sessions.ProvisioningFailureDetail{nil, {Step: &step, Index: &index, ExitCode: &exit}} {
+	step, index, exit, category := "setup", 2, 7, sessions.ProvisioningTimeout
+	session.EnvironmentInitializationSteps = []sessions.InitializationStep{{Step: "npm", DurationMS: 4100}, {Step: "setup", Index: &index, DurationMS: 5200}}
+	for _, detail := range []*sessions.ProvisioningFailureDetail{nil, {Step: &step, Index: &index, ExitCode: &exit}, {Category: &category}} {
 		session.EnvironmentFailure = &sessions.EnvironmentFailure{Reason: "private-secret-canary setup_commands[99] exit 254", Detail: detail}
 		h, _, _ := adminTestHandler(t, serveDiagnostics(diagnosticSnapshotStore{session: session}))
 		w := diagnosticRequest(h, adminSessionsPath+session.ID+"/diagnostics", "Bearer admin")
 		if w.Code != 200 || strings.Contains(w.Body.String(), "canary") || !strings.Contains(w.Body.String(), `"code":"environment_provisioning_failed"`) || !strings.Contains(w.Body.String(), `"source":"environment"`) {
 			t.Fatal(w.Code, w.Body)
 		}
-		want := `"params":{"exit_code":null,"index":null,"step":null}`
-		if detail != nil {
-			want = `"params":{"exit_code":7,"index":2,"step":"setup"}`
+		want := `"params":{"category":null,"exit_code":null,"index":null,"step":null}`
+		if detail != nil && detail.Step != nil {
+			want = `"params":{"category":null,"exit_code":7,"index":2,"step":"setup"}`
+		} else if detail != nil {
+			want = `"params":{"category":"timeout","exit_code":null,"index":null,"step":null}`
 		}
-		if !strings.Contains(w.Body.String(), want) || !strings.Contains(w.Body.String(), `"failed_at":null`) {
+		if !strings.Contains(w.Body.String(), `"initialization_steps":[{"step":"npm","index":null,"duration_ms":4100},{"step":"setup","index":2,"duration_ms":5200}]`) || !strings.Contains(w.Body.String(), want) || !strings.Contains(w.Body.String(), `"failed_at":null`) {
 			t.Fatal("historical reason parsed or time invented", w.Body)
 		}
 	}
@@ -130,5 +133,16 @@ func TestDiagnosticStatusMatchesOfficialSession(t *testing.T) {
 	diagnostic, _ := reflect.TypeFor[SessionDiagnostics]().FieldByName("Status")
 	if diagnostic.Type != official.Type || diagnostic.Tag.Get("enums") != official.Tag.Get("enums") {
 		t.Fatal("diagnostics must preserve the pinned official Session status set")
+	}
+}
+
+func TestDiagnosticStepEnumMatchesDeclaredLabels(t *testing.T) {
+	field, _ := reflect.TypeFor[InitializationStepTiming]().FieldByName("Step")
+	var declared []string
+	for _, label := range sessions.InitializationLabels {
+		declared = append(declared, string(label))
+	}
+	if field.Tag.Get("enums") != strings.Join(declared, ",") {
+		t.Fatal("OpenAPI step enum differs from the declared labels", field.Tag.Get("enums"))
 	}
 }

@@ -253,11 +253,11 @@ func TestExecutionDispatchSteeringAndNativeContinuity(t *testing.T) {
 		t.Fatal("steering retry changed identity")
 	}
 	h.write(first.TurnID, proto.TypePromptSteerAck, proto.PromptSteerAckPayload{InputID: input.InputID, Accepted: true})
-	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "Finished", Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread-1"}})
+	h.write(first.TurnID, proto.TypeDone, proto.DonePayload{Content: "Finished", Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7, OutputTokens: 3}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread-1"}})
 	done := h.finished(result, sessions.TurnCompleted)
 	var outcome execution.Result
 	_ = json.Unmarshal(done.Outcome, &outcome)
-	if outcome.AppliedThrough != second.Sequence || outcome.Done.Usage.InputTokens != 7 {
+	if outcome.AppliedThrough != second.Sequence || outcome.Done.Usage.Tokens.InputTokens != 7 {
 		t.Fatalf("missing result: %+v", outcome)
 	}
 	// Restart Core: a new Store and execution owner continue the native Session.
@@ -307,7 +307,7 @@ func TestExecutionCancellationRequiresReceiptAndSurvivesContextEnd(t *testing.T)
 			if withDone {
 				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 			}
-			outcome := &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}, Usage: proto.Usage{InputTokens: 10}}
+			outcome := &proto.DonePayload{Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}, Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 10}}}
 			h.write(first.TurnID, proto.TypeInteractionDecisionAck, proto.InteractionDecisionAckPayload{DeliveryID: cancel.DeliveryID, Applied: true, Outcome: outcome})
 			h.finished(result, sessions.TurnCancelled)
 			next := h.message("next", "Continue after cancellation")
@@ -347,7 +347,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 			case "disconnect":
 				h.conn.Close()
 			case "engine":
-				h.write(first.TurnID, proto.TypeUsage, proto.UsagePayload{Usage: proto.Usage{InputTokens: 13, OutputTokens: 7}})
+				h.write(first.TurnID, proto.TypeUsage, proto.UsagePayload{Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 13, OutputTokens: 7}}})
 				h.write(first.TurnID, proto.TypeError, proto.ErrorPayload{Error: "Engine failed"})
 				h.write(first.TurnID, proto.TypeDone, proto.DonePayload{})
 			case "late-input":
@@ -362,7 +362,7 @@ func TestExecutionFailureDoesNotBecomeSuccessOrReplay(t *testing.T) {
 			if kind == "engine" {
 				var outcome execution.Result
 				_ = json.Unmarshal(done.Outcome, &outcome)
-				if outcome.Done.Usage.InputTokens != 13 || outcome.Done.Usage.OutputTokens != 7 {
+				if outcome.Done.Usage.Tokens.InputTokens != 13 || outcome.Done.Usage.Tokens.OutputTokens != 7 {
 					t.Fatal("failed execution lost reported usage")
 				}
 			}
@@ -435,7 +435,7 @@ func TestExecutionRejectsRuntimeMissingCapabilityBeforeClaim(t *testing.T) {
 			for {
 				peer, _ := h.registry.LookupDevice(h.device.ID)
 				info, _, _ := peer.AgentKindStatus("codex")
-				if info.Capabilities.DurableInputReceipts == (missing != "durable_input_receipts") && info.Capabilities.Preparation == (missing != "preparation") && info.Capabilities.ExecutionControls == (missing != "execution_controls") && info.Capabilities.DurableTurns == (missing != "durable_turns") && info.Capabilities.SubagentControl == (missing != "subagent_control") && info.Capabilities.ToolObservations == (missing != "tool_observations") && info.Capabilities.EnvironmentNone == (missing != "environment_none") {
+				if info.Capabilities.DurableInputReceipts.IsSupported() == (missing != "durable_input_receipts") && info.Capabilities.Preparation.IsSupported() == (missing != "preparation") && info.Capabilities.ExecutionControls.IsSupported() == (missing != "execution_controls") && info.Capabilities.DurableTurns.IsSupported() == (missing != "durable_turns") && info.Capabilities.SubagentControl.IsSupported() == (missing != "subagent_control") && info.Capabilities.ToolObservations.IsSupported() == (missing != "tool_observations") && info.Capabilities.EnvironmentNone.IsSupported() == (missing != "environment_none") {
 					break
 				}
 				if time.Now().After(deadline) {

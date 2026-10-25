@@ -402,7 +402,7 @@ func (a *agent) executeWork(ctx context.Context, task work) {
 func logOperation(ctx context.Context, task work, started, finished time.Time, code string, err error) {
 	level := slog.LevelInfo
 	switch task.request.Operation {
-	case "info", "renew", "initial", "new_compute", "compute", "observe":
+	case "info", "renew", "initial", "new_compute", "compute", "renew_compute", "observe":
 		if code == "" {
 			level = slog.LevelDebug
 		}

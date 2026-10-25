@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/go-chi/chi/v5"
@@ -31,7 +33,7 @@ type SandboxMutationResponse struct {
 type SandboxEnrollmentTokenRequest struct {
 	// An omitted limit is derived from the node's host when it enrolls.
 	MaxActive *int `json:"max_active,omitempty"`
-	// Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+	// Providers without checkpoint support never suspend, so Core replaces this with max_active; the others use both limits.
 	MaxRetained *int `json:"max_retained,omitempty"`
 }
 
@@ -45,9 +47,9 @@ type Deployment interface {
 	UpdateNode(ctx context.Context, id string, update deployment.NodeUpdate) error
 	RemoveNode(ctx context.Context, id string) error
 	CreateEnrollment(ctx context.Context, limits deployment.EnrollmentLimits) (deployment.EnrollmentToken, error)
-	Enroll(ctx context.Context, token string, input deployment.Enrollment) (deployment.NodeIdentity, error)
+	Enroll(ctx context.Context, token string, input machineapi.NodeEnrollment) (deployment.NodeIdentity, error)
 	NodeConfiguration(ctx context.Context, nodeID, token string, generation uint64) (deployment.NodeConfiguration, error)
-	NodeStatus(ctx context.Context, nodeID, credential string) (deployment.NodeStatus, error)
+	NodeStatus(ctx context.Context, nodeID, credential string) (machineapi.NodeStatus, error)
 	// DecodeConfiguration decodes a submitted provider configuration and
 	// credential with the provider's declared codec.
 	DecodeConfiguration(provider string, public, credential json.RawMessage) (sandbox.Configuration, error)
@@ -85,7 +87,7 @@ func (h *Handler) registerSandboxManagerRoutes(r chi.Router) {
 }
 
 // @Summary Retrieve sandbox deployment
-// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields. E2B template_build values are those Core read when the selection was saved; this read does not call E2B.
+// @Description Core key only. Does not grant project resource access. Responses contain only explicit safe fields. Provider metadata is what Core read when the selection was saved; this read does not call the Provider.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -217,8 +219,8 @@ func (h *Handler) createSandboxEnrollment(w http.ResponseWriter, r *http.Request
 // @Produce json
 // @Security NodeEnrollmentAuth
 // @Accept json
-// @Param body body deployment.Enrollment true "Request"
-// @Success 201 {object} deployment.NodeIdentity
+// @Param body body machineapi.NodeEnrollment true "Request"
+// @Success 201 {object} machineapi.NodeIdentity
 // @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
 // @Router /api/v1/sandbox-node/enroll [post]
 func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +233,7 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var input deployment.Enrollment
+	var input machineapi.NodeEnrollment
 	if decodeInputObject(raw, &input, "node_id", "credential", "name", "provider", "backend_fingerprint", "deployment_generation", "specification_digest", "core_url", "cpu_count", "effective_cpu_cores", "total_memory_bytes", "available_disk_bytes") != nil {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
@@ -245,7 +247,7 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 		writeDeploymentError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, value)
+	writeJSON(w, http.StatusCreated, value.NodeIdentity)
 }
 
 // @Summary Recover an enrolled sandbox node identity and observe its readiness
@@ -254,7 +256,7 @@ func (h *Handler) enrollSandboxNode(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security NodeAuth
 // @Param node_id query string true "Sandbox node UUID"
-// @Success 200 {object} deployment.NodeStatus
+// @Success 200 {object} machineapi.NodeStatus
 // @Failure 400,401,404,409,500,503 {object} v1.ErrorResponse
 // @Router /api/v1/sandbox-node/identity [get]
 func (h *Handler) sandboxNodeIdentity(w http.ResponseWriter, r *http.Request) {

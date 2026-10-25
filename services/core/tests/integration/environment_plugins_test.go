@@ -8,7 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/google/uuid"
@@ -34,7 +35,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	if err := writer.Close(); err != nil {
 		t.Fatal(err)
 	}
-	setup := environmentconfig.Setup{Plugins: []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin-proof", Description: "A proof."}, Archive: archive.Bytes()}}, CapabilityDirectories: []string{"/workspace/generated"}}
+	setup := environmentconfig.Setup{Plugins: []environmentconfig.Plugin{{Metadata: proto.PluginMetadata{Type: "inline", Name: "plugin-proof", Description: "A proof."}, Archive: archive.Bytes()}}, CapabilityDirectories: []string{"/workspace/generated"}}
 	tenant, foreign := uuid.NewString(), uuid.NewString()
 	request := sessions.CreateSession{Creator: FixtureCreator(), Engine: "codex", IdempotencyKey: uuid.NewString(), Configuration: json.RawMessage(`{"environment":{"type":"openai_hosted"}}`), Initialization: setup}
 	session, err := s.CreateSession(t.Context(), tenant, request)
@@ -43,7 +44,7 @@ func TestPluginsFrozenInSession(t *testing.T) {
 	}
 	var cfg struct {
 		Environment struct {
-			Plugins     []agentplugin.Metadata `json:"plugins"`
+			Plugins     []proto.PluginMetadata `json:"plugins"`
 			Directories []string               `json:"capability_directories"`
 		} `json:"environment"`
 	}

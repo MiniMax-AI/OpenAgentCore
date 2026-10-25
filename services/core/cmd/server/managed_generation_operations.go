@@ -105,6 +105,17 @@ func (p *generationRouter) ResumeCompute(ctx context.Context, r sandbox.Referenc
 	defer done()
 	return v.ResumeCompute(ctx, r, c)
 }
+func (p *generationRouter) RenewCompute(ctx context.Context, r sandbox.Reference, c sandbox.Compute) (sandbox.ComputeState, error) {
+	if err := providercontract.Require(p, "RenewCompute"); err != nil {
+		return sandbox.ComputeState{}, err
+	}
+	v, done, err := p.route(ctx, r)
+	if err != nil {
+		return sandbox.ComputeState{}, err
+	}
+	defer done()
+	return v.RenewCompute(ctx, r, c)
+}
 func (p *generationRouter) RestorePreparation(ctx context.Context, r sandbox.Reference, key string) (bool, error) {
 	if err := providercontract.Require(p, "RestorePreparation"); err != nil {
 		return false, err

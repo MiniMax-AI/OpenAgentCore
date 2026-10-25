@@ -19,10 +19,9 @@ const (
 	// TypeOutputMessage carries opt-in native message boundaries and completion snapshots.
 	TypeOutputMessage = "output_message"
 
-	// TypeThinking carries an internal-thinking fragment. Gateway
-	// forwards as a plain EventDelta so existing renderers keep
-	// working.
-	TypeThinking = "thinking"
+	// TypeReasoning carries one native reasoning item: its text fragments while
+	// in progress and its terminal status.
+	TypeReasoning = "reasoning"
 
 	// TypeToolCall carries a tool invocation. Stage=="before" runs
 	// before the call, "after" runs after.
@@ -65,10 +64,19 @@ type OutputMessagePayload struct {
 	Text   *string `json:"text,omitempty"`
 }
 
-// ThinkingPayload carries an internal-thinking fragment.
-type ThinkingPayload struct {
-	Text     string `json:"text"`
-	Sequence uint64 `json:"sequence,omitempty"`
+// ReasoningPayload reports one native reasoning item. An in_progress frame
+// carries the next text fragment of native part Index, which is the current
+// part or the next one; the completed frame carries no text.
+type ReasoningPayload struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Index  int    `json:"index,omitempty"`
+	Delta  string `json:"delta,omitempty"`
+}
+
+// Valid reports whether p is a well-formed reasoning frame.
+func (p ReasoningPayload) Valid() bool {
+	return p.ID != "" && p.Index >= 0 && (p.Status == "in_progress" || (p.Status == "completed" && p.Delta == ""))
 }
 
 // ToolCallPayload carries a tool invocation event. Stage is "before"
@@ -110,13 +118,10 @@ type TokenUsage struct {
 // Tokens is absent when a complete, correctly scoped measurement is unavailable.
 // Core does not reconstruct token counts, prices or provider identity from Raw.
 type Usage struct {
-	Tokens       *TokenUsage    `json:"tokens,omitempty"`
-	Provider     string         `json:"provider,omitempty"`
-	Model        string         `json:"model,omitempty"`
-	InputTokens  int32          `json:"input_tokens,omitempty"`
-	OutputTokens int32          `json:"output_tokens,omitempty"`
-	CostUSD      float64        `json:"cost_usd,omitempty"`
-	Raw          map[string]any `json:"raw,omitempty"`
+	Tokens   *TokenUsage    `json:"tokens,omitempty"`
+	Provider string         `json:"provider,omitempty"`
+	Model    string         `json:"model,omitempty"`
+	Raw      map[string]any `json:"raw,omitempty"`
 }
 
 // UsagePayload carries a Usage update mid-stream.
@@ -138,7 +143,6 @@ type DonePayload struct {
 	// SourceCompletedAtMS freezes the native root completion before child settlement.
 	SourceCompletedAtMS *int64         `json:"source_completed_at_ms,omitempty"`
 	Content             string         `json:"content"`
-	Transcript          string         `json:"transcript,omitempty"`
 	Usage               Usage          `json:"usage,omitzero"`
 	Metadata            map[string]any `json:"metadata,omitempty"`
 }
@@ -199,8 +203,5 @@ type SupportedAgentKind struct {
 // HeartbeatPayload advertises only explicit engine descriptors. Missing
 // supported_agent_kinds establishes no engine availability or capabilities.
 type HeartbeatPayload struct {
-	Timestamp           int64                `json:"ts"`
-	ActiveRequests      int                  `json:"active_requests"`
-	DaemonVersion       string               `json:"daemon_version,omitempty"`
 	SupportedAgentKinds []SupportedAgentKind `json:"supported_agent_kinds,omitempty"`
 }

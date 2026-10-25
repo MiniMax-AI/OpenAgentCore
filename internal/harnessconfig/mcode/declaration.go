@@ -17,8 +17,9 @@ const FunctionServerLabel = "functions"
 // Whitespace-only text is unsupported because the native runtime refuses such
 // prompts with "Local message content or attachments are required.".
 var Declaration = harnessconfig.Declaration{
-	Kind:  "mcode",
-	Label: "MiniMax Code",
+	Kind:   "mcode",
+	Label:  "MiniMax Code",
+	Native: harnessconfig.NativePackage{Component: "minimax", Version: "0.4.12"},
 	Configuration: harnessconfig.Configuration{Providers: []harnessconfig.Provider{
 		{Protocol: "anthropic"},
 		{Protocol: "responses"},
@@ -66,6 +67,8 @@ var Declaration = harnessconfig.Declaration{
 	Placements:         []string{"none", "openai_hosted", "self_hosted"},
 	MCPOrigins:         []string{"service", "environment"},
 	WhitespaceOnlyText: proto.CapabilityUnsupported,
+	// Native MiniMax Code ignores global instructions (AGENTS.md) over 32 KiB.
+	MaxInstructionsBytes: 32 * 1024,
 	ValidateTools: func(functions []proto.FunctionTool, mcp []proto.MCPHTTPServer) error {
 		if err := harnessconfig.RequireObjectSchemas(functions); err != nil {
 			return err

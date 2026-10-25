@@ -229,13 +229,13 @@ test("preselects microsandbox and asks once before switching to Docker", async (
   await page.getByRole("button", { name: "Own machines" }).click();
   const microsandbox = page.getByRole("button", { name: "microsandbox Recommended" });
   const docker = page.getByRole("button", { name: "Docker", exact: true });
-  const confirm = page.getByRole("dialog", { name: "Use Docker instead of microsandbox?" });
+  const confirm = page.getByRole("dialog", { name: "Use Docker?" });
   const sizeStep = page.getByRole("heading", { name: "How big is each sandbox?" });
   await expect(microsandbox).toHaveAttribute("aria-pressed", "true");
 
   // Keeping microsandbox is the default action; it leaves microsandbox selected.
   await docker.click();
-  const keep = confirm.getByRole("button", { name: "Keep microsandbox" });
+  const keep = confirm.getByRole("button", { name: "Back" });
   await expect(keep).toBeFocused();
   await keep.click();
   await expect(confirm).toBeHidden();
@@ -258,8 +258,8 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
     if (sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/deployment")) submitted = sent.postDataJSON() as Record<string, unknown>;
   });
   await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
-  await page.getByRole("button", { name: "E2B cloud" }).click();
-  await expect(page.getByLabel("E2B provider")).toHaveValue("sandbase");
+  await page.getByRole("button", { name: "E2B", exact: true }).click();
+  await expect(page.getByLabel("Service")).toHaveValue("0");
   await expect(page.getByLabel("Sandbox API URL")).toHaveValue("https://sandbox.sandbase.ai");
   await expect(page.getByLabel("Sandbox data-plane domain")).toHaveValue("sandbox.sandbase.ai");
   const keyConsole = page.getByRole("link", { name: "Console → API keys" });
@@ -283,21 +283,20 @@ test("saves E2B without opening Add node, as it has no machines", async ({ page,
 
 test("uses the official E2B preset and clears a selected build when the key changes", async ({ page, request }) => {
   await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
-  await page.getByRole("button", { name: "E2B cloud" }).click();
-  await page.getByLabel("E2B provider").selectOption("official");
+  await page.getByRole("button", { name: "E2B", exact: true }).click();
+  await page.getByLabel("Service").selectOption("1");
   await expect(page.getByLabel("Sandbox API URL")).toHaveValue("https://api.e2b.app");
   await expect(page.getByLabel("Sandbox data-plane domain")).toHaveValue("e2b.app");
   const keyConsole = page.getByRole("link", { name: "Console → API keys" });
   await expect(keyConsole).toHaveAttribute("href", "https://e2b.dev/dashboard?tab=api-keys");
   await page.getByLabel("Sandbox API URL").fill("https://custom.e2b.app");
   await expect(keyConsole).toHaveCount(0);
-  await page.getByLabel("E2B provider").selectOption("custom");
+  await page.getByLabel("Service").selectOption("-1");
   await expect(keyConsole).toHaveCount(0);
-  await page.getByLabel("E2B provider").selectOption("official");
+  await page.getByLabel("Service").selectOption("1");
   await selectFixtureE2BBuild(page);
   await expect(page.getByRole("button", { name: "Next" })).toBeEnabled();
-  await page.getByLabel("E2B API key").fill("changed-fixture-key");
-  await expect(page.getByLabel("Template", { exact: true })).toHaveValue("");
+  await page.getByLabel("API key").fill("changed-fixture-key");
   await expect(page.getByLabel("Template build")).toHaveValue("");
   await expect(page.getByRole("button", { name: "Next" })).toBeDisabled();
 });
@@ -308,15 +307,15 @@ test("shows the retained E2B build while a replacement key is checked", async ({
   const edit = page.getByRole("dialog", { name: "Change resources" });
   const saved = "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b";
   await expect(edit.getByLabel("Template build")).toHaveValue(saved);
-  await edit.getByLabel("E2B API key").fill("replacement-fixture-key");
-  await expect(edit.getByLabel("Template build")).toHaveValue(saved);
+  await edit.getByLabel("API key").fill("replacement-fixture-key");
+  await expect(edit.getByLabel("Template build").first()).toContainText(saved);
   await expect(edit.getByRole("button", { name: "Next" })).toBeEnabled();
 });
 
 test("edits only the saved backend, preserving a custom size", async ({ page, request }) => {
   const current = { resources: { cpus: 7, memory_mib: 8192 } };
   let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, unknown: 0 } },
-    owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
+    owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
     suspension: null };
   let submitted: Record<string, unknown> | null = null;
   await page.route("**/core/v1/sandbox/deployment", async (route) => {
@@ -330,7 +329,7 @@ test("edits only the saved backend, preserving a custom size", async ({ page, re
   await openConsole(page, request, "settings?id=sandbox");
   await page.getByRole("button", { name: "Change resources" }).click();
   await expect(page.getByRole("button", { name: "Own machines" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "E2B cloud" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "E2B", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /^Current/ }).click();
   await page.getByRole("button", { name: "Save configuration" }).click();
   await expect.poll(() => submitted).toMatchObject({ provider: "docker", expected_generation: 1, resources: current.resources });
