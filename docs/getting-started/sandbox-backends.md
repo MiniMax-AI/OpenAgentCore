@@ -14,7 +14,7 @@ The installer selects no backend. One installation uses one backend. To change i
 | Nodes to add | Yes | Yes | None |
 | You provide | Linux amd64 hosts with systemd and `/dev/kvm` | Linux amd64 hosts with systemd and rootful Docker Engine | An E2B API key and a template; a public HTTPS URL for Core |
 | Isolation | Each sandbox has its own kernel | Containers share the node's kernel | E2B's |
-| Idle sandboxes suspend and resume | Yes, with checkpoints | No | No |
+| Idle sandboxes suspend and resume | Yes, with checkpoints | No | Yes, paused in place by E2B |
 | Workspace storage | Required, on NFS | Own disk | Own disk |
 | Disk limits | Root disk and workspace quota | None | Set by the template |
 

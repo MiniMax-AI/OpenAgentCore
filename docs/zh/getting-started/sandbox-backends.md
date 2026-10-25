@@ -1,7 +1,7 @@
 ---
 title: "选择沙箱提供商"
 source: docs/getting-started/sandbox-backends.md
-source_hash: 3426a92e14c9d0106ecdc2fa2d6e9188d3ba9fac53d2ee6ac70213bfe765dcd8
+source_hash: f49ddc14cc073e54f945a051ace5794821a4fcf41952158fb5a0e12046f41554
 ---
 
 比较 microsandbox、Docker 和 E2B，然后在 Web 中选择一个。本指南面向已完成[安装 Core 和 Web](./install.md)、需要为 Core 托管的 Session 提供计算资源的运维人员。
@@ -16,7 +16,7 @@ source_hash: 3426a92e14c9d0106ecdc2fa2d6e9188d3ba9fac53d2ee6ac70213bfe765dcd8
 | 需要添加节点 | 是 | 是 | 否 |
 | 你需要提供 | 带 systemd 和 `/dev/kvm` 的 Linux amd64 主机 | 带 systemd 和 rootful Docker Engine 的 Linux amd64 主机 | E2B API 密钥和模板；Core 的公共 HTTPS URL |
 | 隔离 | 每个沙箱有独立内核 | 容器共享节点内核 | 由 E2B 提供 |
-| 空闲沙箱可挂起和恢复 | 是，通过检查点 | 否 | 否 |
+| 空闲沙箱可挂起和恢复 | 是，通过检查点 | 否 | 是，由 E2B 原地暂停 |
 | 工作区存储 | 必需，使用 NFS | 自有磁盘 | 自有磁盘 |
 | 磁盘限制 | 根磁盘和工作区配额 | 无 | 由模板设置 |
 

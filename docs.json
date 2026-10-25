@@ -31,7 +31,8 @@
             "group": "Concepts",
             "pages": [
               "docs/concepts",
-              "docs/architecture"
+              "docs/architecture",
+              "docs/performance"
             ]
           }
         ]
