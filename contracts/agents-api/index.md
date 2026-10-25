@@ -112,6 +112,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - `env` cannot set `OPENAI_API_KEY`, which Core reserves ([env](./environments.md#env-and-setup-commands)); the official service accepts it.
 - A `self_hosted` Session without pending input requests no connection ([activity](./environments.md#activity-and-required-actions)); one unused official Session switched to `requires_action` with `environment_connection` about five minutes after creation, and its deletion then returned 409.
 - A hosted Environment emits `ready` once, when its initialization completes, and not again before each later Turn as one official Session did. It also emits `connected` and `disconnected`, which that Session did not.
+- The usual hosted order is `connected`, `pending`, `ready`, because Core journals `connected` when the Runtime connects, before it starts initialization; the last Environment event then reads `ready` while the Environment is `connected`.
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 

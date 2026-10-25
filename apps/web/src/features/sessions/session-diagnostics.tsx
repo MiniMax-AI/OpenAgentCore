@@ -4,6 +4,7 @@ import { createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../../components/console-ui";
+import { formatDuration } from "../../lib/format";
 import { diagnosticFailure, diagnosticNext, diagnosticReason } from "../../lib/diagnostic-failure";
 import { admin } from "../../lib/projects";
 import { sessionKey } from "./session-queries";
@@ -13,7 +14,7 @@ export const DiagnosticScope = createContext<Scope | null>(null);
 
 export function sessionDiagnosticsQuery(projectId: string, session: AgentSession) {
   return queryOptions({
-    queryKey: [...sessionKey(projectId, session.id), "diagnostics", "session", session.status, session.last_active_at],
+    queryKey: [...sessionKey(projectId, session.id), "diagnostics", "session", session.status],
     queryFn: ({ signal }) => admin.retrieveSessionDiagnostics(projectId, session.id, { signal }),
     enabled: session.status === "failed",
     retry: false,
@@ -37,6 +38,17 @@ export function DiagnosticsUnavailable({ pending, retry }: { pending: boolean; r
     {pending ? <span className="skeleton-bar" aria-label={t("checking")} /> : <span>{t("unavailable")}</span>}
     {!pending ? <><HelpTip label={t("failureLabel")}>{t("unavailableHelp")}</HelpTip><button className="text-action" type="button" onClick={retry}>{t("retry")}</button></> : null}
   </span>;
+}
+
+/** The facts row of the operations the Environment's initialization ran, in order. */
+export function InitializationSteps({ projectId, session }: { projectId: string; session: AgentSession }) {
+  const { t } = useTranslation("diagnostics");
+  const query = useQuery({ ...sessionDiagnosticsQuery(projectId, session), enabled: true });
+  const steps = query.isError ? [] : query.data?.initialization_steps ?? [];
+  if (!steps.length) return null;
+  return <div><dt>{t("initializationTitle")}</dt><dd className="session-fact-stack">
+    {steps.map((step, index) => <span key={index}>{t(`step.${step.step}`)}{step.index === null ? "" : ` ${step.index + 1}`}: {formatDuration(step.duration_ms / 1000)}</span>)}
+  </dd></div>;
 }
 
 function useSessionFailure(projectId: string, session: AgentSession) {

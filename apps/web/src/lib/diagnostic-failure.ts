@@ -15,6 +15,9 @@ export function diagnosticReason(failure: DiagnosticFailure, t: TFunction<"diagn
     if (failure.params.index !== null) message += gap + t("setupIndex", { number: failure.params.index + 1 });
     if (failure.params.exit_code !== null) message += gap + t("exitCode", { code: failure.params.exit_code });
   }
+  if (failure.code === "environment_provisioning_failed" && "category" in failure.params && failure.params.category) {
+    message += gap + t(`category.${failure.params.category}`);
+  }
   const status = connectionStatus(failure);
   if (status !== null) message += gap + t("httpStatus", { status });
   return message;

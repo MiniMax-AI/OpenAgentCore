@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: 2ac821cd3d4635e6780e3cf517298225036a6d24317d1375bfdc44789959f55a
+source_hash: d33f9a9919e52136f8ece0a8480c1db059f2f35aa1cefa852ba1d001cc259fa2
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -13,7 +13,7 @@ Harness 接收一个冻结的模型提供商配置包，其定义见 [`modelprov
 | 字段 | 含义 |
 | --- | --- |
 | `protocol` | 上游 API：`anthropic`、`responses` 或 `chat_completions`，而不是引擎。所选 Harness 必须原生支持它 |
-| `base_url` | 带有效主机名的 HTTPS URL，不得包含凭据、查询参数或片段 |
+| `base_url` | 带有效主机名的 HTTPS URL，或主机为回环或私有 IP 地址的 HTTP URL，不得包含凭据、查询参数或片段。回环地址指 Harness 所在的机器：在 Core 管理的沙箱中就是沙箱本身 |
 | `api_key` | 不得为空，最长 16 KiB，不得包含 NUL、CR 或 LF |
 | `context_window`、`max_output_tokens` | 可选的非负整数，输出限制不得大于上下文限制。请使用真实模型的限制 |
 

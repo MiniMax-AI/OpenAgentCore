@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"golang.org/x/net/idna"
-)
 
-const providerScheme = "https"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/modelprovider"
+)
 
 // providerHost converts a domain as URL host parsing does (UTS #46 without
 // hyphen or STD3 restrictions), rejecting invalid labels such as bad punycode.
@@ -45,7 +45,7 @@ func ModelProviderRequired(environment string) bool {
 
 func validModelProviderBaseURL(base string) bool {
 	u, err := url.Parse(base)
-	return err == nil && u.Scheme == providerScheme && validModelProviderHost(u) && u.User == nil && u.RawQuery == "" && u.Fragment == "" && !strings.ContainsAny(base, "\x00\r\n")
+	return err == nil && modelprovider.SchemeAllowed(u) && validModelProviderHost(u) && u.User == nil && u.RawQuery == "" && u.Fragment == "" && !strings.ContainsAny(base, "\x00\r\n")
 }
 
 // validModelProviderHost requires a usable host: an IP address, or a domain

@@ -90,3 +90,18 @@ func (q *Queries) ListEnvironmentInitializations(ctx context.Context, id pgtype.
 	}
 	return items, nil
 }
+
+const recordEnvironmentInitializationSteps = `-- name: RecordEnvironmentInitializationSteps :exec
+UPDATE environments SET initialization_steps = $1
+WHERE id = $2 AND initialization = 'running'
+`
+
+type RecordEnvironmentInitializationStepsParams struct {
+	Steps []byte      `json:"steps"`
+	ID    pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) RecordEnvironmentInitializationSteps(ctx context.Context, arg RecordEnvironmentInitializationStepsParams) error {
+	_, err := q.db.Exec(ctx, recordEnvironmentInitializationSteps, arg.Steps, arg.ID)
+	return err
+}

@@ -1,6 +1,11 @@
 package sessions
 
-import "testing"
+import (
+	"encoding/json"
+	"os"
+	"slices"
+	"testing"
+)
 
 // Reasons contain only a fixed label and an exit status. Setup and Python labels
 // match official samples; npm, system, file and Skill labels are unverified.
@@ -23,5 +28,23 @@ func TestProvisioningFailureReasons(t *testing.T) {
 		if got := failure.Reason(); got != want || len(got) > 256 {
 			t.Errorf("%+v: %q", failure, got)
 		}
+	}
+}
+
+func TestProvisioningCategoriesMatchSharedFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/provisioning-categories.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture []string
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	var declared []string
+	for _, category := range ProvisioningCategories {
+		declared = append(declared, string(category))
+	}
+	if !slices.Equal(fixture, declared) {
+		t.Fatal("fixture differs from the declared categories", fixture, declared)
 	}
 }

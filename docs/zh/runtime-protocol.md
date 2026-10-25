@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: 986ab6e6ef3979a672f2e49f7c75346e7bfff327d9de1a6138e7f5c75b55d720
+source_hash: d0180316782a49812b3922ed544e2338d66cb735e496c5d08ccac47e1e2b4024
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -147,7 +147,7 @@ sequenceDiagram
     R-->>C: runtime_prepare_result completed
 ```
 
-初始化和终结阶段使用不含文件数据的类型化 header。每个 `begin` 携带 `budget_ms`，表示 Core 所拥有的初始化预算剩余毫秒数；chunk 和 commit 不携带该字段。Runtime 从收到 `begin` 起执行此相对预算，Core 的等待不超过原操作期限。`begin`–`commit` 暂存阶段另有独立限制；应用已提交操作及等待 `completed` 使用剩余初始化预算，不受暂存限制约束。应用前到期会拒绝传输；应用中到期则在本地变更停止后报告 `unknown`，绝不授权重放。使用共享 validator 验证预期结果、offset、size 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
+初始化和终结阶段使用不含文件数据的类型化 header。每个 `begin` 携带 `budget_ms`，表示 Core 所拥有的初始化预算剩余毫秒数；chunk 和 commit 不携带该字段。Runtime 从收到 `begin` 起执行此相对预算，Core 的等待不超过原操作期限。`begin`–`commit` 暂存阶段另有独立限制；应用已提交操作及等待 `completed` 使用剩余初始化预算，不受暂存限制约束。应用前到期会拒绝传输；应用中到期则在本地变更停止后报告 `unknown`，绝不授权重放。Runtime 已应用的操作，其终态 `completed`、`failed` 或 `unknown` 结果携带 `duration_ms`，即 Runtime 测得的从开始应用到得出结果的时间；其他结果不携带，它也不增加命令文本、路径或输出。使用共享 validator 验证预期结果、offset、size、duration 和有限错误 code。每条连接允许一个 transfer。chunk 回执确认暂存字节，不确认安装；完成的 commit 确认该操作，不证明后续 Turn 已运行。
 
 执行 Turn 流程如下。Core 在发送 `execution_prepare` 之前订阅 preparation status，在发送 `execution_start` 之前订阅 Run，因为输出可能与 status 竞争。
 

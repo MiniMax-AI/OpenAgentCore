@@ -13,7 +13,7 @@ Missing, malformed, foreign and deleted resources follow the Session and Turn no
 
 ## Session snapshot
 
-The object is `core.session_diagnostics`, with `session_id`, the official Session `status`, and nullable `failure`. Each Session or Turn read uses one repeatable-read database snapshot and the public status projection, within a five-second budget that an earlier caller deadline shortens. The transaction is closed after the read, including on cancellation. `failure` is null unless the projection says `failed`. Its fields are:
+The object is `core.session_diagnostics`, with `session_id`, the official Session `status`, nullable `failure` and `initialization_steps`. Each Session or Turn read uses one repeatable-read database snapshot and the public status projection, within a five-second budget that an earlier caller deadline shortens. The transaction is closed after the read, including on cancellation. `failure` is null unless the projection says `failed`. Its fields are:
 
 | Field | Value |
 | --- | --- |
@@ -26,6 +26,21 @@ The object is `core.session_diagnostics`, with `session_id`, the official Sessio
 A hosted provisioning failure takes precedence over input activity, and input activity over the latest root Turn; the public Session response uses the same precedence. Private outcome text, native messages, provider bodies, command text, paths and credentials are never included. Unknown outcome codes become `internal_error`; no prefix matching or reason-text parsing is used.
 
 Provisioning parameters come from the confirmed structured receipt, persisted in the failure transaction that settles the Environment and its input and records the events. `step` is `setup`, `python`, `npm`, `file`, `skill`, `harness` or null. `index` is a nonnegative JSON-safe integer for setup only, otherwise null. `exit_code` is 1 to 255 for script steps, otherwise null. Details that were not recorded remain null. These private fields do not change the public failure reason or SSE.
+
+`category` is set only when `step` is null, for a failure whose public reason is the generic `initialization did not complete`, and is otherwise null:
+
+| `category` | Cause |
+| --- | --- |
+| `timeout` | The initialization budget or a transfer budget expired |
+| `runtime_disconnected` | The Runtime connection closed, changed or was not registered |
+| `unconfirmed` | An operation's effect is unknown, or its receipt is missing or invalid |
+| `rejected` | The Runtime refused an operation before applying it |
+| `operation_failed` | The Runtime confirmed a failed operation that has no public step label, such as a Plugin or snapshot finalization |
+| `core_error` | Core failed to read, validate or record initialization state |
+| `core_restart` | Core lost ownership of the initialization, by restart or lease loss |
+| `compute_released` | The sandbox was released or never created before initialization completed; never set for an Environment whose initialization completed |
+
+`initialization_steps` lists the operations the Environment's initialization ran, in order, from the same snapshot and for any Session status. Each entry has `step` (`file`, `skill`, `plugin`, `configure`, `npm`, `python`, `setup` or `finalize`), `index` (the setup command position for `setup`, otherwise null) and `duration_ms`, the Runtime-measured application time from the [Core–Runtime protocol](../../docs/runtime-protocol.md). Only operations whose result the Runtime reported with a `completed` or `failed` outcome appear, so a preparation-cache hit lists only `finalize`, and an unconfirmed operation is absent. Core also writes one `Environment initialization step` log line per entry with the Session, Environment, `step`, `index` and `duration_ms`. Core stores the list when the initialization ends, successfully or not, and logs each step as it finishes. The list is empty before any operation ran.
 
 ## Turn snapshot and Item receipt timing
 

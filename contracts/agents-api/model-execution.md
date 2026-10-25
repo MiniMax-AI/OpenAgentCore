@@ -11,7 +11,7 @@ A Harness receives one frozen model provider bundle, defined by [`modelprovider.
 | Field | Meaning |
 | --- | --- |
 | `protocol` | The upstream API: `anthropic`, `responses` or `chat_completions`, not an engine. The selected Harness must support it natively |
-| `base_url` | An HTTPS URL with a valid host, without credentials, query or fragment |
+| `base_url` | An HTTPS URL with a valid host, or an HTTP URL whose host is a loopback or private IP address, without credentials, query or fragment. Loopback is the machine the Harness runs on: in a Core-managed sandbox, the sandbox itself |
 | `api_key` | Nonempty, at most 16 KiB, without NUL, CR or LF |
 | `context_window`, `max_output_tokens` | Optional nonnegative integers, with output no larger than context. Use the real model's limits |
 

@@ -14,5 +14,9 @@ WHERE id = $1 AND initialization = 'pending' AND status NOT IN ('failed', 'expir
 UPDATE environments SET initialization = 'complete'
 WHERE id = $1 AND initialization = 'running' AND status NOT IN ('failed', 'expired');
 
+-- name: RecordEnvironmentInitializationSteps :exec
+UPDATE environments SET initialization_steps = sqlc.arg(steps)
+WHERE id = sqlc.arg(id) AND initialization = 'running';
+
 -- name: FailEnvironmentInitialization :exec
 UPDATE environments SET initialization = 'failed' WHERE id = $1 AND initialization <> 'complete';

@@ -62,9 +62,7 @@ func (p Provider) Validate() error {
 	if err != nil || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || strings.ContainsAny(p.BaseURL, "\x00\r\n") {
 		return ErrConfiguration
 	}
-	// Remote providers require HTTPS. Runtime-local providers may use loopback
-	// HTTP; Core retains stricter public provider admission.
-	if u.Scheme != "https" && !(u.Scheme == "http" && net.ParseIP(u.Hostname()).IsLoopback()) {
+	if !SchemeAllowed(u) {
 		return ErrConfiguration
 	}
 	if strings.TrimSpace(p.APIKey) == "" || len(p.APIKey) > 16384 || strings.ContainsAny(p.APIKey, "\x00\r\n") {
@@ -74,6 +72,17 @@ func (p Provider) Validate() error {
 		return ErrConfiguration
 	}
 	return nil
+}
+
+// SchemeAllowed is the one base URL scheme rule: HTTPS, or HTTP to a loopback
+// or private IP address, so the key never crosses a public network in plain
+// text. A host name never qualifies for HTTP, because it can resolve anywhere.
+func SchemeAllowed(u *url.URL) bool {
+	if u.Scheme == "https" {
+		return true
+	}
+	ip := net.ParseIP(u.Hostname())
+	return u.Scheme == "http" && ip != nil && (ip.IsLoopback() || ip.IsPrivate())
 }
 
 // TokenLimitsValid holds the token-limit rule: unset is zero, and an output
