@@ -132,7 +132,7 @@ func (q *Queries) GetFunctionCall(ctx context.Context, arg GetFunctionCallParams
 const listPendingFunctionCalls = `-- name: ListPendingFunctionCalls :many
 SELECT f.session_id, f.turn_id, f.call_id, f.executor_call_id, f.name, f.arguments, f.result, f.applied, f.created_at, f.withdrawn FROM function_calls f JOIN turns t ON t.session_id = f.session_id AND t.id = f.turn_id
 WHERE f.session_id = $1 AND f.turn_id = $2 AND NOT f.applied AND NOT f.withdrawn
-    AND t.status IN ('in_progress', 'waiting') AND t.cancel_requested_at IS NULL
+    AND t.status IN ('in_progress', 'waiting')
 ORDER BY f.created_at, f.call_id
 `
 

@@ -283,9 +283,10 @@ func TestAdmitFunctionResult(t *testing.T) {
 
 func TestLoadRequiredActions(t *testing.T) {
 	calls := []FunctionCall{testCall, {CallID: "second", ExecutorCallID: "native-second", Name: "search", Arguments: json.RawMessage(`{}`), Result: json.RawMessage(`{"success":true}`)}}
-	for _, status := range []string{TurnInProgress, TurnWaiting} {
+	// A waiting Turn keeps its required actions after a cancellation request, until it ends.
+	for _, turn := range []Turn{turnWith(TurnInProgress), turnWith(TurnWaiting), cancelling(TurnWaiting)} {
 		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}, loadPendingFunctionCalls: returns(calls)}
-		actions, err := LoadRequiredActions(t.Context(), f, turnWith(status))
+		actions, err := LoadRequiredActions(t.Context(), f, turn)
 		if err != nil || len(actions) != 2 {
 			t.Fatal(actions, err)
 		}
@@ -300,7 +301,7 @@ func TestLoadRequiredActions(t *testing.T) {
 			}
 		}
 	}
-	for _, turn := range []Turn{turnWith(TurnQueued), cancelling(TurnWaiting), turnWith(TurnCompleted)} {
+	for _, turn := range []Turn{turnWith(TurnQueued), cancelling(TurnInProgress), turnWith(TurnCompleted)} {
 		f := &fakeFunctionTx{fakeTx: &fakeTx{t: t}}
 		actions, err := LoadRequiredActions(t.Context(), f, turn)
 		if err != nil || actions == nil || len(actions) != 0 {

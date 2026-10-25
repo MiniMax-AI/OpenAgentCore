@@ -15,7 +15,7 @@ WHERE s.tenant_id = $1 AND f.session_id = $2 AND f.turn_id = $3 AND f.call_id = 
 -- name: ListPendingFunctionCalls :many
 SELECT f.* FROM function_calls f JOIN turns t ON t.session_id = f.session_id AND t.id = f.turn_id
 WHERE f.session_id = $1 AND f.turn_id = $2 AND NOT f.applied AND NOT f.withdrawn
-    AND t.status IN ('in_progress', 'waiting') AND t.cancel_requested_at IS NULL
+    AND t.status IN ('in_progress', 'waiting')
 ORDER BY f.created_at, f.call_id;
 
 -- name: SessionHasFunctionCall :one
