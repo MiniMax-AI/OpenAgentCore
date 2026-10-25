@@ -50,7 +50,7 @@ func TestClassificationOnlyFromRootTerminalError(t *testing.T) {
 	for _, mode := range []string{"failed", "recovered", "notification-only"} {
 		t.Run(mode, func(t *testing.T) {
 			out := make(chan proto.Envelope, 16)
-			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)), rpc: NewJSONRPCClient(JSONRPCConfig{})}
+			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t), t.TempDir()), rpc: NewJSONRPCClient(JSONRPCConfig{})}
 			s.registerHandlers()
 			s.setThreadID("root")
 			scopeNotification(t, s, "turn/started", `{"threadId":"root","turn":{"id":"turn"}}`)
@@ -109,7 +109,7 @@ func TestProviderRejectionClassifiedOnce(t *testing.T) {
 		}
 	}
 	out := make(chan proto.Envelope, 16)
-	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)), rpc: NewJSONRPCClient(JSONRPCConfig{})}
+	s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t), t.TempDir()), rpc: NewJSONRPCClient(JSONRPCConfig{})}
 	s.registerHandlers()
 	s.setThreadID("root")
 	turnError, _ := json.Marshal(TurnError{Message: body, CodexErrorInfo: json.RawMessage(`"other"`)})

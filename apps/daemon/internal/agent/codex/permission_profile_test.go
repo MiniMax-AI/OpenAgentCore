@@ -12,7 +12,7 @@ func TestRuntimeUsesHostPermissions(t *testing.T) {
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	{
 		req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{WorkspaceRoot: t.TempDir()}}
-		plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)})
+		plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t), runtimeRoot: t.TempDir()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -32,12 +32,13 @@ func TestSelfHostedToolEnvironmentCannotRedirectNativeHistory(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", root)
 	config := filepath.Join(root, "tool-env.json")
-	if err := os.WriteFile(config, []byte(`{"CODEX_HOME":"wrong","HOME":"wrong","USERPROFILE":"wrong","USER_VALUE":"ready"}`), 0600); err != nil {
+	if err := os.WriteFile(config, []byte(`{"CODEX_HOME":"wrong","CODEX_SQLITE_HOME":"wrong","HOME":"wrong","USERPROFILE":"wrong","USER_VALUE":"ready"}`), 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_TOOL_ENV_FILE", config)
 	req := proto.PromptRequestPayload{AgentStateKey: "session", DisableSubagents: true, LocalEnvironment: &proto.LocalEnvironment{}}
-	plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t)})
+	runtimeRoot := t.TempDir()
+	plan, _, err := prepareSessionPlan(t.Context(), req, sessionConfig{stateRoot: testStateRoot(t), runtimeRoot: runtimeRoot})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +48,8 @@ func TestSelfHostedToolEnvironmentCannotRedirectNativeHistory(t *testing.T) {
 		key, value, _ := strings.Cut(entry, "=")
 		values[key] = value
 	}
-	if values["CODEX_HOME"] == "" || values["CODEX_HOME"] == "wrong" || values["HOME"] == "wrong" || values["USERPROFILE"] == "wrong" || values["USER_VALUE"] != "ready" {
+	if values["CODEX_HOME"] == "" || values["CODEX_HOME"] == "wrong" || values["HOME"] == "wrong" || values["USERPROFILE"] == "wrong" || values["USER_VALUE"] != "ready" ||
+		values["CODEX_SQLITE_HOME"] != filepath.Join(runtimeRoot, "daemon", "agent-sessions", "session") {
 		t.Fatal("initialization changed native state identity")
 	}
 }

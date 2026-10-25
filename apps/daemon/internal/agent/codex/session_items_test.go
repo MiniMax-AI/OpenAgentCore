@@ -71,7 +71,7 @@ func TestDispatchStartedItem_UnknownSilent(t *testing.T) {
 func TestReasoningIsReportedOnlyWhenRequested(t *testing.T) {
 	for _, requested := range []bool{true, false} {
 		out := make(chan proto.Envelope, 16)
-		s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)),
+		s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t), t.TempDir()),
 			rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), reasoningSummary: requested}
 		s.registerHandlers()
 		s.setThreadID("root")

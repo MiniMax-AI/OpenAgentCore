@@ -73,11 +73,11 @@ func TestWriteCodexMCPConfig_EmitsStreamableHTTPURL(t *testing.T) {
 
 // TestWriteCodexMCPConfig_FreshHomeDropsStaleEntries documents the
 // "fresh entries only" guarantee: callers allocate a brand-new
-// CODEX_HOME per prompt (BuildSessionPlan does this via allocCodexHome
+// CODEX_HOME per prompt (BuildSessionPlan does this via allocSessionDir
 // + plan.Cleanup), so the previous run's mcp_servers can't leak.
 //
 // writeCodexMCPConfig itself is APPEND semantics now — the truncation
-// guarantee lives in allocCodexHome's RemoveAll, not in the writer.
+// guarantee lives in allocSessionDir's RemoveAll, not in the writer.
 // Test that workflow explicitly so a future refactor that breaks the
 // fresh-home contract fails here.
 func TestWriteCodexMCPConfig_FreshHomeDropsStaleEntries(t *testing.T) {
