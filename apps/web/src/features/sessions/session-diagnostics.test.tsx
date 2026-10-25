@@ -5,14 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import i18n from "../../i18n";
 import { diagnosticFailure } from "../../lib/diagnostic-failure";
-import { DiagnosticScope, SessionFailure, SessionFailureDetails, TurnFailure, sessionDiagnosticsQuery, turnDiagnosticsQuery } from "./session-diagnostics";
+import { DiagnosticScope, InitializationSteps, SessionFailure, SessionFailureDetails, TurnFailure, sessionDiagnosticsQuery, turnDiagnosticsQuery } from "./session-diagnostics";
 import { ItemReceiptTiming } from "./trace/ItemReceiptTiming";
 
 const scope = { projectId: "project", sessionId: "session" };
 const session = { id: "session", status: "failed", last_active_at: 20 } as AgentSession;
 const turn = { id: "turn", session_id: "session", status: "failed", completed_at: 20, error: { code: "internal_error", message: "PRIVATE_NATIVE_SENTINEL" } } as AgentTurn;
 const failure: DiagnosticFailure = { code: "authentication_error", params: {}, failed_at: null };
-const sessionData: SessionDiagnostics = { object: "core.session_diagnostics", session_id: "session", status: "failed", failure: { ...failure, source: "turn", turn_id: "turn" } };
+const sessionData: SessionDiagnostics = { object: "core.session_diagnostics", session_id: "session", status: "failed", failure: { ...failure, source: "turn", turn_id: "turn" }, initialization_steps: [{ step: "npm", index: null, duration_ms: 4100 }, { step: "setup", index: 1, duration_ms: 5200 }] };
 const turnData: TurnDiagnostics = { object: "core.turn_diagnostics", session_id: "session", turn_id: "turn", status: "failed", failure, items: [], items_truncated: false };
 
 afterEach(() => { void i18n.changeLanguage("en"); });
@@ -38,6 +38,17 @@ describe("Core diagnostics in the console", () => {
     expect(render("turn", turnData)).not.toContain("PRIVATE_NATIVE_SENTINEL");
   });
 
+  it("lists the initialization operations that ran with their durations and the failure category", () => {
+    const client = new QueryClient();
+    client.setQueryData(sessionDiagnosticsQuery(scope.projectId, session).queryKey, sessionData);
+    const html = renderToStaticMarkup(<QueryClientProvider client={client}><InitializationSteps projectId={scope.projectId} session={session} /></QueryClientProvider>);
+    client.clear();
+    expect(html).toContain("npm dependencies: 4.1 s");
+    expect(html).toContain("setup 2: 5.2 s");
+    const t = i18n.getFixedT("en", "diagnostics");
+    expect(diagnosticFailure({ code: "environment_provisioning_failed", params: { step: null, index: null, exit_code: null, category: "timeout" }, failed_at: null }, t)).toContain("The preparation timed out.");
+  });
+
   it("gives the Session page the reason, then its next step, in one block", () => {
     expect(render("session", sessionData)).toContain('<p class="session-failure-reason">The model provider rejected authentication.</p><p>Check the API key');
   });
@@ -58,7 +69,7 @@ describe("Core diagnostics in the console", () => {
 
   it("renders only typed provisioning metadata and does not guess a timeout", () => {
     const t = i18n.getFixedT("en", "diagnostics");
-    const text = diagnosticFailure({ code: "environment_provisioning_failed", params: { step: "setup", index: 0, exit_code: 7 }, failed_at: null }, t);
+    const text = diagnosticFailure({ code: "environment_provisioning_failed", params: { step: "setup", index: 0, exit_code: 7, category: null }, failed_at: null }, t);
     expect(text).toContain("Setup command 1");
     expect(text).toContain("Exit code 7");
     expect(diagnosticFailure({ code: "harness_error", params: {}, failed_at: null }, t)).not.toContain("timed out");

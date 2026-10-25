@@ -1,0 +1,10 @@
+[
+  "timeout",
+  "runtime_disconnected",
+  "unconfirmed",
+  "rejected",
+  "operation_failed",
+  "core_error",
+  "core_restart",
+  "compute_released"
+]

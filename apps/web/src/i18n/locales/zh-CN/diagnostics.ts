@@ -1,3 +1,5 @@
+import type { ProvisioningCategory } from "@oac/agents-client";
+
 export const diagnostics = {
   providerUnknown: "还没有记录",
   providerStale: "记录尚未确认",
@@ -61,7 +63,18 @@ export const diagnostics = {
   exitCode: "退出码 {{code}}。",
   httpStatus: "HTTP {{status}}。",
   unreachableHost: "再确认 Session 的沙箱（自托管 Session 则为其主机）能解析并访问该 URL 的主机。",
-  step: { setup: "设置", python: "Python 依赖", npm: "npm 依赖", file: "文件准备", skill: "Skill 准备", harness: "Harness 准备" },
+  step: { setup: "设置", python: "Python 依赖", npm: "npm 依赖", file: "文件准备", skill: "Skill 准备", harness: "Harness 准备", plugin: "Plugin 准备", configure: "环境配置", finalize: "收尾" },
+  category: {
+    timeout: "准备超时。",
+    runtime_disconnected: "Runtime 已断开连接。",
+    unconfirmed: "Runtime 未确认结果。",
+    rejected: "Runtime 拒绝了该操作。",
+    operation_failed: "Runtime 报告操作失败。",
+    core_error: "Core 无法读取、校验或记录初始化状态。",
+    core_restart: "Core 失去了初始化的所有权。",
+    compute_released: "沙箱已被释放或从未创建。",
+  } satisfies Record<ProvisioningCategory, string>,
+  initializationTitle: "初始化",
   unavailable: "失败详情不可用",
   unavailableHelp: "诊断读取失败或与当前状态不一致，请刷新后重试。",
   checking: "正在读取失败详情",

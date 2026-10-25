@@ -61,6 +61,9 @@ type RuntimePrepareResultPayload struct {
 	Offset    int    `json:"offset,omitempty"`
 	SizeBytes int    `json:"size_bytes,omitempty"`
 	ErrorCode string `json:"error_code,omitempty"`
+	// DurationMS is the Runtime-measured time spent applying the operation. It is
+	// reported only by a terminal result of an operation that was applied.
+	DurationMS int64 `json:"duration_ms,omitempty"`
 }
 
 func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
@@ -142,6 +145,9 @@ func ValidRuntimePrepareRequest(p RuntimePreparePayload) bool {
 // terminal category. An unknown effect can never be represented as rejection.
 func ValidRuntimePrepareResult(r RuntimePrepareResultPayload, expected string, offset, size int) bool {
 	if r.ExitCode < 0 || r.ExitCode > 255 || (r.Outcome != "failed" && r.ExitCode != 0) {
+		return false
+	}
+	if r.DurationMS < 0 || r.DurationMS > RuntimePrepareMaxBudgetMS || (r.DurationMS != 0 && r.Outcome != "completed" && r.Outcome != "failed" && r.Outcome != "unknown") {
 		return false
 	}
 	switch r.Outcome {

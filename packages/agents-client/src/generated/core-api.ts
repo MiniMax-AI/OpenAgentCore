@@ -339,6 +339,14 @@ export interface HostHistoryPoint {
   start: string;
 }
 export const hostHistoryPointFields = ["available_disk_bytes_min", "cpu_utilization_max", "memory_used_bytes_max", "start"] as const;
+export interface InitializationStepTiming {
+  duration_ms: number;
+  index: number | null;
+  step: InitializationStepTimingStep;
+}
+export const initializationStepTimingFields = ["duration_ms", "index", "step"] as const;
+export const initializationStepTimingStepValues = ["file", "skill", "plugin", "configure", "npm", "python", "setup", "finalize"] as const;
+export type InitializationStepTimingStep = (typeof initializationStepTimingStepValues)[number];
 export interface Installation {
   address_bindings: AddressBindings;
   api_base_url: string;
@@ -885,11 +893,12 @@ export const sessionDiagnosticFailureCodeValues = ["harness_error", "model_provi
 export type SessionDiagnosticFailureCode = (typeof sessionDiagnosticFailureCodeValues)[number];
 export interface SessionDiagnostics {
   failure: SessionDiagnosticFailure | null;
+  initialization_steps: InitializationStepTiming[];
   object: "core.session_diagnostics";
   session_id: string;
   status: SessionDiagnosticsStatus;
 }
-export const sessionDiagnosticsFields = ["failure", "object", "session_id", "status"] as const;
+export const sessionDiagnosticsFields = ["failure", "initialization_steps", "object", "session_id", "status"] as const;
 export const sessionDiagnosticsStatusValues = ["idle", "in_progress", "requires_action", "failed"] as const;
 export type SessionDiagnosticsStatus = (typeof sessionDiagnosticsStatusValues)[number];
 export interface SessionExecutionConfiguration {

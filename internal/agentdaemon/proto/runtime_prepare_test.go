@@ -283,3 +283,19 @@ func TestRuntimePreparationBudgetOnlyOnBegin(t *testing.T) {
 		}
 	}
 }
+
+func TestRuntimePrepareResultDuration(t *testing.T) {
+	for _, tc := range []struct {
+		result RuntimePrepareResultPayload
+		valid  bool
+	}{
+		{RuntimePrepareResultPayload{Outcome: "completed", DurationMS: 1500}, true},
+		{RuntimePrepareResultPayload{Outcome: "completed", DurationMS: -1}, false},
+		{RuntimePrepareResultPayload{Outcome: "completed", DurationMS: RuntimePrepareMaxBudgetMS + 1}, false},
+		{RuntimePrepareResultPayload{Outcome: "rejected", ErrorCode: "invalid_request", DurationMS: 1}, false},
+	} {
+		if got := ValidRuntimePrepareResult(tc.result, "completed", 0, 0); got != tc.valid {
+			t.Fatalf("%+v: valid=%v", tc.result, got)
+		}
+	}
+}
