@@ -187,28 +187,3 @@ func jsonFields(t reflect.Type) map[string]reflect.Type {
 	jsonFieldCache.Store(t, fields)
 	return fields
 }
-
-// objectMember returns the value of the exact member name of a valid JSON
-// object without decoding the other members, or nil.
-func objectMember(raw []byte, name string) []byte {
-	i := skipSpace(raw, 0)
-	if i == len(raw) || raw[i] != '{' {
-		return nil
-	}
-	var scratch []byte
-	for i = skipSpace(raw, i+1); raw[i] != '}'; {
-		end := stringEnd(raw, i)
-		key := raw[i+1 : end-1]
-		if bytes.IndexByte(key, '\\') >= 0 {
-			scratch = appendUnescaped(scratch[:0], key)
-			key = scratch
-		}
-		i = skipSpace(raw, skipSpace(raw, end)+1)
-		valueEnd := skipValue(raw, i)
-		if string(key) == name {
-			return raw[i:valueEnd]
-		}
-		i = skipComma(raw, skipSpace(raw, valueEnd))
-	}
-	return nil
-}

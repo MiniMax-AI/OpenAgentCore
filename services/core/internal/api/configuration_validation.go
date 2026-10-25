@@ -250,7 +250,8 @@ func checkMembers(path string, raw json.RawMessage, members []member) error {
 }
 
 // unknownMember returns the first key outside members in document order. It
-// stops there, so a body of unknown keys costs no map and no value copies.
+// stops there and keeps no map, so a body of many unknown keys costs no more
+// than its first one.
 func unknownMember(raw json.RawMessage, members []member) (string, bool) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
