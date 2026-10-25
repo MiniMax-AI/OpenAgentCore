@@ -16,7 +16,7 @@ import (
 
 // A message that would start a Turn is rejected once the Credential its
 // Session bound is deleted, whether the tool named it or creation selected
-// it, but a retry of a batch the Session already admitted still replays.
+// it, but a key the Session already used still replays or conflicts.
 func TestWorkerRejectsInputWhoseCredentialWasDeleted(t *testing.T) {
 	for _, mode := range []string{"auto-selected", "explicit"} {
 		t.Run(mode, func(t *testing.T) {
@@ -72,6 +72,9 @@ func TestWorkerRejectsInputWhoseCredentialWasDeleted(t *testing.T) {
 			replay, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "first", []sessions.Input{messageInput("one")})
 			if err != nil || len(replay) != 1 || replay[0].TurnID != first[0].TurnID {
 				t.Fatal("retry of an admitted batch changed", replay, err)
+			}
+			if _, err := worker.SubmitInputs(ctx, h.tenant, h.session.ID, "first", []sessions.Input{messageInput("other")}); !errors.Is(err, sessions.ErrIdempotencyConflict) {
+				t.Fatal("reused key with another batch", err)
 			}
 		})
 	}

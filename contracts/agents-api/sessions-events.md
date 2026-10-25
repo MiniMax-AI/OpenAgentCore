@@ -61,7 +61,7 @@ On `openai_hosted` and `self_hosted` Sessions, messages sent while a Turn runs j
 
 ### Input errors
 
-Checks run in this order: [request validation](./wire-semantics.md#configuration-validation), whose paths start with `events[i]`, Session lookup, retry lookup, the Credential check for a message that starts a Turn, the Environment file-write gate for batches with a message, the pending-input gate, then each event in batch order. A rejected batch writes nothing and leaves any pending action unchanged. Every 409 has type `conflict_error` ([error envelope](./wire-semantics.md)).
+Checks run in this order: [request validation](./wire-semantics.md#configuration-validation), whose paths start with `events[i]`, Session lookup, the Harness input check, retry lookup, the Credential check for a message that starts a Turn, the Environment file-write gate for batches with a message, the pending-input gate, then each event in batch order. A rejected batch writes nothing and leaves any pending action unchanged. Every 409 has type `conflict_error` ([error envelope](./wire-semantics.md)).
 
 | Case | Status and code | Message |
 | --- | --- | --- |
@@ -79,7 +79,7 @@ Checks run in this order: [request validation](./wire-semantics.md#configuration
 | A message that would start a Turn on a Session whose bound MCP Credential, or its Vault, was deleted | 400 `invalid_request_error`, param null | "MCP credential_id {id} was not found in an attached vault" |
 | A message the Session's Harness cannot take, such as whitespace-only text on MiniMax Code | 400 `unsupported_or_invalid_configuration` | See [whitespace-only text](./message-content.md#whitespace-only-text) |
 
-An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Apart from the unknown tool call message, which names its `call_id` as the official SDK expects, error messages never repeat caller input or internal identifiers.
+An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Apart from the unknown tool call message, which names its `call_id` as the official SDK expects, and the Credential message, which names the Credential as Session creation does, error messages never repeat caller input or internal identifiers.
 
 ## Initial input at Session creation
 

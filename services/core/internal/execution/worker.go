@@ -134,9 +134,9 @@ func (w *Worker) SubmitInputs(ctx context.Context, tenant, session, key string, 
 
 // checkInputCredentials rejects a message that would start a Turn whose
 // Session's frozen MCP Credential was deleted, as creation rejects an absent
-// one. It runs before and outside the admission transaction, and a retry of a
-// batch the Session already admitted is never rejected. A deletion after the
-// check still fails at dispatch.
+// one. It runs before and outside the admission transaction, and never rejects
+// a key the Session already used: admission replays that batch or reports the
+// key conflict. A deletion after the check still fails at dispatch.
 func (w *Worker) checkInputCredentials(ctx context.Context, session sessions.Session, key string, inputs []sessions.Input) error {
 	if (session.LastTurn != nil && !sessions.TerminalStatus(session.LastTurn.Status)) ||
 		!slices.ContainsFunc(inputs, func(input sessions.Input) bool { return input.Kind == "message" }) {
@@ -151,7 +151,7 @@ func (w *Worker) checkInputCredentials(ctx context.Context, session sessions.Ses
 	if !errors.As(err, &selection) {
 		return err
 	}
-	if replay, probeErr := w.dispatcher.Sessions.InputAdmitted(ctx, session.TenantID, session.ID, key, inputs); probeErr != nil || replay {
+	if used, probeErr := w.dispatcher.Sessions.InputKeyUsed(ctx, session.TenantID, session.ID, key, inputs); probeErr != nil || used {
 		return probeErr
 	}
 	return err

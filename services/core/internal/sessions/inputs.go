@@ -372,25 +372,25 @@ func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string,
 	return receipts, nil
 }
 
-// InputAdmitted reports whether the Session already admitted the batch under
-// key, directly or through an Environment input reservation, so a retry
-// replays it.
-func (s *Service) InputAdmitted(ctx context.Context, tenant, session, key string, inputs []Input) (bool, error) {
+// InputKeyUsed reports whether the Session already used key, by direct
+// admission or an Environment input reservation, so that admission decides
+// between a replay and a key conflict.
+func (s *Service) InputKeyUsed(ctx context.Context, tenant, session, key string, inputs []Input) (bool, error) {
 	_, encoded, err := ValidateInputs(inputs)
 	if err != nil {
 		return false, err
 	}
-	var admitted bool
+	var used bool
 	err = s.storage.WithInputs(ctx, tenant, session, func(ctx context.Context, tx InputTx) error {
-		receipts, matches, err := tx.LoadInputBatch(ctx, key, encoded)
+		receipts, _, err := tx.LoadInputBatch(ctx, key, encoded)
 		if err != nil {
 			return err
 		}
-		reservation, _, err := tx.FindInputReservation(ctx, key, encoded)
-		admitted = (len(receipts) > 0 && matches) || reservation != nil
+		_, reserved, err := tx.FindInputReservation(ctx, key, encoded)
+		used = len(receipts) > 0 || reserved
 		return err
 	})
-	return admitted, err
+	return used, err
 }
 
 // FunctionCall retains public identity and its opaque execution-adapter reference.
