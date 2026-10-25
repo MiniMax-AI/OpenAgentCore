@@ -181,7 +181,7 @@ def main():
                     raise AssertionError("public initial failure observer failed") from failures[0]
                 assert observations["sdk"] == observations["raw"]
                 assert retry(case, "failed") == observations["sdk"]["session"]
-                assert api.beta.agents.environments.retrieve(case["environment_id"]).status == "pending"
+                assert api.beta.agents.environments.retrieve(case["environment_id"]).status == "disconnected"
                 for retained in cases[1:]:
                     assert retry(retained) == retained["snapshot"]
                 result["controlled_deadline_expiry"] = True

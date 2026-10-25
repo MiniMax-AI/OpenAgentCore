@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -56,13 +57,23 @@ func (h *Handler) getSkill(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, skillResponseResource(value))
 }
 
+var skillUpdateShape = shape{kind: objectValue, members: []member{{"default_version", requiredString}}}
+
 func (h *Handler) updateSkill(w http.ResponseWriter, r *http.Request) {
 	body, ok := readJSONBodyLimit(w, r, 64<<10, "Request exceeds 64 KiB.")
 	if !ok {
 		return
 	}
+	// The Skills routes keep their own body rules; a well-formed object reports
+	// its field errors first.
+	if json.Valid(body) && jsonValueKind(body) == "an object" {
+		if err := checkValue("", body, skillUpdateShape); err != nil {
+			writeFieldError(w, err)
+			return
+		}
+	}
 	var input v1.SkillUpdateRequest
-	if decodeInputObject(body, &input, "default_version") != nil || input.DefaultVersion == "" {
+	if decodeInputObject(body, &input, "default_version") != nil {
 		writeSkillsError(w, r, skills.ErrInvalidInput)
 		return
 	}

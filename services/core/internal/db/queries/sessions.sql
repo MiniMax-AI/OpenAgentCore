@@ -13,6 +13,9 @@ RETURNING *;
 -- name: GetSession :one
 SELECT * FROM sessions WHERE tenant_id = $1 AND id = $2 AND deleted_at IS NULL;
 
+-- name: GetSessionCursor :one
+SELECT created_at, id FROM sessions WHERE tenant_id = $1 AND id = $2;
+
 -- name: ListSessions :many
 SELECT * FROM sessions
 WHERE tenant_id = sqlc.arg(tenant_id) AND deleted_at IS NULL

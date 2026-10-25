@@ -372,6 +372,27 @@ func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string,
 	return receipts, nil
 }
 
+// InputKeyUsed reports whether the Session already used key, by direct
+// admission or an Environment input reservation, so that admission decides
+// between a replay and a key conflict.
+func (s *Service) InputKeyUsed(ctx context.Context, tenant, session, key string, inputs []Input) (bool, error) {
+	_, encoded, err := ValidateInputs(inputs)
+	if err != nil {
+		return false, err
+	}
+	var used bool
+	err = s.storage.WithInputs(ctx, tenant, session, func(ctx context.Context, tx InputTx) error {
+		receipts, _, err := tx.LoadInputBatch(ctx, key, encoded)
+		if err != nil {
+			return err
+		}
+		_, reserved, err := tx.FindInputReservation(ctx, key, encoded)
+		used = len(receipts) > 0 || reserved
+		return err
+	})
+	return used, err
+}
+
 // FunctionCall retains public identity and its opaque execution-adapter reference.
 type FunctionCall struct {
 	CallID, ExecutorCallID, Name string

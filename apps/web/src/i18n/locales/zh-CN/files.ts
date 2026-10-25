@@ -5,7 +5,7 @@ type TranslationShape<T> = { [K in keyof T]: T[K] extends string ? string : Tran
 export const files: TranslationShape<typeof english> = {
   title: "文件",
   help: "通过 Files API 上传到本项目的文件，包括 API 调用方上传的文件。在 Environment 模板中引用 File ID，即可把文件复制到每个新 Session 的工作区。用户数据（user_data）文件不能下载：Core 会拒绝读取其内容。",
-  limits: "每次上传一个文件，最大 512 MiB，文件名 1–1024 字节；允许空文件。",
+  limits: "每次上传一个文件，最大 512 MiB，文件名 1–1024 字节；不接受空文件。",
   actions: {
     upload: "上传文件",
     uploading: "上传中…",

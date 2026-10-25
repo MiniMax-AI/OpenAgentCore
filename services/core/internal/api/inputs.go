@@ -1,11 +1,9 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
-	"reflect"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
@@ -22,20 +20,13 @@ type InputAdmission interface {
 
 func (h *Handler) createEvents(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
-	if !ok {
+	if !ok || writeFieldError(w, validateBody(raw, createSessionEventsParams)) {
 		return
 	}
 	var request struct {
 		Events []json.RawMessage `json:"events"`
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	// An unknown member, including a case variant of events, is rejected before
-	// decoding; see inexactMember.
-	if inexactMember(raw, reflect.TypeOf(request)) || decoder.Decode(&request) != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid Session input event request.")
-		return
-	}
+	_ = json.Unmarshal(raw, &request)
 	key := r.Header.Get("Idempotency-Key")
 	if key == "" {
 		key = uuid.NewString()

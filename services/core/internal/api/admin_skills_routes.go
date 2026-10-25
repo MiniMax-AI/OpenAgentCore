@@ -46,7 +46,7 @@ func (h *Handler) adminDeleteSkill(w http.ResponseWriter, r *http.Request) {
 // @Summary Download Skill content in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
-// @Produce octet-stream
+// @Produce application/zip
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Success 200 {file} binary
@@ -103,7 +103,7 @@ func (h *Handler) adminDeleteSkillVersion(w http.ResponseWriter, r *http.Request
 // @Summary Download immutable Skill version content in a Project
 // @Description Core key only. Reuses the public resource projection and operation rules; the Project ID selects the target space and does not authenticate.
 // @Tags Skills
-// @Produce octet-stream
+// @Produce application/zip
 // @Security DeploymentAdminAuth
 // @Param skill_id path string true "Skill ID"
 // @Param version path string true "Concrete version number"

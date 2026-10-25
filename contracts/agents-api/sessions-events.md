@@ -22,7 +22,7 @@ A Session's `status` and `last_active_at` derive from its latest root Turn and f
 | --- | --- |
 | `idle` | No Turn yet, or the latest Turn completed or was cancelled. Input reserved for a hosted Environment that is still provisioning also reads `idle` |
 | `in_progress` | The latest Turn is queued, running or waiting |
-| `requires_action` | The latest Turn waits for a function result and no cancellation was requested, or input waits for a `self_hosted` machine to connect. `required_actions` lists `function_call` or `environment_connection` entries |
+| `requires_action` | The latest Turn waits for a function result, including after a cancellation request until the Turn ends, or input waits for a `self_hosted` machine to connect. `required_actions` lists `function_call` or `environment_connection` entries |
 | `failed` | The latest Turn failed (`error` is "The execution could not complete."), input reserved for the Environment failed, initial input expired before admission, or the Environment failed to initialize (see [Environment initialization failure](#environment-initialization-failure)) |
 
 ```mermaid
@@ -33,7 +33,7 @@ stateDiagram-v2
     in_progress --> requires_action: awaits function result
     idle --> requires_action: awaits self_hosted machine
     requires_action --> in_progress: result or machine
-    requires_action --> idle: cancelled
+    requires_action --> idle: Turn ended
     in_progress --> failed: Turn failed
     idle --> failed: input expired or Environment failed
     failed --> in_progress: new input
@@ -50,7 +50,7 @@ A Session stays usable after a Turn fails: new input starts a new Turn. Later re
 - **Empty batch.** `{"events": []}` checks that the Session exists and returns 202. It creates no Turn, Item or retry identity.
 - **Retries.** An `Idempotency-Key` of up to 128 bytes identifies the whole ordered batch. The same key and batch return 202 again without admitting anything twice; the same key with another batch returns 409 `idempotency_conflict`. A request without a key is always new.
 - **Messages.** On an idle Session a message batch starts a queued Turn. While a Turn runs, messages join it (steering); they never start a parallel Turn. Each message stays its own user Item, even when the Harness receives several as one prompt.
-- **Cancellation.** A queued Turn is cancelled without a live Runtime. A running Turn is cancelled when the Runtime confirms it; completion can win that race. The Turn has stopped when it reads `cancelled`, not when the request returns. A cancellation on an idle Session with no pending input is accepted and has no effect; while an input reservation is pending, it returns 409.
+- **Cancellation.** A queued Turn is cancelled without a live Runtime. A running Turn is cancelled when the Runtime confirms it; completion can win that race. The Turn has stopped when it reads `cancelled`, not when the request returns. A Turn that waits for a function result keeps the Session at `requires_action` with its `required_actions` until then, and the request emits no Session event. A cancellation on an idle Session with no pending input is accepted and has no effect; while an input reservation is pending, it returns 409.
 - **Function results.** `turn_id`, `call_id` and `success` are required; `output` and `error` are optional and nullable ([content rules](./message-content.md#function-results)). An identical repeated result returns 202 without another application or event. The result Item appears when the Harness applies the result; a result that cancellation prevents from being applied stays stored but produces no Item.
 - **Queueing.** A queued Turn starts when a Runtime that supports the Session's Harness and configuration is connected and one of Core's [`OAC_EXECUTION_CONCURRENCY`](../../docs/configuration.md#settings) work slots is free. A Session stays bound to the Runtime that first ran it.
 - **Execution availability.** While Core shuts down, or after its Worker loses execution ownership, requests return 503 `execution_unavailable`.
@@ -61,7 +61,7 @@ On `openai_hosted` and `self_hosted` Sessions, messages sent while a Turn runs j
 
 ### Input errors
 
-Checks run in this order: request validation, Session lookup, retry lookup, the Environment file-write gate for batches with a message, the pending-input gate, then each event in batch order. A rejected batch writes nothing and leaves any pending action unchanged. Every 409 has type `conflict_error` ([error envelope](./wire-semantics.md)).
+Checks run in this order: [request validation](./wire-semantics.md#configuration-validation), whose paths start with `events[i]`, Session lookup, the Harness input check, retry lookup, the Credential check for a message that starts a Turn, the Environment file-write gate for batches with a message, the pending-input gate, then each event in batch order. A rejected batch writes nothing and leaves any pending action unchanged. Every 409 has type `conflict_error` ([error envelope](./wire-semantics.md)).
 
 | Case | Status and code | Message |
 | --- | --- | --- |
@@ -76,9 +76,10 @@ Checks run in this order: request validation, Session lookup, retry lookup, the 
 | A reserved batch cancelled because an administrator archived the Session or reset its deployment | 409 `environment_input_cancelled` | "The environment input was cancelled before admission." |
 | New input after an `openai_hosted` Environment failed to provision | 409 `conflict_error` | "the hosted environment failed to provision" |
 | New input after a `self_hosted` Environment failed, input already waiting when the Environment failed, or an expired Environment | 409 `environment_unavailable` | "The environment is no longer available for new input." |
+| A message that would start a Turn on a Session whose bound MCP Credential, or its Vault, was deleted | 400 `invalid_request_error`, param null | "MCP credential_id {id} was not found in an attached vault" |
 | A message the Session's Harness cannot take, such as whitespace-only text on MiniMax Code | 400 `unsupported_or_invalid_configuration` | See [whitespace-only text](./message-content.md#whitespace-only-text) |
 
-An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Apart from the unknown tool call message, which names its `call_id` as the official SDK expects, error messages never repeat caller input or internal identifiers.
+An empty `turn_id` or blank `call_id` is the generic 400 `invalid_request`. Apart from the unknown tool call message, which names its `call_id` as the official SDK expects, and the Credential message, which names the Credential as Session creation does, error messages never repeat caller input or internal identifiers.
 
 ## Initial input at Session creation
 
@@ -121,7 +122,7 @@ A retry with the same `Idempotency-Key` and `stream: true` returns 201 with only
 - Codex command output streams as `agent.output.command_execution_output.delta` with the command's Item ID and output index. Native output quotas and text conversion apply, so the deltas are not a byte-exact capture; the completed Item is authoritative.
 - A reasoning Item follows one sequence: `item.added` in progress with an empty `summary`; for each `summary_text` part in order, `reasoning_summary_part.added` with empty text, `reasoning_summary_text.delta` events, then `reasoning_summary_text.done` and `reasoning_summary_part.done` once the next part starts or the Item ends; then `item.done`. `reasoning_summary_part.done` has `status` `incomplete` for a part a cancelled or failed Turn cut off, otherwise null.
 - A cancelled or failed Turn marks its unfinished Items `incomplete` and keeps their partial content.
-- A function call stays in `required_actions` until the Harness applies its result, or cancellation or the Turn's end removes it. A repeated notification emits no new state.
+- A function call stays in `required_actions` until the Harness applies its result or the Turn ends. A cancellation request does not remove it from a waiting Turn. A repeated notification emits no new state.
 
 ## Turns and Items
 

@@ -61,7 +61,7 @@ func TestEnvironmentResourceExactProjectionWithoutExecution(t *testing.T) {
 				t.Fatal("resource read failed", w.Code, w.Body)
 			}
 			want := map[string]any{
-				"id": f.environment.ID, "object": "agent.environment", "type": "self_hosted", "status": status,
+				"id": f.environment.ID, "object": "agent.environment", "type": "self_hosted", "status": strings.Replace(status, "pending", "disconnected", 1),
 				"files": []any{}, "plugins": []any{}, "skills": []any{},
 			}
 			if !reflect.DeepEqual(got, want) || f.calls != 1 || f.tenant != f.environment.TenantID || f.id != f.environment.ID {

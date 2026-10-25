@@ -68,8 +68,8 @@ func readSourceUpload(r *http.Request, dst io.Writer) (files.Upload, error) {
 				return input, files.ErrInvalidInput
 			}
 			value, err := io.ReadAll(io.LimitReader(part, 65))
-			if err != nil || len(value) > 64 {
-				return input, files.ErrInvalidInput
+			if err != nil {
+				return input, sourceUploadError(err)
 			}
 			input.Purpose = string(value)
 		}
@@ -80,8 +80,14 @@ func readSourceUpload(r *http.Request, dst io.Writer) (files.Upload, error) {
 	if _, err := io.CopyBuffer(io.Discard, r.Body, buffer); err != nil {
 		return input, sourceUploadError(err)
 	}
-	if !seen["file"] || !seen["purpose"] || input.Purpose != files.PurposeUserData {
-		return input, files.ErrInvalidInput
+	switch {
+	case !seen["purpose"]:
+		return input, &fieldError{param: "purpose", message: "Missing required parameter: 'purpose'."}
+	case input.Purpose != files.PurposeUserData:
+		return input, &fieldError{param: "purpose", message: "Only purpose user_data is supported."}
+	case !seen["file"]:
+		// The official service names purpose for a missing file part too.
+		return input, &fieldError{param: "purpose", message: "A file part is required."}
 	}
 	return input, nil
 }

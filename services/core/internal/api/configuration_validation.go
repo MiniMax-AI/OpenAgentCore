@@ -4,32 +4,34 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
 
-// Agent configuration protocol validation is owned by Core. It covers saved
-// Agent create and update bodies and the inline Session agent, and runs before
-// the configuration parsers (which keep Core's local limits and codes) and
-// before harness admission. It walks the raw JSON along the request shapes that
-// scripts/generate-public-api.py projects from the pinned schema
-// (official_shapes.gen.go) and reports the first violation as a fieldError with
-// the JSON path as param and the official message forms. x_agents_core keeps
-// its own parser.
+// Request protocol validation is owned by Core. It covers the Agent, Session,
+// Vault, Credential, Environment Template and Session event bodies and the
+// inline Session agent, and runs before the local parsers (which keep Core's
+// limits and codes) and before harness admission. It walks the raw JSON along
+// the request shapes that scripts/generate-public-api.py projects from the
+// pinned schema (official_shapes.gen.go) and reports the first violation as a
+// fieldError with the JSON path as param and the official message forms.
+// x_agents_core keeps its own parser.
 
 type valueKind uint8
 
 const (
-	anyValue     valueKind = iota // validated by its own parser
-	stringValue                   // str
-	booleanValue                  // bool
-	integerValue                  // int with an inclusive minimum
-	enumValue                     // Literal[...] of strings
-	arrayValue                    // Iterable/SequenceNotStr of items
-	mapValue                      // Dict[str, object], or Dict[str, str] with items
-	openObject                    // an object whose members are validated elsewhere
-	objectValue                   // TypedDict members
-	unionValue                    // TypedDicts selected by their "type" member
+	anyValue           valueKind = iota // validated by its own parser
+	stringValue                         // str
+	booleanValue                        // bool
+	integerValue                        // int with an inclusive minimum
+	enumValue                           // Literal[...] of strings
+	arrayValue                          // Iterable/SequenceNotStr of items
+	mapValue                            // Dict[str, object], or Dict[str, str] with items
+	openObject                          // an object whose members are validated elsewhere
+	objectValue                         // TypedDict members
+	unionValue                          // TypedDicts selected by their "type" member
+	stringOrArrayValue                  // a str, or an Iterable of items
 )
 
 type shape struct {
@@ -50,8 +52,17 @@ type member struct {
 
 var requiredString = shape{kind: stringValue, required: true}
 
-// validateSavedAgentBody checks a saved Agent create or update body. Malformed
-// and non-object bodies keep the existing whole-body error.
+// validateBody checks a request body against its pinned shape. Malformed and
+// non-object bodies keep the existing whole-body error.
+func validateBody(raw []byte, root shape) error {
+	if !json.Valid(raw) || jsonValueKind(raw) != "an object" {
+		return nil
+	}
+	return checkValue("", raw, root)
+}
+
+// validateSavedAgentBody checks a saved Agent create or update body, then the
+// semantic rules of its configuration.
 func validateSavedAgentBody(raw []byte, root shape) error {
 	if !json.Valid(raw) || jsonValueKind(raw) != "an object" {
 		return nil
@@ -82,10 +93,39 @@ func validateAgentConfiguration(path string, raw json.RawMessage, root shape) er
 	if value := fields["text"]; jsonValueKind(value) == "an object" {
 		_ = json.Unmarshal(value, &text)
 	}
+	if err := checkMCPLabels(path, tools); err != nil {
+		return err
+	}
 	if text.Format == nil {
 		return configurationConflict(tools, "", nil)
 	}
 	return configurationConflict(tools, text.Format.Type, text.Format.Schema)
+}
+
+var mcpServerLabel = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+// checkMCPLabels rejects an MCP server_label outside [A-Za-z0-9_-] and a label
+// repeated by a later tool, naming the offending tool's server_label.
+func checkMCPLabels(path string, tools []json.RawMessage) error {
+	seen := map[string]bool{}
+	for i, raw := range tools {
+		var tool struct {
+			Type        string `json:"type"`
+			ServerLabel string `json:"server_label"`
+		}
+		if json.Unmarshal(raw, &tool) != nil || tool.Type != "mcp" {
+			continue
+		}
+		param := joinPath(path, fmt.Sprintf("tools[%d].server_label", i))
+		if !mcpServerLabel.MatchString(tool.ServerLabel) {
+			return &fieldError{param: param, message: "MCP server_label may contain only letters, digits, underscores and hyphens."}
+		}
+		if seen[tool.ServerLabel] {
+			return &fieldError{param: param, message: "MCP server_label must be unique across the tools."}
+		}
+		seen[tool.ServerLabel] = true
+	}
+	return nil
 }
 
 func checkValue(path string, raw json.RawMessage, s shape) error {
@@ -113,9 +153,16 @@ func checkValue(path string, raw json.RawMessage, s shape) error {
 			return invalidType(path, "an integer", got)
 		}
 		return checkMinimum(path, string(bytes.TrimSpace(raw)), s.minimum)
-	case arrayValue:
+	case arrayValue, stringOrArrayValue:
+		expected := "an array"
+		if s.kind == stringOrArrayValue {
+			if got == "a string" {
+				return nil
+			}
+			expected = "a string or an array"
+		}
 		if got != "an array" {
-			return invalidType(path, "an array", got)
+			return invalidType(path, expected, got)
 		}
 		var items []json.RawMessage
 		if err := json.Unmarshal(raw, &items); err != nil {
@@ -181,15 +228,13 @@ func checkValue(path string, raw json.RawMessage, s shape) error {
 // which encoding/json would merge, never reach it: the shared body gate
 // (readJSONObject) rejects them first.
 func checkMembers(path string, raw json.RawMessage, members []member) error {
-	keys, fields := orderedMembers(raw)
-	for _, key := range keys {
-		if _, known := findMember(members, key); !known {
-			if !echoableField(key) {
-				return errUnknownParameter
-			}
-			return &fieldError{param: joinPath(path, key), message: fmt.Sprintf("Unknown parameter: '%s'.", joinPath(path, key))}
+	if key, unknown := unknownMember(raw, members); unknown {
+		if !echoableField(key) {
+			return errUnknownParameter
 		}
+		return &fieldError{param: joinPath(path, key), message: fmt.Sprintf("Unknown parameter: '%s'.", joinPath(path, key))}
 	}
+	keys, fields := orderedMembers(raw)
 	for _, key := range keys {
 		spec, _ := findMember(members, key)
 		if err := checkValue(joinPath(path, key), fields[key], spec.shape); err != nil {
@@ -202,6 +247,31 @@ func checkMembers(path string, raw json.RawMessage, members []member) error {
 		}
 	}
 	return nil
+}
+
+// unknownMember returns the first key outside members in document order. It
+// stops there and keeps no map, so a body of many unknown keys costs no more
+// than its first one.
+func unknownMember(raw json.RawMessage, members []member) (string, bool) {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
+		return "", false
+	}
+	for decoder.More() {
+		token, err := decoder.Token()
+		key, isKey := token.(string)
+		if err != nil || !isKey {
+			return "", false
+		}
+		if _, known := findMember(members, key); !known {
+			return key, true
+		}
+		var value json.RawMessage
+		if decoder.Decode(&value) != nil {
+			return "", false
+		}
+	}
+	return "", false
 }
 
 // configurationConflict reports the official semantic rejections of a

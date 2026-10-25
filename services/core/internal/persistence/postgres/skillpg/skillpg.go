@@ -108,6 +108,9 @@ func (s *Store) SetDefaultVersion(ctx context.Context, tenantID string, skillID 
 			return err
 		}
 		target, err := q.GetSkillVersion(ctx, sqlc.GetSkillVersionParams{TenantID: tenant, SkillID: pgID(skillID), Version: version})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return skills.ErrVersionNotFound
+		}
 		if err != nil {
 			return err
 		}

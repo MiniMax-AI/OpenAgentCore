@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	"github.com/google/uuid"
 )
 
 func TestInstalledPathsRejectMissingAndRelativeRoots(t *testing.T) {
@@ -41,5 +42,28 @@ func TestConfigurationDiscoveryUsesSuppliedProcessPaths(t *testing.T) {
 	}
 	if _, err := (ConfigurationAdapter{}).DiscoverConfiguration(t.Context(), input, sandbox.ProcessPaths{}); !errors.Is(err, sandbox.ErrConfigurationUnconfirmed) {
 		t.Fatalf("missing roots: %v", err)
+	}
+}
+
+func TestBuildDirectCreatesItsPrivateStateDirectory(t *testing.T) {
+	paths := sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}
+	binary, state, err := InstalledPaths(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(binary), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	selection := sandbox.Selection{Provider: "e2b", Configuration: &DeploymentConfiguration{APIKey: "synthetic-key", Template: "test:" + uuid.NewString()}}
+	for range 2 {
+		if _, err := BuildDirect(sandbox.DirectConfig{ProcessPaths: paths, InstallationID: uuid.NewString(), Selection: selection}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if info, err := os.Stat(state); err != nil || info.Mode().Perm() != 0700 {
+		t.Fatalf("state directory: %v %v", info, err)
 	}
 }

@@ -55,6 +55,11 @@ func environmentResponse(environment sessions.Environment) (v1.EnvironmentInfo, 
 	default:
 		return v1.EnvironmentInfo{}, errors.New("unsupported stored environment resource status")
 	}
+	status := environment.Status
+	if status == "pending" && configuration.Type == "self_hosted" {
+		// A self_hosted Environment that has never connected reads disconnected.
+		status = "disconnected"
+	}
 	files := configuration.Files
 	if files == nil {
 		files = []json.RawMessage{}
@@ -66,7 +71,7 @@ func environmentResponse(environment sessions.Environment) (v1.EnvironmentInfo, 
 		configuration.Plugins = []json.RawMessage{}
 	}
 	return v1.EnvironmentInfo{
-		ID: environment.ID, Object: "agent.environment", Type: configuration.Type, Status: environment.Status,
+		ID: environment.ID, Object: "agent.environment", Type: configuration.Type, Status: status,
 		Files: files, Plugins: configuration.Plugins, Skills: configuration.Skills,
 	}, nil
 }
