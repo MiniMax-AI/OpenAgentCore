@@ -134,10 +134,6 @@ The sibling `<install-dir>.lock` directory is for synchronization; `<install-dir
 
 The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `database`, `core` and `web`. Core applies database migrations when it starts. Web serves the console and is the only service with a published port, `OAC_WEB_PORT`; see [Request boundary](./web/console-server.md#request-boundary) for what it forwards. No service receives a Docker socket, and Web and Core have no KVM access.
 
-## Independent workspace storage {#independent-workspace-storage}
-
-microsandbox requires independent workspace storage, and the only supported combination is with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the Compose mount, the selection payloads and the quota mode storage server.
-
 ## Appendix: Core environment without the installer
 
 Core reads its process environment. Compose interpolates `.env` into it and mounts secrets at the container paths below. When running Core directly, set the file variables to absolute paths readable by the Core process; see the [service guide](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md).

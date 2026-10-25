@@ -1,14 +1,14 @@
 ---
 title: "配置公开地址"
 source: docs/getting-started/public-address.md
-source_hash: 02eb5d34fb53a65e4cadb60ada04c98c5667e083141e56b8c5169683926a8249
+source_hash: 29563e665c6fdcecc63fe7813e7138d100a4dc4f98389625cbdb6fd25d924a21
 ---
 
 设置浏览器、节点、沙箱和应用访问 Core 所用的唯一源地址，并在其前面放置带 HTTPS 的反向代理。本指南面向将 Core 暴露到其所在机器之外的运维人员。
 
 ## 选择公开 URL {#choose-the-public-url}
 
-`OAC_PUBLIC_URL` 是应用、节点、沙箱和自托管执行器使用的源地址。Web 只接受其中的主机。Core 从中派生其他地址，列在[`OAC_PUBLIC_URL`](../configuration.md#appendix-core-environment-without-the-installer)下。它是不含路径的 http 或 https 源地址。
+`OAC_PUBLIC_URL` 是应用、节点、沙箱和自托管执行器使用的源地址。Web 只接受其中的主机，因此 DNS 重绑定无法访问它。Core 从中派生其他地址，列在[`OAC_PUBLIC_URL`](../configuration.md#appendix-core-environment-without-the-installer)下。它是不含路径的 http 或 https 源地址。
 
 | 场景 | 公开 URL |
 | --- | --- |
@@ -102,18 +102,10 @@ curl -s -o /dev/null -w '%{http_code}\n' -H 'OpenAI-Beta: agents=v1' https://cor
 
 ### 使用快速隧道进行本地试用 {#try-it-locally-with-a-quick-tunnel}
 
-[Cloudflare 快速隧道](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)会为使用外部入口的试用安装提供一个临时公共 HTTPS 地址。它只会转发到一个端口，因此需要在前面放置一个具有相同路由的本地代理：
+[Cloudflare 快速隧道](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/)会为使用外部入口的试用安装提供一个临时公共 HTTPS 地址。
 
-```caddyfile
-http://:8443 {
-	bind 127.0.0.1
-	reverse_proxy 127.0.0.1:8080
-}
-```
-
-1. 启动代理：`caddy run --config Caddyfile`。
-2. 启动隧道：`cloudflared tunnel --url http://127.0.0.1:8443`。它会打印一个地址，例如 `https://random-words.trycloudflare.com`。
-3. 在 `~/.oac/core/.env` 中将该地址设置为 `OAC_PUBLIC_URL`，并运行 `~/.oac/core/oac apply`。
+1. 启动隧道：`cloudflared tunnel --url http://127.0.0.1:8080`。它会打印一个地址，例如 `https://random-words.trycloudflare.com`。
+2. 在 `~/.oac/core/.env` 中将该地址设置为 `OAC_PUBLIC_URL`，并运行 `~/.oac/core/oac apply`。
 
 每当 `cloudflared` 重启时，该地址都会改变；随后必须重新添加绑定到旧地址的节点。吞吐量较低，因此节点首次下载 Runtime（约 500 MB）时可能很慢；请参阅[慢速链接](./nodes.md#rerun-expiry-and-slow-links)。
 

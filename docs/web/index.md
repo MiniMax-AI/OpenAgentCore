@@ -54,7 +54,7 @@ Each Harness's default model is set in **Settings → Models and credentials**:
 
 The deployment's sandbox backend serves hosted Sessions. An application's `self_hosted` Runtime, including one in its own E2B account, is a separate path that the sandbox configuration does not change.
 
-A loopback public address (`local_only`) keeps nodes and remote applications from reaching Core. The console stays reachable at its own address and [warns about it](./console-api-usage.md#provenance-and-monitoring).
+A loopback public address (`local_only`) keeps nodes and remote applications from reaching Core. The console stays reachable at its own address and warns about it.
 
 ## Diagnose a failure
 

@@ -117,7 +117,7 @@ function SandboxManager({ consoleConfig }: { consoleConfig: SandboxConsoleConfig
   const hostedNodes = snapshot?.deployment.mode === "nodes";
   // Nodes share the deployment's Provider, which declares whether sandboxes suspend.
   const suspends = Boolean(snapshot?.deployment.suspension);
-  // A node enrolled with another address than Core's current one (config.json's public_url) gets no new sandboxes until it is added again.
+  // A node enrolled with another address than Core's current one (OAC_PUBLIC_URL) gets no new sandboxes until it is added again.
   const staleNodes = hostedNodes && snapshot ? nodes.filter((node) => onOldAddress(node, snapshot.deployment.core_url)).map((node) => node.name || node.id) : [];
   const selected = params.id ? nodes.find((node) => node.id === params.id) : undefined;
   const editTarget = editId ? nodes.find((node) => node.id === editId) ?? null : null;

@@ -40,7 +40,7 @@ Install with `--host 127.0.0.1`, point your reverse proxy at Web and set `--publ
 
 ## Docker Compose and hosting platforms
 
-Use the `compose.yaml` from a release on any [supported Core host](./install.md#prerequisites). The release pins its initialization, Core, Web and PostgreSQL images and source revision. PostgreSQL 16 is the official image, pinned by digest and mirrored to GHCR with the other images. It starts PostgreSQL, Core and Web. Data lives in a named Docker volume. The one-time initialization service generates random secrets there and prepares the node installer; Core applies database migrations when it starts. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
+Use the `compose.yaml` from a release on any [supported Core host](./install.md#prerequisites). The release pins its initialization, Core, Web and PostgreSQL images and source revision. [Compose configuration](../configuration.md#compose-installations) owns the settings and the data directory.
 
 For a local trial, download `compose.yaml` from a release into an empty directory, then run:
 
@@ -49,9 +49,7 @@ docker compose up -d --wait --wait-timeout 900
 docker compose exec web oac-web core-key
 ```
 
-`oac-web core-key` prints the generated Core key to your terminal without writing it to container logs. Open `http://localhost:8080` and use that key to sign in. All installation secrets are generated automatically; keep the same Compose project and its data volume when restarting.
-
-The initialization image contains only the small node installation metadata alongside the initialization command. First startup verifies and copies that metadata without downloading the control archive or requiring access to GitHub Releases. Later starts verify the saved files. Container images still need to be pulled. An interrupted first initialization can be rerun; an existing database with missing installation secrets is refused.
+Open `http://localhost:8080` and sign in with the printed Core key.
 
 You can deploy before choosing a domain: leave `OAC_PUBLIC_URL` unset or empty, then follow [Compose configuration](../configuration.md#compose-installations) to set it and redeploy once the platform's domain is ready. The initial localhost origin allows services to start; Web accepts the configured host only, so platform-domain access becomes available after that redeployment.
 

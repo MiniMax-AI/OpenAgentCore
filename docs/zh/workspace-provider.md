@@ -1,7 +1,7 @@
 ---
 title: 工作区文件系统协议
 source: docs/workspace-provider.md
-source_hash: cdc12d0deb1e9c1a7bf90fb2f360b08289a0468a3fb059371eb90055363fc1c6
+source_hash: b7f103947580f0a4b987b3670e78a005668797212edd316f8ed2e7d6bc5d105a
 ---
 
 工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
@@ -98,13 +98,13 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 
 `Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 携带[工作区文件系统绑定](#identity-and-configuration)。策略声明了工作区存储的提供商要求提供绑定，缺失时返回 `ErrInvalid`；未声明的提供商保留自有 Environment 磁盘并拒绝绑定。提供时选择精确的外部对象，不得回退到其他磁盘。提供商在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；沙箱提供商不解释文件系统适配器参数或原生回执。
 
-`DeploymentPolicy.Workspace` 已声明表示提供商在外部存储上运行每个 Environment，并给出挂载要求；未声明表示使用提供商自有磁盘、不使用外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执记录所选能力，此类提供商始终具备该回执；未选择存储的部署返回 `ErrWorkspaceRequired`，Core 将其报告为 `workspace_storage_required`；[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)不会将文件系统配置复制进代次。Microsandbox 要求 `host_directory` 和 `user_xattr`；Docker 和 E2B 拒绝外部挂载。校验使用文件系统协议的组合校验器：`EnvironmentDiskMiB` 仅是容量配额请求，仅当存储声明 `capacity_quota` 时有效，默认值为零，表示不请求配额。根磁盘容量仍为必需。
+`DeploymentPolicy.Workspace` 已声明表示提供商在外部存储上运行每个 Environment，并给出挂载要求；未声明表示使用提供商自有磁盘、不使用外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执记录所选能力，此类提供商始终具备该回执；未选择存储的部署返回 `ErrWorkspaceRequired`，Core 将其报告为 `workspace_storage_required`。资源字段见[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)。
 
 Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解析绑定，仅向私有 helper 传递本地目录和不可变 ObjectID。Helper 挂载整个 `/environment`；保留内容与私有原生历史遵循[工作区文件系统范围](#lifetime-and-filesystem-scope)和 [Runtime 资源目录](configuration.md#runtime-resource-directories)。私有 HOME、凭据和计算根磁盘不是持久历史存储。原生资源通过对象和路径标签校验。检查点恢复校验快照对象，通过 SDK `Volumes` 重映射 `/environment`，要求严格外部挂载策略，并拒绝任何恢复警告。恢复部分失败时保留精确目标身份用于清理，不证明就绪。未知结果继续观察原操作。原生 Bind 检查点及 guest 内 flock 连续性不证明对未知 writer 的隔离。
 
 ## 内核 NFS 适配器 {#kernel-nfs-adapter}
 
-`nfs` 适配器使用由运维人员预挂载的 Linux 内核 NFS 文件系统。支持的配置是受信任 AUTH_SYS 客户端上的 NFSv4.2，启用 `root_squash`，Core 和节点使用相同导出和绝对挂载路径。适配器不挂载导出，也不管理 NFS 凭据或服务账户。其他操作系统返回 `ErrUnsupported`。[配置文档](./configuration.md#independent-workspace-storage)负责安装步骤和选择方式。
+`nfs` 适配器使用由运维人员预挂载的 Linux 内核 NFS 文件系统。支持的配置是受信任 AUTH_SYS 客户端上的 NFSv4.2，启用 `root_squash`，Core 和节点使用相同导出和绝对挂载路径。适配器不挂载导出，也不管理 NFS 凭据或服务账户。其他操作系统返回 `ErrUnsupported`。[设置工作区存储](./getting-started/workspace-storage.md)负责安装步骤和选择方式。
 
 参数包含 `root`、`namespace_id`、`uid`，配额模式下还包含 `quota`。`root` 是规范的绝对挂载路径；`namespace_id` 是非零规范 UUID；`uid` 是 Core 和节点均须使用的非零有效主机 UID。Compose 安装使用 65532，即 Core 容器的 UID。运维人员将挂载根目录设置为该 UID 所有、权限 `0700`，并准备同 UID 所有、权限 `0600` 的常规文件 `.oac-storage-root`，内容精确为命名空间 UUID 加一个换行符。应由导出服务端管理员在服务端存储上完成此操作；启用 root squash 的客户端不能假定有权变更所有者。根标记声明所选导出的身份，并非凭据或分布式锁。
 
@@ -135,9 +135,9 @@ stateDiagram-v2
     note right of deleted: Create and Resolve refuse the retired identity
 ```
 
-NFS 存储不提供计算 fencing 或自动分布式故障转移。Guest `flock` 不是跨 VM 写入者锁。上述单写入者和显式删除要求仍然必须遵守。确认释放后，可以允许另一兼容 node 上的新 VM 挂载同一对象，但 node 离线或 Create、Kill、快照清理结果未知均不证明旧写入方已停止。原生历史和数据库行为需要对所选 Runtime、Harness、文件系统组合进行资格验证；仅保留文件不保证原生 Session 恢复、跨 node 内存恢复或任意崩溃后的持久性。
+NFS 存储不提供计算 fencing 或自动分布式故障转移。
 
-所选部署代次使用外部工作区存储（每个 microsandbox 代次都是如此）时，Core 要求所选 Harness profile 支持 `retained_native_history`。创建流程在持有部署锁时校验该代次，然后才提交 Session 或计算预留。既有 Session 的 Runtime 准入和最终执行检查以不可变工作区绑定为依据。使用自有磁盘的提供商不要求此能力。
+所选部署代次使用外部工作区存储（每个 microsandbox 代次都是如此）时，Core 要求所选 Harness profile 支持 `retained_native_history`。创建流程在持有部署锁时校验该代次，然后才提交 Session 或计算预留。既有 Session 的 Runtime 准入和最终执行检查以不可变工作区绑定为依据。
 
 ## 一致性测试 {#conformance}
 

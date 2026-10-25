@@ -1,7 +1,7 @@
 ---
 title: "安装选项"
 source: docs/getting-started/install-options.md
-source_hash: e3503e97930dc4d36f34411e5588d4b9c7102b15eeb14d3763a797c18081af2e
+source_hash: 55b8023916a824d4d866cb6b1d6c75ccf498791e40975a13d647d9ac547b9a06
 ---
 
 本页是安装程序参数的参考，并说明如何用默认方式以外的方式安装：在已有反向代理之后、在托管平台上使用 Docker Compose，或在无法访问互联网的主机上。[默认安装](./install.md)无需任何选项。
@@ -42,7 +42,7 @@ Windows 上 `irm … | iex` 无法传参，默认执行策略也会拦截下载�
 
 ## Docker Compose 与托管平台 {#docker-compose-and-hosting-platforms}
 
-在任一[支持的 Core 主机](./install.md#prerequisites)上使用发行版中的 `compose.yaml`。发行流程会固定初始化、Core、Web 和 PostgreSQL 镜像及源码版本。PostgreSQL 16 使用官方镜像，按摘要固定，并与其他镜像一起镜像到 GHCR。它会启动 PostgreSQL、Core 和 Web。数据保存在 Docker 命名卷中。一次性初始化服务会在该卷中生成随机机密信息并准备节点安装程序；Core 启动时执行数据库迁移。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
+在任一[支持的 Core 主机](./install.md#prerequisites)上使用发行版中的 `compose.yaml`。发行流程会固定初始化、Core、Web 和 PostgreSQL 镜像及源码版本。[Compose 配置](../configuration.md#compose-installations)负责管理各项设置和数据目录。
 
 进行本地试用时，请将发行版的 `compose.yaml` 下载到一个空目录，然后运行：
 
@@ -51,9 +51,7 @@ docker compose up -d --wait --wait-timeout 900
 docker compose exec web oac-web core-key
 ```
 
-`oac-web core-key` 会将生成的 Core 密钥打印到终端，而不会将其写入容器日志。打开 `http://localhost:8080` 并使用该密钥登录。所有安装机密信息都会自动生成；重启时请保留同一个 Compose 项目及其数据卷。
-
-初始化镜像除初始化命令外，仅包含较小的节点安装元数据。首次启动会验证并复制这些元数据，无需下载控制归档或访问 GitHub Releases。后续启动会验证已保存的文件。容器镜像仍需拉取。首次初始化中断后可以重新运行；如果现有数据库缺少安装机密信息，初始化会被拒绝。
+打开 `http://localhost:8080`，使用输出的 Core 密钥登录。
 
 你可以在选择域名前进行部署：将 `OAC_PUBLIC_URL` 保持未设置或留空，然后在平台的域名准备好后，按照 [Compose 配置](../configuration.md#compose-installations)进行设置并重新部署。初始的 localhost 源地址允许服务启动；Web 仅接受已配置的主机，因此重新部署后即可通过平台域名访问。
 

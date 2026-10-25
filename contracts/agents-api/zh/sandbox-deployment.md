@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 279d5e0a8587dd866ff19f4d653fc91ab3f6026cf043bca57af104c34ecfc45c
+source_hash: 27e0c5be13ea610bf488553702c6f8eca3e530544855e754789116cdb2ddc703
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -41,7 +41,7 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `configuration` | 提供商的公开选择器。E2B：不可变的 `template` 构建以及可选且配套的 `api_url` 和 `domain`。Docker 和 microsandbox 仅接受 `{}` 或省略 |
 | `credential` | 提供商的只写凭据。E2B：`{api_key}`，首次设置时必填，在 PUT 中省略以保留当前密钥；null 或空密钥无效。Docker 和 microsandbox 拒绝该字段 |
 
-请求中没有 Core 地址。Core 根据安装公开 URL（`config.json` 中的 `public_url`，Core 对应 `OAC_PUBLIC_URL`）派生部署的 `core_url`：这是节点和沙箱客户机访问 Core 时使用的源地址。包含 `core_url` 的请求会像包含任何其他未知成员一样被拒绝，并返回 400 `invalid_request`。E2B 客户机从 E2B 云访问 Core，因此当公开 URL 为回环地址时，E2B 选择会被拒绝，并返回 409 `sandbox_configuration_error`。Docker 和 microsandbox 选择接受回环公开 URL，但这仅适用于本地开发，因为客户机的回环地址无法访问其主机。更改公开 URL 属于安装变更；参见[更改公开 URL](../../../docs/zh/getting-started/public-address.md#changing-the-public-url)。
+请求中没有 Core 地址。Core 根据安装公开 URL [`OAC_PUBLIC_URL`](../../../docs/zh/configuration.md#settings)派生部署的 `core_url`：这是节点和沙箱客户机访问 Core 时使用的源地址。包含 `core_url` 的请求会像包含任何其他未知成员一样被拒绝，并返回 400 `invalid_request`。E2B 客户机从 E2B 云访问 Core，因此当公开 URL 为回环地址时，E2B 选择会被拒绝，并返回 409 `sandbox_configuration_error`。Docker 和 microsandbox 选择接受回环公开 URL，但这仅适用于本地开发，因为客户机的回环地址无法访问其主机。更改公开 URL 属于安装变更；参见[更改公开 URL](../../../docs/zh/getting-started/public-address.md#changing-the-public-url)。
 
 ### 资源 {#resources}
 

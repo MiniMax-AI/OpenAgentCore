@@ -19,7 +19,7 @@ The account key is stored encrypted in Core's database and is write-only. It rea
 | `command` | `RunCommand` | Runs one bounded command as the Runtime user on a running sandbox whose bootstrap completed; output is limited to 1 MiB per stream |
 | `compute`, `renew_compute` | `GetCompute`, `RenewCompute` | One sandbox spans every generation of an allocation, and the receipt records the current generation, the pause and the resume. Any other generation is `not_found`. `renew_compute` extends a running sandbox's lease and otherwise observes like `compute` |
 | `suspend` | `Suspend` | Pauses the sandbox with the SDK's native memory snapshot, so the daemon survives and the paused sandbox is the snapshot. A pause that is dispatched but not seen complete is `unconfirmed`, never running |
-| `resume` | `Resume` | Records the attempt as dispatched, then reconnects with `connect`; the same operation is never dispatched twice and a failure after dispatch is `unconfirmed`. A snapshot that does not match the paused sandbox, its endpoint or its template build is `checkpoint_unusable` before any native call, durably for the operation |
+| `resume` | `Resume` | Records the attempt as dispatched, then reconnects with `connect`; the same operation is never dispatched twice and a failure after dispatch is `unconfirmed`. A snapshot that does not match the paused sandbox, its endpoint and installation, or its template build is `checkpoint_unusable` before any native call, durably for the operation |
 | `resume_compute` | `ResumeCompute` | Thaws the source only while it is running |
 | `kill_compute`, `delete_snapshot` | `KillCompute`, `DeleteSnapshot` | Destroy the sandbox only for the generation that owns it; a superseded generation owns nothing |
 | `command_compute` | `RunCommandCompute` | Runs one bounded command, such as the wake command, on the running current sandbox |
@@ -42,7 +42,7 @@ The request and credentials arrive on standard input; standard output carries on
 
 The state directory is the fixed `/state/e2b` ([private Provider state](../../../../docs/configuration.md#compose-installations)), which Core creates when it loads the Provider. It must be owned by the helper's user and grant no group or other access, and it lives on durable private storage across Core restarts. Its receipts hold SDK connection material, ownership identities and one-shot creation claims; they are not Core execution state. Losing the directory cannot authorize recreation or successful cleanup; never delete receipts after an uncertain call.
 
-A helper holds its allocation's lock until the SDK operation returns, even after Core's caller times out. Core tracks the helper's actual exit, and a credential change waits for running helpers without killing them. Helper exit never proves that a remote Create settled. Core serializes lifecycle requests per allocation and never replays Create.
+A helper holds its allocation's lock until the SDK operation returns, even after Core's caller times out.
 
 ## Create
 
@@ -58,7 +58,7 @@ An unknown Create is never repeated. A Create whose connection material was lost
 
 Inspection uses SDK metadata and ID reads only. SDK `connect` is used only in Resume, because it resumes paused compute. The version-pinned constructor that restores a client from saved connection material is confined to [`sdk.py`](sdk.py) and covered by a no-connect, no-create test. Resource drift fails inspection but still permits ownership-based cleanup.
 
-`CreateSettled` proves that the original Create and bootstrap can no longer mutate; it is independent of `BootstrapComplete`. An empty lookup never settles an unknown Create. Kill destroys every matching sandbox, confirms that none remains and only then records a settled tombstone; it returns `State=absent` with `CreateSettled`. A settled rejected Create with no sandbox IDs proves absence without a cloud request, so GetInfo and Kill still succeed when the key is invalid. Ordinary missing compute has no such proof.
+Kill destroys every matching sandbox, confirms that none remains and only then records a settled tombstone; it returns `State=absent` with `CreateSettled`. A settled rejected Create with no sandbox IDs proves absence without a cloud request, so GetInfo and Kill still succeed when the key is invalid. Ordinary missing compute has no such proof.
 
 ## Observations
 
@@ -66,7 +66,7 @@ Inspection uses SDK metadata and ID reads only. SDK `connect` is used only in Re
 
 ## Credential verification
 
-`verify_credential` checks the fixed build, the key's paginated team-owned template listing and each settled live receipt against the labelled sandbox listing. Template and sandbox scans each stop at 100 pages or the 30-second deadline. A missing or unsettled receipt, a repeated template cursor or an unconfirmed read never authorizes replacement, and no receipt changes. A readable public template does not prove that the key owns it. Core scans retained generations and allocation pages under one bounded verification context, then repeats the verification while provider calls are fenced, before it commits the new key. Authentication rejection, ownership mismatch and uncertainty return distinct fixed codes.
+`verify_credential` checks the fixed build, the key's paginated team-owned template listing and each settled live receipt against the labelled sandbox listing. Template and sandbox scans each stop at 100 pages or the 30-second deadline. A missing or unsettled receipt, a repeated template cursor or an unconfirmed read never authorizes replacement, and no receipt changes. A readable public template does not prove that the key owns it. Authentication rejection, ownership mismatch and uncertainty return distinct fixed codes.
 
 ## Build and tests
 

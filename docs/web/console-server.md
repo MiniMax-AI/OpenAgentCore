@@ -98,10 +98,6 @@ Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a meth
 
 With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution's node payload at `/node-install/` without sign-in: `node-install.pyz`, `manifest.json`, `SHA256SUMS`, `runtime/seccomp.json`, and the node artifacts the manifest declares under `artifacts/`. An artifact missing locally redirects (307) to its release download. Node install and uninstall commands download from `<public_url>/node-install/`, so the reverse proxy must send that path to the console. Nodes verify every checksum themselves.
 
-## Public address
-
-The operator's reverse proxy or hosting platform terminates HTTPS and routes to the console ([Configure the public address](../getting-started/public-address.md)), and `OAC_PUBLIC_URL` records the origin that browsers, applications, nodes and executors use. The console accepts only its host, so DNS rebinding cannot reach it.
-
 ## Verification
 
 After installing or changing the console, check:

@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 927c27a14bbcc394d7218053937eaea8eaf95258cfbe035d48d298568c97caa5
+source_hash: 0c4b0c50abbeabdca19980b4e7a67552680c0cdc7a534c586b58c9fe6a509ca8
 ---
 
 控制台服务器（`oac-web`）提供 Web，使用 Core 密钥认证管理员，并将浏览器的 `/core/v1` 请求转发到 Core。本参考面向不使用安装程序运行 Web 的运维人员，以及评审其安全边界的人员。
@@ -99,10 +99,6 @@ flowchart LR
 ## 节点安装文件 {#node-installation-payload}
 
 设置 `OAC_WEB_NODE_PAYLOAD_DIR` 后，控制台在 `/node-install/` 无需登录地提供匹配发行版的节点文件：`node-install.pyz`、`manifest.json`、`SHA256SUMS`、`runtime/seccomp.json`，以及清单声明的 `artifacts/` 下节点资产。本地缺失的资产重定向（307）到其发行下载地址。节点安装和卸载命令从 `<public_url>/node-install/` 下载，因此反向代理必须将该路径发给控制台。节点自行验证每个校验和。
-
-## 公开地址 {#public-address}
-
-运维人员的反向代理或托管平台终止 HTTPS 并把流量转到控制台（[配置公开地址](../getting-started/public-address.md)），`OAC_PUBLIC_URL` 记录浏览器、应用、节点和执行器使用的源地址。控制台只接受该地址的主机，因此 DNS 重绑定不能访问它。
 
 ## 验证 {#verification}
 

@@ -45,7 +45,6 @@ Node installation and removal require root. Web's command uses `sudo` unless the
 Copy the current command from **Nodes → Add node**. It includes this installation's address, checksum and enrollment token. Before downloading, it checks Linux amd64, Python 3.9+ and the required tools. Temporary download failures retry up to three attempts. If checksum verification fails, copy a fresh command from Web and retry.
 
 - It downloads into the invoking account's private `~/.oac/node-bootstrap` directory, checks SHA-256, and runs with `sudo`, or directly in a root shell. Each retry clears the unfinished download while holding a lock; verified `<sha256>.pyz` files remain available to installers.
-- The token reaches the installer on standard input, so it never appears in a process argument, an environment variable or sudo's log.
 - The leading space keeps the command out of the shell history where `HISTCONTROL` ignores such lines (the Debian and Ubuntu default).
 
 The installer shows each phase as it runs and, once Core confirms the node, a summary with status and log commands. `export NO_COLOR=1` disables colors; the command passes this through sudo as `--no-color`. It never prints tokens.
@@ -86,7 +85,6 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 
 - Rerunning the same command is safe. Once the node is registered, a rerun uses the node's own credential, changes nothing that already matches and needs no token. It changes nothing and says why when the node's retained identity or node program belongs to another Core address or installation, or when the sandbox configuration has changed since the node registered (the node prepares it itself; see [Change the sandbox configuration](#change-the-sandbox-configuration)): choose **Remove node** on **Nodes**, uninstall the node on the host, then add it again with **Add node**.
 - A run that fails before the node registers leaves nothing that Core knows. The next command, even after a configuration change, replaces the earlier attempt's configuration and any downloaded file that no longer matches, keeps the files that match and continues.
-- A command that already expired, or was used on another host, fails at once with `The enrollment command expired or was already used`: generate a new command and run it within an hour.
 - If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it, and the download continues where it stopped.
 - Every file shows its progress. Failed or interrupted downloads keep what arrived, and a rerun resumes each partial file where it stopped (`Resuming …`), reuses verified complete files and downloads the rest. If the server cannot resume, the file starts again from the beginning. A transfer that brings less than 64 KiB in a minute stops; check the network and rerun the command.
 - The Docker Runtime image is about 400 MB and the microsandbox files about 500 MB. On a slow link with Docker, load the image first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
@@ -106,7 +104,7 @@ Sandbox settings apply to the whole installation; nodes follow them.
 - **Capacity and idle suspension.** On **Nodes**, use **Edit node** for a node's active and retained limits, or **Use recommended** to fill in the recommendation. In **Settings** → **Sandbox and scheduling**, use **Automatic suspension** → **Idle before suspension (seconds)** → **Save** for the deployment-wide [idle policy](../../contracts/agents-api/sandbox-deployment.md#suspension-policy).
 - **Backend.** On the same page, choose **Reset deployment**. Auto reset archives idle hosted Sessions at once and lets running work finish until the deadline you set; force cancels it now. Offline nodes must come back so Core can confirm their cleanup. When the reset completes, Core has retired every node and unused command: set up the new backend, then add nodes again. **Cancel reset** stops the remaining work; archived Sessions stay archived.
 
-The [reset contract](../../contracts/agents-api/sandbox-deployment.md#generation-ownership-and-rollout) describes what reset archives and keeps. To archive a single hosted Session, use the [Core API](../../contracts/agents-api/admin-api.md#session-archive).
+The [reset contract](../../contracts/agents-api/sandbox-deployment.md#reset) describes what reset archives and keeps. To archive a single hosted Session, use the [Core API](../../contracts/agents-api/admin-api.md#session-archive).
 
 ## Checkpoint recovery across nodes
 

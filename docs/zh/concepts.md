@@ -1,7 +1,7 @@
 ---
 title: "概念"
 source: docs/concepts.md
-source_hash: a0749db928e9f8767f5547dec2e6fb4887d1ace214c6fb8a08fe2e7fd5667af0
+source_hash: 61daa0e61271a12b44904a1074f56dbb43721bae5a3e60a03eeaee3d2e5a7b60
 ---
 
 项目是 OpenAgentCore 的执行租户。应用使用其 API 密钥；运维人员使用独立的 Core 密钥管理安装实例。[API 命名空间和凭据](api/index.md)将每类调用方映射到对应命名空间和凭据。
@@ -34,4 +34,4 @@ Runtime daemon 在 Linux、macOS 和 Windows 上运行。原生平台行为由 R
 
 凭据值、模型提供商密钥和机密模板数据仅可写入：应用和管理员读取结果都不包含它们。对话文本、Skill 源码和 Artifact 内容是可读取的资源数据，管理员也可以读取。
 
-公开写入记录执行写入的 API 密钥。管理员写入记录独立的审计身份与目标项目。Web 的 actor 标签仅用于显示；Core 授权依据是 Core 密钥。审计失败会回滚写入。读取不进行审计，审计记录不包含请求体、秘密或文件内容。[写入来源](../../contracts/agents-api/zh/admin-api.md#write-provenance) 和[审计日志](../../contracts/agents-api/zh/admin-api.md#audit-log) 契约定义存储的记录。
+[写入来源](../../contracts/agents-api/zh/admin-api.md#write-provenance) 和[审计日志](../../contracts/agents-api/zh/admin-api.md#audit-log) 契约定义存储的记录。

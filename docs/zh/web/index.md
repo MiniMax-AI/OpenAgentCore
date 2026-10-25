@@ -1,7 +1,7 @@
 ---
 title: "Web 控制台"
 source: docs/web/index.md
-source_hash: eacc43b23569a21ee55d858602846ec93626432c81acba0792a94b0e1f0e1848
+source_hash: b7de8bf7ba82f43f9e60180a6ab544bd7327325cc86055723407c5f21dcd77e9
 ---
 
 Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥登录，查看健康状态和用量，检查应用创建的内容，并管理项目、密钥、节点和设置。应用使用项目 API 密钥调用 `/v1`，不使用 Web。
@@ -56,7 +56,7 @@ Web 观察并管理安装。它从不启动 Session，也不发送输入；只�
 
 部署的沙箱提供商服务托管 Session。应用的 `self_hosted` Runtime（包括它自己 E2B 账号中的 Runtime）是独立路径，修改沙箱配置不会影响它。
 
-回环公开地址（`local_only`）使节点和远程应用无法访问 Core。控制台仍可通过自己的地址访问，并[展示警告](console-api-usage.md#provenance-and-monitoring)。
+回环公开地址（`local_only`）使节点和远程应用无法访问 Core。控制台仍可通过自己的地址访问，并展示警告。
 
 ## 诊断故障 {#diagnose-a-failure}
 

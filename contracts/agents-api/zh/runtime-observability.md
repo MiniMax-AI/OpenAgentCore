@@ -1,10 +1,10 @@
 ---
 title: "Runtime 可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: de7eefac37eb9cc5935c28e2425efc323f1555771e48758ce9412455e891b52c
+source_hash: 0ff8d5a694d934cdc384b859f8192772689c7a5b6599124a2051e978aa7b52d3
 ---
 
-这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `internal/runtimeobs/otlpexporter`。
+这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`services/core/internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `services/core/internal/runtimeobs/otlpexporter`。
 
 观测属于遥测数据。它们绝不会创建、续期、唤醒、恢复或停止计算，绝不会影响 Session 活动，也绝不会决定空闲时间、挂起、准入或执行结果。
 
@@ -39,8 +39,6 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 - 当前磁盘使用量和容量，以字节计，且仅在提供商报告这些值时提供（E2B）。
 
 每项测量都是可选的。存在的零值表示观测到零；缺失值表示不可用，绝不会显示或聚合为零。Core 会拒绝以下采样：`observed_at` 晚于 Core 自身时钟，`started_at` 晚于 `observed_at`，或任一值为负数、非有限值、容量或限制值为零，或超出 JSON 安全整数范围。
-
-`lifecycle_state` 根据 Core 记录中的分配状态和计算阶段派生，绝不会从采样派生：没有分配或状态为 `creating` 时为 `pending`；状态为 `running` 且计算阶段为 `running` 或 `disabled` 时为 `active`；`suspended` 为 `sleeping`；`quiescing`、`suspending`、`restoring` 或 `waking` 为 `transitioning`；`cleanup_pending` 和 `released` 为 `stopped`。
 
 ## 提供商映射 {#provider-mapping}
 

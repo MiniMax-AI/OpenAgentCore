@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 16211a07449e565b8b6ad8856c0060140cd0a18ee16d16300ba969193afede74
+source_hash: 8524f052c003f02834e859bda9c1e1467d7e918f3f3e98b6be726317d078308a
 ---
 
 节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 或 Docker 时添加、修改和移除节点的运维人员；E2B 不需要节点。
@@ -47,7 +47,6 @@ Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添
 从 **节点 → 添加节点** 复制当前命令，其中已填入本安装的地址、校验和与注册令牌。命令先检查 Linux amd64、Python 3.9+ 和必要工具，再下载文件；临时网络故障最多尝试三次。校验失败时，从 Web 复制新命令重试。
 
 - 下载到当前账号的私有 `~/.oac/node-bootstrap` 目录，检查 SHA-256，再通过 `sudo` 执行；root shell 中则直接执行。每次持锁清理下载残片后重试，已验证的 `<sha256>.pyz` 保留供安装程序使用。
-- 令牌通过标准输入传给安装程序，不出现在进程参数、环境变量或 sudo 日志中。
 - 当 `HISTCONTROL` 忽略以空格开头的行时（Debian 和 Ubuntu 默认如此），前导空格能避免命令进入 shell 历史。
 
 安装程序逐阶段展示执行过程，Core 确认节点后展示状态与日志命令摘要。`export NO_COLOR=1` 禁用颜色；命令将其作为 `--no-color` 传过 sudo。程序不输出令牌。
@@ -88,7 +87,6 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 
 - 重新执行同一命令是安全的。节点注册后，重新运行使用节点自身凭据，不改变已匹配的内容，也无需令牌。以下情况程序不做任何修改并说明原因：保留的节点身份或节点程序属于其他 Core 地址或安装；或节点注册后沙箱配置发生变化（节点会自行准备，参阅[修改沙箱配置](#change-the-sandbox-configuration)），此时在 **节点** 选择 **移除节点**，在主机上卸载该节点，再通过 **添加节点** 重新添加。
 - 节点注册前失败的运行不会在 Core 留下任何记录。下一条命令即使在配置变更之后执行，也会替换上次尝试的配置和不再匹配的已下载文件，保留匹配的文件并继续。
-- 已过期或已在其他主机使用的命令立即失败，显示 `The enrollment command expired or was already used`：生成新命令并在 1 小时内执行。
 - 慢速下载期间命令过期时，注册失败并显示 `The enrollment command expired or was already used`。下载文件保留：在 Web 生成新命令后执行，下载从中断处继续。
 - 每个文件都会显示进度。失败或中断时保留已收到的部分；重新执行时，每个未完成的文件从中断处继续（`Resuming …`），复用已校验的完整文件，其余照常下载。服务器不支持续传时，该文件从头开始。每分钟下载不足 64 KiB 时会停止，请检查网络后重新执行命令。
 - Docker Runtime 镜像约 400 MB，microsandbox 文件约 500 MB。使用 Docker 且网络较慢时，可先加载镜像：将发行资产 `oac-<commit>-linux-amd64-runtime.tar.gz` 复制到主机并运行 `sudo docker load -i`。安装程序发现精确匹配的镜像后跳过下载。
@@ -108,7 +106,7 @@ root 只准备账号、组和服务单元；其他操作（包括 Docker 网络�
 - **容量与空闲挂起。** 在 **节点** 中通过 **编辑节点** 修改节点的活跃和保留上限，或用 **使用推荐值** 填入推荐值。在 **设置** → **沙箱与调度** 中，通过 **自动挂起** → **空闲多久后挂起（秒）** → **保存** 修改整个部署的[空闲策略](../../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy)。
 - **沙箱提供商。** 同一页面选择 **重置部署**。自动重置立即归档空闲托管 Session，并让运行中的工作在设定截止时间前完成；强制重置立即取消工作。离线节点必须恢复连接，让 Core 确认清理。重置完成时，Core 已撤销所有节点和未使用命令：配置新的沙箱提供商后重新添加节点。**取消重置** 停止剩余工作；已归档 Session 仍保持归档。
 
-[重置协议](../../../contracts/agents-api/zh/sandbox-deployment.md#generation-ownership-and-rollout)描述重置会归档和保留哪些内容。归档单个托管 Session 时，使用 [Core API](../../../contracts/agents-api/zh/admin-api.md#session-archive)。
+[重置协议](../../../contracts/agents-api/zh/sandbox-deployment.md#reset)描述重置会归档和保留哪些内容。归档单个托管 Session 时，使用 [Core API](../../../contracts/agents-api/zh/admin-api.md#session-archive)。
 
 ## 跨节点的检查点恢复 {#checkpoint-recovery-across-nodes}
 

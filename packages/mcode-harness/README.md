@@ -14,11 +14,7 @@ No second model or scheduling loop is introduced. Hosted public execution is not
 
 ## Build
 
-`source.json` pins the CLI source. The pinned npm package supplies native runtime dependencies; the CLI is built from the patched source with its upstream build script and lockfile. On Linux x86_64 or macOS arm64:
-
-```sh
-MCODE_NATIVE_SOURCE=/absolute/upstream/checkout MCODE_CLI_DIR=/absolute/pinned/package bash scripts/build-mcode-harness.sh
-```
+`source.json` pins the CLI source. The pinned npm package supplies native runtime dependencies; the CLI is built from the patched source with its upstream build script and lockfile. The commands are in [Runtime images and helpers](../../docs/maintainers.md#runtime-images-and-helpers).
 
 `provenance.json` records the hash of every artifact file. The artifact lands in `MCODE_HARNESS_BUILD_DIR`, or a new `${OAC_DEV_HOME:-$HOME/.oac}/build/mcode-harness-<timestamp>` directory. Runtime packaging uses this single artifact and installs it immutably at `/opt/mcode-harness`.
 

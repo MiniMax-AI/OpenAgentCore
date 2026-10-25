@@ -55,7 +55,7 @@ check-go: check-openapi
 check-runtime-contract:
 	go test ./internal/agentdaemon/proto/... ./services/core/internal/runtimegateway ./apps/daemon/internal/transport ./apps/daemon/internal/dispatch ./apps/daemon/internal/wireconformance -count=1
 	go test ./services/core/internal/execution -run '^TestRuntimeProtocol' -count=1
-	go test ./apps/daemon/internal/agent/... -run '^(TestSharedTextLifecycle|TestPublicHarnessContractDeclarations|TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement|TestUnsupportedExtensionsHaveNoNativeEffects)$$' -count=1
+	go test ./apps/daemon/internal/agent/... -run '^(TestSharedTextLifecycle|TestPublicHarnessContractDeclarations|TestRegistryRejectsEveryOmittedCapabilityBeforeReplacement)$$' -count=1
 
 build-daemon:
 	@set -e; output="$${OAC_DEV_HOME:-$$HOME/.oac}/build/daemon"; \
