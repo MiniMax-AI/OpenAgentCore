@@ -1080,18 +1080,16 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   assert.equal(firstCard.schema, "2.0");
   assert.equal(firstCard.config.summary.content, "处理中 · 正在整理结果 · 2 步");
   // The header says what is happening now; the body starts with the timeline.
-  assert.deepEqual(firstCard.header, {
-    title: { tag: "plain_text", content: "处理中" },
-    subtitle: { tag: "plain_text", content: "正在整理结果 · 2 步" },
-    template: "blue",
-  });
+  assert.deepEqual(firstCard.header, { title: { tag: "plain_text", content: "处理中 · 正在整理结果 · 2 步" }, template: "blue" });
   const [said, ran] = firstCard.body.elements;
   assert.equal(said.tag, "markdown");
   assert.equal(said.content, "先读取飞书技能文档。");
   assert.equal(ran.tag, "collapsible_panel");
   assert.equal(ran.expanded, false);
-  assert.match(ran.header.title.content, /运行.*`cat \/workspace\/\.agents\/skills\/lark-shar…`.*0\.4s/);
-  assert.match(ran.elements[0].content, /`cat \/workspace\/\.agents\/skills\/lark-shared\/SKILL\.md`/);
+  // One line per row: a long command is shortened, and its full text is one click away.
+  assert.match(ran.header.title.content, /运行.* cat \/workspace\/\.agents\/skills\/.*….*0\.4s/);
+  assert.match(ran.elements[0].header.title.content, /运行.* cat \/workspace.*…/);
+  assert.match(ran.elements[0].elements[0].text.content, /命令\ncat \/workspace\/\.agents\/skills\/lark-shared\/SKILL\.md/);
 
   finishTurn = true;
   items.push({
@@ -1115,7 +1113,7 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   assert.equal(process.expanded, false);
   assert.match(process.header.title.content, /处理过程 · 2 步/);
   assert.equal(process.elements[0].content, "先读取飞书技能文档。");
-  assert.match(process.elements[1].elements[0].content, /`cat \/workspace/);
+  assert.match(process.elements[1].elements[0].header.title.content, /cat \/workspace/);
   assert.doesNotMatch(
     JSON.stringify(patchedCard),
     /任务编号|在 Web 会话下载|Parsar/,
@@ -1404,7 +1402,7 @@ test("a failure shows its cause with the failed step right below, and a plain an
   assert.equal(card.config.summary.content, "执行失败");
   const [cause, , failed, process] = card.body.elements;
   assert.match(cause.content, /<font color='red'>permission denied<\/font>/);
-  assert.match(failed.content, /运行.*`lark-cli docs \+fetch --doc abc`.*<font color='red'>失败<\/font>/);
+  assert.match(failed.content, /运行.* lark-cli docs \+fetch --doc abc .*<font color='red'>失败<\/font>/);
   assert.match(process.header.title.content, /处理过程 · 1 步/);
   const quiet = JSON.parse(
     formatTurnCard("completed", [
@@ -1435,7 +1433,7 @@ test("web searches appear as readable steps in the Feishu record", async () => {
     ]),
   );
   const search = card.body.elements[2].elements[0];
-  assert.match(search.header.title.content, /搜索网页.*`OpenAgentCore release`/);
+  assert.match(search.header.title.content, /搜索网页.* OpenAgentCore release/);
 });
 
 test("Feishu delivers QR during authorization and artifact media once, retaining uploaded keys after a lost send", async (t) => {
@@ -1571,22 +1569,22 @@ test("consecutive tool calls fold into one row, each joined with its result and 
     { type: "command_execution", command: "pwd", cwd: "/workspace", output: "/workspace", exit_code: 0, duration_ms: 420, status: "completed" },
     { type: "mcp_call", name: "read", server_label: "docs", arguments: { id: 3 }, status: "incomplete" },
   ]));
-  assert.match(card.header.subtitle.content, /2 步/);
+  assert.match(card.header.title.content, /2 步/);
   const [thought, calls] = card.body.elements;
   assert.match(thought.header.title.content, /思考.*先检查接口/);
   assert.equal(thought.elements[0].content, "先检查接口，再处理结果。");
   assert.equal(calls.tag, "collapsible_panel");
   assert.match(calls.header.title.content, /调用 3 次工具.*<font color='red'>失败 1 次<\/font>/);
   const [lookup, pwd, read] = calls.elements;
-  assert.match(lookup.header.title.content, /调用工具.*`lookup`.*<font color='red'>失败<\/font>/);
+  assert.match(lookup.header.title.content, /调用工具.* lookup .*<font color='red'>失败<\/font>/);
   const literal = lookup.elements[0].text;
   assert.equal(literal.tag, "plain_text");
   assert.match(literal.content, /invoice/);
   assert.match(literal.content, /permission denied/);
   assert.match(literal.content, /<at id=all>/);
-  assert.match(pwd.header.title.content, /运行.*`pwd`.*0\.4s/);
+  assert.match(pwd.header.title.content, /运行.* pwd .*0\.4s/);
   assert.match(pwd.elements[0].text.content, /退出码\n0/);
-  assert.match(read.header.title.content, /调用工具.*`docs · read`.*未完成/);
+  assert.match(read.header.title.content, /调用工具.* docs · read .*未完成/);
 });
 
 test("resumed questions display only the current exchange, including on completion", async () => {
@@ -2001,8 +1999,8 @@ test("a running card shows the latest four steps and folds the earlier ones", as
   ]);
   const card = JSON.parse(formatTurnCard("in_progress", items));
   const [earlier, rule, ...recent] = card.body.elements;
-  const label = (row) => row.tag === "markdown" ? row.content : row.header.title.content.match(/`(.*)`/)[1];
-  assert.equal(card.header.subtitle.content, "正在运行 · 8 步");
+  const label = (row) => row.tag === "markdown" ? row.content : row.header.title.content.match(/(step \d)/)[1];
+  assert.equal(card.header.title.content, "处理中 · 正在运行 · 8 步");
   assert.equal(earlier.tag, "collapsible_panel");
   assert.equal(earlier.expanded, false);
   assert.match(earlier.header.title.content, /更早的 4 步/);
@@ -2011,4 +2009,42 @@ test("a running card shows the latest four steps and folds the earlier ones", as
   assert.deepEqual(earlier.elements.map(label), ["说明 1", "step 1", "说明 2", "step 2"]);
   assert.deepEqual(recent.map(label), ["说明 3", "step 3", "说明 4", "step 4"]);
   assert.match(recent.at(-1).header.title.content, /进行中/);
+});
+
+test("thinking and tool rows stay on one line while commentary keeps its lines", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const long = "先确认已有的模型和 Skill，再创建环境，然后检查飞书机器人的绑定和连接状态是否正常，最后试运行";
+  const card = JSON.parse(formatTurnCard("in_progress", [
+    { type: "reasoning", summary: [{ text: long }] },
+    { type: "command_execution", command: `for i in 1 2 3 4; do sleep 30; node parsar.mjs GET /app/runtimes/${"x".repeat(80)}/trial; done`, output: "ok", duration_ms: 128700, status: "completed" },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "第一行说明。\n第二行说明。" }] },
+  ]));
+  const columns = (text) => [...text.replace(/<[^>]*>/g, "")].reduce((sum, char) => {
+    const code = char.codePointAt(0);
+    return sum + (code >= 0x1100 && !(code >= 0x2000 && code <= 0x206f) ? 2 : 1);
+  }, 0);
+  const [thought, run, said] = card.body.elements;
+  for (const row of [thought, run]) assert.ok(columns(row.header.title.content) <= 52, row.header.title.content);
+  assert.match(run.header.title.content, /128\.7s<\/font>$/, "the state stays on the row");
+  assert.equal(said.content, "第一行说明。\n第二行说明。");
+});
+
+test("no Markdown image reaches a card, since Feishu rejects the whole card for an invalid image key", async () => {
+  const { formatTurnCard } = await import("../server/feishu.mjs");
+  const qr = "![飞书授权二维码](/app/feishu/provision/1a77dd3d-124b-44b2-8d5d-3d75f1c72e23/qrcode)";
+  const items = [
+    { type: "message", role: "user", content: [{ type: "input_text", text: "给我链接吧" }] },
+    { type: "reasoning", summary: [{ text: `Present the link, then ${qr}` }] },
+    { type: "message", role: "assistant", phase: "commentary", content: [{ type: "output_text", text: "图表如下 ![chart](https://example.com/chart.png)" }] },
+    { type: "command_execution", command: "node parsar.mjs POST /app/feishu/provision/x", output: qr, status: "completed" },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: `链接：https://open.feishu.cn/page/launcher?user_code=AB-12\n\n${qr}` }] },
+  ];
+  for (const status of ["in_progress", "completed"]) {
+    const card = formatTurnCard(status, items);
+    const markdown = JSON.stringify(JSON.parse(card).body, (key, value) => key === "text" && value?.tag === "plain_text" ? undefined : value);
+    assert.doesNotMatch(markdown, /!\[/, `${status}: Markdown images must not reach the card`);
+  }
+  const done = JSON.parse(formatTurnCard("completed", items)).body.elements[0].content;
+  assert.match(done, /user_code=AB-12/, "the link the Agent gave stays in the answer");
+  assert.match(done, /授权二维码见图片消息/);
 });

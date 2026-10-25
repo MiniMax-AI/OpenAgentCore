@@ -356,6 +356,9 @@ export function turnsAPI(store, core) {
   const superseded = (sessionId, coreTurnId) =>
     (store.get("sessions", sessionId)?.superseded_turns || []).includes(coreTurnId);
   const recovering = (sessionId) => store.list("turns").some((t) => t.session_id === sessionId && t.outcome === "running");
+  // The recorded input that a Core Turn answers.
+  const entryFor = (sessionId, coreTurnId) =>
+    store.list("turns").find((t) => t.session_id === sessionId && t.core_turn_id === coreTurnId);
 
-  return { start, sendPrepared, deliver, send, monitor, summary, overview, health, retry, superseded, recovering };
+  return { start, sendPrepared, deliver, send, monitor, summary, overview, health, retry, superseded, recovering, entryFor };
 }

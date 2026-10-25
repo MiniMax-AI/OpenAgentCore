@@ -197,13 +197,14 @@ function panel({ title, content, elements, block = false }) {
   return {
     tag: "collapsible_panel",
     expanded: false,
-    vertical_spacing: "8px",
-    padding: block ? "0px 12px 8px 12px" : "0px 0px 8px 0px",
+    vertical_spacing: "4px",
+    padding: block ? "0px 12px 8px 12px" : "0px 0px 4px 0px",
     ...(block && { background_color: "grey-50", border: { color: "grey-50", corner_radius: "8px" } }),
     header: {
       title: { tag: "markdown", content: title },
       width: "fill",
-      padding: block ? "8px 0px 8px 0px" : "6px 0px 6px 0px",
+      // The header ignores the panel padding, so a block indents its own title.
+      padding: block ? "8px 12px 8px 12px" : "2px 0px 2px 0px",
       icon: { tag: "standard_icon", token: "down-small-ccm_outlined", size: "16px 16px" },
       icon_position: "right",
       icon_expanded_angle: -180,
@@ -217,22 +218,19 @@ const cardBudget = 28000;
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
 
 // The colored header carries the status and, while running, what is
-// happening now, so the body starts with the content.
+// happening now on the same line, so the body starts with the content.
 function statusCard(status, body, elements = [], subtitle = "") {
   const [title, template] = cardTones[status] || cardTones.failed;
   // A card needs a body; with nothing else to show, what is happening is the body.
   if (!body && !elements.length && subtitle) [body, subtitle] = [`**${subtitle}**`, ""];
+  const heading = subtitle ? `${title} · ${subtitle}` : title;
   return JSON.stringify({
     schema: "2.0",
-    config: { update_multi: true, summary: { content: subtitle ? `${title} · ${subtitle}` : title } },
-    header: {
-      title: { tag: "plain_text", content: title },
-      ...(subtitle && { subtitle: { tag: "plain_text", content: subtitle } }),
-      template,
-    },
+    config: { update_multi: true, summary: { content: heading } },
+    header: { title: { tag: "plain_text", content: heading }, template },
     body: {
       padding: "12px 16px 12px 16px",
-      vertical_spacing: "8px",
+      vertical_spacing: "6px",
       elements: [...(body ? [{ tag: "markdown", content: body }] : []), ...elements],
     },
   });
@@ -277,12 +275,32 @@ function step(item) {
   return ["执行步骤", item.name || item.type || ""];
 }
 
+// Wide (CJK and full-width) characters take two columns in a card; general
+// punctuation such as the ellipsis is narrow.
+const wide = (char) => {
+  const code = char.codePointAt(0);
+  return code >= 0x1100 && !(code >= 0x2000 && code <= 0x206f);
+};
+const columns = (text) => [...text].reduce((sum, char) => sum + (wide(char) ? 2 : 1), 0);
 const clip = (value, limit) => {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
-  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+  if (columns(text) <= limit) return text;
+  let kept = "";
+  for (const char of text) {
+    if (columns(kept + char) > limit - 1) break;
+    kept += char;
+  }
+  return `${kept}…`;
 };
 // Markdown and Feishu tags stay literal inside a one-line title.
 const literal = (value) => value.replace(/[<>]/g, "").replaceAll("`", "'");
+// Thinking and tool rows stay on one line: the detail gets what the label
+// and state leave of the row.
+const rowColumns = 52;
+const oneLine = (label, detail, state = "") => {
+  const room = rowColumns - columns(label) - columns(state.replace(/<[^>]*>/g, "")) - 2;
+  return [grey(label), detail ? literal(clip(detail, Math.max(8, room))) : "", state].filter(Boolean).join(" ");
+};
 
 const toolState = (item) =>
   item.status === "failed"
@@ -298,8 +316,10 @@ const toolState = (item) =>
 // One tool call: the command is the title, its result folds below it.
 function toolRow(item) {
   const [label, detail] = step(item);
-  const title = [grey(label), detail ? `\`${literal(clip(detail, 200))}\`` : "", toolState(item)].filter(Boolean).join(" ");
+  const title = oneLine(label, detail, toolState(item));
   const fields = [
+    // A shortened title keeps the whole command one click away.
+    ["命令", item.command && title.includes("…") ? detail : undefined],
     ["参数", item.command ? undefined : item.arguments ?? item.action],
     ["输出", item.output], ["错误", item.error], ["退出码", item.exit_code],
   ].filter(([, value]) => value !== undefined && value !== null && value !== "");
@@ -323,16 +343,16 @@ function toolsRow(items) {
         : "";
   const [label, detail] = step(items[0]);
   const title = items.length === 1
-    ? [grey(label), detail ? `\`${literal(clip(detail, 40))}\`` : "", state]
-    : [grey(items.every((item) => step(item)[0] === "运行") ? `运行 ${items.length} 条命令` : `调用 ${items.length} 次工具`), state];
-  return panel({ title: title.filter(Boolean).join(" "), elements: items.map(toolRow) });
+    ? oneLine(label, detail, state)
+    : [grey(items.every((item) => step(item)[0] === "运行") ? `运行 ${items.length} 条命令` : `调用 ${items.length} 次工具`), state].filter(Boolean).join(" ");
+  return panel({ title, elements: items.map(toolRow) });
 }
 
 // Only commentary stays open; thinking and tool calls fold behind one line.
 function timelineRow(entry) {
   if (entry.type === "say") return { tag: "markdown", content: excerpt(entry.text, 800) };
   if (entry.type === "think")
-    return panel({ title: `${grey("思考")} ${literal(clip(entry.text.split("\n").find((line) => line.trim()) || "", 40))}`, content: excerpt(entry.text, 1500) });
+    return panel({ title: oneLine("思考", entry.text.split("\n").find((line) => line.trim()) || ""), content: excerpt(entry.text, 1500) });
   return toolsRow(entry.items);
 }
 
@@ -366,9 +386,12 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
   const text = (item) => (item.content || []).filter((p) => p.type === "output_text").map((p) => (p.text || "").trim()).filter(Boolean).join("\n");
   const messages = items.filter((x) => x.type === "message" && x.role === "assistant");
   const latest = messages.at(-1);
+  // Feishu reads any Markdown image as an image key and rejects the whole
+  // card, so images become text; the files themselves are sent as messages.
   const readable = (value) => value
     .replace(/!\[[^\]\n]*\]\((\/app\/feishu\/provision\/[a-f0-9-]{36}\/qrcode)\)/g, "（授权二维码见图片消息）")
-    .replace(/!?\[([^\]]*)\]\((?:\/workspace\/|\.\/)?outputs\/[^)]*\)/g, "$1（见附件）");
+    .replace(/!?\[([^\]]*)\]\((?:\/workspace\/|\.\/)?outputs\/[^)]*\)/g, "$1（见附件）")
+    .replace(/!\[([^\]\n]*)\]\([^)\n]*\)/g, (_, alt) => alt ? `（图片：${alt}）` : "（图片）");
   const authorization = messages.filter((item) => qrImages(text(item)).length);
   const authorizationText = authorization.map((item) => readable(text(item))).join("\n\n");
   const answer = latest?.phase === "commentary" || authorization.includes(latest) ? "" : latest ? readable(text(latest)) : "";
@@ -376,7 +399,7 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
   // Thinking, commentary and tool calls in the order they happened.
   const entries = items.flatMap((x) => {
     if (x.type === "reasoning") {
-      const thought = (x.summary || x.content || []).map((p) => typeof p === "string" ? p : p?.text || "").filter(Boolean).join("\n\n").trim();
+      const thought = readable((x.summary || x.content || []).map((p) => typeof p === "string" ? p : p?.text || "").filter(Boolean).join("\n\n").trim());
       return thought ? [{ type: "think", text: thought }] : [];
     }
     if (x.type === "message") {
@@ -1231,10 +1254,14 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         thread,
         `执行失败\n\n${ledger.summary(run.id)?.failure || "执行环境准备失败，请重新发送消息重试。"}`,
       );
-    const progressId =
-      thread.active_outbound_id ||
-      stableId(`${thread.first_message_id}:accepted`);
-    let progress = store.get("feishu_outbound", progressId);
+    let progress = thread.active_outbound_id && store.get("feishu_outbound", thread.active_outbound_id);
+    // The progress card of the input a Turn answers; an older Turn never takes
+    // the card of a newer message.
+    const cardFor = (turn) => {
+      const entry = ledger.entryFor(run.id, turn.id);
+      const own = entry && store.get("feishu_outbound", stableId(`${entry.kind === "first" ? thread.first_message_id : entry.id}:accepted`));
+      return own || (turn.id === turns.at(-1)?.id ? progress : undefined);
+    };
     const progressReplyTo = progress?.reply_to || thread.root_id;
     const questionBase = progress?.sent_message_id ? progress.id : thread.id;
     if ((progress || session.status === "requires_action") && (["in_progress", "requires_action"].includes(session.status) || recovering) && !unseen.length) {
@@ -1304,67 +1331,53 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         turnItems.some((item) => item.type === "function_call" && item.call_id === callId) &&
         !turnItems.some((item) => item.type === "function_call_output" && item.call_id === callId))) return;
       queueMedia(thread, turnItems, artifacts.filter((file) => file.turn_id === turn.id));
+      const latest = turn.id === turns.at(-1)?.id;
+      const card = cardFor(turn);
+      // The display boundary belongs to the newest input; an older Turn shows all of itself.
       const text = formatTurnCard(
         turn.status,
-        currentItems.filter((item) => item.turn_id === turn.id),
+        latest ? currentItems.filter((item) => item.turn_id === turn.id) : turnItems,
         turn.status === "failed"
           ? ledger.summary(run.id)?.failure || explainFailure(turn.error)
           : turn.error?.message,
       );
       const receiptId = stableId(`${thread.id}:${turn.id}`);
-      if (progress?.sent_message_id) {
+      const receipt = (sentMessageId) => store.put("feishu_outbound", {
+        id: receiptId,
+        app_id: thread.app_id,
+        chat_id: thread.chat_id,
+        chat_type: thread.chat_type,
+        thread_id: thread.id,
+        reply_to: card.reply_to || thread.root_id,
+        payload: text,
+        notify: false,
+        state: "delivered",
+        sent_message_id: sentMessageId,
+        attempts: 1,
+        created_at: stamp(),
+        next_at: 0,
+      });
+      // The newest message's card is free again once its Turn has its result.
+      const release = () => {
+        if (card.id !== progress?.id) return;
+        thread = { ...thread, progress_text: text, active_outbound_id: undefined };
+        progress = undefined;
+      };
+      if (card?.sent_message_id) {
         try {
-          await channel.edit(progress.sent_message_id, text, thread);
-          store.put("feishu_outbound", { ...progress, payload: text, state: "delivered", error: undefined });
-          store.put("feishu_outbound", {
-            id: receiptId,
-            app_id: thread.app_id,
-            chat_id: thread.chat_id,
-            chat_type: thread.chat_type,
-            thread_id: thread.id,
-            reply_to: progress.reply_to || thread.root_id,
-            payload: text,
-            notify: false,
-            state: "delivered",
-            sent_message_id: progress.sent_message_id,
-            attempts: 1,
-            created_at: stamp(),
-            next_at: 0,
-          });
-          thread = {
-            ...thread,
-            progress_text: text,
-            active_outbound_id: undefined,
-          };
-          progress = undefined;
+          await channel.edit(card.sent_message_id, text, thread);
+          store.put("feishu_outbound", { ...card, payload: text, state: "delivered", error: undefined });
+          receipt(card.sent_message_id);
+          release();
           continue;
         } catch (error) {
           if (error.code !== "feishu_card_unavailable") throw error;
           // A confirmed uneditable card falls back to sending a result card.
         }
-      } else if (progress && progress.state === "queued") {
-        store.put("feishu_outbound", { ...progress, payload: text });
-        store.put("feishu_outbound", {
-          id: receiptId,
-          app_id: thread.app_id,
-          chat_id: thread.chat_id,
-          chat_type: thread.chat_type,
-          thread_id: thread.id,
-          reply_to: progress.reply_to || thread.root_id,
-          payload: text,
-          notify: false,
-          state: "delivered",
-          sent_message_id: progress.id,
-          attempts: 1,
-          created_at: stamp(),
-          next_at: 0,
-        });
-        thread = {
-          ...thread,
-          progress_text: text,
-          active_outbound_id: undefined,
-        };
-        progress = undefined;
+      } else if (card?.state === "queued") {
+        store.put("feishu_outbound", { ...card, payload: text });
+        receipt(card.id);
+        release();
         continue;
       }
       queueReply(receiptId, thread, text);
@@ -1598,6 +1611,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       try {
         await observe(thread);
       } catch (error) {
+        console.error(`Feishu thread ${thread.id}: ${error.message}`);
         health("core_unavailable");
         if (
           !(error instanceof AppError) ||
