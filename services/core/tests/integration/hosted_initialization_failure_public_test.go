@@ -187,8 +187,8 @@ func TestHostedInitializationFailureRecordsSafeSessionFailure(t *testing.T) {
 				t.Fatal("Session list", page, err)
 			}
 			events, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
-			// Transport may connect while initialization is still running.
-			if len(events) > 0 && events[0].Event.Type == "agent.session.environment.connected" {
+			// Initialization starts and transport may connect before the failure.
+			for len(events) > 0 && (events[0].Event.Type == "agent.session.environment.pending" || events[0].Event.Type == "agent.session.environment.connected") {
 				events = events[1:]
 			}
 
@@ -352,7 +352,7 @@ func TestHostedInitializationFailurePublicHTTP(t *testing.T) {
 			t.Fatal("invalid frame", line)
 		}
 		bodies = append(bodies, data)
-		if frame["type"] == "agent.session.environment.connected" && len(frames) == 0 && len(names) == 1 {
+		if (frame["type"] == "agent.session.environment.pending" || frame["type"] == "agent.session.environment.connected") && len(frames) == 0 && len(names) == 1 {
 			names = nil
 			continue
 		}

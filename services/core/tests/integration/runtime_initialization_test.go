@@ -202,4 +202,17 @@ func TestManagedRuntimePreparationAllOperationsUsePeer(t *testing.T) {
 	if err != nil || initializationState(t, s, allocation.TenantID, allocation.EnvironmentID) != "complete" {
 		t.Fatal("initialization incomplete", allocation, err)
 	}
+	changes, err := sessionAdapter(s).ListSessionEvents(t.Context(), tenant, session.ID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lifecycle []string
+	for _, change := range changes {
+		if change.Event.Type == "agent.session.environment.pending" || change.Event.Type == "agent.session.environment.ready" {
+			lifecycle = append(lifecycle, change.Event.Type)
+		}
+	}
+	if !reflect.DeepEqual(lifecycle, []string{"agent.session.environment.pending", "agent.session.environment.ready"}) {
+		t.Fatal("initialization events", lifecycle)
+	}
 }
