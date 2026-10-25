@@ -28,7 +28,7 @@ import {
   runtimeObservationLifecycleStateValues, runtimeObservationModeValues, runtimeObservationReasonValues, runtimeObservationStatusValues,
 } from "./generated/core-api";
 import { projectTokenUsage } from "./usage-projection";
-import { projectAgentTurn, projectSessionItem, projectItemContent, projectHistoryPage } from "./history-projection";
+import { projectAgentTurn, projectSessionItem, projectItemContent, projectSummaryText, projectHistoryPage } from "./history-projection";
 import { projectOpenAIHostedSessionEnvironment } from "./session-environment-projection";
 import { safeProvider } from "./execution-configuration-projection";
 import { createSSEDecoder } from "./sse";
@@ -244,7 +244,7 @@ const maxSourceFileBytes = 512 * 1024 * 1024;
 const maxSourceFileListLimit = 10000;
 // An unknown event never carries a field whose meaning a projected event defines.
 const unsafeUnknownEventFields = new Set([
-  "session", "turn", "turn_id", "item", "item_id", "output_index", "content_index", "part", "delta", "text", "error", "environment",
+  "session", "turn", "turn_id", "item", "item_id", "output_index", "content_index", "summary_index", "part", "delta", "text", "error", "environment",
 ]);
 const runtimeProviderTypePattern = /^[a-z][a-z0-9_]{0,31}$/;
 function invalidSessionInputBatch(): never {
@@ -1061,8 +1061,8 @@ function projectCreatedSessionEvent(
   return { event: { type: "agent.session.created", event_id: event.event_id, session }, session };
 }
 
-// Subagent and reasoning summary events are not projected yet; they pass through as unknown events.
-const unprojectedEventPattern = /^agent\.session\.(subagent\.|turn\.reasoning_summary_)/;
+// Subagent events are not projected yet; they pass through as unknown events.
+const unprojectedEventPattern = /^agent\.session\.subagent\./;
 
 const sessionStatusesByEvent: Readonly<Record<string, AgentSession["status"]>> = {
   "agent.session.in_progress": "in_progress",
@@ -1146,10 +1146,16 @@ function projectStreamEventSession(
     output_index: eventIndex(value, "output_index"),
   };
   if (hasOwn(value, "content_index")) projectedFields.content_index = eventIndex(value, "content_index");
+  const reasoning = event.type.startsWith("agent.session.turn.reasoning_summary_");
+  if (reasoning) projectedFields.summary_index = eventIndex(value, "summary_index");
   if (hasOwn(value, "part")) {
-    const part = projectItemContent(value.part, invalidStreamEvent);
-    if (part.type !== "output_text") return invalidStreamEvent();
+    const part = reasoning ? projectSummaryText(value.part, invalidStreamEvent) : projectItemContent(value.part, invalidStreamEvent);
+    if (!reasoning && part.type !== "output_text") return invalidStreamEvent();
     projectedFields.part = part;
+  }
+  if (event.type === "agent.session.turn.reasoning_summary_part.done") {
+    if (value.status !== null && value.status !== "incomplete") return invalidStreamEvent();
+    projectedFields.status = value.status;
   }
   for (const field of ["delta", "text"] as const) {
     if (hasOwn(value, field)) projectedFields[field] = requiredEventString(value, field, true);

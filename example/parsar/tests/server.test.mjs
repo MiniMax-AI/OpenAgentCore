@@ -18,11 +18,12 @@ test("oversized writes return a definite 413 without contacting Core", async (t)
   assert.equal(called, false);
 });
 
-async function serve(t, fetchImpl) {
+async function serve(t, fetchImpl, host) {
   const config = {
     port: 0,
     key: "server-only-secret",
     target: "https://core.example",
+    ...(host ? { host } : {}),
   };
   const server = createServer(createHandler(config, { fetchImpl }));
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
@@ -113,19 +114,19 @@ test("configuration keeps remote credentials on HTTPS and requires a project key
   for (const target of [
     "http://remote.example",
     "https://user:pass@core.example",
-    "https://core.example/v1",
+    "https://core.example/",
     "https://core.example/?token=x",
   ]) {
     assert.throws(() =>
       configuration({
-        OAC_EXAMPLE_CORE_URL: target,
-        OAC_EXAMPLE_PROJECT_KEY: "key",
+        OPENAI_BASE_URL: target,
+        OPENAI_API_KEY: "key",
       }),
     );
   }
   assert.throws(() => configuration({}));
   assert.equal(
-    configuration({ OAC_EXAMPLE_PROJECT_KEY: "key" }).target,
+    configuration({ OPENAI_API_KEY: "key" }).target,
     "http://127.0.0.1:8091",
   );
 });
@@ -161,7 +162,6 @@ test("SSE forwards chunks before completion and aborts upstream when the browser
   await disconnected;
 });
 
-
 test("workspace uploads allow bounded inline files and artifact downloads preserve binary bytes", async (t) => {
   const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
   const binary = new Uint8Array([0, 255, 128, 13, 10]);
@@ -173,23 +173,43 @@ test("workspace uploads allow bounded inline files and artifact downloads preser
       assert.ok(init.body.length > 1024 * 1024);
       return Response.json({ ok: true }, { status: 201 });
     }
-    return new Response(binary, { headers: { "Content-Type": "text/html", "Content-Disposition": 'attachment; filename="report.bin"' } });
+    return new Response(binary, {
+      headers: {
+        "Content-Type": "text/html",
+        "Content-Disposition": 'attachment; filename="report.bin"',
+      },
+    });
   });
   const uploaded = await fetch(`${url}/v1/agents/environments/${id}/files`, {
-    method: "POST", headers: { origin: url, "content-type": "application/json" },
-    body: JSON.stringify({ type: "inline", path: "/workspace/inputs/a", data: Buffer.alloc(1024 * 1024).toString("base64") }),
+    method: "POST",
+    headers: { origin: url, "content-type": "application/json" },
+    body: JSON.stringify({
+      type: "inline",
+      path: "/workspace/inputs/a",
+      data: Buffer.alloc(1024 * 1024).toString("base64"),
+    }),
   });
   assert.equal(uploaded.status, 201);
   const tooLarge = await fetch(`${url}/v1/agents/environments/${id}/files`, {
-    method: "POST", headers: { origin: url }, body: "x".repeat(8 * 1024 * 1024 + 1),
+    method: "POST",
+    headers: { origin: url },
+    body: "x".repeat(8 * 1024 * 1024 + 1),
   });
   assert.equal(tooLarge.status, 413);
   assert.equal(writes, 1);
-  const download = await fetch(`${url}/v1/agents/sessions/${id}/artifacts/${id}/content`);
-  assert.equal(download.headers.get("content-type"), "application/octet-stream");
+  const download = await fetch(
+    `${url}/v1/agents/sessions/${id}/artifacts/${id}/content`,
+  );
+  assert.equal(
+    download.headers.get("content-type"),
+    "application/octet-stream",
+  );
   assert.match(download.headers.get("content-disposition"), /^attachment/);
   assert.deepEqual(new Uint8Array(await download.arrayBuffer()), binary);
-  const denied = await fetch(`${url}/v1/agents/sessions/${id}/artifacts/${id}/content`, { headers: { origin: "https://other.example" } });
+  const denied = await fetch(
+    `${url}/v1/agents/sessions/${id}/artifacts/${id}/content`,
+    { headers: { origin: "https://other.example" } },
+  );
   assert.equal(denied.status, 403);
 });
 
@@ -208,4 +228,179 @@ test("file writes can finish beyond the ordinary proxy timeout", async (t) => {
     },
   );
   assert.equal(response.status, 200);
+});
+
+test("OAuth callback navigation serves only the local frontend while cross-site API access stays forbidden", async (t) => {
+  let frontend = 0;
+  const config = { port: 0, key: "secret", target: "https://core.example" };
+  const server = createServer(
+    createHandler(config, {
+      frontend: (_req, res) => {
+        frontend++;
+        res.end("callback page");
+      },
+    }),
+  );
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  config.port = server.address().port;
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const origin = `http://127.0.0.1:${config.port}`;
+  const response = await fetch(
+    `${origin}/oauth/callback?state=opaque&code=private-code`,
+    { headers: { "sec-fetch-site": "cross-site" } },
+  );
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(frontend, 1);
+  assert.equal(
+    (
+      await fetch(`${origin}/app/mcp-oauth/anything`, {
+        method: "POST",
+        headers: { "sec-fetch-site": "cross-site" },
+      })
+    ).status,
+    403,
+  );
+  const rebound = await new Promise((resolve) => {
+    const req = request(
+      `${origin}/oauth/callback`,
+      { headers: { host: "evil.example", "sec-fetch-site": "cross-site" } },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode);
+      },
+    );
+    req.end();
+  });
+  assert.equal(rebound, 403);
+});
+
+test("external links may navigate to the homepage without permitting cross-site API access", async (t) => {
+  const config = { port: 0, key: "secret", target: "https://core.example" };
+  const server = createServer(
+    createHandler(config, {
+      frontend: (_req, res) => res.end("Parsar shell"),
+      fetchImpl: () => {
+        throw new Error("must not reach Core");
+      },
+    }),
+  );
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  config.port = server.address().port;
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const origin = `http://127.0.0.1:${config.port}`;
+  const navigation = {
+    "sec-fetch-site": "cross-site",
+    "sec-fetch-mode": "navigate",
+    "sec-fetch-dest": "document",
+  };
+  for (const [path, method, headers, status] of [
+    ["/", "GET", navigation, 200],
+    ["/?from=chat", "GET", navigation, 200],
+    ["/index.html", "GET", navigation, 200],
+    ["/app/agents", "GET", navigation, 403],
+    ["/v1/agents/sessions", "GET", navigation, 403],
+    ["/", "POST", navigation, 403],
+    [
+      "/",
+      "GET",
+      { ...navigation, "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" },
+      403,
+    ],
+    ["/", "GET", { ...navigation, "sec-fetch-dest": "iframe" }, 403],
+    ["/", "GET", { ...navigation, host: "evil.example" }, 403],
+    ["/", "GET", { ...navigation, origin: "https://evil.example" }, 403],
+  ]) {
+    const actual = await new Promise((resolve, reject) => {
+      const req = request(`${origin}${path}`, { method, headers }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    assert.equal(
+      actual,
+      status,
+      `${method} ${path} ${JSON.stringify(headers)}`,
+    );
+  }
+});
+
+test("loopback port forwarding preserves exact-origin writes and rejects non-loopback Hosts", async (t) => {
+  let calls = 0;
+  const url = await serve(t, async () => {
+    calls++;
+    return Response.json({ id: "session" });
+  });
+  for (const [host, origin, status] of [
+    ["localhost:57357", "http://localhost:57357", 200],
+    ["127.0.0.1:57357", "http://127.0.0.1:57357", 200],
+    ["localhost", "http://localhost", 200],
+    ["localhost:57357", "http://localhost:18180", 403],
+    ["localhost:57357", "http://127.0.0.1:57357", 403],
+    ["localhost:57357", "https://evil.example", 403],
+    ["localhost:57357", undefined, 403],
+    [
+      "localhost.evil.example:57357",
+      "http://localhost.evil.example:57357",
+      403,
+    ],
+    ["evil.example:57357", "http://evil.example:57357", 403],
+    ["0.0.0.0:57357", "http://0.0.0.0:57357", 403],
+    ["localhost:65536", "http://localhost:65536", 403],
+    ["localhost:0", "http://localhost:0", 403],
+  ]) {
+    const actual = await new Promise((resolve, reject) => {
+      const req = request(
+        `${url}/v1/agents`,
+        { method: "POST", headers: { host, ...(origin ? { origin } : {}) } },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode);
+        },
+      );
+      req.on("error", reject);
+      req.end("{}");
+    });
+    assert.equal(actual, status, `${host} / ${origin}`);
+  }
+  assert.equal(calls, 3);
+});
+
+test("a configured LAN address is the only accepted Host", async (t) => {
+  assert.equal(configuration({ OPENAI_API_KEY: "key" }).host, "127.0.0.1");
+  assert.equal(
+    configuration({ OPENAI_API_KEY: "key", OAC_EXAMPLE_HOST: "10.74.84.145" }).host,
+    "10.74.84.145",
+  );
+  for (const OAC_EXAMPLE_HOST of ["0.0.0.0", "parsar.example", "::1"])
+    assert.throws(() => configuration({ OPENAI_API_KEY: "key", OAC_EXAMPLE_HOST }));
+  const url = await serve(t, async () => Response.json({ id: "session" }), "10.1.2.3");
+  for (const [host, status] of [
+    ["10.1.2.3:57357", 200],
+    ["127.0.0.1:57357", 403],
+    ["localhost:57357", 403],
+    ["10.1.2.4:57357", 403],
+  ]) {
+    const actual = await new Promise((resolve, reject) => {
+      const req = request(
+        `${url}/v1/agents`,
+        { method: "POST", headers: { host, origin: `http://${host}` } },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode);
+        },
+      );
+      req.on("error", reject);
+      req.end("{}");
+    });
+    assert.equal(actual, status, host);
+  }
 });

@@ -1,10 +1,20 @@
+import {
+  TurnNavRail,
+  turnPreview,
+  useActiveTurnKey,
+} from "./components/ui/turn-nav-rail";
+import { tr } from "./lib/i18n";
+import { optionValue } from "./ExecutionFields";
+import { TurnStatus } from "./TurnStatus";
+import { Questions } from "./Questions";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Info } from "lucide-react";
+import { FolderOpen, Info } from "lucide-react";
 import {
   api,
   dateTime,
   readHistory,
+  listSessionArtifacts,
   sessionState,
   sessionTitle,
 } from "./lib/api";
@@ -19,50 +29,77 @@ import {
 } from "./components/ui/dialog";
 import { Property, PropertyList } from "./components/ui/property-list";
 import { ErrorNotice } from "./components/shared";
-import { Activity, Thinking } from "./components/Activity";
-import { useSendTiming, timingLabel } from "./lib/session-timing";
-import { Help } from "./components/shared";
+import { SessionTimeline, Thinking } from "./components/Activity";
 import { useLiveSession } from "./lib/live-session";
 import { Composer } from "./Composer";
 import { SessionFiles } from "./SessionFiles";
-import { ConnectMachine } from "./ConnectMachine";
-import type { SessionRecord } from "./lib/product";
-
+import {
+  harnessNames,
+  useAgents,
+  useRuntimes,
+  type SessionRecord,
+} from "./lib/product";
 export function SessionDetail({
   id,
-  agentId,
-  machine,
+  record,
 }: {
   id: string;
-  agentId: string;
-  machine?: SessionRecord["self_hosted"];
+  record: SessionRecord;
 }) {
-  const timing = useSendTiming(id);
   const [info, setInfo] = useState(false);
   const [messagePending, setMessagePending] = useState(false);
   const [files, setFiles] = useState(false);
   const [attachment, setAttachment] = useState("");
-  const [machineConnected, setMachineConnected] = useState(false);
-  const viewport = useRef<HTMLDivElement>(null);
+  const [viewportElement, setViewportElement] = useState<HTMLDivElement | null>(
+    null,
+  );
   const followOutput = useRef(true);
+  const agents = useAgents(),
+    runtimes = useRuntimes();
   const query = useQuery({
     queryKey: ["session", id],
     queryFn: async ({ signal }) => {
       const [session, items, turns] = await Promise.all([
         api.retrieveSession(id, { signal }),
         readHistory((options) => api.listItems(id, options), signal),
-        api.listTurns(id, { limit: 20, order: "desc", signal }),
+        readHistory((options) => api.listTurns(id, options), signal),
       ]);
-      return { session, items, turns: turns.data };
+      return { session, items, turns: turns.reverse() };
     },
     refetchInterval: 2000,
   });
+  const artifacts = useQuery({
+    queryKey: ["timeline-artifacts", id],
+    queryFn: ({ signal }) => readHistory((options) => listSessionArtifacts(id, options), signal),
+    refetchInterval: 2000,
+  });
   const data = query.data;
-  const live = useLiveSession(id, data?.items);
+  const liveSession = useLiveSession(id, data?.items);
+  // Turns the monitor cancelled and resent are not part of the conversation.
+  const superseded = new Set(record.superseded_turns || []);
+  const live = {
+    ...liveSession,
+    items: liveSession.items.filter(
+      (item) => !("turn_id" in item && superseded.has(item.turn_id as string)),
+    ),
+  };
+  const latestItem = live.items.at(-1);
+  const userTurns = live.items
+    .filter((item) => item.type === "message" && item.role === "user")
+    .map((item) => ({
+      key: item.id,
+      preview: turnPreview(
+        item.content?.map((part) => part.text || "").join("\n") || "",
+      ),
+    }));
+  const activeTurn = useActiveTurnKey(
+    viewportElement,
+    userTurns.map((turn) => turn.key),
+  );
   useEffect(() => {
-    if (viewport.current && followOutput.current)
-      viewport.current.scrollTop = viewport.current.scrollHeight;
-  }, [live.items]);
+    if (viewportElement && followOutput.current)
+      viewportElement.scrollTop = viewportElement.scrollHeight;
+  }, [live.items, viewportElement]);
   const session = data?.session;
   const environmentId =
     session &&
@@ -71,32 +108,45 @@ export function SessionDetail({
       ? session.environment.id
       : undefined;
   const state = session ? sessionState(session, data?.turns[0]) : undefined;
+  const configuration = record.configuration;
+  const agent = agents.data?.find((row) => row.id === record.agent_id);
+  const runtime = runtimes.data?.find((row) => row.id === record.runtime_id);
+  const outdated =
+    configuration?.agent_revision !== undefined &&
+    !!agent &&
+    (agent.revision !== configuration.agent_revision ||
+      agent.runtime_id !== record.runtime_id ||
+      (!!runtime && runtime.revision !== configuration.runtime_revision));
   return (
     <>
-      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line px-6">
-        <Button asChild variant="ghost" size="icon">
-          <a href={`#/agents/${agentId}`} aria-label="返回 Agent">
-            <ArrowLeft />
-          </a>
-        </Button>
-        <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">
-          {session ? sessionTitle(session) : "会话"}
-        </h1>
+      <header className="flex h-16 shrink-0 items-center gap-3 border-b border-line-muted px-6">
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-base font-semibold tracking-tight">
+            {record.name || (session ? sessionTitle(session) : "")}
+          </h1>
+        </div>
         {state && (
-          <span className="flex shrink-0 items-center gap-2 text-base">
+          <span className="flex shrink-0 items-center gap-2 text-sm text-fg-muted">
             <StatusIcon status={state.icon} />
             {state.label}
           </span>
         )}
         {environmentId && (
-          <Button variant="ghost" onClick={() => setFiles(true)}>
-            文件
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={tr("文件")}
+            title={tr("文件")}
+            onClick={() => setFiles(true)}
+          >
+            <FolderOpen />
           </Button>
         )}
         <Button
           variant="ghost"
           size="icon"
-          aria-label="会话详情"
+          aria-label={tr("会话详情")}
+          title={tr("会话详情")}
           disabled={!session}
           onClick={() => setInfo(true)}
         >
@@ -108,105 +158,93 @@ export function SessionDetail({
           sessionId={id}
           environmentId={environmentId}
           writable={
-            !messagePending &&
-            !query.error &&
-            session.status === "idle" &&
-            (!machine || machineConnected)
+            !messagePending && !query.error && session.status === "idle"
           }
           close={() => setFiles(false)}
           useFile={setAttachment}
         />
       )}
-      {session && machine && (
-        <ConnectMachine
-          session={session}
-          machine={machine}
-          onConnected={setMachineConnected}
-        />
+      <ErrorNotice page
+        error={query.error}
+        retry={() => void query.refetch()}
+        className="max-w-3xl"
+      />
+      {session?.error && (
+        <ErrorNotice page error={session.error} className="max-w-3xl" />
       )}
-      {live.reconnecting && (
-        <p role="status" className="px-6 py-2 text-base text-fg-muted">
-          正在重连实时回复，历史仍会自动更新。
-        </p>
-      )}
-      <ErrorNotice error={query.error} retry={() => void query.refetch()} />
-      {session?.error && <ErrorNotice error={session.error} />}
       {data?.turns[0]?.error && !session?.error && (
-        <ErrorNotice error={data.turns[0].error.message} />
+        <ErrorNotice page error={data.turns[0].error.message} className="max-w-3xl" />
       )}
       {query.isPending ? (
-        <EmptyState title="正在加载…" />
+        <EmptyState className="flex-1" title={tr("正在加载\u2026")} />
       ) : (
         data && (
           <>
-            <div
-              ref={viewport}
-              onScroll={(event) => {
-                const element = event.currentTarget;
-                followOutput.current =
-                  element.scrollHeight -
-                    element.scrollTop -
-                    element.clientHeight <
-                  80;
-              }}
-              className="min-h-0 flex-1 overflow-y-auto"
-              aria-label="会话过程"
-            >
-              <div className="mx-auto max-w-3xl px-6 py-6">
-                {live.items.map((item) => (
-                  <Activity key={item.id} item={item} />
-                ))}
-                {!live.items.length && (
-                  <EmptyState title="等待执行记录" size="compact" />
-                )}
-                {data.session.status === "in_progress" && <Thinking />}
-                {data.session.status === "requires_action" &&
-                  data.session.required_actions.some(
-                    (action) =>
-                      !machine || action.type !== "environment_connection",
-                  ) && (
-                    <div role="status" className="py-4 text-base">
-                      此会话需要外部操作，当前示例暂不支持处理。可取消本次执行。
-                      <Button variant="ghost" onClick={() => setInfo(true)}>
-                        查看所需操作
-                      </Button>
-                    </div>
+            <div className="relative flex min-h-0 flex-1 flex-col">
+              {/* Short conversations need no jump navigation. */}
+              {userTurns.length >= 3 && (
+                <TurnNavRail
+                  turns={userTurns}
+                  activeKey={activeTurn}
+                  onJump={(key) => {
+                    followOutput.current = false;
+                    document
+                      .getElementById(`item-${key}`)
+                      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+                  }}
+                />
+              )}
+              <div
+                ref={setViewportElement}
+                onClickCapture={(event) => {
+                  if ((event.target as Element).closest("button[aria-expanded], summary"))
+                    followOutput.current = false;
+                }}
+                onScroll={(event) => {
+                  const element = event.currentTarget;
+                  followOutput.current =
+                    element.scrollHeight -
+                      element.scrollTop -
+                      element.clientHeight <
+                    80;
+                }}
+                className="min-h-0 flex-1 overflow-y-auto"
+                aria-label={tr("会话过程")}
+              >
+                <div className="mx-auto max-w-3xl px-6 py-10">
+                  <SessionTimeline items={live.items} sessionId={id} artifacts={(artifacts.data || []).filter((file) => !superseded.has(file.turn_id))} />
+                  {!live.items.length && (
+                    <EmptyState title={tr("等待执行记录")} size="compact" />
                   )}
+                  {data.session.status === "in_progress" &&
+                    !(latestItem?.type === "reasoning" && latestItem.status === "in_progress") && <Thinking />}
+                  <ErrorNotice error={artifacts.error} retry={() => void artifacts.refetch()} />
+                  <Questions session={data.session} />
+                  {live.reconnecting && (
+                    <p role="status" className="py-2 text-sm text-fg-muted">
+                      {tr("正在重连实时回复，历史仍会自动更新。")}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
-            {timing && (
-              <div
-                aria-label="本次发送耗时"
-                className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-x-6 gap-y-2 px-6 pt-3 text-base text-fg-muted"
-              >
-                <span>
-                  请求返回{" "}
-                  <span
-                    className="tabular-nums text-fg"
-                    data-testid="response-time"
-                  >
-                    {timingLabel(timing.responseMs)}
-                  </span>
-                </span>
-                <span>
-                  首个文本增量{" "}
-                  <span
-                    className="tabular-nums text-fg"
-                    data-testid="first-text-time"
-                  >
-                    {timingLabel(timing.firstTextMs)}
-                  </span>
-                </span>
-                <Help>
-                  从本次发送开始计时：请求返回记录发送接口完成；首个文本增量记录浏览器首次收到非空文本片段。未观测到的时间显示为
-                  —，不使用历史轮询推算。
-                </Help>
+            {outdated && (
+              <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center justify-between gap-3 px-6 pt-3">
+                <p className="text-sm text-fg-muted">
+                  {tr("Agent 配置已更新，新配置只对新对话生效。")}
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <a href={`#/new?agent=${record.agent_id}`}>
+                    {tr("用新配置开始新对话")}
+                  </a>
+                </Button>
               </div>
             )}
+            <TurnStatus record={record} />
             <Composer
+              recordId={record.id}
               onPendingChange={setMessagePending}
               attachment={attachment}
-              connectionPending={Boolean(machine) && !machineConnected}
               key={id}
               turnId={data.turns[0]?.id}
               session={data.session}
@@ -216,42 +254,106 @@ export function SessionDetail({
       )}
       {session && (
         <Dialog open={info} onOpenChange={setInfo}>
-          <DialogContent aria-describedby={undefined}>
+          <DialogContent
+            aria-describedby={undefined}
+            className="max-w-xl"
+          >
             <DialogHeader>
-              <DialogTitle>会话详情</DialogTitle>
+              <DialogTitle>{tr("会话详情")}</DialogTitle>
             </DialogHeader>
             <PropertyList>
               <Property label="Agent">
-                {session.metadata.agent_name || session.agent.name || "Agent"}
+                {configuration?.agent_name ||
+                  session.metadata.agent_name ||
+                  "Agent"}
               </Property>
-              <Property label="模型">{session.agent.model}</Property>
-              <Property label="运行引擎">
-                {session.agent.x_agents_core?.harness || "部署默认"}
+              <Property label={tr("模型")}>{session.agent.model}</Property>
+              <Property label={tr("执行引擎")}>
+                {configuration
+                  ? harnessNames[configuration.harness]
+                  : session.agent.x_agents_core?.harness || tr("部署默认")}
               </Property>
-              <Property label="环境">{session.environment.type}</Property>
-              <Property label="创建时间">
+              <Property label={tr("推理强度")}>
+                {optionValue("reasoning_effort", session.agent.reasoning?.effort || "")}
+              </Property>
+              <Property label={tr("网页搜索")}>
+                {optionValue(
+                  "web_search",
+                  (session.agent.tools as { type: string; mode?: string }[])?.find(
+                    (tool) => tool.type === "web_search",
+                  )?.mode || "disabled",
+                )}
+              </Property>
+              {configuration && (
+                <Property label={tr("环境模板")}>
+                  {configuration.environment_name}
+                </Property>
+              )}
+              {configuration?.bot_name && (
+                <Property label={tr("飞书身份")}>
+                  {configuration.bot_name}
+                </Property>
+              )}
+              <Property label={tr("来源")}>
+                {record.source === "feishu"
+                  ? record.feishu_chat_type === "p2p"
+                    ? tr("飞书私聊")
+                    : tr("飞书群聊")
+                  : tr("网页")}
+              </Property>
+              <Property label={tr("创建时间")}>
                 {dateTime(session.created_at)}
               </Property>
-              <Property label="Session ID" mono>
-                {session.id}
-              </Property>
               <Property label="Tokens" mono>
-                {session.usage?.total_tokens ?? "未报告"}
+                {session.usage?.total_tokens ?? tr("未报告")}
               </Property>
             </PropertyList>
-            {session.required_actions.some(
-              (action) => !machine || action.type !== "environment_connection",
-            ) && (
-              <pre className="max-h-64 overflow-auto text-base">
-                {JSON.stringify(
-                  session.required_actions.filter(
-                    (action) =>
-                      !machine || action.type !== "environment_connection",
-                  ),
-                  null,
-                  2,
-                )}
-              </pre>
+            {configuration && (
+              <details className="group rounded-xl bg-surface-subtle px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium">
+                  {tr("创建时的配置")}
+                </summary>
+                <PropertyList className="mt-3">
+                  <Property label={tr("软件包")}>
+                    {Object.values(configuration.packages || {})
+                      .flat()
+                      .join(", ") || "—"}
+                  </Property>
+                  <Property label={tr("初始化脚本")}>
+                    {configuration.setup_configured ? tr("已配置") : "—"}
+                  </Property>
+                  <Property label={tr("环境变量")}>
+                    {configuration.env_names?.join(", ") || "—"}
+                  </Property>
+                  <Property label={tr("初始文件")}>
+                    {configuration.file_paths?.join(", ") || "—"}
+                  </Property>
+                  <Property label="Skills">
+                    {configuration.skills
+                      .map(
+                        (skill) =>
+                          `${skill.id} · ${skill.version || tr("默认版本")}`,
+                      )
+                      .join(", ") || "—"}
+                  </Property>
+                  <Property label="MCP">
+                    {configuration.mcps.join(", ") || "—"}
+                  </Property>
+                  <Property label={tr("能力")}>
+                    {configuration.capabilities
+                      .map(
+                        (row) => `${row.name} (${row.kind}) · v${row.version}`,
+                      )
+                      .join(", ") || "—"}
+                  </Property>
+                  <Property label="Session ID" mono>
+                    {session.id}
+                  </Property>
+                  <Property label="Environment ID" mono>
+                    {environmentId || "—"}
+                  </Property>
+                </PropertyList>
+              </details>
             )}
           </DialogContent>
         </Dialog>

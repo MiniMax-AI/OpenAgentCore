@@ -5,10 +5,25 @@ import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 
 export class AppError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code) {
     super(message);
     this.status = status;
+    this.code = code;
   }
+}
+// Public API conflicts can be transient admission contention or terminal failures.
+export function transientError(error) {
+  if (!(error instanceof AppError)) return true;
+  if (
+    [
+      "environment_unavailable",
+      "environment_input_expired",
+      "environment_input_cancelled",
+      "idempotency_conflict",
+    ].includes(error.code)
+  )
+    return false;
+  return error.status >= 500 || [408, 409, 425, 429].includes(error.status);
 }
 export function dataPath(config, env = process.env) {
   const directory =

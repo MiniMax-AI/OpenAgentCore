@@ -1,46 +1,127 @@
+import { botFields, environmentVariableName } from "../shared/bot-bindings.mjs";
 import { posix } from "node:path";
 import { AppError, text } from "./store.mjs";
 
-export function runtimeProfile(body) {
-  if (!["openai_hosted", "none", "self_hosted"].includes(body.environment))
-    throw new AppError(400, "运行环境无效。");
-  if (body.environment !== "self_hosted")
-    return { environment: body.environment };
-  if (!["linux", "macos", "windows"].includes(body.platform))
-    throw new AppError(400, "请选择机器平台。");
-  const directory = (value) => {
-    const result = text(value, "工作目录", 4096, true);
-    const portable = result.replaceAll("\\", "/");
-    const clean = (path) =>
-      posix.normalize(path) === path && (path === "/" || !path.endsWith("/"));
-    const windows = body.platform === "windows";
-    const drive = /^[A-Za-z]:\//.test(portable);
-    const unc = portable.startsWith("//");
-    const valid = windows
-      ? !/[:*?"<>|]/.test(drive ? portable.slice(2) : portable) &&
-        (drive
-          ? clean(portable.slice(2))
-          : unc &&
-            portable.slice(2).split("/").length >= 2 &&
-            portable.slice(2).split("/").every((part) => part && part !== "." && part !== ".."))
-      : result.startsWith("/") && !unc && !result.includes("\\") && clean(result);
-    if (!valid || /[\x00-\x1f\x7f]/.test(result) || Buffer.byteLength(result) > 4096)
-      throw new AppError(400, "请填写规范的绝对目录，不使用重复分隔符、末尾斜杠、. 或 ..。");
-    return result;
-  };
+// Product-owned preparation. Core validates the public Environment request again.
+export function runtimeProfile(body, previous) {
+  if (body.environment !== undefined && body.environment !== "openai_hosted")
+    throw new AppError(400, "Parsar 仅支持托管工作环境。");
+  const packages = {};
+  for (const manager of ["npm", "python"]) {
+    const entries = body.packages?.[manager] ?? [];
+    if (
+      !Array.isArray(entries) ||
+      entries.length > 100 ||
+      entries.some(
+        (v) =>
+          typeof v !== "string" ||
+          !v.trim() ||
+          v.startsWith("-") ||
+          /[\x00-\x20\x7f]/.test(v) ||
+          v.length > 512,
+      )
+    )
+      throw new AppError(400, "软件包格式无效，请每行填写一个包名和可选版本。");
+    packages[manager] = [...new Set(entries)];
+  }
   if (
-    body.capability_directories !== undefined &&
-    (!Array.isArray(body.capability_directories) ||
-      body.capability_directories.length > 8)
+    body.packages &&
+    Object.keys(body.packages).some((k) => !["npm", "python"].includes(k))
   )
-    throw new AppError(400, "能力目录最多 8 个。");
-  const directories = (body.capability_directories || []).map(directory);
-  if (new Set(directories).size !== directories.length)
-    throw new AppError(400, "能力目录不能重复。");
+    throw new AppError(400, "环境模板支持 npm 和 Python 软件包。");
+  const env = Object.create(null);
+  const input = body.env === undefined ? previous?.env || {} : body.env;
+  if (
+    !input ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    Object.keys(input).length > 100
+  )
+    throw new AppError(400, "环境变量格式无效。");
+  for (const [name, value] of Object.entries(input)) {
+    if (!environmentVariableName(name))
+      throw new AppError(400, "环境变量名称无效或被运行环境保留。");
+    const selected = value === null ? previous?.env?.[name] : value;
+    if (
+      typeof selected !== "string" ||
+      selected.includes("\0") ||
+      selected.length > 8192
+    )
+      throw new AppError(400, "请填写新环境变量的值；已有变量留空可保留。");
+    env[name] = selected;
+  }
+  const bot_env = body.bot_env ?? {};
+  if (
+    !bot_env ||
+    typeof bot_env !== "object" ||
+    Array.isArray(bot_env) ||
+    Object.keys(bot_env).length > 20
+  )
+    throw new AppError(400, "机器人变量映射格式无效。");
+  for (const [name, source] of Object.entries(bot_env)) {
+    if (
+      !environmentVariableName(name) ||
+      Object.hasOwn(env, name) ||
+      typeof source !== "string" ||
+      !Object.hasOwn(botFields, source)
+    )
+      throw new AppError(
+        400,
+        "机器人变量名称必须有效、不能与固定变量重复，且只能选择机器人字段。",
+      );
+  }
+  const files = body.files ?? [];
+  if (!Array.isArray(files) || files.length > 20)
+    throw new AppError(400, "初始文件最多 20 个。");
+  const paths = new Set();
+  const normalized = files.map((file) => {
+    const path = text(file.path, "文件路径", 1024, true);
+    if (
+      !path.startsWith("/workspace/") ||
+      posix.normalize(path) !== path ||
+      path.endsWith("/") ||
+      /[\\\x00-\x1f\x7f]/.test(path) ||
+      paths.has(path)
+    )
+      throw new AppError(400, "文件路径必须在 /workspace/ 内且不能重复。");
+    paths.add(path);
+    return { path, content: text(file.content, "文件内容", 100000) };
+  });
+  if (Buffer.byteLength(JSON.stringify(normalized)) > 500000)
+    throw new AppError(400, "初始文件总大小不能超过 500 KB。");
   return {
-    environment: "self_hosted",
-    platform: body.platform,
-    workspace_directory: directory(body.workspace_directory),
-    capability_directories: directories,
+    environment: "openai_hosted",
+    description: text(body.description || "", "说明", 1000),
+    packages,
+    setup_script: text(body.setup_script || "", "初始化脚本", 100000),
+    env,
+    bot_env,
+    files: normalized,
+    prepare: body.prepare === true,
+  };
+}
+
+export function publicRuntime({ env, ...row }) {
+  return {
+    ...row,
+    env: Object.fromEntries(Object.keys(env || {}).map((key) => [key, null])),
+  };
+}
+
+export function runtimeEnvironment(runtime) {
+  if (runtime.environment !== "openai_hosted")
+    throw new AppError(400, "Parsar 仅支持托管工作环境，请重新配置环境模板。");
+  return {
+    type: "openai_hosted",
+    packages: runtime.packages || { npm: [], python: [] },
+    env: { ...runtime.env },
+    setup_commands: runtime.setup_script
+      ? [{ command: runtime.setup_script, cwd: "/workspace" }]
+      : [],
+    files: (runtime.files || []).map(({ path, content }) => ({
+      type: "inline",
+      path,
+      data: Buffer.from(content).toString("base64"),
+    })),
   };
 }

@@ -48,7 +48,7 @@ export const Select = React.forwardRef<HTMLButtonElement, SelectProps>(
         <SelectPrimitive.Trigger
           ref={ref}
           className={cn(
-            "app-shadow-control flex h-7 w-full min-w-0 items-center justify-between gap-2 rounded-md border border-line-strong bg-surface px-2 text-left text-sm text-fg transition-[border-color,box-shadow] duration-150 ease-settle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-60",
+            "app-shadow-control flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-[10px] border border-line-strong bg-surface px-3.5 text-left text-sm text-fg transition-[border-color,box-shadow] duration-150 ease-settle focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/20 disabled:cursor-not-allowed disabled:bg-surface-muted disabled:opacity-60",
             className,
           )}
           {...props}

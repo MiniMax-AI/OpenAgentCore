@@ -54,7 +54,7 @@ SCRIPTS = (".py", ".sh", ".mjs", ".go", ".json")
 RULES = (
     (("apps/web/",), WEB, ("web", "web-acceptance")),
     (("services/web/",), (*GO, "Dockerfile"), ("distribution", "compose", "web", "web-acceptance")),
-    (("example/",), WEB, ("example",)),
+    (("example/",), WEB + (".sh",), ("example",)),
     (("docs/", "contracts/"), ("",), ("website",)),
     (("website/",), (*WEB, ".vue", ".md", ".sh"), ("website",)),
     (("services/core/",), CORE, ("backend", "api", "compose")),

@@ -2,6 +2,8 @@ import { defineConfig } from "@playwright/test";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+const appPort = process.env.OAC_EXAMPLE_PORT || "18180";
+
 export default defineConfig({
   testDir: "tests",
   testMatch: "*.spec.ts",
@@ -14,7 +16,7 @@ export default defineConfig({
   ),
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:18180",
+    baseURL: `http://127.0.0.1:${appPort}`,
     channel: "chrome",
     reducedMotion: "reduce",
     screenshot: "only-on-failure",
@@ -28,11 +30,11 @@ export default defineConfig({
     },
     {
       command: "node server.mjs --dev",
-      url: "http://127.0.0.1:18180",
+      url: `http://127.0.0.1:${appPort}`,
       env: {
-        OAC_EXAMPLE_CORE_URL: "http://127.0.0.1:18181",
-        OAC_EXAMPLE_PROJECT_KEY: "fixture-project-key",
-        OAC_EXAMPLE_PORT: "18180",
+        OPENAI_BASE_URL: "http://127.0.0.1:18181/v1",
+        OPENAI_API_KEY: "fixture-project-key",
+        OAC_EXAMPLE_PORT: appPort,
         OAC_EXAMPLE_DATA_DIR: join(
           homedir(),
           ".oac",

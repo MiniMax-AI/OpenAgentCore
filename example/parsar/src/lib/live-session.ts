@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import type { SessionEvent, SessionItem } from "@oac/agents-client";
-import { firstTextArrived } from "./session-timing";
 import { api, readHistory } from "./api";
 
 // Only append deltas after observing the item's baseline on this connection.
@@ -17,13 +16,27 @@ export function applyEvent(
   if (!event.item_id) return;
   const item = items.get(event.item_id);
   if (!item) return;
+  if (event.type.startsWith("agent.session.turn.reasoning_summary_")) {
+    if (item.type !== "reasoning" || event.summary_index === undefined) return;
+    const index = event.summary_index;
+    const summary = [...(item.summary || [])];
+    if (event.type === "agent.session.turn.reasoning_summary_part.added" || event.type === "agent.session.turn.reasoning_summary_part.done") {
+      if (event.part?.type === "summary_text") summary[index] = event.part;
+    } else if (event.type === "agent.session.turn.reasoning_summary_text.delta") {
+      summary[index] = { type: "summary_text", text: (summary[index]?.text || "") + (event.delta || "") };
+    } else if (event.type === "agent.session.turn.reasoning_summary_text.done") {
+      summary[index] = { type: "summary_text", text: event.text || "" };
+    } else return;
+    items.set(item.id, { ...item, summary });
+    return;
+  }
   const index = event.content_index ?? 0;
   const content = [...(item.content || [])];
   if (
     event.type === "agent.session.turn.content_part.added" ||
     event.type === "agent.session.turn.content_part.done"
   ) {
-    if (event.part) content[index] = event.part;
+    if (event.part?.type === "output_text") content[index] = event.part;
   } else if (event.type === "agent.session.turn.output_text.delta") {
     content[index] = {
       type: "output_text",
@@ -85,14 +98,9 @@ export function useLiveSession(id: string, durable: SessionItem[] | undefined) {
           onEvent: (event) => {
             if (seen.has(event.event_id)) return;
             seen.add(event.event_id);
-            if (
-              event.type === "agent.session.turn.output_text.delta" &&
-              event.delta?.length
-            )
-              firstTextArrived(id, event.turn_id);
             if (seen.size > 2000) seen.delete(seen.values().next().value!);
             if (
-              event.type === "agent.session.turn.output_text.delta" &&
+              (event.type === "agent.session.turn.output_text.delta" || event.type === "agent.session.turn.reasoning_summary_text.delta") &&
               event.item_id &&
               !items.has(event.item_id)
             )

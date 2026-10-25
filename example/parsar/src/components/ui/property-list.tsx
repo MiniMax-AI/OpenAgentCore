@@ -12,7 +12,7 @@ export function PropertyList({
   return (
     <dl
       className={cn(
-        "m-0 grid grid-cols-[min(8rem,40%)_minmax(0,1fr)] gap-x-3",
+        "m-0 grid grid-cols-[min(9rem,40%)_minmax(0,1fr)] gap-x-4 gap-y-1.5",
         className,
       )}
     >
@@ -40,7 +40,7 @@ export function Property({
   return (
     <>
       <dt
-        className="min-h-7 min-w-0 py-1 text-xs leading-5 text-fg-muted [overflow-wrap:anywhere]"
+        className="min-h-8 min-w-0 py-1.5 text-sm leading-5 text-fg-muted [overflow-wrap:anywhere]"
         title={typeof label === "string" ? label : undefined}
       >
         {label}
@@ -50,9 +50,9 @@ export function Property({
         className={cn(
           "m-0 min-w-0 text-sm text-fg",
           plainText
-            ? "min-h-7 py-1 leading-5 [overflow-wrap:anywhere]"
-            : "flex h-7 items-center gap-1.5 truncate",
-          mono && "font-mono text-xs",
+            ? "min-h-8 py-1.5 leading-5 [overflow-wrap:anywhere]"
+            : "flex min-h-8 items-center gap-2 truncate",
+          mono && "font-mono text-sm",
           className,
         )}
       >
