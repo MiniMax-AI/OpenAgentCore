@@ -101,7 +101,7 @@ func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, cont
 	plan.Model = stringOpt(opts, "model")
 	plan.SystemPrompt = stringOpt(opts, "system_prompt")
 
-	codexHome, err := allocCodexHome(stateRoot, agentStateKey)
+	codexHome, err := allocSessionDir(stateRoot, agentStateKey)
 	if err != nil {
 		return plan, err
 	}
@@ -212,9 +212,9 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 // helpers
 // ---------------------------------------------------------------------------
 
-func allocCodexHome(root, agentStateKey string) (string, error) {
+func allocSessionDir(root, agentStateKey string) (string, error) {
 	if strings.TrimSpace(agentStateKey) == "" {
-		return "", fmt.Errorf("codex: agentStateKey required for CODEX_HOME allocation")
+		return "", fmt.Errorf("codex: agentStateKey required for a Session directory")
 	}
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
 		return "", fmt.Errorf("codex: state root must be a clean absolute directory")
@@ -232,7 +232,7 @@ func allocCodexHome(root, agentStateKey string) (string, error) {
 	dirParts := append([]string{root, "daemon", "agent-sessions"}, safeParts...)
 	dir := filepath.Join(dirParts...)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return "", fmt.Errorf("codex: create CODEX_HOME %s: %w", dir, err)
+		return "", fmt.Errorf("codex: create Session directory %s: %w", dir, err)
 	}
 	return dir, nil
 }

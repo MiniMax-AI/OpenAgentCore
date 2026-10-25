@@ -24,6 +24,15 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 	if err != nil {
 		return SessionPlan{}, nil, fmt.Errorf("codex: build session plan: %w", err)
 	}
+	// Codex's SQLite databases stay on the compute's own disk, where they open faster than
+	// on shared state storage. A replacement compute rebuilds them from the history in
+	// CODEX_HOME; goals, whose state lives only there, are disabled.
+	sqliteHome, err := allocSessionDir(cfg.runtimeRoot, req.AgentStateKey)
+	if err != nil {
+		plan.Cleanup()
+		return SessionPlan{}, nil, err
+	}
+	plan.Env = append(plan.Env, "CODEX_SQLITE_HOME="+sqliteHome)
 	if err := configureSubagentObservations(&plan, req); err != nil {
 		plan.Cleanup()
 		return SessionPlan{}, nil, err
@@ -47,7 +56,7 @@ func prepareSessionPlan(ctx context.Context, req proto.PromptRequestPayload, cfg
 			return SessionPlan{}, nil, err
 		}
 		for key, value := range values {
-			if strings.EqualFold(key, "CODEX_HOME") || strings.EqualFold(key, "HOME") || strings.EqualFold(key, "USERPROFILE") {
+			if strings.EqualFold(key, "CODEX_HOME") || strings.EqualFold(key, "CODEX_SQLITE_HOME") || strings.EqualFold(key, "HOME") || strings.EqualFold(key, "USERPROFILE") {
 				continue
 			}
 			plan.Env = append(plan.Env, key+"="+value)

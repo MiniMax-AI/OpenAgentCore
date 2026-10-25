@@ -263,7 +263,7 @@ func TestProviderCredentialOnlyInNativeLoopEnvironment(t *testing.T) {
 func TestExplicitStateRootSurvivesRuntimeReplacement(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	first, err := allocCodexHome(state, "stable-session")
+	first, err := allocSessionDir(state, "stable-session")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestExplicitStateRootSurvivesRuntimeReplacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
-	second, err := allocCodexHome(state, "stable-session")
+	second, err := allocSessionDir(state, "stable-session")
 	if err != nil || second != first {
 		t.Fatal("instance identity changed native history", err)
 	}
@@ -283,7 +283,7 @@ func TestExplicitStateRootSurvivesRuntimeReplacement(t *testing.T) {
 	if err = os.WriteFile(unavailable, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = allocCodexHome(unavailable, "stable-session"); err == nil {
+	if _, err = allocSessionDir(unavailable, "stable-session"); err == nil {
 		t.Fatal("unavailable explicit root fell back")
 	}
 }

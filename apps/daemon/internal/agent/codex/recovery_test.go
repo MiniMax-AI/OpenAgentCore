@@ -147,7 +147,7 @@ func TestPreparedRecoveryCannotStartWithoutExistingHistory(t *testing.T) {
 		t.Run(environment, func(t *testing.T) {
 			req, cfg, root := preparationFixture(t)
 			req.RequireExistingNativeSession = true
-			cwd, err := allocCodexHome(testStateRoot(t), req.AgentStateKey)
+			cwd, err := allocSessionDir(testStateRoot(t), req.AgentStateKey)
 			if err != nil {
 				t.Fatal(err)
 			}
