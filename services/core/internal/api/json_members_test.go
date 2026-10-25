@@ -60,14 +60,16 @@ func TestInexactMember(t *testing.T) {
 func TestCaseVariantMembersAreUnknown(t *testing.T) {
 	h, s := validationHandler(t)
 	session := `{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hi"`
-	unknownSession := `{"error":{"message":"Request must be a JSON object containing supported fields.","type":"invalid_request_error","code":"invalid_request","param":null}}` + "\n"
-	for _, body := range []string{
-		session + `,"Metadata":{"k":"v"}}`,
-		session + `,"metadata":{"k":"v"},"Metadata":{"k":"w"}}`,
-		session + `,"Input":"replaced"}`,
-		session + `,"STREAM":true}`,
+	unknown := func(name string) string {
+		return `{"error":{"message":"Unknown parameter: '` + name + `'.","type":"invalid_request_error","code":"invalid_request_error","param":"` + name + `"}}` + "\n"
+	}
+	for body, name := range map[string]string{
+		session + `,"Metadata":{"k":"v"}}`:                      "Metadata",
+		session + `,"metadata":{"k":"v"},"Metadata":{"k":"w"}}`: "Metadata",
+		session + `,"Input":"replaced"}`:                        "Input",
+		session + `,"STREAM":true}`:                             "STREAM",
 	} {
-		if w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body)); w.Code != http.StatusBadRequest || w.Body.String() != unknownSession {
+		if w := bodyGateRequest(h, "/v1/agents/sessions", "application/json", []byte(body)); w.Code != http.StatusBadRequest || w.Body.String() != unknown(name) {
 			t.Errorf("%s: %d %s", body, w.Code, w.Body)
 		}
 	}
@@ -82,8 +84,7 @@ func TestCaseVariantMembersAreUnknown(t *testing.T) {
 		}
 	}
 	events := "/v1/agents/sessions/" + uuid.NewString() + "/events"
-	unknownEvents := `{"error":{"message":"Invalid Session input event request.","type":"invalid_request_error","code":"invalid_request","param":null}}` + "\n"
-	if w := bodyGateRequest(h, events, "application/json", []byte(`{"Events":[]}`)); w.Code != http.StatusBadRequest || w.Body.String() != unknownEvents {
+	if w := bodyGateRequest(h, events, "application/json", []byte(`{"Events":[]}`)); w.Code != http.StatusBadRequest || w.Body.String() != unknown("Events") {
 		t.Errorf("Events: %d %s", w.Code, w.Body)
 	}
 	message := `{"events":[{"type":"agent.session.input.message","input":[{"role":"assistant","Role":"user","content":[{"type":"input_text","text":"hi"}]}]}]}`
@@ -140,8 +141,8 @@ func TestUnknownMembersRejectWithLinearAllocation(t *testing.T) {
 		path, message string
 		body          []byte
 	}{
-		{"/v1/agents/sessions", "Request must be a JSON object containing supported fields.", unknownKeys(`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hi","metadata":{"k":"v"},`, 16<<20-64)},
-		{"/v1/agents/sessions/" + uuid.NewString() + "/events", "Invalid Session input event request.", unknownKeys(`{"events":[],`, 1<<20-64)},
+		{"/v1/agents/sessions", "Unknown parameter: 'k0000000'.", unknownKeys(`{"agent":{"model":"m"},"environment":{"type":"none"},"input":"hi","metadata":{"k":"v"},`, 16<<20-64)},
+		{"/v1/agents/sessions/" + uuid.NewString() + "/events", "Unknown parameter: 'k0000000'.", unknownKeys(`{"events":[],`, 1<<20-64)},
 	} {
 		runtime.GC()
 		var before, after runtime.MemStats

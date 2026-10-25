@@ -16,36 +16,21 @@ import (
 
 func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 	raw, ok := readJSONObject(w, r)
-	if !ok {
-		return
-	}
-	if writeFieldError(w, metadataTypeError(raw)) {
+	if !ok || writeFieldError(w, validateBody(raw, updateAgentSessionParams)) {
 		return
 	}
 	var request struct {
 		Metadata json.RawMessage `json:"metadata"`
 	}
-	if err := decodeInputObject(raw, &request, "metadata"); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "Request must be a JSON object containing supported fields.")
-		return
-	}
+	_ = json.Unmarshal(raw, &request)
 	if len(request.Metadata) == 0 {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "At least one update field is required")
 		return
 	}
-	var pairs map[string]*string
-	if err := json.Unmarshal(request.Metadata, &pairs); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "metadata must be null or an object with string values.")
-		return
-	}
-	values, err := stringMetadata(pairs)
-	if err == nil {
-		err = metadataFieldError(metadata.Validate(values))
-	}
-	if err != nil {
-		if !writeFieldError(w, err) {
-			writeError(w, http.StatusBadRequest, "invalid_request", "metadata must be null or an object with string values.")
-		}
+	var values map[string]string
+	_ = json.Unmarshal(request.Metadata, &values)
+	values = metadataOrEmpty(values)
+	if writeFieldError(w, metadataFieldError(metadata.Validate(values))) {
 		return
 	}
 	session, err := h.Sessions.UpdateSessionMetadata(r.Context(), sessions.UpdateSessionMetadataCommand{TenantID: tenantID(r), SessionID: chi.URLParam(r, "session_id"), Metadata: values})
@@ -54,29 +39,6 @@ func (h *Handler) updateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.respondSession(w, r, session)
-}
-
-// metadataTypeError reports the first non-string value of a request body's
-// top-level metadata object in document order, before generic body decoding
-// can reject it. Other body and metadata shapes keep their existing errors.
-// The shared body gate has already rejected repeated keys.
-func metadataTypeError(body []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(objectMember(body, "metadata")))
-	if token, err := decoder.Token(); err != nil || token != json.Delim('{') {
-		return nil
-	}
-	for decoder.More() {
-		token, err := decoder.Token()
-		key, isKey := token.(string)
-		var value json.RawMessage
-		if err != nil || !isKey || decoder.Decode(&value) != nil {
-			return nil
-		}
-		if kind := jsonValueKind(value); kind != "a string" {
-			return &fieldError{param: "metadata." + key, message: fmt.Sprintf("Invalid type for 'metadata.%s': expected a string, but got %s instead.", key, kind)}
-		}
-	}
-	return nil
 }
 
 func jsonValueKind(value json.RawMessage) string {
@@ -111,6 +73,14 @@ func stringMetadata(values map[string]*string) (map[string]string, error) {
 		metadata[key] = *values[key]
 	}
 	return metadata, nil
+}
+
+// metadataOrEmpty keeps omitted and null metadata equal to an empty map.
+func metadataOrEmpty(values map[string]string) map[string]string {
+	if values == nil {
+		return map[string]string{}
+	}
+	return values
 }
 
 // metadataFieldError renders a metadata violation with the pinned messages

@@ -24,26 +24,6 @@ func decodeInputEvent(raw json.RawMessage) (decodedInputEvent, error) {
 	switch event.Type {
 	case "agent.session.input.message":
 		fields = append(fields, "input")
-		var messages struct {
-			Input []struct {
-				Type    json.RawMessage `json:"type"`
-				Content json.RawMessage `json:"content"`
-			} `json:"input"`
-		}
-		if json.Unmarshal(raw, &messages) != nil {
-			return event, sessions.ErrInvalidInput
-		}
-		for _, message := range messages.Input {
-			if len(message.Type) > 0 {
-				var kind string
-				if json.Unmarshal(message.Type, &kind) != nil || kind != "message" {
-					return event, sessions.ErrInvalidInput
-				}
-			}
-			if err := validateInputContent(message.Content); err != nil {
-				return event, err
-			}
-		}
 	case "agent.session.input.cancel":
 	case "agent.session.input.tool_result":
 		fields = append(fields, "call_id", "turn_id", "success", "error", "output")
@@ -80,15 +60,6 @@ func functionResultInput(event decodedInputEvent) (sessions.Input, error) {
 	if event.CallID == "" || event.TurnID == "" || event.Success == nil {
 		return sessions.Input{}, sessions.ErrInvalidInput
 	}
-	if len(event.Error) > 0 && !bytes.Equal(bytes.TrimSpace(event.Error), []byte("null")) {
-		var message string
-		if json.Unmarshal(event.Error, &message) != nil {
-			return sessions.Input{}, sessions.ErrInvalidInput
-		}
-	}
-	if err := validateFunctionOutput(event.Output); err != nil {
-		return sessions.Input{}, err
-	}
 	result, err := json.Marshal(struct {
 		Success bool            `json:"success"`
 		Error   json.RawMessage `json:"error,omitempty"`
@@ -99,50 +70,4 @@ func functionResultInput(event decodedInputEvent) (sessions.Input, error) {
 	}
 	payload, err := json.Marshal(sessions.FunctionResultInput{TurnID: event.TurnID, CallID: event.CallID, Result: result})
 	return sessions.Input{Kind: "tool_result", Payload: payload}, err
-}
-
-func validateFunctionOutput(raw json.RawMessage) error {
-	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return nil
-	}
-	var text string
-	if json.Unmarshal(raw, &text) == nil {
-		return nil
-	}
-	return validateInputContent(raw)
-}
-
-func validateInputContent(raw json.RawMessage) error {
-	var parts []json.RawMessage
-	if json.Unmarshal(raw, &parts) != nil {
-		return sessions.ErrInvalidInput
-	}
-	for _, part := range parts {
-		var value struct {
-			Type     string  `json:"type"`
-			Text     *string `json:"text"`
-			ImageURL *string `json:"image_url"`
-		}
-		if json.Unmarshal(part, &value) != nil {
-			return sessions.ErrInvalidInput
-		}
-		field := "text"
-		switch value.Type {
-		case "input_text":
-			if value.Text == nil {
-				return sessions.ErrInvalidInput
-			}
-		case "input_image":
-			field = "image_url"
-			if value.ImageURL == nil {
-				return sessions.ErrInvalidInput
-			}
-		default:
-			return sessions.ErrInvalidInput
-		}
-		if err := decodeInputObject(part, &value, "type", field); err != nil {
-			return err
-		}
-	}
-	return nil
 }

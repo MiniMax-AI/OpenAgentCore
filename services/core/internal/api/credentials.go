@@ -1,6 +1,7 @@
 package api
 
 import (
+	"cmp"
 	"encoding/json"
 	"net/http"
 
@@ -13,42 +14,33 @@ import (
 func (h *Handler) createCredential(w http.ResponseWriter, r *http.Request) {
 	vaultID := chi.URLParam(r, "vault_id")
 	raw, ok := readJSONObject(w, r)
-	if !ok {
+	if !ok || writeFieldError(w, validateBody(raw, createVaultCredentialParams)) {
 		return
 	}
 	var request struct {
-		Name *string         `json:"name"`
+		Name string          `json:"name"`
 		Auth json.RawMessage `json:"auth"`
 	}
-	if decodeInputObject(raw, &request, "name", "auth") != nil || request.Name == nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", "name and supported auth are required.")
+	_ = json.Unmarshal(raw, &request)
+	name, err := normalizedVaultName(request.Name)
+	if writeFieldError(w, err) {
 		return
 	}
-	name, err := normalizedVaultName(*request.Name)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request", err.Error())
-		return
-	}
+	var auth v1.CredentialAuthInput
+	_ = json.Unmarshal(request.Auth, &auth)
 	var credential vaults.Credential
-	switch credentialAuthType(request.Auth) {
-	case "static_bearer":
-		var auth v1.CredentialAuthInput
-		if decodeInputObject(request.Auth, &auth, "type", "mcp_server_url", "token") != nil || auth.Token == nil || *auth.Token == "" || !credentialHTTPSURL(auth.MCPServerURL) {
-			writeError(w, http.StatusBadRequest, "invalid_request", "static_bearer requires a nonempty string token and an absolute HTTPS mcp_server_url without userinfo or a fragment.")
+	if auth.Type == "static_bearer" {
+		if writeFieldError(w, cmp.Or(httpsURL("auth.mcp_server_url", *auth.MCPServerURL), nonEmptyString("auth.token", *auth.Token))) {
 			return
 		}
 		credential, err = h.Vaults.CreateStaticCredential(r.Context(), vaults.CreateStaticCredential{TenantID: tenantID(r), VaultID: vaultID, Name: name, MCPServerURL: *auth.MCPServerURL, Token: *auth.Token})
-	case "mcp_oauth":
-		command, parseErr := oauthCredentialCreate(request.Auth, name)
-		if parseErr != nil {
-			writeVaultsError(w, r, parseErr)
+	} else {
+		command, fieldErr := oauthCredentialCreate(auth, name)
+		if writeFieldError(w, fieldErr) {
 			return
 		}
 		command.TenantID, command.VaultID = tenantID(r), vaultID
 		credential, err = h.Vaults.CreateOAuthCredential(r.Context(), command)
-	default:
-		writeError(w, http.StatusBadRequest, "invalid_request", "auth requires type static_bearer or mcp_oauth.")
-		return
 	}
 	if err != nil {
 		writeVaultsError(w, r, err)
