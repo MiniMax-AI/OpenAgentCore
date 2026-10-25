@@ -151,3 +151,15 @@ test("a phone scrolls wide tables inside their frames and keeps every Settings t
   await expect(page.getByRole("table", { name: "Startup settings" }).getByRole("columnheader", { name: "Restarts", exact: true })).toBeInViewport({ ratio: 1 });
   expect(await pageScrollsSideways()).toBe(false);
 });
+
+test("skip to content moves focus to the page and keeps its route", async ({ page, request }) => {
+  await openConsole(page, request, "settings?id=storage");
+  const current = page.getByRole("navigation").getByRole("button", { name: "Workspace storage", exact: true });
+  await expect(current).toHaveAttribute("aria-current", "page");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#main-content")).toBeFocused();
+  await expect(current).toHaveAttribute("aria-current", "page");
+  expect(new URL(page.url()).hash).toBe("#settings?id=storage");
+});

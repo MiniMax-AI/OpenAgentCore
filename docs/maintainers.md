@@ -6,7 +6,7 @@ This guide is for maintainers who build and publish OpenAgentCore. To install Co
 
 ## Build a distribution
 
-A distribution is a matched set of release assets built from one commit: the control archive (the installer, the `oac` command, and the Core, Web, ingress and PostgreSQL images), the Runtime image and node artifacts as separate files, and the native installers.
+A distribution is a matched set of release assets built from one commit: the Runtime image and node artifacts as separate files, and the native installers. The build also writes a control archive per architecture (the installer, the `oac` command, and the Core, Web, ingress and PostgreSQL images). The publisher reads the images and the native catalog from it; nothing installs from it, so it is not a release asset.
 
 Core, Web and ingress images are published as verified Linux amd64/arm64 indexes. The arm64 control archive contains those three images; Node, hosted Runtime and offline payloads use Linux amd64. Release builders use QEMU for ARM image steps, including the E2B helper. Host `oac` binaries are built from the same command for Linux amd64/arm64, macOS amd64/arm64 and Windows amd64; launchers only select, verify and invoke them. Each version index is checked against its platform archives before floating tags move.
 
@@ -53,7 +53,7 @@ node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-Each platform has a small base archive `<os>-<arch>.tar.gz` (`oac-daemon` and `bundle.json`, which lists every component with the SHA-256 of each file) and one archive per component, `<os>-<arch>-node` and `<os>-<arch>-<harness>` (MiniMax Code is not built for Windows). `build-native-installer.mjs` writes them. Core serves these artifacts by name and knows nothing of their content; `oac-daemon install` downloads the components it needs.
+Each platform has a small base archive `<os>-<arch>.tar.gz` (`oac-daemon` and `bundle.json`, which lists every component with the SHA-256 of each file) and one archive per component, `<os>-<arch>-node` and `<os>-<arch>-<harness>` (MiniMax Code is not built for Windows). `build-native-installer.mjs` writes them and leaves out files that only build or install tooling: the CI runner's global pnpm in `node`, and the compiler inputs of `better-sqlite3` in `minimax`. Core serves these artifacts by name and knows nothing of their content; `oac-daemon install` downloads the components it needs.
 
 The catalog records the commit, the Runtime protocol version, each artifact's SHA-256 and, with a release base, its versioned URL. The control archive and Core image carry only `native-installers/catalog.json`; the archives become separate `oac-native-<commit>-<artifact>.tar.gz` release assets, and the offline archive holds a copy of every Linux amd64 archive outside the Core image, which its `install.py` copies into the installation for Core to serve. Core redirects the other platforms to their release assets; a catalog without a release base has no such URL, so its offline archive holds every archive. Without a catalog, Sessions report the install command as unavailable, and the release workflow refuses to publish.
 
@@ -95,7 +95,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 
 `scripts/prepare-release-runtimes.sh` runs the companion build from the pins.
 
-The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executable and resources and the Claude Code bundle copied in. It verifies that each image carries the daemon built from the same commit.
+The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executables and resources and the Claude Code bundle copied in. It verifies that each image carries the daemon built from the same commit.
 
 **E2B helper.**
 

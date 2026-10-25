@@ -56,6 +56,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - A JSON array body is rejected; the official service reads `[]` as `{}`.
 - U+0000 in a stored string returns 400; the official service stores it.
 - Not-found messages never name the resource; Core quotes a full metadata key where the official message abbreviates it.
+- Resource IDs are UUIDs; official IDs carry a type prefix, such as `sess_` for Sessions.
 - UUID identifiers also resolve in other spellings, such as uppercase or braces.
 - The Files routes keep a local `unsupported_parameter` code for a repeated query key.
 - Core has no CORS handling; the official service sends CORS headers.
@@ -109,6 +110,8 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - `openai_hosted` and Template `capability_directories` must lie inside `/workspace`; the official service also accepts system paths such as `/etc` ([capability directories](./environments.md#plugins-and-capability-directories)).
 - `env` cannot set `OPENAI_API_KEY`, which Core reserves ([env](./environments.md#env-and-setup-commands)); the official service accepts it.
+- A `self_hosted` Session without pending input requests no connection ([activity](./environments.md#activity-and-required-actions)); one unused official Session switched to `requires_action` with `environment_connection` about five minutes after creation, and its deletion then returned 409.
+- A hosted Environment emits `ready` once, when its initialization completes, and not again before each later Turn as one official Session did. It also emits `connected` and `disconnected`, which that Session did not.
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 
@@ -118,7 +121,6 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Creating an Environment file over an existing regular file returns the "must not traverse symlinks or overwrite existing files" message. A parent symbolic link that stays inside the workspace is followed, and a parent that escapes the workspace or is a regular file gets a generic 400; the official service rejects symbolic-link parents.
 - File names hold 1–1,024 bytes; the official service accepts empty and longer names.
 - A `SKILL.md` front-matter key other than `name`, `description`, `license`, `compatibility` and `metadata` is rejected; the official service accepts unknown keys ([upload a bundle](./source-files.md#upload-a-bundle)).
-- Artifact IDs are UUIDs.
 
 **Vaults and Credentials** ([Vaults and Credentials](./vaults.md))
 
@@ -141,7 +143,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Execution and history**
 
-- The stream does not emit Environment `pending` or `ready` events, or every pinned interim tool-output variant.
+- The stream does not emit every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.
@@ -183,10 +185,14 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
+- Whether the official service emits Environment `pending` and when: Core emits it when a hosted Environment's initialization starts, and the one official sample showed only `ready`, about 29 s after creation.
 - Whether Subagent child Turns and pending Environment file writes block Session deletion.
 - The official order between the pending-input error and an unknown result target.
 - Whether a Session whose latest Turn failed accepts new input: Core starts a new Turn, and one official sample rejected the input.
 - The event order when a waiting Turn resumes or is cancelled.
+- A Turn with several pending function calls: Core lists them all in one `requires_action`; no official sample had parallel calls.
+- Subagent task text and nesting: Core puts the native task prompt in the `create_subagent_call` content, while one official sample left it out; the `agent_id` of a nested child and the child's input Item have no official sample.
+- Template `env` beside Session `env`: Core merges by key and the Session value wins ([inheritance](./environments.md#inheritance)).
 - Failure reasons for npm, initial-file and Skill installation have no official sample.
 - Codex behavior for an empty text part beside text, and for images in failed function results or as remote references.
 - Official `HEAD` behavior on the routes where Core returns 405.

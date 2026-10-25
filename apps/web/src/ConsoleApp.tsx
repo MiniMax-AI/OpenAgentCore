@@ -120,7 +120,11 @@ function ConsoleShell() {
     <ConsoleNavigationContext.Provider value={navigation}>
       <ConsoleTourContext.Provider value={openTour}>
         <div className="app-shell">
-          <a className="skip-link" href="#main-content">{t("skipToContent")}</a>
+          {/* The router owns the URL fragment, so the link moves focus instead of navigating. */}
+          <a className="skip-link" href="#main-content" onClick={(event) => {
+            event.preventDefault();
+            document.getElementById("main-content")?.focus();
+          }}>{t("skipToContent")}</a>
           <ConsoleSidebar active={consoleNavParent(location.view)} onSelect={(view) => navigate(view)} onIntent={prefetch} onGettingStarted={() => navigate("overview", {}, "getting-started")} />
           <main className="app-main" id="main-content" tabIndex={-1}>
             <div className="page-transition" key={`${location.view}:${location.params.project ?? ""}:${location.params.id ?? ""}`}>

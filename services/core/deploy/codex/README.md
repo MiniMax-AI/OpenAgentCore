@@ -62,16 +62,16 @@ Codex `0.153.4` reports a provider HTTP 400 as `other` and puts the provider's e
 
 ## Runtime image
 
-[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` executable and `codex-resources`.
+[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` and `codex-code-mode-host` executables and `codex-resources`. Native `code_mode` runs its scripts in `codex-code-mode-host`, which Codex finds beside its executable.
 
 | Item | Value |
 | --- | --- |
 | Base | The [shared Runtime base](../../../../docs/maintainers.md#runtime-images-and-helpers) |
-| Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex` (mode 0555) and `/usr/local/codex-resources` |
+| Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex`, `/usr/local/bin/codex-code-mode-host` (mode 0555) and `/usr/local/codex-resources` |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
 | Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
-The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executable and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).
+The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executables and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).
 
 The [Docker adapter](../../../../docs/sandbox-provider.md#docker-adapter) owns the shared container lifecycle and isolation settings.

@@ -10,7 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /environment/workspace /workspace /home/runtime
 COPY runtime_profile.py /tmp/oac-runtime-profile.py
 RUN python3 /tmp/oac-runtime-profile.py && rm /tmp/oac-runtime-profile.py
-COPY --chmod=0555 oac-daemon codex /usr/local/bin/
+# Native code_mode runs model-written scripts in codex-code-mode-host, which
+# Codex finds beside its executable.
+COPY --chmod=0555 oac-daemon codex codex-code-mode-host /usr/local/bin/
 COPY codex-resources /usr/local/codex-resources
 ENV HOME=/home/runtime OAC_RUNTIME_HOME=/home/runtime/.oac \
     OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex \
