@@ -1078,12 +1078,14 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   assert.equal(f.sent.length, 1);
   const firstCard = JSON.parse(f.sent[0].data.content);
   assert.equal(firstCard.schema, "2.0");
-  assert.equal(firstCard.config.summary.content, "处理中");
-  assert.deepEqual(firstCard.header, { title: { tag: "plain_text", content: "处理中" }, template: "blue" });
-  // One chronological timeline: only commentary stays open.
-  const [current, said, ran] = firstCard.body.elements;
-  assert.match(current.content, /正在整理结果/);
-  assert.match(current.content, /2 步/);
+  assert.equal(firstCard.config.summary.content, "处理中 · 正在整理结果 · 2 步");
+  // The header says what is happening now; the body starts with the timeline.
+  assert.deepEqual(firstCard.header, {
+    title: { tag: "plain_text", content: "处理中" },
+    subtitle: { tag: "plain_text", content: "正在整理结果 · 2 步" },
+    template: "blue",
+  });
+  const [said, ran] = firstCard.body.elements;
   assert.equal(said.tag, "markdown");
   assert.equal(said.content, "先读取飞书技能文档。");
   assert.equal(ran.tag, "collapsible_panel");
@@ -1569,8 +1571,8 @@ test("consecutive tool calls fold into one row, each joined with its result and 
     { type: "command_execution", command: "pwd", cwd: "/workspace", output: "/workspace", exit_code: 0, duration_ms: 420, status: "completed" },
     { type: "mcp_call", name: "read", server_label: "docs", arguments: { id: 3 }, status: "incomplete" },
   ]));
-  const [current, thought, calls] = card.body.elements;
-  assert.match(current.content, /2 步/);
+  assert.match(card.header.subtitle.content, /2 步/);
+  const [thought, calls] = card.body.elements;
   assert.match(thought.header.title.content, /思考.*先检查接口/);
   assert.equal(thought.elements[0].content, "先检查接口，再处理结果。");
   assert.equal(calls.tag, "collapsible_panel");
@@ -1997,12 +1999,15 @@ test("a running card shows the latest four steps and folds the earlier ones", as
     { type: "message", role: "assistant", content: [{ type: "output_text", text: `说明 ${i}` }] },
     { type: "command_execution", command: `step ${i}`, duration_ms: 1000, status: i === 4 ? "in_progress" : "completed" },
   ]);
-  const [current, earlier, ...recent] = JSON.parse(formatTurnCard("in_progress", items)).body.elements;
+  const card = JSON.parse(formatTurnCard("in_progress", items));
+  const [earlier, rule, ...recent] = card.body.elements;
   const label = (row) => row.tag === "markdown" ? row.content : row.header.title.content.match(/`(.*)`/)[1];
-  assert.match(current.content, /正在运行.*8 步/);
+  assert.equal(card.header.subtitle.content, "正在运行 · 8 步");
   assert.equal(earlier.tag, "collapsible_panel");
   assert.equal(earlier.expanded, false);
   assert.match(earlier.header.title.content, /更早的 4 步/);
+  assert.equal(earlier.background_color, "grey-50", "earlier steps sit in a tinted block");
+  assert.equal(rule.tag, "hr", "a rule separates them from the latest steps");
   assert.deepEqual(earlier.elements.map(label), ["说明 1", "step 1", "说明 2", "step 2"]);
   assert.deepEqual(recent.map(label), ["说明 3", "step 3", "说明 4", "step 4"]);
   assert.match(recent.at(-1).header.title.content, /进行中/);

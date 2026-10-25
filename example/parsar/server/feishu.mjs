@@ -192,16 +192,18 @@ function excerpt(value, limit) {
   return prefix.join("") + "\n…（内容较长，已截取）";
 }
 
-function panel({ title, content, elements }) {
+// A `block` panel is a tinted, rounded area that holds folded history.
+function panel({ title, content, elements, block = false }) {
   return {
     tag: "collapsible_panel",
     expanded: false,
     vertical_spacing: "8px",
-    padding: "0px 0px 8px 0px",
+    padding: block ? "0px 12px 8px 12px" : "0px 0px 8px 0px",
+    ...(block && { background_color: "grey-50", border: { color: "grey-50", corner_radius: "8px" } }),
     header: {
       title: { tag: "markdown", content: title },
       width: "fill",
-      padding: "6px 0px 6px 0px",
+      padding: block ? "8px 0px 8px 0px" : "6px 0px 6px 0px",
       icon: { tag: "standard_icon", token: "down-small-ccm_outlined", size: "16px 16px" },
       icon_position: "right",
       icon_expanded_angle: -180,
@@ -214,17 +216,24 @@ function panel({ title, content, elements }) {
 const cardBudget = 28000;
 const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
 
-function statusCard(status, body, elements = []) {
+// The colored header carries the status and, while running, what is
+// happening now, so the body starts with the content.
+function statusCard(status, body, elements = [], subtitle = "") {
   const [title, template] = cardTones[status] || cardTones.failed;
+  // A card needs a body; with nothing else to show, what is happening is the body.
+  if (!body && !elements.length && subtitle) [body, subtitle] = [`**${subtitle}**`, ""];
   return JSON.stringify({
     schema: "2.0",
-    config: { update_multi: true, summary: { content: title } },
-    // The colored header carries the status, so the body starts with the content.
-    header: { title: { tag: "plain_text", content: title }, template },
+    config: { update_multi: true, summary: { content: subtitle ? `${title} · ${subtitle}` : title } },
+    header: {
+      title: { tag: "plain_text", content: title },
+      ...(subtitle && { subtitle: { tag: "plain_text", content: subtitle } }),
+      template,
+    },
     body: {
       padding: "12px 16px 12px 16px",
       vertical_spacing: "8px",
-      elements: [{ tag: "markdown", content: body }, ...elements],
+      elements: [...(body ? [{ tag: "markdown", content: body }] : []), ...elements],
     },
   });
 }
@@ -243,7 +252,7 @@ export function feishuCard(payload) {
 }
 
 export function progressCard(text, notice) {
-  return statusCard("in_progress", `**${text}**${notice ? `\n${grey(notice)}` : ""}`);
+  return statusCard("in_progress", notice ? grey(notice) : "", [], text);
 }
 
 function questionText(action, includeOptions = true) {
@@ -391,12 +400,16 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
     const current = !last ? waitingHeadline(turn) : last.type === "message" ? "正在整理回复" : last.type === "reasoning" ? "正在思考" : last.status === "in_progress" ? `正在${step(last)[0]}` : "正在整理结果";
     const typical = !last && turn?.expected_s && turn.stage !== "retrying" ? typicalWait.replace("{{value0}}", turn.expected_s) : "";
     const progress = rows.length ? `${rows.length} 步` : typical;
-    const body = excerpt([`**${current}**${progress ? ` ${grey(`· ${progress}`)}` : ""}`, authorizationText].filter(Boolean).join("\n"), 8000);
+    const subtitle = [current, progress].filter(Boolean).join(" · ");
+    const body = authorizationText ? excerpt(authorizationText, 8000) : "";
     const earlier = rows.slice(0, -recentRows), recent = rows.slice(-recentRows);
     const budget = cardBudget - bytes(body);
     const shown = fitRows(recent, budget);
-    const fold = earlier.length ? [panel({ title: grey(`更早的 ${earlier.length} 步`), elements: fitRows(earlier, budget - bytes(shown)) })] : [];
-    return statusCard(status, body, [...fold, ...shown]);
+    // Earlier steps sit in a tinted block above a rule that separates the latest ones.
+    const fold = earlier.length
+      ? [panel({ title: grey(`更早的 ${earlier.length} 步`), elements: fitRows(earlier, budget - bytes(shown)), block: true }), { tag: "hr" }]
+      : [];
+    return statusCard(status, body, [...fold, ...shown], subtitle);
   }
   const context = questions.some((action) => questionText(action, false).trim() === answer.trim()) ? "" : answer;
   // Put the decision first; keep its explanation available without filling the chat.
@@ -414,7 +427,7 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
   if (failedTool) elements.push(toolRow(failedTool));
   if (rows.length) {
     const budget = cardBudget - bytes(body) - bytes(elements);
-    elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, budget) }));
+    elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, budget), block: true }));
   }
   return statusCard(status, body, elements.length ? [{ tag: "hr" }, ...elements] : []);
 }
