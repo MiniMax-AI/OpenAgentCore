@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: afb241cb659061b9f5c50c5db88c83080d02d07eab37ffb2f1c70d5e2386c96e
+source_hash: 007c0a43dce8af3d21c5a4afb196ad2f62fad8b697ac3ba38eaab6ce955e0f88
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -161,7 +161,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - 没有存储密钥轮换或重新加密。
 - OAuth 刷新仅在派发时执行：提供商返回 401 时不会刷新，不会在 Turn 中途替换令牌，也不会撤回已发送给 Runtime 的令牌。
-- 发送到所选 Credential 已被删除的 Session 的输入会先通过准入，随后在派发时失败。
 - 创建 Credential 时不接受 `Idempotency-Key`。
 
 **Sessions**

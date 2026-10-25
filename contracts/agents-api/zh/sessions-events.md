@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: 39fe5deab865e778bd8d3fa50a5d66707e10df4652b868e47f17126d962291eb
+source_hash: ffddefb51fd2dcd04532d210f658caf96a6f825057c9025c3c18dbf8eb3ddc5a
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -63,7 +63,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 ### 输入错误 {#input-errors}
 
-检查按以下顺序执行：[请求验证](wire-semantics.md#configuration-validation)（路径以 `events[i]` 开头）、Session 查找、重试查找、针对包含消息的批次的 Environment 文件写入门控、待处理输入门控，最后按批次顺序检查每个事件。被拒绝的批次不会写入任何内容，也不会改变任何待处理操作。所有 409 响应的 `type` 都是 `conflict_error`（[错误封装](wire-semantics.md)）。
+检查按以下顺序执行：[请求验证](wire-semantics.md#configuration-validation)（路径以 `events[i]` 开头）、Session 查找、Harness 输入检查、重试查找、针对会启动 Turn 的消息的 Credential 检查、针对包含消息的批次的 Environment 文件写入门控、待处理输入门控，最后按批次顺序检查每个事件。被拒绝的批次不会写入任何内容，也不会改变任何待处理操作。所有 409 响应的 `type` 都是 `conflict_error`（[错误封装](wire-semantics.md)）。
 
 | 情况 | 状态和代码 | 消息 |
 | --- | --- | --- |
@@ -78,9 +78,10 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 | 预留的批次因管理员归档 Session 或重置其部署而被取消 | 409 `environment_input_cancelled` | "The environment input was cancelled before admission." |
 | `openai_hosted` Environment 预配失败后提交新输入 | 409 `conflict_error` | "the hosted environment failed to provision" |
 | `self_hosted` Environment 失败后提交新输入、Environment 失败时输入已在等待，或 Environment 已过期 | 409 `environment_unavailable` | "The environment is no longer available for new input." |
+| 会在其所绑定 MCP Credential 或其 Vault 已删除的 Session 上启动 Turn 的消息 | 400 `invalid_request_error`，param 为 null | "MCP credential_id {id} was not found in an attached vault" |
 | Session Harness 无法处理的消息，例如 MiniMax Code 上仅含空白的文本 | 400 `unsupported_or_invalid_configuration` | 见[仅含空白的文本](message-content.md#whitespace-only-text) |
 
-`turn_id` 为空或 `call_id` 为空白时，会返回通用的 400 `invalid_request`。除未知工具调用的消息按官方 SDK 的预期给出其 `call_id` 外，错误消息绝不会重复调用方输入或内部标识符。
+`turn_id` 为空或 `call_id` 为空白时，会返回通用的 400 `invalid_request`。除未知工具调用的消息按官方 SDK 的预期给出其 `call_id`、Credential 消息像 Session 创建时一样给出该 Credential 外，错误消息绝不会重复调用方输入或内部标识符。
 
 ## 创建 Session 时的初始输入 {#initial-input-at-session-creation}
 
