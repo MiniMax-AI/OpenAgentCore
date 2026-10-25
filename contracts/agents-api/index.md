@@ -110,6 +110,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - `openai_hosted` and Template `capability_directories` must lie inside `/workspace`; the official service also accepts system paths such as `/etc` ([capability directories](./environments.md#plugins-and-capability-directories)).
 - `env` cannot set `OPENAI_API_KEY`, which Core reserves ([env](./environments.md#env-and-setup-commands)); the official service accepts it.
 - A `self_hosted` Session without pending input requests no connection ([activity](./environments.md#activity-and-required-actions)); one unused official Session switched to `requires_action` with `environment_connection` about five minutes after creation, and its deletion then returned 409.
+- A hosted Environment emits `ready` once, when its initialization completes, and not again before each later Turn as one official Session did. It also emits `connected` and `disconnected`, which that Session did not.
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 
@@ -141,7 +142,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Execution and history**
 
-- The stream does not emit Environment `pending` or `ready` events, or every pinned interim tool-output variant.
+- The stream does not emit every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.
@@ -183,6 +184,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
 - A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
+- Whether the official service emits Environment `pending` and when: Core emits it when a hosted Environment's initialization starts, and the one official sample showed only `ready`, about 29 s after creation.
 - Whether Subagent child Turns and pending Environment file writes block Session deletion.
 - The official order between the pending-input error and an unknown result target.
 - Whether a Session whose latest Turn failed accepts new input: Core starts a new Turn, and one official sample rejected the input.

@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 15550304b85596e09cbeb4cc6d7253a4bdd64ffd6adc58a539511e0c939f7ad6
+source_hash: fa17eba20ecb905da36dfb1c0ffb8d9a86f49560f0688ddc6b9a3b59009fc4b4
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -257,6 +257,7 @@ stateDiagram-v2
 - 每个文件、Skill 或 Plugin 传输的暂存预算为两分钟。configure、软件包安装、设置命令和快照最终确定共享整个初始化过程的 30 分钟预算，Core 在每项操作中携带剩余时长，由 Runtime 执行。初始输入仍保留其五分钟接纳期限，因此大型安装应从空闲 Session 开始。
 - 正在运行且所有权丧失的初始化，包括跨 Core 重启丧失所有权，会作为未确认而失败；不会重播任何内容。已完成的 Environment 在重连或原生恢复时绝不会重新安装，因此用户后续更改会保留下来。
 - 失败对 Session 而言是终止状态，但不会销毁计算资源或文件。
+- `openai_hosted` Environment 在开始初始化的事务中记录 `agent.session.environment.pending`，在完成初始化的事务中记录 `agent.session.environment.ready`，各恰好一次。`self_hosted` Environment 两者都不发出。
 
 初始化失败时记录的事件和 Session 状态由 [Environment 初始化失败](sessions-events.md#environment-initialization-failure)定义。原因只指明步骤及其退出状态：
 

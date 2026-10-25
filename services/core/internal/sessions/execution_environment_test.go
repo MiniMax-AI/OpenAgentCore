@@ -163,6 +163,7 @@ func TestInitializationOwnerAndDeviceRules(t *testing.T) {
 }
 
 func TestInitializationTransitionsRunUnderTheListedDevice(t *testing.T) {
+	var journaled []SessionChange
 	owner := EnvironmentInitialization{TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", DeviceID: "device"}
 	listed := func() (ExecutionDevice, bool, error) {
 		return ExecutionDevice{ID: "device", EnvironmentID: "environment"}, true, nil
@@ -176,15 +177,18 @@ func TestInitializationTransitionsRunUnderTheListedDevice(t *testing.T) {
 		want    error
 		calls   []string
 	}{
-		{"claim", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, claimInitialization: returns(true)},
+		{"claim", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, claimInitialization: returns(true), appendChanges: collect(&journaled)},
+			LockedSession{}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
+			nil, append(checked, "ClaimInitialization environment", "AppendChanges agent.session.environment.pending")},
+		{"claim of a self-hosted Environment", fakeTx{loadEnvironment: returns(Environment{ID: "environment", Status: "pending", Configuration: []byte(`{"type":"self_hosted"}`)}), loadSessionDevice: listed, claimInitialization: returns(true)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
 			nil, append(checked, "ClaimInitialization environment")},
 		{"claim that did not apply", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, claimInitialization: returns(false)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.ClaimEnvironmentInitialization(t.Context(), owner) },
 			ErrTurnConflict, append(checked, "ClaimInitialization environment")},
-		{"complete", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, completeInitialization: returns(true)},
+		{"complete", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: listed, completeInitialization: returns(true), appendChanges: collect(&journaled)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.CompleteEnvironmentInitialization(t.Context(), owner) },
-			nil, append(checked, "CompleteInitialization environment")},
+			nil, append(checked, "CompleteInitialization environment", "AppendChanges agent.session.environment.ready")},
 		{"device moved", fakeTx{loadEnvironment: returns(hostedEnvironment), loadSessionDevice: loads(ExecutionDevice{ID: "other", EnvironmentID: "environment"}, true)},
 			LockedSession{}, func(o *ExecutionOperations) error { return o.CompleteEnvironmentInitialization(t.Context(), owner) },
 			ErrTurnConflict, checked},
