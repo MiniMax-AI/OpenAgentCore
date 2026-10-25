@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: ab06803446379f5a4e3525070360654f67d2bf6e4285ae10af9ef1dd551f25ff
+source_hash: 09fcf64102a376e53b2881621c21647afb7187e3899ef6c4b9f350fa7a2d95fe
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -59,6 +59,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - JSON 数组请求体会被拒绝；官方服务会将 `[]` 读取为 `{}`。
 - 存储的字符串中含有 U+0000 时会返回 400；官方服务会存储该字符。
 - 未找到消息从不会指明具体资源；Core 会给完整的元数据键加引号，而官方消息会将其缩略。
+- 资源 ID 均为 UUID；官方 ID 带有类型前缀，例如 Session 的 `sess_`。
 - UUID 标识符也可按其他拼写形式解析，例如大写形式或带花括号的形式。
 - 对于重复的查询键，Files 路由会保留本地 `unsupported_parameter` 代码。
 - Core 不处理 CORS；官方服务会发送 CORS 标头。
@@ -111,6 +112,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - `openai_hosted` 和模板的 `capability_directories` 必须位于 `/workspace` 内；官方服务也接受 `/etc` 等系统路径（[能力目录](environments.md#plugins-and-capability-directories)）。
 - `env` 不能设置 Core 保留的 `OPENAI_API_KEY`（[env](environments.md#env-and-setup-commands)）；官方服务接受该变量。
+- 没有待处理输入的 `self_hosted` Session 不会请求连接（[活动状态](environments.md#activity-and-required-actions)）；一个未使用的官方 Session 在创建约五分钟后转为 `requires_action`，原因为 `environment_connection`，之后删除它返回 409。
 
 **Files、Skills、Environment files 和 Artifacts**（[Files and Skills](source-files.md)、[Environment files and Artifacts](environment-files.md)）
 
@@ -120,7 +122,6 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 在已有常规文件上创建 Environment file 会返回 "must not traverse symlinks or overwrite existing files" 消息。若父级符号链接仍位于工作区内，则会跟随该链接；若父级逸出工作区或父级本身是常规文件，则会返回通用 400；官方服务会拒绝父级符号链接。
 - 文件名长度为 1–1,024 字节；官方服务接受空文件名和更长的文件名。
 - `SKILL.md` front matter 中 `name`、`description`、`license`、`compatibility` 和 `metadata` 以外的键会被拒绝；官方服务接受未知键（[上传 bundle](source-files.md#upload-a-bundle)）。
-- Artifact ID 均为 UUID。
 
 **Vaults 和 Credentials**（[Vaults and Credentials](vaults.md)）
 
@@ -189,6 +190,9 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 官方服务在待处理输入错误与未知结果目标之间的先后顺序。
 - 最新 Turn 失败的 Session 是否接受新输入：Core 会开始新的 Turn，而一个官方样本拒绝了该输入。
 - 等待中的 Turn 恢复或被取消时的事件顺序。
+- 有多个待处理函数调用的 Turn：Core 在同一个 `requires_action` 中列出全部调用；官方样本中没有并行调用。
+- Subagent 的任务文本和嵌套：Core 把原生任务提示放在 `create_subagent_call` 的内容中，而一个官方样本省略了它；嵌套子级的 `agent_id` 和子级的输入 Item 没有官方样本。
+- 模板 `env` 与 Session `env` 并存：Core 按键合并，以 Session 的值为准（[继承](environments.md#inheritance)）。
 - npm、initial-file 和 Skill 安装的失败原因没有官方样本。
 - Codex 对文本旁的空文本部分、失败函数结果中的图像或远程引用图像的行为。
 - 在 Core 返回 405 的路由上，官方服务的 `HEAD` 行为。
