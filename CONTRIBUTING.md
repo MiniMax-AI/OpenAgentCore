@@ -1,6 +1,6 @@
 # Contributing to OpenAgentCore
 
-This guide owns how to work in the repository: documentation ownership, the repository boundary, workflow and review, required checks and naming. Every other subject has one canonical owner, listed below.
+This guide owns how to work in the repository: documentation ownership, the repository boundary, workflow and review, required checks and naming.
 
 ## Documentation ownership
 
@@ -26,15 +26,9 @@ Every subject has one owner. Most owners are the page whose title names the subj
 
 ## Repository boundary
 
-This repository contains the Core API and database, Runtime daemon, Harness and Sandbox Provider adapters, shared protocol packages, Web administrator console and their build and test tools. Product applications stay outside that service boundary. Keep the external Parsar product's `server/`, `apps/parsar/`, CLI, plugins and deployment stack in its own repository; do not automatically sync or delete its Core copy. Go imports resolve through this repository's module.
+This repository contains the Core API and database, Runtime daemon, Harness and Sandbox Provider adapters, shared protocol packages, Web administrator console and their build and test tools. Product applications stay outside that service boundary.
 
-### Product and execution service separation
-
-Core builds, deploys and runs independently of product services, frontends and databases. Applications follow the [public API boundary](AGENTS.md#public-api) and, when they share a PostgreSQL server with Core, use separate databases, credentials and migrations.
-
-- Parsar owns users, workspaces, business authorization, Agent/Team definitions, capabilities, product conversations, IM/sharing, approval decisions and billing. It uses Core for execution.
-- A product conversation may reference several execution Sessions. Core owns native engine session identities; an execution Session has its own lifetime, separate from a daemon connection, process or sandbox.
-- Build application orchestration on the public Session and event contract in the [Agents API guide](docs/api/public-agent-api.md). Product cursor replay must be an explicit product extension. Business Team orchestration belongs to the application; Core's pinned `multi_agent` and Subagent resources remain part of the public contract.
+Core builds, deploys and runs independently of product services, frontends and databases; applications follow the [public API boundary](AGENTS.md#public-api).
 
 ### Optional application example
 
@@ -42,8 +36,7 @@ Core builds, deploys and runs independently of product services, frontends and d
 
 - It calls only public `/v1` APIs. Its Project key stays server-side; it never holds a Core key or issues machine credentials. The example uses only Core-managed hosted environments; its environment templates prepare packages, initialization commands, variables and initial files through the public Session contract.
 - It may keep a small product-owned SQLite database (Node's built-in module, Node 22.13+), outside the checkout and isolated by Core origin and Project key fingerprint. Provider keys never reach the browser.
-- Core owns Skills and authoritative execution/history state. The example owns resource configurations, projects, tasks, comments, interval/Cron plans and Feishu delivery receipts. Session records retain Core references and pending creation requests with stable idempotency keys; product workers use the same public API as interactive flows.
-- Product resources use `/app/` and never become Core API or database conventions. Execution uses bypass mode. The local Web operator, Agent-scoped local MCP tokens and configured Feishu routes are the example’s access boundary; it does not implement product accounts or fine-grained permissions.
+- Product resources use `/app/` and never become Core API or database conventions.
 - It is excluded from Core distributions and cannot become a service dependency.
 
 ## Workflow and review
@@ -56,7 +49,6 @@ If requirements are unresolved, object ownership is unclear, or a design would n
 
 ### Implementation conventions
 
-- Apply the [simplicity and performance principles](AGENTS.md#simplicity-and-performance) when adding structure or optimizing execution.
 - Keep one formatter, parser, validator and error mapper per job, and one error mapper per API surface.
 - Share frontend formatting and labels in `apps/web/src/lib/`.
 - Use `internal/obs/log` for logs. Keep credentials out of source and logs. Harness profiles must not copy Runtime tool environment values; see the [environment contract](contracts/agents-api/environments.md#explicit-local-tool-environment).
@@ -89,7 +81,7 @@ The role needs `CREATE DATABASE`: tests of database-wide state, such as the exec
 
 ### Contract and schema rules
 
-- Each `internal/harnessconfig/<package>/declaration.go` is the single authored declaration of one Harness, read by Core admission and the Runtime. `make generate-harness-catalog` generates the Go registrations, client identifiers/names and the reference, and projects the model-provider protocol names of `internal/modelprovider/config.go` to the client; `make openapi` derives the matching enums. `make check-harness-catalog` verifies freshness in the full gate. Native restrictions stay in the declaration; Runtime availability stays separate and discovery only narrows the declaration.
+- [Declare the Harness](contracts/agents-api/harness-onboarding.md#declare-the-harness) owns what `make generate-harness-catalog` generates from each declaration and what `make check-harness-catalog` checks. The same generator also projects the model-provider protocol names of `internal/modelprovider/config.go` to the client.
 - `make openapi` regenerates the public Go types, the Agent request shapes, the route inventory and all three OpenAPI documents; run it after changing the pinned public schema, Go bindings, Core extensions or handler annotations, and commit the generated diffs. `make check-openapi` checks freshness and the generator, and also runs through `make check-go`.
 - `scripts/generate-public-api.py` reads the checked-in, checksum-verified official source without network access. It selects Agents, Vaults, Files and Skills and follows their schema references, preserving union types, nullability, required fields and constraints. The request shapes in `services/core/internal/api/official_shapes.gen.go` project `CreateAgentParams`, `UpdateAgentParams` and `SessionAgentConfigParam`; Core checks request bodies against them before it reads an Agent configuration. Core's extension types in `contracts/agents-api/v1/` stay authored in Go and are added to the public schema during generation.
 - The standard fields are generated into `v1/official.gen.go`. `go-bindings.json` lists the types Core consumes and overrides only the Go representation or field order that existing storage or custom JSON encoding requires; shared shapes use one Go type. Selected discriminated unions also generate JSON serializers that keep required nullable fields for each variant. Go input projections exclude `packages.system` to preserve its explicit rejection. Other union serializers, Core's local limits, execution admission and state transitions remain implementation code.
@@ -112,7 +104,7 @@ Native adapter changes require their build/check targets and live provider accep
 
 ## OpenAgentCore Runtime names
 
-| Surface | Current name |
+| Surface | Name |
 | --- | --- |
 | Runtime binary | `oac-daemon` |
 | Filesystem and initialization helpers | `oac-*` |
@@ -125,4 +117,4 @@ Provider bootstrap, Runtime images and Harness adapters must agree on these name
 
 ## Branding
 
-Use OpenAgentCore for public project branding. The canonical mark is `docs/assets/openagentcore-logo.svg`; Web uses its outline with cropped transparent margins, theme-aware favicon colors and dark-surface inversion. The README wordmark is `docs/assets/openagentcore-wordmark-light.svg` with a dark variant, and `docs/assets/og-image.png` is the social preview. The architecture diagram that README and the website show, `docs/assets/architecture.svg` and `architecture-dark.svg`, is generated by `scripts/generate-architecture-diagram.py`; change the script and run it again. The `example/parsar/` workbench keeps its own name, logo and favicon. Preserve external repository URLs and data identifiers when changing display copy.
+Use OpenAgentCore for public project branding. The canonical mark is `docs/assets/openagentcore-logo.svg`; Web uses its outline with cropped transparent margins, theme-aware favicon colors and dark-surface inversion. The README wordmark is `docs/assets/openagentcore-wordmark-light.svg` with a dark variant, and `docs/assets/og-image.png` is the social preview. The architecture diagram that README and the website show, `docs/assets/architecture.svg` and `architecture-dark.svg`, is generated by `scripts/generate-architecture-diagram.py`; change the script and run it again. The `example/parsar/` example keeps its own name, logo and favicon.
