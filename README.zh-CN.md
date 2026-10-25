@@ -22,25 +22,26 @@
 
 ## 性能
 
-单个 microsandbox 节点上的沙箱生命周期，E2B 以同样方式测量作为对照。2026-10-25 测得，每项为至少 10 次运行的中位数；每一行都链接到测量方法和原始记录，[`scripts/benchmark.py`](scripts/benchmark.py) 可以复现这些数据。
+单个 microsandbox 节点上的沙箱生命周期，并以 E2B 的创建、暂停和恢复作为对照。2026-10-25 测得，每项为 7 到 30 个样本的中位数；每一行都链接到测量方法和原始记录，[`scripts/benchmark.py`](scripts/benchmark.py) 可以复现这些数据。
 
 | 操作 | OpenAgentCore（microsandbox） | E2B | 原始记录 |
 | --- | --- | --- | --- |
-| [创建沙箱](https://openagentcore.dev/zh/docs/performance#sandbox-start) | 1.20 s | 0.59 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
-| [沙箱创建完成 → 开始初始化](https://openagentcore.dev/zh/docs/performance#sandbox-start) | 0.80 s | — | [core](docs/performance/core.jsonl) |
-| [Environment 就绪，准备缓存命中 / 未命中](https://openagentcore.dev/zh/docs/performance#environment-ready) | 2.3 s / 8.2 s | — | [sessions](docs/performance/sessions.jsonl) |
-| [挂起空闲沙箱](https://openagentcore.dev/zh/docs/performance#suspend-and-resume) | 2.92 s | 0.60 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
-| [恢复沙箱](https://openagentcore.dev/zh/docs/performance#suspend-and-resume) | 1.24 s | 0.75 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
-| [Turn 的首个文本，已挂起 / 运行中的 Session](https://openagentcore.dev/zh/docs/performance#suspend-and-resume) | 3.06 s / 1.51 s | — | [sessions](docs/performance/sessions.jsonl) |
+| [创建沙箱](https://openagentcore.dev/zh/docs/performance#sandbox-start) | 1.22 s | 0.60 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
+| [沙箱创建完成 → 开始初始化](https://openagentcore.dev/zh/docs/performance#sandbox-start) | 0.98 s | — | [core](docs/performance/core.jsonl) |
+| [Environment 就绪，准备缓存命中 / 未命中](https://openagentcore.dev/zh/docs/performance#environment-ready) | 2.50 s / 7.35 s | — | [sessions](docs/performance/sessions.jsonl) |
+| [满载节点上 Environment 就绪](https://openagentcore.dev/zh/docs/performance#environment-ready) | 5.90 s | — | [sessions](docs/performance/sessions.jsonl), [core](docs/performance/core.jsonl) |
+| [挂起空闲沙箱](https://openagentcore.dev/zh/docs/performance#suspend-and-resume) | 3.33 s | 1.04 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
+| [恢复沙箱；清空节点页缓存后恢复](https://openagentcore.dev/zh/docs/performance#suspend-and-resume) | 1.75 s / 1.99 s | 0.87 s | [core](docs/performance/core.jsonl), [cold](docs/performance/cold/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
+| [Turn 的首个文本，已挂起 / 运行中的 Session](https://openagentcore.dev/zh/docs/performance#suspend-and-resume) | 3.51 s / 1.26 s | — | [sessions](docs/performance/sessions.jsonl) |
 
-E2B 时间为客户端上 SDK 调用的耗时，含 0.20 s 的 API 往返；OpenAgentCore 时间由 Core 自己测量，经过 0.2 ms 的本地网络。主机和版本见[测试环境](https://openagentcore.dev/zh/docs/performance#setup)。
+E2B 时间为客户端上 SDK 调用的耗时，含 0.20 s 的 API 往返。OpenAgentCore 的沙箱时间由 Core 自己测量，经过 0.2 ms 的本地网络；Environment 就绪和首个文本由 Core 主机上的应用根据事件流计时，Core 以 100 ms 为间隔推送事件流。主机和版本见[测试环境](https://openagentcore.dev/zh/docs/performance#setup)，两边的差异见 [E2B](https://openagentcore.dev/zh/docs/performance#e2b)。
 
 ## 适用边界
 
-- **Docker 是兼容选项**，用于可信负载或没有 KVM 的主机。容器共享节点内核，空闲沙箱不会挂起，文件保存在节点磁盘上。详见[选择沙箱提供商](https://openagentcore.dev/zh/docs/getting-started/sandbox-backends)。
+- **Docker 是兼容选项**，用于可信负载和没有 KVM 的主机。容器共享节点内核，空闲沙箱不会挂起，文件保存在节点磁盘上。详见[选择沙箱提供商](https://openagentcore.dev/zh/docs/getting-started/sandbox-backends)。
 - **每个工作区只有一个写入者。** 工作区同一时间只挂载到一个沙箱，存储只保留当前文件，没有文件历史或分叉。详见[工作区文件系统协议](https://openagentcore.dev/zh/docs/workspace-provider)。
 - **工作区存储需要 Linux。** NFS 适配器使用 Core 主机和每个节点上的内核 NFS 挂载。详见[设置工作区存储](https://openagentcore.dev/zh/docs/getting-started/workspace-storage)。
-- **挂起比 E2B 的暂停慢**：2.9 s 对 0.6 s。满载节点会提前挂起一个空闲沙箱以留出槽位，因此单个新 Session 不必等待挂起；满载节点上同时到达一批新 Session 时则需要等待。
+- **挂起比 E2B 的暂停慢**：3.33 s 对 1.04 s。节点运行的沙箱已达上限时，新 Session 要等一个空闲沙箱挂起，因此 Environment 在 5.90 s 后才就绪，而不是 2.50 s。详见[挂起](https://openagentcore.dev/zh/docs/sandbox-provider#suspension)。
 
 ![部署概览](docs/assets/console-overview-zh.webp)
 

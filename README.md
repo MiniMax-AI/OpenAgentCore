@@ -22,25 +22,26 @@ The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or Mi
 
 ## Performance
 
-The sandbox lifecycle on one microsandbox node, with E2B measured the same way. Medians of at least 10 runs on 2026-10-25; each row links to its method and raw records, and [`scripts/benchmark.py`](scripts/benchmark.py) reproduces them.
+The sandbox lifecycle on one microsandbox node, with E2B's create, pause and resume for comparison. Medians of 7 to 30 samples on 2026-10-25; each row links to its method and raw records, and [`scripts/benchmark.py`](scripts/benchmark.py) reproduces them.
 
 | Operation | OpenAgentCore on microsandbox | E2B | Records |
 | --- | --- | --- | --- |
-| [Create a sandbox](https://openagentcore.dev/docs/performance#sandbox-start) | 1.20 s | 0.59 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
-| [Sandbox created → initialization starts](https://openagentcore.dev/docs/performance#sandbox-start) | 0.80 s | — | [core](docs/performance/core.jsonl) |
-| [Environment ready, preparation cache hit / miss](https://openagentcore.dev/docs/performance#environment-ready) | 2.3 s / 8.2 s | — | [sessions](docs/performance/sessions.jsonl) |
-| [Suspend an idle sandbox](https://openagentcore.dev/docs/performance#suspend-and-resume) | 2.92 s | 0.60 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
-| [Resume it](https://openagentcore.dev/docs/performance#suspend-and-resume) | 1.24 s | 0.75 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
-| [First text of a Turn, suspended / running Session](https://openagentcore.dev/docs/performance#suspend-and-resume) | 3.06 s / 1.51 s | — | [sessions](docs/performance/sessions.jsonl) |
+| [Create a sandbox](https://openagentcore.dev/docs/performance#sandbox-start) | 1.22 s | 0.60 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
+| [Sandbox created → initialization starts](https://openagentcore.dev/docs/performance#sandbox-start) | 0.98 s | — | [core](docs/performance/core.jsonl) |
+| [Environment ready, preparation cache hit / miss](https://openagentcore.dev/docs/performance#environment-ready) | 2.50 s / 7.35 s | — | [sessions](docs/performance/sessions.jsonl) |
+| [Environment ready on a full node](https://openagentcore.dev/docs/performance#environment-ready) | 5.90 s | — | [sessions](docs/performance/sessions.jsonl), [core](docs/performance/core.jsonl) |
+| [Suspend an idle sandbox](https://openagentcore.dev/docs/performance#suspend-and-resume) | 3.33 s | 1.04 s | [core](docs/performance/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
+| [Resume it; after dropping the node's page cache](https://openagentcore.dev/docs/performance#suspend-and-resume) | 1.75 s / 1.99 s | 0.87 s | [core](docs/performance/core.jsonl), [cold](docs/performance/cold/core.jsonl), [e2b](docs/performance/e2b.jsonl) |
+| [First text of a Turn, suspended / running Session](https://openagentcore.dev/docs/performance#suspend-and-resume) | 3.51 s / 1.26 s | — | [sessions](docs/performance/sessions.jsonl) |
 
-E2B times are SDK calls on the client and include a 0.20 s API round trip; OpenAgentCore times are Core's own, over a 0.2 ms local network. [Setup](https://openagentcore.dev/docs/performance#setup) lists the hosts and versions.
+E2B times are SDK calls on the client and include a 0.20 s API round trip. OpenAgentCore's sandbox times are Core's own, over a 0.2 ms local network; Environment ready and first text are timed by an application on the Core host from its event stream, which Core sends in 100 ms steps. [Setup](https://openagentcore.dev/docs/performance#setup) lists the hosts and versions, and [E2B](https://openagentcore.dev/docs/performance#e2b) how the two sides differ.
 
 ## Limits
 
-- **Docker is a compatibility backend**, for trusted workloads or hosts without KVM. Containers share the node's kernel, idle sandboxes never suspend, and files stay on the node's disk. See [Choose a sandbox backend](https://openagentcore.dev/docs/getting-started/sandbox-backends).
+- **Docker is a compatibility backend**, for trusted workloads and hosts without KVM. Containers share the node's kernel, idle sandboxes never suspend, and files stay on the node's disk. See [Choose a sandbox backend](https://openagentcore.dev/docs/getting-started/sandbox-backends).
 - **One writer per workspace.** A workspace is attached to one sandbox at a time, and storage keeps only its current files: no file history or forks. See [Workspace filesystem protocol](https://openagentcore.dev/docs/workspace-provider).
 - **Workspace storage needs Linux.** The NFS adapter uses a kernel NFS mount on the Core host and on every node. See [Set up workspace storage](https://openagentcore.dev/docs/getting-started/workspace-storage).
-- **Suspend is slower than E2B's pause**: 2.9 s against 0.6 s. A full node suspends one idle sandbox early to keep a slot free, so one new Session does not wait for a suspension, but a burst of new Sessions on a full node does.
+- **Suspend is slower than E2B's pause**: 3.33 s against 1.04 s. A Session that starts on a node already running its maximum number of sandboxes waits for an idle one to suspend, so its Environment was ready after 5.90 s instead of 2.50 s. See [Suspension](https://openagentcore.dev/docs/sandbox-provider#suspension).
 
 ![Deployment overview](docs/assets/console-overview-en.webp)
 

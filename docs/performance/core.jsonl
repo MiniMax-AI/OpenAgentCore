@@ -1,215 +1,252 @@
-{"time": "2026-10-25T07:19:30.33719806Z", "msg": "Runtime compute step", "allocation_id": "ec3d8535", "step": "create", "duration_ms": 1208, "succeeded": true}
-{"time": "2026-10-25T07:19:31.223431035Z", "msg": "Environment preparation cache", "allocation_id": "ec3d8535", "step": "restore_preparation", "duration_ms": 96, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:19:36.556161988Z", "msg": "Environment preparation cache", "allocation_id": "ec3d8535", "step": "save_preparation", "duration_ms": 164, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:19:36.872207358Z", "msg": "Runtime compute phase saved", "allocation_id": "ec3d8535", "to": "running"}
-{"time": "2026-10-25T07:19:40.957281043Z", "msg": "Runtime compute step", "allocation_id": "9020efce", "step": "create", "duration_ms": 1208, "succeeded": true}
-{"time": "2026-10-25T07:19:42.11503032Z", "msg": "Environment preparation cache", "allocation_id": "9020efce", "step": "restore_preparation", "duration_ms": 337, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:19:46.377255989Z", "msg": "Runtime compute step", "allocation_id": "8b2128f0", "step": "create", "duration_ms": 1207, "succeeded": true}
-{"time": "2026-10-25T07:19:47.497738139Z", "msg": "Environment preparation cache", "allocation_id": "8b2128f0", "step": "restore_preparation", "duration_ms": 96, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:19:50.959197475Z", "msg": "Environment preparation cache", "allocation_id": "8b2128f0", "step": "save_preparation", "duration_ms": 162, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:19:51.877250927Z", "msg": "Runtime compute phase saved", "allocation_id": "8b2128f0", "to": "running"}
-{"time": "2026-10-25T07:19:55.587592751Z", "msg": "Runtime compute step", "allocation_id": "86e3bb82", "step": "create", "duration_ms": 1195, "succeeded": true}
-{"time": "2026-10-25T07:19:56.902060225Z", "msg": "Environment preparation cache", "allocation_id": "86e3bb82", "step": "restore_preparation", "duration_ms": 251, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:19:57.099959788Z", "msg": "Runtime compute phase saved", "allocation_id": "86e3bb82", "to": "running"}
-{"time": "2026-10-25T07:20:01.732837862Z", "msg": "Runtime compute step", "allocation_id": "8a43d972", "step": "create", "duration_ms": 1220, "succeeded": true}
-{"time": "2026-10-25T07:20:02.660740791Z", "msg": "Environment preparation cache", "allocation_id": "8a43d972", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:20:09.472102872Z", "msg": "Environment preparation cache", "allocation_id": "8a43d972", "step": "save_preparation", "duration_ms": 157, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:20:11.8716012Z", "msg": "Runtime compute phase saved", "allocation_id": "8a43d972", "to": "running"}
-{"time": "2026-10-25T07:20:13.925436936Z", "msg": "Runtime compute step", "allocation_id": "c8aeca39", "step": "create", "duration_ms": 1200, "succeeded": true}
-{"time": "2026-10-25T07:20:14.960836533Z", "msg": "Environment preparation cache", "allocation_id": "c8aeca39", "step": "restore_preparation", "duration_ms": 241, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:20:16.874221116Z", "msg": "Runtime compute phase saved", "allocation_id": "c8aeca39", "to": "running"}
-{"time": "2026-10-25T07:20:19.425228566Z", "msg": "Runtime compute step", "allocation_id": "5b41e195", "step": "create", "duration_ms": 1186, "succeeded": true}
-{"time": "2026-10-25T07:20:20.28175637Z", "msg": "Environment preparation cache", "allocation_id": "5b41e195", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:20:37.048910919Z", "msg": "Environment preparation cache", "allocation_id": "5b41e195", "step": "save_preparation", "duration_ms": 153, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:20:41.773605197Z", "msg": "Runtime compute step", "allocation_id": "4399c9b6", "step": "create", "duration_ms": 1220, "succeeded": true}
-{"time": "2026-10-25T07:20:42.862869557Z", "msg": "Environment preparation cache", "allocation_id": "4399c9b6", "step": "restore_preparation", "duration_ms": 243, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:20:47.074962267Z", "msg": "Runtime compute step", "allocation_id": "c28f6908", "step": "create", "duration_ms": 1206, "succeeded": true}
-{"time": "2026-10-25T07:20:47.950312751Z", "msg": "Environment preparation cache", "allocation_id": "c28f6908", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:20:53.45261034Z", "msg": "Environment preparation cache", "allocation_id": "c28f6908", "step": "save_preparation", "duration_ms": 157, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:20:57.877687461Z", "msg": "Runtime compute step", "allocation_id": "e080dae4", "step": "create", "duration_ms": 1190, "succeeded": true}
-{"time": "2026-10-25T07:20:58.917497075Z", "msg": "Environment preparation cache", "allocation_id": "e080dae4", "step": "restore_preparation", "duration_ms": 242, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:21:02.165816211Z", "msg": "Runtime compute phase saved", "allocation_id": "e080dae4", "to": "running"}
-{"time": "2026-10-25T07:21:03.400392936Z", "msg": "Runtime compute step", "allocation_id": "6b03587e", "step": "create", "duration_ms": 1200, "succeeded": true}
-{"time": "2026-10-25T07:21:04.312356806Z", "msg": "Environment preparation cache", "allocation_id": "6b03587e", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:21:10.760167286Z", "msg": "Environment preparation cache", "allocation_id": "6b03587e", "step": "save_preparation", "duration_ms": 163, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:21:11.876939108Z", "msg": "Runtime compute phase saved", "allocation_id": "6b03587e", "to": "running"}
-{"time": "2026-10-25T07:21:15.498473548Z", "msg": "Runtime compute step", "allocation_id": "430d974d", "step": "create", "duration_ms": 1188, "succeeded": true}
-{"time": "2026-10-25T07:21:16.527918917Z", "msg": "Environment preparation cache", "allocation_id": "430d974d", "step": "restore_preparation", "duration_ms": 242, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:21:16.87365292Z", "msg": "Runtime compute phase saved", "allocation_id": "430d974d", "to": "running"}
-{"time": "2026-10-25T07:21:21.426915382Z", "msg": "Runtime compute step", "allocation_id": "c1fae46d", "step": "create", "duration_ms": 1200, "succeeded": true}
-{"time": "2026-10-25T07:21:22.351588209Z", "msg": "Environment preparation cache", "allocation_id": "c1fae46d", "step": "restore_preparation", "duration_ms": 94, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:21:29.877708191Z", "msg": "Environment preparation cache", "allocation_id": "c1fae46d", "step": "save_preparation", "duration_ms": 158, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:21:31.876109076Z", "msg": "Runtime compute phase saved", "allocation_id": "c1fae46d", "to": "running"}
-{"time": "2026-10-25T07:21:35.839254206Z", "msg": "Runtime compute step", "allocation_id": "8132cd3d", "step": "create", "duration_ms": 1199, "succeeded": true}
-{"time": "2026-10-25T07:21:36.864424174Z", "msg": "Environment preparation cache", "allocation_id": "8132cd3d", "step": "restore_preparation", "duration_ms": 246, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:21:37.063760274Z", "msg": "Runtime compute phase saved", "allocation_id": "8132cd3d", "to": "running"}
-{"time": "2026-10-25T07:21:41.579569249Z", "msg": "Runtime compute step", "allocation_id": "266c2ff7", "step": "create", "duration_ms": 1224, "succeeded": true}
-{"time": "2026-10-25T07:21:42.74611931Z", "msg": "Environment preparation cache", "allocation_id": "266c2ff7", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:21:46.446847342Z", "msg": "Environment preparation cache", "allocation_id": "266c2ff7", "step": "save_preparation", "duration_ms": 156, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:21:46.878102325Z", "msg": "Runtime compute phase saved", "allocation_id": "266c2ff7", "to": "running"}
-{"time": "2026-10-25T07:21:50.653765664Z", "msg": "Runtime compute step", "allocation_id": "5d92d889", "step": "create", "duration_ms": 1184, "succeeded": true}
-{"time": "2026-10-25T07:21:51.728876823Z", "msg": "Environment preparation cache", "allocation_id": "5d92d889", "step": "restore_preparation", "duration_ms": 244, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:21:51.924364189Z", "msg": "Runtime compute phase saved", "allocation_id": "5d92d889", "to": "running"}
-{"time": "2026-10-25T07:21:56.947103371Z", "msg": "Runtime compute step", "allocation_id": "d22c7203", "step": "create", "duration_ms": 1158, "succeeded": true}
-{"time": "2026-10-25T07:21:57.809181188Z", "msg": "Environment preparation cache", "allocation_id": "d22c7203", "step": "restore_preparation", "duration_ms": 94, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:22:03.822908917Z", "msg": "Environment preparation cache", "allocation_id": "d22c7203", "step": "save_preparation", "duration_ms": 157, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:22:06.873685035Z", "msg": "Runtime compute phase saved", "allocation_id": "d22c7203", "to": "running"}
-{"time": "2026-10-25T07:22:08.793355357Z", "msg": "Runtime compute step", "allocation_id": "8aa30049", "step": "create", "duration_ms": 1194, "succeeded": true}
-{"time": "2026-10-25T07:22:09.836668456Z", "msg": "Environment preparation cache", "allocation_id": "8aa30049", "step": "restore_preparation", "duration_ms": 244, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:22:11.87445846Z", "msg": "Runtime compute phase saved", "allocation_id": "8aa30049", "to": "running"}
-{"time": "2026-10-25T07:22:14.512720811Z", "msg": "Runtime compute step", "allocation_id": "3a802ac1", "step": "create", "duration_ms": 1197, "succeeded": true}
-{"time": "2026-10-25T07:22:15.384619988Z", "msg": "Environment preparation cache", "allocation_id": "3a802ac1", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:22:21.407970034Z", "msg": "Environment preparation cache", "allocation_id": "3a802ac1", "step": "save_preparation", "duration_ms": 161, "succeeded": true, "hit": false}
-{"time": "2026-10-25T07:22:21.876473246Z", "msg": "Runtime compute phase saved", "allocation_id": "3a802ac1", "to": "running"}
-{"time": "2026-10-25T07:22:25.947114724Z", "msg": "Runtime compute step", "allocation_id": "0debb9f1", "step": "create", "duration_ms": 1219, "succeeded": true}
-{"time": "2026-10-25T07:22:27.011625896Z", "msg": "Environment preparation cache", "allocation_id": "0debb9f1", "step": "restore_preparation", "duration_ms": 285, "succeeded": true, "hit": true}
-{"time": "2026-10-25T07:22:32.351978071Z", "msg": "Runtime compute step", "allocation_id": "4585e918", "step": "create", "duration_ms": 1210, "succeeded": true}
-{"time": "2026-10-25T07:22:37.727547393Z", "msg": "Runtime compute step", "allocation_id": "9cd22d12", "step": "create", "duration_ms": 1176, "succeeded": true}
-{"time": "2026-10-25T07:22:42.117807928Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "running"}
-{"time": "2026-10-25T07:22:42.312088648Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "running"}
-{"time": "2026-10-25T07:22:43.540762015Z", "msg": "Runtime compute step", "allocation_id": "43376a77", "step": "create", "duration_ms": 1207, "succeeded": true}
-{"time": "2026-10-25T07:22:46.87098178Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "running"}
-{"time": "2026-10-25T07:22:57.16863417Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "quiescing"}
-{"time": "2026-10-25T07:22:57.174717722Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "suspending"}
-{"time": "2026-10-25T07:23:00.094869649Z", "msg": "Runtime compute step", "allocation_id": "4585e918", "step": "suspend", "duration_ms": 2920, "succeeded": true}
-{"time": "2026-10-25T07:23:00.096934952Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "suspending"}
-{"time": "2026-10-25T07:23:00.099160587Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "suspended"}
-{"time": "2026-10-25T07:23:01.423869122Z", "msg": "Runtime compute step", "allocation_id": "2ed382fc", "step": "create", "duration_ms": 1193, "succeeded": true}
-{"time": "2026-10-25T07:23:05.661674015Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "running"}
-{"time": "2026-10-25T07:23:05.764185119Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "quiescing"}
-{"time": "2026-10-25T07:23:05.769706338Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "suspending"}
-{"time": "2026-10-25T07:23:08.735790134Z", "msg": "Runtime compute step", "allocation_id": "43376a77", "step": "suspend", "duration_ms": 2966, "succeeded": true}
-{"time": "2026-10-25T07:23:08.737648472Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "suspending"}
-{"time": "2026-10-25T07:23:08.738827609Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "suspended"}
-{"time": "2026-10-25T07:23:10.055340044Z", "msg": "Runtime compute step", "allocation_id": "7982abf0", "step": "create", "duration_ms": 1185, "succeeded": true}
-{"time": "2026-10-25T07:23:11.980193982Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "running"}
-{"time": "2026-10-25T07:23:16.278784123Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "quiescing"}
-{"time": "2026-10-25T07:23:16.284765104Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "suspending"}
-{"time": "2026-10-25T07:23:19.15878227Z", "msg": "Runtime compute step", "allocation_id": "9cd22d12", "step": "suspend", "duration_ms": 2873, "succeeded": true}
-{"time": "2026-10-25T07:23:19.160297776Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "suspending"}
-{"time": "2026-10-25T07:23:19.161358558Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "suspended"}
-{"time": "2026-10-25T07:23:20.881005205Z", "msg": "Runtime compute step", "allocation_id": "b2ed8968", "step": "create", "duration_ms": 1194, "succeeded": true}
-{"time": "2026-10-25T07:23:25.386508853Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "quiescing"}
-{"time": "2026-10-25T07:23:25.392140957Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "suspending"}
-{"time": "2026-10-25T07:23:28.31407797Z", "msg": "Runtime compute step", "allocation_id": "2ed382fc", "step": "suspend", "duration_ms": 2921, "succeeded": true}
-{"time": "2026-10-25T07:23:28.315829858Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "suspending"}
-{"time": "2026-10-25T07:23:28.317202795Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "suspended"}
-{"time": "2026-10-25T07:23:28.633676525Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "running"}
-{"time": "2026-10-25T07:23:29.849064508Z", "msg": "Runtime compute step", "allocation_id": "7785ee00", "step": "create", "duration_ms": 1194, "succeeded": true}
-{"time": "2026-10-25T07:23:31.881456215Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "running"}
-{"time": "2026-10-25T07:23:34.3047604Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "quiescing"}
-{"time": "2026-10-25T07:23:34.310957249Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "suspending"}
-{"time": "2026-10-25T07:23:37.229470848Z", "msg": "Runtime compute step", "allocation_id": "7982abf0", "step": "suspend", "duration_ms": 2918, "succeeded": true}
-{"time": "2026-10-25T07:23:37.231135764Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "suspending"}
-{"time": "2026-10-25T07:23:37.232346188Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "suspended"}
-{"time": "2026-10-25T07:23:38.554954831Z", "msg": "Runtime compute step", "allocation_id": "bd4ae3e8", "step": "create", "duration_ms": 1194, "succeeded": true}
-{"time": "2026-10-25T07:23:42.080098527Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "running"}
-{"time": "2026-10-25T07:23:46.890477218Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "quiescing"}
-{"time": "2026-10-25T07:23:46.897276471Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "suspending"}
-{"time": "2026-10-25T07:23:49.813992087Z", "msg": "Runtime compute step", "allocation_id": "b2ed8968", "step": "suspend", "duration_ms": 2916, "succeeded": true}
-{"time": "2026-10-25T07:23:49.815795274Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "suspending"}
-{"time": "2026-10-25T07:23:49.816975113Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "suspended"}
-{"time": "2026-10-25T07:23:51.426685984Z", "msg": "Runtime compute step", "allocation_id": "68393b7f", "step": "create", "duration_ms": 1183, "succeeded": true}
-{"time": "2026-10-25T07:23:55.729611774Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "running"}
-{"time": "2026-10-25T07:23:55.837976994Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "quiescing"}
-{"time": "2026-10-25T07:23:55.843957232Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "suspending"}
-{"time": "2026-10-25T07:23:58.746860379Z", "msg": "Runtime compute step", "allocation_id": "7785ee00", "step": "suspend", "duration_ms": 2902, "succeeded": true}
-{"time": "2026-10-25T07:23:58.748507273Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "suspending"}
-{"time": "2026-10-25T07:23:58.749621243Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "suspended"}
-{"time": "2026-10-25T07:24:00.072050203Z", "msg": "Runtime compute step", "allocation_id": "721ca923", "step": "create", "duration_ms": 1186, "succeeded": true}
-{"time": "2026-10-25T07:24:01.984253947Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "running"}
-{"time": "2026-10-25T07:25:46.992048372Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "quiescing"}
-{"time": "2026-10-25T07:25:46.998231325Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "suspending"}
-{"time": "2026-10-25T07:25:49.90311186Z", "msg": "Runtime compute step", "allocation_id": "bd4ae3e8", "step": "suspend", "duration_ms": 2904, "succeeded": true}
-{"time": "2026-10-25T07:25:49.904613635Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "suspending"}
-{"time": "2026-10-25T07:25:49.905759367Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "suspended"}
-{"time": "2026-10-25T07:28:56.782306194Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "quiescing"}
-{"time": "2026-10-25T07:28:56.788364035Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "suspending"}
-{"time": "2026-10-25T07:28:59.6918678Z", "msg": "Runtime compute step", "allocation_id": "68393b7f", "step": "suspend", "duration_ms": 2903, "succeeded": true}
-{"time": "2026-10-25T07:28:59.693567253Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "suspending"}
-{"time": "2026-10-25T07:28:59.694781429Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "suspended"}
-{"time": "2026-10-25T07:29:06.782735464Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "quiescing"}
-{"time": "2026-10-25T07:29:06.788454401Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "suspending"}
-{"time": "2026-10-25T07:29:09.710463649Z", "msg": "Runtime compute step", "allocation_id": "721ca923", "step": "suspend", "duration_ms": 2921, "succeeded": true}
-{"time": "2026-10-25T07:29:09.712569202Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "suspending"}
-{"time": "2026-10-25T07:29:09.713947238Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "suspended"}
-{"time": "2026-10-25T07:31:05.14422705Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "restoring"}
-{"time": "2026-10-25T07:31:06.011613916Z", "msg": "Runtime compute step", "allocation_id": "4585e918", "step": "resume", "duration_ms": 866, "succeeded": true}
-{"time": "2026-10-25T07:31:06.013266704Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "waking"}
-{"time": "2026-10-25T07:31:06.1544146Z", "msg": "Runtime compute step", "allocation_id": "4585e918", "step": "wake_command", "duration_ms": 141, "succeeded": true}
-{"time": "2026-10-25T07:31:06.255774283Z", "msg": "Runtime compute step", "allocation_id": "4585e918", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
-{"time": "2026-10-25T07:31:06.257244276Z", "msg": "Runtime compute step", "allocation_id": "4585e918", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:31:06.399225159Z", "msg": "Runtime compute step", "allocation_id": "4585e918", "step": "delete_snapshot", "duration_ms": 141, "succeeded": true}
-{"time": "2026-10-25T07:31:06.400613534Z", "msg": "Runtime compute phase saved", "allocation_id": "4585e918", "to": "running"}
-{"time": "2026-10-25T07:31:19.979756538Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "restoring"}
-{"time": "2026-10-25T07:31:20.82972056Z", "msg": "Runtime compute step", "allocation_id": "9cd22d12", "step": "resume", "duration_ms": 848, "succeeded": true}
-{"time": "2026-10-25T07:31:20.831392502Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "waking"}
-{"time": "2026-10-25T07:31:20.972711539Z", "msg": "Runtime compute step", "allocation_id": "9cd22d12", "step": "wake_command", "duration_ms": 141, "succeeded": true}
-{"time": "2026-10-25T07:31:20.97295705Z", "msg": "Runtime compute step", "allocation_id": "9cd22d12", "step": "peer_authorized", "duration_ms": 0, "succeeded": true}
-{"time": "2026-10-25T07:31:20.974592482Z", "msg": "Runtime compute step", "allocation_id": "9cd22d12", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:31:21.106725484Z", "msg": "Runtime compute step", "allocation_id": "9cd22d12", "step": "delete_snapshot", "duration_ms": 132, "succeeded": true}
-{"time": "2026-10-25T07:31:21.108510914Z", "msg": "Runtime compute phase saved", "allocation_id": "9cd22d12", "to": "running"}
-{"time": "2026-10-25T07:31:34.401722816Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "restoring"}
-{"time": "2026-10-25T07:31:35.252781405Z", "msg": "Runtime compute step", "allocation_id": "43376a77", "step": "resume", "duration_ms": 849, "succeeded": true}
-{"time": "2026-10-25T07:31:35.254622111Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "waking"}
-{"time": "2026-10-25T07:31:35.400380058Z", "msg": "Runtime compute step", "allocation_id": "43376a77", "step": "wake_command", "duration_ms": 145, "succeeded": true}
-{"time": "2026-10-25T07:31:35.501492837Z", "msg": "Runtime compute step", "allocation_id": "43376a77", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
-{"time": "2026-10-25T07:31:35.503347057Z", "msg": "Runtime compute step", "allocation_id": "43376a77", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:31:35.63509448Z", "msg": "Runtime compute step", "allocation_id": "43376a77", "step": "delete_snapshot", "duration_ms": 131, "succeeded": true}
-{"time": "2026-10-25T07:31:35.636949427Z", "msg": "Runtime compute phase saved", "allocation_id": "43376a77", "to": "running"}
-{"time": "2026-10-25T07:31:48.731725899Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "restoring"}
-{"time": "2026-10-25T07:31:49.615045931Z", "msg": "Runtime compute step", "allocation_id": "2ed382fc", "step": "resume", "duration_ms": 882, "succeeded": true}
-{"time": "2026-10-25T07:31:49.616918802Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "waking"}
-{"time": "2026-10-25T07:31:49.766837894Z", "msg": "Runtime compute step", "allocation_id": "2ed382fc", "step": "wake_command", "duration_ms": 149, "succeeded": true}
-{"time": "2026-10-25T07:31:49.868129224Z", "msg": "Runtime compute step", "allocation_id": "2ed382fc", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
-{"time": "2026-10-25T07:31:49.869935807Z", "msg": "Runtime compute step", "allocation_id": "2ed382fc", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:31:50.008360913Z", "msg": "Runtime compute step", "allocation_id": "2ed382fc", "step": "delete_snapshot", "duration_ms": 138, "succeeded": true}
-{"time": "2026-10-25T07:31:50.010257517Z", "msg": "Runtime compute phase saved", "allocation_id": "2ed382fc", "to": "running"}
-{"time": "2026-10-25T07:32:05.36837876Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "restoring"}
-{"time": "2026-10-25T07:32:06.250888566Z", "msg": "Runtime compute step", "allocation_id": "7982abf0", "step": "resume", "duration_ms": 881, "succeeded": true}
-{"time": "2026-10-25T07:32:06.252516356Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "waking"}
-{"time": "2026-10-25T07:32:06.390341806Z", "msg": "Runtime compute step", "allocation_id": "7982abf0", "step": "wake_command", "duration_ms": 137, "succeeded": true}
-{"time": "2026-10-25T07:32:06.491654518Z", "msg": "Runtime compute step", "allocation_id": "7982abf0", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
-{"time": "2026-10-25T07:32:06.493862365Z", "msg": "Runtime compute step", "allocation_id": "7982abf0", "step": "environment_resume", "duration_ms": 2, "succeeded": true}
-{"time": "2026-10-25T07:32:06.631064119Z", "msg": "Runtime compute step", "allocation_id": "7982abf0", "step": "delete_snapshot", "duration_ms": 137, "succeeded": true}
-{"time": "2026-10-25T07:32:06.632723405Z", "msg": "Runtime compute phase saved", "allocation_id": "7982abf0", "to": "running"}
-{"time": "2026-10-25T07:32:22.598344843Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "restoring"}
-{"time": "2026-10-25T07:32:23.466108804Z", "msg": "Runtime compute step", "allocation_id": "b2ed8968", "step": "resume", "duration_ms": 867, "succeeded": true}
-{"time": "2026-10-25T07:32:23.467902269Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "waking"}
-{"time": "2026-10-25T07:32:23.692626232Z", "msg": "Runtime compute step", "allocation_id": "b2ed8968", "step": "wake_command", "duration_ms": 224, "succeeded": true}
-{"time": "2026-10-25T07:32:23.692861811Z", "msg": "Runtime compute step", "allocation_id": "b2ed8968", "step": "peer_authorized", "duration_ms": 0, "succeeded": true}
-{"time": "2026-10-25T07:32:23.694873391Z", "msg": "Runtime compute step", "allocation_id": "b2ed8968", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:32:23.82269008Z", "msg": "Runtime compute step", "allocation_id": "b2ed8968", "step": "delete_snapshot", "duration_ms": 127, "succeeded": true}
-{"time": "2026-10-25T07:32:23.824264322Z", "msg": "Runtime compute phase saved", "allocation_id": "b2ed8968", "to": "running"}
-{"time": "2026-10-25T07:32:36.925453654Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "restoring"}
-{"time": "2026-10-25T07:32:37.813240909Z", "msg": "Runtime compute step", "allocation_id": "7785ee00", "step": "resume", "duration_ms": 887, "succeeded": true}
-{"time": "2026-10-25T07:32:37.814819039Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "waking"}
-{"time": "2026-10-25T07:32:37.958696326Z", "msg": "Runtime compute step", "allocation_id": "7785ee00", "step": "wake_command", "duration_ms": 143, "succeeded": true}
-{"time": "2026-10-25T07:32:37.95890857Z", "msg": "Runtime compute step", "allocation_id": "7785ee00", "step": "peer_authorized", "duration_ms": 0, "succeeded": true}
-{"time": "2026-10-25T07:32:37.960437863Z", "msg": "Runtime compute step", "allocation_id": "7785ee00", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:32:38.090718973Z", "msg": "Runtime compute step", "allocation_id": "7785ee00", "step": "delete_snapshot", "duration_ms": 130, "succeeded": true}
-{"time": "2026-10-25T07:32:38.092372577Z", "msg": "Runtime compute phase saved", "allocation_id": "7785ee00", "to": "running"}
-{"time": "2026-10-25T07:33:00.559056023Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "restoring"}
-{"time": "2026-10-25T07:33:01.430589308Z", "msg": "Runtime compute step", "allocation_id": "bd4ae3e8", "step": "resume", "duration_ms": 870, "succeeded": true}
-{"time": "2026-10-25T07:33:01.432362728Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "waking"}
-{"time": "2026-10-25T07:33:01.577311161Z", "msg": "Runtime compute step", "allocation_id": "bd4ae3e8", "step": "wake_command", "duration_ms": 144, "succeeded": true}
-{"time": "2026-10-25T07:33:01.678365757Z", "msg": "Runtime compute step", "allocation_id": "bd4ae3e8", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
-{"time": "2026-10-25T07:33:01.680186339Z", "msg": "Runtime compute step", "allocation_id": "bd4ae3e8", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:33:01.814963623Z", "msg": "Runtime compute step", "allocation_id": "bd4ae3e8", "step": "delete_snapshot", "duration_ms": 134, "succeeded": true}
-{"time": "2026-10-25T07:33:01.81653366Z", "msg": "Runtime compute phase saved", "allocation_id": "bd4ae3e8", "to": "running"}
-{"time": "2026-10-25T07:33:15.285375771Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "restoring"}
-{"time": "2026-10-25T07:33:16.188275584Z", "msg": "Runtime compute step", "allocation_id": "68393b7f", "step": "resume", "duration_ms": 901, "succeeded": true}
-{"time": "2026-10-25T07:33:16.189776013Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "waking"}
-{"time": "2026-10-25T07:33:16.332779638Z", "msg": "Runtime compute step", "allocation_id": "68393b7f", "step": "wake_command", "duration_ms": 142, "succeeded": true}
-{"time": "2026-10-25T07:33:16.43319904Z", "msg": "Runtime compute step", "allocation_id": "68393b7f", "step": "peer_authorized", "duration_ms": 100, "succeeded": true}
-{"time": "2026-10-25T07:33:16.435139498Z", "msg": "Runtime compute step", "allocation_id": "68393b7f", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:33:16.57519917Z", "msg": "Runtime compute step", "allocation_id": "68393b7f", "step": "delete_snapshot", "duration_ms": 140, "succeeded": true}
-{"time": "2026-10-25T07:33:16.576709296Z", "msg": "Runtime compute phase saved", "allocation_id": "68393b7f", "to": "running"}
-{"time": "2026-10-25T07:33:33.513476228Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "restoring"}
-{"time": "2026-10-25T07:33:34.388881128Z", "msg": "Runtime compute step", "allocation_id": "721ca923", "step": "resume", "duration_ms": 874, "succeeded": true}
-{"time": "2026-10-25T07:33:34.390695206Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "waking"}
-{"time": "2026-10-25T07:33:34.53317513Z", "msg": "Runtime compute step", "allocation_id": "721ca923", "step": "wake_command", "duration_ms": 142, "succeeded": true}
-{"time": "2026-10-25T07:33:34.53348764Z", "msg": "Runtime compute step", "allocation_id": "721ca923", "step": "peer_authorized", "duration_ms": 0, "succeeded": true}
-{"time": "2026-10-25T07:33:34.535328981Z", "msg": "Runtime compute step", "allocation_id": "721ca923", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
-{"time": "2026-10-25T07:33:34.672112936Z", "msg": "Runtime compute step", "allocation_id": "721ca923", "step": "delete_snapshot", "duration_ms": 136, "succeeded": true}
-{"time": "2026-10-25T07:33:34.673709717Z", "msg": "Runtime compute phase saved", "allocation_id": "721ca923", "to": "running"}
+{"time": "2026-10-25T07:57:52.671803659Z", "msg": "Runtime compute step", "allocation_id": "c367de17", "step": "create", "duration_ms": 1302, "succeeded": true}
+{"time": "2026-10-25T07:57:54.245197212Z", "msg": "Environment preparation cache", "allocation_id": "c367de17", "step": "restore_preparation", "duration_ms": 94, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:57:54.257918994Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 10}
+{"time": "2026-10-25T07:57:54.265865418Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 6}
+{"time": "2026-10-25T07:57:57.353556318Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 3086}
+{"time": "2026-10-25T07:57:57.449266907Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 94}
+{"time": "2026-10-25T07:57:57.60935735Z", "msg": "Environment preparation cache", "allocation_id": "c367de17", "step": "save_preparation", "duration_ms": 160, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:58:02.495739173Z", "msg": "Runtime compute step", "allocation_id": "e18e9336", "step": "create", "duration_ms": 1203, "succeeded": true}
+{"time": "2026-10-25T07:58:03.512914432Z", "msg": "Environment preparation cache", "allocation_id": "e18e9336", "step": "restore_preparation", "duration_ms": 236, "succeeded": true, "hit": true}
+{"time": "2026-10-25T07:58:07.147713319Z", "msg": "Runtime compute phase saved", "allocation_id": "e18e9336", "to": "running"}
+{"time": "2026-10-25T07:58:09.824495217Z", "msg": "Runtime compute step", "allocation_id": "968768b6", "step": "create", "duration_ms": 1214, "succeeded": true}
+{"time": "2026-10-25T07:58:10.71029351Z", "msg": "Environment preparation cache", "allocation_id": "968768b6", "step": "restore_preparation", "duration_ms": 94, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:58:10.723726048Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 10}
+{"time": "2026-10-25T07:58:10.731003554Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 6}
+{"time": "2026-10-25T07:58:16.783012106Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 6050}
+{"time": "2026-10-25T07:58:16.88957736Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 104}
+{"time": "2026-10-25T07:58:17.045094655Z", "msg": "Environment preparation cache", "allocation_id": "968768b6", "step": "save_preparation", "duration_ms": 155, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:58:21.516167408Z", "msg": "Runtime compute step", "allocation_id": "e07a89f8", "step": "create", "duration_ms": 1193, "succeeded": true}
+{"time": "2026-10-25T07:58:22.571333439Z", "msg": "Environment preparation cache", "allocation_id": "e07a89f8", "step": "restore_preparation", "duration_ms": 241, "succeeded": true, "hit": true}
+{"time": "2026-10-25T07:58:26.851599251Z", "msg": "Runtime compute step", "allocation_id": "c5d13ece", "step": "create", "duration_ms": 1212, "succeeded": true}
+{"time": "2026-10-25T07:58:27.995746833Z", "msg": "Environment preparation cache", "allocation_id": "c5d13ece", "step": "restore_preparation", "duration_ms": 96, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:58:28.011018525Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 12}
+{"time": "2026-10-25T07:58:28.019346312Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 7}
+{"time": "2026-10-25T07:58:32.656450262Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 4635}
+{"time": "2026-10-25T07:58:32.743856619Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 86}
+{"time": "2026-10-25T07:58:32.898821361Z", "msg": "Environment preparation cache", "allocation_id": "c5d13ece", "step": "save_preparation", "duration_ms": 154, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:58:36.951216387Z", "msg": "Runtime compute step", "allocation_id": "bc568c33", "step": "create", "duration_ms": 1199, "succeeded": true}
+{"time": "2026-10-25T07:58:38.095294438Z", "msg": "Environment preparation cache", "allocation_id": "bc568c33", "step": "restore_preparation", "duration_ms": 246, "succeeded": true, "hit": true}
+{"time": "2026-10-25T07:58:42.873881916Z", "msg": "Runtime compute step", "allocation_id": "4f8a37ba", "step": "create", "duration_ms": 1205, "succeeded": true}
+{"time": "2026-10-25T07:58:43.993849098Z", "msg": "Environment preparation cache", "allocation_id": "4f8a37ba", "step": "restore_preparation", "duration_ms": 94, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:58:44.007557339Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 11}
+{"time": "2026-10-25T07:58:44.014999418Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 6}
+{"time": "2026-10-25T07:58:57.561687719Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 13545}
+{"time": "2026-10-25T07:58:57.648961227Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 85}
+{"time": "2026-10-25T07:58:57.802212286Z", "msg": "Environment preparation cache", "allocation_id": "4f8a37ba", "step": "save_preparation", "duration_ms": 153, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:02.482691412Z", "msg": "Runtime compute step", "allocation_id": "64ebc2c5", "step": "create", "duration_ms": 1195, "succeeded": true}
+{"time": "2026-10-25T07:59:03.510949898Z", "msg": "Environment preparation cache", "allocation_id": "64ebc2c5", "step": "restore_preparation", "duration_ms": 240, "succeeded": true, "hit": true}
+{"time": "2026-10-25T07:59:08.29882498Z", "msg": "Runtime compute step", "allocation_id": "179944d1", "step": "create", "duration_ms": 1224, "succeeded": true}
+{"time": "2026-10-25T07:59:09.243820665Z", "msg": "Environment preparation cache", "allocation_id": "179944d1", "step": "restore_preparation", "duration_ms": 93, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:09.257979303Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 11}
+{"time": "2026-10-25T07:59:09.265906724Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 6}
+{"time": "2026-10-25T07:59:12.797957995Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 3530}
+{"time": "2026-10-25T07:59:12.899983478Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 100}
+{"time": "2026-10-25T07:59:13.05885891Z", "msg": "Environment preparation cache", "allocation_id": "179944d1", "step": "save_preparation", "duration_ms": 158, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:16.871746851Z", "msg": "Runtime compute phase saved", "allocation_id": "179944d1", "to": "running"}
+{"time": "2026-10-25T07:59:18.272392846Z", "msg": "Runtime compute step", "allocation_id": "31b0b6e3", "step": "create", "duration_ms": 1257, "succeeded": true}
+{"time": "2026-10-25T07:59:19.674267866Z", "msg": "Environment preparation cache", "allocation_id": "31b0b6e3", "step": "restore_preparation", "duration_ms": 273, "succeeded": true, "hit": true}
+{"time": "2026-10-25T07:59:21.881777582Z", "msg": "Runtime compute phase saved", "allocation_id": "31b0b6e3", "to": "running"}
+{"time": "2026-10-25T07:59:24.666291143Z", "msg": "Runtime compute step", "allocation_id": "300b402c", "step": "create", "duration_ms": 1231, "succeeded": true}
+{"time": "2026-10-25T07:59:25.512730953Z", "msg": "Environment preparation cache", "allocation_id": "300b402c", "step": "restore_preparation", "duration_ms": 94, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:25.527717754Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 11}
+{"time": "2026-10-25T07:59:25.535077083Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 6}
+{"time": "2026-10-25T07:59:29.012126849Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 3475}
+{"time": "2026-10-25T07:59:29.093665315Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 79}
+{"time": "2026-10-25T07:59:29.252759735Z", "msg": "Environment preparation cache", "allocation_id": "300b402c", "step": "save_preparation", "duration_ms": 159, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:31.872586759Z", "msg": "Runtime compute phase saved", "allocation_id": "300b402c", "to": "running"}
+{"time": "2026-10-25T07:59:33.871003256Z", "msg": "Runtime compute step", "allocation_id": "dd34ac29", "step": "create", "duration_ms": 1225, "succeeded": true}
+{"time": "2026-10-25T07:59:35.177786425Z", "msg": "Environment preparation cache", "allocation_id": "dd34ac29", "step": "restore_preparation", "duration_ms": 278, "succeeded": true, "hit": true}
+{"time": "2026-10-25T07:59:36.883737249Z", "msg": "Runtime compute phase saved", "allocation_id": "dd34ac29", "to": "running"}
+{"time": "2026-10-25T07:59:39.963572852Z", "msg": "Runtime compute step", "allocation_id": "f337d52d", "step": "create", "duration_ms": 1303, "succeeded": true}
+{"time": "2026-10-25T07:59:40.994915802Z", "msg": "Environment preparation cache", "allocation_id": "f337d52d", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:41.008343681Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 10}
+{"time": "2026-10-25T07:59:41.01553271Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 5}
+{"time": "2026-10-25T07:59:45.725585036Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 4708}
+{"time": "2026-10-25T07:59:45.827484211Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 97}
+{"time": "2026-10-25T07:59:45.989088574Z", "msg": "Environment preparation cache", "allocation_id": "f337d52d", "step": "save_preparation", "duration_ms": 161, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:47.252382574Z", "msg": "Runtime compute phase saved", "allocation_id": "f337d52d", "to": "running"}
+{"time": "2026-10-25T07:59:50.900537179Z", "msg": "Runtime compute step", "allocation_id": "bb4fcab4", "step": "create", "duration_ms": 1227, "succeeded": true}
+{"time": "2026-10-25T07:59:52.235595957Z", "msg": "Environment preparation cache", "allocation_id": "bb4fcab4", "step": "restore_preparation", "duration_ms": 409, "succeeded": true, "hit": true}
+{"time": "2026-10-25T07:59:57.075807659Z", "msg": "Runtime compute step", "allocation_id": "ad421a9e", "step": "create", "duration_ms": 1181, "succeeded": true}
+{"time": "2026-10-25T07:59:58.245565492Z", "msg": "Environment preparation cache", "allocation_id": "ad421a9e", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
+{"time": "2026-10-25T07:59:58.260535474Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 12}
+{"time": "2026-10-25T07:59:58.268637894Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 6}
+{"time": "2026-10-25T08:00:04.058164993Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 5788}
+{"time": "2026-10-25T08:00:04.141433833Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 81}
+{"time": "2026-10-25T08:00:04.300754761Z", "msg": "Environment preparation cache", "allocation_id": "ad421a9e", "step": "save_preparation", "duration_ms": 159, "succeeded": true, "hit": false}
+{"time": "2026-10-25T08:00:06.870150098Z", "msg": "Runtime compute phase saved", "allocation_id": "ad421a9e", "to": "running"}
+{"time": "2026-10-25T08:00:08.608292517Z", "msg": "Runtime compute step", "allocation_id": "0ab19a8c", "step": "create", "duration_ms": 1205, "succeeded": true}
+{"time": "2026-10-25T08:00:09.894197882Z", "msg": "Environment preparation cache", "allocation_id": "0ab19a8c", "step": "restore_preparation", "duration_ms": 244, "succeeded": true, "hit": true}
+{"time": "2026-10-25T08:00:11.873492039Z", "msg": "Runtime compute phase saved", "allocation_id": "0ab19a8c", "to": "running"}
+{"time": "2026-10-25T08:00:14.584100924Z", "msg": "Runtime compute step", "allocation_id": "54febf56", "step": "create", "duration_ms": 1266, "succeeded": true}
+{"time": "2026-10-25T08:00:15.745806885Z", "msg": "Environment preparation cache", "allocation_id": "54febf56", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
+{"time": "2026-10-25T08:00:15.761419117Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 12}
+{"time": "2026-10-25T08:00:15.769500939Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 6}
+{"time": "2026-10-25T08:00:18.973133208Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 3202}
+{"time": "2026-10-25T08:00:19.057567171Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 82}
+{"time": "2026-10-25T08:00:19.213217537Z", "msg": "Environment preparation cache", "allocation_id": "54febf56", "step": "save_preparation", "duration_ms": 155, "succeeded": true, "hit": false}
+{"time": "2026-10-25T08:00:21.871828592Z", "msg": "Runtime compute phase saved", "allocation_id": "54febf56", "to": "running"}
+{"time": "2026-10-25T08:00:23.515862627Z", "msg": "Runtime compute step", "allocation_id": "4710d35f", "step": "create", "duration_ms": 1184, "succeeded": true}
+{"time": "2026-10-25T08:00:24.547943354Z", "msg": "Environment preparation cache", "allocation_id": "4710d35f", "step": "restore_preparation", "duration_ms": 243, "succeeded": true, "hit": true}
+{"time": "2026-10-25T08:00:26.86998984Z", "msg": "Runtime compute phase saved", "allocation_id": "4710d35f", "to": "running"}
+{"time": "2026-10-25T08:00:29.094579069Z", "msg": "Runtime compute step", "allocation_id": "88e8adcd", "step": "create", "duration_ms": 1248, "succeeded": true}
+{"time": "2026-10-25T08:00:30.245089828Z", "msg": "Environment preparation cache", "allocation_id": "88e8adcd", "step": "restore_preparation", "duration_ms": 95, "succeeded": true, "hit": false}
+{"time": "2026-10-25T08:00:30.260897613Z", "msg": "Environment initialization step", "step": "file", "duration_ms": 12}
+{"time": "2026-10-25T08:00:30.269282628Z", "msg": "Environment initialization step", "step": "configure", "duration_ms": 7}
+{"time": "2026-10-25T08:00:34.994206324Z", "msg": "Environment initialization step", "step": "npm", "duration_ms": 4723}
+{"time": "2026-10-25T08:00:35.092061953Z", "msg": "Environment initialization step", "step": "setup", "duration_ms": 96}
+{"time": "2026-10-25T08:00:35.258743155Z", "msg": "Environment preparation cache", "allocation_id": "88e8adcd", "step": "save_preparation", "duration_ms": 166, "succeeded": true, "hit": false}
+{"time": "2026-10-25T08:00:37.078425906Z", "msg": "Runtime compute phase saved", "allocation_id": "88e8adcd", "to": "running"}
+{"time": "2026-10-25T08:00:40.110789897Z", "msg": "Runtime compute step", "allocation_id": "23a4d566", "step": "create", "duration_ms": 1251, "succeeded": true}
+{"time": "2026-10-25T08:00:41.417119097Z", "msg": "Environment preparation cache", "allocation_id": "23a4d566", "step": "restore_preparation", "duration_ms": 267, "succeeded": true, "hit": true}
+{"time": "2026-10-25T08:00:41.873954695Z", "msg": "Runtime compute phase saved", "allocation_id": "23a4d566", "to": "running"}
+{"time": "2026-10-25T08:00:46.279827284Z", "msg": "Runtime compute step", "allocation_id": "faabc05b", "step": "create", "duration_ms": 1209, "succeeded": true}
+{"time": "2026-10-25T08:00:51.945562314Z", "msg": "Runtime compute step", "allocation_id": "fbb6991d", "step": "create", "duration_ms": 1263, "succeeded": true}
+{"time": "2026-10-25T08:00:57.064056529Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "running"}
+{"time": "2026-10-25T08:00:57.263774753Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "running"}
+{"time": "2026-10-25T08:00:58.64093398Z", "msg": "Runtime compute step", "allocation_id": "9645e43e", "step": "create", "duration_ms": 1352, "succeeded": true}
+{"time": "2026-10-25T08:01:01.895001987Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "running"}
+{"time": "2026-10-25T08:01:12.215744357Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "quiescing"}
+{"time": "2026-10-25T08:01:12.221832118Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "suspending"}
+{"time": "2026-10-25T08:01:15.899214751Z", "msg": "Runtime compute step", "allocation_id": "faabc05b", "step": "suspend", "duration_ms": 3677, "succeeded": true}
+{"time": "2026-10-25T08:01:15.900665523Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "suspending"}
+{"time": "2026-10-25T08:01:15.901732779Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "suspended"}
+{"time": "2026-10-25T08:01:17.40431Z", "msg": "Runtime compute step", "allocation_id": "039a2bad", "step": "create", "duration_ms": 1371, "succeeded": true}
+{"time": "2026-10-25T08:01:21.879006546Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "running"}
+{"time": "2026-10-25T08:01:22.093800297Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "quiescing"}
+{"time": "2026-10-25T08:01:22.099432798Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "suspending"}
+{"time": "2026-10-25T08:01:25.741621567Z", "msg": "Runtime compute step", "allocation_id": "fbb6991d", "step": "suspend", "duration_ms": 3642, "succeeded": true}
+{"time": "2026-10-25T08:01:25.743214152Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "suspending"}
+{"time": "2026-10-25T08:01:25.744516538Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "suspended"}
+{"time": "2026-10-25T08:01:27.276538766Z", "msg": "Runtime compute step", "allocation_id": "a8655ed2", "step": "create", "duration_ms": 1301, "succeeded": true}
+{"time": "2026-10-25T08:01:32.07990635Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "running"}
+{"time": "2026-10-25T08:01:33.107643409Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "quiescing"}
+{"time": "2026-10-25T08:01:33.113962707Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "suspending"}
+{"time": "2026-10-25T08:01:36.351542371Z", "msg": "Runtime compute step", "allocation_id": "9645e43e", "step": "suspend", "duration_ms": 3237, "succeeded": true}
+{"time": "2026-10-25T08:01:36.35325218Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "suspending"}
+{"time": "2026-10-25T08:01:36.354409476Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "suspended"}
+{"time": "2026-10-25T08:01:37.833080928Z", "msg": "Runtime compute step", "allocation_id": "38583d77", "step": "create", "duration_ms": 1345, "succeeded": true}
+{"time": "2026-10-25T08:01:41.977435061Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "running"}
+{"time": "2026-10-25T08:01:42.7118445Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "quiescing"}
+{"time": "2026-10-25T08:01:42.717639112Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "suspending"}
+{"time": "2026-10-25T08:01:46.13900205Z", "msg": "Runtime compute step", "allocation_id": "039a2bad", "step": "suspend", "duration_ms": 3421, "succeeded": true}
+{"time": "2026-10-25T08:01:46.140476522Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "suspending"}
+{"time": "2026-10-25T08:01:46.141742557Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "suspended"}
+{"time": "2026-10-25T08:01:47.576931919Z", "msg": "Runtime compute step", "allocation_id": "0855de2c", "step": "create", "duration_ms": 1208, "succeeded": true}
+{"time": "2026-10-25T08:01:51.731585221Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "running"}
+{"time": "2026-10-25T08:01:51.934600129Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "quiescing"}
+{"time": "2026-10-25T08:01:51.940964174Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "suspending"}
+{"time": "2026-10-25T08:01:54.834612769Z", "msg": "Runtime compute step", "allocation_id": "a8655ed2", "step": "suspend", "duration_ms": 2893, "succeeded": true}
+{"time": "2026-10-25T08:01:54.836309208Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "suspending"}
+{"time": "2026-10-25T08:01:54.83748831Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "suspended"}
+{"time": "2026-10-25T08:01:56.069533255Z", "msg": "Runtime compute step", "allocation_id": "2d420ad9", "step": "create", "duration_ms": 1203, "succeeded": true}
+{"time": "2026-10-25T08:02:01.524045633Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "running"}
+{"time": "2026-10-25T08:02:01.623897346Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "quiescing"}
+{"time": "2026-10-25T08:02:01.629644851Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "suspending"}
+{"time": "2026-10-25T08:02:04.514747279Z", "msg": "Runtime compute step", "allocation_id": "38583d77", "step": "suspend", "duration_ms": 2885, "succeeded": true}
+{"time": "2026-10-25T08:02:04.51637014Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "suspending"}
+{"time": "2026-10-25T08:02:04.517652532Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "suspended"}
+{"time": "2026-10-25T08:02:05.739283594Z", "msg": "Runtime compute step", "allocation_id": "70523e37", "step": "create", "duration_ms": 1191, "succeeded": true}
+{"time": "2026-10-25T08:02:07.077525354Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "running"}
+{"time": "2026-10-25T08:02:10.244748604Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "quiescing"}
+{"time": "2026-10-25T08:02:10.250424503Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "suspending"}
+{"time": "2026-10-25T08:02:13.281365922Z", "msg": "Runtime compute step", "allocation_id": "0855de2c", "step": "suspend", "duration_ms": 3030, "succeeded": true}
+{"time": "2026-10-25T08:02:13.282934141Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "suspending"}
+{"time": "2026-10-25T08:02:13.284012784Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "suspended"}
+{"time": "2026-10-25T08:02:14.815419489Z", "msg": "Runtime compute step", "allocation_id": "d7d53261", "step": "create", "duration_ms": 1291, "succeeded": true}
+{"time": "2026-10-25T08:02:17.099635805Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "running"}
+{"time": "2026-10-25T08:04:01.890481173Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "quiescing"}
+{"time": "2026-10-25T08:04:01.896729551Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "suspending"}
+{"time": "2026-10-25T08:04:04.897755539Z", "msg": "Runtime compute step", "allocation_id": "2d420ad9", "step": "suspend", "duration_ms": 3001, "succeeded": true}
+{"time": "2026-10-25T08:04:04.899543003Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "suspending"}
+{"time": "2026-10-25T08:04:04.901005706Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "suspended"}
+{"time": "2026-10-25T08:07:11.784702303Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "quiescing"}
+{"time": "2026-10-25T08:07:11.79036941Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "suspending"}
+{"time": "2026-10-25T08:07:16.31927946Z", "msg": "Runtime compute step", "allocation_id": "70523e37", "step": "suspend", "duration_ms": 4528, "succeeded": true}
+{"time": "2026-10-25T08:07:16.321146781Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "suspending"}
+{"time": "2026-10-25T08:07:16.322731545Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "suspended"}
+{"time": "2026-10-25T08:07:21.793565231Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "quiescing"}
+{"time": "2026-10-25T08:07:21.799331515Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "suspending"}
+{"time": "2026-10-25T08:07:26.290932927Z", "msg": "Runtime compute step", "allocation_id": "d7d53261", "step": "suspend", "duration_ms": 4491, "succeeded": true}
+{"time": "2026-10-25T08:07:26.292769721Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "suspending"}
+{"time": "2026-10-25T08:07:26.294180501Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "suspended"}
+{"time": "2026-10-25T08:09:19.773484733Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "restoring"}
+{"time": "2026-10-25T08:09:21.584077845Z", "msg": "Runtime compute step", "allocation_id": "faabc05b", "step": "resume", "duration_ms": 1809, "succeeded": true}
+{"time": "2026-10-25T08:09:21.586000111Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "waking"}
+{"time": "2026-10-25T08:09:21.739604978Z", "msg": "Runtime compute step", "allocation_id": "faabc05b", "step": "wake_command", "duration_ms": 153, "succeeded": true}
+{"time": "2026-10-25T08:09:21.84117634Z", "msg": "Runtime compute step", "allocation_id": "faabc05b", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
+{"time": "2026-10-25T08:09:21.843242863Z", "msg": "Runtime compute step", "allocation_id": "faabc05b", "step": "environment_resume", "duration_ms": 2, "succeeded": true}
+{"time": "2026-10-25T08:09:21.993090059Z", "msg": "Runtime compute step", "allocation_id": "faabc05b", "step": "delete_snapshot", "duration_ms": 149, "succeeded": true}
+{"time": "2026-10-25T08:09:21.994734699Z", "msg": "Runtime compute phase saved", "allocation_id": "faabc05b", "to": "running"}
+{"time": "2026-10-25T08:09:38.706407511Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "restoring"}
+{"time": "2026-10-25T08:09:40.919601939Z", "msg": "Runtime compute step", "allocation_id": "fbb6991d", "step": "resume", "duration_ms": 2212, "succeeded": true}
+{"time": "2026-10-25T08:09:40.921239641Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "waking"}
+{"time": "2026-10-25T08:09:41.075520365Z", "msg": "Runtime compute step", "allocation_id": "fbb6991d", "step": "wake_command", "duration_ms": 154, "succeeded": true}
+{"time": "2026-10-25T08:09:41.075833663Z", "msg": "Runtime compute step", "allocation_id": "fbb6991d", "step": "peer_authorized", "duration_ms": 0, "succeeded": true}
+{"time": "2026-10-25T08:09:41.077519924Z", "msg": "Runtime compute step", "allocation_id": "fbb6991d", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:09:41.230656122Z", "msg": "Runtime compute step", "allocation_id": "fbb6991d", "step": "delete_snapshot", "duration_ms": 153, "succeeded": true}
+{"time": "2026-10-25T08:09:41.232287322Z", "msg": "Runtime compute phase saved", "allocation_id": "fbb6991d", "to": "running"}
+{"time": "2026-10-25T08:09:56.034980318Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "restoring"}
+{"time": "2026-10-25T08:09:57.005685045Z", "msg": "Runtime compute step", "allocation_id": "9645e43e", "step": "resume", "duration_ms": 969, "succeeded": true}
+{"time": "2026-10-25T08:09:57.007527142Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "waking"}
+{"time": "2026-10-25T08:09:57.151117258Z", "msg": "Runtime compute step", "allocation_id": "9645e43e", "step": "wake_command", "duration_ms": 143, "succeeded": true}
+{"time": "2026-10-25T08:09:57.151367567Z", "msg": "Runtime compute step", "allocation_id": "9645e43e", "step": "peer_authorized", "duration_ms": 0, "succeeded": true}
+{"time": "2026-10-25T08:09:57.152998394Z", "msg": "Runtime compute step", "allocation_id": "9645e43e", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:09:57.291358403Z", "msg": "Runtime compute step", "allocation_id": "9645e43e", "step": "delete_snapshot", "duration_ms": 138, "succeeded": true}
+{"time": "2026-10-25T08:09:57.29290383Z", "msg": "Runtime compute phase saved", "allocation_id": "9645e43e", "to": "running"}
+{"time": "2026-10-25T08:10:10.055589626Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "restoring"}
+{"time": "2026-10-25T08:10:11.979658134Z", "msg": "Runtime compute step", "allocation_id": "039a2bad", "step": "resume", "duration_ms": 1923, "succeeded": true}
+{"time": "2026-10-25T08:10:11.981517932Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "waking"}
+{"time": "2026-10-25T08:10:12.132262849Z", "msg": "Runtime compute step", "allocation_id": "039a2bad", "step": "wake_command", "duration_ms": 150, "succeeded": true}
+{"time": "2026-10-25T08:10:12.233081616Z", "msg": "Runtime compute step", "allocation_id": "039a2bad", "step": "peer_authorized", "duration_ms": 100, "succeeded": true}
+{"time": "2026-10-25T08:10:12.234999903Z", "msg": "Runtime compute step", "allocation_id": "039a2bad", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:10:12.38581447Z", "msg": "Runtime compute step", "allocation_id": "039a2bad", "step": "delete_snapshot", "duration_ms": 150, "succeeded": true}
+{"time": "2026-10-25T08:10:12.387663653Z", "msg": "Runtime compute phase saved", "allocation_id": "039a2bad", "to": "running"}
+{"time": "2026-10-25T08:10:25.593578801Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "restoring"}
+{"time": "2026-10-25T08:10:26.464329122Z", "msg": "Runtime compute step", "allocation_id": "a8655ed2", "step": "resume", "duration_ms": 870, "succeeded": true}
+{"time": "2026-10-25T08:10:26.466075464Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "waking"}
+{"time": "2026-10-25T08:10:26.602672577Z", "msg": "Runtime compute step", "allocation_id": "a8655ed2", "step": "wake_command", "duration_ms": 136, "succeeded": true}
+{"time": "2026-10-25T08:10:26.703847625Z", "msg": "Runtime compute step", "allocation_id": "a8655ed2", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
+{"time": "2026-10-25T08:10:26.705776114Z", "msg": "Runtime compute step", "allocation_id": "a8655ed2", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:10:26.83988733Z", "msg": "Runtime compute step", "allocation_id": "a8655ed2", "step": "delete_snapshot", "duration_ms": 134, "succeeded": true}
+{"time": "2026-10-25T08:10:26.841459222Z", "msg": "Runtime compute phase saved", "allocation_id": "a8655ed2", "to": "running"}
+{"time": "2026-10-25T08:10:39.322037359Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "restoring"}
+{"time": "2026-10-25T08:10:40.210938709Z", "msg": "Runtime compute step", "allocation_id": "38583d77", "step": "resume", "duration_ms": 887, "succeeded": true}
+{"time": "2026-10-25T08:10:40.212779519Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "waking"}
+{"time": "2026-10-25T08:10:40.357407344Z", "msg": "Runtime compute step", "allocation_id": "38583d77", "step": "wake_command", "duration_ms": 144, "succeeded": true}
+{"time": "2026-10-25T08:10:40.457924997Z", "msg": "Runtime compute step", "allocation_id": "38583d77", "step": "peer_authorized", "duration_ms": 100, "succeeded": true}
+{"time": "2026-10-25T08:10:40.459863171Z", "msg": "Runtime compute step", "allocation_id": "38583d77", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:10:40.601450593Z", "msg": "Runtime compute step", "allocation_id": "38583d77", "step": "delete_snapshot", "duration_ms": 141, "succeeded": true}
+{"time": "2026-10-25T08:10:40.603154261Z", "msg": "Runtime compute phase saved", "allocation_id": "38583d77", "to": "running"}
+{"time": "2026-10-25T08:10:53.549758548Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "restoring"}
+{"time": "2026-10-25T08:10:54.421178334Z", "msg": "Runtime compute step", "allocation_id": "0855de2c", "step": "resume", "duration_ms": 870, "succeeded": true}
+{"time": "2026-10-25T08:10:54.422779781Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "waking"}
+{"time": "2026-10-25T08:10:54.573990657Z", "msg": "Runtime compute step", "allocation_id": "0855de2c", "step": "wake_command", "duration_ms": 151, "succeeded": true}
+{"time": "2026-10-25T08:10:54.574200023Z", "msg": "Runtime compute step", "allocation_id": "0855de2c", "step": "peer_authorized", "duration_ms": 0, "succeeded": true}
+{"time": "2026-10-25T08:10:54.576023663Z", "msg": "Runtime compute step", "allocation_id": "0855de2c", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:10:54.711081864Z", "msg": "Runtime compute step", "allocation_id": "0855de2c", "step": "delete_snapshot", "duration_ms": 135, "succeeded": true}
+{"time": "2026-10-25T08:10:54.71300406Z", "msg": "Runtime compute phase saved", "allocation_id": "0855de2c", "to": "running"}
+{"time": "2026-10-25T08:11:08.379432059Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "restoring"}
+{"time": "2026-10-25T08:11:09.246512253Z", "msg": "Runtime compute step", "allocation_id": "2d420ad9", "step": "resume", "duration_ms": 866, "succeeded": true}
+{"time": "2026-10-25T08:11:09.24817928Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "waking"}
+{"time": "2026-10-25T08:11:09.391133106Z", "msg": "Runtime compute step", "allocation_id": "2d420ad9", "step": "wake_command", "duration_ms": 142, "succeeded": true}
+{"time": "2026-10-25T08:11:09.492494875Z", "msg": "Runtime compute step", "allocation_id": "2d420ad9", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
+{"time": "2026-10-25T08:11:09.494119246Z", "msg": "Runtime compute step", "allocation_id": "2d420ad9", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:11:09.62705605Z", "msg": "Runtime compute step", "allocation_id": "2d420ad9", "step": "delete_snapshot", "duration_ms": 132, "succeeded": true}
+{"time": "2026-10-25T08:11:09.628646618Z", "msg": "Runtime compute phase saved", "allocation_id": "2d420ad9", "to": "running"}
+{"time": "2026-10-25T08:11:23.010069939Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "restoring"}
+{"time": "2026-10-25T08:11:27.316377988Z", "msg": "Runtime compute step", "allocation_id": "70523e37", "step": "resume", "duration_ms": 4305, "succeeded": true}
+{"time": "2026-10-25T08:11:27.318040085Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "waking"}
+{"time": "2026-10-25T08:11:27.466748951Z", "msg": "Runtime compute step", "allocation_id": "70523e37", "step": "wake_command", "duration_ms": 148, "succeeded": true}
+{"time": "2026-10-25T08:11:27.567880941Z", "msg": "Runtime compute step", "allocation_id": "70523e37", "step": "peer_authorized", "duration_ms": 101, "succeeded": true}
+{"time": "2026-10-25T08:11:27.569748616Z", "msg": "Runtime compute step", "allocation_id": "70523e37", "step": "environment_resume", "duration_ms": 1, "succeeded": true}
+{"time": "2026-10-25T08:11:27.712966559Z", "msg": "Runtime compute step", "allocation_id": "70523e37", "step": "delete_snapshot", "duration_ms": 143, "succeeded": true}
+{"time": "2026-10-25T08:11:27.715033386Z", "msg": "Runtime compute phase saved", "allocation_id": "70523e37", "to": "running"}
+{"time": "2026-10-25T08:11:40.641191114Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "restoring"}
+{"time": "2026-10-25T08:11:44.946679844Z", "msg": "Runtime compute step", "allocation_id": "d7d53261", "step": "resume", "duration_ms": 4305, "succeeded": true}
+{"time": "2026-10-25T08:11:44.948326478Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "waking"}
+{"time": "2026-10-25T08:11:45.089866291Z", "msg": "Runtime compute step", "allocation_id": "d7d53261", "step": "wake_command", "duration_ms": 141, "succeeded": true}
+{"time": "2026-10-25T08:11:45.190594572Z", "msg": "Runtime compute step", "allocation_id": "d7d53261", "step": "peer_authorized", "duration_ms": 100, "succeeded": true}
+{"time": "2026-10-25T08:11:45.193211084Z", "msg": "Runtime compute step", "allocation_id": "d7d53261", "step": "environment_resume", "duration_ms": 2, "succeeded": true}
+{"time": "2026-10-25T08:11:45.337917076Z", "msg": "Runtime compute step", "allocation_id": "d7d53261", "step": "delete_snapshot", "duration_ms": 144, "succeeded": true}
+{"time": "2026-10-25T08:11:45.339476508Z", "msg": "Runtime compute phase saved", "allocation_id": "d7d53261", "to": "running"}

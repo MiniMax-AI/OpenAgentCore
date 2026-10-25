@@ -1,7 +1,7 @@
 ---
 title: "选择沙箱提供商"
 source: docs/getting-started/sandbox-backends.md
-source_hash: f49ddc14cc073e54f945a051ace5794821a4fcf41952158fb5a0e12046f41554
+source_hash: 8727d59c6aab61d84991aff807ab1a4a34c01ee82f7066b6ad40ea153248c344
 ---
 
 比较 microsandbox、Docker 和 E2B，然后在 Web 中选择一个。本指南面向已完成[安装 Core 和 Web](./install.md)、需要为 Core 托管的 Session 提供计算资源的运维人员。
@@ -10,7 +10,7 @@ source_hash: f49ddc14cc073e54f945a051ace5794821a4fcf41952158fb5a0e12046f41554
 
 ## 比较各提供商 {#compare-the-backends}
 
-| | microsandbox（推荐） | Docker | E2B |
+| | microsandbox（推荐） | Docker（兼容） | E2B |
 | --- | --- | --- | --- |
 | 沙箱运行位置 | Linux 节点上的 microVM | Linux 节点上的容器 | E2B 云端 |
 | 需要添加节点 | 是 | 是 | 否 |
@@ -22,7 +22,7 @@ source_hash: f49ddc14cc073e54f945a051ace5794821a4fcf41952158fb5a0e12046f41554
 
 字段级差异见[部署契约](../../../contracts/agents-api/zh/sandbox-deployment.md#what-each-field-means-per-sandbox-provider)。节点的主机要求见[添加和管理节点](./nodes.md#host-requirements)。
 
-Docker 节点在其主机上[等同于 root](./nodes.md#what-the-installer-sets-up)：仅在专用于沙箱的主机上添加。
+Docker 是兼容选项，用于可信负载和没有 `/dev/kvm` 的主机。Docker 节点在其主机上[等同于 root](./nodes.md#what-the-installer-sets-up)：仅在专用于沙箱的主机上添加。
 
 沙箱节点运行在 Linux amd64 上。Core 运行在 macOS 或 Windows 上时，请连接 Linux 节点或使用 E2B。应用也可以在自己的机器上运行[自托管 Session](./self-hosted.md)，无需提供商。
 
