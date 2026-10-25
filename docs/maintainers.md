@@ -95,7 +95,7 @@ docker build --platform linux/amd64 -t oac-runtime:mcode "${OAC_DEV_HOME:-$HOME/
 
 `scripts/prepare-release-runtimes.sh` runs the companion build from the pins.
 
-The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executable and resources and the Claude Code bundle copied in. It verifies that each image carries the daemon built from the same commit.
+The distribution combines the three Harness images into one Runtime image (`deploy/distribution/Runtime.Dockerfile`): the MiniMax Code image, which carries the daemon, with the Codex executables and resources and the Claude Code bundle copied in. It verifies that each image carries the daemon built from the same commit.
 
 **E2B helper.**
 
