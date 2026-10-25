@@ -16,6 +16,7 @@ docs/performance.md describes each measurement and how to reproduce it.
 import argparse
 import base64
 import json
+import re
 import secrets
 import statistics
 import time
@@ -27,7 +28,7 @@ SAMPLES = 10
 IDLE = 420
 PROMPT = "Reply with exactly the word OK and nothing else."
 # The Core log fields the measurements read; every other field is dropped.
-CORE_FIELDS = ("time", "msg", "allocation_id", "step", "duration_ms", "succeeded", "hit", "to")
+CORE_FIELDS = ("time", "msg", "allocation_id", "step", "duration_ms", "succeeded", "to")
 CORE_MESSAGES = {"Runtime compute step", "Runtime compute phase saved", "Environment preparation cache", "Environment initialization step"}
 # A process holding 650 MiB of memory; it writes /tmp/held once every page is touched.
 HOLD = ("python3 -c \"import time; b=bytearray(650*1024*1024)\n"
@@ -70,7 +71,7 @@ def turn(request):
 def sessions(args):
     from openai import OpenAI
 
-    client = OpenAI(timeout=900, max_retries=3)
+    client = OpenAI(timeout=900)
     api, templates = client.beta.agents.sessions, client.beta.agents.environments.templates
     log = records(args.out, "sessions.jsonl")
     extra = {"x_agents_core": {"harness": args.harness}} if args.harness else None
@@ -120,13 +121,13 @@ def sessions(args):
 
 def e2b(args):
     import httpx
-    from e2b import Sandbox
+    from e2b import ConnectionConfig, Sandbox
 
     log = records(args.out, "e2b.jsonl")
-    # The SDK's own HTTP client on one kept-alive connection; the first request only opens it.
+    # One kept-alive connection to the API the SDK calls; the first request only opens it.
     with httpx.Client(timeout=30) as api:
         for attempt in range(SAMPLES + 1):
-            seconds, _ = clock(lambda: api.get("https://api.e2b.app/health").raise_for_status())
+            seconds, _ = clock(lambda: api.get(ConnectionConfig().api_url + "/health").raise_for_status())
             if attempt:
                 append(log, {"phase": "api_round_trip", "seconds": seconds})
     paused = []
@@ -135,6 +136,8 @@ def e2b(args):
             record = {"phase": "lifecycle", "sample": sample}
             record["create"], sandbox = clock(lambda: Sandbox.create(template=args.template, timeout=IDLE + 600))
             paused.append((record, sandbox))
+            info = sandbox.get_info()
+            record["cpu_count"], record["memory_mb"] = info.cpu_count, info.memory_mb
             sandbox.commands.run(HOLD, user="root", background=True)
             sandbox.commands.run("dd if=/dev/urandom of=/root/written bs=1M count=100 status=none && sync", user="root", timeout=120)
             sandbox.commands.run("while [ ! -e /tmp/held ]; do sleep 0.2; done", user="root", timeout=120)
@@ -154,12 +157,13 @@ def e2b(args):
 
 
 def core_time(value):
-    # Core writes RFC 3339 in UTC with up to nine fractional digits and no trailing zeros.
-    whole, _, fraction = value.rstrip("Z").partition(".")
-    return datetime.fromisoformat(whole + "+00:00").timestamp() + float("0." + (fraction or "0"))
+    # Core writes RFC 3339 with up to nine fractional digits, which Python 3.10 cannot parse.
+    whole, fraction, offset = re.fullmatch(r"([^.]{19})(?:\.(\d+))?(Z|[+-]\d\d:\d\d)", value).groups()
+    return datetime.fromisoformat(whole + offset.replace("Z", "+00:00")).timestamp() + float("0." + (fraction or "0"))
 
 
 def keep_core_lines(source, window, target):
+    kept_lines = 0
     with open(source) as lines, open(target, "w") as out:
         for line in lines:
             if not line.startswith("{"):
@@ -170,6 +174,9 @@ def keep_core_lines(source, window, target):
                 if "allocation_id" in kept:
                     kept["allocation_id"] = kept["allocation_id"][:8]
                 out.write(json.dumps(kept) + "\n")
+                kept_lines += 1
+    if not kept_lines:
+        raise SystemExit(f"{source} has no JSON Core log lines from the run")
 
 
 def read(path):
@@ -224,10 +231,14 @@ def report(args):
     out = Path(args.out)
     if args.core_log:
         keep_core_lines(args.core_log, json.loads((out / "window.json").read_text()), out / "core.jsonl")
+    rows = {name: samples for name, samples in measurements(out).items()
+            if (out / ("e2b.jsonl" if name.startswith("E2B") else "sessions.jsonl")).exists()}
+    empty = [name for name, samples in rows.items() if not samples]
+    if empty:
+        raise SystemExit("no samples for: " + "; ".join(empty))
     print("| Measurement | Median | Range | n |\n| --- | --- | --- | --- |")
-    for name, samples in measurements(out).items():
-        if samples:
-            print(f"| {name} | {statistics.median(samples):.2f} s | {min(samples):.2f}–{max(samples):.2f} s | {len(samples)} |")
+    for name, samples in rows.items():
+        print(f"| {name} | {statistics.median(samples):.2f} s | {min(samples):.2f}–{max(samples):.2f} s | {len(samples)} |")
 
 
 def main():

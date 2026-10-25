@@ -86,6 +86,7 @@ RULES = (
       "scripts/generate-public-api"), SCRIPTS, JOBS),
     (("scripts/check-sqlc.py", "scripts/go-test-shard.py"), (".py",), ("backend",)),
     (("scripts/ci_",), (".py",), ("hygiene",)),
+    (("scripts/benchmark.", "docs/performance", "docs/zh/performance"), ("",), ("hygiene",)),
     ((".github/workflows/", ".github/actions/"), (".yml", ".yaml"), JOBS),
 )
 # Embedded files and test fixtures are executable inputs regardless of suffix.
