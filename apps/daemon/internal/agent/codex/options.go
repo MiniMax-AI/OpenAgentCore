@@ -78,10 +78,11 @@ type SessionPlan struct {
 func BuildSessionPlan(stateRoot, agentStateKey string, opts map[string]any, controls *proto.ExecutionControls) (SessionPlan, error) {
 	plan := SessionPlan{
 		// Harnesses run unattended: Codex never offers its ask-the-user tool,
-		// and an unreachable model host fails the Turn after the provider's
-		// bounded retries instead of waiting for the network forever.
+		// an unreachable model host fails the Turn after the provider's
+		// bounded retries instead of waiting for the network forever, and no
+		// goal starts native turns of its own after the Turn ends.
 		ExtraConfig:     [][2]string{{"tools.experimental_request_user_input.enabled", "false"}},
-		DisableFeatures: []string{"unbounded_connection_retries"},
+		DisableFeatures: []string{"unbounded_connection_retries", "goals"},
 		Cleanup:         func() {},
 	}
 

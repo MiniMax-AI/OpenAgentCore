@@ -214,6 +214,18 @@ func TestModelConnectionRetriesStayBounded(t *testing.T) {
 	}
 }
 
+// An active Codex goal starts native turns on its own whenever its thread is
+// idle, which would run work after the Turn ends.
+func TestGoalsStayDisabled(t *testing.T) {
+	plan, err := BuildSessionPlan(t.TempDir(), "goals", map[string]any{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(plan.DisableFeatures, "goals") {
+		t.Fatal("goals stay enabled")
+	}
+}
+
 func TestProviderCredentialOnlyInNativeLoopEnvironment(t *testing.T) {
 	root := t.TempDir()
 	const token = "synthetic-private-provider-token"

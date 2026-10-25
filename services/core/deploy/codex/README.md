@@ -16,6 +16,8 @@ Each Session has its own `CODEX_HOME` at `<StateRoot>/daemon/agent-sessions/<sta
 
 By default Codex retries a failed model connection forever, waiting up to 60 seconds between attempts, so a Turn whose model host is unreachable stays in progress with no events. The adapter disables that `unbounded_connection_retries` feature, so Codex falls back to its bounded defaults: up to 4 retries per request and 5 per response stream. A model host that does not resolve or refuses connections then fails the Turn with `connection_failed` within about a minute, depending on how long each lookup or connection attempt takes. Retries start only after a request fails, so slow responses are unaffected, and a stream still ends after Codex's 300 seconds without data. Codex sets no connect timeout: against a host that silently drops connections, each of the 30 attempts waits for the operating system's connect timeout.
 
+Codex's `goals` feature is on by default: when a thread with an active goal goes idle, Codex starts another turn toward the goal on its own, so its tools and model calls would keep running after the Turn ends, outside any Turn the API reports. The adapter disables it, so the model is not offered `create_goal`, `get_goal` or `update_goal`.
+
 ## Execution controls
 
 The adapter applies Core's typed controls and opt-ins, described in the [Runtime protocol](../../../../docs/runtime-protocol.md#capability-declarations), through native Codex settings on both new and resumed Turns.
