@@ -16,7 +16,6 @@ import (
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-const workspaceModeLabel = "io.oac.workspace-mode"
 const workspaceObjectLabel = "io.oac.workspace-object"
 const workspacePathLabel = "io.oac.workspace-path"
 
@@ -24,17 +23,15 @@ const resourceProofLabel = "io.oac.resource-proof"
 
 func resourceProof(config wire.Config) string {
 	raw, _ := json.Marshal(struct {
-		ExternalWorkspace bool
-		Image             string
-		Resources         sandbox.Resources
-	}{config.ExternalWorkspace, config.Image, sandbox.Resources{CPUs: uint32(config.CPUs), MemoryMiB: config.MemoryMiB,
-		RootDiskMiB: config.RootDiskMiB, EnvironmentDiskMiB: config.EnvironmentDiskMiB}})
+		Image     string
+		Resources sandbox.Resources
+	}{config.Image, sandbox.Resources{CPUs: uint32(config.CPUs), MemoryMiB: config.MemoryMiB, RootDiskMiB: config.RootDiskMiB}})
 	digest := sha256.Sum256(raw)
 	return hex.EncodeToString(digest[:])
 }
 
 // The SDK decodes native CPU/memory/rootfs configuration. Its v0.7.8 projection
-// omits mounts, so the explicitly owned or external inventory is projected here.
+// omits mounts, so the external directory inventory is projected here.
 // Restored roots have no configured size: a verified full snapshot supplies that
 // proof, retained as a label only after inspecting the restored target.
 func qualifyConfiguration(config wire.Config, compute wire.Compute, raw string, inheritedRoot bool) error {
@@ -53,38 +50,18 @@ func qualifyConfiguration(config wire.Config, compute wire.Compute, raw string, 
 	}
 	var inventory struct {
 		Mounts []struct {
-			Type    string `json:"type"`
-			Host    string `json:"host"`
-			Guest   string `json:"guest"`
-			Storage struct {
-				Kind        string `json:"kind"`
-				CapacityMiB uint32 `json:"capacity_mib"`
-			} `json:"storage"`
+			Type  string `json:"type"`
+			Host  string `json:"host"`
+			Guest string `json:"guest"`
 		} `json:"mounts"`
 	}
 	if json.Unmarshal([]byte(raw), &inventory) != nil || len(inventory.Mounts) != 1 {
 		return sandbox.ErrInvalid
 	}
 	mount := inventory.Mounts[0]
-	if config.ExternalWorkspace != (actual.Labels[workspaceModeLabel] == "external") {
-		return sandbox.ErrInvalid
-	}
-	switch actual.Labels[workspaceModeLabel] {
-	case "external":
-		id, err := uuid.Parse(actual.Labels[workspaceObjectLabel])
-		path := actual.Labels[workspacePathLabel]
-		if err != nil || id == uuid.Nil || id.String() != actual.Labels[workspaceObjectLabel] || !filepath.IsAbs(path) || filepath.Clean(path) != path || mount.Type != "Bind" || mount.Guest != "/environment" || mount.Host != path {
-			return sandbox.ErrInvalid
-		}
-		return nil
-	case "owned":
-		if actual.Labels[workspaceObjectLabel] != "" || actual.Labels[workspacePathLabel] != "" || config.EnvironmentDiskMiB == 0 {
-			return sandbox.ErrInvalid
-		}
-	default:
-		return sandbox.ErrInvalid
-	}
-	if mount.Type != "Owned" || mount.Guest != "/environment" || mount.Storage.Kind != "disk" || mount.Storage.CapacityMiB != config.EnvironmentDiskMiB {
+	id, err := uuid.Parse(actual.Labels[workspaceObjectLabel])
+	path := actual.Labels[workspacePathLabel]
+	if err != nil || id == uuid.Nil || id.String() != actual.Labels[workspaceObjectLabel] || !filepath.IsAbs(path) || filepath.Clean(path) != path || mount.Type != "Bind" || mount.Guest != "/environment" || mount.Host != path {
 		return sandbox.ErrInvalid
 	}
 	return nil
@@ -97,7 +74,7 @@ func qualifySnapshotResources(config wire.Config, labels map[string]string) erro
 	return nil
 }
 
-// Archives exclude the image. The restored root must resolve from this node's
+// Checkpoints exclude the image. The restored root must resolve from this node's
 // installed image by the captured digest; a missing image record fails before
 // Restore. This metadata check cannot verify the SDK's physical image cache.
 func qualifyRuntimeImage(ctx context.Context, config wire.Config, captured string) error {
@@ -119,16 +96,11 @@ func qualifyRuntimeImage(ctx context.Context, config wire.Config, captured strin
 }
 
 func workspaceLabels(workspace *wire.WorkspaceDirectory) map[string]string {
-	if workspace == nil {
-		return map[string]string{workspaceModeLabel: "owned"}
-	}
-	return map[string]string{workspaceModeLabel: "external", workspaceObjectLabel: workspace.ObjectID, workspacePathLabel: workspace.Path}
+	return map[string]string{workspaceObjectLabel: workspace.ObjectID, workspacePathLabel: workspace.Path}
 }
 func qualifyWorkspace(labels map[string]string, workspace *wire.WorkspaceDirectory) error {
-	for _, key := range []string{workspaceModeLabel, workspaceObjectLabel} {
-		if labels[key] != workspaceLabels(workspace)[key] {
-			return sandbox.ErrOwnership
-		}
+	if labels[workspaceObjectLabel] != workspace.ObjectID {
+		return sandbox.ErrOwnership
 	}
 	return nil
 }

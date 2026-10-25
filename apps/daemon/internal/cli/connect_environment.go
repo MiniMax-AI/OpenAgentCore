@@ -12,19 +12,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/auth"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/daemonize"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
-	"github.com/google/uuid"
 )
-
-type environmentEnrollment struct {
-	DeviceID           string `json:"device_id"`
-	SessionID          string `json:"session_id"`
-	EnvironmentID      string `json:"environment_id"`
-	WorkspaceDirectory string `json:"workspace_directory"`
-}
 
 func environmentClient() *http.Client {
 	return &http.Client{Timeout: bootstrapTimeout, CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -49,11 +43,6 @@ func environmentBase(remote string) (string, error) {
 	return u.String(), nil
 }
 
-func environmentUUID(value string) bool {
-	id, err := uuid.Parse(value)
-	return err == nil && id != uuid.Nil && id.String() == value
-}
-
 // executorCredential returns the credential's key ID and secret token.
 func executorCredential(path, environment string) (string, string, error) {
 	raw, err := readEnvironmentPrivateFile(path)
@@ -65,7 +54,7 @@ func executorCredential(path, environment string) (string, string, error) {
 		Token         string `json:"executor_token"`
 		EnvironmentID string `json:"environment_id,omitempty"`
 	}
-	if decodeEnvironmentJSON(raw, &key) != nil || !environmentUUID(key.KeyID) || key.Token == "" || strings.ContainsAny(key.Token, " \t\r\n\x00") || (key.EnvironmentID != "" && key.EnvironmentID != environment) {
+	if decodeEnvironmentJSON(raw, &key) != nil || !machineapi.CanonicalUUID(key.KeyID) || key.Token == "" || strings.ContainsAny(key.Token, " \t\r\n\x00") || (key.EnvironmentID != "" && key.EnvironmentID != environment) {
 		return "", "", errors.New("connect: invalid executor credential or Environment restriction")
 	}
 	return key.KeyID, key.Token, nil
@@ -83,9 +72,9 @@ func decodeEnvironmentJSON(raw []byte, value any) error {
 	return nil
 }
 
-func enrollEnvironment(ctx context.Context, client *http.Client, base, environment, credential string) (environmentEnrollment, error) {
-	var out environmentEnrollment
-	body, _ := json.Marshal(map[string]string{"environment_id": environment})
+func enrollEnvironment(ctx context.Context, client *http.Client, base, environment, credential string) (machineapi.Enrollment, error) {
+	var out machineapi.Enrollment
+	body, _ := json.Marshal(machineapi.EnrollRequest{EnvironmentID: environment})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/agent-daemon/enroll", bytes.NewReader(body))
 	if err != nil {
 		return out, errors.New("connect: invalid enrollment request")
@@ -107,13 +96,13 @@ func enrollEnvironment(ctx context.Context, client *http.Client, base, environme
 		return out, fmt.Errorf("connect: Environment enrollment rejected (HTTP %d)", resp.StatusCode)
 	}
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024+1))
-	if err != nil || len(raw) > 16*1024 || decodeEnvironmentJSON(raw, &out) != nil || !environmentUUID(out.DeviceID) || !environmentUUID(out.SessionID) || out.EnvironmentID != environment || out.WorkspaceDirectory == "/" || agentcapabilities.ValidateLocalDirectories([]string{out.WorkspaceDirectory}) != nil {
-		return environmentEnrollment{}, errors.New("connect: invalid Environment enrollment response")
+	if err != nil || len(raw) > 16*1024 || decodeEnvironmentJSON(raw, &out) != nil || out.Validate(environment) != nil || out.WorkspaceDirectory == "/" || agentcapabilities.ValidateLocalDirectories([]string{out.WorkspaceDirectory}) != nil {
+		return machineapi.Enrollment{}, errors.New("connect: invalid Environment enrollment response")
 	}
 	return out, nil
 }
 
-func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string) (*transport.BootstrapResponse, error) {
+func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string) (*machineapi.BootstrapResponse, error) {
 	boot, err := transport.BootstrapWithClient(ctx, environmentClient(), prof.ServerURL, prof.RuntimeID, prof.RunnerCredential, Version)
 	if err != nil {
 		return nil, errors.New("connect: Environment bootstrap failed")
@@ -127,12 +116,12 @@ func environmentBootstrap(ctx context.Context, prof auth.Profile, remote string)
 // exitOnRejection selects the native `start` behaviour: a permanent rejection
 // ends the process with the message as its error. Otherwise the process that
 // owns the connection parks (see parkEnvironment).
-func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background, exitOnRejection bool, remote, environment, credentialFile string) error {
+func runEnvironmentConnect(parent context.Context, rc *runContext, profile string, background, exitOnRejection bool, remote, environment, credentialFile, workspace, capabilityDirectory string) error {
 	base, err := environmentBase(remote)
 	if err != nil {
 		return err
 	}
-	if !environmentUUID(environment) {
+	if !machineapi.CanonicalUUID(environment) {
 		return errors.New("connect: canonical Environment ID required")
 	}
 	if err = checkEnvironmentTarget(remote, environment); err != nil {
@@ -165,7 +154,7 @@ func runEnvironmentConnect(parent context.Context, rc *runContext, profile strin
 	if err = parent.Err(); err != nil {
 		return err
 	}
-	if err = bindEnvironmentRuntime(remote, bound, credentialFile); err != nil {
+	if err = bindEnvironmentRuntime(remote, bound, workspace, capabilityDirectory); err != nil {
 		return err
 	}
 	if background && !daemonize.IsBackgroundChild() {
@@ -177,7 +166,7 @@ func runEnvironmentConnect(parent context.Context, rc *runContext, profile strin
 		return err
 	}
 	prof := auth.Profile{ServerURL: base, RuntimeID: bound.DeviceID, RunnerCredential: credential}
-	return rejected(mainLoopRemote(parent, rc, profile, prof, discovery, remote))
+	return rejected(mainLoopRemote(parent, rc, profile, prof, discovery, remote, false))
 }
 
 var (

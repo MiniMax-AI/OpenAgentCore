@@ -6,7 +6,7 @@ Set the one origin that browsers, nodes, sandboxes and applications use to reach
 
 ## Choose the public URL
 
-`OAC_PUBLIC_URL` is the origin applications, nodes, sandboxes and self-hosted executors use. Web accepts only its host. Core derives the daemon WebSocket URL, the self-hosted `remote_url` and each sandbox's connection address from it. It is an http or https origin without a path.
+`OAC_PUBLIC_URL` is the origin applications, nodes, sandboxes and self-hosted executors use. Web accepts only its host. Core derives its other addresses from it, listed under [`OAC_PUBLIC_URL`](../configuration.md#appendix-core-environment-without-the-installer). It is an http or https origin without a path.
 
 | Situation | Public URL |
 | --- | --- |

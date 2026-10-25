@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: 4a9c00d1eed9fe51f9e8f2f08e00f1709ddc55eb1c650ed3a5380f44a5b71e1c
+source_hash: 7dcff114daa6c74d1ee08709f2f68d1b8d97c7225991669fb6431c684e34c26b
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -51,12 +51,6 @@ Authorization: Bearer <Core key>
         "resolved_at": 1789953021,
         "observed_at": 1789953020,
         "started_at": 1789951220,
-        "cpu": {
-          "usage_seconds_total": 482.75,
-          "capacity_cores": 2.0,
-          "usage_cores": null,
-          "utilization_ratio": null
-        },
         "memory": {
           "usage_bytes": 805306368,
           "limit_bytes": 2147483648
@@ -98,7 +92,6 @@ Authorization: Bearer <Core key>
 | `resolved_at` | integer | Core 解析此行时的 Unix 秒数。 |
 | `observed_at` | integer 或 null | 提供商样本的 Unix 秒数；无样本时为 null。 |
 | `started_at` | integer 或 null | 当前计算实例代次启动时的 Unix 秒数。 |
-| `cpu` | object 或 null | 未观测到 CPU 值时为 null。 |
 | `memory` | object 或 null | 未观测到内存值时为 null。 |
 
 `lifecycle_state` 来自 Core 的分配记录，绝不来自样本：
@@ -119,17 +112,6 @@ Authorization: Bearer <Core key>
 | `allocation_id` | 用于标识托管 Session 计算资源的托管分配；其他情况下为 null。 |
 | `device_id` | 存在时，为绑定到托管分配的 Runtime 设备；其他情况下为 null。 |
 | `connection_generation` | 始终为 null：Core 不观测自托管连接。 |
-
-### `cpu` {#cpu}
-
-所有字段均为有限非负数或 null。0 表示观测到的零；null 表示不可用。
-
-| 字段 | 含义 |
-| --- | --- |
-| `usage_seconds_total` | 当前计算实例代次的累计 CPU 秒数（Docker、microsandbox）。 |
-| `capacity_cores` | 已配置的 CPU 容量，大于零。 |
-| `usage_cores` | 始终为 null。 |
-| `utilization_ratio` | 提供商报告的 `capacity_cores` 占比（E2B），不进行钳制；对于报告累计 CPU 时间的提供商为 null。 |
 
 ### `memory` {#memory}
 

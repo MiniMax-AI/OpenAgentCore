@@ -67,7 +67,6 @@ func TestOptionsRejectDroppedContext(t *testing.T) {
 		name string
 		edit func(*proto.PromptRequestPayload)
 	}{
-		{"oversized instructions", func(r *proto.PromptRequestPayload) { r.AgentOptions["system_prompt"] = strings.Repeat("x", 32*1024+1) }},
 		{"missing model", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model") }},
 		{"missing provider", func(r *proto.PromptRequestPayload) { delete(r.AgentOptions, "model_provider") }},
 	}

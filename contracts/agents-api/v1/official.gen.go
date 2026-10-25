@@ -339,9 +339,9 @@ type Item struct {
 	Summary           []SummaryText    `json:"summary,omitempty"`
 }
 
-// ItemContent projects MessageContentResource, EncryptedContentResource.
+// ItemContent projects MessageContentResource, EncryptedContentResource, SummaryTextResource.
 type ItemContent struct {
-	Type             string  `json:"type" binding:"required" enums:"input_text,input_image,output_text,encrypted_content"`
+	Type             string  `json:"type" binding:"required" enums:"input_text,input_image,output_text,encrypted_content,summary_text"`
 	Text             *string `json:"text,omitempty"`
 	ImageURL         string  `json:"image_url,omitempty"`
 	EncryptedContent *string `json:"encrypted_content,omitempty"`

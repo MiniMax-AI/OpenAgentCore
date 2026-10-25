@@ -14,7 +14,6 @@ const RuntimeTypeAgentDaemon = "agent_daemon"
 // CredentialHash is never sent over the daemon protocol.
 type Credential struct {
 	ID             string
-	WorkspaceID    string
 	Name           string
 	Type           string
 	CredentialHash string

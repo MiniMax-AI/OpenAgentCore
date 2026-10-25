@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/google/uuid"
 )
 
 func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T) {
@@ -19,15 +21,18 @@ func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T
 		t.Fatal(err)
 	}
 	path := filepath.Join(dir, "control.json")
-	t.Setenv(suspendControlEnv, path)
-	t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", "env")
-	control, err := newSuspendControl()
+	environment := uuid.NewString()
+	if err := localworkspace.Bind(environment, uuid.NewString(), t.TempDir(), t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(localworkspace.Unbind)
+	control, err := openSuspendControl(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer control.Close()
 	control.signal <- syscall.SIGUSR1
-	if err := control.Arm(proto.EnvironmentSuspendPayload{EnvironmentID: "env", SuspendID: "current"}); err != nil {
+	if err := control.Arm(proto.EnvironmentSuspendPayload{EnvironmentID: environment, SuspendID: "current"}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
@@ -35,7 +40,7 @@ func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T
 		t.Fatal("stale signal woke future suspension")
 	}
 	cancel()
-	if err := runResume(nil, []string{"--control-file", path, "--environment-id", "env", "--suspend-id", "stale"}); err == nil {
+	if err := runResume(nil, []string{"--control-file", path, "--environment-id", environment, "--suspend-id", "stale"}); err == nil {
 		t.Fatal("stale suspension accepted")
 	}
 	saved := control.identity.StartTime
@@ -43,14 +48,14 @@ func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T
 	if err := control.save(); err != nil {
 		t.Fatal(err)
 	}
-	if err := runResume(nil, []string{"--control-file", path, "--environment-id", "env", "--suspend-id", "current"}); err == nil {
+	if err := runResume(nil, []string{"--control-file", path, "--environment-id", environment, "--suspend-id", "current"}); err == nil {
 		t.Fatal("reused PID accepted")
 	}
 	control.identity.StartTime = saved
 	if err := control.save(); err != nil {
 		t.Fatal(err)
 	}
-	if err := runResume(nil, []string{"--control-file", path, "--environment-id", "env", "--suspend-id", "current"}); err != nil {
+	if err := runResume(nil, []string{"--control-file", path, "--environment-id", environment, "--suspend-id", "current"}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -61,7 +66,7 @@ func TestResumeControlRejectsStaleIdentityAndDiscardsPreParkSignals(t *testing.T
 	if err := control.Disarm(); err != nil {
 		t.Fatal(err)
 	}
-	if err := runResume(nil, []string{"--control-file", path, "--environment-id", "env", "--suspend-id", "current"}); err == nil {
+	if err := runResume(nil, []string{"--control-file", path, "--environment-id", environment, "--suspend-id", "current"}); err == nil {
 		t.Fatal("completed suspension accepted another wake")
 	}
 }

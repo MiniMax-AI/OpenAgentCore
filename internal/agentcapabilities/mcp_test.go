@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestMCPOnlyInstalledPackageSurvivesSourceDeletion(t *testing.T) {
@@ -12,7 +14,7 @@ func TestMCPOnlyInstalledPackageSurvivesSourceDeletion(t *testing.T) {
 	writeWorkspace(t, workspace, "plugin/.codex-plugin/plugin.json", []byte(`{"name":"native-tools","description":"Package tools.","mcpServers":"./.mcp.json"}`))
 	writeWorkspace(t, workspace, "plugin/.mcp.json", []byte(`{"mcpServers":{"proof":{"command":"python3","args":["proof.py"],"env_vars":["PLUGIN_TOKEN"]}}}`))
 	writeWorkspace(t, workspace, "plugin/proof.py", []byte("# Preserved server resource.\n"))
-	if err := Finalize(installed, Input{Directories: []string{"/workspace/plugin"}}, testIdentity, workspaceResolver(workspace)); err != nil {
+	if err := Finalize(installed, proto.CapabilitySources{Directories: []string{"/workspace/plugin"}}, testIdentity, workspaceResolver(workspace)); err != nil {
 		t.Fatal(err)
 	}
 	before, err := Load(installed)

@@ -21,7 +21,7 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 | Monitor | Overview | Service status, running Sessions, **Sandbox capacity** and work needing attention; 24-hour Session activity; Core and its nodes as a topology, each opening its page; Needs attention: failed Sessions and Sessions waiting for their caller, active in the last 24 hours, each with its one-line reason; usage by Project |
 | Monitor | Core metrics | Whether Core can run Turns: execution slots, the Turn queue and its p95 wait, interrupted Turns, connected daemons, database latency, CPU and resident memory against their limits, background jobs; Go heap, goroutines and the database pool under **Diagnostics** |
 | Monitor | Agent metrics | Requests, errors, duration, tokens, models, tools, Agents and API keys over 1 h, 6 h, 24 h or 7 d |
-| Monitor | Sandbox metrics | Hosted Runtimes across Projects over time, active against total, each with its status (active, suspended, changing state, waiting for allocation or stopped) and its CPU and memory observations; an E2B deployment adds the sandboxes Core holds in E2B's cloud |
+| Monitor | Sandbox metrics | Hosted Runtimes across Projects over time, active against total, each with its status (active, suspended, changing state, waiting for allocation or stopped) and its memory observation and CPU and memory history; an E2B deployment adds the sandboxes Core holds in E2B's cloud |
 | Monitor | Request log | Recent HTTP requests to Core, their status, elapsed time and safe error codes; [scope and retention](../../contracts/agents-api/admin-api.md#request-log) |
 | Monitor | Session log | Every Session, and each Session's read-only conversation, trace and Turns with the classified reason of a failure and its next step; a self-hosted Session's page also manages its executor credentials and gives the command that connects a host |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
@@ -42,7 +42,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 | Issue, rotate or revoke a self-hosted executor's credential, or copy its install command | The Session's page in the **Session log**; see [Run self-hosted Sessions](../getting-started/self-hosted.md) |
 | Delete a resource, for example a leaked Credential | The resource's row in its list, or its page; Files are deleted from the Files list. The public deletion rules apply |
 
-Web observes and administers the installation. It never starts a Session or sends input; agents run only when applications call `/v1`. Archiving a hosted Session requests cancellation and sandbox reclamation. [Concepts](../concepts.md#what-administrators-can-and-cannot-do) defines what administrators can do.
+Web observes and administers the installation. It never starts a Session or sends input; agents run only when applications call `/v1`. Archiving a hosted Session is defined in [Session archive](../../contracts/agents-api/admin-api.md#session-archive). [Concepts](../concepts.md#what-administrators-can-and-cannot-do) defines what administrators can do.
 
 A new Project key is shown once, together with the calls that use it:
 

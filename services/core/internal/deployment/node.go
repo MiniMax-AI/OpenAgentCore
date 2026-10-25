@@ -3,18 +3,14 @@ package deployment
 import (
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
+// NodeIdentity is the wire identity of a node and the backend namespace Core keeps for it.
 type NodeIdentity struct {
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	NodeID               string `json:"node_id"`
-	InstallationID       string `json:"installation_id"`
-	Provider             string `json:"provider"`
-	BackendFingerprint   string `json:"-"`
-	MaxActive            int    `json:"max_active"`
-	MaxRetained          int    `json:"max_retained"`
+	machineapi.NodeIdentity
+	BackendFingerprint string `json:"-"`
 }
 
 // EnrollmentToken is an issued one-use node enrollment token. ID is a public,
@@ -27,20 +23,13 @@ type EnrollmentToken struct {
 }
 
 type Capacity struct {
-	MaxActive   int `json:"max_active"`
-	MaxRetained int `json:"max_retained"`
+	MaxActive   int `json:"max_active" binding:"required"`
+	MaxRetained int `json:"max_retained" binding:"required"`
 }
 
-type Enrollment struct {
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	NodeID               string `json:"node_id"`
-	Credential           string `json:"credential"`
-	Name                 string `json:"name"`
-	Provider             string `json:"provider"`
-	BackendFingerprint   string `json:"backend_fingerprint"`
-	// The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
-	CoreURL string `json:"core_url"`
+// EnrollmentLimits are the limits an enrollment token approves. A nil limit is unset.
+type EnrollmentLimits struct {
+	MaxActive, MaxRetained *int
 }
 
 type NodeHealth struct {
@@ -69,6 +58,8 @@ type Node struct {
 	Retained       int64      `json:"retained" binding:"required"`
 	CleanupPending int64      `json:"cleanup_pending" binding:"required"`
 	CreatedAt      time.Time  `json:"created_at" binding:"required"`
+	// The limits Core recommends for the node's latest host measurements and the current specification; null before the node reports them.
+	RecommendedCapacity *Capacity `json:"recommended_capacity" extensions:"x-nullable" binding:"required"`
 	// The Core address this node enrolled with. A node whose address differs
 	// from the installation public URL receives no new sandboxes; re-add it.
 	CoreURL string `json:"core_url" binding:"required"`
@@ -79,20 +70,12 @@ type Node struct {
 type NodeUpdate struct {
 	Name      string `json:"name" binding:"required"`
 	MaxActive int    `json:"max_active" binding:"required"`
-	// Docker never suspends, so Core replaces this with max_active; microsandbox uses both limits.
+	// A Provider that does not checkpoint never suspends, so Core replaces this with max_active; a Provider that checkpoints uses both limits.
 	MaxRetained int `json:"max_retained"`
 }
 
-// NodeStatus reports only the authenticated node's Core-owned presence.
-type NodeStatus struct {
-	NodeIdentity
-	Connected     bool `json:"connected"`
-	ProviderReady bool `json:"provider_ready"`
-}
-
+// NodeConfiguration answers GET /api/v1/sandbox-node/configuration. Its specification is the Sandbox Provider protocol's type, which the machine wire file cannot import.
 type NodeConfiguration struct {
-	MaxActive           int                    `json:"max_active"`
-	MaxRetained         int                    `json:"max_retained"`
 	InstallationID      string                 `json:"installation_id"`
 	Provider            string                 `json:"provider"`
 	CoreURL             string                 `json:"core_url"`

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
@@ -27,7 +29,7 @@ func changeNodeTarget(t *testing.T, w *Store, view deployment.View, input sandbo
 	return next, input
 }
 
-func generationHeartbeat(t *testing.T, s *Store, node deployment.Enrollment, connection string, view deployment.View, state string) {
+func generationHeartbeat(t *testing.T, s *Store, node machineapi.NodeEnrollment, connection string, view deployment.View, state string) {
 	t.Helper()
 	status := sandbox.GenerationStatus{Generation: view.Generation, SpecificationDigest: view.SpecificationDigest, State: state}
 	if state == "ready" && view.Provider == "microsandbox" {
@@ -67,7 +69,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 				t.Fatal(err)
 			}
 			pendingNode, pendingGeneration := placedGeneration(t, s, w, pending)
-			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 2}))
+			token, err := EnrollmentTestToken(nodes.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(2)}))
 			if err != nil {
 				t.Fatal(err)
 			}

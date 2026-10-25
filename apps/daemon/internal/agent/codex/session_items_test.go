@@ -1,7 +1,9 @@
 package codex
 
 import (
+	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -66,54 +68,46 @@ func TestDispatchStartedItem_UnknownSilent(t *testing.T) {
 	}
 }
 
-func TestDispatchCompletedItem_Reasoning_UsesBuffer(t *testing.T) {
-	bufs := NewItemBuffers()
-	FoldDeltaIntoBuffer(bufs, "reasoning", "r1", "Hello ")
-	FoldDeltaIntoBuffer(bufs, "reasoning", "r1", "world")
-
-	envs, text, err := DispatchCompletedItem("run-1", ThreadItem{
-		Type: "reasoning", ID: "r1",
-	}, bufs)
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
-	if text != "" {
-		t.Fatalf("reasoning must not produce agent text, got %q", text)
-	}
-	if len(envs) != 1 || envs[0].Type != proto.TypeThinking {
-		t.Fatalf("envs = %+v", envs)
-	}
-	var p proto.ThinkingPayload
-	_ = envs[0].DecodePayload(&p)
-	if p.Text != "Hello world" {
-		t.Fatalf("thinking text = %q", p.Text)
-	}
-	// Buffer must be drained so a re-completion doesn't double-emit.
-	if got := bufs.Reasoning["r1"]; got != "" {
-		t.Fatalf("buffer not drained: %q", got)
-	}
-}
-
-func TestDispatchCompletedItem_Reasoning_FallbackToItemBody(t *testing.T) {
-	// No deltas observed — must fall back to item.text / summary.
-	bufs := NewItemBuffers()
-	envs, _, err := DispatchCompletedItem("run-1", ThreadItem{
-		Type: "reasoning", ID: "r1", Text: "fallback body",
-	}, bufs)
-	if err != nil {
-		t.Fatalf("dispatch: %v", err)
-	}
-	var p proto.ThinkingPayload
-	_ = envs[0].DecodePayload(&p)
-	if p.Text != "fallback body" {
-		t.Fatalf("fallback path = %q", p.Text)
+func TestReasoningIsReportedOnlyWhenRequested(t *testing.T) {
+	for _, requested := range []bool{true, false} {
+		out := make(chan proto.Envelope, 16)
+		s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)),
+			rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), reasoningSummary: requested}
+		s.registerHandlers()
+		s.setThreadID("root")
+		scopeNotification(t, s, "turn/started", `{"threadId":"root","turn":{"id":"turn"}}`)
+		scope := `{"threadId":"root","turnId":"turn",`
+		scopeNotification(t, s, "item/reasoning/summaryTextDelta", scope+`"itemId":"r1","delta":"plan ","summaryIndex":0}`)
+		scopeNotification(t, s, "item/reasoning/textDelta", scope+`"itemId":"r1","delta":"raw","contentIndex":0}`)
+		scopeNotification(t, s, "item/reasoning/summaryTextDelta", scope+`"itemId":"r1","delta":"next","summaryIndex":1}`)
+		scopeNotification(t, s, "item/completed", scope+`"item":{"type":"reasoning","id":"r1"}}`)
+		scopeNotification(t, s, "item/completed", scope+`"item":{"type":"reasoning","id":"r2","content":["whole"]}}`)
+		close(out)
+		var got []proto.ReasoningPayload
+		for env := range out {
+			if env.Type == proto.TypeReasoning {
+				var p proto.ReasoningPayload
+				_ = env.DecodePayload(&p)
+				got = append(got, p)
+			}
+		}
+		want := []proto.ReasoningPayload{
+			{ID: "r1", Status: "in_progress", Delta: "plan "}, {ID: "r1", Status: "in_progress", Index: 1, Delta: "next"}, {ID: "r1", Status: "completed"},
+			{ID: "r2", Status: "in_progress", Delta: "whole"}, {ID: "r2", Status: "completed"},
+		}
+		if !requested {
+			want = nil
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("requested=%v: reasoning %+v, want %+v", requested, got, want)
+		}
 	}
 }
 
 func TestDispatchCompletedItem_AgentMessage_BufferIsFinalText(t *testing.T) {
 	bufs := NewItemBuffers()
-	FoldDeltaIntoBuffer(bufs, "agent", "a1", "Hello ")
-	FoldDeltaIntoBuffer(bufs, "agent", "a1", "world")
+	FoldDeltaIntoBuffer(bufs, "a1", "Hello ")
+	FoldDeltaIntoBuffer(bufs, "a1", "world")
 
 	envs, text, err := DispatchCompletedItem("run-1", ThreadItem{
 		Type: "agentMessage", ID: "a1", Text: "fallback",
@@ -168,14 +162,14 @@ func TestDispatchCompletedItem_ToolCallEmitsAfterStage(t *testing.T) {
 
 func TestFoldDeltaIntoBuffer_AccumulatesPerItem(t *testing.T) {
 	bufs := NewItemBuffers()
-	if got := FoldDeltaIntoBuffer(bufs, "agent", "a1", "hi"); got != "hi" {
+	if got := FoldDeltaIntoBuffer(bufs, "a1", "hi"); got != "hi" {
 		t.Fatalf("fold returned %q", got)
 	}
-	if got := FoldDeltaIntoBuffer(bufs, "agent", "a1", " there"); got != "hi there" {
+	if got := FoldDeltaIntoBuffer(bufs, "a1", " there"); got != "hi there" {
 		t.Fatalf("fold accumulation = %q", got)
 	}
 	// Different itemId is a different accumulator.
-	if got := FoldDeltaIntoBuffer(bufs, "agent", "a2", "other"); got != "other" {
+	if got := FoldDeltaIntoBuffer(bufs, "a2", "other"); got != "other" {
 		t.Fatalf("cross-item bleed: got %q", got)
 	}
 }

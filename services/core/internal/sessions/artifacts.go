@@ -3,6 +3,7 @@ package sessions
 import (
 	"archive/tar"
 	"context"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"io"
 	"io/fs"
 	"strings"
@@ -39,25 +40,6 @@ type Artifact struct {
 type ArtifactPage struct {
 	Artifacts  []Artifact
 	NextCursor string
-}
-
-// ArtifactReader reads a Session's published Artifacts, independently of its
-// Environment's availability.
-type ArtifactReader interface {
-	// GetSessionArtifact returns a published Artifact of the visible Session,
-	// or ErrNotFound.
-	GetSessionArtifact(ctx context.Context, tenantID, sessionID, artifactID string) (Artifact, error)
-	// ListSessionArtifacts returns one page of the visible Session's published
-	// Artifacts in publication-time and ID order. A non-empty environmentID
-	// keeps the Artifacts that Environment produced; a malformed one matches
-	// nothing. A limit outside 1..100 is ErrInvalidInput. A cursor that is not
-	// a published Artifact of the Session, including a malformed one, is
-	// ErrArtifactCursor.
-	ListSessionArtifacts(ctx context.Context, tenantID, sessionID, environmentID, cursor string, limit int, ascending bool) (ArtifactPage, error)
-	// ReadSessionArtifact passes consume a published Artifact and its content
-	// from one snapshot, so a concurrent deletion never truncates a read it
-	// admitted. It returns consume's error unchanged.
-	ReadSessionArtifact(ctx context.Context, tenantID, sessionID, artifactID string, consume func(Artifact, io.Reader) error) error
 }
 
 // ArtifactStorage persists a Session's Artifacts.
@@ -192,7 +174,7 @@ func readArtifactExport(export io.Reader, put func(path string, size int64, cont
 		}
 		seen[header.Name] = true
 		total += header.Size
-		if err := put("/workspace/"+header.Name, header.Size, archive); err != nil {
+		if err := put(runtimebootstrap.PublicWorkspace+"/"+header.Name, header.Size, archive); err != nil {
 			return err
 		}
 	}

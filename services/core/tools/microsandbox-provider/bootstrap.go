@@ -5,8 +5,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"path"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	wire "github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
@@ -17,7 +19,7 @@ import (
 const bootstrapScript = `
 import ctypes,json,os,stat,subprocess,sys
 b=json.load(sys.stdin)
-for p in ['/home/runtime','/home/runtime/.oac','/environment','/environment/workspace','/environment/staging','/environment/initialization','/environment/packages','/run/oac']:
+for p in ['/home/runtime','/home/runtime/.oac','/environment','/environment/workspace','/environment/staging','/environment/initialization','/environment/packages',sys.argv[1]]:
     os.makedirs(p,mode=0o700,exist_ok=True)
     if not stat.S_ISDIR(os.lstat(p).st_mode): raise RuntimeError('invalid bootstrap directory')
     os.chmod(p,0o700);os.chown(p,1000,1000)
@@ -50,10 +52,6 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	for key, value := range workspaceLabels(b.q.Workspace) {
 		labels[key] = value
 	}
-	mount := sdk.Mount.Owned(sdk.OwnedVolumeOptions{Kind: sdk.VolumeKindDisk, SizeMiB: b.q.Config.EnvironmentDiskMiB})
-	if b.q.Workspace != nil {
-		mount = sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})
-	}
 	live, e := sdk.CreateSandbox(ctx, c.Name,
 		// Every compatible node holds the pinned image; nothing is ever pulled.
 		sdk.WithImage(b.q.Config.Image), sdk.WithPullPolicy(sdk.PullPolicyNever), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
@@ -62,13 +60,11 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		// The selected Environment mount keeps workspace and staging on one filesystem.
 		// Bootstrap creates their directories before starting the daemon.
 		sdk.WithWorkdir("/"), sdk.WithMounts(map[string]sdk.MountConfig{
-			"/environment": mount,
+			"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{}),
 		}),
 		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()),
 		sdk.WithEnv(map[string]string{
 			"HOME": "/home/runtime", "OAC_RUNTIME_HOME": "/home/runtime/.oac",
-			"OAC_RUNTIME_ENVIRONMENT_ID": bootstrap.EnvironmentID, "OAC_RUNTIME_SESSION_ID": bootstrap.SessionID,
-			"OAC_RUNTIME_DAEMON_SUSPEND_PID_FILE": "/run/oac/daemon-suspend.json",
 		}))
 	if e != nil {
 		return wire.Response{}, e
@@ -86,7 +82,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	var actual struct {
 		Labels map[string]string `json:"labels"`
 	}
-	if json.Unmarshal([]byte(h.ConfigJSON()), &actual) != nil || qualifyWorkspace(actual.Labels, b.q.Workspace) != nil || (b.q.Workspace != nil && actual.Labels[workspacePathLabel] != b.q.Workspace.Path) {
+	if json.Unmarshal([]byte(h.ConfigJSON()), &actual) != nil || qualifyWorkspace(actual.Labels, b.q.Workspace) != nil || actual.Labels[workspacePathLabel] != b.q.Workspace.Path {
 		qualified.CreateSettled = true
 		return qualified, sandbox.ErrInvalid
 	}
@@ -96,7 +92,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	}
 	initialization, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	result, e := runCommand(initialization, live, sandbox.Command{Args: []string{"/usr/bin/python3", "-I", "-S", "-c", bootstrapScript}, Stdin: data}, "0:0")
+	result, e := runCommand(initialization, live, sandbox.Command{Args: []string{"/usr/bin/python3", "-I", "-S", "-c", bootstrapScript, path.Dir(runtimebootstrap.SuspendControlFile)}, Stdin: data}, "0:0")
 	if e != nil {
 		return wire.Response{}, e
 	}

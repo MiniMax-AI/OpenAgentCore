@@ -54,31 +54,18 @@ func TestWriteCodexProviderConfig_PinsResponsesWire(t *testing.T) {
 func TestWriteCodexProviderConfig_FullProvider(t *testing.T) {
 	dir := t.TempDir()
 	cfg := providerConfig{
-		Name:        "mygw",
 		BaseURL:     "https://platform-api.example.com/v1",
 		BearerToken: "sk-test-fixture",
 		WireAPI:     "responses",
-		HTTPHeaders: map[string]string{
-			"X-Sub-Module": "codex-internal",
-			"X-Request-ID": "abc",
-		},
-		QueryParams: map[string]string{
-			"api-version": "2025-04-01-preview",
-		},
 	}
 	if err := writeCodexProviderConfig(dir, cfg); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	body := mustReadFile(t, filepath.Join(dir, "config.toml"))
 	for _, want := range []string{
-		`name = "mygw"`,
+		`name = "OpenAgentCore"`,
 		`base_url = "https://platform-api.example.com/v1"`,
 		`env_key = "OAC_CODEX_PROVIDER_API_KEY"`,
-		`[model_providers.oac.http_headers]`,
-		`"X-Sub-Module" = "codex-internal"`,
-		`"X-Request-ID" = "abc"`,
-		`[model_providers.oac.query_params]`,
-		`"api-version" = "2025-04-01-preview"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("config.toml missing %q\n---\n%s", want, body)

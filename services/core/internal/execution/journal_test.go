@@ -114,7 +114,7 @@ func TestJournalDrainRetainsTerminalContinuityAndUsageOnFailure(t *testing.T) {
 		env, _ := proto.NewEnvelope(proto.TypeDelta, "run", proto.DeltaPayload{Delta: "partial", Sequence: uint64(i + 1)})
 		upstream <- env
 	}
-	done, _ := proto.NewEnvelope(proto.TypeDone, "run", proto.DonePayload{Content: "Final", Usage: proto.Usage{InputTokens: 10, OutputTokens: 4}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread"}})
+	done, _ := proto.NewEnvelope(proto.TypeDone, "run", proto.DonePayload{Content: "Final", Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 10, OutputTokens: 4}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-thread"}})
 	upstream <- done
 	close(upstream)
 	result := Result{ErrorCode: "event_persistence_failed"}
@@ -124,7 +124,7 @@ func TestJournalDrainRetainsTerminalContinuityAndUsageOnFailure(t *testing.T) {
 	if err := j.flush(context.Background()); err == nil {
 		t.Fatal("flush should fail")
 	}
-	if result.ErrorCode != "event_persistence_failed" || result.Done.Metadata[proto.DoneMetaAgentSessionID] != "native-thread" || result.Done.Usage.InputTokens != 10 || result.Done.Usage.OutputTokens != 4 {
+	if result.ErrorCode != "event_persistence_failed" || result.Done.Metadata[proto.DoneMetaAgentSessionID] != "native-thread" || result.Done.Usage.Tokens.InputTokens != 10 || result.Done.Usage.Tokens.OutputTokens != 4 {
 		t.Fatalf("terminal data lost or failure cleared: %+v", result)
 	}
 	if err := j.flush(context.Background()); err != nil {
@@ -145,11 +145,11 @@ func TestCancellationReceiptContinuitySurvivesFlushFailure(t *testing.T) {
 		}
 	}
 	result := Result{ErrorCode: "event_persistence_failed"}
-	reply := cancellationResult{ack: proto.InteractionDecisionAckPayload{Applied: true, Outcome: &proto.DonePayload{Usage: proto.Usage{InputTokens: 9}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancel-native"}}}}
+	reply := cancellationResult{ack: proto.InteractionDecisionAckPayload{Applied: true, Outcome: &proto.DonePayload{Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 9}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancel-native"}}}}
 	if err := recordCancellation(context.Background(), j, reply, &result); err == nil {
 		t.Fatal("flush should fail")
 	}
-	if result.Done.Metadata[proto.DoneMetaAgentSessionID] != "cancel-native" || result.Done.Usage.InputTokens != 9 || result.ErrorCode != "event_persistence_failed" {
+	if result.Done.Metadata[proto.DoneMetaAgentSessionID] != "cancel-native" || result.Done.Usage.Tokens.InputTokens != 9 || result.ErrorCode != "event_persistence_failed" {
 		t.Fatalf("lost cancellation outcome: %+v", result)
 	}
 	if err := j.flush(context.Background()); err != nil {

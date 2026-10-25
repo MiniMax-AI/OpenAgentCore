@@ -5,11 +5,11 @@ import shlex
 from install_display import color, heading, paragraph
 
 
-def summary(root, args, unit, account):
+def summary(root, args, unit, account, provider):
     print("\n" + color("Node installation complete.", "32"))
     heading("Status")
     print("  Core connection: connected")
-    print("  Sandbox Provider: " + {"docker": "Docker", "microsandbox": "microsandbox"}[args.provider] + " (ready)")
+    print("  Sandbox Provider: " + provider + " (ready)")
     heading("Node")
     print("  Core: " + args.core_url)
     print("  Runs as: " + account)

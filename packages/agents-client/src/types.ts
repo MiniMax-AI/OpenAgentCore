@@ -5,22 +5,16 @@ import type {
   DeletedSkillVersionResource, DeletedVaultCredentialResource, DeletedVaultResource, DeleteFileResponse,
   EnvironmentFileListResource, EnvironmentFileResource, EnvironmentPackagesResource, EnvironmentParamNone,
   EnvironmentParamSelfHosted, EnvironmentResourceSelfHosted, EnvironmentStatusResource, FunctionCallStatusResource,
-  HostedEnvironmentFileParam, InputContentParam, InputContentParamInputText, InputMessageParam, ListOrderParam,
-  McpOauthRefreshResource, MultiAgentConfigCurrentParam, MultiAgentConfigResource, NetworkAccessResource,
-  NetworkPolicyResource, PersistedAgentToolConfigParamFunction, PersistedAgentToolConfigParamMcp, PersistedAgentToolConfigParamProgrammaticToolCalling,
-  PersistedAgentToolConfigParamToolSearch, PersistedAgentToolConfigParamWebSearch, ReasoningEffortResource,
-  ReasoningParam, ReasoningResource, ReasoningSummaryResource, RotateVaultCredentialAuthParamStaticBearer,
+  HostedEnvironmentFileParam, InputContentParam, InputMessageParam, ListOrderParam,
+  McpOauthRefreshResource, MultiAgentConfigCurrentParam, MultiAgentConfigResource, NetworkPolicyResource, PersistedAgentToolConfigParamFunction, PersistedAgentToolConfigParamMcp, PersistedAgentToolConfigParamProgrammaticToolCalling,
+  PersistedAgentToolConfigParamToolSearch, PersistedAgentToolConfigParamWebSearch, ReasoningParam, ReasoningResource, RotateVaultCredentialAuthParamStaticBearer,
   RotateVaultCredentialParams, ServiceTierResource, SessionEnvironmentStateResource, SessionEnvironmentStatusResource,
-  SessionArtifactResource, SessionErrorResource, SessionInputParam, SessionInputParamAgentSessionInputCancel,
-  SessionInputParamAgentSessionInputMessage, SessionInputParamAgentSessionInputToolResult,
-  SessionRequiredActionResource, SessionRequiredActionResourceEnvironmentConnection,
-  SessionRequiredActionResourceFunctionCall, SessionStatusResource, SkillResource, SkillVersionResource,
-  TextFormatResource, TextParam, TextResource, TokenUsageResource, TurnResource, TurnStatusResource,
-  VaultCredentialAuthResourceMcpOauth, VaultCredentialAuthResourceStaticBearer, VaultCredentialResource,
-  VaultResource, VaultStatusParam, WebSearchLocationParam,
-} from "./generated/public-api";
+  SessionArtifactResource, SessionErrorResource, SessionInputParam, SessionInputParamAgentSessionInputToolResult,
+  SessionRequiredActionResource, SessionStatusResource, SkillResource, SkillVersionResource,
+  TextParam, TextResource, TokenUsageResource, TurnResource, VaultCredentialResource,
+  VaultResource, VaultStatusParam, } from "./generated/public-api";
 import type {
-  CoreHarness as CoreHarnessResource, ModelConfigurationSupport as ModelConfigurationSupportResource, RuntimeCPUObservation,
+  CoreHarness as CoreHarnessResource, ModelConfigurationSupport as ModelConfigurationSupportResource,
   RuntimeMemoryObservation, RuntimeObservationLifecycleState, RuntimeObservationReason,
 } from "./generated/core-api";
 
@@ -47,12 +41,9 @@ export interface ReadOptions {
   signal?: AbortSignal;
 }
 
-export type AgentTextFormat = TextFormatResource;
 export type AgentTextConfig = TextResource;
 export type AgentTextInput = TextParam;
 export type AgentServiceTier = ServiceTierResource;
-export type AgentReasoningEffort = ReasoningEffortResource;
-export type AgentReasoningSummary = ReasoningSummaryResource;
 export type AgentReasoning = ReasoningParam;
 export type MultiAgentInput = MultiAgentConfigCurrentParam;
 
@@ -64,16 +55,9 @@ export type FunctionToolInput = PersistedAgentToolConfigParamFunction;
  */
 export type McpToolInput = PersistedAgentToolConfigParamMcp;
 
-/** Anonymous is an explicit subset that cannot name a stored Credential. */
-export type AnonymousHttpMcpToolInput = Omit<McpToolInput, "credential_id"> & {
-  credential_id?: null;
-};
-
 export type ToolSearchInput = PersistedAgentToolConfigParamToolSearch;
 
 export type ProgrammaticToolCallingInput = PersistedAgentToolConfigParamProgrammaticToolCalling;
-
-export type WebSearchLocationInput = WebSearchLocationParam;
 
 /**
  * Saved Agents keep every pinned mode; omitted or null `mode` is saved as `live`
@@ -107,11 +91,7 @@ export type CreateVaultInput = CreateVaultParams;
 
 export type VaultDeleted = DeletedVaultResource;
 
-export type StaticBearerCredentialAuth = VaultCredentialAuthResourceStaticBearer;
-
 export type McpOAuthRefreshMetadata = McpOauthRefreshResource;
-
-export type McpOAuthCredentialAuth = VaultCredentialAuthResourceMcpOauth;
 
 export type VaultCredential = VaultCredentialResource;
 
@@ -211,12 +191,6 @@ export type AgentEnvironmentInput =
 export type SelfHostedAgentEnvironment = EnvironmentResourceSelfHosted;
 
 export type AgentEnvironmentPackages = EnvironmentPackagesResource;
-
-/**
- * Network policy of a hosted Environment or Template. `restricted` carries the
- * exact hostnames in Core's spelling and order; the other modes carry none.
- */
-export type EnvironmentNetworkAccess = NetworkAccessResource;
 
 export type EnvironmentNetworkPolicy = NetworkPolicyResource;
 
@@ -493,10 +467,6 @@ export interface SkillContent {
 
 export type SessionStatus = SessionStatusResource;
 
-export type FunctionCallAction = SessionRequiredActionResourceFunctionCall;
-
-export type EnvironmentConnectionAction = SessionRequiredActionResourceEnvironmentConnection;
-
 export type RequiredAction = SessionRequiredActionResource;
 
 export type TokenUsage = TokenUsageResource;
@@ -566,8 +536,6 @@ export interface CreateSessionInput {
   stream?: false;
   vault_ids?: string[];
 }
-
-export type InputTextContent = InputContentParamInputText;
 
 export type InputMessage = InputMessageParam;
 
@@ -648,8 +616,6 @@ export interface WebSearchAction {
   url?: string | null;
   pattern?: string | null;
 }
-
-export type TurnStatus = TurnStatusResource;
 
 export type AgentTurn = TurnResource;
 
@@ -750,10 +716,6 @@ export interface FunctionResultInput {
 
 export type FunctionResultContent = InputContentParam;
 
-export type SessionMessageInputEvent = SessionInputParamAgentSessionInputMessage;
-
-export type SessionCancelInputEvent = SessionInputParamAgentSessionInputCancel;
-
 export type SessionToolResultInputEvent = SessionInputParamAgentSessionInputToolResult;
 
 export type SessionInputEvent = SessionInputParam;
@@ -773,7 +735,7 @@ export interface CreateSessionStreamOptions extends StreamOptions {
 
 // Generated /core/v1 types keep their schema names in ./generated/core-api.
 export type {
-  HarnessModelConfiguration, RuntimeCPUObservation, RuntimeHistory, RuntimeMemoryObservation, RuntimeObservationReason, SessionExecutionConfiguration,
+  HarnessModelConfiguration, RuntimeHistory, RuntimeMemoryObservation, RuntimeObservationReason, SessionExecutionConfiguration,
 } from "./generated/core-api";
 
 export type RuntimeUnavailableReason = Exclude<RuntimeObservationReason, "runtime_mode_not_observable">;
@@ -802,7 +764,6 @@ export interface RuntimeObservedObservation extends RuntimeObservationBase {
   allocation_created_at: number | null;
   observed_at: number;
   started_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   memory: RuntimeMemoryObservation | null;
 }
 
@@ -899,12 +860,6 @@ export interface ModelConfigurationInput {
   model_provider: ModelProviderInput;
   model: string;
   harness_config?: HarnessConfig;
-}
-
-export interface ModelConfigurationView {
-  model_provider: ModelProviderView;
-  model: string;
-  harness_config: HarnessConfig;
 }
 
 // The schema declares protocols as plain strings; the harness catalog names them.

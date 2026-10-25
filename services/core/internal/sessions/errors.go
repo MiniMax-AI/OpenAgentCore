@@ -23,6 +23,11 @@ var ErrInputPending = fmt.Errorf("%w: session input is still pending", ErrTurnCo
 // internal callers; an expired Environment keeps that plain error.
 var ErrHostedEnvironmentFailed = fmt.Errorf("%w: the hosted environment failed to provision", ErrEnvironmentUnavailable)
 
+// ErrRetainedHistoryUnsupported rejects a Harness without retained native
+// history on external workspace storage. It remains ErrInvalidInput for
+// internal callers.
+var ErrRetainedHistoryUnsupported = fmt.Errorf("%w: external workspace storage requires retained_native_history", ErrInvalidInput)
+
 // ErrNotIdle rejects deletion of a Session that still has work or input
 // pending. Callers cancel first and delete after the Session settles.
 var ErrNotIdle = errors.New("session must be durably idle or failed without required actions before deletion")
@@ -73,3 +78,12 @@ var (
 	// Session Artifacts.
 	ErrArtifactCursor = &CursorError{Message: "after is not a valid artifact ID"}
 )
+
+// UnknownFunctionCallError is ErrUnknownFunctionCall with the rejected call_id.
+type UnknownFunctionCallError struct{ CallID string }
+
+func (e *UnknownFunctionCallError) Error() string {
+	return ErrUnknownFunctionCall.Error() + ": " + e.CallID
+}
+
+func (e *UnknownFunctionCallError) Unwrap() error { return ErrUnknownFunctionCall }

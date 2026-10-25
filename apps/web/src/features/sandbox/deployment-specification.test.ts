@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultSandboxResources, sandboxesThatFit, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
+import { defaultSandboxResources, savedSpecification, selectedWorkspace, validSandboxResources } from "./deployment-specification";
 import { deploymentContract, type SandboxProvider, type SandboxSpecification } from "@oac/agents-client";
 
 describe("deployment resources", () => {
@@ -18,7 +18,7 @@ describe("deployment resources", () => {
       expect(resources).toEqual(declared);
       if (resources) {
         expect(resources).not.toBe(declared);
-        expect(validSandboxResources(provider, resources)).toBe(true);
+        expect(validSandboxResources(provider, resources, selectedWorkspace(provider, { tenant_capacity_mib: 0 }))).toBe(true);
       }
     }
   });
@@ -28,12 +28,12 @@ describe("deployment resources", () => {
     expect(validSandboxResources("docker", { cpus: 2, memory_mib: 511 })).toBe(false);
     expect(validSandboxResources("docker", { cpus: 2, memory_mib: 1048577 })).toBe(false);
     expect(validSandboxResources("e2b", { cpus: 2, memory_mib: 2048, root_disk_mib: 1024 })).toBe(false);
-    expect(validSandboxResources("microsandbox", { cpus: 2, memory_mib: 2048, root_disk_mib: 1023, environment_disk_mib: 8192 })).toBe(false);
+    expect(validSandboxResources("microsandbox", { cpus: 2, memory_mib: 2048, root_disk_mib: 1023 }, { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false })).toBe(false);
   });
-  it("validates external storage without fabricating a disk quota or weakening root disk bounds", () => {
+  it("runs microsandbox only on selected storage, where the environment disk is a quota request", () => {
     const workspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
-    const resources = defaultSandboxResources("microsandbox", workspace)!;
-    expect(resources.environment_disk_mib).toBe(0);
+    const resources = defaultSandboxResources("microsandbox")!;
+    expect(resources.environment_disk_mib).toBeUndefined();
     expect(validSandboxResources("microsandbox", resources, workspace)).toBe(true);
     expect(validSandboxResources("microsandbox", resources)).toBe(false);
     expect(validSandboxResources("microsandbox", { ...resources, root_disk_mib: 0 }, workspace)).toBe(false);
@@ -42,25 +42,10 @@ describe("deployment resources", () => {
     expect(validSandboxResources("docker", { cpus: 2, memory_mib: 2048 }, workspace)).toBe(false);
     expect(validSandboxResources("microsandbox", { ...resources, environment_disk_mib: 8192 }, { ...workspace, capacity_quota: true })).toBe(true);
   });
-  it("sizes a first initialization from the selected workspace storage", () => {
-    const sized = (capacity: number | null) => {
-      const workspace = selectedWorkspace("microsandbox", capacity === null ? null : { tenant_capacity_mib: capacity });
-      const resources = defaultSandboxResources("microsandbox", workspace)!;
-      return { workspace, resources, valid: validSandboxResources("microsandbox", resources, workspace) };
-    };
-    expect(sized(0)).toMatchObject({ workspace: { capacity_quota: false }, resources: { environment_disk_mib: 0 }, valid: true });
-    expect(sized(1024)).toMatchObject({ workspace: { capacity_quota: true }, resources: { environment_disk_mib: 8192 }, valid: true });
-    expect(sized(null).workspace).toBeUndefined();
+  it("takes the workspace requirement from the selected storage", () => {
+    expect(selectedWorkspace("microsandbox", { tenant_capacity_mib: 0 })).toMatchObject({ capacity_quota: false });
+    expect(selectedWorkspace("microsandbox", { tenant_capacity_mib: 1024 })).toMatchObject({ capacity_quota: true });
+    expect(selectedWorkspace("microsandbox", null)).toBeUndefined();
     expect(selectedWorkspace("docker", { tenant_capacity_mib: 0 })).toBeUndefined();
-  });
-});
-
-describe("sandboxes a host holds", () => {
-  it("is the smaller of what its CPUs and its memory hold, and unknown without either or the size", () => {
-    const size = { cpus: 2, memory_mib: 4096 };
-    expect(sandboxesThatFit({ cpus: 16, memoryBytes: 64 * 2 ** 30 }, size)).toBe(8);
-    expect(sandboxesThatFit({ cpus: 64, memoryBytes: 18 * 2 ** 30 }, size)).toBe(4);
-    expect(sandboxesThatFit({ cpus: null, memoryBytes: 64 * 2 ** 30 }, size)).toBeNull();
-    expect(sandboxesThatFit({ cpus: 16, memoryBytes: 64 * 2 ** 30 }, null)).toBeNull();
   });
 });

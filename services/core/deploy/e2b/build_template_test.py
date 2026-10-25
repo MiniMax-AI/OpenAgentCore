@@ -28,7 +28,7 @@ class BundlePermissionsTest(unittest.TestCase):
                                 'codex/config': 0o600, 'opt': 0o755,
                                 'opt/private': 0o700, 'opt/private/key': 0o600}
                 image = {'Architecture': 'amd64', 'Os': 'linux', 'Id': 'sha256:fixture',
-                         'Config': {'Env': ['OAC_RUNTIME_WORKSPACE=/environment/workspace']}}
+                         'Config': {'Env': ['OAC_RUNTIME_HOME=/home/runtime/.oac']}}
 
                 def check_output(argv, **kwargs):
                     if argv == ['docker', 'image', 'inspect', 'sha256:fixture']:

@@ -11,20 +11,18 @@ import (
 )
 
 type harness struct {
-	Kind      string   `json:"kind"`
-	Label     string   `json:"label"`
-	Protocols []string `json:"protocols"`
+	Kind  string `json:"kind"`
+	Label string `json:"label"`
+	// Component and Version name the native installer component and its pin.
+	Component string `json:"component"`
+	Version   string `json:"version"`
 }
 
 func declarations() []harness {
 	var result []harness
 	for _, kind := range builtin.Kinds() {
 		declaration, _ := builtin.Registry().Lookup(kind)
-		protocols := []string{}
-		for _, declared := range declaration.Providers {
-			protocols = append(protocols, declared.Protocol)
-		}
-		result = append(result, harness{Kind: kind, Label: declaration.Label, Protocols: protocols})
+		result = append(result, harness{Kind: kind, Label: declaration.Label, Component: declaration.Native.Component, Version: declaration.Native.Version})
 	}
 	return result
 }

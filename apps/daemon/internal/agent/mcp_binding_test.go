@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 func TestMCPBindingsPreserveOriginAuthorityAndPolicy(t *testing.T) {
@@ -18,7 +17,7 @@ func TestMCPBindingsPreserveOriginAuthorityAndPolicy(t *testing.T) {
 			t.Fatal("public binding unavailable", err)
 		}
 		b := got[0]
-		if b.ConnectionOrigin != "service" || b.CredentialAuthority != "project_vault" || b.Transport != "http" || !b.Required || (b.AllowedTools == nil) != (allow == nil) || *b.BearerToken != token {
+		if b.Transport != "http" || !b.Required || (b.AllowedTools == nil) != (allow == nil) || *b.BearerToken != token {
 			t.Fatal("public policy or authority changed")
 		}
 		*b.BearerToken = "mutated"
@@ -27,14 +26,14 @@ func TestMCPBindingsPreserveOriginAuthorityAndPolicy(t *testing.T) {
 		}
 	}
 	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{
-		{Server: agentplugin.MCPServer{Name: "stdio", Type: "stdio", Command: "node", Args: []string{"tool.js"}}, PackageRoot: "plugins/proof", InstallationRoot: "/private/installed"},
-		{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", HTTPHeaders: map[string]string{"X-Selected": "literal"}}, BearerToken: &token},
+		{Server: proto.PluginMCPServer{Name: "stdio", Type: "stdio", Command: "node", Args: []string{"tool.js"}}, PackageRoot: "plugins/proof", InstallationRoot: "/private/installed"},
+		{Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", HTTPHeaders: map[string]string{"X-Selected": "literal"}}, BearerToken: &token},
 	}}
 	got, err := ResolveMCPBindings(proto.PromptRequestPayload{LocalEnvironment: local})
 	if err != nil || len(got) != 2 {
 		t.Fatal("installed bindings unavailable", err)
 	}
-	if got[0].ConnectionOrigin != "environment" || got[0].CredentialAuthority != "none" || got[0].Stdio.PackageRoot != "plugins/proof" || got[0].Required || got[0].AllowedTools != nil || got[1].CredentialAuthority != "environment_configuration" {
+	if got[0].Stdio.PackageRoot != "plugins/proof" || got[0].Required || got[0].AllowedTools != nil {
 		t.Fatal("installed identity or authority changed")
 	}
 	got[0].Stdio.Server.Args[0] = "mutated"
@@ -58,11 +57,11 @@ func TestMCPBindingsDistinguishAbsentAndEmptyProfile(t *testing.T) {
 
 func TestMCPBindingsRejectRelocationAndAmbiguousInstallation(t *testing.T) {
 	public := []proto.MCPHTTPServer{{ConnectionOrigin: "service", ServerLabel: "remote", ServerURL: "https://example.test/mcp"}}
-	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}}
+	local := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}}
 	for _, req := range []proto.PromptRequestPayload{
 		{MCPHTTPServers: &public, LocalEnvironment: local},
 		{LocalEnvironment: &proto.LocalEnvironment{MCP: append(local.MCP, local.MCP[0])}},
-		{LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", BearerTokenEnvVar: "MISSING"}}}}},
+		{LocalEnvironment: &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp", BearerTokenEnvVar: "MISSING"}}}}},
 	} {
 		if _, err := ResolveMCPBindings(req); err == nil {
 			t.Fatal("unsupported authority accepted")
@@ -79,7 +78,7 @@ func TestPublicEnvironmentMCPRetainsVaultAuthority(t *testing.T) {
 	if err != nil || len(got) != 1 {
 		t.Fatal("environment binding unavailable", err)
 	}
-	if got[0].ConnectionOrigin != "environment" || got[0].CredentialAuthority != "project_vault" || !got[0].Required || (*got[0].AllowedTools)[0] != "prove" {
+	if !got[0].Required || (*got[0].AllowedTools)[0] != "prove" {
 		t.Fatal("public policy changed")
 	}
 	*got[0].BearerToken = "mutated"
@@ -94,7 +93,7 @@ func TestPublicEnvironmentMCPRetainsVaultAuthority(t *testing.T) {
 		}
 	}
 	public[0].ConnectionOrigin = "environment"
-	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}
+	req.LocalEnvironment.MCP = []proto.EnvironmentMCP{{Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.test/mcp"}}}
 	if _, err := ResolveMCPBindings(req); err == nil {
 		t.Fatal("public/Plugin identity collision accepted")
 	}

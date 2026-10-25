@@ -132,7 +132,7 @@ func TestThirdHarnessPublicOnboarding(t *testing.T) {
 	}
 	for deadline := time.Now().Add(3 * time.Second); ; {
 		current, _, _ := peer.AgentKindStatus("fixture_harness")
-		if !current.Capabilities.DurableInputReceipts {
+		if !current.Capabilities.DurableInputReceipts.IsSupported() {
 			break
 		}
 		if time.Now().After(deadline) {

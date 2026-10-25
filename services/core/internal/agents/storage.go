@@ -48,14 +48,3 @@ type Revision struct {
 	// ModelProvider nil keeps the saved bundle.
 	ModelProvider *ModelProviderChange
 }
-
-// Reader reads saved Agents of one tenant. An agent ID or list cursor that
-// cannot name an Agent is a missing Agent: ErrNotFound.
-type Reader interface {
-	GetAgent(ctx context.Context, tenantID, agentID string) (Agent, error)
-	ListAgents(context.Context, ListQuery) (Page, error)
-	// GetAgentWithModelProvider reads the Agent and its opened model provider
-	// bundle from one snapshot. The bundle is nil when the Agent has none; a
-	// bundle that fails to open is an internal error.
-	GetAgentWithModelProvider(ctx context.Context, tenantID, agentID string) (Agent, *v1.ModelProviderInput, error)
-}

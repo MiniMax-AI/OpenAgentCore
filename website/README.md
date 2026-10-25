@@ -1,6 +1,6 @@
 # OpenAgentCore website
 
-The website is the landing page plus the published documentation, built with [VitePress](https://vitepress.dev) and deployed to GitHub Pages. It reads the repository's existing `docs/`, `contracts/` and `docs.json` in place: no page is copied, moved or rewritten.
+The website is the landing page plus the published documentation, built with [VitePress](https://vitepress.dev) and deployed to GitHub Pages. It reads the repository's `docs/`, `contracts/` and `docs.json` in place: no page is copied, moved or rewritten.
 
 ## Run it
 
@@ -58,6 +58,4 @@ Pull request checks build under the published `/OpenAgentCore/` path. Output tes
 
 ## Maintain bilingual documentation
 
-English documentation owns technical facts. Translate each authored page in `docs/` and `contracts/agents-api/` into its mirrored `zh/` path in the same change. Keep code blocks, API identifiers and exact Web action names unchanged; translate explanatory prose and preserve the English heading ID with an explicit `{#id}` anchor. Resolve relative links from the Chinese file to the corresponding Chinese document or shared original asset. The Harness catalog generator produces both language editions. Extend other generators before translating their output; preserve generated regions in otherwise authored pages byte for byte, with a Chinese explanation before the region.
-
-Each Chinese frontmatter records `source` as the repository-relative English path and `source_hash` as its SHA-256 digest. Update that digest only after reconciling the complete translation with the source. `pnpm --dir website check-translations` checks coverage and freshness before the build. `docs.json` remains the single navigation order; titles are read from the selected language's source.
+The translation rules are in [Documentation](../AGENTS.md#documentation). Give each Chinese heading the English heading ID as an explicit `{#id}` anchor. Resolve relative links from the Chinese file to the corresponding Chinese document or shared original asset. The Harness catalog generator produces both language editions. Extend other generators before translating their output; preserve generated regions in otherwise authored pages byte for byte, with a Chinese explanation before the region. Update `source_hash` only after reconciling the complete translation with the source. `pnpm --dir website check-translations` checks coverage and freshness before the build. `docs.json` remains the single navigation order; titles are read from the selected language's source.

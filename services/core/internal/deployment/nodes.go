@@ -9,9 +9,10 @@ import (
 	"math"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/coremetrics"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
 )
@@ -22,17 +23,21 @@ func (s *Service) ListNodes(ctx context.Context) ([]Node, error) {
 	if err != nil {
 		return nil, err
 	}
+	recommend, err := s.recommendations(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]Node, 0, len(records))
 	for _, n := range records {
-		out = append(out, nodeView(n))
+		out = append(out, nodeView(n, recommend))
 	}
 	return out, nil
 }
 
-func nodeView(n NodeRecord) Node {
+func nodeView(n NodeRecord, recommend func(NodeHealth) *Capacity) Node {
 	health := n.Health
 	health.Host = nil
-	return Node{Rollout: nodeRollout(n), NodeHealth: health, ProviderReady: n.Online && n.ServingReady, Running: n.Running, Snapshots: n.Snapshots, ID: n.ID, Name: n.Name, CoreURL: n.CoreURL, EnrollmentID: n.EnrollmentID, Provider: n.Provider, Online: n.Online, LastSeenAt: n.LastSeenAt, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained, Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt}
+	return Node{Rollout: nodeRollout(n), NodeHealth: health, ProviderReady: n.Online && n.ServingReady, Running: n.Running, Snapshots: n.Snapshots, ID: n.ID, Name: n.Name, CoreURL: n.CoreURL, EnrollmentID: n.EnrollmentID, Provider: n.Provider, Online: n.Online, LastSeenAt: n.LastSeenAt, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained, Active: n.Active, Reserved: n.Reserved, Retained: n.Retained, CleanupPending: n.CleanupPending, CreatedAt: n.CreatedAt, RecommendedCapacity: recommend(n.Health)}
 }
 
 // NodeDetail returns one node with its last host observation and its host
@@ -53,7 +58,11 @@ func (s *Service) NodeDetail(ctx context.Context, id, window string) (NodeDetail
 	if err != nil {
 		return NodeDetail{}, err
 	}
-	result := NodeDetail{Node: nodeView(record), History: HostHistory{ResolutionSeconds: span.ResolutionSeconds, Points: historyPoints(span, samples)}}
+	recommend, err := s.recommendations(ctx)
+	if err != nil {
+		return NodeDetail{}, err
+	}
+	result := NodeDetail{Node: nodeView(record, recommend), History: HostHistory{ResolutionSeconds: span.ResolutionSeconds, Points: historyPoints(span, samples)}}
 	if record.Health.Host != nil {
 		result.Host = *record.Health.Host
 	}
@@ -129,10 +138,13 @@ func (s *Service) RemoveNode(ctx context.Context, id string) error {
 
 // CreateEnrollment issues a one-use enrollment token. Its ID is a public,
 // non-secret handle: the node the token registers reports it as enrollment_id.
-func (s *Service) CreateEnrollment(ctx context.Context, capacity Capacity) (EnrollmentToken, error) {
+// A limit left unset is derived from the node's host when it enrolls.
+func (s *Service) CreateEnrollment(ctx context.Context, limits EnrollmentLimits) (EnrollmentToken, error) {
 	// The retained limit depends on the provider, so the transaction checks it.
-	if err := validateNode("enrollment", capacity.MaxActive, capacity.MaxActive); err != nil {
-		return EnrollmentToken{}, err
+	if limits.MaxActive != nil {
+		if err := validateNode("enrollment", *limits.MaxActive, *limits.MaxActive); err != nil {
+			return EnrollmentToken{}, err
+		}
 	}
 	var bytes [32]byte
 	if _, err := rand.Read(bytes[:]); err != nil {
@@ -140,12 +152,23 @@ func (s *Service) CreateEnrollment(ctx context.Context, capacity Capacity) (Enro
 	}
 	result := EnrollmentToken{Token: hex.EncodeToString(bytes[:]), ID: uuid.NewString()}
 	err := s.withManager(ctx, func(tx NodeTx, d Record) error {
-		retained, err := s.registry.RetainedLimit(d.Provider, capacity.MaxActive, capacity.MaxRetained)
-		if err != nil {
-			return err
-		}
-		if err := validateNode("enrollment", capacity.MaxActive, retained); err != nil {
-			return err
+		// A provider without checkpoints keeps no retained limit, so the token ignores it.
+		if limits.MaxRetained != nil {
+			checkpoint, err := s.registry.SupportsCheckpoint(d.Provider)
+			if err != nil {
+				return err
+			}
+			if !checkpoint {
+				limits.MaxRetained = nil
+			} else {
+				active := 1
+				if limits.MaxActive != nil {
+					active = *limits.MaxActive
+				}
+				if err := validateNode("enrollment", active, *limits.MaxRetained); err != nil {
+					return err
+				}
+			}
 		}
 		if d.Reset != nil {
 			return ErrResetInProgress
@@ -156,7 +179,8 @@ func (s *Service) CreateEnrollment(ctx context.Context, capacity Capacity) (Enro
 		if _, err := s.specification(d); err != nil {
 			return ErrConflict
 		}
-		result.ExpiresAt, err = tx.CreateEnrollment(NewEnrollment{ID: result.ID, TokenDigest: tokenDigest(result.Token), InstallationID: d.InstallationID, MaxActive: capacity.MaxActive, MaxRetained: retained})
+		var err error
+		result.ExpiresAt, err = tx.CreateEnrollment(NewEnrollment{ID: result.ID, TokenDigest: tokenDigest(result.Token), InstallationID: d.InstallationID, MaxActive: limits.MaxActive, MaxRetained: limits.MaxRetained})
 		return err
 	})
 	if err != nil {
@@ -166,12 +190,16 @@ func (s *Service) CreateEnrollment(ctx context.Context, capacity Capacity) (Enro
 }
 
 // Enroll registers a node with a one-use enrollment token.
-func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (NodeIdentity, error) {
+func (s *Service) Enroll(ctx context.Context, token string, input machineapi.NodeEnrollment) (NodeIdentity, error) {
 	nodeID, err := parseID(input.NodeID)
 	if err != nil || !validNodeCredential(input.Credential) || !validDigest(input.BackendFingerprint) {
 		return NodeIdentity{}, ErrInvalidInput
 	}
 	if err := validateNode(input.Name, 1, 1); err != nil {
+		return NodeIdentity{}, err
+	}
+	host, err := enrollmentHealth(input)
+	if err != nil {
 		return NodeIdentity{}, err
 	}
 	var result NodeIdentity
@@ -212,11 +240,11 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 		if input.CoreURL != s.rules.PublicURL() {
 			return ErrNodeAddressMismatch
 		}
-		retained, err := s.registry.RetainedLimit(d.Provider, receipt.MaxActive, receipt.MaxRetained)
+		capacity, err := s.enrolledCapacity(d, spec, host, receipt)
 		if err != nil {
 			return err
 		}
-		n, err := tx.InsertNode(NewNode{ID: nodeID, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialDigest: tokenDigest(input.Credential), MaxActive: receipt.MaxActive, MaxRetained: retained, SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: input.DeploymentGeneration, CoreURL: input.CoreURL, EnrollmentID: receipt.ID})
+		n, err := tx.InsertNode(NewNode{ID: nodeID, InstallationID: d.InstallationID, Name: input.Name, BackendFingerprint: input.BackendFingerprint, CredentialDigest: tokenDigest(input.Credential), MaxActive: capacity.MaxActive, MaxRetained: capacity.MaxRetained, SpecificationDigest: input.SpecificationDigest, DeploymentGeneration: input.DeploymentGeneration, CoreURL: input.CoreURL, EnrollmentID: receipt.ID})
 		if err != nil {
 			return err
 		}
@@ -236,8 +264,48 @@ func (s *Service) Enroll(ctx context.Context, token string, input Enrollment) (N
 	return result, nil
 }
 
+// enrolledCapacity completes the token's limits: each unset limit is the
+// recommendation for the node's host, and the retained limit is never below the
+// active one or beyond what the provider keeps.
+func (s *Service) enrolledCapacity(d Record, spec sandbox.DeploymentSpec, host NodeHealth, receipt EnrollmentRecord) (Capacity, error) {
+	capacity := Capacity{}
+	if receipt.MaxActive != nil {
+		capacity.MaxActive = *receipt.MaxActive
+	}
+	if receipt.MaxRetained != nil {
+		capacity.MaxRetained = *receipt.MaxRetained
+	}
+	checkpoint, err := s.registry.SupportsCheckpoint(d.Provider)
+	if err != nil {
+		return Capacity{}, err
+	}
+	// Without checkpoints a retained limit is just the active one, which needs no host.
+	if receipt.MaxActive == nil || receipt.MaxRetained == nil && checkpoint {
+		recommended, ok := RecommendCapacity(host, spec.Resources, checkpoint)
+		if !ok {
+			return Capacity{}, ErrNodeHostUnmeasured
+		}
+		if receipt.MaxActive == nil {
+			// An explicit retained limit binds: active never exceeds it.
+			capacity.MaxActive = recommended.MaxActive
+			if receipt.MaxRetained != nil && checkpoint {
+				capacity.MaxActive = min(capacity.MaxActive, capacity.MaxRetained)
+			}
+		}
+		if receipt.MaxRetained == nil {
+			capacity.MaxRetained = recommended.MaxRetained
+		}
+	}
+	retained, err := s.registry.RetainedLimit(d.Provider, capacity.MaxActive, max(capacity.MaxRetained, capacity.MaxActive))
+	if err != nil {
+		return Capacity{}, err
+	}
+	capacity.MaxRetained = retained
+	return capacity, nil
+}
+
 func identity(n StoredNode, provider string) NodeIdentity {
-	return NodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: n.DeploymentGeneration, NodeID: n.ID, InstallationID: n.InstallationID, Provider: provider, BackendFingerprint: n.BackendFingerprint, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained}
+	return NodeIdentity{NodeIdentity: machineapi.NodeIdentity{SpecificationDigest: n.SpecificationDigest, DeploymentGeneration: n.DeploymentGeneration, NodeID: n.ID, InstallationID: n.InstallationID, Provider: provider, MaxActive: n.MaxActive, MaxRetained: n.MaxRetained}, BackendFingerprint: n.BackendFingerprint}
 }
 
 // AuthenticateNode checks a node credential and returns the node's identity.
@@ -315,21 +383,21 @@ func (s *Service) generationSpecification(tx NodeReads, d Record, generation uin
 }
 
 // NodeStatus reports the authenticated node's Core-owned presence.
-func (s *Service) NodeStatus(ctx context.Context, nodeID, credential string) (NodeStatus, error) {
+func (s *Service) NodeStatus(ctx context.Context, nodeID, credential string) (machineapi.NodeStatus, error) {
 	identity, err := s.AuthenticateNode(ctx, nodeID, credential)
 	if err != nil {
-		return NodeStatus{}, err
+		return machineapi.NodeStatus{}, err
 	}
 	nodes, err := s.reader.Nodes(ctx)
 	if err != nil {
-		return NodeStatus{}, err
+		return machineapi.NodeStatus{}, err
 	}
 	for _, n := range nodes {
 		if n.ID == identity.NodeID {
-			return NodeStatus{NodeIdentity: identity, Connected: n.Online, ProviderReady: n.Online && n.ServingReady}, nil
+			return machineapi.NodeStatus{NodeIdentity: identity.NodeIdentity, Connected: n.Online, ProviderReady: n.Online && n.ServingReady}, nil
 		}
 	}
-	return NodeStatus{}, ErrNodeCredential
+	return machineapi.NodeStatus{}, ErrNodeCredential
 }
 
 // NodeConfiguration is the read-only bootstrap of an enrollment token or node
@@ -352,13 +420,12 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		}
 		var node *StoredNode
 		var installation string
-		var active, retained int
 		if nodeID == "" {
 			r, err := tx.LoadEnrollment(tokenDigest(token))
 			if err != nil || r.Consumed || !r.ExpiresAt.After(time.Now()) {
 				return ErrNodeCredential
 			}
-			installation, active, retained = r.InstallationID, r.MaxActive, r.MaxRetained
+			installation = r.InstallationID
 		} else {
 			id, err := parseID(nodeID)
 			if err != nil {
@@ -368,7 +435,7 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 			if err != nil || n.CredentialDigest != tokenDigest(token) {
 				return ErrNodeCredential
 			}
-			node, installation, active, retained = &n, n.InstallationID, n.MaxActive, n.MaxRetained
+			node, installation = &n, n.InstallationID
 		}
 		// A claimed installation rejects foreign credentials identically before
 		// and after initialization.
@@ -407,7 +474,7 @@ func (s *Service) NodeConfiguration(ctx context.Context, nodeID, token string, g
 		if err != nil {
 			return err
 		}
-		result = NodeConfiguration{MaxActive: active, MaxRetained: retained, InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.Provider)}
+		result = NodeConfiguration{InstallationID: d.InstallationID, Provider: d.Provider, CoreURL: s.rules.PublicURL(), Generation: selected, Specification: spec, SpecificationDigest: spec.Digest(d.Provider)}
 		return nil
 	})
 	if err != nil {
@@ -537,7 +604,7 @@ func (s *Service) recordGenerations(tx NodeTx, d Record, n StoredNode, statuses 
 	if err != nil {
 		return err
 	}
-	checkpointSupported := adapter.Operations()["Initial"].State == providercontract.Supported
+	checkpointSupported := sandbox.SupportsCheckpoint(adapter.Operations())
 	seen := map[uint64]bool{}
 	for _, status := range statuses {
 		if status.Checkpoint != nil && (status.State != "ready" || !checkpointSupported || status.Checkpoint.Validate() != nil) || status.State == "ready" && checkpointSupported && status.Checkpoint == nil {

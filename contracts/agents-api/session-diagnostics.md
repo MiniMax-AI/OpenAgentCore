@@ -25,7 +25,7 @@ The object is `core.session_diagnostics`, with `session_id`, the official Sessio
 
 A hosted provisioning failure takes precedence over input activity, and input activity over the latest root Turn; the public Session response uses the same precedence. Private outcome text, native messages, provider bodies, command text, paths and credentials are never included. Unknown outcome codes become `internal_error`; no prefix matching or reason-text parsing is used.
 
-Provisioning parameters come from the confirmed structured receipt, persisted in the failure transaction that settles the Environment and its input and records the events. `step` is `setup`, `python`, `npm`, `system`, `file`, `skill` or null. `index` is a nonnegative JSON-safe integer for setup only, otherwise null. `exit_code` is 1 to 255 for script steps, otherwise null. Details that were not recorded remain null. These private fields do not change the public failure reason or SSE.
+Provisioning parameters come from the confirmed structured receipt, persisted in the failure transaction that settles the Environment and its input and records the events. `step` is `setup`, `python`, `npm`, `file`, `skill`, `harness` or null. `index` is a nonnegative JSON-safe integer for setup only, otherwise null. `exit_code` is 1 to 255 for script steps, otherwise null. Details that were not recorded remain null. These private fields do not change the public failure reason or SSE.
 
 ## Turn snapshot and Item receipt timing
 

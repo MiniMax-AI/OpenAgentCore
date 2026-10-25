@@ -1,7 +1,7 @@
 ---
 title: "文件与 Skill"
 source: contracts/agents-api/source-files.md
-source_hash: 86d63f3ea780394ed99c0f5ec9d566117140a8650cb780e4b038e4ab45155ba9
+source_hash: a87f5745f8d96e7399726fa99cb8c69fc083ee03faf122bce7c4fc33ad95b5d0
 ---
 
 Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的项目资源，不依赖 Session。File 保存上传字节，Environment 通过 ID 复制它们。Skill 保存不可变、版本化的包，由模板和 Session 引用。项目的所有 API 密钥共享这些资源。
@@ -22,8 +22,8 @@ Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的
 
 ### 上传 {#upload}
 
-- 仅接受 `purpose=user_data`。不支持其他用途、`expires_after` 或 Uploads API。
-- 文件可为空，最大 512 MiB；整个 multipart 正文可额外增加 64 KiB。更大上传返回 413 `request_too_large`。传输须在五分钟内完成。
+- 仅接受 `purpose=user_data`。不支持其他用途、`expires_after` 或 Uploads API。缺少 `purpose` 或取其他值，或缺少 `file` 部分时，返回 400，`param: "purpose"`，code 为 null。
+- 文件至少一个字节，最大 512 MiB；空文件返回 400 `File is empty.`，code 与 param 为 null；整个 multipart 正文可额外增加 64 KiB。更大上传返回 413 `request_too_large`。传输须在五分钟内完成。
 - 部分缺失、重复或未知，存在 `Content-Encoding` 或 `Content-Transfer-Encoding` 头，或文件名为空、超过 1,024 字节、非 UTF-8、包含 NUL 时返回 400。完整请求通过验证之前 Core 不存储任何内容。
 - Core 不对上传去重。响应丢失后，先列出 File 再次上传。
 
@@ -64,11 +64,11 @@ Core 在自身数据库中以 PostgreSQL 大对象存储 File 字节。上传和
 | 操作 | 行为 |
 | --- | --- |
 | `POST /skills` | 上传新 Skill。首版同时为默认和最新版本 |
-| `POST /skills/{skill_id}/versions` | 上传新版本。表单 `default` 为 `true` 时设为默认；`false` 或省略时默认不变 |
+| `POST /skills/{skill_id}/versions` | 上传新版本。表单 `default` 取 `true` 或 `false`（不区分大小写），分别设为默认或保持默认不变；省略时默认不变 |
 | `GET /skills`, `GET /skills/{skill_id}` | Skill 元数据，不解密任何包 |
-| `POST /skills/{skill_id}` | `{"default_version": "<n>"}` 修改默认版本 |
+| `POST /skills/{skill_id}` | `{"default_version": "<n>"}` 修改默认版本。请求体错误是以该成员为 `param` 的字段错误；Skill 没有的版本返回 404，`param: "default_version"` |
 | `DELETE /skills/{skill_id}` | 删除 Skill 与所有版本 |
-| `GET /skills/{skill_id}/content` | 默认版本 ZIP |
+| `GET /skills/{skill_id}/content` | 默认版本 ZIP，`Content-Type: application/zip`，文件名 `<name>-<version>.zip` |
 | `GET /skills/{skill_id}/versions`, `GET /skills/{skill_id}/versions/{version}` | 版本元数据。列表按版本号排序，`after` 是版本 ID（`skillver_…`），不是数字 |
 | `GET /skills/{skill_id}/versions/{version}/content` | 指定版本 ZIP |
 | `DELETE /skills/{skill_id}/versions/{version}` | 见[删除版本](#delete-a-version) |
@@ -88,6 +88,8 @@ curl "$OPENAI_BASE_URL/skills" -H "Authorization: Bearer $OPENAI_API_KEY" -F fil
 - `SKILL.md` 使用 UTF-8，最大 256 KiB，以 YAML frontmatter 开始。`name` 必填：小写字母与数字，可用单个 `-` 或 `_` 分隔，最多 64 字符。`description` 必填且非空。`license`、`compatibility` 和字符串值 `metadata` 映射可选；其他键被拒绝。
 - 条目为普通文件或目录，使用规范相对路径。链接、特殊文件、绝对路径、`..` 组件和重复项被拒绝。
 - 限制：压缩后 5 MiB，展开后 20 MiB，500 个文件，以及含目录在内的 1,000 个 ZIP 条目。
+
+被拒绝的上传返回 400 `invalid_request_error`，`param: "files"`，code 为 `invalid_value`，message 说明原因。缺少 `files` 部分、未知部分以及创建时携带 `default` 分别返回针对该成员的 `Missing required parameter` 与 `Unknown parameter` 错误；无效的 `default` 的 `param: "default"`。上传路由还会拒绝包含 `_` 的 `name` 以及超过 1024 个字符的 `description`。已存储的 Skill、插件 Skill 和 Environment 安装仍接受名称中的 `_` 和任何非空 `description`。
 
 Core 将每个版本的包加密并绑定到项目、Skill 与版本。ZIP 上传保留可执行位；目录上传以 mode 0644 存储文件。
 

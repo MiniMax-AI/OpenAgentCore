@@ -80,7 +80,7 @@ The administrator signs in with the deployment's [Core key](../getting-started/o
 - The session cookie `core_console_session` is HttpOnly, `SameSite=Strict`, and `Secure` when `OAC_PUBLIC_URL` is HTTPS. It lasts 12 hours.
 - Sessions live only in the console's memory, at most 64 at a time; the oldest is dropped first. A console restart or a Core key rotation signs everyone out.
 - At most two sign-in checks run at once; another attempt gets 429 with `Retry-After: 1`.
-- Failed attempts share a budget of 10 per minute; beyond it, a wrong key gets 429 with `Retry-After: 60`. The correct key always signs in, which is why the console refuses to start with a Core key shorter than 32 characters.
+- Failed attempts share a budget of 10 per minute; beyond it, a wrong key gets 429 with `Retry-After: 60`. The correct key always signs in, which is why the console refuses to start with a Core key that breaks the [key format](../getting-started/operations.md#core-key).
 
 Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a method other than `POST`, 415 for a body that is not JSON, 429 as above, and 503 when the console cannot create a session.
 

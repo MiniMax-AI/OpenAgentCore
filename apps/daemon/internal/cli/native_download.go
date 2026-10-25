@@ -45,64 +45,36 @@ func nativeInstallerBase(onboardURL string) string {
 	return strings.TrimSuffix(onboardURL, "installation") + "install/" + Version
 }
 
-// obtainNativeComponents makes the distribution directory hold node and each selected Harness.
-// Without a Core address nothing is downloaded and a missing component is an error.
-func obtainNativeComponents(ctx context.Context, out io.Writer, o *nativeInstallOptions, selected []string) error {
-	var missing []string
-	for _, name := range append([]string{"node"}, selected...) {
-		_, inBundle := os.Lstat(nativeComponentRoot(o.Bundle, name))
-		_, installed := os.Lstat(nativeComponentRoot(o.Directory, name))
-		if inBundle != nil && installed != nil {
-			missing = append(missing, name)
-		}
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	if o.OnboardURL == "" {
-		return fmt.Errorf("install: component %s is missing from %s; extract %s-%s-%s.tar.gz into it and retry", missing[0], o.Bundle, runtime.GOOS, runtime.GOARCH, missing[0])
-	}
-	return fetchNativeComponents(ctx, out, o.OnboardURL, o.Bundle, missing)
-}
-
-// fetchNativeComponents downloads the archive of each named component and extracts it into the
-// distribution directory. Verified archives stay in the Runtime home, keyed by version, so a later
-// installation of the same release reuses them. This is the only owner of that directory's lock.
-func fetchNativeComponents(ctx context.Context, out io.Writer, onboardURL, bundle string, names []string) error {
+// nativeDownloadDirectory holds only transient files: the installer's bundle.* directories and the
+// partial archive that a retry or a later run resumes.
+func nativeDownloadDirectory() (string, error) {
 	home, err := paths.Root()
 	if err != nil {
-		return err
+		return "", err
 	}
 	cache := filepath.Join(home, "native-download")
 	if err = runtimefs.EnsurePrivateDir(cache); err != nil {
-		return err
+		return "", err
 	}
-	held, err := os.OpenRoot(cache)
-	if err != nil {
-		return err
-	}
-	defer held.Close()
-	unlock, err := runtimefs.LockDirectory(held)
-	if err != nil {
-		return errors.New("install: another native download is running; wait for it to finish and retry")
-	}
-	defer unlock()
 	pruneNativeDownloads(cache)
 	dir := filepath.Join(cache, Version)
-	if err = os.MkdirAll(dir, 0700); err != nil {
-		return err
+	return dir, os.MkdirAll(dir, 0700)
+}
+
+// downloadNativeComponent fetches the archive of one component, verifies it against Core's
+// checksum and extracts it into stage. It returns the archive, which the caller deletes once the
+// component is published.
+func downloadNativeComponent(ctx context.Context, out io.Writer, onboardURL, name, stage string, expected nativeComponent) (string, error) {
+	dir, err := nativeDownloadDirectory()
+	if err != nil {
+		return "", err
 	}
-	for _, name := range names {
-		file := runtime.GOOS + "-" + runtime.GOARCH + "-" + name
-		archive, err := fetchNativeArchive(ctx, out, nativeInstallerBase(onboardURL)+"/"+file, dir, file)
-		if err == nil {
-			err = extractNativeComponent(ctx, out, archive, bundle, name)
-		}
-		if err != nil {
-			return err
-		}
+	file := runtime.GOOS + "-" + runtime.GOARCH + "-" + name
+	archive, err := fetchNativeArchive(ctx, out, nativeInstallerBase(onboardURL)+"/"+file, dir, file)
+	if err != nil {
+		return "", err
 	}
-	return nil
+	return archive, extractNativeComponent(ctx, out, archive, stage, name, expected)
 }
 
 // pruneNativeDownloads keeps the current version and recent distribution directories of running
@@ -118,22 +90,13 @@ func pruneNativeDownloads(cache string) {
 	}
 }
 
-// fetchNativeArchive returns the verified cached archive, downloading or resuming it when needed.
+// fetchNativeArchive returns the verified archive, downloading or resuming it as needed.
 func fetchNativeArchive(ctx context.Context, out io.Writer, url, dir, file string) (string, error) {
 	want, err := fetchNativeChecksum(ctx, out, url+".sha256")
 	if err != nil {
 		return "", err
 	}
-	archive := filepath.Join(dir, file+".tar.gz")
-	if got, err := nativeFileDigest(ctx, archive); err == nil {
-		if got == want {
-			fmt.Fprintf(out, "Using the downloaded %s archive.\n", file)
-			return archive, nil
-		}
-		fmt.Fprintf(out, "The downloaded %s archive failed verification and was discarded.\n", file)
-		_ = os.Remove(archive)
-	}
-	part := archive + ".part"
+	part := filepath.Join(dir, file+".tar.gz.part")
 	for pass := 0; ; pass++ {
 		resumed := false
 		if info, err := os.Stat(part); err == nil && info.Size() > 0 {
@@ -148,7 +111,7 @@ func fetchNativeArchive(ctx context.Context, out io.Writer, url, dir, file strin
 			return "", err
 		}
 		if got == want {
-			return archive, os.Rename(part, archive)
+			return part, nil
 		}
 		_ = os.Remove(part)
 		// A resumed file may have been damaged earlier; one clean download decides.
@@ -329,10 +292,10 @@ func nativeFileDigest(ctx context.Context, path string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// extractNativeComponent unpacks components/<name>/ from a verified archive into the distribution
-// directory. Only regular files and directories under that path are accepted; per-file digests are
-// checked later against bundle.json.
-func extractNativeComponent(ctx context.Context, out io.Writer, archive, bundle, name string) error {
+// extractNativeComponent unpacks components/<name>/ from a verified archive into stage. Only regular
+// files and directories under that path are accepted, and only files that bundle.json lists; every
+// file is then checked against its digest.
+func extractNativeComponent(ctx context.Context, out io.Writer, archive, stage, name string, expected nativeComponent) error {
 	var size uint64
 	if err := eachNativeEntry(ctx, archive, name, func(h *tar.Header, _ string, _ io.Reader) error {
 		size += uint64(h.Size)
@@ -340,28 +303,27 @@ func extractNativeComponent(ctx context.Context, out io.Writer, archive, bundle,
 	}); err != nil {
 		return err
 	}
-	parent := filepath.Join(bundle, "components")
-	if err := os.MkdirAll(parent, 0700); err != nil {
-		return err
-	}
-	if err := requireNativeSpace(parent, size); err != nil {
+	if err := requireNativeSpace(filepath.Dir(stage), size); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "Extracting %s...\n", name)
-	stage := filepath.Join(parent, ".extract-"+name)
-	if err := os.RemoveAll(stage); err != nil {
-		return err
-	}
-	defer os.RemoveAll(stage)
 	if err := eachNativeEntry(ctx, archive, name, func(h *tar.Header, rel string, r io.Reader) error {
 		target := filepath.Join(stage, filepath.FromSlash(rel))
 		if h.Typeflag == tar.TypeDir {
 			return os.MkdirAll(target, 0700)
 		}
+		listed, ok := expected.Files[rel]
+		if !ok {
+			return errors.New("install: component archive holds a file that bundle.json does not list")
+		}
 		if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 			return err
 		}
-		file, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		mode := os.FileMode(0600)
+		if listed.Executable {
+			mode = 0700
+		}
+		file, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 		if err != nil {
 			return err
 		}
@@ -373,7 +335,13 @@ func extractNativeComponent(ctx context.Context, out io.Writer, archive, bundle,
 	}); err != nil {
 		return err
 	}
-	return os.Rename(stage, nativeComponentRoot(bundle, name))
+	if err := checkComponentFiles(ctx, stage, expected); err != nil {
+		if errors.Is(err, errNativeComponentMismatch) || errors.Is(err, os.ErrNotExist) {
+			return errors.New("install: component archive does not match bundle.json; Core serves inconsistent installer files")
+		}
+		return err
+	}
+	return nil
 }
 
 // eachNativeEntry visits the files and directories of a component archive; the root directory itself is skipped.

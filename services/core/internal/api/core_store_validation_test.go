@@ -84,8 +84,8 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 
 func TestCoreActiveCapacityUpperBoundNamesSubmittedField(t *testing.T) {
 	deps, fakes := sandboxFakes(t)
-	fakes.deployment.createEnrollment = func(_ context.Context, capacity deployment.Capacity) (deployment.EnrollmentToken, error) {
-		return deployment.EnrollmentToken{}, nodeCapacity(capacity.MaxActive)
+	fakes.deployment.createEnrollment = func(_ context.Context, limits deployment.EnrollmentLimits) (deployment.EnrollmentToken, error) {
+		return deployment.EnrollmentToken{}, nodeCapacity(*limits.MaxActive)
 	}
 	fakes.deployment.updateNode = func(_ context.Context, _ string, input deployment.NodeUpdate) error {
 		return nodeCapacity(input.MaxActive)

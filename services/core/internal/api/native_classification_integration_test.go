@@ -30,7 +30,7 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 			receipt := submitMessage(t, pool, tenant, session.ID, "input", "test")
 			transitionTurn(t, pool, tenant, session.ID, receipt.TurnID, sessions.TurnTransition{ExpectedStatus: sessions.TurnQueued, Status: sessions.TurnInProgress})
 			status := 503
-			result := execution.Result{ErrorCode: "engine_failed", Error: "Bearer secret-canary https://private.example/key", EngineErrorCode: code, EngineHTTPStatus: &status, Done: proto.DonePayload{Usage: proto.Usage{InputTokens: 7, OutputTokens: 3}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-secret-canary"}}}
+			result := execution.Result{ErrorCode: "engine_failed", Error: "Bearer secret-canary https://private.example/key", EngineErrorCode: code, EngineHTTPStatus: &status, Done: proto.DonePayload{Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 7, OutputTokens: 3}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "native-secret-canary"}}}
 			outcome, err := json.Marshal(result)
 			if err != nil {
 				t.Fatal(err)
@@ -41,7 +41,7 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 				t.Fatal(err)
 			}
 			var saved execution.Result
-			if err = json.Unmarshal(snap.Turn.Outcome, &saved); err != nil || saved.EngineErrorCode != code || saved.EngineHTTPStatus == nil || *saved.EngineHTTPStatus != 503 || saved.Done.Usage.InputTokens != 7 || saved.Done.Usage.OutputTokens != 3 || saved.Done.Metadata[proto.DoneMetaAgentSessionID] != "native-secret-canary" {
+			if err = json.Unmarshal(snap.Turn.Outcome, &saved); err != nil || saved.EngineErrorCode != code || saved.EngineHTTPStatus == nil || *saved.EngineHTTPStatus != 503 || saved.Done.Usage.Tokens.InputTokens != 7 || saved.Done.Usage.Tokens.OutputTokens != 3 || saved.Done.Metadata[proto.DoneMetaAgentSessionID] != "native-secret-canary" {
 				t.Fatal("outcome round trip lost facts", err)
 			}
 			want := code
@@ -72,14 +72,38 @@ func TestNativeClassificationPostgresRoundTripAndPublicPrivacy(t *testing.T) {
 				t.Fatal(err)
 			}
 			eventBytes, _ := json.Marshal(events)
-			if strings.Contains(string(eventBytes), "canary") || strings.Contains(string(eventBytes), "engine_error") || strings.Contains(string(eventBytes), "http_status") {
+			if strings.Contains(string(eventBytes), "canary") || strings.Contains(string(eventBytes), "private.example") || strings.Contains(string(eventBytes), "http_status") {
 				t.Fatal("private metadata entered SSE")
 			}
-			// Remove only additive private fields. All public response bytes must match.
+			// The Turn read and its stream event publish the same category: official names stay, anything else is internal_error.
+			public := code
+			if code == "secret-canary" {
+				public = "internal_error"
+			}
+			if !strings.Contains(string(before[1]), `"error":{"code":"`+public+`"`) {
+				t.Fatal("Turn error code", before[1])
+			}
+			streamed := false
+			for _, change := range events {
+				if change.Event.Type == "agent.session.turn.failed" {
+					event, err := streamResponse(session, change, "")
+					if err != nil || event.Turn == nil || event.Turn.Error == nil || event.Turn.Error.Code != public {
+						t.Fatal("streamed Turn error", err, event.Turn)
+					}
+					streamed = true
+				}
+			}
+			if !streamed {
+				t.Fatal("no agent.session.turn.failed event")
+			}
+			// Remove only the private fields; every other public response must keep its bytes.
 			if _, err = pool.Exec(t.Context(), `UPDATE turns SET outcome=outcome-'engine_error_code'-'engine_http_status' WHERE id=$1`, receipt.TurnID); err != nil {
 				t.Fatal(err)
 			}
 			for i, path := range paths {
+				if i == 1 {
+					continue
+				}
 				w := diagnosticRequest(h, path, "Bearer caller")
 				if w.Code != 200 || !bytes.Equal(before[i], w.Body.Bytes()) {
 					t.Fatal("private classification changed public response", path, w.Body)

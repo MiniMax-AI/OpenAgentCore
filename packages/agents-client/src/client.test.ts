@@ -133,12 +133,6 @@ function runtimeObservation(overrides: Record<string, unknown> = {}): Record<str
     resolved_at: 30,
     observed_at: 20,
     started_at: 10,
-    cpu: {
-      usage_seconds_total: 0,
-      capacity_cores: 2,
-      usage_cores: null,
-      utilization_ratio: null,
-    },
     memory: { usage_bytes: 0, limit_bytes: 1024 },
     ...overrides,
   };
@@ -2271,7 +2265,7 @@ describe("OpenAIAgentsClient", () => {
     for (const [status, type, code, message] of [
       [409, "conflict_error", "conflict_error", "The tool call already has a different result."],
       [409, "conflict_error", "conflict_error", "The Turn cannot accept this input in its current state."],
-      [400, "invalid_request_error", "invalid_request_error", "Unknown pending tool call."],
+      [400, "invalid_request_error", "invalid_request_error", "Unknown pending tool call: call"],
       [400, "invalid_request_error", "invalid_request_error", "The tool call belongs to a different Turn."],
     ] as const) {
       const calls: FetchCall[] = [];
@@ -2737,7 +2731,6 @@ describe("OpenAIAgentsClient", () => {
 
     await expect(client.retrieveRuntimeObservation(runtimeProjectId, runtimeSessionId)).resolves.toMatchObject({
       id: runtimeSessionId,
-      cpu: { usage_seconds_total: 0 },
       memory: { usage_bytes: 0 },
     });
     expect(String(calls[0]?.input)).toBe(
@@ -2757,7 +2750,6 @@ describe("OpenAIAgentsClient", () => {
       allocation_created_at: null,
       observed_at: null,
       started_at: null,
-      cpu: null,
       memory: null,
     });
     const client = new AdminClient({ fetch: recordingFetch(jsonResponse(value), []) });
@@ -2770,15 +2762,6 @@ describe("OpenAIAgentsClient", () => {
     ["invalid status/reason", () => ({ ...runtimeObservation(), status: "observed", reason: "sample_timeout" })],
     ["invalid lifecycle state", () => ({ ...runtimeObservation(), lifecycle_state: "paused" })],
     ["invalid mode/instance", () => ({ ...runtimeObservation(), mode: "none" })],
-    ["negative CPU", () => ({ ...runtimeObservation(), cpu: {
-      usage_seconds_total: -1, capacity_cores: 2, usage_cores: null, utilization_ratio: null,
-    } })],
-    ["non-numeric CPU", () => ({ ...runtimeObservation(), cpu: {
-      usage_seconds_total: "NaN", capacity_cores: 2, usage_cores: null, utilization_ratio: null,
-    } })],
-    ["zero CPU capacity", () => ({ ...runtimeObservation(), cpu: {
-      usage_seconds_total: 1, capacity_cores: 0, usage_cores: null, utilization_ratio: null,
-    } })],
     ["unsafe memory", () => ({ ...runtimeObservation(), memory: {
       usage_bytes: Number.MAX_SAFE_INTEGER + 1, limit_bytes: 1024,
     } })],

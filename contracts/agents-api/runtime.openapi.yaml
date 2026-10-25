@@ -31,31 +31,6 @@ definitions:
     required:
       - error
     type: object
-  api.NativeInstallationClaim:
-    properties:
-      executor_token:
-        type: string
-    type: object
-  deployment.Enrollment:
-    properties:
-      backend_fingerprint:
-        type: string
-      core_url:
-        description: The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
-        type: string
-      credential:
-        type: string
-      deployment_generation:
-        type: integer
-      name:
-        type: string
-      node_id:
-        type: string
-      provider:
-        type: string
-      specification_digest:
-        type: string
-    type: object
   deployment.NodeConfiguration:
     properties:
       core_url:
@@ -64,10 +39,6 @@ definitions:
         type: integer
       installation_id:
         type: string
-      max_active:
-        type: integer
-      max_retained:
-        type: integer
       provider:
         type: string
       specification:
@@ -75,7 +46,56 @@ definitions:
       specification_digest:
         type: string
     type: object
-  deployment.NodeIdentity:
+  machineapi.InstallationClaim:
+    properties:
+      executor_token:
+        type: string
+    type: object
+  machineapi.InstallationContext:
+    properties:
+      environment_id:
+        type: string
+      harness:
+        type: string
+      protocol_version:
+        type: string
+      remote_url:
+        type: string
+      version:
+        type: string
+      workspace_directory:
+        type: string
+    type: object
+  machineapi.NodeEnrollment:
+    properties:
+      available_disk_bytes:
+        type: integer
+      backend_fingerprint:
+        type: string
+      core_url:
+        description: The Core origin this node stores and connects to, such as https://core.example. It must equal the installation public URL; otherwise enrollment gets 409 sandbox_node_address_mismatch and the token stays unused.
+        type: string
+      cpu_count:
+        description: Host measurements as in the node's health reports. Core derives a limit the enrollment token leaves unset from them.
+        type: integer
+      credential:
+        type: string
+      deployment_generation:
+        type: integer
+      effective_cpu_cores:
+        type: number
+      name:
+        type: string
+      node_id:
+        type: string
+      provider:
+        type: string
+      specification_digest:
+        type: string
+      total_memory_bytes:
+        type: integer
+    type: object
+  machineapi.NodeIdentity:
     properties:
       deployment_generation:
         type: integer
@@ -92,7 +112,7 @@ definitions:
       specification_digest:
         type: string
     type: object
-  deployment.NodeStatus:
+  machineapi.NodeStatus:
     properties:
       connected:
         type: boolean
@@ -166,21 +186,6 @@ definitions:
     required:
       - error
     type: object
-  v1.NativeInstallationContext:
-    properties:
-      environment_id:
-        type: string
-      harness:
-        type: string
-      protocol_version:
-        type: string
-      remote_url:
-        type: string
-      version:
-        type: string
-      workspace_directory:
-        type: string
-    type: object
   workspacefs.AttachmentKind:
     enum:
       - host_directory
@@ -218,7 +223,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/v1.NativeInstallationContext'
+            $ref: '#/definitions/machineapi.InstallationContext'
         "401":
           description: Unauthorized
           schema:
@@ -245,7 +250,7 @@ paths:
           name: body
           required: true
           schema:
-            $ref: '#/definitions/api.NativeInstallationClaim'
+            $ref: '#/definitions/machineapi.InstallationClaim'
       responses:
         "204":
           description: No Content
@@ -270,7 +275,7 @@ paths:
         - Native Installation
   /api/v1/sandbox-node/configuration:
     get:
-      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose E2B credentials. Node files cannot override this specification.
+      description: Authenticates with an unconsumed enrollment token, or a retained node credential with X-OAC-Node-ID. Does not consume the token or expose Provider credentials. Node files cannot override this specification.
       parameters:
         - description: Retained node UUID
           in: header
@@ -323,14 +328,14 @@ paths:
           name: body
           required: true
           schema:
-            $ref: '#/definitions/deployment.Enrollment'
+            $ref: '#/definitions/machineapi.NodeEnrollment'
       produces:
         - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/deployment.NodeIdentity'
+            $ref: '#/definitions/machineapi.NodeIdentity'
         "400":
           description: Bad Request
           schema:
@@ -375,7 +380,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/deployment.NodeStatus'
+            $ref: '#/definitions/machineapi.NodeStatus'
         "400":
           description: Bad Request
           schema:

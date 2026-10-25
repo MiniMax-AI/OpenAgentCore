@@ -1,7 +1,7 @@
 ---
 title: "Session、事件和历史"
 source: contracts/agents-api/sessions-events.md
-source_hash: a87569d0232231fec4eeefeae610626125162474b3362ca490d2938ca0b8a024
+source_hash: ffddefb51fd2dcd04532d210f658caf96a6f825057c9025c3c18dbf8eb3ddc5a
 ---
 
 本契约涵盖 Session 内部发生的事情：发送输入、实时事件流，以及读取 Turn、Item 和使用量的持久化历史。Session 资源本身（创建配置、重试标识、更新、列出和删除）见 [API 行为](wire-semantics.md)。消息和函数结果内容见[消息内容](message-content.md)。[Agents API 指南](../../../docs/zh/api/public-agent-api.md)展示了使用 SDK 和 HTTP 的调用方式。
@@ -24,7 +24,7 @@ Session 的 `status` 和 `last_active_at` 由其最新的根 Turn 以及仍在�
 | --- | --- |
 | `idle` | 尚无 Turn，或最新 Turn 已完成或已取消。为仍在预配的托管 Environment 预留的输入也显示为 `idle` |
 | `in_progress` | 最新 Turn 正在排队、运行或等待 |
-| `requires_action` | 最新 Turn 正在等待函数结果且未请求取消，或输入正在等待 `self_hosted` 机器连接。`required_actions` 列出 `function_call` 或 `environment_connection` 条目 |
+| `requires_action` | 最新 Turn 正在等待函数结果（请求取消后在 Turn 结束前也保持如此），或输入正在等待 `self_hosted` 机器连接。`required_actions` 列出 `function_call` 或 `environment_connection` 条目 |
 | `failed` | 最新 Turn 失败（`error` 为 "The execution could not complete."）、为 Environment 预留的输入失败、初始输入在接纳前到期，或 Environment 初始化失败（见 [Environment 初始化失败](#environment-initialization-failure)） |
 
 ```mermaid
@@ -35,7 +35,7 @@ stateDiagram-v2
     in_progress --> requires_action: awaits function result
     idle --> requires_action: awaits self_hosted machine
     requires_action --> in_progress: result or machine
-    requires_action --> idle: cancelled
+    requires_action --> idle: Turn ended
     in_progress --> failed: Turn failed
     idle --> failed: input expired or Environment failed
     failed --> in_progress: new input
@@ -52,7 +52,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - **空批次。** `{"events": []}` 会检查 Session 是否存在并返回 202。它不会创建 Turn、Item 或重试标识。
 - **重试。** 最长 128 字节的 `Idempotency-Key` 标识整个有序批次。相同密钥和批次会再次返回 202，而不会重复接纳任何内容；相同密钥搭配另一个批次会返回 409 `idempotency_conflict`。不带密钥的请求始终是新请求。
 - **消息。** 在空闲 Session 上，消息批次会启动一个排队的 Turn。Turn 运行时，消息会加入其中（引导）；它们绝不会启动并行 Turn。每条消息都保留为独立的用户 Item，即使 Harness 将多条消息作为同一个提示接收。
-- **取消。** 排队的 Turn 无需活动 Runtime 即可取消。正在运行的 Turn 只有在 Runtime 确认后才会取消；完成操作可能赢得该竞争。读取到 `cancelled` 时才表示该 Turn 已停止，而不是请求返回时。在没有待处理输入的情况下，对空闲 Session 执行的取消会被接受且不产生任何效果；而在输入预留待处理期间，取消会返回 409。
+- **取消。** 排队的 Turn 无需活动 Runtime 即可取消。正在运行的 Turn 只有在 Runtime 确认后才会取消；完成操作可能赢得该竞争。读取到 `cancelled` 时才表示该 Turn 已停止，而不是请求返回时。正在等待函数结果的 Turn 在此之前会让 Session 保持 `requires_action` 及其 `required_actions`，且该请求不会发出 Session 事件。在没有待处理输入的情况下，对空闲 Session 执行的取消会被接受且不产生任何效果；而在输入预留待处理期间，取消会返回 409。
 - **函数结果。** `turn_id`、`call_id` 和 `success` 为必填项；`output` 和 `error` 为可选项且可为空（[内容规则](message-content.md#function-results)）。重复提交完全相同的结果会返回 202，不会再次应用或发出事件。Harness 应用结果时才会出现结果 Item；如果取消操作导致结果无法应用，结果仍会存储，但不会产生 Item。
 - **排队。** 当一个已连接且支持该 Session Harness 和配置的 Runtime 接入，并且 Core 的 [`OAC_EXECUTION_CONCURRENCY`](../../../docs/zh/configuration.md#settings) 工作槽位有一个空闲时，排队的 Turn 才会启动。Session 始终绑定到首次运行它的 Runtime。
 - **执行可用性。** Core 关闭期间，或其 Worker 失去执行所有权后，请求返回 503 `execution_unavailable`。
@@ -63,7 +63,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 
 ### 输入错误 {#input-errors}
 
-检查按以下顺序执行：请求验证、Session 查找、重试查找、针对包含消息的批次的 Environment 文件写入门控、待处理输入门控，最后按批次顺序检查每个事件。被拒绝的批次不会写入任何内容，也不会改变任何待处理操作。所有 409 响应的 `type` 都是 `conflict_error`（[错误封装](wire-semantics.md)）。
+检查按以下顺序执行：[请求验证](wire-semantics.md#configuration-validation)（路径以 `events[i]` 开头）、Session 查找、Harness 输入检查、重试查找、针对会启动 Turn 的消息的 Credential 检查、针对包含消息的批次的 Environment 文件写入门控、待处理输入门控，最后按批次顺序检查每个事件。被拒绝的批次不会写入任何内容，也不会改变任何待处理操作。所有 409 响应的 `type` 都是 `conflict_error`（[错误封装](wire-semantics.md)）。
 
 | 情况 | 状态和代码 | 消息 |
 | --- | --- | --- |
@@ -71,16 +71,17 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 | Turn 在当前状态下无法接受的输入，例如取消后提交的结果，或 Turn 已结束且未存储结果后提交的结果 | 409 `conflict_error` | "The Turn cannot accept this input in its current state." |
 | 与该调用已存储结果不同的结果，无论其 Turn 结束之前还是之后 | 409 `conflict_error` | "The tool call already has a different result." |
 | 相同 `Idempotency-Key` 搭配不同批次 | 409 `idempotency_conflict` | "This idempotency key was used with different input." |
-| `call_id` 未标识该 Session 的任何函数调用的结果 | 400 `invalid_request_error`, param null | "Unknown pending tool call." |
+| `call_id` 未标识该 Session 的任何函数调用的结果 | 400 `invalid_request_error`, param null | "Unknown pending tool call: {call_id}" |
 | 为该 Session 的某个调用提交结果，但 `turn_id` 标识另一个 Turn、未知 Turn ID，或不是 Turn ID 的值 | 400 `invalid_request_error`, param null | "The tool call belongs to a different Turn." |
 | 缺失、格式错误或来自其他作用域的 Session | 404 `not_found_error` | "Resource not found." |
 | 预留的批次在 Turn 启动前超过五分钟截止时间 | 409 `environment_input_expired` | "The environment input deadline elapsed before admission." |
 | 预留的批次因管理员归档 Session 或重置其部署而被取消 | 409 `environment_input_cancelled` | "The environment input was cancelled before admission." |
 | `openai_hosted` Environment 预配失败后提交新输入 | 409 `conflict_error` | "the hosted environment failed to provision" |
 | `self_hosted` Environment 失败后提交新输入、Environment 失败时输入已在等待，或 Environment 已过期 | 409 `environment_unavailable` | "The environment is no longer available for new input." |
+| 会在其所绑定 MCP Credential 或其 Vault 已删除的 Session 上启动 Turn 的消息 | 400 `invalid_request_error`，param 为 null | "MCP credential_id {id} was not found in an attached vault" |
 | Session Harness 无法处理的消息，例如 MiniMax Code 上仅含空白的文本 | 400 `unsupported_or_invalid_configuration` | 见[仅含空白的文本](message-content.md#whitespace-only-text) |
 
-`turn_id` 为空或 `call_id` 为空白时，会返回通用的 400 `invalid_request`。错误消息绝不会重复调用方输入或内部标识符。
+`turn_id` 为空或 `call_id` 为空白时，会返回通用的 400 `invalid_request`。除未知工具调用的消息按官方 SDK 的预期给出其 `call_id`、Credential 消息像 Session 创建时一样给出该 Credential 外，错误消息绝不会重复调用方输入或内部标识符。
 
 ## 创建 Session 时的初始输入 {#initial-input-at-session-creation}
 
@@ -111,7 +112,7 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - **生命周期。** 流会跨 Turn 保持打开，并在 Turn 失败后继续存在。流会在 Session 被删除时，或在 [Environment 初始化失败](#environment-initialization-failure)产生终止 `agent.session.failed` 后结束；在该失败之后打开的流会保持打开。每 15 秒发送一次 keepalive 注释。
 - **缓冲区。** Core 为每个 Session 最多保留 256 个事件和 64 MiB 事件，必要时还会额外容纳一个更大的事件。读取方落后于缓冲区时，会收到一个 `error` 事件，其 type 为 `server_error`、code 为 `stream_interrupted`，随后流会关闭。套接字写入阻塞五秒也会关闭流。执行过程绝不会等待读取方。
 - **密钥重新检查。** 打开的流在空闲期间以及发送输出前，每秒最多重新检查一次原始项目 API 密钥。撤销密钥或归档项目会关闭流，身份验证失败也会关闭流。重新检查使用正常的五秒身份验证超时，并且等待期间不会发送任何 Session 数据。已经发送的字节无法收回。
-- **仅根工作。** 子 Turn 和子 Item 不发布 Session 事件；`agent.session.subagent.*` 事件和根协调 Item 会发布。请通过 [Subagent 资源](subagents.md)读取子工作。
+- **仅根工作。** 子 Turn 和子 Item 不发布 Session 事件，Subagent 的 `function_call` Item 除外，它只以 `item.added` 发布一次；`agent.session.subagent.*` 事件和根协调 Item 会发布。请通过 [Subagent 资源](subagents.md)读取子工作。
 
 ### 事件规则 {#event-rules}
 
@@ -121,14 +122,15 @@ Turn 失败后 Session 仍可使用：新输入会启动一个新 Turn。后来�
 - `item.added` 和 `item.done` 始终携带 `output_index`；输入 Item 的该值为 null。函数结果只发出 `item.added`；`item.done` 用于代理输出。
 - 助手消息遵循以下单一顺序：先发送 `content` 为空的进行中 `item.added`，再发送文本为空的 `content_part.added`，然后发送 `output_text.delta` 事件、`output_text.done`、`content_part.done` 和 `item.done`。首次观察时已完整的消息（例如结构化输出）会在一个 `output_text.delta` 中逐字节发送全部文本。完整文本会替换此前累积的增量。
 - Codex 命令输出以 `agent.output.command_execution_output.delta` 流式传输，并携带命令的 Item ID 和输出索引。原生输出配额和文本转换规则适用，因此这些增量并非逐字节捕获的原始结果；完整 Item 才是权威结果。
+- reasoning Item 遵循以下单一顺序：先发送 `summary` 为空的进行中 `item.added`；然后按顺序对每个 `summary_text` 部分发送文本为空的 `reasoning_summary_part.added` 和 `reasoning_summary_text.delta` 事件，并在下一个部分开始或 Item 结束时发送 `reasoning_summary_text.done` 和 `reasoning_summary_part.done`；最后发送 `item.done`。被取消或失败的 Turn 截断的部分，其 `reasoning_summary_part.done` 的 `status` 为 `incomplete`，否则为 null。
 - 已取消或失败的 Turn 会将其未完成的 Item 标记为 `incomplete`，并保留其部分内容。
-- 函数调用会一直保留在 `required_actions` 中，直到 Harness 应用其结果，或取消操作或 Turn 结束将其移除。重复通知不会发出新状态。
+- 函数调用会一直保留在 `required_actions` 中，直到 Harness 应用其结果，或 Turn 结束将其移除；对等待中 Turn 的取消请求不会将其移除。重复通知不会发出新状态。
 
 ## Turn 与 Item {#turns-and-items}
 
 Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-semantics.md)）。游标是同一 Session 内的 ID。
 
-**Turn。** Session Turn 路由只包含根 Turn，按创建时间、再按 ID 排序；在该路由中使用子 Turn ID 会返回 404。失败的 Turn 包含 `error: {code: "internal_error", message: "The execution could not complete."}`，绝不包含引擎原始诊断信息。管理员可通过[Session 诊断](session-diagnostics.md)读取失败类别。
+**Turn。** Session Turn 路由只包含根 Turn，按创建时间、再按 ID 排序；在该路由中使用子 Turn ID 会返回 404。失败 Turn 的 `error` 包含官方 `code` 和该 code 对应的固定消息，绝不包含引擎原始诊断信息；[与 OpenAI 的差异](index.md#differences-from-openai)列出 Core 报告的 code。流中的快照与读取返回相同的 `error`。管理员可通过[Session 诊断](session-diagnostics.md)读取失败类别。
 
 **Item。** Item 按首次观察时间、再按其在 Session 中的位置、最后按 ID 排序。更新和重试绝不会移动 Item，也不会更改其 `output_index`；`output_index` 是 Item 在该 Turn 输出 Item 中从零开始的位置，输入 Item 没有此值。读取操作使用已存储的历史索引，绝不会根据原生日志重新构建该索引。Item 列表包含仍在进行中或尚未完成的 Item。
 
@@ -137,11 +139,14 @@ Turn 和 Item 列表接受 `after`、`limit` 和 `order`（[列表规则](wire-s
 | `message` | 用户或助手内容片段。Harness 报告阶段时，`phase` 为其阶段（`commentary`、`final_answer`），否则为 null |
 | `command_execution` | 命令、报告的输出、退出代码、持续时间和工作目录 |
 | `mcp_call` | 服务器和工具标识、参数、结构化结果或错误 |
-| `function_call`、`function_call_output` | 关联的调用及其结果。结果始终携带 `output` 和 `error`；提交时省略这些字段则值为 null。存储的结果会保留提交时字段是否存在的信息。原生文件更改显示为 `apply_patch` 函数调用，更改内容作为参数，不会生成虚构结果 |
+| `function_call`、`function_call_output` | 关联的调用及其结果。结果始终携带 `output` 和 `error`；提交时省略这些字段则值为 null。存储的结果会保留提交时字段是否存在的信息。Codex 文件更改显示为 `apply_patch` 函数调用，更改内容作为参数，不会生成虚构结果 |
 | `web_search_call` | 支持的操作字段（`search`、`open_page`、`find_in_page`、`other`）；Claude Code 以 `search` 报告 `WebSearch`，以 `open_page` 报告 `WebFetch` |
-| `reasoning`、`agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态；reasoning 状态可以为 null |
+| `reasoning` | 一个原生推理 item，每个原生部分对应一个 `summary_text` 部分，仅在 Agent 设置了 `reasoning.summary` 时出现；为 null（默认）时，任何 Turn（根或子）都没有 `reasoning` Item 和 reasoning 事件。文本内容见 [OpenAI 兼容性](index.md#differences-from-openai)。子 Turn 的 Item 状态可以为 null |
+| `agent_message` 和 Subagent 协调调用 | 见 [Subagents](subagents.md)。`agent_message` 没有状态 |
 
 工具失败不会导致其 Turn 失败。Session 的项目可以读取工具输出，其中可能包含该工具自己的诊断文本。
+
+PostgreSQL 无法存储 U+0000，因此 Harness 输出（例如命令输出）中的 U+0000 在存储、事件流和列表中都会替换为 U+FFFD，Turn 照常继续。
 
 ## 使用量 {#usage}
 

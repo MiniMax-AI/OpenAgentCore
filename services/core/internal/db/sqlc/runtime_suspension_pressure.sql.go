@@ -14,7 +14,7 @@ import (
 const expireRuntimeCheckpoint = `-- name: ExpireRuntimeCheckpoint :one
 UPDATE runtime_allocations
 SET compute_retained_until=clock_timestamp(), compute_revision=compute_revision+1
-WHERE id=$1 AND compute_revision=$2 AND state='running' AND compute_phase='suspended' AND compute_retained_until>clock_timestamp()
+WHERE id=$1 AND compute_revision=$2 AND state='running' AND compute_phase IN ('suspended','restoring') AND compute_retained_until>clock_timestamp()
 RETURNING id, environment_id, device_id, provider_key, state, create_settled, created_at, released_at, compute_phase, compute_revision, compute_state, compute_activity_at, compute_wake_requested, compute_retained_until, node_id, observation_error, compute_phase_changed_at, deployment_generation
 `
 
@@ -72,6 +72,35 @@ func (q *Queries) ListIdleRuntimeCheckpoints(ctx context.Context, nodeID pgtype.
 			return nil, err
 		}
 		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRuntimeStartingNodes = `-- name: ListRuntimeStartingNodes :many
+SELECT DISTINCT p.node_id
+FROM runtime_placements p JOIN environments e ON e.id=p.environment_id
+LEFT JOIN runtime_allocations a ON a.environment_id=p.environment_id AND a.state <> 'released'
+WHERE p.released_at IS NULL AND (a.id IS NULL OR e.initialization IN ('pending', 'running'))
+`
+
+// A node is starting a Session while that Session's sandbox is not created or
+// its initialization has not finished.
+func (q *Queries) ListRuntimeStartingNodes(ctx context.Context) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listRuntimeStartingNodes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var node_id pgtype.UUID
+		if err := rows.Scan(&node_id); err != nil {
+			return nil, err
+		}
+		items = append(items, node_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

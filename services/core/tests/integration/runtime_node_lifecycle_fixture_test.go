@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
@@ -134,11 +136,11 @@ func newNodeIsolationFixture(t *testing.T, mode string) *nodeIsolationFixture {
 }
 func (f *nodeIsolationFixture) enroll(id string) {
 	f.t.Helper()
-	token, err := EnrollmentTestToken(f.nodes.CreateEnrollment(f.t.Context(), deployment.Capacity{MaxActive: 100, MaxRetained: 100}))
+	token, err := EnrollmentTestToken(f.nodes.CreateEnrollment(f.t.Context(), deployment.EnrollmentLimits{MaxActive: new(100), MaxRetained: new(100)}))
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	_, err = f.nodes.Enroll(f.t.Context(), token, deployment.Enrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: f.store.placement.PublicURL()})
+	_, err = f.nodes.Enroll(f.t.Context(), token, machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: id, Credential: strings.Repeat("x", 64), Name: id, Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: f.store.placement.PublicURL()})
 	if err != nil {
 		f.t.Fatal(err)
 	}

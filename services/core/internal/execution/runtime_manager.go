@@ -14,6 +14,17 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspaces"
 )
 
+// provider returns the configured Provider and its installation, or nil during
+// a deployment switch.
+func (m *runtimeManager) provider() (sandbox.SandboxProvider, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.switching {
+		return nil, ""
+	}
+	return m.config.Provider, m.config.InstallationID
+}
+
 // runtimeManager owns node membership, not provider operations. Each registered
 // node has one serial lifecycle; slow provider work cannot occupy another node.
 var errRuntimeTransition = fmt.Errorf("%w: sandbox configuration is changing", ErrExecutionUnavailable)
@@ -23,6 +34,7 @@ type runtimeManager struct {
 	workspaceCursor     string
 	placementCursor     deployment.PlacementDemandCursor
 	placementWake       chan struct{}
+	scheduleWake        chan<- struct{}
 	workspaceGate       chan struct{}
 	sessions            sessions.Reader
 	sessionExecution    *sessions.ExecutionOperations
@@ -98,7 +110,7 @@ func (m *runtimeManager) node(id string) (*runtimeNode, error) {
 			deployment: m.deployment, deployments: m.deploymentService, reader: m.deploymentReader,
 			lease: m.lease, registry: m.registry, config: m.config, nodeID: id,
 			gate: make(chan struct{}, 1), ctx: ctx, stop: stop,
-			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination,
+			connections: make(map[string]*runtimeConnection), connectionWake: make(chan *runtimegateway.Session, 1), wakeHints: make(chan struct{}, 1), pendingWake: make(chan struct{}, 1), hintDestination: m.hintDestination, placementWake: m.placementWake, scheduleWake: m.scheduleWake,
 		}}
 		m.nodes[id] = n
 	}
@@ -128,6 +140,24 @@ func (m *runtimeManager) hintDestination(id string) {
 	select {
 	case n.lifecycle.wakeHints <- struct{}{}:
 	default:
+	}
+}
+
+// Work waiting for this compute may start now; the scheduler ticker recovers a missed wake.
+func (r *runtimeLifecycle) computeRunning() {
+	select {
+	case r.scheduleWake <- struct{}{}:
+	default:
+	}
+}
+
+// A freed node slot may admit waiting demand; the placement ticker recovers a missed wake.
+func (r *runtimeLifecycle) freedSlot() {
+	if r.nodeID != "" {
+		select {
+		case r.placementWake <- struct{}{}:
+		default:
+		}
 	}
 }
 

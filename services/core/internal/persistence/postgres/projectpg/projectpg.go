@@ -26,7 +26,6 @@ type Store struct {
 
 var (
 	_ projects.Storage = (*Store)(nil)
-	_ projects.Reader  = (*Store)(nil)
 )
 
 func New(pool *pgunit.Pool) *Store { return &Store{pool: pool} }

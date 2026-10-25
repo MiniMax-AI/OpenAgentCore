@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"io/fs"
 	"testing"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 )
 
 func TestBundle(t *testing.T) {
-	metadata := Metadata{Type: "inline", Name: "proof-skill", Description: "Run the proof."}
+	metadata := proto.SkillMetadata{Type: "inline", Name: "proof-skill", Description: "Run the proof."}
 	manifest := []byte("---\nname: proof-skill\ndescription: Run the proof.\n---\nRun scripts/check.py.\n")
 	makeArchive := func(paths []string, bodies [][]byte, mode fs.FileMode) []byte {
 		var b bytes.Buffer

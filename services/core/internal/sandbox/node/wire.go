@@ -7,9 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"io"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -18,7 +19,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-const ProtocolVersion = 7
+const ProtocolVersion = 9
 const MaxControlFrameBytes = 32 * 1024
 const MaxFrameBytes = 72 * 1024 * 1024
 const maxPending = 32
@@ -50,30 +51,6 @@ type Health struct {
 	AvailableDiskBytes   *int64                     `json:"available_disk_bytes,omitempty"`
 }
 
-type EnrollmentRequest struct {
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	NodeID               string `json:"node_id"`
-	Credential           string `json:"credential"`
-	Name                 string `json:"name"`
-	Provider             string `json:"provider"`
-	BackendFingerprint   string `json:"backend_fingerprint"`
-	// The retained Core origin; Core refuses an enrollment whose address is not its public URL.
-	CoreURL string `json:"core_url"`
-}
-
-type EnrollmentResponse struct {
-	MaxActive            int    `json:"max_active"`
-	MaxRetained          int    `json:"max_retained"`
-	SpecificationDigest  string `json:"specification_digest"`
-	DeploymentGeneration uint64 `json:"deployment_generation"`
-	Connected            bool   `json:"connected,omitempty"`
-	ProviderReady        bool   `json:"provider_ready,omitempty"`
-	NodeID               string `json:"node_id"`
-	InstallationID       string `json:"installation_id"`
-	Provider             string `json:"provider"`
-}
-
 type request struct {
 	DeploymentGeneration uint64 `json:"deployment_generation,omitempty"`
 	ID                   string `json:"id"`
@@ -93,6 +70,8 @@ type request struct {
 	Resume      *sandbox.ResumeRequest    `json:"resume,omitempty"`
 	Snapshot    *sandbox.SnapshotIdentity `json:"snapshot,omitempty"`
 	Observation *runtimeobs.Target        `json:"observation,omitempty"`
+	// Key is the opaque preparation cache key of the preparation operations.
+	Key string `json:"key,omitempty"`
 }
 
 type response struct {
@@ -105,6 +84,7 @@ type response struct {
 	State        *sandbox.ComputeState              `json:"state,omitempty"`
 	Command      *sandbox.CommandResult             `json:"command,omitempty"`
 	Sample       *runtimeobs.Sample                 `json:"sample,omitempty"`
+	Restored     bool                               `json:"restored,omitempty"`
 }
 
 type frame struct {
@@ -189,6 +169,8 @@ func errorCode(err error) string {
 		return "not_found"
 	case errors.Is(err, sandbox.ErrCommandUnconfirmed):
 		return "command_unconfirmed"
+	case errors.Is(err, sandbox.ErrCheckpointUnusable):
+		return "checkpoint_unusable"
 	default:
 		return "unconfirmed"
 	}
@@ -225,6 +207,8 @@ func responseError(out response) error {
 		return sandbox.ErrNotFound
 	case "command_unconfirmed":
 		return sandbox.ErrCommandUnconfirmed
+	case "checkpoint_unusable":
+		return sandbox.ErrCheckpointUnusable
 	default:
 		return sandbox.ErrComputeUnconfirmed
 	}
@@ -258,11 +242,15 @@ func (q request) validate() error {
 		if count == 0 {
 			return nil
 		}
+	case "restore_preparation", "save_preparation":
+		if count == 0 && q.Key != "" && len(q.Key) <= 256 {
+			return nil
+		}
 	case "new_compute":
 		if count == 0 || count == 1 && q.Snapshot != nil {
 			return nil
 		}
-	case "compute", "kill_compute", "resume_compute":
+	case "compute", "kill_compute", "resume_compute", "renew_compute":
 		if count == 1 && q.Compute != nil {
 			return nil
 		}
@@ -327,6 +315,10 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (respons
 	case "command":
 		command, err = p.RunCommand(ctx, q.Reference, *q.Command)
 		out.Command = &command
+	case "restore_preparation":
+		out.Restored, err = p.RestorePreparation(ctx, q.Reference, q.Key)
+	case "save_preparation":
+		err = p.SavePreparation(ctx, q.Reference, q.Key)
 	default:
 		var state sandbox.ComputeState
 		var compute sandbox.Compute
@@ -353,6 +345,9 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (respons
 		case "resume_compute":
 			state, err = p.ResumeCompute(ctx, q.Reference, *q.Compute)
 			out.State = &state
+		case "renew_compute":
+			state, err = p.RenewCompute(ctx, q.Reference, *q.Compute)
+			out.State = &state
 		case "command_compute":
 			command, err = p.RunCommandCompute(ctx, q.Reference, *q.Compute, *q.Command)
 			out.Command = &command
@@ -375,6 +370,7 @@ func execute(ctx context.Context, p sandbox.SandboxProvider, q request) (respons
 		}
 		out.Command = nil
 		out.Compute = nil
+		out.Restored = false
 	}
 	return out, err
 }

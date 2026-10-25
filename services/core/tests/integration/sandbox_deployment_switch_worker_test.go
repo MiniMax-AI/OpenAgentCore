@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 
@@ -67,11 +69,11 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err == nil || preparations.Load() != prepared {
 		t.Fatal("stale identical POST reached provider preparation", err)
 	}
-	enrollment, err := EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 4}))
+	enrollment, err := EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := deployment.Enrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "docker", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), CoreURL: s.placement.PublicURL()}
+	node := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "docker", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), CoreURL: s.placement.PublicURL()}
 	if _, err := deployments.Enroll(t.Context(), enrollment, node); err != nil {
 		t.Fatal(err)
 	}

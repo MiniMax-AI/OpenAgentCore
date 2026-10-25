@@ -20,7 +20,7 @@ cache=$root/native-download
 mkdir -p "$cache"
 [ -d "$cache" ] && [ -O "$cache" ] || fail 'Native download directory must belong to the current account.'
 chmod 700 "$cache"
-# The installer downloads the Harness archives into this directory and extracts them beside the executable.
+# The unpacked installer lives here; the installer also keeps unfinished component downloads in this directory.
 work=$(mktemp -d "$cache/bundle.XXXXXX") || fail 'Cannot write the native download directory.'
 active=
 cleanup() { rm -rf "$work"; }

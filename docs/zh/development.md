@@ -1,7 +1,7 @@
 ---
 title: "开发 OpenAgentCore"
 source: docs/development.md
-source_hash: f0e015b4f13aeafa5ec486c42a5d4210f6dd9a9ce40b34112cdef1ed3aad28ba
+source_hash: 31487de5d69fee69c08b7293fba5c36c17c70251ccda8361d79e6b41bf1a5a58
 ---
 
 准备工作副本，构建组件并验证修改。如需使用已安装的实例，从[概览](getting-started/index.md)开始。修改代码前阅读[贡献者规则](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md)。
@@ -103,6 +103,7 @@ Core 构建产物和输出目录设置见[独立 Core 构建](maintainers.md#sta
 | `services/core/internal/execution` | 持久化 Turn 分发与调度 | [Runtime 协议](runtime-protocol.md) |
 | `internal/harnessconfig` | 每个 Harness 一份声明，由 Core 准入和 Runtime 共同读取 | [Harness 协议](../../contracts/agents-api/zh/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire 类型与验证器 | [Runtime 协议](runtime-protocol.md) |
+| `internal/machineapi` | 机器连接 API 线路类型 | [机器连接 API](../../contracts/agents-api/zh/machine-api.md) |
 | `internal/runtimebootstrap` | 提供商到 Runtime 的启动输入 | [Runtime 引导](runtime-bootstrap.md) |
 | `apps/daemon/internal/dispatch` | Runtime 准备、Executor 复用、Turn 和清理所有权 | [Harness 生命周期](../../contracts/agents-api/zh/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | 原生 Harness adapter | [原生参考](../../contracts/agents-api/zh/harness-onboarding.md#native-references) |

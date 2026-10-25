@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/execution"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/files"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/textvalue"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
@@ -137,6 +139,7 @@ func TestConflictErrorsUseConflictType(t *testing.T) {
 	for err, code := range map[error]string{
 		deployment.ErrConflict:                 "sandbox_deployment_conflict",
 		deployment.ErrNodeInUse:                "runtime_node_in_use",
+		sandbox.ErrWorkspaceRequired:           "workspace_storage_required",
 		deployment.ErrNodeAddressMismatch:      "sandbox_node_address_mismatch",
 		sessions.ErrEnvironmentUnavailable:     "environment_unavailable",
 		execution.ErrEnvironmentInputExpired:   "environment_input_expired",
@@ -193,5 +196,16 @@ func TestSharedPersistenceErrors(t *testing.T) {
 		if response.Code != test.status || !strings.Contains(response.Body.String(), test.body) {
 			t.Errorf("%v: %d %s", test.err, response.Code, response.Body)
 		}
+	}
+}
+
+// A client that has gone gets no error report: its ended context is the failure.
+func TestInternalErrorAfterClientAbort(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	response := httptest.NewRecorder()
+	writeAgentsError(response, httptest.NewRequest(http.MethodGet, "/v1/agents", nil).WithContext(ctx), context.Canceled)
+	if response.Body.Len() != 0 {
+		t.Fatal(response.Body)
 	}
 }

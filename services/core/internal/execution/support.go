@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
@@ -67,59 +66,59 @@ func (p Policy) validateEngineInputs(engine string, configuration json.RawMessag
 
 // engineCapabilities is shared by device selection and the final preclaim check.
 // Capability bits describe the connected adapter; the declaration states what it may be asked to do.
-func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, snapshot Snapshot) (runtimedevice.KindCapabilities, error) {
-	fail := func(message string) (runtimedevice.KindCapabilities, error) {
-		return runtimedevice.KindCapabilities{}, errors.New(message)
+func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, snapshot Snapshot) (proto.AgentKindCapabilities, error) {
+	fail := func(message string) (proto.AgentKindCapabilities, error) {
+		return proto.AgentKindCapabilities{}, errors.New(message)
 	}
 	declaration, ok := p.Harnesses().Lookup(engine)
 	if !ok || !declaration.Accepts(snapshot.Environment.Type) {
 		return fail("execution engine placement is not supported")
 	}
 	if err := validateDeclaredConfiguration(declaration, snapshot); err != nil {
-		return runtimedevice.KindCapabilities{}, err
+		return proto.AgentKindCapabilities{}, err
 	}
 	info, found, known := peer.AgentKindStatus(engine)
 	caps := info.Capabilities
-	if !known || !found || !info.Available || !caps.Streaming || !caps.DurableTurns || !caps.DurableInputReceipts {
+	if !known || !found || !info.Available || !caps.Streaming.IsSupported() || !caps.DurableTurns.IsSupported() || !caps.DurableInputReceipts.IsSupported() {
 		return fail("device must advertise streaming, durable input receipts and durable turns for this engine")
 	}
-	if !caps.Preparation {
+	if !caps.Preparation.IsSupported() {
 		return fail("device must advertise executor preparation")
 	}
-	if !caps.ExecutionControls {
+	if !caps.ExecutionControls.IsSupported() {
 		return fail("device must advertise execution_controls")
 	}
-	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput || !caps.MessageItems) {
+	if snapshot.Agent.Text.Format.Type == "json_schema" && (!caps.StructuredOutput.IsSupported() || !caps.MessageItems.IsSupported()) {
 		return fail("device must support structured output and message observations")
 	}
-	if !caps.ToolObservations {
+	if !caps.ToolObservations.IsSupported() {
 		return fail("device must advertise tool_observations")
 	}
-	if snapshot.Agent.MultiAgent.Enabled && !caps.SubagentObservations {
+	if snapshot.Agent.MultiAgent.Enabled && !caps.SubagentObservations.IsSupported() {
 		return fail("device must support durable subagent observations")
 	}
-	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl {
+	if !snapshot.Agent.MultiAgent.Enabled && !caps.SubagentControl.IsSupported() {
 		return fail("device must advertise subagent_control")
 	}
 	tools, err := executionTools(snapshot.Agent.Tools)
 	if err != nil {
 		return fail("invalid execution tool configuration")
 	}
-	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch); err != nil {
+	if err := (proto.PromptRequestPayload{ToolSearch: tools.Search, FunctionTools: tools.Functions}).ValidateToolSearch(caps.ToolSearch.IsSupported()); err != nil {
 		return fail(err.Error())
 	}
-	if len(tools.Functions) > 0 && !caps.FunctionTools {
+	if len(tools.Functions) > 0 && !caps.FunctionTools.IsSupported() {
 		return fail("device must advertise function_tools")
 	}
 	if _, err := p.mcpExecutionCredentials(engine, snapshot, tools.MCP, caps); err != nil {
-		return runtimedevice.KindCapabilities{}, err
+		return proto.AgentKindCapabilities{}, err
 	}
 	if snapshot.Environment.Type == "openai_hosted" || snapshot.Environment.Type == "self_hosted" {
-		if !caps.Preparation || !caps.LocalEnvironment || !caps.WorkspaceReadPreparation || !caps.WorkspaceOutputExport {
+		if !caps.Preparation.IsSupported() || !caps.LocalEnvironment.IsSupported() || !caps.WorkspaceReadPreparation.IsSupported() || !caps.WorkspaceOutputExport.IsSupported() {
 			return fail("device must advertise local preparation, workspace reads and output export")
 		}
 	}
-	if environmentNone(snapshot) && !caps.EnvironmentNone {
+	if environmentNone(snapshot) && !caps.EnvironmentNone.IsSupported() {
 		return fail("device must advertise environment_none")
 	}
 	return caps, nil
@@ -128,7 +127,7 @@ func (p Policy) engineCapabilities(peer *runtimegateway.Session, engine string, 
 // sessionCapabilities shares storage-specific validation between device selection
 // and the final preparation gate. The immutable binding, not today's deployment,
 // determines whether this Session requires native history outside compute.
-func (d *Dispatcher) sessionCapabilities(ctx context.Context, peer *runtimegateway.Session, session sessions.Session, snapshot Snapshot) (runtimedevice.KindCapabilities, error) {
+func (d *Dispatcher) sessionCapabilities(ctx context.Context, peer *runtimegateway.Session, session sessions.Session, snapshot Snapshot) (proto.AgentKindCapabilities, error) {
 	caps, err := d.engineCapabilities(peer, session.Engine, snapshot)
 	if err != nil {
 		return caps, err
@@ -138,10 +137,10 @@ func (d *Dispatcher) sessionCapabilities(ctx context.Context, peer *runtimegatew
 	}
 	environment, err := d.SessionsReader.GetSessionEnvironment(ctx, session.TenantID, session.ID)
 	if err != nil {
-		return runtimedevice.KindCapabilities{}, err
+		return proto.AgentKindCapabilities{}, err
 	}
-	if err := d.validateEnvironmentHistory(session.Engine, environment, caps.RetainedNativeHistory); err != nil {
-		return runtimedevice.KindCapabilities{}, err
+	if err := d.validateEnvironmentHistory(session.Engine, environment, caps.RetainedNativeHistory.IsSupported()); err != nil {
+		return proto.AgentKindCapabilities{}, err
 	}
 	return caps, nil
 }

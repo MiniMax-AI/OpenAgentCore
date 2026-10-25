@@ -1,10 +1,10 @@
 ---
 title: 工作区文件系统协议
 source: docs/workspace-provider.md
-source_hash: 7d20a39d5ea33ae1874c4aee79257b4e80bd806727375b9664535c0172dc102d
+source_hash: 06a170d6966d003c9294254c2f2e851d26916731c5c227013d272fc86eb454eb
 ---
 
-工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建、观察和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
+工作区文件系统协议连接 Core 和沙箱节点与拥有 Environment 持久存储的适配器。Core 创建和删除存储对象；节点将对象解析为主机目录，由其[沙箱提供商协议](sandbox-provider.md)挂载到计算资源。本文面向文件系统适配器和沙箱提供商的作者。
 
 | | |
 | --- | --- |
@@ -17,13 +17,13 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 
 | 沙箱提供商 | 外部工作区存储 |
 | --- | --- |
-| microsandbox | 支持（`host_directory`、`user_xattr`） |
+| microsandbox | 必需（`host_directory`、`user_xattr`） |
 | Docker、E2B | 不支持；使用提供商自有的 Environment 磁盘 |
 
 ## 实现适配器 {#implement-an-adapter}
 
 1. 定义 `Parameters` 和可选凭据，并实现 `Normalize`（[标识与配置](#identity-and-configuration)）。
-2. 在 `Control` 中实现 `Declaration`、`Check`、`Create`、`Observe` 和 `Delete`，在 `Resolver` 中实现 `Resolve`（[操作与结果](#operations-and-outcomes)）。
+2. 在 `Control` 中实现 `Declaration`、`Check`、`Create` 和 `Delete`，在 `Resolver` 中实现 `Resolve`（[操作与结果](#operations-and-outcomes)）。
 3. 声明挂载类型、用户扩展属性支持和配额强制执行（[能力验证](#capability-validation)）。
 4. 每个对象保持单一写入方，仅在 Core 授权时删除（[生命周期与文件系统范围](#lifetime-and-filesystem-scope)）。
 
@@ -51,14 +51,13 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 
 适配器注册一个 `Adapter` 实现，其三个角色相互独立且均为必需。`Normalize(parameters, credential)` 在不执行 I/O 的情况下验证并规范化参数、编码凭据输入；缺少必需凭据或提供参数不使用的凭据均为 `ErrInvalid`；编码后的凭据是有效输入且编码结果不变，因此 Core 可以使用已存储的凭据重新选择保留的配置。`Control(ConfigurationRecord)` 在 Core 中使用解密后的凭据构造控制适配器。`Resolver(Configuration)` 仅根据公开配置构造节点解析器。构造过程不执行文件系统或网络操作。
 
-每个控制适配器实现 `Declaration`、`Check`、`Create`、`Observe` 和 `Delete`；每个节点挂载适配器实现 `Resolve`。不得使用可选旁路接口、隐式替换适配器或 nil 实现回退。
+每个控制适配器实现 `Declaration`、`Check`、`Create` 和 `Delete`；每个节点挂载适配器实现 `Resolve`。不得使用可选旁路接口、隐式替换适配器或 nil 实现回退。
 
 | 操作 | 必需语义 |
 | --- | --- |
 | `Declaration()` | 描述所选配置已经验证的挂载、用户扩展属性和配额行为。 |
 | `Check(ctx)` | 验证配置和可用性，不创建对象。 |
 | `Create(ctx, reference, capacityMiB)` | 创建归属对象或收敛到其现有挂载凭据，不覆盖数据；重试与并发调用使用同一不可变引用和获准容量。正容量须在成功返回前实际强制执行，并在每次重试时重新验证。 |
-| `Observe(ctx, reference)` | 返回现有对象的绑定挂载凭据，不创建、修复或准备对象。 |
 | `Delete(ctx, reference)` | Core 授权删除且确认计算资源停止后，收敛到已验证归属对象的终态删除。 |
 | `Resolve(ctx, binding)` | 验证原生归属并为本地计算解析挂载。 |
 
@@ -73,7 +72,7 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 | `ErrNotFound` | 对象不存在 |
 | `ErrUnsupported` | 不支持的组合 |
 
-观察到不存在不证明先前变更已结束。超时或上下文取消只结束调用方的等待，不证明原生操作停止或回滚。结果未知时 Core 保留归属。Core 可以使用同一持久化不可变引用和配置重试 `Create` 或 `Delete`，包括收到 `ErrUnconfirmed` 后；绝不能通过替换新对象标识重试结果不确定的操作。
+对象不存在不证明先前变更已结束。超时或上下文取消只结束调用方的等待，不证明原生操作停止或回滚。结果未知时 Core 保留归属。Core 可以使用同一持久化不可变引用和配置重试 `Create` 或 `Delete`，包括收到 `ErrUnconfirmed` 后；绝不能通过替换新对象标识重试结果不确定的操作。
 
 同一引用的重试与并发收敛是适配器必须提供的保证。`Create` 保留现有对象数据并返回该归属对象的挂载凭据，绝不重新初始化存活对象。重复或并发的 `Delete` 调用收敛到同一终态删除。一旦记录终态删除，并发、延迟或重试的 `Create` 均不得使对象复活，`Resolve` 也不得暴露该对象。允许保留删除元数据，并在先前进行中的操作结束后继续清理。这些保证适用于存储生命周期操作，不表示超时时变更已结束，也不提供分布式计算隔离。
 
@@ -97,11 +96,11 @@ Core 在分配任一资源前，选择并验证沙箱提供商与文件系统适
 
 ## 挂载 {#attachment}
 
-`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 可携带[工作区文件系统绑定](#identity-and-configuration)。未提供时使用提供商自有的 Environment 磁盘；提供时选择精确的外部对象，不得回退到自有磁盘。提供商在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；沙箱提供商不解释文件系统适配器参数或原生回执。
+`Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 携带[工作区文件系统绑定](#identity-and-configuration)。策略声明了工作区存储的提供商要求提供绑定，缺失时返回 `ErrInvalid`；未声明的提供商保留自有 Environment 磁盘并拒绝绑定。提供时选择精确的外部对象，不得回退到其他磁盘。提供商在解析前校验租户、Environment、绑定及其配置回执。`LocalOptions.Workspace` 注入文件系统解析器；沙箱提供商不解释文件系统适配器参数或原生回执。
 
-`DeploymentPolicy.Workspace` 声明挂载要求；未声明表示不支持外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执选择代次的模式和能力；[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)不会将文件系统配置复制进代次。Microsandbox 要求 `host_directory` 和 `user_xattr`；Docker 和 E2B 拒绝外部挂载。`ValidateWorkspacePolicy` 使用文件系统协议的组合校验器：不强制容量配额的外部文件系统拒绝正值 `EnvironmentDiskMiB`，零表示不请求配额。根磁盘容量仍为必需。未提供外部声明时，继续使用自有磁盘的容量边界。
+`DeploymentPolicy.Workspace` 已声明表示提供商在外部存储上运行每个 Environment，并给出挂载要求；未声明表示使用提供商自有磁盘、不使用外部存储。派生的不可变 `DeploymentSpec.Workspace` 回执记录所选能力，此类提供商始终具备该回执；未选择存储的部署返回 `ErrWorkspaceRequired`，Core 将其报告为 `workspace_storage_required`；[部署流程](../../contracts/agents-api/zh/sandbox-deployment.md#resources)不会将文件系统配置复制进代次。Microsandbox 要求 `host_directory` 和 `user_xattr`；Docker 和 E2B 拒绝外部挂载。校验使用文件系统协议的组合校验器：`EnvironmentDiskMiB` 仅是容量配额请求，仅当存储声明 `capacity_quota` 时有效，默认值为零，表示不请求配额。根磁盘容量仍为必需。
 
-Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解析绑定，仅向私有 helper 传递本地目录和不可变 ObjectID。Helper 挂载整个 `/environment`；保留内容与私有原生历史遵循[工作区文件系统范围](#lifetime-and-filesystem-scope)和 [Runtime 资源目录](configuration.md#runtime-resource-directories)。私有 HOME、凭据和计算根磁盘不是持久历史存储。原生资源通过明确的模式、对象和路径标签校验，不根据挂载形状推断模式。检查点恢复校验快照对象，通过 SDK `Volumes` 重映射 `/environment`，要求严格外部挂载策略，并拒绝任何恢复警告。恢复部分失败时保留精确目标身份用于清理，不证明就绪。未知结果继续观察原操作。原生 Bind 检查点及 guest 内 flock 连续性不证明对未知 writer 的隔离。
+Microsandbox 在每次 Create 和 Resume（包括观察中断的恢复）时解析绑定，仅向私有 helper 传递本地目录和不可变 ObjectID。Helper 挂载整个 `/environment`；保留内容与私有原生历史遵循[工作区文件系统范围](#lifetime-and-filesystem-scope)和 [Runtime 资源目录](configuration.md#runtime-resource-directories)。私有 HOME、凭据和计算根磁盘不是持久历史存储。原生资源通过对象和路径标签校验。检查点恢复校验快照对象，通过 SDK `Volumes` 重映射 `/environment`，要求严格外部挂载策略，并拒绝任何恢复警告。恢复部分失败时保留精确目标身份用于清理，不证明就绪。未知结果继续观察原操作。原生 Bind 检查点及 guest 内 flock 连续性不证明对未知 writer 的隔离。
 
 ## 内核 NFS 适配器 {#kernel-nfs-adapter}
 
@@ -138,7 +137,7 @@ stateDiagram-v2
 
 NFS 存储不提供计算 fencing 或自动分布式故障转移。Guest `flock` 不是跨 VM 写入者锁。上述单写入者和显式删除要求仍然必须遵守。确认释放后，可以允许另一兼容 node 上的新 VM 挂载同一对象，但 node 离线或 Create、Kill、快照清理结果未知均不证明旧写入方已停止。原生历史和数据库行为需要对所选 Runtime、Harness、文件系统组合进行资格验证；仅保留文件不保证原生 Session 恢复、跨 node 内存恢复或任意崩溃后的持久性。
 
-所选部署代次使用外部工作区存储时，Core 要求所选 Harness profile 支持 `retained_native_history`。创建流程在持有部署锁时校验该代次，然后才提交 Session 或计算预留。既有 Session 的 Runtime 准入和最终执行检查以不可变工作区绑定为依据。自带工作区存储不要求此能力。
+所选部署代次使用外部工作区存储（每个 microsandbox 代次都是如此）时，Core 要求所选 Harness profile 支持 `retained_native_history`。创建流程在持有部署锁时校验该代次，然后才提交 Session 或计算预留。既有 Session 的 Runtime 准入和最终执行检查以不可变工作区绑定为依据。使用自有磁盘的提供商不要求此能力。
 
 ## 一致性测试 {#conformance}
 

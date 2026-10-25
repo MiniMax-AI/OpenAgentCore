@@ -14,7 +14,7 @@ import (
 )
 
 func TestBootstrapDeliversOnlyPublicConnectionInput(t *testing.T) {
-	b := sandbox.Bootstrap{CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "test-secret"}
+	b := sandbox.Bootstrap{Reference: sandbox.Reference{EnvironmentID: "0d1f4f1c-6c3e-4e0b-9a52-3e3d8b0e7a11"}, SessionID: "6a1b7c0e-2f4d-4c55-8f6e-9d2a1b3c4d5e", CoreURL: "https://core.example/api/v1", DeviceID: "da912024-1543-4242-a2c1-5f4f7ebbc6c7", Credential: "test-secret"}
 	found := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "PUT" || !strings.HasSuffix(r.URL.Path, "/containers/test/archive") {

@@ -12,11 +12,13 @@ import (
 	"regexp"
 	"strconv"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 )
 
 // Enroll consumes a short-lived enrollment token. InitIdentity must have been
 // called with the local provider identity before invoking this function.
-func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentRequest) (StoredIdentity, error) {
+func Enroll(ctx context.Context, coreURL, dir, token string, input machineapi.NodeEnrollment) (StoredIdentity, error) {
 	release, err := lockDirectory(dir)
 	if err != nil {
 		return StoredIdentity{}, err
@@ -33,6 +35,9 @@ func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentReq
 	input.NodeID, input.Credential = stored.Identity.NodeID, stored.Credential
 	input.Provider, input.BackendFingerprint = stored.Identity.Provider, stored.Identity.BackendFingerprint
 	input.CoreURL = coreURL
+	var host Health
+	new(hostHealthSampler).fill(&host, dir)
+	input.CPUCount, input.EffectiveCPUCores, input.TotalMemoryBytes, input.AvailableDiskBytes = host.CPUCount, host.EffectiveCPUCores, host.TotalMemoryBytes, host.AvailableDiskBytes
 	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	// This also recovers a consumed registration whose success response was lost.
 	target, err := endpoint(coreURL, "/api/v1/sandbox-node/identity")
@@ -74,9 +79,9 @@ func Enroll(ctx context.Context, coreURL, dir, token string, input EnrollmentReq
 	}
 	return retainEnrollment(dir, stored, out)
 }
-func readEnrollment(r *http.Response) (EnrollmentResponse, error) {
+func readEnrollment(r *http.Response) (machineapi.NodeStatus, error) {
 	defer r.Body.Close()
-	var out EnrollmentResponse
+	var out machineapi.NodeStatus
 	if r.StatusCode < 200 || r.StatusCode >= 300 {
 		return out, enrollmentRejection(r)
 	}
@@ -87,7 +92,7 @@ func readEnrollment(r *http.Response) (EnrollmentResponse, error) {
 	}
 	return out, nil
 }
-func verifyEnrollment(s StoredIdentity, out EnrollmentResponse) (StoredIdentity, error) {
+func verifyEnrollment(s StoredIdentity, out machineapi.NodeStatus) (StoredIdentity, error) {
 	if out.SpecificationDigest != s.Identity.SpecificationDigest || out.DeploymentGeneration != s.Identity.DeploymentGeneration || out.NodeID != s.Identity.NodeID || out.InstallationID != s.Identity.InstallationID || out.Provider != s.Identity.Provider {
 		return StoredIdentity{}, errors.New("enrolled node identity mismatch")
 	}
@@ -98,7 +103,7 @@ func verifyEnrollment(s StoredIdentity, out EnrollmentResponse) (StoredIdentity,
 	return s, nil
 }
 
-func retainEnrollment(dir string, stored StoredIdentity, out EnrollmentResponse) (StoredIdentity, error) {
+func retainEnrollment(dir string, stored StoredIdentity, out machineapi.NodeStatus) (StoredIdentity, error) {
 	verified, err := verifyEnrollment(stored, out)
 	if err != nil {
 		return StoredIdentity{}, err

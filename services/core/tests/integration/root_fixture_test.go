@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/credentialcrypto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/db/sqlc"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment/placement"
@@ -60,11 +61,14 @@ func (s *Store) CreateSession(ctx context.Context, tenant string, input sessions
 }
 
 // createSession runs Session creation as cmd/server does, on s's database,
-// credential key and placement rules.
+// credential key and placement rules, with the built-in Harness declarations.
 func createSession(ctx context.Context, s *Store, tenant string, input sessions.CreateSession) (sessions.Creation, error) {
 	service, err := newSessionService(s)
 	if err != nil {
 		return sessions.Creation{}, err
+	}
+	if declaration, ok := builtin.Registry().Lookup(input.Engine); ok {
+		input.SupportsRetainedNativeHistory = declaration.Capabilities.RetainedNativeHistory.IsSupported()
 	}
 	return service.CreateSession(ctx, tenant, input)
 }

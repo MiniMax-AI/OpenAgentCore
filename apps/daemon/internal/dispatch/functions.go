@@ -44,10 +44,6 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 	r.mu.Lock()
 	state := r.sessions[env.ID]
 	session, finishOperation, ready := r.preparedOperationLocked(state)
-	var submitter agent.FunctionResultSubmitter
-	if ready {
-		submitter, _ = session.(agent.FunctionResultSubmitter)
-	}
 	r.mu.Unlock()
 	if state != nil && !ready {
 		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "not_ready", "function call is waiting for the native session")
@@ -61,13 +57,10 @@ func (r *Router) handleFunctionResult(ctx context.Context, env proto.Envelope) e
 	if state != nil && !state.capabilities.FunctionTools.IsSupported() {
 		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "unsupported", "The runtime declaration does not support function results.")
 	}
-	if ready && submitter == nil {
-		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "contract_violation", "Declared function capability has no implementation.")
-	}
-	if submitter == nil {
+	if session == nil {
 		return r.sendInteractionDecisionAck(ctx, env.ID, result.DeliveryID, false, "not_pending", "function call is no longer pending")
 	}
-	if err := submitter.SubmitFunctionResult(ctx, result); err != nil {
+	if err := session.SubmitFunctionResult(ctx, result); err != nil {
 		code := "runtime_error"
 		if errors.Is(err, agent.ErrUnsupportedOperation) {
 			code = "contract_violation"

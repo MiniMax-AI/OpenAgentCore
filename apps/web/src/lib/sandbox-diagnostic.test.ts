@@ -1,4 +1,3 @@
-import { sandboxNodeDiagnostics, type SandboxNodeDiagnostic } from "@oac/agents-client";
 import { describe, expect, it } from "vitest";
 import { nodeProviderDiagnostic, sandboxDiagnosticMessage } from "./sandbox-diagnostic";
 

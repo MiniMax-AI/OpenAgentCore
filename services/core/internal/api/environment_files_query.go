@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/MiniMax-AI/OpenAgentCore/internal/runtimebootstrap"
 	"net/http"
 	"net/url"
 	"path"
@@ -55,7 +56,7 @@ func readEnvironmentFileQuery(w http.ResponseWriter, r *http.Request, environmen
 	if !ok {
 		return options, false
 	}
-	const root = "/workspace"
+	const root = runtimebootstrap.PublicWorkspace
 	directory := root
 	if requested, exists := q["path"]; exists {
 		if err := environmentFileDirectoryError(requested[0]); err != nil {
@@ -88,7 +89,7 @@ func environmentFileDirectoryError(value string) error {
 		return errEnvironmentFileDirectory
 	case path.Clean(value) != value:
 		return errEnvironmentFileCanonical
-	case value != "/workspace" && !strings.HasPrefix(value, "/workspace/"):
+	case value != runtimebootstrap.PublicWorkspace && !strings.HasPrefix(value, runtimebootstrap.PublicWorkspace+"/"):
 		return errEnvironmentFileDirectory
 	}
 	return nil

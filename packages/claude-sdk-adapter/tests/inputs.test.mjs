@@ -3,6 +3,7 @@ import test from "node:test";
 import { Inputs } from "../dist/inputs.js";
 
 const result = (ids, session_id = "native") => ({ type: "result", session_id, user_message_uuids: ids });
+const textInput = text => [{ content: [{ type: "input_text", text }] }];
 const steer = (input_id, text = "additional text") => ({ type: "steer", input_id, input: [{ content: [{ type: "input_text", text }] }] });
 
 test("queued input survives the first result and completes only with its own native result", async () => {
@@ -65,7 +66,6 @@ test("reject before readiness, repeated identities and native receipt capacity w
 });
 
 test("ordered image batches keep message boundaries and aggregate native consumption", async () => {
-  const { textInput } = await import("../dist/message_input.js");
   const inputs = new Inputs(textInput("opening"));
   const stream = inputs[Symbol.asyncIterator]();
   const first = (await stream.next()).value;
@@ -92,7 +92,6 @@ test("ordered image batches keep message boundaries and aggregate native consump
 });
 
 test("native UUID capacity rejects a whole batch and partial consumption does not apply it", async () => {
-  const { textInput } = await import("../dist/message_input.js");
   const inputs = new Inputs(Array.from({ length: 63 }, () => textInput("opening")[0]));
   inputs.start("native");
   const pair = [...textInput("a"), ...textInput("b")];

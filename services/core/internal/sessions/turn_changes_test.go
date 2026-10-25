@@ -15,8 +15,11 @@ const (
 )
 
 func turnWith(status string) Turn {
-	return Turn{ID: testTurn, SessionID: testSession, Status: status, CompletedAt: time.Unix(1700000000, 0), Outcome: json.RawMessage(`{"private":true}`)}
+	return Turn{ID: testTurn, SessionID: testSession, Status: status, CompletedAt: time.Unix(1700000000, 0), Outcome: json.RawMessage(`{"error":"native text","error_code":"engine_failed","engine_error_code":"rate_limit_exceeded","engine_http_status":429}`)}
 }
+
+// classified is turnWith's outcome without its native text and HTTP status.
+const classified = `{"error_code":"engine_failed","engine_error_code":"rate_limit_exceeded"}`
 
 func types(changes []SessionChange) []string {
 	var kinds []string
@@ -80,7 +83,7 @@ func TestTurnChangesReportTheNewStatus(t *testing.T) {
 			t.Fatalf("%s: %q", test.status, types(changes))
 		}
 		for _, change := range changes {
-			if change.Turn.Outcome != nil || change.Event.TurnID != testTurn || change.Turn.Status != test.status {
+			if string(change.Turn.Outcome) != classified || change.Event.TurnID != testTurn || change.Turn.Status != test.status {
 				t.Fatalf("%s: snapshot %+v", test.status, change)
 			}
 		}
@@ -108,7 +111,7 @@ func TestActivityChangeDerivesSessionActivity(t *testing.T) {
 		{TurnFailed, nil, "agent.session.failed", true},
 	} {
 		change := ActivityChange(turnWith(test.status), usage, test.actions)
-		if change.Event.Type != test.want || change.Settled != test.settled || change.Turn.Outcome != nil ||
+		if change.Event.Type != test.want || change.Settled != test.settled || string(change.Turn.Outcome) != classified ||
 			string(change.SessionUsage) != string(usage) || !reflect.DeepEqual(change.RequiredActions, test.actions) {
 			t.Fatalf("%s: %+v", test.status, change)
 		}

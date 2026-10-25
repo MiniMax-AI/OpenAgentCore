@@ -6,8 +6,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 )
 
 // Setup is confidential input, never ordinary resource metadata.
@@ -44,8 +45,15 @@ func (s Setup) ValidateInstalled() error {
 	return s.validate(true)
 }
 
+// ValidEnvironmentEntry reports whether an environment variable may be set.
+func ValidEnvironmentEntry(name, value string) bool {
+	// The first three reservations are explicitly part of the public guide;
+	// OAC_* identifies the actual deployment authority and binding.
+	return environmentName.MatchString(name) && name != "PATH" && name != "OPENAI_API_KEY" && !strings.HasPrefix(name, "CODEX_") && !strings.HasPrefix(name, "OAC_") && !strings.ContainsRune(value, 0)
+}
+
 func (s Setup) validate(installed bool) error {
-	if validateSkills(s.Skills, installed) != nil || ValidatePlugins(s.Plugins) != nil || agentcapabilities.ValidateSourceDirectories(s.CapabilityDirectories) != nil {
+	if validateSkills(s.Skills, installed) != nil || ValidatePlugins(s.Plugins) != nil || proto.ValidateSourceDirectories(s.CapabilityDirectories) != nil {
 		return ErrInvalid
 	}
 	ordinary := s
@@ -56,9 +64,7 @@ func (s Setup) validate(installed bool) error {
 		return ErrInvalid
 	}
 	for name, value := range s.Env {
-		// The first three reservations are explicitly part of the public guide;
-		// OAC_* identifies the actual deployment authority and binding.
-		if !environmentName.MatchString(name) || name == "PATH" || name == "OPENAI_API_KEY" || strings.HasPrefix(name, "CODEX_") || strings.HasPrefix(name, "OAC_") || strings.ContainsRune(value, 0) {
+		if !ValidEnvironmentEntry(name, value) {
 			return ErrInvalid
 		}
 	}

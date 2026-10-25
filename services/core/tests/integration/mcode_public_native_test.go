@@ -159,7 +159,7 @@ func startNativeEngineDaemon(t *testing.T, h *dispatchHarness, home, binary, eng
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
 		if peer, err := h.registry.LookupDevice(h.device.ID); err == nil && peer != old {
-			if info, found, known := peer.AgentKindStatus(engine); found && known && info.Available && info.Capabilities.EnvironmentNone {
+			if info, found, known := peer.AgentKindStatus(engine); found && known && info.Available && info.Capabilities.EnvironmentNone.IsSupported() {
 				return stop
 			}
 		}

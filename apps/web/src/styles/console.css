@@ -42,13 +42,6 @@ html[data-theme="dark"] {
   to { opacity: 1; }
 }
 
-/* Sidebar ------------------------------------------------------------- */
-
-.brand-lockup .brand-product {
-  margin-left: 2px;
-  font-size: 12px;
-}
-
 .console-nav {
   margin-top: 6px;
 }
@@ -514,25 +507,6 @@ html[data-theme="dark"] {
   font-variant-numeric: tabular-nums;
 }
 
-.select-control select {
-  height: 28px;
-  max-width: 220px;
-  padding: 0 28px 0 9px;
-  color: var(--fg);
-  font-size: 13px;
-  background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='m1 1 4 4 4-4' stroke='%23787774' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
-  border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  box-shadow: var(--shadow-control);
-  appearance: none;
-}
-
-.select-control select:focus-visible {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
 /* Lists --------------------------------------------------------------- */
 
 /* Every resource list: search first, then filters, the count on the right. */
@@ -878,13 +852,6 @@ html[data-theme="dark"] {
 
 .clickable-row {
   cursor: pointer;
-}
-
-.table-truncate {
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .table-muted {

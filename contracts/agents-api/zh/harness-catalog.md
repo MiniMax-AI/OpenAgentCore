@@ -7,10 +7,10 @@ title: "内置 Harness 注册"
 
 每个 Harness 对应 `internal/harnessconfig/<package>` 目录中唯一的 `declaration.go`。新增包含 `declaration.go` 的目录即注册该 Harness；`make generate-harness-catalog` 重新生成注册代码和本页，`make check-harness-catalog` 检查生成结果。
 
-| 标识符 | 显示名称 | 声明 |
-| --- | --- | --- |
-| `claude_sdk` | Claude Code | [`claudesdk/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/claudesdk/declaration.go) |
-| `codex` | Codex | [`codex/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/codex/declaration.go) |
-| `mcode` | MiniMax Code | [`mcode/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/mcode/declaration.go) |
+| 标识符 | 显示名称 | 原生版本 | 声明 |
+| --- | --- | --- | --- |
+| `claude_sdk` | Claude Code | `0.3.269` | [`claudesdk/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/claudesdk/declaration.go) |
+| `codex` | Codex | `0.153.4` | [`codex/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/codex/declaration.go) |
+| `mcode` | MiniMax Code | `0.4.12` | [`mcode/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/mcode/declaration.go) |
 
 这些注册描述当前构建。部署启用的 Harness 由 `OAC_HARNESSES` [进程设置](../../../docs/zh/configuration.md#settings)决定；[Harness 能力](./harness-capabilities.md)列出各 Harness 的支持范围，连接的 Runtime 报告自身可用性。[Harness protocol](./harness-onboarding.md)介绍适配器和打包步骤。

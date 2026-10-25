@@ -36,7 +36,7 @@ Evidence for a status comes from the pinned official SDK and raw HTTP against th
 | Environments | retrieve | Implemented; Session-scoped ([ownership](./environments.md#resources-and-states)). The pinned contract rejects `environment.environment_id`; existing hosted Environments cannot be attached across Sessions. Workspaces shared across Sessions belong to the application ([Projects own assets](../../docs/concepts.md#projects-own-assets)) | [Environments](./environments.md) |
 | Environment files | create, list | Implemented; the list is not recursive | [Environment files and Artifacts](./environment-files.md) |
 | Environment Templates | create, retrieve, update, list, delete | Implemented; execution limits are listed under [known gaps](#known-gaps) | [Environment Templates](./environments.md#templates) |
-| Vaults | create, retrieve, list, delete | Implemented; no archive operation | [Vaults and Credentials](./vaults.md) |
+| Vaults | create, retrieve, list, delete | Implemented | [Vaults and Credentials](./vaults.md) |
 | Vault Credentials | create, retrieve, update, list, delete | Implemented for `static_bearer` and `mcp_oauth` | [Vaults and Credentials](./vaults.md) |
 | Files | create, retrieve, list, delete, content | Implemented for `purpose=user_data`; content download is rejected | [Files and Skills](./source-files.md) |
 | Skills and Skill versions | create, retrieve, update, list, delete, content | Implemented | [Files and Skills](./source-files.md) |
@@ -58,10 +58,11 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Not-found messages never name the resource; Core quotes a full metadata key where the official message abbreviates it.
 - UUID identifiers also resolve in other spellings, such as uppercase or braces.
 - The Files routes keep a local `unsupported_parameter` code for a repeated query key.
+- Core has no CORS handling; the official service sends CORS headers.
 
 **Lists** ([lists](./wire-semantics.md#lists))
 
-- A deleted Agent or Session used as a cursor returns 404; the official service still pages from it.
+- A deleted Agent used as a cursor returns 404; the official service still pages from it.
 - A Turn cursor from another Session, a Credential cursor equal to its Vault ID, and a Skills cursor that is not a Skill ID return 404.
 - Vault and Credential lists clamp a negative `limit`, as the pinned SDK describes; the official service returns 400.
 
@@ -76,30 +77,46 @@ Each item is Core's deliberate or native behavior where the official service beh
 - Claude Code with live search on `environment: none` has only `WebSearch`, so search yields `search` actions and no page opens ([web search](./execution-tools.md#web-search-and-programmatic-tool-calling)).
 - An omitted reasoning effort stays null instead of taking the model's default.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
+- Codex rejects programmatic tool calling together with `multi_agent`.
 - A Session's `agent.tools` omits `tool_search` declarations.
 - Core rejects an inline `authorization` on a Session MCP transport, an `Authorization` entry in `headers` and a nonempty stdio `env`: credentials come only from Vaults (`credential_id`) and environment values only from the Environment (`env_vars`) ([MCP](./execution-tools.md#mcp)).
 - A `stdio` MCP server needs a workspace placement and the origin `environment`. Claude Code starts the server in its workspace directory, so `cwd` must equal it, with its whole process environment, which also holds the model provider key and other servers' Vault bearer tokens, and it needs `allowed_tools` null. MiniMax Code starts the server in its private home directory, so it rejects every `stdio` server ([MCP](./execution-tools.md#mcp)).
+- Core rejects nonempty MCP `request_metadata`, which no Harness can send, as well as a `stdio` server whose `connection_origin` is `service`, an empty `credential_id` and an empty `allowed_tools` name, which the pinned schema allows without defining their meaning (400 with the reason).
 - Claude rejects an MCP `server_url` or `headers` value containing `${`, because the native client expands `${VAR}` in both from a process environment that holds Core-held credentials.
-- Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returned 200.
+- Each Harness rejects the MCP labels its native client reserves, such as `functions` on Claude Code ([MCP](./execution-tools.md#mcp)).
+- An MCP server that cannot be reached is handled natively: an optional server's tools are missing and a required one fails the start ([MCP](./execution-tools.md#mcp)). The official Item and Turn failure shapes are not reproduced.
+- Deleting a Session right after an events 202 returns 409, because Core admits the Turn in the same transaction; the official service returns 200.
+- Deleting a Session while its hosted Environment runs setup succeeds when no input is pending; the official service returns 409.
 
 **Input, events and history** ([Sessions, events and history](./sessions-events.md), [message content](./message-content.md))
 
 - Input to a `none` Session is admitted synchronously; Core does not emulate the official asynchronous admission window.
-- A function result that resumes a waiting Turn emits `turn.in_progress`, and cancelling a Turn that waits on a function result emits an interim `agent.session.in_progress`.
+- An events request takes at most 64 events ([send input](./sessions-events.md#send-input)); the official limit is 16384.
+- A function result that resumes a waiting Turn emits `turn.in_progress`.
 - A function call the native Harness abandons, such as a Subagent call dropped when the root closes or interrupts the child or a MiniMax Code call past its 120 s timeout, is withdrawn: it stops being a required action and a later result for it returns 409 `conflict_error`. The official API has no withdrawal.
 - Attaching to the stream mid-Turn sends no catch-up Item snapshots.
 - The Items list includes in-progress and incomplete output Items, and keeps a failed function result's submitted `output`.
-- Error messages omit the call and executor IDs that official messages include.
+- Error messages omit the call and executor IDs that official messages include, except that the unknown tool call message names its `call_id`.
+- A failed Turn reports the model failure categories under their official names and `sandbox_error` for a Runtime that disconnected or failed its preparation. Every other Core failure, such as an unavailable Runtime, a missing model provider, a rejected input or a storage failure, reports `internal_error`. The message is a fixed sentence per code and never carries native text. Subagent Turns always report `internal_error`.
 - An empty text part beside other text is accepted and stored.
 - Empty input returns 400 `invalid_request` with a generic message and a null param; the official response is `invalid_request_error` with param `input`.
 - Session usage is available as soon as every root Turn has settled; official reads lag by seconds.
+- U+0000 in Harness output, such as command output, reads as U+FFFD; the official service keeps it.
+- A `reasoning` Item carries what the Harness shows of its native reasoning: its native summary when it produces one, otherwise its native reasoning text, such as Codex raw reasoning or the thinking text the model API returns to Claude Code. Each native part is one `summary_text` part, and native reasoning without text is not reported, so Claude Code with the model provider's `thinking.display` `omitted` reports none. Codex streams the first native channel an item delivers, its summary or its raw reasoning text.
+
+**Environments and Templates** ([Environments](./environments.md))
+
+- `openai_hosted` and Template `capability_directories` must lie inside `/workspace`; the official service also accepts system paths such as `/etc` ([capability directories](./environments.md#plugins-and-capability-directories)).
+- `env` cannot set `OPENAI_API_KEY`, which Core reserves ([env](./environments.md#env-and-setup-commands)); the official service accepts it.
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 
-- File uploads hold up to 512 MiB; the official limit is 512 MB. The Files list returns up to 10,000 Files by default, and a `purpose` filter other than `user_data` returns an empty page.
+- File uploads hold up to 512 MiB; the official limit is 512 MB. A `purpose` filter other than `user_data` returns an empty page.
 - Skill version numbers are never reused, and uploads and deletions of one Skill run one at a time.
 - Environment files work on `self_hosted` Environments, which the official service refuses.
 - Creating an Environment file over an existing regular file returns the "must not traverse symlinks or overwrite existing files" message. A parent symbolic link that stays inside the workspace is followed, and a parent that escapes the workspace or is a regular file gets a generic 400; the official service rejects symbolic-link parents.
+- File names hold 1–1,024 bytes; the official service accepts empty and longer names.
+- A `SKILL.md` front-matter key other than `name`, `description`, `license`, `compatibility` and `metadata` is rejected; the official service accepts unknown keys ([upload a bundle](./source-files.md#upload-a-bundle)).
 - Artifact IDs are UUIDs.
 
 **Vaults and Credentials** ([Vaults and Credentials](./vaults.md))
@@ -111,43 +128,49 @@ Each item is Core's deliberate or native behavior where the official service beh
 - An explicit `null` for OAuth `access_token`, `refresh` or `token_endpoint_auth` in an update keeps the stored value.
 - A static token must be an RFC 6750 `b64token` to run; other stored tokens fail at dispatch.
 - Vault metadata has a 64 KiB bound and no pair or length limits; names are 1–256 bytes after trimming.
+- A Credential's `mcp_server_url` is stored and matched as sent; the official service lowercases its scheme and host.
 
 ## Known gaps
 
 **Configuration and tools**
 
-- A `reasoning.effort`, `reasoning.summary`, `service_tier`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
-- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input.
+- A `reasoning.effort`, `reasoning.summary`, `service_tier`, `text.verbosity`, `web_search` mode or setting or `programmatic_tool_calling` value that the selected Harness does not declare is saved but rejected at Session admission ([Harness capabilities](./harness-capabilities.md#execution-and-input)).
+- Harness support for tools, structured output, deferred discovery, subagents and MCP differs by Harness and placement; see the [Harness capabilities](./harness-capabilities.md). MiniMax Code has no image input and accepts at most 32 KiB of `instructions`.
 - Model-derived reasoning defaults are not resolved.
 
 **Execution and history**
 
-- Codex reasoning summaries are requested but not projected as `reasoning` Items, and the stream does not emit reasoning-summary events, Environment `pending` or `ready` events, or every pinned interim tool-output variant.
+- The stream does not emit Environment `pending` or `ready` events, or every pinned interim tool-output variant.
 - Native Item variants beyond those listed under [Turns and Items](./sessions-events.md#turns-and-items) are not projected, and Items cannot be modified.
 - A function result that cancellation prevents from being applied never appears as an Item.
 - Pinned Codex can lose command output emitted before its stream subscription.
 - Claude Code and MiniMax Code report no public usage.
+- `agent_message` and `interrupt_subagent_call` Items are accepted by the Runtime protocol, but no Harness adapter produces them.
+- Codex file changes have no official Item type ([Turns and Items](./sessions-events.md#turns-and-items)).
+- Claude Code runs at most 64 messages in one Turn, counting its opening input ([Runtime boundary](./message-content.md#runtime-boundary)); a Turn that receives more fails with `internal_error`.
 - MiniMax Code receives a message that starts with `/` with a trailing blank line, because ACP otherwise runs it as an operator command.
 - Core gives no crash-safe or exactly-once guarantee for native side effects; claimed work fails on restart without replay.
 - `file_id` and `detail` on images are rejected; each Harness declares which `image_url` values it accepts ([message content](./message-content.md#images)).
 
 **Environments and Templates**
 
-- Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the existing [input reservation deadline](./environments.md#reservations).
+- Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the [input reservation deadline](./environments.md#reservations).
+- MiniMax Code does not declare `retained_native_history`, so it cannot run on microsandbox, which keeps every Environment on workspace storage; Core rejects the Session ([Harness capabilities](./harness-capabilities.md)).
 - Only `enabled` networking runs, so Sessions that need `disabled` or `restricted` are rejected ([restricted network policy](./environments.md#restricted-network)).
-- `packages.system` is rejected; system packages must be preinstalled.
+- `packages.system` other than null or an empty list is rejected; system packages must be preinstalled.
+- `Environment.files` lists the files recorded at Session creation; files created later through the Environment files API do not appear.
 - Cold continuation does not restore process memory, background processes or temporary system-disk changes, and completed setup is not replayed ([Environment persistence](./environments.md#runtime-capability-preparation)). On compatible microsandbox nodes with retained NFS storage, Codex and Claude Code are qualified for [checkpoint transfer](../../docs/sandbox-provider.md#checkpoint-transfer) and for continuation after [confirmed compute loss](../../docs/sandbox-provider.md#confirmed-compute-loss). Takeover of an unconfirmed old writer, host-crash durability and arbitrary crash-damaged history are unqualified.
 
 **Files and Environment files**
 
 - Files accept only `purpose=user_data`; other purposes, `expires_after` and the Uploads API are not supported.
+- The Skills create route accepts a single `files` part, but the pinned SDK sends no part when `files` is one file instead of a list ([upload a bundle](./source-files.md#upload-a-bundle)).
 - An Environment file write whose outcome is uncertain is never retried or recovered automatically; it blocks further writes and messages to the Session.
 
 **Vaults and Credentials**
 
-- There is no archive lifecycle, storage-key rotation or re-encryption.
+- There is no storage-key rotation or re-encryption.
 - OAuth refresh happens only at dispatch: there is no refresh on a provider 401, no mid-Turn replacement and no withdrawal of a token already sent to a Runtime.
-- Input sent to a Session whose selected Credential was deleted is admitted and then fails at dispatch.
 - Credential creation takes no `Idempotency-Key`.
 
 **Sessions**
@@ -158,14 +181,16 @@ Each item is Core's deliberate or native behavior where the official service beh
 ### Unverified against the official service
 
 - The order of errors when one request has several faults, and error, default and payload-limit parity in general.
-- A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
+- A Subagent's function call: Core makes it a required action of the root Turn that runs the child, with `turn_id` set to that Turn, and publishes the child's `function_call` Item once as `agent.session.turn.item.added` with the child Turn ID and a null `output_index`; a result may name either Turn. The Turn is `waiting` and the Session `requires_action` while root output may continue, and the `call_id` equals the `call_id` of the child's `function_call` Item. Claude Code publishes the child's Items when the root Turn settles, after the required action.
 - Whether Subagent child Turns and pending Environment file writes block Session deletion.
 - The official order between the pending-input error and an unknown result target.
+- Whether a Session whose latest Turn failed accepts new input: Core starts a new Turn, and one official sample rejected the input.
+- The event order when a waiting Turn resumes or is cancelled.
 - Failure reasons for npm, initial-file and Skill installation have no official sample.
 - Codex behavior for an empty text part beside text, and for images in failed function results or as remote references.
 - Official `HEAD` behavior on the routes where Core returns 405.
 - Environment Template hostname forms beyond exact hosts, and `disabled` combined with domains.
-- Files purpose filtering and pagination while Files change; official Skill upload limits and error timing.
-- Environment file list defaults (limit 20, the workspace root as the default path, no recursion, page-token invalidation), the 50 MiB `file_id` copy limit and the check order on create.
+- Files purpose filtering and pagination while Files change; official Skill upload limits and error timing, and the error for a malformed Skill version.
+- Environment file list defaults (limit 20, the workspace root as the default path, page-token invalidation), the 50 MiB `file_id` copy limit and the check order on create.
 - Artifact capture of hard links, special files and a linked `outputs` directory, republication after changed bytes, and content headers and ranges.
-- Vault and Credential error and retry semantics, pagination under concurrent writes, visibility after deletion, exact-URL matching against the official normalization, OAuth refresh timing and errors, and restricted-key scopes.
+- Vault and Credential error and retry semantics, pagination under concurrent writes, visibility after deletion, OAuth refresh timing and errors, and restricted-key scopes.

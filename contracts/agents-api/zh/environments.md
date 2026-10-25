@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 3408e2c811042732d35227150533cf12a85cfcff8a5118d7eb62a5d68549cc8b
+source_hash: 15550304b85596e09cbeb4cc6d7253a4bdd64ffd6adc58a539511e0c939f7ad6
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -55,7 +55,7 @@ stateDiagram-v2
 
 Session environment 事件携带 Session 和 Environment 的身份标识以及可选的 Turn 身份标识，绝不携带配置、凭据、注册 ID 或修订号。Session 的 `required_actions` 可以包含 `{type: "environment_connection", environment_id}`，这与函数调用相互独立。Environment 连接、Session 状态和 Turn 状态相互独立。
 
-Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
+Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会选出重试的胜者，而重试绝不创建或修复 Environment。Environment 从所属 Session 派生其项目和不可变配置。其首个状态为 `pending`；`self_hosted` Environment 在首次连接前读作 `disconnected`。Session 删除后，读取会隐藏 Environment，而 Core 仍保留该记录，用于结算和清理。Session 为 `none` 时没有 Environment。
 
 托管的外层 Environment 必须排除权限范围更广的应用程序凭据和其他租户的机密。
 
@@ -224,7 +224,7 @@ Executor 接纳仅验证已冻结的描述符。准备所有者会在调用原�
 daemon 以启动它的账户身份运行，绝不使用 sudo 或提升权限。准备过程中只会安装用户目录中的依赖项。
 
 - 系统依赖必须预先安装在托管镜像中，或由自托管机器的所有者安装。缺少可执行文件或库时，需要该依赖的操作会失败。
-- 模板和内联配置都会拒绝 `packages.system`，包括 null 或空列表（400，param `packages.system`）。软件包响应仍会包含官方要求的 `system: []`。
+- `packages.system` 接受 null 或空列表（表示没有系统软件包），模板和内联配置会拒绝其他任何值（400，param `packages.system`）。软件包响应包含官方要求的 `system: []`，因此读取到的配置可以原样回传。
 - npm 会安装到本地 prefix，Python/pip 会安装到 Runtime 软件包目录下的本地 target；Node/npm 和 Python/pip 必须已经安装。其依赖项可被每个工作目录中的原生工具看到。
 - 设置命令使用 Bash 运行；在 Windows 上必须使用 Git Bash，且不能由其他 shell 替代。默认工作目录为 `/workspace`。
 - 在 Windows 上，npm 安装以及名为 `npm` 或 `npx` 的 stdio MCP 命令（包括其 `.cmd` shim）会通过 Node 调用 npm 的 JavaScript 入口点运行，而不经过额外的 shell。
@@ -318,6 +318,10 @@ Session 会先应用模板，然后应用自身字段。组合仅在加密 Sessi
 
 作为比较，不带模板的内联 `openai_hosted` Session 会将省略或为 null 的 `network` 视为启用。
 
+### 准备复用 {#preparation-reuse}
+
+Core 可以用同一 Project 中较早一次准备的结果启动托管 Environment，前提是两者在 Template 组合之后的有效配置完全相同，且距该次准备不超过 24 小时。每个 Session 仍然得到自己的副本。此时设置命令和包安装不会为该 Session 再次运行。只复用 `/environment`（见[生命周期与文件系统范围](../../../docs/zh/workspace-provider.md#lifetime-and-filesystem-scope)），HOME 和其他与计算实例本地相关的改动不会复用。设置过程不得产生每个 Session 唯一的值，不得执行必须按 Session 发生的外部副作用，也不得获取 24 小时内就会过期的凭据；需要这些行为的配置必须有所不同，例如在 `env` 或 `files` 上。未声明[准备缓存](../../../docs/zh/sandbox-provider.md#explicit-operation-contracts)的提供商始终完整准备。
+
 ### 受限网络 {#restricted-network}
 
 `restricted` 要求在 `allowed_domains` 中提供 1–100 个精确 ASCII 主机名；子域名和重定向目标需要各自的条目。通配符、URL 或端口语法、IP 字面量、Unicode 和尾随点都会被拒绝。读取操作会返回提供的拼写、顺序和重复项；比较操作使用单独的小写去重副本。
@@ -355,7 +359,7 @@ template = client.beta.agents.environments.templates.create(
 )
 ```
 
-固定版本的 `/v1/skills` 资源、版本及内容路由使用项目 API 密钥，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。固定版本 SDK 3.13.0 在多部分内容提取过程中会丢弃单文件 tuple，因此应使用原始 HTTP 上传单个 ZIP。一次上传最多包含 500 个常规文件，并且必须恰好包含一个 `SKILL.md`；压缩后为 5 MiB，展开后为 20 MiB。[File resource semantics](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
+固定版本的 `/v1/skills` 资源、版本及内容路由使用项目 API 密钥，且不使用 Agents beta 标头。ZIP 上传使用 `files`，目录上传则重复使用 `files[]`。[Upload a bundle](source-files.md#upload-a-bundle) 负责 bundle 格式、上传限制和 SDK 单文件限制；[versions and metadata](source-files.md#versions-and-metadata) 负责默认版本和删除规则。
 
 省略或传入 null 版本的引用会在 Session 创建时选择默认版本，`"latest"` 会选择最新版本，正版本号字符串则选择该版本。模板响应会保留未解析的选择器（默认版本为 `version: null`）；Session 元数据会显示 `{type, skill_id, version, name, description}`，其中版本为具体值。Session 会在其创建事务中冻结所选版本的字节和元数据；之后默认版本发生变化、源被删除或模板被更新，都无法改变这些内容。
 
@@ -378,8 +382,7 @@ Plugin 是带有 type、name 和 description 的内联 ZIP，其单个归档根�
 
 Skills 及其不可变版本是项目资源，独立于 Session 和原生安装。
 
-- 版本分配和指针变更会在所属 Skill 行上串行化。顶层 name 和 description 在同一事务中跟随默认版本；非默认上传不会更改它们。在并发上传和删除过程中，版本身份始终唯一。
-- Bundle 使用服务密码进行加密，并绑定到项目、Skill 和版本。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
+- 版本分配、默认版本变更和串行化由 [Versions and metadata](source-files.md#versions-and-metadata) 定义，Bundle 加密由 [Upload a bundle](source-files.md#upload-a-bundle) 定义。元数据读取绝不会加载或解密 Bundle。删除 Skill 会回收其版本，但不会影响已冻结的 Session。
 - 引用会在 Session 创建事务中、upsert 建立所有权之后解析。被引用的资源按稳定顺序锁定，版本、元数据和字节会一并冻结。公开引用元数据、未解析的模板意图和已解析的 Runtime Bundle 始终彼此独立；引用绝不会报告为内联内容。
 
 内联和引用的 Skills 使用相同的机密快照与安装程序。Runtime 会在设置和原生执行之前，将它们安装到能力根目录下的 `skills/<name>`。适配器只注册所选的 Skill 根目录：Codex 将其注册为显式额外根目录，MiniMax Code 通过其原生目录进行注册，Claude 则将其作为私有状态路径下的用户 Skills，使原生列出与本地 `~/.claude/skills` 相同的裸名称。Claude 拒绝包含 `.claude-plugin` 的 Skill，因为原生会将其作为插件加载，连同其 hooks 和 MCP 服务器。Skill 根目录不会启用 MCP 服务器，只有 [Plugin MCP](#plugin-mcp) 会启用。Codex 与本地运行一样递归扫描每个 Skill 根目录，因此嵌套的 `SKILL.md` 会注册另一个原生 Skill。原生 Harness 配置绝不会整体透传。

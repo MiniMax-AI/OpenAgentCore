@@ -20,11 +20,12 @@ Placements are `none` (no Environment), hosted (`openai_hosted`) and self-hosted
 | --- | --- | --- | --- |
 | Text Turns, active input, cancellation, restart and continuation | Verified on all placements | Verified on all placements | Verified on all placements |
 | [Files and Artifacts](./environment-files.md) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted |
+| Agent `instructions` | Admitted | Admitted | At most 32 KiB; longer instructions are rejected |
 | [Whitespace-only message text](./message-content.md) | Admitted; delivered unchanged | Admitted; native drops it, and an all-blank message becomes `(no content)` | Rejected |
 | [Message images](./message-content.md#images) | PNG and JPEG data URLs: verified on all placements; other data URLs: admitted; remote URLs: rejected | PNG and JPEG data URLs: verified on all placements; remote URLs and GIF and WebP data URLs: admitted | Rejected |
 | `reasoning.effort` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted | `low`, `medium`, `high`, `xhigh`, `max`: admitted | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`: admitted |
-| `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | Rejected | Rejected |
-| `service_tier` other than `auto` | `default`, `flex`, `priority`: admitted | Rejected | Rejected |
+| `reasoning.summary` | `concise`, `detailed`, `auto`: admitted | `auto`: admitted | Rejected |
+| `service_tier` other than `auto` | `default`, `flex`, `priority`, `fast`: admitted | Rejected | Rejected |
 | `text.verbosity` other than `medium` | Admitted; the native model decides | Rejected | Rejected |
 | [Public token usage](./sessions-events.md) | Measured counters | Null | Null |
 
@@ -39,7 +40,7 @@ Native model parameters and provider protocols per Harness are in [model executi
 | [Structured output](./execution-tools.md#structured-output) | Admitted on all placements | Verified on all placements | Rejected |
 | [Deferred function discovery](./execution-tools.md#deferred-function-discovery) | Rejected | Verified: `none`, self-hosted; admitted: hosted | Rejected |
 | [Disabled web search and programmatic tool calling](./execution-tools.md#web-search-and-programmatic-tool-calling) | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted | Verified: `none`; admitted: hosted, self-hosted |
-| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements | `live` admitted on all placements; `cached` and `enabled` rejected | Rejected |
+| Web search `cached` or `live` and programmatic tool calling `enabled` | Admitted on all placements; `enabled` is rejected together with `multi_agent` | `live` admitted on all placements; `cached` and `enabled` rejected | Rejected |
 | [Service-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: `none`; rejected elsewhere | Verified: `none`; rejected elsewhere | Verified: `none`, with `allowed_tools` null and `required` false only; rejected elsewhere |
 | [Environment-origin HTTP MCP](./environments.md#public-mcp-connection-origin) | Verified: hosted, self-hosted | Verified: hosted, self-hosted | Verified: hosted, self-hosted; `allowed_tools` null and `required` false only |
 | [Stdio MCP](./execution-tools.md#mcp) | Admitted: hosted, self-hosted | Admitted: hosted, self-hosted; `cwd` must be the workspace directory and `allowed_tools` null | Rejected |
@@ -59,9 +60,9 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | [Initial files, setup commands, Skills and Plugins](./environments.md#runtime-capability-preparation) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Capability directories | Admitted | Admitted | Admitted |
 | npm and Python packages | Admitted | Admitted | Admitted |
-| `packages.system` | Rejected | Rejected | Rejected |
+| `packages.system` other than null or `[]` | Rejected | Rejected | Rejected |
 | Network `disabled` or `restricted` | Rejected | Rejected | Rejected |
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, with literal headers or HTTPS bearer | Verified: self-hosted; admitted: hosted; literal headers or HTTPS bearer |
 
-External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; owned workspace storage does not. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.
+External workspace storage additionally requires the selected Harness declaration and Runtime to support `retained_native_history`; Docker and E2B, which keep their own disks, do not. microsandbox always uses external storage, so MiniMax Code, which does not declare the capability, cannot run on it. The [Workspace filesystem protocol](../../docs/workspace-provider.md) owns storage combination admission.

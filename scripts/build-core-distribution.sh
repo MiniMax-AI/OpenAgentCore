@@ -104,14 +104,14 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   exit 1
 fi
 go run ./services/core/cmd/provider-artifacts
-for file in install_display.py node_output.py node_install.py provider_assets.py node_spec.py node_generations.py node_payload.py distribution.py; do
+for file in install_display.py node_output.py node_install.py host_docker.py host_microsandbox.py provider_assets.py node_spec.py node_generations.py node_payload.py distribution.py; do
   cp "deploy/node/$file" "$bundle/$file"
 done
 python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch" "$revision"
 # The bundled docs (BUNDLED_DOCS); links that leave them point at this commit on GitHub.
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
 mkdir -p "$bundle/runtime"
-cp services/core/deploy/codex/seccomp.json "$bundle/runtime/"
+cp services/core/internal/sandbox/docker/seccomp.json "$bundle/runtime/"
 mkdir -p "$bundle/storage"
 install -m 0755 services/core/internal/workspacefs/nfs/quota/oac-workspace-quota "$bundle/storage/"
 cp LICENSE "$bundle/"

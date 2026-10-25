@@ -20,10 +20,15 @@ func workspaceBinding() *workspacefs.Binding {
 	c := workspacefs.Configuration{ID: "77777777-7777-4777-8777-777777777777", Adapter: "test", Parameters: json.RawMessage(`{}`)}
 	return &workspacefs.Binding{Configuration: c, Attachment: workspacefs.Attachment{Reference: workspacefs.Reference{TenantID: r.TenantID, EnvironmentID: r.EnvironmentID, ObjectID: "88888888-8888-4888-8888-888888888888"}, ConfigurationID: c.ID, Kind: workspacefs.AttachmentHostDirectory, Native: json.RawMessage(`{}`)}}
 }
+
+// resolveTo gives a Provider the resolver every Environment needs.
+func resolveTo(p *Provider) {
+	p.workspace = workspaceResolverFunc(func(context.Context, workspacefs.Binding) (workspacefs.Directory, error) {
+		return workspacefs.Directory{Path: "/resolved/environment"}, nil
+	})
+}
 func TestWorkspaceResolveBeforeRestoreAndRetainPartialTarget(t *testing.T) {
 	c, r, s := testConfig(), testRef(), testSnapshot()
-	c.EnvironmentDiskMiB = 0
-	c.ExternalWorkspace = true
 	resolves, calls := 0, 0
 	p, err := NewWithCaller(c, callerFunc(func(_ context.Context, q Request) (Response, error) {
 		calls++
@@ -60,7 +65,6 @@ func TestWorkspaceResolveBeforeRestoreAndRetainPartialTarget(t *testing.T) {
 func TestWorkspaceDoesNotFallbackWithoutResolver(t *testing.T) {
 	calls := 0
 	config := testConfig()
-	config.ExternalWorkspace = true
 	p, _ := NewWithCaller(config, callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))
 	_, err := p.Create(deadline(t), sandbox.Bootstrap{Reference: testRef(), SessionID: testRef().TenantID, DeviceID: testRef().EnvironmentID, CoreURL: "https://core.example/api/v1", Credential: "fixture", Workspace: workspaceBinding()})
 	if !errors.Is(err, workspacefs.ErrUnsupported) || calls != 0 {
@@ -72,7 +76,6 @@ func TestPreNativeWorkspaceFailureSettlesAbsentCreation(t *testing.T) {
 	for _, failure := range []string{"resolve", "mode", "bootstrap", "unbounded"} {
 		t.Run(failure, func(t *testing.T) {
 			config, ref := testConfig(), testRef()
-			config.ExternalWorkspace = true
 			calls := 0
 			provider, err := NewWithCaller(config, callerFunc(func(context.Context, Request) (Response, error) { calls++; return Response{}, nil }))
 			if err != nil {

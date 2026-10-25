@@ -1,6 +1,8 @@
 package runtimefs
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,6 +40,9 @@ func LockDirectory(root *os.Root) (func(), error) {
 	overlapped := new(windows.Overlapped)
 	if err = windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, overlapped); err != nil {
 		f.Close()
+		if errors.Is(err, windows.ERROR_LOCK_VIOLATION) {
+			return nil, fmt.Errorf("%w: %w", ErrLocked, err)
+		}
 		return nil, err
 	}
 	return func() { _ = windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, overlapped); _ = f.Close() }, nil

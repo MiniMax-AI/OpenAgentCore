@@ -39,14 +39,18 @@ func ValidateInputKey(key string) error {
 	return nil
 }
 
-// ValidateInputs checks and normalizes an input batch: 1..64 messages,
+// MaxInputBatch is the most events one request admits; the input reservation
+// check in the baseline migration holds the same bound.
+const MaxInputBatch = 64
+
+// ValidateInputs checks and normalizes an input batch: 1..MaxInputBatch messages,
 // cancellations and function results whose nonempty JSON object payloads total
 // at most 512 KiB, an empty cancellation payload and a well-formed function
 // result. It returns the normalized batch and its encoding, the batch's retry
 // identity.
 func ValidateInputs(inputs []Input) ([]Input, json.RawMessage, error) {
-	if len(inputs) == 0 || len(inputs) > 64 {
-		return nil, nil, fmt.Errorf("%w: input batch must contain 1..64 events", ErrInvalidInput)
+	if len(inputs) == 0 || len(inputs) > MaxInputBatch {
+		return nil, nil, fmt.Errorf("%w: input batch must contain 1..%d events", ErrInvalidInput, MaxInputBatch)
 	}
 	batch := make([]Input, len(inputs))
 	size := 0
@@ -366,6 +370,27 @@ func (s *Service) SubmitInputs(ctx context.Context, tenant, session, key string,
 		return nil, fmt.Errorf("submit turn inputs: %w", err)
 	}
 	return receipts, nil
+}
+
+// InputKeyUsed reports whether the Session already used key, by direct
+// admission or an Environment input reservation, so that admission decides
+// between a replay and a key conflict.
+func (s *Service) InputKeyUsed(ctx context.Context, tenant, session, key string, inputs []Input) (bool, error) {
+	_, encoded, err := ValidateInputs(inputs)
+	if err != nil {
+		return false, err
+	}
+	var used bool
+	err = s.storage.WithInputs(ctx, tenant, session, func(ctx context.Context, tx InputTx) error {
+		receipts, _, err := tx.LoadInputBatch(ctx, key, encoded)
+		if err != nil {
+			return err
+		}
+		_, reserved, err := tx.FindInputReservation(ctx, key, encoded)
+		used = len(receipts) > 0 || reserved
+		return err
+	})
+	return used, err
 }
 
 // FunctionCall retains public identity and its opaque execution-adapter reference.

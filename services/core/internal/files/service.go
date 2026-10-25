@@ -25,9 +25,9 @@ type CreateCommand struct {
 	Upload   func(io.Writer) (Upload, error)
 }
 
-// Create stores the File only after its complete content fits MaxBytes and its
-// envelope validates. A content write that failed, including one beyond
-// MaxBytes, fails the upload even when Upload ignored the write error.
+// Create stores the File only after its complete content is nonempty, fits
+// MaxBytes and its envelope validates. A content write that failed, including
+// one beyond MaxBytes, fails the upload even when Upload ignored the write error.
 func (s *Service) Create(ctx context.Context, command CreateCommand) (File, error) {
 	if command.Upload == nil {
 		return File{}, ErrInvalidInput
@@ -43,6 +43,9 @@ func (s *Service) Create(ctx context.Context, command CreateCommand) (File, erro
 		}
 		if err := upload.Validate(); err != nil {
 			return Upload{}, err
+		}
+		if content.left == MaxBytes {
+			return Upload{}, ErrEmpty
 		}
 		return upload, nil
 	})

@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: f66f608093cc824add3215a9df520082b1679af1852ee213b7a6adfca40221ed
+source_hash: 6f1b4534b4b473c47175560c24ca6e1d1fe2ff4c5e764f204d1022939e4178b3
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -11,7 +11,6 @@ source_hash: f66f608093cc824add3215a9df520082b1679af1852ee213b7a6adfca40221ed
 分发包是从同一个提交构建的一组相互匹配的发布资源：控制归档（安装程序、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装程序。
 
 Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
-
 
 请在 Linux x86_64 上构建，所需环境包括与 Debian 12 兼容的 glibc、Docker、`go.mod` 中指定的 Go 版本、C 编译器（microsandbox 辅助程序使用 CGO 构建）、Node、pnpm、Python 3.9 或更高版本、curl、tar、pigz 和 sha256sum。源代码必须保持干净并已提交。请先准备固定版本的 Codex 包和 MiniMax Code 配套程序，然后执行构建：
 
@@ -49,7 +48,7 @@ ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`�
 
 ### 原生安装程序 {#native-installers}
 
-自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象会固定 Node.js 和 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会将该平台的各个归档上传为 `oac-native-installer-<OS>-<ARCH>` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录，输入目录中放入这三个构件的所有归档：
+自托管机器通过各平台的原生安装程序安装 `oac-daemon`：Linux amd64、macOS arm64 和 Windows amd64。每个安装程序均由 `native-check` 工作流在各自的操作系统上构建（`scripts/build-native-installer.mjs`，其中的 `pins` 对象包含 Node.js 版本和由各 Harness 声明生成的 Harness 版本），并在每次选中的原生检查中得到验证。手动打包运行和发布检查会将该平台的各个归档上传为 `oac-native-installer-<OS>-<ARCH>` 并保留七天；普通 PR 和 main 检查即使成功也不会上传软件包。要构建本地分发包，请从该确切提交的一次 `native-check` 运行中下载这三个构件（可以是手动运行或发布运行；PR 运行构建的是合并提交，因此不匹配），然后使用该检出内容组装目录，输入目录中放入这三个构件的所有归档：
 
 ```sh
 node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
@@ -64,9 +63,9 @@ export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 
 `make build-core-distribution` 会构建以下全部内容。也可以单独构建其中一项，以测试某个 Harness 镜像或辅助程序。所有命令都必须从仓库根目录运行；默认输出位于 `${OAC_DEV_HOME:-$HOME/.oac}/build` 下。
 
-三个维护的 Runtime 镜像共用一个构建期调整：固定 Debian 登录 profile 会保留继承且已导出的 `PATH`，未设置 `PATH` 时仍使用 Debian 默认值。这样，登录和非登录工具都能使用 Runtime 初始化的包路径与用户路径，无需另一份包路径设置。组合镜像继承同一 profile。上游 profile 结构变化会使构建失败以便审查；自定义 shell 启动文件仍可以显式更改 `PATH`。
+三个维护的 Runtime 镜像共用固定摘要的基础镜像 `node:22.23.1-bookworm-slim`（含 `ca-certificates`、`bash`、`git`、`python3`、`python3-pip` 和 `ripgrep`），以及一个构建期调整：固定 Debian 登录 profile 会保留继承且已导出的 `PATH`，未设置 `PATH` 时仍使用 Debian 默认值。这样，登录和非登录工具都能使用 Runtime 初始化的包路径与用户路径，无需另一份包路径设置。组合镜像继承同一 profile。上游 profile 结构变化会使构建失败以便审查；自定义 shell 启动文件仍可以显式更改 `PATH`。
 
-**Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@0.153.4-linux-x64`（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
+**Codex Runtime 镜像。** 在 `~/.oac` 下解压官方 npm 包 `@openai/codex@<version>-linux-x64`，版本见 [Harness 目录](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/contracts/agents-api/harness-catalog.md)（例如使用 `npm pack --ignore-scripts` 和 `tar -xzf`），然后执行：
 
 ```sh
 export CODEX_CLI_DIR=/absolute/path/to/package
@@ -239,7 +238,7 @@ make check-ci
 
 `make check` 仍是完整的本地入口，使用未分片的 Web 测试套件和未分片的 Core 集成测试包。`make check-web-unit` 和 `make check-web-acceptance OAC_WEB_TEST_SHARD=1/4` 用于分别运行 Web 部分；`make check-core-packages` 和 `make check-core-integration OAC_CORE_INTEGRATION_SHARD=1/3` 用于分别运行 Core 部分，其中集成测试按名称的稳定哈希分配到分片。选择测试涵盖混合变更、共享使用方、重命名/删除、未知输入、浅合并检出以及失败/取消/缺失结果。对于选择映射的更改，请针对受影响的规则重放具有代表性的差异。对于工作流更改，请运行 actionlint，并验证更改后的调度或分区行为。仅在需要验证受变更影响的行为时，才运行真实组件测试。
 
-使用 `python3 scripts/ci_metrics.py RUN_ID ...` 衡量已完成的运行。它会报告最近一次尝试的运行器分钟数总和、耗时、从该次尝试开始计算的初始排队延迟、并发作业峰值、平台明细以及作业结果/失败比例。只有在该次尝试中被分配了运行器的作业才计入机器时间和执行并发；排队期间被取消的作业仍保留其结果和实际耗时。更早的尝试不计入其中。失败作业的重新运行可能沿用更早的成功结果：这些结果会单独显示，且其原有执行时间会被排除。如果缺少重新运行的开始时间戳，测量会停止，因为无法可靠区分复用的作业。比较时应保留 run/head/attempt 标识，并分别报告取消和未完成的运行。原始运行器分钟数并非计费分钟数；估算成本前，应使用各平台公布的转换和配额规则。较小的成功样本不能作为长期失败率估计。定时完整运行不在此策略范围内。
+使用 `python3 scripts/ci_metrics.py RUN_ID ...` 衡量已完成的运行。它会报告最近一次尝试的运行器分钟数总和、耗时、从该次尝试开始计算的初始排队延迟、并发作业峰值、平台明细以及作业结果/失败比例。只有在该次尝试中被分配了运行器的作业才计入机器时间和执行并发；排队期间被取消的作业仍保留其结果和实际耗时。更早的尝试不计入其中。失败作业的重新运行可能沿用更早的成功结果：这些结果会单独显示，且其原有执行时间会被排除。如果缺少重新运行的开始时间戳，测量会停止，因为无法可靠区分复用的作业。比较时应保留 run/head/attempt 标识，并分别报告取消和未完成的运行。原始运行器分钟数并非计费分钟数；估算成本前，应使用各平台公布的转换和配额规则。较小的成功样本不能作为长期失败率估计。
 
 ### CI 运行器和免费配额 {#ci-runners-and-free-allowance}
 

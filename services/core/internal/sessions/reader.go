@@ -1,18 +1,19 @@
 package sessions
 
-// Reader reads Sessions and their resources, Environment and devices, and the
-// administrator's cross-Project Session views, one family per line. Callers
-// use it directly; no use case forwards a read.
+import "context"
+
+// Reader reads Sessions and their resources and Environment, and devices.
+// Callers use it directly; no use case forwards a read.
 type Reader interface {
-	AdminReader
-	ArtifactReader
+	// AuthenticateEnvironmentExecutor checks, in one database snapshot, that
+	// the credential whose SHA-256 digest is given is current for the
+	// Environment and belongs to its Session's creator, and returns the
+	// Session's tenant. Any other credential is ErrNotFound.
+	AuthenticateEnvironmentExecutor(ctx context.Context, environment, digest string) (string, error)
 	DeviceReader
 	EnvironmentReader
-	ExecutorCredentialReader
 	InputReader
-	ItemReader
 	ModelExecutionReader
 	SessionReader
-	SubagentReader
 	TurnReader
 }

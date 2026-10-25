@@ -42,7 +42,7 @@ type DeploymentModelProvider struct {
 	BaseUrl         string             `json:"base_url"`
 	ContextWindow   int32              `json:"context_window"`
 	MaxOutputTokens int32              `json:"max_output_tokens"`
-	EncryptedConfig []byte             `json:"encrypted_config"`
+	EncryptedApiKey []byte             `json:"encrypted_api_key"`
 	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 	Revision        pgtype.UUID        `json:"revision"`
 	LastUsedAt      pgtype.Timestamptz `json:"last_used_at"`
@@ -210,20 +210,6 @@ type ProjectApiKey struct {
 	ProjectID   pgtype.UUID        `json:"project_id"`
 }
 
-type PublicExecutionTurn struct {
-	ID                     pgtype.UUID        `json:"id"`
-	SessionID              pgtype.UUID        `json:"session_id"`
-	Status                 string             `json:"status"`
-	CreatedAt              pgtype.Timestamptz `json:"created_at"`
-	StartedAt              pgtype.Timestamptz `json:"started_at"`
-	CompletedAt            pgtype.Timestamptz `json:"completed_at"`
-	CancelRequestedAt      pgtype.Timestamptz `json:"cancel_requested_at"`
-	Outcome                []byte             `json:"outcome"`
-	TokenUsage             []byte             `json:"token_usage"`
-	ArtifactCaptureStarted bool               `json:"artifact_capture_started"`
-	SubagentID             pgtype.UUID        `json:"subagent_id"`
-}
-
 type RuntimeAllocation struct {
 	ID                    pgtype.UUID        `json:"id"`
 	EnvironmentID         pgtype.UUID        `json:"environment_id"`
@@ -329,8 +315,8 @@ type RuntimeNodeEnrollment struct {
 	ExpiresAt      pgtype.Timestamptz `json:"expires_at"`
 	ConsumedAt     pgtype.Timestamptz `json:"consumed_at"`
 	NodeID         pgtype.UUID        `json:"node_id"`
-	MaxActive      int32              `json:"max_active"`
-	MaxRetained    int32              `json:"max_retained"`
+	MaxActive      pgtype.Int4        `json:"max_active"`
+	MaxRetained    pgtype.Int4        `json:"max_retained"`
 	ID             pgtype.UUID        `json:"id"`
 }
 

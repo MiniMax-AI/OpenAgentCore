@@ -130,6 +130,27 @@ func (q *Queries) GetSession(ctx context.Context, arg GetSessionParams) (Session
 	return i, err
 }
 
+const getSessionCursor = `-- name: GetSessionCursor :one
+SELECT created_at, id FROM sessions WHERE tenant_id = $1 AND id = $2
+`
+
+type GetSessionCursorParams struct {
+	TenantID pgtype.UUID `json:"tenant_id"`
+	ID       pgtype.UUID `json:"id"`
+}
+
+type GetSessionCursorRow struct {
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	ID        pgtype.UUID        `json:"id"`
+}
+
+func (q *Queries) GetSessionCursor(ctx context.Context, arg GetSessionCursorParams) (GetSessionCursorRow, error) {
+	row := q.db.QueryRow(ctx, getSessionCursor, arg.TenantID, arg.ID)
+	var i GetSessionCursorRow
+	err := row.Scan(&i.CreatedAt, &i.ID)
+	return i, err
+}
+
 const listSessions = `-- name: ListSessions :many
 SELECT id, tenant_id, engine, metadata, idempotency_key, request_hash, created_at, configuration, event_sequence, creation_request_hash, deleted_at, creator_kind, creator_id FROM sessions
 WHERE tenant_id = $1 AND deleted_at IS NULL

@@ -9,7 +9,7 @@ import { type OwnedRuntimeObservation } from "../../lib/admin-view";
  * Hosted Runtimes across every project: the observations come from the Web
  * API's deployment-wide list (each labelled with its project); the Sessions
  * they belong to are read by ID through their project, bounded. Only
- * Core-managed hosted sandboxes report CPU and memory.
+ * Core-managed hosted sandboxes report memory.
  */
 
 /** Most hosted Sessions read by ID on one load; the rest are listed by ID only. */
@@ -97,10 +97,8 @@ export interface HostedRuntimeUsage {
   sleeping: number;
   /** Transitioning or waiting for an allocation. */
   pending: number;
-  /** Runtimes with a current CPU and memory sample. */
+  /** Runtimes with a current memory sample. */
   observed: number;
-  cpuUsageCores: number | null;
-  cpuCapacityCores: number | null;
   memoryUsageBytes: number | null;
   memoryLimitBytes: number | null;
 }
@@ -115,8 +113,6 @@ export function hostedRuntimeUsage(observations: readonly OwnedRuntimeObservatio
     sleeping: hosted.filter((observation) => observation.lifecycle_state === "sleeping").length,
     pending: hosted.filter((observation) => observation.lifecycle_state === "pending" || observation.lifecycle_state === "transitioning").length,
     observed: observed.length,
-    cpuUsageCores: sumKnown(observed.map((observation) => observation.cpu?.usage_cores)),
-    cpuCapacityCores: sumKnown(observed.map((observation) => observation.cpu?.capacity_cores)),
     memoryUsageBytes: sumKnown(observed.map((observation) => observation.memory?.usage_bytes)),
     memoryLimitBytes: sumKnown(observed.map((observation) => observation.memory?.limit_bytes)),
   };

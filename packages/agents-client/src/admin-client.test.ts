@@ -439,7 +439,6 @@ describe("AdminClient project monitoring", () => {
       instance: { kind: "managed_allocation", allocation_id: resourceId, device_id: keyId, connection_generation: null },
       lifecycle_state: "active", status: "observed", reason: null,
       allocation_created_at: 10, resolved_at: 30, observed_at: 20, started_at: 10,
-      cpu: { usage_seconds_total: 0, capacity_cores: 2, usage_cores: null, utilization_ratio: null },
       memory: { usage_bytes: 0, limit_bytes: 1024 },
       disk: null,
     };
@@ -462,7 +461,6 @@ describe("AdminClient project monitoring", () => {
       instance: { kind: "managed_allocation", allocation_id: resourceId, device_id: keyId, connection_generation: null },
       lifecycle_state: "active", status: "observed", reason: null,
       allocation_created_at: 10, resolved_at: 30, observed_at: 20, started_at: 10,
-      cpu: { usage_seconds_total: null, capacity_cores: 2, usage_cores: null, utilization_ratio: 0.1955 },
       memory: { usage_bytes: 183836672, limit_bytes: 2079141888 },
       disk: { usage_bytes: 1593188352, limit_bytes: 23511863296 },
     };

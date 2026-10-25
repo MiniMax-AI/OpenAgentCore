@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -15,7 +16,7 @@ func TestAuthenticatedCapabilitiesKeepRevokedReceipt(t *testing.T) {
 	tenant, _, _ := newEnvironment(t, pool, "self_hosted", "pending")
 	device := newDevice(t, pool, tenant, pgtype.UUID{})
 	store := New(pgunit.NewPool(pool), nil)
-	kinds := []runtimedevice.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: runtimedevice.KindCapabilities{RetainedNativeHistory: true}}}
+	kinds := []proto.SupportedAgentKind{{Kind: "fixture", Available: true, Capabilities: prototest.Capabilities(proto.AgentKindCapabilities{RetainedNativeHistory: proto.CapabilitySupported})}}
 	correct := strings.Repeat("a", 64)
 	if ok, err := store.TouchAuthenticatedDevice(t.Context(), device, correct, kinds); err != nil || !ok {
 		t.Fatal(ok, err)

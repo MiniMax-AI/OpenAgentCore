@@ -33,8 +33,8 @@ async function saveConfiguration(page: Page) {
 }
 async function editE2B(page: Page, key?: string) {
   await page.getByRole("button", { name: "Change resources", exact: true }).click();
-  await expect(page.getByLabel("E2B API key", { exact: true })).toHaveValue("");
-  if (key !== undefined) await page.getByLabel("E2B API key", { exact: true }).fill(key);
+  await expect(page.getByLabel("API key", { exact: true })).toHaveValue("");
+  if (key !== undefined) await page.getByLabel("API key", { exact: true }).fill(key);
   await page.getByRole("button", { name: "Next", exact: true }).click();
 }
 
@@ -58,7 +58,7 @@ test("online configuration retains existing resources and stops rapid polling wh
   await expect(rollout(page)).toBeVisible();
   const before = await inventory(page);
   expect(before.allocations.length).toBeGreaterThan(0);
-  await setDeployment(request, { resources: { allocations: before.allocations.length, pending: 0 } });
+  await setDeployment(request, { resources: { allocations: before.allocations.length, running: before.allocations.length, pending: 0 } });
   await page.getByRole("button", { name: "Refresh sandbox state", exact: true }).click();
   await page.getByRole("button", { name: "Change resources", exact: true }).click();
   await page.getByRole("button", { name: /^Large/ }).click();
@@ -212,7 +212,7 @@ test("a different E2B team leaves the committed configuration intact and require
   await editE2B(page, "fixture-other-team-key");
   const rejected = await saveConfiguration(page);
   expect(rejected.response.status()).toBe(409);
-  await expect(page.locator(".wizard-rejection")).toContainText("Reset before changing teams.");
+  await expect(page.locator(".wizard-rejection")).toContainText("Reset before changing accounts.");
   await expect(page.locator(".wizard-rejection")).toContainText("the saved configuration is unchanged");
   expect(await deploymentRead(page)).toEqual(before);
   await expect(page.getByRole("button", { name: "Save configuration", exact: true })).toBeDisabled();

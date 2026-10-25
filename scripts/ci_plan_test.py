@@ -53,7 +53,7 @@ class SelectionTests(unittest.TestCase):
         spec.loader.exec_module(generator)
         with patch.object(generator, "go", side_effect=lambda source: source):
             outputs = {**generator.render_registrations(generator.packages()), **generator.render_docs([])}
-        for path in [*map(str, outputs), "packages/agents-client/src/harness-catalog.ts", "scripts/acceptance/harness_catalog.py"]:
+        for path in [*map(str, outputs), "packages/agents-client/src/harness-catalog.ts"]:
             with self.subTest(path=path):
                 self.assertIn("distribution", self.jobs(path))
 
@@ -121,7 +121,7 @@ class SelectionTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(self.jobs(path), {"hygiene", "backend", "distribution", "compose", "api", "native"})
                 self.assertTrue(ci.select([path])["image"])
-        for path in ("package.json", "pnpm-workspace.yaml", ".npmrc"):
+        for path in ("package.json", "pnpm-workspace.yaml"):
             with self.subTest(path=path):
                 self.assertEqual(self.jobs(path), {"hygiene", "harness", "example", "web", "web-acceptance", "website", "native"})
                 self.assertFalse(ci.select([path])["image"])
@@ -138,7 +138,6 @@ class SelectionTests(unittest.TestCase):
             "packages/agents-client/pnpm-lock.yaml": {"web", "web-acceptance", "example"},
             "packages/claude-sdk-adapter/pnpm-lock.yaml": {"harness", "native", "distribution"},
             "packages/claude-sdk-adapter/package.json": {"harness", "native", "distribution"},
-            "packages/tsconfig/base.json": {"harness", "native"},
             "pnpm-lock.yaml": set(),
         }
         for path, jobs in cases.items():

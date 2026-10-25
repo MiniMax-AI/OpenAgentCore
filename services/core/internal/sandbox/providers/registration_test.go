@@ -35,8 +35,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				return nil, nil
 			}
 		}},
-		{"missing specification validator", func(a *Adapter) { a.ValidateSpecification = nil }},
-		{"missing resource validator", func(a *Adapter) { a.ValidateResources = nil }},
+		{"invalid setup declaration", func(a *Adapter) { a.Setup.Summary.ZHCN = "" }},
 		{"missing configuration", func(a *Adapter) { a.Configuration = nil }},
 		{"typed nil configuration", func(a *Adapter) { var c *registrationConfiguration; a.Configuration = c }},
 		{"missing configuration requirement", func(a *Adapter) { a.Configuration = registrationConfiguration{} }},
@@ -60,8 +59,6 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				t.Fatal("called local constructor")
 				return nil, nil
 			}
-			a.ValidateSpecification = func(sandbox.DeploymentSpec) error { t.Fatal("called specification validator"); return nil }
-			a.ValidateResources = func(sandbox.Resources) error { t.Fatal("called resource validator"); return nil }
 			a.Configuration = registrationConfiguration{requirements: a.Configuration.Requirements()}
 			tc.mutate(&a)
 			registry.adapters[kind] = a
@@ -75,7 +72,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 				{"public origin requirement", func() error { _, err := registry.RequiresPublicOrigin(kind); return err }},
 				{"normalize", func() error { _, err := registry.Normalize(selection); return err }},
 				{"specification", func() error { return registry.ValidateSpecification(kind, selection.DeploymentSpec) }},
-				{"resources", func() error { return registry.ValidateResources(kind, selection.Resources) }},
+
 				{"description", func() error { _, err := registry.Describe(kind, uuid.NewString()); return err }},
 				{"decode input", func() error { _, err := registry.DecodeInput(kind, nil, nil); return err }},
 				{"encode", func() error { _, err := registry.Encode(kind, nil); return err }},
@@ -165,12 +162,35 @@ func TestRegistrationRejectsInvalidDefaultResources(t *testing.T) {
 	}
 }
 
-// Only a nodes registration may declare checkpoint support.
-func TestRegistrationCheckpointRequiresNodes(t *testing.T) {
+// Checkpoint support follows the declaration in both modes.
+func TestRegistrationAdmitsDirectCheckpoint(t *testing.T) {
 	registry := Builtin()
 	a := registry.adapters["microsandbox"]
 	a.Mode, a.BuildLocal, a.NodeArtifacts, a.BuildDirect = "direct", nil, nil, registry.adapters["e2b"].BuildDirect
-	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) || !strings.Contains(err.Error(), "checkpoint") {
-		t.Fatal("direct checkpoint registration accepted", err)
+	if err := ValidateRegistration(a); err != nil {
+		t.Fatal("direct checkpoint registration rejected", err)
+	}
+}
+
+func TestSetupDeclarationMustMatchRequirements(t *testing.T) {
+	registry := Builtin()
+	for name, change := range map[string]func(*Adapter){
+		"secret field without credential": func(a *Adapter) {
+			a.Setup.Fields = []sandbox.SetupField{{Name: "key", Secret: true, Label: sandbox.Text{EN: "Key", ZHCN: "密钥"}}}
+		},
+		"missing locale": func(a *Adapter) { a.Setup.Summary.ZHCN = "" },
+		"preset value for unknown field": func(a *Adapter) {
+			a.Setup.Presets = []sandbox.SetupPreset{{Label: "x", Values: map[string]string{"unknown": "x"}}}
+		},
+	} {
+		a := registry.adapters["docker"]
+		change(&a)
+		if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
+			t.Fatalf("%s: %v", name, err)
+		}
+	}
+	registry.adapters["second"] = registry.adapters["microsandbox"]
+	if _, _, err := registry.DeploymentContract(); !errors.Is(err, providercontract.ErrContract) {
+		t.Fatalf("two recommended providers in one mode: %v", err)
 	}
 }

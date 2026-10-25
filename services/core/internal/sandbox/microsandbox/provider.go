@@ -67,6 +67,8 @@ func (p *Provider) call(ctx context.Context, q Request) (Response, error) {
 		return out, sandbox.ErrNotFound
 	case "command_unconfirmed":
 		return out, sandbox.ErrCommandUnconfirmed
+	case "checkpoint_unusable":
+		return out, sandbox.ErrCheckpointUnusable
 	case "metrics_unavailable":
 		return out, runtimeobs.ErrUnavailable
 	default:
@@ -143,9 +145,6 @@ func (p *Provider) Create(ctx context.Context, b sandbox.Bootstrap) (sandbox.Inf
 	}
 	if err := ValidateBootstrap(b); err != nil {
 		return absent, err
-	}
-	if p.config.ExternalWorkspace != (b.Workspace != nil) {
-		return absent, sandbox.ErrInvalid
 	}
 	workspace, err := p.resolveWorkspace(ctx, b.Reference, b.Workspace)
 	if err != nil {
@@ -238,10 +237,33 @@ func (p *Provider) RunCommandCompute(ctx context.Context, r sandbox.Reference, c
 	return *out.Command, nil
 }
 
+// The preparation cache addresses the initial compute, like RunCommand.
+func (p *Provider) RestorePreparation(ctx context.Context, r sandbox.Reference, key string) (bool, error) {
+	c, e := p.Initial(ctx, r)
+	if e != nil {
+		return false, e
+	}
+	out, e := p.call(ctx, Request{Operation: "restore_preparation", Reference: r, Compute: c, Key: key})
+	return out.Restored && e == nil, e
+}
+func (p *Provider) SavePreparation(ctx context.Context, r sandbox.Reference, key string) error {
+	c, e := p.Initial(ctx, r)
+	if e != nil {
+		return e
+	}
+	_, e = p.call(ctx, Request{Operation: "save_preparation", Reference: r, Compute: c, Key: key})
+	return e
+}
+
 // ResumeCompute thaws the exact resident source after an aborted suspension.
 // It never starts stopped compute or restores a checkpoint.
 func (p *Provider) ResumeCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
 	return p.state(ctx, Request{Operation: "resume_compute", Reference: r, Compute: c})
+}
+
+// RenewCompute observes: a microsandbox VM has no native lease.
+func (p *Provider) RenewCompute(ctx context.Context, r sandbox.Reference, c Compute) (State, error) {
+	return p.GetCompute(ctx, r, c)
 }
 
 func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generation uint64, snapshot *SnapshotIdentity) (Compute, error) {
@@ -261,7 +283,7 @@ func (p *Provider) NewCompute(ctx context.Context, r sandbox.Reference, generati
 
 func (p *Provider) resolveWorkspace(ctx context.Context, reference sandbox.Reference, binding *workspacefs.Binding) (*WorkspaceDirectory, error) {
 	if binding == nil {
-		return nil, nil
+		return nil, sandbox.ErrInvalid
 	}
 	if err := sandbox.ValidateWorkspaceBinding(reference, binding); err != nil {
 		return nil, err

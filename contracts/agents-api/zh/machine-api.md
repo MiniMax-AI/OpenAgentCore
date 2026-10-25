@@ -1,10 +1,12 @@
 ---
 title: "机器连接 API"
 source: contracts/agents-api/machine-api.md
-source_hash: 637717534ca8fd64eea6f6688461dd6b065b317ae271cd974880524d698c3ae9
+source_hash: 0160c835973e50788d704cf432fabb64c5650e2cef0c81b173ca81d3e2a611bc
 ---
 
 机器通过 `/api/v1` 调用 Core：包括沙箱节点、Runtime daemon 和自托管安装程序。各路由仅接受所列凭据，不接受 Core 密钥或项目 API 密钥；控制台登录也不授予此处权限。反向代理将 `/api/v1` 直接发送给 Core；Web 不提供这些路由。
+
+每个请求体和成功响应体都是 `internal/machineapi/machineapi.go` 中的类型，节点配置除外：它的 `specification` 是[沙箱 Provider 协议](../../../docs/zh/sandbox-provider.md)中的类型。下文各路由小节列出各自的错误。
 
 ## 路由 {#routes}
 
@@ -29,7 +31,7 @@ source_hash: 637717534ca8fd64eea6f6688461dd6b065b317ae271cd974880524d698c3ae9
 
 | 凭据 | 签发方 | 接受位置 |
 | --- | --- | --- |
-| 登记 token | `POST /core/v1/sandbox/enrollment-tokens`（Web **添加节点**），带节点批准容量。使用一次；在响应 `expires_at` 过期 | 无节点 ID 的 `sandbox-node/configuration`、`sandbox-node/enroll` |
+| 登记 token | `POST /core/v1/sandbox/enrollment-tokens`（Web **添加节点**），带可选的节点限制。使用一次；在响应 `expires_at` 过期 | 无节点 ID 的 `sandbox-node/configuration`、`sandbox-node/enroll` |
 | 节点凭据 | 节点自身：生成 32 至 256 个无空白字符的密钥，在登记时注册 | 带 `X-OAC-Node-ID` 的 `sandbox-node/configuration`、`sandbox-node/identity`、`sandbox-node/connect` |
 | 安装授权 | `self_hosted` Session 的 `x_agents_core.installation` 命令；短期有效 | `agent-daemon/installation` 及其 `claim` |
 | 执行器凭据 | 安装领取，或[执行器凭据](environment-executor-credentials.md)中使用 Core 密钥的接口 | `agent-daemon/enroll` 和 `agent-daemon/connection`；登记后也作为绑定设备的 daemon 凭据 |
@@ -60,7 +62,7 @@ oac-daemon connect --profile default
 - 新节点发送登记 token，不带 `X-OAC-Node-ID`。token 必须有效、未过期、未消费且由此安装签发。活动重置拒绝该读取。
 - 已注册节点发送节点凭据，并在 `X-OAC-Node-ID` 放其 UUID。无查询时读取当前目标。`?generation=N` 仅读取此节点仍可能需要的代际：当前目标、服务 pin，或其上未释放分配或 placement 持有的代际；其他代际被拒绝。重置期间仍可读取，以恢复已有归属资源。
 
-响应包含 `installation_id`、`provider`、`core_url`（安装公开 URL）、`generation`、`specification`、`specification_digest`、`max_active` 和 `max_retained`。不包含管理员、项目或 E2B 凭据，仅适用于节点型提供商。[沙箱部署契约](sandbox-deployment.md#canonical-node-specification)定义 specification 与摘要。
+响应包含 `installation_id`、`provider`、`core_url`（安装公开 URL）、`generation`、`specification`、`specification_digest`。不包含管理员、项目或 E2B 凭据，仅适用于节点型提供商。[沙箱部署契约](sandbox-deployment.md#canonical-node-specification)定义 specification 与摘要。
 
 ### 登记节点 {#enroll-a-node}
 
@@ -75,8 +77,9 @@ oac-daemon connect --profile default
 | `backend_fingerprint` | 节点后端命名空间摘要 |
 | `deployment_generation`, `specification_digest` | 节点读取的配置 |
 | `core_url` | 节点存储并连接的 Core origin |
+| `cpu_count`、`effective_cpu_cores`、`total_memory_bytes`、`available_disk_bytes` | 可选的主机测量值，见[节点协议](node-generation-protocol.md#connection) |
 
-Core 在一个事务中检查 token 有效、部署已初始化且为节点型且未重置、代际与摘要匹配当前 specification、`core_url` 等于安装公开 URL、节点 ID 未使用。仅通过后按 token 批准容量注册节点并消费 token。201 响应为节点身份：`node_id`、`installation_id`、`provider`、`deployment_generation`、`specification_digest`、`max_active` 和 `max_retained`。节点不能提交容量；登记代际和摘要为不可变身份，后续代际使用独立配置。
+Core 在一个事务中检查 token 有效、部署已初始化且为节点型且未重置、代际与摘要匹配当前 specification、`core_url` 等于安装公开 URL、节点 ID 未使用。仅通过后按 token 设置的限制注册节点，token 未设置的限制取所报告主机的[推荐容量](sandbox-deployment.md#recommended-capacity)，并消费 token。201 响应为节点身份：`node_id`、`installation_id`、`provider`、`deployment_generation`、`specification_digest`、`max_active` 和 `max_retained`。节点不能提交限制，但令牌未设置的限制取决于节点报告的主机测量值，范围限定在 1 到 1000000；显式值和之后的修改具有约束力。登记代际和摘要为不可变身份，后续代际使用独立配置。
 
 ### 恢复节点身份 {#recover-a-node-s-identity}
 
@@ -91,6 +94,7 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 | 401 | `invalid_node_credential` | token 或节点凭据缺失、无效、过期、已消费或属于其他安装 |
 | 409 | `sandbox_specification_mismatch` | 节点代际或摘要不匹配 |
 | 409 | `sandbox_node_address_mismatch` | `core_url` 不是安装公开 URL；token 保持未使用 |
+| 409 | `sandbox_node_host_unmeasured` | token 未设置某个限制，且请求缺少 CPU 数量或有效核数，或总内存；token 保持未使用 |
 | 409 | `idempotency_conflict` | 节点 ID 已注册 |
 | 409 | `sandbox_reset_in_progress` | 重置期间登记或新节点读取配置 |
 | 503 | `runtime_node_unavailable` | 部署未初始化或存储不可用 |
@@ -101,7 +105,7 @@ Core 在一个事务中检查 token 有效、部署已初始化且为节点型�
 
 ### daemon 引导 {#daemon-bootstrap}
 
-`POST /api/v1/agent-daemon/bootstrap` 携带 daemon 凭据及 `{"device_id": "…"}`，返回 `device_id`、`workspace_id`、`ws_url`（从 `OAC_PUBLIC_URL` 推导，不使用请求头）、`heartbeat_seconds` 和 `protocol_version`。daemon 随后按 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#ownership-and-connection)连接 `ws_url`。
+`POST /api/v1/agent-daemon/bootstrap` 携带 daemon 凭据及 `{"device_id": "…"}`，返回 `device_id`、`ws_url`（从 `OAC_PUBLIC_URL` 推导，不使用请求头）和 `heartbeat_seconds`。daemon 随后按 [Core–Runtime 协议](../../../docs/zh/runtime-protocol.md#ownership-and-connection)连接 `ws_url`。
 
 引导和 WebSocket 路由共享错误体 `{"error": code, "detail": text}`：400 `missing_params`、`missing_device_id` 或 `bad_json`；401 `missing_bearer`、`unknown_device` 或 `bad_credential`；403 `wrong_runtime_type`；500 `internal`；WebSocket 的 `version` 不等于 Core 精确 Runtime 协议版本时返回 426 `incompatible_version`。
 

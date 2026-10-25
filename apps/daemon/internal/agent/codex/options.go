@@ -52,8 +52,8 @@ type SessionPlan struct {
 	// SystemPrompt is forwarded as developerInstructions on thread/start.
 	SystemPrompt string
 
-	// ModelReasoningEffort is frozen for launch and every native Turn.
-	ModelReasoningEffort string
+	// ReasoningSummary reports that the Agent requested reasoning summaries.
+	ReasoningSummary bool
 
 	// OutputSchema is the frozen public JSON Schema sent as outputSchema on every
 	// native root Turn.
@@ -160,10 +160,14 @@ func excludeFromShellEnvironment(plan *SessionPlan, pattern string) {
 // absent control sends nothing, so Codex keeps its native default; Codex itself
 // ignores a value the selected model does not support.
 func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls) {
+	set := func(key, value string) { plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value}) }
+	if controls == nil || controls.ReasoningSummary == "" {
+		// The official default is no reasoning summary, while Codex defaults to a model-dependent one.
+		set("model_reasoning_summary", strconv("none"))
+	}
 	if controls == nil {
 		return
 	}
-	set := func(key, value string) { plan.ExtraConfig = append(plan.ExtraConfig, [2]string{key, value}) }
 	if search := controls.WebSearch; search != nil {
 		set("web_search", strconv(search.Mode))
 		set("tools.web_search.context_size", strconv(search.ContextSize))
@@ -189,10 +193,10 @@ func applyExecutionControls(plan *SessionPlan, controls *proto.ExecutionControls
 		plan.OutputSchema = format.Schema
 	}
 	if controls.ReasoningEffort != "" {
-		plan.ModelReasoningEffort = controls.ReasoningEffort
 		set("model_reasoning_effort", strconv(controls.ReasoningEffort))
 	}
 	if controls.ReasoningSummary != "" {
+		plan.ReasoningSummary = true
 		set("model_reasoning_summary", strconv(controls.ReasoningSummary))
 	}
 	if controls.ServiceTier != "" {

@@ -85,7 +85,7 @@ func (u unit) LoadEnrollment(tokenDigest string) (deployment.EnrollmentRecord, e
 	if err != nil {
 		return deployment.EnrollmentRecord{}, err
 	}
-	return deployment.EnrollmentRecord{ID: uuidString(r.ID), InstallationID: uuidString(r.InstallationID), ExpiresAt: r.ExpiresAt.Time, Consumed: r.ConsumedAt.Valid, MaxActive: int(r.MaxActive), MaxRetained: int(r.MaxRetained)}, nil
+	return deployment.EnrollmentRecord{ID: uuidString(r.ID), InstallationID: uuidString(r.InstallationID), ExpiresAt: r.ExpiresAt.Time, Consumed: r.ConsumedAt.Valid, MaxActive: optionalInt(r.MaxActive), MaxRetained: optionalInt(r.MaxRetained)}, nil
 }
 
 func (u unit) LoadGenerationSpecification(generation uint64) (deployment.GenerationSpecification, error) {
@@ -175,6 +175,21 @@ func (t *nodeTx) RemoveNode(id string) error {
 	return t.q.RemoveRuntimeNode(t.ctx, nodeID)
 }
 
+func optionalInt4(v *int) pgtype.Int4 {
+	if v == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*v), Valid: true}
+}
+
+func optionalInt(v pgtype.Int4) *int {
+	if !v.Valid {
+		return nil
+	}
+	n := int(v.Int32)
+	return &n
+}
+
 func (t *nodeTx) CreateEnrollment(enrollment deployment.NewEnrollment) (time.Time, error) {
 	id, err := parseID(enrollment.ID)
 	if err != nil {
@@ -184,7 +199,7 @@ func (t *nodeTx) CreateEnrollment(enrollment deployment.NewEnrollment) (time.Tim
 	if err != nil {
 		return time.Time{}, err
 	}
-	if err := t.q.CreateRuntimeEnrollment(t.ctx, sqlc.CreateRuntimeEnrollmentParams{ID: id, TokenSha256: enrollment.TokenDigest, InstallationID: installation, MaxActive: int32(enrollment.MaxActive), MaxRetained: int32(enrollment.MaxRetained)}); err != nil {
+	if err := t.q.CreateRuntimeEnrollment(t.ctx, sqlc.CreateRuntimeEnrollmentParams{ID: id, TokenSha256: enrollment.TokenDigest, InstallationID: installation, MaxActive: optionalInt4(enrollment.MaxActive), MaxRetained: optionalInt4(enrollment.MaxRetained)}); err != nil {
 		return time.Time{}, err
 	}
 	row, err := t.q.GetRuntimeEnrollment(t.ctx, enrollment.TokenDigest)

@@ -14,14 +14,11 @@ import (
 // decision. Each adapter's compile assertions then enforce its actual methods.
 func TestPublicHarnessContractDeclarations(t *testing.T) {
 	roles := map[string][]string{
-		"Executor":                 {"executor"},
-		"Turn":                     {"session"},
-		"Session":                  {"session"},
-		"DurableSteerer":           {"session"},
-		"FunctionResultSubmitter":  {"session"},
-		"WorkspaceReader":          {"executor", "session"},
-		"WorkspaceDirectoryLister": {"executor", "session"},
-		"WorkspaceWriter":          {"executor", "session"},
+		"Executor":                {"executor"},
+		"Turn":                    {"session"},
+		"Session":                 {"session"},
+		"DurableSteerer":          {"session"},
+		"FunctionResultSubmitter": {"session"},
 	}
 	files, err := filepath.Glob("*.go")
 	if err != nil {

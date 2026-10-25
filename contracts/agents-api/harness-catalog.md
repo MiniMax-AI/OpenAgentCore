@@ -7,10 +7,10 @@ title: "Built-in Harness registrations"
 
 Each Harness is the one `declaration.go` in its `internal/harnessconfig/<package>` directory. Adding a directory with a `declaration.go` registers the Harness; `make generate-harness-catalog` regenerates the registrations and this page, and `make check-harness-catalog` checks them.
 
-| Identifier | Display name | Declaration |
-| --- | --- | --- |
-| `claude_sdk` | Claude Code | [`claudesdk/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/claudesdk/declaration.go) |
-| `codex` | Codex | [`codex/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/codex/declaration.go) |
-| `mcode` | MiniMax Code | [`mcode/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/mcode/declaration.go) |
+| Identifier | Display name | Native version | Declaration |
+| --- | --- | --- | --- |
+| `claude_sdk` | Claude Code | `0.3.269` | [`claudesdk/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/claudesdk/declaration.go) |
+| `codex` | Codex | `0.153.4` | [`codex/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/codex/declaration.go) |
+| `mcode` | MiniMax Code | `0.4.12` | [`mcode/declaration.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/mcode/declaration.go) |
 
 These registrations describe the build. Which Harnesses a deployment enables is the `OAC_HARNESSES` [process setting](../../docs/configuration.md#settings), [Harness capabilities](./harness-capabilities.md) lists what each Harness supports, and a connected Runtime reports its own availability. [Harness protocol](./harness-onboarding.md) describes the adapter and packaging steps.

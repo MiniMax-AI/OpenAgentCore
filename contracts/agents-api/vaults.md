@@ -58,7 +58,7 @@ A malformed, missing or foreign ID returns 404 `not_found_error`, and so does a 
 
 | Field | Rules |
 | --- | --- |
-| `name` | Optional. Omitted stays `null`; explicit `null` is rejected. A string is trimmed and must then hold 1–256 UTF-8 bytes |
+| `name` | Optional. Omitted stays `null`; explicit `null` is rejected. A string is trimmed and must then hold 1–256 UTF-8 bytes (param `name`) |
 | `metadata` | Omitted or `null` becomes `{}`. Values must be strings; another type returns 400 `invalid_request_error` with param `metadata.<key>`. The encoded object is limited to 64 KiB, with no pair-count or length limits |
 
 A Vault reads as `id`, `object: "vault"`, `created_at`, `name` and `metadata`. There is no update route.
@@ -67,7 +67,7 @@ Deleting a Vault removes it and all its Credentials in one transaction, whatever
 
 ## Credentials
 
-Creation takes a required `name` (trimmed, 1–256 UTF-8 bytes) and an `auth` object whose `type` is `static_bearer` or `mcp_oauth`. `mcp_server_url` must be an absolute HTTPS URL without userinfo or fragment; Core keeps it byte for byte, including any query, and performs no DNS or HTTP request.
+Creation takes a required `name` (trimmed, 1–256 UTF-8 bytes) and an `auth` object whose `type` is `static_bearer` or `mcp_oauth`. `mcp_server_url` must be an absolute HTTPS URL without userinfo or fragment; Core keeps it byte for byte, including any query, and performs no DNS or HTTP request. Field errors name the field as param, such as `auth.type`, `auth.access_token` or `auth.mcp_server_url`, and an unknown or missing member has the official `Unknown parameter` or `Missing required parameter` message ([request validation](./wire-semantics.md#configuration-validation)).
 
 A Credential reads as `id`, `vault_id`, `name`, `object: "vault.credential"`, `created_at`, `updated_at` and `auth`. `auth` holds `type` and `mcp_server_url`; an OAuth Credential adds `expires_at` and `refresh` with `client_id`, `token_endpoint`, `token_endpoint_auth.type`, `resource` and `scope`. Reads and lists need no storage key.
 
@@ -145,4 +145,4 @@ An unreadable or malformed key file stops Core at startup. Losing or replacing t
 
 Deleting a Credential, or its Vault, removes the credential rows. It does not erase secrets from PostgreSQL pages, write-ahead logs, backups or native history. Afterwards its reads, updates and repeated deletion return 404, lists omit it, new Sessions cannot select it and new Credentials cannot be created in a deleted Vault.
 
-Existing Sessions keep their frozen attachments and selections, and their history stays readable. The next dispatch that needs a deleted Credential fails; Core neither selects another Credential nor connects anonymously. Deletion does not cancel running work, withdraw a token already sent to a Runtime or revoke the grant at its provider: cancel the Session and revoke the grant yourself when needed. Revoked or invalid OAuth grants likewise fail until replaced.
+Existing Sessions keep their frozen attachments and selections, and their history stays readable. A message that would start a Turn is rejected with 400 `invalid_request_error`, as at creation, and creates no Turn; a request under an `Idempotency-Key` the Session already used replays or conflicts as before. A deletion between that check and dispatch, and any other input, still fails at the next dispatch that needs the deleted Credential. Core neither selects another Credential nor connects anonymously. Deletion does not cancel running work, withdraw a token already sent to a Runtime or revoke the grant at its provider: cancel the Session and revoke the grant yourself when needed. Revoked or invalid OAuth grants likewise fail until replaced.

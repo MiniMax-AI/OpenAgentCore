@@ -37,7 +37,7 @@ func localWorker(t *testing.T, scoped, execute bool) (*dispatchHarness, *executi
 			return false
 		}
 		info, _, _ := peer.AgentKindStatus("codex")
-		return info.Capabilities.LocalEnvironment
+		return info.Capabilities.LocalEnvironment.IsSupported()
 	})
 	w := startWorker(t, t.Context(), h.s, h.d)
 	ctx, cancel := context.WithCancel(t.Context())

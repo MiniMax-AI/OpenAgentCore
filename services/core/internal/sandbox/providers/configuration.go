@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -100,17 +101,20 @@ func (r *Registry) WithCredential(owner, candidate sandbox.Selection) (sandbox.S
 	owner.Configuration, e = a.Configuration.WithCredential(owner.Configuration, candidate.Configuration)
 	return owner, e
 }
-func (r *Registry) DiscoverConfiguration(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (json.RawMessage, error) {
+func (r *Registry) DiscoverConfiguration(ctx context.Context, kind string, input sandbox.ConfigurationDiscoveryInput, paths sandbox.ProcessPaths) (sandbox.ConfigurationOptions, error) {
 	a, err := r.Lookup(kind)
 	if err != nil {
-		return nil, err
+		return sandbox.ConfigurationOptions{}, err
 	}
 	if err := a.Configuration.Requirements().Discovery.Check("DiscoverConfiguration"); err != nil {
-		return nil, err
+		return sandbox.ConfigurationOptions{}, err
+	}
+	if !slices.ContainsFunc(a.Setup.Fields, func(f sandbox.SetupField) bool { return f.Discovered && f.Name == input.Query.Field }) {
+		return sandbox.ConfigurationOptions{}, sandbox.ErrInvalid
 	}
 	result, err := a.Configuration.DiscoverConfiguration(ctx, input, paths)
 	if err != nil {
-		return nil, declaredResult("DiscoverConfiguration", err)
+		return sandbox.ConfigurationOptions{}, declaredResult("DiscoverConfiguration", err)
 	}
 	return result, nil
 }
@@ -158,7 +162,8 @@ func (nodeConfiguration) HasCredential() bool      { return false }
 func (nodeConfiguration) ReplacesCredential() bool { return false }
 
 type nodeConfigurationAdapter struct {
-	validate func(sandbox.DeploymentSpec) error
+	kind   string
+	policy sandbox.DeploymentPolicy
 }
 
 func (nodeConfigurationAdapter) Requirements() sandbox.ConfigurationRequirements {
@@ -192,7 +197,7 @@ func (a nodeConfigurationAdapter) Normalize(s sandbox.Selection) (sandbox.Select
 		return s, err
 	}
 	s.Configuration = nodeConfiguration{}
-	return s, a.validate(s.DeploymentSpec)
+	return s, s.ValidatePolicy(a.kind, a.policy)
 }
 func (a nodeConfigurationAdapter) ResolveChange(next, previous sandbox.Selection) (sandbox.Selection, error) {
 	return a.Normalize(next)
@@ -209,8 +214,8 @@ func (a nodeConfigurationAdapter) Equal(x, y sandbox.Configuration) (bool, error
 	}
 	return true, nil
 }
-func (nodeConfigurationAdapter) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (json.RawMessage, error) {
-	return nil, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "node_configuration_has_no_catalog"}
+func (nodeConfigurationAdapter) DiscoverConfiguration(context.Context, sandbox.ConfigurationDiscoveryInput, sandbox.ProcessPaths) (sandbox.ConfigurationOptions, error) {
+	return sandbox.ConfigurationOptions{}, &providercontract.UnsupportedError{Operation: "DiscoverConfiguration", Reason: "node_configuration_has_no_catalog"}
 }
 func (nodeConfigurationAdapter) DiscoverSelection(context.Context, sandbox.DirectConfig) (sandbox.Selection, error) {
 	return sandbox.Selection{}, &providercontract.UnsupportedError{Operation: "DiscoverSelection", Reason: "node_configuration_has_no_catalog"}

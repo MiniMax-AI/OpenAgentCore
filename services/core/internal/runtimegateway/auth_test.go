@@ -80,7 +80,6 @@ func TestAuthenticator_RejectsBadCredential(t *testing.T) {
 func TestAuthenticator_AcceptsValidCredential(t *testing.T) {
 	row := runtimedevice.Credential{
 		ID:             "dev-1",
-		WorkspaceID:    "wks-1",
 		Name:           "alice-mac",
 		Type:           runtimedevice.RuntimeTypeAgentDaemon,
 		CredentialHash: runtimedevice.HashCredential("real-tok"),
@@ -90,7 +89,7 @@ func TestAuthenticator_AcceptsValidCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected success, got %v", err)
 	}
-	if got.DeviceID != "dev-1" || got.WorkspaceID != "wks-1" || got.Name != "alice-mac" {
+	if got.DeviceID != "dev-1" || got.Name != "alice-mac" {
 		t.Fatalf("unexpected AuthenticatedRuntime: %+v", got)
 	}
 }

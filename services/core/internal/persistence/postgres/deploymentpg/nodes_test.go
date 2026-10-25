@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -30,8 +32,8 @@ func nodesTokenDigest(token string) string {
 }
 
 // nodesEnrollment is a valid enrollment of a new node on view.
-func nodesEnrollment(view deployment.View, name, credential string) deployment.Enrollment {
-	return deployment.Enrollment{NodeID: uuid.NewString(), Name: name, Credential: strings.Repeat(credential, 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("b", 64),
+func nodesEnrollment(view deployment.View, name, credential string) machineapi.NodeEnrollment {
+	return machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: name, Credential: strings.Repeat(credential, 64), Provider: view.Provider, BackendFingerprint: strings.Repeat("b", 64),
 		SpecificationDigest: view.SpecificationDigest, DeploymentGeneration: view.Generation, CoreURL: fixturePublicURL}
 }
 
@@ -39,18 +41,14 @@ func TestEnrollmentApprovedCapacity(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
-	for _, capacity := range []deployment.Capacity{{MaxActive: 0, MaxRetained: 8}, {MaxActive: 3, MaxRetained: 2}, {MaxActive: 1, MaxRetained: 1000001}} {
-		if _, err := f.service.CreateEnrollment(t.Context(), capacity); !errors.Is(err, deployment.ErrInvalidInput) {
+	for _, limits := range []deployment.EnrollmentLimits{{MaxActive: new(0), MaxRetained: new(8)}, {MaxActive: new(3), MaxRetained: new(2)}, {MaxActive: new(1), MaxRetained: new(1000001)}, {MaxRetained: new(0)}} {
+		if _, err := f.service.CreateEnrollment(t.Context(), limits); !errors.Is(err, deployment.ErrInvalidInput) {
 			t.Fatal("invalid capacity accepted", err)
 		}
 	}
-	token, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 3})
+	token, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(3)})
 	if err != nil {
 		t.Fatal(err)
-	}
-	config, err := f.service.NodeConfiguration(t.Context(), "", token.Token, 0)
-	if err != nil || config.MaxActive != 1 || config.MaxRetained != 3 {
-		t.Fatal("bootstrap lost approved capacity", config, err)
 	}
 	input := nodesEnrollment(view, "approved", "a")
 	identity, err := f.service.Enroll(t.Context(), token.Token, input)
@@ -75,9 +73,44 @@ func TestEnrollmentApprovedCapacity(t *testing.T) {
 	if err != nil || identity.MaxActive != 2 || identity.MaxRetained != 5 {
 		t.Fatal("credential read ignored admin update", identity, err)
 	}
-	config, err = f.service.NodeConfiguration(t.Context(), input.NodeID, input.Credential, 0)
-	if err != nil || config.MaxActive != 2 || config.MaxRetained != 5 {
-		t.Fatal("configuration read ignored admin update", config, err)
+}
+
+// A token that leaves a limit unset takes it from the enrolling host; an explicit limit stays.
+func TestEnrollmentDerivesUnsetLimitsFromHost(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
+	host := func(input machineapi.NodeEnrollment) machineapi.NodeEnrollment {
+		cpus, memory, disk := int64(64), int64(256<<30), int64(8<<40)
+		input.CPUCount, input.TotalMemoryBytes, input.AvailableDiskBytes = &cpus, &memory, &disk
+		return input
+	}
+	enroll := func(limits deployment.EnrollmentLimits, input machineapi.NodeEnrollment) (deployment.NodeIdentity, error) {
+		token, err := f.service.CreateEnrollment(t.Context(), limits)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return f.service.Enroll(t.Context(), token.Token, input)
+	}
+	if _, err := enroll(deployment.EnrollmentLimits{}, nodesEnrollment(view, "blind", "b")); !errors.Is(err, deployment.ErrNodeHostUnmeasured) {
+		t.Fatal("unset limits enrolled without host measurements", err)
+	}
+	recommended, err := enroll(deployment.EnrollmentLimits{}, host(nodesEnrollment(view, "derived", "d")))
+	if err != nil || recommended.MaxActive < 2 || recommended.MaxRetained < recommended.MaxActive {
+		t.Fatal("unset limits were not derived from the host", recommended, err)
+	}
+	explicit, err := enroll(deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)}, host(nodesEnrollment(view, "explicit", "e")))
+	if err != nil || explicit.MaxActive != 1 || explicit.MaxRetained != 1 {
+		t.Fatal("explicit limits changed", explicit, err)
+	}
+	// Only retained set: it binds, and active follows the host but never above it.
+	bound, err := enroll(deployment.EnrollmentLimits{MaxRetained: new(4)}, host(nodesEnrollment(view, "bound", "r")))
+	if err != nil || bound.MaxActive > 4 || bound.MaxRetained != 4 {
+		t.Fatal("an explicit retained limit was overridden", bound, err)
+	}
+	partial, err := enroll(deployment.EnrollmentLimits{MaxActive: new(1)}, host(nodesEnrollment(view, "partial", "p")))
+	if err != nil || partial.MaxActive != 1 || partial.MaxRetained < 1 {
+		t.Fatal("an unset retained limit was not derived", partial, err)
 	}
 }
 
@@ -86,7 +119,7 @@ func TestDockerRetainedLimitFollowsActive(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	token, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 3, MaxRetained: 1})
+	token, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(3), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +143,7 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 	changes, _ := f.execution(t)
 	unknown := strings.Repeat("u", 64)
 	// Before initialization the deployment is unavailable.
-	early := deployment.Enrollment{NodeID: uuid.NewString(), Name: "early", Credential: strings.Repeat("e", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
+	early := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "early", Credential: strings.Repeat("e", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		SpecificationDigest: strings.Repeat("d", 64), DeploymentGeneration: 1, CoreURL: fixturePublicURL}
 	if _, err := f.service.Enroll(t.Context(), unknown, early); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("uninitialized deployment judged before the token", err)
@@ -122,7 +155,7 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 		t.Fatal("unknown node authenticated", err)
 	}
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	consumed, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	consumed, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,19 +163,19 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 	if _, err := f.service.Enroll(t.Context(), consumed.Token, node); err != nil {
 		t.Fatal(err)
 	}
-	fresh, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	fresh, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, tc := range []struct {
 		name   string
-		change func(*deployment.Enrollment)
+		change func(*machineapi.NodeEnrollment)
 		want   error
 	}{
-		{"provider", func(e *deployment.Enrollment) { e.Provider = "microsandbox" }, deployment.ErrInvalidInput},
-		{"generation", func(e *deployment.Enrollment) { e.DeploymentGeneration++ }, deployment.ErrSpecificationMismatch},
-		{"specification", func(e *deployment.Enrollment) { e.SpecificationDigest = strings.Repeat("0", 64) }, deployment.ErrSpecificationMismatch},
-		{"address", func(e *deployment.Enrollment) { e.CoreURL = "https://other.example" }, deployment.ErrNodeAddressMismatch},
+		{"provider", func(e *machineapi.NodeEnrollment) { e.Provider = "microsandbox" }, deployment.ErrInvalidInput},
+		{"generation", func(e *machineapi.NodeEnrollment) { e.DeploymentGeneration++ }, deployment.ErrSpecificationMismatch},
+		{"specification", func(e *machineapi.NodeEnrollment) { e.SpecificationDigest = strings.Repeat("0", 64) }, deployment.ErrSpecificationMismatch},
+		{"address", func(e *machineapi.NodeEnrollment) { e.CoreURL = "https://other.example" }, deployment.ErrNodeAddressMismatch},
 	} {
 		input := nodesEnrollment(view, "refused", "r")
 		tc.change(&input)
@@ -192,7 +225,7 @@ func TestEnrollmentAddressMismatchKeepsToken(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	token, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	token, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +266,7 @@ func TestEnrollmentReplay(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	token, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	token, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -248,13 +281,13 @@ func TestEnrollmentReplay(t *testing.T) {
 	if recovered, err := f.service.AuthenticateNode(t.Context(), input.NodeID, input.Credential); err != nil || recovered != identity {
 		t.Fatal("lost response cannot recover", recovered, err)
 	}
-	second, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 1, MaxRetained: 1})
+	second, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	other := input
 	other.Credential = strings.Repeat("o", 64)
-	for _, candidate := range []deployment.Enrollment{input, other} {
+	for _, candidate := range []machineapi.NodeEnrollment{input, other} {
 		if _, err := f.service.Enroll(t.Context(), second.Token, candidate); !errors.Is(err, deployment.ErrNodeExists) {
 			t.Fatal("enrolled node ID reused", err)
 		}

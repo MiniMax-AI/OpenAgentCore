@@ -1,7 +1,7 @@
 ---
 title: "控制台服务器"
 source: docs/web/console-server.md
-source_hash: 2c8b3bfed09d29c70cfee4b3381a248befd722c8336c4964a079e20c073f1a4a
+source_hash: 927c27a14bbcc394d7218053937eaea8eaf95258cfbe035d48d298568c97caa5
 ---
 
 控制台服务器（`oac-web`）提供 Web，使用 Core 密钥认证管理员，并将浏览器的 `/core/v1` 请求转发到 Core。本参考面向不使用安装程序运行 Web 的运维人员，以及评审其安全边界的人员。
@@ -82,7 +82,7 @@ flowchart LR
 - 会话 cookie `core_console_session` 为 HttpOnly、`SameSite=Strict`，`OAC_PUBLIC_URL` 为 HTTPS 时还设置 `Secure`。有效期 12 小时。
 - 会话仅存在控制台内存中，最多同时 64 个，先移除最旧的。重启控制台或轮换 Core 密钥会让所有用户退出登录。
 - 同时最多执行两次登录检查；额外尝试返回 429 和 `Retry-After: 1`。
-- 失败尝试共享每分钟 10 次预算；超出后，错误密钥返回 429 和 `Retry-After: 60`。正确密钥始终可以登录，因此控制台拒绝使用少于 32 字符的 Core 密钥启动。
+- 失败尝试共享每分钟 10 次预算；超出后，错误密钥返回 429 和 `Retry-After: 60`。正确密钥始终可以登录，因此控制台拒绝使用不符合[密钥格式](../getting-started/operations.md#core-key)的 Core 密钥启动。
 
 登录错误：请求体格式错误为 400，错误密钥为 401 `Invalid Core key`，非 `POST` 方法为 405，非 JSON 请求体为 415，上述频率限制为 429，无法创建会话为 503。
 

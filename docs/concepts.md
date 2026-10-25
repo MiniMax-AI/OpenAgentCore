@@ -18,7 +18,7 @@ Application reads, writes and references are scoped to the key's Project. A reso
 
 ## What administrators can and cannot do
 
-Administrators manage Projects and keys, sandbox deployments, nodes, executor credentials and deployment default models. They inspect resources, execution history, operational counts and usage, and delete resources under their deletion rules. Archiving a hosted Session requests cancellation and sandbox reclamation; see [Session archive](../contracts/agents-api/admin-api.md#session-archive).
+Administrators manage Projects and keys, sandbox deployments, nodes, executor credentials and deployment default models. They inspect resources, execution history, operational counts and usage, and delete resources under their deletion rules. Archiving a hosted Session is defined in [Session archive](../contracts/agents-api/admin-api.md#session-archive).
 
 Creating or editing application assets, starting Sessions and submitting input require a Project API key. The Core key gives no application identity and cannot read stored secrets. The [Core administration API](../contracts/agents-api/admin-api.md) defines its operations; the [Console server](./web/console-server.md) owns Web sign-in and credential handling.
 

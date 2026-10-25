@@ -44,9 +44,11 @@ type View struct {
 	CoreURL string `json:"core_url" binding:"required"`
 }
 
-// Resources counts what still belongs to the deployment.
+// Resources counts what still belongs to the deployment. Running excludes
+// suspended allocations, which Allocations includes.
 type Resources struct {
 	Allocations int64 `json:"allocations" binding:"required"`
+	Running     int64 `json:"running" binding:"required"`
 	Pending     int64 `json:"pending" binding:"required"`
 }
 

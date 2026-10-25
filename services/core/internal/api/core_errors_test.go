@@ -123,9 +123,9 @@ func TestCoreMarkerPreservesObservationAndStreamingWrappers(t *testing.T) {
 		}))
 		observer := func(code string) { observed = append(observed, code) }
 		if markerOutside {
-			handler = coreErrorResponses(responseHeadersWithErrors(handler, observer))
+			handler = coreErrorResponses(responseHeadersWithLog(handler, observer, nil))
 		} else {
-			handler = responseHeadersWithErrors(coreErrorResponses(handler), observer)
+			handler = responseHeadersWithLog(coreErrorResponses(handler), observer, nil)
 		}
 		handler.ServeHTTP(out, httptest.NewRequest("GET", "/core/v1/test", nil))
 		if !out.Flushed || !out.deadline.Equal(time.Unix(1234, 0)) || out.Header().Get("Openai-Processing-Ms") == "" || !reflect.DeepEqual(observed, []string{"execution_unavailable"}) || !strings.Contains(out.Body.String(), `"details":{"reason":"draining"}`) {

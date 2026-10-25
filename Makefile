@@ -3,7 +3,7 @@ SQLC_VERSION ?= v1.29.0
 SQLC ?= go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
 SWAG_VERSION ?= v1.16.4
 
-.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core check-core-packages check-core-integration docker-build-core check-core-container build-codex-runtime build-claude-runtime build-claude-sdk-runtime build-mcode-harness build-mcode-runtime
+.PHONY: help check check-database check-go check-sqlc sqlc-generate node-deps check-claude-sdk check-web check-mcode-harness build-daemon build-core check-core check-core-packages check-core-integration docker-build-core check-core-container build-codex-runtime build-claude-runtime build-claude-sdk-runtime
 
 help:
 	@printf '%s\n' 'make build-core        Build standalone Core commands' 'make build-daemon      Build the execution daemon' 'make check             Run Core, persistence and runtime checks' 'See README.md for runtime prerequisites and deployment.'
@@ -38,7 +38,7 @@ openapi:
 	output=$$(mktemp -d "$$root/core-openapi.XXXXXX"); trap 'rm -rf "$$output"' EXIT; \
 	python3 scripts/generate-public-api.py $(OPENAPI_FLAGS) --swag-roots "$$output/roots.go"; \
 	$(SWAG) init \
-	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,./internal/modelprovider,$$output" \
+	    -g cmd/server/main.go --dir "./services/core,./contracts/agents-api/v1,./internal/modelprovider,./internal/machineapi,$$output" \
 	    --output "$$output" \
 	    --outputTypes yaml --parseInternal; \
 	python3 scripts/patch-agents-openapi.py "$$output/swagger.yaml"; \
@@ -154,12 +154,6 @@ build-codex-runtime:
 build-claude-runtime:
 	./scripts/build-claude-runtime.sh
 
-build-mcode-harness:
-	./scripts/build-mcode-harness.sh
-
-build-mcode-runtime:
-	./scripts/build-mcode-runtime.sh
-
 .PHONY: build-microsandbox-provider check-microsandbox-provider
 build-microsandbox-provider:
 	python3 scripts/build-microsandbox-provider.py build "$${OAC_DEV_HOME:-$$HOME/.oac}/build/microsandbox-provider/oac-microsandbox-provider"
@@ -180,7 +174,6 @@ check-distribution:
 	go test ./services/web ./services/core/cmd/oac -count=1
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/node -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/compose -p 'test_*.py'
-	PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s scripts/acceptance -p 'test_*.py'
 	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install.py
 	PYTHONDONTWRITEBYTECODE=1 python3 deploy/test_install_source.py
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/core-distribution-manifest.test.py

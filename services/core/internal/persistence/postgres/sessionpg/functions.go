@@ -71,6 +71,21 @@ func (t *SessionTx) FindResultTurn(ctx context.Context, turn string) (sessions.T
 	return TurnFromRow(row), true, nil
 }
 
+func (t *SessionTx) FindCallTurn(ctx context.Context, call string) (sessions.Turn, string, bool, error) {
+	row, err := t.q.FindFunctionCallTurn(ctx, sqlc.FindFunctionCallTurnParams{SessionID: t.session, CallID: call})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return sessions.Turn{}, "", false, nil
+	}
+	if err != nil {
+		return sessions.Turn{}, "", false, err
+	}
+	root, err := t.q.SessionEventTurn(ctx, sqlc.SessionEventTurnParams{SessionID: t.session, ID: row.TurnID})
+	if err != nil {
+		return sessions.Turn{}, "", false, err
+	}
+	return TurnFromRow(root), row.ExecutorCallID, true, nil
+}
+
 func (t *SessionTx) MatchFunctionResult(ctx context.Context, turn, call string, result json.RawMessage) (sessions.FunctionResultMatch, error) {
 	id, err := parseID(turn)
 	if err != nil {

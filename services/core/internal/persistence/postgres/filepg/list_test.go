@@ -111,7 +111,7 @@ func TestFileListPaginationIsolationAndReconnect(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(foreignPage.Files, []files.File{foreign}) || foreignPage.NextCursor != "" {
 		t.Fatalf("project isolation: %+v, %v", foreignPage, err)
 	}
-	deleted := create(t, service, t.Context(), tenant, nil)
+	deleted := create(t, service, t.Context(), tenant, []byte("deleted"))
 	if err := service.Delete(t.Context(), files.DeleteCommand{TenantID: tenant, FileID: deleted.ID}); err != nil {
 		t.Fatal(err)
 	}

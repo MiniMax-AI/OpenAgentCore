@@ -45,10 +45,10 @@ In the workspace profile, the frozen installation's Skills are linked into the S
 
 | Item | Value |
 | --- | --- |
-| Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep` |
+| Base | The [shared Runtime base](../../../../docs/maintainers.md#runtime-images-and-helpers) |
 | Programs | `/usr/local/bin/oac-daemon` and the companion at `/opt/mcode-harness` (native CLI at `native/cli.js`) |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_COMPANION`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_MCODE_NODE`, `OAC_RUNTIME_MCODE_BIN`, `OAC_RUNTIME_MCODE_COMPANION`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build runs the companion's `check.mjs` and the native `--version`. The combined Runtime image uses this image as its base. Sandboxes run it with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).

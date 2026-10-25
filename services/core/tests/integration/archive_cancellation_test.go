@@ -114,7 +114,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				peer, err = registry.LookupDevice(owner.DeviceID)
 				if err == nil {
 					info, _, known := peer.AgentKindStatus("codex")
-					if known && info.Capabilities.FunctionTools {
+					if known && info.Capabilities.FunctionTools.IsSupported() {
 						break
 					}
 				}
@@ -255,7 +255,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				h.write("", proto.TypeHeartbeat, proto.HeartbeatPayload{})
 			}
 			if !closedCase {
-				ack := proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Usage: proto.Usage{InputTokens: 17}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}}}
+				ack := proto.InteractionDecisionAckPayload{DeliveryID: request.DeliveryID, Applied: true, Outcome: &proto.DonePayload{Usage: proto.Usage{Tokens: &proto.TokenUsage{InputTokens: 17}}, Metadata: map[string]any{proto.DoneMetaAgentSessionID: "cancelled-native"}}}
 				if scenario == "negative_ack" {
 					ack.Applied = false
 					ack.ErrorCode = "cancel_failed"
@@ -298,7 +298,7 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 				t.Fatal(got.run.Turn.Status, got.err, string(got.run.Turn.Outcome))
 			}
 			var outcome execution.Result
-			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == sessions.TurnCancelled && outcome.Done.Usage.InputTokens != 17) {
+			if err := json.Unmarshal(got.run.Turn.Outcome, &outcome); err != nil || (wantStatus == sessions.TurnCancelled && outcome.Done.Usage.Tokens.InputTokens != 17) {
 				t.Fatal("receipt lost usage", string(got.run.Turn.Outcome), err)
 			}
 

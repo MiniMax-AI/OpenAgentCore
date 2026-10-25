@@ -26,7 +26,7 @@ func (c Config) Validate() error {
 	if !filepath.IsAbs(c.CheckpointRoot) || filepath.Clean(c.CheckpointRoot) != c.CheckpointRoot {
 		return sandbox.ErrInvalid
 	}
-	if !validID(c.InstallationID) || !filepath.IsAbs(c.HelperPath) || !filepath.IsAbs(c.RuntimeHome) || !filepath.IsAbs(c.RuntimePath) || !filepath.IsAbs(c.FirmwarePath) || !validHash(c.RuntimeSHA256) || !validHash(c.FirmwareSHA256) || c.MemoryMiB == 0 || c.CPUs == 0 || c.RootDiskMiB == 0 || (!c.ExternalWorkspace && c.EnvironmentDiskMiB == 0) {
+	if !validID(c.InstallationID) || !filepath.IsAbs(c.HelperPath) || !filepath.IsAbs(c.RuntimeHome) || !filepath.IsAbs(c.RuntimePath) || !filepath.IsAbs(c.FirmwarePath) || !validHash(c.RuntimeSHA256) || !validHash(c.FirmwareSHA256) || c.MemoryMiB == 0 || c.CPUs == 0 || c.RootDiskMiB == 0 {
 		return sandbox.ErrInvalid
 	}
 	imageName, digest, pinned := strings.Cut(c.Image, "@sha256:")
@@ -71,8 +71,15 @@ func ValidateCompute(c Config, r sandbox.Reference, v Compute) error {
 	}
 	return nil
 }
+
+// SnapshotEvidence encodes the native digest, checkpoint ID and checkpoint root; the root is last because it may contain spaces.
+func SnapshotEvidence(digest, checkpointID, root string) string {
+	return digest + " " + checkpointID + " " + root
+}
+
 func ValidateSnapshot(c Config, r sandbox.Reference, s SnapshotIdentity) error {
-	if s.Compatibility.Validate() != nil || !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || s.Digest == "" || s.CheckpointID == "" || s.CheckpointRoot == "" {
+	receipt := strings.SplitN(s.Evidence, " ", 3)
+	if s.Validate() != nil || !ValidReference(r) || !validID(s.OperationID) || s.Reference != SnapshotReference(c, r, s.OperationID) || s.SourceName != Name(c, r, s.SourceGeneration) || s.SourceID == "" || s.ID == "" || len(receipt) != 3 || receipt[0] == "" || receipt[1] == "" || receipt[2] == "" {
 		return sandbox.ErrInvalid
 	}
 	return nil
@@ -109,10 +116,7 @@ func ValidateRequest(q Request) error {
 	}
 	switch q.Operation {
 	case "create":
-		if q.Config.ExternalWorkspace != (q.Workspace != nil) {
-			return sandbox.ErrInvalid
-		}
-		if (q.Workspace == nil && q.Config.EnvironmentDiskMiB == 0) || (q.Bootstrap != nil && q.Bootstrap.Workspace != nil) || q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
+		if q.Workspace == nil || (q.Bootstrap != nil && q.Bootstrap.Workspace != nil) || q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
 			return sandbox.ErrInvalid
 		}
 	case "initial_info":
@@ -124,6 +128,10 @@ func ValidateRequest(q Request) error {
 			return sandbox.ErrInvalid
 		}
 		return ValidateCompute(q.Config, q.Reference, q.Compute)
+	case "restore_preparation", "save_preparation":
+		if !validHash(q.Key) || q.Compute != (Compute{Name: Name(q.Config, q.Reference, 0)}) {
+			return sandbox.ErrInvalid
+		}
 	case "command":
 		if q.Command == nil || ValidateCommand(*q.Command) != nil {
 			return sandbox.ErrInvalid
@@ -138,11 +146,8 @@ func ValidateRequest(q Request) error {
 			return sandbox.ErrInvalid
 		}
 	case "resume":
-		if q.Config.ExternalWorkspace != (q.Workspace != nil) {
-			return sandbox.ErrInvalid
-		}
 		v := q.Resume
-		if (q.Workspace == nil && q.Config.EnvironmentDiskMiB == 0) || (v != nil && v.Workspace != nil) || v == nil || v.Reference != q.Reference || !validID(v.OperationID) || ValidateSnapshot(q.Config, q.Reference, v.Snapshot) != nil || ValidateCompute(q.Config, q.Reference, v.Target) != nil || v.Target.RestoredFrom == nil || *v.Target.RestoredFrom != v.Snapshot {
+		if q.Workspace == nil || (v != nil && v.Workspace != nil) || v == nil || v.Reference != q.Reference || !validID(v.OperationID) || ValidateSnapshot(q.Config, q.Reference, v.Snapshot) != nil || ValidateCompute(q.Config, q.Reference, v.Target) != nil || v.Target.RestoredFrom == nil || *v.Target.RestoredFrom != v.Snapshot {
 			return sandbox.ErrInvalid
 		}
 	case "delete_snapshot":

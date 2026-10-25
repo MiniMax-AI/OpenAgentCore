@@ -9,8 +9,9 @@ import (
 )
 
 // ValidateRegistration checks wiring before configuration parsing or construction.
-// Only configuration requirements and operation declarations are read, and the
-// resource validator only for a declared default size, after every other check.
+// Only configuration requirements, the setup declaration and operation
+// declarations are read, and the policy only for a declared default size, after
+// every other check.
 func ValidateRegistration(a Adapter) error {
 	invalid := func(field string) error {
 		return fmt.Errorf("%w: invalid registration %s", providercontract.ErrContract, field)
@@ -33,14 +34,11 @@ func ValidateRegistration(a Adapter) error {
 	default:
 		return invalid("mode")
 	}
-	if a.ValidateSpecification == nil {
-		return invalid("specification validator")
-	}
-	if a.ValidateResources == nil {
-		return invalid("resource validator")
-	}
 	if err := validateConfigurationAdapter(a.Configuration); err != nil {
 		return err
+	}
+	if a.Setup.Validate(a.Configuration.Requirements()) != nil {
+		return invalid("setup declaration")
 	}
 	if a.Policy.Workspace != nil && a.Policy.Workspace.Attachment != workspacefs.AttachmentHostDirectory {
 		return invalid("workspace attachment requirements")
@@ -52,12 +50,7 @@ func ValidateRegistration(a Adapter) error {
 	if err := sandbox.ValidateOperations(operations); err != nil {
 		return err
 	}
-	// The common lifecycle suspends only node allocations, so only a nodes
-	// registration may declare checkpoint support.
-	if operations["Initial"].State == providercontract.Supported && a.Mode != sandbox.DeploymentNodes {
-		return invalid("checkpoint support outside nodes mode")
-	}
-	if a.Policy.DefaultResources != nil && a.ValidateResources(*a.Policy.DefaultResources) != nil {
+	if a.Policy.DefaultResources != nil && a.Policy.DefaultResources.ValidatePolicy("", a.Policy) != nil {
 		return invalid("default resources")
 	}
 	return nil

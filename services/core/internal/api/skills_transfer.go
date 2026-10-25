@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -34,7 +35,7 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {
 			writeContentTooLarge(w)
-		} else {
+		} else if !writeFieldError(w, err) {
 			writeSkillsError(w, r, skills.ErrInvalidInput)
 		}
 		return
@@ -57,7 +58,7 @@ func (h *Handler) uploadSkill(w http.ResponseWriter, r *http.Request, version bo
 }
 
 func (h *Handler) skillContent(w http.ResponseWriter, r *http.Request) {
-	err := serveStoredContent(w, r, func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
+	err := serveStoredContent(w, r, "application/zip", func(ctx context.Context, consume func(string, int64, io.Reader) error) error {
 		skill := skills.PathID(chi.URLParam(r, "skill_id"))
 		var content skills.Content
 		var err error
@@ -69,7 +70,7 @@ func (h *Handler) skillContent(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return err
 		}
-		return consume(content.Version.Name+".zip", int64(len(content.Archive)), bytes.NewReader(content.Archive))
+		return consume(fmt.Sprintf("%s-%d.zip", content.Version.Name, content.Version.Version), int64(len(content.Archive)), bytes.NewReader(content.Archive))
 	})
 	if err != nil {
 		writeSkillsError(w, r, err)

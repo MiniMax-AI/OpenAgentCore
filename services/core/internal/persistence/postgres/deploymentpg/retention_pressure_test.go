@@ -38,7 +38,7 @@ func qualifyPressureRetention(t *testing.T, f fixture, owner deployment.Allocati
 func TestRetentionPressureReleasesOldestRetainableCheckpoint(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 3, MaxRetained: 3})
 	f.connect(t, node.NodeID)
 	var owners []deployment.Allocation
@@ -98,7 +98,7 @@ func TestRetentionPressureKeepsIneligibleCheckpoints(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
-			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 			f.connect(t, node.NodeID)
 			owner := qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))
@@ -134,7 +134,7 @@ func TestPressureSuspendsReleasableOwnerWhenRetainedSlotsAreFull(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
-			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: retainedSpecification()})
+			installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 			node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 			f.connect(t, node.NodeID)
 			owner := qualifyPressureRetention(t, f, runningPressureOwner(t, f, changes, installation, node.NodeID, view.Generation))

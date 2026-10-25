@@ -146,3 +146,22 @@ func TestDiagnosticNativeClassification(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicTurnErrorFollowsDiagnosticClassification(t *testing.T) {
+	for outcome, want := range map[string]string{
+		`{"error_code":"engine_failed","engine_error_code":"rate_limit_exceeded","error":"raw-secret-canary"}`: "rate_limit_exceeded",
+		`{"error_code":"engine_failed","engine_error_code":"connection_failed","engine_http_status":502}`:      "connection_failed",
+		`{"error_code":"engine_failed","engine_error_code":"native-only"}`:                                     "internal_error",
+		`{"error_code":"device_disconnected"}`:                                                                 "sandbox_error",
+		`{"error_code":"preparation_start_failed"}`:                                                            "sandbox_error",
+		`{"error_code":"model_provider_required"}`:                                                             "internal_error",
+		`{"error_code":"execution_unavailable"}`:                                                               "internal_error",
+		`{"error_code":"event_persistence_failed"}`:                                                            "internal_error",
+		``: "internal_error",
+	} {
+		got := publicTurnError(turnDiagnosticFailure(sessions.Turn{Status: sessions.TurnFailed, Outcome: json.RawMessage(outcome)}).Code)
+		if got.Code != want || got.Message == "" || strings.Contains(got.Message, "canary") {
+			t.Fatalf("%s: %+v", outcome, got)
+		}
+	}
+}

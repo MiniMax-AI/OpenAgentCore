@@ -320,14 +320,6 @@
   letter-spacing: inherit;
 }
 
-/* Runtime charts are divided by hairlines inside one frame. */
-.session-runtime-charts {
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: var(--frame-radius);
-}
-
 /* The order strip's explanation sits beside its label, behind the help tip. */
 .session-trace-frame .trace-order-overview > header {
   align-items: center;
@@ -511,50 +503,6 @@
   color: var(--danger);
   font-size: 12.5px;
   line-height: 18px;
-}
-
-.executor-install-skeleton {
-  display: grid;
-  gap: 10px;
-  padding: 14px 12px;
-}
-
-.executor-install-skeleton .skeleton-bar:first-child {
-  width: 62%;
-}
-
-.executor-install-skeleton .skeleton-bar:last-child {
-  width: 48%;
-}
-
-/* Host requirements on one wrapping line, split by middle dots. */
-.executor-install-requirements {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  color: var(--fg-muted);
-  font-size: 12.5px;
-  line-height: 18px;
-}
-
-.executor-install-requirements > span {
-  color: var(--fg);
-  font-weight: 500;
-}
-
-.executor-install-requirements ul {
-  display: flex;
-  flex: 1 1 0;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.executor-install-separator {
-  margin-right: 8px;
 }
 
 /* A failure's reason under its status: in full under a failed Turn, its line

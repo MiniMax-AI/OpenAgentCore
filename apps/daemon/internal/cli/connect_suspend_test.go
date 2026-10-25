@@ -15,9 +15,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/agent"
+	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/localworkspace"
 	"github.com/MiniMax-AI/OpenAgentCore/apps/daemon/internal/transport"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto/prototest"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
@@ -28,7 +30,6 @@ import (
 func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 	for _, scenario := range []string{"resume", "rollback", "reconnect", "revoked", "wrong_operation"} {
 		t.Run(scenario, func(t *testing.T) {
-			t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 			var connections atomic.Int32
 			peers := make(chan *websocket.Conn, 3)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +57,7 @@ func TestPlannedReconnectRequiresAuthenticatedMatchingResume(t *testing.T) {
 			defer cancel()
 			done := make(chan error, 1)
 			go func() {
-				done <- runSuspendLoop(ctx, dial, registry, &transport.BootstrapResponse{HeartbeatSeconds: 1}, agentCLIDiscovery{}, control)
+				done <- runSuspendLoop(ctx, dial, registry, &machineapi.BootstrapResponse{HeartbeatSeconds: 1}, agentCLIDiscovery{}, control)
 			}()
 			var first *websocket.Conn
 			select {
@@ -187,7 +188,6 @@ func readLifecycleResult(t *testing.T, peer *websocket.Conn, kind string) proto.
 }
 
 func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
-	t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 	peers := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
@@ -204,7 +204,7 @@ func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		done <- runSuspendLoop(ctx, dial, agent.NewRegistry(), &transport.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
+		done <- runSuspendLoop(ctx, dial, agent.NewRegistry(), &machineapi.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
 	}()
 	var peer *websocket.Conn
 	select {
@@ -240,7 +240,6 @@ func TestRunningSourceOnlyAcceptsExplicitRollbackOrItsReceipt(t *testing.T) {
 func TestSuspensionReconnectBeforeConfirmation(t *testing.T) {
 	for _, scenario := range []string{"disconnect", "timeout", "revoked", "cancelled", "deleted"} {
 		t.Run(scenario, func(t *testing.T) {
-			t.Setenv("OAC_RUNTIME_WORKSPACE", "")
 			var attempts atomic.Int32
 			peers := make(chan *websocket.Conn, 2)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -343,10 +342,10 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 	environment, session := uuid.NewString(), uuid.NewString()
 	t.Setenv("OAC_RUNTIME_HOME", t.TempDir())
 	t.Setenv("OAC_RUNTIME_STATE_DIRECTORY", t.TempDir())
-	t.Setenv("OAC_RUNTIME_WORKSPACE", t.TempDir())
-	t.Setenv("OAC_RUNTIME_CAPABILITY_DIRECTORY", t.TempDir())
-	t.Setenv("OAC_RUNTIME_ENVIRONMENT_ID", environment)
-	t.Setenv("OAC_RUNTIME_SESSION_ID", session)
+	if err := localworkspace.Bind(environment, session, t.TempDir(), t.TempDir()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(localworkspace.Unbind)
 	peers := make(chan *websocket.Conn, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		peer, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
@@ -374,7 +373,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 	control := &suspendControl{path: filepath.Join(t.TempDir(), "control.json"), identity: suspendIdentity{EnvironmentID: environment}, signal: make(chan os.Signal, 1)}
 	finished := make(chan error, 1)
 	go func() {
-		finished <- runSuspendLoop(ctx, dial, registry, &transport.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
+		finished <- runSuspendLoop(ctx, dial, registry, &machineapi.BootstrapResponse{HeartbeatSeconds: 60}, agentCLIDiscovery{}, control)
 	}()
 	var peer *websocket.Conn
 	select {
@@ -383,7 +382,7 @@ func TestQuiesceRetainsExecutorAcrossReconnectAndShutdownConfirmsCleanup(t *test
 		t.Fatal("no connection")
 	}
 	defer peer.Close()
-	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &agentcapabilities.Input{}}}})
+	preparation, err := proto.NewEnvelope(proto.TypeExecutionPrepare, "prepare", proto.ExecutionPreparePayload{SessionID: session, Configuration: proto.PromptRequestPayload{AgentKind: "cleanup", AgentStateKey: session, LocalEnvironment: &proto.LocalEnvironment{ID: environment, WorkspaceDirectory: "/workspace", CapabilitySources: &proto.CapabilitySources{}}}})
 	if err != nil {
 		t.Fatal(err)
 	}

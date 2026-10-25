@@ -56,21 +56,3 @@ type NewAPIKey struct {
 	ID, Name, Prefix string
 	Digest           [sha256.Size]byte
 }
-
-// Reader answers Project and key queries.
-type Reader interface {
-	// GetProject returns ErrNotFound for a missing Project or malformed ID.
-	GetProject(ctx context.Context, id string) (Binding, error)
-	// ListProjects returns ErrNotFound when query.After names no Project.
-	ListProjects(ctx context.Context, query ListQuery) (Page, error)
-	// ListAPIKeys returns every key of the Project, including revoked keys. It
-	// returns ErrNotFound for a missing Project or when query.After names no key
-	// of this Project.
-	ListAPIKeys(ctx context.Context, projectID string, query ListQuery) (KeyPage, error)
-	// ResolveAPIKey returns the active key with this secret digest, in an
-	// active Project, or ErrNotFound.
-	ResolveAPIKey(ctx context.Context, digest [sha256.Size]byte) (KeyBinding, error)
-	// APIKeyDigestExists reports whether any key, including a revoked key or a
-	// key of an archived Project, has this secret digest.
-	APIKeyDigestExists(ctx context.Context, digest [sha256.Size]byte) (bool, error)
-}

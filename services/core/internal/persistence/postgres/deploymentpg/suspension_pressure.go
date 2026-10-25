@@ -31,6 +31,13 @@ func (t *allocationTx) LoadSuspensionDemand(current deployment.Allocation) (depl
 	for _, node := range inFlight {
 		result.InFlightNodes = append(result.InFlightNodes, uuidString(node))
 	}
+	starting, err := t.q.ListRuntimeStartingNodes(t.ctx)
+	if err != nil {
+		return result, err
+	}
+	for _, node := range starting {
+		result.StartingNodes = append(result.StartingNodes, uuidString(node))
+	}
 	result.Nodes, err = placementpg.LoadNodes(t.ctx, t.q)
 	if err != nil {
 		return result, err

@@ -74,8 +74,7 @@ func turnResponse(session sessions.Session, turn sessions.Turn) (v1.Turn, error)
 	// Session Turns are root Turns, so subagent_id is always null here.
 	response := v1.Turn{Usage: tokenUsage(turn.Usage), ID: turn.ID, SessionID: turn.SessionID, AgentID: cfg.Agent.ID, Object: "agent.session.turn", Status: turn.Status, CreatedAt: turn.CreatedAt.Unix(), StartedAt: unixTime(turn.StartedAt), CompletedAt: unixTime(turn.CompletedAt)}
 	if turn.Status == sessions.TurnFailed {
-		// Native errors can contain secrets; publish a stable category without raw diagnostics.
-		response.Error = &v1.TurnError{Code: "internal_error", Message: "The execution could not complete."}
+		response.Error = publicTurnError(turnDiagnosticFailure(turn).Code)
 	}
 	return response, nil
 }

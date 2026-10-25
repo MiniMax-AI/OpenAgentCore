@@ -50,7 +50,7 @@ sequenceDiagram
 
 Core counts a node as online while it is connected under the current owner epoch and its last heartbeat is less than 45 seconds old. A heartbeat establishes provider readiness and the last host measurements, never Session activity. [Timeouts and limits](#timeouts-and-limits) lists every timer.
 
-Health carries `observed_at`, `active_operations` (at most 32) and the host measurements that the [Runtime telemetry API](./runtime-observability-api.md#node-host-observations-and-history) reports. A node reports readiness per generation, as described below. A `diagnostic` in a generation observation that is not a declared class makes the frame invalid. The [nodes guide](../../docs/getting-started/nodes.md#readiness-codes) lists the classes and their causes.
+Health carries `observed_at`, `active_operations` (at most 32) and the host measurements that the [Runtime telemetry API](./runtime-observability-api.md#node-host-observations-and-history) reports. The enrollment request carries the same measurements that the node takes for health, `cpu_count`, `effective_cpu_cores`, `total_memory_bytes` and `available_disk_bytes`, each omitted when the node cannot measure it and validated like a health report. Core derives from them every limit the enrollment token leaves unset, as [Recommended capacity](./sandbox-deployment.md#recommended-capacity) defines. A node reports readiness per generation, as described below. A `diagnostic` in a generation observation that is not a declared class makes the frame invalid. The [nodes guide](../../docs/getting-started/nodes.md#readiness-codes) lists the classes and their causes.
 
 ## Provider requests
 
@@ -79,23 +79,27 @@ Each operation carries its own arguments and returns the following result on suc
 | `initial` | `Initial` | None | `compute` |
 | `new_compute` | `NewCompute` | Positive compute `generation` and optional `snapshot` | `compute` |
 | `compute` | `GetCompute` | `compute` | `state` |
+| `renew_compute` | `RenewCompute` | `compute` | `state` |
 | `kill_compute` | `KillCompute` | `compute` | None |
 | `resume_compute` | `ResumeCompute` | `compute` | `state` |
 | `command_compute` | `RunCommandCompute` | `compute` and `command` | `command` |
 | `suspend` | `Suspend` | `suspend` | `state` |
 | `resume` | `Resume` | `resume` | `state` |
 | `delete_snapshot` | `DeleteSnapshot` | `snapshot` | None |
+| `restore_preparation` | `RestorePreparation` | `key` | `restored` |
+| `save_preparation` | `SavePreparation` | `key` | None |
 
 A request whose `connection_id`, `owner_epoch` or `sequence` does not match closes the connection. A malformed request gets an `invalid` response. The node runs the request on the provider of the named `deployment_generation` and answers `unconfirmed` when it cannot. Core sends `create` and a `resume` that is not observe-only only to a generation that is ready on that node, and keeps at most 32 requests pending per connection.
 
 The budget is relative: the node anchors `timeout_ms` to its own clock on receipt and consumes it while the request waits in its queue, so the hosts' clocks need not agree. Core still bounds its own wait. A full node queue closes the connection.
 
-The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute` or `delete_snapshot`. A failed response carries an `error_code`:
+The `response` frame carries `id` and `connection_id`. A successful response carries the result named in the operation table, with no result field for `kill`, `kill_compute`, `delete_snapshot` or `save_preparation`. A failed response carries an `error_code`:
 
 | `error_code` | Meaning |
 | --- | --- |
 | `invalid`, `ownership`, `exists`, `not_found` | `ErrInvalid`, `ErrOwnership`, `ErrExists`, `ErrNotFound` |
 | `command_unconfirmed` | `ErrCommandUnconfirmed` |
+| `checkpoint_unusable` | `ErrCheckpointUnusable`, a `resume` outcome |
 | `observation_unavailable`, `runtime_not_running` | The observation outcomes |
 | `unsupported` | The operation is declared unsupported; see below |
 | `unconfirmed`, or any other value | The outcome is unknown |
@@ -104,7 +108,7 @@ A failed response carries no result, except an `info` that is an exact-reference
 
 Node startup and generation loading validate complete Provider operation declarations before accepting work, and the Core proxy uses the same registered declaration, so an unsupported operation rejects before node resolution or native I/O. The [operation contract](../../docs/sandbox-provider.md#explicit-operation-contracts) owns the inventory. An `unsupported` response carries an `unsupported` object with the exact method `operation` and an authored safe `reason`; the proxy checks both against the request. Missing, malformed or mismatched evidence is an unconfirmed result, never proof that a mutation was rejected. Unsupported stays distinct from observation unavailability and unknown compute or command results, and it neither settles resource ownership nor authorizes a replay.
 
-Create bootstrap and Resume requests may carry an optional workspace filesystem binding. The node validates its tenant and Environment against the allocation reference, its immutable ObjectID, and its attachment configuration ID against the supplied configuration before forwarding it. The filesystem resolver validates adapter-native ownership. A missing binding selects owned storage; a present binding cannot fall back. Error responses may retain a Resume target only when its nonempty native ID, name, generation and snapshot provenance match the requested target; this is cleanup evidence, never successful restore.
+Create bootstrap and Resume requests may carry an optional workspace filesystem binding. The node validates its tenant and Environment against the allocation reference, its immutable ObjectID, and its attachment configuration ID against the supplied configuration before forwarding it. The filesystem resolver validates adapter-native ownership. A Provider whose policy declares workspace storage rejects a missing binding; a Provider without it rejects a present one. Neither falls back. Error responses may retain a Resume target only when its nonempty native ID, name, generation and snapshot provenance match the requested target; this is cleanup evidence, never successful restore.
 
 ## Generation control
 

@@ -26,10 +26,6 @@ type Storage interface {
 	// DisconnectNode clears the node's connection when it is still this one. It
 	// waits for the node row first, so an uncertain connect cannot outlive it.
 	DisconnectNode(ctx context.Context, nodeID, connectionID string, epoch uint64) error
-	// SampleHostHistory copies each fresh authenticated heartbeat into the
-	// host history, at the Runtime sampler cadence, and returns the number of
-	// samples. Neither reads nor offline nodes fill gaps.
-	SampleHostHistory(ctx context.Context) (int64, error)
 	// WithActivity runs apply in one transaction that locks the Session of
 	// the tenant's Environment and then prunes the Session's journal. It
 	// commits only when both succeed. A missing Environment, or one of a
@@ -130,7 +126,7 @@ type AllocationTx interface {
 	// OldestIdleCheckpoint reports whether current has the earliest retention
 	// deadline among its node's idle suspended allocations that can be retained.
 	OldestIdleCheckpoint(current Allocation) (bool, error)
-	// ExpireCheckpoint ends the suspended allocation's retention now.
+	// ExpireCheckpoint ends the retention of a suspended or restoring allocation now.
 	ExpireCheckpoint(current Allocation) (Allocation, error)
 	// PlacementDemand reads one qualified page; next advances past all inspected
 	// rows, including ineligible receipts. An empty next.EnvironmentID ends the scan.
@@ -253,9 +249,6 @@ type Reader interface {
 	// the given Session ID, in ID order, whose allocation, if any, is
 	// unreleased. limit is 1 to 100. It reads only and renews nothing.
 	ObservationSessions(ctx context.Context, after string, limit int) (ObservationSessionPage, error)
-	// NodeAllocations returns up to 1000 unreleased allocations of the node,
-	// oldest first. A missing node is ErrNotFound.
-	NodeAllocations(ctx context.Context, nodeID string) ([]NodeAllocation, error)
 	// NodeOnline reports whether the node is connected; a missing node is
 	// offline.
 	NodeOnline(ctx context.Context, nodeID string) (bool, error)
@@ -494,13 +487,14 @@ type EnrollmentRecord struct {
 	ID, InstallationID     string
 	ExpiresAt              time.Time
 	Consumed               bool
-	MaxActive, MaxRetained int
+	MaxActive, MaxRetained *int
 }
 
 // NewEnrollment is an enrollment token to store, by digest.
 type NewEnrollment struct {
 	ID, TokenDigest, InstallationID string
-	MaxActive, MaxRetained          int
+	// A nil limit is unset: Core derives it from the host when the node enrolls.
+	MaxActive, MaxRetained *int
 }
 
 // Heartbeat is a node's health for one connection.

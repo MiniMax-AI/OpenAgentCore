@@ -13,7 +13,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 		t.Run(map[bool]string{false: "child without thread started", true: "child thread started"}[childStarted], func(t *testing.T) {
 			out := make(chan proto.Envelope, 64)
 			s := &Session{runID: "run", out: out, cancelCtx: context.Background(), cfg: defaultSessionConfig(testStateRoot(t)),
-				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers()}
+				rpc: NewJSONRPCClient(JSONRPCConfig{}), bufs: NewItemBuffers(), reasoningSummary: true}
 			s.registerHandlers()
 			s.setThreadID("root")
 			notify := func(method, params string) { t.Helper(); scopeNotification(t, s, method, params) }
@@ -57,7 +57,7 @@ func TestRootNotificationIsolation(t *testing.T) {
 			if s.terminal.Load() || s.currentThreadID() != "root" || len(out) != rootEvents {
 				t.Fatalf("foreign notification changed Run ownership/output: terminal=%v thread=%q events=%d want=%d", s.terminal.Load(), s.currentThreadID(), len(out), rootEvents)
 			}
-			if s.bufs.AgentText["shared"] != "root " || s.bufs.Reasoning["thought"] != "root thought" || s.peekLastErrText() != "root retry" || s.takeFinalText() != "" {
+			if s.bufs.AgentText["shared"] != "root " || s.bufs.Reasoning["thought"].channel != "text" || s.peekLastErrText() != "root retry" || s.takeFinalText() != "" {
 				t.Fatal("foreign notification changed root buffers")
 			}
 			if s.latestUsage == nil || s.latestUsage.InputTokens != 20 || s.latestUsage.OutputTokens != 5 || s.usageTurnID != "root-turn" {
@@ -88,8 +88,8 @@ func TestRootNotificationIsolation(t *testing.T) {
 					}
 				}
 			}
-			if doneCount != 1 || s.deltaSeq.Load() != 2 || s.thinkingSeq.Load() != 1 {
-				t.Fatalf("root output duplicated or polluted: done=%d delta=%d thinking=%d", doneCount, s.deltaSeq.Load(), s.thinkingSeq.Load())
+			if doneCount != 1 || s.deltaSeq.Load() != 2 {
+				t.Fatalf("root output duplicated or polluted: done=%d delta=%d", doneCount, s.deltaSeq.Load())
 			}
 		})
 	}

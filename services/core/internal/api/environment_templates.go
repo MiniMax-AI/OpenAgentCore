@@ -3,9 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 
 	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmenttemplates"
 	"github.com/go-chi/chi/v5"
 )
@@ -33,11 +37,17 @@ func decodeTemplateInput(raw []byte) (environmenttemplates.Input, error) {
 	in := environmenttemplates.Input{}
 	if value, supplied := fields["name"]; supplied {
 		in.SetName = true
-		if json.Unmarshal(value, &in.Name) != nil || environmenttemplates.ValidateName(in.Name) != nil {
+		if json.Unmarshal(value, &in.Name) != nil {
 			return in, environmenttemplates.ErrInvalidInput
+		}
+		if environmenttemplates.ValidateName(in.Name) != nil {
+			return in, &fieldError{param: "name", message: fmt.Sprintf("name must contain 1 to %d characters.", environmenttemplates.MaxNameLength)}
 		}
 	}
 	delete(fields, "name")
+	if err := templateEnvError(fields["env"]); err != nil {
+		return in, err
+	}
 	_, in.SetNetwork = fields["network"]
 	_, in.SetFiles = fields["files"]
 	_, in.SetEnv = fields["env"]
@@ -70,13 +80,29 @@ func decodeTemplateInput(raw []byte) (environmenttemplates.Input, error) {
 	return in, nil
 }
 
+// templateEnvError names the first environment variable Core cannot set.
+func templateEnvError(raw json.RawMessage) error {
+	var env map[string]string
+	_ = json.Unmarshal(raw, &env)
+	for _, name := range slices.Sorted(maps.Keys(env)) {
+		if !environmentconfig.ValidEnvironmentEntry(name, env[name]) {
+			param := "env"
+			if echoableField(name) {
+				param += "." + name
+			}
+			return &fieldError{param: param, message: "Environment variable names must match [A-Za-z_][A-Za-z0-9_]* and must not be PATH, OPENAI_API_KEY or start with CODEX_ or OAC_; values must not contain U+0000."}
+		}
+	}
+	return nil
+}
+
 func templateResponse(t environmenttemplates.Template) v1.EnvironmentTemplate {
 	return v1.EnvironmentTemplate{ID: t.ID, Object: "agent.environment.template", Name: t.Name, CreatedAt: t.CreatedAt.Unix(), UpdatedAt: t.UpdatedAt.Unix(), CapabilityDirectories: append([]string{}, t.CapabilityDirectories...), Network: v1.EnvironmentNetwork{Access: t.NetworkAccess, AllowedDomains: append([]string{}, t.AllowedDomains...)}, Packages: packageMetadata(&t.Packages), Files: templateFileResponse(t.Files), Plugins: pluginResponse(t.Plugins), Skills: skillResponse(t.Skills)}
 }
 
-func readTemplateInput(w http.ResponseWriter, r *http.Request) (environmenttemplates.Input, bool) {
+func readTemplateInput(w http.ResponseWriter, r *http.Request, pinned shape) (environmenttemplates.Input, bool) {
 	raw, ok := readJSONObjectLimit(w, r, 16*1024*1024, "Request exceeds 16 MiB.")
-	if !ok {
+	if !ok || writeFieldError(w, validateBody(raw, pinned)) {
 		return environmenttemplates.Input{}, false
 	}
 	in, err := decodeTemplateInput(raw)
@@ -91,7 +117,7 @@ func readTemplateInput(w http.ResponseWriter, r *http.Request) (environmenttempl
 }
 
 func (h *Handler) createEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	in, ok := readTemplateInput(w, r)
+	in, ok := readTemplateInput(w, r, createEnvironmentTemplateParams)
 	if !ok {
 		return
 	}
@@ -113,7 +139,7 @@ func (h *Handler) getEnvironmentTemplate(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) updateEnvironmentTemplate(w http.ResponseWriter, r *http.Request) {
-	in, ok := readTemplateInput(w, r)
+	in, ok := readTemplateInput(w, r, updateEnvironmentTemplateParams)
 	if !ok {
 		return
 	}

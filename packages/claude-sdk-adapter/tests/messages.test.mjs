@@ -90,3 +90,18 @@ test("unmatched text cannot acquire an invented identity", () => {
   observer.consume(block(0));
   assert.throws(() => observer.consume(snapshot("other", "wrong")), /unmatched/);
 });
+
+test("thinking blocks with text are reasoning only when summaries are requested", () => {
+  const think = [start("native"), stream({ type: "content_block_start", index: 0, content_block: { type: "thinking", thinking: "" } }),
+    stream({ type: "content_block_delta", index: 0, delta: { type: "thinking_delta", thinking: "hmm " } }),
+    stream({ type: "content_block_delta", index: 0, delta: { type: "signature_delta", signature: "sig" } }), blockStop(0),
+    stream({ type: "content_block_start", index: 1, content_block: { type: "thinking", thinking: "" } }),
+    stream({ type: "content_block_delta", index: 1, delta: { type: "signature_delta", signature: "sig" } }), blockStop(1), stop()];
+  const off = new MessageObserver();
+  assert.deepEqual(think.flatMap(message => off.consume(message)), []);
+  const observer = new MessageObserver(true);
+  assert.deepEqual(think.flatMap(message => observer.consume(message)), [
+    { type: "reasoning", reasoning: { id: "native:0", status: "in_progress", delta: "hmm " } },
+    { type: "reasoning", reasoning: { id: "native:0", status: "completed" } },
+  ]);
+});

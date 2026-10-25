@@ -30,6 +30,11 @@ it("preserves historical nulls and finite safe provisioning parameters", () => {
   expect(projectTurnDiagnostics(snapshot, id.toUpperCase(), turn.toUpperCase())).toEqual(snapshot);
 });
 
+it("accepts the Harness step Core records when the selected Harness is unavailable", () => {
+  const value = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params: { step: "harness", index: null, exit_code: null }, failed_at: null } };
+  expect(projectSessionDiagnostics(value, id)).toEqual(value);
+});
+
 it.each([
   (v: any) => { v.failure.error = "secret-canary"; },
   (v: any) => { v.failure.code = "input_secret-canary"; },

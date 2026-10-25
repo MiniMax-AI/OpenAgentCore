@@ -75,7 +75,7 @@ func (e *ExecutionOperations) ReserveAllocation(ctx context.Context, key Allocat
 		if environment.Status == "failed" || environment.Status == "expired" {
 			return ErrInvalidInput
 		}
-		allocation := NewAllocation{ID: uuid.NewString(), EnvironmentID: environment.ID, DeviceID: uuid.NewString(), ProviderKey: installation, Generation: d.Generation}
+		allocation := NewAllocation{ID: uuid.NewString(), DeviceID: uuid.NewString(), ProviderKey: installation, Generation: d.Generation}
 		if d.Mode == string(sandbox.DeploymentNodes) {
 			reserved, err := tx.LoadReserved()
 			if err != nil {
@@ -287,7 +287,14 @@ func (e *ExecutionOperations) SetCompute(ctx context.Context, owner Allocation, 
 					if !activity.ReadyToSuspend(15*time.Second) || current.NodeID == "" {
 						return Allocation{}, ErrNotIdle
 					}
-					allowed, err := e.canSuspendForDemand(tx, current)
+					pressure, err := tx.LoadSuspensionDemand(current)
+					if err != nil {
+						return Allocation{}, err
+					}
+					allowed, err := e.canSuspendForDemand(tx, pressure, current)
+					if err == nil && !allowed && activity.ReadyToSuspend(freeSlotIdle) {
+						allowed = canKeepFreeSlot(pressure, current)
+					}
 					if err != nil {
 						return Allocation{}, err
 					}

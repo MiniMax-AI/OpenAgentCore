@@ -23,14 +23,38 @@ type session struct {
 	cancelOutput   chan struct{}
 	nativeEnded    bool
 
-	reads       workspaceReadState
-	directories workspaceDirectoryState
-	process     *clirunner.Process
-	writeMu     *sync.Mutex
-	functions   functionState
-	steering    steeringState
-	settled     chan struct{}
-	outcome     proto.DonePayload
+	process   *clirunner.Process
+	writeMu   *sync.Mutex
+	functions functionState
+	steering  steeringState
+	settled   chan struct{}
+	outcome   proto.DonePayload
+}
+
+// Frames the Executor writes to the bridge; bridgeEvent is what the bridge sends back.
+// packages/claude-sdk-adapter/fixtures/bridge-frames.json is checked against both.
+type turnStartFrame struct {
+	Type   string             `json:"type"`
+	TurnID string             `json:"turn_id"`
+	Input  proto.MessageInput `json:"input"`
+}
+
+type turnCancelFrame struct {
+	Type   string `json:"type"`
+	TurnID string `json:"turn_id"`
+}
+
+type steerFrame struct {
+	Type    string             `json:"type"`
+	TurnID  string             `json:"turn_id"`
+	InputID string             `json:"input_id"`
+	Input   proto.MessageInput `json:"input"`
+}
+
+type functionResultFrame struct {
+	Type   string `json:"type"`
+	TurnID string `json:"turn_id"`
+	proto.FunctionResultPayload
 }
 
 type bridgeEvent struct {
@@ -52,6 +76,7 @@ type bridgeEvent struct {
 	Code        string                              `json:"code"`
 	ItemID      string                              `json:"item_id"`
 	Message     *proto.OutputMessagePayload         `json:"message"`
+	Reasoning   *proto.ReasoningPayload             `json:"reasoning"`
 	Call        *proto.FunctionCallPayload          `json:"call"`
 	Withdrawn   *proto.FunctionCallWithdrawnPayload `json:"withdrawn"`
 	CallID      string                              `json:"call_id"`

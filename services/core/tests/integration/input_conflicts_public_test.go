@@ -18,16 +18,20 @@ import (
 const conflictAgent = `"agent":{"id":"agent_conflicts","model":"fixture","tools":[],"multi_agent":{"enabled":false,"max_concurrent_subagents":null},"reasoning":{},"service_tier":"auto","text":{"format":{"type":"text"},"verbosity":"medium"}}`
 
 // Official error bodies for Session input rejections (EVT-11, EVT-12, ERR-22,
-// ERR-27). Every param is null and no message repeats caller input.
+// ERR-27). Every param is null and only the unknown tool call message names
+// the caller's call_id.
 const (
 	missingSessionBody = `{"error":{"message":"Resource not found.","type":"not_found_error","code":"not_found_error","param":null}}` + "\n"
-	unknownCallBody    = `{"error":{"message":"Unknown pending tool call.","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
 	otherTurnBody      = `{"error":{"message":"The tool call belongs to a different Turn.","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
 	turnConflictBody   = `{"error":{"message":"The Turn cannot accept this input in its current state.","type":"conflict_error","code":"conflict_error","param":null}}` + "\n"
 	pendingInputBody   = `{"error":{"message":"Earlier input to this Session is still pending.","type":"conflict_error","code":"conflict_error","param":null}}` + "\n"
 	changedResultBody  = `{"error":{"message":"The tool call already has a different result.","type":"conflict_error","code":"conflict_error","param":null}}` + "\n"
 	eventKeyReuseBody  = `{"error":{"message":"This idempotency key was used with different input.","type":"conflict_error","code":"idempotency_conflict","param":null}}` + "\n"
 )
+
+func unknownCallBody(call string) string {
+	return `{"error":{"message":"Unknown pending tool call: ` + call + `","type":"invalid_request_error","code":"invalid_request_error","param":null}}` + "\n"
+}
 
 // TestSessionInputConflictsAndResultTargetsPostgres replays the Session input
 // error rows CF2–CF4 and CF6–CF9 of the official semantics alignment over HTTP
@@ -182,11 +186,11 @@ func TestSessionInputConflictsAndResultTargetsPostgres(t *testing.T) {
 	// CF6–CF8: result targets in owned, other owned, foreign and missing Sessions.
 	valid := result(current.TurnID, "pending-call", "value")
 	reject([]rejection{
-		{"unknown-call", owner, session, []string{result(current.TurnID, "absent-call", "x")}, 400, unknownCallBody, ""},
-		{"unknown-call-any-turn", owner, session, []string{result(uuid.NewString(), "absent-call", "x")}, 400, unknownCallBody, ""},
-		{"unknown-call-malformed-turn", owner, session, []string{result("turn_malformed", "absent-call", "x")}, 400, unknownCallBody, ""},
-		{"call-of-other-session", owner, other, []string{valid}, 400, unknownCallBody, ""},
-		{"rollback-batch", owner, session, []string{message, valid, result(current.TurnID, "absent-call", "x")}, 400, unknownCallBody, ""},
+		{"unknown-call", owner, session, []string{result(current.TurnID, "absent-call", "x")}, 400, unknownCallBody("absent-call"), ""},
+		{"unknown-call-any-turn", owner, session, []string{result(uuid.NewString(), "absent-call", "x")}, 400, unknownCallBody("absent-call"), ""},
+		{"unknown-call-malformed-turn", owner, session, []string{result("turn_malformed", "absent-call", "x")}, 400, unknownCallBody("absent-call"), ""},
+		{"call-of-other-session", owner, other, []string{valid}, 400, unknownCallBody("pending-call"), ""},
+		{"rollback-batch", owner, session, []string{message, valid, result(current.TurnID, "absent-call", "x")}, 400, unknownCallBody("absent-call"), ""},
 		{"completed-turn", owner, session, []string{result(first.TurnID, "pending-call", "x")}, 400, otherTurnBody, ""},
 		{"call-of-completed-turn", owner, session, []string{result(current.TurnID, "first-call", "one")}, 400, otherTurnBody, ""},
 		{"unknown-turn", owner, session, []string{result(uuid.NewString(), "pending-call", "x")}, 400, otherTurnBody, ""},

@@ -61,6 +61,10 @@ type Configuration struct {
 	ValidateNativeConfig func(proto.HarnessConfig) bool
 }
 
+// NativePackage names the native Harness package and its single supported version.
+// Component is the name of its native installer component.
+type NativePackage struct{ Component, Version string }
+
 // Declaration is everything a Harness states about itself, authored once in
 // internal/harnessconfig/<package>/declaration.go. The Runtime adapter binds it
 // to native execution, and Core admission validates every Session against it:
@@ -73,6 +77,9 @@ type Configuration struct {
 type Declaration struct {
 	// Kind is the public identifier; Label is its display name.
 	Kind, Label string
+	// Native is the pinned native package the Harness runs. Every projection of
+	// its name and version is generated from, or checked against, this value.
+	Native NativePackage
 	// Configuration declares model providers and native parameter validation.
 	Configuration
 	// Capabilities is the maximum the adapter supports on a capable host and the
@@ -90,6 +97,9 @@ type Declaration struct {
 	// text. Unsupported Harnesses reject them at admission; Core never trims or
 	// pads model input to fit a Harness.
 	WhitespaceOnlyText proto.CapabilitySupport
+	// MaxInstructionsBytes is the native limit on an Agent's instructions in
+	// bytes; zero declares none. Admission rejects longer instructions.
+	MaxInstructionsBytes int
 	// ValidateConfiguration adds pure restrictions on a saved Agent and
 	// Environment.
 	ValidateConfiguration func(Admission) error
@@ -135,6 +145,9 @@ func (d Declaration) ValidateDeclaration() error {
 	if d.WhitespaceOnlyText != proto.CapabilitySupported && d.WhitespaceOnlyText != proto.CapabilityUnsupported {
 		return errors.New("harnessconfig: whitespace-only text support must be declared")
 	}
+	if d.MaxInstructionsBytes < 0 {
+		return errors.New("harnessconfig: invalid instructions limit")
+	}
 	if len(d.Placements) == 0 || !validChoices(d.Placements, "none", "openai_hosted", "self_hosted") {
 		return errors.New("harnessconfig: invalid placements")
 	}
@@ -163,12 +176,11 @@ func validChoices(values []string, allowed ...string) bool {
 }
 
 // PreparedConfiguration owns a validated snapshot without native side effects.
-// Model and Provider may be absent only for the existing native-owned connection
-// path. A supplied model must be a nonempty string; an explicit provider requires
-// an explicit model. HarnessConfig is always an independently owned object.
+// Model may be absent only for the existing native-owned connection path. A
+// supplied model must be a nonempty string; an explicit provider requires an
+// explicit model. HarnessConfig is always an independently owned object.
 type PreparedConfiguration struct {
 	Model         string
-	Provider      *modelprovider.Provider
 	HarnessConfig proto.HarnessConfig
 }
 
@@ -198,11 +210,9 @@ func (c Configuration) Prepare(options map[string]any) (PreparedConfiguration, e
 		if result.Model == "" {
 			return PreparedConfiguration{}, ErrModel
 		}
-		provider, err := c.ParseProvider(value)
-		if err != nil {
+		if _, err := c.ParseProvider(value); err != nil {
 			return PreparedConfiguration{}, err
 		}
-		result.Provider = &provider
 	}
 	native, err := c.PrepareHarnessConfig(options)
 	if err != nil {

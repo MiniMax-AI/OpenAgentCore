@@ -31,7 +31,7 @@ CI_INPUTS = {
 }
 DEPENDENCY_INPUTS = {
     **dict.fromkeys(("go.mod", "go.sum", "go.work", "go.work.sum"), GO_JOBS),
-    **dict.fromkeys(("package.json", "pnpm-workspace.yaml", ".npmrc"), NODE_JOBS),
+    **dict.fromkeys(("package.json", "pnpm-workspace.yaml"), NODE_JOBS),
     "pnpm-lock.yaml": ("hygiene",),
     "apps/web/pnpm-lock.yaml": ("web", "web-acceptance"),
     "example/parsar/pnpm-lock.yaml": ("example",),
@@ -68,8 +68,7 @@ RULES = (
     (("contracts/",), (*GO, ".json", ".yaml", ".yml"), ("backend", "api", "native", "web", "web-acceptance", "example", "distribution")),
     (("packages/agents-client/",), (*GO, *WEB), ("backend", "api", "web", "web-acceptance", "example")),
     (("packages/claude-sdk-adapter/", "packages/mcode-harness/"), WEB, ("harness", "native", "backend", "distribution")),
-    (("packages/tsconfig/",), (".json",), ("harness", "native")),
-    (("deploy/node/", "scripts/acceptance/"), (".py", ".json", ".sh"), ("distribution",)),
+    (("deploy/node/",), (".py", ".json", ".sh"), ("distribution",)),
     (("deploy/compose/",), (".yaml", ".toml", ".json", ".txt"), ("distribution", "compose")),
     (("scripts/compose-smoke.py", "scripts/render-compose.py", "deploy/compose/test_compose.py"), (".py",), ("distribution", "compose")),
     (("deploy/install.sh", "deploy/install-source.py", "deploy/test_install.py", "scripts/publish-core-release.",
@@ -109,7 +108,7 @@ IMAGE_FILES = {"go.mod", "go.sum", "go.work", "go.work.sum", ".github/workflows/
 IMAGE_INPUTS = ("scripts/build-core", "scripts/build-e2b-provider", "deploy/distribution/", "services/core/tools/e2b-provider/",
                 "services/core/deploy/e2b/")
 # Generated outputs retain freshness checks even when the file is documentation.
-GENERATED_OUTPUTS = {"contracts/agents-api/harness-catalog.md", "contracts/agents-api/zh/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
+GENERATED_OUTPUTS = {"scripts/native-pins.json", "contracts/agents-api/harness-catalog.md", "contracts/agents-api/zh/harness-catalog.md", "packages/agents-client/src/harness-catalog.ts",
                      "internal/harnessconfig/builtin/registry.go", "apps/daemon/internal/cli/harness_declarations.go"}
 
 

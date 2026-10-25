@@ -26,7 +26,6 @@ export interface AdminRuntimeObservation {
 export const adminRuntimeObservationFields = ["observation", "project_id"] as const;
 export interface AdminRuntimeObservationDetail {
   allocation_created_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   disk: RuntimeDiskObservation | null;
   environment_id: string | null;
   id: string;
@@ -43,7 +42,7 @@ export interface AdminRuntimeObservationDetail {
   started_at: number | null;
   status: AdminRuntimeObservationDetailStatus;
 }
-export const adminRuntimeObservationDetailFields = ["allocation_created_at", "cpu", "disk", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
+export const adminRuntimeObservationDetailFields = ["allocation_created_at", "disk", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
 export const adminRuntimeObservationDetailLifecycleStateValues = ["active", "sleeping", "transitioning", "pending", "stopped"] as const;
 export type AdminRuntimeObservationDetailLifecycleState = (typeof adminRuntimeObservationDetailLifecycleStateValues)[number];
 export const adminRuntimeObservationDetailModeValues = ["none", "self_hosted", "openai_hosted"] as const;
@@ -116,13 +115,36 @@ export interface AdminauditPage {
 export const adminauditPageFields = ["data", "has_more", "next_cursor"] as const;
 export const attachmentKindValues = ["host_directory"] as const;
 export type AttachmentKind = (typeof attachmentKindValues)[number];
+export interface Capacity {
+  max_active: number;
+  max_retained: number;
+}
+export const capacityFields = ["max_active", "max_retained"] as const;
 export interface ConfigurationDiscoveryInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
-  query?: Record<string, unknown>;
+  query?: ConfigurationDiscoveryQuery;
 }
 export const configurationDiscoveryInputFields = ["configuration", "credential", "query"] as const;
 export const configurationDiscoveryInputRequired = [] as const;
+export interface ConfigurationDiscoveryQuery {
+  field?: string;
+  path?: string[];
+}
+export const configurationDiscoveryQueryFields = ["field", "path"] as const;
+export const configurationDiscoveryQueryRequired = [] as const;
+export interface ConfigurationOption {
+  complete: boolean;
+  label: string;
+  resources?: SandboxResources;
+  value: string;
+}
+export const configurationOptionFields = ["complete", "label", "resources", "value"] as const;
+export const configurationOptionRequired = ["complete", "label", "value"] as const;
+export interface ConfigurationOptions {
+  options: ConfigurationOption[];
+}
+export const configurationOptionsFields = ["options"] as const;
 export interface CoreAPIError {
   code: string | null;
   details?: Record<string, unknown>;
@@ -186,8 +208,9 @@ export type DeploymentMode = (typeof deploymentModeValues)[number];
 export interface DeploymentResources {
   allocations: number;
   pending: number;
+  running: number;
 }
-export const deploymentResourcesFields = ["allocations", "pending"] as const;
+export const deploymentResourcesFields = ["allocations", "pending", "running"] as const;
 export interface DeploymentSpec {
   resources: SandboxResources;
   workspace?: Declaration;
@@ -425,13 +448,14 @@ export interface Node {
   online: boolean;
   provider: string;
   provider_ready: boolean;
+  recommended_capacity: Capacity | null;
   reserved: number;
   retained: number;
   rollout: NodeRollout;
   running: number;
   snapshots: number;
 }
-export const nodeFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
+export const nodeFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "recommended_capacity", "reserved", "retained", "rollout", "running", "snapshots"] as const;
 export interface NodeAllocation {
   compute_phase: string;
   compute_phase_changed_at: string | null;
@@ -468,13 +492,14 @@ export interface NodeDetail {
   online: boolean;
   provider: string;
   provider_ready: boolean;
+  recommended_capacity: Capacity | null;
   reserved: number;
   retained: number;
   rollout: NodeRollout;
   running: number;
   snapshots: number;
 }
-export const nodeDetailFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "history", "host", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "reserved", "retained", "rollout", "running", "snapshots"] as const;
+export const nodeDetailFields = ["active", "available_disk_bytes", "available_memory_bytes", "cleanup_pending", "core_url", "cpu_count", "created_at", "enrollment_id", "history", "host", "id", "last_seen_at", "max_active", "max_retained", "name", "online", "provider", "provider_ready", "recommended_capacity", "reserved", "retained", "rollout", "running", "snapshots"] as const;
 export const nodeDiagnosticCodeValues = ["provider_unavailable", "host_unsupported", "artifacts_unavailable", "runtime_image_unavailable", "capacity_insufficient"] as const;
 export type NodeDiagnosticCode = (typeof nodeDiagnosticCodeValues)[number];
 export interface NodeHost {
@@ -648,13 +673,6 @@ export interface RolloutNodes {
 export const rolloutNodesFields = ["failed", "preparing", "ready", "unknown"] as const;
 export const rolloutStateValues = ["settled", "preparing"] as const;
 export type RolloutState = (typeof rolloutStateValues)[number];
-export interface RuntimeCPUObservation {
-  capacity_cores: number | null;
-  usage_cores: number | null;
-  usage_seconds_total: number | null;
-  utilization_ratio: number | null;
-}
-export const runtimeCPUObservationFields = ["capacity_cores", "usage_cores", "usage_seconds_total", "utilization_ratio"] as const;
 export interface RuntimeDiskObservation {
   limit_bytes: number | null;
   usage_bytes: number | null;
@@ -757,7 +775,6 @@ export interface RuntimeMemoryObservation {
 export const runtimeMemoryObservationFields = ["limit_bytes", "usage_bytes"] as const;
 export interface RuntimeObservation {
   allocation_created_at: number | null;
-  cpu: RuntimeCPUObservation | null;
   environment_id: string | null;
   id: string;
   instance: RuntimeInstance;
@@ -773,7 +790,7 @@ export interface RuntimeObservation {
   started_at: number | null;
   status: RuntimeObservationStatus;
 }
-export const runtimeObservationFields = ["allocation_created_at", "cpu", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
+export const runtimeObservationFields = ["allocation_created_at", "environment_id", "id", "instance", "lifecycle_state", "memory", "mode", "object", "observed_at", "provider_type", "reason", "resolved_at", "session_id", "started_at", "status"] as const;
 export const runtimeObservationLifecycleStateValues = ["active", "sleeping", "transitioning", "pending", "stopped"] as const;
 export type RuntimeObservationLifecycleState = (typeof runtimeObservationLifecycleStateValues)[number];
 export const runtimeObservationModeValues = ["none", "self_hosted", "openai_hosted"] as const;

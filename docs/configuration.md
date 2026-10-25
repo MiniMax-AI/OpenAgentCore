@@ -68,7 +68,7 @@ Which Harnesses are enabled, and the default one, are process settings (`OAC_HAR
 
 ### Node capacity
 
-Core approves a node's capacity when you generate its Add node command: **Sandboxes at once** (`max_active`, default 2) and, for microsandbox only, **Retained sandboxes** (`max_retained`, default 8), with `max_retained >= max_active >= 1`. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
+A node's capacity is **Sandboxes at once** (`max_active`) and, for microsandbox only, **Retained sandboxes** (`max_retained`), with `max_retained >= max_active >= 1`. **Add node** keeps the recommended limits by default, which Core [derives from the host](../contracts/agents-api/sandbox-deployment.md#recommended-capacity) when the node registers, or you enter both numbers. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**, which shows the recommendation and fills it in on request. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
 
 `OAC_EXECUTION_CONCURRENCY` is unrelated: it limits concurrent execution work in Core.
 
@@ -130,13 +130,13 @@ The installer creates `~/.oac/core` by default (`$HOME/.oac/core` on Windows). I
 | `compose.override.yaml` | Optional local Compose entries. For a source bundle it is JSON and also holds Web's `/node-payload` bind and Core's native installer bind | You. `install.py` replaces only its own entries and requires JSON |
 | `oac` (`oac.exe` on Windows) | Native management command | The installer |
 
-The sibling `<install-dir>.lock` directory remains for synchronization; `<install-dir>.staging` holds unpublished installation files. Neither contains service data. On Unix the installer creates private directories with mode `0700` and configuration files with mode `0600`.
+The sibling `<install-dir>.lock` directory is for synchronization; `<install-dir>.staging` holds unpublished installation files. Neither contains service data. On Unix the installer creates private directories with mode `0700` and configuration files with mode `0600`.
 
 The Compose project is named `oac-<10 hex digits>`. Its services are `init`, `database`, `core` and `web`. Core applies database migrations when it starts. Web serves the console and is the only service with a published port, `OAC_WEB_PORT`; see [Request boundary](./web/console-server.md#request-boundary) for what it forwards. No service receives a Docker socket, and Web and Core have no KVM access.
 
 ## Independent workspace storage {#independent-workspace-storage}
 
-The supported independent filesystem combination is microsandbox with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the `oac-node` account, the Compose mount, the selection payloads and the quota mode storage server.
+microsandbox requires independent workspace storage, and the only supported combination is with the [kernel NFS adapter](./workspace-provider.md#kernel-nfs-adapter). Select it in **Settings → Workspace storage** (`/core/v1/workspace-storage`, see the [Core administration API](../contracts/agents-api/admin-api.md#workspace-storage)); the selection and its tenant capacity apply to new workspaces, and existing workspaces keep their configuration. [Set up workspace storage](./getting-started/workspace-storage.md) covers the NFS export, the Compose mount, the selection payloads and the quota mode storage server.
 
 ## Appendix: Core environment without the installer
 
@@ -167,7 +167,7 @@ Compose sets these for Web. Set them yourself only when you run the console with
 | `OAC_WEB_ADDR` | `:8080` | Listener address. `oac-web healthcheck` probes its `/healthz` on `127.0.0.1` when its host is empty or unspecified |
 | `OAC_PUBLIC_URL` | Required | The [public URL](#settings): the exact browser-facing origin, HTTP or HTTPS, without a path. Host and origin checks use it; HTTPS makes the session cookie `Secure` |
 | `OAC_WEB_UPSTREAM` | `http://core:8091` | Core's origin, HTTP or HTTPS, without credentials, query or path |
-| `OAC_WEB_CORE_KEY_FILE` | Required | Absolute path of a regular file with no group or other permissions, holding the Core key: at least 32 characters, no whitespace, at most 4 KiB |
+| `OAC_WEB_CORE_KEY_FILE` | Required | Absolute path of a regular file with no group or other permissions, holding the [Core key](getting-started/operations.md#core-key), at most 4 KiB |
 | `OAC_WEB_DIST` | `/www` | Absolute directory of the built console; must contain `index.html` |
 | `OAC_WEB_NODE_PAYLOAD_DIR` | unset | Absolute path of the matched distribution's node payload (the installer's `node-payload/`). Unset, `/node-install/*` is not served and Add node is unavailable |
 

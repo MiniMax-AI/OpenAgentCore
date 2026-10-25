@@ -69,7 +69,7 @@ func setupOperations(setup environmentconfig.Setup) []runtimeSetupOperation {
 		result = append(result, operation)
 	}
 	if len(setup.Skills)+len(setup.Plugins)+len(setup.CapabilityDirectories) > 0 {
-		sources := agentcapabilities.Input{Plugins: setup.PluginMetadata(), Directories: setup.CapabilityDirectories}
+		sources := proto.CapabilitySources{Plugins: setup.PluginMetadata(), Directories: setup.CapabilityDirectories}
 		for _, skill := range setup.Skills {
 			sources.Skills = append(sources.Skills, skill.InstallationMetadata())
 		}

@@ -5,7 +5,7 @@ export const sandboxNavigation = {
   "back": "Back to Settings",
   "nodes": "Open Nodes",
   "unconfigured": "Set up sandbox hosting in Settings before adding nodes.",
-  "cloud": "E2B runs sandboxes in its cloud. There are no nodes to manage.",
+  "cloud": "The provider runs sandboxes in its cloud. There are no nodes to manage.",
   "reset": "Node enrollment is paused during reset. View progress in Settings.",
   "details": "Configuration details"
 } as const;

@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: 48515be4243404bb45d5fb93ffe9836580e37f01efb495c1e06e2722d6183165
+source_hash: e9ca5912f98f2acb49373b42e256a7343ea086bb195cccb3d3612085f8aee2de
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -72,7 +72,7 @@ Core 安装的每项设置、其归属位置以及修改方式。安装程序写
 
 ### 节点容量 {#node-capacity}
 
-生成 **添加节点** 命令时，Core 会批准节点容量：**同时运行的沙箱**（`max_active`，默认值为 2），并且仅对 microsandbox 还会批准 **保留的沙箱**（`max_retained`，默认值为 8），其中 `max_retained >= max_active >= 1`。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值。预留和尚未确认的清理操作都会占用容量；retained slot 已满时可以[提前结束空闲检查点的保留期](./sandbox-provider.md#cold-replacement-after-checkpoint-retention)；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
+节点容量是 **同时运行的沙箱**（`max_active`），并且仅对 microsandbox 还有 **保留的沙箱**（`max_retained`），其中 `max_retained >= max_active >= 1`。**添加节点** 默认采用推荐值，即节点注册时 Core [按主机推导](../../contracts/agents-api/zh/sandbox-deployment.md#recommended-capacity)的值；也可以自行填写两个数字。Docker 从不暂停沙箱，因此 Web 不会询问此项，并且 Core 会使 `max_retained` 保持等于 `max_active`。之后可在 **节点** 使用 **编辑节点** 修改这些值，它会显示推荐值并可一键填入。预留和尚未确认的清理操作都会占用容量；retained slot 已满时可以[提前结束空闲检查点的保留期](./sandbox-provider.md#cold-replacement-after-checkpoint-retention)；调低限制不会停止任何正在运行的沙箱。节点自身的文件无法更改其容量、大小或 Runtime。
 
 `OAC_EXECUTION_CONCURRENCY` 与此无关：它限制 Core 中并发执行的工作量。
 
@@ -140,7 +140,7 @@ Compose 项目名为 `oac-<10 hex digits>`，服务包括 `init`、`database`、
 
 ## 独立工作区存储 {#independent-workspace-storage}
 
-支持的独立文件系统组合是 microsandbox 与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、`oac-node` 账户、Compose 挂载、选择负载和配额模式存储服务器。
+microsandbox 要求使用独立工作区存储，唯一支持的组合是与[内核 NFS 适配器](./workspace-provider.md#kernel-nfs-adapter)。在 **设置 → 工作区存储** 中选择它（`/core/v1/workspace-storage`，参阅 [Core 管理 API](../../contracts/agents-api/zh/admin-api.md#workspace-storage)）；该选择及其租户容量适用于新工作区，现有工作区保留自身配置。[设置工作区存储](getting-started/workspace-storage.md)涵盖 NFS 导出、Compose 挂载、选择负载和配额模式存储服务器。
 
 ## 附录：没有安装程序时的 Core 环境 {#appendix-core-environment-without-the-installer}
 
@@ -171,7 +171,7 @@ Compose 为 Web 设置这些变量。仅在不使用 Compose 运行控制台时�
 | `OAC_WEB_ADDR` | `:8080` | 监听地址。主机部分为空或未指定时，`oac-web healthcheck` 在 `127.0.0.1` 上探测其 `/healthz` |
 | `OAC_PUBLIC_URL` | 必填 | [公共 URL](#settings)：面向浏览器的准确源地址，可以使用 HTTP 或 HTTPS，且不得包含路径。Host 和源地址检查使用此值；HTTPS 会使 Session Cookie 具备 `Secure` 属性 |
 | `OAC_WEB_UPSTREAM` | `http://core:8091` | Core 的源地址，可以使用 HTTP 或 HTTPS，且不得包含凭据、查询参数或路径 |
-| `OAC_WEB_CORE_KEY_FILE` | 必填 | 常规文件的绝对路径，该文件没有组或其他用户权限，并保存 Core 密钥：至少 32 个字符、不含空白字符、最大 4 KiB |
+| `OAC_WEB_CORE_KEY_FILE` | 必填 | 常规文件的绝对路径，该文件没有组或其他用户权限，并保存 [Core 密钥](getting-started/operations.md#core-key)，最大 4 KiB |
 | `OAC_WEB_DIST` | `/www` | 已构建控制台的绝对目录；必须包含 `index.html` |
 | `OAC_WEB_NODE_PAYLOAD_DIR` | 未设置 | 所匹配发行版的节点载荷（即安装程序的 `node-payload/`）的绝对路径。未设置时，不提供 `/node-install/*`，且 **添加节点** 不可用 |
 

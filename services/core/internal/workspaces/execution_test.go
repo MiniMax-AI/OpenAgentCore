@@ -125,9 +125,6 @@ func (c *workspaceControl) Create(_ context.Context, r workspacefs.Reference, ca
 	}
 	return workspacefs.Attachment{Reference: r, ConfigurationID: c.store.record.Configuration.ID, Kind: workspacefs.AttachmentHostDirectory, Native: []byte(`{}`)}, c.createErr
 }
-func (c *workspaceControl) Observe(ctx context.Context, r workspacefs.Reference) (workspacefs.Attachment, error) {
-	return c.Create(ctx, r, 0)
-}
 func (c *workspaceControl) Delete(context.Context, workspacefs.Reference) error {
 	c.deletes++
 	return c.deleteErr

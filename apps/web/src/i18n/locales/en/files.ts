@@ -1,7 +1,7 @@
 export const files = {
   title: "Files",
   help: "Files uploaded to this project through the Files API, including uploads made by API callers. Reference a File ID from an Environment template to copy the file into the workspace of each new Session. User data files cannot be downloaded: Core rejects content requests for them.",
-  limits: "Uploads accept one file of at most 512 MiB with a 1–1024 byte name; empty files are allowed.",
+  limits: "Uploads accept one file of at most 512 MiB with a 1–1024 byte name; empty files are rejected.",
   actions: {
     upload: "Upload file",
     uploading: "Uploading…",

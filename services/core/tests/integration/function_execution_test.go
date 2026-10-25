@@ -37,7 +37,7 @@ func newFunctionHarnessWith(t *testing.T, configuration string) *dispatchHarness
 	for {
 		peer, _ := h.registry.LookupDevice(h.device.ID)
 		info, _, _ := peer.AgentKindStatus("codex")
-		if info.Capabilities.FunctionTools {
+		if info.Capabilities.FunctionTools.IsSupported() {
 			return h
 		}
 		if time.Now().After(deadline) {
@@ -141,11 +141,8 @@ func TestExecutionSubagentFunctionCallIsARequiredActionOfTheRootTurn(t *testing.
 	if err != nil || state.LastTurn.ID != input.TurnID || state.LastTurn.Status != sessions.TurnWaiting || len(childItems.Data) != 1 || childItems.Data[0].CallID != action.CallID {
 		t.Fatal(state, childItems, err)
 	}
-	// The child Turn is not a Session Turn, so only the root Turn answers the call.
+	// The root Turn answers the call; the child Turn ID answer has its own test.
 	answer := json.RawMessage(`{"success":true,"output":"saved"}`)
-	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, items.Identity(child.ID, "turn:child-turn"), action.CallID, answer); !errors.Is(err, sessions.ErrFunctionCallTurnMismatch) {
-		t.Fatal("the child Turn answered the call", err)
-	}
 	if err := SubmitFixtureFunctionResult(t.Context(), h.s, h.tenant, h.session.ID, input.TurnID, action.CallID, answer); err != nil {
 		t.Fatal(err)
 	}

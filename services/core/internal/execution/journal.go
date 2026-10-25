@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -58,7 +59,7 @@ func (j *journal) enqueue(env proto.Envelope) error {
 		return sessions.ErrInvalidInput
 	}
 	switch env.Type {
-	case proto.TypeDelta, proto.TypeOutputMessage, proto.TypeThinking, proto.TypeToolCall, proto.TypeCommandOutput, proto.TypeUsage,
+	case proto.TypeDelta, proto.TypeOutputMessage, proto.TypeReasoning, proto.TypeToolCall, proto.TypeCommandOutput, proto.TypeUsage,
 		proto.TypeError, proto.TypeDone, proto.TypePromptSteerAck, proto.TypeSubagentIdentity, proto.TypeSubagentLifecycle, proto.TypeSubagentTurn, proto.TypeSubagentItem, proto.TypeSubagentCoordination, "cancel_receipt":
 	default:
 		return nil
@@ -94,6 +95,8 @@ func (j *journal) flush(ctx context.Context) error {
 		// An uncertain commit must retry the same batch even after more frames arrive.
 		j.pendingCount = count
 		if err := j.writer.AppendTurnEvents(ctx, j.tenant, j.session, j.turn, j.next, j.batch[:count]); err != nil {
+			// Driver errors can include submitted values, so the raw error is never logged.
+			log.Ctx(ctx).Error("oac-core turn journal write failed", "session_id", j.session, "turn_id", j.turn, "first_ordinal", j.next, "events", count)
 			return err
 		}
 		j.pendingCount = 0

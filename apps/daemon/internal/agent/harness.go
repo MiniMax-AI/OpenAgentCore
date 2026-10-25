@@ -28,6 +28,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"io"
 	"reflect"
 	"strings"
@@ -145,6 +146,7 @@ type Executor interface {
 type Turn interface {
 	Session
 	DurableSteerer
+	FunctionResultSubmitter
 	// Success confirms closed output and settled native input, function and
 	// child-work obligations. Errors cannot prove cancellation.
 	AwaitSettlement(context.Context) (TurnSettlement, error)
@@ -182,39 +184,40 @@ type DurableSteerer interface {
 	SteerWithReceipt(context.Context, proto.PromptSteerPayload, func()) error
 }
 
-// FunctionResultSubmitter delivers a result for an outstanding native call.
+// FunctionResultSubmitter is mandatory on every public Turn; support comes from the declaration. It delivers a result for an outstanding native call.
 // A successful return requires its native application receipt.
 type FunctionResultSubmitter interface {
 	SubmitFunctionResult(context.Context, proto.FunctionResultPayload) error
 }
 
-// Workspace extensions, implemented by each owner explicitly. The common
-// Runtime may supply an authorized workspace owner independently of the adapter.
-// A resource without native access returns the corresponding Unsupported error;
-// this does not disable capabilities provided by the common workspace owner.
+// Protocol errors.
 
-// WorkspaceReader returns success only after acknowledged native close on an existing owner.
-type WorkspaceReader interface {
-	ReadWorkspaceFile(context.Context, string, int) (WorkspaceReadResult, error)
-}
+// ErrUnsupportedOperation marks an intentional absence of optional behavior.
+// Implementations wrap it with a static reason and perform no native effects.
+// It is distinct from unavailable resources, failures and uncertain outcomes.
+var ErrUnsupportedOperation = errors.New("agent: unsupported operation")
 
-// WorkspaceDirectoryLister reads one directory through an existing workspace owner.
-// An empty directory selects the root; other paths contain only relative components.
-// Entry names are single components. Kind is file, directory, symlink or other;
-// SizeBytes is present and nonnegative only for regular files. Results have no
-// prescribed order, and Truncated must not be presented as a complete inventory.
-// maxEntries is positive; adapters may reject limits above their private bound.
-// Successful return requires settled directory/metadata access and handle cleanup.
-// Implementations retain workspace authorization and isolation and use the existing
-// WorkspaceRead errors for unsupported, unavailable, busy, invalid or uncertain reads.
-// This interface does not establish public Files pagination or feature admission.
-type WorkspaceDirectoryLister interface {
-	ListWorkspaceDirectory(context.Context, string, int) (WorkspaceDirectoryResult, error)
-}
+// ErrUnknownFunctionCall means the function call is no longer pending.
+var ErrUnknownFunctionCall = errors.New("agent: function call is no longer pending")
 
-// WorkspaceWriter confirms a native commit on an already authorized prepared owner.
-type WorkspaceWriter interface {
-	WriteWorkspaceFile(context.Context, string, []byte) (WorkspaceWriteResult, error)
+// ErrSteeringNotReady means no input was sent because the turn is starting.
+var ErrSteeringNotReady = errors.New("agent: turn is not ready for input")
+
+// ErrSteeringInactive means no input was sent because the run ended or was cancelled.
+var ErrSteeringInactive = errors.New("agent: run is no longer active")
+
+// ErrSteeringRejected means the engine explicitly rejected the input.
+var ErrSteeringRejected = errors.New("agent: input rejected")
+
+// Installation is an optional adapter-owned native distribution contract.
+// It supplies activation paths and readiness checks, never execution or model
+// configuration. Runtime owns copying, checksums, publication and installation locks.
+type Installation struct {
+	AgentKind   string
+	Version     string
+	Supported   func() bool
+	Environment func(directory, node string) map[string]string
+	Check       func(context.Context, string, string, []string) error
 }
 
 // Kind registration.

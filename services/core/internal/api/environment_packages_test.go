@@ -10,7 +10,7 @@ import (
 )
 
 func TestSystemPackagesRejectedAtEveryInput(t *testing.T) {
-	for _, value := range []string{`null`, `[]`, `["jq"]`} {
+	for _, value := range []string{`["jq"]`, `"jq"`} {
 		packages := `"packages":{"npm":["semver"],"python":["packaging"],"system":` + value + `}`
 		t.Run(value, func(t *testing.T) {
 			if _, err := decodeTemplateInput([]byte("{" + packages + "}")); !errors.Is(err, errSystemPackages) {
@@ -29,8 +29,13 @@ func TestSystemPackagesRejectedAtEveryInput(t *testing.T) {
 			}
 		})
 	}
-	if _, err := decodeTemplateInput([]byte(`{"packages":{"npm":["semver"],"python":["packaging"]}}`)); err != nil {
-		t.Fatal("supported package managers rejected", err)
+	for _, system := range []string{``, `,"system":null`, `,"system":[]`} {
+		if _, err := decodeTemplateInput([]byte(`{"packages":{"npm":["semver"],"python":["packaging"]` + system + `}}`)); err != nil {
+			t.Fatal("supported package managers or an empty system list rejected", system, err)
+		}
+		if _, err := decodeSessionEnvironment(json.RawMessage(`{"type":"openai_hosted","packages":{"npm":["semver"]` + system + `}}`)); err != nil {
+			t.Fatal("Session rejected an empty system list", system, err)
+		}
 	}
 }
 

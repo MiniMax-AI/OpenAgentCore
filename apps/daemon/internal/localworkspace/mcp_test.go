@@ -7,12 +7,11 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 func TestEnvironmentMCPCredentialsNeverFallBackToNativeEnv(t *testing.T) {
 	t.Setenv("PLUGIN_TOKEN", "native-private-value")
-	installed := []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
+	installed := []agentcapabilities.InstalledMCP{{PackageRoot: "plugins/0", Server: proto.PluginMCPServer{
 		Name: "remote", Type: "http", URL: "https://example.com/mcp", BearerTokenEnvVar: "PLUGIN_TOKEN",
 	}}}
 	if _, err := resolveEnvironmentMCP(installed, nil); err == nil {
@@ -37,7 +36,7 @@ func TestDeclaredMCPVariablesNeverFallBackToNativeEnv(t *testing.T) {
 }
 
 func TestMCPStdioLauncherContainsOnlyInstalledIdentity(t *testing.T) {
-	server := proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/0", Server: agentplugin.MCPServer{
+	server := proto.EnvironmentMCP{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/0", Server: proto.PluginMCPServer{
 		Name: "package_tool", Type: "stdio", Command: "untrusted-command", Args: []string{"private-argument"},
 	}}
 	command, args := MCPStdioCommand(server)

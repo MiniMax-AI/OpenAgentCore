@@ -13,8 +13,9 @@ import (
 // Declaration is the only authored description of the Codex Harness. The
 // Runtime may narrow Capabilities for the installed host, never widen them.
 var Declaration = harnessconfig.Declaration{
-	Kind:  "codex",
-	Label: "Codex",
+	Kind:   "codex",
+	Label:  "Codex",
+	Native: harnessconfig.NativePackage{Component: "codex", Version: "0.153.4"},
 	Configuration: harnessconfig.Configuration{
 		// context_window maps to model_context_window; Codex has no native
 		// max_output_tokens setting.

@@ -22,9 +22,9 @@ func TestMCPHTTPBearerCapabilitySurvivesHeartbeatMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := &Session{}
-		s.setSupportedAgentKinds(deviceKindsFromHeartbeat(decoded))
+		s.setSupportedAgentKinds(decoded.SupportedAgentKinds)
 		info, found, known := s.AgentKindStatus("codex")
-		if !found || !known || !info.Capabilities.MCPHTTPTools || info.Capabilities.MCPHTTPBearerAuth != supported {
+		if !found || !known || !info.Capabilities.MCPHTTPTools.IsSupported() || info.Capabilities.MCPHTTPBearerAuth.IsSupported() != supported {
 			t.Fatal("bearer capability was lost or inferred from credential-free MCP")
 		}
 	}
@@ -42,9 +42,9 @@ func TestMCPRequiredCapabilityIsExplicit(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := &Session{}
-		s.setSupportedAgentKinds(deviceKindsFromHeartbeat(decoded))
+		s.setSupportedAgentKinds(decoded.SupportedAgentKinds)
 		info, found, known := s.AgentKindStatus("codex")
-		if !found || !known || info.Capabilities.MCPHTTPRequired != supported {
+		if !found || !known || info.Capabilities.MCPHTTPRequired.IsSupported() != supported {
 			t.Fatal("combination capability lost or inferred")
 		}
 	}

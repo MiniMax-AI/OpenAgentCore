@@ -36,7 +36,7 @@ func claudeHeartbeat(t *testing.T, h *dispatchHarness, ready bool) {
 	for {
 		peer, _ := h.registry.LookupDevice(h.device.ID)
 		info, found, known := peer.AgentKindStatus("claude_sdk")
-		if known && found && info.Capabilities.DurableInputReceipts == ready {
+		if known && found && info.Capabilities.DurableInputReceipts.IsSupported() == ready {
 			return
 		}
 		if time.Now().After(deadline) {

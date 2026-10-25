@@ -81,14 +81,6 @@
   gap: 12px;
 }
 
-/* The fixed protocol in the provider form: a value, not a control. */
-.system-model-protocol {
-  margin: 0;
-  color: var(--fg);
-  font-size: 13px;
-  line-height: 18px;
-}
-
 /* Advanced model settings stay in the edit dialog. */
 .system-model-advanced > summary {
   cursor: pointer;

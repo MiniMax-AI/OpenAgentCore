@@ -12,7 +12,6 @@ func TestWorkspaceReceiptValidatesNormalizationAndGenerationBuild(t *testing.T) 
 	registry := Builtin()
 	spec := validRegistrationSpec()
 	spec.Resources.RootDiskMiB = 4096
-	spec.Resources.EnvironmentDiskMiB = 0
 	spec.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	if err := registry.ValidateSpecification("microsandbox", spec); err != nil {
 		t.Fatal(err)
@@ -35,8 +34,8 @@ func TestWorkspaceReceiptValidatesNormalizationAndGenerationBuild(t *testing.T) 
 		t.Fatal("external generation built without resolver", err)
 	}
 	config.Specification.Workspace = nil
-	if _, _, err = registry.Build(config, sandbox.LocalOptions{Standalone: true}); err == nil || errors.Is(err, reached) {
-		t.Fatal("owned zero disk bypassed validation", err)
+	if _, _, err = registry.Build(config, sandbox.LocalOptions{Standalone: true, Workspace: unreachableWorkspaceResolver{}}); !errors.Is(err, sandbox.ErrWorkspaceRequired) {
+		t.Fatal("generation without storage bypassed validation", err)
 	}
 }
 

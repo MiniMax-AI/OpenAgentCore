@@ -1,7 +1,7 @@
 ---
 title: "Vault 与 Credential"
 source: contracts/agents-api/vaults.md
-source_hash: b27509949dca26f064cda765ea97229e3325dee3ff650b17fa332a756409cf34
+source_hash: 3ef927a873326ca5a14720843269c8c05053331e616305fcccfdf0e4367f4be2
 ---
 
 Vault 是项目所有的 Credential 容器。Credential 保存一个 HTTPS MCP server 的秘密：`static_bearer` token 或 `mcp_oauth` grant。Session 在 `vault_ids` 中关联 Vault；Core 在创建 Session 时为每个 HTTP MCP server 选择一个 Credential，只在分派工作时将解密 token 交给 Runtime。秘密只能写入：任何读取都不返回 token、refresh token、client secret 或密文。
@@ -60,7 +60,7 @@ MCP tool 可以通过 `credential_id` 指定 Credential；未指定时，Core �
 
 | 字段 | 规则 |
 | --- | --- |
-| `name` | 可选；省略保持 `null`，显式 `null` 被拒绝。字符串去除首尾空白后必须为 1–256 UTF-8 字节 |
+| `name` | 可选；省略保持 `null`，显式 `null` 被拒绝。字符串去除首尾空白后必须为 1–256 UTF-8 字节（param 为 `name`） |
 | `metadata` | 省略或 `null` 转为 `{}`。值必须为字符串；其他类型返回 400 `invalid_request_error`，param 为 `metadata.<key>`。编码后对象上限 64 KiB，无键值对数量或长度限制 |
 
 Vault 读取包含 `id`、`object: "vault"`、`created_at`、`name` 和 `metadata`。没有更新路由。
@@ -69,7 +69,7 @@ Vault 读取包含 `id`、`object: "vault"`、`created_at`、`name` 和 `metadat
 
 ## Credential {#credentials}
 
-创建需要 `name`（去除首尾空白后 1–256 UTF-8 字节）和 `auth` 对象，`type` 为 `static_bearer` 或 `mcp_oauth`。`mcp_server_url` 必须是无 userinfo、无 fragment 的绝对 HTTPS URL；Core 逐字节保留，包括 query，不执行 DNS 或 HTTP 请求。
+创建需要 `name`（去除首尾空白后 1–256 UTF-8 字节）和 `auth` 对象，`type` 为 `static_bearer` 或 `mcp_oauth`。`mcp_server_url` 必须是无 userinfo、无 fragment 的绝对 HTTPS URL；Core 逐字节保留，包括 query，不执行 DNS 或 HTTP 请求。字段错误以该字段作为 param，例如 `auth.type`、`auth.access_token` 或 `auth.mcp_server_url`；未知成员或缺失成员使用官方的 `Unknown parameter` 或 `Missing required parameter` 消息（[请求验证](wire-semantics.md#configuration-validation)）。
 
 Credential 读取包含 `id`、`vault_id`、`name`、`object: "vault.credential"`、`created_at`、`updated_at` 和 `auth`。`auth` 包含 `type`、`mcp_server_url`；OAuth Credential 还包含 `expires_at` 和 `refresh`，后者包含 `client_id`、`token_endpoint`、`token_endpoint_auth.type`、`resource` 和 `scope`。读取和列表无需 storage key。
 
@@ -147,4 +147,4 @@ key 文件不可读或格式错误会使 Core 启动失败。丢失或替换 key
 
 删除 Credential 或其 Vault 会移除凭据行，但不会擦除 PostgreSQL 页面、WAL、备份或原生历史中的秘密。此后查询、更新和重复删除返回 404；列表不再包含它；新 Session 不能选择它；不能在已删除 Vault 中创建新 Credential。
 
-现有 Session 保留固定的关联和选择，历史仍可读。下一次需要已删除 Credential 的分派失败；Core 不选择其他 Credential，也不匿名连接。删除不取消运行中的工作、不收回已发送 Runtime 的 token，也不在服务方撤销 grant；需要时自行取消 Session 并撤销 grant。已撤销或无效 OAuth grant 同样失败，直到被替换。
+现有 Session 保留固定的关联和选择，历史仍可读。会启动 Turn 的消息与创建时一样返回 400 `invalid_request_error`，且不创建 Turn；使用 Session 已用过的 `Idempotency-Key` 的请求照常重放或冲突。该检查与分派之间发生的删除以及其他输入，仍在下一次需要已删除 Credential 的分派时失败。Core 不选择其他 Credential，也不匿名连接。删除不取消运行中的工作、不收回已发送 Runtime 的 token，也不在服务方撤销 grant；需要时自行取消 Session 并撤销 grant。已撤销或无效 OAuth grant 同样失败，直到被替换。

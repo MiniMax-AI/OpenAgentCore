@@ -1,5 +1,5 @@
-import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode, type SandboxProvider } from "@oac/agents-client";
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { SandboxAdminClient, type SandboxAllocation, type SandboxDeployment, type SandboxNode } from "@oac/agents-client";
+import { queryOptions } from "@tanstack/react-query";
 
 import { confirmSandboxRead, startSandboxRead } from "./sandbox-write-ownership";
 import { sandboxConsoleConfig } from "./console-config";
@@ -41,15 +41,6 @@ export const sandboxDeploymentQuery = queryOptions<SandboxDeployment>({
 /** Only Core reports active work; retained older sandboxes do not keep polling alive. */
 export function sandboxResetPollInterval(deployment: SandboxDeployment | undefined): 5000 | false {
   return deployment?.reset || deployment?.rollout.state === "preparing" ? 5000 : false;
-}
-
-/**
- * The deployment's sandbox provider from the cached deployment read: "" before
- * setup, null while unknown. Pages that differ for E2B (no machines) and own
- * nodes read it.
- */
-export function useSandboxProvider(): SandboxProvider | "" | null {
-  return useQuery(sandboxDeploymentQuery).data?.provider ?? null;
 }
 
 export interface SandboxSnapshot {

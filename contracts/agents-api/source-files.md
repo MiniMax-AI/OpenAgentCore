@@ -20,8 +20,8 @@ Use a File by passing its ID to [Environment files](./environment-files.md#creat
 
 ### Upload
 
-- Only `purpose=user_data` is accepted. Other purposes, `expires_after` and the Uploads API are not supported.
-- The file may be empty and holds up to 512 MiB; the whole multipart body may exceed that by 64 KiB. A larger upload returns 413 `request_too_large`. The transfer must finish within five minutes.
+- Only `purpose=user_data` is accepted. Other purposes, `expires_after` and the Uploads API are not supported. A missing or other `purpose`, or a missing `file` part, returns 400 with `param: "purpose"` and a null code.
+- The file holds at least one byte and up to 512 MiB; an empty file returns 400 `File is empty.` with a null code and param; the whole multipart body may exceed that by 64 KiB. A larger upload returns 413 `request_too_large`. The transfer must finish within five minutes.
 - A missing, repeated or unknown part, a `Content-Encoding` or `Content-Transfer-Encoding` header, or a filename that is empty, longer than 1,024 bytes, not UTF-8 or contains NUL returns 400. Core stores nothing until the whole request validates.
 - Core does not deduplicate uploads. After a lost response, list Files before uploading again.
 
@@ -62,11 +62,11 @@ A copy into a workspace reads a consistent snapshot of the File and can finish a
 | Operation | Behavior |
 | --- | --- |
 | `POST /skills` | Uploads a new Skill. Its first version is both default and latest |
-| `POST /skills/{skill_id}/versions` | Uploads a new version. A `default` form field of `true` makes it the default; `false` or omitted leaves the default unchanged |
+| `POST /skills/{skill_id}/versions` | Uploads a new version. A `default` form field of `true` or `false`, in any letter case, makes it the default or leaves the default unchanged; omitted leaves it unchanged |
 | `GET /skills`, `GET /skills/{skill_id}` | Skill metadata, without decrypting any bundle |
-| `POST /skills/{skill_id}` | `{"default_version": "<n>"}` changes the default version |
+| `POST /skills/{skill_id}` | `{"default_version": "<n>"}` changes the default version. Body errors are field errors with the member as `param`; a version the Skill does not have returns 404 with `param: "default_version"` |
 | `DELETE /skills/{skill_id}` | Deletes the Skill and every version |
-| `GET /skills/{skill_id}/content` | ZIP of the default version |
+| `GET /skills/{skill_id}/content` | ZIP of the default version, `Content-Type: application/zip`, filename `<name>-<version>.zip` |
 | `GET /skills/{skill_id}/versions`, `GET /skills/{skill_id}/versions/{version}` | Version metadata. The list orders by version number, and `after` is a version ID (`skillver_…`), not a number |
 | `GET /skills/{skill_id}/versions/{version}/content` | ZIP of that version |
 | `DELETE /skills/{skill_id}/versions/{version}` | See [Delete a version](#delete-a-version) |
@@ -86,6 +86,8 @@ A bundle has one top-level folder containing `SKILL.md` and any supporting files
 - `SKILL.md` is UTF-8, at most 256 KiB, and starts with YAML front matter. `name` is required: lowercase letters and digits, optionally separated by single `-` or `_`, at most 64 characters. `description` is required and non-empty. `license`, `compatibility` and a string-valued `metadata` map are optional; any other key is rejected.
 - Entries are regular files or directories with clean relative paths. Links, special files, absolute paths, `..` components and duplicates are rejected.
 - Limits: 5 MiB compressed, 20 MiB expanded, 500 files, and 1,000 ZIP entries including directories.
+
+A rejected upload returns 400 `invalid_request_error` with `param: "files"` and code `invalid_value`, and a message that states the cause. A missing `files` part, an unknown part and `default` on create are `Missing required parameter` and `Unknown parameter` errors for that member; an invalid `default` names `param: "default"`. The upload routes also reject a `name` that contains `_` and a `description` longer than 1024 characters. Skills already stored, plugin Skills and Environment installation keep accepting `_` in the name and any non-empty description.
 
 Core encrypts each version's bundle bound to its Project, Skill and version. ZIP uploads keep executable bits; directory uploads store files with mode 0644.
 

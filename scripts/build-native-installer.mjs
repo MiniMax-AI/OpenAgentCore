@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // Package trusted, already-built native artifacts. This does not install on a host.
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { createRequire } from 'node:module';
 
-export const pins = { node: '22.22.0', codex: '0.153.4', claude: '0.3.269', minimax: '0.4.12' };
+export const pins = { node: '22.22.0', ...JSON.parse(readFileSync(new URL('./native-pins.json', import.meta.url), 'utf8')) };
 const platforms = { linux: 'linux', darwin: 'darwin', win32: 'windows' };
 const architectures = { x64: 'amd64', arm64: 'arm64' };
 const inside = (root, path) => {
@@ -125,7 +126,7 @@ export async function validateComponents(root, names, daemonVersion) {
       await requireFile(join(component, 'pnpm-lock.yaml'));
       await requireFile(join(component, 'dist/main.js'));
       const info = JSON.parse(probe(node, [join(component, 'dist/runtime_check.js')], component, env));
-      if (info.type !== 'runtime_ready' || info.protocol !== 3 || info.sdk !== pins.claude || info.native !== '2.1.269 (Claude Code)' || !info.features?.includes('local_runtime_v2')) throw new Error('Claude runtime compatibility failed');
+      if (info.type !== 'runtime_ready' || info.protocol !== 3 || info.sdk !== pins.claude || !info.features?.includes('local_runtime_v2')) throw new Error('Claude runtime compatibility failed');
     } else if (name === 'minimax') {
       if (windows) throw new Error('MiniMax is not supported on Windows');
       const upstream = await json(join(component, 'source.json'));

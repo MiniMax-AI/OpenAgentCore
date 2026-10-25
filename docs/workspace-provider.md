@@ -2,7 +2,7 @@
 title: Workspace filesystem protocol
 ---
 
-The workspace filesystem protocol connects Core and sandbox nodes to the adapter that owns durable Environment storage. Core creates, observes and deletes storage objects; a node resolves an object to a host directory that its [Sandbox Provider protocol](sandbox-provider.md) attaches to compute. It is for authors of filesystem adapters and Sandbox Providers.
+The workspace filesystem protocol connects Core and sandbox nodes to the adapter that owns durable Environment storage. Core creates and deletes storage objects; a node resolves an object to a host directory that its [Sandbox Provider protocol](sandbox-provider.md) attaches to compute. It is for authors of filesystem adapters and Sandbox Providers.
 
 | | |
 | --- | --- |
@@ -15,13 +15,13 @@ Core selects and validates the combination of a Sandbox Provider and a filesyste
 
 | Sandbox Provider | External workspace storage |
 | --- | --- |
-| microsandbox | Supported (`host_directory`, `user_xattr`) |
+| microsandbox | Required (`host_directory`, `user_xattr`) |
 | Docker, E2B | Not supported; the Provider's own Environment disk |
 
 ## Implement an adapter
 
 1. Define `Parameters` and the optional credential, and implement `Normalize` ([Identity and configuration](#identity-and-configuration)).
-2. Implement `Declaration`, `Check`, `Create`, `Observe` and `Delete` in `Control`, and `Resolve` in `Resolver` ([Operations and outcomes](#operations-and-outcomes)).
+2. Implement `Declaration`, `Check`, `Create` and `Delete` in `Control`, and `Resolve` in `Resolver` ([Operations and outcomes](#operations-and-outcomes)).
 3. Declare the attachment kind, user xattr support and quota enforcement ([Capability validation](#capability-validation)).
 4. Keep one writer per object and delete only on Core's authorization ([Lifetime and filesystem scope](#lifetime-and-filesystem-scope)).
 
@@ -50,14 +50,13 @@ Core selects and validates the combination of a Sandbox Provider and a filesyste
 
 An adapter registers one implementation of `Adapter` with three separate, mandatory roles. `Normalize(parameters, credential)` validates and canonicalizes parameters and encodes the credential input without I/O; a missing required credential or a credential the parameters do not use is `ErrInvalid`, and an encoded credential is valid input that encodes to itself, so Core can re-select a retained configuration with its stored credential. `Control(ConfigurationRecord)` constructs the control adapter in Core with the decrypted credential. `Resolver(Configuration)` constructs the node resolver from public configuration only. Construction performs no filesystem or network operation.
 
-Every control adapter implements `Declaration`, `Check`, `Create`, `Observe` and `Delete`. Every node attachment adapter implements `Resolve`. There is no optional side interface, implicit adapter substitution or nil implementation fallback.
+Every control adapter implements `Declaration`, `Check`, `Create` and `Delete`. Every node attachment adapter implements `Resolve`. There is no optional side interface, implicit adapter substitution or nil implementation fallback.
 
 | Operation | Required meaning |
 | --- | --- |
 | `Declaration()` | Describe the selected configuration's verified attachment, user xattr and quota behavior. |
 | `Check(ctx)` | Validate configuration and availability without creating an object. |
 | `Create(ctx, reference, capacityMiB)` | Create the owned object or converge on its existing attachment without overwriting data; retries and concurrent calls use the same immutable reference and admitted capacity. A positive capacity is enforced, and verified on every retry, before success. |
-| `Observe(ctx, reference)` | Return an existing object's bound attachment without creating, repairing or preparing it. |
 | `Delete(ctx, reference)` | Converge on terminal deletion of the verified owned object after Core has authorized deletion and confirmed compute stop. |
 | `Resolve(ctx, binding)` | Validate native ownership and resolve the attachment for local compute. |
 
@@ -72,7 +71,7 @@ Errors support `errors.Is`. Adapters preserve these outcomes when wrapping error
 | `ErrNotFound` | The object is missing |
 | `ErrUnsupported` | The combination is unsupported |
 
-A missing observation does not prove an earlier mutation settled. A timeout or canceled context ends the caller's wait; it does not prove native stop or rollback. Core retains ownership on unknown outcomes. It may retry `Create` or `Delete` with the same persisted immutable reference and configuration, including after `ErrUnconfirmed`; it must never substitute a new object identity to retry an uncertain operation.
+A missing object does not prove an earlier mutation settled. A timeout or canceled context ends the caller's wait; it does not prove native stop or rollback. Core retains ownership on unknown outcomes. It may retry `Create` or `Delete` with the same persisted immutable reference and configuration, including after `ErrUnconfirmed`; it must never substitute a new object identity to retry an uncertain operation.
 
 Same-reference retry and concurrent convergence are mandatory adapter guarantees. `Create` preserves any existing object data and returns the attachment for that owned object; it never reinitializes a live object. Repeated and concurrent `Delete` calls converge on the same terminal deletion. Once terminal deletion is recorded, concurrent, delayed or retried `Create` calls must not resurrect the object, and `Resolve` must not expose it. Retained deletion metadata and further cleanup of settled in-flight operations are permitted. These guarantees apply to storage lifecycle operations; they do not establish mutation settlement at timeout or distributed compute fencing.
 
@@ -96,11 +95,11 @@ Workspace storage is retained with its Session until explicit Session deletion. 
 
 ## Attachment
 
-`Bootstrap.Workspace` and `ResumeRequest.Workspace` optionally carry a [workspace filesystem binding](#identity-and-configuration). Absence selects the Provider's owned Environment disk; presence selects the exact external object and never permits a fallback to an owned disk. Providers validate the tenant and Environment against the binding and its configuration receipt before resolving it. `LocalOptions.Workspace` injects the filesystem resolver; Sandbox Providers never interpret filesystem adapter parameters or native receipts.
+`Bootstrap.Workspace` and `ResumeRequest.Workspace` optionally carry a [workspace filesystem binding](#identity-and-configuration). A Provider whose policy declares workspace storage requires the binding and returns `ErrInvalid` without it; a Provider without that declaration keeps its own Environment disk and rejects a binding. Presence selects the exact external object and never permits a fallback to another disk. Providers validate the tenant and Environment against the binding and its configuration receipt before resolving it. `LocalOptions.Workspace` injects the filesystem resolver; Sandbox Providers never interpret filesystem adapter parameters or native receipts.
 
-`DeploymentPolicy.Workspace` declares supported attachment requirements; absence means external storage is unsupported. The derived immutable `DeploymentSpec.Workspace` receipt selects the generation mode and capabilities; its [deployment workflow](../contracts/agents-api/sandbox-deployment.md#resources) never copies filesystem configuration into the generation. Microsandbox requires `host_directory` and `user_xattr`; Docker and E2B reject external attachments. `ValidateWorkspacePolicy` uses the filesystem protocol's combination validator: an external filesystem without an enforced quota rejects a positive `EnvironmentDiskMiB`, while zero requests no quota. Root disk capacity is still required. Without an external declaration, the existing owned disk bounds apply.
+`DeploymentPolicy.Workspace` present means the Provider runs every Environment on external storage with the declared attachment requirements; absent means the Provider's own disk and no external storage. The derived immutable `DeploymentSpec.Workspace` receipt records the selected capabilities and is always present for such a Provider; a deployment with no storage selected returns `ErrWorkspaceRequired`, which Core reports as `workspace_storage_required`. The [deployment workflow](../contracts/agents-api/sandbox-deployment.md#resources) never copies filesystem configuration into the generation. Microsandbox requires `host_directory` and `user_xattr`; Docker and E2B reject external attachments. Validation uses the filesystem protocol's combination validator: `EnvironmentDiskMiB` is only a capacity quota request, valid when the storage declares `capacity_quota`, and its default is zero, which requests no quota. Root disk capacity is still required.
 
-Microsandbox resolves each Create and Resume binding, including observation of an interrupted restore, and passes only the local directory and immutable ObjectID to its private helper. The helper binds the whole `/environment`; its retained contents and private native history follow the [workspace filesystem scope](#lifetime-and-filesystem-scope) and [Runtime resource directories](configuration.md#runtime-resource-directories). Private HOME, credentials and the compute root are not a durable history store. Explicit mode, object and path labels qualify native resources; mount shape alone never selects a mode. Checkpoint restore verifies the snapshot's object, remaps `/environment` through SDK `Volumes`, requires strict external mount policy and rejects every restore warning. Partial restore errors retain the exact target identity for cleanup and never establish readiness. Unknown outcomes remain observations of the original operation. Native Bind checkpoint and guest-local flock continuity do not establish fencing against an unknown writer.
+Microsandbox resolves each Create and Resume binding, including observation of an interrupted restore, and passes only the local directory and immutable ObjectID to its private helper. The helper binds the whole `/environment`; its retained contents and private native history follow the [workspace filesystem scope](#lifetime-and-filesystem-scope) and [Runtime resource directories](configuration.md#runtime-resource-directories). Private HOME, credentials and the compute root are not a durable history store. Object and path labels qualify native resources. Checkpoint restore verifies the snapshot's object, remaps `/environment` through SDK `Volumes`, requires strict external mount policy and rejects every restore warning. Partial restore errors retain the exact target identity for cleanup and never establish readiness. Unknown outcomes remain observations of the original operation. Native Bind checkpoint and guest-local flock continuity do not establish fencing against an unknown writer.
 
 ## Kernel NFS adapter
 
@@ -137,7 +136,7 @@ stateDiagram-v2
 
 NFS storage does not supply compute fencing or automatic distributed failover. Guest `flock` is not a cross-VM writer lock. The single-writer and explicit-deletion requirements above remain mandatory. Confirmed release can permit a fresh VM on another compatible node to attach the same object, but an offline node or an unknown Create, Kill or snapshot-cleanup result never proves that the old writer stopped. Native history and database behavior require qualification of the selected Runtime, Harness and filesystem combination; file persistence alone is not a guarantee of native Session recovery, cross-node memory restore or arbitrary crash durability.
 
-Core requires the selected Harness profile to support `retained_native_history` when the selected deployment generation uses external workspace storage. Creation validates that generation while holding the deployment lock, before committing the Session or compute reservation. Existing Sessions use their immutable workspace binding for Runtime admission and the final execution check. Owned workspace storage does not require this capability.
+Core requires the selected Harness profile to support `retained_native_history` when the selected deployment generation uses external workspace storage, which is every microsandbox generation. Creation validates that generation while holding the deployment lock, before committing the Session or compute reservation. Existing Sessions use their immutable workspace binding for Runtime admission and the final execution check. A Provider with its own disk does not require this capability.
 
 ## Conformance
 

@@ -318,15 +318,6 @@
   border-bottom-color: var(--line-muted);
 }
 
-.overview-projects-table .column-group {
-  text-align: center;
-}
-
-.overview-projects-table .column-group,
-.overview-projects-table .column-group-start {
-  box-shadow: inset 1px 0 var(--line-muted);
-}
-
 /* The project column fits its names; spare width spreads over the figures
    instead of opening a gap between a project and its numbers. */
 .overview-projects-table thead tr:first-child > th:first-child,

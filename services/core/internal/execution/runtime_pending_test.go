@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -381,3 +382,19 @@ func TestAwaitingConnectionPassSharesCancellationFence(t *testing.T) {
 		t.Fatal("connection pass escaped cancellation")
 	}
 }
+
+// noCheckpoint declares a fixture Provider that supports no checkpoint.
+func noCheckpoint() providercontract.Operations {
+	return providercontract.Operations{"Initial": {State: providercontract.Unsupported, Reason: "fixture_operation_not_supported"}}
+}
+
+func (*connectedBootstrapProvider) ProviderOperations() providercontract.Operations {
+	return noCheckpoint()
+}
+func (*settledWorkspaceRefusal) ProviderOperations() providercontract.Operations {
+	return noCheckpoint()
+}
+func (*unknownWorkspaceCreation) ProviderOperations() providercontract.Operations {
+	return noCheckpoint()
+}
+func (*preparationProvider) ProviderOperations() providercontract.Operations { return noCheckpoint() }

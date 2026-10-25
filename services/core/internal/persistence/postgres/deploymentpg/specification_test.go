@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
 	"github.com/google/uuid"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
@@ -31,7 +33,7 @@ func TestSandboxSpecificationRoundTripAndClaimStays(t *testing.T) {
 				t.Fatal("saved deployment lost its resources or Runtime provenance", err)
 			}
 			preview, err := f.service.SetupForSelection(view.InstallationID, input)
-			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || !reflect.DeepEqual(preview.Suspension, setup.Suspension) || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
+			if err != nil || preview.Mode != setup.Mode || preview.BackendFingerprint != setup.BackendFingerprint || (preview.Suspension == nil) != (setup.Suspension == nil) || preview.Suspension != nil && preview.Suspension.RetentionSeconds != setup.Suspension.RetentionSeconds || !reflect.DeepEqual(preview.Configuration, setup.Configuration) {
 				t.Fatal("preview and persisted normalized deployment disagree", err)
 			}
 			input.ExpectedGeneration = view.Generation
@@ -76,11 +78,11 @@ func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
 	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	issued, err := f.service.CreateEnrollment(t.Context(), deployment.Capacity{MaxActive: 2, MaxRetained: 2})
+	issued, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(2)})
 	if err != nil || uuid.Validate(issued.ID) != nil || issued.Token == "" {
 		t.Fatal(issued.ID, err)
 	}
-	input := deployment.Enrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "docker",
+	input := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "docker",
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: "https://other.example"}
 	if _, err := f.service.Enroll(t.Context(), issued.Token, input); !errors.Is(err, deployment.ErrNodeAddressMismatch) {
 		t.Fatal("enrolled a node that uses another Core address", err)
@@ -90,7 +92,7 @@ func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
 		t.Fatal("the refused enrollment consumed its token", err)
 	}
 	earlier := strings.Repeat("e", 64)
-	if _, err := f.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at) VALUES($1,$2,clock_timestamp()+interval '10 minutes')",
+	if _, err := f.pool.Exec(t.Context(), "INSERT INTO runtime_node_enrollments(token_sha256,installation_id,expires_at,max_active,max_retained) VALUES($1,$2,clock_timestamp()+interval '10 minutes',2,2)",
 		setupDigest(earlier), view.InstallationID); err != nil {
 		t.Fatal(err)
 	}

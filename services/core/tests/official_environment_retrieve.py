@@ -53,14 +53,14 @@ def main():
             other = foreign.beta.agents.sessions.create(**creation, extra_body=PROVIDER)
             result = {"environment_id": session.environment.id, "deleted_environment_id": removed.environment.id,
                       "foreign_environment_id": other.environment.id}
-            verify_environment(api.beta.agents.environments.retrieve(removed.environment.id).to_dict(), removed.environment.id, "pending")
+            verify_environment(api.beta.agents.environments.retrieve(removed.environment.id).to_dict(), removed.environment.id, "disconnected")
             api.beta.agents.sessions.delete(removed.id)
             assert list(api.beta.agents.sessions.turns.list(session.id)) == []
             assert list(api.beta.agents.sessions.items.list(session.id)) == []
 
         environment_id = result["environment_id"]
         endpoint = base + "/v1/agents/environments/" + environment_id
-        expected = verify_environment(api.beta.agents.environments.retrieve(environment_id).to_dict(), environment_id, "pending")
+        expected = verify_environment(api.beta.agents.environments.retrieve(environment_id).to_dict(), environment_id, "disconnected")
         assert peer.beta.agents.environments.retrieve(environment_id).to_dict() == expected
         raw = api.beta.agents.environments.with_raw_response.retrieve(environment_id.upper())
         assert raw.status_code == 200 and raw.http_response.json() == expected and raw.parse().to_dict() == expected
@@ -112,7 +112,7 @@ def main():
         for method in ("POST", "PATCH", "DELETE"):
             rejected(endpoint, 405, "unsupported_operation", method=method)
         assert api.beta.agents.environments.retrieve(environment_id).to_dict() == expected
-        verify_environment(foreign.beta.agents.environments.retrieve(result["foreign_environment_id"]).to_dict(), result["foreign_environment_id"], "pending")
+        verify_environment(foreign.beta.agents.environments.retrieve(result["foreign_environment_id"]).to_dict(), result["foreign_environment_id"], "disconnected")
     print(json.dumps(result))
 
 

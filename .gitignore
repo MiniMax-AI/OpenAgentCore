@@ -11,11 +11,6 @@ coverage/
 go.work.sum
 __pycache__/
 *.pyc
-/config/
-/logs/
-/state/
-/cache/
-/target/
 # `go build ./services/web` in the repository root writes this binary.
 /web
 playwright-report/

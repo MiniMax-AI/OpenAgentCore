@@ -7,7 +7,7 @@ import { node, project } from "./test-fixtures";
 
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({ credential_configured: false, configuration: {}, metadata: {},
   rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes",
-  resources: { allocations: 0, pending: 0 }, suspension: null, ...overrides,
+  resources: { allocations: 0, running: 0, pending: 0 }, suspension: null, ...overrides,
 });
 const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({ status: "ready", snapshot: { deployment: value, nodes, allocations: [], loadedAt: 0 }, targetGeneration: value.generation, refreshing: false, error: null });
 const sandboxes = (state: FleetState) => gettingStartedSteps({ sandboxReset: false, fleet: state, localOnly: false, projects: [], sessions: 0, harnesses: [] }).sandboxes;
@@ -58,16 +58,13 @@ describe("Getting started steps", () => {
       expect(steps.sandboxes).toMatchObject({ state: "todo", action: "nodes", cloud: provider === "e2b" });
     }
   });
-  it("counts sandboxes ready with a saved deployment and a ready node, or a saved E2B deployment whose build is not reported unready", () => {
+  it("counts sandboxes ready with a saved deployment and a ready node, or a saved direct deployment", () => {
     expect(sandboxes(fleet(deployment({ provider: "", mode: "" }), []))).toMatchObject({ state: "todo", action: "setup" });
     expect(sandboxes(fleet(deployment(), []))).toMatchObject({ state: "todo", action: "add-node" });
     expect(sandboxes(fleet(deployment(), [node("n1", { provider_ready: false }), node("n2", { online: false })]))).toMatchObject({ state: "todo", action: "nodes" });
     expect(sandboxes(fleet(deployment()))).toMatchObject({ state: "done" });
-    const e2b = (status: string | null) => deployment({ provider: "e2b", mode: "direct", configuration: { template: "t", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status, resources: { cpus: 2, memory_mib: 2048, root_disk_mib: null } } } });
-    expect(sandboxes(fleet(e2b("building"), []))).toMatchObject({ state: "todo", cloud: true });
-    expect(sandboxes(fleet(e2b("ready"), []))).toMatchObject({ state: "done", cloud: true });
-    // Saved before Core recorded the build: Core admitted it, so it counts as ready.
-    expect(sandboxes(fleet(e2b(null), []))).toMatchObject({ state: "done", cloud: true });
+    const direct = deployment({ provider: "e2b", mode: "direct", configuration: { template: "t", api_url: "https://api.e2b.app", domain: "e2b.app" }, credential_configured: true });
+    expect(sandboxes(fleet(direct, []))).toMatchObject({ state: "done", cloud: true });
     expect(sandboxes({ status: "loading" }).state).toBeNull();
     expect(sandboxes({ status: "failed", error: new Error("down") }).state).toBe("unknown");
   });

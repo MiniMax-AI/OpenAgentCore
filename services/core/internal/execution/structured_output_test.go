@@ -9,7 +9,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/harnesstest"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimedevice"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -34,7 +33,7 @@ func TestStructuredOutputRequestKeepsFrozenSchemaAndInstructions(t *testing.T) {
 	schema := json.RawMessage(`{"type":"object","properties":{"number":{"const":9007199254740992}}}`)
 	instructions := "Keep these original instructions."
 	snapshot := Snapshot{Agent: v1.Agent{Model: "model", Instructions: &instructions, Text: v1.TextConfig{Format: v1.TextFormat{Type: "json_schema", Schema: schema}}}}
-	request, err := (&Dispatcher{}).executionRequest(context.Background(), sessions.Session{}, snapshot, runtimedevice.KindCapabilities{MessageItems: true}, sessions.ExecutionBinding{})
+	request, err := (&Dispatcher{}).executionRequest(context.Background(), sessions.Session{}, snapshot, proto.AgentKindCapabilities{MessageItems: proto.CapabilitySupported}, sessions.ExecutionBinding{})
 	if err != nil || request.ExecutionControls.OutputFormat == nil {
 		t.Fatal(err)
 	}

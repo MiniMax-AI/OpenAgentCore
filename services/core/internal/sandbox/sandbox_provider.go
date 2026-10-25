@@ -35,7 +35,10 @@ import (
 )
 
 var (
-	ErrInvalid            = errors.New("invalid sandbox configuration")
+	ErrInvalid = errors.New("invalid sandbox configuration")
+	// ErrWorkspaceRequired reports a Provider that runs every Environment on
+	// external storage while none is selected.
+	ErrWorkspaceRequired  = errors.New("sandbox provider requires workspace storage")
 	ErrOwnership          = errors.New("sandbox ownership mismatch")
 	ErrExists             = errors.New("sandbox allocation already exists")
 	ErrNotFound           = errors.New("sandbox allocation not found")
@@ -43,6 +46,11 @@ var (
 	// ErrComputeUnconfirmed requires observation of the retained operation identity;
 	// it does not authorize another Create, capture, restore, or cold start.
 	ErrComputeUnconfirmed = errors.New("sandbox lifecycle outcome unconfirmed")
+	// ErrCheckpointUnusable is a Resume outcome: the adapter durably closed this
+	// operation before dispatching native restoration, and the snapshot cannot be
+	// restored. It repeats for the same operation and is never returned once
+	// native restoration was dispatched.
+	ErrCheckpointUnusable = errors.New("sandbox checkpoint cannot be restored")
 )
 
 // Reference must be persisted by the caller before Create. AllocationID is a fresh
@@ -54,6 +62,8 @@ type Bootstrap struct {
 	Workspace *workspacefs.Binding `json:",omitempty"`
 	Reference
 	SessionID, DeviceID, CoreURL, Credential string
+	// SuspendControl is true exactly when the Provider declares checkpoint support.
+	SuspendControl bool
 }
 
 // Info describes compute only. Running does not establish daemon authentication,
@@ -117,6 +127,17 @@ type SandboxProvider interface {
 	RunCommandCompute(context.Context, Reference, Compute, Command) (CommandResult, error)
 	// ResumeCompute thaws only the same resident instance after an aborted pause.
 	ResumeCompute(context.Context, Reference, Compute) (ComputeState, error)
+	// RenewCompute extends the native lease of the exact running incarnation
+	// where the Provider has one, and otherwise observes exactly like
+	// GetCompute. It never revives stopped compute.
+	RenewCompute(context.Context, Reference, Compute) (ComputeState, error)
+
+	// The preparation cache keeps the Environment filesystem left by one finished
+	// preparation. Key is opaque and the adapter owns storage and lifetime. Both
+	// address the allocation's initial compute and share one declaration.
+	// RestorePreparation returns false when it holds no valid entry.
+	RestorePreparation(ctx context.Context, r Reference, key string) (bool, error)
+	SavePreparation(ctx context.Context, r Reference, key string) error
 
 	// Observe reads one owned Runtime instance after verifying its ownership. It
 	// never renews, restarts or stops compute.
@@ -128,7 +149,10 @@ var requiredOperations = []string{"Create", "GetInfo", "Renew", "Kill", "RunComm
 
 // checkpointOperations are all supported or all unsupported: partial cleanup or
 // restore support cannot safely own a compute incarnation.
-var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute"}
+var checkpointOperations = []string{"Initial", "NewCompute", "GetCompute", "Suspend", "Resume", "KillCompute", "DeleteSnapshot", "RunCommandCompute", "ResumeCompute", "RenewCompute"}
+
+// preparationOperations are both supported or both unsupported.
+var preparationOperations = []string{"RestorePreparation", "SavePreparation"}
 
 // Compute identifies one incarnation of an allocation. Name is provider-derived.
 // ID is empty only until the original create or restore result is observed.
@@ -139,7 +163,7 @@ type Compute struct {
 	RestoredFrom *SnapshotIdentity
 }
 
-// CheckpointCompatibility identifies an adapter-verified private archive domain
+// CheckpointCompatibility identifies an adapter-verified private checkpoint domain
 // and execution compatibility class. Core compares these opaque tokens only.
 type CheckpointCompatibility struct {
 	ArtifactDomain string `json:"artifact_domain"`
@@ -153,20 +177,31 @@ func (c CheckpointCompatibility) Validate() error {
 	return nil
 }
 
+// MaxSnapshotEvidenceBytes bounds SnapshotIdentity.Evidence.
+const MaxSnapshotEvidenceBytes = 4096
+
 // SnapshotIdentity is provider evidence from a verified full snapshot. Core
 // persists it unchanged and records consumption separately; it never invents
 // paths, checksums, native checkpoint fields, or source identity.
+// Evidence is the Provider's private verification evidence: Core and the node
+// proxy store and return it unchanged and never interpret it.
 type SnapshotIdentity struct {
 	Compatibility    CheckpointCompatibility
 	Reference        string
 	ID               string
-	Digest           string
-	CheckpointID     string
-	CheckpointRoot   string
+	Evidence         string
 	OperationID      string
 	SourceGeneration uint64
 	SourceName       string
 	SourceID         string
+}
+
+// Validate checks the fields Core relies on.
+func (s SnapshotIdentity) Validate() error {
+	if len(s.Evidence) > MaxSnapshotEvidenceBytes {
+		return ErrInvalid
+	}
+	return s.Compatibility.Validate()
 }
 
 type ComputeState struct {
@@ -177,7 +212,7 @@ type ComputeState struct {
 	Status            string
 	BootstrapComplete bool
 	Snapshot          *SnapshotIdentity
-	// SourceStopped proves the archive is durable and all source-local compute
+	// SourceStopped proves the checkpoint is durable and all source-local compute
 	// and capture obligations have settled, so another node can own restoration.
 	SourceStopped bool
 	// RestoreAttemptClosed echoes the exact Resume OperationID only after a
@@ -250,15 +285,20 @@ func ValidateOperations(operations providercontract.Operations) error {
 		}
 	}
 	for _, name := range checkpointOperations {
-		if operations[name].State != operations["Initial"].State {
+		if (operations[name].State == providercontract.Supported) != SupportsCheckpoint(operations) {
 			return fmt.Errorf("%w: incomplete checkpoint lifecycle", providercontract.ErrContract)
 		}
+	}
+	if operations[preparationOperations[0]].State != operations[preparationOperations[1]].State {
+		return fmt.Errorf("%w: incomplete preparation cache", providercontract.ErrContract)
 	}
 	return nil
 }
 
-func SupportsCheckpoint(p SandboxProvider) bool {
-	return providercontract.Require(p, "Initial") == nil
+// SupportsCheckpoint is the one predicate over a declaration: the checkpoint
+// operations are all supported or all unsupported, so Initial decides.
+func SupportsCheckpoint(operations providercontract.Operations) bool {
+	return operations["Initial"].State == providercontract.Supported
 }
 
 // ProcessPaths locates installed adapter helpers and their private state. The
@@ -288,9 +328,81 @@ type ConfigurationRequirements struct {
 	CredentialVerification providercontract.Support
 }
 
-// DeploymentPolicy is the deployment declaration. Disk declares independent
-// disk limits. DefaultResources is the size setup proposes, or nil when the
-// Provider's configuration selects it.
+// Text is operator-facing copy in every supported locale.
+type Text struct {
+	EN   string `json:"en"`
+	ZHCN string `json:"zh-CN"`
+}
+
+func (t Text) valid() bool { return t.EN != "" && t.ZHCN != "" }
+
+// SetupField is one value an operator enters to connect the Provider. A Secret
+// field is submitted as the credential, any other as configuration. An Optional
+// field may stay empty and the Provider supplies its default. A Discovered field
+// takes its value from DiscoverConfiguration. Help may be empty in both locales.
+type SetupField struct {
+	Name       string `json:"name"`
+	Secret     bool   `json:"secret"`
+	Optional   bool   `json:"optional"`
+	Discovered bool   `json:"discovered"`
+	Label      Text   `json:"label"`
+	Help       Text   `json:"help"`
+}
+
+// SetupPreset is a named set of field values, such as one hosted service.
+// CredentialURL, when set, is where the operator creates the credential.
+type SetupPreset struct {
+	Label         string            `json:"label"`
+	Values        map[string]string `json:"values"`
+	CredentialURL string            `json:"credential_url,omitempty"`
+}
+
+// SetupDeclaration is everything the console needs to set up one Provider.
+// Label is the Provider's proper noun. Cautions are risks an operator confirms
+// before choosing it. Recommended marks the default among Providers of one
+// deployment mode, and at most one does.
+type SetupDeclaration struct {
+	Label       string        `json:"label"`
+	Summary     Text          `json:"summary"`
+	Cautions    []Text        `json:"cautions"`
+	Recommended bool          `json:"recommended"`
+	Fields      []SetupField  `json:"fields"`
+	Presets     []SetupPreset `json:"presets"`
+}
+
+// Validate checks the declaration against the Provider's configuration
+// requirements: secret fields exist exactly when a credential is required,
+// discovered fields exactly when discovery is supported, and every text has
+// both locales.
+func (d SetupDeclaration) Validate(r ConfigurationRequirements) error {
+	secret, discovered := false, false
+	ok := d.Label != "" && d.Summary.valid()
+	names := map[string]bool{}
+	for _, f := range d.Fields {
+		ok = ok && f.Name != "" && !names[f.Name] && f.Label.valid() && (f.Help == Text{} || f.Help.valid())
+		names[f.Name] = true
+		secret, discovered = secret || f.Secret, discovered || f.Discovered
+		ok = ok && !(f.Secret && (f.Optional || f.Discovered))
+	}
+	for _, c := range d.Cautions {
+		ok = ok && c.valid()
+	}
+	for _, p := range d.Presets {
+		ok = ok && p.Label != ""
+		for name := range p.Values {
+			ok = ok && names[name]
+		}
+	}
+	if !ok || secret != (r.Credential == Required) || discovered != (r.Discovery.State == providercontract.Supported) {
+		return ErrInvalid
+	}
+	return nil
+}
+
+// DeploymentPolicy is the deployment declaration. Workspace, when present, means
+// the Provider runs every Environment on external storage; absent means its own
+// disk. Disk declares independent disk limits. DefaultResources is the size setup
+// proposes, or nil when the Provider's configuration selects it.
 type DeploymentPolicy struct {
 	Workspace        *workspacefs.Requirements `json:"workspace,omitempty"`
 	Disk             bool                      `json:"disk"`
@@ -373,12 +485,33 @@ type Built struct {
 	Quiescent func() bool
 }
 
-// ConfigurationDiscoveryInput is a transient read-only request. Query is typed
-// and validated by the adapter; it cannot select a compute mutation.
+// ConfigurationDiscoveryQuery selects the options of one Discovered field. Path
+// holds the values chosen at earlier levels, empty for the first level.
+type ConfigurationDiscoveryQuery struct {
+	Field string   `json:"field"`
+	Path  []string `json:"path"`
+}
+
+// ConfigurationDiscoveryInput is a transient read-only request. The adapter
+// validates Configuration and Credential; Query cannot select a compute mutation.
 type ConfigurationDiscoveryInput struct {
-	Configuration json.RawMessage `json:"configuration" swaggertype:"object"`
-	Credential    json.RawMessage `json:"credential" swaggertype:"object"`
-	Query         json.RawMessage `json:"query" swaggertype:"object"`
+	Configuration json.RawMessage             `json:"configuration" swaggertype:"object"`
+	Credential    json.RawMessage             `json:"credential" swaggertype:"object"`
+	Query         ConfigurationDiscoveryQuery `json:"query"`
+}
+
+// ConfigurationOption is one choice for a Discovered field. A Complete option's
+// Value is the field's value; any other is a Path element for the next level.
+type ConfigurationOption struct {
+	Value     string     `json:"value" binding:"required"`
+	Label     string     `json:"label" binding:"required"`
+	Resources *Resources `json:"resources,omitempty"`
+	Complete  bool       `json:"complete" binding:"required"`
+}
+
+// ConfigurationOptions is the result of one discovery level.
+type ConfigurationOptions struct {
+	Options []ConfigurationOption `json:"options" binding:"required"`
 }
 
 // ConfigurationAdapter owns all interpretation of provider configuration.
@@ -400,7 +533,7 @@ type ConfigurationAdapter interface {
 	Equal(a, b Configuration) (bool, error)
 	// DiscoverConfiguration lists the native catalog a credential can use,
 	// without a saved deployment.
-	DiscoverConfiguration(context.Context, ConfigurationDiscoveryInput, ProcessPaths) (json.RawMessage, error)
+	DiscoverConfiguration(context.Context, ConfigurationDiscoveryInput, ProcessPaths) (ConfigurationOptions, error)
 	// DiscoverSelection resolves a candidate's omitted native values before
 	// commit. Loading retained ownership never calls it.
 	DiscoverSelection(context.Context, DirectConfig) (Selection, error)

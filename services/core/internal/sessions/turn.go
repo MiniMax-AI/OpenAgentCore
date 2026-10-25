@@ -67,13 +67,6 @@ type TurnPage struct {
 	NextCursor string
 }
 
-type TurnEvent struct {
-	Ordinal   int32
-	Kind      string
-	Payload   json.RawMessage
-	CreatedAt time.Time
-}
-
 type ExecutionEvent struct {
 	Kind    string          `json:"kind"`
 	Payload json.RawMessage `json:"payload"`
@@ -102,11 +95,6 @@ type TurnReader interface {
 	// is ErrInvalidInput; a malformed Session or Turn ID, a Subagent Turn ID
 	// and a missing Turn are ErrNotFound.
 	GetTurn(ctx context.Context, tenant, session, turn string) (Turn, error)
-	// ListTurns pages the root Turns of the tenant's Session that was not
-	// publicly deleted by creation time and ID, after the Turn cursor names.
-	// A page size outside 1..100 is ErrInvalidInput; a missing Session or
-	// cursor Turn is ErrNotFound.
-	ListTurns(ctx context.Context, tenant, session, cursor string, limit int, ascending bool) (TurnPage, error)
 	// ListExecutionWork lists, in ID order after the Turn after names, up to
 	// 100 root Turns in statuses across tenants. With connectedDevices not nil, it
 	// lists only the Turns of tenants that own one of those devices, unrevoked.

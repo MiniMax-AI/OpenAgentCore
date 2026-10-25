@@ -8,7 +8,6 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
 	"github.com/google/uuid"
 )
@@ -29,7 +28,7 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 	archive := []byte("opaque archive bytes must be expanded only by Runtime")
 	setup := environmentconfig.Setup{
 		Skills:                []environmentconfig.Skill{{Metadata: environmentconfig.SkillMetadata{Type: "skill_reference", SkillID: "private-reference", Version: "1", Name: "example", Description: "Safe description"}, Archive: archive}},
-		Plugins:               []environmentconfig.Plugin{{Metadata: agentplugin.Metadata{Type: "inline", Name: "plugin", Description: "Safe plugin"}, Archive: archive}},
+		Plugins:               []environmentconfig.Plugin{{Metadata: proto.PluginMetadata{Type: "inline", Name: "plugin", Description: "Safe plugin"}, Archive: archive}},
 		Commands:              []environmentconfig.SetupCommand{{Command: "prepare directory"}},
 		CapabilityDirectories: []string{"/workspace/generated"},
 	}

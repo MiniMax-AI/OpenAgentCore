@@ -101,6 +101,7 @@ For frontend development, run `pnpm dev:web` using the fixture or Core connectio
 | `services/core/internal/execution` | Durable Turn dispatch and scheduling | [Runtime protocol](./runtime-protocol.md) |
 | `internal/harnessconfig` | One declaration per Harness, read by Core admission and the Runtime | [Harness protocol](../contracts/agents-api/harness-onboarding.md) |
 | `internal/agentdaemon/proto` | Core–Runtime wire types and validators | [Runtime protocol](./runtime-protocol.md) |
+| `internal/machineapi` | Machine connection API wire types | [Machine connection API](../contracts/agents-api/machine-api.md) |
 | `internal/runtimebootstrap` | Provider-to-Runtime startup input | [Runtime bootstrap](./runtime-bootstrap.md) |
 | `apps/daemon/internal/dispatch` | Runtime preparation, Executor reuse, Turn and cleanup ownership | [Harness lifecycle](../contracts/agents-api/harness-onboarding.md#required-adapter-interfaces) |
 | `apps/daemon/internal/agent` | Native Harness adapters | [Native references](../contracts/agents-api/harness-onboarding.md#native-references) |

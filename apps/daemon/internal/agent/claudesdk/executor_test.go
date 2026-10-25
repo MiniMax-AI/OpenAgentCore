@@ -98,6 +98,15 @@ func runPersistentExecutorHelper() {
 				encode(bridgeEvent{Type: "delta", TurnID: old, ItemID: "item", Delta: "late"})
 				continue
 			}
+			if frame := os.Getenv("SDK_REPLAY_FRAME"); frame != "" {
+				// Replay one shared-fixture frame as this Turn's only bridge output.
+				var fields map[string]any
+				_ = json.Unmarshal([]byte(frame), &fields)
+				fields["turn_id"] = active
+				_ = json.NewEncoder(os.Stdout).Encode(fields)
+				settle(true)
+				continue
+			}
 			encode(bridgeEvent{Type: "turn_started", TurnID: active})
 			encode(bridgeEvent{Type: "input_ready", TurnID: active, SessionID: "native-persistent"})
 			encode(bridgeEvent{Type: "delta", TurnID: active, ItemID: "item", Delta: "partial"})

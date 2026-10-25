@@ -43,5 +43,3 @@ export function nativeContent(message: MessageInput[number], remote = false): SD
     ? { type: "text" as const, text: part.text }
     : { type: "image" as const, source: remote && !part.image_url.startsWith("data:") ? { type: "url" as const, url: part.image_url } : imageSource(part.image_url) });
 }
-
-export function textInput(text: string): MessageInput { return [{ content: [{ type: "input_text", text }] }]; }

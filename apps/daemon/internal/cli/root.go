@@ -33,7 +33,7 @@ func defaultRunContext() *runContext {
 }
 
 // commands lists subcommands in --help render order: the user's
-// likely flow connect → status → stop / logs → logout.
+// likely flow connect → status → stop / logs.
 var commands = []command{
 	{name: "install", summary: "Install a native daemon and selected Harnesses", run: runInstall},
 	{name: "start", summary: "Start the installed native daemon", run: runStart},
@@ -44,7 +44,6 @@ var commands = []command{
 	{name: "status", summary: "Print the credential profile and daemon state", run: runStatus},
 	{name: "stop", summary: "Stop a background `connect -b` daemon", run: runStop},
 	{name: "logs", summary: "Tail the background daemon's log file", run: runLogs},
-	{name: "logout", summary: "Forget the credential for a profile", run: runLogout},
 	{name: "version", summary: "Print the daemon version and exit", run: runVersion},
 }
 

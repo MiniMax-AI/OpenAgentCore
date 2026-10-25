@@ -1,6 +1,6 @@
 # Codex Runtime
 
-The Codex adapter ([`agent/codex`](../../../../apps/daemon/internal/agent/codex)) runs the native Codex CLI through its app-server protocol inside the daemon. This page holds the Codex-specific adapter rules, the Codex Runtime image and the Docker sandbox settings that every Docker Runtime uses. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
+The Codex adapter ([`agent/codex`](../../../../apps/daemon/internal/agent/codex)) runs the native Codex CLI through its app-server protocol inside the daemon. This page holds the Codex-specific adapter rules, and the Codex Runtime image. [Harness protocol](../../../../contracts/agents-api/harness-onboarding.md) owns the obligations shared by all adapters.
 
 Native tools run with the daemon user's permissions; the outer sandbox provides isolation ([Runtime and outer isolation](../../../../docs/concepts.md#runtime-and-outer-isolation)).
 
@@ -23,7 +23,7 @@ The adapter applies Core's typed controls and opt-ins, described in the [Runtime
 - **`environment: none`.** The daemon forces `CODEX_EXEC_SERVER_URL=none` and confirms that Codex reports its `local` and `remote` environments as unknown before it starts or resumes a thread; a binary that cannot do this fails closed. The engine process runs on the bound device, which is not a user execution environment.
 - **Web search.** The control becomes Codex's `web_search` option (`disabled`, `cached` or `live`) with `tools.web_search` `context_size`, `allowed_domains` and `location`.
 - **Programmatic tool calling.** `enabled: true` turns on the native `code_mode` feature. An explicit disable turns off the native `code_mode`, `code_mode_only` and `code_mode_prewarm` features and checks managed requirements before a thread starts or resumes, rejecting a conflicting requirement.
-- **Reasoning, service tier and verbosity.** `reasoning.effort` and `reasoning.summary` become `model_reasoning_effort` and `model_reasoning_summary`, a non-`auto` service tier becomes `service_tier` and the text verbosity becomes `model_verbosity`.
+- **Reasoning, service tier and verbosity.** `reasoning.effort` and `reasoning.summary` become `model_reasoning_effort` and `model_reasoning_summary`, a null `reasoning.summary`, the official default, becomes `none` because Codex's own default depends on the model, a non-`auto` service tier becomes `service_tier` and the text verbosity becomes `model_verbosity`.
 - **Subagents.** Disabling Subagents turns off both native multi-agent feature generations, `multi_agent` and `multi_agent_v2`, overriding the operator's feature preferences.
 
 ## MCP servers
@@ -62,16 +62,16 @@ Codex `0.153.4` reports a provider HTTP 400 as `other` and puts the provider's e
 
 ## Runtime image
 
-[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` executable and `codex-resources`.
+[`Dockerfile`](Dockerfile) builds the Codex Runtime image from a prepared context that holds only `oac-daemon`, the unmodified `codex` and `codex-code-mode-host` executables and `codex-resources`. Native `code_mode` runs its scripts in `codex-code-mode-host`, which Codex finds beside its executable.
 
 | Item | Value |
 | --- | --- |
-| Base | Digest-pinned `node:22.23.1-bookworm-slim` with `ca-certificates`, `bash`, `git`, `python3`, `python3-pip` and `ripgrep`, the same base and package layer as the Claude and MiniMax images |
-| Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex` (mode 0555) and `/usr/local/codex-resources` |
+| Base | The [shared Runtime base](../../../../docs/maintainers.md#runtime-images-and-helpers) |
+| Programs | `/usr/local/bin/oac-daemon`, `/usr/local/bin/codex`, `/usr/local/bin/codex-code-mode-host` (mode 0555) and `/usr/local/codex-resources` |
 | User | UID/GID 1000 with `HOME=/home/runtime` |
-| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_WORKSPACE=/environment/workspace`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
+| Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CODEX_BIN=/usr/local/bin/codex`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
-The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executable and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).
+The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executables and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).
 
 The [Docker adapter](../../../../docs/sandbox-provider.md#docker-adapter) owns the shared container lifecycle and isolation settings.

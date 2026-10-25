@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/harnessconfig/builtin"
 
 	"github.com/google/uuid"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 const testPublicURL = "https://core.example"
@@ -59,7 +63,7 @@ func testSpecification(provider string) sandbox.DeploymentSpec {
 	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
-		s.Resources.EnvironmentDiskMiB = 8192
+		s.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	}
 	return s
 }
@@ -239,14 +243,14 @@ func TestSetupChangeDecisions(t *testing.T) {
 	}
 }
 
-// Enrollment checks the token before the deployment, so a bad token is a
+// machineapi.NodeEnrollment checks the token before the deployment, so a bad token is a
 // credential error whatever the deployment's state.
 func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 	installation, token := uuid.NewString(), "enrollment-token"
 	current := webDeployment(t, installation, "docker", 1)
-	valid := Enrollment{NodeID: uuid.NewString(), Name: "node", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
+	valid := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "node", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
 		DeploymentGeneration: 1, SpecificationDigest: testSpecification("docker").Digest("docker"), CoreURL: testPublicURL}
-	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: 1, MaxRetained: 1}
+	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: new(1), MaxRetained: new(1)}
 	resetting := current
 	resetting.Reset = &ResetState{Clear: "sandboxes", RequestedAt: time.Now()}
 	unselected := current
@@ -265,7 +269,7 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 		deployment Record
 		receipt    EnrollmentRecord
 		loadErr    error
-		input      Enrollment
+		input      machineapi.NodeEnrollment
 		want       error
 	}{
 		{"unknown token while resetting", resetting, EnrollmentRecord{}, ErrNotFound, valid, ErrNodeCredential},
@@ -296,11 +300,11 @@ func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 
 	// Malformed input is rejected before storage.
 	service := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL)
-	for _, mutate := range []func(*Enrollment){
-		func(e *Enrollment) { e.NodeID = "node" },
-		func(e *Enrollment) { e.Credential = "short" },
-		func(e *Enrollment) { e.BackendFingerprint = "fingerprint" },
-		func(e *Enrollment) { e.Name = "" },
+	for _, mutate := range []func(*machineapi.NodeEnrollment){
+		func(e *machineapi.NodeEnrollment) { e.NodeID = "node" },
+		func(e *machineapi.NodeEnrollment) { e.Credential = "short" },
+		func(e *machineapi.NodeEnrollment) { e.BackendFingerprint = "fingerprint" },
+		func(e *machineapi.NodeEnrollment) { e.Name = "" },
 	} {
 		input := valid
 		mutate(&input)

@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/agentplugin"
 )
 
 func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) {
@@ -17,10 +16,10 @@ func TestEnvironmentMCPUsesInstalledLauncherAndSelectedCredential(t *testing.T) 
 	token := "selected-user-token"
 	t.Setenv("MCP_TOKEN", "unselected-native-token")
 	req.LocalEnvironment = &proto.LocalEnvironment{CapabilityRoot: "/private/runtime/capabilities", WorkspaceRoot: config.Workspace.Directory, MCP: []proto.EnvironmentMCP{
-		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/local", Server: agentplugin.MCPServer{Name: "local", Type: "stdio", Command: "untrusted-package-command", Args: []string{"package-argument"}, EnvVars: []string{"MCP_TOKEN"}}},
-		{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", BearerTokenEnvVar: "MCP_TOKEN"}, BearerToken: &token},
+		{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/local", Server: proto.PluginMCPServer{Name: "local", Type: "stdio", Command: "untrusted-package-command", Args: []string{"package-argument"}, EnvVars: []string{"MCP_TOKEN"}}},
+		{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/remote", Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp", BearerTokenEnvVar: "MCP_TOKEN"}, BearerToken: &token},
 	}}
-	start, env, err := prepare(config, req)
+	start, env, err := prepareConfiguration(config, req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +62,7 @@ func TestEnvironmentMCPRejectsUnqualifiedCombinations(t *testing.T) {
 			e.MCP[0].Server.URL = "http://example.invalid/mcp"
 		},
 	} {
-		environment := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", WorkspaceRoot: "/private/runtime/workspace", PackageRoot: "plugins/remote", Server: agentplugin.MCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
+		environment := &proto.LocalEnvironment{MCP: []proto.EnvironmentMCP{{InstallationRoot: "/private/runtime/capabilities", PackageRoot: "plugins/remote", Server: proto.PluginMCPServer{Name: "remote", Type: "http", URL: "https://example.invalid/mcp"}}}}
 		mutate(environment)
 		if _, _, err := prepareRuntimeMCP(proto.PromptRequestPayload{LocalEnvironment: environment}); err == nil {
 			t.Fatal("unsupported declaration accepted")

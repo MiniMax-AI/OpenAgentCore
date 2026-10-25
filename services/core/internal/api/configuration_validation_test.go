@@ -115,6 +115,8 @@ func TestAgentConfigurationProtocolErrorsUseOfficialFields(t *testing.T) {
 		{"http url", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"http"}}]`, "{p}tools[0].transport.server_url", "Missing required parameter: '{p}tools[0].transport.server_url'."},
 		{"transport type", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"ws"}}]`, "{p}tools[0].transport.type", "Invalid value: 'ws'. Supported values are: 'http' and 'stdio'."},
 		{"header value", `"tools":[{"type":"mcp","server_label":"x","transport":{"type":"http","server_url":"https://example.invalid","headers":{"h":1}}}]`, "{p}tools[0].transport.headers.h", "Invalid type for '{p}tools[0].transport.headers.h': expected a string, but got an integer instead."},
+		{"mcp label characters", `"tools":[{"type":"mcp","server_label":"a b","transport":{"type":"http","server_url":"https://example.invalid"}}]`, "{p}tools[0].server_label", "MCP server_label may contain only letters, digits, underscores and hyphens."},
+		{"mcp label repeated", `"tools":[{"type":"mcp","server_label":"a","transport":{"type":"http","server_url":"https://example.invalid"}},{"type":"mcp","server_label":"a","transport":{"type":"http","server_url":"https://example.invalid"}}]`, "{p}tools[1].server_label", "MCP server_label must be unique across the tools."},
 		{"verbosity", `"text":{"verbosity":"verbose"}`, "{p}text.verbosity", "Invalid value: 'verbose'. Supported values are: 'low', 'medium', and 'high'."},
 		{"text member", `"text":{"unknown":true}`, "{p}text.unknown", "Unknown parameter: '{p}text.unknown'."},
 		{"format type", `"text":{"format":{}}`, "{p}text.format.type", "Missing required parameter: '{p}text.format.type'."},
@@ -273,6 +275,21 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 	}
 	if s.writes != 0 {
 		t.Fatal("rejected configuration reached storage")
+	}
+}
+
+// Errors from the local limits on an MCP transport name the offending member.
+func TestMCPTransportErrorsNameTheMember(t *testing.T) {
+	const http1 = `{"type":"mcp","server_label":"x","transport":{"type":"http","server_url":"https://example.invalid"}}`
+	for _, tc := range []struct{ tool, param, message string }{
+		{`{"type":"mcp","server_label":"x","transport":{"type":"http","server_url":"ftp://example.invalid"}}`, "tools[0].transport.server_url", "MCP server_url must be an absolute HTTP(S) URL without credentials or fragment."},
+		{http1 + `,{"type":"mcp","server_label":"y","transport":{"type":"http","server_url":"https://example.invalid","headers":{"authorization":"t"}}}`, "tools[1].transport.headers.authorization", "MCP headers cannot carry Authorization; use credential_id."},
+		{`{"type":"mcp","server_label":"x","transport":{"type":"stdio","command":"run","cwd":"relative"}}`, "tools[0].transport.cwd", "MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters."},
+	} {
+		for _, op := range configurationOperations()[:3] {
+			h, _ := configurationHandler(t, nil)
+			assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"tools":[`+tc.tool+`]`)), "invalid_request_error", ptr(op.prefix+tc.param), tc.message)
+		}
 	}
 }
 
