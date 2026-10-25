@@ -62,6 +62,9 @@ func TestArchiveWaitingCancellationReceipts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if _, err := s.pool.Exec(t.Context(), `UPDATE environments SET initialization='complete' WHERE id=$1`, session.Environment.ID); err != nil {
+				t.Fatal(err)
+			}
 			secret := uuid.NewString()
 			owner, err := leased.Deployment.ReserveAllocation(t.Context(), deployment.AllocationKey{TenantID: project.TenantID, EnvironmentID: session.Environment.ID}, installation, runtimedevice.HashCredential(secret))
 			if err != nil {

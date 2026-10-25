@@ -57,6 +57,11 @@ func (s *Store) SetPlacement(rules *placement.Rules) { s.placement = rules }
 // CreateSession creates a Session through the Session service on s.
 func (s *Store) CreateSession(ctx context.Context, tenant string, input sessions.CreateSession) (sessions.Session, error) {
 	creation, err := createSession(ctx, s, tenant, input)
+	// A hosted fixture with nothing to set up stands for a prepared Environment;
+	// the initialization tests give theirs files or a setup.
+	if err == nil && creation.Session.Environment != nil && len(input.InitialFiles) == 0 && input.Initialization.Empty() {
+		_, err = s.pool.Exec(ctx, `UPDATE environments SET initialization='complete' WHERE id=$1`, creation.Session.Environment.ID)
+	}
 	return creation.Session, err
 }
 
