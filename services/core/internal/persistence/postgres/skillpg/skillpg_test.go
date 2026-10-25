@@ -197,7 +197,7 @@ func TestOwnershipEncryptionAndVersions(t *testing.T) {
 	if _, err = f.service.ListVersions(ctx, skills.ListVersions{TenantID: tenant, SkillID: id, After: "3", Limit: 20, Ascending: true}); !errors.As(err, &cursorErr) || cursorErr.Message != "Invalid 'after': '3'. Expected an ID that begins with 'skillver'." {
 		t.Fatal("numeric version is not a cursor", err)
 	}
-	if _, err = f.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrNotFound) {
+	if _, err = f.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrVersionNotFound) {
 		t.Fatal("missing default", err)
 	}
 	updated, err := f.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "3"})
@@ -341,7 +341,7 @@ func TestMetadataTracksDefaultVersion(t *testing.T) {
 	if _, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: foreign, SkillID: id, Version: "2"}); !errors.Is(err, skills.ErrNotFound) {
 		t.Fatal("foreign default update", err)
 	}
-	if _, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrNotFound) {
+	if _, err := replaced.service.SetDefaultVersion(ctx, skills.SetDefaultVersion{TenantID: tenant, SkillID: id, Version: "999"}); !errors.Is(err, skills.ErrVersionNotFound) {
 		t.Fatal("missing default update", err)
 	}
 	assertStored(1, 2)

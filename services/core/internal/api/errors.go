@@ -61,9 +61,10 @@ func writeContentTooLarge(w http.ResponseWriter) {
 const unstorableTextMessage = "Request text contains characters this service cannot store or compare, such as U+0000 or invalid UTF-8."
 
 // fieldError is a request validation failure reported with the official
-// invalid_request_error code. An empty param serializes as null.
+// invalid_request_error code unless it names another. An empty param
+// serializes as null.
 type fieldError struct {
-	param, message string
+	param, message, code string
 }
 
 func (e *fieldError) Error() string { return e.message }
@@ -75,10 +76,14 @@ func writeFieldError(w http.ResponseWriter, err error) bool {
 	if !errors.As(err, &field) {
 		return false
 	}
+	code := field.code
+	if code == "" {
+		code = "invalid_request_error"
+	}
 	if field.param == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", field.message)
+		writeError(w, http.StatusBadRequest, code, field.message)
 	} else {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", field.message, field.param)
+		writeError(w, http.StatusBadRequest, code, field.message, field.param)
 	}
 	return true
 }

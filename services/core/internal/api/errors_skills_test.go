@@ -34,6 +34,8 @@ func TestWriteSkillsError(t *testing.T) {
 			`{"error":{"message":"Resource not found.","type":"invalid_request_error","code":null,"param":null}}`},
 		{"project not found", project, skills.ErrNotFound, http.StatusNotFound,
 			`{"error":{"message":"Resource not found.","type":"not_found_error","code":"not_found_error","param":null}}`},
+		{"default version missing", "/v1/skills/skill_missing", skills.ErrVersionNotFound, http.StatusNotFound,
+			`{"error":{"message":"Resource not found.","type":"invalid_request_error","code":null,"param":"default_version"}}`},
 		{"invalid input", "/v1/skills", skills.ErrInvalidInput, http.StatusBadRequest,
 			`{"error":{"message":"Invalid resource identifier or request limits.","type":"invalid_request_error","code":"invalid_request","param":null}}`},
 		{"unstorable text", "/v1/skills", fmt.Errorf("create: %w", textvalue.ErrUnstorable), http.StatusBadRequest,
