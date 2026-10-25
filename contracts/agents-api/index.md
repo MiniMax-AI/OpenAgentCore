@@ -61,7 +61,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 **Lists** ([lists](./wire-semantics.md#lists))
 
-- A deleted Agent or Session used as a cursor returns 404; the official service still pages from it.
+- A deleted Agent used as a cursor returns 404; the official service still pages from it.
 - A Turn cursor from another Session, a Credential cursor equal to its Vault ID, and a Skills cursor that is not a Skill ID return 404.
 - Vault and Credential lists clamp a negative `limit`, as the pinned SDK describes; the official service returns 400.
 
