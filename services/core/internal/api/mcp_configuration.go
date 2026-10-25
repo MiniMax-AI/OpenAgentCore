@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
 	"sort"
 	"strings"
@@ -14,8 +13,8 @@ import (
 )
 
 // resolveMCPTool canonicalizes a declaration whose pinned shape and server_label
-// were checked at decode. Core keeps its local limits, and a rejection names the
-// offending member under at, the declaration's path.
+// were checked at decode. Core keeps its local limits; a rejected transport
+// member is named under at, the declaration's path.
 func resolveMCPTool(raw json.RawMessage, at string, saved bool) (json.RawMessage, error) {
 	var input v1.MCPToolInput
 	var transport struct {
@@ -48,19 +47,19 @@ func resolveMCPTool(raw json.RawMessage, at string, saved bool) (json.RawMessage
 		origin = *input.ConnectionOrigin
 	}
 	if stdio && origin != "environment" {
-		return nil, reject("connection_origin", "MCP stdio servers run in the Environment; connection_origin must be environment.")
+		return nil, errors.New("MCP stdio servers run in the Environment; connection_origin must be environment.")
 	}
 	if input.CredentialID != nil && (*input.CredentialID == "" || stdio) {
-		return nil, reject("credential_id", "MCP credential_id must be null or a nonempty string, and stdio servers take none.")
+		return nil, errors.New("MCP credential_id must be null or a nonempty string, and stdio servers take none.")
 	}
 	if len(input.RequestMetadata) != 0 {
-		return nil, reject("request_metadata", "No engine sends MCP request_metadata.")
+		return nil, errors.New("No engine sends MCP request_metadata.")
 	}
 	var allowed *[]string
 	if input.AllowedTools != nil {
-		for i, name := range input.AllowedTools {
+		for _, name := range input.AllowedTools {
 			if name == "" {
-				return nil, reject(fmt.Sprintf("allowed_tools[%d]", i), "MCP allowed_tools requires nonempty string names.")
+				return nil, errors.New("MCP allowed_tools requires nonempty string names.")
 			}
 		}
 		allowed = &input.AllowedTools
@@ -73,18 +72,21 @@ func resolveMCPTool(raw json.RawMessage, at string, saved bool) (json.RawMessage
 		}
 		args, envVars := append([]string{}, transport.Args...), append([]string{}, transport.EnvVars...)
 		// Valid is the one definition of a startable declaration; each probe
-		// varies one member over a valid remainder to name the member at fault.
+		// varies one member over a valid remainder to name the member at fault,
+		// and the whole declaration is checked last.
+		declaration := proto.MCPStdio{Command: transport.Command, Args: args, Cwd: transport.Cwd, EnvVars: envVars}
 		for _, probe := range []struct {
 			member string
 			stdio  proto.MCPStdio
 		}{
-			{"command", proto.MCPStdio{Command: transport.Command, Cwd: "/"}},
-			{"args", proto.MCPStdio{Command: "x", Args: args, Cwd: "/"}},
-			{"cwd", proto.MCPStdio{Command: "x", Cwd: transport.Cwd}},
-			{"env_vars", proto.MCPStdio{Command: "x", Cwd: "/", EnvVars: envVars}},
+			{"transport.command", proto.MCPStdio{Command: transport.Command, Cwd: "/"}},
+			{"transport.args", proto.MCPStdio{Command: "x", Args: args, Cwd: "/"}},
+			{"transport.cwd", proto.MCPStdio{Command: "x", Cwd: transport.Cwd}},
+			{"transport.env_vars", proto.MCPStdio{Command: "x", Cwd: "/", EnvVars: envVars}},
+			{"transport", declaration},
 		} {
 			if !probe.stdio.Valid() {
-				return nil, reject("transport."+probe.member, "MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters.")
+				return nil, reject(probe.member, "MCP stdio servers require a nonempty command, an absolute cwd, variable names in env_vars and no NUL characters.")
 			}
 		}
 		tool.Transport = v1.MCPTransport{Type: "stdio", Command: transport.Command, Args: &args, Cwd: transport.Cwd, EnvVars: &envVars}

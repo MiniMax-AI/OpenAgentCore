@@ -271,7 +271,7 @@ func TestAgentConfigurationLocalLimitsKeepCodes(t *testing.T) {
 		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"multi_agent":{"enabled":true,"max_concurrent_subagents":4294967296}`)), "unsupported_or_invalid_configuration", nil, "max_concurrent_subagents must be an integer from 1 to 4294967295.")
 	}
 	for _, op := range configurationOperations()[:3] {
-		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"tools":[{"type":"mcp","server_label":"x","connection_origin":"service","transport":{"type":"stdio","command":"run","cwd":"/"}}]`)), "invalid_request_error", ptr(op.prefix+"tools[0].connection_origin"), "MCP stdio servers run in the Environment; connection_origin must be environment.")
+		assertConfigurationError(t, credentialRequest(h, http.MethodPost, op.path, op.body(`"tools":[{"type":"mcp","server_label":"x","connection_origin":"service","transport":{"type":"stdio","command":"run","cwd":"/"}}]`)), "unsupported_or_invalid_configuration", nil, "MCP stdio servers run in the Environment; connection_origin must be environment.")
 	}
 	if s.writes != 0 {
 		t.Fatal("rejected configuration reached storage")

@@ -189,7 +189,7 @@ Session 的有效配置还必须通过执行准入，无论配置来自保存还
 | 配置 | 消息 |
 | --- | --- |
 | Harness 未声明的 `reasoning.effort`、`reasoning.summary`、`service_tier`、`web_search` 模式或设置、`programmatic_tool_calling` 取值或 `text.verbosity` | 指出字段的消息，例如 `reasoning.effort "max" is not supported by this Harness.`；见 [tool policy](execution-tools.md#web-search-and-programmatic-tool-calling) 和 [Harness 能力](harness-capabilities.md#execution-and-input) |
-| 两个使用同一标签的 MCP 服务器 | "Execution requires distinct MCP server labels." |
+| 函数名称为空或重复 | "Function names must be nonempty and unique." |
 | 未声明 `retained_native_history` 的 Harness，运行在把每个 Environment 都放在 workspace 存储上的 sandbox provider 上（[Harness 能力](harness-capabilities.md)） | "This Session's harness does not retain its native history, which the sandbox provider's workspace storage requires. Use a harness that supports retained_native_history, or a sandbox provider with its own disk." |
 
 每 Session 的 `tools` 替换可以允许一个其已保存 tools 原本会被拒绝的 Session。每种工具和 Harness 的支持情况见 [execution and tools](execution-tools.md)。
