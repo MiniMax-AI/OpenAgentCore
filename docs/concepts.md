@@ -32,4 +32,4 @@ Tools run with the permissions of the account that launches the daemon. The daem
 
 Credential values, model keys and confidential template data are write-only: application and administrator reads omit them. Conversation text, Skill source and Artifact content are readable resource data, including to administrators.
 
-Public writes record the API key responsible. Administrator writes record a separate audit identity and the target Project. Web's actor label is display-only; Core authorizes the Core key. An audit failure rolls back the write. Reads are not audited, and audit records contain no request bodies, secrets or file contents. The [write provenance](../contracts/agents-api/admin-api.md#write-provenance) and [audit log](../contracts/agents-api/admin-api.md#audit-log) contracts define the stored records.
+The [write provenance](../contracts/agents-api/admin-api.md#write-provenance) and [audit log](../contracts/agents-api/admin-api.md#audit-log) contracts define the stored records.

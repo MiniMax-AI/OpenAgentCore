@@ -16,7 +16,7 @@ pnpm --dir website preview   # serve the build at http://127.0.0.1:4181
 
 - The content root is the repository root. `docs/**` and `contracts/**` keep their paths as URLs, so `docs/architecture.md` is `/docs/architecture`. `website/index.md` and `website/zh/index.md` are mapped onto `/` and `/zh/`. Chinese sources in `docs/zh/` and `contracts/agents-api/zh/` map to `/zh/docs/` and `/zh/contracts/agents-api/`; the language switch opens the matching page.
 - `docs.json` owns the page list and order: three tabs (Docs, API, Extend), each with groups of pages. The top nav shows one item per tab, and each page's sidebar shows only its own tab. `/llms.txt` lists every page under `## <tab> › <group>` with a one-sentence summary taken from the page's first paragraph. Each page's frontmatter `title` is its label. Every Markdown page under `docs/` and `contracts/` is built, and a test fails when one is missing from `docs.json`.
-- Each page's source Markdown is published next to its HTML (`/docs/architecture.md`), and the `README` paths declared in `docs.json` redirect to their section index.
+- Each page's source Markdown is published next to its HTML (`/docs/architecture.md`).
 - Relative links from a page to a file that is not a published page, such as `CONTRIBUTING.md` or `openapi.yaml`, are rewritten to GitHub at build time, so the Markdown works unchanged on GitHub and on the site.
 
 The visual system combines warm paper surfaces, green accents and ruled sections. Landing headings use self-hosted Space Grotesk (loaded by the landing only); body text uses Inter and code uses Geist Mono. Chinese text uses the system Chinese sans-serif stack. Both light and dark themes share the same hierarchy.

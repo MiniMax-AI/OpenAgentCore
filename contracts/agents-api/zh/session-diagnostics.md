@@ -1,7 +1,7 @@
 ---
 title: "Session 诊断"
 source: contracts/agents-api/session-diagnostics.md
-source_hash: d2159eddd1995bac506cb753a243b9ac063aba0f87c1854e2f97e885f9bb624f
+source_hash: 33b3be90cb3059fd281e318274e8101602787e25fcd19072cf355f9054eff907
 ---
 
 管理员通过两个需要 Core 密钥的路由读取 Session 或 Turn 失败的原因，它们报告失败类别和 Item 接收时间。
@@ -47,8 +47,6 @@ source_hash: d2159eddd1995bac506cb753a243b9ac063aba0f87c1854e2f97e885f9bb624f
 ## Turn 快照与 Item 回执时间 {#turn-snapshot-and-item-receipt-timing}
 
 对象为 `core.turn_diagnostics`，包含 `session_id`、`turn_id`、官方根 Turn `status`、可空的 `failure`、`items` 和 `items_truncated`。Turn 失败包含 `code`、`params` 和可空的 `failed_at`，不包含来源或 Turn ID。只有失败的 Turn 才有失败详情；已取消或已完成的 Turn 不会继承私有结果中的分类。
-
-原生分类仅适用于结果为 `engine_failed` 的失败 Turn，来自[原生失败分类](../../../docs/zh/runtime-protocol.md#native-failure-classification)中定义的有限结果元数据。`connection_failed` 的 params 包含 `http_status`，值为 100 至 599 或 null；其他原生分类使用空 params。
 
 `items` 最多包含 1000 个根 Item，与公开 Item 列表一样，按 `(created_at, position, id)` 升序排列。存储最多读取 1001 行以检测截断。每项包含 `item_id`、`started_at`、可空的 `completed_at` 和可空整数 `observed_duration_ms`。
 

@@ -95,7 +95,7 @@ New hosted requests, and requests that omit the inline model, record caller inte
 ```
 
 - `agent.model` is the exact provider model ID; a supplied value always replaces the deployment model.
-- The Session's `x_agents_core` accepts `model_provider`, `harness_config` and `environment` ([Environments](./environments.md#preparation-order)); any other member, such as `sandbox_node_id`, is rejected with 400. Hosted node placement is automatic.
+- The Session's `x_agents_core` accepts `model_provider`, `harness_config` and `environment` ([Environments](./environments.md#preparation-order)); any other member is rejected with 400. Hosted node placement is automatic.
 
 Unsupported protocol, Harness or Environment combinations are rejected before the Session is created. Provider availability is checked during execution, not by a probe.
 

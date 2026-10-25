@@ -81,7 +81,7 @@ function presetOf(provider: SandboxProvider, resources: SandboxResources): Prese
  * An update can retain the saved credential.
  * A Provider that declares cautions takes a confirmation, once per wizard
  * session; a saved deployment has already made it.
- * Core's address is config.json's `public_url`: the review only shows it, and
+ * Core's address is `OAC_PUBLIC_URL`: the review only shows it, and
  * a configuration Core rejects for it is explained here, where it was saved.
  */
 type WizardProps = {

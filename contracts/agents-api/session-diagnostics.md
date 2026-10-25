@@ -46,8 +46,6 @@ Provisioning parameters come from the confirmed structured receipt, persisted in
 
 The object is `core.turn_diagnostics`, with `session_id`, `turn_id`, the official root Turn `status`, nullable `failure`, `items` and `items_truncated`. A Turn failure has `code`, `params` and nullable `failed_at`, without a source or Turn ID. Only failed Turns have failure details; cancelled and completed Turns never inherit a classification from a private outcome.
 
-Native categories apply only to a failed Turn whose outcome is `engine_failed`, and come from the finite outcome metadata described in [native failure classification](../../docs/runtime-protocol.md#native-failure-classification). `connection_failed` params contain `http_status`, 100 to 599 or null; other native categories have empty params.
-
 `items` contains at most 1000 root Items, ordered by `(created_at, position, id)` ascending like the public Items list. Storage reads at most 1001 rows to detect truncation. Each entry has `item_id`, `started_at`, nullable `completed_at`, and nullable integer `observed_duration_ms`.
 
 - `started_at` is Core's first persisted input or event receipt of the Item.

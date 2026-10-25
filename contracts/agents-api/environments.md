@@ -87,7 +87,6 @@ The application owns the machine. It creates the Session with a clean absolute `
 - `remote_url` is the daemon WebSocket URL derived from Core's public URL, never from request headers or a daemon address. It names Core's private daemon transport.
 - Enrollment binds the exact Session, Environment, device and executor key. It creates no allocation and cannot move a Session to another device.
 - The Session's workspace must equal the `/workspace` alias or the exact canonical directory the Runtime is bound to. Naming a path grants no access to it.
-- The Session carries its own model provider; deployment defaults never apply ([model execution](./model-execution.md#saved-defaults-and-precedence)).
 - Session reads, lists and events return the `self_hosted` output with the Environment ID, workspace and capability directories, never private configuration. `capability_directories` lists the caller's selections; the Runtime's installation locations stay private.
 - Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access but does not stop native processes; the machine owner stops and cleans up.
 - The workspace and native history must survive a daemon restart. Losing them never authorizes silent replacement or replay.
@@ -106,34 +105,13 @@ The application owns the machine. It creates the Session with a clean absolute `
 
 ## Input admission
 
-Session input goes through `POST /agents/sessions/{id}/events` in ordered batches of 1–64 events. On an Environment-bearing Session, Core reserves input that cannot start yet until the Environment is connected and prepared.
+On an Environment-bearing Session, Core reserves input that cannot start yet until the Environment is connected and prepared. [Send input](./sessions-events.md#send-input) and [Initial input at Session creation](./sessions-events.md#initial-input-at-session-creation) define each request's behavior, and [Input errors](./sessions-events.md#input-errors) lists every outcome. Creation without input creates no Turn and no connection action but still requests Environment preparation.
 
-A valid node-backed creation can wait for compute capacity after committing. Initial input uses the same reservation and deadline while waiting; creating without input still requests Environment preparation. [Placement and generation selection](./sandbox-deployment.md#generation-ownership-and-rollout) define the scheduling rules.
+A valid node-backed creation can wait for compute capacity after committing. Initial input uses the same reservation and deadline while waiting. [Placement and generation selection](./sandbox-deployment.md#generation-ownership-and-rollout) define the scheduling rules.
 
-### Initial input
+Under the Session lock, a retry recovers its original reservation or receipt before Core chooses between the active Turn and a new reservation, and keeps that target during later work. An unlocked read or a retry after a conflict never picks a different path.
 
-Creation accepts initial text as a string or an ordered array of user messages. Omitted or null input creates no Turn and no connection action.
-
-- The creation transaction stores the initial batch as a reservation; for `self_hosted` it also records a connection action. Only the creation winner inserts them; retries never insert them again.
-- A `self_hosted` creation returns the Session and the Environment connection target at once, while the machine is still offline, without waiting for admission. A streamed `self_hosted` creation sends the committed JSON projection as its `created` snapshot, already showing `requires_action` and the connection action, then the committed `requires_action` event.
-- A fresh creation stream ends right after the idle state recorded when the admitted Turn ends or the reservation stops being pending, or after a failure. The connection alone clearing the action does not end it. A creation without input ends right after its created snapshot; a same-key stream retry ends at once without events. Later subscribers see only future events and recover history through queries.
-- Closing the stream leaves committed work intact; the Worker prepares and admits the input.
-- If the initial reservation expires, the Session becomes `failed` with a safe error and no actions, and no Turn is created. The Environment itself is not failed.
-- Creation retries keep the original identity, deadline and input. Saved-Agent retries with recorded intent recover before execution admission or source resolution.
-
-### Later input
-
-| Batch | Behavior |
-| --- | --- |
-| Messages, Turn active | Appended to the current Turn through ordered admission and native delivery. No new Turn, preparation or reservation. |
-| Messages, Session idle | Reserved; the request waits for the Worker to prepare, admit and claim. |
-| Cancellation only | Admitted through the ordinary durable cancellation path. An idle cancellation creates no Turn. A new cancellation conflicts while a reservation is pending; it never cancels pre-Turn input. |
-| Function results only | Admitted to the named pending calls with the ordinary result receipts, without a Turn or preparation. Cannot bypass a pending reservation. Function results never become Environment installation metadata. |
-| Mixed kinds | Rejected. |
-
-Core returns 202 only after the batch is durably admitted. For a cancellation, 202 confirms admission, not native completion or process exit. Under the Session lock, a retry recovers its original reservation or receipt before Core chooses between the active Turn and a new reservation, and keeps that target during later work. An unlocked read or a retry after a conflict never picks a different path.
-
-The waiting request uses bounded pooled operations, outside transactions and execution leases; it never prepares or starts native work. Only this route extends its response write deadline, to six minutes, covering the five-minute database deadline plus response time. Disconnecting stops the wait, not the reservation. [Input errors](./sessions-events.md#input-errors) lists every outcome of the request.
+A `POST /v1/agents/sessions/{session_id}/events` request waiting on a reservation uses bounded pooled operations, outside transactions and execution leases; it never prepares or starts native work. Only that route extends its response write deadline, to six minutes, covering the five-minute database deadline plus response time.
 
 ### Reservations
 

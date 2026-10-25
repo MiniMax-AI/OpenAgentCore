@@ -20,7 +20,7 @@ Every subject has one owner. Most owners are the page whose title names the subj
 | E2B and microsandbox Provider helper implementation | [E2B helper](services/core/tools/e2b-provider/README.md), [microsandbox helper](services/core/tools/microsandbox-provider/README.md) |
 | Distribution builds, Runtime image builds, CI and publication | [Build and release OpenAgentCore](docs/maintainers.md) |
 | Website: landing page, bilingual documentation maintenance, documentation site build and GitHub Pages publication | [Website guide](website/README.md) |
-| Installer lifecycle, locking, generated state, managed HTTPS and downloads | [Deployment](deploy/README.md) and [Node installer](deploy/node/README.md) |
+| Installer lifecycle, locking, generated state and downloads | [Deployment](deploy/README.md) and [Node installer](deploy/node/README.md) |
 | Web page behavior and visual rules | [Web product](apps/web/PRODUCT.md), [Web design](apps/web/DESIGN.md) |
 | Application example behavior and local operation | [Application example](example/parsar/README.md) |
 
@@ -102,7 +102,7 @@ The role needs `CREATE DATABASE`: tests of database-wide state, such as the exec
 
 Use official SDKs and upstream types or schemas. Validate raw HTTP payloads and observable workflows alongside SDK behavior. API changes preserve the pinned contracts, [OpenAI compatibility](contracts/agents-api/index.md), official-client tests and Core's independent build. Verify the official-client workflow before application integration. An OpenAI endpoint is a test target only when the required capabilities and credentials are available.
 
-Controlled fixtures and synthetic model responses qualify deterministic behavior. Live acceptance calls a real model API through Core, the daemon and the Harness adapter. Direct native probes establish feasibility only. Keep provider credentials in private test configuration, outside source, logs and task records.
+Controlled fixtures and synthetic model responses qualify deterministic behavior. Live acceptance calls a real model API through Core, the daemon and the Harness adapter. Direct native probes establish feasibility only.
 
 For wire details the pinned SDK does not specify, probe resources you own and retain the request evidence. In the [OpenAI compatibility](contracts/agents-api/index.md), keep observed behavior distinct from guarantees, accepted profiles distinct from complete coverage, and provider connectivity distinct from deployment qualification.
 

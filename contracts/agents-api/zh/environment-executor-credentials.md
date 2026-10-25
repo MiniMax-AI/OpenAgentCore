@@ -1,7 +1,7 @@
 ---
 title: "执行器凭据"
 source: contracts/agents-api/environment-executor-credentials.md
-source_hash: bc6bfa4cdaa4a82694fc3b2936aa50f1e00ae7feecea05f7c67401bb5816f185
+source_hash: 9920c082498a3dd0ff4d7a20bed6ab3c43ed5a46a9a8e52c0efe72ce5683924b
 ---
 
 执行器凭据允许 `oac-daemon` 为一个 `self_hosted` Environment 注册并连接。它只授权该 Environment 的私有 daemon 传输（`/api/v1/agent-daemon/*`），不授权 `/v1`、`/core/v1`、sandbox node 注册或项目资源。项目的 principal 是其执行 principal。Core 只保存密钥摘要。
@@ -97,4 +97,4 @@ Core 永久拒绝 daemon 时（注册 401/409、永久 WebSocket 拒绝，或 da
 
 ## 模型提供商 {#model-provider}
 
-`self_hosted` Session 携带自己的模型提供商，部署默认值不适用。[模型执行](model-execution.md)负责交付规则。保存的 Agent 的模型提供商密钥会交给项目中用该 Agent 创建的每个 `self_hosted` Session 的执行器，因此任何能在该项目创建 `self_hosted` Session 并运行执行器的人都能读取它。
+[模型执行](model-execution.md)负责交付规则。保存的 Agent 的模型提供商密钥会交给项目中用该 Agent 创建的每个 `self_hosted` Session 的执行器，因此任何能在该项目创建 `self_hosted` Session 并运行执行器的人都能读取它。

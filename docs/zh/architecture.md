@@ -1,12 +1,12 @@
 ---
 title: "架构"
 source: docs/architecture.md
-source_hash: 957a59269543af671ccac136b00d54e78da276958c9c765ac43151174c6fd918
+source_hash: 9a52651443a4e985e05a40c1f7c6833fd6f4ecc203ab5fdfbf527566244d9222
 ---
 
 OpenAgentCore 是 Agent 运行平台，通过可替换的协议实现统一组织 Harness、模型、工具、Session 和执行环境。它将编排、计算资源和原生执行分开。Core 负责 API 和持久状态。沙箱提供商管理计算资源。独立工作区文件系统 adapter 通过单独的协议管理 Environment 持久存储。Runtime daemon 准备 Environment 并运行选定的 Harness；Harness 的原生 SDK 或协议负责模型与工具循环。
 
-推荐的自部署方案是 microsandbox 配合 kernel NFS 工作区存储。E2B 提供托管计算。Docker 运行在没有检查点或外部存储的节点上。它们使用相同的 Core 编排和能力检查。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。[沙箱提供商协议](./sandbox-provider.md)和[工作区文件系统协议](./workspace-provider.md)定义其契约和支持的能力。
+[沙箱后端](./getting-started/sandbox-backends.md)页面对比各部署选项。计算和文件系统 adapter 声明其支持的组合；部署选择不会引入独立的 Agent 执行流程。[沙箱提供商协议](./sandbox-provider.md)和[工作区文件系统协议](./workspace-provider.md)定义其契约和支持的能力。
 
 ```mermaid
 flowchart TB
@@ -70,6 +70,6 @@ sequenceDiagram
 
 daemon 连接后，Core 检查可用 Harness 和请求的能力。Runtime 准备工作区 Environment 及其能力快照，然后准备或复用 Session Executor。Core 持久化输出、工具交互和回执，供应用读取和接收事件。完成或取消使 Turn 结算；健康的 Executor 可以在同一 Environment 中执行下一个 Turn。
 
-对于支持检查点的计算资源，Core 自动挂起空闲工作，并在确认快照捕获及源计算停止后释放活跃计算容量。新工作在符合条件的兼容节点上恢复保留的内存；独立工作区存储始终属于同一 Environment 标识。[检查点生命周期](./sandbox-provider.md#suspension)负责空闲准入、唤醒与保留规则，[检查点转移](./sandbox-provider.md#checkpoint-transfer)定义共享存储和兼容性要求。仅凭节点失联不能授权替代写入者。
+[检查点生命周期](./sandbox-provider.md#suspension)负责空闲准入、唤醒与保留规则，[检查点转移](./sandbox-provider.md#checkpoint-transfer)定义共享存储和兼容性要求。
 
-执行、计算资源和独立工作区存储拥有不同的生命周期。关闭 Executor 本身不会删除存储。[工作区文件系统契约](workspace-provider.md#lifetime-and-filesystem-scope) 负责持久存储保留及显式删除规则；计算快照到期不授权回收工作区存储。准备、连接和执行就绪具有不同状态。[Environment 契约](../../contracts/agents-api/zh/environments.md) 负责准备规则，[Core–Runtime 协议](runtime-protocol.md) 负责顺序、回执和故障处理。
+[工作区文件系统契约](workspace-provider.md#lifetime-and-filesystem-scope) 负责持久存储保留及显式删除规则；计算快照到期不授权回收工作区存储。[Environment 契约](../../contracts/agents-api/zh/environments.md) 负责准备规则，[Core–Runtime 协议](runtime-protocol.md) 负责顺序、回执和故障处理。

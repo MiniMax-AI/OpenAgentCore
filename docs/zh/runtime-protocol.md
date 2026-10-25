@@ -1,7 +1,7 @@
 ---
 title: "Core–Runtime 协议"
 source: docs/runtime-protocol.md
-source_hash: d0180316782a49812b3922ed544e2338d66cb735e496c5d08ccac47e1e2b4024
+source_hash: ac10ed0c636be22b92802eeae3af6ded928239c637e24cafe748a62fa16174f0
 ---
 
 Core–Runtime 协议连接 Core 与 Runtime daemon，定义 daemon 连接上消息的含义和顺序。托管和自托管 Runtime 使用同一协议。
@@ -42,8 +42,8 @@ sequenceDiagram
     R->>C: ordered envelopes
 ```
 
-- [机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型；项目 API 密钥和 Core 密钥都不是 Runtime 凭据。
-- 两个请求都通过 Bearer header 提供凭据。凭据不得出现在 URL、payload 日志或 trace 中。
+- [机器连接 API](../../contracts/agents-api/zh/machine-api.md#credentials) 列出凭据类型。
+- 凭据不得出现在 URL、payload 日志或 trace 中。
 - 立即发送第一个 heartbeat，之后按 bootstrap 返回的间隔发送。每个 heartbeat 声明 `supported_agent_kinds`、其可用性和[能力](#capability-declarations)。第一个 heartbeat 之前能力未知；heartbeat 中缺失的 kind 视为未声明。两者都不允许推断。
 - Heartbeat 仅证明存活，不证明执行进度，也不充当此前消息的回执。
 
@@ -331,7 +331,6 @@ Core 在 Worker 的 Session 调度预约上运行空闲目录读取，活动执�
 | 2 分钟 | 一次 `runtime_prepare` transfer 的 `begin`–`commit` 暂存阶段 | 传输被拒绝。 |
 | 64 KiB | `runtime_prepare` transfer 或 `workspace_write` body 的单个 chunk | 更大的 chunk 验证失败。 |
 | 50 MiB | 一次 `runtime_prepare` transfer 或 `workspace_write` body（私有限制） | 传输在到达 installer 前被拒绝。 |
-| 5 MiB | 公开写入的 decoded inline body，由 API 在任何 Runtime 工作前检查 | API 拒绝请求。 |
 | 4 MiB | 单个入站 transport frame | frame 被拒绝。 |
 | 8 KiB、128 字节 | `workspace_read` 请求 payload 与 correlation ID，在准入前检查 | 请求被拒绝；过长 ID 不回显，过大的 trace metadata 不进入回复。 |
 | 1 MiB | `workspace_read` 的原始结果，位于 transport frame 内 | 结果明确截断。 |

@@ -2,7 +2,7 @@
 title: "Runtime observability"
 ---
 
-This is the contributor contract for how Core observes Runtimes and keeps their history. The routes and response fields are in the [Runtime telemetry API](./runtime-observability-api.md). The code lives in `services/core/internal/runtimeobs` (resolution, sources, sampler and export), `internal/runtimehistory` (history queries and the PostgreSQL store) and `internal/runtimeobs/otlpexporter`.
+This is the contributor contract for how Core observes Runtimes and keeps their history. The routes and response fields are in the [Runtime telemetry API](./runtime-observability-api.md). The code lives in `services/core/internal/runtimeobs` (resolution, sources, sampler and export), `services/core/internal/runtimehistory` (history queries and the PostgreSQL store) and `services/core/internal/runtimeobs/otlpexporter`.
 
 Observations are telemetry. They never create, renew, wake, restore or stop compute, never touch Session activity, and never decide idle time, suspension, admission or execution outcomes.
 
@@ -37,8 +37,6 @@ A sample carries:
 - current disk usage and capacity in bytes, only where the provider reports them (E2B).
 
 Every measurement is optional. A present zero is an observed zero; an absent value is unavailable and is never shown or aggregated as zero. Core rejects a sample whose `observed_at` is later than its own clock, whose `started_at` is later than `observed_at`, or whose values are negative, non-finite, a zero capacity or limit, or beyond the JSON safe-integer range.
-
-`lifecycle_state` is derived from the allocation state and compute phase in Core's records, never from a sample: no allocation or `creating` is `pending`; `running` with compute phase `running` or `disabled` is `active`, `suspended` is `sleeping`, and `quiescing`, `suspending`, `restoring` or `waking` is `transitioning`; `cleanup_pending` and `released` are `stopped`.
 
 ## Provider mapping
 

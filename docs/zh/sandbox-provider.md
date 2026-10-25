@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 590c360468ffa40fef877d3ef5cb2b9ee7f213d7e2aeb2ad28df515d965629d4
+source_hash: 9aac833e15cf78b06e4378b7526074bdb4cbac82aef4528e17da382053bc638d
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
@@ -134,9 +134,9 @@ Checkpoint 支持增加 `Compute` generation、name、ID 和 `SnapshotIdentity`�
 2. 声明 `sandbox.DeploymentPolicy`。adapter 不再编写 specification 或 resource validator。
 3. 基于类型化原生配置实现 `sandbox.ConfigurationAdapter`。`DecodeInput` 严格解析请求中独立的公开 `configuration` 与只写 `credential` 对象。`Encode` 生成白名单公开 selector、只读观测和独立 secret bytes，不透传请求 JSON。`Decode` 恢复已存储 selector 并保留对所属资源的访问，不做远程 admission 或新模板验证。`Normalize` 修改前复制输入。`ResolveChange`、`Equal` 和 `WithCredential` 负责继承、身份与凭据组合。`Requirements` 声明是否需要凭据和公开 Core origin，以及支持哪些 setup 操作：`Discovery` 对应 `DiscoverConfiguration`，`SelectionDiscovery` 对应 `DiscoverSelection`，`CredentialVerification` 对应 `VerifyCredential`。`DiscoverConfiguration` 接收 `ConfigurationDiscoveryQuery{Field, Path}`，其中 `Field` 是已声明的 `Discovered` 字段，`Path` 是前几级已选择的值，并返回 `ConfigurationOptions`：由 `{Value, Label, Resources, Complete}` 组成的列表，`Complete` 表示该选项可保存为字段值，其余选项通向下一级。它验证 query 并返回安全 catalog，不做 mutation 或 admission decision；Core 保留授权、输入限制与 deadline。`DiscoverSelection` 在提交前解析候选项省略的原生值，`VerifyCredential` 验证凭据对所属资源的访问，不修改资源。两者都接收候选项的 `sandbox.DirectConfig`，原生 client 只为该次调用构造。node 提供商仅接受空公开对象，拒绝凭据，对每项 setup 操作和 credential replacement 返回 Unsupported。
 4. node adapter 从自己的包中导出 `BuildLocal` constructor、它解码的类型化 `native` 对象，以及它在共享 node artifact 之外添加的原生文件。node-local 设置（如主机路径）只存放在该对象中；resources 从 node 配置的 `specification` 读取，Runtime 镜像来自同一对象。
-5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即提供商 kind，也用于标记该提供商的观测；checkpoint 支持读取此项。生成的投影组合每个已注册的部署模式、deployment policy 和 setup 声明与 `sandbox/deployment_contract.go` 中的共享 field bound：installer 从 `deploy/node/node_spec.py` 读取 policy，TypeScript 客户端和 Web 从 `packages/agents-client/src/deployment-contract.ts` 读取 policy 和 setup 声明，因此 Web 读取这些声明，而不比较提供商 kind。通过 `go run ./services/core/cmd/specification-contract -write` 重新生成两者。
+5. 在 `providers/registry.go` 中注册 constructor、policy、configuration adapter 和 operation 声明。其键即提供商 kind，也用于标记该提供商的观测；checkpoint 支持读取此项。生成的投影见[规范节点规格](../../contracts/agents-api/zh/sandbox-deployment.md#canonical-node-specification)。
 6. 提供 adapter 和 helper 的发行产物，通过已注册 configuration 契约把该提供商交付给运维人员。
-7. 在 `Policy()` 旁声明 setup 向导的内容：编写 `sandbox.SetupDeclaration`，并注册为条目的 `Setup`。它包含中英文的标签、摘要和注意事项，该提供商是否为其模式的 Recommended 选择，公开配置字段和凭据字段（`Name`、本地化的 `Label`、`Secret`、`Discovered`、`Optional`、`Help`），以及填充字段值并链接凭据控制台的 preset。注册会拒绝：凭据非必需却声明了 secret 字段、不支持 `Discovery` 却声明了 discovered 字段、空的语言文本和指向未知字段的 preset 值。生成部署契约时会拒绝同一模式下多于一个 Recommended 提供商。Web 遵循声明的模式和字段，不出现任何提供商名称：声明只通过生成的 `packages/agents-client/src/deployment-contract.ts` 到达 Web，不进入 `deploy/node/node_spec.py`。
+7. 在 `Policy()` 旁声明 setup 向导的内容：编写 `sandbox.SetupDeclaration`，并注册为条目的 `Setup`。它包含中英文的标签、摘要和注意事项，该提供商是否为其模式的 Recommended 选择，公开配置字段和凭据字段（`Name`、本地化的 `Label`、`Secret`、`Discovered`、`Optional`、`Help`），以及填充字段值并链接凭据控制台的 preset。注册会拒绝：凭据非必需却声明了 secret 字段、不支持 `Discovery` 却声明了 discovered 字段、空的语言文本和指向未知字段的 preset 值。生成部署契约时会拒绝同一模式下多于一个 Recommended 提供商。
 
 node 配置 `sandbox.NodeConfig` 包含 `provider`、`generation`、`installation_id`、`core_url`、`specification`，以及 adapter 的不透明 `native` 对象。`providers.Build` 验证 `provider`、`generation`、`installation_id` 和 `specification`，并将配置与临时 `sandbox.LocalOptions` 传给 `BuildLocal`，由它严格解码 `native`。调用方通过 `Standalone` 明确选择独立注册或单提供商执行，或通过 `GenerationStateDirectory` 中的规范绝对 node state directory 选择 generation 拥有的执行。context 缺失或混合时拒绝。adapter 负责 generation 特有的原生 preparation 和 readiness 检查。Microsandbox 将 helper lease 绑定到安装实例、generation 和 specification digest，然后在平台、容量和 artifact readiness 后检查固定 image。
 
@@ -260,11 +260,11 @@ Core 在初始化完成、没有 root 或 Subagent Turn 处于排队、进行中
 
 `Suspend` 只有在持久发布已验证的完整检查点、停止精确 source compute，并结清 source 本地 capture 与 cleanup 义务后，才能报告 `SourceStopped`。Core 先持久化快照，再标记 suspended；仅原生资源不存在并不足够。`Suspend.ObserveOnly` 可以为同一 operation 已验证的快照完成检查点发布和源清理，但不能重新捕获快照，也不能停止已经恢复 running 的源。此前已发布的检查点缺失或损坏时，`ObserveOnly` 可以返回其精确持久 ownership receipt，标记 `Status: unknown` 和 `SourceStopped: false`，供清理使用；该 receipt 不证明检查点当前可用，也不证明源不存在。`Resume` 仍在执行前验证检查点。完成源结清屏障后，source node 不可用不再阻止恢复。删除和正常到期可以将空闲 suspended allocation 的清理路由转给同一 artifact domain 内的在线 node；删除不要求 execution class 匹配。清理目标必须已提供同一不可变 generation，且有 retained 容量。没有这样的 node 时，清理保持 pending，不释放所有权；运维需恢复符合条件的 node 或其容量。未知 running 或 restoring writer 不会仅因 node 不可达而迁移。
 
-恢复用 `Resume.ObserveOnly` 观察已持久化的 target 与 operation。`RestoreAttemptClosed` 是精确 operation ID，不是通用 absence 标志：adapter 只有在持久关闭从未进入原生执行的 attempt，并隔离该 ID 的所有迟到请求后才能返回。如果 adapter 能证明当前调用在派发原生恢复之前失败，也可以关闭已持久 admitted 的 attempt。microsandbox adapter 对创建该 admission 的 fresh 请求，在派发原生恢复之前的任何失败上执行这种关闭。wire deadline 到期或未分类失败会关闭该 attempt，Core 随后持久化新的 operation ID。快照缺失、未通过身份或完整性校验，或未通过 adapter 对当前 generation 的资格检查（例如资源、workspace 或 runtime image 不匹配）时，也会关闭该 attempt，并报告为 `ErrCheckpointUnusable`。该结果是持久的：同一 operation 的 `Resume.ObserveOnly` 会再次报告它，该 operation ID 的迟到请求仍被隔离。一旦已派发原生恢复，提供商不会返回它。收到 `ErrCheckpointUnusable` 后，Core 不再恢复该快照，并[立即结束其保留](#cold-replacement-after-checkpoint-retention)。一旦已派发原生恢复，结果未知的 attempt 保留相同 target、所有权与原始 retention deadline；原生列表缺失、helper 死亡或超时都不授权重放。这种恢复可能一直不可用，直到显式删除或正常保留期到期；等待中的 input 可能达到其公共 deadline。用户删除仍需精确原生 settlement，之后才能释放资源与所有权。
+恢复用 `Resume.ObserveOnly` 观察已持久化的 target 与 operation。`RestoreAttemptClosed` 是精确 operation ID，不是通用 absence 标志：adapter 只有在持久关闭从未进入原生执行的 attempt，并隔离该 ID 的所有迟到请求后才能返回。如果 adapter 能证明当前调用在派发原生恢复之前失败，也可以关闭已持久 admitted 的 attempt。wire deadline 到期或未分类失败会关闭该 attempt，Core 随后持久化新的 operation ID。快照缺失、未通过身份或完整性校验，或未通过 adapter 对当前 generation 的资格检查（例如资源、workspace 或 runtime image 不匹配）时，也会关闭该 attempt，并报告为 `ErrCheckpointUnusable`。该结果是持久的：同一 operation 的 `Resume.ObserveOnly` 会再次报告它，该 operation ID 的迟到请求仍被隔离。一旦已派发原生恢复，提供商不会返回它。收到 `ErrCheckpointUnusable` 后，Core 不再恢复该快照，并[立即结束其保留](#cold-replacement-after-checkpoint-retention)。一旦已派发原生恢复，结果未知的 attempt 保留相同 target、所有权与原始 retention deadline；原生列表缺失、helper 死亡或超时都不授权重放。这种恢复可能一直不可用，直到显式删除或正常保留期到期；等待中的 input 可能达到其公共 deadline。用户删除仍需精确原生 settlement，之后才能释放资源与所有权。
 
-E2B adapter 使用 SDK 的原生 pause 与 `connect` 做 checkpoint。一个 sandbox 跨越 allocation 的所有 generation：`Suspend` 以内存快照暂停它，daemon 因此存活，`Resume` 重新连接同一个 sandbox。helper 的私有 receipt 记录当前 generation，所以被取代的 generation 返回 `ErrNotFound`，`KillCompute` 和 `DeleteSnapshot` 从不触碰由其他 generation 拥有的 sandbox。`CheckpointCompatibility` 指明 endpoint、安装和模板构建，不匹配的快照在任何原生调用之前即为 `ErrCheckpointUnusable`。E2B 没有独立的 workspace 文件系统，因此保留期到期走下面的未满足条件分支。
+E2B adapter 的 checkpoint 行为见 [E2B provider 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md)。E2B 没有独立的 workspace 文件系统，因此保留期到期走下面的未满足条件分支。
 
-microsandbox adapter 要求显式的私有 `checkpoint_root`，位于所有 guest 可访问文件系统之外。目录权限为 `0700`，私有 namespace marker 标识真实检查点存储。默认安装创建 node 本地私有 store。跨 node 恢复要求运维为参与 node 挂载同一个私有 store，挂载路径可以不同。每个保留的检查点都是 guest 内存与根磁盘层的未压缩原生快照，因此共享 store 要为每次挂起和跨 node 恢复承载这部分数据量。Runtime state 目录与 workspace binding 都不用于推导该 root。adapter 在恢复前再次验证检查点、外部文件系统身份和原生 execution class。恢复 RAM 与文件描述符不保证外部 TCP 连接连续，也不保证应用副作用可安全重放。
+私有 `checkpoint_root` 见 [microsandbox provider 指南](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md)。每个保留的检查点都是 guest 内存与根磁盘层的未压缩原生快照，因此共享 store 要为每次挂起和跨 node 恢复承载这部分数据量。恢复 RAM 与文件描述符不保证外部 TCP 连接连续，也不保证应用副作用可安全重放。
 
 ### 检查点保留期后的冷替换 {#cold-replacement-after-checkpoint-retention}
 
@@ -298,7 +298,7 @@ Core 在释放 allocation 和 placement 归属前，确认原始创建已结算�
 
 ## 一致性测试 {#conformance}
 
-installer 与 Go adapter 的 E2B 模板和 endpoint validator 消费共享 [selector fixture](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/e2b/testdata/configuration-selectors.json)。任何验证修改都扩展这些 case，使两处入口接受相同 selector。
+Go adapter 的 E2B 模板和 endpoint validator 消费共享 [selector fixture](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/e2b/testdata/configuration-selectors.json)。任何验证修改都扩展这些 case。
 
 开发时运行 `make check-sandbox-provider-contract`。它通过真实 adapter 边界和受控原生失败运行共享 [`contracttest`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/contracttest) 套件，以及 adapter 和 node transport 测试；`make check` 包含相同 package。使用 native-side fixture 调用公开 failure runner，不使用假的 `SandboxProvider`，保留外来 ownership、未知 mutation result、cancellation、不自动 replay、failed cleanup 和 reference-bound settlement 测试。
 

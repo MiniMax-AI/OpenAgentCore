@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: e62ff2b6bc6cee007f1bdbfac5cf6204e2d13552686e7d7c0a424362495e7a52
+source_hash: 52d557886a595276c94f935b22531d84a712ceff0e64bf91e04749eed4366dc1
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -89,7 +89,6 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 - `remote_url` 是根据 Core 的公共 URL 推导出的 daemon WebSocket URL，绝不根据请求头或 daemon 地址生成。它指定 Core 的私有 daemon 传输通道。
 - 注册会将精确的 Session、Environment、设备和执行器凭据绑定在一起。它不会创建任何分配，也无法将 Session 迁移到另一台设备。
 - Session 的工作区必须等于 `/workspace` 别名，或等于 Runtime 绑定到的精确规范目录。指定某个路径并不会授予对它的访问权限。
-- Session 携带自己的模型提供商；部署默认值绝不适用（[model execution](model-execution.md#saved-defaults-and-precedence)）。
 - Session 读取、列表和事件会返回带有 Environment ID、工作区及能力目录的 `self_hosted` 输出，但绝不返回私有配置。`capability_directories` 列出调用方选择的内容；Runtime 的安装位置保持私有。
 - 计算资源、工作区和文件仍归应用程序所有。删除 Session 或撤销凭据会拒绝后续访问，但不会停止原生进程；机器所有者负责停止和清理。
 - 工作区和原生历史必须能在 daemon 重启后继续存在。丢失它们绝不授权进行静默替换或重播。
@@ -108,34 +107,13 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ## 输入接纳 {#input-admission}
 
-Session 输入通过 `POST /agents/sessions/{id}/events` 以每次 1–64 个事件的有序批次提交。对于带 Environment 的 Session，Core 会将尚不能启动的输入预留，直到 Environment 完成连接和准备。
+对于带 Environment 的 Session，Core 会将尚不能启动的输入预留，直到 Environment 完成连接和准备。[发送输入](sessions-events.md#send-input)和[创建 Session 时的初始输入](sessions-events.md#initial-input-at-session-creation)定义每个请求的行为，[输入错误](sessions-events.md#input-errors)列出全部结果。无输入的创建不会创建 Turn 或连接操作，但仍会请求 Environment 准备。
 
-有效的节点模式创建可以在提交后等待计算容量。初始输入在等待期间仍使用同一 reservation 和期限；无输入创建也会请求 Environment 准备。[Placement 与代次选择](./sandbox-deployment.md#generation-ownership-and-rollout) 定义调度规则。
+有效的节点模式创建可以在提交后等待计算容量。初始输入在等待期间仍使用同一 reservation 和期限。[Placement 与代次选择](./sandbox-deployment.md#generation-ownership-and-rollout) 定义调度规则。
 
-### 初始输入 {#initial-input}
+在 Session 锁内，重试会先恢复其原始预留或回执，然后由 Core 在活动 Turn 与新预留之间选择，并在后续工作中保持该目标。未加锁的读取或冲突后的重试绝不会选择不同路径。
 
-创建操作接受字符串形式的初始文本，或由用户消息构成的有序数组。省略或传入 null 输入不会创建 Turn 或连接操作。
-
-- 创建事务会将初始批次存储为预留；对于 `self_hosted`，还会记录连接操作。只有创建胜者会插入它们；重试绝不会再次插入。
-- `self_hosted` 创建会同时返回 Session 和 Environment 连接目标，即使机器仍处于离线状态，也不等待接纳。流式 `self_hosted` 创建会将已提交的 JSON 投影作为其 `created` 快照发送，其中已经显示 `requires_action` 和连接操作，随后发送已提交的 `requires_action` 事件。
-- 新鲜的创建流会在已接纳 Turn 结束时记录空闲状态，或预留不再处于 pending 时记录空闲状态后立即结束，也会在失败后结束。仅因连接而清除操作不会结束该流。无输入的创建会在发送其 `created` 快照后立即结束；使用相同 key 的流重试会立即结束且不发送任何事件。后续订阅者只能看到未来事件，并通过查询恢复历史。
-- 关闭流不会影响已提交的工作；Worker 仍会准备并接纳输入。
-- 如果初始预留过期，Session 会变为 `failed`，并带有安全错误且不包含任何操作，同时不会创建 Turn。Environment 本身不会变为 `failed`。
-- 创建重试会保留原始身份、截止时间和输入。对于记录了意图的 Saved-Agent，重试会在执行接纳或源解析之前进行恢复。
-
-### 后续输入 {#later-input}
-
-| 批次 | 行为 |
-| --- | --- |
-| 消息，Turn 处于活动状态 | 通过有序接纳和原生传递追加到当前 Turn。不会创建新 Turn、准备或预留。 |
-| 消息，Session 处于空闲状态 | 预留该输入；请求等待 Worker 进行准备、接纳和认领。 |
-| 仅取消 | 通过常规持久取消路径接纳。空闲状态下的取消不会创建 Turn。预留处于 pending 时，新的取消会发生冲突；它绝不会取消 Turn 之前的输入。 |
-| 仅函数结果 | 使用常规结果回执接纳到指定的 pending 调用，不涉及 Turn 或准备。不能绕过 pending 预留。函数结果绝不会成为 Environment 安装元数据。 |
-| 混合类型 | 拒绝。 |
-
-Core 仅在批次已持久接纳后返回 202。对于取消，202 确认的是接纳，而非原生完成或进程退出。在 Session 锁内，重试会先恢复其原始预留或回执，然后由 Core 在活动 Turn 与新预留之间选择，并在后续工作中保持该目标。未加锁的读取或冲突后的重试绝不会选择不同路径。
-
-等待请求使用有界的池化操作，位于事务和执行租约之外；它绝不会准备或启动原生工作。只有此路由会将其响应写入期限延长至六分钟，以涵盖五分钟的数据库期限及响应时间。断开连接会停止等待，但不会取消预留。该请求的全部结果见[输入错误](sessions-events.md#input-errors)。
+等待预留的 `POST /v1/agents/sessions/{session_id}/events` 请求使用有界的池化操作，位于事务和执行租约之外；它绝不会准备或启动原生工作。只有该路由会将其响应写入期限延长至六分钟，以涵盖五分钟的数据库期限及响应时间。
 
 ### 预留 {#reservations}
 
