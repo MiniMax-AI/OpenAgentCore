@@ -17,6 +17,7 @@ parser.add_argument('--image', required=True, help='Qualified linux/amd64 Runtim
 parser.add_argument('--name', required=True)
 parser.add_argument('--api-key-file', type=Path, required=True)
 parser.add_argument('--output', type=Path, required=True)
+parser.add_argument('--memory-mb', type=int, default=2048)
 args = parser.parse_args()
 if not args.image.startswith('sha256:') or not args.output.is_absolute() or not args.api_key_file.is_absolute():
     parser.error('Use an image digest and absolute private key/output paths')
@@ -81,7 +82,7 @@ with tempfile.TemporaryDirectory(dir=state) as temporary:
                          '&& chmod 0444 /etc/oac-runtime-env.json '
                          '&& chmod 0555 /opt/oac-e2b /opt/oac-e2b/init.py /opt/oac-e2b/managed_init.py /opt/oac-e2b/helper_contract_generated.py', user='root')
                 .set_user('runtime').set_workdir('/environment/workspace'))
-    result = Template.build(template, name=args.name, cpu_count=2, memory_mb=2048,
+    result = Template.build(template, name=args.name, cpu_count=2, memory_mb=args.memory_mb,
                             on_build_logs=lambda entry: print(entry.message, flush=True),
                             api_key=args.api_key_file.read_text().strip())
     report = {'template': result.template_id + ':' + result.build_id, 'image': image['Id'],

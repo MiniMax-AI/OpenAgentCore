@@ -8,19 +8,19 @@ The installer selects no backend. One installation uses one backend. To change i
 
 ## Compare the backends
 
-| | microsandbox (recommended) | Docker | E2B |
+| | microsandbox (recommended) | Docker (compatibility) | E2B |
 | --- | --- | --- | --- |
 | Where sandboxes run | A microVM on your Linux nodes | A container on your Linux nodes | E2B's cloud |
 | Nodes to add | Yes | Yes | None |
 | You provide | Linux amd64 hosts with systemd and `/dev/kvm` | Linux amd64 hosts with systemd and rootful Docker Engine | An E2B API key and a template; a public HTTPS URL for Core |
 | Isolation | Each sandbox has its own kernel | Containers share the node's kernel | E2B's |
-| Idle sandboxes suspend and resume | Yes, with checkpoints | No | No |
+| Idle sandboxes suspend and resume | Yes, with checkpoints | No | Yes, paused in place by E2B |
 | Workspace storage | Required, on NFS | Own disk | Own disk |
 | Disk limits | Root disk and workspace quota | None | Set by the template |
 
 The field-level differences are in the [deployment contract](../../contracts/agents-api/sandbox-deployment.md#what-each-field-means-per-sandbox-provider). Host requirements for nodes are in [Add and manage nodes](./nodes.md#host-requirements).
 
-Docker nodes are [root-equivalent](./nodes.md#what-the-installer-sets-up) on their host: add them only on hosts dedicated to sandboxes.
+Docker is a compatibility backend, for trusted workloads and for hosts without `/dev/kvm`. Its nodes are [root-equivalent](./nodes.md#what-the-installer-sets-up) on their host: add them only on hosts dedicated to sandboxes.
 
 Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a Linux node or use E2B. Applications can also run [self-hosted Sessions](./self-hosted.md) on their own machines, with no backend.
 

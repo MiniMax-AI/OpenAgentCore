@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: 15e69d281763e34723ff025a5a2ea38ab75e741cf6958705313e27a36276e928
+source_hash: d2560bad3e9a099dd61cef0f1c27eb5fa3320af5a6e2620b210f1011b1b9d6bd
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -82,6 +82,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - 未指定推理强度时会保持为 null，而不是采用模型的默认值。
 - Codex 把程序化工具调用映射到原生 `code_mode`，由模型编写的脚本调用其他工具；该功能在上游仍处于开发中。
 - Codex 拒绝同时使用程序化工具调用和 `multi_agent`。
+- Codex 不启用原生 goals（`create_goal`、`get_goal` 和 `update_goal`），因为处于活动状态的 goal 会在 Turn 结束后自行启动新的 turn（[Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)）。
 - Session 的 `agent.tools` 会省略 `tool_search` 声明。
 - Core 拒绝 Session MCP 传输中的内联 `authorization`、`headers` 中的 `Authorization` 条目以及非空的 stdio `env`：凭据只来自 Vault（`credential_id`），环境值只来自 Environment（`env_vars`）（[MCP](execution-tools.md#mcp)）。
 - `stdio` MCP 服务器需要工作区部署位置和 `environment` 来源。Claude Code 在其工作区目录中启动服务器，因此 `cwd` 必须与之相同；服务器继承整个进程环境，其中也有模型提供方密钥和其他服务器的 Vault bearer 令牌；且 `allowed_tools` 须为 null。MiniMax Code 在其私有主目录中启动服务器，因此拒绝所有 `stdio` 服务器（[MCP](execution-tools.md#mcp)）。
@@ -115,7 +116,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 - `env` 不能设置 Core 保留的 `OPENAI_API_KEY`（[env](environments.md#env-and-setup-commands)）；官方服务接受该变量。
 - 没有待处理输入的 `self_hosted` Session 不会请求连接（[活动状态](environments.md#activity-and-required-actions)）；一个未使用的官方 Session 在创建约五分钟后转为 `requires_action`，原因为 `environment_connection`，之后删除它返回 409。
 - hosted Environment 只在初始化完成时发出一次 `ready`，不会像一个官方 Session 那样在之后每个 Turn 之前再次发出；它还会发出 `connected` 和 `disconnected`，而该官方 Session 没有。
-- hosted Environment 通常的顺序是 `connected`、`pending`、`ready`，因为 Core 在 Runtime 连接时、开始初始化之前就记录 `connected`；此时最后一个 Environment 事件显示 `ready`，而 Environment 处于 `connected`。
+- hosted Environment 的 `connected` 和 `pending` 先后顺序不固定：Core 在观察到 Runtime 连接时记录 `connected`，在该 Runtime 上开始初始化时记录 `pending`。`ready` 在两者之后，因此最后一个 Environment 事件可能显示 `ready`，而 Environment 处于 `connected`。
 
 **Files、Skills、Environment files 和 Artifacts**（[Files and Skills](source-files.md)、[Environment files and Artifacts](environment-files.md)）
 

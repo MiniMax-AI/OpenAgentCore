@@ -85,7 +85,7 @@ Capacity is admitted per object. For a new binding, Core validates the selected 
 
 When the [tenant capacity policy](configuration.md#tenant-capacity) is set, a new binding is also admitted against the tenant's committed capacity: the sum of admitted capacities of that tenant's workspaces that are not yet confirmed deleted, across all configurations. Creating, failed or unconfirmed and deleting workspaces count until the adapter confirms deletion. A retained workspace with no admitted capacity counts as unbounded and blocks further admission for its tenant until it is deleted. Under the policy a request without capacity is unsupported, and a request that would exceed it fails as unavailable before any storage or compute is allocated. Existing bindings never re-enter admission, and lowering the policy evicts nothing.
 
-Workspace access is single-writer. Core must serialize compute ownership and confirm the previous writer stopped before attaching a replacement. There is no cross-VM lock capability in this protocol: a guest `flock` is not proof of a host lock or another guest's exclusion. A placement must not advertise concurrent-safe attachment based on guest-local locking.
+Workspace access is single-writer. Core must serialize compute ownership and confirm the previous writer stopped before attaching a replacement. There is no cross-VM lock capability in this protocol: a guest `flock` is not proof of a host lock or another guest's exclusion. A placement must not advertise concurrent-safe attachment based on guest-local locking. An object holds only its current contents: no operation keeps earlier versions or forks an object.
 
 ## Lifetime and filesystem scope
 

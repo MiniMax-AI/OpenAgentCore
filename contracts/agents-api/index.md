@@ -79,6 +79,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - An omitted reasoning effort stays null instead of taking the model's default.
 - Codex maps programmatic tool calling to its native `code_mode`, whose model-written scripts call the other tools; the feature is under development upstream.
 - Codex rejects programmatic tool calling together with `multi_agent`.
+- Codex runs without its native goals (`create_goal`, `get_goal` and `update_goal`), because an active goal starts turns of its own after the Turn ends ([Codex Runtime](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/codex/README.md)).
 - A Session's `agent.tools` omits `tool_search` declarations.
 - Core rejects an inline `authorization` on a Session MCP transport, an `Authorization` entry in `headers` and a nonempty stdio `env`: credentials come only from Vaults (`credential_id`) and environment values only from the Environment (`env_vars`) ([MCP](./execution-tools.md#mcp)).
 - A `stdio` MCP server needs a workspace placement and the origin `environment`. Claude Code starts the server in its workspace directory, so `cwd` must equal it, with its whole process environment, which also holds the model provider key and other servers' Vault bearer tokens, and it needs `allowed_tools` null. MiniMax Code starts the server in its private home directory, so it rejects every `stdio` server ([MCP](./execution-tools.md#mcp)).
@@ -112,7 +113,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 - `env` cannot set `OPENAI_API_KEY`, which Core reserves ([env](./environments.md#env-and-setup-commands)); the official service accepts it.
 - A `self_hosted` Session without pending input requests no connection ([activity](./environments.md#activity-and-required-actions)); one unused official Session switched to `requires_action` with `environment_connection` about five minutes after creation, and its deletion then returned 409.
 - A hosted Environment emits `ready` once, when its initialization completes, and not again before each later Turn as one official Session did. It also emits `connected` and `disconnected`, which that Session did not.
-- The usual hosted order is `connected`, `pending`, `ready`, because Core journals `connected` when the Runtime connects, before it starts initialization; the last Environment event then reads `ready` while the Environment is `connected`.
+- A hosted Environment's `connected` and `pending` arrive in either order: Core journals `connected` when it observes the Runtime's connection and `pending` when initialization starts on that Runtime. `ready` follows both, so the last Environment event can read `ready` while the Environment is `connected`.
 
 **Files, Skills, Environment files and Artifacts** ([Files and Skills](./source-files.md), [Environment files and Artifacts](./environment-files.md))
 
