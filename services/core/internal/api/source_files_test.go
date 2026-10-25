@@ -206,6 +206,31 @@ func TestSourceFilesRejectIncompleteOrUnsupportedMultipart(t *testing.T) {
 			t.Fatalf("invalid multipart accepted %v: %d", fields, status)
 		}
 	}
+	for _, test := range []struct {
+		fields  []string
+		data    string
+		param   any
+		message string
+	}{
+		{[]string{"file"}, "x", "purpose", "Missing required parameter: 'purpose'."},
+		{[]string{"file", "purpose=batch"}, "x", "purpose", "Only purpose user_data is supported."},
+		{[]string{"purpose=user_data"}, "x", "purpose", "A file part is required."},
+		{[]string{"file", "purpose=user_data"}, "", nil, "File is empty."},
+	} {
+		f := &sourceFilesFixture{}
+		h, _ := environmentFileCreateHandler(t, f.wire)
+		server := httptest.NewServer(h)
+		body, contentType := sourceMultipart(t, test.fields, []byte(test.data))
+		status, raw := sourceRequest(t, server, "POST", "/v1/files", "files-key", contentType, body)
+		server.Close()
+		var got map[string]map[string]any
+		if status != 400 || json.Unmarshal(raw, &got) != nil || f.file.ID != "" {
+			t.Fatalf("%v: %d %s", test.fields, status, raw)
+		}
+		if e := got["error"]; e["type"] != "invalid_request_error" || e["code"] != nil || e["param"] != test.param || e["message"] != test.message {
+			t.Fatalf("%v error projection: %s", test.fields, raw)
+		}
+	}
 	f := &sourceFilesFixture{}
 	h, _ := environmentFileCreateHandler(t, f.wire)
 	server := httptest.NewServer(h)

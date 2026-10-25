@@ -14,7 +14,11 @@ func writeFilesError(w http.ResponseWriter, r *http.Request, err error, notFound
 	if writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err) {
 		return
 	}
+	var field *fieldError
 	switch {
+	case errors.As(err, &field):
+		// The Files routes keep their non-beta error envelope.
+		writeError(w, http.StatusBadRequest, "", field.message, field.param)
 	case errors.Is(err, files.ErrNotFound):
 		code := "not_found_error"
 		// The Files routes keep their non-beta error envelope.
@@ -24,6 +28,8 @@ func writeFilesError(w http.ResponseWriter, r *http.Request, err error, notFound
 		writeError(w, http.StatusNotFound, code, "Resource not found.", notFoundParam...)
 	case errors.Is(err, files.ErrTooLarge):
 		writeContentTooLarge(w)
+	case errors.Is(err, files.ErrEmpty):
+		writeError(w, http.StatusBadRequest, "", "File is empty.")
 	case errors.Is(err, files.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", "Invalid resource identifier or request limits.")
 	default:

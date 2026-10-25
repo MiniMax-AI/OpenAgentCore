@@ -1,7 +1,7 @@
 ---
 title: "文件与 Skill"
 source: contracts/agents-api/source-files.md
-source_hash: 86d63f3ea780394ed99c0f5ec9d566117140a8650cb780e4b038e4ab45155ba9
+source_hash: 32041f334a2bf3141731fab69901fc97665da225e4e03328df0db7300faa18ff
 ---
 
 Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的项目资源，不依赖 Session。File 保存上传字节，Environment 通过 ID 复制它们。Skill 保存不可变、版本化的包，由模板和 Session 引用。项目的所有 API 密钥共享这些资源。
@@ -22,8 +22,8 @@ Files（`/v1/files`）和 Skills（`/v1/skills`）是具有独立生命周期的
 
 ### 上传 {#upload}
 
-- 仅接受 `purpose=user_data`。不支持其他用途、`expires_after` 或 Uploads API。
-- 文件可为空，最大 512 MiB；整个 multipart 正文可额外增加 64 KiB。更大上传返回 413 `request_too_large`。传输须在五分钟内完成。
+- 仅接受 `purpose=user_data`。不支持其他用途、`expires_after` 或 Uploads API。缺少 `purpose` 或取其他值，或缺少 `file` 部分时，返回 400，`param: "purpose"`，code 为 null。
+- 文件至少一个字节，最大 512 MiB；空文件返回 400 `File is empty.`，code 与 param 为 null；整个 multipart 正文可额外增加 64 KiB。更大上传返回 413 `request_too_large`。传输须在五分钟内完成。
 - 部分缺失、重复或未知，存在 `Content-Encoding` 或 `Content-Transfer-Encoding` 头，或文件名为空、超过 1,024 字节、非 UTF-8、包含 NUL 时返回 400。完整请求通过验证之前 Core 不存储任何内容。
 - Core 不对上传去重。响应丢失后，先列出 File 再次上传。
 

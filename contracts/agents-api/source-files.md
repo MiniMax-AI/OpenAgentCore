@@ -20,8 +20,8 @@ Use a File by passing its ID to [Environment files](./environment-files.md#creat
 
 ### Upload
 
-- Only `purpose=user_data` is accepted. Other purposes, `expires_after` and the Uploads API are not supported.
-- The file may be empty and holds up to 512 MiB; the whole multipart body may exceed that by 64 KiB. A larger upload returns 413 `request_too_large`. The transfer must finish within five minutes.
+- Only `purpose=user_data` is accepted. Other purposes, `expires_after` and the Uploads API are not supported. A missing or other `purpose`, or a missing `file` part, returns 400 with `param: "purpose"` and a null code.
+- The file holds at least one byte and up to 512 MiB; an empty file returns 400 `File is empty.` with a null code and param; the whole multipart body may exceed that by 64 KiB. A larger upload returns 413 `request_too_large`. The transfer must finish within five minutes.
 - A missing, repeated or unknown part, a `Content-Encoding` or `Content-Transfer-Encoding` header, or a filename that is empty, longer than 1,024 bytes, not UTF-8 or contains NUL returns 400. Core stores nothing until the whole request validates.
 - Core does not deduplicate uploads. After a lost response, list Files before uploading again.
 
