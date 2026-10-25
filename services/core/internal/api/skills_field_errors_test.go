@@ -125,7 +125,7 @@ func TestSkillUpdateErrors(t *testing.T) {
 		{"unknown key", `{"default_version":"1","x":1}`, `"message":"Unknown parameter: 'x'.","type":"invalid_request_error","code":"invalid_request_error","param":"x"`},
 		{"missing", `{}`, `"message":"Missing required parameter: 'default_version'.","type":"invalid_request_error","code":"invalid_request_error","param":"default_version"`},
 		{"wrong type", `{"default_version":1}`, `"message":"Invalid type for 'default_version': expected a string, but got an integer instead.","type":"invalid_request_error","code":"invalid_request_error","param":"default_version"`},
-		{"missing version", `{"default_version":"9"}`, `"message":"Skill version not found.","type":"invalid_request_error","code":null,"param":"default_version"`},
+		{"missing version", `{"default_version":"9"}`, `"message":"Resource not found.","type":"invalid_request_error","code":null,"param":"default_version"`},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			request := httptest.NewRequest(http.MethodPost, "/v1/skills/skill_x", strings.NewReader(test.body))

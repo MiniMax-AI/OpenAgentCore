@@ -203,7 +203,7 @@ func TestSetDefaultVersionRequiresAConcreteVersion(t *testing.T) {
 	service, storage, _ := newTestService(t)
 	skill := uuid.New()
 	for _, value := range []string{"", "latest", "0", "01", "-1", "x"} {
-		if _, err := service.SetDefaultVersion(t.Context(), SetDefaultVersion{TenantID: "tenant", SkillID: skill, Version: value}); !errors.Is(err, ErrVersionNotFound) {
+		if _, err := service.SetDefaultVersion(t.Context(), SetDefaultVersion{TenantID: "tenant", SkillID: skill, Version: value}); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("%q: %v", value, err)
 		}
 	}

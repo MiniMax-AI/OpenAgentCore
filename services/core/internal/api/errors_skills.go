@@ -23,14 +23,15 @@ func writeSkillsError(w http.ResponseWriter, r *http.Request, err error) {
 		} else {
 			writeError(w, http.StatusBadRequest, "invalid_request_error", cursor.Message)
 		}
-	case errors.Is(err, skills.ErrVersionNotFound):
-		writeError(w, http.StatusNotFound, "", "Skill version not found.", "default_version")
-	case errors.Is(err, skills.ErrNotFound):
-		code := "not_found_error"
+	case errors.Is(err, skills.ErrNotFound), errors.Is(err, skills.ErrVersionNotFound):
+		code, param := "not_found_error", []string(nil)
 		if skillsRoute {
 			code = ""
 		}
-		writeError(w, http.StatusNotFound, code, "Resource not found.")
+		if errors.Is(err, skills.ErrVersionNotFound) {
+			param = []string{"default_version"}
+		}
+		writeError(w, http.StatusNotFound, code, "Resource not found.", param...)
 	case errors.Is(err, skills.ErrInvalidInput):
 		writeError(w, http.StatusBadRequest, "invalid_request", invalidInputMessage)
 	case writeAuditSourceError(w, r, err) || writeTextValueError(w, r, err):
