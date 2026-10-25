@@ -891,6 +891,7 @@ function scriptedCore(plan) {
     const outcome = plan.turns.shift() || "complete";
     // Reserved input that never starts a Turn, as when capacity stays full.
     if (outcome === "reserve") return;
+    // "run" (like any other plan) leaves a fresh Turn in progress; "stall" backdates it.
     const turn = { id: `turn_${randomUUID()}`, status: "in_progress", created_at: outcome === "stall" ? nowS() - 60 : nowS() };
     session.turns.unshift(turn);
     session.items.push({ id: randomUUID(), type: "message", role: "user", turn_id: turn.id, content: input?.[0]?.content || [] });
@@ -1080,4 +1081,37 @@ test("each ledger entry follows its own Core Turn when inputs arrive before the 
   assert.equal(store.get("turns", `${id}:first`).core_turn_id, first.id);
   assert.equal(store.get("turns", `${id}:first`).outcome, "completed");
   assert.equal(store.get("turns", `${id}:k1`).core_turn_id, follow.id);
+});
+
+test("the run overview lists running and recent Turns with their stage, counts and concurrency", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  // Consumed in order: Gone, Done, Busy, Busy's follow-up, Broken and its resend.
+  const plan = { environments: [], turns: ["complete", "complete", "complete", "run", "fail", "fail"] };
+  const fake = scriptedCore(plan);
+  const { api, put, input } = await setup(store, fake.core);
+  const done = randomUUID(), busy = randomUUID(), broken = randomUUID(), gone = randomUUID();
+  await put("sessions", { ...input, name: "Gone" }, gone);
+  store.put("sessions", { ...store.get("sessions", gone), deleted_at: 1 });
+  await put("sessions", { ...input, name: "Done" }, done);
+  await put("sessions", { ...input, name: "Busy" }, busy);
+  await api("POST", `/app/sessions/${busy}/messages`, { text: "Keep going", key: "k1" });
+  await put("sessions", { ...input, name: "Broken", input: "Fix it" }, broken);
+  await api.sessions.turns.monitor();
+  await api.sessions.turns.monitor();
+  const overview = await api("GET", "/app/turns");
+  assert.deepEqual(overview.running.map((row) => [row.conversation, row.prompt, row.stage]), [["Busy", "Keep going", "starting"]]);
+  const recent = overview.recent.map((row) => [row.conversation, row.outcome, row.latest]);
+  assert.deepEqual(recent.sort(), [["Broken", "failed", true], ["Busy", "completed", false], ["Done", "completed", true]]);
+  const failed = overview.recent.find((row) => row.outcome === "failed");
+  assert.match(failed.failure, /connection reset/);
+  assert.equal(failed.retries, 1);
+  assert.equal(failed.prompt, "Fix it");
+  assert.equal(overview.recent.some((row) => row.conversation === "Gone"), false, "deleted conversations are hidden");
+  assert.deepEqual(
+    { running: overview.stats.running, waiting_user: overview.stats.waiting_user, failed_recent: overview.stats.failed_recent },
+    { running: 1, waiting_user: 0, failed_recent: 1 },
+  );
+  assert.equal(overview.stats.concurrency.length, 31);
+  assert.equal(overview.stats.concurrency.at(-1), 1);
 });

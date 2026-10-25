@@ -90,7 +90,7 @@ export function Settings() {
         <Section title={tr("记录")}>
           <div className="flex flex-wrap gap-2.5">
             {[
-              ["/runs", tr("运行记录")],
+              ["/runs", tr("运行")],
               ["/usage", tr("用量")],
               ["/audit", tr("审计日志")],
             ].map(([href, label]) => (

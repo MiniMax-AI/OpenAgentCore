@@ -492,5 +492,19 @@
   "图片暂不可用，可下载原文件。": "The image is unavailable. You can download the original file.",
   "此格式不支持预览，请下载文件查看。": "Preview is unavailable for this format. Download the file to view it.",
   "正在加载图片…": "Loading image…",
-  "（请将图片保存为会话产物后展示）": " (save the image as a session artifact to display it)"
+  "（请将图片保存为会话产物后展示）": " (save the image as a session artifact to display it)",
+  "运行": "Runs",
+  "进行中": "Running",
+  "等你回复": "Waiting for you",
+  "近 5 分钟失败": "Failed in 5 min",
+  "同时进行": "Concurrent",
+  "近 5 分钟": "Last 5 min",
+  "近 5 分钟同时进行的对话": "Concurrent conversations in the last 5 minutes",
+  "停止 {{value0}}": "Stop {{value0}}",
+  "重试 {{value0}}": "Retry {{value0}}",
+  "自动恢复 {{value0}} 次": "recovered {{value0}} times",
+  "进行中 · {{value0}}": "Running · {{value0}}",
+  "现在没有正在执行的对话": "Nothing is running right now",
+  "最近完成": "Recently finished",
+  "已停止": "Stopped"
 }

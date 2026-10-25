@@ -142,6 +142,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       return feishu(method, path, body);
     if (path === "/app/providers/discover" && method === "POST")
       return providers.discover(body);
+    if (path === "/app/turns" && method === "GET") return sessions.turns.overview();
     // Actions on one resource: `/app/{kind}/{id}/{action}`.
     const action = path.match(/^\/app\/([a-z]+)\/([a-f0-9-]{36})\/([a-z]+)$/);
     const handler = action && actions[`${method} ${action[1]}/${action[3]}`];

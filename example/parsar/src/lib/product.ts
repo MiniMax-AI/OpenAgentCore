@@ -60,6 +60,25 @@ export interface TurnSummary {
   slow: boolean;
   retries: number;
   failure?: string;
+  done_at?: number;
+  first_output_s: number | null;
+}
+// One Turn in the 运行 view.
+export interface TurnRow extends TurnSummary {
+  id: string;
+  session_id: string;
+  core_session_id: string;
+  agent_id: string;
+  conversation: string;
+  source: "web" | "feishu";
+  chat_type?: "p2p" | "group";
+  prompt: string;
+  latest: boolean;
+}
+export interface TurnOverview {
+  running: TurnRow[];
+  recent: TurnRow[];
+  stats: { running: number; waiting_user: number; failed_recent: number; concurrency: number[] };
 }
 export interface SessionRecord {
   turn?: TurnSummary;

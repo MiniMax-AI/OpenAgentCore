@@ -157,7 +157,7 @@ export function RecordTabs({
       active={active}
       items={[
         { key: "conversations", label: tr("对话"), href: "/conversations" },
-        { key: "runs", label: tr("运行记录"), href: "/runs" },
+        { key: "runs", label: tr("运行"), href: "/runs" },
         { key: "usage", label: tr("用量"), href: "/usage" },
         { key: "audit", label: tr("审计日志"), href: "/audit" },
       ]}

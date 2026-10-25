@@ -251,10 +251,9 @@ export function turnsAPI(store, core) {
     }
   };
 
-  // The latest Turn of a conversation, as the UI and Feishu cards show it.
-  const summary = (sessionId) => {
-    const turn = latest(sessionId);
-    if (!turn) return undefined;
+  // What a Turn looks like to people: its stage, how long it has waited and
+  // how long this Agent usually takes.
+  const describe = (turn) => {
     const kind = kindOf(turn);
     const expected_s = typical(turn.agent_id, kind);
     const elapsed_s = Math.round(((turn.done_at || now()) - turn.started_at) / 1000);
@@ -263,11 +262,67 @@ export function turnsAPI(store, core) {
       stage: turn.stage,
       kind,
       started_at: turn.started_at,
+      done_at: turn.done_at,
       elapsed_s,
       expected_s,
+      first_output_s: turn.output_at ? Math.round((turn.output_at - turn.started_at) / 100) / 10 : null,
       slow: turn.outcome === "running" && !turn.output_at && elapsed_s > Math.max(2 * expected_s, expected_s + 15),
       retries: turn.retries,
       failure: turn.failure,
+    };
+  };
+
+  // The latest Turn of a conversation, as the UI and Feishu cards show it.
+  const summary = (sessionId) => {
+    const turn = latest(sessionId);
+    return turn && describe(turn);
+  };
+
+  // Running and recent Turns across all conversations, for the 运行 view.
+  const overview = () => {
+    const at = now();
+    const visible = store.list("turns").filter((t) => {
+      const record = store.get("sessions", t.session_id);
+      return record && !record.deleted_at;
+    });
+    const latestOf = new Map();
+    for (const t of visible)
+      if (!latestOf.has(t.session_id) || latestOf.get(t.session_id).started_at < t.started_at) latestOf.set(t.session_id, t);
+    const row = (t) => {
+      const record = store.get("sessions", t.session_id);
+      const prompt = (t.input || []).flatMap((m) => m.content || []).find((part) => part.type === "input_text")?.text || "";
+      return {
+        id: t.id,
+        session_id: t.session_id,
+        core_session_id: t.core_session_id,
+        agent_id: t.agent_id,
+        conversation: record.name,
+        source: t.source,
+        chat_type: record.feishu_chat_type,
+        prompt: prompt.slice(0, 200),
+        latest: latestOf.get(t.session_id) === t,
+        ...describe(t),
+      };
+    };
+    const running = visible.filter((t) => t.outcome === "running").sort((a, b) => a.started_at - b.started_at);
+    const recent = visible
+      .filter((t) => t.outcome !== "running")
+      .sort((a, b) => b.done_at - a.done_at)
+      .slice(0, 50);
+    // Conversations running at each 10-second mark of the last five minutes.
+    const concurrency = Array.from({ length: 31 }, (_, i) => {
+      const mark = at - (30 - i) * 10_000;
+      return visible.filter((t) => t.started_at <= mark && (t.done_at ?? Infinity) > mark).length;
+    });
+    return {
+      running: running.map(row),
+      recent: recent.map(row),
+      stats: {
+        running: running.length,
+        waiting_user: running.filter((t) => t.stage === "waiting_user").length,
+        failed_recent: visible.filter((t) => t.outcome === "failed" && t.done_at > at - 5 * 60_000).length,
+        concurrency,
+      },
     };
   };
 
@@ -302,5 +357,5 @@ export function turnsAPI(store, core) {
     (store.get("sessions", sessionId)?.superseded_turns || []).includes(coreTurnId);
   const recovering = (sessionId) => store.list("turns").some((t) => t.session_id === sessionId && t.outcome === "running");
 
-  return { start, sendPrepared, deliver, send, monitor, summary, health, retry, superseded, recovering };
+  return { start, sendPrepared, deliver, send, monitor, summary, overview, health, retry, superseded, recovering };
 }

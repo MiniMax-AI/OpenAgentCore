@@ -1044,3 +1044,26 @@ test("chat previews authorization QR and artifact images, downloads files and ke
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: test.info().outputPath("media-mobile.png") });
 });
+
+test("the runs view shows running conversations with their stage, stops them and lists what finished", async ({ page }) => {
+  await resources(page);
+  await agent(page);
+  await converse(page);
+  await expect(page.getByText("已检查登录流程并补充验证。")).toBeVisible();
+  await page.getByLabel("继续对话").fill("Delayed response");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await expect(page.getByRole("button", { name: "取消执行" })).toBeVisible();
+  await page.goto("/#/runs");
+  const running = page.getByRole("region", { name: "进行中" });
+  await expect(running.getByRole("heading", { name: "Delayed response" })).toBeVisible();
+  await expect(running).toContainText(/正在启动|执行中|正在思考/);
+  await expect(page.getByRole("term").filter({ hasText: "进行中" }).locator("+ dd")).toHaveText("1");
+  await running.getByRole("button", { name: "停止 Delayed response" }).click();
+  await expect(running).toContainText("现在没有正在执行的对话", { timeout: 15000 });
+  const recent = page.getByRole("region", { name: "最近完成" });
+  await expect(recent.getByRole("heading", { name: "Delayed response" })).toBeVisible();
+  await expect(recent.getByRole("img", { name: "已停止" })).toBeVisible();
+  await expect(recent.getByRole("heading", { name: "Review code" })).toBeVisible();
+  await recent.getByRole("link", { name: /^Review code/ }).click();
+  await expect(page.getByLabel("继续对话")).toBeVisible();
+});

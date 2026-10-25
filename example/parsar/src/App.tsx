@@ -20,6 +20,7 @@ import { Feishu } from "./Feishu";
 import { Runtimes } from "./Resources";
 import { Agents } from "./Agents";
 import { Artifacts } from "./Artifacts";
+import { Runs } from "./Runs";
 import { AgentPage } from "./AgentPage";
 import { SessionPage } from "./SessionPage";
 import { Home } from "./Home";
@@ -149,8 +150,10 @@ export function App() {
       <Home key={route} agentId={params.get("agent") || undefined} />
     ) : sessionId ? (
       <SessionPage key={sessionId} id={sessionId} />
-    ) : ["/conversations", "/runs", "/usage"].includes(path!) ? (
-      <Records key={path} view={path!.slice(1) as "conversations" | "runs" | "usage"} />
+    ) : path === "/runs" ? (
+      <Runs />
+    ) : ["/conversations", "/usage"].includes(path!) ? (
+      <Records key={path} view={path!.slice(1) as "conversations" | "usage"} />
     ) : path === "/artifacts" ? (
       <Artifacts />
     ) : path === "/audit" ? (

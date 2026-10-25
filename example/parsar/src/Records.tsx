@@ -3,15 +3,7 @@ import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AgentSession, AgentTurn } from "@oac/agents-client";
-import {
-  Search,
-  MessageSquare,
-  Play,
-  X,
-  Pencil,
-  Trash2,
-  Plus,
-} from "lucide-react";
+import { Search, MessageSquare, X, Pencil, Trash2, Plus } from "lucide-react";
 import { api, readHistory, dateTime, sessionState } from "./lib/api";
 import {
   product,
@@ -81,11 +73,7 @@ export function useExecutionRecords(rows: SessionRecord[] | undefined) {
         : false,
   });
 }
-export function Records({
-  view,
-}: {
-  view: "conversations" | "runs" | "usage";
-}) {
+export function Records({ view }: { view: "conversations" | "usage" }) {
   const sessions = useSessions(),
     agents = useAgents(),
     cache = useQueryClient();
@@ -161,7 +149,6 @@ export function Records({
   const data = all ? measured.slice(page * 20, (page + 1) * 20) : measured;
   const title = {
     conversations: tr("对话"),
-    runs: tr("运行记录"),
     usage: tr("用量"),
   }[view];
   const usage = measured.reduce(
@@ -185,7 +172,8 @@ export function Records({
         </Button>
       </PageHeader>
       <RecordTabs active={view} />
-      <ErrorNotice page
+      <ErrorNotice
+        page
         error={
           sessions.error || agents.error || observations.error || mutate.error
         }
@@ -295,9 +283,7 @@ export function Records({
             columns={
               view === "usage"
                 ? "minmax(220px,2fr) 130px 110px 110px 120px 110px"
-                : view === "runs"
-                  ? "16px minmax(200px,2fr) minmax(100px,1fr) 100px 120px 90px 90px 60px"
-                  : "16px minmax(200px,2fr) minmax(100px,1fr) 100px 120px 60px"
+                : "16px minmax(200px,2fr) minmax(100px,1fr) 100px 120px 60px"
             }
           >
             <LedgerHeader>
@@ -306,12 +292,6 @@ export function Records({
               <span>Agent</span>
               <span>{view === "usage" ? tr("输入 Token") : tr("状态")}</span>
               <span>{view === "usage" ? tr("输出 Token") : tr("时间")}</span>
-              {view === "runs" && (
-                <>
-                  <span>{tr("耗时")}</span>
-                  <span>Tokens</span>
-                </>
-              )}
               {view === "usage" ? (
                 <>
                   <span>{tr("总 Token")}</span>
@@ -349,122 +329,86 @@ export function Records({
                     </span>
                   </LedgerRow>,
                 ];
-              const entries =
-                view === "runs" && row.turns.length
-                  ? [...row.turns].reverse()
-                  : [undefined];
-              return entries.map((turn) => {
-                const state = row.session
-                  ? sessionState(
-                      turn &&
-                        ["completed", "failed", "cancelled"].includes(
-                          turn.status,
-                        )
-                        ? { ...row.session, status: "idle" }
-                        : row.session,
-                      turn || row.turns.at(-1),
-                    )
-                  : {
-                      label: row.error ? tr("读取失败") : tr("待恢复"),
-                      icon: "interrupted" as const,
-                    };
-                return (
-                  <LedgerRow
-                    key={turn?.id || row.record.id}
-                    className={
-                      selected === row.record.id ? "bg-surface-muted" : ""
-                    }
+              const state = row.session
+                ? sessionState(row.session, row.turns.at(-1))
+                : {
+                    label: row.error ? tr("读取失败") : tr("待恢复"),
+                    icon: "interrupted" as const,
+                  };
+              return [
+                <LedgerRow
+                  key={row.record.id}
+                  className={
+                    selected === row.record.id ? "bg-surface-muted" : ""
+                  }
+                >
+                  <StatusIcon status={state.icon} />
+                  <button
+                    className="flex min-w-0 items-center gap-2 truncate text-left"
+                    onClick={() => setSelected(row.record.id)}
                   >
-                    <StatusIcon status={state.icon} />
-                    <button
-                      className="flex min-w-0 items-center gap-2 truncate text-left"
-                      onClick={() => setSelected(row.record.id)}
-                    >
-                      <span className="truncate font-medium">
-                        {row.record.name}
-                      </span>
-                      {row.record.source === "feishu" && (
-                        <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-0.5 text-sm text-fg-muted">
-                          {row.record.feishu_chat_type === "p2p"
-                            ? tr("飞书私聊")
-                            : tr("飞书群聊")}
-                        </span>
-                      )}
-                      {turn && (
-                        <span className="font-mono text-fg-muted">
-                          {turn.id.slice(0, 8)}
-                        </span>
-                      )}
-                    </button>
-                    <span>{agent}</span>
-                    <span title={row.error}>{state.label}</span>
-                    <span className="text-fg-muted">
-                      {dateTime(turn?.started_at || row.record.created_at)}
+                    <span className="truncate font-medium">
+                      {row.record.name}
                     </span>
-                    {view === "runs" && (
-                      <>
-                        <span className="font-mono">
-                          {turn?.started_at && turn.completed_at
-                            ? `${Math.max(0, turn.completed_at - turn.started_at).toFixed(1)} s`
-                            : "—"}
-                        </span>
-                        <span className="font-mono">
-                          {turn?.usage?.total_tokens ?? "—"}
-                        </span>
-                      </>
+                    {row.record.source === "feishu" && (
+                      <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-0.5 text-sm text-fg-muted">
+                        {row.record.feishu_chat_type === "p2p"
+                          ? tr("飞书私聊")
+                          : tr("飞书群聊")}
+                      </span>
                     )}
-                    <div className="flex">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={tr("重命名 {{value0}}", {
-                          value0: row.record.name,
-                        })}
-                        onClick={() => {
-                          const name = prompt(tr("会话名称"), row.record.name);
-                          if (name?.trim())
-                            mutate.mutate({
-                              id: row.record.id,
-                              method: "PATCH",
-                              name: name.trim(),
-                            });
-                        }}
-                      >
-                        <Pencil />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={tr("删除会话 {{value0}}", {
-                          value0: row.record.name,
-                        })}
-                        disabled={mutate.isPending}
-                        onClick={() => {
-                          if (
-                            confirm(
-                              tr(
-                                "删除此会话及其执行历史？正在执行时需先取消。",
-                              ),
-                            )
+                  </button>
+                  <span>{agent}</span>
+                  <span title={row.error}>{state.label}</span>
+                  <span className="text-fg-muted">
+                    {dateTime(row.record.created_at)}
+                  </span>
+                  <div className="flex">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={tr("重命名 {{value0}}", {
+                        value0: row.record.name,
+                      })}
+                      onClick={() => {
+                        const name = prompt(tr("会话名称"), row.record.name);
+                        if (name?.trim())
+                          mutate.mutate({
+                            id: row.record.id,
+                            method: "PATCH",
+                            name: name.trim(),
+                          });
+                      }}
+                    >
+                      <Pencil />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={tr("删除会话 {{value0}}", {
+                        value0: row.record.name,
+                      })}
+                      disabled={mutate.isPending}
+                      onClick={() => {
+                        if (
+                          confirm(
+                            tr("删除此会话及其执行历史？正在执行时需先取消。"),
                           )
-                            mutate.mutate({
-                              id: row.record.id,
-                              method: "DELETE",
-                            });
-                        }}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  </LedgerRow>
-                );
-              });
+                        )
+                          mutate.mutate({
+                            id: row.record.id,
+                            method: "DELETE",
+                          });
+                      }}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                </LedgerRow>,
+              ];
             })}
             {!sessions.isPending && !observations.isPending && !total && (
-              <EmptyState
-                icon={view === "conversations" ? MessageSquare : Play}
-                title={tr("暂无记录")}
-              />
+              <EmptyState icon={MessageSquare} title={tr("暂无记录")} />
             )}
             {observations.isPending && !!rows?.length && (
               <p className="px-6 py-4 text-sm text-fg-muted">
