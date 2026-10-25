@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: f2c2a927b8faad9c2834ae4d1195940195df5fc617c8395a027f0d21dfb5ea1e
+source_hash: 1424dc3288c244cb3be78bb2070530bdc0b5aec8474c1ab943611bee335fdca7
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -60,7 +60,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `invalid_name` | `name` | `max_length`：项目和节点为 128，项目 API 密钥为 80 | 名称未通过相应资源的验证器 |
 | `invalid_node_capacity` | `max_active` 或 `max_retained` | `min`：1，`max`：1000000 | 容量无效；保留容量还必须至少等于活动容量 |
 | `invalid_model_provider` | null | 省略 | 必须提供完整的模型提供商配置包 |
-| `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS，且不得包含凭据、查询或片段 |
+| `model_provider_base_url_invalid` | `base_url` | 省略 | 必须使用 HTTPS（回环或私有 IP 地址也可以用 HTTP），且不得包含凭据、查询或片段 |
 | `model_provider_protocol_unsupported` | `protocol` | `harness` 和 `allowed_protocols`，来自该构建的适配器目录 | 协议未知，或所选 Harness 不支持该协议 |
 | `model_provider_api_key_invalid` | `api_key` | `max_length`：16384 | 密钥为空、过长或包含禁止字符 |
 | `model_provider_token_limits_invalid` | `context_window` 或 `max_output_tokens` | 省略 | 限制为负数、`max_output_tokens` 超过已设置的 `context_window`，或 Harness 没有已设置限制的原生设置 |

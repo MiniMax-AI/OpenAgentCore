@@ -32,13 +32,14 @@ func TestModelExecutionValidation(t *testing.T) {
 			t.Fatalf("unsupported protocol or harness accepted: %s/%s", tc.protocol, tc.harness)
 		}
 	}
-	for _, url := range []string{"http://example.com", "https://user:pass@example.com", "https://example.com?key=secret", "https://example.com#secret", "https://",
+	for _, url := range []string{"http://example.com", "http://8.8.8.8/v1", "http://169.254.169.254/v1", "http://localhost:7351/v1", "https://user:pass@example.com", "https://example.com?key=secret", "https://example.com#secret", "https://",
 		"https://example.com:99999/v1", "https://example.com:0/v1", "https://xn--.test", "https://xn--a.test", "https://a..b", "https://999.1.1.1"} {
 		if (&ModelProviderInput{Protocol: "responses", BaseURL: url, APIKey: "secret"}).Validate() == nil {
 			t.Fatal("unsafe or unusable provider URL accepted", url)
 		}
 	}
-	for _, url := range []string{"https://example.com:8443/v1", "https://127.0.0.1/v1", "https://[::1]:8443/v1", "https://model_gateway.internal/v1", "https://bücher.example/v1"} {
+	for _, url := range []string{"https://example.com:8443/v1", "https://127.0.0.1/v1", "https://[::1]:8443/v1", "https://model_gateway.internal/v1", "https://bücher.example/v1",
+		"http://127.0.0.1:7351/v1", "http://10.0.0.5:8080/v1", "http://[fd00::1]:8080/v1"} {
 		if err := (&ModelProviderInput{Protocol: "responses", BaseURL: url, APIKey: "secret"}).Validate(); err != nil {
 			t.Fatal("valid provider URL rejected", url, err)
 		}
