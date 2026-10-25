@@ -24,6 +24,10 @@ func (f *fakeTx) CompleteInitialization(_ context.Context, environment string) (
 	return f.completeInitialization()
 }
 
+func (f *fakeTx) RecordInitializationSteps(context.Context, string, []InitializationStep) error {
+	return nil
+}
+
 func (f *fakeTx) FailInitialization(_ context.Context, environment string) error {
 	f.record("FailInitialization", f.failInitialization != nil, environment)
 	return f.failInitialization()

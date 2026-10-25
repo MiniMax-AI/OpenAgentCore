@@ -293,7 +293,7 @@ function adminRead(response, path, url) {
     if (m[2] === "diagnostics") {
       const failedTurn = (state.turns.get(session.id) ?? []).findLast((turn) => turn.status === "failed");
       return send(response, 200, { object: "core.session_diagnostics", session_id: session.id, status: session.status,
-        failure: session.status === "failed" ? { source: failedTurn ? "turn" : "environment_input", ...(failedTurn ? { turn_id: failedTurn.id } : {}), code: "internal_error", params: {}, failed_at: null } : null });
+        failure: session.status === "failed" ? { source: failedTurn ? "turn" : "environment_input", ...(failedTurn ? { turn_id: failedTurn.id } : {}), code: "internal_error", params: {}, failed_at: null } : null, initialization_steps: [] });
     }
     const diagnostics = m[2].match(/^turns\/([^/]+)\/diagnostics$/);
     if (diagnostics) {

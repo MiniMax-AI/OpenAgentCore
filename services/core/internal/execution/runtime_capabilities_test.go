@@ -39,7 +39,7 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 	owner := agentcapabilities.Identity{EnvironmentID: uuid.NewString(), SessionID: uuid.NewString()}
 	for _, op := range operations {
 		peer := &capabilityFixture{outcome: "completed"}
-		if err := runRuntimeSetup(initializationTestContext(t), peer, owner, op); err != nil {
+		if _, err := runRuntimeSetup(initializationTestContext(t), peer, owner, op); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := uuid.Parse(peer.requestID); err != nil {
@@ -63,14 +63,14 @@ func TestRuntimeCapabilitiesPreserveRawBundlesAndSetupOrdering(t *testing.T) {
 func TestRuntimeCapabilitiesConfirmedAndUnknownFailures(t *testing.T) {
 	for _, outcome := range []string{"failed", "rejected", "unknown", "unexpected"} {
 		peer := &capabilityFixture{outcome: outcome}
-		err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "finalize"}})
+		_, err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "finalize"}})
 		var confirmed *runtimeStepFailure
 		if err == nil || errors.As(err, &confirmed) != (outcome == "failed" || outcome == "rejected") {
 			t.Fatal(outcome, err)
 		}
 	}
 	peer := &capabilityFixture{outcome: "completed", err: errors.New(setupCanary)}
-	err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{}})
+	_, err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{}})
 	if err == nil || bytes.Contains([]byte(err.Error()), []byte(setupCanary)) {
 		t.Fatal("transport error leaked or succeeded", err)
 	}

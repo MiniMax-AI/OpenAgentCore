@@ -134,7 +134,7 @@ The [Session diagnostics](./session-diagnostics.md) routes return these categori
 | `internal_error` | Unknown or malformed outcome; no raw value is returned |
 | `environment_connection_timeout` | Initial input connection deadline expired |
 | `environment_unavailable` | Environment unavailable for initial input |
-| `environment_provisioning_failed` | Hosted provisioning failure; params contain nullable `step`, `index`, `exit_code` from a sanitized receipt |
+| `environment_provisioning_failed` | Hosted provisioning failure; params contain nullable `step`, `index`, `exit_code` from a sanitized receipt, and `category` for a failure without a confirmed step |
 
 A database failure is an error, never an empty or healthy snapshot. Provisioning reasons and native messages are never parsed for categories or parameters.
 

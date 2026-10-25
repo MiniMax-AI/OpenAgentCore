@@ -7,7 +7,7 @@ const turn = "729dab72-a9ea-4d0a-a38c-1b45e46233a9";
 const item = "bf8d4f3a-d8bd-4d59-ad37-15f186f90832";
 const time = "2026-09-28T03:00:00.123456Z";
 const failure = { code: "runtime_disconnected", params: {}, failed_at: time };
-const session = { object: "core.session_diagnostics", session_id: id, status: "failed", failure: { ...failure, source: "turn", turn_id: turn } };
+const session = { object: "core.session_diagnostics", session_id: id, status: "failed", failure: { ...failure, source: "turn", turn_id: turn }, initialization_steps: [{ step: "npm", index: null, duration_ms: 4100 }, { step: "setup", index: 1, duration_ms: 5200 }] };
 const snapshot = { object: "core.turn_diagnostics", session_id: id, turn_id: turn, status: "failed", failure, items: [{ item_id: item, started_at: time, completed_at: null, observed_duration_ms: null }], items_truncated: false };
 
 it("retrieves Core diagnostics with credential, scope and cancellation", async () => {
@@ -25,13 +25,13 @@ it("retrieves Core diagnostics with credential, scope and cancellation", async (
 });
 
 it("preserves historical nulls and finite safe provisioning parameters", () => {
-  const value = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params: { step: "setup", index: 2, exit_code: 7 }, failed_at: null } };
+  const value = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params: { step: "setup", index: 2, exit_code: 7, category: null }, failed_at: null } };
   expect(projectSessionDiagnostics(value, id)).toEqual(value);
   expect(projectTurnDiagnostics(snapshot, id.toUpperCase(), turn.toUpperCase())).toEqual(snapshot);
 });
 
 it("accepts the Harness step Core records when the selected Harness is unavailable", () => {
-  const value = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params: { step: "harness", index: null, exit_code: null }, failed_at: null } };
+  const value = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params: { step: "harness", index: null, exit_code: null, category: null }, failed_at: null } };
   expect(projectSessionDiagnostics(value, id)).toEqual(value);
 });
 
@@ -53,12 +53,20 @@ it.each([
   expect(() => projectTurnDiagnostics(value, id, turn)).not.toThrow(/secret-canary/u);
 });
 
+it("preserves a failure category and rejects malformed initialization steps", () => {
+  const categorized = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params: { step: null, index: null, exit_code: null, category: "timeout" }, failed_at: null } };
+  expect(projectSessionDiagnostics(categorized, id)).toEqual(categorized);
+  expect(() => projectSessionDiagnostics({ ...categorized, failure: { ...categorized.failure, params: { ...categorized.failure.params, category: "secret-canary" } } }, id)).toThrow();
+  expect(() => projectSessionDiagnostics({ ...session, initialization_steps: [{ step: "setup", index: null, duration_ms: 1 }] }, id)).toThrow();
+  expect(() => projectSessionDiagnostics({ ...session, initialization_steps: [{ step: "npm", index: null, duration_ms: -1 }] }, id)).toThrow();
+});
+
 it.each([
-  { step: "secret-canary", index: null, exit_code: null },
-  { step: "python", index: 3, exit_code: 2 },
-  { step: "setup", index: Number.MAX_SAFE_INTEGER + 1, exit_code: 1 },
-  { step: "file", index: null, exit_code: 1 },
-  { step: "setup", index: 0, exit_code: 256 },
+  { step: "secret-canary", index: null, exit_code: null, category: null },
+  { step: "python", index: 3, exit_code: 2, category: null },
+  { step: "setup", index: Number.MAX_SAFE_INTEGER + 1, exit_code: 1, category: null },
+  { step: "file", index: null, exit_code: 1, category: null },
+  { step: "setup", index: 0, exit_code: 256, category: null },
 ])("rejects unsafe provisioning parameters", (params) => {
   const value = { ...session, failure: { source: "environment", code: "environment_provisioning_failed", params, failed_at: time } };
   expect(() => projectSessionDiagnostics(value, id)).toThrow();
@@ -82,7 +90,7 @@ it("rejects HTTP status parameters on nonconnection categories", () => {
   expect(() => projectTurnDiagnostics({ ...snapshot, failure: { ...failure, code: "authentication_error", params: { http_status: 401 } } }, id, turn)).toThrow();
 });
 
-const provisioning = { source: "environment", code: "environment_provisioning_failed", params: { step: "setup", index: null, exit_code: null }, failed_at: null };
+const provisioning = { source: "environment", code: "environment_provisioning_failed", params: { step: "setup", index: null, exit_code: null, category: null }, failed_at: null };
 it.each([
   ["Session status", () => projectSessionDiagnostics({ ...session, status: ["failed"], failure: null }, id)],
   ["Turn status", () => projectTurnDiagnostics({ ...snapshot, status: ["failed"], failure: null }, id, turn)],

@@ -151,7 +151,9 @@ func (r *Router) runRuntimePreparationTransfer(ctx context.Context, u *runtimePr
 	r.mu.Unlock()
 	result := rejectedRuntimePreparation("invalid_request")
 	if admitted {
+		started := time.Now()
 		result = runtimePreparationResult(apply(ctx, u.request, data), u.request.SizeBytes)
+		result.DurationMS = time.Since(started).Milliseconds()
 	}
 	// Release the potentially large body before waiting on transport delivery.
 	data = nil

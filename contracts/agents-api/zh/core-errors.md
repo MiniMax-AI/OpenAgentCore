@@ -1,7 +1,7 @@
 ---
 title: "Core 管理错误"
 source: contracts/agents-api/core-errors.md
-source_hash: b2a6cd40a67bbe58fc78efa068a8ad0cf23cf62ad02e3c1456323fa66e9bb6ef
+source_hash: f2c2a927b8faad9c2834ae4d1195940195df5fc617c8395a027f0d21dfb5ea1e
 ---
 
 `/core/v1` 上的错误使用此封装结构。`message` 是安全的英文文本；`code` 和 `param` 可以为 null。客户端依据稳定的 `code` 和可选的 `param` 进行处理，对未知代码显示 `message`，绝不解析消息，也绝不自动重试被拒绝的写操作。
@@ -136,7 +136,7 @@ Web 的控制台服务器在 `/core` 路径上发生自身故障时使用此封�
 | `internal_error` | 结果未知或格式错误；不返回原始值 |
 | `environment_connection_timeout` | 初始输入连接截止时间已过 |
 | `environment_unavailable` | 初始输入所需 Environment 不可用 |
-| `environment_provisioning_failed` | 托管预置失败；params 包含来自已清理回执的可空 `step`、`index`、`exit_code` |
+| `environment_provisioning_failed` | 托管预置失败；params 包含来自已清理回执的可空 `step`、`index`、`exit_code`，以及用于没有已确认步骤的失败的 `category` |
 
 数据库故障属于错误，绝不会产生空快照或健康快照。绝不会解析预置原因或原生消息以确定类别或参数。
 

@@ -50,7 +50,7 @@ func (w *Worker) runEnvironmentInitializations(ctx context.Context) error {
 			}
 			if owner.State == "running" {
 				// Lost process-local progress cannot prove which side effects ran.
-				if err := w.dispatcher.sessionExecution.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
+				if err := w.dispatcher.sessionExecution.FailEnvironmentInitialization(ctx, owner, sessions.ProvisioningFailure{Category: sessions.ProvisioningCoreRestart}); err != nil && !errors.Is(err, sessions.ErrNotFound) {
 					return err
 				}
 				continue
@@ -96,7 +96,14 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 	operation, cancel := context.WithTimeout(ctx, time.Duration(proto.RuntimePrepareMaxBudgetMS)*time.Millisecond)
 	defer cancel()
 	failure := sessions.ProvisioningFailure{}
-	err := w.prepareEnvironment(operation, owner, &failure)
+	steps := []sessions.InitializationStep{}
+	err := w.prepareEnvironment(operation, owner, &failure, &steps)
+	// Steps that ran stay recorded for a failed initialization as well.
+	record, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer stop()
+	if recordErr := w.dispatcher.sessionExecution.RecordEnvironmentInitializationSteps(record, owner, steps); recordErr != nil && err == nil {
+		err = recordErr
+	}
 	if err == nil {
 		err = w.dispatcher.sessionExecution.CompleteEnvironmentInitialization(operation, owner)
 		if err == nil {
@@ -106,13 +113,14 @@ func (w *Worker) initializeEnvironment(ctx context.Context, owner sessions.Envir
 	if err != nil {
 		log.Warn(ctx, "Environment preparation failed", "environment_id", owner.EnvironmentID, "session_id", owner.SessionID)
 		// A later scan settles an unrecorded failure; it never retries the setup.
-		record, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		defer stop()
+		if failure.Step == "" && failure.Category == "" {
+			failure.Category = provisioningCategory(err)
+		}
 		_ = w.dispatcher.sessionExecution.FailEnvironmentInitialization(record, owner, failure)
 	}
 }
 
-func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.EnvironmentInitialization, failure *sessions.ProvisioningFailure) error {
+func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.EnvironmentInitialization, failure *sessions.ProvisioningFailure, steps *[]sessions.InitializationStep) error {
 	environment, err := w.dispatcher.SessionsReader.GetEnvironment(ctx, owner.TenantID, owner.EnvironmentID)
 	if err != nil {
 		return err
@@ -150,21 +158,33 @@ func (w *Worker) prepareEnvironment(ctx context.Context, owner sessions.Environm
 			var currentPeer = peer
 			currentPeer, err = w.dispatcher.authorizedPeer(ctx, owner.DeviceID)
 			if err == nil && currentPeer != peer {
-				err = errors.New("Runtime connection changed during initialization")
+				err = errRuntimeConnectionChanged
 			}
 		}
 		candidate := sessions.ProvisioningFailure{Step: sessions.ProvisioningInitialFile}
+		var result proto.RuntimePrepareResultPayload
+		var recorded sessions.InitializationStep
 		if err == nil && index < len(cfg.Files) {
 			var metadata environmentconfig.InitialFileMetadata
 			var body []byte
 			metadata, body, err = w.dispatcher.SessionsReader.ReadInitialEnvironmentFile(ctx, owner.TenantID, owner.SessionID, index)
 			if err == nil {
-				err = installInitialFile(ctx, peer, identity, metadata, body)
+				result, err = installInitialFile(ctx, peer, identity, metadata, body)
+				recorded, _ = runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "file"}}.step(result)
 			}
 		} else if err == nil {
 			command := operations[index-len(cfg.Files)]
 			candidate = command.provisioningFailure(0)
-			err = runRuntimeSetup(ctx, peer, identity, command)
+			result, err = runRuntimeSetup(ctx, peer, identity, command)
+			recorded, _ = command.step(result)
+		}
+		if recorded.Step != "" {
+			*steps = append(*steps, recorded)
+			attrs := []any{"environment_id", owner.EnvironmentID, "session_id", owner.SessionID, "step", recorded.Step, "duration_ms", recorded.DurationMS}
+			if recorded.Index != nil {
+				attrs = append(attrs, "index", *recorded.Index)
+			}
+			log.With(attrs...).InfoContext(ctx, "Environment initialization step")
 		}
 		var confirmed *runtimeStepFailure
 		if errors.As(err, &confirmed) {

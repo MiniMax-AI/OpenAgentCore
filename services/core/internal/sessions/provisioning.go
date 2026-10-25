@@ -19,12 +19,47 @@ type ProvisioningFailureDetail struct {
 	Step     *string `json:"step"`
 	Index    *int    `json:"index"`
 	ExitCode *int    `json:"exit_code"`
+	Category *string `json:"category,omitempty"`
 }
 
 // ProvisioningFailureReason is the safe reason for an Environment that
 // failed without a confirmed failed step: timeouts, unknown effects, missing or
 // old receipts, bootstrap rejection and Core restart during initialization.
 const ProvisioningFailureReason = "Failed to provision environment: initialization did not complete"
+
+// Failure categories for an Environment that failed without a confirmed failed
+// step, recorded privately beside the generic public reason.
+const (
+	// ProvisioningTimeout: the initialization budget or a transfer budget expired.
+	ProvisioningTimeout = "timeout"
+	// ProvisioningRuntimeDisconnected: the Runtime connection closed or changed.
+	ProvisioningRuntimeDisconnected = "runtime_disconnected"
+	// ProvisioningUnconfirmed: the effect of an operation is unknown or its receipt is missing or invalid.
+	ProvisioningUnconfirmed = "unconfirmed"
+	// ProvisioningRejected: the Runtime refused an operation before applying it.
+	ProvisioningRejected = "rejected"
+	// ProvisioningOperationFailed: the Runtime confirmed failure of an operation with no public step label.
+	ProvisioningOperationFailed = "operation_failed"
+	// ProvisioningCoreError: Core could not read or validate the stored configuration.
+	ProvisioningCoreError = "core_error"
+	// ProvisioningCoreRestart: the initialization owner was lost, so progress is unknown.
+	ProvisioningCoreRestart = "core_restart"
+	// ProvisioningComputeReleased: the Environment's compute ended before initialization completed.
+	ProvisioningComputeReleased = "compute_released"
+)
+
+var provisioningCategories = map[string]bool{
+	ProvisioningTimeout: true, ProvisioningRuntimeDisconnected: true, ProvisioningUnconfirmed: true, ProvisioningRejected: true,
+	ProvisioningOperationFailed: true, ProvisioningCoreError: true, ProvisioningCoreRestart: true, ProvisioningComputeReleased: true,
+}
+
+// InitializationStep is the Runtime-reported duration of one initialization
+// operation that ran. Step is a fixed label and Index is set for setup commands.
+type InitializationStep struct {
+	Step       string `json:"step"`
+	Index      *int   `json:"index"`
+	DurationMS int64  `json:"duration_ms"`
+}
 
 // Provisioning step kinds for ProvisioningFailure.Step.
 const (
@@ -39,10 +74,12 @@ const (
 // ProvisioningFailure identifies a confirmed failed initialization step.
 // It cannot carry Runtime output: Step selects a fixed label, Index is the setup
 // command position and ExitCode is the Runtime-reported status (0 when absent).
+// Category classifies a failure without a confirmed step.
 type ProvisioningFailure struct {
 	Step     string
 	Index    int
 	ExitCode int
+	Category string
 }
 
 // Reason renders the public Session error. The setup_commands and Python package
@@ -72,14 +109,25 @@ func (f ProvisioningFailure) Reason() string {
 
 // Detail is the private evidence recorded with the failure.
 func (f ProvisioningFailure) Detail() *ProvisioningFailureDetail {
-	return SanitizedProvisioningDetail(ProvisioningFailureDetail{Step: &f.Step, Index: &f.Index, ExitCode: &f.ExitCode})
+	detail := ProvisioningFailureDetail{Step: &f.Step, Index: &f.Index, ExitCode: &f.ExitCode}
+	if f.Step == "" {
+		detail.Step = nil
+		if f.Category != "" {
+			detail.Category = &f.Category
+		}
+	}
+	return SanitizedProvisioningDetail(detail)
 }
 
 // SanitizedProvisioningDetail keeps only the fields the step's category allows
-// and returns nil for a missing or unknown step.
+// and returns nil for a missing or unknown step without a known category.
 func SanitizedProvisioningDetail(f ProvisioningFailureDetail) *ProvisioningFailureDetail {
 	if f.Step == nil {
-		return nil
+		if f.Category == nil || !provisioningCategories[*f.Category] {
+			return nil
+		}
+		value := *f.Category
+		return &ProvisioningFailureDetail{Category: &value}
 	}
 	result := &ProvisioningFailureDetail{}
 	switch *f.Step {

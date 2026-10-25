@@ -10,6 +10,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentcapabilities"
 	"github.com/MiniMax-AI/OpenAgentCore/internal/agentdaemon/proto"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/environmentconfig"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 )
 
@@ -37,7 +38,7 @@ func TestRuntimeSetupReceiptOutcomes(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: test.outcome, ExitCode: test.code}, err: test.err}
-			err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: setupCanary}}})
+			_, err := runRuntimeSetup(initializationTestContext(t), peer, agentcapabilities.Identity{}, runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup", Command: setupCanary}}})
 			if test.outcome == "completed" && test.err == nil {
 				if err != nil {
 					t.Fatal(err)
@@ -74,14 +75,14 @@ func TestInitialFileUsesTypedRuntimeBytes(t *testing.T) {
 	size := int64(len(body))
 	owner := agentcapabilities.Identity{EnvironmentID: "environment", SessionID: "session"}
 	peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: "completed"}}
-	if err := installInitialFile(initializationTestContext(t), peer, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
+	if _, err := installInitialFile(initializationTestContext(t), peer, owner, environmentconfig.InitialFileMetadata{Path: "/workspace/a", SizeBytes: &size}, body); err != nil {
 		t.Fatal(err)
 	}
 	if peer.request.Action != "file" || peer.request.File.Path != "/workspace/a" || peer.request.EnvironmentID != owner.EnvironmentID || peer.request.SessionID != owner.SessionID || string(peer.data) != setupCanary {
 		t.Fatal("file transport changed")
 	}
 	size++
-	if err := installInitialFile(initializationTestContext(t), peer, owner, environmentconfig.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
+	if _, err := installInitialFile(initializationTestContext(t), peer, owner, environmentconfig.InitialFileMetadata{SizeBytes: &size}, body); err == nil {
 		t.Fatal("mismatched source size accepted")
 	}
 }
@@ -97,7 +98,7 @@ func TestRuntimeSetupUsesRemainingInitializationBudget(t *testing.T) {
 	ctx := initializationTestContext(t)
 	deadline, _ := ctx.Deadline()
 	peer := &receiptRuntime{result: proto.RuntimePrepareResultPayload{Outcome: "completed"}}
-	err := runRuntimeSetup(ctx, peer, agentcapabilities.Identity{}, runtimeSetupOperation{})
+	_, err := runRuntimeSetup(ctx, peer, agentcapabilities.Identity{}, runtimeSetupOperation{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,9 +113,35 @@ func TestRuntimeSetupUsesRemainingInitializationBudget(t *testing.T) {
 	}()} {
 		t.Run(name, func(t *testing.T) {
 			peer := &receiptRuntime{}
-			if runRuntimeSetup(c, peer, agentcapabilities.Identity{}, runtimeSetupOperation{}) == nil || peer.request.BudgetMS != 0 {
+			if _, err := runRuntimeSetup(c, peer, agentcapabilities.Identity{}, runtimeSetupOperation{}); err == nil || peer.request.BudgetMS != 0 {
 				t.Fatal("invalid budget sent")
 			}
 		})
+	}
+}
+
+func TestRuntimeSetupReportsStepTimingAndCategories(t *testing.T) {
+	setup := runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "initialize", Initialization: &proto.RuntimeInitialization{Action: "setup"}}, Index: 3}
+	step, ok := setup.step(proto.RuntimePrepareResultPayload{Outcome: "completed", DurationMS: 5200})
+	if !ok || step.Step != "setup" || step.Index == nil || *step.Index != 3 || step.DurationMS != 5200 {
+		t.Fatal("setup timing", step)
+	}
+	if step, ok = (runtimeSetupOperation{Request: proto.RuntimePreparePayload{Action: "finalize"}}).step(proto.RuntimePrepareResultPayload{Outcome: "failed", DurationMS: 7}); !ok || step.Step != "finalize" || step.Index != nil {
+		t.Fatal("finalize timing", step)
+	}
+	if _, ok = setup.step(proto.RuntimePrepareResultPayload{Outcome: "unknown"}); ok {
+		t.Fatal("unconfirmed operation reported as run")
+	}
+	for want, err := range map[string]error{
+		sessions.ProvisioningTimeout:             &unconfirmedError{cause: context.DeadlineExceeded},
+		sessions.ProvisioningRuntimeDisconnected: &unconfirmedError{cause: runtimegateway.ErrSessionClosed},
+		sessions.ProvisioningUnconfirmed:         &unconfirmedError{},
+		sessions.ProvisioningRejected:            &runtimeStepFailure{rejected: true},
+		sessions.ProvisioningOperationFailed:     &runtimeStepFailure{},
+		sessions.ProvisioningCoreError:           sessions.ErrInvalidInput,
+	} {
+		if got := provisioningCategory(err); got != want {
+			t.Fatalf("category %s, want %s", got, want)
+		}
 	}
 }

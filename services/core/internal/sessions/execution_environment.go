@@ -64,6 +64,9 @@ type InitializationTx interface {
 	// CompleteInitialization completes the running preparation of the live
 	// Environment and reports whether it did.
 	CompleteInitialization(ctx context.Context, environment string) (bool, error)
+	// RecordInitializationSteps stores the operation durations of the
+	// Environment's running preparation.
+	RecordInitializationSteps(ctx context.Context, environment string, steps []InitializationStep) error
 	// FailInitialization marks the Environment's preparation failed unless it
 	// completed.
 	FailInitialization(ctx context.Context, environment string) error
@@ -200,6 +203,14 @@ func journalInitialization(ctx context.Context, tx InitializationTx, environment
 		return applied, err
 	}
 	return true, tx.AppendChanges(ctx, EnvironmentStateChange(environment.ID, kind, status))
+}
+
+// RecordEnvironmentInitializationSteps stores the operation durations of the
+// claimed preparation, before it completes or fails.
+func (o *ExecutionOperations) RecordEnvironmentInitializationSteps(ctx context.Context, owner EnvironmentInitialization, steps []InitializationStep) error {
+	return o.withInitialization(ctx, owner, func(ctx context.Context, tx InitializationTx, environment Environment) error {
+		return tx.RecordInitializationSteps(ctx, environment.ID, steps)
+	})
 }
 
 // FailEnvironmentInitialization records the failure of a preparation that did

@@ -292,6 +292,9 @@ func loadSessionActivity(ctx context.Context, q *sqlc.Queries, session sessions.
 		}
 		session.Environment = &value
 		session.EnvironmentFailure = environmentFailure(environment.Environment)
+		if err := json.Unmarshal(environment.Environment.InitializationSteps, &session.EnvironmentInitializationSteps); err != nil {
+			return session, err
+		}
 		state, err := LoadEnvironmentInput(ctx, q, id)
 		if err != nil {
 			return session, err

@@ -223,7 +223,7 @@ func (e *ExecutionOperations) cleanup(ctx context.Context, owner Allocation, evi
 				return ErrAllocationConflict
 			}
 			if !retain {
-				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, nil)
+				err = sessions.TerminateEnvironment(ctx, tx, revoked.Expired, sessions.ProvisioningFailureReason, sessions.ProvisioningFailure{Category: sessions.ProvisioningComputeReleased}.Detail())
 			}
 		}
 		if err != nil {

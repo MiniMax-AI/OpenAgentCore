@@ -441,3 +441,25 @@ func TestRuntimePreparationHonorsBeginBudgetDuringStaging(t *testing.T) {
 		shutdownCapabilitiesRouter(t, r)
 	})
 }
+
+func TestRuntimePreparationReportsApplyDuration(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, sender, environment, session := capabilitiesTestRouter(t)
+		_, cancel := context.WithCancel(t.Context())
+		id := uuid.NewString()
+		request := proto.RuntimePreparePayload{BudgetMS: 300000, Step: "begin", Action: "finalize", EnvironmentID: environment, SessionID: session, Sources: &proto.CapabilitySources{}}
+		owner := &runtimePreparationTransfer{envelope: capabilityEnvelope(t, id, request), request: request, ready: make(chan struct{}), cancel: cancel, finished: true, apply: true}
+		close(owner.ready)
+		r.runtimePreparation = owner
+		r.shutdownWG.Add(1)
+		go r.runRuntimePreparationTransfer(t.Context(), owner, func(context.Context, proto.RuntimePreparePayload, []byte) error {
+			time.Sleep(1500 * time.Millisecond)
+			return nil
+		})
+		synctest.Wait()
+		got := capabilitiesReceipt(t, sender, id, "completed")
+		if got.DurationMS != 1500 || !proto.ValidRuntimePrepareResult(got, "completed", 0, 0) {
+			t.Fatalf("apply duration not reported: %+v", got)
+		}
+	})
+}

@@ -490,6 +490,29 @@ definitions:
       - object
       - updated_at
     type: object
+  api.InitializationStepTiming:
+    properties:
+      duration_ms:
+        type: integer
+      index:
+        type: integer
+        x-nullable: true
+      step:
+        enum:
+          - file
+          - skill
+          - plugin
+          - configure
+          - npm
+          - python
+          - setup
+          - finalize
+        type: string
+    required:
+      - duration_ms
+      - index
+      - step
+    type: object
   api.Installation:
     properties:
       address_bindings:
@@ -855,6 +878,11 @@ definitions:
         allOf:
           - $ref: '#/definitions/api.SessionDiagnosticFailure'
         x-nullable: true
+      initialization_steps:
+        description: InitializationSteps lists the operations the Environment's initialization ran, in order.
+        items:
+          $ref: '#/definitions/api.InitializationStepTiming'
+        type: array
       object:
         enum:
           - core.session_diagnostics
@@ -870,6 +898,7 @@ definitions:
         type: string
     required:
       - failure
+      - initialization_steps
       - object
       - session_id
       - status
