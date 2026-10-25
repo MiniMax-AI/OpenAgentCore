@@ -28,6 +28,18 @@ test('component preserves bytes and executable metadata with contained links fla
   assert.deepEqual(Object.keys(files).sort(), ['lib/native', 'linked/native']);
 });
 
+test('component leaves out the named build-only paths', async t => {
+  const { source, output } = await fixture(t);
+  await mkdir(join(source, 'pkg/deps'), { recursive: true });
+  await mkdir(join(source, 'pkg/build'), { recursive: true });
+  await writeFile(join(source, 'pkg/deps/sqlite3.c'), 'source');
+  await writeFile(join(source, 'pkg/binding.gyp'), '{}');
+  await writeFile(join(source, 'pkg/build/addon.node'), 'binary');
+  const files = await copyComponent(source, output, ['pkg/deps', 'pkg/binding.gyp']);
+  assert.deepEqual(Object.keys(files), ['pkg/build/addon.node']);
+  await assert.rejects(lstat(join(output, 'pkg/deps')));
+});
+
 test('component rejects escaping directory links', async t => {
   const { root, source, output } = await fixture(t);
   await mkdir(join(root, 'outside')); await writeFile(join(root, 'outside/secret'), 'not bundled');

@@ -250,6 +250,9 @@ def publish(assets, repository, revision, tag, mode):
     files = sorted(assets.iterdir())
     if not files or any(p.is_symlink() or not p.is_file() for p in files):
         raise ValueError("Expected a nonempty directory containing only regular asset files")
+    # The control archives carry the Core, Web and ingress images and the native
+    # catalog from the build to this script. Nothing installs from them, so they are not release assets.
+    control = {f"oac-{revision}-linux-{arch}.tar.gz{suffix}" for arch in ("amd64", "arm64") for suffix in ("", ".sha256")}
     # The builder validates the manifest and Runtime assets. Verify archives again
     # after the Actions artifact transfer between jobs.
     stem = "oac-" + revision + "-linux-amd64"
@@ -296,6 +299,7 @@ def publish(assets, repository, revision, tag, mode):
     endpoint = "releases/" + str(release_id)
     # Keep every operation bound to the ID returned by creation. No tag lookup,
     # overwrite, deletion or automatic retry can select another release.
+    files = [p for p in files if p.name not in control]
     expected = {p.name: p.stat().st_size for p in files}
     def upload(path):
         print(f"Uploading {path.name} ({expected[path.name]} bytes)", flush=True)

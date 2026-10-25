@@ -1,14 +1,14 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 6f1b4534b4b473c47175560c24ca6e1d1fe2ff4c5e764f204d1022939e4178b3
+source_hash: 0b605c6f5df332a2eb9831d3026b4bcde4ae6d7a2e2cb7bd8b3ce3a21704a7db
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
 
 ## 构建分发包 {#build-a-distribution}
 
-分发包是从同一个提交构建的一组相互匹配的发布资源：控制归档（安装程序、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）、作为独立文件的 Runtime 镜像和节点构件，以及原生安装程序。
+分发包是从同一个提交构建的一组相互匹配的发布资源：作为独立文件的 Runtime 镜像和节点构件，以及原生安装程序。构建还会为每种架构生成一个控制归档（安装程序、`oac` 命令，以及 Core、Web、ingress 和 PostgreSQL 镜像）。发布器从中读取镜像和原生目录；没有任何安装流程使用它，因此它不是发布资源。
 
 Core、Web 和 ingress 镜像发布为经过校验的 Linux amd64/arm64 多架构索引。arm64 控制归档包含这三个镜像；Node、托管 Runtime 和离线包使用 Linux amd64。发行构建使用 QEMU 执行 ARM 镜像步骤，包括 E2B helper。主机 `oac` 从同一份实现构建为 Linux amd64/arm64、macOS amd64/arm64 和 Windows amd64 二进制；启动脚本只选择、校验并运行它们。所有版本索引校验通过后才更新浮动标签。
 
@@ -55,7 +55,7 @@ node scripts/build-native-catalog.mjs INPUT_DIR OUTPUT_DIR
 export OAC_NATIVE_INSTALLER_BUILD_DIR=OUTPUT_DIR
 ```
 
-每个平台有一个小型基础归档 `<os>-<arch>.tar.gz`（`oac-daemon` 和 `bundle.json`，后者列出每个组件及其每个文件的 SHA-256），以及每个组件一个归档，即 `<os>-<arch>-node` 和 `<os>-<arch>-<harness>`（MiniMax Code 不为 Windows 构建）。`build-native-installer.mjs` 生成它们。Core 按名称提供这些制品，不了解其内容；`oac-daemon install` 下载所需的组件。
+每个平台有一个小型基础归档 `<os>-<arch>.tar.gz`（`oac-daemon` 和 `bundle.json`，后者列出每个组件及其每个文件的 SHA-256），以及每个组件一个归档，即 `<os>-<arch>-node` 和 `<os>-<arch>-<harness>`（MiniMax Code 不为 Windows 构建）。`build-native-installer.mjs` 生成它们，并略去仅用于构建或安装的文件：`node` 中 CI 运行器全局安装的 pnpm，以及 `minimax` 中 `better-sqlite3` 的编译输入。Core 按名称提供这些制品，不了解其内容；`oac-daemon install` 下载所需的组件。
 
 该目录会记录提交、Runtime 协议版本、每个制品的 SHA-256，并在提供发布基址时记录其带版本号的 URL。控制归档和 Core 镜像仅携带 `native-installers/catalog.json`；这些归档会成为独立的 `oac-native-<commit>-<artifact>.tar.gz` 发布资源，离线归档则会在 Core 镜像之外保留所有 Linux amd64 归档的一份副本，由其 `install.py` 复制到安装目录中供 Core 提供下载。其他平台由 Core 重定向到对应的发布资源；没有发布基址的目录没有这类 URL，因此其离线归档会保留所有归档。如果没有目录，Sessions 会将安装命令报告为不可用，并且发布工作流会拒绝发布。
 
