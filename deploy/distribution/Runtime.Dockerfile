@@ -9,7 +9,7 @@ FROM ${MCODE_IMAGE}
 
 # Keep the shared daemon and dependencies from the MiniMax base.
 # Native harness packages remain outside the workspace.
-COPY --from=codex /usr/local/bin/codex /usr/local/bin/codex
+COPY --from=codex /usr/local/bin/codex /usr/local/bin/codex-code-mode-host /usr/local/bin/
 COPY --from=codex /usr/local/codex-resources /usr/local/codex-resources
 COPY --from=claude /opt/claude-sdk /opt/claude-sdk
 
