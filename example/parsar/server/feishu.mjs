@@ -1049,6 +1049,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           row,
           "支持的命令：/clear、/stop、/answer、/help。其他消息会交给 Agent。",
         );
+      let steered = false;
       try {
         if (
           media.files.length &&
@@ -1133,7 +1134,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         store.put("feishu_inbound", row);
         // Messages go through the Turn ledger; answers and cancellations go to Core directly.
         if (event.type === "agent.session.input.message")
-          await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" });
+          steered = (await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" })).id !== row.id;
         else
           await core(
             `/v1/agents/sessions/${run.core_session_id}/events`,
@@ -1166,7 +1167,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           thread,
           "已请求取消，等待 Agent 确认停止。",
         );
-      else progress(thinking);
+      // A message that steered the running Turn keeps that Turn's card.
+      else if (!steered) progress(thinking);
     }
     store.put("feishu_inbound", {
       ...row,

@@ -943,7 +943,12 @@ function scriptedCore(plan) {
         const running = session.turns.find((t) => t.status === "in_progress");
         if (running) running.status = "cancelled";
         session.status = "idle";
-      } else addTurn(session, event.input);
+      } else {
+        // As in Core, a message sent while a Turn runs steers that Turn.
+        const running = session.turns.find((t) => t.status === "in_progress");
+        if (running) session.items.push({ id: randomUUID(), type: "message", role: "user", turn_id: running.id, content: event.input?.[0]?.content || [] });
+        else addTurn(session, event.input);
+      }
       return {};
     }
     throw new Error(`unexpected ${method} ${path}`);
@@ -1267,4 +1272,34 @@ test("capabilities declare the credentials they need and each Agent chooses wher
   await api("DELETE", `/app/secrets/${token.id}`, {});
   for (const body of [{ credentials: ["PATH"] }, { credentials: ["bad name"] }])
     await assert.rejects(api("PUT", "/app/skills/skill_review/credentials", body), (error) => error.status === 400);
+});
+
+test("a message sent while a Turn runs steers it: one running Turn, resent together", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const plan = { environments: [], turns: ["run", "run"] };
+  const fake = scriptedCore(plan);
+  const { api, put, input } = await setup(store, fake.core);
+  const turns = api.sessions.turns;
+  const id = randomUUID();
+  await put("sessions", input, id);
+  await turns.monitor();
+  const first = turns.overview().running;
+  assert.equal(first.length, 1);
+  // The steer joins the running Turn instead of becoming a second one.
+  const steered = await turns.send(id, { text: "我明天要去开发者大会", key: "steer-1" });
+  assert.equal(steered.id, first[0].id);
+  await turns.send(id, { text: "我明天要去开发者大会", key: "steer-1" });
+  assert.equal(store.get("turns", first[0].id).steers.length, 1, "a retried steer is recorded once");
+  await turns.monitor();
+  assert.equal(turns.overview().running.length, 1);
+  assert.equal(store.list("turns").length, 1);
+  // A message after the Turn ended starts a Turn of its own.
+  const session = fake.sessions.get(store.get("sessions", id).core_session_id);
+  session.turns[0].status = "completed";
+  session.status = "idle";
+  await turns.monitor();
+  const next = await turns.send(id, { text: "再来一个", key: "next" });
+  assert.notEqual(next.id, first[0].id);
+  assert.equal(store.list("turns").length, 2);
 });

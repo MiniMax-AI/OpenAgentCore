@@ -1815,10 +1815,11 @@ test("ordinary follow-ups exclude old content while Core publishes a delayed inp
   const items = [{ id: "old", turn_id: "same-turn", type: "message", role: "assistant", content: [{ type: "output_text", text: "OLD EXCHANGE" }] }];
   const patches = [];
   f.channel.rawClient.im.message.patch = async (payload) => { patches.push(payload); return { code: 0 }; };
+  // The earlier Turn has ended, so each follow-up starts a Turn of its own.
   const core = async (path, method, ...rest) => {
-    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "same-turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "same-turn", status: "completed" }], has_more: false };
     if (method === "GET" && path.includes("/items")) return { data: items, has_more: false };
-    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: "in_progress" };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: "idle" };
     return f.core(path, method, ...rest);
   };
   let worker = feishuWorker(f.store, core, f.api, async () => f.channel);
@@ -2065,4 +2066,32 @@ test("a bot takes the name its app has in Feishu when it connects", async (t) =>
   // Saving the bot again keeps the name Feishu gave it.
   const saved = await f.api("PUT", `/app/feishu/bots/${botId}`, { ...bot, name: "Something else" });
   assert.equal(saved.name, "OddjobHandler");
+});
+
+test("a message sent while the Turn runs steers it and keeps that Turn's card", async (t) => {
+  const f = await feishu(t);
+  const config = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
+  const items = [];
+  const posted = [];
+  const core = async (path, method, body, ...rest) => {
+    if (method === "GET" && path.includes("/turns")) return { data: [{ id: "running-turn", status: "in_progress" }], has_more: false };
+    if (method === "GET" && path.includes("/items")) return { data: items, has_more: false };
+    if (method === "GET" && /^\/v1\/agents\/sessions\/[^/]+$/.test(path)) return { id: path.split("/")[4], status: "in_progress" };
+    if (method === "POST" && path.endsWith("/events")) posted.push(body.events[0]);
+    return f.core(path, method, body, ...rest);
+  };
+  const worker = feishuWorker(f.store, core, f.api, async () => f.channel);
+  const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
+  worker.receive("cli_0123456789abcdef", dm);
+  await worker.tick();
+  assert.equal(f.sent.length, 1);
+  worker.receive("cli_0123456789abcdef", { ...dm, messageId: "steer", content: "我明天要去开发者大会" });
+  await worker.tick();
+  // The steer reaches the running Turn, gets no card of its own and adds no Turn.
+  assert.ok(posted.some((event) => event.type === "agent.session.input.message" && JSON.stringify(event.input).includes("开发者大会")));
+  assert.equal(f.sent.length, 1);
+  assert.equal(f.store.list("turns").length, 1);
+  assert.equal(f.store.list("turns")[0].steers.length, 1);
+  assert.equal(f.store.list("feishu_inbound").find((row) => row.message_id === "steer").state, "delivered");
 });

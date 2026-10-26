@@ -91,15 +91,27 @@ export function turnsAPI(store, core) {
   };
 
   // Records and sends a follow-up input. The entry is written first so a
-  // retried send (same id and key) keeps its original baseline.
+  // retried send (same id and key) keeps its original baseline. A message sent
+  // while this conversation's Turn runs steers that Turn, as in Core, and is
+  // recorded on it instead of as a Turn of its own. Returns the Turn it is part of.
   const deliver = async (record, input, { id, key, source }) => {
-    const turn =
-      store.get("turns", id) ||
-      start(record, { id, kind: "followup", input, source, base: await baseline(record.core_session_id) });
+    let turn = store.get("turns", id) || store.list("turns").find((t) => t.steers?.some((steer) => steer.id === id));
+    if (!turn) {
+      const base = await baseline(record.core_session_id);
+      const running = base.base_running &&
+        store.list("turns").find((t) => t.session_id === record.id && t.outcome === "running" && (!t.core_turn_id || t.core_turn_id === base.base_turn_id));
+      turn = running
+        ? { ...running, steers: [...(running.steers || []), { id, input: asInput(input) }] }
+        : start(record, { id, kind: "followup", input, source, base });
+      store.put("turns", turn);
+    }
+    const steer = turn.steers?.find((entry) => entry.id === id);
     try {
-      await post(record.core_session_id, message(turn.input), key);
+      await post(record.core_session_id, message(steer ? steer.input : turn.input), key);
     } catch (error) {
-      if (error instanceof AppError && error.status >= 400 && error.status < 500) store.remove("turns", id);
+      if (error instanceof AppError && error.status >= 400 && error.status < 500)
+        if (steer) store.put("turns", { ...store.get("turns", turn.id), steers: turn.steers.filter((entry) => entry.id !== id) });
+        else store.remove("turns", id);
       throw error;
     }
     return turn;
@@ -169,7 +181,9 @@ export function turnsAPI(store, core) {
       ...record,
       superseded_turns: [...new Set([...(record.superseded_turns || []), coreTurnId])],
     });
-    await post(record.core_session_id, message(turn.input), `${turn.id}:resend:${retries}`);
+    // Messages that steered the Turn go with it again.
+    const input = [...asInput(turn.input), ...(turn.steers || []).flatMap((steer) => steer.input)];
+    await post(record.core_session_id, message(input), `${turn.id}:resend:${retries}`);
     store.put("turns", { ...turn, retries, stage: "retrying", pending_cancel: undefined, core_turn_id: undefined });
   };
 
