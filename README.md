@@ -15,7 +15,7 @@ The OpenAI Agents API, open source and self-hosted. Run Codex, Claude Code or Mi
 
 </div>
 
-![Deployment overview](docs/assets/console-overview-en.webp)
+<p align="center"><img alt="Deployment overview" src="docs/assets/console-overview-en.webp" width="75%"></p>
 
 - **Same API as OpenAI.** Set `OPENAI_BASE_URL` and the [official OpenAI SDK](https://developers.openai.com/api/docs/libraries), or plain HTTP, works unchanged.
 - **Your agent, your model.** Each Session runs Codex, Claude Code or MiniMax Code natively, as it runs on your machine, with the model provider you configure. See [Harness capabilities](https://openagentcore.dev/contracts/agents-api/harness-capabilities).

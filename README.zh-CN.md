@@ -15,7 +15,7 @@
 
 </div>
 
-![部署概览](docs/assets/console-overview-zh.webp)
+<p align="center"><img alt="部署概览" src="docs/assets/console-overview-zh.webp" width="75%"></p>
 
 - **与 OpenAI 相同的 API。** 设置 `OPENAI_BASE_URL` 后，[官方 OpenAI SDK](https://developers.openai.com/api/docs/libraries)或直接的 HTTP 调用无需改动即可使用。
 - **你的 Agent，你的模型。** 每个 Session 原生运行 Codex、Claude Code 或 MiniMax Code，使用你配置的模型提供商，与在本机运行一致。详见 [Harness 能力](https://openagentcore.dev/zh/contracts/agents-api/harness-capabilities)。
