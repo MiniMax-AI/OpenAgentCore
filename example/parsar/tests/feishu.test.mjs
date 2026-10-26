@@ -191,7 +191,8 @@ test("Feishu settings redact secrets, default-deny chat dispatch and persist ing
   assert.equal(
     f.calls.find((x) => x.path.endsWith("/events")).body.events[0].input[0]
       .content[0].text,
-    "Also check mobile",
+    // The Agent sees which Feishu message it is answering.
+    "[飞书消息 message_id=om_next chat_id=oc_test chat_type=group sender_open_id=ou_user]\nAlso check mobile",
   );
 });
 
@@ -671,7 +672,7 @@ test("Agent Skill version selectors are validated and frozen in public requests"
 });
 
 test("Feishu QR registration throttles polling, persists credentials without returning them, and resumes safely", async (t) => {
-  const { feishuRegistrationAPI } = await import(
+  const { botScopes, feishuRegistrationAPI } = await import(
     "../server/feishu-registration.mjs"
   );
   const store = openStore(":memory:");
@@ -721,9 +722,9 @@ test("Feishu QR registration throttles polling, persists credentials without ret
   // Scanning creates the app with its name and the group-message scope pre-filled.
   const scan = new URL(begin.verification_url);
   assert.equal(scan.searchParams.get("name"), "Assistant");
-  assert.deepEqual(JSON.parse(gunzipSync(Buffer.from(scan.searchParams.get("addons"), "base64url"))), {
-    scopes: { tenant: ["im:message.group_msg"] },
-  });
+  const requested = JSON.parse(gunzipSync(Buffer.from(scan.searchParams.get("addons"), "base64url")));
+  assert.deepEqual(requested, { scopes: { tenant: botScopes } });
+  assert.ok(botScopes.includes("im:message.group_msg"));
   assert.equal(JSON.stringify(begin).includes("private-device"), false);
   await api("POST", path, { action: "begin" });
   assert.deepEqual(calls, ["init", "begin"]);
@@ -1164,7 +1165,7 @@ test("Feishu updates a single card in place with thinking and steps, omits Web t
   );
   assert.equal(
     f.calls.findLast((call) => call.path === "/v1/agents/sessions").body.input,
-    "收到请回复",
+    "[飞书消息 message_id=om_dm_3 chat_id=oc_dm_single chat_type=p2p sender_open_id=ou_user]\n收到请回复",
   );
   const listedSessions = await f.api("GET", "/app/sessions");
   assert.equal(
@@ -2101,4 +2102,38 @@ test("a message sent while the Turn runs steers it and keeps that Turn's card", 
   assert.equal(f.store.list("turns").length, 1);
   assert.equal(f.store.list("turns")[0].steers.length, 1);
   assert.equal(f.store.list("feishu_inbound").find((row) => row.message_id === "steer").state, "delivered");
+});
+
+test("a turn blocked by missing Feishu scopes answers with the scopes and a link to apply", async () => {
+  const { formatTurnCard, missingScopes } = await import("../server/feishu.mjs");
+  const cli = JSON.stringify({ ok: false, identity: "bot", error: { type: "authorization", subtype: "app_scope_not_applied", code: 99991672, message: "access denied: app cli_0123456789abcdef has not applied for the required scope(s): base:field:read, base:record:read" } });
+  const api = '{"code":99991672,"msg":"Access denied. One of the following scopes is required: [calendar:calendar:readonly, calendar:calendar]."}';
+  const items = [
+    { type: "command_execution", command: "lark-cli base +field-list", output: cli, status: "failed" },
+    { type: "command_execution", command: "curl calendar", output: api, status: "completed" },
+    { type: "command_execution", command: "echo", output: "scope: not an error", status: "completed" },
+    { type: "message", role: "assistant", content: [{ type: "output_text", text: "很长的一段解释和三个选项" }] },
+  ];
+  assert.deepEqual(missingScopes(items), ["base:field:read", "base:record:read", "calendar:calendar:readonly", "calendar:calendar"]);
+  const app = { app_id: "cli_0123456789abcdef", brand: "feishu", name: "日程助手" };
+  const card = JSON.parse(formatTurnCard("requires_action", items, undefined, undefined, [], app));
+  const body = card.body.elements[0].content;
+  assert.equal(card.header.title.content, "需要开通权限");
+  assert.match(body, /机器人「日程助手」还缺少飞书权限/);
+  assert.match(body, /https:\/\/open\.feishu\.cn\/page\/scope-apply\?clientID=cli_0123456789abcdef&scopes=base%3Afield%3Aread%2Cbase%3Arecord%3Aread%2Ccalendar%3Acalendar%3Areadonly%2Ccalendar%3Acalendar/);
+  assert.doesNotMatch(body, /很长的一段解释/, "the Agent's explanation folds below");
+  assert.match(JSON.stringify(card.body.elements.slice(1)), /很长的一段解释/);
+  // Without scope errors, the card is unchanged.
+  const plain = JSON.parse(formatTurnCard("completed", items.slice(2), undefined, undefined, [], app));
+  assert.equal(plain.header.title.content, "已完成");
+  // Lark apps apply on the Lark console.
+  assert.match(formatTurnCard("failed", items, "x", undefined, [], { ...app, brand: "lark" }), /open\.larksuite\.com\/page\/scope-apply/);
+});
+
+test("Parsar's views show a Feishu message without the source line the Agent sees", async () => {
+  const { feishuSource, withoutFeishuSource } = await import("../shared/feishu-source.mjs");
+  const line = feishuSource({ message_id: "om_1", chat_id: "oc_1", chat_type: "p2p", sender_id: "ou_1" });
+  assert.equal(line, "[飞书消息 message_id=om_1 chat_id=oc_1 chat_type=p2p sender_open_id=ou_1]");
+  assert.equal(withoutFeishuSource(`${line}\n记一下明天的 meetup`), "记一下明天的 meetup");
+  assert.equal(withoutFeishuSource("[飞书消息] 不是来源行"), "[飞书消息] 不是来源行");
 });

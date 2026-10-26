@@ -3,10 +3,26 @@ import QRCode from "qrcode";
 import { qrImagePattern } from "../shared/media.mjs";
 import { AppError, uuid, text } from "./store.mjs";
 
-// Scopes the new app requests on top of the platform's default template, in
-// the official SDKs' QR `addons` encoding. Without im:message.group_msg the bot
-// never receives topic replies that do not mention it.
-const addons = gzipSync(JSON.stringify({ scopes: { tenant: ["im:message.group_msg"] } })).toString("base64url");
+// App-identity scopes the new app requests on top of the platform's default
+// template, so an Agent can work with Feishu data without its users applying
+// for each scope later. Without im:message.group_msg the bot never receives
+// topic replies that do not mention it.
+export const botScopes = [
+  "im:message.group_msg", "im:chat.members:read",
+  "contact:user.base:readonly", "contact:user.id:readonly", "contact:department.base:readonly",
+  "bitable:app", "base:app:read", "base:app:create", "base:app:update", "base:table:read", "base:table:create", "base:table:update",
+  "base:field:read", "base:field:create", "base:field:update", "base:record:read", "base:record:create", "base:record:update",
+  "base:record:delete", "base:view:read",
+  "calendar:calendar", "calendar:calendar:readonly", "calendar:calendar:read", "calendar:calendar.calendar:readonly",
+  "calendar:calendar.event:read", "calendar:calendar.event:create", "calendar:calendar.event:update", "calendar:calendar.event:delete",
+  "calendar:calendar.free_busy:read",
+  "docx:document", "docx:document:create", "drive:drive", "drive:drive:readonly", "drive:file", "drive:file:upload", "drive:file:download",
+  "sheets:spreadsheet", "sheets:spreadsheet:readonly", "sheets:spreadsheet:create",
+  "wiki:wiki", "wiki:wiki:readonly", "wiki:node:read", "wiki:node:create", "wiki:space:read",
+  "task:task:read", "task:task:write", "task:tasklist:read", "task:tasklist:write",
+];
+// The official SDKs' QR `addons` encoding.
+const addons = gzipSync(JSON.stringify({ scopes: { tenant: botScopes } })).toString("base64url");
 
 // The SDK registerApp helper runs an in-memory polling loop and cannot resume a
 // persisted device code after restart. This adapter implements the same device
@@ -61,7 +77,7 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
       if (!row) throw new AppError(404, "注册会话不存在。");
       if (row.status !== "pending" || row.expires_at <= Date.now())
         throw new AppError(410, "授权二维码已失效，请重新发起注册。");
-      return QRCode.toBuffer(row.verification_url, { width: 320, margin: 4 });
+      return QRCode.toBuffer(row.verification_url, { width: 480, margin: 4 });
     }
     const id = path.match(/^\/app\/feishu\/provision\/([a-f0-9-]{36})$/)?.[1];
     if (!id || !uuid.test(id)) throw new AppError(404, "Not found.");

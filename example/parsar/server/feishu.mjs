@@ -7,6 +7,7 @@ const stableId = (value) => {
 import { feishuContextReader } from "./feishu-context.mjs";
 import { explainFailure, turnsAPI } from "./turns.mjs";
 import { typicalWait, waitingHeadline } from "../shared/turn-status.mjs";
+import { feishuSource } from "../shared/feishu-source.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
 
 const stamp = () => Date.now();
@@ -176,6 +177,7 @@ const cardTones = {
   completed: ["已完成", "green"],
   cancelled: ["已停止", "grey"],
   failed: ["执行失败", "red"],
+  missing_scopes: ["需要开通权限", "orange"],
 };
 const grey = (text) => `<font color='grey'>${text}</font>`;
 
@@ -382,7 +384,36 @@ function exchangeItems(items) {
 
 const recentRows = 4;
 
-export function formatTurnCard(status, items = [], error, turn, questions = []) {
+// Scopes Feishu says the bot's app lacks, from the Agent's tool output: the
+// platform's "One of the following scopes is required: [...]", lark-cli's
+// "required scope(s): ...", and permission_violations subjects.
+export function missingScopes(items) {
+  const found = new Set();
+  const scope = /^[a-z][a-z0-9_]*:[a-z0-9_.:-]+$/;
+  for (const item of items) {
+    if (!["command_execution", "function_call_output", "mcp_call"].includes(item.type)) continue;
+    const output = [item.output, item.error].map((value) => (typeof value === "string" ? value : JSON.stringify(value ?? ""))).join("\n");
+    if (!/99991672|99991679|app_scope_not_applied|scopes? (?:is )?required|required scope/i.test(output)) continue;
+    for (const [, list] of output.matchAll(/(?:scopes is required: \[|required scope\(s\): )([^\]"\n]+)/g))
+      for (const name of list.split(/[,\s]+/)) if (scope.test(name)) found.add(name);
+    for (const [, name] of output.matchAll(/"subject":\s*"([^"]+)"/g)) if (scope.test(name)) found.add(name);
+  }
+  return [...found];
+}
+
+// What to tell people when the bot's app lacks scopes: which, and where to apply.
+function scopeNotice(app, scopes) {
+  const host = app.brand === "lark" ? "open.larksuite.com" : "open.feishu.cn";
+  const url = `https://${host}/page/scope-apply?clientID=${encodeURIComponent(app.app_id)}&scopes=${encodeURIComponent(scopes.join(","))}`;
+  return [
+    `**机器人「${app.name || app.app_id}」还缺少飞书权限**，这次没能完成。`,
+    `需要开通：${scopes.map((name) => `\`${name}\``).join("、")}`,
+    `[申请开通权限](${url})`,
+    grey("管理员批准并发布新版本后，直接回复这条消息即可继续。"),
+  ].join("\n\n");
+}
+
+export function formatTurnCard(status, items = [], error, turn, questions = [], app) {
   items = exchangeItems(items);
   const text = (item) => (item.content || []).filter((p) => p.type === "output_text").map((p) => (p.text || "").trim()).filter(Boolean).join("\n");
   const messages = items.filter((x) => x.type === "message" && x.role === "assistant");
@@ -445,6 +476,13 @@ export function formatTurnCard(status, items = [], error, turn, questions = []) 
     : status === "cancelled" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已按你的要求停止。"
     : [authorizationText, answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n"), status === "requires_action" ? 8000 : 12000);
   const elements = [];
+  // Missing scopes come first: the Agent's own explanation folds below the link.
+  const scopes = app ? missingScopes(items) : [];
+  if (scopes.length) {
+    elements.push(panel({ title: grey("Agent 的说明"), content: excerpt([body, foldContext ? context : ""].filter(Boolean).join("\n\n"), 4000) }));
+    if (rows.length) elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, cardBudget - bytes(elements) - 2000), block: true }));
+    return statusCard("missing_scopes", scopeNotice(app, scopes), [{ tag: "hr" }, ...elements]);
+  }
   if (foldContext) elements.push(panel({ title: grey("补充说明"), content: excerpt(context, 4000) }));
   // A failure shows the step that failed right under its cause.
   const failedTool = status === "failed" ? tools.findLast((item) => item.status === "failed") : undefined;
@@ -872,10 +910,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       ((context.resources || []).some((resource) => resource.type === "image")
         ? "图片消息"
         : "文件消息");
+    // The Agent sees where the message came from, so Skills can key work to it.
+    const source = feishuSource(row);
     const media = {
       images: [],
       files: [],
-      text: input.trim() || title,
+      text: `${source}\n${input.trim() || title}`,
       title,
       notice: context.notice,
     };
@@ -1259,6 +1299,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         thread,
         `执行失败\n\n${ledger.summary(run.id)?.failure || "执行环境准备失败，请重新发送消息重试。"}`,
       );
+    // The bot's app, so a card can link to applying for scopes it lacks.
+    const app = store.list("feishu_bots").find((bot) => bot.app_id === thread.app_id);
     let progress = thread.active_outbound_id && store.get("feishu_outbound", thread.active_outbound_id);
     // The progress card of the input a Turn answers; an older Turn never takes
     // the card of a newer message.
@@ -1282,7 +1324,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         (item) => item.turn_id === turns.at(-1)?.id && !ledger.superseded(run.id, item.turn_id),
       );
       queueMedia(thread, items);
-      const text = formatTurnCard(session.status === "requires_action" && questions.length ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id), questions);
+      const text = formatTurnCard(session.status === "requires_action" && questions.length ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id), questions, app);
       if (progress?.sent_message_id) {
         if (thread.progress_text !== text) {
           try {
@@ -1345,6 +1387,9 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         turn.status === "failed"
           ? ledger.summary(run.id)?.failure || explainFailure(turn.error)
           : turn.error?.message,
+        undefined,
+        [],
+        app,
       );
       const receiptId = stableId(`${thread.id}:${turn.id}`);
       const receipt = (sentMessageId) => store.put("feishu_outbound", {
