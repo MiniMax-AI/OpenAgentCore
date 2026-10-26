@@ -166,7 +166,7 @@ export function App() {
       href: "/capabilities",
       label: tr("资源库"),
       icon: BookOpen,
-      match: ["/capabilities", "/models", "/skills", "/mcps", "/credentials"],
+      match: ["/capabilities", "/models", "/credentials"],
     },
   ];
   const connect = [
@@ -204,10 +204,6 @@ export function App() {
       <Settings />
     ) : path === "/models" ? (
       <Capabilities key={path} initialTab="models" />
-    ) : path === "/skills" ? (
-      <Capabilities key={path} initialTab="skills" />
-    ) : path === "/mcps" ? (
-      <Capabilities key={path} initialTab="mcps" />
     ) : path === "/credentials" ? (
       <Capabilities key={path} initialTab="credentials" />
     ) : path === "/capabilities" ? (

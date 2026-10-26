@@ -1,5 +1,5 @@
 import { AppError, text, uuid } from "./store.mjs";
-import { boundAgents } from "./capability-kinds.mjs";
+import { boundAgents, credentialNames } from "./capability-kinds.mjs";
 import { unzipSync } from "fflate";
 const publicVersion = ({ archive, ...value }) => ({
   ...value,
@@ -106,6 +106,8 @@ export function capabilityAPI(store) {
       kind,
       versions,
       default_version,
+      // A Plugin's programs may read variables the Agent supplies from its secrets.
+      credentials: kind === "plugin" ? credentialNames(body.credentials ?? old?.credentials) : [],
       deprecated: body.deprecated === true,
       revision: (old?.revision || 0) + 1,
     };

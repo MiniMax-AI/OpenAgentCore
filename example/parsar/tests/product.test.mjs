@@ -94,8 +94,8 @@ test("environment templates prepare hosted Sessions, protect variables and freez
     { env: { PATH: "x" } },
     { env: { OAC_KEY: "x" } },
     { env: { NEW: null } },
-    { bot_env: { TOKEN: "access_token" } },
-    { env: { A: "x" }, bot_env: { A: "app_id" } },
+    { credentials: ["PATH"] },
+    { credentials: "FEISHU_APP_ID" },
     { files: [{ path: "/workspace/../outside", content: "x" }] },
     {
       files: [
@@ -674,25 +674,23 @@ test("model availability and pricing remain product-owned and freeze with a Sess
   );
 });
 
-test("the Agent's bound Feishu bot supplies mapped identity variables without exposing the secret", async (t) => {
+test("a bound Feishu bot's identity reaches every conversation, and what declares it needs a bot", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   const calls = [];
-  const { api, put, core, agent, input } = await setup(store, async (_p, _m, body) => {
+  const { api, put, core, agent, runtime: setupRuntime, input } = await setup(store, async (_p, _m, body) => {
     calls.push(body);
     return { id: randomUUID() };
   });
   const runtime = await put("runtimes", {
     name: "Feishu",
     env: { LARKSUITE_CLI_DEFAULT_AS: "bot" },
-    bot_env: {
-      FEISHU_APP_ID: "app_id",
-      FEISHU_APP_SECRET: "app_secret",
-      FEISHU_BRAND: "brand",
-    },
+    credentials: ["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
   });
-  await put("agents", { ...agent, runtime_id: runtime.id }, agent.id);
-  await assert.rejects(put("sessions", input), /飞书机器人身份/);
+  // A template that declares the bot's identity needs an Agent with a bot.
+  await assert.rejects(put("agents", { ...agent, runtime_id: runtime.id }, agent.id), /需要飞书机器人身份/);
+  store.put("agents", { ...store.get("agents", agent.id), runtime_id: runtime.id });
+  await assert.rejects(put("sessions", input), /需要飞书机器人身份/);
   const botId = randomUUID();
   await api("PUT", `/app/feishu/bots/${botId}`, {
     revision: 0,
@@ -716,14 +714,19 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
     /已绑定另一个机器人/,
   );
   const record = await put("sessions", input);
-  // The Template keeps its own variables; each Session adds the bot's identity on top.
+  // The Template keeps its own variables; each Session adds the bound bot's identity on top.
   assert.deepEqual(calls.at(-1).environment.env, {
     FEISHU_APP_ID: "cli_0123456789abcdef",
     FEISHU_APP_SECRET: "bot-secret",
     FEISHU_BRAND: "lark",
   });
   assert.deepEqual(core.saved.get(calls.at(-1).environment.environment_template_id).env, { LARKSUITE_CLI_DEFAULT_AS: "bot" });
-  assert.equal(record.configuration.bot_name, "Assistant");
+  // Until the bot first connects, Feishu has not told Parsar its name.
+  assert.equal(record.configuration.bot_name, "cli_0123456789abcdef");
+  // Binding is enough: a template that declares nothing gets the identity too.
+  store.put("agents", { ...store.get("agents", agent.id), runtime_id: setupRuntime.id });
+  await put("sessions", { ...input, name: "Plain" });
+  assert.equal(calls.at(-1).environment.env.FEISHU_APP_SECRET, "bot-secret");
   assert.ok(record.configuration.env_names.includes("FEISHU_APP_SECRET"));
   assert.ok(!JSON.stringify(await api("GET", "/app/sessions")).includes("bot-secret"));
   assert.ok(!JSON.stringify(await api("GET", "/app/runtimes")).includes("bot-secret"));
@@ -1210,4 +1213,58 @@ test("only live configuration blocks deletion; conversations keep their snapshot
   assert.equal(kept.configuration.agent_name, "Reviewer");
   assert.ok((await api("GET", "/app/sessions")).some((row) => row.id === conversation.id));
   assert.equal(calls.some((call) => call.method === "DELETE" && call.path.includes("/sessions/")), false, "its Core Session and messages stay");
+});
+
+test("capabilities declare the credentials they need and each Agent chooses where they come from", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const sent = [];
+  const { api, put, core, agent, input } = await setup(store, async (_path, _method, body) => {
+    sent.push(body);
+    return { id: randomUUID() };
+  });
+  // Secrets keep their values out of every read.
+  const token = await put("secrets", { name: "GitHub token", value: "ghp_private" });
+  assert.equal(token.has_value, true);
+  assert.ok(!JSON.stringify(await api("GET", "/app/secrets")).includes("ghp_private"));
+  const renamed = await put("secrets", { ...token, name: "GitHub" }, token.id);
+  assert.equal(store.get("secrets", token.id).value, "ghp_private", "omitting the value keeps it");
+
+  // A Plugin and a Skill need variables; an MCP needs a Vault credential.
+  const plugin = randomUUID();
+  store.put("capabilities", { id: plugin, kind: "plugin", name: "Git tools", credentials: ["GITHUB_TOKEN"], default_version: "1", versions: [{ version: "1", archive: "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==" }], revision: 1 });
+  await api("PUT", "/app/skills/skill_review/credentials", { credentials: ["REVIEW_KEY"] });
+  const mcpId = store.get("agents", agent.id).mcp_ids[0];
+  await put("mcps", { ...store.get("mcps", mcpId), requires_credential: true }, mcpId);
+  const base = { ...store.get("agents", agent.id), capability_ids: [plugin] };
+  await assert.rejects(put("agents", base, agent.id), /选择密钥/);
+  const review = await put("secrets", { name: "Review", value: "review-private" });
+  const vault = randomUUID(), credential = randomUUID();
+  await assert.rejects(
+    put("agents", { ...base, credentials: { GITHUB_TOKEN: token.id, REVIEW_KEY: review.id } }, agent.id),
+    /为 MCP「Docs」选择凭据/,
+  );
+  await put("agents", {
+    ...base,
+    credentials: { GITHUB_TOKEN: renamed.id, REVIEW_KEY: review.id },
+    mcp_credentials: { [mcpId]: { vault_id: vault, credential_id: credential } },
+  }, agent.id);
+
+  // Values reach each Session's variables, never the saved Agent; the MCP uses the chosen credential.
+  await put("sessions", input);
+  const request = sent.at(-1);
+  assert.deepEqual(request.environment.env, { GITHUB_TOKEN: "ghp_private", REVIEW_KEY: "review-private" });
+  assert.deepEqual(request.vault_ids, [vault]);
+  const saved = core.agentOf(request);
+  assert.equal(saved.tools.find((tool) => tool.type === "mcp").credential_id, credential);
+  assert.ok(!JSON.stringify(saved).includes("ghp_private"));
+  assert.ok(!JSON.stringify(await api("GET", "/app/agents")).includes("ghp_private"));
+
+  // A secret an Agent uses stays until the Agent stops using it.
+  await assert.rejects(api("DELETE", `/app/secrets/${token.id}`), /仍被引用/);
+  const unbound = await put("agents", { ...store.get("agents", agent.id), capability_ids: [] }, agent.id);
+  assert.deepEqual(Object.keys(unbound.credentials), ["REVIEW_KEY"], "a choice nothing needs is dropped");
+  await api("DELETE", `/app/secrets/${token.id}`, {});
+  for (const body of [{ credentials: ["PATH"] }, { credentials: ["bad name"] }])
+    await assert.rejects(api("PUT", "/app/skills/skill_review/credentials", body), (error) => error.status === 400);
 });

@@ -188,14 +188,6 @@ function BotCard({ bot }: { bot: FeishuBot }) {
         </div>
         {credentials && (
           <div className="grid gap-4 border-t border-line-muted pt-6 sm:grid-cols-2">
-            <Field label={tr("机器人名称")} id={`bot-name-${bot.id}`}>
-              <Input
-                id={`bot-name-${bot.id}`}
-                value={form.name}
-                maxLength={80}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </Field>
             <Field label={tr("地区")} id={`bot-brand-${bot.id}`}>
               <Select
                 id={`bot-brand-${bot.id}`}
@@ -490,7 +482,6 @@ function QrCreate({ close }: { close: () => void }) {
 function ManualCreate({ close }: { close: () => void }) {
   const cache = useQueryClient();
   const [form, setForm] = useState({
-    name: "",
     app_id: "",
     app_secret: "",
     brand: "feishu" as "feishu" | "lark",
@@ -518,15 +509,6 @@ function ManualCreate({ close }: { close: () => void }) {
         save.mutate();
       }}
     >
-      <Field label={tr("机器人名称")} id="new-bot-name">
-        <Input
-          id="new-bot-name"
-          required
-          maxLength={80}
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-      </Field>
       <Field label="App ID" id="new-bot-app">
         <Input
           id="new-bot-app"

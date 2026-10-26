@@ -1,21 +1,23 @@
 import { useState } from "react";
 import { ResourceEditor } from "./Resources";
 import { ExecutionFields } from "./ExecutionFields";
-import { SkillCreate, SkillDetail, useSkills } from "./Skills";
+import { useSkills } from "./Skills";
+import { CapabilityEditorFor, type EditorTarget } from "./Library";
+import { SecretEditor, useAllVaultCredentials } from "./Credentials";
 import { useQuery } from "@tanstack/react-query";
 import { api, readHistory } from "./lib/api";
 import { tr } from "./lib/i18n";
-import {
-  CapabilityEditor,
-  useCapabilities,
-  type Capability,
-} from "./Capabilities";
+import { useCapabilities, type Capability } from "./Capabilities";
 import {
   useModels,
   useMCPs,
   useRuntimes,
+  useFeishuBots,
+  useSecrets,
+  useSkillCredentials,
   type AgentProfile,
 } from "./lib/product";
+import { botVariables } from "../shared/bot-bindings.mjs";
 import { ResourceField } from "./components/ResourceField";
 import {
   maxFiles,
@@ -26,6 +28,8 @@ import { Select, SelectOption } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
 import { ErrorNotice, Field, Section, Toggle } from "./components/shared";
 import { randomUuid } from "@oac/agents-client";
+import { Plus } from "lucide-react";
+import { Button } from "./components/ui/button";
 export type Configuration = Pick<
   AgentProfile,
   | "harness"
@@ -44,6 +48,8 @@ export type Configuration = Pick<
   | "ask_user"
   | "capability_ids"
   | "capability_versions"
+  | "credentials"
+  | "mcp_credentials"
 >;
 export const emptyConfiguration: Configuration = {
   harness: "codex",
@@ -58,10 +64,12 @@ export const emptyConfiguration: Configuration = {
   mcp_ids: [],
 };
 export function ConfigurationFields({
+  agentId,
   value,
   change,
   errors = {},
 }: {
+  agentId: string;
   value: Configuration;
   change: (value: Configuration) => void;
   errors?: { model_id?: string; runtime_id?: string };
@@ -251,6 +259,7 @@ export function ConfigurationFields({
             />
           ))}
       </Section>
+      <CredentialFields agentId={agentId} value={value} change={change} />
       <Section title={tr("行为")}>
         <div className="space-y-3">
           <Toggle
@@ -265,72 +274,31 @@ export function ConfigurationFields({
           />
         </div>
       </Section>
-      {editor?.kind === "skills" &&
-        (editor.creating ? (
-          <SkillCreate
-            close={close}
-            onSaved={(id) =>
-              change({ ...value, skill_ids: [...value.skill_ids, id] })
-            }
-          />
-        ) : (
-          <SkillDetail
-            skill={skills.data!.find((row) => row.id === editor.id)!}
-            close={close}
-          />
-        ))}
-      {(editor?.kind === "mcps" || editor?.kind === "runtimes") && (
+      {editor?.kind === "runtimes" && (
         <ResourceEditor
-          kind={editor.kind}
-          title={editor.kind === "mcps" ? "MCP" : tr("环境模板")}
+          kind="runtimes"
+          title={tr("环境模板")}
           value={
             editor.creating
-              ? editor.kind === "mcps"
-                ? { id: editor.id, revision: 0, name: "", label: "", url: "" }
-                : {
-                    id: editor.id,
-                    revision: 0,
-                    name: "",
-                    environment: "openai_hosted",
-                  }
-              : editor.kind === "mcps"
-                ? mcps.data!.find((row) => row.id === editor.id)!
-                : runtimes.data!.find((row) => row.id === editor.id)!
+              ? { id: editor.id, revision: 0, name: "", environment: "openai_hosted" }
+              : runtimes.data!.find((row) => row.id === editor.id)!
           }
+          close={close}
+          onSaved={(id) => change({ ...value, runtime_id: id })}
+        />
+      )}
+      {editor && editor.kind !== "runtimes" && (
+        <CapabilityEditorFor
+          target={editor as EditorTarget}
           close={close}
           onSaved={(id) =>
             change(
-              editor.kind === "mcps"
-                ? { ...value, mcp_ids: [...new Set([...value.mcp_ids, id])] }
-                : { ...value, runtime_id: id },
+              editor.kind === "skills"
+                ? { ...value, skill_ids: [...new Set([...value.skill_ids, id])] }
+                : editor.kind === "mcps"
+                  ? { ...value, mcp_ids: [...new Set([...value.mcp_ids, id])] }
+                  : { ...value, capability_ids: [...new Set([...(value.capability_ids || []), id])] },
             )
-          }
-        />
-      )}
-      {editor && ["prompt", "knowledge", "plugin"].includes(editor.kind) && (
-        <CapabilityEditor
-          value={
-            editor.creating
-              ? {
-                  id: editor.id,
-                  name: "",
-                  description: "",
-                  kind: editor.kind as Capability["kind"],
-                  revision: 0,
-                  deprecated: false,
-                  default_version: "",
-                  versions: [],
-                }
-              : capabilities.data!.find((row) => row.id === editor.id)!
-          }
-          close={close}
-          onSaved={(id) =>
-            change({
-              ...value,
-              capability_ids: [
-                ...new Set([...(value.capability_ids || []), id]),
-              ],
-            })
           }
         />
       )}
@@ -378,5 +346,122 @@ function SkillVersionSelect({
       </Select>
       <ErrorNotice error={versions.error} />
     </div>
+  );
+}
+
+// Where each credential the bound capabilities need comes from: a secret for
+// each variable, and a Vault credential for each MCP that needs one.
+function CredentialFields({
+  agentId,
+  value,
+  change,
+}: {
+  agentId: string;
+  value: Configuration;
+  change: (value: Configuration) => void;
+}) {
+  const capabilities = useCapabilities(),
+    skillCredentials = useSkillCredentials(),
+    mcps = useMCPs(),
+    runtimes = useRuntimes(),
+    bots = useFeishuBots(),
+    secrets = useSecrets(),
+    vaultCredentials = useAllVaultCredentials();
+  const [creating, setCreating] = useState<string | null>(null);
+  const needed = [
+    ...new Set([
+      ...value.skill_ids.flatMap((id) => skillCredentials.data?.find((row) => row.id === id)?.credentials || []),
+      ...(capabilities.data || [])
+        .filter((row) => value.capability_ids?.includes(row.id))
+        .flatMap((row) => row.credentials || []),
+      ...(runtimes.data?.find((row) => row.id === value.runtime_id)?.credentials || []),
+    ]),
+  ];
+  // The bot's identity comes from the bot bound to this Agent; the rest from chosen secrets.
+  const needsBot = needed.some((name) => name in botVariables);
+  const names = needed.filter((name) => !(name in botVariables));
+  const bot = bots.data?.find((row) => row.agent_id === agentId);
+  const authMcps = (mcps.data || []).filter((row) => value.mcp_ids.includes(row.id) && row.requires_credential);
+  if (!needed.length && !authMcps.length) return null;
+  const choose = (name: string, secretId: string) =>
+    change({ ...value, credentials: { ...value.credentials, [name]: secretId } });
+  return (
+    <Section title={tr("凭据")}>
+      {needsBot && (
+        <Field label={tr("飞书机器人身份")} id="credential-bot">
+          {bot ? (
+            <p id="credential-bot" className="text-sm text-fg">
+              {tr("由绑定的飞书机器人「{{value0}}」提供", { value0: bot.name })}
+            </p>
+          ) : (
+            <p id="credential-bot" className="text-sm text-danger">
+              {tr("请先在飞书接入中给这个 Agent 绑定机器人")}
+            </p>
+          )}
+        </Field>
+      )}
+      {names.map((name) => (
+        <Field key={name} label={name} id={`credential-${name}`}>
+          <div className="flex gap-2">
+            <Select
+              id={`credential-${name}`}
+              aria-label={tr("{{value0}} 使用的密钥", { value0: name })}
+              value={value.credentials?.[name] || ""}
+              onValueChange={(secretId) => choose(name, secretId)}
+            >
+              <SelectOption value="">{tr("选择密钥")}</SelectOption>
+              {secrets.data?.map((secret) => (
+                <SelectOption key={secret.id} value={secret.id}>
+                  {secret.name}
+                </SelectOption>
+              ))}
+            </Select>
+            <Button
+              variant="outline"
+              aria-label={tr("新建 {{value0}} 的密钥", { value0: name })}
+              onClick={() => setCreating(name)}
+            >
+              <Plus />
+              {tr("新建")}
+            </Button>
+          </div>
+        </Field>
+      ))}
+      {authMcps.map((mcp) => {
+        const choice = value.mcp_credentials?.[mcp.id];
+        const options = (vaultCredentials.data || []).filter(({ credential }) => credential.auth.mcp_server_url === mcp.url);
+        return (
+          <Field key={mcp.id} label={mcp.name} id={`mcp-credential-${mcp.id}`}>
+            <Select
+              id={`mcp-credential-${mcp.id}`}
+              aria-label={tr("{{value0}} 使用的凭据", { value0: mcp.name })}
+              value={choice ? `${choice.vault_id}/${choice.credential_id}` : ""}
+              onValueChange={(selected) => {
+                const [vault_id, credential_id] = selected.split("/");
+                change({
+                  ...value,
+                  mcp_credentials: { ...value.mcp_credentials, [mcp.id]: { vault_id: vault_id!, credential_id: credential_id! } },
+                });
+              }}
+            >
+              <SelectOption value="">{options.length ? tr("选择凭据") : tr("先在凭据中为这个地址添加 MCP 凭据")}</SelectOption>
+              {options.map(({ vault, credential }) => (
+                <SelectOption key={credential.id} value={`${vault.id}/${credential.id}`}>
+                  {`${vault.name || vault.id} / ${credential.name}`}
+                </SelectOption>
+              ))}
+            </Select>
+          </Field>
+        );
+      })}
+      <ErrorNotice error={secrets.error || vaultCredentials.error || skillCredentials.error} />
+      {creating && (
+        <SecretEditor
+          value={{ id: randomUuid(), name: creating, revision: 0 }}
+          close={() => setCreating(null)}
+          onSaved={(id) => choose(creating, id)}
+        />
+      )}
+    </Section>
   );
 }

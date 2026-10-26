@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { AppError, text, uuid } from "./store.mjs";
 import { harnessOptions } from "../shared/harness-options.mjs";
-import { contributions } from "./capability-kinds.mjs";
+import { boundBot, contributions } from "./capability-kinds.mjs";
 import { templateFiles } from "./core-resources.mjs";
 import { turnsAPI } from "./turns.mjs";
 
@@ -11,10 +11,6 @@ import { turnsAPI } from "./turns.mjs";
 const fingerprint = ({ request: { input, metadata, ...request }, core_digests }) =>
   createHash("sha256").update(JSON.stringify({ request, core_digests })).digest("hex");
 const warmAge = 12 * 3600_000;
-
-export function sessionBot(store, agentId) {
-  return store.list("feishu_bots").find((bot) => bot.agent_id === agentId);
-}
 
 // A Session references the Agent's saved Core Agent and its environment
 // template's Core Template, and adds only what differs per conversation: the
@@ -29,13 +25,7 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
   const runtime = await resources.ensure("runtimes", storedRuntime.id);
   const model = store.get("models", agent.model_id);
   const bound = contributions(store, agent);
-  const botEnv = Object.entries(runtime.bot_env || {});
-  const bot = sessionBot(store, agent.id);
-  if (botEnv.length && !bot?.app_secret)
-    throw new AppError(
-      400,
-      "环境模板需要飞书机器人身份，请先在飞书接入中把机器人绑定到这个 Agent。",
-    );
+  const bot = boundBot(store, agent);
   const provider = store.get("providers", model.provider_id);
   if (!provider?.base_url?.startsWith("https://") || !provider.api_key)
     throw new AppError(
@@ -75,12 +65,13 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
     throw new AppError(400, "附件格式或大小无效。");
   // Session files replace the Template's set, so they include the Template's own.
   const extraFiles = [...files, ...bound.session.files];
+  // Variables overlay the Template's own: the bound bot's identity and the
+  // secrets the Agent chose for what its capabilities need.
+  const env = bound.session.env;
   const environment = {
     type: "openai_hosted",
     environment_template_id: runtime.core_template_id,
-    ...(botEnv.length
-      ? { env: Object.fromEntries(botEnv.map(([name, field]) => [name, field === "brand" ? bot.brand || "feishu" : bot[field]])) }
-      : {}),
+    ...(Object.keys(env).length ? { env } : {}),
     ...(bound.session.skills.length ? { skills: bound.session.skills } : {}),
     ...(bound.session.plugins.length ? { plugins: bound.session.plugins } : {}),
     ...(extraFiles.length ? { files: [...templateFiles(runtime), ...extraFiles] } : {}),
@@ -102,17 +93,14 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
       agent_name: agent.name,
       agent_revision: agent.revision,
       runtime_revision: runtime.revision,
-      bot_name: botEnv.length ? bot.name : undefined,
+      bot_name: bot?.name,
       model: model.model,
       harness: agent.harness,
       environment: runtime.environment,
       environment_name: runtime.name,
       packages: runtime.packages || { npm: [], python: [] },
       setup_configured: Boolean(runtime.setup_script),
-      env_names: [
-        ...Object.keys(runtime.env || {}),
-        ...botEnv.map(([name]) => name),
-      ],
+      env_names: [...new Set([...Object.keys(runtime.env || {}), ...Object.keys(env)])],
       file_paths: (runtime.files || []).map((file) => file.path),
       ...bound.summary,
     },

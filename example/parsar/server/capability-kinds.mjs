@@ -1,8 +1,18 @@
-import { AppError, text, uuid } from "./store.mjs";
+import { AppError, text } from "./store.mjs";
+import { botVariables, environmentVariableName } from "../shared/bot-bindings.mjs";
 
 // Every kind of capability an Agent can bind, in one place. A kind resolves an
-// Agent's bindings and says where each one goes: into the Core Agent (tools,
-// instructions) or into the Session's Environment (skills, plugins, files).
+// Agent's bindings, says which credentials each needs, and where each one goes:
+// into the Core Agent (tools, instructions) or into the Session's Environment
+// (skills, plugins, files, variables).
+
+// Variable names a capability needs the Agent to supply from a secret.
+export function credentialNames(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 20 || value.some((name) => !environmentVariableName(name)))
+    throw new AppError(400, "凭据需求是有效的环境变量名，最多 20 个，且不能使用运行环境保留的名称。");
+  return [...new Set(value)];
+}
 
 const libraryEntry = (store, agent, id) => {
   const capability = store.get("capabilities", id);
@@ -27,8 +37,13 @@ export const capabilityKinds = {
   skills: {
     bound: (agent) => agent.skill_ids || [],
     // Skills live in Core; the binding names a Skill and optionally a version.
-    resolve: (_store, agent) =>
-      (agent.skill_ids || []).map((skill_id) => ({ skill_id, version: agent.skill_versions?.[skill_id] })),
+    // Parsar keeps only the credentials a Skill needs.
+    resolve: (store, agent) =>
+      (agent.skill_ids || []).map((skill_id) => ({
+        skill_id,
+        version: agent.skill_versions?.[skill_id],
+        credentials: store.get("skill_credentials", skill_id)?.credentials || [],
+      })),
     contribute: (entry, out) =>
       out.session.skills.push({ type: "skill_reference", skill_id: entry.skill_id, ...(entry.version ? { version: entry.version } : {}) }),
   },
@@ -41,7 +56,11 @@ export const capabilityKinds = {
         throw new AppError(400, "绑定的 MCP 服务标识不能重复。");
       return mcps;
     },
+    // An MCP that needs authentication uses the Vault credential the Agent chose for it.
     contribute: (mcp, out, agent) => {
+      const credential = mcp.requires_credential && agent.mcp_credentials?.[mcp.id];
+      if (mcp.requires_credential && !credential)
+        throw new AppError(400, `请在 Agent 中为 MCP「${mcp.name}」选择凭据。`);
       out.agent.tools.push({
         type: "mcp",
         server_label: mcp.label,
@@ -49,9 +68,9 @@ export const capabilityKinds = {
         connection_origin: "environment",
         // MiniMax Code admits only optional MCP initialization.
         required: agent.harness !== "mcode",
-        ...(mcp.credential_id ? { credential_id: mcp.credential_id } : {}),
+        ...(credential ? { credential_id: credential.credential_id } : {}),
       });
-      if (mcp.vault_id) out.session.vault_ids.push(mcp.vault_id);
+      if (credential) out.session.vault_ids.push(credential.vault_id);
     },
     // An HTTPS address without credentials; authentication comes from a Vault credential.
     validate: (body) => {
@@ -63,13 +82,10 @@ export const capabilityKinds = {
       }
       if (url.protocol !== "https:" || url.username || url.password || url.hash || url.search)
         throw new AppError(400, "MCP 使用不含凭据的 HTTPS 地址。");
-      if (body.vault_id && !uuid.test(body.vault_id)) throw new AppError(400, "凭据库标识无效。");
-      if (body.credential_id && (!body.vault_id || !uuid.test(body.credential_id)))
-        throw new AppError(400, "凭据标识无效。");
       const label = text(body.label, "MCP 标识", 64, true);
       if (!/^[a-zA-Z0-9_-]+$/.test(label))
         throw new AppError(400, "MCP 标识仅支持字母、数字、下划线和连字符。");
-      return { url: url.href, vault_id: body.vault_id || "", credential_id: body.credential_id || "", label };
+      return { url: url.href, label, requires_credential: body.requires_credential === true };
     },
   },
   prompt: library("prompt", (row, out) => out.agent.instructions.push(row.content)),
@@ -92,21 +108,60 @@ export const capabilityKinds = {
 };
 
 // What an Agent's bindings add to its Core Agent and to each of its Sessions.
+export const boundBot = (store, agent) =>
+  store.list("feishu_bots").find((bot) => bot.agent_id === agent.id && bot.app_secret);
+
+// What needs credentials: every bound capability and the Agent's environment template.
+function needers(store, agent) {
+  const out = [];
+  for (const [kind, definition] of Object.entries(capabilityKinds))
+    for (const entry of definition.resolve(store, agent)) out.push({ kind, entry });
+  const runtime = store.get("runtimes", agent.runtime_id || "");
+  if (runtime) out.push({ kind: "runtimes", entry: runtime });
+  return out;
+}
+
+// What an Agent's bindings add to its Core Agent and to each of its Sessions.
+// A bound bot's identity reaches every conversation; any other variable comes
+// from the secret the Agent chose for it.
 export function contributions(store, agent) {
   const out = {
     agent: { tools: [], instructions: [] },
-    session: { skills: [], plugins: [], files: [], vault_ids: [] },
+    session: { skills: [], plugins: [], files: [], vault_ids: [], env: {} },
     summary: { skills: [], mcps: [], capabilities: [] },
   };
-  for (const [kind, definition] of Object.entries(capabilityKinds))
-    for (const entry of definition.resolve(store, agent)) {
-      definition.contribute(entry, out, agent);
-      if (kind === "skills") out.summary.skills.push({ id: entry.skill_id, version: entry.version || null });
-      else if (kind === "mcps") out.summary.mcps.push(entry.label);
-      else out.summary.capabilities.push({ name: entry.name, kind: entry.kind, version: entry.version });
+  const bot = boundBot(store, agent);
+  for (const { kind, entry } of needers(store, agent)) {
+    if (kind !== "runtimes") capabilityKinds[kind].contribute(entry, out, agent);
+    for (const name of entry.credentials || []) {
+      const label = entry.name || entry.skill_id;
+      if (Object.hasOwn(botVariables, name)) {
+        if (!bot) throw new AppError(400, `「${label}」需要飞书机器人身份，请先在飞书接入中给这个 Agent 绑定机器人。`);
+        continue;
+      }
+      const secret = store.get("secrets", agent.credentials?.[name] || "");
+      if (!secret) throw new AppError(400, `请在 Agent 中为「${label}」所需的 ${name} 选择密钥。`);
+      out.session.env[name] = secret.value;
     }
+    if (kind === "skills") out.summary.skills.push({ id: entry.skill_id, version: entry.version || null });
+    else if (kind === "mcps") out.summary.mcps.push(entry.label);
+    else if (kind !== "runtimes") out.summary.capabilities.push({ name: entry.name, kind: entry.kind, version: entry.version });
+  }
+  if (bot)
+    for (const [name, field] of Object.entries(botVariables))
+      out.session.env[name] = field === "brand" ? bot.brand || "feishu" : bot[field];
   out.session.vault_ids = [...new Set(out.session.vault_ids)];
   return out;
+}
+
+// The secrets and MCP credentials an Agent must choose for its bindings now.
+export function requiredCredentials(store, agent) {
+  const env = new Set(), mcps = new Set();
+  for (const { kind, entry } of needers(store, agent)) {
+    for (const name of entry.credentials || []) if (!Object.hasOwn(botVariables, name)) env.add(name);
+    if (kind === "mcps" && entry.requires_credential) mcps.add(entry.id);
+  }
+  return { env, mcps };
 }
 
 // Agents that bind a capability; a bound capability cannot be deleted.

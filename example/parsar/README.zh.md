@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 62934f80a9b631d42ea26739bc2439bc11093975debcbf789fe48f567603a1fe
+source_hash: bf6d042037c030463b3ad1723b7d8789edd471c4f1f3b96ef3f11843ca6fa158
 ---
 
 # Parsar 工作空间
@@ -27,7 +27,7 @@ pnpm --filter @oac/parsar-example dev
 | 对象 | 含义 |
 | --- | --- |
 | **资源库** | 组装用的零件，按使用方分组：模型供 Agent 的执行引擎使用；Skills、MCP 服务、Plugins、知识和指令片段供 Agent 使用；凭据供 MCP 使用。资源是共享的：修改一项会影响所有使用它的对象。只有仍然有效的配置会阻止删除：Agent 绑定了这项能力、Agent 使用这个环境模板或模型，或者机器人绑定了这个 Agent。对话不算：它保留创建时的配置快照和完整历史。 |
-| **环境模板** | 准备好的工作区：npm 与 Python 软件包、Bash 初始化脚本、环境变量、飞书机器人变量和初始文件。 |
+| **环境模板** | 准备好的工作区：npm 与 Python 软件包、Bash 初始化脚本、环境变量、需要的密钥和初始文件。 |
 | **Agent** | 用户对话的对象：名称、描述、指令、运行方式、一个必选的环境模板、能力和行为开关。运行方式对应本地 Codex 的配置：Harness、模型、推理强度、网页搜索，以及 **高级** 中的推理摘要、输出详细度和服务层级。**复制**会生成一份独立副本。 |
 | **飞书机器人** | 一个机器人最多绑定一个 Agent。它把自己的聊天路由给该 Agent，并在所有对话中（包括网页对话）作为该 Agent 的飞书身份。 |
 | **对话** | 一个公开 Core Session，拥有独立的 Environment，由 Agent 对应的 Core Agent 和环境模板对应的 Core Environment Template 创建。Session 开始时，Core 会复制这两份配置。 |
@@ -107,12 +107,16 @@ Parsar 会跟踪每一轮正在执行的对话，网页和飞书都一样。出�
 
 **模型** 按 Provider 分组管理模型 ID。可获取 Provider 的 OpenAI 格式 `GET /v1/models` 目录，也可手动填写。密钥只保存在服务端，留空编辑会保留已保存的密钥。**测试** 会用已保存的连接发起一次极小的生成，显示耗时或服务商返回的错误，不会显示密钥。获取目录时只发送该 Provider 的密钥，且不跟随重定向。所有 Harness 都使用所选的 HTTPS Provider：Codex 使用 Responses 协议，Claude Code 和 MiniMax Code 使用 Anthropic 协议。不支持的组合会明确失败，请参阅 [Harness 覆盖记录](../../contracts/agents-api/zh/index.md)。
 
-- **Skills** 支持创建 SKILL.md、上传 ZIP、版本管理、默认版本选择、按 Agent 固定版本以及有限的文件预览。**浏览目录** 搜索 skills.sh 索引；预览在临时目录中使用固定版本的 `skills@1.5.23` CLI，再走常规公开 Skill 上传。这需要 Parsar 主机具备 `npx` 和网络访问。导入的压缩包限制为 32 MiB 和 1,000 个文件。
-- **MCP** 提供静态服务目录和 HTTPS 端点配置。可选的 Vault 凭据使用官方公开 MCP 工具，连接来源为 environment。
-- **凭据** 创建 Vault 和只写的 bearer 凭据。**OAuth 授权** 使用维护中的 MCP SDK 完成发现、动态客户端注册、签发方绑定和 PKCE，再通过公开 Vault API 保存令牌。OAuth 令牌不会返回浏览器。
-- 指令片段和知识具有不可变的编号版本、默认版本、固定版本和停用状态。知识版本会成为初始工作区文件。标准 Claude/Codex Plugin ZIP 会成为公开 Environment Plugin，并列出其中声明的 `.mcp.json` 服务。stdio 服务所需的可执行文件必须存在于环境中。
+**资源库** 有三个标签页：**能力**、**模型** 和 **凭据**。
 
-**环境模板** 只在 Core 托管的工作区中运行。每个新对话会先写入文件、安装软件包并完成初始化，再启动 Agent；初始化失败会停止执行。初始文件使用规范的 `/workspace/` 路径，脚本在工作区中运行。变量值在产品响应中只写：`null` 保留已有值，字符串替换，删除名称即删除变量。**飞书机器人变量** 把变量名映射到所绑定机器人的 **App ID**、**App Secret** 或地区；使用这类模板的对话要求 Agent 已绑定机器人。每个环境模板保存为一个 Core Environment Template，每个 Agent 保存为一个 Core Agent。它们本身或它们绑定的内容变化时，Parsar 会更新 Core 里的这两份资源；Core Project 更换后，下次使用时会重新创建。对话的 Session 引用这两份资源，只附加每次对话不同的内容：机器人变量、Agent 的 Skills、Plugins 和知识文件，以及附件（见[模板继承](../../contracts/agents-api/environments.md#inheritance)）。Core 可能在 24 小时内复用一次完全相同的准备结果（[准备结果复用](../../contracts/agents-api/zh/environments.md#preparation-reuse)），长时间空闲的对话也可能换到新沙箱；这两种情况下只保留 `/environment`（包括 `/workspace`），初始化脚本不会再次执行。因此初始化脚本必须把之后要用的内容写到 `/workspace` 或软件包目录下，不能写在 HOME 中。飞书工作环境通过 `LARKSUITE_CLI_CONFIG_DIR` 和 `LARKSUITE_CLI_DATA_DIR` 把 lark-cli 的配置和加密凭证放在 `/workspace/.lark-cli`。
+- **能力** 把 Agent 可以绑定的所有能力放在一张表里，显示类型、版本、绑定它的已启用 Agent 数量和它需要的凭据；可以按 Skill、MCP、Plugin、指令片段或知识筛选。**新建能力** 可以添加任意一种：HTTP MCP、从 MCP 目录添加、编写或上传 Skill、从 Skill 目录导入、Plugin、指令片段或知识。
+- **Skills** 支持版本管理、默认版本选择、按 Agent 固定版本以及有限的文件预览。Skill 目录搜索 skills.sh 索引；预览在临时目录中使用固定版本的 `skills@1.5.23` CLI，再走常规公开 Skill 上传，这需要 Parsar 主机具备 `npx` 和网络访问。导入的压缩包限制为 32 MiB 和 1,000 个文件。
+- **MCP** 服务是 HTTPS 端点，使用官方公开 MCP 工具，连接来源为 environment。标记为 **需要凭据** 的 MCP，使用绑定它的每个 Agent 各自选择的 Vault 凭据。
+- 指令片段和知识具有不可变的编号版本、默认版本、固定版本和停用状态。知识版本会成为初始工作区文件。标准 Claude/Codex Plugin ZIP 会成为公开 Environment Plugin，并列出其中声明的 `.mcp.json` 服务。stdio 服务所需的可执行文件必须存在于环境中。
+- Skill 或 Plugin 可以列出它需要的变量（**需要的密钥**）。绑定它的每个 Agent 在自己的 **凭据** 部分为每个变量选择一个密钥，对话以环境变量的形式拿到这些值。能力需要的凭据没有全部选好之前，Agent 不能保存；不再需要的选择会被自动去掉。
+- **凭据** 包括 **密钥**（这些变量的只写值）和 **MCP 凭据**（Vault 及其中只写的 bearer 凭据）。**OAuth 授权** 使用维护中的 MCP SDK 完成发现、动态客户端注册、签发方绑定和 PKCE，再通过公开 Vault API 保存令牌。密钥的值和 OAuth 令牌都不会返回浏览器。
+
+**环境模板** 只在 Core 托管的工作区中运行。每个新对话会先写入文件、安装软件包并完成初始化，再启动 Agent；初始化失败会停止执行。初始文件使用规范的 `/workspace/` 路径，脚本在工作区中运行。变量值在产品响应中只写：`null` 保留已有值，字符串替换，删除名称即删除变量。**需要的密钥** 列出由 Agent 提供的变量，和 Skill、Plugin 的写法相同。每个环境模板保存为一个 Core Environment Template，每个 Agent 保存为一个 Core Agent。它们本身或它们绑定的内容变化时，Parsar 会更新 Core 里的这两份资源；Core Project 更换后，下次使用时会重新创建。对话的 Session 引用这两份资源，只附加每次对话不同的内容：机器人变量、Agent 的 Skills、Plugins 和知识文件，以及附件（见[模板继承](../../contracts/agents-api/environments.md#inheritance)）。Core 可能在 24 小时内复用一次完全相同的准备结果（[准备结果复用](../../contracts/agents-api/zh/environments.md#preparation-reuse)），长时间空闲的对话也可能换到新沙箱；这两种情况下只保留 `/environment`（包括 `/workspace`），初始化脚本不会再次执行。因此初始化脚本必须把之后要用的内容写到 `/workspace` 或软件包目录下，不能写在 HOME 中。飞书工作环境通过 `LARKSUITE_CLI_CONFIG_DIR` 和 `LARKSUITE_CLI_DATA_DIR` 把 lark-cli 的配置和加密凭证放在 `/workspace/.lark-cli`。
 
 **提前准备，新对话无需等待安装** 会为使用该模板的每个 Agent 保留一个准备好的 Session。Parsar 在没有输入的情况下创建它，Core 会提前准备好 Environment；下一个网页或飞书对话发送第一条消息时直接接管它，并保留自己的标题。Agent、其环境模板、机器人或模型服务商变更后，或超过 12 小时、或被接管后，准备好的 Session 会被替换；关闭开关会丢弃它。第一条消息带图片或文件时，会创建普通的 Session。每个准备好的 Session 在等待期间会占用一个工作区。
 
@@ -132,11 +136,11 @@ Parsar 会跟踪每一轮正在执行的对话，网页和飞书都一样。出�
 
 ### 机器人身份 {#bot-identity}
 
-Agent 以绑定的机器人身份工作。使用 **飞书机器人变量** 时，Parsar 会把机器人的 App ID 和 App Secret 写入对话 Environment 的变量。飞书案例把它们映射为 `FEISHU_*` 变量，初始化脚本运行 `lark-cli config init --app-secret-stdin`，由 CLI 自行获取并刷新租户令牌，长对话也能持续工作。不要映射为 `LARKSUITE_CLI_APP_ID` 或 `LARKSUITE_CLI_APP_SECRET`：这两个变量会让 lark-cli 进入环境凭据模式，该模式要求直接提供租户令牌。任何能与机器人对话的人都能使用机器人的权限，Environment 中的工具也能读取该密钥。只为机器人授予其 Agent 需要的权限，尽量一个 Agent 使用一个机器人。轮换后的密钥只对新对话生效。
+Agent 以绑定的机器人身份工作。绑定了机器人的 Agent，它的每个对话（包括网页对话）都会以 `FEISHU_APP_ID`、`FEISHU_APP_SECRET` 和 `FEISHU_BRAND` 拿到机器人身份，不需要任何映射。需要机器人身份的模板、Skill 或 Plugin 在 **需要的密钥** 里列出这几个名字：能力列表里它的凭据需求显示为 **飞书机器人**，Agent 页面显示由哪个机器人提供，没有绑定机器人的 Agent 不能保存。这几个名字只能由绑定的机器人提供。飞书案例的初始化脚本运行 `lark-cli config init --app-secret-stdin`，由 CLI 自行获取并刷新租户令牌，长对话也能持续工作。不要以 `LARKSUITE_CLI_APP_ID` 或 `LARKSUITE_CLI_APP_SECRET` 传入：这两个变量会让 lark-cli 进入环境凭据模式，该模式要求直接提供租户令牌。任何能与机器人对话的人都能使用机器人的权限，Environment 中的工具也能读取该密钥。只为机器人授予其 Agent 需要的权限，尽量一个 Agent 使用一个机器人。轮换后的密钥只对新对话生效。
 
 ### 飞书工作环境案例 {#feishu-workspace-case}
 
-[飞书工作环境](examples/feishu/)由普通模板组装而成。[environment.json](examples/feishu/environment.json) 声明软件包、机器人变量和文件，[setup.sh](examples/feishu/setup.sh) 安装经过校验和验证的官方 CLI 并用机器人凭证完成配置，[agent.json](examples/feishu/agent.json) 定义一个 Codex Agent。配置好模型，导入官方 `lark-shared` Skill 和需要的业务 Skill，添加机器人后运行：
+[飞书工作环境](examples/feishu/)由普通模板组装而成。[environment.json](examples/feishu/environment.json) 声明软件包、需要的机器人身份和文件，[setup.sh](examples/feishu/setup.sh) 安装经过校验和验证的官方 CLI 并用机器人凭证完成配置，[agent.json](examples/feishu/agent.json) 定义一个 Codex Agent。配置好模型，导入官方 `lark-shared` Skill 和需要的业务 Skill，添加机器人后运行：
 
 ```bash
 node example/parsar/examples/feishu/configure.mjs --url http://localhost:3001 --model MODEL_ID --bot BOT_ID --skills SHARED_SKILL_ID,DOMAIN_SKILL_ID

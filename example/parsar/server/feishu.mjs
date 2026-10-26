@@ -110,8 +110,9 @@ export function feishuAPI(store) {
       throw new AppError(409, "配置已更新，请重新加载。");
     if (body.brand !== undefined && !["feishu", "lark"].includes(body.brand))
       throw new AppError(400, "机器人地区无效。");
-    const name = text(body.name || "Feishu", "机器人名称", 80, true);
     const app_id = text(body.app_id, "App ID", 100).trim();
+    // The name comes from Feishu once the bot connects; until then it shows the App ID.
+    const name = app_id === old.app_id && old.name ? old.name : app_id || "Feishu";
     if (
       app_id &&
       store
@@ -481,6 +482,8 @@ export async function createFeishuTransport(settings, receive) {
       const bot = result.bot || result.data?.bot;
       if (result.code !== 0 || !bot?.open_id)
         throw new Error("Cannot resolve Feishu bot identity");
+      // The name people see in Feishu.
+      this.name = bot.app_name;
       readContext = feishuContextReader(client, {
         openId: bot.open_id,
         name: bot.app_name || "Parsar",
@@ -1527,6 +1530,10 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       try {
         await channel.connect();
         active = config;
+        // The bot keeps the name it has in Feishu; renaming the app there renames it here.
+        const saved = store.get("feishu_bots", configId);
+        if (channel.name && saved && saved.name !== channel.name)
+          store.put("feishu_bots", { ...saved, name: channel.name });
       } catch {
         await channel.disconnect();
         channel = undefined;

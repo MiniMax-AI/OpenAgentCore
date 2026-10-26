@@ -2052,3 +2052,17 @@ test("no Markdown image reaches a card, since Feishu rejects the whole card for 
   assert.match(done, /user_code=AB-12/, "the link the Agent gave stays in the answer");
   assert.match(done, /授权二维码见图片消息/);
 });
+
+test("a bot takes the name its app has in Feishu when it connects", async (t) => {
+  const f = await feishu(t);
+  f.channel.connect = async function () {
+    this.name = "OddjobHandler";
+  };
+  const worker = f.create();
+  await worker.tick();
+  const bot = f.store.get("feishu_bots", botId);
+  assert.equal(bot.name, "OddjobHandler");
+  // Saving the bot again keeps the name Feishu gave it.
+  const saved = await f.api("PUT", `/app/feishu/bots/${botId}`, { ...bot, name: "Something else" });
+  assert.equal(saved.name, "OddjobHandler");
+});
