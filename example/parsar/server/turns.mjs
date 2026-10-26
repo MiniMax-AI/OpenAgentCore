@@ -99,8 +99,13 @@ export function turnsAPI(store, core) {
     try {
       await post(record.core_session_id, message(turn.input), key);
     } catch (error) {
-      if (error instanceof AppError && error.status >= 400 && error.status < 500) store.remove("turns", id);
-      throw error;
+      if (error instanceof AppError && error.status >= 400 && error.status < 500) {
+        store.remove("turns", id);
+        throw error;
+      }
+      // A lost response can follow accepted input while Core resumes a Session.
+      // Web follows the durable ledger; Feishu owns its own delivery retries.
+      if (source !== "web") throw error;
     }
     return turn;
   };

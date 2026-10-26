@@ -939,6 +939,62 @@ function scriptedCore(plan) {
   return { core, calls, sessions };
 }
 
+test("Web follows uncertain sends without resending, but preserves explicit rejections and Feishu retries", async (t) => {
+  for (const error of [new DOMException("request timed out", "TimeoutError"), new TypeError("fetch failed"), new AppError(502, "gateway timeout")]) {
+    const store = openStore(":memory:");
+    t.after(() => store.close());
+    const fake = scriptedCore({ environments: [], turns: [] });
+    let pending, sends = 0;
+    const core = async (path, method, body, key) => {
+      if (method === "POST" && path.endsWith("/events")) {
+        sends++;
+        pending = () => fake.core(path, method, body, key);
+        throw error;
+      }
+      return fake.core(path, method, body, key);
+    };
+    const { api, put, input } = await setup(store, core);
+    const id = randomUUID();
+    await put("sessions", input, id);
+    await api.sessions.turns.monitor();
+    const response = await api("POST", `/app/sessions/${id}/messages`, { text: "Continue", key: "slow" });
+    assert.equal(response.turn.outcome, "running");
+    assert.equal(response.turn.failure, undefined);
+    await api.sessions.turns.monitor();
+    assert.equal(store.get("turns", `${id}:slow`).outcome, "running");
+    await pending(); // Core accepts and executes after the HTTP response was lost.
+    await api.sessions.turns.monitor();
+    assert.equal(store.get("turns", `${id}:slow`).outcome, "completed");
+    assert.equal(sends, 1);
+
+    await api("POST", `/app/sessions/${id}/messages`, { text: "Never accepted", key: "lost" });
+    const lost = store.get("turns", `${id}:lost`);
+    store.put("turns", { ...lost, started_at: lost.started_at - 6 * 60_000 });
+    await api.sessions.turns.monitor();
+    assert.equal(store.get("turns", lost.id).outcome, "failed");
+    assert.match(store.get("turns", lost.id).failure, /没有被执行/);
+    assert.equal(sends, 2);
+
+    await assert.rejects(api.sessions.turns.deliver(store.get("sessions", id), "Feishu", {
+      id: "feishu-message", key: "feishu-message", source: "feishu",
+    }), (e) => e === error);
+  }
+  for (const status of [400, 401, 403, 404, 409, 429]) {
+    const store = openStore(":memory:");
+    t.after(() => store.close());
+    const fake = scriptedCore({ environments: [], turns: [] });
+    const rejected = new AppError(status, "rejected");
+    const { api, put, input } = await setup(store, (path, method, ...args) => {
+      if (method === "POST" && path.endsWith("/events")) throw rejected;
+      return fake.core(path, method, ...args);
+    });
+    const id = randomUUID();
+    await put("sessions", input, id);
+    await assert.rejects(api("POST", `/app/sessions/${id}/messages`, { text: "Continue", key: "denied" }), (e) => e === rejected);
+    assert.equal(store.get("turns", `${id}:denied`), null);
+  }
+});
+
 test("the Turn monitor replaces a failed Environment, resends stalled or failed Turns once, and explains final failures", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
