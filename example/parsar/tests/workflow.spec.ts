@@ -1072,3 +1072,13 @@ test("the runs view shows running conversations with their stage, stops them and
   await recent.getByRole("link", { name: /^Review code/ }).click();
   await expect(page.getByLabel("继续对话")).toBeVisible();
 });
+
+test("an environment trial reports its result on the button, without extra status text", async ({ page }) => {
+  await resources(page);
+  await agent(page);
+  await page.goto("/#/runtimes");
+  const trial = page.getByRole("button", { name: /^试运行 / }).first();
+  await trial.click();
+  await expect(trial).toHaveText("可用", { timeout: 30000 });
+  await expect(page.getByText(/首次回复|可用 ·/)).toHaveCount(0);
+});
