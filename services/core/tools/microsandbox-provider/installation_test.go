@@ -3,16 +3,29 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestIsolatedConfigReusesOnlyPrivateEmptyObject(t *testing.T) {
+func TestIsolatedConfigReusesOnlyPrivateSnapshotBudget(t *testing.T) {
 	home := t.TempDir()
 	path, err := isolatedConfig(home)
 	if err != nil {
 		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		Snapshots struct {
+			MaxFilesystemStateMiB int `json:"max_filesystem_state_mib"`
+		} `json:"snapshots"`
+	}
+	if err := json.Unmarshal(data, &config); err != nil || config.Snapshots.MaxFilesystemStateMiB != 64 {
+		t.Fatalf("snapshot budget: %s, %v", data, err)
 	}
 	if again, err := isolatedConfig(home); err != nil || again != path {
 		t.Fatalf("reuse: %s %v", again, err)
@@ -22,6 +35,18 @@ func TestIsolatedConfigReusesOnlyPrivateEmptyObject(t *testing.T) {
 	}
 	if _, err := isolatedConfig(home); err == nil {
 		t.Fatal("ambient profile accepted")
+	}
+}
+
+func TestIsolatedConfigRejectsChangedBudgetAndTrailingContent(t *testing.T) {
+	for _, data := range []string{"{}\n", "{\"snapshots\":{\"max_filesystem_state_mib\":4095}}\n", "{\"snapshots\":{\"max_filesystem_state_mib\":64}}\n{}"} {
+		home := t.TempDir()
+		if err := os.WriteFile(filepath.Join(home, "oac-sdk-config.json"), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := isolatedConfig(home); err == nil {
+			t.Fatalf("accepted modified config: %q", data)
+		}
 	}
 }
 
