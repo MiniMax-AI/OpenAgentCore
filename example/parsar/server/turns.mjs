@@ -318,7 +318,6 @@ export function turnsAPI(store, core) {
       started_at: turn.started_at,
       done_at: turn.done_at,
       elapsed_s,
-      expected_s,
       first_output_s: turn.output_at ? Math.round((turn.output_at - turn.started_at) / 100) / 10 : null,
       slow: turn.outcome === "running" && !turn.output_at && elapsed_s > Math.max(2 * expected_s, expected_s + 15),
       retries: turn.retries,

@@ -449,7 +449,6 @@
   "响应较慢，正在自动重试": "Slow response, retrying automatically",
   "比平时慢，请稍候": "Slower than usual, please wait",
   "已等待 {{value0}} 秒": "waited {{value0}} s",
-  "通常约 {{value0}} 秒": "usually about {{value0}} s",
   "重试中…": "Retrying…",
   "测试 {{value0}}": "Test {{value0}}",
   "测试中…": "Testing…",

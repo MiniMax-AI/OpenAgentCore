@@ -6,7 +6,7 @@ const stableId = (value) => {
 };
 import { feishuContextReader } from "./feishu-context.mjs";
 import { explainFailure, turnsAPI } from "./turns.mjs";
-import { typicalWait, waitingHeadline } from "../shared/turn-status.mjs";
+import { waitingHeadline } from "../shared/turn-status.mjs";
 import { feishuSource } from "../shared/feishu-source.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
 
@@ -169,6 +169,13 @@ export function feishuAPI(store) {
     store.put("feishu_bots", value);
     return publicFeishu(value);
   };
+}
+
+// Feishu's rich-text box can bold or code-format a command; the command is
+// what remains without that formatting.
+export function asCommand(text) {
+  const plain = text.replace(/^[*_~`]+|[*_~`]+$/g, "").trim();
+  return /^\/(clear|stop|help)$/.test(plain) || /^\/answer\s/.test(plain) ? plain : text;
 }
 
 const cardTones = {
@@ -453,9 +460,7 @@ export function formatTurnCard(status, items = [], error, turn, questions = [], 
   if (status === "in_progress") {
     const last = items.filter((x) => x.role !== "user" && x.type !== "function_call_output").at(-1);
     const current = !last ? waitingHeadline(turn) : last.type === "message" ? "正在整理回复" : last.type === "reasoning" ? "正在思考" : last.status === "in_progress" ? `正在${step(last)[0]}` : "正在整理结果";
-    const typical = !last && turn?.expected_s && turn.stage !== "retrying" ? typicalWait.replace("{{value0}}", turn.expected_s) : "";
-    const progress = rows.length ? `${rows.length} 步` : typical;
-    const subtitle = [current, progress].filter(Boolean).join(" · ");
+    const subtitle = [current, rows.length ? `${rows.length} 步` : ""].filter(Boolean).join(" · ");
     const body = authorizationText ? excerpt(authorizationText, 8000) : "";
     const earlier = rows.slice(0, -recentRows), recent = rows.slice(-recentRows);
     const budget = cardBudget - bytes(body);
@@ -727,9 +732,10 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     if (!message.content?.trim() || message.content.length > 40000) return;
     const id = stableId(`${appId}:${message.messageId}`);
     if (store.get("feishu_inbound", id)) return;
+    const content = asCommand(message.content.trim());
     let thread =
       message.chatType === "p2p" &&
-      message.content.trim() !== "/clear"
+      content !== "/clear"
         ? store
             .list("feishu_threads")
             .find(
@@ -783,7 +789,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         thread_id: threadId,
         message_id: message.messageId,
         sender_id: message.senderId,
-        text: message.content.trim(),
+        text: content,
         raw_content_type: message.rawContentType,
         reply_to_message_id: message.replyToMessageId,
         occurred_at: message.createTime || stamp(),
@@ -821,22 +827,25 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         next_at: 0,
       });
   };
-  const queueMedia = (thread, items, artifacts = []) => {
-    const sources = artifacts.map((file) => ({
-      id: `artifact:${file.id}`,
-      path: artifactContentPath(file.session_id, file.id),
-      name: file.path.split("/").at(-1) || "attachment",
-    }));
-    for (const item of items.filter((item) => item.type === "message" && item.role === "assistant")) {
-      const text = (item.content || []).filter((part) => part.type === "output_text").map((part) => part.text).join("\n");
+  // A Turn's files reply to the message it answers. Only files its reply names
+  // reach the chat; every file stays downloadable in the Web conversation.
+  const queueMedia = (thread, items, artifacts = [], replyTo = thread.root_id) => {
+    const replies = items
+      .filter((item) => item.type === "message" && item.role === "assistant")
+      .map((item) => ({ item, text: (item.content || []).filter((part) => part.type === "output_text").map((part) => part.text).join("\n") }));
+    const said = replies.map(({ text }) => text).join("\n");
+    const sources = artifacts
+      .map((file) => ({ file, name: file.path.split("/").at(-1) || "attachment" }))
+      .filter(({ name }) => said.includes(name))
+      .map(({ file, name }) => ({ id: `artifact:${file.id}`, path: artifactContentPath(file.session_id, file.id), name }));
+    for (const { item, text } of replies)
       for (const path of qrImages(text))
         sources.push({ id: `${item.turn_id}:${path}`, path, name: "feishu-authorization.png" });
-    }
     for (const source of sources) {
       const id = stableId(`${thread.id}:media:${source.id}`);
       if (store.get("feishu_outbound", id)) continue;
       store.transaction(() => {
-        queueReply(id, thread, "");
+        queueReply(id, thread, "", false, replyTo);
         store.put("feishu_outbound", { ...store.get("feishu_outbound", id), media: source });
       });
     }
@@ -1323,7 +1332,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       const items = currentItems.filter(
         (item) => item.turn_id === turns.at(-1)?.id && !ledger.superseded(run.id, item.turn_id),
       );
-      queueMedia(thread, items);
+      queueMedia(thread, items, [], progress?.reply_to);
       const text = formatTurnCard(session.status === "requires_action" && questions.length ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id), questions, app);
       if (progress?.sent_message_id) {
         if (thread.progress_text !== text) {
@@ -1377,9 +1386,9 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       if (turn.status === "completed" && (thread.answered_call_ids || []).some((callId) =>
         turnItems.some((item) => item.type === "function_call" && item.call_id === callId) &&
         !turnItems.some((item) => item.type === "function_call_output" && item.call_id === callId))) return;
-      queueMedia(thread, turnItems, artifacts.filter((file) => file.turn_id === turn.id));
       const latest = turn.id === turns.at(-1)?.id;
       const card = cardFor(turn);
+      queueMedia(thread, turnItems, artifacts.filter((file) => file.turn_id === turn.id), card?.reply_to);
       // The display boundary belongs to the newest input; an older Turn shows all of itself.
       const text = formatTurnCard(
         turn.status,

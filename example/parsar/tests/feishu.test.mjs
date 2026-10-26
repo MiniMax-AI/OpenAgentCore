@@ -1471,10 +1471,12 @@ test("Feishu delivers QR during authorization and artifact media once, retaining
     if (path.endsWith(`/${fileId}/content`)) return Buffer.from("report content");
     const value = await f.core(path, ...args);
     if (path.includes("/turns")) return { data: [{ id: turnId, status: waiting ? "in_progress" : "completed" }], has_more: false };
-    if (path.includes("/items")) return { data: [{ id: itemId, turn_id: turnId, type: "message", role: "assistant", content: [{ type: "output_text", text: `Scan [authorize](https://open.feishu.cn/page/cli?user_code=test-code)\n![飞书授权二维码](/app/feishu/provision/${registrationId}/qrcode)` }] }], has_more: false };
+    if (path.includes("/items")) return { data: [{ id: itemId, turn_id: turnId, type: "message", role: "assistant", content: [{ type: "output_text", text: `Scan [authorize](https://open.feishu.cn/page/cli?user_code=test-code)\n![飞书授权二维码](/app/feishu/provision/${registrationId}/qrcode)\n见 chart.png 和 report.txt。` }] }], has_more: false };
+    // Only files the reply names reach the chat; evidence.json stays in the Web conversation.
     if (path.includes("/artifacts")) return { data: waiting ? [] : [
       { id: imageId, session_id: path.split("/")[4], turn_id: turnId, path: "/workspace/outputs/chart.png", size_bytes: png.length },
       { id: fileId, session_id: path.split("/")[4], turn_id: turnId, path: "/workspace/outputs/report.txt", size_bytes: 14 },
+      { id: randomUUID(), session_id: path.split("/")[4], turn_id: turnId, path: "/workspace/outputs/evidence/evidence.json", size_bytes: 2 },
     ], has_more: false };
     if (args[0] === "GET") return { ...value, status: waiting ? "requires_action" : "idle" };
     return value;
@@ -2136,4 +2138,11 @@ test("Parsar's views show a Feishu message without the source line the Agent see
   assert.equal(line, "[飞书消息 message_id=om_1 chat_id=oc_1 chat_type=p2p sender_open_id=ou_1]");
   assert.equal(withoutFeishuSource(`${line}\n记一下明天的 meetup`), "记一下明天的 meetup");
   assert.equal(withoutFeishuSource("[飞书消息] 不是来源行"), "[飞书消息] 不是来源行");
+});
+
+test("a command keeps working when Feishu's rich-text box formats it", async () => {
+  const { asCommand } = await import("../server/feishu.mjs");
+  for (const text of ["/clear", "**/clear**", "`/clear`", "~~/stop~~", "_/help_"]) assert.match(asCommand(text), /^\/(clear|stop|help)$/);
+  assert.equal(asCommand("**/answer call_1 好的**"), "/answer call_1 好的");
+  assert.equal(asCommand("**重点** 明天开会"), "**重点** 明天开会", "ordinary text keeps its formatting");
 });

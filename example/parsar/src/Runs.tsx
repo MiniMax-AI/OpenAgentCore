@@ -5,7 +5,7 @@ import { Play } from "lucide-react";
 import { tr } from "./lib/i18n";
 import { api, dateTime } from "./lib/api";
 import { product, useAgents, useTurnOverview, type TurnRow } from "./lib/product";
-import { stageLabel, typicalWait } from "../shared/turn-status.mjs";
+import { stageLabel } from "../shared/turn-status.mjs";
 import { ErrorNotice, PageHeader, RecordTabs } from "./components/shared";
 import { Button } from "./components/ui/button";
 import { EmptyState } from "./components/ui/empty-state";
@@ -106,10 +106,6 @@ function Running({
     mutationFn: () => api.cancelTurn(row.core_session_id, randomUuid()),
   });
   const elapsed = Math.max(0, Math.round((now - row.started_at) / 1000));
-  const waiting =
-    !row.first_output_s &&
-    row.stage !== "waiting_user" &&
-    row.stage !== "retrying";
   return (
     <article className="flex items-center gap-4 px-6 py-4">
       <StatusIcon status="running" />
@@ -128,12 +124,6 @@ function Running({
         )}
       >
         {tr(stageLabel(row))} · {tr("{{value0}} 秒", { value0: elapsed })}
-        {waiting && (
-          <span className="text-fg-muted">
-            {" "}
-            · {tr(typicalWait, { value0: row.expected_s })}
-          </span>
-        )}
       </p>
       {row.stage === "waiting_user" ? (
         <span className="w-16 shrink-0" />

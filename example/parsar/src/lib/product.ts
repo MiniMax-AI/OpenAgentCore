@@ -65,7 +65,6 @@ export interface TurnSummary {
   kind: "cold" | "prepared" | "followup";
   started_at: number;
   elapsed_s: number;
-  expected_s: number;
   slow: boolean;
   retries: number;
   failure?: string;

@@ -4,7 +4,7 @@ import { tr } from "./lib/i18n";
 import { product, type SessionRecord } from "./lib/product";
 import { Button } from "./components/ui/button";
 import { ErrorNotice } from "./components/shared";
-import { typicalWait, waitingHeadline } from "../shared/turn-status.mjs";
+import { waitingHeadline } from "../shared/turn-status.mjs";
 
 // Where a running Turn spends its time before the first output, and a plain
 // explanation with a retry when it failed.
@@ -57,7 +57,6 @@ export function TurnStatus({ record }: { record: SessionRecord }) {
         className="rounded-xl bg-surface-subtle px-4 py-3 text-sm text-fg"
       >
         {tr(waitingHeadline(turn))} · {tr("已等待 {{value0}} 秒", { value0: elapsed })}
-        {turn.stage !== "retrying" && ` · ${tr(typicalWait, { value0: turn.expected_s })}`}
       </p>
     </div>
   );
