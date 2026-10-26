@@ -54,6 +54,27 @@ export const botScopes = [
   // Translation, OCR and speech
   "translation:text", "optical_char_recognition:image", "speech_to_text:speech",
 ];
+// The name the app has in Feishu, read with its own credentials; undefined
+// when Feishu cannot say.
+export async function feishuAppName(fetchImpl, { app_id, app_secret, brand }) {
+  const host = brand === "lark" ? "open.larksuite.com" : "open.feishu.cn";
+  const call = async (path, init) =>
+    (await fetchImpl(`https://${host}${path}`, { ...init, redirect: "error", signal: AbortSignal.timeout(10000) })).json();
+  try {
+    const { tenant_access_token: token } = await call("/open-apis/auth/v3/tenant_access_token/internal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app_id, app_secret }),
+    });
+    if (!token) return;
+    const info = await call("/open-apis/bot/v3/info", { headers: { Authorization: `Bearer ${token}` } });
+    const name = (info.bot || info.data?.bot)?.app_name;
+    return typeof name === "string" && name.trim() ? name.trim().slice(0, 80) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // The official SDKs' QR `addons` encoding.
 const addons = gzipSync(JSON.stringify({ scopes: { tenant: botScopes } })).toString("base64url");
 
@@ -127,7 +148,7 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
         const bot = store.get("feishu_bots", id);
         if (bot?.app_id)
           throw new AppError(409, "机器人已有应用，请新建机器人进行扫码注册。");
-        const name = text(body.name || "Feishu", "机器人名称", 80, true);
+        const name = body.name ? text(body.name, "机器人名称", 80, true) : "";
         await call("init");
         const value = await call("begin", {
           archetype: "PersonalAgent",
@@ -152,8 +173,8 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
           verification.password
         )
           throw new AppError(502, "飞书返回的授权地址无效。");
-        // The confirmation page after scanning pre-fills the app's name and scopes.
-        verification.searchParams.set("name", name);
+        // The confirmation page after scanning pre-fills the app's scopes, and its name when one was given.
+        if (name) verification.searchParams.set("name", name);
         verification.searchParams.set("addons", addons);
         row = {
           id,
@@ -214,11 +235,13 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
             .some((bot) => bot.app_id === value.client_id)
         )
           throw new AppError(409, "应用已绑定，请检查机器人配置。");
+        const brand = row.brand === "lark" ? "lark" : "feishu";
+        const appName = await feishuAppName(fetchImpl, { app_id: value.client_id, app_secret: value.client_secret, brand });
         store.transaction(() => {
           store.put("feishu_bots", {
             ...bot,
             id,
-            name: bot?.name || row.name,
+            name: appName || row.name || value.client_id,
             app_id: value.client_id,
             app_secret: value.client_secret,
             brand: row.brand === "lark" ? "lark" : "feishu",

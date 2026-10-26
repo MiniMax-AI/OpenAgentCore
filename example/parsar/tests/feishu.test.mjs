@@ -5,6 +5,11 @@ import { randomUUID } from "node:crypto";
 import { openStore, AppError } from "../server/store.mjs";
 import { productAPI } from "../server/product.mjs";
 import { withSavedResources } from "./core-double.mjs";
+
+// Tests never reach Feishu; a name lookup falls back to the App ID.
+const offline = async () => {
+  throw new TypeError("offline");
+};
 import { feishuOperations } from "../server/feishu.mjs";
 import { feishuWorker as workerForBot } from "../server/feishu.mjs";
 
@@ -52,7 +57,7 @@ async function setup(t) {
     return { id, status: resource.status };
   };
   const savedCore = withSavedResources(core);
-  const api = productAPI(store, savedCore);
+  const api = productAPI(store, savedCore, offline);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
   const provider = await put("providers", {
@@ -2186,4 +2191,35 @@ test("a bot deletes at once, running or with deliveries pending; delivered histo
   assert.equal(f.store.get("feishu_outbound", "pending"), null);
   assert.equal(f.store.get("feishu_inbound", "waiting"), null);
   assert.equal(f.store.get("feishu_outbound", "sent").state, "delivered");
+});
+
+test("a new bot takes the name its app has in Feishu, scanned or added", async (t) => {
+  const { feishuRegistrationAPI } = await import("../server/feishu-registration.mjs");
+  const { feishuAPI } = await import("../server/feishu.mjs");
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const feishuFetch = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    if (path === "/open-apis/auth/v3/tenant_access_token/internal")
+      return Response.json({ tenant_access_token: JSON.parse(init.body).app_secret === "right" ? "token" : undefined });
+    if (path === "/open-apis/bot/v3/info") return Response.json({ bot: { app_name: "reldev日程" } });
+    const action = new URLSearchParams(init.body).get("action");
+    if (action === "begin")
+      return Response.json({ device_code: "device", user_code: "CODE", verification_uri_complete: "https://open.feishu.cn/page/cli?user_code=CODE", expires_in: 300, interval: 1 });
+    if (action === "poll") return Response.json({ client_id: "cli_0123456789abcdef", client_secret: "right" });
+    return Response.json({});
+  };
+  const registration = feishuRegistrationAPI(store, feishuFetch);
+  const id = randomUUID();
+  const begin = await registration("POST", `/app/feishu/provision/${id}`, { action: "begin" });
+  assert.equal(new URL(begin.verification_url).searchParams.get("name"), null, "people name the app on the confirmation page");
+  await registration("POST", `/app/feishu/provision/${id}`, { action: "poll" });
+  assert.equal(store.get("feishu_bots", id).name, "reldev日程");
+  // An app added by App ID and App Secret takes its Feishu name too.
+  const bots = feishuAPI(store, feishuFetch);
+  const added = await bots("PUT", `/app/feishu/bots/${randomUUID()}`, { revision: 0, app_id: "cli_fedcba9876543210", app_secret: "right", enabled: false });
+  assert.equal(added.name, "reldev日程");
+  // When Feishu cannot say, the App ID stands in until the bot connects.
+  const unnamed = await bots("PUT", `/app/feishu/bots/${randomUUID()}`, { revision: 0, app_id: "cli_aaaaaaaaaaaaaaaa", app_secret: "wrong", enabled: false });
+  assert.equal(unnamed.name, "cli_aaaaaaaaaaaaaaaa");
 });

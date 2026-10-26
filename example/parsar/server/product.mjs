@@ -51,7 +51,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
   };
   const capabilities = capabilityAPI(store);
   const oauth = mcpOAuthAPI(store, core, origin, fetchImpl);
-  const feishu = feishuAPI(store);
+  const feishu = feishuAPI(store, fetchImpl);
   const registration = feishuRegistrationAPI(store, fetchImpl);
   const providers = providerAPI(store, fetchImpl);
   const trials = trialAPI(store, core, resources);

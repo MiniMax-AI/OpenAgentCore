@@ -8,6 +8,7 @@ import { feishuContextReader } from "./feishu-context.mjs";
 import { explainFailure, turnsAPI } from "./turns.mjs";
 import { waitingHeadline } from "../shared/turn-status.mjs";
 import { feishuSource } from "../shared/feishu-source.mjs";
+import { feishuAppName } from "./feishu-registration.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
 
 const stamp = () => Date.now();
@@ -16,7 +17,7 @@ export const publicFeishu = ({ app_secret, ...record }) => ({
   ...record,
   has_app_secret: !!app_secret,
 });
-export function feishuAPI(store) {
+export function feishuAPI(store, fetchImpl = fetch) {
   return async (method, path, body) => {
     const retryMatch = path.match(
       /^\/app\/feishu\/deliveries\/(inbound|outbound)\/([a-f0-9-]{36})$/,
@@ -107,8 +108,10 @@ export function feishuAPI(store) {
     if (body.brand !== undefined && !["feishu", "lark"].includes(body.brand))
       throw new AppError(400, "机器人地区无效。");
     const app_id = text(body.app_id, "App ID", 100).trim();
-    // The name comes from Feishu once the bot connects; until then it shows the App ID.
-    const name = app_id === old.app_id && old.name ? old.name : app_id || "Feishu";
+    // A new app takes the name it has in Feishu; connecting keeps it current.
+    const name = app_id === old.app_id && old.name
+      ? old.name
+      : (app_id && body.app_secret && (await feishuAppName(fetchImpl, { app_id, app_secret: body.app_secret.trim(), brand: body.brand ?? old.brand }))) || app_id || "Feishu";
     if (
       app_id &&
       store

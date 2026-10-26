@@ -207,7 +207,7 @@ test("Provider discovery reports failures without leaking keys or upstream bodie
   store.close();
 });
 
-async function setup(store, test, fetchImpl) {
+async function setup(store, test, fetchImpl = async () => { throw new TypeError("offline"); }) {
   const core = withSavedResources(test);
   const api = productAPI(store, core, fetchImpl);
   const put = (kind, body, id = randomUUID()) =>

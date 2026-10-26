@@ -410,10 +410,7 @@ function QrCreate({ close }: { close: () => void }) {
   const [started, setStarted] = useState(false);
   const begin = useMutation({
     mutationFn: () =>
-      product<RegistrationState>(`feishu/provision/${id}`, "POST", {
-        action: "begin",
-        name: "Parsar",
-      }),
+      product<RegistrationState>(`feishu/provision/${id}`, "POST", { action: "begin" }),
     onSuccess: (value) => {
       cache.setQueryData(["feishu-registration", id], value);
       setStarted(true);
