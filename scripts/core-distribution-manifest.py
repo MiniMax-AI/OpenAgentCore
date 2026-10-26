@@ -52,8 +52,7 @@ BUNDLED_DOCS = (
 )
 # Files the bundled docs show, copied as they are, so they work offline.
 BUNDLED_FILES = (
-    "docs/assets/openagentcore-wordmark-light.svg",
-    "docs/assets/openagentcore-wordmark-dark.svg",
+    "docs/assets/openagentcore-banner.webp",
     "docs/assets/architecture.svg",
     "docs/assets/architecture-dark.svg",
     "docs/assets/console-overview-en.webp",
