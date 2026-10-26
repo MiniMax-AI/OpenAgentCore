@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createServer, request } from "node:http";
+import { randomUUID } from "node:crypto";
 import { configuration, createHandler } from "../server.mjs";
+import { openStore } from "../server/store.mjs";
 
 test("oversized writes return a definite 413 without contacting Core", async (t) => {
   let called = false;
@@ -9,7 +11,7 @@ test("oversized writes return a definite 413 without contacting Core", async (t)
     called = true;
     return Response.json({});
   });
-  const response = await fetch(`${url}/v1/agents`, {
+  const response = await fetch(`${url}/v1/vaults`, {
     method: "POST",
     headers: { origin: url },
     body: "x".repeat(1024 * 1024 + 1),
@@ -18,14 +20,14 @@ test("oversized writes return a definite 413 without contacting Core", async (t)
   assert.equal(called, false);
 });
 
-async function serve(t, fetchImpl, host) {
+async function serve(t, fetchImpl, host, store) {
   const config = {
     port: 0,
     key: "server-only-secret",
     target: "https://core.example",
     ...(host ? { host } : {}),
   };
-  const server = createServer(createHandler(config, { fetchImpl }));
+  const server = createServer(createHandler(config, { fetchImpl, store }));
   await new Promise((done) => server.listen(0, "127.0.0.1", done));
   config.port = server.address().port;
   t.after(() => {
@@ -39,7 +41,7 @@ test("server injects only the project key and preserves request identity", async
   let called = false;
   const url = await serve(t, async (target, init) => {
     called = true;
-    assert.equal(target, "https://core.example/v1/agents");
+    assert.equal(target, "https://core.example/v1/vaults");
     assert.equal(init.headers.Authorization, "Bearer server-only-secret");
     assert.equal(init.headers["Idempotency-Key"], "same-operation");
     assert.equal(init.headers["OpenAI-Beta"], "agents=v1");
@@ -47,7 +49,7 @@ test("server injects only the project key and preserves request identity", async
     assert.equal(init.headers.cookie, undefined);
     return Response.json({ id: "session" }, { status: 201 });
   });
-  const result = await fetch(`${url}/v1/agents`, {
+  const result = await fetch(`${url}/v1/vaults`, {
     method: "POST",
     body: "{}",
     headers: {
@@ -67,14 +69,17 @@ test("cross-origin, rebinding, management and encoded paths never reach Core", a
     throw new Error("must not reach Core");
   });
   for (const [path, headers, method, status] of [
-    ["/v1/agents", { origin: "https://evil.example" }, "GET", 403],
-    ["/v1/agents", { host: "evil.example" }, "GET", 403],
-    ["/v1/agents", { "sec-fetch-site": "cross-site" }, "GET", 403],
-    ["/v1/agents", {}, "POST", 403],
+    ["/v1/vaults", { origin: "https://evil.example" }, "GET", 403],
+    ["/v1/vaults", { host: "evil.example" }, "GET", 403],
+    ["/v1/vaults", { "sec-fetch-site": "cross-site" }, "GET", 403],
+    ["/v1/vaults", {}, "POST", 403],
     ["/core/v1/projects", {}, "GET", 404],
     ["/api/v1/devices", {}, "GET", 404],
     ["/v1/agents%2fsessions", {}, "GET", 404],
-    ["/v1/agents", {}, "DELETE", 404],
+    ["/v1/vaults", {}, "DELETE", 404],
+    // Saved Agents and Templates are written only by Parsar's server.
+    ["/v1/agents", {}, "GET", 404],
+    ["/v1/agents/environments/templates", {}, "GET", 404],
   ]) {
     const received = await new Promise((done, reject) => {
       const req = request(`${url}${path}`, { method, headers }, (res) => {
@@ -104,7 +109,7 @@ test("redirects and transport errors do not expose credentials or follow another
     },
   ]) {
     const url = await serve(t, reply);
-    const result = await fetch(`${url}/v1/agents`);
+    const result = await fetch(`${url}/v1/vaults`);
     assert.equal(result.status, 502);
     assert.equal((await result.text()).includes("server-only-secret"), false);
   }
@@ -359,7 +364,7 @@ test("loopback port forwarding preserves exact-origin writes and rejects non-loo
   ]) {
     const actual = await new Promise((resolve, reject) => {
       const req = request(
-        `${url}/v1/agents`,
+        `${url}/v1/vaults`,
         { method: "POST", headers: { host, ...(origin ? { origin } : {}) } },
         (res) => {
           res.resume();
@@ -391,7 +396,7 @@ test("a configured LAN address is the only accepted Host", async (t) => {
   ]) {
     const actual = await new Promise((resolve, reject) => {
       const req = request(
-        `${url}/v1/agents`,
+        `${url}/v1/vaults`,
         { method: "POST", headers: { host, origin: `http://${host}` } },
         (res) => {
           res.resume();
@@ -403,4 +408,20 @@ test("a configured LAN address is the only accepted Host", async (t) => {
     });
     assert.equal(actual, status, host);
   }
+});
+
+test("a Skill an Agent binds is not deleted", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  store.put("agents", { id: randomUUID(), skill_ids: ["skill_bound"] });
+  const deleted = [];
+  const url = await serve(t, async (target) => {
+    deleted.push(String(target));
+    return Response.json({ id: "skill_free", deleted: true });
+  }, undefined, store);
+  const remove = (id) => fetch(`${url}/v1/skills/${id}`, { method: "DELETE", headers: { Origin: url } });
+  assert.equal((await remove("skill_bound")).status, 409);
+  assert.equal(deleted.length, 0);
+  assert.equal((await remove("skill_free")).status, 200);
+  assert.equal(deleted.length, 1);
 });

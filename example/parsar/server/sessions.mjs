@@ -1,32 +1,34 @@
 import { createHash, randomUUID } from "node:crypto";
-import { runtimeEnvironment } from "./runtime-profile.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 import { harnessOptions } from "../shared/harness-options.mjs";
+import { contributions } from "./capability-kinds.mjs";
+import { templateFiles } from "./core-resources.mjs";
 import { turnsAPI } from "./turns.mjs";
 
 // A warm Session matches a cold creation only when every frozen byte except the
-// first input and the per-conversation metadata is the same.
-const fingerprint = ({ input, metadata, ...request }) =>
-  createHash("sha256").update(JSON.stringify(request)).digest("hex");
+// first input and the per-conversation metadata is the same, including the
+// content of the Core Agent and Template it references.
+const fingerprint = ({ request: { input, metadata, ...request }, core_digests }) =>
+  createHash("sha256").update(JSON.stringify({ request, core_digests })).digest("hex");
 const warmAge = 12 * 3600_000;
 
 export function sessionBot(store, agentId) {
   return store.list("feishu_bots").find((bot) => bot.agent_id === agentId);
 }
 
-export function prepareSession(store, id, body, origin = {}, warm = false) {
-  const agent = store.get("agents", body.agent_id);
-  if (!agent) throw new AppError(400, "请选择有效的 Agent。");
-  if (agent.enabled === false)
-    throw new AppError(400, "Agent 已停用，请先启用。");
-  const runtime = store.get("runtimes", agent.runtime_id || "");
-  if (!runtime) throw new AppError(400, "Agent 未配置环境模板。");
+// A Session references the Agent's saved Core Agent and its environment
+// template's Core Template, and adds only what differs per conversation: the
+// bot identity, the Agent's Skills, Plugins and knowledge, and attachments.
+export async function prepareSession(store, resources, id, body, origin = {}, warm = false) {
+  const stored = store.get("agents", body.agent_id);
+  if (!stored) throw new AppError(400, "请选择有效的 Agent。");
+  if (stored.enabled === false) throw new AppError(400, "Agent 已停用，请先启用。");
+  const storedRuntime = store.get("runtimes", stored.runtime_id || "");
+  if (!storedRuntime) throw new AppError(400, "Agent 未配置环境模板。");
+  const agent = await resources.ensure("agents", stored.id);
+  const runtime = await resources.ensure("runtimes", storedRuntime.id);
   const model = store.get("models", agent.model_id);
-  const mcps = agent.mcp_ids.map((id) => store.get("mcps", id));
-  if (!model || model.enabled === false || mcps.some((mcp) => !mcp))
-    throw new AppError(400, "Agent 绑定的资源已不可用。");
-  if (new Set(mcps.map((mcp) => mcp.label)).size !== mcps.length)
-    throw new AppError(400, "绑定的 MCP 服务标识不能重复。");
+  const bound = contributions(store, agent);
   const botEnv = Object.entries(runtime.bot_env || {});
   const bot = sessionBot(store, agent.id);
   if (botEnv.length && !bot?.app_secret)
@@ -34,60 +36,12 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
       400,
       "环境模板需要飞书机器人身份，请先在飞书接入中把机器人绑定到这个 Agent。",
     );
-  const environment = runtimeEnvironment(runtime);
-  for (const [name, field] of botEnv)
-    environment.env[name] = field === "brand" ? bot.brand || "feishu" : bot[field];
   const provider = store.get("providers", model.provider_id);
   if (!provider?.base_url?.startsWith("https://") || !provider.api_key)
     throw new AppError(
       400,
       "请先在模型页面配置所选 Provider 的 HTTPS Base URL 和 API Key。",
     );
-  const modelProvider = {
-    protocol: harnessOptions[agent.harness].protocol,
-    base_url: provider.base_url,
-    api_key: provider.api_key,
-  };
-  const tools = [
-    { type: "web_search", mode: agent.web_search || "disabled" },
-  ];
-  if (agent.ask_user)
-    tools.push({
-      type: "function",
-      name: "ask_user",
-      description:
-        "Ask the user a business question when essential information is missing. Never request execution permission or approval; execution is bypass-only.",
-      parameters: {
-        type: "object",
-        properties: {
-          question: { type: "string" },
-          options: { type: "array", items: { type: "string" } },
-        },
-        required: ["question", "options"],
-        additionalProperties: false,
-      },
-    });
-  tools.push(
-    ...mcps.map((mcp) => ({
-      type: "mcp",
-      server_label: mcp.label,
-      transport: { type: "http", server_url: mcp.url },
-      connection_origin: "environment",
-      // MiniMax Code admits only optional MCP initialization.
-      required: agent.harness !== "mcode",
-      ...(mcp.credential_id ? { credential_id: mcp.credential_id } : {}),
-    })),
-  );
-  {
-    environment.skills = agent.skill_ids.map((skill_id) => ({
-      type: "skill_reference",
-      skill_id,
-      ...(agent.skill_versions?.[skill_id]
-        ? { version: agent.skill_versions[skill_id] }
-        : {}),
-    }));
-    if (mcps.length) environment.network = { access: "enabled" };
-  }
   const images = body.images || [];
   const files = body.files || [];
   if (
@@ -119,60 +73,18 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
     )
   )
     throw new AppError(400, "附件格式或大小无效。");
-  if (files.length && environment.type !== "openai_hosted")
-    throw new AppError(400, "附件需要托管运行时。");
-  if (files.length) environment.files.push(...files);
-  const capabilities = (agent.capability_ids || []).map((id) => {
-    const capability = store.get("capabilities", id);
-    if (!capability || capability.deprecated)
-      throw new AppError(400, "Agent 绑定的能力已停用或不存在。");
-    const version = capability.versions.find(
-      (row) =>
-        row.version ===
-        (agent.capability_versions?.[id] || capability.default_version),
-    );
-    if (!version) throw new AppError(400, "Agent 绑定的能力版本不存在。");
-    return { ...capability, ...version };
-  });
-  for (const capability of capabilities) {
-    if (capability.kind === "prompt") continue;
-    if (environment.type !== "openai_hosted")
-      throw new AppError(400, "Plugin 和知识文件需要托管运行时。");
-    if (capability.kind === "knowledge")
-      environment.files = [
-        ...(environment.files || []),
-        {
-          type: "inline",
-          path: `/workspace/knowledge/${capability.id}.md`,
-          data: Buffer.from(capability.content).toString("base64"),
-        },
-      ];
-    if (capability.kind === "plugin")
-      environment.plugins = [
-        ...(environment.plugins || []),
-        {
-          type: "inline",
-          name: capability.name,
-          description: capability.description,
-          source: {
-            type: "base64",
-            media_type: "application/zip",
-            data: capability.archive,
-          },
-        },
-      ];
-  }
-  const instructions = [
-    agent.instructions,
-    ...capabilities
-      .filter((row) => row.kind === "prompt")
-      .map((row) => row.content),
-    ...capabilities
-      .filter((row) => row.kind === "knowledge")
-      .map((row) => `Knowledge: ${row.name} — ./knowledge/${row.id}.md`),
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  // Session files replace the Template's set, so they include the Template's own.
+  const extraFiles = [...files, ...bound.session.files];
+  const environment = {
+    type: "openai_hosted",
+    environment_template_id: runtime.core_template_id,
+    ...(botEnv.length
+      ? { env: Object.fromEntries(botEnv.map(([name, field]) => [name, field === "brand" ? bot.brand || "feishu" : bot[field]])) }
+      : {}),
+    ...(bound.session.skills.length ? { skills: bound.session.skills } : {}),
+    ...(bound.session.plugins.length ? { plugins: bound.session.plugins } : {}),
+    ...(extraFiles.length ? { files: [...templateFiles(runtime), ...extraFiles] } : {}),
+  };
   const name = warm ? "" : text(body.name, "会话名称", 80, true);
   const input = warm ? "" : text(body.input, "消息", 100000, true);
   return {
@@ -185,6 +97,7 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
       ? { feishu_chat_type: origin.feishu_chat_type }
       : {}),
     pricing: model.pricing,
+    core_digests: [agent.core_digest, runtime.core_digest],
     configuration: {
       agent_name: agent.name,
       agent_revision: agent.revision,
@@ -201,48 +114,13 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
         ...botEnv.map(([name]) => name),
       ],
       file_paths: (runtime.files || []).map((file) => file.path),
-      skills: agent.skill_ids.map((id) => ({
-        id,
-        version: agent.skill_versions?.[id] || null,
-      })),
-      mcps: mcps.map((mcp) => mcp.label),
-      capabilities: capabilities.map((row) => ({
-        name: row.name,
-        kind: row.kind,
-        version: row.version,
-      })),
+      ...bound.summary,
     },
     created_at: Math.floor(Date.now() / 1000),
     request: {
-      agent: {
-        model: model.model,
-        instructions,
-        ...(agent.reasoning_effort || agent.reasoning_summary
-          ? {
-              reasoning: {
-                ...(agent.reasoning_effort
-                  ? { effort: agent.reasoning_effort }
-                  : {}),
-                ...(agent.reasoning_summary
-                  ? { summary: agent.reasoning_summary }
-                  : {}),
-              },
-            }
-          : {}),
-        ...(agent.service_tier ? { service_tier: agent.service_tier } : {}),
-        x_agents_core: { harness: agent.harness },
-        multi_agent: { enabled: false },
-        text: { verbosity: agent.verbosity || "medium" },
-        tools,
-      },
+      agent_id: agent.core_agent_id,
       environment,
-      ...(mcps.some((mcp) => mcp.vault_id)
-        ? {
-            vault_ids: [
-              ...new Set(mcps.map((mcp) => mcp.vault_id).filter(Boolean)),
-            ],
-          }
-        : {}),
+      ...(bound.session.vault_ids.length ? { vault_ids: bound.session.vault_ids } : {}),
       ...(input
         ? {
             input: images.length
@@ -261,7 +139,14 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
               : input,
           }
         : {}),
-      x_agents_core: { model_provider: modelProvider },
+      // The Provider key stays in Parsar's model settings and travels per Session.
+      x_agents_core: {
+        model_provider: {
+          protocol: harnessOptions[agent.harness].protocol,
+          base_url: provider.base_url,
+          api_key: provider.api_key,
+        },
+      },
       metadata: {
         application: "parsar-example",
         agent_id: agent.id,
@@ -272,7 +157,7 @@ export function prepareSession(store, id, body, origin = {}, warm = false) {
   };
 }
 
-export function sessionAPI(store, core) {
+export function sessionAPI(store, core, resources) {
   const running = new Map();
   const turns = turnsAPI(store, core);
   // Hand a prepared Session to this conversation when one matches its frozen
@@ -280,7 +165,7 @@ export function sessionAPI(store, core) {
   // normally if the prepared one does not start.
   const claim = (row) => {
     if (typeof row.request.input !== "string") return;
-    const print = fingerprint(row.request);
+    const print = fingerprint(row);
     const warm = store
       .list("warm_sessions")
       .find((entry) => entry.agent_id === row.agent_id && entry.fingerprint === print);
@@ -297,7 +182,7 @@ export function sessionAPI(store, core) {
     if (row?.pending_input) return turns.sendPrepared(row);
     if (row?.core_session_id) return row;
     if (!row) {
-      row = prepareSession(store, id, body, origin);
+      row = await prepareSession(store, resources, id, body, origin);
       store.put("sessions", row);
       const claimed = claim(row);
       if (claimed) return claimed;
@@ -359,8 +244,7 @@ export function sessionAPI(store, core) {
       )
         try {
           print = fingerprint(
-            prepareSession(store, randomUUID(), { agent_id: agent.id }, {}, true)
-              .request,
+            await prepareSession(store, resources, randomUUID(), { agent_id: agent.id }, {}, true),
           );
         } catch {
           print = undefined;
@@ -379,7 +263,7 @@ export function sessionAPI(store, core) {
       if (!print || entries.some((entry) => entry.fingerprint === print && now - entry.created_at <= warmAge))
         continue;
       const id = randomUUID();
-      const { request } = prepareSession(store, id, { agent_id: agent.id }, {}, true);
+      const { request } = await prepareSession(store, resources, id, { agent_id: agent.id }, {}, true);
       const session = await core("/v1/agents/sessions", "POST", {
         ...request,
         metadata: { ...request.metadata, title: "", warm: "true" },

@@ -9,6 +9,7 @@ import { buildDirectory } from "./paths.mjs";
 import { isIPv4 } from "node:net";
 import { openStore, dataPath, AppError } from "./server/store.mjs";
 import { productAPI } from "./server/product.mjs";
+import { boundAgents } from "./server/capability-kinds.mjs";
 import { createFeishuTransport, feishuWorkers } from "./server/feishu.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
@@ -31,8 +32,6 @@ const routes = [
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}$/, ["GET"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/(items|turns)$/, ["GET"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/events$/, ["GET", "POST"]],
-  [/^\/v1\/agents$/, ["GET", "POST"]],
-  [/^\/v1\/agents\/[a-f0-9-]{36}$/, ["GET", "POST"]],
 ];
 routes.push(
   [
@@ -250,6 +249,10 @@ export function createHandler(
           "A same-origin Origin header is required for writes.",
         );
       }
+      // Skills live in Core; one an Agent still binds is not deleted.
+      const skill = req.method === "DELETE" && url.pathname.match(/^\/v1\/skills\/(skill_[A-Za-z0-9_-]+)$/)?.[1];
+      if (skill && store && boundAgents(store, "skills", skill).length)
+        return fail(res, 409, "Skill 仍被 Agent 使用，请先在 Agent 中解除绑定。");
       const streaming =
         req.method === "GET" && url.pathname.endsWith("/events");
       const controller = new AbortController();
@@ -420,6 +423,11 @@ if (
     void productHandler.sessions
       .refreshWarm()
       .catch((error) => console.error("Prepared sessions:", error.message));
+  // Saved Core Agents and Templates that no longer resolve, as after moving to
+  // a new Project, are created again on next use.
+  await productHandler.resources
+    .verify()
+    .catch((error) => console.error("Core resources:", error.message));
   refreshPrepared();
   setInterval(refreshPrepared, 15000).unref();
   // Running Turns are watched for stalls and failed Environments.

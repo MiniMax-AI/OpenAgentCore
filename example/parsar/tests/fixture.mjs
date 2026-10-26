@@ -115,7 +115,7 @@ createServer(async (req, res) => {
     executorConnected = true;
     return reply({});
   }
-  if (/^\/v1\/agents\/environments\/[^/]+$/.test(url.pathname)) {
+  if (/^\/v1\/agents\/environments\/(?!templates$)[^/]+$/.test(url.pathname)) {
     return reply({
       id: url.pathname.split("/").at(-1),
       object: "agent.environment",
@@ -255,7 +255,11 @@ createServer(async (req, res) => {
       agents = agents.filter((row) => row !== agent);
       return reply({ id: agent.id, object: "agent.deleted", deleted: true });
     }
-    if (req.method === "POST") Object.assign(agent, body);
+    // A null field resets the saved Agent to its default.
+    if (req.method === "POST")
+      for (const [key, value] of Object.entries(body))
+        if (value === null) delete agent[key];
+        else agent[key] = value;
     return reply(agent);
   }
   if (
@@ -265,6 +269,15 @@ createServer(async (req, res) => {
     const template = { id: randomUUID(), ...body };
     templates.push(template);
     return reply(template, 201);
+  }
+  const template = templates.find((t) => url.pathname === `/v1/agents/environments/templates/${t.id}`);
+  if (template) {
+    if (req.method === "DELETE") {
+      templates = templates.filter((row) => row !== template);
+      return reply({ id: template.id, deleted: true });
+    }
+    if (req.method === "POST") Object.assign(template, body);
+    return reply(template);
   }
   if (url.pathname === "/v1/skills" && req.method === "GET")
     return reply(page(skills));
@@ -348,12 +361,21 @@ createServer(async (req, res) => {
       );
     const key = req.headers["idempotency-key"];
     if (receipts.has(key)) return reply(receipts.get(key));
+    // A saved Agent supplies the configuration; an inline `agent` overrides it.
+    const reference = body.agent_id && agents.find((a) => a.id === body.agent_id);
+    if (body.agent_id && !reference)
+      return reply({ error: { message: "Agent not found" } }, 404);
+    if (body.environment.environment_template_id && !templates.some((t) => t.id === body.environment.environment_template_id))
+      return reply({ error: { message: "Environment template not found" } }, 404);
+    // A Session's Agent snapshot carries configuration only, not the saved Agent's identity or name.
+    const { id: _id, object: _object, created_at: _created, updated_at: _updated, metadata: _metadata, name: _name, ...referenced } = reference || {};
     const saved = {
       id: randomUUID(),
       name: null,
       service_tier: "auto",
+      ...referenced,
       ...body.agent,
-      reasoning: { effort: null, summary: null, ...body.agent?.reasoning },
+      reasoning: { effort: null, summary: null, ...referenced.reasoning, ...body.agent?.reasoning },
       multi_agent: { enabled: false, max_concurrent_subagents: null },
       text: { format: { type: "text" }, verbosity: "medium" },
     };

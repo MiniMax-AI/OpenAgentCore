@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { openStore, AppError } from "../server/store.mjs";
 import { productAPI } from "../server/product.mjs";
+import { withSavedResources } from "./core-double.mjs";
 import { feishuOperations } from "../server/feishu.mjs";
 import { feishuWorker as workerForBot } from "../server/feishu.mjs";
 
@@ -49,7 +50,8 @@ async function setup(t) {
     if (path.includes("/artifacts")) return { data: [], has_more: false };
     return { id, status: resource.status };
   };
-  const api = productAPI(store, core);
+  const savedCore = withSavedResources(core);
+  const api = productAPI(store, savedCore);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
   const provider = await put("providers", {
@@ -77,7 +79,7 @@ async function setup(t) {
   });
   return {
     store,
-    core,
+    core: savedCore,
     api,
     put,
     agent,
@@ -581,7 +583,7 @@ test("Feishu can withdraw an unstarted conversation and recover a lost creation 
   );
 });
 
-test("capability versions freeze into dispatch and retired capabilities cannot start new work", async (t) => {
+test("pinned capability versions reach the saved Agent and retired capabilities cannot start new work", async (t) => {
   const f = await setup(t),
     id = randomUUID();
   const cap = await f.api("PUT", `/app/capabilities/${id}`, {
@@ -609,8 +611,10 @@ test("capability versions freeze into dispatch and retired capabilities cannot s
     agent_id: agent.id,
     input: "Work",
   });
-  assert.match(f.calls[0].body.agent.instructions, /Always verify/);
-  assert.doesNotMatch(f.calls[0].body.agent.instructions, /Updated rules/);
+  // A pinned version reaches the saved Core Agent the Session references.
+  const saved = f.core.agentOf(f.calls[0].body);
+  assert.match(saved.instructions, /Always verify/);
+  assert.doesNotMatch(saved.instructions, /Updated rules/);
   const current = await f.api("GET", `/app/capabilities/${id}`);
   await f.api("PUT", `/app/capabilities/${id}`, {
     ...current,

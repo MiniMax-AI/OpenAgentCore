@@ -1,10 +1,11 @@
 import { AppError, text, uuid } from "./store.mjs";
+import { boundAgents } from "./capability-kinds.mjs";
 import { unzipSync } from "fflate";
 const publicVersion = ({ archive, ...value }) => ({
   ...value,
   has_archive: !!archive,
 });
-export const publicCapability = (row) => ({
+const publicCapability = (row) => ({
   ...row,
   versions: row.versions.map(publicVersion),
 });
@@ -25,9 +26,7 @@ export function capabilityAPI(store) {
     if (old && old.revision !== body.revision)
       throw new AppError(409, "能力已更新，请重新加载。");
     if (method === "DELETE") {
-      if (
-        store.list("agents").some((agent) => agent.capability_ids?.includes(id))
-      )
+      if (boundAgents(store, "capabilities", id).length)
         throw new AppError(409, "能力仍被 Agent 引用。");
       store.remove("capabilities", id);
       return {};

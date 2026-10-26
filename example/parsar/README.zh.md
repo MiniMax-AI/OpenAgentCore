@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 91f8e0d2abc4d4bb989358f846e6b212fbb38e764a953a1d175c17e6b3c640ea
+source_hash: 62934f80a9b631d42ea26739bc2439bc11093975debcbf789fe48f567603a1fe
 ---
 
 # Parsar 工作空间
@@ -26,11 +26,11 @@ pnpm --filter @oac/parsar-example dev
 
 | 对象 | 含义 |
 | --- | --- |
-| **资源库** | 组装用的零件，按使用方分组：模型供 Agent 的执行引擎使用；Skills、MCP 服务、Plugins、知识和指令片段供 Agent 使用；凭据供 MCP 使用。资源是共享的：修改一项会影响所有使用它的对象，正在使用的条目不能移除。 |
+| **资源库** | 组装用的零件，按使用方分组：模型供 Agent 的执行引擎使用；Skills、MCP 服务、Plugins、知识和指令片段供 Agent 使用；凭据供 MCP 使用。资源是共享的：修改一项会影响所有使用它的对象。只有仍然有效的配置会阻止删除：Agent 绑定了这项能力、Agent 使用这个环境模板或模型，或者机器人绑定了这个 Agent。对话不算：它保留创建时的配置快照和完整历史。 |
 | **环境模板** | 准备好的工作区：npm 与 Python 软件包、Bash 初始化脚本、环境变量、飞书机器人变量和初始文件。 |
 | **Agent** | 用户对话的对象：名称、描述、指令、运行方式、一个必选的环境模板、能力和行为开关。运行方式对应本地 Codex 的配置：Harness、模型、推理强度、网页搜索，以及 **高级** 中的推理摘要、输出详细度和服务层级。**复制**会生成一份独立副本。 |
 | **飞书机器人** | 一个机器人最多绑定一个 Agent。它把自己的聊天路由给该 Agent，并在所有对话中（包括网页对话）作为该 Agent 的飞书身份。 |
-| **对话** | 一个公开 Core Session，拥有独立的 Environment，在开始时冻结 Agent 和环境配置。 |
+| **对话** | 一个公开 Core Session，拥有独立的 Environment，由 Agent 对应的 Core Agent 和环境模板对应的 Core Environment Template 创建。Session 开始时，Core 会复制这两份配置。 |
 
 配置只在模板和 Agent 中设定，对话不会覆盖。修改只影响新对话。Agent 或其环境模板变更后，已有对话会给出提示，并提供 **用新配置开始新对话**。
 
@@ -112,7 +112,7 @@ Parsar 会跟踪每一轮正在执行的对话，网页和飞书都一样。出�
 - **凭据** 创建 Vault 和只写的 bearer 凭据。**OAuth 授权** 使用维护中的 MCP SDK 完成发现、动态客户端注册、签发方绑定和 PKCE，再通过公开 Vault API 保存令牌。OAuth 令牌不会返回浏览器。
 - 指令片段和知识具有不可变的编号版本、默认版本、固定版本和停用状态。知识版本会成为初始工作区文件。标准 Claude/Codex Plugin ZIP 会成为公开 Environment Plugin，并列出其中声明的 `.mcp.json` 服务。stdio 服务所需的可执行文件必须存在于环境中。
 
-**环境模板** 只在 Core 托管的工作区中运行。每个新对话会先写入文件、安装软件包并完成初始化，再启动 Agent；初始化失败会停止执行。初始文件使用规范的 `/workspace/` 路径，脚本在工作区中运行。变量值在产品响应中只写：`null` 保留已有值，字符串替换，删除名称即删除变量。**飞书机器人变量** 把变量名映射到所绑定机器人的 **App ID**、**App Secret** 或地区；使用这类模板的对话要求 Agent 已绑定机器人。Parsar 通过公开 Session Environment 合约内联发送模板，不创建 Core Template 资源。Core 可能在 24 小时内复用一次完全相同的准备结果（[准备结果复用](../../contracts/agents-api/zh/environments.md#preparation-reuse)），长时间空闲的对话也可能换到新沙箱；这两种情况下只保留 `/environment`（包括 `/workspace`），初始化脚本不会再次执行。因此初始化脚本必须把之后要用的内容写到 `/workspace` 或软件包目录下，不能写在 HOME 中。飞书工作环境通过 `LARKSUITE_CLI_CONFIG_DIR` 和 `LARKSUITE_CLI_DATA_DIR` 把 lark-cli 的配置和加密凭证放在 `/workspace/.lark-cli`。
+**环境模板** 只在 Core 托管的工作区中运行。每个新对话会先写入文件、安装软件包并完成初始化，再启动 Agent；初始化失败会停止执行。初始文件使用规范的 `/workspace/` 路径，脚本在工作区中运行。变量值在产品响应中只写：`null` 保留已有值，字符串替换，删除名称即删除变量。**飞书机器人变量** 把变量名映射到所绑定机器人的 **App ID**、**App Secret** 或地区；使用这类模板的对话要求 Agent 已绑定机器人。每个环境模板保存为一个 Core Environment Template，每个 Agent 保存为一个 Core Agent。它们本身或它们绑定的内容变化时，Parsar 会更新 Core 里的这两份资源；Core Project 更换后，下次使用时会重新创建。对话的 Session 引用这两份资源，只附加每次对话不同的内容：机器人变量、Agent 的 Skills、Plugins 和知识文件，以及附件（见[模板继承](../../contracts/agents-api/environments.md#inheritance)）。Core 可能在 24 小时内复用一次完全相同的准备结果（[准备结果复用](../../contracts/agents-api/zh/environments.md#preparation-reuse)），长时间空闲的对话也可能换到新沙箱；这两种情况下只保留 `/environment`（包括 `/workspace`），初始化脚本不会再次执行。因此初始化脚本必须把之后要用的内容写到 `/workspace` 或软件包目录下，不能写在 HOME 中。飞书工作环境通过 `LARKSUITE_CLI_CONFIG_DIR` 和 `LARKSUITE_CLI_DATA_DIR` 把 lark-cli 的配置和加密凭证放在 `/workspace/.lark-cli`。
 
 **提前准备，新对话无需等待安装** 会为使用该模板的每个 Agent 保留一个准备好的 Session。Parsar 在没有输入的情况下创建它，Core 会提前准备好 Environment；下一个网页或飞书对话发送第一条消息时直接接管它，并保留自己的标题。Agent、其环境模板、机器人或模型服务商变更后，或超过 12 小时、或被接管后，准备好的 Session 会被替换；关闭开关会丢弃它。第一条消息带图片或文件时，会创建普通的 Session。每个准备好的 Session 在等待期间会占用一个工作区。
 
@@ -146,7 +146,7 @@ node example/parsar/examples/feishu/configure.mjs --url http://localhost:3001 --
 
 ## 数据归属与本地 API {#ownership-and-local-api}
 
-Core 的 Project key 只保存在服务端。对话创建成功后，只保留 Core 引用和产品元数据；创建未确认时保留冻结的公开请求直到确认。Core 仍是执行、Items、Turns、Skills、Vaults 和 Artifacts 的权威来源。SQLite 保存产品配置、能力版本、飞书投递状态以及临时 OAuth/注册状态。文件位于 `~/.oac/data/parsar-example/`，可用绝对路径 `OAC_EXAMPLE_DATA_DIR` 覆盖；由 Core 地址和 Project key 指纹选择具体文件。请在服务停止时备份。Provider 和机器人密钥保存在其中，Core Project key 不在其中。构建和缓存使用 `${OAC_DEV_HOME:-$HOME/.oac}`。
+Core 的 Project key 只保存在服务端。对话创建成功后，只保留 Core 引用和产品元数据；创建未确认时保留冻结的公开请求直到确认。Core 仍是执行、Items、Turns、Skills、Vaults 和 Artifacts 的权威来源，并以保存的 Agent 和 Environment Template 存放每个 Agent 和环境模板，这两类资源只由 Parsar 服务端写入。SQLite 保存产品配置、能力版本、飞书投递状态以及临时 OAuth/注册状态。文件位于 `~/.oac/data/parsar-example/`，可用绝对路径 `OAC_EXAMPLE_DATA_DIR` 覆盖；由 Core 地址和 Project key 指纹选择具体文件。请在服务停止时备份。Provider 和机器人密钥保存在其中，Core Project key 不在其中。构建和缓存使用 `${OAC_DEV_HOME:-$HOME/.oac}`。
 
 | 产品路由组 | 调用方与凭据 |
 | --- | --- |

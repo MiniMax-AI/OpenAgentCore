@@ -8,6 +8,8 @@ import { runtimeProfile, publicRuntime } from "./runtime-profile.mjs";
 import { feishuAPI } from "./feishu.mjs";
 import { trialAPI } from "./trials.mjs";
 import { sessionAPI } from "./sessions.mjs";
+import { coreResources } from "./core-resources.mjs";
+import { boundAgents, capabilityKinds } from "./capability-kinds.mjs";
 import { AppError, text, uuid } from "./store.mjs";
 import {
   harnessOptions,
@@ -32,7 +34,8 @@ const kinds = new Set([
   "sessions",
 ]);
 export function productAPI(store, core, fetchImpl = fetch, origin) {
-  const sessions = sessionAPI(store, core);
+  const resources = coreResources(store, core);
+  const sessions = sessionAPI(store, core, resources);
   const publicRow = (kind, row) => {
     if (kind === "providers") return publicProvider(row);
     if (kind === "runtimes") return publicRuntime(row);
@@ -47,7 +50,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
   const feishu = feishuAPI(store);
   const registration = feishuRegistrationAPI(store, fetchImpl);
   const providers = providerAPI(store, fetchImpl);
-  const trials = trialAPI(store, core);
+  const trials = trialAPI(store, core, resources);
   const sessionAfter = (run) => async (id, body) => {
     await run(id, body);
     return publicRow("sessions", store.get("sessions", id));
@@ -201,21 +204,15 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     }
     const previous = store.get(kind, id);
     if (method === "DELETE") {
+      // Only live configuration blocks deletion. Conversations keep the
+      // snapshot they were created with, and their Core Sessions keep running.
       const used =
         store.list("feishu_bots").some((row) => row.agent_id === id) ||
         store.list("models").some((row) => row.provider_id === id) ||
-        store
-          .list("agents")
-          .some(
-            (row) =>
-              row.model_id === id ||
-              row.runtime_id === id ||
-              row.mcp_ids.includes(id),
-          ) ||
-        store
-          .list("sessions")
-          .some((row) => row.agent_id === id || row.runtime_id === id);
+        store.list("agents").some((row) => row.model_id === id || row.runtime_id === id) ||
+        (kind === "mcps" && boundAgents(store, "mcps", id).length > 0);
       if (used) throw new AppError(409, "资源仍被引用，请先调整绑定。");
+      if (kind === "agents" || kind === "runtimes") await resources.remove(kind, previous);
       store.transaction(() => {
         store.remove(kind, id);
         if (kind === "models") touchProviders(previous?.provider_id);
@@ -264,35 +261,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
       )
         throw new AppError(409, "此 Provider 已有相同的模型 ID。");
     }
-    if (kind === "mcps") {
-      let url;
-      try {
-        url = new URL(body.url);
-      } catch {
-        throw new AppError(400, "请填写有效的 MCP URL。");
-      }
-      if (
-        url.protocol !== "https:" ||
-        url.username ||
-        url.password ||
-        url.hash ||
-        url.search
-      )
-        throw new AppError(400, "MCP 使用不含凭据的 HTTPS 地址。");
-      value.url = url.href;
-      if (body.vault_id && !uuid.test(body.vault_id))
-        throw new AppError(400, "凭据库标识无效。");
-      if (
-        body.credential_id &&
-        (!body.vault_id || !uuid.test(body.credential_id))
-      )
-        throw new AppError(400, "凭据标识无效。");
-      value.vault_id = body.vault_id || "";
-      value.credential_id = body.credential_id || "";
-      value.label = text(body.label, "MCP 标识", 64, true);
-      if (!/^[a-zA-Z0-9_-]+$/.test(value.label))
-        throw new AppError(400, "MCP 标识仅支持字母、数字、下划线和连字符。");
-    }
+    if (kind === "mcps") Object.assign(value, capabilityKinds.mcps.validate(body));
     if (kind === "runtimes") {
       Object.assign(value, runtimeProfile(body, previous));
     }
@@ -380,12 +349,24 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
         if (version) value.skill_versions[skillId] = version;
       }
     }
+    // The saved Core Agent or Template keeps its identity across edits.
+    for (const field of ["core_agent_id", "core_template_id", "core_digest"])
+      if (previous?.[field]) value[field] = previous[field];
     store.transaction(() => {
       store.put(kind, value);
       if (kind === "models")
         touchProviders(previous?.provider_id, value.provider_id);
     });
-    return publicRow(kind, value);
+    // Core validates the Agent or Template now, so a rejected edit is not kept.
+    if (kind === "agents" || kind === "runtimes")
+      try {
+        await resources.ensure(kind, id);
+      } catch (error) {
+        if (previous) store.put(kind, previous);
+        else store.remove(kind, id);
+        throw error;
+      }
+    return publicRow(kind, store.get(kind, id));
   };
   const handler = async (method, path, body) => {
     const result = await handle(method, path, body);
@@ -399,5 +380,6 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     return result;
   };
   handler.sessions = sessions;
+  handler.resources = resources;
   return handler;
 }

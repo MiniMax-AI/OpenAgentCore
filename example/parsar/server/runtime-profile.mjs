@@ -107,21 +107,3 @@ export function publicRuntime({ env, ...row }) {
     env: Object.fromEntries(Object.keys(env || {}).map((key) => [key, null])),
   };
 }
-
-export function runtimeEnvironment(runtime) {
-  if (runtime.environment !== "openai_hosted")
-    throw new AppError(400, "Parsar 仅支持托管工作环境，请重新配置环境模板。");
-  return {
-    type: "openai_hosted",
-    packages: runtime.packages || { npm: [], python: [] },
-    env: { ...runtime.env },
-    setup_commands: runtime.setup_script
-      ? [{ command: runtime.setup_script, cwd: "/workspace" }]
-      : [],
-    files: (runtime.files || []).map(({ path, content }) => ({
-      type: "inline",
-      path,
-      data: Buffer.from(content).toString("base64"),
-    })),
-  };
-}

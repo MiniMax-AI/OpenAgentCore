@@ -296,6 +296,7 @@ export function turnsAPI(store, core) {
         session_id: t.session_id,
         core_session_id: t.core_session_id,
         agent_id: t.agent_id,
+        agent_name: record.configuration?.agent_name,
         conversation: record.name,
         source: t.source,
         chat_type: record.feishu_chat_type,

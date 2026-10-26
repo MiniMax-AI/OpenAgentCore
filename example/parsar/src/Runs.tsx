@@ -223,8 +223,9 @@ export function Runs() {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
-  const name = (id: string) =>
-    agents.data?.find((agent) => agent.id === id)?.name || "—";
+  // A deleted Agent keeps the name its conversation was created with.
+  const name = (row: TurnRow) =>
+    agents.data?.find((agent) => agent.id === row.agent_id)?.name || row.agent_name || "—";
   const keep = (row: TurnRow) =>
     (!agentFilter || row.agent_id === agentFilter) &&
     (!source || row.source === source);
@@ -286,7 +287,7 @@ export function Runs() {
                 <Running
                   key={row.id}
                   row={row}
-                  agent={name(row.agent_id)}
+                  agent={name(row)}
                   now={now}
                 />
               ))}
@@ -306,7 +307,7 @@ export function Runs() {
           {recent.length ? (
             <div className="divide-y divide-line-muted overflow-hidden rounded-2xl border border-line bg-surface app-shadow-card">
               {recent.map((row) => (
-                <Recent key={row.id} row={row} agent={name(row.agent_id)} />
+                <Recent key={row.id} row={row} agent={name(row)} />
               ))}
             </div>
           ) : (

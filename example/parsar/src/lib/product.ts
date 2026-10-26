@@ -69,6 +69,7 @@ export interface TurnRow extends TurnSummary {
   session_id: string;
   core_session_id: string;
   agent_id: string;
+  agent_name?: string;
   conversation: string;
   source: "web" | "feishu";
   chat_type?: "p2p" | "group";

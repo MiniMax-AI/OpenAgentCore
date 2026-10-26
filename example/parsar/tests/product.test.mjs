@@ -6,13 +6,14 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { openStore, dataPath, AppError } from "../server/store.mjs";
 import { productAPI } from "../server/product.mjs";
+import { withSavedResources } from "./core-double.mjs";
 
 test("environment templates prepare hosted Sessions, protect variables and freeze retries", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   let failed = true;
   const calls = [];
-  const { api, put, agent: base } = await setup(
+  const { api, put, core, agent: base } = await setup(
     store,
     async (_path, _method, body) => {
       calls.push(structuredClone(body));
@@ -48,14 +49,15 @@ test("environment templates prepare hosted Sessions, protect variables and freez
     ),
     /lost response/,
   );
+  // The saved Core Template holds the preparation; the Session references it.
   const frozen = calls[0];
   assert.equal(frozen.environment.type, "openai_hosted");
-  assert.equal(frozen.environment.env.OFFICE_TOKEN, "private-env");
-  assert.deepEqual(frozen.environment.packages, runtime.packages);
-  assert.equal(
-    frozen.environment.setup_commands[0].command,
-    runtime.setup_script,
-  );
+  const template = core.saved.get(frozen.environment.environment_template_id);
+  assert.equal(template.env.OFFICE_TOKEN, "private-env");
+  assert.deepEqual(template.packages, runtime.packages);
+  assert.equal(template.setup_commands[0].command, runtime.setup_script);
+  assert.ok(!JSON.stringify(frozen).includes("private-env"), "variables stay in the Template");
+  // Session files replace the Template's set, so they carry the Template's own too.
   assert.deepEqual(
     frozen.environment.files.map((f) => f.path),
     ["/workspace/config.txt", "/workspace/inputs/input.txt"],
@@ -205,7 +207,8 @@ test("Provider discovery reports failures without leaking keys or upstream bodie
   store.close();
 });
 
-async function setup(store, core, fetchImpl) {
+async function setup(store, test, fetchImpl) {
+  const core = withSavedResources(test);
   const api = productAPI(store, core, fetchImpl);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
@@ -240,6 +243,7 @@ async function setup(store, core, fetchImpl) {
   return {
     api,
     put,
+    core,
     model,
     runtime,
     agent,
@@ -250,7 +254,7 @@ async function setup(store, core, fetchImpl) {
     },
   };
 }
-test("one Agent creates independent Sessions; edits do not mutate prior execution; retries survive restart", async (t) => {
+test("Sessions reference one saved Core Agent that edits update in place; retries survive restart", async (t) => {
   const root = join(homedir(), ".oac", "tests");
   await mkdir(root, { recursive: true });
   const dir = await mkdtemp(join(root, "parsar-store-"));
@@ -269,7 +273,7 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
     }
     return receipts.get(key);
   };
-  const { api, put, agent, model, input } = await setup(store, core);
+  const { api, put, core: saved, agent, model, input } = await setup(store, core);
   assert.equal(calls.length, 0);
   const first = await put("sessions", input);
   assert.deepEqual(calls[0].body.environment.skills, [
@@ -281,21 +285,23 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
     api_key: "provider-secret",
   });
   assert.equal(JSON.stringify(first).includes("provider-secret"), false);
-  assert.equal(calls[0].body.agent.tools.length, 2);
-  assert.deepEqual(calls[0].body.agent.tools[1], {
+  assert.equal(calls[0].body.agent, undefined, "the Session references the saved Agent");
+  const savedAgent = saved.agentOf(calls[0].body);
+  assert.equal(savedAgent.tools.length, 2);
+  assert.deepEqual(savedAgent.tools[1], {
     type: "mcp",
     server_label: "docs",
     transport: { type: "http", server_url: "https://mcp.example/docs" },
     connection_origin: "environment",
     required: true,
   });
-  await put("agents", { ...agent, instructions: "Updated" }, agent.id);
+  assert.equal(savedAgent.instructions, "Review carefully");
+  await put("agents", { ...store.get("agents", agent.id), instructions: "Updated" }, agent.id);
   const second = await put("sessions", input);
   assert.notEqual(first.core_session_id, second.core_session_id);
-  assert.equal(calls[0].body.agent.instructions, "Review carefully");
-  assert.equal(calls[1].body.agent.instructions, "Updated");
+  assert.equal(calls[1].body.agent_id, calls[0].body.agent_id, "an edit updates the same saved Agent");
+  assert.equal(saved.agentOf(calls[1].body).instructions, "Updated");
   await assert.rejects(api("DELETE", `/app/models/${model.id}`), /仍被引用/);
-  await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
   const pending = randomUUID();
   lose = true;
   await assert.rejects(put("sessions", input, pending), /lost response/);
@@ -303,7 +309,7 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
   store.close();
   store = openStore(path);
   t.after(() => store.close());
-  const resumed = await productAPI(store, core)(
+  const resumed = await productAPI(store, saved)(
     "PUT",
     `/app/sessions/${pending}`,
     {},
@@ -672,7 +678,7 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
   const store = openStore(":memory:");
   t.after(() => store.close());
   const calls = [];
-  const { api, put, agent, input } = await setup(store, async (_p, _m, body) => {
+  const { api, put, core, agent, input } = await setup(store, async (_p, _m, body) => {
     calls.push(body);
     return { id: randomUUID() };
   });
@@ -710,12 +716,13 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
     /已绑定另一个机器人/,
   );
   const record = await put("sessions", input);
+  // The Template keeps its own variables; each Session adds the bot's identity on top.
   assert.deepEqual(calls.at(-1).environment.env, {
-    LARKSUITE_CLI_DEFAULT_AS: "bot",
     FEISHU_APP_ID: "cli_0123456789abcdef",
     FEISHU_APP_SECRET: "bot-secret",
     FEISHU_BRAND: "lark",
   });
+  assert.deepEqual(core.saved.get(calls.at(-1).environment.environment_template_id).env, { LARKSUITE_CLI_DEFAULT_AS: "bot" });
   assert.equal(record.configuration.bot_name, "Assistant");
   assert.ok(record.configuration.env_names.includes("FEISHU_APP_SECRET"));
   assert.ok(!JSON.stringify(await api("GET", "/app/sessions")).includes("bot-secret"));
@@ -724,11 +731,11 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
   await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
 });
 
-test("Agents carry Harness options into the Session request and reject undeclared values", async (t) => {
+test("Agents carry Harness options into the saved Core Agent and reject undeclared values", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   const sent = [];
-  const { api, put, agent, input } = await setup(store, async (_path, _method, body) => {
+  const { api, put, core, agent, input } = await setup(store, async (_path, _method, body) => {
     sent.push(body);
     return { id: randomUUID() };
   });
@@ -747,12 +754,13 @@ test("Agents carry Harness options into the Session request and reject undeclare
   );
   await put("sessions", input);
   const request = sent[0];
-  assert.deepEqual(request.agent.x_agents_core, { harness: "codex" });
-  assert.deepEqual(request.agent.reasoning, { effort: "high", summary: "auto" });
-  assert.deepEqual(request.agent.text, { verbosity: "low" });
-  assert.equal(request.agent.service_tier, "priority");
+  const saved = core.agentOf(request);
+  assert.deepEqual(saved.x_agents_core, { harness: "codex" });
+  assert.deepEqual(saved.reasoning, { effort: "high", summary: "auto" });
+  assert.deepEqual(saved.text, { verbosity: "low" });
+  assert.equal(saved.service_tier, "priority");
   assert.deepEqual(
-    request.agent.tools.find((tool) => tool.type === "web_search"),
+    saved.tools.find((tool) => tool.type === "web_search"),
     { type: "web_search", mode: "live" },
   );
   assert.equal(request.x_agents_core.model_provider.protocol, "responses");
@@ -763,9 +771,10 @@ test("Agents carry Harness options into the Session request and reject undeclare
   );
   assert.equal(plain.web_search, "disabled");
   await put("sessions", { ...input, name: "Plain" });
-  assert.equal(sent[1].agent.reasoning, undefined);
-  assert.equal(sent[1].agent.service_tier, undefined);
-  assert.deepEqual(sent[1].agent.text, { verbosity: "medium" });
+  // Cleared settings reset the saved Agent instead of keeping old values.
+  assert.equal(core.agentOf(sent[1]).reasoning, null);
+  assert.equal(core.agentOf(sent[1]).service_tier, null);
+  assert.deepEqual(core.agentOf(sent[1]).text, { verbosity: "medium" });
   assert.equal(sent[1].x_agents_core.model_provider.protocol, "anthropic");
   for (const [patch, message] of [
     [{ reasoning_summary: "auto" }, /Claude Code 不支持所选的推理摘要/],
@@ -853,7 +862,7 @@ test("Agent resources follow Core's Environment limits instead of one shared bud
   const make = (kind, n) =>
     Array.from({ length: n }, (_, i) => {
       const id = randomUUID();
-      store.put("capabilities", { id, kind, name: `${kind} ${i}`, default_version: "1", versions: [{ version: "1" }] });
+      store.put("capabilities", { id, kind, name: `${kind} ${i}`, default_version: "1", versions: [{ version: "1", content: "x", archive: "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==" }] });
       return id;
     });
   const prompts = make("prompt", 12),
@@ -1114,4 +1123,91 @@ test("the run overview lists running and recent Turns with their stage, counts a
   );
   assert.equal(overview.stats.concurrency.length, 31);
   assert.equal(overview.stats.concurrency.at(-1), 1);
+});
+
+test("Agents and templates live in Core as saved resources that follow every change", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const sent = [];
+  let rejectAgents = false;
+  const { api, put, core, agent, runtime, input } = await setup(store, async (_path, _method, body) => {
+    sent.push(body);
+    return { id: randomUUID() };
+  });
+  const coreAgentId = store.get("agents", agent.id).core_agent_id;
+  const coreTemplateId = store.get("runtimes", runtime.id).core_template_id;
+  assert.equal(core.saved.get(coreAgentId).metadata.parsar_agent_id, agent.id);
+  assert.ok(core.saved.has(coreTemplateId));
+
+  // An edit updates the same saved Agent.
+  await put("agents", { ...store.get("agents", agent.id), instructions: "Edited" }, agent.id);
+  assert.equal(store.get("agents", agent.id).core_agent_id, coreAgentId);
+  assert.equal(core.saved.get(coreAgentId).instructions, "Edited");
+
+  // An edit Core rejects is not kept.
+  const rejecting = async (path, method, body, key) => {
+    if (rejectAgents && path.startsWith("/v1/agents/") && method === "POST") throw new AppError(400, "invalid agent");
+    return core(path, method, body, key);
+  };
+  const guarded = productAPI(store, rejecting);
+  rejectAgents = true;
+  await assert.rejects(
+    guarded("PUT", `/app/agents/${agent.id}`, { ...store.get("agents", agent.id), instructions: "Rejected" }),
+    /invalid agent/,
+  );
+  assert.equal(store.get("agents", agent.id).instructions, "Edited");
+  rejectAgents = false;
+
+  // What an Agent binds reaches its saved Agent when the next Session starts.
+  const mcpId = store.get("agents", agent.id).mcp_ids[0];
+  await put("mcps", { ...store.get("mcps", mcpId), url: "https://mcp.example/v2" }, mcpId);
+  await put("sessions", input);
+  assert.equal(sent.at(-1).agent_id, coreAgentId);
+  assert.equal(sent.at(-1).environment.environment_template_id, coreTemplateId);
+  assert.equal(core.saved.get(coreAgentId).tools.find((tool) => tool.type === "mcp").transport.server_url, "https://mcp.example/v2");
+
+  // A new Project loses the saved resources; the next use creates them again.
+  core.saved.clear();
+  await api.resources.verify();
+  assert.equal(store.get("agents", agent.id).core_agent_id, undefined);
+  await put("sessions", { ...input, name: "After move" });
+  assert.ok(core.saved.has(sent.at(-1).agent_id));
+  assert.ok(core.saved.has(sent.at(-1).environment.environment_template_id));
+
+  // Deleting a template deletes its saved Core Template.
+  const spare = await put("runtimes", { name: "Spare" });
+  const spareTemplate = store.get("runtimes", spare.id).core_template_id;
+  await api("DELETE", `/app/runtimes/${spare.id}`, {});
+  assert.equal(core.saved.has(spareTemplate), false);
+});
+
+test("only live configuration blocks deletion; conversations keep their snapshot and history", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const calls = [];
+  const { api, put, core, agent, runtime, model, input } = await setup(store, async (path, method, body) => {
+    calls.push({ path, method });
+    return { id: randomUUID() };
+  });
+  const conversation = await put("sessions", input);
+  // An Agent that uses a template, model or MCP keeps them.
+  await assert.rejects(api("DELETE", `/app/runtimes/${runtime.id}`), /仍被引用/);
+  await assert.rejects(api("DELETE", `/app/models/${model.id}`), /仍被引用/);
+  await assert.rejects(api("DELETE", `/app/mcps/${agent.mcp_ids[0]}`), /仍被引用/);
+  // A bot bound to the Agent keeps it.
+  store.put("feishu_bots", { id: randomUUID(), agent_id: agent.id });
+  await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
+  store.remove("feishu_bots", store.list("feishu_bots")[0].id);
+  // A conversation is history, not a dependency.
+  const coreAgentId = store.get("agents", agent.id).core_agent_id;
+  await api("DELETE", `/app/agents/${agent.id}`, {});
+  assert.equal(core.saved.has(coreAgentId), false);
+  await api("DELETE", `/app/runtimes/${runtime.id}`, {});
+  await api("DELETE", `/app/mcps/${agent.mcp_ids[0]}`, {});
+  await api("DELETE", `/app/models/${model.id}`, {});
+  const kept = await api("GET", `/app/sessions/${conversation.id}`);
+  assert.equal(kept.core_session_id, conversation.core_session_id);
+  assert.equal(kept.configuration.agent_name, "Reviewer");
+  assert.ok((await api("GET", "/app/sessions")).some((row) => row.id === conversation.id));
+  assert.equal(calls.some((call) => call.method === "DELETE" && call.path.includes("/sessions/")), false, "its Core Session and messages stay");
 });
