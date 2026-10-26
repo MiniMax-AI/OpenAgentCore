@@ -152,7 +152,7 @@ export function turnsAPI(store, core) {
       () => {
         const turn = store.get("turns", id);
         if (turn?.outcome === "running" && turn.core_session_id === record.core_session_id)
-          store.put("turns", { ...turn, unsent: true });
+          save({ ...turn, unsent: true });
       },
     );
     return record;
@@ -168,12 +168,20 @@ export function turnsAPI(store, core) {
     return deliver(record, text, { id: `${sessionId}:${key}`, key, source: "web" });
   };
 
+  // The monitor writes back a copy it read before its Core calls; a message
+  // that joined the Turn meanwhile stays recorded.
+  const save = (turn) => {
+    const steers = store.get("turns", turn.id)?.steers;
+    const saved = steers ? { ...turn, steers } : turn;
+    store.put("turns", saved);
+    return saved;
+  };
+
   const finish = (turn, outcome, failure) => {
     const done = { ...turn, outcome, stage: undefined, done_at: now(), pending_cancel: undefined };
     if (failure) done.failure = failure;
     if (outcome === "completed" && !done.output_at) done.output_at = done.done_at;
-    store.put("turns", done);
-    return done;
+    return save(done);
   };
 
   // Replaces a Session whose first Turn never ran (its Environment failed, or a
@@ -188,7 +196,7 @@ export function turnsAPI(store, core) {
       // Feishu cursors belong to the replaced Core Session.
       for (const thread of store.list("feishu_threads").filter((t) => t.session_id === record.id))
         store.put("feishu_threads", { ...thread, turn_cursor: undefined, item_cursor: undefined, artifact_cursor: undefined });
-      store.put("turns", { ...turn, core_session_id: created.id, retries, prepared: false, unsent: undefined, stage: "preparing" });
+      save({ ...turn, core_session_id: created.id, retries, prepared: false, unsent: undefined, stage: "preparing" });
     });
     await core(`/v1/agents/sessions/${record.core_session_id}`, "DELETE").catch(() => {});
   };
@@ -205,14 +213,14 @@ export function turnsAPI(store, core) {
     // Messages that steered the Turn go with it again.
     const input = [...asInput(turn.input), ...(turn.steers || []).flatMap((steer) => steer.input)];
     await post(record.core_session_id, message(input), `${turn.id}:resend:${retries}`);
-    store.put("turns", { ...turn, retries, stage: "retrying", pending_cancel: undefined, core_turn_id: undefined });
+    save({ ...turn, retries, stage: "retrying", pending_cancel: undefined, core_turn_id: undefined });
   };
 
   const check = async (turn) => {
     const record = store.get("sessions", turn.session_id);
     if (!record || record.deleted_at) return finish(turn, "cancelled");
     if (record.core_session_id !== turn.core_session_id) {
-      store.put("turns", { ...turn, core_session_id: record.core_session_id });
+      save({ ...turn, core_session_id: record.core_session_id });
       return;
     }
     // Confirm uncertain Web submissions before attributing any Core Turn to
@@ -284,7 +292,7 @@ export function turnsAPI(store, core) {
       await post(sid, { type: "agent.session.input.cancel" }, `${turn.id}:cancel:${current.retries + 1}`);
       current = { ...current, pending_cancel: coreTurn.id, stage: "retrying" };
     } else if (stalled) current.failure = unresponsive;
-    store.put("turns", current);
+    save(current);
   };
 
   let monitoring = false;

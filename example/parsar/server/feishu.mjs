@@ -423,8 +423,7 @@ function scopeNotice(app, scopes) {
   const host = app.brand === "lark" ? "open.larksuite.com" : "open.feishu.cn";
   const url = `https://${host}/page/scope-apply?clientID=${encodeURIComponent(app.app_id)}&scopes=${encodeURIComponent(scopes.join(","))}`;
   return [
-    `**机器人「${app.name || app.app_id}」还缺少飞书权限**，这次没能完成。`,
-    `需要开通：${scopes.map((name) => `\`${name}\``).join("、")}`,
+    `需要为机器人「${app.name || app.app_id}」开通：${scopes.map((name) => `\`${name}\``).join("、")}`,
     `[申请开通权限](${url})`,
     grey("管理员批准并发布新版本后，直接回复这条消息即可继续。"),
   ].join("\n\n");
@@ -490,14 +489,15 @@ export function formatTurnCard(status, items = [], error, turn, questions = [], 
     : status === "cancelled" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已按你的要求停止。"
     : [authorizationText, answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n"), status === "requires_action" ? 8000 : 12000);
   const elements = [];
-  // Missing scopes come first: the Agent's own explanation folds below the link.
-  const scopes = app ? missingScopes(items) : [];
+  // Scopes the Agent's reply names as missing get a link to apply for them,
+  // under the reply; scopes it only ran into while exploring do not.
+  const said = [answer, ...questions.map((action) => questionText(action))].join("\n");
+  const scopes = app ? missingScopes(items).filter((name) => said.includes(name)) : [];
+  if (foldContext) elements.push(panel({ title: grey("补充说明"), content: excerpt(context, 4000), block: true }));
   if (scopes.length) {
-    elements.push(panel({ title: grey("Agent 的说明"), content: excerpt([body, foldContext ? context : ""].filter(Boolean).join("\n\n"), 4000) }));
-    if (rows.length) elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, cardBudget - bytes(elements) - 2000), block: true }));
-    return statusCard("missing_scopes", scopeNotice(app, scopes), [{ tag: "hr" }, ...elements]);
+    if (rows.length) elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, cardBudget - bytes(body) - 3000), block: true }));
+    return statusCard("missing_scopes", [body, scopeNotice(app, scopes)].join("\n\n"), [{ tag: "hr" }, ...elements]);
   }
-  if (foldContext) elements.push(panel({ title: grey("补充说明"), content: excerpt(context, 4000) }));
   // A failure shows the step that failed right under its cause.
   const failedTool = status === "failed" ? tools.findLast((item) => item.status === "failed") : undefined;
   if (failedTool) elements.push(toolRow(failedTool));
@@ -1190,8 +1190,11 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         row = { ...row, state: "submitting", event };
         store.put("feishu_inbound", row);
         // Messages go through the Turn ledger; answers and cancellations go to Core directly.
-        if (event.type === "agent.session.input.message")
-          steered = (await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" })).id !== row.id;
+        // A message sent while a Turn runs joins it in Core and keeps its card.
+        if (event.type === "agent.session.input.message") {
+          const delivered = await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" });
+          steered = delivered.id !== row.id || delivered.base_running === true;
+        }
         else
           await core(
             `/v1/agents/sessions/${run.core_session_id}/events`,

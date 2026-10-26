@@ -2112,30 +2112,32 @@ test("a message sent while the Turn runs steers it and keeps that Turn's card", 
   assert.equal(f.store.list("feishu_inbound").find((row) => row.message_id === "steer").state, "delivered");
 });
 
-test("a turn blocked by missing Feishu scopes answers with the scopes and a link to apply", async () => {
+test("a reply that names missing Feishu scopes gets a link to apply for them", async () => {
   const { formatTurnCard, missingScopes } = await import("../server/feishu.mjs");
   const cli = JSON.stringify({ ok: false, identity: "bot", error: { type: "authorization", subtype: "app_scope_not_applied", code: 99991672, message: "access denied: app cli_0123456789abcdef has not applied for the required scope(s): base:field:read, base:record:read" } });
-  const api = '{"code":99991672,"msg":"Access denied. One of the following scopes is required: [calendar:calendar:readonly, calendar:calendar]."}';
-  const items = [
+  const api = '{"code":99991672,"msg":"Access denied. One of the following scopes is required: [drive:drive, drive:drive:readonly]."}';
+  const tools = [
     { type: "command_execution", command: "lark-cli base +field-list", output: cli, status: "failed" },
-    { type: "command_execution", command: "curl calendar", output: api, status: "completed" },
+    { type: "command_execution", command: "lark-cli drive files list", output: api, status: "completed" },
     { type: "command_execution", command: "echo", output: "scope: not an error", status: "completed" },
-    { type: "message", role: "assistant", content: [{ type: "output_text", text: "很长的一段解释和三个选项" }] },
   ];
-  assert.deepEqual(missingScopes(items), ["base:field:read", "base:record:read", "calendar:calendar:readonly", "calendar:calendar"]);
+  assert.deepEqual(missingScopes(tools), ["base:field:read", "base:record:read", "drive:drive", "drive:drive:readonly"]);
+  const reply = (text) => [...tools, { type: "message", role: "assistant", content: [{ type: "output_text", text }] }];
   const app = { app_id: "cli_0123456789abcdef", brand: "feishu", name: "日程助手" };
-  const card = JSON.parse(formatTurnCard("requires_action", items, undefined, undefined, [], app));
+  // The reply names the Base scopes; Drive came up only while exploring.
+  const card = JSON.parse(formatTurnCard("completed", reply("登记没完成：缺少 base:field:read 和 base:record:read。"), undefined, undefined, [], app));
   const body = card.body.elements[0].content;
   assert.equal(card.header.title.content, "需要开通权限");
-  assert.match(body, /机器人「日程助手」还缺少飞书权限/);
-  assert.match(body, /https:\/\/open\.feishu\.cn\/page\/scope-apply\?clientID=cli_0123456789abcdef&scopes=base%3Afield%3Aread%2Cbase%3Arecord%3Aread%2Ccalendar%3Acalendar%3Areadonly%2Ccalendar%3Acalendar/);
-  assert.doesNotMatch(body, /很长的一段解释/, "the Agent's explanation folds below");
-  assert.match(JSON.stringify(card.body.elements.slice(1)), /很长的一段解释/);
-  // Without scope errors, the card is unchanged.
-  const plain = JSON.parse(formatTurnCard("completed", items.slice(2), undefined, undefined, [], app));
+  assert.match(body, /^登记没完成：缺少 base:field:read 和 base:record:read。/, "the reply stays the body");
+  assert.match(body, /需要为机器人「日程助手」开通/);
+  assert.match(body, /https:\/\/open\.feishu\.cn\/page\/scope-apply\?clientID=cli_0123456789abcdef&scopes=base%3Afield%3Aread%2Cbase%3Arecord%3Aread\)/);
+  assert.doesNotMatch(body, /drive/, "scopes met only while exploring are not asked for");
+  // A reply that names no scope keeps the ordinary card.
+  const plain = JSON.parse(formatTurnCard("completed", reply("请让管理员把机器人加为多维表的协作者。"), undefined, undefined, [], app));
   assert.equal(plain.header.title.content, "已完成");
+  assert.doesNotMatch(JSON.stringify(plain), /scope-apply/);
   // Lark apps apply on the Lark console.
-  assert.match(formatTurnCard("failed", items, "x", undefined, [], { ...app, brand: "lark" }), /open\.larksuite\.com\/page\/scope-apply/);
+  assert.match(formatTurnCard("failed", reply("缺少 base:field:read"), "x", undefined, [], { ...app, brand: "lark" }), /open\.larksuite\.com\/page\/scope-apply/);
 });
 
 test("Parsar's views show a Feishu message without the source line the Agent sees", async () => {

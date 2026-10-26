@@ -1440,3 +1440,27 @@ test("an uncertain message confirmed while its Turn still runs joins that Turn",
   assert.deepEqual(store.get("turns", `${id}:first`).steers.map((steer) => steer.id), [`${id}:uncertain`]);
   assert.equal(api.sessions.turns.overview().running.length, 1);
 });
+
+test("a message that joins a Turn while the monitor checks it stays recorded", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const fake = scriptedCore({ environments: [], turns: ["run"] });
+  let gate;
+  const core = async (path, method, body, key) => {
+    // Hold the monitor's Turn listing until the message has joined.
+    if (gate && method === "GET" && path.includes("/turns?order=desc&limit=100")) await gate.promise;
+    return fake.core(path, method, body, key);
+  };
+  const { api, put, input } = await setup(store, core);
+  const id = randomUUID();
+  await put("sessions", input, id);
+  await api.sessions.turns.monitor();
+  gate = Promise.withResolvers();
+  const pass = api.sessions.turns.monitor();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await api("POST", `/app/sessions/${id}/messages`, { text: "补充一句", key: "steer" });
+  gate.resolve();
+  await pass;
+  assert.deepEqual(store.get("turns", `${id}:first`).steers?.map((steer) => steer.id), [`${id}:steer`]);
+  assert.equal(store.get("turns", `${id}:steer`), null);
+});
