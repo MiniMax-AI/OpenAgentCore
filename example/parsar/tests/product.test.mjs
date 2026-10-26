@@ -42,7 +42,7 @@ test("environment templates prepare hosted Sessions, protect variables and freez
         input: "Read config",
         agent_id: agent.id,
         files: [
-          { type: "inline", path: "/workspace/inputs/input.txt", data: "eA==" },
+          { type: "file_id", path: "/workspace/inputs/input.txt", file_id: "file-input" },
         ],
       },
       id,

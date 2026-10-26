@@ -44,6 +44,8 @@ const page = (data) => ({
   first_id: data[0]?.id || null,
   last_id: data.at(-1)?.id || null,
 });
+// Files uploaded through the Files API, by ID, with their sizes.
+const uploads = new Map();
 createServer(async (req, res) => {
   const url = new URL(req.url, "http://localhost");
   const chunks = [];
@@ -475,6 +477,27 @@ createServer(async (req, res) => {
     }
     return reply(session, 201);
   }
+  if (url.pathname === "/v1/files" && req.method === "POST") {
+    const form = await new Request("http://fixture/", {
+      method: "POST",
+      headers: { "content-type": req.headers["content-type"] },
+      body: bytes,
+    }).formData();
+    const file = form.get("file");
+    const id = `file-${randomUUID()}`;
+    uploads.set(id, file.size);
+    return reply({
+      id,
+      object: "file",
+      bytes: file.size,
+      created_at: Math.floor(Date.now() / 1000),
+      filename: file.name,
+      purpose: form.get("purpose"),
+      status: "processed",
+      expires_at: null,
+      status_details: null,
+    });
+  }
   const fileMatch = url.pathname.match(
     /^\/v1\/agents\/environments\/([^/]+)\/files$/,
   );
@@ -485,7 +508,7 @@ createServer(async (req, res) => {
           object: "agent.environment.file",
           environment_id: fileMatch[1],
           path: body.path,
-          size_bytes: Buffer.from(body.data, "base64").length,
+          size_bytes: body.type === "file_id" ? uploads.get(body.file_id) : Buffer.from(body.data, "base64").length,
         },
         201,
       );

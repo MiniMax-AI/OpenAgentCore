@@ -50,13 +50,11 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
   if (
     !Array.isArray(files) ||
     files.length > 8 ||
-    JSON.stringify(files).length > 7000000 ||
     files.some(
       (file) =>
-        file.type !== "inline" ||
+        file.type !== "file_id" ||
         !/^\/workspace\/inputs\/[a-zA-Z0-9_.-]+$/.test(file.path) ||
-        typeof file.data !== "string" ||
-        !/^[A-Za-z0-9+/]*={0,2}$/.test(file.data),
+        !/^file-[A-Za-z0-9_-]+$/.test(file.file_id),
     )
   )
     throw new AppError(400, "附件格式或大小无效。");

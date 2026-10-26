@@ -1,4 +1,4 @@
-import { readMediaBytes } from "./shared/media.mjs";
+import { maxUploadBytes, readMediaBytes } from "./shared/media.mjs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createServer } from "node:http";
@@ -24,6 +24,7 @@ const routes = [
   ],
   [/^\/v1\/agents\/environments\/[a-f0-9-]{36}$/, ["GET"]],
   [/^\/v1\/agents\/environments\/[a-f0-9-]{36}\/files$/, ["GET", "POST"]],
+  [/^\/v1\/files$/, ["POST"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/artifacts$/, ["GET"]],
   [
     /^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/artifacts\/[a-f0-9-]{36}\/content$/,
@@ -97,16 +98,18 @@ function fail(res, status, message) {
 
 export function coreClient(config, fetchImpl = fetch) {
   return async (path, method, body, key) => {
+    // A FormData body is a multipart upload, which sets its own Content-Type.
+    const form = body instanceof FormData;
     const response = await fetchImpl(`${config.target}${path}`, {
       method,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
       redirect: "manual",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(form ? 300_000 : 30_000),
       headers: {
         ...(key ? { "Idempotency-Key": key } : {}),
         Authorization: `Bearer ${config.key}`,
         "OpenAI-Beta": "agents=v1",
-        "Content-Type": "application/json",
+        ...(form ? {} : { "Content-Type": "application/json" }),
       },
     });
     if (response.status >= 300 && response.status < 400)
@@ -270,10 +273,12 @@ export function createHandler(
           size += chunk.length;
           if (
             size >
-            (url.pathname.startsWith("/v1/skills") ||
-            url.pathname.endsWith("/files")
-              ? 8 * 1024 * 1024
-              : 1024 * 1024)
+            (url.pathname === "/v1/files"
+              ? maxUploadBytes + 64 * 1024
+              : url.pathname.startsWith("/v1/skills") ||
+                  url.pathname.endsWith("/files")
+                ? 8 * 1024 * 1024
+                : 1024 * 1024)
           )
             return fail(res, 413, "Request too large.");
           chunks.push(chunk);
@@ -284,7 +289,7 @@ export function createHandler(
           "Content-Type": req.headers["content-type"] || "application/json",
           ...(streaming ? { Accept: "text/event-stream" } : {}),
         };
-        if (url.pathname.startsWith("/v1/skills"))
+        if (url.pathname.startsWith("/v1/skills") || url.pathname === "/v1/files")
           delete headers["OpenAI-Beta"];
         if (req.headers["idempotency-key"])
           headers["Idempotency-Key"] = req.headers["idempotency-key"];

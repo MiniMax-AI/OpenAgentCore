@@ -1,4 +1,4 @@
-import { artifactContentPath, imageMime, maxMediaBytes, qrImages, qrImagePattern } from "../shared/media.mjs";
+import { artifactContentPath, imageMime, maxMediaBytes, maxUploadBytes, qrImages, qrImagePattern } from "../shared/media.mjs";
 import { createHash, randomUUID } from "node:crypto";
 const stableId = (value) => {
   const hex = createHash("sha256").update(value).digest("hex");
@@ -947,8 +947,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       const chunks = [];
       for await (const chunk of response) {
         total += chunk.length;
-        if (total > 5 * 1024 * 1024)
-          throw new AppError(413, "附件合计不能超过 5 MiB。");
+        if (total > maxUploadBytes)
+          throw new AppError(413, "附件合计不能超过 50 MiB。");
         chunks.push(chunk);
       }
       const bytes = Buffer.concat(chunks);
@@ -976,11 +976,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           .replace(/[^a-zA-Z0-9_.-]/g, "_")
           .slice(-100);
         const path = `/workspace/inputs/${row.id}-${media.files.length}-${filename}`;
-        media.files.push({
-          type: "inline",
-          path,
-          data: bytes.toString("base64"),
-        });
+        // Uploaded once: the message keeps only the File ID across retries.
+        const form = new FormData();
+        form.append("file", new Blob([bytes]), filename);
+        form.append("purpose", "user_data");
+        const file = await core("/v1/files", "POST", form);
+        media.files.push({ type: "file_id", path, file_id: file.id });
         media.text += `\nAttachment: ${path.replace("/workspace/", "./")}`;
       }
     }

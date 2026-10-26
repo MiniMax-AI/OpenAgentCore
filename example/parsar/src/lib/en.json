@@ -128,7 +128,6 @@
   "搜索资源或操作": "Search resources or operations",
   "文件": "Files",
   "文件不能超过 32 MiB。": "Files must not exceed 32 MiB.",
-  "文件不能超过 5 MiB。": "Files must not exceed 5 MiB.",
   "新建凭据库": "New vault",
   "无法读取产物。": "Unable to read artifacts.",
   "无法读取文件。": "Unable to read file.",
@@ -520,5 +519,7 @@
   "新建 {{value0}} 的密钥": "New secret for {{value0}}",
   "由绑定的飞书机器人「{{value0}}」提供": "Provided by the bound Feishu bot {{value0}}",
   "请先在飞书接入中给这个 Agent 绑定机器人": "Bind a bot to this Agent under Feishu first",
-  "变量名称不能重复": "Variable names must be unique"
+  "变量名称不能重复": "Variable names must be unique",
+  "文件不能为空。": "The file is empty.",
+  "文件不能超过 50 MiB。": "Files can be at most 50 MiB."
 }

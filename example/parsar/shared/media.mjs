@@ -1,6 +1,9 @@
 // Only persisted product QR images and public Session Artifacts are media sources.
 export const qrImagePattern = /^\/app\/feishu\/provision\/([a-f0-9-]{36})\/qrcode$/;
 export const maxMediaBytes = 5 * 1024 * 1024;
+// Files people hand to an Agent go to Core's Files API, then into the
+// workspace by File ID, which Core takes up to 50 MiB.
+export const maxUploadBytes = 50 * 1024 * 1024;
 export const artifactContentPath = (sessionId, artifactId) =>
   `/v1/agents/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}/content`;
 export function qrImages(text) {

@@ -26,6 +26,8 @@ async function setup(t) {
     reject = false;
   const core = async (path, method, body, key) => {
     calls.push({ path, method, body, key });
+    if (method === "POST" && path === "/v1/files")
+      return { id: `file-${randomUUID()}`, bytes: body.get("file").size };
     if (method === "POST") {
       if (reject) throw new AppError(422, "invalid");
       if (!receipts.has(key)) {
@@ -2224,4 +2226,29 @@ test("a new bot takes the name its app has in Feishu, scanned or added", async (
   // When Feishu cannot say, the App ID stands in until the bot connects.
   const unnamed = await bots("PUT", `/app/feishu/bots/${randomUUID()}`, { revision: 0, app_id: "cli_aaaaaaaaaaaaaaaa", app_secret: "wrong", enabled: false });
   assert.equal(unnamed.name, "cli_aaaaaaaaaaaaaaaa");
+});
+
+test("a Feishu file reaches the workspace through Core's Files API, up to 50 MiB", async (t) => {
+  const f = await feishu(t);
+  const worker = f.create();
+  const pdf = Buffer.alloc(6 * 1024 * 1024, 1);
+  f.channel.rawClient.im.messageResource = {
+    get: async () => ({ getReadableStream: async function* () { yield pdf; } }),
+  };
+  worker.receive("cli_0123456789abcdef", {
+    ...f.message,
+    messageId: "om_file",
+    content: '<file key="file_key" name="share.pptx"/>',
+    resources: [{ type: "file", fileKey: "file_key", fileName: "share.pptx" }],
+  });
+  await worker.tick();
+  const upload = f.calls.find((call) => call.path === "/v1/files");
+  assert.equal(upload.body.get("purpose"), "user_data");
+  assert.equal(upload.body.get("file").size, pdf.length, "a 6 MiB file is no longer refused");
+  const creation = f.calls.findLast((call) => call.path === "/v1/agents/sessions" && call.method === "POST");
+  const [file] = creation.body.environment.files.filter((entry) => entry.path.startsWith("/workspace/inputs/"));
+  assert.equal(file.type, "file_id");
+  assert.match(file.file_id, /^file-/);
+  assert.match(file.path, /share\.pptx$/);
+  assert.doesNotMatch(JSON.stringify(f.store.list("feishu_inbound")), /AQEBAQEB/, "the message keeps no file bytes");
 });

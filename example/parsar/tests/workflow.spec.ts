@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
 const appOrigin = `http://127.0.0.1:${process.env.OAC_EXAMPLE_PORT || "18180"}`;
 async function navigate(page: Page, name: string) {
   if (["能力", "模型", "凭据"].includes(name)) {
@@ -612,18 +613,17 @@ test("an active reply without a replayed item baseline refreshes immediately on 
 
 test("conversation uploads insert a file path and download binary artifacts without leaving the conversation", async ({
   page,
-}) => {
+}, testInfo) => {
   await resources(page);
   await agent(page);
   await converse(page);
   await expect(page.getByLabel("继续对话")).toBeVisible();
   await page.getByRole("button", { name: "文件", exact: true }).click();
-  await page.getByLabel("选择上传文件").setInputFiles({
-    name: "large.bin",
-    mimeType: "application/octet-stream",
-    buffer: Buffer.alloc(5 * 1024 * 1024 + 1),
-  });
-  await expect(page.getByRole("alert")).toContainText("文件不能超过 5 MiB");
+  // Playwright passes buffers only up to 50 MB, so the oversized file is on disk.
+  const large = testInfo.outputPath("large.bin");
+  await writeFile(large, Buffer.alloc(50 * 1024 * 1024 + 1));
+  await page.getByLabel("选择上传文件").setInputFiles(large);
+  await expect(page.getByRole("alert")).toContainText("文件不能超过 50 MiB");
   await page.getByLabel("选择上传文件").setInputFiles({
     name: "numbers.csv",
     mimeType: "text/csv",
@@ -636,14 +636,16 @@ test("conversation uploads insert a file path and download binary artifacts with
   await page.getByRole("button", { name: "文件", exact: true }).click();
   const uploaded = page.waitForRequest(
     (request) =>
-      request.method() === "POST" && request.url().endsWith("/files"),
+      request.method() === "POST" && /\/environments\/[^/]+\/files$/.test(request.url()),
   );
   await page.getByLabel("选择上传文件").setInputFiles({
     name: "中".repeat(80) + ".txt",
     mimeType: "text/plain",
     buffer: Buffer.from("small"),
   });
-  const uploadedPath = (await uploaded).postDataJSON().path;
+  const written = (await uploaded).postDataJSON();
+  expect(written.type, "the workspace gets the file by its Files API ID").toBe("file_id");
+  const uploadedPath = written.path;
   expect(
     Buffer.byteLength(uploadedPath.split("/").at(-1), "utf8"),
   ).toBeLessThanOrEqual(255);
