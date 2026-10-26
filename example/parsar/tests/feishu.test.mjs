@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { gunzipSync } from "node:zlib";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { openStore, AppError } from "../server/store.mjs";
@@ -717,6 +718,12 @@ test("Feishu QR registration throttles polling, persists credentials without ret
   const path = `/app/feishu/provision/${id}`;
   const begin = await api("POST", path, { action: "begin", name: "Assistant" });
   assert.equal(begin.status, "pending");
+  // Scanning creates the app with its name and the group-message scope pre-filled.
+  const scan = new URL(begin.verification_url);
+  assert.equal(scan.searchParams.get("name"), "Assistant");
+  assert.deepEqual(JSON.parse(gunzipSync(Buffer.from(scan.searchParams.get("addons"), "base64url"))), {
+    scopes: { tenant: ["im:message.group_msg"] },
+  });
   assert.equal(JSON.stringify(begin).includes("private-device"), false);
   await api("POST", path, { action: "begin" });
   assert.deepEqual(calls, ["init", "begin"]);

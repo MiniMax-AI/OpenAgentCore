@@ -1,6 +1,12 @@
+import { gzipSync } from "node:zlib";
 import QRCode from "qrcode";
 import { qrImagePattern } from "../shared/media.mjs";
 import { AppError, uuid, text } from "./store.mjs";
+
+// Scopes the new app requests on top of the platform's default template, in
+// the official SDKs' QR `addons` encoding. Without im:message.group_msg the bot
+// never receives topic replies that do not mention it.
+const addons = gzipSync(JSON.stringify({ scopes: { tenant: ["im:message.group_msg"] } })).toString("base64url");
 
 // The SDK registerApp helper runs an in-memory polling loop and cannot resume a
 // persisted device code after restart. This adapter implements the same device
@@ -97,6 +103,9 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
           verification.password
         )
           throw new AppError(502, "飞书返回的授权地址无效。");
+        // The confirmation page after scanning pre-fills the app's name and scopes.
+        verification.searchParams.set("name", name);
+        verification.searchParams.set("addons", addons);
         row = {
           id,
           name,
