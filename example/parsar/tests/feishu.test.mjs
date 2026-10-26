@@ -1710,7 +1710,8 @@ test("large multilingual diagnostics stay below the Feishu card payload limit", 
   for (const status of ["in_progress", "completed", "requires_action"]) {
     const payload = formatTurnCard(status, items, undefined, undefined, [{ arguments: { question: large, options: [large] } }]);
     assert.ok(Buffer.byteLength(payload) < 30000, `${status}: ${Buffer.byteLength(payload)}`);
-    assert.match(payload, /更早的 \d+ (步|次调用)见网页对话/, "the oldest rows leave the card first");
+    assert.doesNotMatch(payload, /网页/, "the card never sends people to the Web");
+    assert.match(payload, /调用 20 次工具|第 1–\d+ 步/, "every step stays in the card, at less detail");
     assert.match(payload, /内容较长，已截取/);
   }
 });

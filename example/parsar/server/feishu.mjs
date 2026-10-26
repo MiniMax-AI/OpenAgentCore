@@ -342,7 +342,8 @@ function toolRow(item) {
 }
 
 // Consecutive tool calls fold into one row; each call folds again inside it.
-function toolsRow(items) {
+// With less room, calls keep only their titles, then the group is one line.
+function toolsRow(items, level = 0) {
   const failed = items.filter((item) => item.status === "failed").length;
   const state = items.some((item) => item.status === "in_progress")
     ? grey("进行中")
@@ -355,30 +356,41 @@ function toolsRow(items) {
   const title = items.length === 1
     ? oneLine(label, detail, state)
     : [grey(items.every((item) => step(item)[0] === "运行") ? `运行 ${items.length} 条命令` : `调用 ${items.length} 次工具`), state].filter(Boolean).join(" ");
-  return panel({ title, elements: items.map(toolRow) });
+  if (level >= 2 || (level === 1 && items.length === 1)) return { tag: "markdown", content: title };
+  const calls = level === 1
+    ? items.map((item) => ({ tag: "markdown", content: oneLine(...step(item), toolState(item)) }))
+    : items.map(toolRow);
+  return panel({ title, elements: calls });
 }
 
-// Only commentary stays open; thinking and tool calls fold behind one line.
-function timelineRow(entry) {
-  if (entry.type === "say") return { tag: "markdown", content: excerpt(entry.text, 800) };
-  if (entry.type === "think")
-    return panel({ title: oneLine("思考", entry.text.split("\n").find((line) => line.trim()) || ""), content: excerpt(entry.text, 1500) });
-  return toolsRow(entry.items);
-}
-
-// The oldest rows leave the card first when it would grow past Feishu's
-// limit; a single row that is still too large sheds its oldest calls.
-function fitRows(rows, budget, unit = "步") {
-  const kept = [...rows];
-  let dropped = 0;
-  while (kept.length > 1 && bytes(kept) > budget) {
-    kept.shift();
-    dropped++;
+// One step at decreasing detail: everything; tool calls without their output;
+// thinking and tool groups as one line; commentary shortened.
+function timelineRow(entry, level = 0) {
+  if (entry.type === "say") return { tag: "markdown", content: excerpt(entry.text, level < 3 ? 4000 : 400) };
+  if (entry.type === "think") {
+    const title = oneLine("思考", entry.text.split("\n").find((line) => line.trim()) || "");
+    return level < 2 ? panel({ title, content: excerpt(entry.text, 1500) }) : { tag: "markdown", content: title };
   }
-  const [only] = kept;
-  if (kept.length === 1 && bytes(kept) > budget && only.elements?.length > 1)
-    kept[0] = { ...only, elements: fitRows(only.elements, budget - (bytes(only) - bytes(only.elements)), "次调用") };
-  return dropped ? [{ tag: "markdown", content: grey(`更早的 ${dropped} ${unit}见网页对话`) }, ...kept] : kept;
+  return toolsRow(entry.items, level);
+}
+
+// Every step stays in the card. When it would pass Feishu's size limit, the
+// oldest steps give up detail first.
+function fitRows(entries, budget) {
+  const rows = entries.map((entry) => timelineRow(entry));
+  for (let level = 1; level <= 3 && bytes(rows) > budget; level++)
+    for (let i = 0; i < entries.length && bytes(rows) > budget; i++) {
+      rows[i] = timelineRow(entries[i], level);
+    }
+  // Hundreds of steps: the oldest become one summary line.
+  let merged = 0;
+  while (merged < entries.length - 1 && bytes(rows.slice(merged)) + 200 > budget) merged++;
+  if (!merged) return rows;
+  const counted = entries.slice(0, merged);
+  const commands = counted.flatMap((entry) => entry.items || []).length;
+  const thoughts = counted.filter((entry) => entry.type === "think").length;
+  const summary = [commands && `运行 ${commands} 条命令`, thoughts && `思考 ${thoughts} 次`].filter(Boolean).join("、");
+  return [{ tag: "markdown", content: grey(`第 1–${merged} 步${summary ? `：${summary}` : ""}`) }, ...rows.slice(merged)];
 }
 
 // A tool-result answer resumes the same Core Turn. Display only the exchange
@@ -455,19 +467,18 @@ export function formatTurnCard(status, items = [], error, turn, questions = [], 
     else rows.push(entry.type === "tool" ? { type: "tools", items: [entry.item] } : entry);
     return rows;
   }, []);
-  const rows = grouped.map(timelineRow);
+  const rows = grouped;
   const tools = entries.filter((entry) => entry.type === "tool").map((entry) => entry.item);
   if (status === "in_progress") {
     const last = items.filter((x) => x.role !== "user" && x.type !== "function_call_output").at(-1);
     const current = !last ? waitingHeadline(turn) : last.type === "message" ? "正在整理回复" : last.type === "reasoning" ? "正在思考" : last.status === "in_progress" ? `正在${step(last)[0]}` : "正在整理结果";
     const subtitle = [current, rows.length ? `${rows.length} 步` : ""].filter(Boolean).join(" · ");
     const body = authorizationText ? excerpt(authorizationText, 8000) : "";
-    const earlier = rows.slice(0, -recentRows), recent = rows.slice(-recentRows);
-    const budget = cardBudget - bytes(body);
-    const shown = fitRows(recent, budget);
+    const fitted = fitRows(rows, cardBudget - bytes(body) - 600);
+    const earlier = fitted.slice(0, -recentRows), shown = fitted.slice(-recentRows);
     // Earlier steps sit in a tinted block above a rule that separates the latest ones.
     const fold = earlier.length
-      ? [panel({ title: grey(`更早的 ${earlier.length} 步`), elements: fitRows(earlier, budget - bytes(shown)), block: true }), { tag: "hr" }]
+      ? [panel({ title: grey(`更早的 ${earlier.length} 步`), elements: earlier, block: true }), { tag: "hr" }]
       : [];
     return statusCard(status, body, [...fold, ...shown], subtitle);
   }
@@ -865,7 +876,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   };
   const cancel = async (row) => {
     const thread = store.get("feishu_threads", row.thread_id);
-    if (!thread) return reject(row, "话题关联不可用，请在 Web 中检查。");
+    if (!thread) return reject(row, "这条消息没能接上对话，请重新发送。");
     let run = store.get("sessions", thread.session_id);
     // Resolve an uncertain initial creation before cancelling its actual Session.
     if (run && !run.core_session_id && !run.deleted_at)
@@ -980,7 +991,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   };
   const inbound = async (row) => {
     let thread = store.get("feishu_threads", row.thread_id);
-    if (!thread) return reject(row, "话题关联不可用，请在 Web 中检查。");
+    if (!thread) return reject(row, "这条消息没能接上对话，请重新发送。");
     // A new Session for this chat or topic; the next message starts it.
     const rotateThread = () => {
       thread = {
@@ -1523,7 +1534,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
             ? await product("GET", row.media.path, {})
             : await core(row.media.path, "GET");
           if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > maxMediaBytes)
-            throw new AppError(413, "附件为空或超过 5 MiB，请在网页会话中下载。");
+            throw new AppError(413, "附件为空或超过 5 MiB，飞书发送不了。");
           uploaded = await channel.upload(bytes, row.media.name);
           store.put("feishu_outbound", { ...store.get("feishu_outbound", row.id), uploaded_media: uploaded });
         }
