@@ -1,5 +1,6 @@
 import { AppError, text } from "./store.mjs";
 import { botVariables, environmentVariableName } from "../shared/bot-bindings.mjs";
+import { harnessOptions } from "../shared/harness-options.mjs";
 
 // Every kind of capability an Agent can bind, in one place. A kind resolves an
 // Agent's bindings, says which credentials each needs, and where each one goes:
@@ -66,8 +67,8 @@ export const capabilityKinds = {
         server_label: mcp.label,
         transport: { type: "http", server_url: mcp.url },
         connection_origin: "environment",
-        // MiniMax Code admits only optional MCP initialization.
-        required: agent.harness !== "mcode",
+        // Required only where the Harness declares required HTTP MCP servers.
+        required: harnessOptions[agent.harness]?.mcp_http_required === true,
         ...(credential ? { credential_id: credential.credential_id } : {}),
       });
       if (credential) out.session.vault_ids.push(credential.vault_id);

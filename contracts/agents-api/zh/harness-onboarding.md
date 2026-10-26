@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 9be8782db19e5d68342b751f9b9aeaeac4566e3489320294ca06fcebd422bf78
+source_hash: fce6b6b0b690f252c250b100cf800712237b8ed5c8abfbc7f464a6fb2e55c586
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -178,7 +178,7 @@ Runtime 统一解析[状态目录](../../../docs/zh/configuration.md#runtime-res
 
 ## 声明 Harness {#declare-the-harness}
 
-每个 Harness 是 `internal/harnessconfig/<package>/declaration.go` 中的一个 `var Declaration = harnessconfig.Declaration{...}`。包名是去掉下划线的 kind。创建该文件即注册 Harness：`make generate-harness-catalog` 生成 Core 注册表、Runtime 的 `harnessDeclarations`、客户端标识符和显示名称以及[注册参考](harness-catalog.md)，`make check-harness-catalog` 拒绝过期的投影。`make openapi` 从同一批声明派生 Harness 枚举，因此不要在 DTO 标签或路由注解中手写枚举。没有动态插件加载器，声明也不能表示机器的可用性。
+每个 Harness 是 `internal/harnessconfig/<package>/declaration.go` 中的一个 `var Declaration = harnessconfig.Declaration{...}`。包名是去掉下划线的 kind。创建该文件即注册 Harness：`make generate-harness-catalog` 生成 Core 注册表、Runtime 的 `harnessDeclarations`、客户端标识符和显示名称、Parsar 示例使用的协议和执行选项，以及[注册参考](harness-catalog.md)，`make check-harness-catalog` 拒绝过期的投影。`make openapi` 从同一批声明派生 Harness 枚举，因此不要在 DTO 标签或路由注解中手写枚举。没有动态插件加载器，声明也不能表示机器的可用性。
 
 声明包含：
 

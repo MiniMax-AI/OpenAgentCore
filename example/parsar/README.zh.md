@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: 02cf5bb2228fca4278bdbaa1f2c52416347481b7c4491fd2ec61f9c046941272
+source_hash: 9fd24c6684193572391f8cd279cd681548c2918b4f0c487271c90b9836940a44
 ---
 
 # Parsar 工作空间

@@ -45,11 +45,8 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
     JSON.stringify(images).length > 900000
   )
     throw new AppError(400, "图片格式或大小无效。");
-  if (images.length && agent.harness === "mcode")
-    throw new AppError(
-      400,
-      "当前运行配置不支持图片输入，请使用托管 Codex 或 Claude Code。",
-    );
+  if (images.length && !harnessOptions[agent.harness].message_images)
+    throw new AppError(400, `${harnessOptions[agent.harness].label} 不支持图片输入，请换用支持图片的执行引擎。`);
   if (
     !Array.isArray(files) ||
     files.length > 8 ||

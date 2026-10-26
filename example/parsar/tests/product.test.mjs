@@ -780,7 +780,7 @@ test("Agents carry Harness options into the saved Core Agent and reject undeclar
   assert.deepEqual(core.agentOf(sent[1]).text, { verbosity: "medium" });
   assert.equal(sent[1].x_agents_core.model_provider.protocol, "anthropic");
   for (const [patch, message] of [
-    [{ reasoning_summary: "auto" }, /Claude Code 不支持所选的推理摘要/],
+    [{ reasoning_summary: "concise" }, /Claude Code 不支持所选的推理摘要/],
     [{ harness: "mcode", web_search: "live" }, /MiniMax Code 不支持所选的网页搜索方式/],
     [{ reasoning_effort: "minimal" }, /Claude Code 不支持所选的推理强度/],
     [{ harness: "local" }, /请选择执行引擎/],
@@ -1302,4 +1302,23 @@ test("a message sent while a Turn runs steers it: one running Turn, resent toget
   const next = await turns.send(id, { text: "再来一个", key: "next" });
   assert.notEqual(next.id, first[0].id);
   assert.equal(store.list("turns").length, 2);
+});
+
+test("image input and required MCP servers follow what the Harness declares", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const sent = [];
+  const { put, core, agent, input } = await setup(store, async (_path, _method, body) => {
+    sent.push(body);
+    return { id: randomUUID() };
+  });
+  const image = "data:image/png;base64,iVBORw0KGgo=";
+  // Claude Code declares both.
+  await put("sessions", { ...input, images: [image] });
+  assert.equal(core.agentOf(sent.at(-1)).tools.find((tool) => tool.type === "mcp").required, true);
+  // MiniMax Code declares neither.
+  await put("agents", { ...store.get("agents", agent.id), harness: "mcode" }, agent.id);
+  await assert.rejects(put("sessions", { ...input, images: [image] }), /MiniMax Code 不支持图片输入/);
+  await put("sessions", input);
+  assert.equal(core.agentOf(sent.at(-1)).tools.find((tool) => tool.type === "mcp").required, false);
 });
