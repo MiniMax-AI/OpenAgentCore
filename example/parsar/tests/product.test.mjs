@@ -956,22 +956,115 @@ function scriptedCore(plan) {
   return { core, calls, sessions };
 }
 
+test("Web confirms uncertain sends with the original key before attributing a Turn", async (t) => {
+  for (const active of [false, true]) {
+    for (const error of [new DOMException("request timed out", "TimeoutError"), new TypeError("fetch failed"), new AppError(502, "gateway timeout")]) {
+      const store = openStore(":memory:");
+      t.after(() => store.close());
+      const plan = { environments: [], turns: [active ? "run" : "complete"] };
+      const fake = scriptedCore(plan);
+      const accepted = new Set(), posts = [];
+      let reachable = false;
+      const core = async (path, method, body, key) => {
+        if (method === "POST" && path.endsWith("/events")) {
+          posts.push({ key, body });
+          if (!reachable) throw error;
+          if (accepted.has(key)) return {};
+          accepted.add(key);
+        }
+        return fake.core(path, method, body, key);
+      };
+      const { api, put, input } = await setup(store, core);
+      const id = randomUUID();
+      await put("sessions", input, id);
+      const record = store.get("sessions", id);
+      const session = fake.sessions.get(record.core_session_id);
+      const response = await api("POST", `/app/sessions/${id}/messages`, { text: "Continue", key: "slow" });
+      assert.equal(response.turn.outcome, "running");
+      assert.equal(response.turn.failure, undefined);
+      session.turns[0].status = "completed";
+      session.status = "idle";
+      await api.sessions.turns.monitor();
+      assert.equal(store.get("turns", `${id}:slow`).outcome, "running", "the old Turn cannot prove receipt");
+      // Core already accepted the input, but its response was lost.
+      await fake.core(`/v1/agents/sessions/${record.core_session_id}/events`, "POST", posts[0].body, "slow");
+      accepted.add("slow");
+      reachable = true;
+      await api.sessions.turns.monitor();
+      assert.equal(store.get("turns", `${id}:slow`).outcome, "completed");
+      assert.equal(session.turns.length, 2, "confirmation never executes the input twice");
+      assert.ok(posts.every((p) => p.key === "slow"));
+      assert.ok(posts.every((p) => JSON.stringify(p.body) === JSON.stringify(posts[0].body)));
+
+      reachable = false;
+      await api("POST", `/app/sessions/${id}/messages`, { text: "Not admitted", key: "lost" });
+      plan.turns.push("reserve");
+      reachable = true;
+      const lost = store.get("turns", `${id}:lost`);
+      store.put("turns", { ...lost, started_at: lost.started_at - 6 * 60_000 });
+      await api.sessions.turns.monitor();
+      assert.equal(store.get("turns", lost.id).outcome, "failed");
+      assert.match(store.get("turns", lost.id).failure, /没有被执行/);
+
+      reachable = false;
+      await assert.rejects(api.sessions.turns.deliver(record, "Feishu", {
+        id: "feishu-message", key: "feishu-message", source: "feishu",
+      }), (e) => e === error);
+    }
+  }
+});
+
+test("Web explicit rejections remain failures before and after an uncertain response", async (t) => {
+  for (const status of [400, 401, 403, 404, 409, 429]) {
+    const store = openStore(":memory:");
+    t.after(() => store.close());
+    const fake = scriptedCore({ environments: [], turns: [] });
+    const rejected = new AppError(status, "rejected");
+    let error = rejected;
+    const { api, put, input } = await setup(store, (path, method, ...args) => {
+      if (method === "POST" && path.endsWith("/events")) throw error;
+      return fake.core(path, method, ...args);
+    });
+    const id = randomUUID();
+    await put("sessions", input, id);
+    await assert.rejects(api("POST", `/app/sessions/${id}/messages`, { text: "Continue", key: "denied" }), (e) => e === rejected);
+    assert.equal(store.get("turns", `${id}:denied`), null);
+    error = new TypeError("fetch failed");
+    await api("POST", `/app/sessions/${id}/messages`, { text: "Continue", key: "uncertain" });
+    error = rejected;
+    await api.sessions.turns.monitor();
+    assert.equal(store.get("turns", `${id}:uncertain`).outcome, "failed");
+    assert.match(store.get("turns", `${id}:uncertain`).failure, /rejected/);
+  }
+});
+
 test("the Turn monitor replaces a failed Environment, resends stalled or failed Turns once, and explains final failures", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   const plan = { environments: ["fail"], turns: [] };
   const fake = scriptedCore(plan);
-  const { api, put, runtime, input } = await setup(store, fake.core);
+  const { api, put, core, runtime, input } = await setup(store, fake.core);
   const turns = api.sessions.turns;
 
-  // A failed Environment is replaced with the identical frozen request.
+  // A failed Environment is replaced with the configuration the conversation
+  // was created with, even after the Agent and its template were edited.
   const id = randomUUID();
   const created = await put("sessions", input, id);
+  const savedAgent = structuredClone(core.agentOf(fake.calls.find((c) => c.method === "POST" && c.path === "/v1/agents/sessions").body));
+  const agentRecord = store.get("agents", input.agent_id);
+  await put("agents", { ...agentRecord, instructions: "Edited after creation" }, agentRecord.id);
+  await put("runtimes", { ...store.get("runtimes", runtime.id), setup_script: "echo edited" }, runtime.id);
   await turns.monitor();
   const replaced = store.get("sessions", id);
   assert.notEqual(replaced.core_session_id, created.core_session_id);
   const creations = fake.calls.filter((c) => c.method === "POST" && c.path === "/v1/agents/sessions");
-  assert.deepEqual(creations[1].body, creations[0].body);
+  assert.equal(creations[1].body.agent_id, undefined);
+  assert.equal(creations[1].body.agent.instructions, "Review carefully");
+  assert.equal(savedAgent.instructions, "Review carefully");
+  assert.equal(creations[1].body.agent.model, savedAgent.model);
+  assert.deepEqual(creations[1].body.environment.setup_commands, []);
+  assert.deepEqual(creations[1].body.input, creations[0].body.input);
+  assert.deepEqual(creations[1].body.x_agents_core, creations[0].body.x_agents_core);
   assert.equal(creations[1].key, `${id}:attempt:1`);
   await turns.monitor();
   assert.equal(turns.summary(id).outcome, "completed");
@@ -1321,4 +1414,29 @@ test("image input and required MCP servers follow what the Harness declares", as
   await assert.rejects(put("sessions", { ...input, images: [image] }), /MiniMax Code 不支持图片输入/);
   await put("sessions", input);
   assert.equal(core.agentOf(sent.at(-1)).tools.find((tool) => tool.type === "mcp").required, false);
+});
+
+test("an uncertain message confirmed while its Turn still runs joins that Turn", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const plan = { environments: [], turns: ["run"] };
+  const fake = scriptedCore(plan);
+  let reachable = true;
+  const core = async (path, method, body, key) => {
+    if (method === "POST" && path.endsWith("/events") && !reachable) throw new TypeError("fetch failed");
+    return fake.core(path, method, body, key);
+  };
+  const { api, put, input } = await setup(store, core);
+  const id = randomUUID();
+  await put("sessions", input, id);
+  await api.sessions.turns.monitor();
+  reachable = false;
+  await api("POST", `/app/sessions/${id}/messages`, { text: "补充一句", key: "uncertain" });
+  assert.equal(store.get("turns", `${id}:uncertain`).pending_key, "uncertain");
+  reachable = true;
+  await api.sessions.turns.monitor();
+  await api.sessions.turns.monitor();
+  assert.equal(store.get("turns", `${id}:uncertain`), null);
+  assert.deepEqual(store.get("turns", `${id}:first`).steers.map((steer) => steer.id), [`${id}:uncertain`]);
+  assert.equal(api.sessions.turns.overview().running.length, 1);
 });

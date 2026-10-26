@@ -44,7 +44,7 @@ export function productAPI(store, core, fetchImpl = fetch, origin) {
     if (kind === "runtimes") return publicRuntime(row);
     if (kind === "secrets") return publicSecret(row);
     if (kind === "sessions") {
-      const { request, ...record } = row;
+      const { request, recovery, ...record } = row;
       return { ...record, turn: sessions.turns.summary(record.id) };
     }
     return row;

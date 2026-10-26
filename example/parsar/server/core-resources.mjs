@@ -75,6 +75,15 @@ function coreTemplate(runtime) {
   };
 }
 
+// The saved Agent and Template as an inline Session configuration, frozen when
+// a conversation is created. Replacing its Session later uses this copy, so
+// edits to the saved resources reach only new conversations.
+export function frozenConfiguration(store, agent, runtime) {
+  const { name: _agentName, metadata: _metadata, ...inline } = withoutNulls(coreAgent(store, agent));
+  const { name: _templateName, ...template } = coreTemplate(runtime);
+  return { agent: inline, template };
+}
+
 const targets = {
   agents: { field: "core_agent_id", path: "/v1/agents", body: coreAgent },
   runtimes: { field: "core_template_id", path: "/v1/agents/environments/templates", body: (_store, row) => coreTemplate(row) },

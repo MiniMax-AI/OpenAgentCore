@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { AppError, text, uuid } from "./store.mjs";
 import { harnessOptions } from "../shared/harness-options.mjs";
 import { boundBot, contributions } from "./capability-kinds.mjs";
-import { templateFiles } from "./core-resources.mjs";
+import { frozenConfiguration, templateFiles } from "./core-resources.mjs";
 import { turnsAPI } from "./turns.mjs";
 
 // A warm Session matches a cold creation only when every frozen byte except the
@@ -73,9 +73,19 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
     ...(bound.session.plugins.length ? { plugins: bound.session.plugins } : {}),
     ...(extraFiles.length ? { files: [...templateFiles(runtime), ...extraFiles] } : {}),
   };
+  // The same configuration inline, for replacing this conversation's Session.
+  const frozen = frozenConfiguration(store, agent, runtime);
+  const inlineEnvironment = {
+    type: "openai_hosted",
+    ...frozen.template,
+    env: { ...frozen.template.env, ...env },
+    skills: bound.session.skills,
+    plugins: bound.session.plugins,
+    ...(environment.files ? { files: environment.files } : {}),
+  };
   const name = warm ? "" : text(body.name, "会话名称", 80, true);
   const input = warm ? "" : text(body.input, "消息", 100000, true);
-  return {
+  const row = {
     id,
     name,
     agent_id: agent.id,
@@ -140,6 +150,8 @@ export async function prepareSession(store, resources, id, body, origin = {}, wa
       },
     },
   };
+  const { agent_id: _saved, ...shared } = row.request;
+  return { ...row, recovery: { ...shared, agent: frozen.agent, environment: inlineEnvironment } };
 }
 
 export function sessionAPI(store, core, resources) {

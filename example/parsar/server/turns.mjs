@@ -90,31 +90,50 @@ export function turnsAPI(store, core) {
     return turn;
   };
 
+  // An input sent while a Turn ran joined that Turn in Core. It is recorded on
+  // the entry that owns that Turn instead of as a Turn of its own, and resent
+  // with it if that Turn is retried.
+  const join = (turn, coreTurnId) => {
+    const owner = store
+      .list("turns")
+      .find((t) => t.id !== turn.id && t.session_id === turn.session_id && t.started_at <= turn.started_at &&
+        (t.core_turn_id ? t.core_turn_id === coreTurnId : t.outcome === "running"));
+    if (!owner) return turn;
+    store.transaction(() => {
+      store.put("turns", { ...owner, steers: [...(owner.steers || []), { id: turn.id, input: turn.input }] });
+      store.remove("turns", turn.id);
+    });
+    return store.get("turns", owner.id);
+  };
+
   // Records and sends a follow-up input. The entry is written first so a
-  // retried send (same id and key) keeps its original baseline. A message sent
-  // while this conversation's Turn runs steers that Turn, as in Core, and is
-  // recorded on it instead of as a Turn of its own. Returns the Turn it is part of.
+  // retried send (same id and key) keeps its original baseline. Returns the
+  // Turn the input is part of.
   const deliver = async (record, input, { id, key, source }) => {
-    let turn = store.get("turns", id) || store.list("turns").find((t) => t.steers?.some((steer) => steer.id === id));
-    if (!turn) {
-      const base = await baseline(record.core_session_id);
-      const running = base.base_running &&
-        store.list("turns").find((t) => t.session_id === record.id && t.outcome === "running" && (!t.core_turn_id || t.core_turn_id === base.base_turn_id));
-      turn = running
-        ? { ...running, steers: [...(running.steers || []), { id, input: asInput(input) }] }
-        : start(record, { id, kind: "followup", input, source, base });
-      store.put("turns", turn);
-    }
-    const steer = turn.steers?.find((entry) => entry.id === id);
+    const joined = store.list("turns").find((t) => t.steers?.some((steer) => steer.id === id));
+    if (joined) return joined;
+    const turn =
+      store.get("turns", id) ||
+      start(record, { id, kind: "followup", input, source, base: await baseline(record.core_session_id) });
+    // A confirmation comes later; by then Core may have started a Turn for it,
+    // so only the monitor's observation can attribute it.
+    const confirming = !!turn.pending_key;
+    if (source === "web") store.put("turns", { ...turn, pending_key: key });
     try {
-      await post(record.core_session_id, message(steer ? steer.input : turn.input), key);
+      await post(record.core_session_id, message(turn.input), key);
+      const current = store.get("turns", id);
+      if (current?.pending_key) store.put("turns", { ...current, pending_key: undefined });
     } catch (error) {
-      if (error instanceof AppError && error.status >= 400 && error.status < 500)
-        if (steer) store.put("turns", { ...store.get("turns", turn.id), steers: turn.steers.filter((entry) => entry.id !== id) });
-        else store.remove("turns", id);
-      throw error;
+      if (error instanceof AppError && error.status >= 400 && error.status < 500) {
+        store.remove("turns", id);
+        throw error;
+      }
+      // A lost response can follow accepted input while Core resumes a Session.
+      // Web confirms receipt with the same key; Feishu owns its delivery retries.
+      if (source !== "web") throw error;
     }
-    return turn;
+    const current = store.get("turns", id);
+    return current.pending_key || confirming || !current.base_running ? current : join(current, current.base_turn_id);
   };
 
   // The first input of a claimed prepared Session. Core answers the send only
@@ -158,9 +177,11 @@ export function turnsAPI(store, core) {
   };
 
   // Replaces a Session whose first Turn never ran (its Environment failed, or a
-  // claimed prepared Session did not start) with the identical frozen request.
+  // claimed prepared Session did not start) with the configuration it was created with.
   const recreate = async (turn, record, key, retries) => {
-    const created = await core("/v1/agents/sessions", "POST", record.request, key);
+    // The configuration frozen when the conversation was created, not the
+    // saved Agent and Template, which may have been edited since.
+    const created = await core("/v1/agents/sessions", "POST", record.recovery, key);
     store.transaction(() => {
       const { pending_input, ...rest } = record;
       store.put("sessions", { ...rest, core_session_id: created.id, superseded_turns: [] });
@@ -194,6 +215,19 @@ export function turnsAPI(store, core) {
       store.put("turns", { ...turn, core_session_id: record.core_session_id });
       return;
     }
+    // Confirm uncertain Web submissions before attributing any Core Turn to
+    // the input. Reusing the frozen body and key cannot execute it twice.
+    if (turn.pending_key) {
+      let confirmed;
+      try {
+        confirmed = await deliver(record, turn.input, { id: turn.id, key: turn.pending_key, source: "web" });
+      } catch (error) {
+        return finish(turn, "failed", explainFailure(error, runtimeName(record)));
+      }
+      // Still unconfirmed, or confirmed as part of the Turn that was running.
+      if (confirmed.pending_key || confirmed.id !== turn.id) return;
+      turn = confirmed;
+    }
     const sid = turn.core_session_id;
     const session = await core(`/v1/agents/sessions/${sid}`, "GET");
     const superseded = new Set(record.superseded_turns || []);
@@ -204,6 +238,8 @@ export function turnsAPI(store, core) {
     const at = turn.base_turn_id ? recent.findIndex((t) => t.id === turn.base_turn_id) : -1;
     const coreTurn =
       recent.slice(at + 1).find((t) => !superseded.has(t.id)) || (turn.base_running && at >= 0 ? recent[at] : undefined);
+    // The input joined the Turn that was running when it was sent.
+    if (coreTurn && coreTurn.id === turn.base_turn_id && join(turn, coreTurn.id).id !== turn.id) return;
     if (!coreTurn) {
       const replaceable = turn.kind === "first" && record.request && turn.retries < maxRetries;
       const notStarted = turn.prepared && (turn.unsent || now() - turn.started_at > stallMs);
@@ -223,7 +259,7 @@ export function turnsAPI(store, core) {
       current.output_at = now();
       // The frozen request is only needed until the first Turn produced output.
       if (record.request) {
-        const { request, ...rest } = record;
+        const { request, recovery, ...rest } = record;
         store.put("sessions", rest);
       }
     }
@@ -256,10 +292,14 @@ export function turnsAPI(store, core) {
     if (monitoring) return;
     monitoring = true;
     try {
-      for (const turn of store.list("turns").filter((t) => t.outcome === "running"))
-        await check(turn).catch(() => {
-          /* Core may be briefly unreachable; the next pass retries. */
-        });
+      for (const { id } of store.list("turns").filter((t) => t.outcome === "running")) {
+        // Read each entry afresh: checking an earlier one can fold an input into it.
+        const turn = store.get("turns", id);
+        if (turn?.outcome === "running")
+          await check(turn).catch(() => {
+            /* Core may be briefly unreachable; the next pass retries. */
+          });
+      }
     } finally {
       monitoring = false;
     }
