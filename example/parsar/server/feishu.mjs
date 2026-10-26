@@ -733,18 +733,20 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     const id = stableId(`${appId}:${message.messageId}`);
     if (store.get("feishu_inbound", id)) return;
     const content = asCommand(message.content.trim());
+    // A private chat is one thread per sender; /clear starts a new conversation
+    // in it. The newest one wins if earlier versions left several.
     let thread =
-      message.chatType === "p2p" &&
-      content !== "/clear"
+      message.chatType === "p2p"
         ? store
             .list("feishu_threads")
-            .find(
+            .filter(
               (row) =>
                 row.app_id === appId &&
                 row.chat_id === message.chatId &&
                 row.sender_id === message.senderId &&
                 row.chat_type === "p2p",
             )
+            .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))[0]
         : threadFor(appId, message);
     if (
       thread &&
@@ -1008,14 +1010,11 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     if (["/clear", "/help"].includes(row.text)) {
       if (row.text === "/clear") {
         // Work in the cleared conversation would continue unseen; stop it.
-        const previous = row.chat_type === "p2p"
-          ? store.list("feishu_threads").filter((t) => t.id !== thread.id && t.app_id === thread.app_id && t.chat_id === thread.chat_id && t.sender_id === thread.sender_id && t.chat_type === "p2p").at(-1)
-          : thread;
-        const run = previous && store.get("sessions", previous.session_id);
+        const run = store.get("sessions", thread.session_id);
         if (run?.core_session_id)
           await core(`/v1/agents/sessions/${run.core_session_id}/events`, "POST", { events: [{ type: "agent.session.input.cancel" }] }, `${row.id}:clear`).catch(() => {});
-        // A private chat already got a fresh thread on receipt; a topic keeps its root.
-        if (row.chat_type !== "p2p" && thread.first_message_id !== row.id) rotateThread();
+        // The thread starts its next conversation, unless this /clear opened it.
+        if (thread.first_message_id !== row.id) rotateThread();
       }
       queueReply(
         stableId(`${row.id}:command`),

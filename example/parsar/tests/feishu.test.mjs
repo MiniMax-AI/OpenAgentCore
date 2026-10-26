@@ -2146,3 +2146,28 @@ test("a command keeps working when Feishu's rich-text box formats it", async () 
   assert.equal(asCommand("**/answer call_1 好的**"), "/answer call_1 好的");
   assert.equal(asCommand("**重点** 明天开会"), "**重点** 明天开会", "ordinary text keeps its formatting");
 });
+
+test("a private chat keeps one thread per sender, and /clear always starts its next conversation", async (t) => {
+  const f = await feishu(t);
+  const config = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...config, direct: true });
+  const worker = f.create();
+  const dm = { ...f.message, chatType: "p2p", mentionedBot: false };
+  const say = async (messageId, content) => {
+    worker.receive("cli_0123456789abcdef", { ...dm, messageId, content });
+    await worker.tick();
+  };
+  const sessionOf = (messageId) => {
+    const row = f.store.list("feishu_inbound").find((r) => r.message_id === messageId);
+    return f.store.get("feishu_threads", row.thread_id).session_id;
+  };
+  await say("om_a", "记一下 meetup");
+  const first = sessionOf("om_a");
+  await say("om_clear_1", "**/clear**");
+  await say("om_clear_2", "/clear");
+  await say("om_b", "再记一下 meetup");
+  assert.equal(f.store.list("feishu_threads").filter((row) => row.chat_type === "p2p").length, 1);
+  assert.notEqual(sessionOf("om_b"), first, "the message after /clear starts a new conversation");
+  await say("om_c", "补充：下午三点");
+  assert.equal(sessionOf("om_c"), sessionOf("om_b"));
+});
