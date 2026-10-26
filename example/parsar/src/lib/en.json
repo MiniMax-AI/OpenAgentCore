@@ -353,7 +353,6 @@
   "收起应用凭证": "Hide app credentials",
   "应用凭证": "App credentials",
   "删除机器人": "Delete bot",
-  "请先停用机器人": "Disable the bot first",
   "删除机器人 {{value0}}？": "Delete bot {{value0}}?",
   "停用": "Disable",
   "保存并启用": "Save and enable",

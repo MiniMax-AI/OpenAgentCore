@@ -2172,3 +2172,18 @@ test("a private chat keeps one thread per sender, and /clear always starts its n
   await say("om_c", "补充：下午三点");
   assert.equal(sessionOf("om_c"), sessionOf("om_b"));
 });
+
+test("a bot deletes at once, running or with deliveries pending; delivered history stays", async (t) => {
+  const f = await feishu(t);
+  const bot = await f.api("GET", `/app/feishu/bots/${botId}`);
+  await f.api("PUT", `/app/feishu/bots/${botId}`, { ...bot, enabled: true });
+  const appId = "cli_0123456789abcdef";
+  f.store.put("feishu_outbound", { id: "pending", app_id: appId, state: "queued" });
+  f.store.put("feishu_inbound", { id: "waiting", app_id: appId, state: "queued" });
+  f.store.put("feishu_outbound", { id: "sent", app_id: appId, state: "delivered" });
+  await f.api("DELETE", `/app/feishu/bots/${botId}`, {});
+  assert.equal(f.store.get("feishu_bots", botId), null);
+  assert.equal(f.store.get("feishu_outbound", "pending"), null);
+  assert.equal(f.store.get("feishu_inbound", "waiting"), null);
+  assert.equal(f.store.get("feishu_outbound", "sent").state, "delivered");
+});

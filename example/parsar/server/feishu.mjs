@@ -90,20 +90,15 @@ export function feishuAPI(store) {
       groups: false,
     };
     if (method === "GET") return publicFeishu(old);
+    // Deleting a bot stops it and drops what it had not delivered yet;
+    // conversations and delivered messages stay.
     if (method === "DELETE") {
-      if (old.enabled) throw new AppError(409, "请先停用机器人。");
-      if (
-        [
-          ...store.list("feishu_inbound"),
-          ...store.list("feishu_outbound"),
-        ].some(
-          (row) =>
-            row.app_id === old.app_id &&
-            !["delivered", "rejected"].includes(row.state),
-        )
-      )
-        throw new AppError(409, "机器人仍有未完成投递，请先处理。");
-      store.remove("feishu_bots", id);
+      store.transaction(() => {
+        for (const kind of ["feishu_inbound", "feishu_outbound"])
+          for (const row of store.list(kind))
+            if (row.app_id === old.app_id && !["delivered", "rejected"].includes(row.state)) store.remove(kind, row.id);
+        store.remove("feishu_bots", id);
+      });
       return {};
     }
     if (method !== "PUT") throw new AppError(405, "Method not allowed.");

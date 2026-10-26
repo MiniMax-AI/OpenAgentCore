@@ -239,8 +239,8 @@ function BotCard({ bot }: { bot: FeishuBot }) {
             variant="ghost"
             size="icon"
             aria-label={tr("删除机器人")}
-            title={bot.enabled ? tr("请先停用机器人") : tr("删除机器人")}
-            disabled={bot.enabled || remove.isPending}
+            title={tr("删除机器人")}
+            disabled={remove.isPending}
             onClick={() => {
               if (confirm(tr("删除机器人 {{value0}}？", { value0: bot.name })))
                 remove.mutate();
