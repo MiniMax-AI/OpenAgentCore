@@ -96,13 +96,21 @@ export function turnsAPI(store, core) {
     const turn =
       store.get("turns", id) ||
       start(record, { id, kind: "followup", input, source, base: await baseline(record.core_session_id) });
+    if (source === "web") store.put("turns", { ...turn, pending_key: key });
     try {
       await post(record.core_session_id, message(turn.input), key);
+      const current = store.get("turns", id);
+      if (current?.pending_key) store.put("turns", { ...current, pending_key: undefined });
     } catch (error) {
-      if (error instanceof AppError && error.status >= 400 && error.status < 500) store.remove("turns", id);
-      throw error;
+      if (error instanceof AppError && error.status >= 400 && error.status < 500) {
+        store.remove("turns", id);
+        throw error;
+      }
+      // A lost response can follow accepted input while Core resumes a Session.
+      // Web confirms receipt with the same key; Feishu owns its delivery retries.
+      if (source !== "web") throw error;
     }
-    return turn;
+    return store.get("turns", id);
   };
 
   // The first input of a claimed prepared Session. Core answers the send only
@@ -179,6 +187,16 @@ export function turnsAPI(store, core) {
     if (record.core_session_id !== turn.core_session_id) {
       store.put("turns", { ...turn, core_session_id: record.core_session_id });
       return;
+    }
+    // Confirm uncertain Web submissions before attributing any Core Turn to
+    // the input. Reusing the frozen body and key cannot execute it twice.
+    if (turn.pending_key) {
+      try {
+        turn = await deliver(record, turn.input, { id: turn.id, key: turn.pending_key, source: "web" });
+      } catch (error) {
+        return finish(turn, "failed", explainFailure(error, runtimeName(record)));
+      }
+      if (turn.pending_key) return;
     }
     const sid = turn.core_session_id;
     const session = await core(`/v1/agents/sessions/${sid}`, "GET");
