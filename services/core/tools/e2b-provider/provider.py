@@ -88,11 +88,11 @@ ALL_TRAFFIC = '0.0.0.0/0'
 
 
 def network_options(bootstrap):
-    """The SDK network option for Core's egress: public access, or only Core and the model provider."""
+    """The SDK network option for Core's egress: public access, or only Core, the model provider and the named domains."""
     egress = bootstrap['Egress']
     if egress['public']:
         return {'deny_out': list(BLOCKED_RANGES)}
-    allowed = [urlsplit(bootstrap['CoreURL']).hostname, *egress['endpoints']]
+    allowed = [urlsplit(bootstrap['CoreURL']).hostname, *egress['endpoints'], *egress['domains']]
     return {'deny_out': [ALL_TRAFFIC], 'allow_out': sorted(set(allowed))}
 
 

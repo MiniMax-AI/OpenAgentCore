@@ -72,14 +72,16 @@ func (n Network) ValidatePolicy(provider string, support NetworkSupport) error {
 }
 
 // Validate checks an Egress a Provider receives: exact host names for
-// PrivateDomains and non-empty host names or IP addresses for Endpoints.
+// PrivateDomains and Domains and non-empty host names or IP addresses for Endpoints.
 func (e Egress) Validate() error {
-	if len(e.PrivateDomains) > maxNetworkDomains {
-		return ErrInvalid
-	}
-	for _, d := range e.PrivateDomains {
-		if len(d) > maxDomainLength || !domainRule.MatchString(d) {
+	for _, names := range [][]string{e.PrivateDomains, e.Domains} {
+		if len(names) > maxNetworkDomains {
 			return ErrInvalid
+		}
+		for _, d := range names {
+			if !ValidDomain(d) {
+				return ErrInvalid
+			}
 		}
 	}
 	for _, h := range e.Endpoints {

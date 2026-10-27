@@ -80,3 +80,21 @@ allow models.example.com  `
 		t.Fatalf("report %q", report)
 	}
 }
+
+// Domains admit public answers only: they sit after "deny private" and add no address rule.
+func TestDomainRulesFollowDenyPrivate(t *testing.T) {
+	got, _ := rules(t, sandbox.Egress{Domains: []string{"pypi.org"}, Endpoints: []string{"models.example.com"}}, map[string][]string{
+		"core.example.com": {"172.29.144.1"}, "models.example.com": {"203.0.113.9"}, "pypi.org": {"151.101.0.223"}})
+	want := `allow host udp 53
+allow host tcp 53
+deny loopback  
+deny link-local  
+deny metadata  
+allow 172.29.144.1 tcp 24443
+deny private  
+allow models.example.com  
+allow pypi.org  `
+	if got != want {
+		t.Fatalf("rules:\n%s", got)
+	}
+}

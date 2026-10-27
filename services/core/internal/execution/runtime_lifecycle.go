@@ -26,18 +26,22 @@ import (
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
 	// PublishUnconfigured updates the shared observation cache after reset commit.
-	PublishUnconfigured   func(uint64)
-	Generation            uint64
-	Mode                  string
-	loadDeployment        func(context.Context) (*RuntimeProvider, error)
-	prepareDeployment     RuntimeDeploymentPreparer
-	ProviderKind          string
-	CoreURL               string
-	InstallationID        string
-	BackendFingerprint    string
-	Provider              sandbox.SandboxProvider
-	Suspension            *RuntimeSuspensionPolicy
-	Resources             sandbox.Resources
+	PublishUnconfigured func(uint64)
+	Generation          uint64
+	Mode                string
+	loadDeployment      func(context.Context) (*RuntimeProvider, error)
+	prepareDeployment   RuntimeDeploymentPreparer
+	ProviderKind        string
+	CoreURL             string
+	InstallationID      string
+	BackendFingerprint  string
+	Provider            sandbox.SandboxProvider
+	Suspension          *RuntimeSuspensionPolicy
+	Resources           sandbox.Resources
+	// Network is the deployment's egress cap and NetworkSupport its Provider's
+	// declaration; Session admission checks Environment policies against both.
+	Network               sandbox.Network
+	NetworkSupport        sandbox.NetworkSupport
 	WorkspaceRequirements *workspacefs.Requirements
 	Workspace             *workspacefs.Declaration
 }

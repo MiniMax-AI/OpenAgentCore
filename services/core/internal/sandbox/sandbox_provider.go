@@ -79,6 +79,9 @@ type Egress struct {
 	// PrivateDomains are exact host names the Provider resolves with the host's
 	// DNS; every address they resolve to is allowed, private ones included.
 	PrivateDomains []string `json:"private_domains"`
+	// Domains are exact host names the Provider allows on public addresses
+	// only; a private answer for them stays blocked.
+	Domains []string `json:"domains"`
 	// Endpoints are the host names or IP addresses of the Session's model
 	// provider. The Harness runs inside the sandbox and calls them directly, so
 	// every address they resolve to is allowed, private ones included.

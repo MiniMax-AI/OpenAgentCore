@@ -193,17 +193,18 @@ An allocation moves to `cleanup_pending` when its Session is deleted or archived
 
 ## Network egress
 
-A Provider declares `DeploymentPolicy.Network`: `Restrict` means it can refuse public addresses, `PrivateDomains` means it can allow the private addresses that named hosts resolve to. Core validates the deployment's [network cap](../contracts/agents-api/sandbox-deployment.md#network) against the declaration when the selection is saved and never substitutes another behavior.
+A Provider declares `DeploymentPolicy.Network`: `Restrict` means it can refuse public addresses and allow named public domains, and Core admits `disabled` and `restricted` Environments only then; `PrivateDomains` means it can allow the private addresses that named hosts resolve to. Core validates the deployment's [network cap](../contracts/agents-api/sandbox-deployment.md#network) against the declaration when the selection is saved and never substitutes another behavior.
 
-Core sends the same `Egress` in `Bootstrap` and in every `ResumeRequest`, derived from the allocation's deployment generation and its Session's frozen model provider:
+Core sends the same `Egress` in `Bootstrap` and in every `ResumeRequest`, derived from the allocation's deployment generation, its Session's frozen Environment `network` policy and its frozen model provider. `disabled` leaves only `Endpoints`; `restricted` clears `Public` and lists the allowed domains in `PrivateDomains` when the cap names them and in `Domains` otherwise ([policy](../contracts/agents-api/environments.md#restricted-network)):
 
 - `Public`: public addresses are allowed.
 - `PrivateDomains`: exact host names whose resolved addresses, private ones included, are allowed.
+- `Domains`: exact host names allowed on public addresses only; a private answer stays blocked. They carry a `restricted` Environment's `allowed_domains` when the cap allows the public internet.
 - `Endpoints`: the host of the model provider's `base_url`, omitted when it is loopback. The Harness runs in the sandbox and calls it directly.
 
-The Provider enforces exactly this on top of the always-allowed connection to Core, and blocks loopback, link-local, cloud-metadata and every private address that `Egress` does not name. It resolves names with its host's DNS when it creates and when it resumes, and cannot follow later changes of an answer. A name that does not resolve gets no rule. MCP traffic has no entry: it follows `Public` and `PrivateDomains`.
+The Provider enforces exactly this on top of the always-allowed connection to Core, and blocks loopback, link-local, cloud-metadata and every private address that `Egress` does not name. It resolves names with its host's DNS when it creates and when it resumes, and cannot follow later changes of an answer. A name that does not resolve gets no rule. MCP traffic has no entry: it follows `Public`, `PrivateDomains` and `Domains`.
 
-microsandbox applies the rules with first-match order, default deny, and host DNS reachable; it allows the resolved private addresses without a port so that DNS rebind protection passes them. E2B declares `Restrict` only: `Public` adds a deny list for loopback, private and link-local ranges, and not `Public` denies all traffic except the Core host and `Endpoints`.
+microsandbox applies the rules with first-match order, default deny, and host DNS reachable; it allows the resolved private addresses without a port so that DNS rebind protection passes them. E2B declares `Restrict` only: `Public` adds a deny list for loopback, private and link-local ranges, and not `Public` denies all traffic except the Core host, `Endpoints` and `Domains`.
 
 ## Checkpoint lifecycle
 
