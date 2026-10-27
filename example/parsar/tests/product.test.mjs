@@ -6,6 +6,32 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { openStore, dataPath, AppError } from "../server/store.mjs";
 import { productAPI } from "../server/product.mjs";
+import { runtimeEnvironment } from "../server/runtime-profile.mjs";
+
+test("environment template network maps to the official field and is omitted when enabled", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const { put } = await setup(store, async () => ({ id: randomUUID() }));
+  const request = async (network) =>
+    runtimeEnvironment(await put("runtimes", { name: "Net", network }));
+  assert.ok(!("network" in (await request(undefined))));
+  assert.ok(!("network" in (await request({ access: "enabled" }))));
+  assert.deepEqual((await request({ access: "disabled" })).network, {
+    access: "disabled",
+  });
+  assert.deepEqual(
+    (
+      await request({
+        access: "restricted",
+        allowed_domains: [" api.example.com ", ""],
+      })
+    ).network,
+    { access: "restricted", allowed_domains: ["api.example.com"] },
+  );
+  await assert.rejects(put("runtimes", { name: "Bad", network: { access: "x" } }), {
+    status: 400,
+  });
+});
 
 test("environment templates prepare hosted Sessions, protect variables and freeze retries", async (t) => {
   const store = openStore(":memory:");

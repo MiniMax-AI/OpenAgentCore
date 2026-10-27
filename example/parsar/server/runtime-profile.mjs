@@ -29,6 +29,20 @@ export function runtimeProfile(body, previous) {
     Object.keys(body.packages).some((k) => !["npm", "python"].includes(k))
   )
     throw new AppError(400, "环境模板支持 npm 和 Python 软件包。");
+  // Core validates the domains; Parsar only maps the choice.
+  const access = body.network?.access;
+  let network;
+  if (access === "disabled") network = { access };
+  else if (access === "restricted") {
+    const domains = body.network.allowed_domains;
+    if (!Array.isArray(domains) || domains.some((d) => typeof d !== "string"))
+      throw new AppError(400, "请填写允许访问的域名，每行一个。");
+    network = {
+      access,
+      allowed_domains: domains.map((d) => d.trim()).filter(Boolean),
+    };
+  } else if (access !== undefined && access !== "enabled")
+    throw new AppError(400, "网络设置无效。");
   const env = Object.create(null);
   const input = body.env === undefined ? previous?.env || {} : body.env;
   if (
@@ -94,6 +108,7 @@ export function runtimeProfile(body, previous) {
     description: text(body.description || "", "说明", 1000),
     packages,
     setup_script: text(body.setup_script || "", "初始化脚本", 100000),
+    ...(network && { network }),
     env,
     bot_env,
     files: normalized,
@@ -114,6 +129,7 @@ export function runtimeEnvironment(runtime) {
   return {
     type: "openai_hosted",
     packages: runtime.packages || { npm: [], python: [] },
+    ...(runtime.network && { network: runtime.network }),
     env: { ...runtime.env },
     setup_commands: runtime.setup_script
       ? [{ command: runtime.setup_script, cwd: "/workspace" }]
