@@ -44,8 +44,8 @@ func rules(t *testing.T, egress sandbox.Egress, dns map[string][]string) (string
 }
 
 func TestDefaultPolicyRules(t *testing.T) {
-	got, _ := rules(t, sandbox.Egress{Public: true, Endpoints: []string{"api.openai.com"}}, map[string][]string{
-		"core.example.com": {"172.29.144.1"}, "api.openai.com": {"104.18.1.1"}})
+	got, _ := rules(t, sandbox.Egress{Public: true, Endpoints: []string{"api.openai.com:443"}}, map[string][]string{
+		"core.example.com": {"172.29.144.1"}})
 	want := `allow host udp 53
 allow host tcp 53
 deny loopback  
@@ -59,9 +59,12 @@ allow public  `
 	}
 }
 
-func TestPrivateDomainRules(t *testing.T) {
-	got, report := rules(t, sandbox.Egress{PrivateDomains: []string{"gitlab.example.com", "gone.example.com"}, Endpoints: []string{"models.example.com"}}, map[string][]string{
-		"core.example.com": {"172.29.144.1"}, "gitlab.example.com": {"10.74.2.81", "8.8.8.8"}, "models.example.com": {"203.0.113.9"}})
+// Only PrivateDomains names yield port-less private allows; an Endpoint is
+// limited to its port and sits after "deny private".
+func TestEndpointIsPortLimitedAndNeverPrivate(t *testing.T) {
+	got, report := rules(t, sandbox.Egress{PrivateDomains: []string{"gitlab.example.com", "gone.example.com"}, Domains: []string{"pypi.org"},
+		Endpoints: []string{"models.example.com:8443", "203.0.113.9:8000", "10.1.2.3:8000"}}, map[string][]string{
+		"core.example.com": {"172.29.144.1"}, "gitlab.example.com": {"10.74.2.81", "8.8.8.8"}, "models.example.com": {"10.9.9.9"}})
 	want := `allow host udp 53
 allow host tcp 53
 deny loopback  
@@ -70,31 +73,15 @@ deny metadata
 allow 172.29.144.1 tcp 24443
 allow 10.74.2.81  
 deny private  
+allow models.example.com tcp 8443
+allow 203.0.113.9 tcp 8000
 allow gitlab.example.com  
 allow gone.example.com  
-allow models.example.com  `
+allow pypi.org  `
 	if got != want {
 		t.Fatalf("rules:\n%s", got)
 	}
 	if report != "unresolved gone.example.com\n" {
 		t.Fatalf("report %q", report)
-	}
-}
-
-// Domains admit public answers only: they sit after "deny private" and add no address rule.
-func TestDomainRulesFollowDenyPrivate(t *testing.T) {
-	got, _ := rules(t, sandbox.Egress{Domains: []string{"pypi.org"}, Endpoints: []string{"models.example.com"}}, map[string][]string{
-		"core.example.com": {"172.29.144.1"}, "models.example.com": {"203.0.113.9"}, "pypi.org": {"151.101.0.223"}})
-	want := `allow host udp 53
-allow host tcp 53
-deny loopback  
-deny link-local  
-deny metadata  
-allow 172.29.144.1 tcp 24443
-deny private  
-allow models.example.com  
-allow pypi.org  `
-	if got != want {
-		t.Fatalf("rules:\n%s", got)
 	}
 }

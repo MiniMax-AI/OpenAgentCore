@@ -1,7 +1,7 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: c77f0eb6c07c2f262183d690928e03bf51442e59fb04b0acca955dd0177d3d31
+source_hash: f1d90aac721b527b49e1f214d54997918f3bb437aa0af1d5dc33304584819813
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
@@ -42,7 +42,7 @@ source_hash: c77f0eb6c07c2f262183d690928e03bf51442e59fb04b0acca955dd0177d3d31
 
 ### 沙箱无法访问私有端点 {#sandboxes-cannot-reach-a-private-endpoint}
 
-microsandbox 沙箱只能访问模型提供商的主机，以及部署[网络上限](../../../contracts/agents-api/zh/sandbox-deployment.md#network) `domains` 中的名称所对应的私有地址。任何其他解析为私有地址的名称在沙箱内都无法解析，因为 DNS rebind 保护会丢弃该应答，依赖它的 Turn 会在 Harness 停止重试后失败，私有地址上的 MCP 服务器也是如此。
+microsandbox 沙箱只能访问部署[网络上限](../../../contracts/agents-api/zh/sandbox-deployment.md#network) `domains` 中的名称所对应的私有地址。任何其他解析为私有地址的名称在沙箱内都无法解析，因为 DNS rebind 保护会丢弃该应答，依赖它的 Turn 会在 Harness 停止重试后失败，私有地址上的 MCP 服务器也是如此。
 
 在 **设置** → **沙箱与调度** → **网络** 中把该服务器的精确主机名加入域名列表。节点在沙箱启动和恢复时，用主机 `/etc/resolv.conf` 中的域名服务器解析这些名称。无法解析的名称没有规则，节点会记录 `sandbox network names without an address` 并列出这些名称。
 

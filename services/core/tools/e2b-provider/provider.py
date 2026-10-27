@@ -1,8 +1,10 @@
 """Bounded SDK operations for an already authorized Core allocation, plus
 read-only deployment validation and observation."""
 from concurrent.futures import ThreadPoolExecutor
+import ipaddress
 import json
 import math
+import socket
 import time
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
@@ -87,13 +89,33 @@ BLOCKED_RANGES = ('127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'
 ALL_TRAFFIC = '0.0.0.0/0'
 
 
+def public_ipv4(host):
+    """The public IPv4 addresses of a host name or literal; none when it does not resolve."""
+    try:
+        found = {info[4][0] for info in socket.getaddrinfo(host, None, socket.AF_INET)}
+    except OSError:
+        return []
+    return sorted(a for a in found if ipaddress.ip_address(a).is_global)
+
+
 def network_options(bootstrap):
-    """The SDK network option for Core's egress: public access, or only Core, the model provider and the named domains."""
+    """The SDK network option for Core's egress: public access, or only Core, the model provider and the named domains.
+
+    E2B matches a host name in allow_out only on ports 80 and 443, so a host on
+    any other port is also allowed by its public addresses."""
     egress = bootstrap['Egress']
     if egress['public']:
         return {'deny_out': list(BLOCKED_RANGES)}
-    allowed = [urlsplit(bootstrap['CoreURL']).hostname, *egress['endpoints'], *egress['domains']]
-    return {'deny_out': [ALL_TRAFFIC], 'allow_out': sorted(set(allowed))}
+    core = urlsplit(bootstrap['CoreURL'])
+    targets = [(core.hostname, core.port or (443 if core.scheme == 'https' else 80))]
+    for endpoint in egress['endpoints']:
+        target = urlsplit('//' + endpoint)
+        targets.append((target.hostname, target.port))
+    allowed = {host for host, _ in targets} | set(egress['domains'])
+    for host, port in targets:
+        if port not in (80, 443):
+            allowed.update(f'{a}/32' for a in public_ipv4(host))
+    return {'deny_out': [ALL_TRAFFIC], 'allow_out': sorted(allowed)}
 
 
 class Provider:
