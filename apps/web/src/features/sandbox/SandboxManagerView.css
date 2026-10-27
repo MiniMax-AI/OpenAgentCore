@@ -86,3 +86,6 @@
 .sandbox-reset-dialog p { line-height: 1.6; }
 
 .node-statuses { display: grid; gap: 4px; }
+
+.settings-row .settings-row-control input.network-switch { width: auto; }
+.settings-row .settings-row-control textarea.network-domains { width: min(100%, 360px); font-family: var(--font-mono, monospace); resize: vertical; }
