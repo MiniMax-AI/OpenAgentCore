@@ -46,6 +46,10 @@ const resolveTimeout = 5 * time.Second
 //     and rebind protection already refuse private ones
 //  7. public addresses, when Public
 //
+// Strict hostname enforcement is off: it accepts a domain allow over TLS only
+// with TLS interception, so the domain allows of rule 6 would never pass HTTPS.
+// They match by the guest's DNS answer and the TLS server name instead.
+//
 // Core and PrivateDomains names are resolved together under one deadline. A
 // PrivateDomains name that does not resolve gets no address rule and is
 // reported to report.
@@ -95,7 +99,7 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	slices.Sort(private)
 	private = slices.Compact(private)
 
-	n := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny}
+	n := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny, DisableStrict: true}
 	allow := func(destination, protocol, port string) {
 		n.Rules = append(n.Rules, sdk.PolicyRule{Action: sdk.PolicyActionAllow, Direction: sdk.PolicyDirectionEgress, Destination: destination, Protocol: sdk.PolicyProtocol(protocol), Port: port})
 	}
