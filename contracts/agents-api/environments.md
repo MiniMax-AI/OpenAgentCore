@@ -75,7 +75,7 @@ The deployment's configured Sandbox Provider (E2B or microsandbox, see [sandbox 
 
 - Session creation, with or without initial input, commits the Session, Environment and retry identity before the Worker provisions compute. A creation interrupted before bootstrap is recovered without repeating the Provider's Create.
 - Provisioning needs no caller action; the Session stays idle until a Turn starts.
-- Omitted or null `network` means enabled; `disabled` and `restricted` are rejected before the Session is created ([restricted network](#restricted-network)).
+- Omitted or null `network` means enabled; `disabled` and `restricted` need a hosted Environment on a sandbox Provider that can restrict ([network policy](#restricted-network)).
 - A Core restart keeps the allocation, workspace and native identity and never replays uncertain work.
 - Terminal cleanup revokes authority and settles pending input in one transaction before the Provider reclaims compute. New input on a terminal Environment is rejected.
 - Deleting the Session reclaims its Environment; deleting a Template does not.
@@ -303,7 +303,13 @@ Core may start a hosted Environment from the result of an earlier preparation in
 
 `restricted` requires 1–100 exact ASCII hostnames in `allowed_domains`; subdomains and redirect targets need their own entries. Wildcards, URL or port syntax, IP literals, Unicode and trailing dots are rejected. Reads return the supplied spelling, order and duplicates; comparison uses a separate lowercase, deduplicated copy.
 
-Only `enabled` runs. Core stores the other policies in Templates but rejects any Session whose effective network is not `enabled`, before allocating compute. Initialization and tools use the host's existing network.
+A hosted Session's effective `network` narrows the deployment's [network cap](./sandbox-deployment.md#network), and the policy holds for the sandbox's whole life, including package installation and setup commands:
+
+- `enabled`: the sandbox reaches what the cap allows.
+- `disabled`: the sandbox reaches only Core and the Session's model provider. Package installation and setup commands that need the network fail as ordinary setup errors.
+- `restricted`: the sandbox reaches the listed domains, Core and the model provider. A domain is allowed on public addresses when the cap allows the public internet, and on its resolved addresses when it is one of the cap's extra domains. Any other domain is rejected at Session creation with `sandbox_network_outside_cap`, whose `param` is that `allowed_domains` entry. If the cap shrinks later, the sandbox attempt fails with the same error.
+
+`disabled` and `restricted` return `sandbox_network_unsupported` when the deployment's sandbox Provider cannot restrict egress. A `self_hosted` Environment accepts only `enabled`, because Core cannot enforce a policy on a machine it does not run.
 
 ### Env and setup commands
 

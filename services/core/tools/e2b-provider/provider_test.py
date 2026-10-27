@@ -33,7 +33,7 @@ class Fixture(unittest.TestCase):
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
                                           CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True,
-                                          Egress={'public': True, 'private_domains': [], 'endpoints': []})}
+                                          Egress={'public': True, 'private_domains': [], 'domains': [], 'endpoints': []})}
         self.request['RuntimeBootstrap'] = {
             'version': 3, 'suspend_control': True, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
@@ -94,9 +94,9 @@ class ProviderTest(Fixture):
         provider = __import__('provider')
         public = provider.network_options(self.request['Bootstrap'])
         self.assertEqual(public, {'deny_out': list(provider.BLOCKED_RANGES)})
-        closed = dict(self.request['Bootstrap'], Egress={'public': False, 'private_domains': [], 'endpoints': ['api.model.example']})
+        closed = dict(self.request['Bootstrap'], Egress={'public': False, 'private_domains': [], 'domains': ['pypi.org'], 'endpoints': ['api.model.example']})
         self.assertEqual(provider.network_options(closed),
-                         {'deny_out': ['0.0.0.0/0'], 'allow_out': ['api.model.example', 'core.example']})
+                         {'deny_out': ['0.0.0.0/0'], 'allow_out': ['api.model.example', 'core.example', 'pypi.org']})
         self.assertEqual(self.call('create')['ErrorCode'], '')
         self.assertNotIn('Egress', json.loads(self.cloud.files.write.call_args.args[1]))
         self.assertEqual(self.api.create.call_args.kwargs['network'], public)

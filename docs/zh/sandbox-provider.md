@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: e485f3a8b9fa811d139227c7117ec2f4807b5487f1d142d074468cea3eeb0639
+source_hash: 1e6284f09a11fa6ca6ba433537ed2b09135c10e473c4173fd4a6f4ca858e1f0e
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox 和 E2B 实现了该协议。
@@ -195,17 +195,18 @@ stateDiagram-v2
 
 ## 网络出站 {#network-egress}
 
-Provider 声明 `DeploymentPolicy.Network`：`Restrict` 表示能拒绝公开地址，`PrivateDomains` 表示能允许具名主机解析出的私有地址。保存选择时，Core 会依据该声明校验部署的[网络上限](../../contracts/agents-api/zh/sandbox-deployment.md#network)，绝不替换为其他行为。
+Provider 声明 `DeploymentPolicy.Network`：`Restrict` 表示能拒绝公开地址并允许具名公开域名，Core 仅在此时准入 `disabled` 和 `restricted` Environment；`PrivateDomains` 表示能允许具名主机解析出的私有地址。保存选择时，Core 会依据该声明校验部署的[网络上限](../../contracts/agents-api/zh/sandbox-deployment.md#network)，绝不替换为其他行为。
 
-Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它由分配所属的部署代次和 Session 冻结的模型提供商推导而来：
+Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它由分配所属的部署代次和 Session 冻结的 Environment `network` 策略和冻结的模型提供商推导而来。`disabled` 只留下 `Endpoints`；`restricted` 清除 `Public`，上限列出的域名放入 `PrivateDomains`，其余放入 `Domains`（[策略](../../contracts/agents-api/zh/environments.md#restricted-network)）：
 
 - `Public`：允许公开地址。
 - `PrivateDomains`：精确主机名，其解析出的地址（包括私有地址）都被允许。
+- `Domains`：只在公开地址上被允许的精确主机名，私有应答仍被阻止。上限允许公网时，它们承载 `restricted` Environment 的 `allowed_domains`。
 - `Endpoints`：模型提供商 `base_url` 的主机，回环主机时省略。Harness 运行在沙箱内，直接调用它。
 
-Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址。它在创建和恢复时用主机 DNS 解析名称，无法跟随之后应答的变化。无法解析的名称没有规则。MCP 流量没有条目：它遵循 `Public` 和 `PrivateDomains`。
+Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址。它在创建和恢复时用主机 DNS 解析名称，无法跟随之后应答的变化。无法解析的名称没有规则。MCP 流量没有条目：它遵循 `Public`、`PrivateDomains` 和 `Domains`。
 
-microsandbox 按首条匹配的顺序、默认拒绝并保持主机 DNS 可达来应用规则；它不带端口地允许解析出的私有地址，使 DNS rebind 保护放行它们。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机和 `Endpoints` 之外的全部流量。
+microsandbox 按首条匹配的顺序、默认拒绝并保持主机 DNS 可达来应用规则；它不带端口地允许解析出的私有地址，使 DNS rebind 保护放行它们。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部流量。
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 

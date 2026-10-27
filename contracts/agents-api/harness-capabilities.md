@@ -61,7 +61,7 @@ These operations need a workspace, so they apply to hosted and self-hosted place
 | Capability directories | Admitted | Admitted | Admitted |
 | npm and Python packages | Admitted | Admitted | Admitted |
 | `packages.system` other than null or `[]` | Rejected | Rejected | Rejected |
-| Network `disabled` or `restricted` | Rejected | Rejected | Rejected |
+| Network `disabled` or `restricted` | Admitted: hosted; rejected: self-hosted | Admitted: hosted; rejected: self-hosted | Admitted: hosted; rejected: self-hosted |
 | [Plugin MCP over stdio](./environments.md#plugin-mcp) | Verified: hosted, self-hosted | Verified: self-hosted; admitted: hosted | Verified: self-hosted; admitted: hosted |
 | Plugin MCP over HTTP | Admitted, with literal headers or HTTPS bearer | Admitted, with literal headers or HTTPS bearer | Verified: self-hosted; admitted: hosted; literal headers or HTTPS bearer |
 

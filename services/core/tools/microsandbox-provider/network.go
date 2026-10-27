@@ -37,8 +37,9 @@ func isPrivate(a netip.Addr) bool { return a.IsPrivate() || carrierGradeNAT.Cont
 //     without port, because only a port-less address allow lets the guest's DNS
 //     answer pass rebind protection, which stays at its default
 //  5. deny every other private address
-//  6. unless Public, a domain allow for each Endpoint and PrivateDomains name,
-//     so their public answers work
+//  6. unless Public, a domain allow for each Endpoint, PrivateDomains and
+//     Domains name; only public answers reach it, since rule 5 and rebind
+//     protection already refuse private ones
 //  7. public addresses, when Public
 //
 // A name that does not resolve gets no address rule and is reported to report.
@@ -61,6 +62,10 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	names := slices.Concat(egress.Endpoints, egress.PrivateDomains)
 	slices.Sort(names)
 	names = slices.Compact(names)
+	// Domains resolve to public addresses only, so they need no address rule.
+	allowed := slices.Concat(names, egress.Domains)
+	slices.Sort(allowed)
+	allowed = slices.Compact(allowed)
 
 	var private []string
 	for _, name := range names {
@@ -98,7 +103,7 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	}
 	deny("private")
 	if !egress.Public {
-		for _, name := range names {
+		for _, name := range allowed {
 			if a, err := netip.ParseAddr(name); err == nil {
 				allow(a.Unmap().String(), "", "")
 			} else if sandbox.ValidDomain(name) {
