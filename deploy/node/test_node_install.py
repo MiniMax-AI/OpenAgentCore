@@ -87,6 +87,7 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(installer, "open_request", side_effect=self.configuration_response),
                       mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=self.artifact_response)),
                       mock.patch.object(host_microsandbox, "home", return_value=self.home / "m"),
+                      mock.patch.object(host_microsandbox, "capacity", return_value=(64, 256 << 30)),
                       mock.patch.object(host_microsandbox.socket, "getaddrinfo", side_effect=lambda host, port, **kwargs: REAL_GETADDRINFO(host, port, **kwargs) if host[0].isdigit() else [(2, 1, 6, "", ("203.0.113.5", port))]),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
                       mock.patch.object(installer, "checked", side_effect=self.checked),
