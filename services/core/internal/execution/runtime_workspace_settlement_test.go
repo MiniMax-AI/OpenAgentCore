@@ -90,7 +90,7 @@ func workspaceSettlementFixtureWithSetup(t *testing.T, provider sandbox.SandboxP
 	owner := Owner{Lease: lease, Deployment: operations, Sessions: sessionExecution(t, lease)}
 	var installation, nodeID string
 	if setup == nil {
-		installation, nodeID = workspaceNodeSetup(t, true)(owner, deployments, reader)
+		installation, nodeID = workspaceNodeSetup(t)(owner, deployments, reader)
 	} else {
 		installation, nodeID = setup(owner, deployments, reader)
 	}

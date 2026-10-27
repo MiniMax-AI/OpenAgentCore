@@ -119,7 +119,7 @@ function runtimeObservation(overrides: Record<string, unknown> = {}): Record<str
     session_id: runtimeSessionId,
     environment_id: runtimeEnvironmentId,
     mode: "openai_hosted",
-    provider_type: "docker",
+    provider_type: "microsandbox",
     instance: {
       kind: "managed_allocation",
       allocation_id: runtimeAllocationId,

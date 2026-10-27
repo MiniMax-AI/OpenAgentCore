@@ -64,7 +64,7 @@ test("online configuration retains existing resources and stops rapid polling wh
   await page.getByRole("button", { name: /^Large/ }).click();
   const saved = await saveConfiguration(page);
   expect(saved.response.ok()).toBe(true);
-  expect(saved.input).toMatchObject({ provider: "docker", expected_generation: 1 });
+  expect(saved.input).toMatchObject({ provider: "microsandbox", expected_generation: 1 });
   const current = await saved.response.json() as SandboxDeployment;
   expect(current.generation).toBe(2);
   expect(current.resources.allocations).toBe(before.allocations.length);
@@ -240,7 +240,7 @@ test("uncertain configuration refresh preserves a draft until its generation cha
   const edit = page.getByRole("dialog", { name: "Change resources", exact: true });
   await edit.getByRole("button", { name: /^Large/ }).click();
   const wizard = edit.getByRole("region", { name: "Change the sandbox configuration", exact: true });
-  const draftSize = await fact(wizard, "Each sandbox").innerText();
+  const draftSize = (await fact(wizard, "Each sandbox").textContent()) ?? "";
   expect(draftSize).not.toBe(committedSize);
   await failNext(request, { method: "PUT", path: deploymentPath, status: 503, message: "Configuration outcome is unconfirmed." });
   const result = await saveConfiguration(page);

@@ -17,6 +17,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/projects"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
 
 func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
@@ -32,7 +33,7 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 	}
 	upperCapacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 1000001, MaxRetained: 8})
 	capacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 0})
-	_, resourceErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "docker", DeploymentSpec: sandbox.DeploymentSpec{}})
+	_, resourceErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: sandbox.DeploymentSpec{Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}})
 	for _, tc := range []struct {
 		err                       error
 		code, param               string

@@ -14,13 +14,13 @@ import node_spec
 class SpecificationTests(unittest.TestCase):
     def setUp(self):
         self.args = argparse.Namespace(core_url="https://core.example", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe", provider=None)
-        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096}}
-        self.data = {"installation_id": self.args.installation_id, "provider": "docker", "generation": 3,
-                     "specification": self.spec, "specification_digest": node_spec.digest("docker", self.spec),
+        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096, "root_disk_mib": 8192}, "workspace": {"attachment": "host_directory", "user_xattr": True}}
+        self.data = {"installation_id": self.args.installation_id, "provider": "microsandbox", "generation": 3,
+                     "specification": self.spec, "specification_digest": node_spec.digest("microsandbox", self.spec),
                      "core_url": self.args.core_url}
         self.retained = {"core_url": self.args.core_url, "credential": "f" * 64, "identity": {
             "node_id": "634d97be-e54d-40f0-9468-ae6b62be85bf", "installation_id": self.args.installation_id,
-            "provider": "docker", "deployment_generation": 3, "specification_digest": self.data["specification_digest"]}}
+            "provider": "microsandbox", "deployment_generation": 3, "specification_digest": self.data["specification_digest"]}}
 
     def response(self):
         return io.BytesIO(json.dumps(self.data).encode())
@@ -75,14 +75,14 @@ class SpecificationTests(unittest.TestCase):
         for change in (lambda: self.data.update(generation=4), lambda: self.spec["resources"].update(cpus=8)):
             original = copy.deepcopy(self.data)
             change()
-            self.data["specification_digest"] = node_spec.digest("docker", self.data["specification"])
+            self.data["specification_digest"] = node_spec.digest("microsandbox", self.data["specification"])
             with self.assertRaisesRegex(node_spec.SpecificationError, "prepares the changed sandbox configuration itself"):
                 node_spec.fetch(self.args, "once", self.retained, mock.Mock(return_value=self.response()))
             self.data = original
             self.spec = self.data["specification"]
 
     def test_invalid_limits_digests_and_provider_assertions_are_rejected(self):
-        for field, value in (("cpus", True), ("memory_mib", 1), ("root_disk_mib", 8192), ("custom", 1)):
+        for field, value in (("cpus", True), ("memory_mib", 1), ("root_disk_mib", 1), ("custom", 1)):
             data = copy.deepcopy(self.data)
             data["specification"]["resources"][field] = value
             with self.subTest(field=field), self.assertRaises(node_spec.SpecificationError):
@@ -90,15 +90,15 @@ class SpecificationTests(unittest.TestCase):
         self.data["specification_digest"] = "0" * 64
         with self.assertRaises(node_spec.SpecificationError):
             node_spec.validate(self.data, self.args)
-        self.data["specification_digest"] = node_spec.digest("docker", self.spec)
-        self.args.provider = "microsandbox"
+        self.data["specification_digest"] = node_spec.digest("microsandbox", self.spec)
+        self.args.provider = "e2b"
         with self.assertRaises(node_spec.SpecificationError):
             node_spec.validate(self.data, self.args)
 
     def test_digest_is_independent_of_response_object_key_order(self):
         reordered = copy.deepcopy(self.spec)
         reordered["resources"] = dict(reversed(list(reordered["resources"].items())))
-        self.assertEqual(node_spec.digest("docker", reordered), node_spec.digest("docker", self.spec))
+        self.assertEqual(node_spec.digest("microsandbox", reordered), node_spec.digest("microsandbox", self.spec))
 
 
 class SharedDeploymentContractTests(unittest.TestCase):

@@ -34,7 +34,7 @@ flowchart TB
 | Declaration | The Harness's maximum capabilities, placements, configuration and pure admission restrictions, read by Core admission and the Runtime | `internal/harnessconfig/<package>/declaration.go` |
 | Runtime binding | The declaration plus discovery, installed factories and verified capabilities | `apps/daemon/internal/agent/<package>/declaration.go` |
 
-An Environment supplies execution resources. Managed E2B, Docker and microsandbox machines and application-owned machines differ in provisioning and connection; the connected Runtime uses this same contract. The daemon runs on Linux, macOS and Windows, managed Providers are Linux-only, and each adapter qualifies its own platforms ([self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms)). Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](./environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
+An Environment supplies execution resources. Managed E2B and microsandbox machines and application-owned machines differ in provisioning and connection; the connected Runtime uses this same contract. The daemon runs on Linux, macOS and Windows, managed Providers are Linux-only, and each adapter qualifies its own platforms ([self-hosted platforms](../../docs/getting-started/self-hosted.md#platforms)). Native factories receive capabilities only after the Runtime has loaded the bound installed snapshot ([capability preparation](./environments.md#runtime-capability-preparation)). Model providers supply model communication settings, not Turn scheduling or native process ownership.
 
 ## Steps
 

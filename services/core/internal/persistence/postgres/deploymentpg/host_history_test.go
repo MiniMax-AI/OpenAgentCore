@@ -15,13 +15,13 @@ import (
 
 func hostHistoryPtr[T any](value T) *T { return &value }
 
-// hostHistoryNode initializes a Docker deployment and connects one enrolled
+// hostHistoryNode initializes a microsandbox deployment and connects one enrolled
 // node, returning it with its connection and the owner epoch.
 func hostHistoryNode(t *testing.T) (fixture, string, string, uint64) {
 	t.Helper()
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 2, MaxRetained: 8})
 	connection := f.connect(t, node.NodeID)
 	epoch, err := f.adapter.OwnerEpoch(t.Context())

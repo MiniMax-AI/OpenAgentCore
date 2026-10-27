@@ -35,7 +35,7 @@ The list has one row for every Session of every Project that is not deleted, inc
         "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
         "environment_id": "6c02fb71-5fa8-4298-93e8-57c6625a3fc2",
         "mode": "openai_hosted",
-        "provider_type": "docker",
+        "provider_type": "microsandbox",
         "instance": {
           "kind": "managed_allocation",
           "allocation_id": "d23ab94e-e40b-45bd-93a2-444f1f74642b",
@@ -81,7 +81,7 @@ This returns one `RuntimeObservation`, without `disk`. It accepts no query param
 | `session_id` | string | The Session. |
 | `environment_id` | string or null | Null only for mode `none`. |
 | `mode` | enum | `none`, `self_hosted` or `openai_hosted`. |
-| `provider_type` | string or null | Source kind, such as `docker`, `microsandbox` or `e2b`; null when no provider was read. Treat an unknown value as a new kind, not an error. |
+| `provider_type` | string or null | Source kind, `microsandbox` or `e2b`; null when no provider was read. Treat an unknown value as a new kind, not an error. |
 | `instance` | object | The current compute identity; see [`RuntimeInstance`](#runtimeinstance). |
 | `lifecycle_state` | enum or null | Core's own lifecycle view of a managed allocation; null for `none` and `self_hosted`. See below. |
 | `status` | enum | `observed`, `unsupported` or `unavailable`. |
@@ -117,7 +117,7 @@ This returns one `RuntimeObservation`, without `disk`. It accepts no query param
 
 ### `disk`
 
-Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rules of `memory`. E2B fills it when the sandbox reports both its disk usage and a nonzero capacity. Docker and microsandbox return null. A non-null `disk` appears only on an `observed` row.
+Only list rows carry `disk`: null, or `{usage_bytes, limit_bytes}` with the rules of `memory`. E2B fills it when the sandbox reports both its disk usage and a nonzero capacity. microsandbox returns null. A non-null `disk` appears only on an `observed` row.
 
 ### Status and reason
 

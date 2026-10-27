@@ -13,7 +13,7 @@ func (*fixedSource) ProviderOperations() providercontract.Operations    { return
 func (blockingSource) ProviderOperations() providercontract.Operations  { return observedOperations() }
 func (*countingSource) ProviderOperations() providercontract.Operations { return observedOperations() }
 
-// sourceOf selects one fixed docker source for every page.
+// sourceOf selects one fixed microsandbox source for every page.
 func sourceOf(source Source) func(context.Context) (Source, string, error) {
-	return func(context.Context) (Source, string, error) { return source, "docker", nil }
+	return func(context.Context) (Source, string, error) { return source, "microsandbox", nil }
 }

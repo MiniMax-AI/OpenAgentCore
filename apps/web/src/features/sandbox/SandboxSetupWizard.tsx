@@ -408,7 +408,7 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           </>}
         >
           <ul className="wizard-cautions">
-            {confirming ? sandboxProviderSetup(confirming).cautions.map((caution) => <li key={caution.en}>{text(caution)}</li>) : null}
+            {confirming ? sandboxProviderSetup(confirming).cautions.map((caution: Parameters<typeof text>[0]) => <li key={caution.en}>{text(caution)}</li>) : null}
           </ul>
         </Modal>,
         document.body,

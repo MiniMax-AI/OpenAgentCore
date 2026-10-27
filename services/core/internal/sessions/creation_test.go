@@ -440,7 +440,7 @@ func TestCreateSession(t *testing.T) {
 			if external {
 				spec = json.RawMessage(`{"workspace":{}}`)
 			}
-			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Mode: string(sandbox.DeploymentNodes), Generation: 5, Specification: spec})
+			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "microsandbox", Mode: string(sandbox.DeploymentNodes), Generation: 5, Specification: spec})
 			tx.createEnvironment = returns("environment")
 			_, err, _ := runCreation(t, rules, tx, creationInput("openai_hosted"))
 			if external != errors.Is(err, ErrInvalidInput) {
@@ -457,13 +457,13 @@ func TestCreateSession(t *testing.T) {
 		calls []string
 	}{
 		{"a reset closes hosted admission", rules, func(tx *fakeCreationTx) {
-			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Resetting: true})
+			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "microsandbox", Resetting: true})
 		}, placement.ErrResetAdmission, []string{"UpsertSession create", "LockDeployment"}},
 		{"an unconfigured deployment still rejects admission", rules, func(tx *fakeCreationTx) {
 			tx.lockDeployment = returns(placement.Deployment{Mode: string(sandbox.DeploymentNodes)})
 		}, placement.ErrNodeUnavailable, []string{"UpsertSession create", "LockDeployment"}},
 		{"an invalid deployment still rejects admission", rules, func(tx *fakeCreationTx) {
-			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "docker", Mode: string(sandbox.DeploymentNodes), Specification: json.RawMessage(`[]`)})
+			tx.lockDeployment = returns(placement.Deployment{InstallationID: "installation", Provider: "microsandbox", Mode: string(sandbox.DeploymentNodes), Specification: json.RawMessage(`[]`)})
 		}, placement.ErrAdmissionClosed, []string{"UpsertSession create", "LockDeployment"}},
 		{"hosted creation needs rules", nil, func(*fakeCreationTx) {}, nil, []string{"UpsertSession create"}},
 	} {

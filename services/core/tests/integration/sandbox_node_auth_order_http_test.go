@@ -37,7 +37,7 @@ func TestSandboxNodeRoutesAuthenticateBeforeDeploymentState(t *testing.T) {
 	token, claimedToken, claimed := strings.Repeat("e", 64), strings.Repeat("c", 64), uuid.NewString()
 	enrollment(token, uuid.NewString())
 	enrollment(claimedToken, claimed)
-	enroll, _ := json.Marshal(machineapi.NodeEnrollment{NodeID: uuid.NewString(), Credential: strings.Repeat("n", 64), Name: "Early node", Provider: "docker",
+	enroll, _ := json.Marshal(machineapi.NodeEnrollment{NodeID: uuid.NewString(), Credential: strings.Repeat("n", 64), Name: "Early node", Provider: "microsandbox",
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: strings.Repeat("d", 64), CoreURL: "https://core.example"})
 	nodeID := uuid.NewString()
 	type check struct {

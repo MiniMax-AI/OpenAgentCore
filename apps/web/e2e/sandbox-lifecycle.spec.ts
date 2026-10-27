@@ -37,12 +37,6 @@ test("shows each node's retained limit and elapsed phase time without inventing 
   await page.screenshot({ path: testInfo.outputPath("sandbox-metrics-zh.png"), fullPage: true });
 });
 
-test("hides the retained limit when the provider declares no suspension support", async ({ page, request }) => {
-  await openConsole(page, request, "nodes");
-  await expect(page.getByRole("table", { name: "Sandbox nodes" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Retained / limit" })).toHaveCount(0);
-});
-
 
 test("edits deployment idle time without changing generation", async ({ page, request }) => {
   // Settings shows the deployment only; Nodes reads the node inventory.

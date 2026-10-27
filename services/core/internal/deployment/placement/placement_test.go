@@ -64,8 +64,8 @@ func TestRegistryDeclaresPublicOrigin(t *testing.T) {
 	if err := loopback.CheckPublicOrigin("e2b"); !errors.Is(err, ErrPublicURLUnreachable) {
 		t.Fatalf("CheckPublicOrigin(e2b) on loopback = %v", err)
 	}
-	if err := loopback.CheckPublicOrigin("docker"); err != nil {
-		t.Fatalf("CheckPublicOrigin(docker) on loopback = %v", err)
+	if err := loopback.CheckPublicOrigin("microsandbox"); err != nil {
+		t.Fatalf("CheckPublicOrigin(microsandbox) on loopback = %v", err)
 	}
 	if err := rules(t, providers.Builtin(), publicURL).CheckPublicOrigin("e2b"); err != nil {
 		t.Fatalf("CheckPublicOrigin(e2b) on a public URL = %v", err)
@@ -84,7 +84,7 @@ func TestCheckAdmission(t *testing.T) {
 		}
 		return nil
 	}}
-	valid := Deployment{InstallationID: installation, Provider: "docker", Specification: json.RawMessage(`{"resources":{"cpus":2}}`)}
+	valid := Deployment{InstallationID: installation, Provider: "microsandbox", Specification: json.RawMessage(`{"resources":{"cpus":2}}`)}
 	with := func(change func(*Deployment)) Deployment {
 		d := valid
 		change(&d)
@@ -119,7 +119,7 @@ func TestDecidePlacement(t *testing.T) {
 	ready := func(id string, g uint64, active int64) Node {
 		return Node{ID: id, Online: true, ServingReady: true, ReadyGeneration: generation(g), Active: active, MaxActive: 4, Retained: active, MaxRetained: 4, CoreURL: publicURL}
 	}
-	nodes := Deployment{InstallationID: "installation", Provider: "docker", Mode: "nodes"}
+	nodes := Deployment{InstallationID: "installation", Provider: "microsandbox", Mode: "nodes"}
 	with := func(change func(*Deployment)) Deployment {
 		d := nodes
 		change(&d)

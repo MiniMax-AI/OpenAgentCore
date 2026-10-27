@@ -1,7 +1,7 @@
 ---
 title: "安装 Core 和 Web"
 source: docs/getting-started/install.md
-source_hash: 6f5dbf881566fe1be1c4ae0ae998066f8b6df43b6d489eb88a328a6868ab7706
+source_hash: a0bb75ea6ce1671d2d4bfb2880e2b12ea8555cade40218f0cc2a4f43a829508f
 ---
 
 本指南带运维人员从一台空主机到可用的安装：在 Docker 下运行的 Core、Web 控制台和 PostgreSQL，一个沙箱提供商，一个默认模型和第一个项目 API 密钥。Web 的 **概览** 通过 **新手引导** 清单跟踪同样的步骤。
@@ -78,7 +78,7 @@ curl -fsSL https://openagentcore.dev/install.sh | bash -s -- --public-url https:
 
 ## 添加沙箱容量 {#add-sandbox-capacity}
 
-安装程序不选择沙箱提供商。请[选择沙箱提供商](./sandbox-backends.md)：在自有 Linux 节点上运行 microsandbox，并使用[设置工作区存储](./workspace-storage.md)中的工作区存储，是推荐的自管部署；E2B 不需要节点。应用也可以在自己的机器上运行[自托管 Session](./self-hosted.md)。
+安装程序不选择沙箱提供商。请[选择沙箱提供商](./sandbox-backends.md)：在自有 Linux 节点上运行 microsandbox，并使用[设置工作区存储](./workspace-storage.md)中的工作区存储，是自管部署；E2B 不需要节点。应用也可以在自己的机器上运行[自托管 Session](./self-hosted.md)。
 
 ## 设置默认模型 {#set-a-default-model}
 

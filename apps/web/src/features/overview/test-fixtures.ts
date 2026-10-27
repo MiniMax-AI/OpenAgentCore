@@ -35,7 +35,7 @@ export function session(id: string, overrides: Partial<AgentSession> = {}): Agen
 
 export function node(id: string, overrides: Partial<SandboxNode> = {}): SandboxNode {
   return {
-    id, name: id, provider: "docker", online: true, provider_ready: true,
+    id, name: id, provider: "microsandbox", online: true, provider_ready: true,
     rollout: { state: overrides.online === false ? "unknown" : "ready", ready_generation: 1 },
     cpu_count: 8, available_memory_bytes: 1024, available_disk_bytes: 2048,
     running: 1, snapshots: 0, last_seen_at: "2026-09-24T00:00:00Z",
@@ -48,7 +48,7 @@ export function node(id: string, overrides: Partial<SandboxNode> = {}): SandboxN
 export function hostedObservation(sessionId: string, projectId: string, overrides: Partial<OwnedRuntimeObservation> = {}): OwnedRuntimeObservation {
   return {
     id: sessionId, object: "agent.runtime_observation", session_id: sessionId, resolved_at: 1_000,
-    environment_id: `env_${sessionId}`, mode: "openai_hosted", provider_type: "docker",
+    environment_id: `env_${sessionId}`, mode: "openai_hosted", provider_type: "microsandbox",
     instance: { kind: "managed_allocation", allocation_id: `alloc_${sessionId}`, device_id: null, connection_generation: null },
     lifecycle_state: "active", status: "observed", reason: null, allocation_created_at: 100, observed_at: 1_000, started_at: 400,
     memory: { usage_bytes: 100, limit_bytes: 400 },

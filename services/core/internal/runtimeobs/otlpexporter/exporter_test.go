@@ -41,7 +41,7 @@ func observedRecord() runtimeobs.ExportRecord {
 	memoryUsage, memoryLimit := uint64(1024), uint64(2048)
 	return runtimeobs.ExportRecord{
 		TenantID: "tenant", SessionID: "session", EnvironmentID: "environment", AllocationID: "allocation",
-		Mode: runtimeobs.ModeManaged, ProviderType: "docker", Status: runtimeobs.StatusObserved,
+		Mode: runtimeobs.ModeManaged, ProviderType: "microsandbox", Status: runtimeobs.StatusObserved,
 		CollectionSource: runtimeobs.CollectionSourceOnRead,
 		ResolvedAt:       observedAt, SourceDuration: 50 * time.Millisecond,
 		Sample: &runtimeobs.Sample{
@@ -88,7 +88,7 @@ func TestExporterBuildsFencedProviderNeutralMetrics(t *testing.T) {
 	for key, want := range map[string]string{
 		"agents.tenant.id": "tenant", "agents.session.id": "session", "agents.environment.id": "environment",
 		"agents.runtime.allocation.id": "allocation", "agents.runtime.mode": "openai_hosted",
-		"agents.runtime.provider.type": "docker", "agents.runtime.status": "observed",
+		"agents.runtime.provider.type": "microsandbox", "agents.runtime.status": "observed",
 		"agents.runtime.collection.source":     "on_read",
 		"agents.runtime.resolved_at_unix_nano": "1790132400000000000",
 		"agents.runtime.observed_at_unix_nano": "1790132400000000000",
@@ -171,7 +171,7 @@ func TestExporterRejectsUnsafeRecordsBeforeTransport(t *testing.T) {
 	client := &captureClient{}
 	exporter := newWithClient(client)
 	record := observedRecord()
-	record.ProviderType = "docker native=secret"
+	record.ProviderType = "microsandbox native=secret"
 	if err := exporter.Export(t.Context(), record); err == nil || client.calls != 0 {
 		t.Fatalf("unsafe record reached transport: err=%v calls=%d", err, client.calls)
 	}

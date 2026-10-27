@@ -26,7 +26,7 @@ Creating or editing application assets, starting Sessions and submitting input r
 
 The Runtime daemon runs on Linux, macOS and Windows. Native platform behavior belongs to the Runtime and its Harness adapters; managed Sandbox Providers run Linux environments.
 
-Tools run with the permissions of the account that launches the daemon. The daemon adds no filesystem, permission or network isolation. Use the outer Environment for isolation: a managed Docker, E2B or microsandbox environment, or a container or VM around a self-hosted machine's Runtime. Authentication, private storage, locks and process cleanup protect the connection and lifecycle, but tools running as the same user can access Runtime data.
+Tools run with the permissions of the account that launches the daemon. The daemon adds no filesystem, permission or network isolation. Use the outer Environment for isolation: a managed E2B or microsandbox environment, or a container or VM around a self-hosted machine's Runtime. Authentication, private storage, locks and process cleanup protect the connection and lifecycle, but tools running as the same user can access Runtime data.
 
 ## Secrets and audit
 

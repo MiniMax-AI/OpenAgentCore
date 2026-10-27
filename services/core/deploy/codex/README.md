@@ -75,5 +75,3 @@ Codex `0.153.4` reports a provider HTTP 400 as `other` and puts the provider's e
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
 The build fails unless `codex --version` reports the pinned version. The image holds no credentials, workspace data or product software. The distribution copies the Codex executables and resources into the combined Runtime image; see the [maintainer guide](../../../../docs/maintainers.md#runtime-images-and-helpers).
-
-The [Docker adapter](../../../../docs/sandbox-provider.md#docker-adapter) owns the shared container lifecycle and isolation settings.

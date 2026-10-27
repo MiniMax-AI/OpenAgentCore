@@ -2,12 +2,12 @@
 title: "Sandbox Provider protocol"
 ---
 
-The Sandbox Provider protocol connects Core to the adapter that supplies compute for Core-managed (`openai_hosted`) Environments and runs the bounded bootstrap that starts the Runtime daemon in it. This page is for adapter authors: it says what a Provider implements and what it may rely on Core to do. Docker, microsandbox and E2B implement it.
+The Sandbox Provider protocol connects Core to the adapter that supplies compute for Core-managed (`openai_hosted`) Environments and runs the bounded bootstrap that starts the Runtime daemon in it. This page is for adapter authors: it says what a Provider implements and what it may rely on Core to do. microsandbox and E2B implement it.
 
 | | |
 | --- | --- |
 | Caller | Core's runtime manager and execution Worker |
-| Implementations | Docker and microsandbox (node adapters) and E2B (direct adapter); see [Reference adapters](#reference-adapters) |
+| Implementations | microsandbox (node adapter) and E2B (direct adapter); see [Reference adapters](#reference-adapters) |
 | Code | [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go) in `sandbox_provider.go`, with the setup-time `ConfigurationAdapter` |
 | Transport | A direct adapter is called in process. A node adapter runs on a sandbox node and receives the same calls over the [sandbox node protocol](../contracts/agents-api/node-generation-protocol.md#provider-requests) |
 | Version rule | The in-process interface has no wire version. The sandbox node protocol and each helper protocol require an exact version match |
@@ -50,7 +50,7 @@ Isolation belongs to the provider's infrastructure, not the daemon; see [Runtime
 | `Kill` | Reclaim the allocation's compute and retained resources |
 | `RunCommand` | Run a bounded command in the allocation's compute |
 
-A backend without a native renewable lease, such as Docker, still keeps Core's hosted expiry and cleanup requirements. Every adapter implements `RunCommand` and its tests exercise it, but Core's orchestration does not call it; only the node transport forwards it. Confidential command input travels in `Command.Stdin`, never in arguments or logs, and the result keeps byte order, bounded output and the actual exit status.
+A backend without a native renewable lease, still keeps Core's hosted expiry and cleanup requirements. Every adapter implements `RunCommand` and its tests exercise it, but Core's orchestration does not call it; only the node transport forwards it. Confidential command input travels in `Command.Stdin`, never in arguments or logs, and the result keeps byte order, bounded output and the actual exit status.
 
 `Bootstrap.Workspace` and `ResumeRequest.Workspace` carry an external workspace binding exactly when the Provider's `DeploymentPolicy.Workspace` is declared; the Provider obligations for it are in [Attachment](./workspace-provider.md#attachment). Core sets `Bootstrap.SuspendControl` exactly when the Provider declares checkpoint support, and the Provider passes it unchanged in the [Runtime bootstrap](./runtime-bootstrap.md).
 
@@ -154,7 +154,7 @@ Preview and persistence use `providers.Normalize` and `providers.Describe`. `pro
 
 A direct adapter with a credential verifies all retained generations and allocation references before a key is replaced. The common `sandbox.CallFence` excludes native calls and waits for helper completion, including calls whose callers timed out; execution invokes the prepared verification and fencing callbacks without branching on a vendor.
 
-Vendor deployment validation and SDK setup stay at the construction boundary, and construction never creates an Environment. For node-local adapters `sandbox.Built` returns the provider, probe, installation identity, backend fingerprint and specification digest, and a `Quiescent` check when a helper can outlive its caller; generation collection waits for it. The factory also returns its close function. `execution.RuntimeProvider` binds the adapter to its kind, installation ID, backend fingerprint, generation, mode and node ownership; the database owns the selection, and the in-memory copy is never another authority. Docker and microsandbox run on nodes, and E2B is constructed directly. The node proxy exposes checkpoint operations only for a backend whose registered declaration supports them, and common lifecycle code admits suspension through the checkpoint declaration, never through a provider name.
+Vendor deployment validation and SDK setup stay at the construction boundary, and construction never creates an Environment. For node-local adapters `sandbox.Built` returns the provider, probe, installation identity, backend fingerprint and specification digest, and a `Quiescent` check when a helper can outlive its caller; generation collection waits for it. The factory also returns its close function. `execution.RuntimeProvider` binds the adapter to its kind, installation ID, backend fingerprint, generation, mode and node ownership; the database owns the selection, and the in-memory copy is never another authority. microsandbox runs on nodes, and E2B is constructed directly. The node proxy exposes checkpoint operations only for a backend whose registered declaration supports them, and common lifecycle code admits suspension through the checkpoint declaration, never through a provider name.
 
 The backend fingerprint identifies a native resource namespace, not capacity. Core keeps deployment generations so that owned allocations keep resolving to their original backend; never repoint retained allocations at a replacement backend.
 
@@ -302,30 +302,11 @@ Run `make check-sandbox-provider-contract` while developing. It runs the shared 
 
 Node tests separately cover disconnect and reconnect fencing and cleanup after a lost Create response. Helper protocols and the [sandbox node protocol](../contracts/agents-api/node-generation-protocol.md) require an exact version match.
 
-Native acceptance proves what fixtures cannot: creation, lease behavior, owned partial cleanup, declared isolation and limits, and snapshots where supported. The opt-in Docker lifecycle and recovery tests use `AGENTS_RUNTIME_DOCKER_TEST_IMAGE`; the SDK helpers use `make check-e2b-provider` and `make check-microsandbox-provider`. Mocked compute proves neither reclamation nor isolation.
+Native acceptance proves what fixtures cannot: creation, lease behavior, owned partial cleanup, declared isolation and limits, and snapshots where supported. The SDK helpers use `make check-e2b-provider` and `make check-microsandbox-provider`. Mocked compute proves neither reclamation nor isolation.
 
 ## Reference adapters
 
 | Kind | Adapter | Helper and adapter rules | Operator guide |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker) | Node proxy in [`sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node) | [Docker adapter](#docker-adapter) |
 | microsandbox (node) | [`sandbox/microsandbox`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) | [Add and manage nodes](./getting-started/nodes.md) |
 | E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) | [Sandbox deployment](../contracts/agents-api/sandbox-deployment.md#e2b-configuration); application-managed templates in [`deploy/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md) |
-
-## Docker adapter
-
-The Docker Sandbox Provider ([`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker)) runs every Runtime image, whichever Harness it serves, with the same container settings ([`container_options.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/container_options.go)):
-
-- user 1000:1000, read-only root filesystem, all capabilities dropped, `no-new-privileges`, the [seccomp profile](#seccomp-profile) and AppArmor `unconfined`;
-- the node’s configured network and extra hosts ([node configuration](./configuration.md#docker-node-configuration));
-- CPU and memory from the deployment specification, a 128-process limit and a 128 MiB `/tmp` tmpfs;
-- two named volumes labelled with the installation, tenant, Environment and allocation: `<name>-home` at `/home` and `<name>-environment` at `/environment`, whose `workspace` subdirectory is also mounted at `/workspace`. The Docker Engine must support volume subpath mounts;
-- with the configured `nested_sandbox` option, Docker's `/proc` masks are lifted (`/sys/firmware` and `/sys/devices/virtual/powercap` stay masked) and the container runs an init process.
-
-Create refuses to reuse retained volumes that have no container. It copies the [Runtime bootstrap](./runtime-bootstrap.md) file to `/home/runtime/runtime-bootstrap.json` (mode 0600, UID 1000) and the `/environment` workspace, staging, initialization and package directories into the container, then starts `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json`. When the created container does not have the configured CPU, memory and exact image, Create returns the error with `CreateSettled`. Docker has no lease, so Renew only reads the container state. Kill checks the ownership labels of the container and both volumes before removing any of them, then confirms that all three are gone.
-
-The node uses the explicit Unix socket in its [provider configuration](./configuration.md#docker-node-configuration) and ignores `DOCKER_HOST`. No Docker socket, host home or Core credential is mounted into a Runtime.
-
-### Seccomp profile
-
-[`seccomp.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/seccomp.json) is the Moby default profile at [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) (Apache-2.0, see [seccomp.LICENSE](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/seccomp.LICENSE); upstream file SHA-256 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`) with one appended rule that allows `clone`, `unshare`, `setns`, `mount`, `umount2` and `pivot_root`. The distribution ships this file to every Docker node as `runtime/seccomp.json`.

@@ -17,7 +17,7 @@ func TestCreatesEnvironment(t *testing.T) {
 			t.Fatalf("%s: %v, %v", configuration, got, err)
 		}
 	}
-	for _, configuration := range []string{`not json`, `{"environment":{"type":"docker"}}`, `{"environment":{}}`} {
+	for _, configuration := range []string{`not json`, `{"environment":{"type":"microsandbox"}}`, `{"environment":{}}`} {
 		if _, err := createsEnvironment([]byte(configuration)); !errors.Is(err, ErrInvalidInput) {
 			t.Fatalf("%s: %v", configuration, err)
 		}

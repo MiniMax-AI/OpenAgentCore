@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -91,7 +91,7 @@ func TestObservationsRouteThroughAssignedNodeWithoutLifecycleCalls(t *testing.T)
 	stopSecond := runObservationNode(t, hub, server.URL, second, b)
 	ra, rb := reference(), reference()
 	assignments := map[sandbox.Reference]string{ra: first.NodeID, rb: second.NodeID}
-	source := hub.GenerationProvider(docker.Operations(), func(_ context.Context, r sandbox.Reference) (string, uint64, error) {
+	source := hub.GenerationProvider(microsandbox.Operations(), func(_ context.Context, r sandbox.Reference) (string, uint64, error) {
 		if id, ok := assignments[r]; ok {
 			return id, 1, nil
 		}

@@ -1,33 +1,5 @@
 [
   {
-    "name": "docker",
-    "provider": "docker",
-    "specification": {
-      "resources": {
-        "cpus": 2,
-        "memory_mib": 4096
-      }
-    },
-    "valid": true,
-    "canonical": "{\"provider\":\"docker\",\"resources\":{\"cpus\":2,\"memory_mib\":4096}}",
-    "digest": "6931ff71e3c92bccfbc422fb11d0e69fdf591e7bdd1aed76ac47fa4f144baca1"
-  },
-  {
-    "name": "docker-zero-disks",
-    "provider": "docker",
-    "specification": {
-      "resources": {
-        "cpus": 2,
-        "memory_mib": 4096,
-        "root_disk_mib": 0,
-        "environment_disk_mib": 0
-      }
-    },
-    "valid": true,
-    "canonical": "{\"provider\":\"docker\",\"resources\":{\"cpus\":2,\"memory_mib\":4096}}",
-    "digest": "6931ff71e3c92bccfbc422fb11d0e69fdf591e7bdd1aed76ac47fa4f144baca1"
-  },
-  {
     "name": "microsandbox",
     "provider": "microsandbox",
     "specification": {
@@ -62,68 +34,81 @@
   },
   {
     "name": "cpu-zero",
-    "provider": "docker",
+    "provider": "microsandbox",
     "specification": {
       "resources": {
         "cpus": 0,
-        "memory_mib": 4096
+        "memory_mib": 4096,
+        "root_disk_mib": 1024
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true
       }
     },
     "valid": false
   },
   {
     "name": "cpu-overflow",
-    "provider": "docker",
+    "provider": "microsandbox",
     "specification": {
       "resources": {
         "cpus": 256,
-        "memory_mib": 4096
+        "memory_mib": 4096,
+        "root_disk_mib": 1024
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true
       }
     },
     "valid": false
   },
   {
     "name": "cpu-bool",
-    "provider": "docker",
+    "provider": "microsandbox",
     "specification": {
       "resources": {
         "cpus": true,
-        "memory_mib": 4096
+        "memory_mib": 4096,
+        "root_disk_mib": 1024
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true
       }
     },
     "valid": false
   },
   {
     "name": "memory-low",
-    "provider": "docker",
+    "provider": "microsandbox",
     "specification": {
       "resources": {
         "cpus": 2,
-        "memory_mib": 511
+        "memory_mib": 511,
+        "root_disk_mib": 1024
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true
       }
     },
     "valid": false
   },
   {
     "name": "unknown-resource",
-    "provider": "docker",
+    "provider": "microsandbox",
     "specification": {
       "resources": {
         "cpus": 2,
         "memory_mib": 4096,
-        "other": 1
-      }
-    },
-    "valid": false
-  },
-  {
-    "name": "docker-disk",
-    "provider": "docker",
-    "specification": {
-      "resources": {
-        "cpus": 2,
-        "memory_mib": 4096,
+        "other": 1,
         "root_disk_mib": 1024
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true
       }
     },
     "valid": false
@@ -148,14 +133,19 @@
   },
   {
     "name": "runtime-rejected",
-    "provider": "docker",
+    "provider": "microsandbox",
     "specification": {
       "resources": {
         "cpus": 2,
-        "memory_mib": 4096
+        "memory_mib": 4096,
+        "root_disk_mib": 1024
       },
       "runtime": {
         "source_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true
       }
     },
     "valid": false
@@ -239,22 +229,6 @@
         "cpus": 255,
         "memory_mib": 1048576,
         "root_disk_mib": 1024
-      }
-    },
-    "valid": false
-  },
-  {
-    "name": "docker-external-rejected",
-    "provider": "docker",
-    "specification": {
-      "resources": {
-        "cpus": 255,
-        "memory_mib": 1048576
-      },
-      "workspace": {
-        "attachment": "host_directory",
-        "user_xattr": true,
-        "capacity_quota": false
       }
     },
     "valid": false

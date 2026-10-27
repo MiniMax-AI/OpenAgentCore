@@ -26,10 +26,10 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(add.getByLabel("One-time enrollment command without sudo", { exact: true })).toHaveCount(0);
   await add.getByRole("radio", { name: "Custom" }).click();
   await add.getByLabel("Sandboxes at once").fill("3");
+  await add.getByLabel("Retained sandboxes").fill("3");
   const tokenRequest = () => page.waitForRequest((sent) => sent.method() === "POST" && sent.url().endsWith("/core/v1/sandbox/enrollment-tokens"));
   const issued = tokenRequest();
   await add.getByRole("button", { name: "Generate command" }).click();
-  // Docker never suspends, so it retains exactly the sandboxes it runs.
   expect((await issued).postDataJSON()).toEqual({ max_active: 3, max_retained: 3 });
   const field = add.getByLabel("One-time enrollment command", { exact: true });
   await expect(field).toHaveValue(/enroll_fixture_/);
@@ -42,7 +42,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await expect(add.getByText("If the command is interrupted or the download stalls, run it again: unfinished downloads restart, and verified files are reused.")).toBeVisible();
   await expect(add.getByRole("timer")).toHaveText(/^Expires in (1:00:00|59:\d\d)$/);
   const progress = add.getByRole("status", { name: "Registration progress" });
-  await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
+  await expect(progress).toHaveText(/Waiting for registration.*Connect.*microsandbox check/);
 
   // Closing keeps the command for the next opening. Meanwhile another command's node, with the
   // same limits, registers: it reports another enrollment ID, so it is not this command's node.
@@ -53,7 +53,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   await page.getByRole("button", { name: "Add node" }).click();
   await expect(field).toHaveValue(first);
   await expect(page.getByRole("table", { name: "Sandbox nodes" })).toContainText("edge-05");
-  await expect(progress).toHaveText(/Waiting for registration.*Connect.*Docker check/);
+  await expect(progress).toHaveText(/Waiting for registration.*Connect.*microsandbox check/);
 
   // Once expired, a new command is issued only on request, for the same limits.
   await page.clock.fastForward("01:00:30");
@@ -79,7 +79,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
     watch.expiredWatch.observe(document.body, { childList: true, subtree: true, characterData: true });
   });
   await page.getByRole("button", { name: "Add node" }).click();
-  await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*Docker check/);
+  await expect(progress).toHaveText(/Registered · edge-04.*Waiting to connect.*microsandbox check/);
   expect(await page.evaluate(() => {
     const watch = window as unknown as { expiredShown: boolean; expiredWatch: MutationObserver };
     watch.expiredWatch.disconnect();
@@ -95,7 +95,7 @@ test("adds a node: host requirements, a root/sudo command, a countdown, the same
   // Connected but not ready, it keeps waiting for its provider; once ready, the node is connected.
   await setNode(request, { id: "node-new", online: true });
   await expect(problem).toContainText("Sandbox provider unavailable");
-  await expect(progress).toContainText("Waiting for Docker");
+  await expect(progress).toContainText("Waiting for microsandbox");
   await setNode(request, { id: "node-new", provider_ready: true });
   await expect(progress).toHaveText("edge-04 · Connected");
   await add.getByRole("button", { name: "Done" }).click();
@@ -145,7 +145,7 @@ test("issues no command before the installation is read, for a loopback public U
   await openConsole(page, request, "nodes", { nodeArtifacts: [] });
   await page.getByRole("button", { name: "Refresh sandbox state" }).click();
   await page.getByRole("button", { name: "Add node" }).click();
-  await expect(add.getByRole("status")).toHaveText("This console has no node files for Docker. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.");
+  await expect(add.getByRole("status")).toHaveText("This console has no node files for microsandbox. Install Core from the offline bundle, or add the release artifacts and rerun ./install.sh.");
   await expect(add.getByRole("button", { name: "Generate command" })).toHaveCount(0);
   expect(await writes(request)).toEqual([]);
   // Rerunning ./install.sh adds them: reopening reads the console again, without a reload.
@@ -187,7 +187,6 @@ test("marks a node on an old Core address in its row, beside each node's limit",
   await expect(row).toContainText("Old address");
   await expect(row).toContainText("Remove and add again");
   await expect(row).not.toContainText("Available");
-  // Docker nodes show their limit too.
   await expect(row).toContainText("5 / 8");
 });
 
@@ -222,34 +221,6 @@ test("sets up own-machine sandboxes page by page", async ({ page, request }) => 
   expect(await writes(request)).toEqual(["POST /core/v1/sandbox/deployment"]);
   await add.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-});
-
-test("preselects microsandbox and asks once before switching to Docker", async ({ page, request }) => {
-  await openConsole(page, request, "settings?id=sandbox", { sandbox: "none" });
-  await page.getByRole("button", { name: "Own machines" }).click();
-  const microsandbox = page.getByRole("button", { name: "microsandbox Recommended" });
-  const docker = page.getByRole("button", { name: "Docker", exact: true });
-  const confirm = page.getByRole("dialog", { name: "Use Docker?" });
-  const sizeStep = page.getByRole("heading", { name: "How big is each sandbox?" });
-  await expect(microsandbox).toHaveAttribute("aria-pressed", "true");
-
-  // Keeping microsandbox is the default action; it leaves microsandbox selected.
-  await docker.click();
-  const keep = confirm.getByRole("button", { name: "Back" });
-  await expect(keep).toBeFocused();
-  await keep.click();
-  await expect(confirm).toBeHidden();
-  await expect(microsandbox).toHaveAttribute("aria-pressed", "true");
-
-  // Confirmed, Docker is selected and the wizard does not ask again.
-  await docker.click();
-  await confirm.getByRole("button", { name: "Use Docker" }).click();
-  await expect(sizeStep).toBeVisible();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(docker).toHaveAttribute("aria-pressed", "true");
-  await docker.click();
-  await expect(sizeStep).toBeVisible();
-  await expect(confirm).toHaveCount(0);
 });
 
 test("saves E2B without opening Add node, as it has no machines", async ({ page, request }) => {
@@ -313,8 +284,8 @@ test("shows the retained E2B build while a replacement key is checked", async ({
 });
 
 test("edits only the saved backend, preserving a custom size", async ({ page, request }) => {
-  const current = { resources: { cpus: 7, memory_mib: 8192 } };
-  let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, unknown: 0 } },
+  const current = { resources: { cpus: 7, memory_mib: 8192, root_disk_mib: 10240 }, workspace: { attachment: "host_directory", user_xattr: true, capacity_quota: false } };
+  let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "microsandbox", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, unknown: 0 } },
     owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
     suspension: null };
   let submitted: Record<string, unknown> | null = null;
@@ -332,7 +303,7 @@ test("edits only the saved backend, preserving a custom size", async ({ page, re
   await expect(page.getByRole("button", { name: "E2B", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /^Current/ }).click();
   await page.getByRole("button", { name: "Save configuration" }).click();
-  await expect.poll(() => submitted).toMatchObject({ provider: "docker", expected_generation: 1, resources: current.resources });
+  await expect.poll(() => submitted).toMatchObject({ provider: "microsandbox", expected_generation: 1, resources: current.resources });
   expect(submitted).not.toHaveProperty("core_url");
 });
 
@@ -367,7 +338,7 @@ test("renames a node and sets how many sandboxes run on it at once", async ({ pa
   await page.getByRole("row").filter({ hasText: "core-01" }).getByRole("button", { name: "Edit node" }).click();
   const edit = page.getByRole("dialog", { name: "Edit node" });
   await edit.getByLabel("Name").fill("core-01-large");
-  await expect(edit).toContainText("Recommended: 6 at once.");
+  await expect(edit).toContainText("Recommended: 6 at once, 6 retained.");
   await edit.getByRole("button", { name: "Use recommended" }).click();
   await expect(edit.getByLabel("Sandboxes at once")).toHaveValue("6");
   await edit.getByRole("button", { name: "Save" }).click();

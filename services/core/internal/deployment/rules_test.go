@@ -113,13 +113,13 @@ func TestCheckGeneration(t *testing.T) {
 			t.Errorf("checkGeneration(%+v, %s) = %v, want a plain conflict", c.d, c.installation, err)
 		}
 	}
-	if initialized(Record{InstallationID: installation}) || initialized(Record{Provider: "docker"}) || !initialized(Record{InstallationID: installation, Provider: "docker"}) {
+	if initialized(Record{InstallationID: installation}) || initialized(Record{Provider: "microsandbox"}) || !initialized(Record{InstallationID: installation, Provider: "microsandbox"}) {
 		t.Fatal("initialized needs both an installation and a provider")
 	}
 }
 
 func TestTypedErrors(t *testing.T) {
-	if err := error(&ResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}); !errors.Is(err, ErrConflict) {
+	if err := error(&ResetRequiredError{CurrentProvider: "microsandbox", RequestedProvider: "e2b"}); !errors.Is(err, ErrConflict) {
 		t.Fatal("ResetRequiredError is not a conflict")
 	}
 	validation := &sandbox.ValidationError{Param: "resources.cpus", Message: "too many"}

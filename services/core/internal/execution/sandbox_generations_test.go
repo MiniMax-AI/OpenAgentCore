@@ -9,8 +9,8 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/deployment"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/google/uuid"
 )
@@ -29,7 +29,7 @@ func TestE2BReplacementVerifiesTwiceAndNeverPublishesFailedCommit(t *testing.T) 
 	}
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
-	provider := hub.Proxy(uuid.NewString(), docker.Operations(), 1)
+	provider := hub.Proxy(uuid.NewString(), microsandbox.Operations(), 1)
 	verifyCalls, published, fenced, released := 0, 0, 0, 0
 	var rejectAt int
 	var rejection error = sandbox.ErrCredentialOwnership

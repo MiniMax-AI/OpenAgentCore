@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -21,8 +22,24 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
+// switchWorker is a running Worker over a deferred fixture provider. Workspace
+// storage is selected only for node deployments: a cloud deployment has none.
+type switchWorker struct {
+	s            *Store
+	pool         *pgxpool.Pool
+	w            *execution.Worker
+	deployments  *deployment.Service
+	id           string
+	done         chan error
+	fail         *atomic.Bool
+	preparations *atomic.Int32
+}
+
+func startSwitchWorker(t *testing.T, storage bool) switchWorker {
 	s, pool := newManagedTestStore(t)
+	if storage {
+		selectStoreWorkspaceStorage(t, s)
+	}
 	deployments := deploymentService(t, s)
 	id := uuid.NewString()
 	p := &lifecycleProvider{resources: map[string]sandbox.Info{}}
@@ -53,8 +70,14 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 			t.Error("worker shutdown blocked")
 		}
 	})
+	return switchWorker{s, pool, w, deployments, id, done, &fail, &preparations}
+}
+
+func TestSandboxWorkerRecoversFailedNodeActivation(t *testing.T) {
+	f := startSwitchWorker(t, true)
+	s, pool, w, deployments, fail, preparations := f.s, f.pool, f.w, f.deployments, f.fail, f.preparations
 	fail.Store(true)
-	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err == nil {
+	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}); err == nil {
 		t.Fatal("rejected initial provider configuration was committed")
 	}
 	empty, err := deployments.View(t.Context())
@@ -62,18 +85,18 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 		t.Fatal("failed initial candidate changed the deployment", err)
 	}
 	fail.Store(false)
-	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
+	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}); err != nil {
 		t.Fatal(err)
 	}
 	prepared := preparations.Load()
-	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err == nil || preparations.Load() != prepared {
+	if _, err := w.InitializeSandboxDeployment(t.Context(), sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}); err == nil || preparations.Load() != prepared {
 		t.Fatal("stale identical POST reached provider preparation", err)
 	}
 	enrollment, err := EnrollmentTestToken(deployments.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(4)}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	node := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "docker", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), CoreURL: s.placement.PublicURL()}
+	node := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "retained candidate fixture", Provider: "microsandbox", Credential: strings.Repeat("n", 64), BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), CoreURL: s.placement.PublicURL()}
 	if _, err := deployments.Enroll(t.Context(), enrollment, node); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +104,7 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := sandbox.Selection{ExpectedGeneration: 1, DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}
+	input := sandbox.Selection{ExpectedGeneration: 1, DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}
 	input.Resources.CPUs++
 	fail.Store(true)
 	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), input); err == nil {
@@ -109,10 +132,19 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 	if err := w.ReconcileManagedRuntimes(t.Context()); err != nil {
 		t.Fatal("failed commit left manager barrier closed", err)
 	}
-	if view, err := deployments.View(t.Context()); err != nil || view.Generation != 1 || view.Provider != "docker" {
+	if view, err := deployments.View(t.Context()); err != nil || view.Generation != 1 || view.Provider != "microsandbox" {
 		t.Fatal("failed commit replaced provider", view, err)
 	}
 	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), input); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSandboxWorkerResetsCloudDeployment(t *testing.T) {
+	f := startSwitchWorker(t, false)
+	s, w, deployments, id, done := f.s, f.w, f.deployments, f.id, f.done
+	empty, err := deployments.View(t.Context())
+	if err != nil {
 		t.Fatal(err)
 	}
 	reset := func(generation uint64) deployment.View {
@@ -138,32 +170,27 @@ func TestSandboxWorkerSwitchesAndRecoversFailedActivation(t *testing.T) {
 		t.Fatal("reset completion blocked (including possible manager self-drain)")
 		return deployment.View{}
 	}
-	empty = reset(2)
 	cloud := sandbox.Selection{ExpectedGeneration: empty.Generation, DeploymentSpec: SandboxDeploymentTestSpec("e2b"), Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "fixture-api-key", Template: "runtime:" + uuid.NewString()}}
 	if _, err := w.InitializeSandboxDeployment(t.Context(), cloud); err != nil {
-		t.Fatal("setup after unconfigured publication", err)
+		t.Fatal("initial cloud setup", err)
 	}
 	tenant, session, environment := managedSession(t, s)
 	allocation, err := w.ProvisionEnvironment(t.Context(), tenant, environment.ID, id)
 	if err != nil || allocation.NodeID != "" || allocation.State != "running" {
 		t.Fatal("direct provider not available after resume", allocation, err)
 	}
-	next := sandbox.Selection{ExpectedGeneration: 4, DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}
-	if _, err := w.UpdateSandboxDeployment(SandboxResetTestContext(t.Context()), next); !errors.Is(err, deployment.ErrConflict) {
-		t.Fatal("dirty switch accepted", err)
-	}
 	if err := sessionService(t, s).DeleteSession(t.Context(), sessions.DeleteSessionCommand{TenantID: tenant, SessionID: session.ID}); err != nil {
 		t.Fatal(err)
 	}
 	reconcileManagedState(t, w, s, tenant, environment.ID, "released")
-	empty = reset(4)
-	next.ExpectedGeneration = empty.Generation
-	if _, err := w.InitializeSandboxDeployment(t.Context(), next); err != nil {
+	empty = reset(1)
+	cloud.ExpectedGeneration = empty.Generation
+	if _, err := w.InitializeSandboxDeployment(t.Context(), cloud); err != nil {
 		t.Fatal("clean setup after reset", err)
 	}
 	select {
 	case err := <-done:
-		t.Fatalf("provider switch stopped Worker: %v", err)
+		t.Fatalf("reset stopped Worker: %v", err)
 	default:
 	}
 }

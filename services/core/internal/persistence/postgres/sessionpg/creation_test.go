@@ -28,6 +28,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/skills"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/writeaudit"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -472,7 +473,7 @@ func TestHostedCreationAdmitsUnderDeploymentLockAndLeavesComputeUnreserved(t *te
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	tenant := uuid.NewString()
-	nodes, err := json.Marshal(sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}})
+	nodes, err := json.Marshal(sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -501,7 +502,7 @@ func TestHostedCreationAdmitsUnderDeploymentLockAndLeavesComputeUnreserved(t *te
 		done <- err
 	}()
 	awaitBlocked(ctx, t, pool, holder)
-	if _, err := tx.Exec(ctx, `UPDATE runtime_deployment SET provider_kind='docker', mode='nodes', generation=2, specification=$1,
+	if _, err := tx.Exec(ctx, `UPDATE runtime_deployment SET provider_kind='microsandbox', mode='nodes', generation=2, specification=$1,
 		reset_clear='force', reset_requested_at=now(), reset_forced_at=now(), reset_audit='{}'`, string(nodes)); err != nil {
 		t.Fatal(err)
 	}
@@ -514,7 +515,7 @@ func TestHostedCreationAdmitsUnderDeploymentLockAndLeavesComputeUnreserved(t *te
 	if retry, err := service.CreateSession(ctx, tenant, hosted("existing")); err != nil || retry.Created || retry.Session.ID != existing.Session.ID {
 		t.Fatal("retry ran admission", retry, err)
 	}
-	exec(t, pool, "UPDATE runtime_deployment SET reset_clear=NULL, reset_requested_at=NULL, reset_forced_at=NULL, reset_audit=NULL")
+	exec(t, pool, `UPDATE runtime_deployment SET provider_kind='e2b', mode='direct', generation=3, specification='{"resources":{"cpus":2,"memory_mib":2048}}', reset_clear=NULL, reset_requested_at=NULL, reset_forced_at=NULL, reset_audit=NULL`)
 	queued, err := service.CreateSession(ctx, tenant, hosted("unplaced"))
 	if err != nil || !queued.Created {
 		t.Fatal("creation without available compute was not accepted", queued, err)

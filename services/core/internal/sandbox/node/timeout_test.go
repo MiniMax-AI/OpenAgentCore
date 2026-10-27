@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -103,7 +103,7 @@ func TestQueuedMutationExpiresWithoutExecution(t *testing.T) {
 		}
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
-	proxy := hub.Proxy(id.NodeID, docker.Operations(), 1)
+	proxy := hub.Proxy(id.NodeID, microsandbox.Operations(), 1)
 	r := reference()
 	createCtx, stopCreate := context.WithTimeout(ctx, 3*time.Second)
 	defer stopCreate()

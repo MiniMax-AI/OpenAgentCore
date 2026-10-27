@@ -2,12 +2,12 @@
 title: "Sandbox node protocol"
 ---
 
-The sandbox node protocol connects Core to a Docker or microsandbox host, which runs Provider operations against its local provider and reports readiness, host measurements and the deployment generations it holds.
+The sandbox node protocol connects Core to a microsandbox host, which runs Provider operations against its local provider and reports readiness, host measurements and the deployment generations it holds.
 
 | | |
 | --- | --- |
 | Caller | Core, the only lifecycle owner; the node never retries a mutation or schedules work |
-| Implementations | The sandbox node program with the Docker and microsandbox Providers |
+| Implementations | The sandbox node program with the microsandbox Provider |
 | Code | [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node) (`wire.go`, `generation_wire.go`) |
 | Transport | One WebSocket, `GET /api/v1/sandbox-node/connect`; the HTTP routes a node uses to enroll and read its configuration are in the [machine connection API](./machine-api.md#node-routes) |
 | Version rule | Exact match on `node.ProtocolVersion`, see [Frames and version](#frames-and-version) |

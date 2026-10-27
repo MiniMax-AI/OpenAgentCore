@@ -23,12 +23,12 @@ import urllib.error
 from types import SimpleNamespace
 from unittest import mock
 
-import host_docker
 import host_microsandbox
 import node_install as installer
 import node_spec
 
 REAL_FETCH = installer.fetch
+REAL_GETADDRINFO = socket.getaddrinfo
 
 
 
@@ -64,16 +64,15 @@ class NodeInstallTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.home = Path(temporary.name).resolve()
         self.args = argparse.Namespace(source_url="https://console.example", core_url="https://172.29.144.1:24443",
-                                       provider="docker", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe")
+                                       provider="microsandbox", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe")
         self.root = self.home / ".oac/nodes" / self.args.installation_id
         self.manifest = {"platform": "linux/amd64", "source_commit": "a" * 40, "images": {"runtime": "sha256:" + "b" * 64},
                          "image_manifest_digests": {"runtime": "sha256:" + "c" * 64},
                          "runtime_ref": "oac-runtime@sha256:" + "c" * 64,
                          "microsandbox": {"runtime_sha256": "d" * 64, "firmware_sha256": "e" * 64}}
-        self.payloads = {name: b"fixture-payload-" + name.encode() for name in installer.provider_assets.artifacts("microsandbox", ("node", "policy", "runtime"))}
+        self.payloads = {name: b"fixture-payload-" + name.encode() for name in installer.provider_assets.artifacts("microsandbox", ("node", "runtime"))}
         self.payloads["images/runtime.tar.gz"] = gzip.compress(b"runtime archive")
         self.refresh_manifest()
-        self.containerd = False
         self.invalid_image = None
         self.image_present = False
         self.calls = []
@@ -88,9 +87,10 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(installer, "open_request", side_effect=self.configuration_response),
                       mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=self.artifact_response)),
                       mock.patch.object(host_microsandbox, "home", return_value=self.home / "m"),
+                      mock.patch.object(host_microsandbox, "capacity", return_value=(64, 256 << 30)),
+                      mock.patch.object(host_microsandbox.socket, "getaddrinfo", side_effect=lambda host, port, **kwargs: REAL_GETADDRINFO(host, port, **kwargs) if host[0].isdigit() else [(2, 1, 6, "", ("203.0.113.5", port))]),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
                       mock.patch.object(installer, "checked", side_effect=self.checked),
-                      mock.patch.object(installer.distribution, "docker_command", side_effect=self.docker_command),
                       mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"statically linked", b""))):
             patch.start()
             self.addCleanup(patch.stop)
@@ -159,38 +159,24 @@ class NodeInstallTests(unittest.TestCase):
             if getattr(self, "fail_usermod", False):
                 raise installer.InstallError(failure)
             self.joined = True
-        if "{{json .}}" in arguments:
-            return json.dumps({"MemoryLimit": True, "CpuCfsQuota": True, "NCPU": 8, "MemTotal": 16 << 30})
         if "load" in arguments:
             self.image_present = True
         if "inspect" in arguments:
             if not self.image_present:
                 raise installer.InstallError(failure)
-            if arguments[0] == "docker":
-                if self.containerd and arguments[arguments.index("inspect") + 1] == self.manifest["images"]["runtime"]:
-                    raise installer.InstallError(failure)
-                identity = self.manifest["image_manifest_digests" if self.containerd else "images"]["runtime"]
-                return self.invalid_image or identity + " linux/amd64"
-            return json.dumps({"digest": self.manifest["runtime_ref"].split("@", 1)[1], "os": "linux", "architecture": "amd64"})
+            return json.dumps({"digest": self.manifest["runtime_ref"].split("@", 1)[1], "os": "linux", "architecture": "amd64", **(self.invalid_image or {})})
         return ""
-
-    def docker_command(self, arguments, **kwargs):
-        try:
-            return subprocess.CompletedProcess(arguments, 0, self.checked(arguments, "image missing", **kwargs), "")
-        except installer.InstallError:
-            return subprocess.CompletedProcess(arguments, 1, "", "")
 
     def install(self):
         installer.prepare_service_node(self.args, "synthetic-once-token", installer.node_generations.helper_archive(self.args, installer))
 
-    def test_docker_installs_matched_payload_registers_and_starts_persistent_service(self):
+    def test_microsandbox_installs_matched_payload_registers_and_starts_persistent_service(self):
         system = self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         config = json.loads((self.root / "provider.json").read_text())
-        self.assertEqual(config["native"]["image"], self.manifest["images"]["runtime"])
+        self.assertEqual(config["native"]["image"], self.manifest["runtime_ref"])
         self.assertEqual(config["core_url"], self.args.core_url + "/api/v1")
         self.assertEqual(config["installation_id"], self.args.installation_id)
-        self.assertFalse((self.root / host_microsandbox.ARTIFACTS[0]).exists())
         unit = (system / "units" / ("oac-node-" + self.args.installation_id + ".service")).read_text()
         self.assertIn(" run --config ", unit)
         self.assertIn("KillMode=process", unit)
@@ -202,37 +188,16 @@ class NodeInstallTests(unittest.TestCase):
         self.assertTrue(any("register" in call for call, _ in self.calls))
         self.assertTrue(any("is-active" in call for call, _ in self.calls))
 
-    def test_containerd_node_persists_actual_id_and_warm_retry_avoids_archive(self):
-        self.containerd = True
-        self.install()
-        expected = self.manifest['image_manifest_digests']['runtime']
-        self.assertEqual(json.loads((self.root / 'provider.json').read_text())['native']['image'], expected)
-        before = (self.root / 'provider.json').read_bytes()
-        with mock.patch.object(installer.distribution, 'runtime_archive', side_effect=AssertionError('warm Runtime download')):
-            self.install()
-        self.assertEqual((self.root / 'provider.json').read_bytes(), before)
-
-    def test_retained_provider_image_cannot_bypass_verified_selection(self):
-        self.install()
-        config = json.loads((self.root / 'provider.json').read_text())
-        config['native']['image'] = 'sha256:' + 'f' * 64
-        (self.root / 'provider.json').write_text(json.dumps(config))
-        self.calls.clear()
-        with self.assertRaisesRegex(node_spec.SpecificationError, 'Retained Docker image differs'):
-            self.install()
-        self.assertFalse(any('register' in call or 'enable' in call for call, _ in self.calls))
-
     def test_wrong_loaded_runtime_cannot_register_or_write_provider_config(self):
-        for observed in ('sha256:' + 'f' * 64 + ' linux/amd64', self.manifest['images']['runtime'] + ' linux/arm64'):
+        for observed in ({'digest': 'sha256:' + 'f' * 64}, {'architecture': 'arm64'}):
             self.invalid_image = observed
             self.image_present = False
-            with self.subTest(observed=observed), self.assertRaisesRegex(installer.distribution.DistributionError, 'identity or platform'):
+            with self.subTest(observed=observed), self.assertRaisesRegex(installer.InstallError, 'identity or platform'):
                 self.install()
             self.assertFalse((self.root / 'provider.json').exists())
             self.assertFalse(any('register' in call or 'enable' in call for call, _ in self.calls))
 
     def test_microsandbox_imports_image_and_allows_only_explicit_private_core_endpoint(self):
-        self.args.provider = "microsandbox"
         self.install()
         config = json.loads((self.root / "provider.json").read_text())["native"]
         # The image and artifact hashes come from the installation's verified manifest.
@@ -257,32 +222,11 @@ class NodeInstallTests(unittest.TestCase):
         self.assertFalse(any("register" in call for call, _ in self.calls))
         self.assertFalse(any("load" in call for call, _ in self.calls))
 
-    def test_policy_download_after_sigkill_starts_clean(self):
-        root = self.home / "policy"
-        payload = self.payloads["runtime/seccomp.json"]
-        expected = hashlib.sha256(payload).hexdigest()
-        class Interrupted(io.BytesIO):
-            def read(self, size=-1):
-                if self.tell():
-                    os.kill(os.getpid(), signal.SIGKILL)
-                return super().read(1)
-        child = os.fork()
-        if child == 0:
-            with mock.patch.object(installer, "fetch", return_value=Interrupted(payload)):
-                installer.download(self.args.source_url, "runtime/seccomp.json", root, expected)
-            os._exit(1)
-        _, status = os.waitpid(child, 0)
-        self.assertEqual(os.waitstatus_to_exitcode(status), -signal.SIGKILL)
-        partial = root / "runtime/.seccomp.json.partial"
-        self.assertTrue(partial.exists())
-        installer.download(self.args.source_url, "runtime/seccomp.json", root, expected)
-        self.assertFalse(partial.exists())
-        self.assertEqual((root / "runtime/seccomp.json").read_bytes(), payload)
-
     def test_retry_after_configuration_write_sigkill_publishes_complete_files(self):
         for name in ("installation.json", "provider.json", "registered.json"):
             with self.subTest(name=name):
                 self.args.installation_id = name.replace(".json", "")
+                shutil.rmtree(self.home / "m", ignore_errors=True)
                 self.root = self.home / ".oac/nodes" / self.args.installation_id
                 partial = self.root / ("." + name + ".partial")
                 original_open = os.open
@@ -363,14 +307,13 @@ class NodeInstallTests(unittest.TestCase):
             self.install()
         for name in ("installation.json", "provider.json", "state/node/identity.json", "registered.json"):
             self.assertFalse((self.root / name).exists(), name)
-        self.assertTrue((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).is_file())
+        self.assertTrue((self.root / installer.provider_assets.artifacts("microsandbox", ("node",))[0]).is_file())
         self.register_stderr = None
         self.args.core_url = "https://core-new.example"
         self.install()
         self.assertEqual(json.loads((self.root / "registered.json").read_text())["core_url"], "https://core-new.example")
 
     def test_microsandbox_registration_retry_retains_original_dns_policy(self):
-        self.args.provider = "microsandbox"
         self.fail_registration = True
         with self.assertRaises(installer.InstallError):
             self.install()
@@ -384,7 +327,7 @@ class NodeInstallTests(unittest.TestCase):
     def test_different_commit_provider_or_core_cannot_overwrite_retained_installation(self):
         self.install()
         original = (self.root / "provider.json").read_bytes()
-        for field, value in (("provider", "microsandbox"), ("core_url", "https://other.example")):
+        for field, value in (("core_url", "https://other.example"),):
             before = getattr(self.args, field)
             setattr(self.args, field, value)
             with self.assertRaisesRegex((installer.InstallError, node_spec.SpecificationError), "differs|prepares the changed|added with another Core address"):
@@ -401,32 +344,28 @@ class NodeInstallTests(unittest.TestCase):
         with self.assertRaisesRegex(installer.InstallError, "manifest checksum"):
             self.install()
         self.refresh_manifest()
-        self.payloads[installer.provider_assets.artifacts("docker", ("node",))[0]] += b"corrupt"
+        self.payloads[installer.provider_assets.artifacts("microsandbox", ("node",))[0]] += b"corrupt"
         with self.assertRaisesRegex(installer.distribution.DistributionError, "published size|checksum"):
             self.install()
         self.assertFalse([call for call, _ in self.calls if "inspect" not in call])
-        self.assertFalse((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).exists())
+        self.assertFalse((self.root / installer.provider_assets.artifacts("microsandbox", ("node",))[0]).exists())
 
     def test_installed_payload_and_config_are_not_overwritten(self):
         self.install()
-        target = self.root / installer.provider_assets.artifacts("docker", ("node",))[0]
+        target = self.root / installer.provider_assets.artifacts("microsandbox", ("node",))[0]
         target.write_bytes(b"existing-different-payload")
         with self.assertRaises(installer.distribution.DistributionError):
             self.install()
         self.assertEqual(target.read_bytes(), b"existing-different-payload")
 
     def test_warm_image_skips_archive_download_and_import_before_registration(self):
-        for provider in ("docker", "microsandbox"):
-            with self.subTest(provider=provider):
-                self.args.provider = provider
-                self.image_present = True
-                with mock.patch.object(installer.distribution, "runtime_archive") as archive:
-                    installer.HOSTS[provider].prepare_runtime(installer, self.root, self.args, self.manifest)
-                archive.assert_not_called()
+        self.image_present = True
+        with mock.patch.object(installer.distribution, "runtime_archive") as archive:
+            installer.HOSTS["microsandbox"].prepare_runtime(installer, self.root, self.args, self.manifest)
+        archive.assert_not_called()
         self.assertFalse(any("load" in call for call, _ in self.calls))
 
     def test_retry_after_unconfirmed_enrollment_preserves_imported_image(self):
-        self.args.provider = "microsandbox"
         self.fail_registration = True
         with self.assertRaises(installer.InstallError):
             self.install()
@@ -458,11 +397,7 @@ class NodeInstallTests(unittest.TestCase):
         (system / "systemd").mkdir(parents=True)
         (system / "run").mkdir()
         (system / "selinux").write_text("1" if enforcing else "0")
-        docker_socket = socket.socket(socket.AF_UNIX)
-        docker_socket.bind(str(system / "docker.sock"))
-        self.addCleanup(docker_socket.close)
-        os.chmod(system / "docker.sock", 0o660)
-        self.account, self.joined, self.docker_installed, self.device_group = None, False, True, "docker"
+        self.account, self.joined, self.kvm_present, self.device_group = None, False, True, "kvm"
         service_home = self.home / "service"
         self.root = service_home / ".oac/nodes" / self.args.installation_id
 
@@ -472,13 +407,16 @@ class NodeInstallTests(unittest.TestCase):
             self.service_steps.append("wait_ready" if function is installer.wait_ready else function.__name__)
             with mock.patch.object(installer.Path, "home", return_value=Path(account.pw_dir)):
                 function(*arguments)
-        for patch in (mock.patch.multiple(host_docker, CHILD_CONFIG=system / "docker-config", SOCKET=system / "docker.sock"),
+        def kvm_stat():
+            if not self.kvm_present:
+                raise OSError(errno.ENOENT, "no KVM")
+            return SimpleNamespace(st_mode=stat.S_IFCHR | 0o660, st_gid=1)
+        for patch in (mock.patch.object(host_microsandbox, "KVM", SimpleNamespace(stat=kvm_stat)),
                       mock.patch.multiple(installer, SERVICE_HOME=service_home, SERVICE_UID=os.getuid(), SYSTEM_RECORDS=system / "etc",
                                           SYSTEM_UNITS=system / "units", SYSTEM_LOCKS=system / "run",
                                           SYSTEMD_RUNNING=system / "systemd", SELINUX_ENFORCE=system / "selinux",
                                           run_as=run_as,
                                           service_account=lambda: self.account),
-                      mock.patch.object(installer.shutil, "which", side_effect=lambda tool: None if tool == "docker" and not self.docker_installed else "/usr/bin/" + tool),
                       mock.patch.object(installer.grp, "getgrnam", side_effect=lambda name: SimpleNamespace(gr_mem=["oac-node"] if self.joined else [])),
                       mock.patch.object(installer.grp, "getgrgid", side_effect=lambda gid: SimpleNamespace(gr_name=self.device_group)),
                       mock.patch.object(installer.pwd, "getpwuid", side_effect=KeyError)):
@@ -501,7 +439,7 @@ class NodeInstallTests(unittest.TestCase):
             with self.subTest(uid=uid), mock.patch.dict(os.environ, {"SUDO_UID": uid}):
                 stream = io.StringIO()
                 with contextlib.redirect_stdout(stream):
-                    installer.node_output.summary(self.root, self.args, "oac-node-example.service", "oac-node", "Docker")
+                    installer.node_output.summary(self.root, self.args, "oac-node-example.service", "oac-node", "microsandbox")
                 self.assertIn("  Status: " + prefix + "systemctl status oac-node-example.service", stream.getvalue())
                 self.assertIn("  Logs: " + prefix + "journalctl -u oac-node-example.service -f", stream.getvalue())
 
@@ -517,7 +455,7 @@ class NodeInstallTests(unittest.TestCase):
             ready.side_effect = None
             action(self.args, "")
         text = stream.getvalue()
-        self.assertIn("\nStatus\n  Core connection: connected\n  Sandbox Provider: Docker (ready)\n", text)
+        self.assertIn("\nStatus\n  Core connection: connected\n  Sandbox Provider: microsandbox (ready)\n", text)
         self.assertIn("\nNode\n", text)
         self.assertIn("\nManage\n", text)
         self.assertIn("  Status: systemctl status oac-node-", text)
@@ -535,7 +473,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertTrue(any(call[:3] == ["usermod", "--append", "--groups"] for call in commands))
         self.assertIn(["systemctl", "enable", "--now", "oac-node-" + self.args.installation_id + ".service"], commands)
         unit = (system / "units" / ("oac-node-" + self.args.installation_id + ".service")).read_text()
-        for line in ("User=oac-node", "After=network-online.target docker.service", "WantedBy=multi-user.target",
+        for line in ("User=oac-node", "After=network-online.target", "WantedBy=multi-user.target",
                      "RestartPreventExitStatus=78", "StartLimitIntervalSec=0"):
             self.assertIn(line, unit)
         self.assertNotIn("synthetic-once-token", unit)
@@ -545,7 +483,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertTrue((self.root / "registered.json").exists())
         self.assertFalse((self.root / ("oac-node-" + self.args.installation_id + ".service")).exists())
         account = json.loads((system / "etc/account.json").read_text())
-        self.assertEqual((account["created"], account["groups_added"]), (True, ["docker"]))
+        self.assertEqual((account["created"], account["groups_added"]), (True, ["kvm"]))
         self.assertEqual(stat.S_IMODE((system / "etc").stat().st_mode), 0o755)
         before = {path: path.read_bytes() for path in (system / "etc").iterdir()}
         self.calls.clear()
@@ -591,14 +529,14 @@ class NodeInstallTests(unittest.TestCase):
 
     def test_sudo_mode_refusals_change_nothing(self):
         foreign = SimpleNamespace(pw_name="oac-node", pw_uid=4242, pw_gid=4242, pw_dir="/home/oac-node", pw_shell="/bin/bash")
-        for case, message in (("selinux", "SELinux is enforcing"), ("docker", "Docker Engine is not installed"),
+        for case, message in (("selinux", "SELinux is enforcing"), ("kvm", "KVM is unavailable"),
                               ("account", "not created or adopted by this installer"), ("group", "belongs to the group disk"),
                               ("home", "does not belong to the oac-node account")):
             with self.subTest(case=case):
                 system = self.sudo_host(enforcing=case == "selinux")
-                self.docker_installed = case != "docker"
+                self.kvm_present = case != "kvm"
                 self.account = foreign if case == "account" else None
-                self.device_group = "disk" if case == "group" else "docker"
+                self.device_group = "disk" if case == "group" else "kvm"
                 if case == "home":  # a home directory left without its account
                     (self.home / "service").mkdir()
                 self.calls.clear()
@@ -646,8 +584,6 @@ class NodeInstallTests(unittest.TestCase):
         self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         store = self.home / "m"
-        store.mkdir()
-        (store / "oac-installation.json").write_text(json.dumps({"installation_id": self.args.installation_id}))
         (store / "image").write_text("layers")
         output = self.uninstall_output(False)
         self.assertFalse(store.exists())
@@ -658,8 +594,6 @@ class NodeInstallTests(unittest.TestCase):
         self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         store = self.home / "m"
-        store.mkdir()
-        (store / "oac-installation.json").write_text(json.dumps({"installation_id": self.args.installation_id}))
         output = self.uninstall_output(True)
         self.assertTrue(store.is_dir())
         self.assertIn("Kept the microsandbox store " + str(store), output)
@@ -722,8 +656,6 @@ class NodeInstallTests(unittest.TestCase):
         self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         store = self.home / "m"
-        store.mkdir()
-        (store / "oac-installation.json").write_text(json.dumps({"installation_id": self.args.installation_id}))
         shutil.rmtree(self.root)
         self.assertIn("Kept the microsandbox store " + str(store), self.uninstall_output(False))
         self.assertTrue(store.is_dir())
@@ -733,6 +665,7 @@ class NodeInstallTests(unittest.TestCase):
         installer.install_system(self.args, "synthetic-once-token")
         elsewhere = self.home / "elsewhere"
         elsewhere.mkdir()
+        shutil.rmtree(self.home / "m")
         (self.home / "m").symlink_to(elsewhere, target_is_directory=True)
         with self.assertRaisesRegex(installer.InstallError, "symbolic link.*Nothing was changed"):
             self.uninstall_output(False)
@@ -743,7 +676,7 @@ class NodeInstallTests(unittest.TestCase):
         self.sudo_host()
         installer.install_system(self.args, "synthetic-once-token")
         store = self.home / "m"
-        store.mkdir()
+        (store / "oac-installation.json").unlink()
         self.assertIn("Kept the microsandbox store", self.uninstall_output(False))
         self.assertTrue(store.is_dir())
 
@@ -780,7 +713,7 @@ class NodeInstallTests(unittest.TestCase):
         self.assertIn("rm -f /home/me/.oac/node-bootstrap/*.pyz", output)
         commands = [call for call, _ in self.calls]
         self.assertNotIn(["userdel", "oac-node"], commands)
-        self.assertIn(["gpasswd", "--delete", "oac-node", "docker"], commands)
+        self.assertIn(["gpasswd", "--delete", "oac-node", "kvm"], commands)
         self.assertTrue((self.home / "service").is_dir())
         self.assertEqual(stat.S_IMODE((self.home / "service").stat().st_mode), 0o755)
         self.assertFalse((system / "etc").exists())
@@ -828,12 +761,11 @@ class NodeInstallTests(unittest.TestCase):
                 tty = "opened"
             except OSError:
                 tty = "unavailable"
-            print("session-leader=%s stdin=%s docker-config=%s tty=%s" % (os.getsid(0) == os.getpid(),
-                  os.readlink("/proc/self/fd/0"), os.environ["DOCKER_CONFIG"], tty))
+            print("session-leader=%s stdin=%s tty=%s" % (os.getsid(0) == os.getpid(),
+                  os.readlink("/proc/self/fd/0"), tty))
         output = io.StringIO()
         self.service_step(probe, output)
-        self.assertIn("session-leader=True stdin=/dev/null docker-config=" + str(host_docker.CHILD_CONFIG) + " tty=unavailable",
-                      output.getvalue())
+        self.assertIn("session-leader=True stdin=/dev/null tty=unavailable", output.getvalue())
 
     def test_service_user_output_reaches_the_terminal_as_plain_text(self):
         def forge():
@@ -846,21 +778,6 @@ class NodeInstallTests(unittest.TestCase):
         self.service_step(forge, output, errors)
         self.assertEqual(output.getvalue(), "?]52;c;ZWNobyBoaQ==?copied??[2KFinish with: sudo sh\ncaf\u00e9\n")
         self.assertEqual(errors.getvalue(), "?]0;title??warning\n")
-
-    def test_uninstall_prints_only_an_image_id_from_the_service_home(self):
-        root = self.home / "node"
-        root.mkdir()
-        (root / "provider.json").write_text(json.dumps({"native": {"image": "x\nFinish with: sudo sh"}}))
-        output = io.StringIO()
-        with mock.patch.object(installer.sys, "stdout", output):
-            installer.remove_node_files(root, self.args.installation_id, False)
-        self.assertNotIn("Finish", output.getvalue())
-        root.mkdir()
-        (root / "provider.json").write_text(json.dumps({"native": {"image": "sha256:" + "b" * 64}}))
-        output = io.StringIO()
-        with mock.patch.object(installer.sys, "stdout", output):
-            installer.remove_node_files(root, self.args.installation_id, False)
-        self.assertIn("`sudo docker image rm sha256:", output.getvalue())
 
     def test_service_user_step_gets_its_own_session_keyring(self):
         libc = installer.ctypes.CDLL(None, use_errno=True)
@@ -974,7 +891,7 @@ class NodeInstallTests(unittest.TestCase):
             self.install()
         self.fail_registration = False
         self.core_knows_node = False
-        program = installer.provider_assets.artifacts("docker", ("node",))[0]
+        program = installer.provider_assets.artifacts("microsandbox", ("node",))[0]
         self.payloads[program] = b"program of the upgraded Core"
         self.cpus = 4
         self.refresh_manifest()
@@ -993,7 +910,7 @@ class NodeInstallTests(unittest.TestCase):
 
     def test_a_registered_node_of_another_installation_says_to_remove_and_add_it_again(self):
         self.install()
-        program = self.root / installer.provider_assets.artifacts("docker", ("node",))[0]
+        program = self.root / installer.provider_assets.artifacts("microsandbox", ("node",))[0]
         saved = program.read_bytes()
         self.manifest["source_commit"] = "f" * 40
         self.payloads[program.relative_to(self.root).as_posix()] = b"program of another installation"
@@ -1007,7 +924,7 @@ class NodeInstallTests(unittest.TestCase):
             with self.assertRaisesRegex(installer.InstallError, "Not enough disk space under .*[Ff]ree space, then rerun"):
                 self.install()
         self.assertFalse((self.root / "installation.json").exists())
-        self.assertFalse((self.root / installer.provider_assets.artifacts("docker", ("node",))[0]).exists())
+        self.assertFalse((self.root / installer.provider_assets.artifacts("microsandbox", ("node",))[0]).exists())
 
     def test_a_full_disk_in_the_service_step_has_its_own_message(self):
         def write():
@@ -1019,31 +936,14 @@ class NodeInstallTests(unittest.TestCase):
         self.assertNotIn("OSError", errors.getvalue())
 
     def test_the_runtime_archives_are_deleted_once_the_image_is_imported(self):
-        for provider in ("docker", "microsandbox"):
-            with self.subTest(provider=provider):
-                self.args.provider = provider
-                self.install()
-                self.assertEqual(list(self.root.glob("images/*")), [])
-                shutil.rmtree(self.root)
+        self.install()
+        self.assertEqual(list(self.root.glob("images/*")), [])
 
     def test_a_failed_local_provider_check_names_its_class_not_the_nodes_text(self):
         message = str(installer.registration_failure(b"x: local provider readiness check failed (host_unsupported): /home/secret"))
         self.assertIn("/dev/kvm", message)
         self.assertIn("the token was not used", message)
         self.assertNotIn("secret", message)
-
-    def test_a_leftover_docker_network_without_containers_does_not_block_adding_the_node(self):
-        network = "oac-node-" + self.args.installation_id
-        containers = [""]
-        def docker(arguments, failure, **kwargs):
-            if "ps" in arguments:
-                return containers[0]
-            return network if "network" in arguments else ""
-        with mock.patch.object(installer, "checked", side_effect=docker), mock.patch.object(installer, "node_records", return_value=[]):
-            installer.other_node(self.args, "docker")
-            containers[0] = "oac-sandbox-1"
-            with self.assertRaisesRegex(installer.InstallError, "already uses this Docker engine"):
-                installer.other_node(self.args, "docker")
 
     def test_a_metadata_body_cut_short_is_retried(self):
         class Cut(io.BytesIO):

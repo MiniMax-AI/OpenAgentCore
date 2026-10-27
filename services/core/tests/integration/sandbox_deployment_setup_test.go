@@ -39,7 +39,7 @@ func TestSandboxDeploymentSetupPersistsWithoutExecution(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(replay, selected) {
 		t.Fatal("identical retry changed selection", replay, err)
 	}
-	for _, changed := range []sandbox.Selection{{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}} {
+	for _, changed := range []sandbox.Selection{{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}} {
 		if _, err := deploymentExecution(t, w).Initialize(t.Context(), id, changed); !errors.Is(err, deployment.ErrConflict) {
 			t.Fatal("changed selection accepted", err)
 		}

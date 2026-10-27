@@ -74,12 +74,12 @@ type lostComputeFixture struct {
 
 // newLostComputeFixture commits a settled running incarnation of a Session
 // whose completed initialization and native identity are retained.
-func newLostComputeFixture(t *testing.T, external bool, seed ...string) lostComputeFixture {
+func newLostComputeFixture(t *testing.T, seed ...string) lostComputeFixture {
 	t.Helper()
 	provider := &lostComputeProvider{retentionProvider: retentionProvider{bootstraps: make(chan sandbox.Bootstrap, 2)}, observe: func(sandbox.Compute) (sandbox.ComputeState, error) {
 		return sandbox.ComputeState{}, sandbox.ErrNotFound
 	}}
-	f := lostComputeFixture{workspaceSettlementFixture: workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, external)), provider: provider}
+	f := lostComputeFixture{workspaceSettlementFixture: workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t)), provider: provider}
 	r, session := f.lifecycle, f.session
 	owner, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
 	if err != nil {
@@ -174,7 +174,7 @@ func (f lostComputeFixture) demand(t *testing.T) {
 func TestConfirmedLostRunningComputeContinuesRetainedSession(t *testing.T) {
 	for name, observe := range lostObservations {
 		t.Run(name, func(t *testing.T) {
-			f := newLostComputeFixture(t, true)
+			f := newLostComputeFixture(t)
 			f.provider.observe = observe
 			r := f.lifecycle
 			binding, err := f.storage.Get(t.Context(), f.session.TenantID, f.owner.EnvironmentID)
@@ -220,7 +220,6 @@ func TestConfirmedLostRunningComputeContinuesRetainedSession(t *testing.T) {
 func TestUnconfirmedLostComputeKeepsOwnership(t *testing.T) {
 	type negative struct {
 		name     string
-		owned    bool
 		seed     []string
 		observe  func(sandbox.Compute) (sandbox.ComputeState, error)
 		killErr  error
@@ -256,7 +255,6 @@ func TestUnconfirmedLostComputeKeepsOwnership(t *testing.T) {
 		{name: "unknown_creation", seed: []string{`UPDATE runtime_allocations SET create_settled=false WHERE id=$3`}, want: sandbox.ErrNotFound},
 		{name: "no_compute_id", seed: []string{`UPDATE runtime_allocations SET compute_state='{"current":{"Name":"old-compute"}}' WHERE id=$3`}, want: sandbox.ErrOwnership},
 		{name: "restore_intent", seed: []string{`UPDATE runtime_allocations SET compute_state='{"current":{"Name":"old-compute","ID":"old-compute-id"},"target":{"Name":"next","Generation":1},"restore_id":"attempt"}' WHERE id=$3`}, want: sandbox.ErrNotFound},
-		{name: "owned_workspace", owned: true, want: sandbox.ErrNotFound},
 		{name: "initialization_incomplete", seed: []string{`UPDATE environments SET initialization='running' WHERE id=$1`}, want: sandbox.ErrNotFound, initial: "running"},
 		{name: "terminal_environment", seed: []string{`UPDATE environments SET status='failed' WHERE id=$1`}, want: sandbox.ErrNotFound, status: "failed"},
 		{name: "native_history_undeclared", seed: []string{`UPDATE devices SET supported_agent_kinds='[{"kind":"codex","available":true,"capabilities":{}}]' WHERE id=$2`}, want: sandbox.ErrNotFound},
@@ -275,7 +273,7 @@ func TestUnconfirmedLostComputeKeepsOwnership(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			f := newLostComputeFixture(t, !test.owned, test.seed...)
+			f := newLostComputeFixture(t, test.seed...)
 			r := f.lifecycle
 			if test.observe != nil {
 				f.provider.observe = test.observe
@@ -335,7 +333,7 @@ func TestLostComputeReleaseSerializesWithConcurrentIntent(t *testing.T) {
 	for name, observe := range lostObservations {
 		t.Run(name, func(t *testing.T) {
 			t.Run("restart_after_kill", func(t *testing.T) {
-				f := newLostComputeFixture(t, true)
+				f := newLostComputeFixture(t)
 				f.provider.observe = observe
 				r := f.lifecycle
 				// The first owner confirms cleanup, then stops before the release commit.
@@ -376,7 +374,7 @@ func TestLostComputeReleaseSerializesWithConcurrentIntent(t *testing.T) {
 				{name: "deletion", statement: `UPDATE sessions SET deleted_at=clock_timestamp() WHERE id=(SELECT session_id FROM environments WHERE id=$1)`, want: sessions.ErrNotFound},
 			} {
 				t.Run(test.name, func(t *testing.T) {
-					f := newLostComputeFixture(t, true)
+					f := newLostComputeFixture(t)
 					f.provider.observe = observe
 					f.provider.onKill = func() {
 						if _, err := f.pool.Exec(t.Context(), test.statement, f.owner.EnvironmentID); err != nil {

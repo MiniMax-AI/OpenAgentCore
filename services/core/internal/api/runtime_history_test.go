@@ -75,7 +75,7 @@ func TestRuntimeHistoryRouteBindsAuthenticatedSessionAndPreservesCoverage(t *tes
 			Capabilities: service.capabilities, Scope: scope,
 			Requested: requested, Resolution: 30 * time.Second, GeneratedAt: requested.End, RetainedFrom: &start,
 			Coverage:   []runtimehistory.CoveragePoint{coveragePoint},
-			Series:     []runtimehistory.Series{{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker", Points: []runtimehistory.Point{resourcePoint}}},
+			Series:     []runtimehistory.Series{{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "microsandbox", Points: []runtimehistory.Point{resourcePoint}}},
 			TokenUsage: []runtimehistory.TokenUsagePoint{{Start: start, End: start.Add(30 * time.Second), SampledAt: start.Add(10 * time.Second), InputTokens: 120, OutputTokens: 30}},
 		}
 	}
@@ -117,7 +117,7 @@ func TestRuntimeHistoryRejectsUnsafeQueriesAndFailures(t *testing.T) {
 	handler, _, _ := adminTestHandler(t, historyWith(service))
 	sessionID := uuid.NewString()
 	for _, query := range []string{
-		"?range=", "?range=2h", "?range=7d", "?range=1h&range=1h", "?range=1h&provider=docker", "?range=1h&max_points=60", "?start=1&end=2",
+		"?range=", "?range=2h", "?range=7d", "?range=1h&range=1h", "?range=1h&provider=microsandbox", "?range=1h&max_points=60", "?start=1&end=2",
 	} {
 		response := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-history"+query)
 		if response.Code != http.StatusBadRequest {

@@ -53,14 +53,9 @@ func TestIdlePolicyChangesCurrentAllocationsWithoutRollout(t *testing.T) {
 	}
 }
 
-func TestIdlePolicyRejectsUnsupportedAndUnconfiguredDeployment(t *testing.T) {
+func TestIdlePolicyRejectsUnconfiguredDeployment(t *testing.T) {
 	f := newFixture(t)
 	if _, err := f.service.UpdateIdleSeconds(admin(t), 60); !errors.Is(err, deployment.ErrNotConfigured) {
-		t.Fatal(err)
-	}
-	changes, _ := f.execution(t)
-	f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	if _, err := f.service.UpdateIdleSeconds(admin(t), 60); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal(err)
 	}
 }

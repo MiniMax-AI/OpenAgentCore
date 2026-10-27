@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 0bc83086935af877837d1d791b3ad8eafa486fcc9adbf00b119d4546dc66658c
+source_hash: d222cc5fe4c258dcc4e8956c08757276dc6340511c5eaf2e0fba2698e6718761
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -40,7 +40,7 @@ make build-core-distribution
 
 构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交及其源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装程序在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装程序资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
 
-ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`、`SHA256SUMS`、`node-install.pyz` 与 `runtime/seccomp.json`。构建流程根据与分发包相同的 Runtime 和构件身份生成其清单，再禁用网络验证初始化。节点清单不包含控制平面镜像身份，因此可在 ingress 镜像生成前打包。
+ingress 镜像仅包含 `oac` 和三个节点元数据文件：`manifest.json`、`SHA256SUMS` 与 `node-install.pyz`。构建流程根据与分发包相同的 Runtime 和构件身份生成其清单，再禁用网络验证初始化。节点清单不包含控制平面镜像身份，因此可在 ingress 镜像生成前打包。
 
 控制归档不包含 Runtime 镜像或节点执行构件；离线归档包含这些内容。[下载契约](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#download-contract)说明了节点如何获取这些内容。
 

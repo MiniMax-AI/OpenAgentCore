@@ -17,7 +17,6 @@ func TestRegistrationOwnsDeploymentPolicy(t *testing.T) {
 		kind, mode, namespace string
 		checkpoint            bool
 	}{
-		{"docker", "nodes", "nodes", false},
 		{"microsandbox", "nodes", "nodes", true},
 		{"e2b", "direct", "e2b", true},
 	} {
@@ -68,10 +67,10 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 	registry := Builtin()
 	const kind = "contract-test-provider"
 	// Registration is test-local: production registrations are fixed, never plugins.
-	registry.adapters[kind] = registry.adapters["docker"]
+	registry.adapters[kind] = registry.adapters["microsandbox"]
 	s, err := registry.Normalize(sandbox.Selection{Provider: kind, DeploymentSpec: validRegistrationSpec()})
 	checkpoint, checkpointErr := registry.SupportsCheckpoint(kind)
-	if err != nil || checkpointErr != nil || s.Provider != kind || checkpoint {
+	if err != nil || checkpointErr != nil || s.Provider != kind || !checkpoint {
 		t.Fatal("new entry did not follow shared boundary", err, checkpointErr)
 	}
 	d, err := registry.Describe(kind, uuid.NewString())
@@ -85,21 +84,9 @@ func TestNewRegistrationDoesNotNeedCoreDispatchChanges(t *testing.T) {
 
 func TestRetainedLimitUsesRegisteredCapabilities(t *testing.T) {
 	registry := Builtin()
-	const kind = "capacity-test-provider"
-	for _, checkpoint := range []bool{false, true} {
-		adapter := registry.adapters["docker"]
-		if checkpoint {
-			adapter = registry.adapters["microsandbox"]
-		}
-		registry.adapters[kind] = adapter
-		for _, retained := range []int{0, 20} {
-			want := 10
-			if checkpoint {
-				want = retained
-			}
-			if got, err := registry.RetainedLimit(kind, 10, retained); err != nil || got != want {
-				t.Fatalf("checkpoint=%v retained=%d: got %d, want %d (%v)", checkpoint, retained, got, want, err)
-			}
+	for _, retained := range []int{0, 20} {
+		if got, err := registry.RetainedLimit("microsandbox", 10, retained); err != nil || got != retained {
+			t.Fatalf("retained=%d: got %d (%v)", retained, got, err)
 		}
 	}
 }
@@ -107,7 +94,7 @@ func TestRetainedLimitUsesRegisteredCapabilities(t *testing.T) {
 // Capability questions report lookup failures instead of answering false.
 func TestCapabilityLookupsReportFailures(t *testing.T) {
 	registry := Builtin()
-	invalid := registry.adapters["docker"]
+	invalid := registry.adapters["microsandbox"]
 	invalid.Operations = nil
 	registry.adapters["invalid-registration"] = invalid
 	for kind, want := range map[string]error{"unregistered": ErrUnknownProvider, "invalid-registration": providercontract.ErrContract} {

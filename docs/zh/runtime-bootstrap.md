@@ -1,7 +1,7 @@
 ---
 title: "Runtime 引导"
 source: docs/runtime-bootstrap.md
-source_hash: 68bb957984c615d36b941efae570b366b6245f08fe4c76561f8aaa92966e1a4b
+source_hash: 991f76a7edfe957cb0558a490a2ec4f094148bba85980aea386b85c802db9e08
 ---
 
 Runtime 引导协议连接沙箱提供商与其启动的托管 Runtime。提供商向 Runtime 交付一个引导文件，该文件是此次启动中 Runtime 唯一的认证输入，也是其 Environment 绑定的唯一来源。
@@ -75,7 +75,6 @@ oac-daemon connect --bootstrap-file /home/runtime/runtime-bootstrap.json
 
 | 提供商 | 交付方式 |
 | --- | --- |
-| Docker | 将文件写入 Runtime 拥有的 home volume。 |
 | microsandbox、E2B | 在启动同一命令之前交付文件。 |
 
 ## 验证 {#verification}

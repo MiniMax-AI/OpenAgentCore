@@ -49,4 +49,4 @@ The pinned Claude Code reports both a request that got no HTTP response, such as
 | Environment | `OAC_RUNTIME_HOME=/home/runtime/.oac`, `OAC_RUNTIME_CLAUDE_SDK_NODE=/usr/local/bin/node`, `OAC_RUNTIME_CLAUDE_SDK_ENTRYPOINT=/opt/claude-sdk/dist/main.js`, `OAC_RUNTIME_INITIALIZATION_DIRECTORY=/environment/initialization`, `OAC_RUNTIME_PACKAGE_DIRECTORY=/environment/packages`, `OAC_RUNTIME_STATE_DIRECTORY=/environment/runtime-state` |
 | Entry point | `oac-daemon connect --profile default`, working directory `/environment/workspace` |
 
-The build runs the bundle's `runtime_check.js` against its entry point. The distribution copies `/opt/claude-sdk` into the combined Runtime image. Sandboxes run the image with the [Docker sandbox settings](../../../../docs/sandbox-provider.md#docker-adapter).
+The build runs the bundle's `runtime_check.js` against its entry point. The distribution copies `/opt/claude-sdk` into the combined Runtime image.

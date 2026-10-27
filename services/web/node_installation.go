@@ -18,7 +18,7 @@ import (
 // Serving the fixed list avoids a package registry or an arbitrary file endpoint.
 var nodePayloadFiles = map[string]bool{
 	"node-install.pyz": true,
-	"manifest.json":    true, "SHA256SUMS": true, "runtime/seccomp.json": true,
+	"manifest.json":    true, "SHA256SUMS": true,
 }
 
 // The generated adapter declarations bound the distribution payload endpoint.

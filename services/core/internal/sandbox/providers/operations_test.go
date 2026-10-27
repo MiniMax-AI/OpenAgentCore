@@ -3,7 +3,7 @@ package providers
 import (
 	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"testing"
 )
 
@@ -16,7 +16,7 @@ func TestRegistrationRejectsMissingAndMismatchedDeclarations(t *testing.T) {
 		}
 	}
 	delete(registry.adapters, "invalid-contract-fixture")
-	if err := ValidateBinding(registry.adapters["e2b"], &docker.Provider{}); !errors.Is(err, providercontract.ErrContract) {
+	if err := ValidateBinding(registry.adapters["e2b"], &microsandbox.Provider{}); !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal("registration differs from instance", err)
 	}
 }

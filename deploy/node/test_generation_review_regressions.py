@@ -74,7 +74,7 @@ class GenerationReviewRegressions(unittest.TestCase):
         for name in ('node', 'helper'):
             raw = (name + ' verified artifact').encode()
             entries[name] = {'filename': name + '-' + source, 'size': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
-        files = {'node-install.pyz': b'node', 'SHA256SUMS': b'fixture', 'runtime/seccomp.json': b'{}', 'manifest.json': json.dumps({'source_commit': source, 'artifacts': entries}).encode()}
+        files = {'node-install.pyz': b'node', 'SHA256SUMS': b'fixture', 'manifest.json': json.dumps({'source_commit': source, 'artifacts': entries}).encode()}
         for name, raw in files.items():
             path = bundle / name; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(raw)
         node_payload.publish(root / 'node-payload', bundle)
@@ -83,7 +83,7 @@ class GenerationReviewRegressions(unittest.TestCase):
     def test_publish_is_flat_and_adds_and_repairs_verified_missing_artifacts(self):
         with tempfile.TemporaryDirectory() as temp:
             root, bundle, payload, entries = self.payload_fixture(Path(temp))
-            self.assertEqual(sorted(path.name for path in payload.iterdir()), ['SHA256SUMS', 'manifest.json', 'node-install.pyz', 'runtime'])
+            self.assertEqual(sorted(path.name for path in payload.iterdir()), ['SHA256SUMS', 'manifest.json', 'node-install.pyz'])
             (bundle / 'artifacts').mkdir()
             for name, entry in entries.items():
                 (bundle / 'artifacts' / entry['filename']).write_bytes((name + ' verified artifact').encode())
