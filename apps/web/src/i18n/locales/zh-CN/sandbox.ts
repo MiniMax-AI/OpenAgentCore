@@ -10,7 +10,6 @@ export const sandbox = {
   "{{provider}} sandboxes run in the provider's cloud and cannot reach your private network.": "{{provider}} 的沙箱运行在提供商的云端，无法访问你的内网。",
   "Add at most {{count}} domains.": "最多添加 {{count}} 个域名。",
   "{{domain}} is listed twice.": "{{domain}} 重复了。",
-  "{{domain}} must be lowercase.": "{{domain}} 必须为小写。",
   "{{domain}} is too long.": "{{domain}} 太长。",
   "{{domain}} is not a valid host name.": "{{domain}} 不是有效的主机名。",
   "New sandboxes will run with this policy": "新沙箱将按此策略运行",

@@ -3,12 +3,12 @@ import { deploymentContract, type SandboxProvider } from "@oac/agents-client";
 const rule = deploymentContract.network;
 const pattern = new RegExp(rule.domain_pattern);
 
-export type DomainProblem = "invalid" | "uppercase" | "too_long" | "duplicate";
+export type DomainProblem = "invalid" | "too_long" | "duplicate";
 export type DomainIssue = { domain: string; problem: DomainProblem } | { problem: "too_many" };
 
-/** One host name per line; blank lines are ignored. */
+/** One host name per line, lowercased like the API does; blank lines are ignored. */
 export function parseDomains(text: string): string[] {
-  return text.split("\n").map((line) => line.trim()).filter(Boolean);
+  return text.split("\n").map((line) => line.trim().toLowerCase()).filter(Boolean);
 }
 
 /** Checks a domain list against the generated rule while it is typed. */
@@ -20,7 +20,7 @@ export function domainIssues(domains: readonly string[]): DomainIssue[] {
     if (seen.has(domain)) issues.push({ domain, problem: "duplicate" });
     seen.add(domain);
     if (domain.length > rule.max_domain_length) issues.push({ domain, problem: "too_long" });
-    else if (!pattern.test(domain)) issues.push({ domain, problem: pattern.test(domain.toLowerCase()) ? "uppercase" : "invalid" });
+    else if (!pattern.test(domain)) issues.push({ domain, problem: "invalid" });
   }
   return issues;
 }

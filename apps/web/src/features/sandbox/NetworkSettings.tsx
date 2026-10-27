@@ -37,7 +37,6 @@ export function NetworkForm({ deployment, disabled, onSave }: { deployment: Sand
     switch (issue.problem) {
       case "too_many": return t("Add at most {{count}} domains.", { count: maxDomains });
       case "duplicate": return t("{{domain}} is listed twice.", { domain: issue.domain });
-      case "uppercase": return t("{{domain}} must be lowercase.", { domain: issue.domain });
       case "too_long": return t("{{domain}} is too long.", { domain: issue.domain });
       default: return t("{{domain}} is not a valid host name.", { domain: issue.domain });
     }

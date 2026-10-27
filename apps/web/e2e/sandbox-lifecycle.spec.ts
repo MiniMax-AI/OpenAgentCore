@@ -71,7 +71,6 @@ test("edits the sandbox network cap for new sandboxes", async ({ page, request }
   const domains = area.getByLabel("Extra allowed domains");
   await expect(area.getByRole("switch", { name: "Allow public internet" })).toBeChecked();
   await domains.fill("Git.example.com\n*.example.com");
-  await expect(area.getByText("Git.example.com must be lowercase.")).toBeVisible();
   await expect(area.getByText("*.example.com is not a valid host name.")).toBeVisible();
   await expect(area.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
   await domains.fill("gitlab.example.com");

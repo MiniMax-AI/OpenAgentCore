@@ -440,7 +440,7 @@ type NetworkSupport struct {
 	// allowing Core and the Egress hosts that resolve to public addresses.
 	Restrict bool `json:"restrict"`
 	// PrivateDomains: can allow the private addresses that Egress.PrivateDomains
-	// and Egress.Endpoints resolve to, and blocks every other private address.
+	// resolve to, and blocks every other private address.
 	PrivateDomains bool `json:"private_domains"`
 }
 
