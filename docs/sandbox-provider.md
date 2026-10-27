@@ -191,6 +191,20 @@ stateDiagram-v2
 
 An allocation moves to `cleanup_pending` when its Session is deleted or archived, its Environment fails or expires, or an administrator resets the deployment. `released` requires `CreateSettled`; see [Identity and resource ownership](#identity-and-resource-ownership).
 
+## Network egress
+
+A Provider declares `DeploymentPolicy.Network`: `Restrict` means it can refuse public addresses, `PrivateDomains` means it can allow the private addresses that named hosts resolve to. Core validates the deployment's [network cap](../contracts/agents-api/sandbox-deployment.md#network) against the declaration when the selection is saved and never substitutes another behavior.
+
+Core sends the same `Egress` in `Bootstrap` and in every `ResumeRequest`, derived from the allocation's deployment generation and its Session's frozen model provider:
+
+- `Public`: public addresses are allowed.
+- `PrivateDomains`: exact host names whose resolved addresses, private ones included, are allowed.
+- `Endpoints`: the host of the model provider's `base_url`, omitted when it is loopback. The Harness runs in the sandbox and calls it directly.
+
+The Provider enforces exactly this on top of the always-allowed connection to Core, and blocks loopback, link-local, cloud-metadata and every private address that `Egress` does not name. It resolves names with its host's DNS when it creates and when it resumes, and cannot follow later changes of an answer. A name that does not resolve gets no rule. MCP traffic has no entry: it follows `Public` and `PrivateDomains`.
+
+microsandbox applies the rules with first-match order, default deny, and host DNS reachable; it allows the resolved private addresses without a port so that DNS rebind protection passes them. E2B declares `Restrict` only: `Public` adds a deny list for loopback, private and link-local ranges, and not `Public` denies all traffic except the Core host and `Endpoints`.
+
 ## Checkpoint lifecycle
 
 A Provider that declares the checkpoint operations (`Initial`, `NewCompute`, `GetCompute`, `RenewCompute`, `Suspend`, `Resume`, `ResumeCompute`, `KillCompute`, `DeleteSnapshot`, `RunCommandCompute`) lets Core suspend an idle allocation to a snapshot and restore it on the same or another compatible node. Core records the allocation's `compute_phase`; it is `disabled` for a Provider that does not declare checkpoint support, and the other phases move as follows. Deletion, archive, reset and retention expiry release the allocation from any phase after the cleanup described in [What Core guarantees to a Provider](#what-core-guarantees-to-a-provider).

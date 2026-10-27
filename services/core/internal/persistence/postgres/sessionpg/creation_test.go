@@ -473,7 +473,7 @@ func TestHostedCreationAdmitsUnderDeploymentLockAndLeavesComputeUnreserved(t *te
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	tenant := uuid.NewString()
-	nodes, err := json.Marshal(sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}})
+	nodes, err := json.Marshal(sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}})
 	if err != nil {
 		t.Fatal(err)
 	}

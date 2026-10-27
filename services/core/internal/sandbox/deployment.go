@@ -75,6 +75,7 @@ func (r Resources) ValidatePolicy(provider string, rules DeploymentPolicy) error
 
 type DeploymentSpec struct {
 	Resources Resources `json:"resources" binding:"required"`
+	Network   Network   `json:"network" binding:"required"`
 	// Workspace is a derived immutable capability receipt, never filesystem configuration.
 	Workspace *workspacefs.Declaration `json:"workspace,omitempty" readonly:"true"`
 }
@@ -92,6 +93,9 @@ func (s DeploymentSpec) ValidatePolicy(provider string, policy DeploymentPolicy)
 		if err := workspacefs.ValidateCombination(*policy.Workspace, *s.Workspace, s.Resources.EnvironmentDiskMiB); err != nil {
 			return err
 		}
+	}
+	if err := s.Network.Canonical().ValidatePolicy(provider, policy.Network); err != nil {
+		return err
 	}
 	return s.Resources.ValidatePolicy(provider, policy)
 }

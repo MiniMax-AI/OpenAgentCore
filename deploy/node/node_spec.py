@@ -24,13 +24,26 @@ ENROLLMENT_EXPIRED = ("The enrollment command expired or was already used. Gener
 
 # BEGIN GENERATED DEPLOYMENT CONTRACT
 # Generated from sandbox/deployment_contract.go; do not edit.
-_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"providers\":{\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"default_resources\":null},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192}}},\"minimum_disk\":1024}")
+_CONTRACT = json.loads("{\"workspace_fields\":[\"attachment\",\"user_xattr\",\"capacity_quota\"],\"resources\":[{\"name\":\"cpus\",\"min\":1,\"max\":255,\"omit_zero\":false},{\"name\":\"memory_mib\",\"min\":512,\"max\":1048576,\"omit_zero\":false},{\"name\":\"root_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true},{\"name\":\"environment_disk_mib\",\"min\":0,\"max\":4294967295,\"omit_zero\":true}],\"network\":{\"max_domains\":100,\"max_domain_length\":253,\"domain_pattern\":\"^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\\\.)*[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$\"},\"providers\":{\"e2b\":{\"mode\":\"direct\",\"disk\":false,\"default_resources\":null,\"network\":{\"restrict\":true,\"private_domains\":false}},\"microsandbox\":{\"mode\":\"nodes\",\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true},\"disk\":true,\"default_resources\":{\"cpus\":2,\"memory_mib\":4096,\"root_disk_mib\":8192},\"network\":{\"restrict\":true,\"private_domains\":true}}},\"minimum_disk\":1024}")
 # END GENERATED DEPLOYMENT CONTRACT
+
+
+def canonical_network(provider, network, support, validate):
+    if validate and (not isinstance(network, dict) or set(network) != {"public", "domains"} or type(network["public"]) is not bool
+                     or not isinstance(network["domains"], list) or not all(isinstance(name, str) for name in network["domains"])):
+        raise ValueError("Invalid network fields")
+    rule = _CONTRACT["network"]
+    domains = sorted({name.strip().lower() for name in network["domains"]})
+    if validate and (len(domains) > rule["max_domains"] or not all(len(name) <= rule["max_domain_length"] and re.fullmatch(rule["domain_pattern"], name) for name in domains)):
+        raise ValueError("Invalid network domains")
+    if validate and (not network["public"] and not support["restrict"] or domains and not support["private_domains"]):
+        raise ValueError("Network cap is not supported by " + provider)
+    return {"public": network["public"], "domains": domains}
 
 
 def canonical_spec(provider, specification, validate=True):
     rules = _CONTRACT["providers"][provider]
-    if validate and (not isinstance(specification, dict) or set(specification) - {"workspace"} != {"resources"}):
+    if validate and (not isinstance(specification, dict) or set(specification) - {"workspace"} != {"resources", "network"}):
         raise ValueError("Invalid specification fields")
     workspace = specification.get("workspace")
     requirements = rules.get("workspace")
@@ -61,7 +74,7 @@ def canonical_spec(provider, specification, validate=True):
             raise ValueError("Invalid resource value")
         if value or not rule["omit_zero"]:
             ordered[name] = value
-    result = {"provider": provider, "resources": ordered}
+    result = {"provider": provider, "resources": ordered, "network": canonical_network(provider, specification["network"], rules["network"], validate)}
     if workspace is not None:
         result["workspace"] = {field: workspace[field] if field == "attachment" else bool(workspace.get(field, False)) for field in _CONTRACT["workspace_fields"]}
     return result
@@ -80,7 +93,7 @@ def validate(data, args):
         if (_CONTRACT["providers"].get(provider, {}).get("mode") != "nodes" or data["installation_id"] != args.installation_id
                 or data["core_url"] != args.core_url or type(data["generation"]) is not int or data["generation"] < 1
                 or getattr(args, "provider", None) not in (None, provider)
-                or set(spec) - {"workspace"} != {"resources"}):
+                or set(spec) - {"workspace"} != {"resources", "network"}):
             raise ValueError()
         canonical_spec(provider, spec)
         if data["specification_digest"] != digest(provider, spec):

@@ -33,7 +33,7 @@ func TestCoreStoreValidationFieldsAndPublicFallback(t *testing.T) {
 	}
 	upperCapacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 1000001, MaxRetained: 8})
 	capacityErr := nodes.UpdateNode(context.Background(), managementProjectID, deployment.NodeUpdate{Name: "node", MaxActive: 0})
-	_, resourceErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: sandbox.DeploymentSpec{Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}})
+	_, resourceErr := nodes.SetupForSelection(managementProjectID, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}})
 	for _, tc := range []struct {
 		err                       error
 		code, param               string

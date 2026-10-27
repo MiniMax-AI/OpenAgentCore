@@ -58,7 +58,7 @@ func initialInfoRequest(t *testing.T) wire.Request {
 	config.RuntimeHome = t.TempDir()
 	config.CheckpointRoot = checkpointFixture(t)
 	config.RuntimeSHA256, config.FirmwareSHA256 = strings.Repeat("a", 64), strings.Repeat("b", 64)
-	config.Network = wire.NetworkPolicy{DefaultEgress: "deny", DefaultIngress: "deny"}
+	config.CoreURL = "https://core.example.com"
 	ref := sandbox.Reference{TenantID: "22222222-2222-4222-8222-222222222222", EnvironmentID: "33333333-3333-4333-8333-333333333333", AllocationID: "44444444-4444-4444-8444-444444444444"}
 	return wire.Request{Version: wire.ProtocolVersion, Operation: "initial_info", Config: config, Reference: ref,
 		Compute: wire.Compute{Name: wire.Name(config, ref, 0)}, Deadline: time.Now().Add(5 * time.Second)}

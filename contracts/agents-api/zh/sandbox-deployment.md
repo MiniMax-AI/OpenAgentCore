@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: c16d11a873f0fc39288cd0b1cfbc9514a1392950f46fbaeb49503fa42f80ba9b
+source_hash: 7b92833b5d4b9c66df5e93c34dfd58d6be5c8cc1223ba5922abbe31228185525
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -38,6 +38,7 @@ POST 和 PUT 接受相同的完整选择，并要求提供先前 GET 返回的 `
 | `expected_generation` | 必填的非负整数，来自 GET；绝不会自动刷新并重放 |
 | `provider` | 必须是 `microsandbox`、`e2b` 中恰好一个 |
 | `resources` | 每个沙箱的限制，见下文；microsandbox 必填，E2B 可选 |
+| `network` | 出站上限，见[下文](#network)。POST 中省略表示默认值；PUT 中省略表示保持当前上限 |
 | `configuration` | 提供商的公开选择器。E2B：不可变的 `template` 构建以及可选且配套的 `api_url` 和 `domain`。microsandbox 仅接受 `{}` 或省略 |
 | `credential` | 提供商的只写凭据。E2B：`{api_key}`，首次设置时必填，在 PUT 中省略以保留当前密钥；null 或空密钥无效。microsandbox 拒绝该字段 |
 
@@ -62,6 +63,19 @@ microsandbox 会配置 CPU、内存和托管根磁盘，并在挂载于 `/enviro
 响应中可选的 `specification.workspace` 是从所选[工作区文件系统](../../../docs/zh/workspace-provider.md)派生的不可变能力回执，不是可独立写入的设置。它仅包含 `attachment`、`user_xattr` 和 `capacity_quota`；文件系统配置、路径和凭据不进入 Sandbox specification。Core 保存前校验组合声明，保留代次校验与节点构造均使用此回执。microsandbox 始终具备该回执，尚未选择工作区存储时保存部署会返回 `workspace_storage_required`。E2B 没有回执，继续使用自有磁盘。Create 和 Resume 必须且仅当固定代次具备该回执时提供绑定。
 
 先选择文件系统配置，再配置 microsandbox 部署。选择文件系统不会改变现有代次或 allocation；下一次 Sandbox 更新派生该回执。文件系统选择必须支持提供商声明的要求。现有部署要求相同的 `attachment` 和 `user_xattr`；选择可以更改 `capacity_quota`，此后在 Sandbox 更新设置相匹配的 `environment_disk_mib` 之前拒绝新工作区。既有工作区保持其获准时的容量。
+
+### 网络 {#network}
+
+当 Environment 的 `network.access` 为 `enabled` 或省略时，`network` 限定该部署的每个沙箱最多能访问什么。到 Core 的连接和 Session 的模型提供商主机始终可达，因为 Harness 运行在沙箱内。Environment 中的 MCP 连接与其他流量一样遵循该上限。
+
+| 字段 | 可接受的值 |
+| --- | --- |
+| `public` | 布尔值。`true` 允许公开地址；`false` 只允许 Core、模型提供商和 `domains` |
+| `domains` | 最多 100 个精确主机名，每个不超过 253 个字符，由小写字母、数字、连字符和点组成，且最后一个标签以字母开头。通配符、IP 字面量、端口和 URL 会被拒绝。Core 以小写、去重并排序的形式存储。名称解析出的每个地址都被允许，包括私有地址 |
+
+默认值为 `{"public": true, "domains": []}`。无论哪种上限，回环、链路本地、云元数据地址以及其他所有私有地址始终被阻止。地址在沙箱启动和恢复时解析，因此两次解析之间应答变化的名称不会被跟随。沙箱保留创建它的代次的上限。
+
+每个 Provider 声明自己能强制执行什么（[Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md#network-egress)）：microsandbox 支持两个字段，E2B 支持 `public: false` 但不支持 `domains`，因为 E2B 沙箱无法访问私有网络。所选 Provider 未声明的上限会返回 400 `invalid_sandbox_configuration`，`param` 为 `network.public` 或 `network.domains`。
 
 ### E2B 配置 {#e2b-configuration}
 
@@ -223,6 +237,7 @@ Core 用一条规则，从节点主机和单个沙箱的大小推导推荐值。
 | 字段 | microsandbox | E2B |
 | --- | --- | --- |
 | 独立工作区文件系统 | 必需：[Kernel NFS adapter](../../../docs/zh/workspace-provider.md#kernel-nfs-adapter)，与计算资源分开配置 | 不支持 |
+| 部署 `specification.network` | `public` 和 `domains` | 仅 `public`；`domains` 必须为空，私有网络不可达 |
 | 部署 `specification.resources` | `cpus`、`memory_mib`、`root_disk_mib`，以及作为配额请求的 `environment_disk_mib` | `cpus` 和 `memory_mib`，必须等于就绪模板构建中的值；省略时取自该构建；无磁盘字段 |
 | 部署 `metadata.template_build` | 不存在：`metadata` 为空 | Core 保存选择时读取到的构建 |
 | 部署 `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`；Core 用 SDK 的原生 pause 暂停空闲的 E2B 沙箱 |

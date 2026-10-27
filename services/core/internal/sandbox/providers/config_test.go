@@ -27,7 +27,7 @@ func TestNodeRejectsCoreConfigurationAndUnknownProvider(t *testing.T) {
 func TestNodeBuildRequiresNodeProviderAndGeneration(t *testing.T) {
 	registry := Builtin()
 	options := sandbox.LocalOptions{Standalone: true}
-	if _, _, err := registry.Build(sandbox.NodeConfig{Generation: 1, Provider: "e2b", InstallationID: uuid.NewString(), Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}}, options); err == nil {
+	if _, _, err := registry.Build(sandbox.NodeConfig{Generation: 1, Provider: "e2b", InstallationID: uuid.NewString(), Specification: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}}, options); err == nil {
 		t.Fatal("accepted a cloud provider on a node")
 	}
 	if _, _, err := registry.Build(sandbox.NodeConfig{Provider: "microsandbox", InstallationID: uuid.NewString(), Specification: validRegistrationSpec()}, options); err == nil {

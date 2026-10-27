@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"io"
 	"os"
@@ -67,6 +68,10 @@ func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 		if err != nil || stdout.exceeded || stderr.exceeded {
 			return Response{}, errors.New("helper result unconfirmed")
 		}
+	}
+	// The helper reports only host names that had no address on stderr.
+	if stderr.Len() > 0 {
+		log.Bg().Warn("sandbox network names without an address", "operation", q.Operation, "names", stderr.String())
 	}
 	var out Response
 	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))

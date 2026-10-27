@@ -14,7 +14,7 @@ import node_spec
 class SpecificationTests(unittest.TestCase):
     def setUp(self):
         self.args = argparse.Namespace(core_url="https://core.example", installation_id="94be54a1-138c-4f30-bc87-b13686272dbe", provider=None)
-        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096, "root_disk_mib": 8192}, "workspace": {"attachment": "host_directory", "user_xattr": True}}
+        self.spec = {"resources": {"cpus": 2, "memory_mib": 4096, "root_disk_mib": 8192}, "network": {"public": True, "domains": []}, "workspace": {"attachment": "host_directory", "user_xattr": True}}
         self.data = {"installation_id": self.args.installation_id, "provider": "microsandbox", "generation": 3,
                      "specification": self.spec, "specification_digest": node_spec.digest("microsandbox", self.spec),
                      "core_url": self.args.core_url}

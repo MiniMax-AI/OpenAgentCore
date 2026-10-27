@@ -135,6 +135,8 @@ definitions:
     type: object
   sandbox.DeploymentSpec:
     properties:
+      network:
+        $ref: '#/definitions/sandbox.Network'
       resources:
         $ref: '#/definitions/sandbox.Resources'
       workspace:
@@ -143,7 +145,20 @@ definitions:
         description: Workspace is a derived immutable capability receipt, never filesystem configuration.
         readOnly: true
     required:
+      - network
       - resources
+    type: object
+  sandbox.Network:
+    properties:
+      domains:
+        items:
+          type: string
+        type: array
+      public:
+        type: boolean
+    required:
+      - domains
+      - public
     type: object
   sandbox.Resources:
     properties:

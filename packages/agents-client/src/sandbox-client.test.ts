@@ -48,14 +48,14 @@ const unconfigured = {
 const microsandbox = {
   configuration: {}, metadata: {},
   ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "microsandbox", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
-  resources: { allocations: 2, running: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 } }, specification_digest: "0".repeat(64),
+  resources: { allocations: 2, running: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 }, network: { public: true, domains: [] } }, specification_digest: "0".repeat(64),
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
 const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
 const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification, workspace: externalWorkspace } };
 /** An E2B selection saved before Core recorded its template build. */
 const e2bDeployment = {
-  ...microsandbox, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 } },
+  ...microsandbox, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 }, network: { public: true, domains: [] } },
   configuration: { template: "runtime:00000000-0000-0000-0000-000000000001", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status: null, resources: { cpus: null, memory_mib: null, root_disk_mib: null } } },
 };
 const reads: Record<string, (client: SandboxAdminClient) => Promise<unknown>> = {

@@ -8,7 +8,7 @@ import {
   hostHistoryFields, hostHistoryPointFields, nodeAllocationDiagnosticValues, nodeAllocationFields, nodeDetailFields,
   capacityFields, configurationOptionFields, configurationOptionRequired, configurationOptionsFields, nodeDiagnosticCodeValues, nodeFields, nodeHostFields, nodeRolloutFields, nodeRolloutRequired, nodeRolloutStateValues, resetModeValues,
   resetFields, resetOfflineNodeFields, resetRemainingFields, rolloutFields, rolloutNodesFields, rolloutStateValues,
-  sandboxAllocationListFields, sandboxNodeListFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
+  sandboxAllocationListFields, sandboxNodeListFields, networkFields, sandboxResourcesFields, sandboxResourcesRequired, suspensionFields,
   type ConfigurationOption, type DeploymentSpec, type DeploymentView, type HostHistoryPoint, type Node, type NodeAllocation, type NodeDetail, type NodeDiagnosticCode,
   type NodeHost, type NodeRollout, type NodeUpdate, type Reset, type ResetOfflineNode, type ResetRequest, type Rollout,
   type SandboxIdlePolicyInput, type SandboxDeploymentInput, type SandboxEnrollmentToken, type SandboxResources as SandboxResourcesResource,
@@ -102,7 +102,9 @@ function projectSpecification(value: unknown): SandboxSpecification {
   const specification = members(value, deploymentSpecFields, deploymentSpecRequired);
   const resources = members(specification.resources, sandboxResourcesFields, sandboxResourcesRequired);
   valid(Object.values(resources).every(isNonnegativeInteger));
-  const result: SandboxSpecification = { resources: { ...resources } as unknown as SandboxResources };
+  const network = members(specification.network, networkFields, networkFields);
+  valid(typeof network.public === "boolean" && Array.isArray(network.domains) && network.domains.every((name) => typeof name === "string"));
+  const result: SandboxSpecification = { resources: { ...resources } as unknown as SandboxResources, network: { public: network.public as boolean, domains: [...(network.domains as string[])] } };
   if (hasOwn(specification, "workspace")) {
     const workspace = members(specification.workspace, deploymentContract.workspace_fields);
     if (!isOneOf(attachmentKindValues, workspace.attachment) || typeof workspace.user_xattr !== "boolean" || typeof workspace.capacity_quota !== "boolean") return invalidSandboxResponse();

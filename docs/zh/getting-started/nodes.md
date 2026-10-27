@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 43558fa9028c8fa4fff37eada64b9d895f52800c136d3e4f35f185d45e021050
+source_hash: 247ca9c1eff00c067eed15c09a9bd1baaab8f8d7a47d5446644bafe19865b6e3
 ---
 
 节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 时添加、修改和移除节点的运维人员；E2B 不需要节点。
@@ -68,13 +68,13 @@ Core 主机与其他主机一样加入：要在它上面运行沙箱，将它添
 | 节点状态 | `/var/lib/oac-node/.oac/nodes/<installation-id>/`：身份、配置和节点文件。microsandbox 在 `/var/lib/oac-node/.oac/m/` 保存镜像和沙箱 |
 | 记录 | `/etc/oac-node/`：安装程序创建或修改的内容，用于重新运行和卸载，以及服务的代理设置 |
 | Runtime 镜像 | 一次性导入 microsandbox 存储 |
-| microsandbox 网络策略 | 沙箱仅能访问 Core、主机上的 DNS 和公开地址：无入站连接、不可访问私有网络 |
+| microsandbox 网络策略 | Core 对每个沙箱应用部署的[网络上限](../../../contracts/agents-api/zh/sandbox-deployment.md#network)：无入站连接，只有上限列出的主机可访问私有网络 |
 
 root 只准备账号、组和服务单元；其他操作都以 `oac-node` 在没有终端的独立会话中执行。安装程序不安装 KVM 或软件包，不修改设备权限、sudoers、防火墙或 SELinux 设置，也不修改其他账号。节点向外连接 Core；Core 不需要通过 SSH 访问主机。
 
 > [!CAUTION]
 > [!WARNING]
-> microsandbox 沙箱无法访问私有地址；参见[沙箱无法访问私有端点](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint)。
+> microsandbox 沙箱只能通过网络上限 `domains` 中的名称访问私有地址；参见[沙箱无法访问私有端点](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint)。
 
 **每台主机只服务一个 Core。** 节点共享 `oac-node` 账号，因此主机只服务一个 Core；第二个 Core 的命令会被拒绝。
 

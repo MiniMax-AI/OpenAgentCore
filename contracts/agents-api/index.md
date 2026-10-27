@@ -160,6 +160,7 @@ Each item is Core's deliberate or native behavior where the official service beh
 
 - Hosted workspace admission is limited by the [tenant capacity policy](../../docs/configuration.md#tenant-capacity) and the [input reservation deadline](./environments.md#reservations).
 - MiniMax Code does not declare `retained_native_history`, so it cannot run on microsandbox, which keeps every Environment on workspace storage; Core rejects the Session ([Harness capabilities](./harness-capabilities.md)).
+- The model provider stays reachable from the sandbox because the Harness runs there; MCP connections from the Environment follow the deployment's [network cap](./sandbox-deployment.md#network). E2B sandboxes cannot reach private networks, and `169.254.169.254` answers inside an E2B sandbox under every cap.
 - Only `enabled` networking runs, so Sessions that need `disabled` or `restricted` are rejected ([restricted network policy](./environments.md#restricted-network)).
 - `packages.system` other than null or an empty list is rejected; system packages must be preinstalled.
 - `Environment.files` lists the files recorded at Session creation; files created later through the Environment files API do not appear.

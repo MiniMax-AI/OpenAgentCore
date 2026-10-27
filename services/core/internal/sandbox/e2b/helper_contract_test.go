@@ -67,6 +67,7 @@ func validManagedExchange(data []byte) bool {
 	delete(expected, "CoreURL")
 	delete(expected, "Credential")
 	delete(expected, "SuspendControl")
+	delete(expected, "Egress")
 	expected["InstallationID"] = nil
 	expected["RuntimeBootstrap"] = nil
 	if workspace, present := fields["Workspace"]; present {

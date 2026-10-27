@@ -64,6 +64,25 @@ type Bootstrap struct {
 	SessionID, DeviceID, CoreURL, Credential string
 	// SuspendControl is true exactly when the Provider declares checkpoint support.
 	SuspendControl bool
+	// Egress is what the allocation may reach besides its Core connection.
+	Egress Egress
+}
+
+// Egress is what one allocation may reach besides its Core connection. Core
+// derives it from the allocation's deployment generation and the Session's
+// frozen configuration, and sends the same value at Create and at every Resume.
+// The Provider enforces exactly it and always blocks loopback, link-local
+// (cloud metadata) and every private address that Egress does not name.
+type Egress struct {
+	// Public allows every public address.
+	Public bool `json:"public"`
+	// PrivateDomains are exact host names the Provider resolves with the host's
+	// DNS; every address they resolve to is allowed, private ones included.
+	PrivateDomains []string `json:"private_domains"`
+	// Endpoints are the host names or IP addresses of the Session's model
+	// provider. The Harness runs inside the sandbox and calls them directly, so
+	// every address they resolve to is allowed, private ones included.
+	Endpoints []string `json:"endpoints"`
 }
 
 // Info describes compute only. Running does not establish daemon authentication,
@@ -246,6 +265,8 @@ type ResumeRequest struct {
 	OperationID string
 	Snapshot    SnapshotIdentity
 	Target      Compute
+	// Egress is the value Core sent at Create; the restored sandbox runs under it.
+	Egress Egress
 	// Recovery observes the previous target and never starts a new restore.
 	ObserveOnly bool
 }
@@ -402,11 +423,25 @@ func (d SetupDeclaration) Validate(r ConfigurationRequirements) error {
 // DeploymentPolicy is the deployment declaration. Workspace, when present, means
 // the Provider runs every Environment on external storage; absent means its own
 // disk. Disk declares independent disk limits. DefaultResources is the size setup
-// proposes, or nil when the Provider's configuration selects it.
+// proposes, or nil when the Provider's configuration selects it. Network
+// declares the egress restrictions the Provider enforces.
 type DeploymentPolicy struct {
 	Workspace        *workspacefs.Requirements `json:"workspace,omitempty"`
 	Disk             bool                      `json:"disk"`
 	DefaultResources *Resources                `json:"default_resources"`
+	Network          NetworkSupport            `json:"network"`
+}
+
+// NetworkSupport declares the egress restrictions a Provider enforces. Every
+// Provider always allows its Core connection and blocks loopback and link-local
+// addresses.
+type NetworkSupport struct {
+	// Restrict: can refuse public addresses (Egress.Public false) while still
+	// allowing Core and the Egress hosts that resolve to public addresses.
+	Restrict bool `json:"restrict"`
+	// PrivateDomains: can allow the private addresses that Egress.PrivateDomains
+	// and Egress.Endpoints resolve to, and blocks every other private address.
+	PrivateDomains bool `json:"private_domains"`
 }
 
 // Configuration is an adapter-owned typed value, never a request or response DTO.
@@ -428,6 +463,8 @@ type ConfigurationRecord struct {
 // Selection is the typed deployment configuration shared by preview and commit.
 type Selection struct {
 	DeploymentSpec
+	// NetworkOmitted marks a change that left network out; it keeps the current cap.
+	NetworkOmitted     bool          `json:"-"`
 	ExpectedGeneration uint64        `json:"expected_generation"`
 	Provider           string        `json:"provider"`
 	Configuration      Configuration `json:"-"`

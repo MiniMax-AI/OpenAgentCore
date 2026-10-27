@@ -743,6 +743,12 @@ definitions:
         type: object
       expected_generation:
         type: integer
+      network:
+        allOf:
+          - $ref: '#/definitions/sandbox.Network'
+        description: |-
+          The network cap. Omitted, it is the public internet only on setup and the
+          current cap on a change.
       provider:
         type: string
       resources:
@@ -763,6 +769,12 @@ definitions:
         type: object
       expected_generation:
         type: integer
+      network:
+        allOf:
+          - $ref: '#/definitions/sandbox.Network'
+        description: |-
+          The network cap. Omitted, it is the public internet only on setup and the
+          current cap on a change.
       provider:
         type: string
       resources:
@@ -1947,6 +1959,8 @@ definitions:
       - DeploymentDirect
   sandbox.DeploymentSpec:
     properties:
+      network:
+        $ref: '#/definitions/sandbox.Network'
       resources:
         $ref: '#/definitions/sandbox.Resources'
       workspace:
@@ -1955,7 +1969,20 @@ definitions:
         description: Workspace is a derived immutable capability receipt, never filesystem configuration.
         readOnly: true
     required:
+      - network
       - resources
+    type: object
+  sandbox.Network:
+    properties:
+      domains:
+        items:
+          type: string
+        type: array
+      public:
+        type: boolean
+    required:
+      - domains
+      - public
     type: object
   sandbox.NodeDiagnosticCode:
     enum:
@@ -7032,7 +7059,7 @@ paths:
     post:
       consumes:
         - application/json
-      description: Selects a provider and its enforced resource limits. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. A Provider that requires a public origin returns 409 sandbox_configuration_error while the public URL is loopback. Credentials are write-only. A Provider without default resources may omit resources to adopt the validated configuration's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
+      description: Selects a provider, its enforced resource limits and the network cap. An omitted network is the public internet only. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. A Provider that requires a public origin returns 409 sandbox_configuration_error while the public URL is loopback. Credentials are write-only. A Provider without default resources may omit resources to adopt the validated configuration's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
       parameters:
         - description: Deployment selection
           in: body
@@ -7075,7 +7102,7 @@ paths:
     put:
       consumes:
         - application/json
-      description: 'Requires the observed generation, the same backend type and no active reset. Credential-holding Providers apply same-account changes online: allocations retain immutable generation and current credentials; an omitted credential preserves it, explicit submission including the same credential verifies and advances generation. Other accounts require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.'
+      description: 'Requires the observed generation, the same backend type and no active reset. An omitted network keeps the current cap; a changed cap applies to new sandboxes only. Credential-holding Providers apply same-account changes online: allocations retain immutable generation and current credentials; an omitted credential preserves it, explicit submission including the same credential verifies and advances generation. Other accounts require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.'
       parameters:
         - description: Replacement deployment selection
           in: body

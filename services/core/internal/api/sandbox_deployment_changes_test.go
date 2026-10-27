@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -103,6 +104,37 @@ func TestSandboxMutationErrorsExposeOnlyTypedCoreFacts(t *testing.T) {
 			if !core && strings.Contains(body, `"details"`) {
 				t.Fatal("Core facts escaped their router", body)
 			}
+		}
+	}
+}
+
+// An omitted network is the default cap and is marked so an update keeps the
+// current one; a submitted network reaches the selection with its domains.
+func TestSandboxDeploymentNetworkSelection(t *testing.T) {
+	deps, fakes := sandboxFakes(t)
+	var got sandbox.Selection
+	fakes.deploymentChanges.updateSandboxDeployment = func(_ context.Context, in sandbox.Selection) (deployment.View, error) {
+		got = in
+		return deployment.View{Provider: in.Provider}, nil
+	}
+	fakes.deployment.decodeConfiguration = providers.Builtin().DecodeInput
+	h := newTestHandler(t, deps)
+	const base = `{"provider":"e2b","expected_generation":2,"credential":{"api_key":"synthetic-private-key"},"configuration":{"template":"qualified:build"}`
+	for _, tc := range []struct {
+		body    string
+		network sandbox.Network
+		omitted bool
+	}{
+		{base + `}`, sandbox.DefaultNetwork(), true},
+		{base + `,"network":{"public":false,"domains":null}}`, sandbox.Network{Domains: []string{}}, false},
+		{base + `,"network":{"public":true,"domains":["gitlab.example.com"]}}`, sandbox.Network{Public: true, Domains: []string{"gitlab.example.com"}}, false},
+	} {
+		r := httptest.NewRequest("PUT", "/core/v1/sandbox/deployment", strings.NewReader(tc.body))
+		r.Header.Set("Authorization", "Bearer administrator")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != 200 || !reflect.DeepEqual(got.Network, tc.network) || got.NetworkOmitted != tc.omitted {
+			t.Fatalf("%s: status=%d network=%+v omitted=%v", tc.body, w.Code, got.Network, got.NetworkOmitted)
 		}
 	}
 }

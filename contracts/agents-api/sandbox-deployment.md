@@ -36,6 +36,7 @@ POST and PUT take the same complete selection and require `expected_generation` 
 | `expected_generation` | Required nonnegative integer from GET; never refresh and replay it automatically |
 | `provider` | Exactly one of `microsandbox`, `e2b` |
 | `resources` | Per-sandbox limits, below; required for microsandbox, optional for E2B |
+| `network` | The egress cap, [below](#network). Omitted on POST means the default; omitted on PUT keeps the current cap |
 | `configuration` | The provider's public selectors. E2B: the immutable `template` build and the optional paired `api_url` and `domain`. microsandbox accepts only `{}` or omission |
 | `credential` | The provider's write-only credential. E2B: `{api_key}`, required at first setup and omitted on PUT to keep the current key; a null or empty key is invalid. microsandbox rejects it |
 
@@ -59,6 +60,19 @@ microsandbox configures the CPUs, memory and a managed root disk. It runs every 
 The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. microsandbox always has the receipt, and a deployment saved before workspace storage is selected returns `workspace_storage_required`. E2B has no receipt and keeps its own disks. Create and Resume provide a binding exactly when the frozen generation has the receipt.
 
 Select the filesystem configuration before the microsandbox deployment. Selecting the filesystem does not alter existing generations or allocations; the next sandbox update derives the receipt. A filesystem selection must support the provider's declared requirements. An existing deployment requires the same `attachment` and `user_xattr`; the selection may change `capacity_quota`, after which new workspaces are refused until a sandbox update sets a matching `environment_disk_mib`. Existing workspaces keep the capacity they were admitted with.
+
+### Network
+
+`network` caps what every sandbox of the deployment may reach when its Environment's `network.access` is `enabled` or omitted. The connection to Core and the host of the Session's model provider are always reachable, because the Harness runs inside the sandbox. MCP connections from the Environment follow the cap like any other traffic.
+
+| Field | Accepted value |
+| --- | --- |
+| `public` | Boolean. `true` allows public addresses; `false` allows only Core, the model provider and `domains` |
+| `domains` | At most 100 exact host names of at most 253 characters, in lowercase letters, digits, hyphens and dots, whose last label starts with a letter. Wildcards, IP literals, ports and URLs are rejected. Core stores them lowercase, deduplicated and sorted. Every address a name resolves to is allowed, private addresses included |
+
+The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked. Addresses are resolved when a sandbox starts and when it resumes, so a name whose answer changes in between is not followed. A sandbox keeps the cap of the generation that created it.
+
+Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
 
 ### E2B configuration
 
@@ -218,6 +232,7 @@ Some fields keep one name across providers but differ in meaning, or do not appl
 | Field | microsandbox | E2B |
 | --- | --- | --- |
 | Independent workspace filesystem | Required: [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter), configured separately from compute | Unsupported |
+| Deployment `specification.network` | `public` and `domains` | `public` only; `domains` must be empty and private networks are unreachable |
 | Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and, as a quota request, `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields |
 | Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved |
 | Deployment `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`; Core pauses an idle E2B sandbox with the SDK's native pause |

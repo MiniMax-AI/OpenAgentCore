@@ -29,7 +29,7 @@ func TestE2BRejectedSpecificationHasSafeActionableDiagnostic(t *testing.T) {
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
 	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id}
-	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
+	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true, Specification: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 3, MemoryMiB: 3072}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	_, err := s.prepare(t.Context(), selection)
 	if !errors.Is(err, sandbox.ErrConfigurationSelection) || strings.Contains(err.Error(), "synthetic-private-key") || s.selected.Load() != nil {
 		t.Fatal("rejected candidate lost its safe diagnostic or was published", err)
@@ -66,7 +66,7 @@ else:
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
 	selection := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true,
-		Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
+		Specification: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-private-key", Template: "runtime:" + uuid.NewString()}}
 	allocation := func(context.Context, sandbox.Reference) (deployment.Setup, error) { return selection, nil }
 	s := &managedSetup{processPaths: paths, registry: providers.Builtin(), installationID: id,

@@ -94,7 +94,7 @@ func admin(t *testing.T) context.Context {
 
 // testSpecification is a valid deployment specification for provider.
 func testSpecification(provider string) sandbox.DeploymentSpec {
-	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
+	s := sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
 		s.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}

@@ -22,7 +22,7 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 512, RootDiskMiB: 1024, EnvironmentDiskMiB: 1}, "resources.environment_disk_mib", "microsandbox requires environment_disk_mib of 0 or at least 1024 MiB", validationBound(1024), nil},
 		{"e2b", sandbox.Resources{CPUs: 1, MemoryMiB: 512, EnvironmentDiskMiB: 1}, "resources.environment_disk_mib", "e2b does not support independent disk capacity limits", validationBound(0), validationBound(0)},
 	} {
-		spec := sandbox.DeploymentSpec{Resources: tc.resources}
+		spec := sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: tc.resources}
 		if tc.provider == "microsandbox" {
 			// microsandbox runs every sandbox on workspace storage.
 			spec.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true, CapacityQuota: true}
@@ -39,11 +39,11 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 			}
 		}
 	}
-	if err := registry.ValidateSpecification("microsandbox", sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576, RootDiskMiB: 1024}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}); err != nil {
+	if err := registry.ValidateSpecification("microsandbox", sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576, RootDiskMiB: 1024}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}); err != nil {
 		t.Fatal(err)
 	}
 	var field *sandbox.ValidationError
-	err := registry.ValidateSpecification("private-provider", sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}})
+	err := registry.ValidateSpecification("private-provider", sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}})
 	if errors.As(err, &field) || err.Error() != sandbox.ErrInvalid.Error()+": unsupported sandbox provider" {
 		t.Fatal("unknown provider reclassified", err)
 	}

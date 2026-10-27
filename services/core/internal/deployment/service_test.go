@@ -60,7 +60,7 @@ func operations(t *testing.T, publicURL string, tx *fakeDeploymentTx) *Execution
 
 // testSpecification is a valid deployment specification for provider.
 func testSpecification(provider string) sandbox.DeploymentSpec {
-	s := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
+	s := sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
 	if provider == "microsandbox" {
 		s.Resources.RootDiskMiB = 8192
 		s.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
@@ -146,7 +146,7 @@ func TestUnknownProviderIsRejectedBeforeStorage(t *testing.T) {
 func TestSandboxValidationWrapperPreservesClassification(t *testing.T) {
 	service := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL)
 	installation := "00000000-0000-4000-8000-000000000001"
-	_, err := service.SetupForSelection(installation, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: sandbox.DeploymentSpec{Workspace: testSpecification("microsandbox").Workspace}})
+	_, err := service.SetupForSelection(installation, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Workspace: testSpecification("microsandbox").Workspace}})
 	var configuration *ConfigurationError
 	if !errors.As(err, &configuration) || !errors.Is(err, ErrInvalidInput) || configuration.Validation == nil || configuration.Validation.Param != "resources.cpus" {
 		t.Fatalf("missing validation metadata: %#v", err)

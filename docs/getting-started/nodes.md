@@ -66,12 +66,12 @@ The node service keeps the proxy settings of the latest run, so it reaches Core 
 | Node state | `/var/lib/oac-node/.oac/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/oac-node/.oac/m/` |
 | Records | `/etc/oac-node/`: what the installer created or changed, used by reruns and uninstall, and the service's proxy settings |
 | Runtime image | Imported once into the microsandbox store |
-| microsandbox network policy | Sandboxes may reach Core, DNS on the host and public addresses, and nothing else: no inbound connections and no private networks |
+| microsandbox network policy | Core applies the deployment's [network cap](../../contracts/agents-api/sandbox-deployment.md#network) to every sandbox: no inbound connections, and private networks only for the hosts the cap names |
 
 Root only prepares the account, the group and the unit; everything else runs as `oac-node`, in its own session without a terminal. The installer never installs KVM or packages, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts. The node connects out to Core; Core needs no SSH access to the host.
 
 > [!WARNING]
-> microsandbox sandboxes cannot reach private addresses; see [Sandboxes cannot reach a private endpoint](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint).
+> microsandbox sandboxes reach a private address only through a name in the network cap's `domains`; see [Sandboxes cannot reach a private endpoint](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint).
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 

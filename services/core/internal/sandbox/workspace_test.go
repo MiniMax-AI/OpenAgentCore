@@ -9,11 +9,11 @@ import (
 func TestExternalStorageProviderRequiresSelectionAndKeepsRootCapacity(t *testing.T) {
 	policy := DeploymentPolicy{Disk: true, Workspace: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}
 	declaration := &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
-	spec := DeploymentSpec{Resources: Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 4096}, Workspace: declaration}
+	spec := DeploymentSpec{Resources: Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 4096}, Network: DefaultNetwork(), Workspace: declaration}
 	if err := spec.ValidatePolicy("test", policy); err != nil {
 		t.Fatal(err)
 	}
-	if err := (DeploymentSpec{Resources: spec.Resources}).ValidatePolicy("test", policy); !errors.Is(err, ErrWorkspaceRequired) {
+	if err := (DeploymentSpec{Resources: spec.Resources, Network: spec.Network}).ValidatePolicy("test", policy); !errors.Is(err, ErrWorkspaceRequired) {
 		t.Fatal("missing storage accepted", err)
 	}
 	if err := spec.ValidatePolicy("test", DeploymentPolicy{}); !errors.Is(err, workspacefs.ErrUnsupported) {

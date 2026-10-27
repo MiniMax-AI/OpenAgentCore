@@ -23,7 +23,6 @@ func NewWithCaller(c Config, caller Caller) (*Provider, error) {
 	if c.Validate() != nil || caller == nil {
 		return nil, sandbox.ErrInvalid
 	}
-	c.Network.Rules = append([]NetworkRule(nil), c.Network.Rules...)
 	return &Provider{config: c, caller: caller}, nil
 }
 func (p *Provider) Initial(ctx context.Context, r sandbox.Reference) (Compute, error) {

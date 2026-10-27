@@ -86,14 +86,14 @@ function unconfiguredDeployment(generation = 0, ownerEpoch = 3) {
 }
 
 function configuredDeployment() {
-  return { installation_id: INSTALLATION_ID, provider: "microsandbox", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 } }, specification_digest: "fixture", suspension: { idle_seconds: 300, retention_seconds: 86400 } };
+  return { installation_id: INSTALLATION_ID, provider: "microsandbox", credential_configured: false, configuration: {}, metadata: {}, core_url: publicUrl(), reset: null, rollout: nodeRollout(), owner_epoch: 3, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: { resources: { cpus: 2, memory_mib: 4096 }, network: { public: true, domains: [] } }, specification_digest: "fixture", suspension: { idle_seconds: 300, retention_seconds: 86400 } };
 }
 /** The E2B template build as Core read it when the selection was saved. */
 const templateBuild = { status: "ready", resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 10240 } };
 
 // E2B runs sandboxes in its cloud: no nodes, only what Core holds there.
 function e2bDeployment() {
-  return { ...configuredDeployment(), provider: "e2b", mode: "direct", rollout: noNodeRollout(), suspension: null, resources: { allocations: 3, running: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, configuration: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } };
+  return { ...configuredDeployment(), provider: "e2b", mode: "direct", rollout: noNodeRollout(), suspension: null, resources: { allocations: 3, running: 3, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 }, network: { public: true, domains: [] } }, configuration: { template: "oac-runtime:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: templateBuild } };
 }
 
 function reset(mode = "login", fresh = false, sandbox = "configured", nodes = "demo", address = "public", installers = true, artifacts = "microsandbox") {

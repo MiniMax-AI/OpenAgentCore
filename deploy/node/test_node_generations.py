@@ -22,7 +22,7 @@ class GenerationTests(unittest.TestCase):
         self.directory.mkdir(parents=True, mode=0o700)
         self.value = {"installation_id": "test-installation", "generation": 1, "provider": "microsandbox", "core_url": "https://core.example/api/v1",
                       "native": {"image": "sha256:" + "a" * 64},
-                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}}}
+                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}, "network": {"public": True, "domains": []}}}
         self.args = SimpleNamespace(installation_id="test-installation", generation=1, specification_digest=node_spec.digest("microsandbox", self.value["specification"]))
         node_generations.atomic_json(self.root / "provider.json", self.value)
         self.initialize_lease()
@@ -37,7 +37,7 @@ class GenerationTests(unittest.TestCase):
             pass
 
     def next_generation(self, resources):
-        specification = {"resources": resources}
+        specification = {"resources": resources, "network": {"public": True, "domains": []}}
         configuration = {"installation_id": "test-installation", "provider": "microsandbox", "core_url": "https://core.example", "generation": 2, "specification": specification, "specification_digest": node_spec.digest("microsandbox", specification)}
         self.args.generation, self.args.specification_digest = 2, configuration["specification_digest"]
         return configuration

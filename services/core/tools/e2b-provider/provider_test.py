@@ -32,7 +32,8 @@ class Fixture(unittest.TestCase):
         self.request = {'Version': PROTOCOL_VERSION, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
-                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True)}
+                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True,
+                                          Egress={'public': True, 'private_domains': [], 'endpoints': []})}
         self.request['RuntimeBootstrap'] = {
             'version': 3, 'suspend_control': True, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
@@ -88,6 +89,17 @@ class ProviderTest(Fixture):
         self.assertNotIn(self.request['Bootstrap']['Credential'], serialized)
         self.assertEqual(self.record()['connection']['envd_access_token'], 'private-envd-secret')
         self.api.connect.assert_not_called()
+
+    def test_create_maps_egress_to_network_options(self):
+        provider = __import__('provider')
+        public = provider.network_options(self.request['Bootstrap'])
+        self.assertEqual(public, {'deny_out': list(provider.BLOCKED_RANGES)})
+        closed = dict(self.request['Bootstrap'], Egress={'public': False, 'private_domains': [], 'endpoints': ['api.model.example']})
+        self.assertEqual(provider.network_options(closed),
+                         {'deny_out': ['0.0.0.0/0'], 'allow_out': ['api.model.example', 'core.example']})
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.assertNotIn('Egress', json.loads(self.cloud.files.write.call_args.args[1]))
+        self.assertEqual(self.api.create.call_args.kwargs['network'], public)
 
     def test_create_response_without_metadata_reads_exact_id_before_bootstrap(self):
         created = SimpleNamespace(sandbox_id=self.cloud.sandbox_id,
