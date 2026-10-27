@@ -240,7 +240,7 @@ test("uncertain configuration refresh preserves a draft until its generation cha
   const edit = page.getByRole("dialog", { name: "Change resources", exact: true });
   await edit.getByRole("button", { name: /^Large/ }).click();
   const wizard = edit.getByRole("region", { name: "Change the sandbox configuration", exact: true });
-  const draftSize = await fact(wizard, "Each sandbox").innerText();
+  const draftSize = (await fact(wizard, "Each sandbox").innerText()).replace(/\s+/g, " ").trim();
   expect(draftSize).not.toBe(committedSize);
   await failNext(request, { method: "PUT", path: deploymentPath, status: 503, message: "Configuration outcome is unconfirmed." });
   const result = await saveConfiguration(page);

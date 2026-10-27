@@ -284,7 +284,7 @@ test("shows the retained E2B build while a replacement key is checked", async ({
 });
 
 test("edits only the saved backend, preserving a custom size", async ({ page, request }) => {
-  const current = { resources: { cpus: 7, memory_mib: 8192 } };
+  const current = { resources: { cpus: 7, memory_mib: 8192, root_disk_mib: 10240 }, workspace: { attachment: "host_directory", user_xattr: true, capacity_quota: false } };
   let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "microsandbox", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, unknown: 0 } },
     owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
     suspension: null };
@@ -338,7 +338,7 @@ test("renames a node and sets how many sandboxes run on it at once", async ({ pa
   await page.getByRole("row").filter({ hasText: "core-01" }).getByRole("button", { name: "Edit node" }).click();
   const edit = page.getByRole("dialog", { name: "Edit node" });
   await edit.getByLabel("Name").fill("core-01-large");
-  await expect(edit).toContainText("Recommended: 6 at once.");
+  await expect(edit).toContainText("Recommended: 6 at once, 6 retained.");
   await edit.getByRole("button", { name: "Use recommended" }).click();
   await expect(edit.getByLabel("Sandboxes at once")).toHaveValue("6");
   await edit.getByRole("button", { name: "Save" }).click();
