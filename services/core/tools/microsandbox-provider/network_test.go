@@ -33,7 +33,7 @@ func rules(t *testing.T, egress sandbox.Egress, dns map[string][]string) (string
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.DefaultEgress != "deny" || n.DefaultIngress != "deny" || !n.DisableStrict || n.DNS != nil {
+	if n.DefaultEgress != "deny" || n.DefaultIngress != "deny" || n.DisableStrict || n.DNS != nil {
 		t.Fatalf("defaults or DNS options changed: %+v", n)
 	}
 	var lines []string
