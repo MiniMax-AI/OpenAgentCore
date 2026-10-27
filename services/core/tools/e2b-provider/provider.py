@@ -111,11 +111,19 @@ def network_options(bootstrap):
     for endpoint in egress['endpoints']:
         target = urlsplit('//' + endpoint)
         targets.append((target.hostname, target.port))
-    allowed = {host for host, _ in targets} | set(egress['domains'])
+    allowed = set(egress['domains'])
     for host, port in targets:
+        try:
+            # An IP literal as a bare host would open every port; allow it only as a global /32 or /128.
+            address = ipaddress.ip_address(host)
+            if address.is_global:
+                allowed.add(str(ipaddress.ip_network(address)))
+            continue
+        except ValueError:
+            allowed.add(host)
         if port not in (80, 443):
             allowed.update(f'{a}/32' for a in public_ipv4(host))
-    return {'deny_out': [ALL_TRAFFIC], 'allow_out': sorted(allowed)}
+    return {'deny_out': [ALL_TRAFFIC, '::/0'], 'allow_out': sorted(allowed)}
 
 
 class Provider:

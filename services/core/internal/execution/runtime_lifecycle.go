@@ -277,7 +277,11 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
-	egress, err := r.allocationEgress(ctx, owner, spec.Network)
+	reserved, err := r.workspaceSpecification(ctx, owner.Key(), owner.ID)
+	if err != nil {
+		return owner, err
+	}
+	egress, err := r.allocationEgress(ctx, owner, reserved.Network)
 	if err != nil {
 		return owner, err
 	}

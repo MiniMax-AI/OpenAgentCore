@@ -85,4 +85,4 @@ The manifest's `images` records each exported image's config digest, and `image_
 
 Docker's classic image store identifies images by config digest, and its containerd store by the OCI descriptor. The build therefore takes the digest the local store resolves from BuildKit's build metadata, never the `--iidfile` config digest alone, and disables provenance attestations so each image and archive holds one platform manifest in both stores.
 
-The node installer confirms Linux amd64 and the returned immutable local ID, and service and provider configuration and Runtime launches use that ID. Tags never replace identity verification. The microsandbox `runtime_ref` is independent of Docker's local store identity.
+The Core installer confirms Linux amd64 and the returned immutable local ID, and the Compose configuration uses that ID. Tags never replace identity verification.

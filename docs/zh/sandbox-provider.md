@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 45dd97e9627942748787865fc257bb2f25ee72e874d2c14a639d46f631b7028e
+source_hash: 12713a187e000d21ad8a466d986d71297183347a772848104ac0d365b328fbbc
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox 和 E2B 实现了该协议。
@@ -206,7 +206,7 @@ Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它
 
 Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址，但 E2B 无法阻止元数据地址 169.254.169.254。它在创建和恢复时用主机 DNS 解析名称，无法跟随之后应答的变化。无法解析的名称没有规则。MCP 流量没有条目：它遵循 `Public`、`PrivateDomains` 和 `Domains`。
 
-microsandbox 按首条匹配的顺序、默认拒绝并保持主机 DNS 可达来应用规则；它不带端口地允许解析出的私有地址，使 DNS rebind 保护放行它们。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其公开 IPv4 地址。
+microsandbox 按首条匹配的顺序、默认拒绝并保持主机 DNS 可达来应用规则；它不带端口地允许解析出的私有地址，使 DNS rebind 保护放行它们。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 

@@ -32,7 +32,7 @@ func TestConfigurationDiscoveryUsesSuppliedProcessPaths(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(binary), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(binary, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":2,\"Templates\":[]}'\n"), 0700); err != nil {
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"Version\":3,\"Templates\":[]}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	input := sandbox.ConfigurationDiscoveryInput{Credential: json.RawMessage(`{"api_key":"synthetic-key"}`)}

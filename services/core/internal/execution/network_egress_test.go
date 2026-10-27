@@ -27,6 +27,7 @@ func TestEgressLimitsTheModelProviderToItsPort(t *testing.T) {
 		{"private host listed by the cap stays reachable when disabled", closed, disabled, "http://llm.corp.example:8000/v1", sandbox.Egress{PrivateDomains: []string{"llm.corp.example"}, Domains: []string{}, Endpoints: []string{"llm.corp.example:8000"}}},
 		{"private host the cap does not list", sandbox.DefaultNetwork(), disabled, "http://llm.corp.example:8000/v1", sandbox.Egress{PrivateDomains: []string{}, Domains: []string{}, Endpoints: []string{"llm.corp.example:8000"}}},
 		{"private IP literal", closed, disabled, "http://10.1.2.3:8000/v1", sandbox.Egress{PrivateDomains: []string{}, Domains: []string{}, Endpoints: []string{"10.1.2.3:8000"}}},
+		{"port out of range", closed, disabled, "http://api.model.example:99999", sandbox.Egress{PrivateDomains: []string{}, Domains: []string{}, Endpoints: []string{}}},
 		{"loopback", closed, disabled, "http://127.0.0.1:8000/v1", sandbox.Egress{PrivateDomains: []string{}, Domains: []string{}, Endpoints: []string{}}},
 		{"localhost", closed, disabled, "http://localhost:8000", sandbox.Egress{PrivateDomains: []string{}, Domains: []string{}, Endpoints: []string{}}},
 	} {
