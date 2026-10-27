@@ -410,7 +410,7 @@ async function sandboxRoute(request, response, path, url) {
     // As Core: E2B may omit resources and adopt its template build's CPU and memory; only microsandbox suspends.
     const resources = input.resources ?? { cpus: templateBuild.resources.cpus, memory_mib: templateBuild.resources.memory_mib };
     const previous = state.deployment;
-    const specification = { resources };
+    const specification = { resources, network: input.network ?? (initialize ? { public: true, domains: [] } : previous.specification.network) };
     const explicitKey = e2b && Object.hasOwn(input, "credential");
     const sameSelection = !initialize && JSON.stringify(specification) === JSON.stringify(previous.specification) && (!e2b || input.configuration.template === previous.configuration?.template);
     // Omission can be a no-op; every explicit key, including identical bytes,

@@ -284,7 +284,7 @@ test("shows the retained E2B build while a replacement key is checked", async ({
 });
 
 test("edits only the saved backend, preserving a custom size", async ({ page, request }) => {
-  const current = { resources: { cpus: 7, memory_mib: 8192, root_disk_mib: 10240 }, workspace: { attachment: "host_directory", user_xattr: true, capacity_quota: false } };
+  const current = { resources: { cpus: 7, memory_mib: 8192, root_disk_mib: 10240 }, network: { public: true, domains: [] }, workspace: { attachment: "host_directory", user_xattr: true, capacity_quota: false } };
   let deployment = { configuration: {}, metadata: {}, credential_configured: false, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "microsandbox", core_url: "https://core.example", reset: null, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 0, preparing: 0, failed: 0, unknown: 0 } },
     owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 0, running: 0, pending: 0 }, specification: current, specification_digest: "e".repeat(64),
     suspension: null };
