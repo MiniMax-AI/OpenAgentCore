@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +12,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // ProcessCaller never kills a mutating helper on a Core response timeout.
@@ -69,9 +70,15 @@ func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("helper result unconfirmed")
 		}
 	}
-	// The helper reports only host names that had no address on stderr.
-	if stderr.Len() > 0 {
-		log.Bg().Warn("sandbox network names without an address", "operation", q.Operation, "names", stderr.String())
+	// The helper reports host names it could not resolve or support as "unresolved <name>" and "unsupported <name>" lines.
+	var names []string
+	for _, line := range strings.Split(stderr.String(), "\n") {
+		if strings.HasPrefix(line, "unresolved ") || strings.HasPrefix(line, "unsupported ") {
+			names = append(names, line)
+		}
+	}
+	if len(names) > 0 {
+		log.Bg().Warn("sandbox network names without an address", "operation", q.Operation, "names", strings.Join(names, "; "))
 	}
 	var out Response
 	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))

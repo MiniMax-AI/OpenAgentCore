@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agentnetwork"
 )
 
 // The deployment network rule is authored here once. The node installer and the
@@ -12,9 +14,8 @@ import (
 const (
 	maxNetworkDomains = 100
 	maxDomainLength   = 253
-	// domainPattern accepts an exact host name: dot-separated RFC 1123 labels
-	// whose last label starts with a letter, which also rejects IP literals.
-	domainPattern = `^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$`
+	// domainPattern is the exact-host rule shared with the Environment network field.
+	domainPattern = agentnetwork.HostPattern
 )
 
 var domainRule = regexp.MustCompile(domainPattern)

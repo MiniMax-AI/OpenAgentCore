@@ -30,6 +30,23 @@ type SandboxDeploymentChangeInput struct {
 	SandboxDeploymentInput
 }
 
+// requireNetworkMembers rejects a submitted network that omits public or domains,
+// so a missing member never reads as false or empty.
+func requireNetworkMembers(raw json.RawMessage) error {
+	var body struct {
+		Network map[string]json.RawMessage `json:"network"`
+	}
+	if json.Unmarshal(raw, &body) != nil || body.Network == nil {
+		return nil
+	}
+	for _, member := range []string{"public", "domains"} {
+		if _, ok := body.Network[member]; !ok {
+			return &sandbox.ValidationError{Param: "network." + member, Message: fmt.Sprintf("%s: network.%s is required", sandbox.ErrInvalid, member)}
+		}
+	}
+	return nil
+}
+
 // selection decodes the submitted configuration with the provider's declared codec.
 func (h *Handler) selection(v SandboxDeploymentInput) (sandbox.Selection, error) {
 	c, err := h.Sandboxes.Deployment.DecodeConfiguration(v.Provider, v.Configuration, v.Credential)
@@ -81,6 +98,10 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}
+	if err := requireNetworkMembers(raw); err != nil {
+		writeDeploymentError(w, r, err)
+		return
+	}
 	selection, err := h.selection(input)
 	if err != nil {
 		writeDeploymentError(w, r, err)
@@ -112,6 +133,10 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 	var input SandboxDeploymentChangeInput
 	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "network", "expected_generation") != nil || input.ExpectedGeneration == nil {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
+		return
+	}
+	if err := requireNetworkMembers(raw); err != nil {
+		writeDeploymentError(w, r, err)
 		return
 	}
 	selection, err := h.selection(input.SandboxDeploymentInput)

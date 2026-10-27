@@ -138,3 +138,25 @@ func TestSandboxDeploymentNetworkSelection(t *testing.T) {
 		}
 	}
 }
+
+// A submitted network without public or domains is a 400 naming the member.
+func TestSandboxDeploymentNetworkRequiresMembers(t *testing.T) {
+	deps, _ := sandboxFakes(t)
+	h := newTestHandler(t, deps)
+	const base = `{"provider":"e2b","expected_generation":2,"configuration":{"template":"qualified:build"}`
+	for _, tc := range []struct{ network, param string }{
+		{`{}`, "network.public"},
+		{`{"domains":[]}`, "network.public"},
+		{`{"public":true}`, "network.domains"},
+	} {
+		for _, method := range []string{"POST", "PUT"} {
+			r := httptest.NewRequest(method, "/core/v1/sandbox/deployment", strings.NewReader(base+`,"network":`+tc.network+`}`))
+			r.Header.Set("Authorization", "Bearer administrator")
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != 400 || !strings.Contains(w.Body.String(), tc.param) {
+				t.Fatalf("%s %s: status=%d %s", method, tc.network, w.Code, w.Body.String())
+			}
+		}
+	}
+}

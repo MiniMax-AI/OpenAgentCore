@@ -343,8 +343,6 @@ export const sandbox = {
   "Where should sandboxes run?": "沙箱在哪里运行？",
   "Which sandbox backend?": "用哪个沙箱提供商？",
   "Recommended": "推荐",
-  "Use {{provider}}?": "使用 {{provider}}？",
-  "Use {{provider}}": "使用 {{provider}}",
   "{{cpus}} CPU · {{memory}}": "{{cpus}} 核 · {{memory}}",
   "Save configuration": "保存配置",
   "Change the sandbox configuration": "修改沙箱配置",

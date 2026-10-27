@@ -71,8 +71,9 @@ type Bootstrap struct {
 // Egress is what one allocation may reach besides its Core connection. Core
 // derives it from the allocation's deployment generation and the Session's
 // frozen configuration, and sends the same value at Create and at every Resume.
-// The Provider enforces exactly it and always blocks loopback, link-local
-// (cloud metadata) and every private address that Egress does not name.
+// The Provider enforces exactly it and blocks loopback, link-local (cloud
+// metadata) and every private address that Egress does not name, except where
+// it cannot: E2B cannot block the metadata address.
 type Egress struct {
 	// Public allows every public address.
 	Public bool `json:"public"`
@@ -382,13 +383,11 @@ type SetupPreset struct {
 }
 
 // SetupDeclaration is everything the console needs to set up one Provider.
-// Label is the Provider's proper noun. Cautions are risks an operator confirms
-// before choosing it. Recommended marks the default among Providers of one
+// Label is the Provider's proper noun. Recommended marks the default among Providers of one
 // deployment mode, and at most one does.
 type SetupDeclaration struct {
 	Label       string        `json:"label"`
 	Summary     Text          `json:"summary"`
-	Cautions    []Text        `json:"cautions"`
 	Recommended bool          `json:"recommended"`
 	Fields      []SetupField  `json:"fields"`
 	Presets     []SetupPreset `json:"presets"`
@@ -407,9 +406,6 @@ func (d SetupDeclaration) Validate(r ConfigurationRequirements) error {
 		names[f.Name] = true
 		secret, discovered = secret || f.Secret, discovered || f.Discovered
 		ok = ok && !(f.Secret && (f.Optional || f.Discovered))
-	}
-	for _, c := range d.Cautions {
-		ok = ok && c.valid()
 	}
 	for _, p := range d.Presets {
 		ok = ok && p.Label != ""
@@ -437,7 +433,7 @@ type DeploymentPolicy struct {
 
 // NetworkSupport declares the egress restrictions a Provider enforces. Every
 // Provider always allows its Core connection and blocks loopback and link-local
-// addresses.
+// addresses, except that E2B cannot block the metadata address.
 type NetworkSupport struct {
 	// Restrict: can refuse public addresses (Egress.Public false) while still
 	// allowing Core and the Egress hosts that resolve to public addresses.
