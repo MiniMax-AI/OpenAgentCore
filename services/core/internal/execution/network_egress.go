@@ -83,10 +83,9 @@ func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, mode
 			if port == "" {
 				port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
 			}
-			if endpoint := net.JoinHostPort(host, port); port != "" {
-				if _, _, err := sandbox.SplitEndpoint(endpoint); err == nil {
-					egress.Endpoints = append(egress.Endpoints, endpoint)
-				}
+			endpoint := net.JoinHostPort(host, port)
+			if _, _, err := sandbox.SplitEndpoint(endpoint); err == nil {
+				egress.Endpoints = append(egress.Endpoints, endpoint)
 			}
 			if slices.Contains(network.Domains, host) {
 				egress.PrivateDomains = append(egress.PrivateDomains, host)
