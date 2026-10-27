@@ -40,7 +40,6 @@ The hero holds the title, the lede, the install command and the interactive exam
 SVG files are bundled under `.vitepress/theme/assets/logos/` and tinted with CSS (dark in the light theme, white in the dark theme), preserving their proportions. Their sources are:
 
 - AI brands, AWS, Azure, Google Cloud, Alibaba Cloud, Tencent Cloud, Huawei Cloud, Volcengine, Baidu AI Cloud and DigitalOcean: [Lobe Icons](https://github.com/lobehub/lobe-icons), from `@lobehub/icons-static-svg` version `1.95.1`, using the matching filename in its `icons/` directory. MIT license: `LICENSE-lobe-icons.txt` beside the assets.
-- Docker: [SVGL's Docker SVG](https://github.com/pheralb/svgl/blob/main/static/library/docker.svg). MIT license: `LICENSE-svgl.txt` beside the assets.
 - Hetzner: [Simple Icons' Hetzner SVG](https://github.com/simple-icons/simple-icons/blob/develop/icons/hetzner.svg). CC0 notice: `LICENSE-simple-icons.txt` beside the assets.
 - E2B: the medium white symbol from [E2B's official brand assets](https://changelog.e2b.dev/brand), file `e2b-symbol-white-m.svg`. Preserve its proportions and clear space according to that source's usage guidance.
 

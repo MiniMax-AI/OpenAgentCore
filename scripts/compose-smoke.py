@@ -38,14 +38,13 @@ distribution = load('distribution', 'scripts/core-distribution-manifest.py')
 
 def prepare_payload(destination, revision, source_time):
     """Node metadata for this commit, built with the distribution's own builders."""
-    (destination / 'runtime').mkdir(parents=True)
+    destination.mkdir(parents=True)
     with tempfile.TemporaryDirectory(dir=destination.parent) as sources:
         sources = Path(sources)
         for path in (ROOT / 'deploy/node').glob('*.py'):
             shutil.copyfile(path, sources / path.name)
         distribution.bootstraps(sources, source_time, revision)
         shutil.copyfile(sources / 'node-install.pyz', destination / 'node-install.pyz')
-    shutil.copyfile(ROOT / 'services/core/internal/sandbox/docker/seccomp.json', destination / 'runtime/seccomp.json')
     (destination / 'manifest.json').write_text(json.dumps(
         {'source_commit': revision, 'platform': 'linux/amd64'}))
     distribution.checksums(destination)

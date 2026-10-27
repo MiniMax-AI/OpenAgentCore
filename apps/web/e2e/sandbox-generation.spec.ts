@@ -64,7 +64,7 @@ test("online configuration retains existing resources and stops rapid polling wh
   await page.getByRole("button", { name: /^Large/ }).click();
   const saved = await saveConfiguration(page);
   expect(saved.response.ok()).toBe(true);
-  expect(saved.input).toMatchObject({ provider: "docker", expected_generation: 1 });
+  expect(saved.input).toMatchObject({ provider: "microsandbox", expected_generation: 1 });
   const current = await saved.response.json() as SandboxDeployment;
   expect(current.generation).toBe(2);
   expect(current.resources.allocations).toBe(before.allocations.length);

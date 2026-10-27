@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
@@ -63,7 +63,7 @@ func TestGenerationWireRoutesOldOwnershipAndCurrentTargetSeparately(t *testing.T
 	}()
 	wait(t, func() bool { return hub.Online(id.NodeID) })
 	for _, generation := range []uint64{1, 17, 9} {
-		proxy := hub.GenerationProvider(docker.Operations(), func(context.Context, sandbox.Reference) (string, uint64, error) { return id.NodeID, generation, nil })
+		proxy := hub.GenerationProvider(microsandbox.Operations(), func(context.Context, sandbox.Reference) (string, uint64, error) { return id.NodeID, generation, nil })
 		ref := reference()
 		if _, err := proxy.GetInfo(ctx, ref); err != nil {
 			t.Fatal("retained generation info failed", generation, err)

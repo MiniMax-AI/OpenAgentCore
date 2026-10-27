@@ -99,7 +99,7 @@ func TestServiceAuthorizesAndBoundsBackendQuery(t *testing.T) {
 	reader.result = Result{GeneratedAt: now, RetainedFrom: &start, TokenUsage: []TokenUsagePoint{{
 		Start: start, End: start.Add(30 * time.Second), SampledAt: start.Add(20 * time.Second), InputTokens: 120, OutputTokens: 30,
 	}}, Series: []Series{{
-		Scope: scope, AllocationID: allocationID, StartedAt: startedAt, ProviderType: "docker",
+		Scope: scope, AllocationID: allocationID, StartedAt: startedAt, ProviderType: "microsandbox",
 		Points: []Point{{
 			Start: start, End: start.Add(30 * time.Second), FirstObservedAt: start.Add(time.Second), LastObservedAt: start.Add(20 * time.Second),
 			ObservationCount: 2, ObservedCount: 2, CPUContributorCount: 2, MemoryContributorCount: 2,
@@ -212,7 +212,7 @@ func TestServiceRejectsMalformedBackendResults(t *testing.T) {
 	now := time.Date(2026, 9, 23, 8, 0, 0, 0, time.UTC)
 	start := now.Add(-time.Hour)
 	scope := Scope{TenantID: tenantID, SessionID: sessionID, EnvironmentID: environmentID}
-	base := Series{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "docker"}
+	base := Series{Scope: scope, AllocationID: allocationID, StartedAt: start.Add(-time.Minute), ProviderType: "microsandbox"}
 	for name, mutate := range map[string]func(*Result){
 		"cross tenant":            func(result *Result) { result.Series[0].TenantID = "55555555-5555-4555-8555-555555555555" },
 		"noncanonical allocation": func(result *Result) { result.Series[0].AllocationID = "urn:uuid:" + allocationID },

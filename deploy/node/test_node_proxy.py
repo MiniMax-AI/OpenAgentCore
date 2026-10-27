@@ -205,7 +205,7 @@ class NodeProxyTests(unittest.TestCase):
         self.assertEqual(installer.service_environment({"no_proxy": "internal.invalid"}), "")
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "node.env"
-            unit = installer.system_unit(Path("/var/lib/oac-node/.oac/nodes/fixture"), "docker", path)
+            unit = installer.system_unit(Path("/var/lib/oac-node/.oac/nodes/fixture"), "microsandbox", path)
             self.assertIn("EnvironmentFile=-" + str(path) + "\n", unit)
             self.assertNotIn("private", unit)
             self.assertTrue(installer.write_service_environment(path, content))

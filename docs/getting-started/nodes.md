@@ -2,7 +2,7 @@
 title: "Add and manage nodes"
 ---
 
-A node is a Linux host that runs sandboxes for Core-hosted Sessions. This guide is for operators who add, change and remove nodes when the sandbox backend (see [Choose a sandbox backend](./sandbox-backends.md)) is microsandbox or Docker; E2B needs no nodes.
+A node is a Linux host that runs sandboxes for Core-hosted Sessions. This guide is for operators who add, change and remove nodes when the sandbox backend (see [Choose a sandbox backend](./sandbox-backends.md)) is microsandbox; E2B needs no nodes.
 
 Core places each new Session on a node with free capacity; the node creates the sandbox, and the sandbox connects back to Core. Machines that applications connect for their own Sessions are [self-hosted executors](./self-hosted.md), not nodes. You add a node by generating a command in Web and running it on the host. The [sandbox deployment contract](../../contracts/agents-api/sandbox-deployment.md) defines the sandbox settings and their change rules, and the [node protocol](../../contracts/agents-api/node-generation-protocol.md) defines how nodes prepare and keep Runtime generations.
 
@@ -21,15 +21,14 @@ The Core host joins like any other host: to run sandboxes on it, add it as a nod
 
 - Linux amd64 with systemd; Python 3.9+, `curl`, `sha256sum` and `flock`; root or sudo.
 - SELinux not enforcing. The installer does not support hosts with enforcing SELinux.
-- Docker: rootful Docker Engine running, its socket `/var/run/docker.sock` owned by the `docker` group with mode `0660`, enforcing CPU and memory limits (cgroup v2).
-- microsandbox: `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
-- CPUs and memory for at least one sandbox of the installation's size, and about 3 GB of free disk while the Runtime image installs: its download and unpacked copy sit under `/var/lib/oac-node` until the import finishes, and the image takes about 1.5 GB in Docker's storage or the microsandbox store. The installer checks the space before it downloads and deletes the archives after the import, so the node keeps the image and under 0.2 GB of programs.
+- `/dev/kvm` in the `kvm` group (hardware or nested virtualization), and the libraries microsandbox links (glibc).
+- CPUs and memory for at least one sandbox of the installation's size, and about 3 GB of free disk while the Runtime image installs: its download and unpacked copy sit under `/var/lib/oac-node` until the import finishes, and the image takes about 1.5 GB in the microsandbox store. The installer checks the space before it downloads and deletes the archives after the import, so the node keeps the image and under 0.2 GB of programs.
 - Access to the console and Core at the public URL; sandboxes reach Core too.
 
 ## Add a node
 
 1. In Web, open **Nodes** and choose **Add node**.
-2. Keep **Recommended** limits, or choose **Custom** and set **Sandboxes at once** and, with microsandbox, **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). **Edit node** shows the recommendation for the host and fills it in with **Use recommended**.
+2. Keep **Recommended** limits, or choose **Custom** and set **Sandboxes at once** and **Retained sandboxes**: the node's [capacity](../configuration.md#node-capacity). **Edit node** shows the recommendation for the host and fills it in with **Use recommended**.
 3. Choose **Generate command** and copy the command. It registers one node, once, and only if it runs within an hour; Web counts down and offers **Generate new command** when it expires.
 4. Run it on the host. Web follows the node from registered to connected to ready.
 
@@ -62,17 +61,14 @@ The node service keeps the proxy settings of the latest run, so it reaches Core 
 | Item | Detail |
 | --- | --- |
 | Service user | System user `oac-node` with UID 65532, the UID of Core's service, home `/var/lib/oac-node` and no login shell. An existing account with that UID, that home and a nologin shell is adopted; any other account named `oac-node` is refused. If another account holds UID 65532, the installer stops and changes nothing |
-| Group | The group that owns `/var/run/docker.sock` (Docker) or `/dev/kvm` (microsandbox): `docker` or `kvm`, nothing else |
+| Group | The group that owns `/dev/kvm`: `kvm`, nothing else |
 | Service | `/etc/systemd/system/oac-node-<installation-id>.service`, a root-owned system unit with `User=oac-node`, enabled at boot. It restarts every 5 seconds while Core is unreachable and stops for good once Core no longer accepts the node |
 | Node state | `/var/lib/oac-node/.oac/nodes/<installation-id>/`: identity, configuration, node files. microsandbox keeps its images and sandboxes under `/var/lib/oac-node/.oac/m/` |
 | Records | `/etc/oac-node/`: what the installer created or changed, used by reruns and uninstall, and the service's proxy settings |
-| Docker | The Runtime image, imported once, and a network `oac-node-<installation-id>` |
+| Runtime image | Imported once into the microsandbox store |
 | microsandbox network policy | Sandboxes may reach Core, DNS on the host and public addresses, and nothing else: no inbound connections and no private networks |
 
-Root only prepares the account, the group and the unit; everything else, the Docker network included, runs as `oac-node`, in its own session without a terminal. The installer never installs Docker, KVM or packages, never starts Docker, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts. The node connects out to Core; Core needs no SSH or Docker TCP access to the host.
-
-> [!CAUTION]
-> Docker mode is root-equivalent. Membership in the `docker` group lets `oac-node`, and so anything that controls the node, act as root on the host, and containers share the host kernel. Add Docker nodes only on hosts dedicated to sandboxes. microsandbox nodes need only the `kvm` group and run each sandbox in its own microVM.
+Root only prepares the account, the group and the unit; everything else runs as `oac-node`, in its own session without a terminal. The installer never installs KVM or packages, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts. The node connects out to Core; Core needs no SSH access to the host.
 
 > [!WARNING]
 > microsandbox sandboxes cannot reach private addresses; see [Sandboxes cannot reach a private endpoint](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint).
@@ -87,7 +83,7 @@ Root only prepares the account, the group and the unit; everything else, the Doc
 - A run that fails before the node registers leaves nothing that Core knows. The next command, even after a configuration change, replaces the earlier attempt's configuration and any downloaded file that no longer matches, keeps the files that match and continues.
 - If the command expires during a slow download, registration fails with `The enrollment command expired or was already used`. The downloaded files are kept: generate a new command in Web and run it, and the download continues where it stopped.
 - Every file shows its progress. Failed or interrupted downloads keep what arrived, and a rerun resumes each partial file where it stopped (`Resuming …`), reuses verified complete files and downloads the rest. If the server cannot resume, the file starts again from the beginning. A transfer that brings less than 64 KiB in a minute stops; check the network and rerun the command.
-- The Docker Runtime image is about 400 MB and the microsandbox files about 500 MB. On a slow link with Docker, load the image first: copy the release's `oac-<commit>-linux-amd64-runtime.tar.gz` asset to the host and run `sudo docker load -i` on it. The installer then finds the exact image and skips the download.
+- The microsandbox files are about 500 MB.
 - Interrupting the installer, or closing its terminal, stops it; run the command again to continue.
 
 ## Logs
@@ -117,9 +113,9 @@ microsandbox includes the host kernel and CPU profile in its checkpoint executio
 1. In Web, open **Nodes** and choose **Remove node** on the node's page, or **Remove** in its list row, then **Confirm removal**. Core refuses while the node still holds sandboxes, snapshots or pending cleanup; let them finish, or archive their Sessions. Removal is permanent: the host can come back only as a new node. Removing every node keeps the sandbox configuration.
 2. Web then shows **Clean up the host** with the uninstall command. Run it on the host. **Clean up a host** on **Nodes** shows the same command at any time, for a host you removed earlier, after a deployment reset retired its node, or for a host that never registered.
 
-Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. If Core is gone, so is Web: run `sudo python3 ~/.oac/node-bootstrap/<sha256>.pyz --uninstall --installation-id <installation-id> --force` on the host, with the installer the original command left in that directory. The installation ID is in the unit name `oac-node-<installation-id>.service` and in `/etc/oac-node/<installation-id>.json`; Web shows it under **Settings** → **Service and deployment** → **Installation details**. Uninstall stops and removes the service, the node state, the records, the proxy settings and the Docker network. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added. The output lists what it kept: an adopted account with its home `/var/lib/oac-node`, and the downloaded installers in `~/.oac/node-bootstrap`, which `rm -f ~/.oac/node-bootstrap/*.pyz` removes.
+Uninstall first asks Core, at the address the node enrolled with, whether the node was removed, and refuses while Core still lists it. When the node enrolled with an address other than the current public URL, the dialog also shows **Old Core address gone?**: if that address no longer responds, it gives the command with `--force`, which skips the check; remove the node on the Nodes page first. If Core is gone, so is Web: run `sudo python3 ~/.oac/node-bootstrap/<sha256>.pyz --uninstall --installation-id <installation-id> --force` on the host, with the installer the original command left in that directory. The installation ID is in the unit name `oac-node-<installation-id>.service` and in `/etc/oac-node/<installation-id>.json`; Web shows it under **Settings** → **Service and deployment** → **Installation details**. Uninstall stops and removes the service, the node state, the records and the proxy settings. It deletes the `oac-node` account only if the installer created it and no node remains; an adopted account only loses the groups the installer added. The output lists what it kept: an adopted account with its home `/var/lib/oac-node`, and the downloaded installers in `~/.oac/node-bootstrap`, which `rm -f ~/.oac/node-bootstrap/*.pyz` removes.
 
-It never deletes Docker images or volumes. It keeps the Runtime image and prints the `sudo docker image rm` command. For microsandbox, once Core has confirmed the removal, it also deletes the node's store under `/var/lib/oac-node/.oac/m/` (about 1.5 GB), and with it the created account. With `--force` Core isn't asked, so the store is kept and the output prints the command that deletes it (`sudo -u oac-node rm -rf <store>`); microVMs may still use it, so check `pgrep -u oac-node` first, then rerun uninstall to finish removing the account. The output lists what was deleted and what was kept. Uninstall can be rerun until it completes.
+Once Core has confirmed the removal, uninstall also deletes the node's store under `/var/lib/oac-node/.oac/m/` (about 1.5 GB), and with it the created account. With `--force` Core isn't asked, so the store is kept and the output prints the command that deletes it (`sudo -u oac-node rm -rf <store>`); microVMs may still use it, so check `pgrep -u oac-node` first, then rerun uninstall to finish removing the account. The output lists what was deleted and what was kept. Uninstall can be rerun until it completes.
 
 ## When a node host fails
 
@@ -135,12 +131,12 @@ When a node is online but its sandbox provider is not ready, **Nodes** and **Ove
 
 Each code is a Provider-neutral class; the local error behind it stays on the node. Rerun the command on the host: the installer checks the host requirements first and names what to fix ([Installer messages](./troubleshooting.md#installer-messages)).
 
-A node reports only its first failed check, in this order: the Docker daemon or KVM, Docker's limit support, host capacity, then the installed Runtime files. An unreachable Docker daemon therefore hides a missing image. The next preparation attempt after a fix clears or replaces the code.
+A node reports only its first failed check, in this order: KVM, host capacity, then the installed Runtime files. Missing KVM access therefore hides a missing image. The next preparation attempt after a fix clears or replaces the code.
 
 | Code | Help tip | Cause | Fix |
 | --- | --- | --- | --- |
-| `provider_unavailable` | Sandbox provider unavailable | The provider's service is unreachable or fails a request, such as a stopped Docker daemon, or a failure without a class | Rerun the node's command |
-| `host_unsupported` | Host unsupported | The host lacks a capability the provider requires, such as Docker CPU and memory limits (cgroup v2) or read-write access to `/dev/kvm` | Rerun the node's command |
+| `provider_unavailable` | Sandbox provider unavailable | The provider's service is unreachable or fails a request, or a failure without a class | Rerun the node's command |
+| `host_unsupported` | Host unsupported | The host lacks a capability the provider requires, such as read-write access to `/dev/kvm` | Rerun the node's command |
 | `capacity_insufficient` | Host too small | The host has fewer CPUs or less memory than one sandbox | Use a larger host, or change the sandbox size |
 | `runtime_image_unavailable` | Runtime image missing | The provider does not have the installation's Runtime image | Rerun the node's command to download it again; otherwise load the image from the matching release |
 | `artifacts_unavailable` | Provider files missing | A pinned provider file, such as the microsandbox Runtime, firmware or helper, is missing or fails its SHA-256 check | Rerun the node's command to download the missing files; otherwise restore them from the matching release |

@@ -7,13 +7,15 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 	"github.com/google/uuid"
 )
 
 func validRegistrationSpec() sandbox.DeploymentSpec {
 	return sandbox.DeploymentSpec{
-		Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048},
+		Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024},
+		Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true},
 	}
 }
 
@@ -54,7 +56,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 		{"incomplete operations", func(a *Adapter) { a.Operations = func() providercontract.Operations { return nil } }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			a := registry.adapters["docker"]
+			a := registry.adapters["microsandbox"]
 			a.BuildLocal = func(sandbox.NodeConfig, sandbox.LocalOptions, *sandbox.Built) (func(), error) {
 				t.Fatal("called local constructor")
 				return nil, nil
@@ -89,7 +91,7 @@ func TestRegistrationRejectsBeforeCallbacksOrConstruction(t *testing.T) {
 					return err
 				}},
 				{"direct build", func() error { _, err := registry.BuildDirect(sandbox.DirectConfig{Selection: selection}); return err }},
-				{"binding", func() error { return ValidateBinding(a, &docker.Provider{}) }},
+				{"binding", func() error { return ValidateBinding(a, &microsandbox.Provider{}) }},
 				{"projection", func() error {
 					python, typescript, err := registry.DeploymentContract()
 					if python != "" || typescript != "" {
@@ -118,14 +120,14 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	}
 	const kind = "new-test-provider"
 	calls, closes := 0, 0
-	options := sandbox.LocalOptions{GenerationStateDirectory: t.TempDir()}
-	a := registry.adapters["docker"]
+	options := sandbox.LocalOptions{GenerationStateDirectory: t.TempDir(), Workspace: unreachableWorkspaceResolver{}}
+	a := registry.adapters["microsandbox"]
 	a.BuildLocal = func(_ sandbox.NodeConfig, got sandbox.LocalOptions, built *sandbox.Built) (func(), error) {
 		calls++
 		if got != options {
 			t.Fatalf("construction options = %+v, want %+v", got, options)
 		}
-		built.Provider = &docker.Provider{}
+		built.Provider = &microsandbox.Provider{}
 		return func() { closes++ }, nil
 	}
 	registry.adapters[kind] = a
@@ -142,7 +144,7 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 	a.Mode, a.BuildLocal, a.NodeArtifacts = "direct", nil, nil
 	a.BuildDirect = func(sandbox.DirectConfig) (sandbox.SandboxProvider, error) {
 		calls++
-		return &docker.Provider{}, nil
+		return &microsandbox.Provider{}, nil
 	}
 	registry.adapters[kind] = a
 	p, err := registry.BuildDirect(sandbox.DirectConfig{Selection: sandbox.Selection{Provider: kind}})
@@ -155,8 +157,8 @@ func TestCompleteRegistrationsPreserveConstruction(t *testing.T) {
 }
 
 func TestRegistrationRejectsInvalidDefaultResources(t *testing.T) {
-	a := Builtin().adapters["docker"]
-	a.Policy.DefaultResources = &sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024}
+	a := Builtin().adapters["microsandbox"]
+	a.Policy.DefaultResources = &sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1}
 	if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal(err)
 	}
@@ -183,7 +185,7 @@ func TestSetupDeclarationMustMatchRequirements(t *testing.T) {
 			a.Setup.Presets = []sandbox.SetupPreset{{Label: "x", Values: map[string]string{"unknown": "x"}}}
 		},
 	} {
-		a := registry.adapters["docker"]
+		a := registry.adapters["microsandbox"]
 		change(&a)
 		if err := ValidateRegistration(a); !errors.Is(err, providercontract.ErrContract) {
 			t.Fatalf("%s: %v", name, err)

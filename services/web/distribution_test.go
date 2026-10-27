@@ -84,7 +84,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 		}
 	}
 	artifacts := map[string]any{}
-	for _, logical := range []string{"native/bin/oac-node", "images/runtime.tar.gz", "native/microsandbox/msb", "runtime/seccomp.json"} {
+	for _, logical := range []string{"native/bin/oac-node", "images/runtime.tar.gz", "native/microsandbox/msb"} {
 		artifacts[logical] = map[string]any{"filename": strings.ReplaceAll(logical, "/", "-"), "size": len("runtime-bytes")}
 	}
 	release := publishedPayload(t, payload, map[string]any{"artifacts": artifacts})
@@ -100,7 +100,7 @@ func TestConsoleReportsServableNodeProviders(t *testing.T) {
 	}
 	defer h.Close()
 	server := serveSignedIn(t, h)
-	if _, body := responseBody(t, server, consoleRequest(t, server, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":["docker"]`) {
+	if _, body := responseBody(t, server, consoleRequest(t, server, "GET", "/console/config")); !strings.Contains(body, `"node_artifacts":[]`) {
 		t.Fatal("microsandbox reported without its helper and firmware:", body)
 	}
 	request := consoleRequest(t, server, "GET", "/node-install/artifacts/images-runtime.tar.gz")

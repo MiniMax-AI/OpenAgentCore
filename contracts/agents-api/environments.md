@@ -8,7 +8,7 @@ Related owners:
 
 - [Environment files](./environment-files.md): the Files API on a live workspace.
 - [Executor credentials](./environment-executor-credentials.md): enrollment, the installation grant and connection status of a `self_hosted` machine.
-- [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (E2B, Docker or microsandbox) hosts `openai_hosted` Environments.
+- [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (E2B or microsandbox) hosts `openai_hosted` Environments.
 - [Core–Runtime protocol](../../docs/runtime-protocol.md): the `runtime_prepare` transfer and every other wire message.
 - [Runtime and outer isolation](../../docs/concepts.md#runtime-and-outer-isolation): the daemon runs tools with its launching user's permissions; isolation comes from the outer Environment.
 
@@ -71,7 +71,7 @@ Both placements run the same Runtime: the daemon, the selected Harness, native t
 
 ### Hosted (`openai_hosted`)
 
-The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
+The deployment's configured Sandbox Provider (E2B or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
 
 - Session creation, with or without initial input, commits the Session, Environment and retry identity before the Worker provisions compute. A creation interrupted before bootstrap is recovered without repeating the Provider's Create.
 - Provisioning needs no caller action; the Session stays idle until a Turn starts.

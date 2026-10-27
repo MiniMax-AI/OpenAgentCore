@@ -37,7 +37,7 @@ func TestOnlineNodeArtifactsRedirectWithoutLocalPayload(t *testing.T) {
 	}
 	defer payload.Close()
 	h := &console{nodePayload: payload}
-	if got := strings.Join(h.nodeArtifacts(), ","); got != "docker,microsandbox" {
+	if got := strings.Join(h.nodeArtifacts(), ","); got != "microsandbox" {
 		t.Fatal(got)
 	}
 	name := manifest.Artifacts["images/runtime.tar.gz"].Filename

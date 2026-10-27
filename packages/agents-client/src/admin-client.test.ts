@@ -435,7 +435,7 @@ describe("AdminClient project monitoring", () => {
   it("retains the project label on global Runtime observations", async () => {
     const observation = {
       id: sessionId, object: "agent.runtime_observation", session_id: sessionId, environment_id: resourceId,
-      mode: "openai_hosted", provider_type: "docker",
+      mode: "openai_hosted", provider_type: "microsandbox",
       instance: { kind: "managed_allocation", allocation_id: resourceId, device_id: keyId, connection_generation: null },
       lifecycle_state: "active", status: "observed", reason: null,
       allocation_created_at: 10, resolved_at: 30, observed_at: 20, started_at: 10,

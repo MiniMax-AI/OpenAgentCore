@@ -37,7 +37,7 @@ func resetTx(t *testing.T, stored Record, resources Resources, source adminaudit
 }
 
 func resetting(t *testing.T, installation string, clear ResetMode, requestedAt time.Time, deadline *time.Time) Record {
-	d := webDeployment(t, installation, "docker", 4)
+	d := webDeployment(t, installation, "microsandbox", 4)
 	d.Reset = &ResetState{Clear: string(clear), RequestedAt: requestedAt, DeadlineAt: deadline}
 	return d
 }
@@ -45,7 +45,7 @@ func resetting(t *testing.T, installation string, clear ResetMode, requestedAt t
 func TestStartResetDecisions(t *testing.T) {
 	installation := uuid.NewString()
 	admin := adminaudit.WithSource(t.Context(), adminaudit.Source{CredentialID: "admin"})
-	idle := webDeployment(t, installation, "docker", 4)
+	idle := webDeployment(t, installation, "microsandbox", 4)
 	unconfigured := idle
 	unconfigured.Provider = ""
 	seconds := func(v int32) *int32 { return &v }
@@ -87,7 +87,7 @@ func TestCancelResetDecisions(t *testing.T) {
 		calls      []string
 	}{
 		"stale generation":  {resetting(t, installation, ResetAuto, time.Now(), nil), 3, ErrConflict, nil},
-		"no running reset":  {webDeployment(t, installation, "docker", 4), 4, nil, nil},
+		"no running reset":  {webDeployment(t, installation, "microsandbox", 4), 4, nil, nil},
 		"cancels the reset": {resetting(t, installation, ResetAuto, time.Now(), nil), 4, nil, []string{"CancelReset", "RecordAudit reset_cancel " + installation}},
 	} {
 		var calls []string
@@ -108,7 +108,7 @@ func TestAdvanceResetDeadlineUsesTheStoredSource(t *testing.T) {
 		stored Record
 		calls  []string
 	}{
-		"no reset":       {webDeployment(t, installation, "docker", 4), nil},
+		"no reset":       {webDeployment(t, installation, "microsandbox", 4), nil},
 		"deadline ahead": {resetting(t, installation, ResetAuto, time.Now(), &future), nil},
 		"already force":  {resetting(t, installation, ResetForce, time.Now(), nil), nil},
 		"deadline passed": {resetting(t, installation, ResetAuto, time.Now(), &past),
@@ -135,7 +135,7 @@ func TestCompleteResetDecisions(t *testing.T) {
 		resources   Resources
 	}{
 		"stale generation":          {running, 3, requestedAt, Resources{}},
-		"no running reset":          {webDeployment(t, installation, "docker", 4), 4, requestedAt, Resources{}},
+		"no running reset":          {webDeployment(t, installation, "microsandbox", 4), 4, requestedAt, Resources{}},
 		"another reset":             {running, 4, requestedAt.Add(time.Second), Resources{}},
 		"owner epoch exhausted":     {exhausted, 4, requestedAt, Resources{}},
 		"resources still allocated": {running, 4, requestedAt, Resources{Allocations: 2, Pending: 1}},

@@ -23,7 +23,6 @@ import volcengine from './assets/logos/volcengine.svg'
 import baiducloud from './assets/logos/baiducloud.svg'
 import digitalocean from './assets/logos/digitalocean.svg'
 import hetzner from './assets/logos/hetzner.svg'
-import docker from './assets/logos/docker.svg'
 import e2b from './assets/logos/e2b.svg'
 
 export const agentLogos = [
@@ -54,6 +53,5 @@ export const computeLogos = [
   { name: 'Baidu AI Cloud', src: baiducloud },
   { name: 'DigitalOcean', src: digitalocean },
   { name: 'Hetzner', src: hetzner },
-  { name: 'Docker', src: docker },
   { name: 'E2B', src: e2b },
 ] as const

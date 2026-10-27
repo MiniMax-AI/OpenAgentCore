@@ -42,7 +42,7 @@ func historyOwner(t *testing.T, pool *pgxpool.Pool) runtimehistory.Scope {
 func historyRecord(scope runtimehistory.Scope, allocation string, started, at time.Time, cpu float64, input uint64) runtimeobs.ExportRecord {
 	capacity := 2.0
 	memory := uint64(512)
-	return runtimeobs.ExportRecord{TenantID: scope.TenantID, SessionID: scope.SessionID, EnvironmentID: scope.EnvironmentID, AllocationID: allocation, Mode: runtimeobs.ModeManaged, ProviderType: "docker", Status: runtimeobs.StatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic, ResolvedAt: at,
+	return runtimeobs.ExportRecord{TenantID: scope.TenantID, SessionID: scope.SessionID, EnvironmentID: scope.EnvironmentID, AllocationID: allocation, Mode: runtimeobs.ModeManaged, ProviderType: "microsandbox", Status: runtimeobs.StatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic, ResolvedAt: at,
 		Sample: &runtimeobs.Sample{ObservedAt: at, StartedAt: &started, CPUUsageSecondsTotal: &cpu, CPUCapacityCores: &capacity, MemoryUsageBytes: &memory}, TokenUsage: &runtimeobs.TokenUsage{InputTokens: input, OutputTokens: input / 2}}
 }
 func historyQuery(scope runtimehistory.Scope, start, end time.Time, points int) runtimehistory.Query {

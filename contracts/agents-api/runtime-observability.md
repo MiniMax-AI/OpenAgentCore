@@ -18,13 +18,13 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 The resolver (`services/core/internal/deployment/observation.go`) reads the Session, its Environment, the current allocation and the Session's measured usage from the database. A Session, daemon connection, process, container and native Harness Session are different identities and never stand in for one another.
 
-Managed Docker, microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
+Managed microsandbox and E2B allocations are observed. `none` and `self_hosted` Sessions are `unsupported`; Core never attributes shared host statistics to an `environment:none` Session.
 
 Every managed allocation is read through the deployment's selected Sandbox Provider, which verifies the allocation's installation (`provider_key`) and labels or equivalent ownership data before it returns values. Before any provider read, the allocation state decides some rows: `creating` or no allocation yet gives `allocation_pending`, and `cleanup_pending` or `released` gives `runtime_not_running`. A provider read that exceeds its deadline gives `sample_timeout`, a not-running result `runtime_not_running`, and an unavailable result `sample_unavailable`. Any other error, an ownership mismatch or an invalid sample fails the read.
 
 `Observe` belongs to the [Sandbox Provider protocol](../../docs/sandbox-provider.md); `services/core/internal/runtimeobs/source.go` owns the observation types and the `Source` view of a Provider. Core loads the selected Provider and its registered kind once per page and uses that same immutable Provider for every read on that page, reading each running target with `Observe`. Without a selection the load returns typed `ErrUnavailable`, which produces `sample_unavailable` without a provider type. Other load errors follow the provider-read error rules above.
 
-An observation's provider type is that registered kind: `docker`, `microsandbox` or `e2b`. Reconfiguration affects later pages; it cannot change the provider type or Provider selected for an in-flight page. Generation routers continue to resolve each allocation through its recorded deployment generation.
+An observation's provider type is that registered kind: `microsandbox` or `e2b`. Reconfiguration affects later pages; it cannot change the provider type or Provider selected for an in-flight page. Generation routers continue to resolve each allocation through its recorded deployment generation.
 
 ## Sample semantics
 
@@ -39,10 +39,6 @@ A sample carries:
 Every measurement is optional. A present zero is an observed zero; an absent value is unavailable and is never shown or aggregated as zero. Core rejects a sample whose `observed_at` is later than its own clock, whose `started_at` is later than `observed_at`, or whose values are negative, non-finite, a zero capacity or limit, or beyond the JSON safe-integer range.
 
 ## Provider mapping
-
-### Docker
-
-One non-streaming Inspect and Stats read of the owned container. Cumulative CPU time comes from the cgroup counter, memory usage from the current cgroup usage, and CPU and memory capacity from the container's configured limits. The container's `StartedAt` is the incarnation start, so a container restart resets compute uptime. A missing or stopped container is `runtime_not_running`. Disk is null.
 
 ### microsandbox
 

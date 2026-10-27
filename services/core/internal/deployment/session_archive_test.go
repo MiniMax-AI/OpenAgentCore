@@ -16,7 +16,7 @@ import (
 )
 
 func TestCheckArchiveDeployment(t *testing.T) {
-	managed := Record{InstallationID: "installation", Provider: "docker", Generation: 4}
+	managed := Record{InstallationID: "installation", Provider: "microsandbox", Generation: 4}
 	for name, test := range map[string]struct {
 		change func(*Record)
 		want   error
@@ -226,7 +226,7 @@ func archiveOperations(t *testing.T, tx *fakeArchiveTx, locked sessions.LockedSe
 }
 
 func TestArchiveSession(t *testing.T) {
-	managed := Record{InstallationID: "installation", Provider: "docker", Generation: 1}
+	managed := Record{InstallationID: "installation", Provider: "microsandbox", Generation: 1}
 	hosted := &sessions.Environment{ID: "environment", Status: "connected", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
 	expired := &sessions.Environment{ID: "environment", Status: "expired", Configuration: hosted.Configuration}
 	live := &Allocation{ID: "allocation", DeviceID: "device", ProviderKey: "installation", State: "running"}
@@ -282,7 +282,7 @@ func TestArchiveSession(t *testing.T) {
 func TestArchiveResetSession(t *testing.T) {
 	requested := time.Unix(100, 0)
 	resetting := func(clear ResetMode) Record {
-		return Record{InstallationID: "installation", Provider: "docker", Generation: 1, Reset: &ResetState{Clear: string(clear), RequestedAt: requested}}
+		return Record{InstallationID: "installation", Provider: "microsandbox", Generation: 1, Reset: &ResetState{Clear: string(clear), RequestedAt: requested}}
 	}
 	hosted := &sessions.Environment{ID: "environment", Status: "connected", Configuration: json.RawMessage(`{"type":"openai_hosted"}`)}
 	failed := &sessions.Environment{ID: "environment", Status: "failed", Configuration: hosted.Configuration}

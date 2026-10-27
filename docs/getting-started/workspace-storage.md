@@ -4,7 +4,7 @@ title: "Set up workspace storage"
 
 Keep Session workspaces on an NFS filesystem outside the sandbox nodes, with or without per-workspace quotas. microsandbox runs every Environment on this storage, so select it before you configure the microsandbox backend.
 
-The supported combination is microsandbox with the [kernel NFS adapter](../workspace-provider.md#kernel-nfs-adapter). Docker and E2B keep their own disks and do not support it; see [Choose a sandbox backend](./sandbox-backends.md).
+The supported combination is microsandbox with the [kernel NFS adapter](../workspace-provider.md#kernel-nfs-adapter). E2B keeps its own disks and does not support it; see [Choose a sandbox backend](./sandbox-backends.md).
 
 ```mermaid
 flowchart LR

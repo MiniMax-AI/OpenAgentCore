@@ -56,7 +56,7 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
     const digest = scenario === "checksum mismatch" ? "0".repeat(64) : createHash("sha256").update(payload).digest("hex");
     const token = "fixture'one-time";
     try {
-      const command = scenario === "uninstall" ? nodeUninstallCommand({ sourceUrl: "http://localhost:8080", installationId: "fixture-installation", scriptDigest: digest }) : nodeInstallCommand({ token, coreUrl: "http://127.0.0.1:8091", sourceUrl: "http://localhost:8080", provider: "docker", installationId: "fixture-installation", scriptDigest: digest });
+      const command = scenario === "uninstall" ? nodeUninstallCommand({ sourceUrl: "http://localhost:8080", installationId: "fixture-installation", scriptDigest: digest }) : nodeInstallCommand({ token, coreUrl: "http://127.0.0.1:8091", sourceUrl: "http://localhost:8080", provider: "microsandbox", installationId: "fixture-installation", scriptDigest: digest });
       const proxy = "http://fixture:private%20password@proxy.example:3128";
       const proxyEnv: Record<string, string | undefined> = { http_proxy: undefined, https_proxy: undefined, no_proxy: undefined, HTTP_PROXY: undefined, HTTPS_PROXY: undefined, NO_PROXY: undefined, ALL_PROXY: undefined };
       if (["uppercase proxy", "root proxy", "empty proxy"].includes(scenario)) Object.assign(proxyEnv, { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, NO_PROXY: "core.example,localhost" });
@@ -111,7 +111,7 @@ process.exit(process.env.SCENARIO==='installer failure'?7:0);`);
       expect(invocation.stdin).toBe(scenario === "uninstall" ? "" : `${token}\n`);
       expect(invocation.args.some((arg) => arg.includes("one-time"))).toBe(false);
       expect(Object.values(invocation.env).some((value) => value.includes("one-time"))).toBe(false);
-      expect(invocation.args.slice(1)).toEqual(scenario === "uninstall" ? ["--uninstall", "--installation-id", "fixture-installation"] : [...(scenario === "no color" ? ["--no-color"] : []), "--enrollment-token-stdin", "--source-url", "http://localhost:8080", "--core-url", "http://127.0.0.1:8091", "--provider", "docker", "--installation-id", "fixture-installation"]);
+      expect(invocation.args.slice(1)).toEqual(scenario === "uninstall" ? ["--uninstall", "--installation-id", "fixture-installation"] : [...(scenario === "no color" ? ["--no-color"] : []), "--enrollment-token-stdin", "--source-url", "http://localhost:8080", "--core-url", "http://127.0.0.1:8091", "--provider", "microsandbox", "--installation-id", "fixture-installation"]);
       expect(invocation.mode & 0o077).toBe(0);
       if (scenario === "as root" || scenario === "root proxy") {
         expect(readdirSync(root)).not.toContain("sudo.json");

@@ -53,7 +53,7 @@ func TestRestoreAttemptRecoveryUsesExactClosedEvidence(t *testing.T) {
 		t.Run(outcome, func(t *testing.T) {
 			stop := errors.New("native request captured")
 			provider := &restoreAttemptProvider{outcome: outcome, stop: stop}
-			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, true))
+			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t))
 			r, session := f.lifecycle, f.session
 			owner, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
 			if err != nil {
@@ -108,7 +108,7 @@ func TestRestoreAttemptRecoveryUsesExactClosedEvidence(t *testing.T) {
 
 func TestUnusableCheckpointEndsRetentionAndIsNeverRestoredAgain(t *testing.T) {
 	provider := &restoreAttemptProvider{outcome: "unusable"}
-	f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, true))
+	f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t))
 	r, session := f.lifecycle, f.session
 	owner, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
 	if err != nil {
@@ -141,7 +141,7 @@ func TestCheckpointTransferRoutesBeforeTargetIO(t *testing.T) {
 		t.Run(operation, func(t *testing.T) {
 			stop := errors.New("target Resume captured")
 			provider := &restoreAttemptProvider{stop: stop}
-			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, true))
+			f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t))
 			r, session := f.lifecycle, f.session
 			owner, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
 			if err != nil {
@@ -248,7 +248,7 @@ func (p *cleanupReceiptProvider) Suspend(_ context.Context, q sandbox.SuspendReq
 }
 func TestLostCaptureReceiptCanStillBeDeleted(t *testing.T) {
 	p := &cleanupReceiptProvider{}
-	f := workspaceSettlementFixtureWithSetup(t, p, workspaceNodeSetup(t, true))
+	f := workspaceSettlementFixtureWithSetup(t, p, workspaceNodeSetup(t))
 	r, s := f.lifecycle, f.session
 	owner, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID)
 	if err != nil {

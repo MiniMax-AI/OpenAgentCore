@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 52d557886a595276c94f935b22531d84a712ceff0e64bf91e04749eed4366dc1
+source_hash: 6c8a1b26ed3e285a7ef5219d514d954e7c83e08c2d1c244b5669279fcd0b4c8a
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -10,7 +10,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 - [Environment files](environment-files.md)：实时工作区上的 Files API。
 - [执行器凭据](environment-executor-credentials.md)：`self_hosted` 机器的注册、安装授权和连接状态。
-- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（E2B、Docker 或 microsandbox）。
+- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（E2B 或 microsandbox）。
 - [Core–Runtime protocol](../../../docs/zh/runtime-protocol.md)：`runtime_prepare` 传输及所有其他线上消息。
 - [Runtime and outer isolation](../../../docs/zh/concepts.md#runtime-and-outer-isolation)：daemon 使用启动用户的权限运行工具；隔离由外层 Environment 提供。
 
@@ -73,7 +73,7 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
-部署中配置的沙箱提供商（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
+部署中配置的沙箱提供商（E2B 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
 
 - Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行提供商的 Create。
 - 置备无需调用方执行任何操作；在 Turn 启动之前，Session 会保持空闲。

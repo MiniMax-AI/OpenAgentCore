@@ -24,11 +24,12 @@ type auditedDeploymentChanges struct {
 }
 
 func (d auditedDeploymentChanges) UpdateSandboxDeployment(ctx context.Context, input sandbox.Selection) (deployment.View, error) {
+	input.Workspace = SandboxDeploymentTestSpec("microsandbox").Workspace
 	return d.operations.Update(ctx, d.installation, input)
 }
 
 func TestSandboxDeploymentUpdateHTTPCommitsWithAdministratorAudit(t *testing.T) {
-	store, writer, initial, input := webSpecificationFixture(t, "docker")
+	store, writer, initial, input := webSpecificationFixture(t, "microsandbox")
 	changes := auditedDeploymentChanges{strictStandIn{t}, deploymentExecution(t, writer), initial.InstallationID}
 	handler, err := publicHandler(t, store, newTestAuthenticator(t, nil), "codex", func(d *api.Dependencies) { d.Sandboxes.DeploymentChanges = changes })
 	if err != nil {
@@ -38,7 +39,7 @@ func TestSandboxDeploymentUpdateHTTPCommitsWithAdministratorAudit(t *testing.T) 
 		t.Helper()
 		resources := input.Resources
 		resources.CPUs = cpus
-		body, err := json.Marshal(map[string]any{"expected_generation": generation, "provider": "docker", "configuration": map[string]any{}, "resources": resources})
+		body, err := json.Marshal(map[string]any{"expected_generation": generation, "provider": "microsandbox", "configuration": map[string]any{}, "resources": resources})
 		if err != nil {
 			t.Fatal(err)
 		}

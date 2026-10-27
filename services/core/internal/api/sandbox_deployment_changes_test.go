@@ -81,7 +81,7 @@ func TestSandboxMutationErrorsExposeOnlyTypedCoreFacts(t *testing.T) {
 		details string
 	}{
 		{&deployment.GenerationStaleError{CurrentGeneration: 8}, "sandbox_generation_stale", 409, `"current_generation":8`},
-		{&deployment.ResetRequiredError{CurrentProvider: "docker", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`},
+		{&deployment.ResetRequiredError{CurrentProvider: "microsandbox", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"requested_provider":"e2b"`},
 		{&deployment.ResetRequiredError{CurrentProvider: "e2b", RequestedProvider: "e2b"}, "sandbox_reset_required", 409, `"current_provider":"e2b"`},
 		{&deployment.InUseError{Resources: deployment.Resources{Allocations: 2, Pending: 1}}, "sandbox_in_use", 409, `"allocations":2`},
 		{deployment.ErrResetInProgress, "sandbox_reset_in_progress", 409, ""},

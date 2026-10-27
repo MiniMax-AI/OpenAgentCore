@@ -31,7 +31,6 @@ from urllib.parse import urlencode, urlsplit
 import uuid
 
 import distribution
-import host_docker
 import host_microsandbox
 import provider_assets
 import node_spec
@@ -46,7 +45,7 @@ class InstallError(Exception):
 
 # The one place that names the Sandbox Providers: each module prepares its provider's host, and the
 # flow below calls them by the provider Core selected.
-HOSTS = {"docker": host_docker, "microsandbox": host_microsandbox}
+HOSTS = {"microsandbox": host_microsandbox}
 SELF = sys.modules[__name__]
 
 # Sudo mode: run as root, the installer prepares the host itself. The node runs as
@@ -101,8 +100,8 @@ REJECTION = re.compile(rb"node enrollment rejected \(HTTP (\d{3})(?: ([a-z_]{1,6
 # The node program's failed local check before it contacts Core; only its fixed class code is shown.
 READINESS_CHECK = re.compile(rb"local provider readiness check failed \(([a-z_]{1,64})\)")
 READINESS_FAILURES = {
-    "provider_unavailable": "The sandbox provider does not answer on this host, for example because Docker is stopped.",
-    "host_unsupported": "This host lacks a capability the sandbox provider needs, such as Docker CPU and memory limits or read-write access to /dev/kvm.",
+    "provider_unavailable": "The sandbox provider does not answer on this host, for example because the host service is stopped.",
+    "host_unsupported": "This host lacks a capability the sandbox provider needs, such as read-write access to /dev/kvm.",
     "capacity_insufficient": "This host is too small for one sandbox.",
     "runtime_image_unavailable": "The sandbox provider does not have the Runtime image.",
     "artifacts_unavailable": "A sandbox provider file is missing or fails its checksum.",
@@ -212,7 +211,7 @@ def metadata(source):
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", manifest.get("images", {}).get("runtime", ""))):
         raise InstallError("Unsupported node distribution")
     distribution.image_identities(manifest, "runtime")
-    for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items if item["role"] != "policy"):
+    for name in dict.fromkeys(item["path"] for items in provider_assets.CATALOG.values() for item in items):
         distribution.artifact(manifest, name)
     # Metadata stays on the console; artifact requests may redirect to the release.
     manifest["artifact_base_url"] = source + "/node-install/artifacts"
@@ -262,26 +261,6 @@ def file_digest(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             result.update(block)
     return result.hexdigest()
-
-
-def download(source, name, root, expected, replace=False):
-    target = root / name
-    safe_directory(target.parent)
-    if existing_file(target):
-        if file_digest(target) == expected:
-            return
-        if not replace:
-            raise InstallError("Installed node payload differs; refusing to overwrite it")
-        target.unlink()
-    with distribution.temporary_file(target) as temporary:
-        with os.fdopen(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as output, fetch(source, name) as response:
-            for block in iter(lambda: response.read(1024 * 1024), b""):
-                output.write(block)
-        if file_digest(Path(temporary)) != expected:
-            raise InstallError("Node payload checksum mismatch: " + name)
-        os.replace(temporary, target)
-    if name.startswith("native/"):
-        os.chmod(target, 0o700)
 
 
 def drop_runtime_archives(root):
@@ -352,11 +331,10 @@ def require_disk(root, args, manifest, names):
     Provider's store may then keep more unpacked copies under the same disk."""
     needed = 0
     for name in names:
-        if name != "runtime/seccomp.json":
-            entry = distribution.artifact(manifest, name)
-            target = root / name
-            if not (target.is_file() and distribution.matches(target, entry)):
-                needed += entry["size"] - distribution.resumable(distribution.partial_path(target), entry["size"])
+        entry = distribution.artifact(manifest, name)
+        target = root / name
+        if not (target.is_file() and distribution.matches(target, entry)):
+            needed += entry["size"] - distribution.resumable(distribution.partial_path(target), entry["size"])
     host = HOSTS[args.provider]
     if not host.runtime_imported(SELF, root, args, manifest):
         archive = distribution.artifact(manifest, "images/runtime.tar.gz")
@@ -376,9 +354,7 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
     """Download and verify the payload, prepare the Runtime and register; not the service."""
     install_display.step("Downloading and verifying node files")
     manifest, sums = metadata(args.source_url)
-    names = provider_assets.artifacts(args.provider, ("node", "runtime", "policy"))
-    if "runtime/seccomp.json" not in sums:
-        raise InstallError("The distribution is missing required node checksums")
+    names = provider_assets.artifacts(args.provider, ("node", "runtime"))
     state = {"installation_id": args.installation_id, "provider": args.provider, "core_url": args.core_url,
              "source_commit": manifest["source_commit"], "generation": args.configuration["generation"],
              "specification_digest": args.configuration["specification_digest"]}
@@ -388,14 +364,11 @@ def register_node(root, args, token, helper_archive=None, *, secret_path):
     require_disk(root, args, manifest, names)
     write_once(root / "installation.json", json_text(state))
     for name in names:
-        if name == "runtime/seccomp.json":
-            download(args.source_url, name, root, sums[name], replace=args.disposable)
-        else:
-            target = root / name
-            safe_directory(target.parent)
-            existing_file(target)
-            distribution.obtain_artifact(manifest, name, target, args.disposable)
-            os.chmod(target, 0o700)
+        target = root / name
+        safe_directory(target.parent)
+        existing_file(target)
+        distribution.obtain_artifact(manifest, name, target, args.disposable)
+        os.chmod(target, 0o700)
     node_generations.install_helper(root, args, SELF, helper_archive)
     safe_directory(root / "state/node")
     lease_identity = {"installation_id": args.installation_id, "generation": args.configuration["generation"],
@@ -799,7 +772,7 @@ def ours(account, recorded_uid=None):
     """The account the installer created or adopted.
 
     It has the service home, a nologin shell, the recorded uid when there is one,
-    neither uid nor gid 0, and no groups besides its own, docker and kvm."""
+    neither uid nor gid 0, and no groups besides its own and kvm."""
     if (account is None or account.pw_dir != str(SERVICE_HOME) or not account.pw_shell.endswith(("nologin", "false"))
             or recorded_uid not in (None, account.pw_uid) or account.pw_uid == 0 or account.pw_gid == 0):
         return False
@@ -830,7 +803,7 @@ def other_node(args, provider):
     """Refuse a second sudo-mode Core on this host, or a second node for this installation.
 
     Sudo-mode nodes share the oac-node account, so one host serves one Core. Retained node
-    state is checked in the invoking user's home and, for Docker, on this engine;
+    state is checked in the invoking user's home;
     other users' homes are not searched or modified."""
     for installation in node_records():
         if installation != args.installation_id:
@@ -857,7 +830,7 @@ def account_plan():
     if account is not None and not ours(account, (record or {}).get("uid")):
         raise InstallError("An account named " + SERVICE_USER + " exists but was not created or adopted by this installer "
                            "(home " + account.pw_dir + ", shell " + account.pw_shell + ", uid " + str(account.pw_uid)
-                           + ", or groups beyond its own, docker and kvm). Rename or remove it, then rerun." + NOTHING_CHANGED)
+                           + ", or groups beyond its own and kvm). Rename or remove it, then rerun." + NOTHING_CHANGED)
     if account is not None and account.pw_uid != SERVICE_UID:
         raise InstallError("The " + SERVICE_USER + " account has UID " + str(account.pw_uid) + ", but it must use UID "
                            + str(SERVICE_UID) + " to match Core. Renumber or remove it, then rerun." + NOTHING_CHANGED)

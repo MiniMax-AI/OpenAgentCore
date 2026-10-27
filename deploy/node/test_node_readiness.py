@@ -20,7 +20,7 @@ class ReadinessTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(dir=base)
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name).resolve()
-        self.args = argparse.Namespace(core_url="https://core.example", provider="docker",
+        self.args = argparse.Namespace(core_url="https://core.example", provider="microsandbox",
                                        installation_id="94be54a1-138c-4f30-bc87-b13686272dbe")
         self.identity = {"node_id": "634d97be-e54d-40f0-9468-ae6b62be85bf", "installation_id": self.args.installation_id,
                          "provider": self.args.provider, "deployment_generation": 1, "specification_digest": "b" * 64}

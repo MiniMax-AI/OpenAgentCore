@@ -1,7 +1,7 @@
 ---
 title: "Harness 协议"
 source: contracts/agents-api/harness-onboarding.md
-source_hash: 9be8782db19e5d68342b751f9b9aeaeac4566e3489320294ca06fcebd422bf78
+source_hash: 258dc7cba6a5b2959d9b7b525ab5a6a9ef4ed53939e44276773b71095467946e
 ---
 
 **Harness** 是一种运行模型和工具循环的原生代理引擎（Codex、Claude Code、MiniMax Code）；**Harness 适配器**将 Runtime 的 Executor 和 Turn 契约转换到该引擎的 SDK 或协议。Harness 协议是 Runtime 与适配器之间的契约：适配器接口及其生命周期义务、声明、注册和验收。本文面向添加或维护 Harness 的开发者。
@@ -36,7 +36,7 @@ flowchart TB
 | 声明 | Harness 的最大能力、放置位置、配置和纯准入限制，由 Core 准入和 Runtime 共同读取 | `internal/harnessconfig/<package>/declaration.go` |
 | Runtime 绑定 | 声明加上发现、已安装工厂和已验证能力 | `apps/daemon/internal/agent/<package>/declaration.go` |
 
-Environment 提供执行资源。受管 E2B、Docker 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管提供商仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型提供商负责模型通信设置，而不负责 Turn 调度或原生进程所有权。
+Environment 提供执行资源。受管 E2B 和 microsandbox 机器以及应用自有机器在预配和连接方式上有所不同；已连接的 Runtime 使用同一契约。daemon 运行于 Linux、macOS 和 Windows，受管提供商仅支持 Linux，并且每个适配器自行认定其支持的平台（[self-hosted platforms](../../../docs/zh/getting-started/self-hosted.md#platforms)）。只有在 Runtime 加载绑定的已安装快照后，原生工厂才会收到能力（[capability preparation](environments.md#runtime-capability-preparation)）。模型提供商负责模型通信设置，而不负责 Turn 调度或原生进程所有权。
 
 ## 步骤 {#steps}
 

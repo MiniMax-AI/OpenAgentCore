@@ -23,7 +23,7 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 	if err := changes.Claim(t.Context(), installation); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := changes.Initialize(t.Context(), installation, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("docker"), Provider: "docker"}); err != nil {
+	if _, err := changes.Initialize(t.Context(), installation, sandbox.Selection{DeploymentSpec: SandboxDeploymentTestSpec("microsandbox"), Provider: "microsandbox"}); err != nil {
 		t.Fatal(err)
 	}
 	nodes := deploymentService(t, s)
@@ -32,7 +32,7 @@ func TestManagedSessionArchiveReleasesPendingNodePlacement(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodeID := uuid.NewString()
-	if _, err := nodes.Enroll(t.Context(), token, machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: nodeID, Name: "Archive fixture", Provider: "docker", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}); err != nil {
+	if _, err := nodes.Enroll(t.Context(), token, machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: nodeID, Name: "Archive fixture", Provider: "microsandbox", Credential: strings.Repeat("x", 64), BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}); err != nil {
 		t.Fatal(err)
 	}
 	onlineManagerNode(t, s, nodeID)

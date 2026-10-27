@@ -115,9 +115,9 @@ func TestSetupForSelectionRequiresAReachablePublicURL(t *testing.T) {
 	if err != nil || setup.Provider != "e2b" || setup.Mode != "direct" || setup.InstallationID != id || !setup.UsesCredential {
 		t.Fatalf("E2B with a public URL = %+v, %v", setup, err)
 	}
-	docker := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
-	if setup, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, "http://127.0.0.1:8091").SetupForSelection(id, docker); err != nil || setup.Mode != "nodes" || setup.UsesCredential {
-		t.Fatalf("Docker with a loopback public URL = %+v, %v", setup, err)
+	selection := sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")}
+	if setup, err := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, "http://127.0.0.1:8091").SetupForSelection(id, selection); err != nil || setup.Mode != "nodes" || setup.UsesCredential {
+		t.Fatalf("microsandbox with a loopback public URL = %+v, %v", setup, err)
 	}
 }
 
@@ -146,7 +146,7 @@ func TestUnknownProviderIsRejectedBeforeStorage(t *testing.T) {
 func TestSandboxValidationWrapperPreservesClassification(t *testing.T) {
 	service := newService(t, &fakeStorage{t: t}, &fakeReader{t: t}, testPublicURL)
 	installation := "00000000-0000-4000-8000-000000000001"
-	_, err := service.SetupForSelection(installation, sandbox.Selection{Provider: "docker"})
+	_, err := service.SetupForSelection(installation, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: sandbox.DeploymentSpec{Workspace: testSpecification("microsandbox").Workspace}})
 	var configuration *ConfigurationError
 	if !errors.As(err, &configuration) || !errors.Is(err, ErrInvalidInput) || configuration.Validation == nil || configuration.Validation.Param != "resources.cpus" {
 		t.Fatalf("missing validation metadata: %#v", err)
@@ -177,7 +177,7 @@ func TestRegistryLookupFailuresPropagate(t *testing.T) {
 // configuration the provider no longer decodes is a conflict the administrator
 // resolves by saving again.
 func TestSetupReportsDeclarationsAndStoredConfigurationConflicts(t *testing.T) {
-	stored := webDeployment(t, uuid.NewString(), "docker", 1)
+	stored := webDeployment(t, uuid.NewString(), "microsandbox", 1)
 	reader := &fakeReader{t: t, deployment: func(context.Context) (Record, error) { return stored, nil }}
 	service := newService(t, &fakeStorage{t: t}, reader, testPublicURL)
 	setup, err := service.Setup(t.Context())
@@ -192,13 +192,13 @@ func TestSetupReportsDeclarationsAndStoredConfigurationConflicts(t *testing.T) {
 
 func TestSetupChangeDecisions(t *testing.T) {
 	installation := uuid.NewString()
-	stored := webDeployment(t, installation, "docker", 2)
+	stored := webDeployment(t, installation, "microsandbox", 2)
 	load := func() *fakeDeploymentTx {
 		return &fakeDeploymentTx{t: t, loadDeployment: func() (Record, error) { return stored, nil }}
 	}
-	docker := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker"), ExpectedGeneration: 2}
+	selection := sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox"), ExpectedGeneration: 2}
 
-	stale := docker
+	stale := selection
 	stale.ExpectedGeneration = 1
 	for name, call := range map[string]func(*ExecutionOperations) error{
 		"CheckSetup": func(o *ExecutionOperations) error { return o.CheckSetup(t.Context(), installation, stale) },
@@ -214,7 +214,7 @@ func TestSetupChangeDecisions(t *testing.T) {
 		}
 	}
 
-	switched := sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox"), ExpectedGeneration: 2}
+	switched := sandbox.Selection{Provider: "e2b", Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}, ExpectedGeneration: 2}
 	for name, call := range map[string]func(*ExecutionOperations) error{
 		"CheckSetup": func(o *ExecutionOperations) error { return o.CheckSetup(t.Context(), installation, switched) },
 		"ClassifyChange": func(o *ExecutionOperations) error {
@@ -227,16 +227,16 @@ func TestSetupChangeDecisions(t *testing.T) {
 		},
 	} {
 		var reset *ResetRequiredError
-		if err := call(operations(t, testPublicURL, load())); !errors.As(err, &reset) || reset.CurrentProvider != "docker" || reset.RequestedProvider != "microsandbox" || !errors.Is(err, ErrConflict) {
+		if err := call(operations(t, testPublicURL, load())); !errors.As(err, &reset) || reset.CurrentProvider != "microsandbox" || reset.RequestedProvider != "e2b" || !errors.Is(err, ErrConflict) {
 			t.Errorf("%s switching provider without a reset = %v", name, err)
 		}
 	}
 
-	resolved, unchanged, err := operations(t, testPublicURL, load()).ClassifyChange(t.Context(), installation, docker)
-	if err != nil || !unchanged || resolved.Provider != "docker" || resolved.ExpectedGeneration != 2 {
+	resolved, unchanged, err := operations(t, testPublicURL, load()).ClassifyChange(t.Context(), installation, selection)
+	if err != nil || !unchanged || resolved.Provider != "microsandbox" || resolved.ExpectedGeneration != 2 {
 		t.Fatalf("ClassifyChange of the stored selection = %+v, %v, %v", resolved, unchanged, err)
 	}
-	changed := docker
+	changed := selection
 	changed.Resources.CPUs = 4
 	if _, unchanged, err := operations(t, testPublicURL, load()).ClassifyChange(t.Context(), installation, changed); err != nil || unchanged {
 		t.Fatalf("ClassifyChange of a new specification = %v, %v", unchanged, err)
@@ -247,9 +247,9 @@ func TestSetupChangeDecisions(t *testing.T) {
 // credential error whatever the deployment's state.
 func TestEnrollChecksTheTokenBeforeTheDeployment(t *testing.T) {
 	installation, token := uuid.NewString(), "enrollment-token"
-	current := webDeployment(t, installation, "docker", 1)
-	valid := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "node", Credential: strings.Repeat("n", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
-		DeploymentGeneration: 1, SpecificationDigest: testSpecification("docker").Digest("docker"), CoreURL: testPublicURL}
+	current := webDeployment(t, installation, "microsandbox", 1)
+	valid := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "node", Credential: strings.Repeat("n", 64), Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64),
+		DeploymentGeneration: 1, SpecificationDigest: testSpecification("microsandbox").Digest("microsandbox"), CoreURL: testPublicURL}
 	receipt := EnrollmentRecord{ID: uuid.NewString(), InstallationID: installation, ExpiresAt: time.Now().Add(10 * time.Minute), MaxActive: new(1), MaxRetained: new(1)}
 	resetting := current
 	resetting.Reset = &ResetState{Clear: "sandboxes", RequestedAt: time.Now()}
@@ -348,7 +348,7 @@ func TestAuthenticateNodeChecksTheCredentialFirst(t *testing.T) {
 	}
 	reads := &fakeNodeReads{t: t,
 		loadNode:       func(string) (StoredNode, error) { return stored, nil },
-		loadDeployment: func() (Record, error) { return webDeployment(t, uuid.NewString(), "docker", 1), nil },
+		loadDeployment: func() (Record, error) { return webDeployment(t, uuid.NewString(), "microsandbox", 1), nil },
 	}
 	if _, err := service(reads).AuthenticateNode(t.Context(), nodeID, credential); !errors.Is(err, ErrNodeCredential) {
 		t.Errorf("node of another installation: %v", err)

@@ -151,10 +151,10 @@ func TestInitialE2BPublicTemplateOutsideTeamIsRejected(t *testing.T) {
 
 func TestManagedSetupRoutesProviderWithoutCredentialRequirement(t *testing.T) {
 	s := &managedSetup{}
-	config := &execution.RuntimeProvider{ProviderKind: "docker"}
+	config := &execution.RuntimeProvider{ProviderKind: "microsandbox"}
 	candidate, err := s.routeGenerations(
 		execution.PreparedRuntimeDeployment{Config: config},
-		deployment.Setup{Provider: "docker", Mode: "nodes"},
+		deployment.Setup{Provider: "microsandbox", Mode: "nodes"},
 	)
 	if err != nil || candidate.Config != config || candidate.FenceCredential != nil || candidate.VerifyCredential != nil {
 		t.Fatalf("explicit no-credential provider required credential routing: %v", err)

@@ -64,7 +64,7 @@ function history(overrides: Record<string, unknown> = {}): Record<string, unknow
       environment_id: environmentId,
       allocation_id: allocationId,
       started_at: { seconds: 900, nanoseconds: 0 },
-      provider_type: "docker",
+      provider_type: "microsandbox",
       points: [{
         ...first,
         cpu: { contributor_count: 1, utilization_ratio: 0, capacity_cores: 2 },

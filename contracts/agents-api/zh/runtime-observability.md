@@ -1,7 +1,7 @@
 ---
 title: "Runtime 可观测性"
 source: contracts/agents-api/runtime-observability.md
-source_hash: 0ff8d5a694d934cdc384b859f8192772689c7a5b6599124a2051e978aa7b52d3
+source_hash: b77c76a6b8ed496dab56f3d62deb7f7f61066e0751bc4bd3b5373535b3cc7c05
 ---
 
 这是面向贡献者的契约，规定 Core 如何观测 Runtime 并保留其历史。路由和响应字段见 [Runtime telemetry API](runtime-observability-api.md)。代码位于 `services/core/internal/runtimeobs`（解析、源、采样器和导出）、`services/core/internal/runtimehistory`（历史查询和 PostgreSQL 存储）以及 `services/core/internal/runtimeobs/otlpexporter`。
@@ -20,13 +20,13 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 
 解析器（`services/core/internal/deployment/observation.go`）从数据库中读取 Session、其 Environment、当前分配以及 Session 的实测使用量。Session、守护进程连接、进程、容器和原生 Harness Session 是不同身份，彼此绝不能替代。
 
-托管 Docker、microsandbox 和 E2B 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
+托管 microsandbox 和 E2B 分配均会被观测。`none` 和 `self_hosted` Session 为 `unsupported`；Core 绝不会将共享主机统计信息归属于 `environment:none` Session。
 
 每个托管分配都通过部署所选的沙箱提供商读取；该提供商在返回数值前会验证分配的 installation（`provider_key`）以及分配标签或等效所有权数据。在读取任何提供商之前，部分行的结果由分配状态决定：处于 `creating` 状态或尚无分配时得到 `allocation_pending`，处于 `cleanup_pending` 或 `released` 状态时得到 `runtime_not_running`。提供商读取超出截止时间时得到 `sample_timeout`，返回未运行结果时得到 `runtime_not_running`，返回不可用结果时得到 `sample_unavailable`。任何其他错误、所有权不匹配或无效采样都会使读取失败。
 
 `Observe` 属于 [沙箱提供商协议](../../../docs/zh/sandbox-provider.md)；`services/core/internal/runtimeobs/source.go` 负责观测类型以及提供商的 `Source` 视图。Core 每页只加载一次所选提供商及其注册 kind，并在该页的每次读取中使用同一不可变提供商，用 `Observe` 读取每个运行中的目标。没有选择时，加载返回类型化的 `ErrUnavailable`，从而生成不含提供商类型的 `sample_unavailable`。其他加载错误遵循上述提供商读取错误规则。
 
-观测的提供商类型即该注册 kind：`docker`、`microsandbox` 或 `e2b`。重新配置会影响后续页面，但无法更改正在处理页面所选定的提供商类型或提供商。Generation 路由器仍会通过每个分配记录的部署代次解析该分配。
+观测的提供商类型即该注册 kind：`microsandbox` 或 `e2b`。重新配置会影响后续页面，但无法更改正在处理页面所选定的提供商类型或提供商。Generation 路由器仍会通过每个分配记录的部署代次解析该分配。
 
 ## 采样语义 {#sample-semantics}
 
@@ -41,10 +41,6 @@ none:        tenant_id -> session_id (no Session-owned Runtime instance)
 每项测量都是可选的。存在的零值表示观测到零；缺失值表示不可用，绝不会显示或聚合为零。Core 会拒绝以下采样：`observed_at` 晚于 Core 自身时钟，`started_at` 晚于 `observed_at`，或任一值为负数、非有限值、容量或限制值为零，或超出 JSON 安全整数范围。
 
 ## 提供商映射 {#provider-mapping}
-
-### Docker {#docker}
-
-对所属容器进行一次非流式 Inspect 和 Stats 读取。累计 CPU 时间来自 cgroup 计数器，内存使用量来自当前 cgroup 使用量，CPU 和内存容量来自容器配置的容量限制。容器的 `StartedAt` 是本次计算实例启动周期的开始时间，因此重启容器会重置计算运行时长。容器缺失或已停止时为 `runtime_not_running`。磁盘为 null。
 
 ### microsandbox {#microsandbox}
 

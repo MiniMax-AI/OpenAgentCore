@@ -38,7 +38,7 @@ make build-core-distribution
 
 The build reuses the Core, Web, Runtime, SDK and helper builders. The manifest records the commit and its source tree, image config and OCI manifest digests, the Runtime OCI manifest digest, the microsandbox runtime and firmware hashes, and the size and SHA-256 of every Runtime and node artifact; native installers carry only their SHA-256 in the [catalog](#native-installers). Output is the control archive and its `.sha256`, the optional offline archive, and the versioned Runtime, node and native installer assets. Nothing is published. Rebuilding into a directory that already holds this commit's distribution is refused.
 
-The ingress image carries only `oac` and four node metadata files: `manifest.json`, `SHA256SUMS`, `node-install.pyz` and `runtime/seccomp.json`. The build prepares their manifest from the same Runtime and artifact identities as the distribution, then verifies initialization with networking disabled. The node manifest omits control-plane image identities so it can be packaged before the ingress image itself exists.
+The ingress image carries only `oac` and three node metadata files: `manifest.json`, `SHA256SUMS` and `node-install.pyz`. The build prepares their manifest from the same Runtime and artifact identities as the distribution, then verifies initialization with networking disabled. The node manifest omits control-plane image identities so it can be packaged before the ingress image itself exists.
 
 The control archive carries no Runtime image or node execution artifacts; the offline archive carries them. The [download contract](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#download-contract) describes how nodes obtain them.
 
