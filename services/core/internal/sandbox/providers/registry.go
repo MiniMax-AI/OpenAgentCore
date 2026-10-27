@@ -141,7 +141,7 @@ func (r *Registry) DeploymentContract() (python, typescript string, err error) {
 		}
 		requirements := a.Configuration.Requirements()
 		setup := a.Setup
-		setup.Cautions, setup.Fields, setup.Presets = nonNil(setup.Cautions), nonNil(setup.Fields), nonNil(setup.Presets)
+		setup.Fields, setup.Presets = nonNil(setup.Fields), nonNil(setup.Presets)
 		providers[kind] = sandbox.ProviderProjection{Mode: a.Mode, DeploymentPolicy: a.Policy, Setup: &sandbox.ProviderSetup{SetupDeclaration: setup,
 			Credential: requirements.Credential, PublicOrigin: requirements.PublicOrigin, Discovery: requirements.Discovery.State == providercontract.Supported}}
 	}

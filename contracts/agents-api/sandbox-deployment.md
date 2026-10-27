@@ -70,7 +70,7 @@ Select the filesystem configuration before the microsandbox deployment. Selectin
 | `public` | Boolean. `true` allows public addresses; `false` allows only Core, the model provider and `domains` |
 | `domains` | At most 100 exact host names of at most 253 characters, in lowercase letters, digits, hyphens and dots, whose last label starts with a letter. Wildcards, IP literals, ports and URLs are rejected. Core stores them lowercase, deduplicated and sorted. Every address a name resolves to is allowed, private addresses included |
 
-The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked. Addresses are resolved when a sandbox starts and when it resumes, so a name whose answer changes in between is not followed. A sandbox keeps the cap of the generation that created it.
+The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked, except that E2B cannot block the metadata address 169.254.169.254 and its sandboxes cannot reach private networks at all. Addresses are resolved when a sandbox starts and when it resumes, so a name whose answer changes in between is not followed. A sandbox keeps the cap of the generation that created it.
 
 Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
 

@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 1e6284f09a11fa6ca6ba433537ed2b09135c10e473c4173fd4a6f4ca858e1f0e
+source_hash: 45f9a9c4f99c0e764390d832c547ab1303cacb090fc7159d3fb0e5b5c3b25db8
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox 和 E2B 实现了该协议。
@@ -162,7 +162,7 @@ backend fingerprint 标识原生资源命名空间，不表示容量。Core 保�
 
 ### 发行产物与进程路径 {#distribution-artifacts-and-process-paths}
 
-每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime`、`policy` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 Web catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包、Web availability 和 node 安装读取此投影；添加提供商 payload 不在这些消费者中增加按提供商名称的分支。
+每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 Web catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包、Web availability 和 node 安装读取此投影；添加提供商 payload 不在这些消费者中增加按提供商名称的分支。
 
 launcher 从[派生进程环境](configuration.md)提供 `sandbox.ProcessPaths`。Core 读取这些路径一次，并传给 direct construction 和 setup 操作。它们是固定发行属性，不是部署设置或用户可选 helper 路径。每个 adapter 解析自己的相对 helper 和 state 位置；E2B 使用 `e2b/oac-e2b-provider` 和 `e2b/`。root 缺失或不是绝对路径时，在执行 helper 前失败。提供商构造与发现不读取进程环境变量。
 

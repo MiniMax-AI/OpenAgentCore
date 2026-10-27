@@ -6,7 +6,7 @@ import (
 )
 
 func TestPolicyValidationRejectsPatternsAndAddressSyntax(t *testing.T) {
-	for _, host := range []string{"", "*.example.com", "example.com:443", "https://example.com", "example.com/path", "example.com?x", "example.com#x", "user@example.com", " example.com", "example.com\n", "example..com", "-example.com", "example-.com", "example_com", "127.0.0.1", "::1", "example.com.", "例子.com", strings.Repeat("x", 64) + ".com"} {
+	for _, host := range []string{"", "*.example.com", "example.com:443", "https://example.com", "example.com/path", "example.com?x", "example.com#x", "user@example.com", " example.com", "example.com\n", "example..com", "-example.com", "example-.com", "example_com", "127.0.0.1", "x.1", "::1", "example.com.", "例子.com", strings.Repeat("x", 64) + ".com"} {
 		if (Policy{Access: "restricted", AllowedDomains: []string{host}}).Validate() == nil {
 			t.Fatalf("accepted an unqualified hostname %q", host)
 		}

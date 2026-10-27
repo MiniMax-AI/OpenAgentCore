@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { SandboxDeployment, SandboxSpecification } from "@oac/agents-client";
-import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { HelpTip, Section } from "../../components/console-ui";
 import { useToast } from "../../components/Toast";

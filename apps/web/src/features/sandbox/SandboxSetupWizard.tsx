@@ -3,12 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import * as m from "motion/react-m";
 import { ArrowLeft, ArrowRight, Cloud, ExternalLink, Server, SlidersHorizontal, type LucideIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { HelpTip } from "../../components/console-ui";
-import { Modal } from "../../components/Modal";
 import { useConsoleNavigation } from "../../lib/console-navigation";
 import { coreFieldError } from "../../lib/core-error";
 import { formatBytes } from "../../lib/format";
@@ -73,14 +71,12 @@ function presetOf(provider: SandboxProvider, resources: SandboxResources): Prese
  * which backend (own machines, the recommended one preselected) or the
  * Provider's connection, how big each sandbox is (only for a Provider that
  * declares a default size), then a review. A Provider's setup declaration
- * decides its connection fields, services, cautions and discovered options; the
+ * decides its connection fields, services and discovered options; the
  * Provider's resource declarations decide the size and disk inputs. Advanced
  * settings hold the complete size form.
  * `current` pre-selects the saved choices when a deployment changes. Keeping
  * the backend keeps its saved size; another backend starts from its defaults.
  * An update can retain the saved credential.
- * A Provider that declares cautions takes a confirmation, once per wizard
- * session; a saved deployment has already made it.
  * Core's address is `OAC_PUBLIC_URL`: the review only shows it, and
  * a configuration Core rejects for it is explained here, where it was saved.
  */
@@ -115,9 +111,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
   const [replacementRequested, setReplacementRequested] = useState(false);
   const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmed, setConfirmed] = useState<SandboxProvider | null>(current?.provider ?? null);
-  const [confirming, setConfirming] = useState<SandboxProvider | null>(null);
-  const goBack = useRef<HTMLButtonElement>(null);
   // Core's reason for rejecting the saved configuration, such as a loopback public_url.
   const [rejection, setRejection] = useState<string | null>(null);
   const [fieldRejection, setFieldRejection] = useState<unknown>(null);
@@ -171,14 +164,9 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
     setProvider(next);
   }
 
-  function proceed(next: SandboxProvider) {
-    setConfirming(null);
+  function select(next: SandboxProvider) {
     choose(next);
     setStep(deploymentContract.providers[next].mode === "direct" ? "connection" : "size");
-  }
-  function select(next: SandboxProvider) {
-    if (sandboxProviderSetup(next).cautions.length > 0 && confirmed !== next) setConfirming(next);
-    else proceed(next);
   }
 
   async function save(event?: FormEvent) {
@@ -395,24 +383,6 @@ export function SandboxSetupWizard({ coreUrl, expectedGeneration, current, disab
           {page}
         </m.div>
       </AnimatePresence>
-      {/* Portaled: the sliding page's transform would otherwise contain the fixed backdrop. */}
-      {createPortal(
-        <Modal
-          open={confirming !== null}
-          title={t("Use {{provider}}?", { provider: confirming ? sandboxProviderSetup(confirming).label : "" })}
-          initialFocus={goBack}
-          onClose={() => setConfirming(null)}
-          footer={<>
-            <button type="button" className="button outline" onClick={() => { if (confirming) { setConfirmed(confirming); proceed(confirming); } }}>{t("Use {{provider}}", { provider: confirming ? sandboxProviderSetup(confirming).label : "" })}</button>
-            <button ref={goBack} type="button" className="button primary" onClick={() => setConfirming(null)}>{t("Back")}</button>
-          </>}
-        >
-          <ul className="wizard-cautions">
-            {confirming ? sandboxProviderSetup(confirming).cautions.map((caution: Parameters<typeof text>[0]) => <li key={caution.en}>{text(caution)}</li>) : null}
-          </ul>
-        </Modal>,
-        document.body,
-      )}
     </section>
   );
 }
