@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -19,8 +20,6 @@ import (
 type resolver func(ctx context.Context, host string) ([]netip.Addr, error)
 
 func hostResolver(ctx context.Context, host string) ([]netip.Addr, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
 	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 }
 
@@ -28,21 +27,28 @@ var carrierGradeNAT = netip.MustParsePrefix("100.64.0.0/10")
 
 func isPrivate(a netip.Addr) bool { return a.IsPrivate() || carrierGradeNAT.Contains(a) }
 
+// resolveTimeout bounds all lookups of one egressNetwork call together.
+const resolveTimeout = 5 * time.Second
+
 // egressNetwork builds one allocation's network policy; Create and Resume call
 // it with the same Egress. Rules are first match with default deny:
 //  1. host DNS
 //  2. deny loopback, link-local and metadata
 //  3. each address of the Core host, on its port
-//  4. each private address that an Endpoint or PrivateDomains name resolves to,
-//     without port, because only a port-less address allow lets the guest's DNS
-//     answer pass rebind protection, which stays at its default
+//  4. each private address that a PrivateDomains name resolves to, without
+//     port, because only a port-less address allow lets the guest's DNS answer
+//     pass rebind protection, which stays at its default; Endpoints never
+//     yield private addresses
 //  5. deny every other private address
-//  6. unless Public, a domain allow for each Endpoint, PrivateDomains and
-//     Domains name; only public answers reach it, since rule 5 and rebind
-//     protection already refuse private ones
+//  6. unless Public, a tcp allow on its port for each Endpoint (domain, or a
+//     public IP literal), and a port-less domain allow for each PrivateDomains
+//     and Domains name; only public answers reach a domain allow, since rule 5
+//     and rebind protection already refuse private ones
 //  7. public addresses, when Public
 //
-// A name that does not resolve gets no address rule and is reported to report.
+// Core and PrivateDomains names are resolved together under one deadline. A
+// PrivateDomains name that does not resolve gets no address rule and is
+// reported to report.
 func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, resolve resolver, report io.Writer) (*sdk.NetworkConfig, error) {
 	core, err := url.Parse(coreURL)
 	if err != nil || core.Hostname() == "" {
@@ -55,26 +61,32 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	if _, err := strconv.ParseUint(port, 10, 16); err != nil {
 		return nil, sandbox.ErrInvalid
 	}
-	coreAddresses, err := addresses(ctx, core.Hostname(), resolve)
-	if err != nil {
-		return nil, err
-	}
-	names := slices.Concat(egress.Endpoints, egress.PrivateDomains)
+	names := slices.Concat(egress.PrivateDomains, egress.Domains)
 	slices.Sort(names)
 	names = slices.Compact(names)
-	// Domains resolve to public addresses only, so they need no address rule.
-	allowed := slices.Concat(names, egress.Domains)
-	slices.Sort(allowed)
-	allowed = slices.Compact(allowed)
 
+	ctx, cancel := context.WithTimeout(ctx, resolveTimeout)
+	defer cancel()
+	var wg sync.WaitGroup
+	var coreAddresses []netip.Addr
+	var coreErr error
+	wg.Go(func() { coreAddresses, coreErr = addresses(ctx, core.Hostname(), resolve) })
+	found := make([][]netip.Addr, len(egress.PrivateDomains))
+	failed := make([]error, len(egress.PrivateDomains))
+	for i, name := range egress.PrivateDomains {
+		wg.Go(func() { found[i], failed[i] = addresses(ctx, name, resolve) })
+	}
+	wg.Wait()
+	if coreErr != nil {
+		return nil, coreErr
+	}
 	var private []string
-	for _, name := range names {
-		found, err := addresses(ctx, name, resolve)
-		if err != nil {
+	for i, name := range egress.PrivateDomains {
+		if failed[i] != nil {
 			fmt.Fprintf(report, "unresolved %s\n", name)
 			continue
 		}
-		for _, a := range found {
+		for _, a := range found[i] {
 			if isPrivate(a) {
 				private = append(private, a.String())
 			}
@@ -103,14 +115,22 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	}
 	deny("private")
 	if !egress.Public {
-		for _, name := range allowed {
-			if a, err := netip.ParseAddr(name); err == nil {
-				allow(a.Unmap().String(), "", "")
-			} else if sandbox.ValidDomain(name) {
-				allow(name, "", "")
+		for _, endpoint := range egress.Endpoints {
+			host, p, err := sandbox.SplitEndpoint(endpoint)
+			if err != nil {
+				fmt.Fprintf(report, "unsupported %s\n", endpoint)
+			} else if a, err := netip.ParseAddr(host); err == nil {
+				if a = a.Unmap(); !isPrivate(a) {
+					allow(a.String(), "tcp", strconv.Itoa(p))
+				}
+			} else if sandbox.ValidDomain(host) {
+				allow(host, "tcp", strconv.Itoa(p))
 			} else {
-				fmt.Fprintf(report, "unsupported %s\n", name)
+				fmt.Fprintf(report, "unsupported %s\n", endpoint)
 			}
+		}
+		for _, name := range names {
+			allow(name, "", "")
 		}
 	}
 	if egress.Public {

@@ -63,7 +63,7 @@ Select the filesystem configuration before the microsandbox deployment. Selectin
 
 ### Network
 
-`network` caps what every sandbox of the deployment may reach when its Environment's `network.access` is `enabled` or omitted. The connection to Core and the host of the Session's model provider are always reachable, because the Harness runs inside the sandbox. MCP connections from the Environment follow the cap like any other traffic.
+`network` caps what every sandbox of the deployment may reach when its Environment's `network.access` is `enabled` or omitted. The connection to Core and the Session's model provider port on public addresses are always reachable, because the Harness runs inside the sandbox. To reach a model provider at a private address, list its exact host name in `domains`. MCP connections from the Environment follow the cap like any other traffic.
 
 | Field | Accepted value |
 | --- | --- |

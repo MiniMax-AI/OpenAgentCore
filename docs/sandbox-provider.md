@@ -200,11 +200,11 @@ Core sends the same `Egress` in `Bootstrap` and in every `ResumeRequest`, derive
 - `Public`: public addresses are allowed.
 - `PrivateDomains`: exact host names whose resolved addresses, private ones included, are allowed.
 - `Domains`: exact host names allowed on public addresses only; a private answer stays blocked. They carry a `restricted` Environment's `allowed_domains` when the cap allows the public internet.
-- `Endpoints`: the host of the model provider's `base_url`, omitted when it is loopback. The Harness runs in the sandbox and calls it directly.
+- `Endpoints`: `host:port` entries (`net.JoinHostPort` form) for the model provider's `base_url`, with the port from the URL or 443 for https and 80 for http, omitted when the host is loopback. The Harness runs in the sandbox and calls it directly. An entry allows that TCP port on public addresses only, never a private address. When the cap lists the model host's name in its extra domains, Core also adds that name to `PrivateDomains`, so a private model host keeps working under every policy.
 
-The Provider enforces exactly this on top of the always-allowed connection to Core, and blocks loopback, link-local, cloud-metadata and every private address that `Egress` does not name. It resolves names with its host's DNS when it creates and when it resumes, and cannot follow later changes of an answer. A name that does not resolve gets no rule. MCP traffic has no entry: it follows `Public`, `PrivateDomains` and `Domains`.
+The Provider enforces exactly this on top of the always-allowed connection to Core, and blocks loopback, link-local, cloud-metadata and every private address that `Egress` does not name, except that E2B cannot block the metadata address 169.254.169.254. It resolves names with its host's DNS when it creates and when it resumes, and cannot follow later changes of an answer. A name that does not resolve gets no rule. MCP traffic has no entry: it follows `Public`, `PrivateDomains` and `Domains`.
 
-microsandbox applies the rules with first-match order, default deny, and host DNS reachable; it allows the resolved private addresses without a port so that DNS rebind protection passes them. E2B declares `Restrict` only: `Public` adds a deny list for loopback, private and link-local ranges, and not `Public` denies all traffic except the Core host, `Endpoints` and `Domains`.
+microsandbox applies the rules with first-match order, default deny, and host DNS reachable; it allows the resolved private addresses without a port so that DNS rebind protection passes them. E2B declares `Restrict` only: `Public` adds a deny list for loopback, private and link-local ranges, and not `Public` denies all traffic except the Core host, `Endpoints` and `Domains`. E2B matches a host name only on ports 80 and 443, so the adapter also allows the public IPv4 addresses of the Core host and of each Endpoint on any other port.
 
 ## Checkpoint lifecycle
 

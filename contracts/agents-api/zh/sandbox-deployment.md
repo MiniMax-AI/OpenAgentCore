@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: ad85ff2713327c6b1e171088b84829308a50d6b0bca93cae531252745e3c6b4e
+source_hash: 5afb4db75820cfbadd390409074c94730a559ba86594f8bc40de4796cd174b94
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -66,7 +66,7 @@ microsandbox 会配置 CPU、内存和托管根磁盘，并在挂载于 `/enviro
 
 ### 网络 {#network}
 
-当 Environment 的 `network.access` 为 `enabled` 或省略时，`network` 限定该部署的每个沙箱最多能访问什么。到 Core 的连接和 Session 的模型提供商主机始终可达，因为 Harness 运行在沙箱内。Environment 中的 MCP 连接与其他流量一样遵循该上限。
+当 Environment 的 `network.access` 为 `enabled` 或省略时，`network` 限定该部署的每个沙箱最多能访问什么。到 Core 的连接和 Session 的模型提供商在公开地址上的端口始终可达，因为 Harness 运行在沙箱内。要访问私有地址上的模型提供商，请把其精确主机名列入 `domains`。Environment 中的 MCP 连接与其他流量一样遵循该上限。
 
 | 字段 | 可接受的值 |
 | --- | --- |

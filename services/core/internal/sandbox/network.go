@@ -2,8 +2,10 @@ package sandbox
 
 import (
 	"fmt"
+	"net"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agentnetwork"
@@ -73,7 +75,7 @@ func (n Network) ValidatePolicy(provider string, support NetworkSupport) error {
 }
 
 // Validate checks an Egress a Provider receives: exact host names for
-// PrivateDomains and Domains and non-empty host names or IP addresses for Endpoints.
+// PrivateDomains and Domains and host:port entries for Endpoints.
 func (e Egress) Validate() error {
 	for _, names := range [][]string{e.PrivateDomains, e.Domains} {
 		if len(names) > maxNetworkDomains {
@@ -85,12 +87,22 @@ func (e Egress) Validate() error {
 			}
 		}
 	}
-	for _, h := range e.Endpoints {
-		if h == "" || len(h) > maxDomainLength || strings.ContainsAny(h, "/ \t\r\n") {
-			return ErrInvalid
+	for _, endpoint := range e.Endpoints {
+		if _, _, err := SplitEndpoint(endpoint); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+// SplitEndpoint splits an Egress.Endpoints entry into its host and TCP port.
+func SplitEndpoint(endpoint string) (host string, port int, err error) {
+	host, p, splitErr := net.SplitHostPort(endpoint)
+	port, convErr := strconv.Atoi(p)
+	if splitErr != nil || convErr != nil || host == "" || len(host) > maxDomainLength || port < 1 || port > 65535 || strings.ContainsAny(host, "/ \t\r\n") {
+		return "", 0, ErrInvalid
+	}
+	return host, port, nil
 }
 
 // ValidDomain reports whether name is an exact host name under the deployment

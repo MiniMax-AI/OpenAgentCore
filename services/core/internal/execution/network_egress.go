@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -23,9 +24,6 @@ import (
 // longer covers fails the attempt with the admission error.
 func (r *runtimeLifecycle) allocationEgress(ctx context.Context, owner deployment.Allocation, network sandbox.Network) (sandbox.Egress, error) {
 	session, err := r.sessions.GetSession(ctx, owner.TenantID, owner.SessionID)
-	if errors.Is(err, sessions.ErrNotFound) {
-		return egressFor(network, nil, "")
-	}
 	if err != nil {
 		return sandbox.Egress{}, err
 	}
@@ -57,8 +55,10 @@ func admitNetwork(support sandbox.NetworkSupport, network sandbox.Network, polic
 }
 
 // egressFor applies the cap and the Environment policy. The Harness runs inside
-// the sandbox, so the host of the Session's model provider is always reachable;
-// a loopback host is the sandbox itself and needs no entry. A nil policy equals
+// the sandbox, so the port of the Session's model provider is always reachable
+// on public addresses; a loopback host is the sandbox itself and needs no
+// entry. A model host the cap lists by name also joins PrivateDomains, so a
+// private model host keeps working under every policy. A nil policy equals
 // enabled.
 func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, modelBaseURL string) (sandbox.Egress, error) {
 	egress := sandbox.Egress{Public: network.Public, PrivateDomains: append([]string{}, network.Domains...), Domains: []string{}, Endpoints: []string{}}
@@ -76,16 +76,25 @@ func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, mode
 					Message: fmt.Sprintf("%s is outside the network this deployment allows.", domain)}
 			}
 		}
-		slices.Sort(egress.PrivateDomains)
-		egress.PrivateDomains = slices.Compact(egress.PrivateDomains)
-		slices.Sort(egress.Domains)
-		egress.Domains = slices.Compact(egress.Domains)
 	}
 	if u, err := url.Parse(modelBaseURL); err == nil {
 		if host := strings.ToLower(u.Hostname()); host != "" && !loopbackHost(host) {
-			egress.Endpoints = append(egress.Endpoints, host)
+			port := u.Port()
+			if port == "" {
+				port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
+			}
+			if port != "" {
+				egress.Endpoints = append(egress.Endpoints, net.JoinHostPort(host, port))
+			}
+			if slices.Contains(network.Domains, host) {
+				egress.PrivateDomains = append(egress.PrivateDomains, host)
+			}
 		}
 	}
+	slices.Sort(egress.PrivateDomains)
+	egress.PrivateDomains = slices.Compact(egress.PrivateDomains)
+	slices.Sort(egress.Domains)
+	egress.Domains = slices.Compact(egress.Domains)
 	return egress, nil
 }
 

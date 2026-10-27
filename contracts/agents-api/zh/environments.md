@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: b921c3cde636588da6aebd95d902016fbd4e1a4b4bbbcc8c374540181d5d4ceb
+source_hash: 41335469992a2f5262e73ea7e61d4fb0fd101cab48b844f458e4313d50c50647
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -308,8 +308,8 @@ Core 可以用同一 Project 中较早一次准备的结果启动托管 Environm
 托管 Session 的有效 `network` 在部署的[网络上限](sandbox-deployment.md#network)内收窄，并且该策略在沙箱的整个生命周期内生效，包括包安装和设置命令：
 
 - `enabled`：沙箱可访问上限允许的范围。
-- `disabled`：沙箱只能访问 Core 和 Session 的模型提供商。需要网络的包安装和设置命令按普通设置错误失败。
-- `restricted`：沙箱可访问所列域名、Core 和模型提供商。上限允许公网时，域名在公开地址上被允许；域名属于上限的额外域名时，在其解析出的地址上被允许。其他域名在创建 Session 时被拒绝，错误码为 `sandbox_network_outside_cap`，`param` 指向该 `allowed_domains` 条目。上限之后缩小时，沙箱尝试以同一错误失败。
+- `disabled`：沙箱只能访问 Core 和 Session 的模型提供商。模型提供商仅在公开地址上的 `base_url` 端口可达；私有的模型提供商主机只有在上限的额外域名列出其精确名称时才可达。需要网络的包安装和设置命令按普通设置错误失败。
+- `restricted`：沙箱可访问所列域名、Core 和模型提供商（条件同 `disabled`）。上限允许公网时，域名在公开地址上被允许；域名属于上限的额外域名时，在其解析出的地址上被允许。其他域名在创建 Session 时被拒绝，错误码为 `sandbox_network_outside_cap`，`param` 指向该 `allowed_domains` 条目。上限之后缩小时，沙箱尝试以同一错误失败。
 
 部署的沙箱 Provider 无法限制出站时，`disabled` 和 `restricted` 返回 `sandbox_network_unsupported`。`self_hosted` Environment 只接受 `enabled`，因为 Core 无法在不由它运行的机器上强制策略。
 

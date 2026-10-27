@@ -83,9 +83,10 @@ type Egress struct {
 	// Domains are exact host names the Provider allows on public addresses
 	// only; a private answer for them stays blocked.
 	Domains []string `json:"domains"`
-	// Endpoints are the host names or IP addresses of the Session's model
-	// provider. The Harness runs inside the sandbox and calls them directly, so
-	// every address they resolve to is allowed, private ones included.
+	// Endpoints are host:port entries (net.JoinHostPort form) of the Session's
+	// model provider. The Harness runs inside the sandbox and calls them
+	// directly. Each entry allows that TCP port on public addresses only, never
+	// a private one.
 	Endpoints []string `json:"endpoints"`
 }
 
