@@ -36,7 +36,7 @@ print(json.dumps({'Version':2,'Info':info}))
 	}
 	paths := testProviderPaths(t, helper, state)
 	id := uuid.NewString()
-	old := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true, Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
+	old := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true, Specification: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Configuration: &e2b.DeploymentConfiguration{APIKey: "old-key", Template: "old:" + uuid.NewString()}}
 	current := old
 	current.Generation = 2
 	current.Specification.Resources.CPUs = 4
@@ -145,7 +145,7 @@ print(json.dumps(result))
 			paths := testProviderPaths(t, helper, state)
 			id, build := uuid.NewString(), ":"+uuid.NewString()
 			current := deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", Generation: 1, UsesCredential: true,
-				Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
+				Specification: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}},
 				Configuration: &e2b.DeploymentConfiguration{APIKey: tc.committedKey, Template: tc.committedTemplate + build}}
 			committed := current
 			setups := &fakeDeploymentSetups{t: t, setup: committedSetup(&committed), withCredential: credentialService(t),

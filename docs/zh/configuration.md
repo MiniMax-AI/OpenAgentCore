@@ -1,7 +1,7 @@
 ---
 title: "配置参考"
 source: docs/configuration.md
-source_hash: e06f34fe8629d5de462b5ee1d0f165cb8a278f39872d16a315b04fafbf9467de
+source_hash: 61cd106bf8c463b4f4c8e43133e7f292dd366519ff10f5f98597219076bf8971
 ---
 
 Core 安装的每项设置、其归属位置以及修改方式。安装程序写入初始值；之后请使用本参考。每项设置都恰好只有一个归属位置，分属以下三类：
@@ -62,6 +62,7 @@ Core 安装的每项设置、其归属位置以及修改方式。安装程序写
 | 沙箱提供商：microsandbox 或 E2B | **设置** → **沙箱与调度**：设置向导，最后点击 **保存配置** | `/core/v1/sandbox/deployment` | 每个安装只能使用一个沙箱提供商，在首次登录后选择。要改用其他提供商，必须先执行 **重置部署**；请参阅[更改沙箱配置](getting-started/nodes.md#change-the-sandbox-configuration) |
 | 沙箱大小、E2B 密钥和模板构建 | **设置** → **沙箱与调度** → **修改资源** | `/core/v1/sandbox/deployment` | Web 会推荐 [提供商声明的默认大小](sandbox-provider.md#register-the-provider-kind)。现有沙箱会保留其大小。E2B 密钥仅可写入，并且已加密 |
 | 节点及其容量 | **节点**：**添加节点**、**编辑节点** 和移除 | `/core/v1/sandbox/enrollment-tokens`、`/core/v1/sandbox/nodes` | 请参阅[节点容量](#node-capacity)和[添加和管理节点](getting-started/nodes.md) |
+| 沙箱网络上限 | Web 中没有 | `/core/v1/sandbox/deployment` | `network.public` 和 `network.domains`；参阅[网络](../../contracts/agents-api/zh/sandbox-deployment.md#network)。已有沙箱保持启动时的上限 |
 | 空闲挂起 | **设置** → **沙箱与调度** → **自动挂起** → **空闲多久后挂起（秒）** → **保存** | `PATCH /core/v1/sandbox/deployment` | 整个部署统一生效；参阅[挂起策略](../../contracts/agents-api/zh/sandbox-deployment.md#suspension-policy) |
 | 独立工作区存储和租户容量 | **设置 → 工作区存储** | `/core/v1/workspace-storage` | 参阅[设置工作区存储](getting-started/workspace-storage.md)；现有工作区保留自身配置 |
 | 项目和 API 密钥 | **项目与密钥**：**创建项目**、**改名**、**签发密钥**、**撤销**、**归档** | `/core/v1/projects` | 密钥只显示一次；Core 存储其摘要 |

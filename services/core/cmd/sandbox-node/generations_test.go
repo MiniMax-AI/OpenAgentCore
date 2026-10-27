@@ -100,7 +100,7 @@ func TestGenerationHelperKeepsCancellation(t *testing.T) {
 // Preparation may resolve native state, such as the digest a containerd image
 // store names the loaded Runtime image by; the envelope stays fixed.
 func TestGenerationPlanFixesOnlyTheEnvelope(t *testing.T) {
-	plan := sandbox.NodeConfig{InstallationID: "installation", Generation: 2, Provider: "microsandbox", Specification: sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Native: json.RawMessage(`{"image":"sha256:` + strings.Repeat("b", 64) + `"}`)}
+	plan := sandbox.NodeConfig{InstallationID: "installation", Generation: 2, Provider: "microsandbox", Specification: sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}, Native: json.RawMessage(`{"image":"sha256:` + strings.Repeat("b", 64) + `"}`)}
 	final := plan
 	final.Native = json.RawMessage(`{"image":"sha256:` + strings.Repeat("c", 64) + `"}`)
 	if !sameGenerationPlan(final, plan) {

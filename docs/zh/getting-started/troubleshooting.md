@@ -1,7 +1,7 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: c2d729e1f6d7a0fab71db8a8183ce84f336fa8386f02b521327afaddebfe2f5e
+source_hash: d5191995fac17c30e4d6235b3d5e7d5c91d7d95f8a1600591b5faef8ba7ae3dc
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
@@ -42,9 +42,9 @@ source_hash: c2d729e1f6d7a0fab71db8a8183ce84f336fa8386f02b521327afaddebfe2f5e
 
 ### 沙箱无法访问私有端点 {#sandboxes-cannot-reach-a-private-endpoint}
 
-microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务器，Harness 停止重试后 Turn 失败。沙箱的 DNS 查询发往主机 `/etc/resolv.conf` 中列出的域名服务器，而 DNS rebind 保护会丢弃任何包含私有地址的应答。因此，这些域名服务器解析为私有地址的名称在沙箱内根本无法解析，即使是云 VPC 解析器之后的公共模型 API 这类公共服务也是如此。
+microsandbox 沙箱只能访问模型提供商的主机，以及部署[网络上限](../../../contracts/agents-api/zh/sandbox-deployment.md#network) `domains` 中的名称所对应的私有地址。任何其他解析为私有地址的名称在沙箱内都无法解析，因为 DNS rebind 保护会丢弃该应答，依赖它的 Turn 会在 Harness 停止重试后失败，私有地址上的 MCP 服务器也是如此。
 
-节点没有更改此行为的设置。请让这些域名服务器返回该服务的公共地址。microsandbox 不读取主机的 `/etc/hosts`，因此只有当 `/etc/resolv.conf` 指向提供该条目的本地存根解析器（例如 `127.0.0.53` 上的 systemd-resolved）时，那里的条目才有用。
+用 `PUT /core/v1/sandbox/deployment` 把该服务器的精确主机名加入 `domains`。节点在沙箱启动和恢复时，用主机 `/etc/resolv.conf` 中的域名服务器解析这些名称。无法解析的名称没有规则，节点会记录 `sandbox network names without an address` 并列出这些名称。
 
 ### 连接失败 {#connection-failures}
 

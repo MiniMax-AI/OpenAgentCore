@@ -25,13 +25,12 @@ func generationConfig(t *testing.T) (sandbox.NodeConfig, sandboxmicro.Native) {
 	spec.Resources.RootDiskMiB = 8192
 	spec.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
 	native := sandboxmicro.Native{HelperPath: filepath.Join(dir, "helper"), RuntimeHome: dir, CheckpointRoot: t.TempDir(), RuntimePath: filepath.Join(dir, "msb"), FirmwarePath: filepath.Join(dir, "firmware"),
-		Image: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64),
-		Network: sandboxmicro.Network{DefaultEgress: "allow", DefaultIngress: "deny"}}
+		Image: "oac-runtime@sha256:" + strings.Repeat("d", 64), RuntimeSHA256: strings.Repeat("e", 64), FirmwareSHA256: strings.Repeat("f", 64)}
 	raw, err := json.Marshal(native)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return sandbox.NodeConfig{Provider: "microsandbox", InstallationID: uuid.NewString(), Generation: 9, Specification: spec, Native: raw}, native
+	return sandbox.NodeConfig{Provider: "microsandbox", CoreURL: "https://core.example.com", InstallationID: uuid.NewString(), Generation: 9, Specification: spec, Native: raw}, native
 }
 
 func TestMicrosandboxGenerationDirectoryOwnership(t *testing.T) {

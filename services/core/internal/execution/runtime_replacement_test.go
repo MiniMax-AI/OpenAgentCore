@@ -332,7 +332,7 @@ func workspaceNodeSetup(t *testing.T) func(Owner, *deployment.Service, deploymen
 		if err := owner.Deployment.Claim(t.Context(), installation); err != nil {
 			t.Fatal(err)
 		}
-		specification := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}
+		specification := sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}
 		view, err := owner.Deployment.Initialize(t.Context(), installation, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: specification})
 		if err != nil {
 			t.Fatal(err)

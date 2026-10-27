@@ -14,6 +14,7 @@ import (
 
 func validRegistrationSpec() sandbox.DeploymentSpec {
 	return sandbox.DeploymentSpec{
+		Network:   sandbox.DefaultNetwork(),
 		Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 1024},
 		Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true},
 	}

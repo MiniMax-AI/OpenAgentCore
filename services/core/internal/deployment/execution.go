@@ -147,6 +147,9 @@ func (e *ExecutionOperations) ClassifyChange(ctx context.Context, installation s
 		if err != nil {
 			return err
 		}
+		if input.NetworkOmitted && previous.Provider != "" {
+			input.Network = previous.Specification.Network
+		}
 		resolved, err := e.service.registry.ResolveChange(input, previous.selection())
 		if err != nil {
 			return configurationError(err)

@@ -6,10 +6,8 @@ import json
 import os
 from pathlib import Path
 import shutil
-import socket
 import stat
 import subprocess
-from urllib.parse import urlsplit
 import uuid
 
 import distribution
@@ -142,21 +140,12 @@ def configure(installer, root, args):
 
 
 def native_config(installer, root, args, manifest, runtime_image):
-    endpoint = urlsplit(args.core_url)
-    port = endpoint.port or (443 if endpoint.scheme == "https" else 80)
-    addresses = sorted({entry[4][0] for entry in socket.getaddrinfo(endpoint.hostname, port, type=socket.SOCK_STREAM)})
-    core_rules = [{"action": "allow", "direction": "egress", "destination": address, "protocol": "tcp", "port": str(port)} for address in addresses]
     return {
         "helper_path": str(root / ARTIFACTS[0]), "runtime_path": str(root / ARTIFACTS[1]), "firmware_path": str(root / ARTIFACTS[2]),
         "image": manifest["runtime_ref"], "runtime_sha256": manifest["microsandbox"]["runtime_sha256"],
         "firmware_sha256": manifest["microsandbox"]["firmware_sha256"],
         "runtime_home": str(home(installer, args.installation_id)),
         "checkpoint_root": str(checkpoint_root(args)),
-        "network": {"default_egress": "deny", "default_ingress": "deny", "rules": core_rules + [
-            {"action": "allow", "direction": "egress", "destination": "public"},
-            {"action": "allow", "direction": "egress", "destination": "host", "protocol": "udp", "port": "53"},
-            {"action": "allow", "direction": "egress", "destination": "host", "protocol": "tcp", "port": "53"},
-        ]},
     }
 
 

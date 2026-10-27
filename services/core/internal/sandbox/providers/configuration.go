@@ -74,6 +74,7 @@ func (r *Registry) Normalize(s sandbox.Selection) (sandbox.Selection, error) {
 	if e != nil {
 		return s, e
 	}
+	s.Network = s.Network.Canonical()
 	return a.Configuration.Normalize(s)
 }
 func (r *Registry) ResolveChange(next, previous sandbox.Selection) (sandbox.Selection, error) {
@@ -81,6 +82,7 @@ func (r *Registry) ResolveChange(next, previous sandbox.Selection) (sandbox.Sele
 	if e != nil {
 		return next, e
 	}
+	next.Network = next.Network.Canonical()
 	return a.Configuration.ResolveChange(next, previous)
 }
 func (r *Registry) WithCredential(owner, candidate sandbox.Selection) (sandbox.Selection, error) {

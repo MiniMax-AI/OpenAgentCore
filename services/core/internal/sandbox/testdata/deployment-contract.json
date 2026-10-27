@@ -13,11 +13,15 @@
         "attachment": "host_directory",
         "user_xattr": true,
         "capacity_quota": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
-    "digest": "a0f5348e68e36ff01ffcef3e6c71c5eddfd429f34b440a4b3bb273b8f9eeac94"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"network\":{\"public\":true,\"domains\":[]},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "5681b8aff93025b98b8f1d539cc5427612ae03cf7ce933d3950366c7ac4a15f8"
   },
   {
     "name": "e2b",
@@ -26,11 +30,15 @@
       "resources": {
         "cpus": 1,
         "memory_mib": 512
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"e2b\",\"resources\":{\"cpus\":1,\"memory_mib\":512}}",
-    "digest": "bfedd8252478cfeb7e927ccd9aab6e812e0a35405046db3cf023fe62a869de04"
+    "canonical": "{\"provider\":\"e2b\",\"resources\":{\"cpus\":1,\"memory_mib\":512},\"network\":{\"public\":true,\"domains\":[]}}",
+    "digest": "bfb113d499a2982999297b0831c47f98ccf11faead0fd5f9f6b31a4dc7d80809"
   },
   {
     "name": "cpu-zero",
@@ -44,6 +52,10 @@
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -60,6 +72,10 @@
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -76,6 +92,10 @@
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -92,6 +112,10 @@
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -109,6 +133,10 @@
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -127,6 +155,10 @@
         "attachment": "host_directory",
         "user_xattr": true,
         "capacity_quota": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -146,6 +178,10 @@
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -163,11 +199,15 @@
         "attachment": "host_directory",
         "user_xattr": true,
         "capacity_quota": false
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
-    "digest": "cd31758a8ec9df729120eccd3db650d0f82cb35c4fbd1b1f5b7cf70140ae9faf"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"network\":{\"public\":true,\"domains\":[]},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "79d6a3f68ac1fcc4e4ad4f11edc2f9e3c7f03858c1a29392c2f8097950577b8a"
   },
   {
     "name": "microsandbox-external-requires-root",
@@ -182,6 +222,10 @@
         "attachment": "host_directory",
         "user_xattr": true,
         "capacity_quota": false
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -200,6 +244,10 @@
         "attachment": "host_directory",
         "user_xattr": true,
         "capacity_quota": false
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -217,6 +265,10 @@
         "attachment": "host_directory",
         "user_xattr": false,
         "capacity_quota": false
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -229,6 +281,10 @@
         "cpus": 255,
         "memory_mib": 1048576,
         "root_disk_mib": 1024
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": false
@@ -245,11 +301,15 @@
       "workspace": {
         "attachment": "host_directory",
         "user_xattr": true
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
-    "digest": "cd31758a8ec9df729120eccd3db650d0f82cb35c4fbd1b1f5b7cf70140ae9faf"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"network\":{\"public\":true,\"domains\":[]},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "79d6a3f68ac1fcc4e4ad4f11edc2f9e3c7f03858c1a29392c2f8097950577b8a"
   },
   {
     "name": "microsandbox-external-null-false-quota",
@@ -264,10 +324,255 @@
         "attachment": "host_directory",
         "user_xattr": true,
         "capacity_quota": null
+      },
+      "network": {
+        "public": true,
+        "domains": []
       }
     },
     "valid": true,
-    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
-    "digest": "cd31758a8ec9df729120eccd3db650d0f82cb35c4fbd1b1f5b7cf70140ae9faf"
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024},\"network\":{\"public\":true,\"domains\":[]},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":false}}",
+    "digest": "79d6a3f68ac1fcc4e4ad4f11edc2f9e3c7f03858c1a29392c2f8097950577b8a"
+  },
+  {
+    "name": "microsandbox-network-private-domains",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024,
+        "environment_disk_mib": 4294967295
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
+      },
+      "network": {
+        "public": false,
+        "domains": [
+          "gitlab.example.com",
+          "api.internal"
+        ]
+      }
+    },
+    "valid": true,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"network\":{\"public\":false,\"domains\":[\"api.internal\",\"gitlab.example.com\"]},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "99e7ef956a54ca326b5a061376ce33f44de6832a80ce74747b1515bb1a926c1c"
+  },
+  {
+    "name": "e2b-network-closed",
+    "provider": "e2b",
+    "specification": {
+      "resources": {
+        "cpus": 1,
+        "memory_mib": 512
+      },
+      "network": {
+        "public": false,
+        "domains": []
+      }
+    },
+    "valid": true,
+    "canonical": "{\"provider\":\"e2b\",\"resources\":{\"cpus\":1,\"memory_mib\":512},\"network\":{\"public\":false,\"domains\":[]}}",
+    "digest": "2cd439c0df3e648f23bd428c1c2a6bf13efb7c92959fae83ed460d71fa504e6b"
+  },
+  {
+    "name": "e2b-network-private-domain-rejected",
+    "provider": "e2b",
+    "specification": {
+      "resources": {
+        "cpus": 1,
+        "memory_mib": 512
+      },
+      "network": {
+        "public": true,
+        "domains": [
+          "gitlab.example.com"
+        ]
+      }
+    },
+    "valid": false,
+    "canonical": "{\"provider\":\"e2b\",\"resources\":{\"cpus\":1,\"memory_mib\":512}}",
+    "digest": "bfedd8252478cfeb7e927ccd9aab6e812e0a35405046db3cf023fe62a869de04"
+  },
+  {
+    "name": "network-wildcard-rejected",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024,
+        "environment_disk_mib": 4294967295
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
+      },
+      "network": {
+        "public": true,
+        "domains": [
+          "*.example.com"
+        ]
+      }
+    },
+    "valid": false,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "a0f5348e68e36ff01ffcef3e6c71c5eddfd429f34b440a4b3bb273b8f9eeac94"
+  },
+  {
+    "name": "network-ip-literal-rejected",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024,
+        "environment_disk_mib": 4294967295
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
+      },
+      "network": {
+        "public": true,
+        "domains": [
+          "10.0.0.1"
+        ]
+      }
+    },
+    "valid": false,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "a0f5348e68e36ff01ffcef3e6c71c5eddfd429f34b440a4b3bb273b8f9eeac94"
+  },
+  {
+    "name": "network-too-many-domains",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024,
+        "environment_disk_mib": 4294967295
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
+      },
+      "network": {
+        "public": true,
+        "domains": [
+          "h0.example.com",
+          "h1.example.com",
+          "h2.example.com",
+          "h3.example.com",
+          "h4.example.com",
+          "h5.example.com",
+          "h6.example.com",
+          "h7.example.com",
+          "h8.example.com",
+          "h9.example.com",
+          "h10.example.com",
+          "h11.example.com",
+          "h12.example.com",
+          "h13.example.com",
+          "h14.example.com",
+          "h15.example.com",
+          "h16.example.com",
+          "h17.example.com",
+          "h18.example.com",
+          "h19.example.com",
+          "h20.example.com",
+          "h21.example.com",
+          "h22.example.com",
+          "h23.example.com",
+          "h24.example.com",
+          "h25.example.com",
+          "h26.example.com",
+          "h27.example.com",
+          "h28.example.com",
+          "h29.example.com",
+          "h30.example.com",
+          "h31.example.com",
+          "h32.example.com",
+          "h33.example.com",
+          "h34.example.com",
+          "h35.example.com",
+          "h36.example.com",
+          "h37.example.com",
+          "h38.example.com",
+          "h39.example.com",
+          "h40.example.com",
+          "h41.example.com",
+          "h42.example.com",
+          "h43.example.com",
+          "h44.example.com",
+          "h45.example.com",
+          "h46.example.com",
+          "h47.example.com",
+          "h48.example.com",
+          "h49.example.com",
+          "h50.example.com",
+          "h51.example.com",
+          "h52.example.com",
+          "h53.example.com",
+          "h54.example.com",
+          "h55.example.com",
+          "h56.example.com",
+          "h57.example.com",
+          "h58.example.com",
+          "h59.example.com",
+          "h60.example.com",
+          "h61.example.com",
+          "h62.example.com",
+          "h63.example.com",
+          "h64.example.com",
+          "h65.example.com",
+          "h66.example.com",
+          "h67.example.com",
+          "h68.example.com",
+          "h69.example.com",
+          "h70.example.com",
+          "h71.example.com",
+          "h72.example.com",
+          "h73.example.com",
+          "h74.example.com",
+          "h75.example.com",
+          "h76.example.com",
+          "h77.example.com",
+          "h78.example.com",
+          "h79.example.com",
+          "h80.example.com",
+          "h81.example.com",
+          "h82.example.com",
+          "h83.example.com",
+          "h84.example.com",
+          "h85.example.com",
+          "h86.example.com",
+          "h87.example.com",
+          "h88.example.com",
+          "h89.example.com",
+          "h90.example.com",
+          "h91.example.com",
+          "h92.example.com",
+          "h93.example.com",
+          "h94.example.com",
+          "h95.example.com",
+          "h96.example.com",
+          "h97.example.com",
+          "h98.example.com",
+          "h99.example.com",
+          "h100.example.com"
+        ]
+      }
+    },
+    "valid": false,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "a0f5348e68e36ff01ffcef3e6c71c5eddfd429f34b440a4b3bb273b8f9eeac94"
   }
 ]

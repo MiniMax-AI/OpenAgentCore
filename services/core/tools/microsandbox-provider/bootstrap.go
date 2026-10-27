@@ -52,6 +52,10 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	for key, value := range workspaceLabels(b.q.Workspace) {
 		labels[key] = value
 	}
+	network, e := b.network(ctx, bootstrap.Egress)
+	if e != nil {
+		return wire.Response{}, e
+	}
 	live, e := sdk.CreateSandbox(ctx, c.Name,
 		// Every compatible node holds the pinned image; nothing is ever pulled.
 		sdk.WithImage(b.q.Config.Image), sdk.WithPullPolicy(sdk.PullPolicyNever), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),
@@ -62,7 +66,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 		sdk.WithWorkdir("/"), sdk.WithMounts(map[string]sdk.MountConfig{
 			"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{}),
 		}),
-		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(b.network()),
+		sdk.WithLabels(labels), sdk.WithDetached(), sdk.WithQuietLogs(), sdk.WithNetwork(network),
 		sdk.WithEnv(map[string]string{
 			"HOME": "/home/runtime", "OAC_RUNTIME_HOME": "/home/runtime/.oac",
 		}))

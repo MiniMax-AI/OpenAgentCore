@@ -40,9 +40,9 @@ Add node shows no command: see [Before you add a node](./nodes.md#before-you-add
 
 ### Sandboxes cannot reach a private endpoint
 
-A microsandbox sandbox cannot reach a model provider or MCP server at a private address, and the Turn fails once the Harness stops retrying. Sandbox DNS queries go to the nameservers listed in the host's `/etc/resolv.conf`, and DNS rebind protection discards any answer that contains a private address. A name those nameservers resolve to a private address therefore does not resolve in the sandbox at all, even for a public service such as a model API behind a cloud VPC resolver.
+A microsandbox sandbox reaches a private address only for the model provider's host and for the names in the deployment's [network cap](../../contracts/agents-api/sandbox-deployment.md#network) `domains`. Any other name that resolves to a private address does not resolve in the sandbox, because DNS rebind protection discards the answer, and a Turn that depends on it fails once the Harness stops retrying. This includes an MCP server at a private address.
 
-Nodes have no setting to change this. Make those nameservers return the service's public addresses. microsandbox does not read the host's `/etc/hosts`, so an entry there helps only when `/etc/resolv.conf` points at a local stub resolver that serves it, such as systemd-resolved at `127.0.0.53`.
+Add the server's exact host name to `domains` with `PUT /core/v1/sandbox/deployment`. The node resolves those names with the nameservers in the host's `/etc/resolv.conf` when a sandbox starts and when it resumes. A name that does not resolve there gets no rule, and the node logs `sandbox network names without an address` with the names.
 
 ### Connection failures
 

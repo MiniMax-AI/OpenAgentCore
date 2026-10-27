@@ -17,10 +17,13 @@ type SandboxDeploymentInput struct {
 	// Per-sandbox limits, required for a Provider that declares default
 	// resources. Another Provider may omit them; Core then uses the cpus and
 	// memory_mib of the configuration it validated.
-	Resources     sandbox.Resources `json:"resources"`
-	Provider      string            `json:"provider"`
-	Configuration json.RawMessage   `json:"configuration" swaggertype:"object"`
-	Credential    json.RawMessage   `json:"credential,omitempty" swaggertype:"object"`
+	Resources sandbox.Resources `json:"resources"`
+	// The network cap. Omitted, it is the public internet only on setup and the
+	// current cap on a change.
+	Network       *sandbox.Network `json:"network,omitempty"`
+	Provider      string           `json:"provider"`
+	Configuration json.RawMessage  `json:"configuration" swaggertype:"object"`
+	Credential    json.RawMessage  `json:"credential,omitempty" swaggertype:"object"`
 }
 
 type SandboxDeploymentChangeInput struct {
@@ -33,7 +36,15 @@ func (h *Handler) selection(v SandboxDeploymentInput) (sandbox.Selection, error)
 	if err != nil {
 		return sandbox.Selection{}, err
 	}
-	return sandbox.Selection{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources}, Configuration: c}, nil
+	selection := sandbox.Selection{ExpectedGeneration: *v.ExpectedGeneration, Provider: v.Provider, DeploymentSpec: sandbox.DeploymentSpec{Resources: v.Resources, Network: sandbox.DefaultNetwork()}, Configuration: c}
+	if v.Network != nil {
+		selection.Network = *v.Network
+		if selection.Network.Domains == nil {
+			selection.Network.Domains = []string{}
+		}
+	}
+	selection.NetworkOmitted = v.Network == nil
+	return selection, nil
 }
 
 // DeploymentChanges sets up and updates the sandbox deployment through the
@@ -51,7 +62,7 @@ type DeploymentReset interface {
 }
 
 // @Summary Initialize the deployment sandbox provider
-// @Description Selects a provider and its enforced resource limits. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. A Provider that requires a public origin returns 409 sandbox_configuration_error while the public URL is loopback. Credentials are write-only. A Provider without default resources may omit resources to adopt the validated configuration's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
+// @Description Selects a provider, its enforced resource limits and the network cap. An omitted network is the public internet only. Core derives the deployment's core_url from the installation public URL and rejects a core_url member with 400. A Provider that requires a public origin returns 409 sandbox_configuration_error while the public URL is loopback. Credentials are write-only. A Provider without default resources may omit resources to adopt the validated configuration's CPU and memory, returned in specification.resources. Requires explicit expected_generation, including zero at first setup. Stale retries reject before provider validation. An identical selection at the current generation is a no-op; a differing selection rejects. This does not create compute or execute work.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -66,7 +77,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var input SandboxDeploymentInput
-	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "expected_generation") != nil || input.ExpectedGeneration == nil {
+	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "network", "expected_generation") != nil || input.ExpectedGeneration == nil {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}
@@ -84,7 +95,7 @@ func (h *Handler) initializeSandboxDeployment(w http.ResponseWriter, r *http.Req
 }
 
 // @Summary Change the sandbox deployment configuration
-// @Description Requires the observed generation, the same backend type and no active reset. Credential-holding Providers apply same-account changes online: allocations retain immutable generation and current credentials; an omitted credential preserves it, explicit submission including the same credential verifies and advances generation. Other accounts require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.
+// @Description Requires the observed generation, the same backend type and no active reset. An omitted network keeps the current cap; a changed cap applies to new sandboxes only. Credential-holding Providers apply same-account changes online: allocations retain immutable generation and current credentials; an omitted credential preserves it, explicit submission including the same credential verifies and advances generation. Other accounts require explicit reset. Node providers retain the zero-resource guard and retire old nodes/tokens on change. Core rejects core_url input. Never automatically replay an uncertain write; rollout.state is the authoritative preparation polling signal.
 // @Tags Sandbox Manager
 // @Produce json
 // @Security DeploymentAdminAuth
@@ -99,7 +110,7 @@ func (h *Handler) updateSandboxDeployment(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var input SandboxDeploymentChangeInput
-	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "expected_generation") != nil || input.ExpectedGeneration == nil {
+	if decodeInputObject(raw, &input, "provider", "configuration", "credential", "resources", "network", "expected_generation") != nil || input.ExpectedGeneration == nil {
 		writeDeploymentError(w, r, deployment.ErrInvalidInput)
 		return
 	}

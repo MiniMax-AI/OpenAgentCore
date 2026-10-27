@@ -302,3 +302,18 @@ func TestRejectedChangeLeavesDeploymentUnchanged(t *testing.T) {
 		t.Fatal("committed change was not audited", audit)
 	}
 }
+
+func TestOmittedNetworkKeepsTheStoredCap(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	input := setupE2BSelection()
+	input.Network = sandbox.Network{Public: false, Domains: []string{}}
+	id, view := f.initialize(t, changes, input)
+	omitted := setupE2BSelection()
+	omitted.Network, omitted.NetworkOmitted, omitted.ExpectedGeneration = sandbox.Network{}, true, view.Generation
+	omitted.Configuration = &e2b.DeploymentConfiguration{Template: input.Configuration.(*e2b.DeploymentConfiguration).Template}
+	resolved, _, err := changes.ClassifyChange(t.Context(), id, omitted)
+	if err != nil || resolved.Network.Public || resolved.Network.Domains == nil {
+		t.Fatalf("omitted network did not keep the stored cap: %+v %v", resolved.Network, err)
+	}
+}

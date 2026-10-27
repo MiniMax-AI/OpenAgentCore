@@ -28,7 +28,6 @@ import node_install as installer
 import node_spec
 
 REAL_FETCH = installer.fetch
-REAL_GETADDRINFO = socket.getaddrinfo
 
 
 
@@ -88,7 +87,6 @@ class NodeInstallTests(unittest.TestCase):
                       mock.patch.object(installer.distribution.urllib.request, "build_opener", return_value=mock.Mock(open=self.artifact_response)),
                       mock.patch.object(host_microsandbox, "home", return_value=self.home / "m"),
                       mock.patch.object(host_microsandbox, "capacity", return_value=(64, 256 << 30)),
-                      mock.patch.object(host_microsandbox.socket, "getaddrinfo", side_effect=lambda host, port, **kwargs: REAL_GETADDRINFO(host, port, **kwargs) if host[0].isdigit() else [(2, 1, 6, "", ("203.0.113.5", port))]),
                       mock.patch.object(installer, "fetch", side_effect=lambda source, name: io.BytesIO(self.payloads[name])),
                       mock.patch.object(installer, "checked", side_effect=self.checked),
                       mock.patch.object(installer.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, b"statically linked", b""))):
@@ -102,7 +100,7 @@ class NodeInstallTests(unittest.TestCase):
         resources = {"cpus": self.cpus, "memory_mib": 6144}
         if self.args.provider == "microsandbox":
             resources.update(root_disk_mib=10240)
-        spec = {"resources": resources}
+        spec = {"resources": resources, "network": {"public": True, "domains": []}}
         if self.args.provider == "microsandbox":
             spec["workspace"] = {"attachment": "host_directory", "user_xattr": True, "capacity_quota": False}
         configuration = {"installation_id": self.args.installation_id, "provider": self.args.provider,
@@ -197,16 +195,13 @@ class NodeInstallTests(unittest.TestCase):
             self.assertFalse((self.root / 'provider.json').exists())
             self.assertFalse(any('register' in call or 'enable' in call for call, _ in self.calls))
 
-    def test_microsandbox_imports_image_and_allows_only_explicit_private_core_endpoint(self):
+    def test_microsandbox_imports_image_and_writes_no_network_rules(self):
         self.install()
         config = json.loads((self.root / "provider.json").read_text())["native"]
         # The image and artifact hashes come from the installation's verified manifest.
-        self.assertEqual(set(config), {"helper_path", "runtime_path", "firmware_path", "image", "runtime_sha256", "firmware_sha256", "runtime_home", "checkpoint_root", "network"})
+        self.assertEqual(set(config), {"helper_path", "runtime_path", "firmware_path", "image", "runtime_sha256", "firmware_sha256", "runtime_home", "checkpoint_root"})
         self.assertEqual((config["image"], config["runtime_sha256"], config["firmware_sha256"]),
                          (self.manifest["runtime_ref"], self.manifest["microsandbox"]["runtime_sha256"], self.manifest["microsandbox"]["firmware_sha256"]))
-        rules = config["network"]["rules"]
-        self.assertIn({"action": "allow", "direction": "egress", "destination": "172.29.144.1", "protocol": "tcp", "port": "24443"}, rules)
-        self.assertNotIn("private", [rule["destination"] for rule in rules])
         self.assertTrue(any("--tag" in call and self.manifest["runtime_ref"] in call for call, _ in self.calls))
 
     def test_repeat_preserves_registration_and_recovers_service_start_failure(self):
@@ -313,14 +308,13 @@ class NodeInstallTests(unittest.TestCase):
         self.install()
         self.assertEqual(json.loads((self.root / "registered.json").read_text())["core_url"], "https://core-new.example")
 
-    def test_microsandbox_registration_retry_retains_original_dns_policy(self):
+    def test_microsandbox_registration_retry_retains_original_provider_configuration(self):
         self.fail_registration = True
         with self.assertRaises(installer.InstallError):
             self.install()
         original = (self.root / "provider.json").read_bytes()
         self.fail_registration = False
-        with mock.patch.object(installer.socket, "getaddrinfo", side_effect=OSError("DNS unavailable")):
-            self.install()
+        self.install()
         self.assertEqual((self.root / "provider.json").read_bytes(), original)
         self.assertTrue((self.root / "registered.json").exists())
 

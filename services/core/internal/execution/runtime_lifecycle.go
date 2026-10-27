@@ -273,11 +273,16 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
+	egress, err := r.allocationEgress(ctx, owner, spec.Network)
+	if err != nil {
+		return owner, err
+	}
 	started := time.Now()
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
 		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token,
 		SuspendControl: sandbox.SupportsCheckpoint(provider.ProviderOperations()),
+		Egress:         egress,
 	})
 	logComputeStep(ctx, owner, "create", started, err)
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {

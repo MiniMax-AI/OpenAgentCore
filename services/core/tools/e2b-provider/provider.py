@@ -5,6 +5,7 @@ import json
 import math
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from e2b import Sandbox, SandboxQuery, SandboxState
@@ -77,6 +78,22 @@ def observed(cloud, point):
                     DiskUsed=metric.disk_used if disk_known else None, DiskTotal=metric.disk_total if disk_known else None)
     except Exception:
         return {'Status': 'unavailable'}
+
+
+# E2B sandboxes cannot reach private networks; the deny list closes the ranges
+# a sandbox host could still route to.
+BLOCKED_RANGES = ('127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '169.254.0.0/16',
+                  '::1/128', 'fc00::/7', 'fe80::/10')
+ALL_TRAFFIC = '0.0.0.0/0'
+
+
+def network_options(bootstrap):
+    """The SDK network option for Core's egress: public access, or only Core and the model provider."""
+    egress = bootstrap['Egress']
+    if egress['public']:
+        return {'deny_out': list(BLOCKED_RANGES)}
+    allowed = [urlsplit(bootstrap['CoreURL']).hostname, *egress['endpoints']]
+    return {'deny_out': [ALL_TRAFFIC], 'allow_out': sorted(set(allowed))}
 
 
 class Provider:
@@ -234,7 +251,7 @@ class Provider:
         try:
             cloud = Sandbox.create(template=self.config['Template'], timeout=self.config['TimeoutSeconds'],
                                    metadata=self.metadata, lifecycle={'on_timeout': 'kill', 'auto_resume': False},
-                                   **self.options())
+                                   network=network_options(bootstrap), **self.options())
         except Exception as error:
             if definitely_rejected(error):
                 self.receipt.save(status='rejected', settled=True)
@@ -259,7 +276,7 @@ class Provider:
             raise Failure('template_invalid' if check['ExitCode'] == 78 else 'unconfirmed')
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
-        del payload['CoreURL'], payload['Credential'], payload['SuspendControl']
+        del payload['CoreURL'], payload['Credential'], payload['SuspendControl'], payload['Egress']
         if (set(payload) - set(MANAGED_BOOTSTRAP_FIELDS) or
                 not set(MANAGED_BOOTSTRAP_REQUIRED_FIELDS) <= set(payload)):
             raise Failure('invalid')

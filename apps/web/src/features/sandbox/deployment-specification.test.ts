@@ -4,12 +4,12 @@ import { deploymentContract, type SandboxProvider, type SandboxSpecification } f
 
 describe("deployment resources", () => {
   it("preserves saved resources only for the same provider", () => {
-    const current: SandboxSpecification = { resources: { cpus: 7, memory_mib: 8192 } };
+    const current: SandboxSpecification = { resources: { cpus: 7, memory_mib: 8192 }, network: { public: true, domains: [] } };
     expect(savedSpecification("microsandbox", "microsandbox", current)).toEqual(current);
     expect(savedSpecification("microsandbox", "microsandbox", current)).not.toBe(current);
     expect(savedSpecification("e2b", "microsandbox", current)).toBeNull();
     expect(savedSpecification("microsandbox", "e2b", current)).toBeNull();
-    expect(savedSpecification("e2b", "e2b", { resources: current.resources })).toEqual({ resources: current.resources });
+    expect(savedSpecification("e2b", "e2b", { resources: current.resources, network: current.network })).toEqual({ resources: current.resources, network: current.network });
   });
   it("proposes a copy of each declared default size, which the declared bounds accept", () => {
     for (const provider of Object.keys(deploymentContract.providers) as SandboxProvider[]) {

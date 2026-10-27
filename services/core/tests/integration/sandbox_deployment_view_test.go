@@ -36,7 +36,7 @@ func TestSandboxDeploymentViewRecordsTemplateBuildAndSuspension(t *testing.T) {
 	}
 	raw, _ := json.Marshal(view)
 	for _, want := range []string{
-		`"specification":{"resources":{"cpus":2,"memory_mib":2048}}`,
+		`"specification":{"resources":{"cpus":2,"memory_mib":2048},"network":{"public":true,"domains":[]}}`,
 		`"template_build":{"status":"ready","resources":{"cpus":2,"memory_mib":2048,"root_disk_mib":24063}}`,
 		`"suspension":{"idle_seconds":300,"retention_seconds":86400}`,
 	} {
