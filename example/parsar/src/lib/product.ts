@@ -26,6 +26,7 @@ export interface RuntimeProfile extends NamedResource {
   description?: string;
   packages?: { npm?: string[]; python?: string[] };
   setup_script?: string;
+  network?: { access: "disabled" | "restricted"; allowed_domains?: string[] };
   bot_env?: Record<string, string>;
   env?: Record<string, string | null>;
   prepare?: boolean;
