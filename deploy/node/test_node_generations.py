@@ -20,10 +20,10 @@ class GenerationTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.directory = self.root / "state/node/generations"
         self.directory.mkdir(parents=True, mode=0o700)
-        self.value = {"installation_id": "test-installation", "generation": 1, "provider": "docker", "core_url": "https://core.example/api/v1",
-                      "native": {"image": "sha256:" + "a" * 64, "seccomp_file": str(self.root / "runtime/seccomp.json")},
-                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}}}
-        self.args = SimpleNamespace(installation_id="test-installation", generation=1, specification_digest=node_spec.digest("docker", self.value["specification"]))
+        self.value = {"installation_id": "test-installation", "generation": 1, "provider": "microsandbox", "core_url": "https://core.example/api/v1",
+                      "native": {"image": "sha256:" + "a" * 64},
+                      "specification": {"resources": {"cpus": 1, "memory_mib": 1024}, "network": {"public": True, "domains": []}}}
+        self.args = SimpleNamespace(installation_id="test-installation", generation=1, specification_digest=node_spec.digest("microsandbox", self.value["specification"]))
         node_generations.atomic_json(self.root / "provider.json", self.value)
         self.initialize_lease()
         for patch in (mock.patch.object(node_generations, "owned_root", return_value=(self.root, {"core_url": "https://core.example"})),
@@ -37,8 +37,8 @@ class GenerationTests(unittest.TestCase):
             pass
 
     def next_generation(self, resources):
-        specification = {"resources": resources}
-        configuration = {"installation_id": "test-installation", "provider": "docker", "core_url": "https://core.example", "generation": 2, "specification": specification, "specification_digest": node_spec.digest("docker", specification)}
+        specification = {"resources": resources, "network": {"public": True, "domains": []}}
+        configuration = {"installation_id": "test-installation", "provider": "microsandbox", "core_url": "https://core.example", "generation": 2, "specification": specification, "specification_digest": node_spec.digest("microsandbox", specification)}
         self.args.generation, self.args.specification_digest = 2, configuration["specification_digest"]
         return configuration
 
@@ -86,12 +86,12 @@ class GenerationTests(unittest.TestCase):
     def test_collection_leaves_the_installations_runtime_and_other_generations(self):
         other = dict(self.value, generation=2)
         node_generations.atomic_json(self.directory / "2.json", other)
-        seccomp = self.root / "runtime/seccomp.json"
-        seccomp.parent.mkdir()
-        seccomp.write_text("{}")
+        runtime = self.root / "images/runtime.tar"
+        runtime.parent.mkdir()
+        runtime.write_text("{}")
         node_generations.collect(self.args, installer)
         installer.checked.assert_not_called()
-        self.assertTrue(seccomp.exists())
+        self.assertTrue(runtime.exists())
         self.assertEqual(node_generations.retained_configs(self.root, installer), {2: other})
 
     def test_symlink_and_shared_inode_are_not_collection_authority(self):

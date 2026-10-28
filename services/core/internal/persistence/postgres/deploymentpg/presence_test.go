@@ -25,13 +25,13 @@ func presenceContext(t *testing.T) context.Context {
 	return ctx
 }
 
-// presenceFixture initializes a Docker deployment and enrolls two nodes, neither
+// presenceFixture initializes a microsandbox deployment and enrolls two nodes, neither
 // connected, and returns them with the current owner epoch.
 func presenceFixture(t *testing.T) (fixture, string, string, uint64) {
 	t.Helper()
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	other := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	epoch, err := f.adapter.OwnerEpoch(t.Context())
@@ -229,7 +229,7 @@ func TestNodePresenceDisconnectWaitsForCommit(t *testing.T) {
 func TestNodeStaleEpochCannotReplaceCurrentConnection(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 4})
 	epoch, err := f.adapter.OwnerEpoch(t.Context())
 	if err != nil {
@@ -258,7 +258,7 @@ func TestNodeStaleEpochCannotReplaceCurrentConnection(t *testing.T) {
 func TestNodeStatusUsesAuthenticatedFreshPresence(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 4})
 	status := func(connected, ready bool) {
 		t.Helper()

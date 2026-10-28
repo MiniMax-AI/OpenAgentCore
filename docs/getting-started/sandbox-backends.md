@@ -2,32 +2,30 @@
 title: "Choose a sandbox backend"
 ---
 
-Compare microsandbox, Docker and E2B, then select one in Web. This guide is for operators who finished [Install Core and Web](./install.md) and need compute for Core-hosted Sessions.
+Compare microsandbox and E2B, then select one in Web. This guide is for operators who finished [Install Core and Web](./install.md) and need compute for Core-hosted Sessions.
 
 The installer selects no backend. One installation uses one backend. To change it later, reset the deployment first; see [Change the sandbox configuration](./nodes.md#change-the-sandbox-configuration).
 
 ## Compare the backends
 
-| | microsandbox (recommended) | Docker (compatibility) | E2B |
-| --- | --- | --- | --- |
-| Where sandboxes run | A microVM on your Linux nodes | A container on your Linux nodes | E2B's cloud |
-| Nodes to add | Yes | Yes | None |
-| You provide | Linux amd64 hosts with systemd and `/dev/kvm` | Linux amd64 hosts with systemd and rootful Docker Engine | An E2B API key and a template; a public HTTPS URL for Core |
-| Isolation | Each sandbox has its own kernel | Containers share the node's kernel | E2B's |
-| Idle sandboxes suspend and resume | Yes, with checkpoints | No | Yes, paused in place by E2B |
-| Workspace storage | Required, on NFS | Own disk | Own disk |
-| Disk limits | Root disk and workspace quota | None | Set by the template |
+| | microsandbox | E2B |
+| --- | --- | --- |
+| Where sandboxes run | A microVM on your Linux nodes | E2B's cloud |
+| Nodes to add | Yes | None |
+| You provide | Linux amd64 hosts with systemd and `/dev/kvm` | An E2B API key and a template; a public HTTPS URL for Core |
+| Isolation | Each sandbox has its own kernel | E2B's |
+| Idle sandboxes suspend and resume | Yes, with checkpoints | Yes, paused in place by E2B |
+| Workspace storage | Required, on NFS | Own disk |
+| Disk limits | Root disk and workspace quota | Set by the template |
 
 The field-level differences are in the [deployment contract](../../contracts/agents-api/sandbox-deployment.md#what-each-field-means-per-sandbox-provider). Host requirements for nodes are in [Add and manage nodes](./nodes.md#host-requirements).
-
-Docker is a compatibility backend, for trusted workloads and for hosts without `/dev/kvm`. Its nodes are [root-equivalent](./nodes.md#what-the-installer-sets-up) on their host: add them only on hosts dedicated to sandboxes.
 
 Sandbox nodes run on Linux amd64. When Core runs on macOS or Windows, connect a Linux node or use E2B. Applications can also run [self-hosted Sessions](./self-hosted.md) on their own machines, with no backend.
 
 ## Select the backend in Web
 
-1. Open **Settings → Sandbox and scheduling**. The setup wizard asks **Where should sandboxes run?**: **Own machines** (microsandbox or Docker) or **E2B**.
-2. For **Own machines**, choose the backend and the sandbox size. Web proposes the [default size the Provider declares](../sandbox-provider.md#register-the-provider-kind) as **Standard**, and **Advanced settings** on the review page holds the exact CPU, memory and disk values. E2B declares no default size, so its review page has no **Advanced settings**.
+1. Open **Settings → Sandbox and scheduling**. The setup wizard asks **Where should sandboxes run?**: **Own machines** (microsandbox) or **E2B**.
+2. For **Own machines**, choose the sandbox size. Web proposes the [default size the Provider declares](../sandbox-provider.md#register-the-provider-kind) as **Standard**, and **Advanced settings** on the review page holds the exact CPU, memory and disk values. E2B declares no default size, so its review page has no **Advanced settings**.
 3. Choose **Save configuration**. The choice is stored in Core's database.
 
 For **Own machines**, continue with [Add and manage nodes](./nodes.md). For microsandbox, first [Set up workspace storage](./workspace-storage.md). For checkpoint recovery across microsandbox nodes, see [Checkpoint recovery across nodes](./nodes.md#checkpoint-recovery-across-nodes).
@@ -46,6 +44,6 @@ The key and template rules, including key replacement, are in [Initial setup and
 
 ## Next steps
 
-- microsandbox or Docker: [Add and manage nodes](./nodes.md).
+- microsandbox: [Add and manage nodes](./nodes.md).
 - Workspaces on NFS: [Set up workspace storage](./workspace-storage.md).
 - Models and keys: continue with [Install Core and Web](./install.md#set-a-default-model).

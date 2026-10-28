@@ -343,13 +343,17 @@ func runtimeVersion(path string) error {
 	return nil
 }
 
-// An empty JSON object prevents ambient SDK profiles without invalid empty input.
+// File-heavy agent work exceeds the native 4 MiB virtio-fs checkpoint default.
+// Keep a bounded per-device budget in the same isolated config for every SDK operation.
+const isolatedSDKConfig = "{\"snapshots\":{\"max_filesystem_state_mib\":64}}\n"
+
+// Only the adapter-owned config is accepted; ambient SDK profiles stay excluded.
 func isolatedConfig(home string) (string, error) {
 	path := filepath.Join(home, "oac-sdk-config.json")
 	fd, err := syscall.Open(path, syscall.O_WRONLY|syscall.O_CREAT|syscall.O_EXCL|syscall.O_NOFOLLOW, 0600)
 	if err == nil {
 		f := os.NewFile(uintptr(fd), path)
-		_, err = f.WriteString("{}\n")
+		_, err = f.WriteString(isolatedSDKConfig)
 		if err == nil {
 			err = f.Sync()
 		}
@@ -376,11 +380,11 @@ func isolatedConfig(home string) (string, error) {
 	if !st.Mode().IsRegular() || st.Mode().Perm() != 0600 {
 		return "", sandbox.ErrOwnership
 	}
-	data, err := io.ReadAll(io.LimitReader(f, 4))
+	data, err := io.ReadAll(io.LimitReader(f, int64(len(isolatedSDKConfig)+1)))
 	if err != nil {
 		return "", err
 	}
-	if string(data) != "{}\n" {
+	if string(data) != isolatedSDKConfig {
 		return "", sandbox.ErrOwnership
 	}
 	return path, nil

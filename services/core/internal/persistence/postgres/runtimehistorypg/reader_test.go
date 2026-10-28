@@ -21,7 +21,7 @@ const (
 func testCapabilities() runtimehistory.Capabilities {
 	return runtimehistory.Capabilities{
 		SampleInterval: 30 * time.Second,
-		Retention: 7 * 24 * time.Hour, MinimumStep: 30 * time.Second, MaximumRange: 24 * time.Hour,
+		Retention:      7 * 24 * time.Hour, MinimumStep: 30 * time.Second, MaximumRange: 24 * time.Hour,
 		MaximumPoints: 1_000, MaximumSeries: 64, MaximumTotalPoints: 10_000,
 		Metrics: []runtimehistory.Metric{runtimehistory.MetricCPU, runtimehistory.MetricMemory},
 	}
@@ -76,7 +76,7 @@ func observedRecord(at, started time.Time, cpu float64) runtimeobs.ExportRecord 
 	capacity := 2.0
 	memory := uint64(123)
 	return runtimeobs.ExportRecord{TenantID: testTenant, SessionID: testSession, EnvironmentID: testEnvironment, AllocationID: testAllocation,
-		Mode: runtimeobs.ModeManaged, ProviderType: "docker", Status: runtimeobs.StatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic,
+		Mode: runtimeobs.ModeManaged, ProviderType: "microsandbox", Status: runtimeobs.StatusObserved, CollectionSource: runtimeobs.CollectionSourcePeriodic,
 		ResolvedAt: at, Sample: &runtimeobs.Sample{ObservedAt: at, StartedAt: &started, CPUUsageSecondsTotal: &cpu, CPUCapacityCores: &capacity, MemoryUsageBytes: &memory},
 		TokenUsage: &runtimeobs.TokenUsage{InputTokens: 12, OutputTokens: 3}}
 }

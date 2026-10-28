@@ -32,7 +32,8 @@ class Fixture(unittest.TestCase):
         self.request = {'Version': PROTOCOL_VERSION, 'Operation': 'create', 'Config': self.config,
                         'Reference': self.reference, 'Deadline': (datetime.now(timezone.utc) + timedelta(seconds=30)).isoformat(),
                         'Bootstrap': dict(self.reference, SessionID=str(uuid4()), DeviceID=str(uuid4()),
-                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True)}
+                                          CoreURL='https://core.example/api/v1', Credential='private-runtime-secret', SuspendControl=True,
+                                          Egress={'public': True, 'private_domains': [], 'domains': [], 'endpoints': []})}
         self.request['RuntimeBootstrap'] = {
             'version': 3, 'suspend_control': True, 'core_url': self.request['Bootstrap']['CoreURL'],
             'device_id': self.request['Bootstrap']['DeviceID'],
@@ -88,6 +89,21 @@ class ProviderTest(Fixture):
         self.assertNotIn(self.request['Bootstrap']['Credential'], serialized)
         self.assertEqual(self.record()['connection']['envd_access_token'], 'private-envd-secret')
         self.api.connect.assert_not_called()
+
+    def test_create_maps_egress_to_network_options(self):
+        provider = __import__('provider')
+        public = provider.network_options(self.request['Bootstrap'])
+        self.assertEqual(public, {'deny_out': list(provider.BLOCKED_RANGES)})
+        closed = dict(self.request['Bootstrap'], Egress={'public': False, 'private_domains': [], 'domains': ['pypi.org'], 'endpoints': ['api.model.example:443', 'models.example:8443']})
+        with patch.object(provider, 'public_ipv4', side_effect=lambda host: {'models.example': ['203.0.113.9']}.get(host, [])):
+            self.assertEqual(provider.network_options(closed),
+                             {'deny_out': ['0.0.0.0/0', '::/0'], 'allow_out': ['203.0.113.9/32', 'api.model.example', 'core.example', 'models.example', 'pypi.org']})
+        literals = dict(closed, CoreURL='https://10.0.0.5:8443', Egress=dict(closed['Egress'], endpoints=['8.8.8.8:443', '10.1.2.3:8000']))
+        with patch.object(provider, 'public_ipv4', return_value=[]):
+            self.assertEqual(provider.network_options(literals)['allow_out'], ['8.8.8.8/32', 'pypi.org'])
+        self.assertEqual(self.call('create')['ErrorCode'], '')
+        self.assertNotIn('Egress', json.loads(self.cloud.files.write.call_args.args[1]))
+        self.assertEqual(self.api.create.call_args.kwargs['network'], public)
 
     def test_create_response_without_metadata_reads_exact_id_before_bootstrap(self):
         created = SimpleNamespace(sandbox_id=self.cloud.sandbox_id,

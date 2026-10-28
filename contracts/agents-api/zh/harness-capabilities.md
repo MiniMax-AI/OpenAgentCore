@@ -1,7 +1,7 @@
 ---
 title: "Harness 能力"
 source: contracts/agents-api/harness-capabilities.md
-source_hash: 8913afc18b99b847850a857e387e1a230085525ce5f1b28abd5a440abc9dcf16
+source_hash: 3cbc5d850c420d4ab0ed7793c0516c8068b365f2d3fd5161d706bdb793db9ac6
 ---
 
 本页列出每个 Harness 在每种部署位置支持的能力。Core 根据 `internal/harnessconfig/<package>/declaration.go` 中 Harness 的声明决定准入，运行 Session 的 Runtime 也必须声明操作。所链接契约定义各操作；[Harness 接入](harness-onboarding.md#qualify-the-adapter)说明资格验证方法。
@@ -14,7 +14,7 @@ source_hash: 8913afc18b99b847850a857e387e1a230085525ce5f1b28abd5a440abc9dcf16
 | 已准入 | Core 通过相同 Runtime 路径允许准入，但该位置尚未运行真实模型验收 |
 | 已拒绝 | Core 在执行前拒绝请求 |
 
-部署位置为 `none`（无 Environment）、托管（`openai_hosted`）和自托管（`self_hosted`）。托管验收在 Docker 节点运行；E2B、microsandbox 使用相同 Runtime 与适配器，托管位置的每个已验证单元格在这两者中视为已准入。自托管验收在 Linux 机器运行；[自托管指南](../../../docs/zh/getting-started/self-hosted.md#platforms)列出支持平台。操作通过验证仅代表该操作本身，不代表与其他选项的所有组合；配置拒绝的组合列于对应操作契约。
+部署位置为 `none`（无 Environment）、托管（`openai_hosted`）和自托管（`self_hosted`）。E2B 和 microsandbox 使用相同 Runtime 与适配器，托管位置的每个已验证单元格在这两者中视为已准入。自托管验收在 Linux 机器运行；[自托管指南](../../../docs/zh/getting-started/self-hosted.md#platforms)列出支持平台。操作通过验证仅代表该操作本身，不代表与其他选项的所有组合；配置拒绝的组合列于对应操作契约。
 
 ## 执行与输入 {#execution-and-input}
 
@@ -63,8 +63,8 @@ Claude 结构化输出要求 medium verbosity，可与 `multi_agent`、Skill、P
 | 能力目录 | 已准入 | 已准入 | 已准入 |
 | npm 与 Python 包 | 已准入 | 已准入 | 已准入 |
 | null 或 `[]` 以外的 `packages.system` | 已拒绝 | 已拒绝 | 已拒绝 |
-| 网络 `disabled` 或 `restricted` | 已拒绝 | 已拒绝 | 已拒绝 |
+| 网络 `disabled` 或 `restricted` | 已准入：托管；已拒绝：自托管 | 已准入：托管；已拒绝：自托管 | 已准入：托管；已拒绝：自托管 |
 | [stdio Plugin MCP](environments.md#plugin-mcp) | 已验证：托管、自托管 | 已验证：自托管；已准入：托管 | 已验证：自托管；已准入：托管 |
 | HTTP Plugin MCP | 已准入，字面值头或 HTTPS bearer | 已准入，字面值头或 HTTPS bearer | 已验证：自托管；已准入：托管；字面值头或 HTTPS bearer |
 
-外部工作区存储还要求所选 Harness 声明和 Runtime 支持 `retained_native_history`；使用自有磁盘的 Docker 和 E2B 不要求此能力。microsandbox 始终使用外部存储，因此未声明该能力的 MiniMax Code 无法在其上运行。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。
+外部工作区存储还要求所选 Harness 声明和 Runtime 支持 `retained_native_history`；使用自有磁盘的 E2B 不要求此能力。microsandbox 始终使用外部存储，因此未声明该能力的 MiniMax Code 无法在其上运行。[工作区文件系统协议](../../../docs/zh/workspace-provider.md)定义存储组合准入规则。

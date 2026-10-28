@@ -5,7 +5,6 @@ import (
 	"errors"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"reflect"
@@ -13,7 +12,7 @@ import (
 )
 
 type changedDeclaration struct {
-	*docker.Provider
+	*microsandbox.Provider
 	operations providercontract.Operations
 }
 
@@ -33,7 +32,7 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 			o["Renew"] = providercontract.Support{State: providercontract.Unsupported, Reason: "no_native_lease"}
 		}},
 		{"partial checkpoint", func(o providercontract.Operations) {
-			o["Initial"] = providercontract.Support{State: providercontract.Supported}
+			o["Initial"] = providercontract.Support{State: providercontract.Unsupported, Reason: "no_checkpoints"}
 		}},
 		{"unsafe reason", func(o providercontract.Operations) {
 			o["Observe"] = providercontract.Support{State: providercontract.Unsupported, Reason: "https://private:key@host"}
@@ -43,14 +42,14 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 		}},
 	} {
 		t.Run(mutate.name, func(t *testing.T) {
-			o := docker.Operations()
+			o := microsandbox.Operations()
 			mutate.change(o)
-			if err := sandbox.ValidateProvider(&changedDeclaration{Provider: &docker.Provider{}, operations: o}); !errors.Is(err, providercontract.ErrContract) {
+			if err := sandbox.ValidateProvider(&changedDeclaration{Provider: &microsandbox.Provider{}, operations: o}); !errors.Is(err, providercontract.ErrContract) {
 				t.Fatal(err)
 			}
 		})
 	}
-	var nilProvider *docker.Provider
+	var nilProvider *microsandbox.Provider
 	if err := sandbox.ValidateProvider(nilProvider); !errors.Is(err, providercontract.ErrContract) {
 		t.Fatal("typed nil accepted", err)
 	}
@@ -59,7 +58,7 @@ func TestDeclarationsRejectMissingUnknownAndContradictoryOperations(t *testing.T
 // Unsupported methods must be callable safely even without native clients or
 // configuration: any attempt at native I/O would panic on these zero providers.
 func TestEveryUnsupportedNativeOperationRejectsWithoutSideEffects(t *testing.T) {
-	for _, provider := range []sandbox.SandboxProvider{&docker.Provider{}, &e2b.Provider{}, &microsandbox.Provider{}} {
+	for _, provider := range []sandbox.SandboxProvider{&microsandbox.Provider{}, &e2b.Provider{}, &microsandbox.Provider{}} {
 		if err := sandbox.ValidateProvider(provider); err != nil {
 			t.Fatal(err)
 		}

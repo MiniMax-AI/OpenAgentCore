@@ -26,25 +26,25 @@ export function EmptyState({
   return (
     <div
       className={cn(
-        "flex min-w-0 flex-col items-center justify-center gap-3 text-center",
-        size === "compact" ? "px-4 py-8" : "px-6 py-16",
+        "flex min-w-0 flex-col items-center justify-center gap-3.5 text-center",
+        size === "compact" ? "px-6 py-10" : "px-8 py-20",
         className,
       )}
     >
       {Icon && (
-        <Icon
-          className="h-5 w-5 text-fg-muted"
-          strokeWidth={1.5}
-          aria-hidden="true"
-        />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-muted text-fg-muted">
+          <Icon className="h-5 w-5" strokeWidth={1.5} aria-hidden="true" />
+        </div>
       )}
-      <div className="min-w-0 max-w-full space-y-1 [overflow-wrap:anywhere]">
-        <p className="text-sm font-medium text-fg">{title}</p>
+      <div className="min-w-0 max-w-full space-y-1.5 [overflow-wrap:anywhere]">
+        <p className="text-lg font-semibold tracking-tight text-fg">{title}</p>
         {description && (
-          <p className="max-w-sm text-sm text-fg-muted">{description}</p>
+          <p className="max-w-md text-base leading-relaxed text-fg-muted">
+            {description}
+          </p>
         )}
       </div>
-      {action && <div className="mt-1">{action}</div>}
+      {action && <div className="mt-2">{action}</div>}
     </div>
   );
 }

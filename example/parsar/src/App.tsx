@@ -1,115 +1,275 @@
+import { tr } from "./lib/i18n";
 import { useEffect, useState } from "react";
-import { Bot, Cpu, BookOpen, Plug, Server, Moon, Sun } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
-import { Models } from "./Models";
-import { Skills } from "./Skills";
-import { MCPs, Runtimes } from "./Resources";
+import {
+  Activity,
+  Bot,
+  BookOpen,
+  Server,
+  Moon,
+  Sun,
+  Send,
+  Settings2,
+  SquarePen,
+  type LucideIcon,
+} from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Capabilities } from "./Capabilities";
+import { Records, Audit } from "./Records";
+import { Settings, type WorkspaceSettings } from "./Settings";
+import { product, useSessions, useTurnOverview } from "./lib/product";
+import { Feishu } from "./Feishu";
+import { Runtimes } from "./Resources";
 import { Agents } from "./Agents";
+import { Artifacts } from "./Artifacts";
+import { Runs } from "./Runs";
+import { AgentPage } from "./AgentPage";
 import { SessionPage } from "./SessionPage";
-import { AgentDetail } from "./AgentDetail";
-import { Button } from "./components/ui/button";
+import { Home } from "./Home";
+import { cn } from "./lib/utils";
+import { setTheme, useTheme } from "./lib/theme";
+
+const currentRoute = () => location.hash.slice(1) || "/";
+
+// The live entry under 新对话: how many conversations are running right now.
+function RunsLink({ selected }: { selected: boolean }) {
+  const running = useTurnOverview().data?.stats.running || 0;
+  return (
+    <a
+      href="#/runs"
+      aria-current={selected ? "page" : undefined}
+      className={cn(
+        "flex h-9 shrink-0 items-center gap-3 rounded-[10px] px-3 text-sm transition-colors duration-150 sm:mt-1",
+        selected
+          ? "bg-surface font-medium text-fg app-shadow-control"
+          : "text-fg-muted hover:app-hover hover:text-fg",
+      )}
+    >
+      <Activity
+        strokeWidth={1.7}
+        className={cn("h-4 w-4 shrink-0", selected ? "text-fg" : "text-fg-subtle")}
+      />
+      <span>{tr("运行")}</span>
+      {running > 0 && (
+        <span
+          aria-label={tr("{{value0}} 个进行中", { value0: running })}
+          className="ml-auto rounded-full bg-status-running/15 px-2 text-sm font-medium tabular-nums text-status-running"
+        >
+          {running}
+        </span>
+      )}
+    </a>
+  );
+}
+
+function NavLink({
+  href,
+  label,
+  icon: Icon,
+  selected,
+}: {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  selected: boolean;
+}) {
+  return (
+    <a
+      href={`#${href}`}
+      aria-current={selected ? "page" : undefined}
+      className={cn(
+        "flex h-9 shrink-0 items-center gap-3 rounded-[10px] px-3 text-sm transition-colors duration-150",
+        selected
+          ? "bg-surface font-medium text-fg app-shadow-control"
+          : "text-fg-muted hover:app-hover hover:text-fg",
+      )}
+    >
+      <Icon
+        strokeWidth={1.7}
+        className={cn("h-4 w-4 shrink-0", selected ? "text-fg" : "text-fg-subtle")}
+      />
+      <span>{label}</span>
+    </a>
+  );
+}
+
+function RecentConversations({ activeId }: { activeId?: string }) {
+  const sessions = useSessions();
+  const rows = [...(sessions.data || [])]
+    .sort((a, b) => b.created_at - a.created_at)
+    .slice(0, 40);
+  if (!rows.length) return null;
+  return (
+    <nav aria-label={tr("最近对话")} className="hidden min-h-0 flex-1 flex-col sm:flex">
+      <div className="px-3 pb-2 pt-6 text-sm text-fg-subtle">{tr("最近对话")}</div>
+      <div className="min-h-0 space-y-0.5 overflow-y-auto pr-1">
+        {rows.map((row) => (
+          <a
+            key={row.id}
+            href={`#/sessions/${row.id}`}
+            aria-current={row.id === activeId ? "page" : undefined}
+            className={cn(
+              "flex h-9 items-center gap-2 rounded-[10px] px-3 text-sm transition-colors duration-150",
+              row.id === activeId
+                ? "bg-surface font-medium text-fg app-shadow-control"
+                : "text-fg-muted hover:app-hover hover:text-fg",
+            )}
+          >
+            <span className="min-w-0 flex-1 truncate">{row.name}</span>
+            {row.source === "feishu" && (
+              <Send
+                aria-label={tr("飞书")}
+                strokeWidth={1.7}
+                className="h-3.5 w-3.5 shrink-0 text-fg-subtle"
+              />
+            )}
+          </a>
+        ))}
+      </div>
+      <a
+        href="#/conversations"
+        className="mt-1 flex h-9 shrink-0 items-center rounded-[10px] px-3 text-sm text-fg-subtle hover:app-hover hover:text-fg"
+      >
+        {tr("全部对话")}
+      </a>
+      <a
+        href="#/artifacts"
+        className="mb-4 flex h-9 shrink-0 items-center rounded-[10px] px-3 text-sm text-fg-subtle hover:app-hover hover:text-fg"
+      >
+        {tr("产物")}
+      </a>
+    </nav>
+  );
+}
 
 export function App() {
-  const [route, setRoute] = useState(location.hash.slice(1) || "/agents");
-  const [dark, setDark] = useState(() => {
-    try {
-      return localStorage.getItem("oac-example-theme") === "dark";
-    } catch {
-      return false;
-    }
+  const [route, setRoute] = useState(currentRoute);
+  const workspace = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => product<WorkspaceSettings>("settings"),
   });
-  const reduce = useReducedMotion();
+  const { dark } = useTheme();
   useEffect(() => {
-    const listener = () => setRoute(location.hash.slice(1) || "/agents");
+    const listener = () => setRoute(currentRoute());
     window.addEventListener("hashchange", listener);
     return () => window.removeEventListener("hashchange", listener);
   }, []);
-  useEffect(() => {
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    try {
-      localStorage.setItem("oac-example-theme", dark ? "dark" : "light");
-    } catch {
-      /* Theme remains usable without storage. */
-    }
-  }, [dark]);
-  const agentId = route.match(/^\/agents\/([a-f0-9-]{36})$/)?.[1];
-  const sessionId = route.match(/^\/sessions\/([a-f0-9-]{36})$/)?.[1];
-  const navigation = [
-    { href: "/agents", label: "Agents", icon: Bot },
-    { href: "/models", label: "模型", icon: Cpu },
-    { href: "/skills", label: "Skills", icon: BookOpen },
-    { href: "/mcps", label: "MCP", icon: Plug },
-    { href: "/runtimes", label: "运行时", icon: Server },
+  const [path, search = ""] = route.split("?");
+  const params = new URLSearchParams(search);
+  const agentId = path!.match(/^\/agents\/([a-f0-9-]{36})$/)?.[1];
+  const sessionId = path!.match(/^\/sessions\/([a-f0-9-]{36})$/)?.[1];
+  const section = (prefixes: string[]) =>
+    prefixes.some((prefix) => path === prefix || path!.startsWith(`${prefix}/`));
+  const build = [
+    { href: "/agents", label: tr("Agent"), icon: Bot, match: ["/agents"] },
+    { href: "/runtimes", label: tr("环境模板"), icon: Server, match: ["/runtimes"] },
+    {
+      href: "/capabilities",
+      label: tr("资源库"),
+      icon: BookOpen,
+      match: ["/capabilities", "/models", "/skills", "/mcps", "/credentials"],
+    },
   ];
+  const connect = [
+    { href: "/feishu", label: tr("飞书接入"), icon: Send, match: ["/feishu"] },
+    { href: "/settings", label: tr("设置"), icon: Settings2, match: ["/settings"] },
+  ];
+  const groups: [string, typeof build][] = [
+    [tr("构建"), build],
+    [tr("接入"), connect],
+  ];
+  const page =
+    path === "/" || path === "/new" ? (
+      <Home key={route} agentId={params.get("agent") || undefined} />
+    ) : sessionId ? (
+      <SessionPage key={sessionId} id={sessionId} />
+    ) : path === "/runs" ? (
+      <Runs />
+    ) : ["/conversations", "/usage"].includes(path!) ? (
+      <Records key={path} view={path!.slice(1) as "conversations" | "usage"} />
+    ) : path === "/artifacts" ? (
+      <Artifacts />
+    ) : path === "/audit" ? (
+      <Audit />
+    ) : path === "/agents/new" ? (
+      <AgentPage key={route} copyFrom={params.get("from") || undefined} />
+    ) : agentId ? (
+      <AgentPage key={agentId} id={agentId} />
+    ) : path === "/agents" ? (
+      <Agents />
+    ) : path === "/runtimes" ? (
+      <Runtimes />
+    ) : path === "/feishu" ? (
+      <Feishu />
+    ) : path === "/settings" ? (
+      <Settings />
+    ) : path === "/models" ? (
+      <Capabilities key={path} initialTab="models" />
+    ) : path === "/skills" ? (
+      <Capabilities key={path} initialTab="skills" />
+    ) : path === "/mcps" ? (
+      <Capabilities key={path} initialTab="mcps" />
+    ) : path === "/credentials" ? (
+      <Capabilities key={path} initialTab="credentials" />
+    ) : path === "/capabilities" ? (
+      <Capabilities key={path} />
+    ) : (
+      <Home />
+    );
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-surface text-fg sm:flex-row">
-      <aside className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface-subtle px-4 py-3 sm:w-52 sm:flex-col sm:flex-nowrap sm:items-stretch sm:gap-0 sm:border-b-0 sm:border-r sm:px-3 sm:py-5">
-        <div className="flex items-center gap-2.5 px-2 sm:mb-8">
+      <aside className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-surface-subtle px-3 py-3 sm:w-[264px] sm:flex-col sm:flex-nowrap sm:items-stretch sm:gap-0 sm:border-b-0 sm:border-r sm:px-3 sm:py-4">
+        <a href="#/" className="flex h-10 min-w-0 items-center gap-2.5 px-3">
           <img
             src={dark ? "/parsar-mark-dark.png" : "/parsar-mark-light.png"}
             alt=""
-            width={26}
-            height={26}
+            width={22}
+            height={22}
           />
-          <span className="text-lg font-semibold tracking-tight">Parsar</span>
-        </div>
-        <nav
-          aria-label="主导航"
-          className="order-last flex w-full min-w-0 gap-1 overflow-x-auto sm:order-none sm:w-auto sm:flex-1 sm:flex-col"
+          <span className="truncate text-base font-semibold tracking-tight">
+            {workspace.data?.name || "Parsar"}
+          </span>
+        </a>
+        <a
+          href="#/new"
+          className={cn(
+            "ml-auto flex h-10 shrink-0 items-center gap-2.5 rounded-[10px] border border-line-strong bg-surface px-3 text-sm font-medium text-fg app-shadow-control transition-colors hover:app-hover sm:ml-0 sm:mt-4",
+            (path === "/" || path === "/new") && "ring-1 ring-fg/10",
+          )}
         >
-          {navigation.map(({ href, label, icon: Icon }) => {
-            const selected =
-              route === href ||
-              (href === "/agents" && (!!agentId || !!sessionId));
-            return (
-              <a
-                key={href}
-                href={`#${href}`}
-                aria-current={selected ? "page" : undefined}
-                className="relative flex h-9 shrink-0 items-center gap-2.5 rounded-md px-3 text-base text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                {selected && (
-                  <motion.span
-                    layoutId="navigation"
-                    className="absolute inset-0 rounded-md border border-line bg-surface app-shadow-control"
-                    transition={{ duration: reduce ? 0 : 0.18 }}
-                  />
-                )}
-                <Icon className="relative h-4 w-4 shrink-0" />
-                <span className={`relative ${selected ? "text-fg" : ""}`}>
-                  {label}
-                </span>
-              </a>
-            );
-          })}
+          <SquarePen strokeWidth={1.7} className="h-4 w-4" />
+          {tr("新对话")}
+        </a>
+        <RunsLink selected={path === "/runs"} />
+        <RecentConversations activeId={sessionId} />
+        <nav
+          aria-label={tr("主导航")}
+          className="order-last flex w-full min-w-0 gap-1 overflow-x-auto sm:order-none sm:mt-auto sm:flex-col sm:gap-0.5 sm:overflow-visible sm:border-t sm:border-line sm:pt-3"
+        >
+          {groups.map(([label, items]) => (
+            <div key={label} className="flex gap-1 sm:block sm:space-y-0.5 sm:pb-2">
+              <div className="hidden px-3 pb-1 pt-2 text-sm text-fg-subtle sm:block">
+                {label}
+              </div>
+              {items.map((item) => (
+                <NavLink key={item.href} {...item} selected={section(item.match)} />
+              ))}
+            </div>
+          ))}
         </nav>
-        <div className="ml-auto sm:ml-0 sm:mt-auto sm:pt-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={dark ? "切换浅色" : "切换深色"}
-            onClick={() => setDark(!dark)}
+        <div className="hidden items-center justify-between px-3 pt-2 sm:flex">
+          <span className="text-sm text-fg-subtle">OpenAgentCore</span>
+          <button
+            type="button"
+            aria-label={dark ? tr("切换浅色") : tr("切换深色")}
+            onClick={() => setTheme(dark ? "light" : "dark")}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle hover:app-hover hover:text-fg"
           >
-            {dark ? <Sun /> : <Moon />}
-          </Button>
+            {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </button>
         </div>
       </aside>
-      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {sessionId ? (
-          <SessionPage key={sessionId} id={sessionId} />
-        ) : agentId ? (
-          <AgentDetail key={agentId} id={agentId} />
-        ) : route === "/models" ? (
-          <Models />
-        ) : route === "/skills" ? (
-          <Skills />
-        ) : route === "/mcps" ? (
-          <MCPs />
-        ) : route === "/runtimes" ? (
-          <Runtimes />
-        ) : (
-          <Agents />
-        )}
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+        {page}
       </main>
     </div>
   );

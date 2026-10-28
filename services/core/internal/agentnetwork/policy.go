@@ -3,7 +3,7 @@ package agentnetwork
 
 import (
 	"errors"
-	"net/netip"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -37,24 +37,15 @@ func (p Policy) Validate() error {
 	return errInvalid
 }
 
+// HostPattern accepts an exact host name: dot-separated RFC 1123 labels whose
+// last label starts with a letter, which also rejects IP literals. It is the one
+// exact-host rule; the sandbox deployment cap shares it.
+const HostPattern = `^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$`
+
+var hostRule = regexp.MustCompile(HostPattern)
+
 func hostname(value string) bool {
-	if len(value) == 0 || len(value) > 253 {
-		return false
-	}
-	if _, err := netip.ParseAddr(value); err == nil {
-		return false
-	}
-	for _, label := range strings.Split(value, ".") {
-		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
-			return false
-		}
-		for _, c := range label {
-			if !(c >= 'a' && c <= 'z') && !(c >= 'A' && c <= 'Z') && !(c >= '0' && c <= '9') && c != '-' {
-				return false
-			}
-		}
-	}
-	return true
+	return len(value) <= 253 && hostRule.MatchString(strings.ToLower(value))
 }
 
 // hosts is the case-folded, sorted allowlist. The caller must validate first.

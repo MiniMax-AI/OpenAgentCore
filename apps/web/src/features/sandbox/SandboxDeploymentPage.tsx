@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxDeployment, type StartSandboxReset } from "@oac/agents-client";
+import { deploymentContract, type InitializeSandboxDeployment, type UpdateSandboxDeployment, type SandboxDeployment, type StartSandboxReset, type SandboxProvider, type SandboxSpecification } from "@oac/agents-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { TableSkeleton } from "../../components/Skeleton";
@@ -20,6 +20,7 @@ import { SandboxResetControls } from "./SandboxResetControls";
 import "./SandboxManagerView.css";
 import { SettingsTabs } from "../settings/SettingsTabs";
 import { SuspensionSettings } from "./SuspensionSettings";
+import { NetworkSettings } from "./NetworkSettings";
 
 function DeploymentHeader({ actions }: { actions?: ReactNode }) {
   const { t } = useTranslation("sandboxNavigation");
@@ -86,6 +87,10 @@ function DeploymentConfiguration() {
   async function update(input: UpdateSandboxDeployment) {
     return changeDeployment((signal) => sandboxAdmin.updateDeployment({ ...input, expected_generation: deployment!.generation }, { signal }), true, true);
   }
+  const updateNetwork = (network: SandboxSpecification["network"]) => changeDeployment((signal) => sandboxAdmin.updateDeployment({
+    provider: configured!.provider as SandboxProvider, expected_generation: deployment!.generation, resources: configured!.specification!.resources, network,
+    ...(configured!.configuration && Object.keys(configured!.configuration).length ? { configuration: configured!.configuration } : {}),
+  }, { signal }));
   const startReset = (input: StartSandboxReset) => changeDeployment((signal) => sandboxAdmin.startReset(input, { signal }));
   const cancelReset = (expectedGeneration: number) => changeDeployment((signal) => sandboxAdmin.cancelReset(expectedGeneration, { signal }));
   const unknownWrite = writeFailure?.open ? <div className="form-stack" role="alert">
@@ -97,6 +102,7 @@ function DeploymentConfiguration() {
   const reset = configured ? <SandboxResetControls key={`reset:${configurationKey}`} deployment={configured} disabled={disabled} stale={!confirmed} onStart={startReset} onCancel={cancelReset} /> : null;
   const sections = [
     configured ? <SandboxDeploymentSettings key={configurationKey} deployment={configured} fresh={confirmed} disabled={disabled} onUpdate={update} onRefresh={refreshByUser} refreshing={loading} pending={busy} writeFailure={writeFailure?.editing ? unknownWrite : null} /> : null,
+    configured?.provider && configured.specification ? <NetworkSettings key={`network:${configurationKey}`} deployment={configured} disabled={disabled || Boolean(configured.reset)} onSave={updateNetwork} /> : null,
     configured?.provider ? <SuspensionSettings key="suspension" deployment={configured} disabled={disabled || Boolean(configured.reset)} /> : null,
   ];
 

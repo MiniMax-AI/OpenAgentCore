@@ -20,12 +20,12 @@ import (
 )
 
 // managerNode is the deployment managerFixture sets up: installation
-// InstallationID runs Docker on the one online node NodeID.
+// InstallationID runs microsandbox on the one online node NodeID.
 type managerNode struct{ InstallationID, NodeID string }
 
 func managerFixture(t *testing.T, active, retained int) (*Store, *Store, managerNode) {
 	t.Helper()
-	s, w, view, _ := webSpecificationFixture(t, "docker")
+	s, w, view, _ := webSpecificationFixture(t, "microsandbox")
 	node := enrollNode(t, s, view, deployment.Capacity{MaxActive: active, MaxRetained: retained})
 	return s, w, managerNode{InstallationID: view.InstallationID, NodeID: node.NodeID}
 }
@@ -235,11 +235,11 @@ func TestRuntimeNodesEnrollmentAndEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("docker").Digest("docker"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
+	input := machineapi.NodeEnrollment{DeploymentGeneration: 1, SpecificationDigest: SandboxDeploymentTestSpec("microsandbox").Digest("microsandbox"), NodeID: uuid.NewString(), Credential: strings.Repeat("x", 64), Name: "remote", Provider: "e2b", BackendFingerprint: strings.Repeat("b", 64), CoreURL: s.placement.PublicURL()}
 	if _, err := nodes.Enroll(t.Context(), token, input); !errors.Is(err, deployment.ErrInvalidInput) {
 		t.Fatal("mixed provider accepted", err)
 	}
-	input.Provider = "docker"
+	input.Provider = "microsandbox"
 	enrolled, err := nodes.Enroll(t.Context(), token, input)
 	if err != nil || enrolled.InstallationID != d.InstallationID {
 		t.Fatal(enrolled, err)

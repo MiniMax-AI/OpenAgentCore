@@ -1,7 +1,7 @@
 ---
 title: "执行器凭据"
 source: contracts/agents-api/environment-executor-credentials.md
-source_hash: bc6bfa4cdaa4a82694fc3b2936aa50f1e00ae7feecea05f7c67401bb5816f185
+source_hash: 706000252b81f220fb22ad28234328b38b425f145066b4fd7b4950cc56c89188
 ---
 
 执行器凭据允许 `oac-daemon` 为一个 `self_hosted` Environment 注册并连接。它只授权该 Environment 的私有 daemon 传输（`/api/v1/agent-daemon/*`），不授权 `/v1`、`/core/v1`、sandbox node 注册或项目资源。项目的 principal 是其执行 principal。Core 只保存密钥摘要。
@@ -91,10 +91,10 @@ Connected 表示 Environment 已连接，其设备和执行器凭据仍有当前
 
 ## 已撤销或轮换的凭据 {#revoked-or-rotated-credential}
 
-Core 永久拒绝 daemon 时（注册 401/409、永久 WebSocket 拒绝，或 daemon 版本来自其他 Core 分发），由 `oac-daemon start` 启动的 daemon 只打印一次原因并以错误退出，再次启动时只尝试一次注册，然后再次退出。Docker Runtime（`oac-daemon connect`）只打印一次原因，停止发请求直到被停止，随后成功退出，避免按退出重启的 supervisor 循环；再次启动时只尝试一次注册，然后再次停驻。临时故障保持正常重连行为，不重放执行。
+Core 永久拒绝 daemon 时（注册 401/409、永久 WebSocket 拒绝，或 daemon 版本来自其他 Core 分发），由 `oac-daemon start` 启动的 daemon 只打印一次原因并以错误退出，再次启动时只尝试一次注册，然后再次退出。沙箱 Runtime（`oac-daemon connect`）只打印一次原因，停止发请求直到被停止，随后成功退出，避免按退出重启的 supervisor 循环；再次启动时只尝试一次注册，然后再次停驻。临时故障保持正常重连行为，不重放执行。
 
 机器只能使用绑定的 `key_id` 重连，轮换新密钥后替换配置路径的凭据文件；[自托管指南](../../../docs/zh/getting-started/self-hosted.md#rotate-or-revoke)提供步骤。新 `key_id` 无法重新连接已绑定的 Environment：签发成功，但用它注册返回 409。轮换不重装 Harness、不改变工作区、不替换原生历史；不要为恢复凭据创建新 Session 历史。
 
 ## 模型提供商 {#model-provider}
 
-`self_hosted` Session 携带自己的模型提供商，部署默认值不适用。[模型执行](model-execution.md)负责交付规则。保存的 Agent 的模型提供商密钥会交给项目中用该 Agent 创建的每个 `self_hosted` Session 的执行器，因此任何能在该项目创建 `self_hosted` Session 并运行执行器的人都能读取它。
+[模型执行](model-execution.md)负责交付规则。保存的 Agent 的模型提供商密钥会交给项目中用该 Agent 创建的每个 `self_hosted` Session 的执行器，因此任何能在该项目创建 `self_hosted` Session 并运行执行器的人都能读取它。

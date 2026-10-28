@@ -24,14 +24,16 @@ const terminalSendTimeout = 2 * time.Second
 // defaultSessionConfig.
 type sessionConfig struct {
 	stateRoot   string
+	runtimeRoot string
 	codexBinary string
 	logger      *slog.Logger
 	killTimeout time.Duration
 }
 
-func defaultSessionConfig(stateRoot string) sessionConfig {
+func defaultSessionConfig(stateRoot, runtimeRoot string) sessionConfig {
 	return sessionConfig{
 		stateRoot:   stateRoot,
+		runtimeRoot: runtimeRoot,
 		codexBinary: defaultBinary(),
 		logger:      obslog.Bg(),
 		killTimeout: rpcKillTimeout,

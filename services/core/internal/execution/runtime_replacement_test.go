@@ -198,7 +198,7 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 	for _, demand := range []string{"input", "live_file"} {
 		t.Run(demand, func(t *testing.T) {
 			provider := &retentionProvider{}
-			fixture := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, true))
+			fixture := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t))
 			r, session := fixture.lifecycle, fixture.session
 			owner, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
 			if err != nil {
@@ -325,26 +325,19 @@ func TestRetainedEnvironmentDemandRecreatesCompute(t *testing.T) {
 	}
 }
 
-// workspaceNodeSetup deploys microsandbox, which runs every Environment on external storage, or, without storage, docker.
-func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Service, deployment.Reader) (string, string) {
+// workspaceNodeSetup deploys microsandbox, which runs every Environment on external storage.
+func workspaceNodeSetup(t *testing.T) func(Owner, *deployment.Service, deployment.Reader) (string, string) {
 	return func(owner Owner, service *deployment.Service, reader deployment.Reader) (string, string) {
 		installation := uuid.NewString()
 		if err := owner.Deployment.Claim(t.Context(), installation); err != nil {
 			t.Fatal(err)
 		}
-		specification := sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}
-		provider := "microsandbox"
-		if !external {
-			provider, specification = "docker", sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048}}
-		}
-		view, err := owner.Deployment.Initialize(t.Context(), installation, sandbox.Selection{Provider: provider, DeploymentSpec: specification})
+		specification := sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 2, MemoryMiB: 2048, RootDiskMiB: 8192}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}
+		view, err := owner.Deployment.Initialize(t.Context(), installation, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: specification})
 		if err != nil {
 			t.Fatal(err)
 		}
 		retained, checkpoint := 2, &sandbox.CheckpointCompatibility{ArtifactDomain: "fixture-store", ExecutionClass: "fixture-runtime"}
-		if !external {
-			retained, checkpoint = 1, nil
-		}
 		token, err := service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: &retained})
 		if err != nil {
 			t.Fatal(err)
@@ -366,23 +359,5 @@ func workspaceNodeSetup(t *testing.T, external bool) func(Owner, *deployment.Ser
 		}
 		return installation, node.NodeID
 
-	}
-}
-
-func TestProvisionRejectsRetainedBindingOnProviderWithoutStorage(t *testing.T) {
-	provider := &retentionProvider{bootstraps: make(chan sandbox.Bootstrap, 1)}
-	f := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, false))
-	r, s := f.lifecycle, f.session
-	if _, err := r.workspaces.Ensure(t.Context(), s.TenantID, s.Environment.ID, r.config.WorkspaceRequirements, 0); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.provision(t.Context(), s.TenantID, s.Environment.ID, r.config.InstallationID); !errors.Is(err, workspacefs.ErrUnsupported) {
-		t.Fatal("binding silently dropped", err)
-	}
-	if provider.creates != 0 {
-		t.Fatal("incompatible compute was created")
-	}
-	if _, err := r.reader.EnvironmentAllocation(t.Context(), deployment.AllocationKey{TenantID: s.TenantID, EnvironmentID: s.Environment.ID}); !errors.Is(err, deployment.ErrNotFound) {
-		t.Fatal("incompatible compute reserved", err)
 	}
 }

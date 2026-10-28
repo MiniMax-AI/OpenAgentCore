@@ -55,7 +55,7 @@ func placedGeneration(t *testing.T, s, w *Store, session sessions.Session) (stri
 }
 
 func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
-	for _, provider := range []string{"microsandbox", "docker"} {
+	for _, provider := range []string{"microsandbox", "microsandbox"} {
 		t.Run(provider, func(t *testing.T) {
 			s, w, first, input := webSpecificationFixture(t, provider)
 			nodes := deploymentService(t, s)
@@ -149,7 +149,7 @@ func TestNodeGenerationsCapacityFallbackAndImmutablePending(t *testing.T) {
 }
 
 func TestNodeGenerationsReconnectKeepsServingPin(t *testing.T) {
-	s, w, first, input := webSpecificationFixture(t, "docker")
+	s, w, first, input := webSpecificationFixture(t, "microsandbox")
 	service := deploymentService(t, s)
 	node := specificationNode(t, s, first)
 	old := onlineManagerNode(t, s, node.NodeID)
@@ -188,7 +188,7 @@ func TestNodeGenerationsReconnectKeepsServingPin(t *testing.T) {
 }
 
 func TestNodeGenerationPreparationRefusalCreatesNoProvisionalOwnership(t *testing.T) {
-	s, w, first, _ := webSpecificationFixture(t, "docker")
+	s, w, first, _ := webSpecificationFixture(t, "microsandbox")
 	node := specificationNode(t, s, first)
 	connection := uuid.NewString()
 	if err := deploymentService(t, s).ConnectNode(t.Context(), node.NodeID, connection, first.OwnerEpoch); err != nil {

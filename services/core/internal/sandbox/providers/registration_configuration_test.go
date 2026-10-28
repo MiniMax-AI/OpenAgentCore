@@ -23,7 +23,7 @@ func (a registrationConfiguration) Requirements() sandbox.ConfigurationRequireme
 
 func TestConfigurationRegistrationRejectsNil(t *testing.T) {
 	registry := Builtin()
-	a := registry.adapters["docker"]
+	a := registry.adapters["microsandbox"]
 	var typedNil *registrationConfiguration
 	for _, configuration := range []sandbox.ConfigurationAdapter{nil, typedNil} {
 		a.Configuration = configuration
@@ -35,7 +35,7 @@ func TestConfigurationRegistrationRejectsNil(t *testing.T) {
 
 func TestConfigurationRequirementsRejectEachOmission(t *testing.T) {
 	registry := Builtin()
-	a := registry.adapters["docker"]
+	a := registry.adapters["microsandbox"]
 	original := a.Configuration.Requirements()
 	typ := reflect.TypeOf(original)
 	for i := 0; i < typ.NumField(); i++ {
@@ -60,7 +60,7 @@ func TestConfigurationRequirementsRejectInvalidDeclarations(t *testing.T) {
 		func(r *sandbox.ConfigurationRequirements) { r.Discovery.Reason = "https://private:key@host" },
 		func(r *sandbox.ConfigurationRequirements) { r.Discovery.State = providercontract.Supported },
 	} {
-		a := registry.adapters["docker"]
+		a := registry.adapters["microsandbox"]
 		requirements := a.Configuration.Requirements()
 		change(&requirements)
 		a.Configuration = registrationConfiguration{requirements: requirements}
@@ -77,7 +77,7 @@ func TestConfigurationRequirementsDoNotInventDependencies(t *testing.T) {
 	// resource operation that may be Unsupported for this provider.
 	for _, credential := range []sandbox.Requirement{sandbox.Required, sandbox.NotRequired} {
 		for _, public := range []sandbox.Requirement{sandbox.Required, sandbox.NotRequired} {
-			a := registry.adapters["docker"]
+			a := registry.adapters["microsandbox"]
 			requirements := a.Configuration.Requirements()
 			requirements.Credential, requirements.PublicOrigin = credential, public
 			a.Configuration = registrationConfiguration{requirements: requirements}
@@ -102,7 +102,7 @@ func TestConfigurationRequirementsDoNotInventDependencies(t *testing.T) {
 
 func TestFutureConfigurationRequirementNeedsExplicitHandling(t *testing.T) {
 	registry := Builtin()
-	original := registry.adapters["docker"].Configuration.Requirements()
+	original := registry.adapters["microsandbox"].Configuration.Requirements()
 	fields := make([]reflect.StructField, 0, 4)
 	typ := reflect.TypeOf(original)
 	for i := 0; i < typ.NumField(); i++ {
@@ -184,14 +184,14 @@ func (contradictingConfiguration) VerifyCredential(context.Context, sandbox.Dire
 
 func TestSupportedSetupOperationsCannotReportUnsupported(t *testing.T) {
 	registry := Builtin()
-	a := registry.adapters["docker"]
+	a := registry.adapters["microsandbox"]
 	requirements := a.Configuration.Requirements()
 	supported := providercontract.Support{State: providercontract.Supported}
 	requirements.Discovery, requirements.SelectionDiscovery, requirements.CredentialVerification = supported, supported, supported
 	a.Configuration = contradictingConfiguration{registrationConfiguration{requirements: requirements}}
-	registry.adapters["docker"] = a
-	direct := sandbox.DirectConfig{Selection: sandbox.Selection{Provider: "docker"}}
-	_, discoverErr := registry.DiscoverConfiguration(t.Context(), "docker", sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
+	registry.adapters["microsandbox"] = a
+	direct := sandbox.DirectConfig{Selection: sandbox.Selection{Provider: "microsandbox"}}
+	_, discoverErr := registry.DiscoverConfiguration(t.Context(), "microsandbox", sandbox.ConfigurationDiscoveryInput{}, sandbox.ProcessPaths{})
 	_, selectionErr := registry.DiscoverSelection(t.Context(), direct)
 	for _, err := range []error{discoverErr, selectionErr, registry.VerifyCredential(t.Context(), direct, nil)} {
 		if !errors.Is(err, providercontract.ErrContract) || errors.Is(err, providercontract.ErrUnsupported) {

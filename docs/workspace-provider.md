@@ -16,7 +16,7 @@ Core selects and validates the combination of a Sandbox Provider and a filesyste
 | Sandbox Provider | External workspace storage |
 | --- | --- |
 | microsandbox | Required (`host_directory`, `user_xattr`) |
-| Docker, E2B | Not supported; the Provider's own Environment disk |
+| E2B | Not supported; the Provider's own Environment disk |
 
 ## Implement an adapter
 
@@ -97,13 +97,13 @@ Workspace storage is retained with its Session until explicit Session deletion. 
 
 `Bootstrap.Workspace` and `ResumeRequest.Workspace` optionally carry a [workspace filesystem binding](#identity-and-configuration). A Provider whose policy declares workspace storage requires the binding and returns `ErrInvalid` without it; a Provider without that declaration keeps its own Environment disk and rejects a binding. Presence selects the exact external object and never permits a fallback to another disk. Providers validate the tenant and Environment against the binding and its configuration receipt before resolving it. `LocalOptions.Workspace` injects the filesystem resolver; Sandbox Providers never interpret filesystem adapter parameters or native receipts.
 
-`DeploymentPolicy.Workspace` present means the Provider runs every Environment on external storage with the declared attachment requirements; absent means the Provider's own disk and no external storage. The derived immutable `DeploymentSpec.Workspace` receipt records the selected capabilities and is always present for such a Provider; a deployment with no storage selected returns `ErrWorkspaceRequired`, which Core reports as `workspace_storage_required`. The [deployment workflow](../contracts/agents-api/sandbox-deployment.md#resources) never copies filesystem configuration into the generation. Microsandbox requires `host_directory` and `user_xattr`; Docker and E2B reject external attachments. Validation uses the filesystem protocol's combination validator: `EnvironmentDiskMiB` is only a capacity quota request, valid when the storage declares `capacity_quota`, and its default is zero, which requests no quota. Root disk capacity is still required.
+`DeploymentPolicy.Workspace` present means the Provider runs every Environment on external storage with the declared attachment requirements; absent means the Provider's own disk and no external storage. The derived immutable `DeploymentSpec.Workspace` receipt records the selected capabilities and is always present for such a Provider; a deployment with no storage selected returns `ErrWorkspaceRequired`, which Core reports as `workspace_storage_required`. The [deployment workflow](../contracts/agents-api/sandbox-deployment.md#resources) owns the resource fields.
 
 Microsandbox resolves each Create and Resume binding, including observation of an interrupted restore, and passes only the local directory and immutable ObjectID to its private helper. The helper binds the whole `/environment`; its retained contents and private native history follow the [workspace filesystem scope](#lifetime-and-filesystem-scope) and [Runtime resource directories](configuration.md#runtime-resource-directories). Private HOME, credentials and the compute root are not a durable history store. Object and path labels qualify native resources. Checkpoint restore verifies the snapshot's object, remaps `/environment` through SDK `Volumes`, requires strict external mount policy and rejects every restore warning. Partial restore errors retain the exact target identity for cleanup and never establish readiness. Unknown outcomes remain observations of the original operation. Native Bind checkpoint and guest-local flock continuity do not establish fencing against an unknown writer.
 
 ## Kernel NFS adapter
 
-The `nfs` adapter uses an operator-premounted Linux kernel NFS filesystem. The supported setup is NFSv4.2 on trusted AUTH_SYS clients with `root_squash`, using the same export and absolute mount path on Core and nodes. The adapter neither mounts exports nor manages NFS credentials or service accounts. Other operating systems return `ErrUnsupported`. [Configuration](./configuration.md#independent-workspace-storage) owns installation steps and selection.
+The `nfs` adapter uses an operator-premounted Linux kernel NFS filesystem. The supported setup is NFSv4.2 on trusted AUTH_SYS clients with `root_squash`, using the same export and absolute mount path on Core and nodes. The adapter neither mounts exports nor manages NFS credentials or service accounts. Other operating systems return `ErrUnsupported`. [Set up workspace storage](./getting-started/workspace-storage.md) owns installation steps and selection.
 
 Parameters contain `root`, `namespace_id`, `uid` and, in quota mode, `quota`. `root` is a clean absolute mount path; `namespace_id` is a canonical nonzero UUID; `uid` is the nonzero effective host UID required on both Core and nodes. A Compose installation uses 65532, the UID of Core's container. The operator prepares the mounted root with mode `0700`, owned by this UID, and a regular `.oac-storage-root` file with mode `0600`, owned by the same UID, containing exactly the namespace UUID followed by one newline. Do this on the export's server-side storage as its administrator; root-squashed clients cannot assume privileged ownership changes. The root marker is an assertion of the selected export's identity, not a credential or distributed lock.
 
@@ -134,9 +134,9 @@ stateDiagram-v2
     note right of deleted: Create and Resolve refuse the retired identity
 ```
 
-NFS storage does not supply compute fencing or automatic distributed failover. Guest `flock` is not a cross-VM writer lock. The single-writer and explicit-deletion requirements above remain mandatory. Confirmed release can permit a fresh VM on another compatible node to attach the same object, but an offline node or an unknown Create, Kill or snapshot-cleanup result never proves that the old writer stopped. Native history and database behavior require qualification of the selected Runtime, Harness and filesystem combination; file persistence alone is not a guarantee of native Session recovery, cross-node memory restore or arbitrary crash durability.
+NFS storage does not supply compute fencing or automatic distributed failover.
 
-Core requires the selected Harness profile to support `retained_native_history` when the selected deployment generation uses external workspace storage, which is every microsandbox generation. Creation validates that generation while holding the deployment lock, before committing the Session or compute reservation. Existing Sessions use their immutable workspace binding for Runtime admission and the final execution check. A Provider with its own disk does not require this capability.
+Core requires the selected Harness profile to support `retained_native_history` when the selected deployment generation uses external workspace storage, which is every microsandbox generation. Creation validates that generation while holding the deployment lock, before committing the Session or compute reservation. Existing Sessions use their immutable workspace binding for Runtime admission and the final execution check.
 
 ## Conformance
 

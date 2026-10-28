@@ -1,6 +1,6 @@
+import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { randomUuid } from "@oac/agents-client";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import {
   product,
@@ -12,10 +12,13 @@ import {
 import { ModelEditor } from "./ModelEditor";
 import { Button } from "./components/ui/button";
 import { ProviderEditor } from "./ProviderEditor";
-import { Help, ErrorNotice, PageHeader } from "./components/shared";
+import { ErrorNotice } from "./components/shared";
 import { EmptyState } from "./components/ui/empty-state";
-
+import { randomUuid } from "@oac/agents-client";
+import { useUsage } from "./lib/usage";
+import { ModelTest } from "./Checks";
 export function Models() {
+  const usage = useUsage();
   const models = useModels();
   const providers = useProviders();
   const cache = useQueryClient();
@@ -30,52 +33,69 @@ export function Models() {
   });
   return (
     <>
-      <PageHeader title="模型">
-        <Help>
-          获取 Provider 的模型列表，勾选或自定义后保存。Agent 选择已绑定的模型。
-        </Help>
-        <Button
-          onClick={() =>
-            setProvider({ id: randomUuid(), name: "", revision: 0 })
-          }
-        >
-          <Plus />
-          添加 Provider
-        </Button>
-      </PageHeader>
-      <ErrorNotice error={models.error || providers.error || remove.error} />
-      <div className="min-h-0 flex-1 space-y-6 overflow-auto p-6">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 pt-6 pb-1 sm:px-10">
+        <h2 className="text-lg font-semibold tracking-tight text-fg">{tr("模型")}</h2>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() =>
+              setProvider({ id: randomUuid(), name: "", revision: 0 })
+            }
+          >
+            <Plus />
+            {tr("添加 Provider")}
+          </Button>
+        </div>
+      </div>
+      <ErrorNotice page error={models.error || providers.error || remove.error} />
+      <div className="mx-auto w-full max-w-6xl space-y-5 px-6 py-5 sm:px-10">
         {providers.data?.map((group) => (
           <section
             key={group.id}
             aria-label={group.name}
-            className="rounded-xl border border-line"
+            className="overflow-hidden rounded-2xl border border-line bg-surface app-shadow-card"
           >
-            <div className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-4">
-              <h2 className="min-w-0 flex-1 break-words text-lg font-semibold">
+            <div className="flex min-h-12 flex-wrap items-center gap-3 border-b border-line bg-surface-subtle/80 px-5 py-2.5">
+              <h2 className="min-w-0 flex-1 break-words text-sm font-semibold text-fg">
                 {group.name}
               </h2>
-              <span className="text-base text-fg-muted">
+              <span className="rounded-md bg-surface px-2 py-0.5 text-sm text-fg-muted ring-1 ring-line">
                 {models.data?.filter((model) => model.provider_id === group.id)
                   .length || 0}{" "}
-                个模型
+                {tr("个模型")}
               </span>
               <Button
-                variant="ghost"
-                aria-label={`编辑 Provider ${group.name}`}
+                variant="outline"
+                size="sm"
+                aria-label={tr("编辑 Provider {{value0}}", {
+                  value0: group.name,
+                })}
                 disabled={!models.data}
                 onClick={() => setProvider(group)}
               >
-                管理模型
+                {tr("管理模型")}
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={`移除 Provider ${group.name}`}
-                disabled={remove.isPending}
+                aria-label={tr("移除 Provider {{value0}}", {
+                  value0: group.name,
+                })}
+                title={
+                  models.data?.some((model) => model.provider_id === group.id)
+                    ? tr("请先移除其中的模型")
+                    : undefined
+                }
+                disabled={
+                  remove.isPending ||
+                  !!models.data?.some((model) => model.provider_id === group.id)
+                }
                 onClick={() => {
                   if (
-                    confirm(`移除 Provider ${group.name}？请先移除其中的模型。`)
+                    confirm(
+                      tr("移除 Provider {{value0}}？", {
+                        value0: group.name,
+                      }),
+                    )
                   )
                     remove.mutate(`providers/${group.id}`);
                 }}
@@ -83,28 +103,29 @@ export function Models() {
                 <Trash2 />
               </Button>
             </div>
-            <div className="divide-y divide-line">
+            <div className="divide-y divide-line-muted">
               {models.data
                 ?.filter((model) => model.provider_id === group.id)
                 .map((model) => (
                   <div
                     key={model.id}
-                    className="flex items-center gap-3 px-5 py-4"
+                    className="flex min-h-12 items-center gap-3 px-5 py-2.5 transition-colors hover:bg-surface-hover/50"
                   >
                     <div className="min-w-0 flex-1">
-                      <h3 className="truncate text-base font-medium">
+                      <h3 className="truncate text-sm font-medium text-fg">
                         {model.name}
                       </h3>
                       {model.name !== model.model && (
-                        <p className="break-words text-base text-fg-muted">
+                        <p className="mt-0.5 break-words font-mono text-sm text-fg-muted">
                           {model.model}
                         </p>
                       )}
                     </div>
+                    <ModelTest id={model.id} name={model.name} />
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={`编辑 ${model.name}`}
+                      aria-label={tr("编辑 {{value0}}", { value0: model.name })}
                       onClick={() => setEditing(model)}
                     >
                       <Pencil />
@@ -112,10 +133,19 @@ export function Models() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={`移除 ${model.name}`}
-                      disabled={remove.isPending}
+                      aria-label={tr("移除 {{value0}}", { value0: model.name })}
+                      title={
+                        usage.model(model.id)
+                          ? tr("仍在使用中，不能移除")
+                          : undefined
+                      }
+                      disabled={remove.isPending || !!usage.model(model.id)}
                       onClick={() => {
-                        if (confirm(`移除模型 ${model.name}？`))
+                        if (
+                          confirm(
+                            tr("移除模型 {{value0}}？", { value0: model.name }),
+                          )
+                        )
                           remove.mutate(`models/${model.id}`);
                       }}
                     >
@@ -127,7 +157,7 @@ export function Models() {
           </section>
         ))}
         {!providers.isPending && !providers.data?.length && (
-          <EmptyState title="添加 Provider，选择需要的模型" />
+          <EmptyState title={tr("添加 Provider，选择需要的模型")} />
         )}
       </div>
       {editing && (

@@ -14,7 +14,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/processconfig"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimeobs"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/providers"
@@ -120,11 +119,11 @@ func credentialService(t *testing.T) func(owner, candidate deployment.Setup) (de
 }
 
 func TestManagedSetupNeverReusesAnotherGenerationOrUnverifiedState(t *testing.T) {
-	value := deployment.Setup{InstallationID: "installation", Provider: "docker", Mode: "nodes", Generation: 1}
+	value := deployment.Setup{InstallationID: "installation", Provider: "microsandbox", Mode: "nodes", Generation: 1}
 	var loadErr error
 	setups := &fakeDeploymentSetups{t: t, setup: func(context.Context) (deployment.Setup, error) { return value, loadErr }}
 	s := &managedSetup{registry: providers.Builtin(), deployment: setups, allocations: &fakeGenerationAllocations{t: t}, installationID: "installation"}
-	cached := &execution.RuntimeProvider{InstallationID: "installation", ProviderKind: "docker", Generation: 1}
+	cached := &execution.RuntimeProvider{InstallationID: "installation", ProviderKind: "microsandbox", Generation: 1}
 	s.publish(cached)
 	if got, err := s.load(t.Context()); err != nil || got != cached {
 		t.Fatal("matching immutable selection was not reused")
@@ -169,7 +168,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	s := &managedSetup{registry: providers.Builtin(), installationID: id, hub: hub, deployment: &fakeDeploymentSetups{t: t}, allocations: &fakeGenerationAllocations{t: t}, runtimeAPI: "https://core.example/api/v1"}
-	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
+	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "microsandbox"}
 	s.publish(previous)
 	candidate, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Operations: microsandbox.Operations(), Suspension: &deployment.Suspension{IdleSeconds: 300, RetentionSeconds: 86400}})
 	if err != nil {
@@ -189,7 +188,7 @@ func TestManagedSetupPreparesWithoutPublishing(t *testing.T) {
 func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 	id := uuid.NewString()
 	s := &managedSetup{processPaths: sandbox.ProcessPaths{ArtifactRoot: t.TempDir(), StateRoot: t.TempDir()}, registry: providers.Builtin(), installationID: id}
-	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "docker"}
+	previous := &execution.RuntimeProvider{InstallationID: id, Generation: 1, ProviderKind: "microsandbox"}
 	s.publish(previous)
 	_, err := s.prepare(t.Context(), deployment.Setup{InstallationID: id, Provider: "e2b", Mode: "direct", UsesCredential: true,
 		Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}})
@@ -200,7 +199,7 @@ func TestManagedSetupRejectedCandidateRetainsSelection(t *testing.T) {
 
 func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 	id := uuid.NewString()
-	value := deployment.Setup{InstallationID: id, Provider: "docker", Mode: "nodes", Generation: 1}
+	value := deployment.Setup{InstallationID: id, Provider: "microsandbox", Mode: "nodes", Generation: 1}
 	entered, release := make(chan struct{}), make(chan struct{})
 	delayed := func(ctx context.Context) (deployment.Setup, error) {
 		close(entered)
@@ -229,7 +228,7 @@ func TestManagedSetupResetTombstoneRejectsDelayedProviderLoad(t *testing.T) {
 	if s.selected.Load().Generation != 2 || s.selected.Load().Config != nil {
 		t.Fatal("empty publication lost its generation")
 	}
-	s.publish(&execution.RuntimeProvider{Generation: 1, ProviderKind: "docker"})
+	s.publish(&execution.RuntimeProvider{Generation: 1, ProviderKind: "microsandbox"})
 	if s.selected.Load().Config != nil {
 		t.Fatal("late old publication resurrected provider")
 	}
@@ -266,11 +265,11 @@ func TestManagedObservationSourceKeepsSelectionAcrossReconfiguration(t *testing.
 	if source, kind, err := setup.observationSource(t.Context()); source != nil || kind != "" || !errors.Is(err, runtimeobs.ErrUnavailable) {
 		t.Fatal("unconfigured setup did not return typed unavailability", source, err)
 	}
-	first := &docker.Provider{}
-	value.Provider, value.Mode, value.Generation = "docker", "nodes", 2
-	setup.publish(&execution.RuntimeProvider{Generation: 2, ProviderKind: "docker", Provider: first})
+	first := &microsandbox.Provider{}
+	value.Provider, value.Mode, value.Generation = "microsandbox", "nodes", 2
+	setup.publish(&execution.RuntimeProvider{Generation: 2, ProviderKind: "microsandbox", Provider: first})
 	source, kind, err := setup.observationSource(t.Context())
-	if err != nil || source != first || kind != "docker" {
+	if err != nil || source != first || kind != "microsandbox" {
 		t.Fatal(source, kind, err)
 	}
 	next := &microsandbox.Provider{}

@@ -1,15 +1,15 @@
 ---
 title: "沙箱节点协议"
 source: contracts/agents-api/node-generation-protocol.md
-source_hash: 3648a80013f1ae90031430c5bdf28d6ee5b59f55dda4b168dfeb99ab5bcec3e2
+source_hash: 78fca3a808fea42a96c020ce78178637e81d0c90ab7fe6827c011ec6f0b272c1
 ---
 
-沙箱节点协议连接 Core 与 Docker 或 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
+沙箱节点协议连接 Core 与 microsandbox 主机：主机针对其本地提供商执行提供商操作，并报告就绪状态、主机测量值及其持有的部署代次。
 
 | | |
 | --- | --- |
 | 调用方 | Core，唯一的生命周期所有者；节点从不重试变更，也不调度工作 |
-| 实现 | 沙箱节点程序，搭配 Docker 与 microsandbox 提供商 |
+| 实现 | 沙箱节点程序，搭配 microsandbox 提供商 |
 | 代码 | [`services/core/internal/sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node)（`wire.go`、`generation_wire.go`） |
 | 传输 | 一个 WebSocket，`GET /api/v1/sandbox-node/connect`；节点用于登记和读取配置的 HTTP 路由见[机器连接 API](machine-api.md#node-routes) |
 | 版本规则 | 与 `node.ProtocolVersion` 精确匹配，见[帧与版本](#frames-and-version) |

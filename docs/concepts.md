@@ -26,10 +26,10 @@ Creating or editing application assets, starting Sessions and submitting input r
 
 The Runtime daemon runs on Linux, macOS and Windows. Native platform behavior belongs to the Runtime and its Harness adapters; managed Sandbox Providers run Linux environments.
 
-Tools run with the permissions of the account that launches the daemon. The daemon adds no filesystem, permission or network isolation. Use the outer Environment for isolation: a managed Docker, E2B or microsandbox environment, or a container or VM around a self-hosted machine's Runtime. Authentication, private storage, locks and process cleanup protect the connection and lifecycle, but tools running as the same user can access Runtime data.
+Tools run with the permissions of the account that launches the daemon. The daemon adds no filesystem, permission or network isolation. Use the outer Environment for isolation: a managed E2B or microsandbox environment, or a container or VM around a self-hosted machine's Runtime. Authentication, private storage, locks and process cleanup protect the connection and lifecycle, but tools running as the same user can access Runtime data.
 
 ## Secrets and audit
 
 Credential values, model keys and confidential template data are write-only: application and administrator reads omit them. Conversation text, Skill source and Artifact content are readable resource data, including to administrators.
 
-Public writes record the API key responsible. Administrator writes record a separate audit identity and the target Project. Web's actor label is display-only; Core authorizes the Core key. An audit failure rolls back the write. Reads are not audited, and audit records contain no request bodies, secrets or file contents. The [write provenance](../contracts/agents-api/admin-api.md#write-provenance) and [audit log](../contracts/agents-api/admin-api.md#audit-log) contracts define the stored records.
+The [write provenance](../contracts/agents-api/admin-api.md#write-provenance) and [audit log](../contracts/agents-api/admin-api.md#audit-log) contracts define the stored records.

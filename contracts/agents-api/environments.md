@@ -8,7 +8,7 @@ Related owners:
 
 - [Environment files](./environment-files.md): the Files API on a live workspace.
 - [Executor credentials](./environment-executor-credentials.md): enrollment, the installation grant and connection status of a `self_hosted` machine.
-- [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (E2B, Docker or microsandbox) hosts `openai_hosted` Environments.
+- [Sandbox deployment](./sandbox-deployment.md): which Sandbox Provider (E2B or microsandbox) hosts `openai_hosted` Environments.
 - [Core–Runtime protocol](../../docs/runtime-protocol.md): the `runtime_prepare` transfer and every other wire message.
 - [Runtime and outer isolation](../../docs/concepts.md#runtime-and-outer-isolation): the daemon runs tools with its launching user's permissions; isolation comes from the outer Environment.
 
@@ -71,11 +71,11 @@ Both placements run the same Runtime: the daemon, the selected Harness, native t
 
 ### Hosted (`openai_hosted`)
 
-The deployment's configured Sandbox Provider (E2B, Docker or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
+The deployment's configured Sandbox Provider (E2B or microsandbox, see [sandbox deployment](./sandbox-deployment.md)) hosts the Environment. [Harness capabilities](./harness-capabilities.md) lists which Harnesses run there.
 
 - Session creation, with or without initial input, commits the Session, Environment and retry identity before the Worker provisions compute. A creation interrupted before bootstrap is recovered without repeating the Provider's Create.
 - Provisioning needs no caller action; the Session stays idle until a Turn starts.
-- Omitted or null `network` means enabled; `disabled` and `restricted` are rejected before the Session is created ([restricted network](#restricted-network)).
+- Omitted or null `network` means enabled; `disabled` and `restricted` need a hosted Environment on a sandbox Provider that can restrict ([network policy](#restricted-network)).
 - A Core restart keeps the allocation, workspace and native identity and never replays uncertain work.
 - Terminal cleanup revokes authority and settles pending input in one transaction before the Provider reclaims compute. New input on a terminal Environment is rejected.
 - Deleting the Session reclaims its Environment; deleting a Template does not.
@@ -87,7 +87,6 @@ The application owns the machine. It creates the Session with a clean absolute `
 - `remote_url` is the daemon WebSocket URL derived from Core's public URL, never from request headers or a daemon address. It names Core's private daemon transport.
 - Enrollment binds the exact Session, Environment, device and executor key. It creates no allocation and cannot move a Session to another device.
 - The Session's workspace must equal the `/workspace` alias or the exact canonical directory the Runtime is bound to. Naming a path grants no access to it.
-- The Session carries its own model provider; deployment defaults never apply ([model execution](./model-execution.md#saved-defaults-and-precedence)).
 - Session reads, lists and events return the `self_hosted` output with the Environment ID, workspace and capability directories, never private configuration. `capability_directories` lists the caller's selections; the Runtime's installation locations stay private.
 - Compute, workspace and files stay the application's. Deleting the Session or revoking the credential denies further access but does not stop native processes; the machine owner stops and cleans up.
 - The workspace and native history must survive a daemon restart. Losing them never authorizes silent replacement or replay.
@@ -106,34 +105,13 @@ The application owns the machine. It creates the Session with a clean absolute `
 
 ## Input admission
 
-Session input goes through `POST /agents/sessions/{id}/events` in ordered batches of 1–64 events. On an Environment-bearing Session, Core reserves input that cannot start yet until the Environment is connected and prepared.
+On an Environment-bearing Session, Core reserves input that cannot start yet until the Environment is connected and prepared. [Send input](./sessions-events.md#send-input) and [Initial input at Session creation](./sessions-events.md#initial-input-at-session-creation) define each request's behavior, and [Input errors](./sessions-events.md#input-errors) lists every outcome. Creation without input creates no Turn and no connection action but still requests Environment preparation.
 
-A valid node-backed creation can wait for compute capacity after committing. Initial input uses the same reservation and deadline while waiting; creating without input still requests Environment preparation. [Placement and generation selection](./sandbox-deployment.md#generation-ownership-and-rollout) define the scheduling rules.
+A valid node-backed creation can wait for compute capacity after committing. Initial input uses the same reservation and deadline while waiting. [Placement and generation selection](./sandbox-deployment.md#generation-ownership-and-rollout) define the scheduling rules.
 
-### Initial input
+Under the Session lock, a retry recovers its original reservation or receipt before Core chooses between the active Turn and a new reservation, and keeps that target during later work. An unlocked read or a retry after a conflict never picks a different path.
 
-Creation accepts initial text as a string or an ordered array of user messages. Omitted or null input creates no Turn and no connection action.
-
-- The creation transaction stores the initial batch as a reservation; for `self_hosted` it also records a connection action. Only the creation winner inserts them; retries never insert them again.
-- A `self_hosted` creation returns the Session and the Environment connection target at once, while the machine is still offline, without waiting for admission. A streamed `self_hosted` creation sends the committed JSON projection as its `created` snapshot, already showing `requires_action` and the connection action, then the committed `requires_action` event.
-- A fresh creation stream ends right after the idle state recorded when the admitted Turn ends or the reservation stops being pending, or after a failure. The connection alone clearing the action does not end it. A creation without input ends right after its created snapshot; a same-key stream retry ends at once without events. Later subscribers see only future events and recover history through queries.
-- Closing the stream leaves committed work intact; the Worker prepares and admits the input.
-- If the initial reservation expires, the Session becomes `failed` with a safe error and no actions, and no Turn is created. The Environment itself is not failed.
-- Creation retries keep the original identity, deadline and input. Saved-Agent retries with recorded intent recover before execution admission or source resolution.
-
-### Later input
-
-| Batch | Behavior |
-| --- | --- |
-| Messages, Turn active | Appended to the current Turn through ordered admission and native delivery. No new Turn, preparation or reservation. |
-| Messages, Session idle | Reserved; the request waits for the Worker to prepare, admit and claim. |
-| Cancellation only | Admitted through the ordinary durable cancellation path. An idle cancellation creates no Turn. A new cancellation conflicts while a reservation is pending; it never cancels pre-Turn input. |
-| Function results only | Admitted to the named pending calls with the ordinary result receipts, without a Turn or preparation. Cannot bypass a pending reservation. Function results never become Environment installation metadata. |
-| Mixed kinds | Rejected. |
-
-Core returns 202 only after the batch is durably admitted. For a cancellation, 202 confirms admission, not native completion or process exit. Under the Session lock, a retry recovers its original reservation or receipt before Core chooses between the active Turn and a new reservation, and keeps that target during later work. An unlocked read or a retry after a conflict never picks a different path.
-
-The waiting request uses bounded pooled operations, outside transactions and execution leases; it never prepares or starts native work. Only this route extends its response write deadline, to six minutes, covering the five-minute database deadline plus response time. Disconnecting stops the wait, not the reservation. [Input errors](./sessions-events.md#input-errors) lists every outcome of the request.
+A `POST /v1/agents/sessions/{session_id}/events` request waiting on a reservation uses bounded pooled operations, outside transactions and execution leases; it never prepares or starts native work. Only that route extends its response write deadline, to six minutes, covering the five-minute database deadline plus response time.
 
 ### Reservations
 
@@ -325,7 +303,20 @@ Core may start a hosted Environment from the result of an earlier preparation in
 
 `restricted` requires 1–100 exact ASCII hostnames in `allowed_domains`; subdomains and redirect targets need their own entries. Wildcards, URL or port syntax, IP literals, Unicode and trailing dots are rejected. Reads return the supplied spelling, order and duplicates; comparison uses a separate lowercase, deduplicated copy.
 
-Only `enabled` runs. Core stores the other policies in Templates but rejects any Session whose effective network is not `enabled`, before allocating compute. Initialization and tools use the host's existing network.
+A hosted Session's effective `network` narrows the deployment's [network cap](./sandbox-deployment.md#network), and the policy holds for the sandbox's whole life, including package installation and setup commands:
+
+- `enabled`: the sandbox reaches what the cap allows.
+- `disabled`: the sandbox reaches only Core and the Session's model provider. The model provider stays reachable on its `base_url` port at public addresses; a private model provider host is reachable only when the cap lists its exact name in the extra domains. Package installation and setup commands that need the network fail as ordinary setup errors.
+- `restricted`: the sandbox reaches the listed domains, Core and the model provider (on the same terms as `disabled`). A domain is allowed on public addresses when the cap allows the public internet, and on its resolved addresses when it is one of the cap's extra domains. Any other domain is rejected at Session creation with `sandbox_network_outside_cap`, whose `param` is that `allowed_domains` entry. If the cap shrinks later, the sandbox attempt fails with the same error.
+
+Limits ([adapter rules](../../docs/sandbox-provider.md#network-egress)):
+
+- Under `disabled`, the host's DNS server stays reachable on port 53.
+- A private model provider host that the cap lists is reachable on all its ports.
+- Reserved ranges such as 198.18.0.0/15 and the documentation ranges are never reachable, not even through a listed name or the model provider.
+- On E2B, a restricted domain is reachable only on ports 80 and 443, and a model provider on another port is reachable on every port of its public addresses.
+
+`disabled` and `restricted` return `sandbox_network_unsupported` when the deployment's sandbox Provider cannot restrict egress. A `self_hosted` Environment accepts only `enabled`, because Core cannot enforce a policy on a machine it does not run.
 
 ### Env and setup commands
 

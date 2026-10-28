@@ -12,7 +12,7 @@ function requester(details: unknown) {
 
 describe("Core error details", () => {
   it("projects documented flat values and retains one-request semantics", async () => {
-    const details = { current_generation: 4, supported: ["docker", "microsandbox"], enabled: true, missing: null, label: "ready", empty: [] };
+    const details = { current_generation: 4, supported: ["microsandbox", "e2b"], enabled: true, missing: null, label: "ready", empty: [] };
     const { fetch, request } = requester(details);
     const error = await request.response("/sandbox/deployment", undefined, "PUT", { expected_generation: 3 }).catch((value: unknown) => value);
     expect(error).toBeInstanceOf(AgentCoreError);
@@ -20,7 +20,7 @@ describe("Core error details", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0]).toEqual(["/core/v1/sandbox/deployment", expect.objectContaining({ method: "PUT", credentials: "same-origin", redirect: "error" })]);
     details.supported[0] = "mutated";
-    expect((error as AgentCoreError).details?.supported).toEqual(["docker", "microsandbox"]);
+    expect((error as AgentCoreError).details?.supported).toEqual(["microsandbox", "e2b"]);
   });
 
   it.each([

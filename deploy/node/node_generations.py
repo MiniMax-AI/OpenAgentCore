@@ -37,7 +37,7 @@ def helper_archive(args, installer):
     archive = io.BytesIO()
     source_dir = Path(installer.__file__).parent
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
-        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py"):
+        for name in ("node_install.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_microsandbox.py"):
             package.write(source_dir / name, "__main__.py" if name == "node_install.py" else name)
     return archive.getvalue()
 

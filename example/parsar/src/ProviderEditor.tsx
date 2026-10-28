@@ -1,3 +1,4 @@
+import { tr } from "./lib/i18n";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -14,23 +15,28 @@ import {
   DialogTitle,
   DialogFooter,
 } from "./components/ui/dialog";
-import { Field, Help, ErrorNotice } from "./components/shared";
-
-type Choice = { model: string; name: string };
-
+import { Field, ErrorNotice } from "./components/shared";
+type Choice = {
+  model: string;
+  name: string;
+};
 export function ProviderEditor({
   value,
   close,
+  onSaved,
 }: {
+  onSaved?: (id: string) => void;
   value: ProviderProfile;
   close: () => void;
 }) {
   const snapshot = useQuery({
     queryKey: ["provider-editor", value.id],
     queryFn: () =>
-      product<ProviderProfile & { models: ModelProfile[] }>(
-        `providers/${value.id}`,
-      ),
+      product<
+        ProviderProfile & {
+          models: ModelProfile[];
+        }
+      >(`providers/${value.id}`),
     enabled: Boolean(value.revision),
     gcTime: 0,
     staleTime: Infinity,
@@ -38,13 +44,16 @@ export function ProviderEditor({
     refetchOnReconnect: false,
   });
   if (!value.revision)
-    return <ProviderForm value={value} models={[]} close={close} />;
+    return (
+      <ProviderForm value={value} models={[]} close={close} onSaved={onSaved} />
+    );
   if (snapshot.data)
     return (
       <ProviderForm
         value={snapshot.data}
         models={snapshot.data.models}
         close={close}
+        onSaved={onSaved}
       />
     );
   return (
@@ -56,11 +65,11 @@ export function ProviderEditor({
     >
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>编辑 Provider</DialogTitle>
+          <DialogTitle>{tr("编辑 Provider")}</DialogTitle>
         </DialogHeader>
         {snapshot.isPending ? (
           <p className="text-base" role="status">
-            加载中…
+            {tr("加载中\u2026")}
           </p>
         ) : (
           <ErrorNotice
@@ -72,12 +81,13 @@ export function ProviderEditor({
     </Dialog>
   );
 }
-
 function ProviderForm({
   value,
   models,
   close,
+  onSaved,
 }: {
+  onSaved?: (id: string) => void;
   value: ProviderProfile;
   models: ModelProfile[];
   close: () => void;
@@ -106,7 +116,9 @@ function ProviderForm({
   });
   const discover = useMutation({
     mutationFn: () =>
-      product<{ models: string[] }>("providers/discover", "POST", connection()),
+      product<{
+        models: string[];
+      }>("providers/discover", "POST", connection()),
     onSuccess: ({ models: found }) => {
       setCatalog(found);
       setChoices((old) => [
@@ -131,6 +143,7 @@ function ProviderForm({
         cache.invalidateQueries({ queryKey: ["providers"] }),
         cache.invalidateQueries({ queryKey: ["models"] }),
       ]);
+      onSaved?.(value.id);
       close();
     },
   });
@@ -171,9 +184,9 @@ function ProviderForm({
           <DialogTitle>
             {step === "connection"
               ? value.revision
-                ? "编辑 Provider"
-                : "添加 Provider"
-              : `${name} · 选择模型`}
+                ? tr("编辑 Provider")
+                : tr("添加 Provider")
+              : tr("{{value0}} \u00B7 选择模型", { value0: name })}
           </DialogTitle>
         </DialogHeader>
         {step === "connection" ? (
@@ -182,10 +195,11 @@ function ProviderForm({
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               discover.mutate();
             }}
           >
-            <Field label="Provider 名称" id="provider-name">
+            <Field label={tr("Provider 名称")} id="provider-name">
               <Input
                 id="provider-name"
                 disabled={busy}
@@ -193,7 +207,7 @@ function ProviderForm({
                 maxLength={80}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="例如 MiniMax"
+                placeholder={tr("例如 MiniMax")}
               />
             </Field>
             <Field label="Base URL" id="provider-base">
@@ -216,16 +230,14 @@ function ProviderForm({
                 maxLength={8192}
                 onChange={(e) => setKey(e.target.value)}
                 placeholder={
-                  value.has_api_key ? "已保存，留空保持不变" : "填写 API Key"
+                  value.has_api_key
+                    ? tr("已保存，留空保持不变")
+                    : tr("填写 API Key")
                 }
               />
             </Field>
             <div className="flex items-center gap-2 text-base">
-              <span>模型连接</span>
-              <Help>
-                地址和密钥用于获取此 Provider
-                的模型列表。密钥仅保存在本机后端，不返回浏览器。Codex 和 Claude Code 的托管及用户机器会话使用此连接；纯文本和 MiniMax Code 使用 Core 部署的连接。
-              </Help>
+              <span>{tr("模型连接")}</span>
             </div>
           </form>
         ) : (
@@ -236,21 +248,21 @@ function ProviderForm({
             >
               <span>
                 {catalog
-                  ? `获取到 ${catalog.length} 个模型`
-                  : `共 ${choices.length} 个模型`}{" "}
-                · 已选 {selected.size} 个
+                  ? tr("获取到 {{value0}} 个模型", { value0: catalog.length })
+                  : tr("共 {{value0}} 个模型", { value0: choices.length })}{" "}
+                {tr("· 已选 {{count}} 个", { count: selected.size })}
               </span>
               <Button
                 variant="outline"
                 disabled={busy}
                 onClick={() => setCustom(!custom)}
               >
-                自定义模型
+                {tr("自定义模型")}
               </Button>
             </div>
             {custom && (
               <div className="space-y-3 rounded-lg border border-line p-3">
-                <Field label="模型 ID" id="custom-model">
+                <Field label={tr("模型 ID")} id="custom-model">
                   <Input
                     id="custom-model"
                     value={customID}
@@ -259,12 +271,13 @@ function ProviderForm({
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault();
+                        e.stopPropagation();
                         addCustom();
                       }
                     }}
                   />
                 </Field>
-                <Field label="显示名称（选填）" id="custom-name">
+                <Field label={tr("显示名称（选填）")} id="custom-name">
                   <Input
                     id="custom-name"
                     value={customName}
@@ -277,19 +290,19 @@ function ProviderForm({
                   onClick={addCustom}
                   disabled={!customID.trim() || busy}
                 >
-                  加入列表
+                  {tr("加入列表")}
                 </Button>
               </div>
             )}
             <Input
-              aria-label="搜索模型"
-              placeholder="搜索模型"
+              aria-label={tr("搜索模型")}
+              placeholder={tr("搜索模型")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
             <div
               className="max-h-72 space-y-1 overflow-y-auto"
-              aria-label="可选模型"
+              aria-label={tr("可选模型")}
             >
               {choices
                 .filter((row) =>
@@ -314,7 +327,7 @@ function ProviderForm({
                 ))}
               {!choices.length && (
                 <p className="py-4 text-base text-fg-muted">
-                  没有模型，可以添加自定义模型。
+                  {tr("没有模型，可以添加自定义模型。")}
                 </p>
               )}
               {choices.length > 0 &&
@@ -324,7 +337,7 @@ function ProviderForm({
                     .includes(search.toLowerCase()),
                 ) && (
                   <p className="py-4 text-base text-fg-muted">
-                    没有匹配的模型。
+                    {tr("没有匹配的模型。")}
                   </p>
                 )}
             </div>
@@ -342,14 +355,14 @@ function ProviderForm({
                   discover.reset();
                 }}
               >
-                手动选择
+                {tr("手动选择")}
               </Button>
               <Button
                 type="submit"
                 form="provider-connect"
                 disabled={!name.trim() || !base.trim() || busy}
               >
-                {discover.isPending ? "获取中…" : "获取模型"}
+                {discover.isPending ? tr("获取中\u2026") : tr("获取模型")}
               </Button>
             </>
           ) : (
@@ -359,10 +372,10 @@ function ProviderForm({
                 disabled={busy}
                 onClick={() => setStep("connection")}
               >
-                上一步
+                {tr("上一步")}
               </Button>
               <Button disabled={busy || custom} onClick={() => save.mutate()}>
-                {save.isPending ? "保存中…" : "保存"}
+                {save.isPending ? tr("保存中\u2026") : tr("保存")}
               </Button>
             </>
           )}

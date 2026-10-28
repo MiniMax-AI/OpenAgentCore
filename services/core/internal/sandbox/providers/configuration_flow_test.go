@@ -90,10 +90,12 @@ func TestAdditionalConfigurationProviderUsesCommonAPIAndStore(t *testing.T) {
 	// The deployment identity and execution lease are database-wide.
 	pool := pgtest.OpenIsolated(t, nil)
 	kind := "regional-fixture"
-	adapter, err := providers.Builtin().Lookup("docker")
+	adapter, err := providers.Builtin().Lookup("microsandbox")
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The fixture runs without workspace storage or disks.
+	adapter.Policy = sandbox.DeploymentPolicy{}
 	adapter.Configuration = regionalCodec{}
 	registry := providers.FixtureRegistry(t, kind, adapter)
 	// The deployment reaches the registered configuration only through the

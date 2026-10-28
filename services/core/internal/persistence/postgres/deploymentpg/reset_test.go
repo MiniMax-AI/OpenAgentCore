@@ -52,7 +52,7 @@ func resetCount(t *testing.T, f fixture, query string) int {
 func TestResetStartEscalateAndComplete(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	if _, err := f.service.CreateEnrollment(admin(t), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)}); err != nil {
 		t.Fatal(err)
@@ -106,7 +106,7 @@ func TestResetStartEscalateAndComplete(t *testing.T) {
 func TestResetDeadlineAndCancel(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	if err := changes.StartReset(admin(t), installation, deployment.ResetRequest{ExpectedGeneration: view.Generation, Clear: deployment.ResetAuto}); err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestResetWritesNothingWithoutAuditOrLease(t *testing.T) {
 	f := newFixture(t)
 	closed := setupClosedExecution(t, f)
 	changes, _ := f.execution(t)
-	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	installation, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	request := deployment.ResetRequest{ExpectedGeneration: view.Generation, Clear: deployment.ResetAuto}
 	if err := changes.StartReset(adminaudit.WithSource(t.Context(), adminaudit.Source{}), installation, request); !errors.Is(err, adminaudit.ErrInvalidSource) {
 		t.Fatalf("StartReset with an invalid source = %v", err)
@@ -161,7 +161,7 @@ func TestResetSessionsAndAddressBindings(t *testing.T) {
 	}
 
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	f.enroll(t, view, deployment.Capacity{MaxActive: 1, MaxRetained: 1})
 	if bindings, err := f.service.AddressBindings(t.Context()); err != nil || bindings != (deployment.AddressBindings{Nodes: 1}) {
 		t.Fatalf("AddressBindings = %+v, %v", bindings, err)

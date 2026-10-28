@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strings"
 
@@ -33,16 +34,8 @@ func (c Config) Validate() error {
 	if !pinned || imageName == "" || strings.Contains(imageName, "@") || !validHash(digest) {
 		return sandbox.ErrInvalid
 	}
-	if c.Network.DefaultEgress != "allow" && c.Network.DefaultEgress != "deny" {
+	if u, err := url.Parse(c.CoreURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" {
 		return sandbox.ErrInvalid
-	}
-	if c.Network.DefaultIngress != "allow" && c.Network.DefaultIngress != "deny" {
-		return sandbox.ErrInvalid
-	}
-	for _, r := range c.Network.Rules {
-		if (r.Action != "allow" && r.Action != "deny") || (r.Direction != "egress" && r.Direction != "ingress") || r.Destination == "" {
-			return sandbox.ErrInvalid
-		}
 	}
 	return nil
 }
@@ -116,7 +109,7 @@ func ValidateRequest(q Request) error {
 	}
 	switch q.Operation {
 	case "create":
-		if q.Workspace == nil || (q.Bootstrap != nil && q.Bootstrap.Workspace != nil) || q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil {
+		if q.Workspace == nil || (q.Bootstrap != nil && q.Bootstrap.Workspace != nil) || q.Bootstrap == nil || q.Bootstrap.Reference != q.Reference || ValidateBootstrap(*q.Bootstrap) != nil || q.Bootstrap.Egress.Validate() != nil {
 			return sandbox.ErrInvalid
 		}
 	case "initial_info":
@@ -147,7 +140,7 @@ func ValidateRequest(q Request) error {
 		}
 	case "resume":
 		v := q.Resume
-		if q.Workspace == nil || (v != nil && v.Workspace != nil) || v == nil || v.Reference != q.Reference || !validID(v.OperationID) || ValidateSnapshot(q.Config, q.Reference, v.Snapshot) != nil || ValidateCompute(q.Config, q.Reference, v.Target) != nil || v.Target.RestoredFrom == nil || *v.Target.RestoredFrom != v.Snapshot {
+		if q.Workspace == nil || (v != nil && v.Workspace != nil) || v == nil || v.Reference != q.Reference || !validID(v.OperationID) || ValidateSnapshot(q.Config, q.Reference, v.Snapshot) != nil || ValidateCompute(q.Config, q.Reference, v.Target) != nil || v.Target.RestoredFrom == nil || *v.Target.RestoredFrom != v.Snapshot || v.Egress.Validate() != nil {
 			return sandbox.ErrInvalid
 		}
 	case "delete_snapshot":

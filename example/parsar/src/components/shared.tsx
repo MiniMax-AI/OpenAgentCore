@@ -1,98 +1,226 @@
+import { tr } from "../lib/i18n";
 import type { ReactNode } from "react";
 import { AlertCircle } from "lucide-react";
-import { CircleHelp } from "lucide-react";
-import * as Tooltip from "@radix-ui/react-tooltip";
 import { errorText } from "../lib/api";
-
+import { cn } from "../lib/utils";
 export function PageHeader({
   title,
+  back,
+  narrow,
   children,
 }: {
   title: string;
+  back?: ReactNode;
+  /** Match the 3xl column of form pages. */
+  narrow?: boolean;
   children?: ReactNode;
 }) {
   return (
-    <header className="flex min-h-16 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line px-6 py-3">
-      <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight">
-        {title}
-      </h1>
-      <div className="flex items-center gap-2">{children}</div>
+    <header className="shrink-0">
+      <div
+        className={cn(
+          "mx-auto flex w-full flex-wrap items-center justify-between gap-4 px-6 pt-8 pb-5 sm:px-10",
+          narrow ? "max-w-3xl" : "max-w-6xl",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-2">
+          {back}
+          <h1 className="min-w-0 truncate text-xl font-semibold tracking-tight text-fg">
+            {title}
+          </h1>
+        </div>
+        {children && (
+          <div className="flex flex-wrap items-center gap-2.5">{children}</div>
+        )}
+      </div>
     </header>
   );
 }
-
-export function Help({
-  children,
-  label = "了解更多",
-}: {
-  children: ReactNode;
-  label?: string;
-}) {
-  return (
-    <Tooltip.Root delayDuration={150}>
-      <Tooltip.Trigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:text-fg focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <CircleHelp className="h-4 w-4" />
-        </button>
-      </Tooltip.Trigger>
-      <Tooltip.Portal>
-        <Tooltip.Content
-          sideOffset={6}
-          className="app-shadow-floating z-[60] max-w-xs rounded-md border border-line bg-surface px-3 py-2 text-base text-fg"
-        >
-          {children}
-          <Tooltip.Arrow className="fill-surface" />
-        </Tooltip.Content>
-      </Tooltip.Portal>
-    </Tooltip.Root>
-  );
-}
-
 export function ErrorNotice({
   error,
   retry,
+  className,
+  page,
 }: {
   error: unknown;
   retry?: () => void;
+  className?: string;
+  /** Align with the page column instead of the surrounding container. */
+  page?: boolean;
 }) {
   if (!error) return null;
-  return (
+  const notice = (
     <div
       role="alert"
-      className="flex items-start gap-2 border-b border-line px-6 py-3 text-sm"
+      className={cn(
+        "my-3 flex items-start gap-3 rounded-xl border border-danger-border bg-danger-subtle px-4 py-3 text-sm",
+        !page && className,
+      )}
     >
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
       <div className="min-w-0 break-words">
         <p>{errorText(error)}</p>
         {retry && (
-          <button className="mt-1 underline underline-offset-4" onClick={retry}>
-            重新加载
+          <button
+            className="mt-1.5 font-medium underline underline-offset-4"
+            onClick={retry}
+          >
+            {tr("重新加载")}
           </button>
         )}
       </div>
     </div>
   );
+  return page ? (
+    <div className={cn("mx-auto w-full max-w-6xl px-6 sm:px-10", className)}>
+      {notice}
+    </div>
+  ) : (
+    notice
+  );
 }
-
 export function Field({
   label,
   id,
+  required,
+  error,
   children,
 }: {
   label: string;
-  id: string;
+  id?: string;
+  required?: boolean;
+  /** Shown under the field after a failed save attempt. */
+  error?: string;
   children: ReactNode;
 }) {
   return (
-    <div className="space-y-1.5">
-      <label htmlFor={id} className="block text-base text-fg-muted">
-        {label}
-      </label>
+    <div className="space-y-2" data-invalid={error ? "true" : undefined}>
+      <div className="flex items-baseline text-sm font-medium text-fg">
+        <label htmlFor={id}>{label}</label>
+        {required && (
+          <span aria-hidden className="ml-1 text-fg-subtle">
+            *
+          </span>
+        )}
+      </div>
       {children}
+      {error && <p className="text-sm text-danger">{error}</p>}
     </div>
+  );
+}
+export function PageTabs({
+  label,
+  active,
+  items,
+}: {
+  label: string;
+  active: string;
+  items: { key: string; label: string; href: string }[];
+}) {
+  return (
+    <div
+      className="mx-auto w-full max-w-6xl shrink-0 px-6 sm:px-10"
+      role="tablist"
+      aria-label={label}
+    >
+      <div className="flex items-center gap-6 overflow-x-auto border-b border-line">
+        {items.map((item) => (
+          <button
+            key={item.key}
+            role="tab"
+            aria-selected={active === item.key}
+            className={cn(
+              "-mb-px h-10 shrink-0 border-b-2 text-sm transition-colors",
+              active === item.key
+                ? "border-fg font-medium text-fg"
+                : "border-transparent text-fg-muted hover:text-fg",
+            )}
+            onClick={() => {
+              location.hash = item.href;
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+export function RecordTabs({
+  active,
+}: {
+  active: "conversations" | "runs" | "usage" | "audit";
+}) {
+  return (
+    <PageTabs
+      label={tr("对话与记录")}
+      active={active}
+      items={[
+        { key: "conversations", label: tr("对话"), href: "/conversations" },
+        { key: "runs", label: tr("运行"), href: "/runs" },
+        { key: "usage", label: tr("用量"), href: "/usage" },
+        { key: "audit", label: tr("审计日志"), href: "/audit" },
+      ]}
+    />
+  );
+}
+export function Section({
+  title,
+  action,
+  children,
+  className,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn(
+        "space-y-5 rounded-2xl border border-line bg-surface p-6 app-shadow-card sm:p-7",
+        className,
+      )}
+    >
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-lg font-semibold tracking-tight text-fg">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+export function Toggle({
+  label,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className={cn(
+        "flex items-center justify-between gap-6 py-1 text-sm text-fg",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      )}
+    >
+      <span>{label}</span>
+      <span className="relative inline-flex shrink-0">
+        <input
+          type="checkbox"
+          role="switch"
+          className="peer sr-only"
+          disabled={disabled}
+          checked={checked}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+        <span className="h-6 w-10 rounded-full bg-line-strong transition-colors peer-checked:bg-surface-emphasis peer-focus-visible:ring-2 peer-focus-visible:ring-accent/40" />
+        <span className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-surface app-shadow-control transition-transform peer-checked:translate-x-4" />
+      </span>
+    </label>
   );
 }

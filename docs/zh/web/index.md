@@ -1,7 +1,7 @@
 ---
 title: "Web 控制台"
 source: docs/web/index.md
-source_hash: eacc43b23569a21ee55d858602846ec93626432c81acba0792a94b0e1f0e1848
+source_hash: 6ea51f7e9634ae3f7433aad452b2a81302d13df0b533743d77feaafd4a53edb6
 ---
 
 Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥登录，查看健康状态和用量，检查应用创建的内容，并管理项目、密钥、节点和设置。应用使用项目 API 密钥调用 `/v1`，不使用 Web。
@@ -28,7 +28,7 @@ Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥�
 | 监控 | Session 日志 | 全部 Session；各 Session 的只读对话、跟踪、Turn、失败分类原因及下一步操作；自托管 Session 页面还管理执行器凭据并提供主机连接命令 |
 | 资源 | Agent、Environment 模板、Skills、文件、Vault | 检查和允许的删除操作，显示各资源所属项目及创建密钥 |
 | 平台 | 项目与密钥 | 创建、重命名和归档项目；签发与撤销密钥；各项目的用量、写入历史和 API 调用方法 |
-| 平台 | 节点 | 添加、编辑和移除 microsandbox 或 Docker 节点；各节点的就绪状态、活跃与保留上限、主机 CPU 与内存及其历史、可用磁盘，以及分配及其在各计算阶段的已用时间 |
+| 平台 | 节点 | 添加、编辑和移除 microsandbox 节点；各节点的就绪状态、活跃与保留上限、主机 CPU 与内存及其历史、可用磁盘，以及分配及其在各计算阶段的已用时间 |
 | 平台 | 设置 | **沙箱与调度**、**工作区存储**、**模型与凭据** 和 **服务与部署**；参阅[配置](../configuration.md#runtime-settings-web) |
 
 缺失数据展示为缺失（—），不会当作零。[控制台 API 使用](console-api-usage.md)列出各页面读取内容及统计边界。
@@ -37,7 +37,7 @@ Web 是 OpenAgentCore 安装的管理员控制台：运维人员用 Core 密钥�
 
 | 任务 | 位置 |
 | --- | --- |
-| 选择沙箱提供商（microsandbox、E2B 或 Docker）、规格和 Runtime，或重置沙箱提供商 | **设置 → 沙箱与调度**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
+| 选择沙箱提供商（microsandbox 或 E2B）、规格和 Runtime，或重置沙箱提供商 | **设置 → 沙箱与调度**；参阅[修改沙箱配置](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | 添加、调整或移除执行节点 | **节点**：**添加节点**、**编辑节点** 和移除；参阅[添加和管理节点](../getting-started/nodes.md) |
 | 设置 Harness 默认模型 | **设置 → 模型与凭据**；参阅[默认模型](../configuration.md#default-models) |
 | 创建项目并签发 API 密钥 | **项目与密钥**；参阅 [项目和 API 密钥](../getting-started/operations.md#projects-and-api-keys) |
@@ -56,7 +56,7 @@ Web 观察并管理安装。它从不启动 Session，也不发送输入；只�
 
 部署的沙箱提供商服务托管 Session。应用的 `self_hosted` Runtime（包括它自己 E2B 账号中的 Runtime）是独立路径，修改沙箱配置不会影响它。
 
-回环公开地址（`local_only`）使节点和远程应用无法访问 Core。控制台仍可通过自己的地址访问，并[展示警告](console-api-usage.md#provenance-and-monitoring)。
+回环公开地址（`local_only`）使节点和远程应用无法访问 Core。控制台仍可通过自己的地址访问，并展示警告。
 
 ## 诊断故障 {#diagnose-a-failure}
 

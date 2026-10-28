@@ -34,12 +34,13 @@ POST and PUT take the same complete selection and require `expected_generation` 
 | Field | Meaning |
 | --- | --- |
 | `expected_generation` | Required nonnegative integer from GET; never refresh and replay it automatically |
-| `provider` | Exactly one of `docker`, `microsandbox`, `e2b` |
-| `resources` | Per-sandbox limits, below; required for Docker and microsandbox, optional for E2B |
-| `configuration` | The provider's public selectors. E2B: the immutable `template` build and the optional paired `api_url` and `domain`. Docker and microsandbox accept only `{}` or omission |
-| `credential` | The provider's write-only credential. E2B: `{api_key}`, required at first setup and omitted on PUT to keep the current key; a null or empty key is invalid. Docker and microsandbox reject it |
+| `provider` | Exactly one of `microsandbox`, `e2b` |
+| `resources` | Per-sandbox limits, below; required for microsandbox, optional for E2B |
+| `network` | The egress cap, [below](#network). Omitted on POST means the default; omitted on PUT keeps the current cap |
+| `configuration` | The provider's public selectors. E2B: the immutable `template` build and the optional paired `api_url` and `domain`. microsandbox accepts only `{}` or omission |
+| `credential` | The provider's write-only credential. E2B: `{api_key}`, required at first setup and omitted on PUT to keep the current key; a null or empty key is invalid. microsandbox rejects it |
 
-The request has no Core address. Core derives the deployment's `core_url` from the installation public URL (`public_url` in `config.json`, `OAC_PUBLIC_URL` for Core): the origin nodes and sandbox guests use to reach Core. A request that contains `core_url` is rejected with 400 `invalid_request` like any other unknown member. E2B guests reach Core from E2B's cloud, so an E2B selection is rejected with 409 `sandbox_configuration_error` while the public URL is loopback. Docker and microsandbox selections accept a loopback public URL, which serves only local development because a guest's loopback address does not reach its host. Changing the public URL is an installation change; see [Change the public URL](../../docs/getting-started/public-address.md#changing-the-public-url).
+The request has no Core address. Core derives the deployment's `core_url` from the installation public URL, [`OAC_PUBLIC_URL`](../../docs/configuration.md#settings): the origin nodes and sandbox guests use to reach Core. A request that contains `core_url` is rejected with 400 `invalid_request` like any other unknown member. E2B guests reach Core from E2B's cloud, so an E2B selection is rejected with 409 `sandbox_configuration_error` while the public URL is loopback. A microsandbox selection accepts a loopback public URL, which serves only local development because a guest's loopback address does not reach its host. Changing the public URL is an installation change; see [Change the public URL](../../docs/getting-started/public-address.md#changing-the-public-url).
 
 ### Resources
 
@@ -47,18 +48,31 @@ The request has no Core address. Core derives the deployment's `core_url` from t
 | --- | --- |
 | `cpus` | Integer, 1 through 255 |
 | `memory_mib` | Integer, 512 through 1048576 MiB |
-| `root_disk_mib` | microsandbox: at least 1024 MiB; Docker and E2B: omitted or zero |
-| `environment_disk_mib` | microsandbox: each new workspace's admitted capacity on workspace storage, where zero (the default) requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; Docker and E2B: omitted or zero |
+| `root_disk_mib` | microsandbox: at least 1024 MiB; E2B: omitted or zero |
+| `environment_disk_mib` | microsandbox: each new workspace's admitted capacity on workspace storage, where zero (the default) requests no quota and a positive value must be at least 1024 MiB and requires enforced quotas; E2B: omitted or zero |
 
 These limits describe each sandbox. A node's `max_active` and `max_retained` are separate reservation limits, set as [Node capacity](#nodes-and-allocations) describes; no host measurement permits exceeding either once set. Native providers may reject values that pass these bounds.
 
-Docker applies the CPU and memory limits and checks the running container's limits and exact image; it has no hard root or workspace disk quota. E2B CPU and memory must equal the exact ready template build, which Core validates through the pinned SDK before saving; disk capacity stays part of the template. Neither provider accepts a disk quota it cannot enforce. An E2B selection may omit `resources`: Core then stores the build's CPU count and memory as `cpus` and `memory_mib`, returned in `specification.resources` without disk fields. On restart Core loads the committed E2B selection without validating the template build again, so an E2B outage never blocks inspection or cleanup; new selections still require validation.
+E2B CPU and memory must equal the exact ready template build, which Core validates through the pinned SDK before saving; disk capacity stays part of the template. E2B accepts no disk quota it cannot enforce. An E2B selection may omit `resources`: Core then stores the build's CPU count and memory as `cpus` and `memory_mib`, returned in `specification.resources` without disk fields. On restart Core loads the committed E2B selection without validating the template build again, so an E2B outage never blocks inspection or cleanup; new selections still require validation.
 
 microsandbox configures the CPUs, memory and a managed root disk. It runs every Environment on [workspace storage](../../docs/workspace-provider.md) mounted at `/environment`. The [microsandbox helper](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) describes how restore handles these limits.
 
-The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. microsandbox always has the receipt, and a deployment saved before workspace storage is selected returns `workspace_storage_required`. Docker and E2B have no receipt and keep their own disks. Create and Resume provide a binding exactly when the frozen generation has the receipt.
+The optional response `specification.workspace` is an immutable capability receipt derived from the selected [workspace filesystem](../../docs/workspace-provider.md), not an independently writable setting. It contains only `attachment`, `user_xattr` and `capacity_quota`; filesystem configuration, paths and credentials stay outside the sandbox specification. Core validates the combined declarations before saving, and retained generation validation and node construction use this receipt. microsandbox always has the receipt, and a deployment saved before workspace storage is selected returns `workspace_storage_required`. E2B has no receipt and keeps its own disks. Create and Resume provide a binding exactly when the frozen generation has the receipt.
 
 Select the filesystem configuration before the microsandbox deployment. Selecting the filesystem does not alter existing generations or allocations; the next sandbox update derives the receipt. A filesystem selection must support the provider's declared requirements. An existing deployment requires the same `attachment` and `user_xattr`; the selection may change `capacity_quota`, after which new workspaces are refused until a sandbox update sets a matching `environment_disk_mib`. Existing workspaces keep the capacity they were admitted with.
+
+### Network
+
+`network` caps what every sandbox of the deployment may reach when its Environment's `network.access` is `enabled` or omitted. The connection to Core and the Session's model provider port on public addresses are always reachable, because the Harness runs inside the sandbox. To reach a model provider at a private address, list its exact host name in `domains`. MCP connections from the Environment follow the cap like any other traffic.
+
+| Field | Accepted value |
+| --- | --- |
+| `public` | Boolean. `true` allows public addresses; `false` allows only Core, the model provider and `domains` |
+| `domains` | At most 100 exact host names of at most 253 characters, in lowercase letters, digits, hyphens and dots, whose last label starts with a letter. Wildcards, IP literals, ports and URLs are rejected. Core stores them lowercase, deduplicated and sorted. Every address a name resolves to is allowed, private addresses included |
+
+The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked, except that E2B cannot block the metadata address 169.254.169.254 and its sandboxes cannot reach private networks at all. Addresses are resolved when a sandbox starts and when it resumes, so a name whose answer changes in between is not followed. A sandbox keeps the cap of the generation that created it.
+
+Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
 
 ### E2B configuration
 
@@ -66,7 +80,7 @@ E2B uses `configuration.template` in `template-id:build-uuid` form; the build UU
 
 ### Configuration discovery
 
-`POST /core/v1/sandbox/providers/{provider}/discovery` takes exactly `configuration`, `credential` and `query` objects, at most 64 KiB, and runs for at most 30 seconds. Unknown members and null objects are rejected. The credential is used only for that request and is never stored or returned; discovery saves nothing, changes no deployment, allocates nothing and never proves that a selection will be admitted. Docker and microsandbox reject it with 400 `sandbox_operation_unsupported`.
+`POST /core/v1/sandbox/providers/{provider}/discovery` takes exactly `configuration`, `credential` and `query` objects, at most 64 KiB, and runs for at most 30 seconds. Unknown members and null objects are rejected. The credential is used only for that request and is never stored or returned; discovery saves nothing, changes no deployment, allocates nothing and never proves that a selection will be admitted. microsandbox rejects it with 400 `sandbox_operation_unsupported`.
 
 Post `{"configuration": {…}, "credential": {…}, "query": {"field": "…", "path": […]}}`, where `field` is a field the provider declares as discovered and `path` holds the values selected at the earlier levels. The result is `{"options": [{"value": "…", "label": "…", "resources": {"cpus": 2, "memory_mib": 2048}, "complete": true}]}`, possibly empty. An option with `complete: true` can be saved as the field's value; the others open the next level. Any other field returns 400 `invalid_request_error`.
 
@@ -74,12 +88,12 @@ E2B declares `template` as discovered. An empty `path` lists the key's templates
 
 ## Safe response
 
-GET and successful writes return `installation_id`, `provider`, `core_url` (read-only: the installation public URL, present even before configuration), `mode`, `generation`, `owner_epoch`, `reset`, `rollout`, `suspension`, `resources` and `credential_configured`. A configured deployment also returns `specification`, `specification_digest`, `configuration` and `metadata`: the adapter's public projection of its selectors and of the observations it recorded, never raw stored values or secrets. E2B returns `configuration.template`, `configuration.api_url`, `configuration.domain` and, once recorded, `metadata.template_build`. Docker and microsandbox return empty `configuration` and `metadata` objects and `credential_configured: false`; an unconfigured deployment has neither object.
+GET and successful writes return `installation_id`, `provider`, `core_url` (read-only: the installation public URL, present even before configuration), `mode`, `generation`, `owner_epoch`, `reset`, `rollout`, `suspension`, `resources` and `credential_configured`. A configured deployment also returns `specification`, `specification_digest`, `configuration` and `metadata`: the adapter's public projection of its selectors and of the observations it recorded, never raw stored values or secrets. E2B returns `configuration.template`, `configuration.api_url`, `configuration.domain` and, once recorded, `metadata.template_build`. microsandbox returns empty `configuration` and `metadata` objects and `credential_configured: false`; an unconfigured deployment has neither object.
 
 - `metadata.template_build` is `{status, resources: {cpus, memory_mib, root_disk_mib}}`: the build as Core read it through the pinned SDK when the selection was saved. GET never calls E2B, so it stays cheap during an E2B outage. Validation admits only a `ready` build whose CPU count and memory equal the selected values; `root_disk_mib` is the build's native disk size, which Core does not enforce. Unknown values are null, `metadata: {}` means no observation was recorded, and an identical PUT without a credential does not refresh it.
 - `suspension` is `{idle_seconds, retention_seconds}`, Core's [suspension policy](../../docs/sandbox-provider.md#suspension), when the selected Provider declares checkpoint support; any other deployment, including an unconfigured one, returns null.
 - Request `resources` and response `specification.resources` are per-sandbox limits. Response `resources.allocations` and `resources.pending` count unreleased allocations and pending hosted Environments without an allocation; `resources.running` counts the unreleased allocations whose compute is running, so it excludes suspended ones.
-- An unconfigured deployment has an empty provider and no specification. Docker and microsandbox use `mode: nodes`; E2B uses `mode: direct`, without a synthetic node.
+- An unconfigured deployment has an empty provider and no specification. microsandbox uses `mode: nodes`; E2B uses `mode: direct`, without a synthetic node.
 - `generation` identifies the saved selection. `owner_epoch` fences the execution owner and node connections; it does not replace `expected_generation`.
 - `specification_digest` is the server's identity of the provider, limits and derived workspace capability receipt; enrollment echoes it unchanged.
 
@@ -89,7 +103,7 @@ The typed `SandboxAdminClient` in `packages/agents-client` checks the deployment
 
 POST validates a candidate before persisting it and creates no compute, Session or model request. At the current generation an identical selection is a no-op; an old generation returns 409 `sandbox_generation_stale`, even for the same body. Missing prerequisites or a failed preparation leave the committed provider in place. A different backend requires a reset first. POST also initializes after a completed reset, using the reset's new generation.
 
-PUT accepts the same provider while no reset is active. Send the observed generation once and never replay an uncertain write automatically. New allocations use the newly committed specification, and existing allocations keep their immutable deployment generation. A same-provider change retires no node, token or owner epoch and drains no execution: Docker and microsandbox nodes prepare the new target independently while serving their old pin, and E2B changes apply at once.
+PUT accepts the same provider while no reset is active. Send the observed generation once and never replay an uncertain write automatically. New allocations use the newly committed specification, and existing allocations keep their immutable deployment generation. A same-provider change retires no node, token or owner epoch and drains no execution: microsandbox nodes prepare the new target independently while serving their old pin, and E2B changes apply at once.
 
 ### E2B key replacement
 
@@ -192,7 +206,7 @@ One mutation gate serializes setup, PUT, reset, cancellation and finalization. A
 
 ## Nodes and allocations
 
-Node capacity is set separately from the deployment specification. `POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and `max_retained` and returns `{token, expires_at, enrollment_id}`; `enrollment_id` is a public handle of that command, never a credential. Core stores the token with the limits as sent, and an omitted limit stays unset. When the node enrolls, Core copies each explicit limit to it unchanged and sets each unset limit to the [recommended capacity](#recommended-capacity) of the host measurements in the enrollment request and the current specification; an unset limit with no host measurements fails with 409 `sandbox_node_host_unmeasured` and leaves the token unused. When only `max_retained` is set, the derived `max_active` never exceeds it; when only `max_active` is set, the derived `max_retained` is raised to at least `max_active`. microsandbox uses both limits. Docker never suspends, so Core replaces its `max_retained` with `max_active`, here and in PATCH. E2B has no nodes and answers 409 `sandbox_deployment_conflict`. A node cannot submit limits, but an unset limit follows the host measurements the node reports at enrollment, bounded by 1 and 1000000. Its local checks may refuse a deployment it cannot run but never raise the limits. Explicit values and later PATCH edits bind: once a node is enrolled, Core derives nothing again. [Node capacity](../../docs/configuration.md#node-capacity) explains the limits for operators.
+Node capacity is set separately from the deployment specification. `POST /core/v1/sandbox/enrollment-tokens` accepts optional `max_active` and `max_retained` and returns `{token, expires_at, enrollment_id}`; `enrollment_id` is a public handle of that command, never a credential. Core stores the token with the limits as sent, and an omitted limit stays unset. When the node enrolls, Core copies each explicit limit to it unchanged and sets each unset limit to the [recommended capacity](#recommended-capacity) of the host measurements in the enrollment request and the current specification; an unset limit with no host measurements fails with 409 `sandbox_node_host_unmeasured` and leaves the token unused. When only `max_retained` is set, the derived `max_active` never exceeds it; when only `max_active` is set, the derived `max_retained` is raised to at least `max_active`. microsandbox uses both limits. E2B has no nodes and answers 409 `sandbox_deployment_conflict`. A node cannot submit limits, but an unset limit follows the host measurements the node reports at enrollment, bounded by 1 and 1000000. Its local checks may refuse a deployment it cannot run but never raise the limits. Explicit values and later PATCH edits bind: once a node is enrolled, Core derives nothing again. [Node capacity](../../docs/configuration.md#node-capacity) explains the limits for operators.
 
 `GET /core/v1/sandbox/nodes` returns `{data: [...]}` with, for each node: `id`, `name`, `provider`, `online`, `last_seen_at`, `created_at`, `max_active`, `max_retained`, the counts `active`, `reserved`, `running`, `retained`, `snapshots` and `cleanup_pending`, `provider_ready`, the host measurements `cpu_count`, `available_memory_bytes` and `available_disk_bytes`, `rollout`, `recommended_capacity`, `enrollment_id` and `core_url`. `recommended_capacity` is `{max_active, max_retained}`, the [recommended capacity](#recommended-capacity) of the node's latest health and the current specification, or null until the node has reported a CPU count or effective cores and its total memory, and while the current specification does not validate. `enrollment_id` is the handle of the command that registered the node, or null when Core has none. `core_url` is the installation public URL at enrollment; a node whose `core_url` differs from the current public URL receives no new placements. Work already placed on it finishes there, including a placed Environment that has no allocation yet, and its retained sandboxes can still resume while the old address reaches Core. See [Change the public URL](../../docs/getting-started/public-address.md#changing-the-public-url).
 
@@ -215,22 +229,23 @@ The recommendation is absent unless the host reports a CPU count or effective co
 
 Some fields keep one name across providers but differ in meaning, or do not apply. Deployment fields come from `GET /core/v1/sandbox/deployment`, node and allocation fields from the node routes, and Runtime fields from the [Runtime telemetry API](./runtime-observability-api.md), where `disk` appears only in the observation list and history is described under [Session Runtime history](./runtime-observability-api.md#session-runtime-history).
 
-| Field | microsandbox | E2B | Docker |
-| --- | --- | --- | --- |
-| Independent workspace filesystem | Required: [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter), configured separately from compute | Unsupported | Unsupported |
-| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and, as a quota request, `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields | `cpus` and `memory_mib`; no disk quota |
-| Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved | Absent: `metadata` is empty |
-| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`; Core pauses an idle E2B sandbox with the SDK's native pause | `null` |
-| Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one | Totals across all nodes |
-| Enrollment-token `max_active`, `max_retained` | Both limits apply; an omitted limit is derived at enrollment | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes | `max_retained` always equals `max_active` |
-| Node list and detail | Enrolled nodes | Empty list; detail returns 404 | Enrolled nodes |
-| Node `retained`, `snapshots`, `max_retained` | Suspended sandboxes are `retained` minus `active`; `snapshots` also includes retained snapshots during restore or cleanup | Not applicable | Docker never suspends: `retained` equals `active`, `snapshots` is 0 and `max_retained` equals `max_active` |
-| Node `host.available_disk_bytes` | Free space on the filesystem of the node state directory; sandbox disks have their own quotas | Not applicable | Free space on the filesystem of the node state directory, not a container's disk |
-| Allocation `compute_phase`, `compute_phase_changed_at` | Includes `suspended`; the timestamp describes the current phase, not snapshot expiry | Not applicable: no node allocations | Always `disabled`, counted as running until release; the time is the allocation's creation |
-| Runtime observation `memory` | From the VM: memory limit and usage | From E2B metrics: memory usage and limit | From Docker stats: memory limit and usage |
-| Runtime observation `disk` | `null` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them | `null`: no disk quota |
-| Runtime observation `lifecycle_state: sleeping` | While suspended | Never | Never |
-| Runtime history CPU | Derived from cumulative CPU time | Mean of the utilization ratios E2B reported in each bucket | Derived from cumulative CPU time |
+| Field | microsandbox | E2B |
+| --- | --- | --- |
+| Independent workspace filesystem | Required: [Kernel NFS adapter](../../docs/workspace-provider.md#kernel-nfs-adapter), configured separately from compute | Unsupported |
+| Deployment `specification.network` | `public` and `domains` | `public` only; `domains` must be empty and private networks are unreachable |
+| Deployment `specification.resources` | `cpus`, `memory_mib`, `root_disk_mib` and, as a quota request, `environment_disk_mib` | `cpus` and `memory_mib`, equal to the ready template build's and taken from it when omitted; no disk fields |
+| Deployment `metadata.template_build` | Absent: `metadata` is empty | The build as Core read it when the selection was saved |
+| Deployment `suspension` | `{idle_seconds, retention_seconds}` | `{idle_seconds, retention_seconds}`; Core pauses an idle E2B sandbox with the SDK's native pause |
+| Deployment `resources.allocations`, `resources.pending` | Totals across all nodes | Core's unreleased E2B sandboxes, and hosted Environments waiting for one |
+| Enrollment-token `max_active`, `max_retained` | Both limits apply; an omitted limit is derived at enrollment | 409 `sandbox_deployment_conflict`, after the 400 capacity checks; E2B has no nodes |
+| Node list and detail | Enrolled nodes | Empty list; detail returns 404 |
+| Node `retained`, `snapshots`, `max_retained` | Suspended sandboxes are `retained` minus `active`; `snapshots` also includes retained snapshots during restore or cleanup | Not applicable |
+| Node `host.available_disk_bytes` | Free space on the filesystem of the node state directory; sandbox disks have their own quotas | Not applicable |
+| Allocation `compute_phase`, `compute_phase_changed_at` | Includes `suspended`; the timestamp describes the current phase, not snapshot expiry | Not applicable: no node allocations |
+| Runtime observation `memory` | From the VM: memory limit and usage | From E2B metrics: memory usage and limit |
+| Runtime observation `disk` | `null` | E2B `diskUsed` and `diskTotal`; `null` when the template does not report them |
+| Runtime observation `lifecycle_state: sleeping` | While suspended | Never |
+| Runtime history CPU | Derived from cumulative CPU time | Mean of the utilization ratios E2B reported in each bucket |
 
 ## Errors
 

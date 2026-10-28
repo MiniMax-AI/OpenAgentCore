@@ -13,7 +13,7 @@ const created = "2026-09-25T08:00:00.123456789Z";
 /** A ready node. */
 const node = {
   rollout: { state: "ready", ready_generation: 1 },
-  id: "3b0c1f4e-8a2d-4c6b-9e7f-1a2b3c4d5e6f", name: "core-01", provider: "docker", online: true, provider_ready: true,
+  id: "3b0c1f4e-8a2d-4c6b-9e7f-1a2b3c4d5e6f", name: "core-01", provider: "microsandbox", online: true, provider_ready: true,
   cpu_count: 16, available_memory_bytes: 8589934592, available_disk_bytes: 107374182400, running: 1, snapshots: 0,
   last_seen_at: "2026-09-25T09:00:00Z", max_active: 2, max_retained: 2, active: 1, reserved: 0, retained: 1, cleanup_pending: 0,
   created_at: created, core_url: "https://core.example", enrollment_id: "9d2e6b1a-4c3f-4e8d-a7b6-5c4d3e2f1a0b",
@@ -45,20 +45,17 @@ const allocation = {
 };
 const unconfigured = {
   credential_configured: false, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: null }, installation_id: "", provider: "", core_url: "https://core.example", reset: null, owner_epoch: 0, generation: 0, mode: "", resources: { allocations: 0, running: 0, pending: 0 }, suspension: null };
-const docker = {
-  configuration: {}, metadata: {},
-  ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "docker", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
-  resources: { allocations: 2, running: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048 } }, specification_digest: "0".repeat(64),
-};
 const microsandbox = {
-  ...docker, provider: "microsandbox", specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 } },
+  configuration: {}, metadata: {},
+  ...unconfigured, installation_id: "94be54a1-138c-4f30-bc87-b13686272dbe", provider: "microsandbox", rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, owner_epoch: 1, generation: 1, mode: "nodes",
+  resources: { allocations: 2, running: 2, pending: 1 }, specification: { resources: { cpus: 2, memory_mib: 2048, root_disk_mib: 8192 }, network: { public: true, domains: [] } }, specification_digest: "0".repeat(64),
   suspension: { idle_seconds: 300, retention_seconds: 86400 },
 };
 const externalWorkspace = { ...deploymentContract.providers.microsandbox.workspace, capacity_quota: false };
 const externalDeployment = { ...microsandbox, specification: { ...microsandbox.specification, workspace: externalWorkspace } };
 /** An E2B selection saved before Core recorded its template build. */
 const e2bDeployment = {
-  ...docker, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 } },
+  ...microsandbox, provider: "e2b", rollout: unconfigured.rollout, mode: "direct", specification: { resources: { cpus: 2, memory_mib: 2048 }, network: { public: true, domains: [] } },
   configuration: { template: "runtime:00000000-0000-0000-0000-000000000001", api_url: "https://api.e2b.app", domain: "e2b.app" } , credential_configured: true, metadata: { template_build: { status: null, resources: { cpus: null, memory_mib: null, root_disk_mib: null } } },
 };
 const reads: Record<string, (client: SandboxAdminClient) => Promise<unknown>> = {
@@ -72,8 +69,8 @@ function read(name: string, body: unknown) {
   return reads[name]!(new SandboxAdminClient({ fetch: vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(body)) }));
 }
 const { enrollment_id: _enrollment, ...unenrolled } = node;
-const { suspension: _suspension, ...unsuspended } = docker;
-const { specification_digest: _digest, ...undigested } = docker;
+const { suspension: _suspension, ...unsuspended } = microsandbox;
+const { specification_digest: _digest, ...undigested } = microsandbox;
 const { compute_phase_changed_at: _changed, ...unphased } = allocation;
 
 describe("strict sandbox administration projections", () => {
@@ -85,7 +82,7 @@ describe("strict sandbox administration projections", () => {
     ["nodes", "ready and unready", { data: [node, unready] }], ["nodes", "empty", { data: [] }],
     ["detail", "observed", detail], ["unobserved", "never observed", unobserved],
     ["allocations", "known and unknown phase times", { data: [allocation, { ...allocation, compute_phase: "suspended", compute_phase_changed_at: created, diagnostic: "node_unavailable" }] }],
-    ["deployment", "unconfigured", unconfigured], ["deployment", "Docker", docker], ["deployment", "microsandbox", microsandbox], ["deployment", "external workspace", externalDeployment], ["deployment", "E2B", e2bDeployment],
+    ["deployment", "unconfigured", unconfigured], ["deployment", "microsandbox", microsandbox], ["deployment", "external workspace", externalDeployment], ["deployment", "E2B", e2bDeployment],
   ])("accepts %s as Core serializes it: %s", async (name, _, body) => {
     expect(await read(name, body)).toEqual(body);
   });
@@ -106,9 +103,9 @@ describe("strict sandbox administration projections", () => {
     ["allocations", "another node's allocation", { data: [{ ...allocation, node_id: unready.id }] }],
     ["deployment", "a missing suspension", unsuspended],
     ["deployment", "a specification without its digest", undigested],
-    ["deployment", "an e2b member for Docker", { ...docker, configuration: e2bDeployment.configuration }],
-    ["deployment", "E2B without its e2b member", { ...docker, provider: "e2b", mode: "direct" }],
-    ["deployment", "an unknown mode", { ...docker, mode: "hybrid" }],
+    ["deployment", "an e2b member for microsandbox", { ...microsandbox, configuration: e2bDeployment.configuration }],
+    ["deployment", "E2B without its e2b member", { ...microsandbox, provider: "e2b", mode: "direct" }],
+    ["deployment", "an unknown mode", { ...microsandbox, mode: "hybrid" }],
   ])("rejects %s with %s", async (name, _, body) => {
     await expect(read(name, body)).rejects.toMatchObject({ status: 502, code: "invalid_admin_response" });
   });
@@ -179,7 +176,7 @@ describe("Core sandbox credential boundaries", () => {
   });
 
   it("patches idle policy once through the existing deployment resource", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ ...docker, suspension: { idle_seconds: 60, retention_seconds: 86400 } }));
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ ...microsandbox, suspension: { idle_seconds: 60, retention_seconds: 86400 } }));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin-only", fetch });
     expect((await admin.updateSuspension({ idle_seconds: 60 })).suspension?.idle_seconds).toBe(60);
     const [url, init] = fetch.mock.calls[0]!;
@@ -193,15 +190,15 @@ describe("Core sandbox credential boundaries", () => {
   });
 
   it("initializes using only the explicit provider with cancellation and admin credentials", async () => {
-    const deployment = docker;
+    const deployment = microsandbox;
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response(deployment));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin-only", fetch });
     const controller = new AbortController();
-    expect(await admin.initializeDeployment({ expected_generation: 0, provider: "docker" }, { signal: controller.signal })).toEqual(deployment);
+    expect(await admin.initializeDeployment({ expected_generation: 0, provider: "microsandbox" }, { signal: controller.signal })).toEqual(deployment);
     const [url, init] = fetch.mock.calls[0]!;
     expect(url).toBe("/core/v1/sandbox/deployment");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body))).toEqual({ expected_generation: 0, provider: "docker" });
+    expect(JSON.parse(String(init?.body))).toEqual({ expected_generation: 0, provider: "microsandbox" });
     expect(init?.signal).toBe(controller.signal);
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer admin-only");
     expect(new Headers(init?.headers).has("OpenAI-Beta")).toBe(false);
@@ -209,7 +206,7 @@ describe("Core sandbox credential boundaries", () => {
   it("forwards one specification with generation and preserves backend conflict details", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response({ error: { code: "sandbox_specification_mismatch", message: "Node specification differs" } }, 409));
     const admin = new SandboxAdminClient({ token: "admin-only", fetch });
-    const input = { provider: "docker" as const, resources: { cpus: 2, memory_mib: 2048 }, expected_generation: 3 };
+    const input = { provider: "microsandbox" as const, resources: { cpus: 2, memory_mib: 2048 }, expected_generation: 3 };
     await expect(admin.updateDeployment(input)).rejects.toMatchObject({ status: 409, code: "sandbox_specification_mismatch" });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual(input);
@@ -223,11 +220,11 @@ describe("Core sandbox credential boundaries", () => {
   it("does not retry an uncertain initialization transport failure", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Connection lost"));
     const admin = new SandboxAdminClient({ baseUrl: "/core/v1/sandbox", token: "admin", fetch });
-    await expect(admin.initializeDeployment({ expected_generation: 0, provider: "docker" })).rejects.toThrow("Sandbox configuration could not be confirmed.");
+    await expect(admin.initializeDeployment({ expected_generation: 0, provider: "microsandbox" })).rejects.toThrow("Sandbox configuration could not be confirmed.");
     expect(fetch).toHaveBeenCalledTimes(1);
   });
   it("uses the explicit admin credential and admin routes without a project beta header", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url) => response(String(url).endsWith("/deployment") ? docker : { data: [] }));
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (url) => response(String(url).endsWith("/deployment") ? microsandbox : { data: [] }));
     const admin = new SandboxAdminClient({ baseUrl: "https://core.example/core/v1/sandbox", token: "admin-only", fetch });
     await admin.retrieveDeployment(); await admin.listNodes(); await admin.listAllocations("node/a"); await admin.createEnrollment(); await admin.removeNode("node/a");
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([
@@ -312,14 +309,14 @@ describe("hosted provider configuration", () => {
   it("never retries uncertain switch or reset writes", async () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(new TypeError("Connection lost"));
     const client = new SandboxAdminClient({ fetch });
-    await expect(client.updateDeployment({ provider: "docker", expected_generation: 1 })).rejects.toThrow();
+    await expect(client.updateDeployment({ provider: "microsandbox", expected_generation: 1 })).rejects.toThrow();
     await expect(client.startReset({ clear: "auto", expected_generation: 1 })).rejects.toThrow();
     expect(fetch).toHaveBeenCalledTimes(2);
   });
 });
 
 const resetting = {
-  ...docker,
+  ...microsandbox,
   reset: { clear: "auto", requested_at: created, deadline_at: "2026-09-25T09:00:00Z", forced_at: null,
     remaining: { busy: 1, idle: 1, cleanup: 1, on_offline_nodes: 2,
       offline_nodes: [{ node_id: node.id, name: node.name, resources: 2 }] } },
@@ -375,10 +372,10 @@ it("uses the authoritative rollout signal instead of retained old Sessions for p
   for (const rollout of [
     { ...settled.rollout, state: "preparing" },
     { ...settled.rollout, previous_generation_sandboxes: 4 },
-    { ...docker.rollout, state: "preparing" },
-    { ...docker.rollout, nodes: { ...docker.rollout.nodes, unknown: -1 } },
+    { ...microsandbox.rollout, state: "preparing" },
+    { ...microsandbox.rollout, nodes: { ...microsandbox.rollout.nodes, unknown: -1 } },
   ]) {
-    const invalid = new SandboxAdminClient({ fetch: async () => response({ ...docker, rollout }) });
+    const invalid = new SandboxAdminClient({ fetch: async () => response({ ...microsandbox, rollout }) });
     await expect(invalid.retrieveDeployment()).rejects.toMatchObject({ code: "invalid_admin_response" });
   }
 });

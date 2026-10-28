@@ -8,7 +8,6 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/internal/providerassets"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/providercontract"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/e2b"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 )
@@ -36,13 +35,8 @@ var ErrUnknownProvider = fmt.Errorf("%w: unsupported sandbox provider", sandbox.
 // Builtin returns a registry of the adapters built into this program.
 func Builtin() *Registry {
 	return &Registry{adapters: map[string]Adapter{
-		"docker": {
-			NodeArtifacts: []providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy},
-			Policy:        docker.Policy(), Setup: docker.Setup(), Operations: docker.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: docker.BuildNode,
-			Configuration: nodeConfigurationAdapter{"docker", docker.Policy()},
-		},
 		"microsandbox": {
-			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage, runtimePolicy}, microsandbox.NodeArtifacts...),
+			NodeArtifacts: append([]providerassets.Artifact{nodeProgram, runtimeImage}, microsandbox.NodeArtifacts...),
 			Policy:        microsandbox.Policy(), Setup: microsandbox.Setup(), Operations: microsandbox.Operations, Mode: sandbox.DeploymentNodes, BuildLocal: microsandbox.BuildNode,
 			Configuration: nodeConfigurationAdapter{"microsandbox", microsandbox.Policy()},
 		},
@@ -147,7 +141,7 @@ func (r *Registry) DeploymentContract() (python, typescript string, err error) {
 		}
 		requirements := a.Configuration.Requirements()
 		setup := a.Setup
-		setup.Cautions, setup.Fields, setup.Presets = nonNil(setup.Cautions), nonNil(setup.Fields), nonNil(setup.Presets)
+		setup.Fields, setup.Presets = nonNil(setup.Fields), nonNil(setup.Presets)
 		providers[kind] = sandbox.ProviderProjection{Mode: a.Mode, DeploymentPolicy: a.Policy, Setup: &sandbox.ProviderSetup{SetupDeclaration: setup,
 			Credential: requirements.Credential, PublicOrigin: requirements.PublicOrigin, Discovery: requirements.Discovery.State == providercontract.Supported}}
 	}

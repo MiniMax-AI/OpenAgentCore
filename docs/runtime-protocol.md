@@ -40,8 +40,8 @@ sequenceDiagram
     R->>C: ordered envelopes
 ```
 
-- The [Machine connection API](../contracts/agents-api/machine-api.md#credentials) lists the credential kinds. Project API keys and the Core key are never Runtime credentials.
-- Both requests carry the credential as a Bearer header. A credential never appears in a URL, a payload log or a trace.
+- The [Machine connection API](../contracts/agents-api/machine-api.md#credentials) lists the credential kinds.
+- A credential never appears in a URL, a payload log or a trace.
 - The first heartbeat is sent at once, then at the interval that bootstrap returned. Each heartbeat declares `supported_agent_kinds`, their availability and their [capabilities](#capability-declarations). Before the first heartbeat, capabilities are unknown; a kind missing from a heartbeat is not advertised. Neither permits inference.
 - Heartbeats establish liveness only, never execution progress or a receipt for an earlier message.
 
@@ -329,7 +329,6 @@ Every number in this protocol is stated here. The Harness side of the Turn lifet
 | 2 minutes | The `begin`–`commit` staging phase of one `runtime_prepare` transfer | The transfer is rejected. |
 | 64 KiB | One chunk of a `runtime_prepare` transfer or a `workspace_write` body | A larger chunk fails validation. |
 | 50 MiB | One `runtime_prepare` transfer or `workspace_write` body (private bound) | The transfer is rejected before it reaches the installer. |
-| 5 MiB | The decoded inline body of a public write, checked by the API before any Runtime work | The API rejects the request. |
 | 4 MiB | One inbound transport frame | The frame is refused. |
 | 8 KiB, 128 bytes | A `workspace_read` request payload, and a correlation ID, checked before admission | The request is rejected; an oversized ID is not echoed and oversized trace metadata is omitted from replies. |
 | 1 MiB | The raw result of a `workspace_read`, within the transport frame | The result is explicitly truncated. |

@@ -37,12 +37,6 @@ test("shows each node's retained limit and elapsed phase time without inventing 
   await page.screenshot({ path: testInfo.outputPath("sandbox-metrics-zh.png"), fullPage: true });
 });
 
-test("hides the retained limit when the provider declares no suspension support", async ({ page, request }) => {
-  await openConsole(page, request, "nodes");
-  await expect(page.getByRole("table", { name: "Sandbox nodes" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Retained / limit" })).toHaveCount(0);
-});
-
 
 test("edits deployment idle time without changing generation", async ({ page, request }) => {
   // Settings shows the deployment only; Nodes reads the node inventory.
@@ -69,4 +63,27 @@ test("edits deployment idle time without changing generation", async ({ page, re
   await expect(idle).toHaveValue("60");
   expect((await writes(request)).filter((write) => write === "PATCH /core/v1/sandbox/deployment")).toHaveLength(1);
   expect(nodeReads).toEqual([]);
+});
+
+test("edits the sandbox network cap for new sandboxes", async ({ page, request }) => {
+  await openConsole(page, request, "settings?id=sandbox");
+  const area = page.getByRole("region", { name: "Network" });
+  const domains = area.getByLabel("Extra allowed domains");
+  await expect(area.getByRole("switch", { name: "Allow public internet" })).toBeChecked();
+  await domains.fill("Git.example.com\n*.example.com");
+  await expect(area.getByText("*.example.com is not a valid host name.")).toBeVisible();
+  await expect(area.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await domains.fill("gitlab.example.com");
+  await area.getByRole("switch", { name: "Allow public internet" }).uncheck();
+  const response = page.waitForResponse((response) => response.request().method() === "PUT" && response.url().endsWith("/sandbox/deployment"));
+  await area.getByRole("button", { name: "Save", exact: true }).click();
+  expect((await response).request().postDataJSON().network).toEqual({ public: false, domains: ["gitlab.example.com"] });
+  await expect(page.getByText("New sandboxes will run with this policy")).toBeVisible();
+});
+
+test("greys out private domains where the provider cannot reach a private network", async ({ page, request }) => {
+  await openConsole(page, request, "settings?id=sandbox", { sandbox: "e2b" });
+  const area = page.getByRole("region", { name: "Network" });
+  await expect(area.getByLabel("Extra allowed domains")).toBeDisabled();
+  await expect(area.getByRole("switch", { name: "Allow public internet" })).toBeEnabled();
 });

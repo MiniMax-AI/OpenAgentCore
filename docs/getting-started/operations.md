@@ -61,7 +61,7 @@ docker compose -f ~/.oac/core/compose.yaml stop
 docker compose -f ~/.oac/core/compose.yaml start
 ```
 
-Stopping Core stops no node and no sandbox. Node services, their microVMs and Docker containers keep running; stopping is not a way to reclaim compute. A Core restart does not continue an interrupted native tool call transparently. After reconnecting, query the same Session; don't create a new Session to replay uncertain work. Session event streams are live only; recover through Session, Turn and Items reads.
+Stopping Core stops no node and no sandbox. Node services and their microVMs keep running; stopping is not a way to reclaim compute. A Core restart does not continue an interrupted native tool call transparently. After reconnecting, query the same Session; don't create a new Session to replay uncertain work. Session event streams are live only; recover through Session, Turn and Items reads.
 
 A Web restart, including one caused by `oac apply`, signs everyone out of the console; see [sign-in](../web/console-server.md#sign-in).
 
@@ -163,7 +163,7 @@ An installation with independent workspace storage or nodes needs the full proce
 - The installation directory, including `.env`, `compose.yaml`, Compose overrides and the management command.
 - Every independent workspace namespace selected by current or retained objects, even when it is outside the installation volume. Back up its entire root, including `.oac-storage-root`, object identities, staging, live data, trash and deletion markers. Preserve numeric ownership, modes, links and extended attributes, including every `user.*` attribute. Copying only `live/data` loses lifecycle evidence and can resurrect deleted identities. [Workspace storage](../workspace-provider.md#kernel-nfs-adapter) owns the layout and ownership requirements.
 - For a [quota mode](../workspace-provider.md#quota-mode) namespace, the entire XFS filesystem holding the export as one block-level copy: a storage or LVM snapshot, or an image of the frozen or unmounted device. Only such a copy keeps project IDs, quota limits, inode identities, the filesystem UUID and the `oac-workspace-quota` journal consistent. A file-level copy, `tar`, `rsync` or `xfsdump` loses them; the command then refuses the restored objects instead of serving them unbounded.
-- Each node's state directory, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, and its provider storage: Docker volumes or microsandbox's store. Include all compute and snapshot resources still referenced by the database. See [when a node host fails](./nodes.md#when-a-node-host-fails).
+- Each node's state directory, `/var/lib/oac-node/.oac/nodes/<installation-id>/`, and its provider storage, the microsandbox store. Include all compute and snapshot resources still referenced by the database. See [when a node host fails](./nodes.md#when-a-node-host-fails).
 - Each private `checkpoint_root` in its entirety, including `.oac-checkpoint-store`, checkpoints, operation journals, lock files and tombstones, together with the matching Core database. The [checkpoint transfer contract](../sandbox-provider.md#checkpoint-transfer) owns its identity, ownership and lifecycle.
 
 ### Establish a stopped-write window

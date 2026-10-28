@@ -26,18 +26,22 @@ import (
 // BackendFingerprint identifies its namespace independently of mutable sizing.
 type RuntimeProvider struct {
 	// PublishUnconfigured updates the shared observation cache after reset commit.
-	PublishUnconfigured   func(uint64)
-	Generation            uint64
-	Mode                  string
-	loadDeployment        func(context.Context) (*RuntimeProvider, error)
-	prepareDeployment     RuntimeDeploymentPreparer
-	ProviderKind          string
-	CoreURL               string
-	InstallationID        string
-	BackendFingerprint    string
-	Provider              sandbox.SandboxProvider
-	Suspension            *RuntimeSuspensionPolicy
-	Resources             sandbox.Resources
+	PublishUnconfigured func(uint64)
+	Generation          uint64
+	Mode                string
+	loadDeployment      func(context.Context) (*RuntimeProvider, error)
+	prepareDeployment   RuntimeDeploymentPreparer
+	ProviderKind        string
+	CoreURL             string
+	InstallationID      string
+	BackendFingerprint  string
+	Provider            sandbox.SandboxProvider
+	Suspension          *RuntimeSuspensionPolicy
+	Resources           sandbox.Resources
+	// Network is the deployment's egress cap and NetworkSupport its Provider's
+	// declaration; Session admission checks Environment policies against both.
+	Network               sandbox.Network
+	NetworkSupport        sandbox.NetworkSupport
 	WorkspaceRequirements *workspacefs.Requirements
 	Workspace             *workspacefs.Declaration
 }
@@ -273,11 +277,20 @@ func (r *runtimeLifecycle) provision(ctx context.Context, tenant, environment, p
 	if err := r.lease.CheckOwnership(ctx); err != nil {
 		return owner, err
 	}
+	reserved, err := r.workspaceSpecification(ctx, owner.Key(), owner.ID)
+	if err != nil {
+		return owner, err
+	}
+	egress, err := r.allocationEgress(ctx, owner, reserved.Network)
+	if err != nil {
+		return owner, err
+	}
 	started := time.Now()
 	info, err := provider.Create(ctx, sandbox.Bootstrap{
 		Reference: runtimeReference(owner), SessionID: owner.SessionID, DeviceID: owner.DeviceID,
 		Workspace: workspace, CoreURL: r.config.CoreURL, Credential: token,
 		SuspendControl: sandbox.SupportsCheckpoint(provider.ProviderOperations()),
+		Egress:         egress,
 	})
 	logComputeStep(ctx, owner, "create", started, err)
 	if info.Reference == runtimeReference(owner) && info.CreateSettled && info.State == "absent" {

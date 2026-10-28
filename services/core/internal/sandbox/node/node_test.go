@@ -15,7 +15,7 @@ import (
 
 	"github.com/MiniMax-AI/OpenAgentCore/internal/machineapi"
 
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"github.com/google/uuid"
@@ -63,7 +63,7 @@ func reference() sandbox.Reference {
 	return sandbox.Reference{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString(), AllocationID: uuid.NewString()}
 }
 func identity() Identity {
-	return Identity{DeploymentGeneration: 1, SpecificationDigest: strings.Repeat("a", 64), NodeID: uuid.NewString(), InstallationID: uuid.NewString(), Provider: "docker", BackendFingerprint: strings.Repeat("1", 64), MaxActive: 4, MaxRetained: 16}
+	return Identity{DeploymentGeneration: 1, SpecificationDigest: strings.Repeat("a", 64), NodeID: uuid.NewString(), InstallationID: uuid.NewString(), Provider: "microsandbox", BackendFingerprint: strings.Repeat("1", 64), MaxActive: 4, MaxRetained: 16}
 }
 func stateDir(t *testing.T) string {
 	t.Helper()
@@ -125,7 +125,7 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 		t.Fatal("running node did not retain lifetime identity lock")
 	}
 	r := reference()
-	proxy := hub.Proxy(id.NodeID, docker.Operations(), 1)
+	proxy := hub.Proxy(id.NodeID, microsandbox.Operations(), 1)
 	createCtx, stopCreate := context.WithTimeout(ctx, 150*time.Millisecond)
 	defer stopCreate()
 	createDone := make(chan error, 1)
@@ -166,12 +166,9 @@ func TestLostCreateResponseDoesNotReplayAndReconnectSerializesCleanup(t *testing
 	}
 }
 
-func TestOfflineIsUnknownAndDockerDoesNotAdvertiseCheckpoint(t *testing.T) {
+func TestOfflineIsUnknown(t *testing.T) {
 	h := newTestHub(HubOptions{OwnerEpoch: func(context.Context) (uint64, error) { return 1, nil }})
-	p := h.Proxy(uuid.NewString(), docker.Operations(), 1)
-	if sandbox.SupportsCheckpoint(p.ProviderOperations()) {
-		t.Fatal("docker advertised checkpoint")
-	}
+	p := h.Proxy(uuid.NewString(), microsandbox.Operations(), 1)
 	_, err := p.GetInfo(context.Background(), reference())
 	if !errors.Is(err, sandbox.ErrComputeUnconfirmed) || errors.Is(err, sandbox.ErrNotFound) {
 		t.Fatalf("offline = %v", err)

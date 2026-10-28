@@ -97,7 +97,7 @@ func TestRuntimeObservationRoutesRejectQueries(t *testing.T) {
 		sessionID: {Target: runtimeobs.Target{SessionID: sessionID, Mode: runtimeobs.ModeNone}, Status: runtimeobs.StatusUnsupported, Reason: "runtime_mode_not_observable", ResolvedAt: now},
 	}}
 	handler, _, _ := adminTestHandler(t, observeWith(service))
-	invalid := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-observation?provider=docker")
+	invalid := runtimeObservationRequest(handler, adminSessionsPath+sessionID+"/runtime-observation?provider=microsandbox")
 	if invalid.Code != http.StatusBadRequest {
 		t.Fatalf("unsupported query returned %d: %s", invalid.Code, invalid.Body)
 	}
@@ -109,7 +109,7 @@ func TestRuntimeObservationResponsePreservesObservedZero(t *testing.T) {
 	sessionID, environmentID := uuid.NewString(), uuid.NewString()
 	value, err := runtimeObservationResponse(runtimeobs.Observation{
 		Target: runtimeobs.Target{SessionID: sessionID, EnvironmentID: environmentID, Mode: runtimeobs.ModeManaged, Instance: runtimeobs.Instance{AllocationID: uuid.NewString(), DeviceID: uuid.NewString(), AllocationState: "running", ComputePhase: "running", AllocationCreatedAt: now.Add(-time.Hour)}},
-		Status: runtimeobs.StatusObserved, ProviderType: "docker", ResolvedAt: now,
+		Status: runtimeobs.StatusObserved, ProviderType: "microsandbox", ResolvedAt: now,
 		Sample: &runtimeobs.Sample{ObservedAt: now, MemoryUsageBytes: &zeroMemory},
 	})
 	if err != nil || value.LifecycleState == nil || *value.LifecycleState != "active" || value.Memory == nil || value.Memory.UsageBytes == nil || *value.Memory.UsageBytes != 0 {

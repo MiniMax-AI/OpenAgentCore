@@ -1,7 +1,7 @@
 ---
 title: "模型执行"
 source: contracts/agents-api/model-execution.md
-source_hash: d33f9a9919e52136f8ece0a8480c1db059f2f35aa1cefa852ba1d001cc259fa2
+source_hash: 676dda3abe26188f998a8b0ff1cfa761135d6f04cff19433a5e5bd6ec23e7149
 ---
 
 每个 Session 都运行一个 Harness，并使用一个模型提供商。Core 通过三个固定版本上游协议未定义的 Core 扩展来选择它们：`x_agents_core.harness` 选择 Harness，`x_agents_core.model_provider` 提供端点和密钥，`x_agents_core.harness_config` 携带原生模型参数。Core 没有提供商目录、模型别名解析或产品权限模型；除 Session 和已保存 Agent 配置包外，唯一存储的配置包是每个 Harness 的一个 [deployment default](#deployment-defaults)。本文档定义 Harness—模型提供商协议：[`internal/modelprovider/config.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/modelprovider/config.go) 负责验证冻结的提供商连接，每个 Harness 则通过 [`internal/harnessconfig/harness.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/internal/harnessconfig/harness.go) 声明其协议和原生参数。
@@ -97,7 +97,7 @@ Core 从同一个数据库快照读取 Agent 配置和加密配置包；显式�
 ```
 
 - `agent.model` 是准确的提供商模型 ID；只要提供该值，就始终会替换部署模型。
-- Session 的 `x_agents_core` 接受 `model_provider`、`harness_config` 和 `environment`（[Environments](environments.md#preparation-order)）；任何其他成员，例如 `sandbox_node_id`，都会以 400 拒绝。托管节点放置自动完成。
+- Session 的 `x_agents_core` 接受 `model_provider`、`harness_config` 和 `environment`（[Environments](environments.md#preparation-order)）；任何其他成员都会以 400 拒绝。托管节点放置自动完成。
 
 不受支持的协议、Harness 或 Environment 组合会在创建 Session 前被拒绝。提供商可用性在执行期间检查，而不是通过探测检查。
 

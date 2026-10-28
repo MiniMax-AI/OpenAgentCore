@@ -6,7 +6,7 @@
  * in one corner of the product matches a menu opened in another.
  */
 export const menuContentClass =
-  "app-shadow-floating z-50 min-w-[200px] overflow-hidden rounded-lg border border-line bg-surface p-1 animate-pop-in data-[state=closed]:animate-pop-out"
+  "app-shadow-floating z-50 min-w-[200px] overflow-hidden rounded-xl border border-line bg-surface p-1.5 animate-pop-in data-[state=closed]:animate-pop-out"
 
 export const menuItemClass =
-  "flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm text-fg outline-none data-[highlighted]:app-pressed"
+  "flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-fg outline-none data-[highlighted]:app-pressed"

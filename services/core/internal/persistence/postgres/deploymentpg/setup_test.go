@@ -78,7 +78,7 @@ func TestSandboxDeploymentSetupConcurrentSelection(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			provider := "docker"
+			provider := "microsandbox"
 			if i%2 == 1 {
 				provider = "microsandbox"
 			}
@@ -120,7 +120,7 @@ func TestSandboxDeploymentSetupRejectsUnleasedWrites(t *testing.T) {
 	if err := closed.Claim(t.Context(), id); !errors.Is(err, pgunit.ErrLeaseClosed) {
 		t.Fatal("unleased claim accepted", err)
 	}
-	if _, err := closed.Initialize(t.Context(), id, sandbox.Selection{DeploymentSpec: testSpecification("docker"), Provider: "docker"}); !errors.Is(err, pgunit.ErrLeaseClosed) {
+	if _, err := closed.Initialize(t.Context(), id, sandbox.Selection{DeploymentSpec: testSpecification("microsandbox"), Provider: "microsandbox"}); !errors.Is(err, pgunit.ErrLeaseClosed) {
 		t.Fatal("unleased setup accepted", err)
 	}
 	if view, err := f.service.View(t.Context()); err != nil || view.InstallationID != "" || view.Provider != "" {

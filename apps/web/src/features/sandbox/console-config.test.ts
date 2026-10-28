@@ -4,10 +4,10 @@ import { nodeFilesAvailable, sandboxConsoleConfig } from "./console-config";
 afterEach(() => vi.unstubAllGlobals());
 describe("bundled console capabilities", () => {
   it("uses the existing console login without sending a project or admin bearer", async () => {
-    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64), node_artifacts: ["docker"] })));
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64), node_artifacts: ["microsandbox"] })));
     vi.stubGlobal("fetch", fetch);
     const controller = new AbortController();
-    expect(await sandboxConsoleConfig(controller.signal)).toEqual({ node_installer: true, node_installer_sha256: "a".repeat(64), node_artifacts: ["docker"] });
+    expect(await sandboxConsoleConfig(controller.signal)).toEqual({ node_installer: true, node_installer_sha256: "a".repeat(64), node_artifacts: ["microsandbox"] });
     expect(fetch).toHaveBeenCalledWith("/console/config", { credentials: "include", signal: controller.signal });
   });
   it.each([{}, { node_installer: "true", node_installer_sha256: "a".repeat(64) }, { node_installer: true, node_installer_sha256: "bad" }])("does not enable installation without a verified digest %j", async (body) => {
@@ -23,14 +23,14 @@ describe("bundled console capabilities", () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ node_installer: true, node_installer_sha256: "a".repeat(64), ...body }))));
       return sandboxConsoleConfig(new AbortController().signal);
     };
-    const docker = await read({ node_artifacts: ["docker"] });
-    expect(nodeFilesAvailable(docker, "docker")).toBe(true);
-    expect(nodeFilesAvailable(docker, "microsandbox")).toBe(false);
+    const files = await read({ node_artifacts: ["microsandbox"] });
+    expect(nodeFilesAvailable(files, "microsandbox")).toBe(true);
+    expect(nodeFilesAvailable(files, "e2b")).toBe(false);
     // An absent, null or malformed value reports none.
-    for (const body of [{}, { node_artifacts: null }, { node_artifacts: "docker" }, { node_artifacts: { docker: true } }]) {
+    for (const body of [{}, { node_artifacts: null }, { node_artifacts: "microsandbox" }, { node_artifacts: { microsandbox: true } }]) {
       const config = await read(body);
       expect(config.node_artifacts).toEqual([]);
-      expect(nodeFilesAvailable(config, "docker")).toBe(false);
+      expect(nodeFilesAvailable(config, "microsandbox")).toBe(false);
     }
   });
 });

@@ -1,10 +1,13 @@
 """Bounded SDK operations for an already authorized Core allocation, plus
 read-only deployment validation and observation."""
 from concurrent.futures import ThreadPoolExecutor
+import ipaddress
 import json
 import math
+import socket
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from e2b import Sandbox, SandboxQuery, SandboxState
@@ -77,6 +80,50 @@ def observed(cloud, point):
                     DiskUsed=metric.disk_used if disk_known else None, DiskTotal=metric.disk_total if disk_known else None)
     except Exception:
         return {'Status': 'unavailable'}
+
+
+# E2B sandboxes cannot reach private networks; the deny list closes the ranges
+# a sandbox host could still route to.
+BLOCKED_RANGES = ('127.0.0.0/8', '10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '169.254.0.0/16',
+                  '::1/128', 'fc00::/7', 'fe80::/10')
+ALL_TRAFFIC = '0.0.0.0/0'
+
+
+def public_ipv4(host):
+    """The public IPv4 addresses of a host name or literal; none when it does not resolve."""
+    try:
+        found = {info[4][0] for info in socket.getaddrinfo(host, None, socket.AF_INET)}
+    except OSError:
+        return []
+    return sorted(a for a in found if ipaddress.ip_address(a).is_global)
+
+
+def network_options(bootstrap):
+    """The SDK network option for Core's egress: public access, or only Core, the model provider and the named domains.
+
+    E2B matches a host name in allow_out only on ports 80 and 443, so a host on
+    any other port is also allowed by its public addresses."""
+    egress = bootstrap['Egress']
+    if egress['public']:
+        return {'deny_out': list(BLOCKED_RANGES)}
+    core = urlsplit(bootstrap['CoreURL'])
+    targets = [(core.hostname, core.port or (443 if core.scheme == 'https' else 80))]
+    for endpoint in egress['endpoints']:
+        target = urlsplit('//' + endpoint)
+        targets.append((target.hostname, target.port))
+    allowed = set(egress['domains'])
+    for host, port in targets:
+        try:
+            # An IP literal as a bare host would open every port; allow it only as a global /32 or /128.
+            address = ipaddress.ip_address(host)
+            if address.is_global:
+                allowed.add(str(ipaddress.ip_network(address)))
+            continue
+        except ValueError:
+            allowed.add(host)
+        if port not in (80, 443):
+            allowed.update(f'{a}/32' for a in public_ipv4(host))
+    return {'deny_out': [ALL_TRAFFIC, '::/0'], 'allow_out': sorted(allowed)}
 
 
 class Provider:
@@ -234,7 +281,7 @@ class Provider:
         try:
             cloud = Sandbox.create(template=self.config['Template'], timeout=self.config['TimeoutSeconds'],
                                    metadata=self.metadata, lifecycle={'on_timeout': 'kill', 'auto_resume': False},
-                                   **self.options())
+                                   network=network_options(bootstrap), **self.options())
         except Exception as error:
             if definitely_rejected(error):
                 self.receipt.save(status='rejected', settled=True)
@@ -259,7 +306,7 @@ class Provider:
             raise Failure('template_invalid' if check['ExitCode'] == 78 else 'unconfirmed')
         payload = dict(bootstrap, InstallationID=self.config['InstallationID'],
                        RuntimeBootstrap=self.q['RuntimeBootstrap'])
-        del payload['CoreURL'], payload['Credential'], payload['SuspendControl']
+        del payload['CoreURL'], payload['Credential'], payload['SuspendControl'], payload['Egress']
         if (set(payload) - set(MANAGED_BOOTSTRAP_FIELDS) or
                 not set(MANAGED_BOOTSTRAP_REQUIRED_FIELDS) <= set(payload)):
             raise Failure('invalid')

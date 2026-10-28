@@ -1,20 +1,58 @@
+import { useState } from "react";
+import { ResourceEditor } from "./Resources";
+import { ExecutionFields } from "./ExecutionFields";
+import { SkillCreate, SkillDetail, useSkills } from "./Skills";
+import { useQuery } from "@tanstack/react-query";
+import { api, readHistory } from "./lib/api";
+import { tr } from "./lib/i18n";
+import {
+  CapabilityEditor,
+  useCapabilities,
+  type Capability,
+} from "./Capabilities";
 import {
   useModels,
-  useProviders,
   useMCPs,
+  useRuntimes,
   type AgentProfile,
 } from "./lib/product";
-import { useSkills } from "./Skills";
+import { ResourceField } from "./components/ResourceField";
+import {
+  maxFiles,
+  maxPlugins,
+  maxSkills,
+} from "../shared/environment-limits.mjs";
 import { Select, SelectOption } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
-import { ErrorNotice, Field, Help } from "./components/shared";
+import { ErrorNotice, Field, Section, Toggle } from "./components/shared";
+import { randomUuid } from "@oac/agents-client";
 export type Configuration = Pick<
   AgentProfile,
-  "model_id" | "harness" | "instructions" | "skill_ids" | "mcp_ids"
+  | "harness"
+  | "model_id"
+  | "reasoning_effort"
+  | "reasoning_summary"
+  | "web_search"
+  | "verbosity"
+  | "service_tier"
+  | "instructions"
+  | "skill_ids"
+  | "skill_versions"
+  | "mcp_ids"
+  | "runtime_id"
+  | "enabled"
+  | "ask_user"
+  | "capability_ids"
+  | "capability_versions"
 >;
 export const emptyConfiguration: Configuration = {
+  harness: "codex",
   model_id: "",
-  harness: "claude_sdk",
+  reasoning_effort: "",
+  reasoning_summary: "",
+  web_search: "disabled",
+  verbosity: "",
+  service_tier: "",
   instructions: "",
   skill_ids: [],
   mcp_ids: [],
@@ -22,122 +60,323 @@ export const emptyConfiguration: Configuration = {
 export function ConfigurationFields({
   value,
   change,
+  errors = {},
 }: {
   value: Configuration;
   change: (value: Configuration) => void;
+  errors?: { model_id?: string; runtime_id?: string };
 }) {
-  const models = useModels();
-  const providers = useProviders();
-  const skills = useSkills();
-  const mcps = useMCPs();
-  const toggle = (key: "skill_ids" | "mcp_ids", id: string, checked: boolean) =>
-    change({
-      ...value,
-      [key]: checked ? [...value[key], id] : value[key].filter((v) => v !== id),
-    });
-  return (
-    <>
-      <Field label="模型" id="config-model">
-        <Select
-          id="config-model"
-          value={value.model_id}
-          onValueChange={(model_id) => change({ ...value, model_id })}
-        >
-          <SelectOption value="">选择模型</SelectOption>
-          {providers.data?.flatMap(
-            (provider) =>
-              models.data
-                ?.filter((model) => model.provider_id === provider.id)
-                .map((model) => (
-                  <SelectOption key={model.id} value={model.id}>
-                    {provider.name} / {model.name}
-                  </SelectOption>
-                )) || [],
-          )}
-        </Select>
-        {!models.isPending && !models.data?.length && (
-          <a href="#/models" className="inline-block text-base underline">
-            前往添加模型
-          </a>
-        )}
-      </Field>
-      <Field label="执行引擎" id="config-harness">
-        <Select
-          id="config-harness"
-          value={value.harness}
-          onValueChange={(harness) =>
-            change({ ...value, harness: harness as Configuration["harness"] })
-          }
-        >
-          <SelectOption value="claude_sdk">Claude Code</SelectOption>
-          <SelectOption value="codex">Codex</SelectOption>
-          <SelectOption value="mcode">MiniMax Code</SelectOption>
-        </Select>
-      </Field>
-      <Field label="指令" id="config-instructions">
-        <Textarea
-          id="config-instructions"
-          rows={6}
-          value={value.instructions}
-          onChange={(e) => change({ ...value, instructions: e.target.value })}
-        />
-      </Field>
-      {(
-        [
-          { key: "skill_ids", label: "Skills", rows: skills.data },
-          { key: "mcp_ids", label: "MCP", rows: mcps.data },
-        ] as const
-      ).map((group) => (
-        <section key={group.key} className="space-y-2">
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-medium">{group.label}</h3>
-            <Help>
-              {group.key === "skill_ids"
-                ? "最多选择 8 个技能，运行时需支持托管沙箱。新会话使用技能的默认版本。"
-                : "最多选择 8 个 MCP。托管会话从工作区连接，纯文本会话从 Core 连接；用户机器请在本地 Plugin 中配置。"}
-            </Help>
-          </div>
-          <div className="max-h-48 space-y-2 overflow-auto">
-            {group.rows?.map((row) => (
-              <label
-                key={row.id}
-                className="flex items-center gap-3 rounded-lg border border-line px-3 py-2 text-base"
-              >
-                <input
-                  type="checkbox"
-                  checked={value[group.key].includes(row.id)}
-                  disabled={
-                    !value[group.key].includes(row.id) &&
-                    value[group.key].length >= 8
-                  }
-                  onChange={(e) => toggle(group.key, row.id, e.target.checked)}
-                />
-                {row.name}
-              </label>
-            ))}
-            {value[group.key]
-              .filter(
-                (id) => group.rows && !group.rows.some((row) => row.id === id),
+  const capabilities = useCapabilities(),
+    runtimes = useRuntimes(),
+    models = useModels(),
+    skills = useSkills(),
+    mcps = useMCPs();
+  const [editor, setEditor] = useState<{
+    kind: string;
+    id: string;
+    creating?: boolean;
+  } | null>(null);
+  const add = (kind: string) =>
+    setEditor({ kind, id: randomUuid(), creating: true });
+  const inspect = (kind: string) => (id: string) => setEditor({ kind, id });
+  const close = () => setEditor(null);
+  const capabilityField = (kind: Capability["kind"], label: string) => (
+    <ResourceField
+      label={label}
+      multiple
+      limit={
+        kind === "plugin"
+          ? maxPlugins
+          : kind === "knowledge"
+            ? Math.max(
+                0,
+                maxFiles -
+                  (runtimes.data?.find((row) => row.id === value.runtime_id)
+                    ?.files?.length || 0),
               )
-              .map((id) => (
-                <label key={id} className="flex gap-3 text-base">
-                  <input
-                    type="checkbox"
-                    checked
-                    onChange={() => toggle(group.key, id, false)}
-                  />
-                  不可用资源 {id}
-                </label>
+            : undefined
+      }
+      loading={capabilities.isPending}
+      options={(capabilities.data || [])
+        .filter((row) => row.kind === kind)
+        .map((row) => ({ ...row, disabled: row.deprecated }))}
+      selected={(value.capability_ids || []).filter((id) =>
+        capabilities.data?.some((row) => row.id === id && row.kind === kind),
+      )}
+      change={(ids) =>
+        change({
+          ...value,
+          capability_ids: [
+            ...(value.capability_ids || []).filter(
+              (id) =>
+                !capabilities.data?.some(
+                  (row) => row.id === id && row.kind === kind,
+                ),
+            ),
+            ...ids,
+          ],
+        })
+      }
+      create={() => add(kind)}
+      createLabel={tr("新建{{name}}", { name: label })}
+      inspect={inspect(kind)}
+      detail={(id) => {
+        const row = capabilities.data?.find((row) => row.id === id);
+        return (
+          <div className="w-28">
+            <Select
+              aria-label={tr("{{value0}} 版本", { value0: row?.name || id })}
+              value={value.capability_versions?.[id] || ""}
+              onValueChange={(version) =>
+                change({
+                  ...value,
+                  capability_versions: {
+                    ...value.capability_versions,
+                    [id]: version,
+                  },
+                })
+              }
+            >
+              <SelectOption value="">{tr("默认版本")}</SelectOption>
+              {row?.versions.map((version) => (
+                <SelectOption key={version.version} value={version.version}>
+                  v{version.version}
+                </SelectOption>
               ))}
-            {group.rows?.length === 0 && (
-              <p className="text-base text-fg-muted">尚未添加{group.label}</p>
-            )}
+            </Select>
           </div>
-        </section>
-      ))}
+        );
+      }}
+    />
+  );
+  return (
+    <div className="space-y-6">
+      <Section title={tr("执行与环境")}>
+        <ExecutionFields
+          value={value}
+          change={change}
+          error={errors.model_id}
+        />
+        <ResourceField
+          label={tr("环境模板")}
+          required
+          error={errors.runtime_id}
+          loading={runtimes.isPending}
+          options={runtimes.data || []}
+          selected={value.runtime_id ? [value.runtime_id] : []}
+          change={(ids) => change({ ...value, runtime_id: ids[0] || "" })}
+          empty={tr("选择环境模板")}
+          create={() => add("runtimes")}
+          createLabel={tr("添加环境模板")}
+          inspect={inspect("runtimes")}
+        />
+      </Section>
+      <Section title={tr("指令")}>
+        <Field label={tr("主指令")} id="config-instructions">
+          <Textarea
+            id="config-instructions"
+            rows={10}
+            className="min-h-52 leading-relaxed"
+            placeholder={tr("描述它负责什么、如何工作，以及输出什么结果。")}
+            value={value.instructions}
+            onChange={(event) =>
+              change({ ...value, instructions: event.target.value })
+            }
+          />
+        </Field>
+        {capabilityField("prompt", tr("指令片段"))}
+      </Section>
+      <Section title={tr("能力")}>
+        <ResourceField
+          label="Skills"
+          multiple
+          limit={maxSkills}
+          loading={skills.isPending}
+          options={skills.data || []}
+          selected={value.skill_ids}
+          change={(ids) => change({ ...value, skill_ids: ids })}
+          create={() => add("skills")}
+          createLabel={tr("添加Skills")}
+          inspect={inspect("skills")}
+          detail={(id) => (
+            <SkillVersionSelect
+              id={id}
+              name={skills.data?.find((row) => row.id === id)?.name || id}
+              value={value.skill_versions?.[id] || ""}
+              change={(version) =>
+                change({
+                  ...value,
+                  skill_versions: { ...value.skill_versions, [id]: version },
+                })
+              }
+            />
+          )}
+        />
+        <ResourceField
+          label="MCP"
+          multiple
+          loading={mcps.isPending}
+          options={(mcps.data || []).map((row) => ({
+            ...row,
+            description: row.url,
+          }))}
+          selected={value.mcp_ids}
+          change={(ids) => change({ ...value, mcp_ids: ids })}
+          create={() => add("mcps")}
+          createLabel={tr("添加MCP")}
+          inspect={inspect("mcps")}
+        />
+        {capabilityField("plugin", "Plugins")}
+        {capabilityField("knowledge", tr("知识"))}
+        {(value.capability_ids || [])
+          .filter(
+            (id) =>
+              capabilities.data &&
+              !capabilities.data.some((row) => row.id === id),
+          )
+          .map((id) => (
+            <ResourceField
+              key={id}
+              label={tr("不可用资源")}
+              options={[]}
+              selected={[id]}
+              change={() =>
+                change({
+                  ...value,
+                  capability_ids: value.capability_ids?.filter(
+                    (key) => key !== id,
+                  ),
+                })
+              }
+            />
+          ))}
+      </Section>
+      <Section title={tr("行为")}>
+        <div className="space-y-3">
+          <Toggle
+            label={tr("启用 Agent")}
+            checked={value.enabled !== false}
+            onChange={(enabled) => change({ ...value, enabled })}
+          />
+          <Toggle
+            label={tr("允许 Agent 向用户提问")}
+            checked={!!value.ask_user}
+            onChange={(ask_user) => change({ ...value, ask_user })}
+          />
+        </div>
+      </Section>
+      {editor?.kind === "skills" &&
+        (editor.creating ? (
+          <SkillCreate
+            close={close}
+            onSaved={(id) =>
+              change({ ...value, skill_ids: [...value.skill_ids, id] })
+            }
+          />
+        ) : (
+          <SkillDetail
+            skill={skills.data!.find((row) => row.id === editor.id)!}
+            close={close}
+          />
+        ))}
+      {(editor?.kind === "mcps" || editor?.kind === "runtimes") && (
+        <ResourceEditor
+          kind={editor.kind}
+          title={editor.kind === "mcps" ? "MCP" : tr("环境模板")}
+          value={
+            editor.creating
+              ? editor.kind === "mcps"
+                ? { id: editor.id, revision: 0, name: "", label: "", url: "" }
+                : {
+                    id: editor.id,
+                    revision: 0,
+                    name: "",
+                    environment: "openai_hosted",
+                  }
+              : editor.kind === "mcps"
+                ? mcps.data!.find((row) => row.id === editor.id)!
+                : runtimes.data!.find((row) => row.id === editor.id)!
+          }
+          close={close}
+          onSaved={(id) =>
+            change(
+              editor.kind === "mcps"
+                ? { ...value, mcp_ids: [...new Set([...value.mcp_ids, id])] }
+                : { ...value, runtime_id: id },
+            )
+          }
+        />
+      )}
+      {editor && ["prompt", "knowledge", "plugin"].includes(editor.kind) && (
+        <CapabilityEditor
+          value={
+            editor.creating
+              ? {
+                  id: editor.id,
+                  name: "",
+                  description: "",
+                  kind: editor.kind as Capability["kind"],
+                  revision: 0,
+                  deprecated: false,
+                  default_version: "",
+                  versions: [],
+                }
+              : capabilities.data!.find((row) => row.id === editor.id)!
+          }
+          close={close}
+          onSaved={(id) =>
+            change({
+              ...value,
+              capability_ids: [
+                ...new Set([...(value.capability_ids || []), id]),
+              ],
+            })
+          }
+        />
+      )}
       <ErrorNotice
-        error={providers.error || models.error || skills.error || mcps.error}
+        error={
+          models.error ||
+          skills.error ||
+          mcps.error ||
+          capabilities.error ||
+          runtimes.error
+        }
       />
-    </>
+    </div>
+  );
+}
+function SkillVersionSelect({
+  id,
+  name,
+  value,
+  change,
+}: {
+  id: string;
+  name: string;
+  value: string;
+  change: (version: string) => void;
+}) {
+  const versions = useQuery({
+    queryKey: ["skill-versions", id],
+    queryFn: ({ signal }) =>
+      readHistory((options) => api.listSkillVersions(id, options), signal),
+  });
+  return (
+    <div className="w-28">
+      <Select
+        aria-label={`${name} ${tr("版本")}`}
+        value={value}
+        onValueChange={change}
+      >
+        <SelectOption value="">{tr("默认版本")}</SelectOption>
+        {versions.data?.map((row) => (
+          <SelectOption key={row.id} value={row.version}>
+            v{row.version}
+          </SelectOption>
+        ))}
+      </Select>
+      <ErrorNotice error={versions.error} />
+    </div>
   );
 }

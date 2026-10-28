@@ -18,7 +18,7 @@ def publish(destination, source):
     if destination.is_symlink():
         raise PayloadError("Invalid node payload directory")
     manifest = json.loads((source / "manifest.json").read_text())
-    names = ["node-install.pyz", "manifest.json", "SHA256SUMS", "runtime/seccomp.json"]
+    names = ["node-install.pyz", "manifest.json", "SHA256SUMS"]
     for logical in manifest.get("artifacts", {}):
         entry = artifact(manifest, logical)
         name = "artifacts/" + entry["filename"]

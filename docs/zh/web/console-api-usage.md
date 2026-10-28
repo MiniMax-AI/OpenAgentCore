@@ -1,7 +1,7 @@
 ---
 title: "控制台 API 使用"
 source: docs/web/console-api-usage.md
-source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
+source_hash: 1e058d564c992bbf7d3e924025b5f9e980d725bcc426d105b3f671b2239c30e2
 ---
 
 本页列出各控制台页面调用的 Core 路由，以及控制台如何限定读取范围。本页面向控制台开发者；运维人员请阅读 [Web 控制台](index.md)。[Core 管理 API](../../../contracts/agents-api/zh/admin-api.md) 定义了路由、响应结构、分页和审计记录；[API 命名空间和凭据](../api/index.md) 定义了本文使用的术语。
@@ -29,8 +29,6 @@ source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
 | 签发密钥 | `POST /core/v1/projects/{project_id}/keys` | 对活动项目执行 **签发密钥**，也可从 **新手引导** 进入；明文仅显示一次 |
 | 吊销密钥 | `DELETE /core/v1/projects/{project_id}/keys/{key_id}` | **撤销**；当它是项目最后一个活动密钥时会显示警告 |
 
-发送前会检查名称长度（项目为 1–128 个字符，密钥为 1–80 个字符）和控制字符。已签发密钥的明文会保留在组件内存中，直到管理员确认已保存；绝不会写入浏览器存储、URL 或日志。项目不能删除，明文也无法恢复。
-
 ## 项目资源 {#project-resources}
 
 以下路由相对于 `/core/v1/projects/{project_id}`，并返回与相应公开 `/v1` 操作相同的对象，因此控制台会应用公开客户端的严格投影。已归档项目仍可读取。
@@ -52,7 +50,6 @@ source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
 - **文件。** 列表每页读取 100 条，可按最新或最早顺序排列。管理员 API 没有 File 内容路由，因此控制台不提供下载。
 - **Vault。** Credential 令牌绝不返回。控制台显示每个 Credential 的名称、MCP 服务器 URL、身份验证类型和更新时间。
 - **Session。** 如果某个 Session 格式错误，其所属项目的读取会失败，而不会跳过该 Session。
-- **诊断。** 控制台会翻译 Core 分类的原因，绝不从原始日志推断原因。Session 页面会补充该原因的下一步操作，例如检查 Session 页显示的模型以及该 Session 所用的模型提供商；列表只显示原因，下一步操作放在悬停提示中。Core 不返回 Harness 或模型提供商的原始消息，因此无法分类的失败会如实说明。诊断信息不可用或不匹配时，会提供显式的读取重试；重试绝不会重新执行操作。
 
 ## 执行器凭据和主机连接 {#executor-credentials-and-host-connection}
 
@@ -63,7 +60,7 @@ source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
 | 列出凭据 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/executor-credentials` | 可见时每 5 秒读取一次。表格显示每个凭据的短 `key_id` 及其复制按钮、创建时间（`created_at`，轮换不会改变该值）和状态（Active，或 Revoked 及其时间），并优先显示活动凭据；绝不会列出凭据本身。同一次读取中的 `connection` 观测值用于驱动主机连接面板：never connected、connected、disconnected、bound credential revoked 和 unknown 保持为不同状态，且只有重新读取并得到 connected 才会将主机标记为已连接 |
 | 签发或轮换 | `POST …/executor-credentials`，请求体为 `{"key_id", "rotate"}` | Issue 会在提交前保留生成的密钥 ID。轮换前会确认旧凭据将停止工作；轮换已吊销的凭据会恢复该凭据并生成新密钥。私有 JSON 仅显示一次，供下载或复制，绝不会存储在浏览器存储或查询缓存中，并在 Done 时清除 |
 | 吊销 | `DELETE …/executor-credentials/{key_id}` | **撤销**，需确认（执行器会断开连接且不会重试；其守护进程会保持停止状态，直到操作员将其停止），随后再次读取列表，并显示凭据为 Revoked |
-| 安装命令 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **连接主机**：按 Core 返回的原始内容显示短效 Linux/macOS 和 PowerShell 命令，并提供平台选择器以及指向 [运行自托管 Session](../getting-started/self-hosted.md) 的链接。这些命令会安装守护进程及其 Harnesses、启动守护进程并检查连接；其授权在 30 分钟后过期，控制台每 20 分钟重新读取一次。如果没有可用且未过期的响应，该区段会说明命令不可用。已归档项目不会读取该信息 |
+| 安装命令 | `GET /core/v1/projects/{project_id}/environments/{environment_id}/installation` | **连接主机**：按 Core 返回的原始内容显示短效 Linux/macOS 和 PowerShell 命令，并提供平台选择器以及指向 [运行自托管 Session](../getting-started/self-hosted.md) 的链接。已归档项目不会读取该信息 |
 
 在已归档项目中，该区段会通过提示隐藏 **签发凭据** 和 **轮换**，但保留列表和 **撤销**，因为 Core 仍允许吊销。
 
@@ -77,11 +74,7 @@ source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
 | 安装 | `GET /core/v1/installation` | **设置 → 服务与部署** 的 **安装** 信息（`public_url`、`api_base_url`、`installation_id`、`source_commit`）和只读 **启动设置**（`configuration.settings`；敏感设置仅显示其是否为 `configured`）；调用示例中的 `api_base_url`；作为下载来源以及节点安装和卸载命令中 `--source-url` 的 `public_url`（还包括安装命令中的 `--core-url`）。如果敏感设置包含值，或存在未知成员，读取会失败 |
 | Core 指标 | `GET /core/v1/metrics?range=` | **Core 监控** 页面。不存在该路由的 Core（404）会显示为未报告数据。[Core 指标](../../../contracts/agents-api/zh/core-metrics.md) 定义了每项度量 |
 
-如果为 `local_only`，或者没有 `public_url`，**添加节点** 将无法签发命令，**清理主机** 也无法提供命令。随后 **概览**、**节点** 和 **设置** 会显示醒目警告，并通过 **查看公开地址** 前往 **设置 → 服务与部署**。**节点** 会禁用 **添加节点** 并显示明确原因，**新手引导** 则将沙箱步骤保留为待办项。
-
 无论是在显示新密钥时，还是在活动项目页面没有显示任何密钥时，控制台都会提供 `OPENAI_BASE_URL`（安装的 `api_base_url`）和 `OPENAI_API_KEY`（新密钥，或项目密钥的占位符）的 shell 导出变量，以及针对 `GET /v1/agents` 和 `POST /v1/agents/sessions` 的 `curl` 和 Python 示例，但不会发送其中任何调用。当安装为 `local_only` 时，控制台会说明 API 只能在 Core 所在计算机上访问；当缺少 `api_base_url` 时，则会提示设置 `public_url`。
-
-汇总数值按 Session 累计，并不是计费记录。未报告使用量的 Session 会计入覆盖率，但不会计入 token 总量；控制台会将缺失值显示为缺失，绝不会显示为零。
 
 ## 请求日志 {#request-log}
 
@@ -105,14 +98,14 @@ source_hash: 4c21f70ece3e6ef7f96cf4b9fda57c14c034196f51c224fcf63174ed0bc88fc1
 
 | 操作 | 路由 | 控制台用途 |
 | --- | --- | --- |
-| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 **在设置中管理** 前往 **设置 → 服务与部署**，且无需确认；使用 Docker 或 microsandbox 的 `resources` 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。**沙箱监控** 用 `specification.resources` 显示每个 E2B Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 **设置 → 沙箱与调度** 中 |
+| 部署 | `GET`、`POST`、`PUT /core/v1/sandbox/deployment` | 读取提供商、只读 `core_url`（即 `OAC_PUBLIC_URL`，会显示在设置审核中且绝不发送）、重置状态、安装 ID 和规范；409 `sandbox_configuration_error`（E2B 搭配回环地址形式的 `public_url`）会在设置向导中显示共享客户端固定的安全地址配置消息，并通过 **在设置中管理** 前往 **设置 → 服务与部署**，且无需确认；使用 microsandbox 的 `resources` 初始化部署，或者使用 E2B 账户且不提供 `resources`（Core 采用模板构建的 CPU 和内存）；使用预期的 generation 更改设置。**沙箱监控** 用 `specification.resources` 显示每个 E2B Sandbox 的大小；microsandbox 的 `suspension`（空闲和保留秒数）会显示在 **设置 → 沙箱与调度** 中 |
 | E2B 发现 | `POST /core/v1/sandbox/providers/e2b/discovery` | 设置向导用输入的凭据逐级列出 discovered 字段的选项；E2B 先列出该密钥可见的模板，再列出所选模板的可用构建。该密钥只会通过这些请求体和部署写入请求传输 |
 | 重置 | `POST`、`DELETE /core/v1/sandbox/deployment/reset` | 显式清除托管资源，或在观测到的 generation 处取消剩余清除；显示 Core 的剩余资源和离线预测 |
 | 节点 | `GET /core/v1/sandbox/nodes` | **节点** 页面；**概览** 上的机群；**沙箱监控** 中每个托管 Runtime 所在的节点。`provider_ready` 为 false 的在线节点为降级；**节点** 列表及节点页面中紧邻其状态的帮助提示显示 *沙箱提供商不可用*，目标准备原因（`rollout.diagnostic`，一个[就绪状态码](../getting-started/nodes.md#readiness-codes)）显示在其目标状态中。如果节点的 `core_url`（其注册时使用的地址）与部署的 `core_url` 不同，**节点** 页面会将其标记为绑定到旧地址，需要移除后重新添加；此时它在该页面和节点页面中的状态会显示 **地址已过期**，而不是健康状态。**添加节点** 仅跟踪 `enrollment_id` 与其命令所含 `enrollment_id` 相等的节点 |
 | 节点详情 | `GET /core/v1/sandbox/nodes/{node_id}?range=1h\|6h\|24h` | **节点** 中的节点页面：主机最近一次心跳报告的 CPU 忙碌占比、内存使用量和可用磁盘，以及 1 小时、6 小时或 24 小时内 CPU 与内存的历史记录；页面可见时每 30 秒刷新一次。**编辑节点** 读取节点的 `recommended_capacity` 作为推荐值 |
 | 分配 | `GET /core/v1/sandbox/nodes/{node_id}/allocations` | **节点** 页面；**沙箱监控**。节点页面根据 `compute_phase_changed_at` 显示每个分配处于计算阶段的时间；时间为 null 时显示短横线。它不会根据阶段时间或部署的 `suspension.retention_seconds` 推算快照到期时间 |
-| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **添加节点**：管理员保留推荐上限（请求体不含上限，由 Core 在节点注册时推导）或同时设置两个上限（`max_active`；`max_retained` 仅适用于 microsandbox，在 Docker 下等于 `max_active`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
-| 更新节点 | `PATCH /core/v1/sandbox/nodes/{node_id}` | **编辑节点**：同时修改名称和 Sandbox 限制（保留数量限制仅适用于 microsandbox；在 Docker 下，Core 会将其设为活动数量限制） |
+| 注册 | `POST /core/v1/sandbox/enrollment-tokens` | **添加节点**：管理员保留推荐上限（请求体不含上限，由 Core 在节点注册时推导）或同时设置两个上限（`max_active` 和 `max_retained`），然后 Core 才会把一次性令牌放入命令中；该命令会验证安装程序校验和，并包含命令的 `enrollment_id`，节点注册时会报告此 ID。命令使用 sudo 运行安装程序（作为系统服务），并通过标准输入传递令牌；以 root 运行时则直接执行。界面不提供普通用户安装或移除入口，日志提示始终指明系统服务。命令从安装的 `public_url` 下载安装程序。只有成功读取安装信息后才会请求令牌；如果安装信息无法读取、安装为 `local_only`（或其 `public_url` 不是有效的 HTTP 或 HTTPS 来源），或者 `/console/config` 列出的 `node_artifacts` 不包含部署的提供商，则不会请求令牌。对话框在打开时和窗口重新获得焦点时，会再次读取这两项信息 |
+| 更新节点 | `PATCH /core/v1/sandbox/nodes/{node_id}` | **编辑节点**：同时修改名称和 Sandbox 限制（活动和保留数量限制） |
 | 移除节点 | `DELETE /core/v1/sandbox/nodes/{node_id}` | 确认后移除节点；只有 Core 确认删除后该行才会消失，随后 **清理主机** 对话框会提供主机的卸载命令（需要 root 或 sudo；对于使用不同于部署地址的地址注册的节点，还需要使用 `--force`，以跳过安装程序与 Core 的确认） |
 | Runtime 观测 | `GET /core/v1/sandbox/runtime-observations` | **沙箱监控**：每个项目的托管 Runtime，每项均以所属项目为标签；E2B Sandbox 对话框还会将 `observation.disk` 显示为已用量／限制值（其他位置为 null） |
 
@@ -120,8 +113,8 @@ E2B 部署没有节点；其 API 密钥为只写。**概览** 和 **沙箱监控
 
 ## 写入 {#writes}
 
-- 删除操作使用管理员 API，并采用与公开删除操作相同的前置条件。每次删除都需要确认。4xx 会让对话框保持打开并显示 Core 给出的原因，404 视为已删除，其他任何失败都会报告为结果不确定，并随后执行一次全新读取。
-- 控制台仅允许删除没有必需操作且处于空闲或失败状态的 Session，并且绝不会为了使 Session 可删除而取消正在执行的工作。
+- 每次删除都需要确认。4xx 会让对话框保持打开并显示 Core 给出的原因，404 视为已删除，其他任何失败都会报告为结果不确定，并随后执行一次全新读取。
+- 控制台仅允许删除没有必需操作且处于空闲或失败状态的 Session。
 - 项目、密钥、执行器凭据、删除和 Sandbox 写入操作，每项明确的用户操作只发送一次，绝不会自动重试。结果不确定时，相关信息会保持可见，直到管理员重新读取状态并作出决定。
 - 执行器凭据签发结果未知时（无响应、30 秒超时或 5xx），控制台会打开错误对话框，下一步为 **刷新列表**。如果保留的 `key_id` 随后出现在列表中，则说明凭据已签发但其密钥已经丢失；控制台会提议轮换该凭据（`rotate: true`），以生成仅显示一次的新密钥。如果它未出现在列表中，下一次 Issue 会使用相同的 `key_id` 和 `rotate: false`；如果该请求因第一个请求实际上已成功签发而返回 409，控制台会再次读取列表，并且仅当该凭据在活动项目中列为活动状态时才提供相同的轮换操作，否则会将签发报告为已拒绝。已经列出的保留 `key_id` 绝不会被再次发送；从其所在行执行轮换或吊销后，控制台会清除该 ID，下一次 Issue 将生成新的 `key_id`。
 
@@ -150,7 +143,5 @@ Agent 指标具有以下限制：
 
 ## 未使用的接口 {#not-consumed}
 
-- 任何 `/v1/**` 路由，包括 Session 创建、Session 事件及其流、消息输入、函数结果和取消操作。
-- Agent、Environment 模板、Skill、File、Vault 或 Credential 的创建或更新，包括上传和 Credential 令牌替换。
 - 单个 Turn 读取、Artifacts、Session 执行配置、Environment Files 和管理端 Session 归档。
 - 管理员审计日志（`GET /core/v1/audit-log`）。**设置** 会改为显示安装信息、每个 Harness 的默认模型和 Sandbox 部署。

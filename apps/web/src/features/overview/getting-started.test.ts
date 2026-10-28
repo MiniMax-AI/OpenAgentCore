@@ -6,7 +6,7 @@ import { checklistStorageKey, checklistView, gettingStartedSteps, nextStepAfterN
 import { node, project } from "./test-fixtures";
 
 const deployment = (overrides: Partial<SandboxDeployment> = {}): SandboxDeployment => ({ credential_configured: false, configuration: {}, metadata: {},
-  rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes",
+  rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "microsandbox", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes",
   resources: { allocations: 0, running: 0, pending: 0 }, suspension: null, ...overrides,
 });
 const fleet = (value: SandboxDeployment, nodes = [node("n1")]): FleetState => ({ status: "ready", snapshot: { deployment: value, nodes, allocations: [], loadedAt: 0 }, targetGeneration: value.generation, refreshing: false, error: null });
@@ -27,7 +27,7 @@ describe("Getting started steps", () => {
   });
 
   it("does not report ready during reset or an unreadable deployment, even with ready nodes", () => {
-    for (const backend of ["docker", "e2b"] as const) {
+    for (const backend of ["microsandbox", "e2b"] as const) {
       const input = { fleet: fleet(deployment({ provider: backend })), localOnly: false, projects: [project("p")], sessions: 1,
         harnesses: [harness("codex", { default: true, model_configuration: { ...provider, harness: "codex" } })] };
       for (const sandboxReset of [true, "failed", undefined] as const) {
@@ -53,7 +53,7 @@ describe("Getting started steps", () => {
     }
   });
   it("keeps local-only installations to do even with a ready node or cloud deployment", () => {
-    for (const provider of ["docker", "e2b"] as const) {
+    for (const provider of ["microsandbox", "e2b"] as const) {
       const steps = gettingStartedSteps({ sandboxReset: false, fleet: fleet(deployment({ provider, mode: provider === "e2b" ? "direct" : "nodes" })), projects: [], sessions: 1, harnesses: [], localOnly: true });
       expect(steps.sandboxes).toMatchObject({ state: "todo", action: "nodes", cloud: provider === "e2b" });
     }

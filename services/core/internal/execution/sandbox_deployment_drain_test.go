@@ -14,7 +14,7 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgtest"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/persistence/postgres/pgunit"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/runtimegateway"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/docker"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/microsandbox"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox/node"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -92,7 +92,7 @@ func testLifecycleCancellationPreservesLease(t *testing.T, mode string) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
+	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "microsandbox", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), microsandbox.Operations(), 1)}
 	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +230,7 @@ func TestSandboxDeploymentDrainFailureCannotReactivate(t *testing.T) {
 	hub := node.NewHub(node.HubOptions{})
 	defer hub.Close()
 	id := uuid.NewString()
-	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "docker", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), docker.Operations(), 1)}
+	configuration := &RuntimeProvider{InstallationID: id, ProviderKind: "microsandbox", Mode: "nodes", Generation: 1, CoreURL: "https://core.example/api/v1", BackendFingerprint: strings.Repeat("a", 64), Provider: hub.Proxy(uuid.NewString(), microsandbox.Operations(), 1)}
 	m, err := newRuntimeManager(owner, deployments, reader, nil, runtimegateway.NewRegistry(), NewDeferredRuntimeProvider(id, func(context.Context) (*RuntimeProvider, error) { return configuration, nil }, unusedPreparation(t)))
 	if err != nil {
 		t.Fatal(err)
@@ -256,7 +256,7 @@ func TestSandboxDeploymentDrainFailureCannotReactivate(t *testing.T) {
 	if err := m.pauseDeployment(t.Context()); err == nil {
 		t.Fatal("repeated drain forgot its failure")
 	}
-	if err := m.activateDeployment(t.Context(), deployment.View{InstallationID: id, Generation: 1, Mode: "nodes", Provider: "docker"}); err == nil {
+	if err := m.activateDeployment(t.Context(), deployment.View{InstallationID: id, Generation: 1, Mode: "nodes", Provider: "microsandbox"}); err == nil {
 		t.Fatal("failed drain reopened the provider")
 	}
 	if _, _, err := m.enter(t.Context()); err == nil {

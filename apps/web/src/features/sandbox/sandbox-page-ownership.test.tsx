@@ -47,14 +47,14 @@ describe("sandbox page ownership", () => {
     expect(cloud).toContain("Nodes</h1>");
     expect(cloud).toContain("There are no nodes to manage.");
     expect(cloud).not.toContain("Change resources");
-    const hosts = render(<SandboxManagerView />, cache("docker"));
+    const hosts = render(<SandboxManagerView />, cache("microsandbox"));
     expect(hosts).toContain("node-enrollment");
     expect(hosts).toContain("Add your first node");
     expect(hosts).not.toContain("Reset deployment");
   });
 
   it("opens editing deliberately and keeps the System landing page to one entry", () => {
-    const client = cache("docker");
+    const client = cache("microsandbox");
     const configuration = render(<SandboxDeploymentPage />, client);
     expect(configuration).toContain("Change resources");
     expect(configuration).toContain("Reset deployment");
@@ -67,7 +67,7 @@ describe("sandbox page ownership", () => {
   });
 
   it("shares pending and uncertain write ownership across both pages", () => {
-    const client = cache("docker");
+    const client = cache("microsandbox");
     const attempt = beginSandboxWrite(client)!;
     expect(render(<SandboxManagerView />, client)).toContain("Saving sandbox change");
     expect(render(<SandboxDeploymentPage />, client)).toContain("Saving sandbox change");

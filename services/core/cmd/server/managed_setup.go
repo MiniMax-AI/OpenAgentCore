@@ -155,7 +155,7 @@ func (s *managedSetup) configuration(setup deployment.Setup) (execution.Prepared
 	}
 	selected := &execution.RuntimeProvider{InstallationID: setup.InstallationID, ProviderKind: setup.Provider, Generation: setup.Generation, Mode: setup.Mode,
 		CoreURL: s.runtimeAPI, BackendFingerprint: setup.BackendFingerprint, Provider: provider,
-		Resources: setup.Specification.Resources, WorkspaceRequirements: adapter.Policy.Workspace, Workspace: setup.Specification.Workspace}
+		Resources: setup.Specification.Resources, Network: setup.Specification.Network, NetworkSupport: adapter.Policy.Network, WorkspaceRequirements: adapter.Policy.Workspace, Workspace: setup.Specification.Workspace}
 	if setup.Suspension != nil {
 		selected.Suspension = &execution.RuntimeSuspensionPolicy{Retention: time.Duration(setup.Suspension.RetentionSeconds) * time.Second}
 	}

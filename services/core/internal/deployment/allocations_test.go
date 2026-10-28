@@ -373,11 +373,11 @@ func TestReserveAllocationReplaysBeforeAdmission(t *testing.T) {
 func TestReserveAllocationAdmitsAndTakesTheReservedNode(t *testing.T) {
 	key := AllocationKey{TenantID: uuid.NewString(), EnvironmentID: uuid.NewString()}
 	installation, node := uuid.NewString(), uuid.NewString()
-	specification, err := json.Marshal(testSpecification("docker"))
+	specification, err := json.Marshal(testSpecification("microsandbox"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	deployment := placement.Deployment{InstallationID: installation, Provider: "docker", Mode: "nodes", Generation: 7, Specification: specification}
+	deployment := placement.Deployment{InstallationID: installation, Provider: "microsandbox", Mode: "nodes", Generation: 7, Specification: specification}
 	fresh := func() *fakeReservationTx {
 		return &fakeReservationTx{t: t, loadEnvironment: hostedEnvironment(key.EnvironmentID),
 			findAllocation: func() (Allocation, bool, error) { return Allocation{}, false, nil },

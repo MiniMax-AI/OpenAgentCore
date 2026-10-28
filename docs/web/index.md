@@ -26,7 +26,7 @@ Signing in opens the Overview. While any step is still to do, its **Getting star
 | Monitor | Session log | Every Session, and each Session's read-only conversation, trace and Turns with the classified reason of a failure and its next step; a self-hosted Session's page also manages its executor credentials and gives the command that connects a host |
 | Resources | Agents, Environment templates, Skills, Files, Vaults | Inspection and permitted deletion, with the Project and the creating key of each resource |
 | Platform | Projects and keys | Create, rename and archive Projects; issue and revoke keys; each Project's usage, write history and how to call the API |
-| Platform | Nodes | Add, edit and remove microsandbox or Docker nodes; each node's readiness, active and retained limits, host CPU and memory with their history, free disk, and allocations with elapsed time in each compute phase |
+| Platform | Nodes | Add, edit and remove microsandbox nodes; each node's readiness, active and retained limits, host CPU and memory with their history, free disk, and allocations with elapsed time in each compute phase |
 | Platform | Settings | **Sandbox and scheduling**, **Workspace storage**, **Models and credentials**, and **Service and deployment**; see [configuration](../configuration.md#runtime-settings-web) |
 
 Missing data is shown as missing (—), never as zero. [Console API usage](./console-api-usage.md) lists what each page reads and how its figures are bounded.
@@ -35,7 +35,7 @@ Missing data is shown as missing (—), never as zero. [Console API usage](./con
 
 | Task | Where |
 | --- | --- |
-| Choose the sandbox backend (microsandbox, E2B or Docker), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
+| Choose the sandbox backend (microsandbox or E2B), the sandbox size and Runtime, or reset the backend | **Settings → Sandbox and scheduling**; see [change the sandbox configuration](../getting-started/nodes.md#change-the-sandbox-configuration) |
 | Add, resize or remove execution nodes | **Nodes**: **Add node**, **Edit node** and removal; see [Add and manage nodes](../getting-started/nodes.md) |
 | Set the default model of a Harness | **Settings → Models and credentials**; see [default models](../configuration.md#default-models) |
 | Create a Project and issue its API keys | **Projects and keys**; see [Projects and API keys](../getting-started/operations.md#projects-and-api-keys) |
@@ -54,7 +54,7 @@ Each Harness's default model is set in **Settings → Models and credentials**:
 
 The deployment's sandbox backend serves hosted Sessions. An application's `self_hosted` Runtime, including one in its own E2B account, is a separate path that the sandbox configuration does not change.
 
-A loopback public address (`local_only`) keeps nodes and remote applications from reaching Core. The console stays reachable at its own address and [warns about it](./console-api-usage.md#provenance-and-monitoring).
+A loopback public address (`local_only`) keeps nodes and remote applications from reaching Core. The console stays reachable at its own address and warns about it.
 
 ## Diagnose a failure
 

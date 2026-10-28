@@ -19,7 +19,7 @@ import (
 )
 
 func TestSandboxSpecificationRoundTripAndClaimStays(t *testing.T) {
-	for _, provider := range []string{"docker", "microsandbox", "e2b"} {
+	for _, provider := range []string{"microsandbox", "microsandbox", "e2b"} {
 		t.Run(provider, func(t *testing.T) {
 			f := newFixture(t)
 			changes, _ := f.execution(t)
@@ -77,12 +77,12 @@ func TestSandboxSpecificationInitialCredentialRemainsPrivate(t *testing.T) {
 func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	issued, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(2), MaxRetained: new(2)})
 	if err != nil || uuid.Validate(issued.ID) != nil || issued.Token == "" {
 		t.Fatal(issued.ID, err)
 	}
-	input := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "docker",
+	input := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "addressed", Credential: strings.Repeat("a", 64), Provider: "microsandbox",
 		BackendFingerprint: strings.Repeat("b", 64), DeploymentGeneration: view.Generation, SpecificationDigest: view.SpecificationDigest, CoreURL: "https://other.example"}
 	if _, err := f.service.Enroll(t.Context(), issued.Token, input); !errors.Is(err, deployment.ErrNodeAddressMismatch) {
 		t.Fatal("enrolled a node that uses another Core address", err)
@@ -122,7 +122,7 @@ func TestEnrollmentRecordsItsIDAndRefusesAnotherAddress(t *testing.T) {
 func TestDatabaseDoesNotEnumerateProviderRegistrations(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	input := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
+	input := sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")}
 	id, view := f.initialize(t, changes, input)
 	tx, err := f.pool.Begin(t.Context())
 	if err != nil {

@@ -56,6 +56,7 @@ func TestDeploymentContractFixtures(t *testing.T) {
 			if !fixture.Valid {
 				return
 			}
+			spec.Network = spec.Network.Canonical()
 			canonical, _ := json.Marshal(struct {
 				Provider string `json:"provider"`
 				sandbox.DeploymentSpec

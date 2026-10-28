@@ -28,7 +28,7 @@ class SourceInstallTest(unittest.TestCase):
         self.bundle.mkdir()
         self.revision = 'a' * 40
         self.manifest = {'source_commit': self.revision, 'platform': 'linux/amd64', 'artifacts': {}}
-        for name, data in [('manifest.json', json.dumps(self.manifest).encode()), ('node-install.pyz', b'installer'), ('runtime/seccomp.json', b'{}')]:
+        for name, data in [('manifest.json', json.dumps(self.manifest).encode()), ('node-install.pyz', b'installer')]:
             target = self.bundle / name
             target.parent.mkdir(exist_ok=True)
             target.write_bytes(data)

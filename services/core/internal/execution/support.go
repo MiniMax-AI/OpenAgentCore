@@ -33,12 +33,10 @@ func (p Policy) ValidateSessionConfiguration(engine string, configuration json.R
 			return sessions.ErrInvalidInput
 		}
 	}
-	if snapshot.Environment.Type != "none" {
-		// Current Runtime adapters cannot execute a restricted network policy.
-		// Admission must reject it before allocating compute. Runtime itself is
-		// not an enforcement boundary; new support needs outer isolation.
+	if snapshot.Environment.Type == "self_hosted" {
+		// No enforcement point exists outside a hosted sandbox.
 		if network := snapshot.Environment.Network; network != nil && network.Access != "enabled" {
-			return errors.New("This execution environment does not support disabled or restricted networking. Use enabled networking; Runtime does not provide network isolation.")
+			return errors.New("This execution environment does not support disabled or restricted networking. Use enabled networking.")
 		}
 	}
 	return validateDeclaredConfiguration(declaration, snapshot)

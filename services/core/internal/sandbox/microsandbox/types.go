@@ -9,14 +9,14 @@ import (
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
-const ProtocolVersion = 8
+const ProtocolVersion = 9
 const SDKVersion = "v0.7.8"
 const MaxOutputBytes = 1024 * 1024
 const MaxRequestBytes = 72 * 1024 * 1024
 const MaxResponseBytes = 16 * 1024 * 1024
 
 // Config is trusted deployment configuration. Paths and hashes refer to one
-// immutable, qualified installation. Network is explicitly used on create and restore.
+// immutable, qualified installation. CoreURL is the one address every allocation may always reach.
 type Config struct {
 	InstallationID string
 	HelperPath     string
@@ -30,15 +30,8 @@ type Config struct {
 	MemoryMiB      uint32
 	CPUs           uint8
 	RootDiskMiB    uint32
-	Network        NetworkPolicy
+	CoreURL        string
 }
-
-type NetworkPolicy struct {
-	DefaultEgress  string
-	DefaultIngress string
-	Rules          []NetworkRule
-}
-type NetworkRule struct{ Action, Direction, Destination, Protocol, Port string }
 
 // These aliases keep the helper wire private while Core uses provider-neutral types.
 type Compute = sandbox.Compute

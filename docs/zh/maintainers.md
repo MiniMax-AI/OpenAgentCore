@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: abeea265e04f051163414749fd3e3a9be7b8680d17bec4431038533f9b2d2a3c
+source_hash: d222cc5fe4c258dcc4e8956c08757276dc6340511c5eaf2e0fba2698e6718761
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -40,7 +40,7 @@ make build-core-distribution
 
 构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交及其源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装程序在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装程序资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
 
-ingress 镜像仅包含 `oac` 和四个节点元数据文件：`manifest.json`、`SHA256SUMS`、`node-install.pyz` 与 `runtime/seccomp.json`。构建流程根据与分发包相同的 Runtime 和构件身份生成其清单，再禁用网络验证初始化。节点清单不包含控制平面镜像身份，因此可在 ingress 镜像生成前打包。
+ingress 镜像仅包含 `oac` 和三个节点元数据文件：`manifest.json`、`SHA256SUMS` 与 `node-install.pyz`。构建流程根据与分发包相同的 Runtime 和构件身份生成其清单，再禁用网络验证初始化。节点清单不包含控制平面镜像身份，因此可在 ingress 镜像生成前打包。
 
 控制归档不包含 Runtime 镜像或节点执行构件；离线归档包含这些内容。[下载契约](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md#download-contract)说明了节点如何获取这些内容。
 
@@ -195,8 +195,6 @@ gh workflow run core-release --repo MiniMax-AI/OpenAgentCore --ref main \
 
 Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution` 固定数据和 `compose` 冒烟作业；Core、Web、共享 Go 软件包和镜像 Dockerfile 的变更也会选择冒烟作业。安装 Docker 后，可在本地运行 `python3 scripts/compose-smoke.py` 重复该测试。该脚本使用唯一的项目、自动分配的回环端口，并将在 `~/.oac/tests/` 下生成构件；退出时移除其容器和数据卷。CI 还会在冒烟步骤失败或中断后执行清理。诊断信息会显示容器状态，但不会打印 HTTP 响应正文或登录密钥。Core、Web 和 ingress 镜像都从当前检出构建，并带有当前检出提交的节点元数据；Web 提供占位页面而不是控制台构建，初始化容器禁用网络运行。冒烟矩阵使用 Linux amd64 和 arm64 原生 runner；原生矩阵在 Linux、macOS 和 Windows 上构建并测试共享的 Core 安装程序。
 
-`scripts/ci_plan.py` 根据变更路径选择检查组。每个所选集合都包含 `hygiene`，混合变更会累加其使用方，并且每个作业都读取同一计划，而不是维护各自的路径列表。仅修改通知的 PR 会跳过数据库、浏览器和原生作业；同时修改通知和 Core 的 PR 会添加后端和 API 检查。
-
 | 变更输入 | 所选检查组 |
 | --- | --- |
 | `docs/` 和 `contracts/` 下已发布的文档和资源，以及 `docs.json` | `hygiene`、`website` |
@@ -221,11 +219,11 @@ Compose 模板和 Compose 测试发生变更时，会同时选择 `distribution`
 
 即使计划或依赖项失败，最终 `check` 仍会运行。它要求计划有效且成功、每个所选作业均成功，并且每个未选择作业均被跳过。失败、取消、作业缺失、意外跳过或意外执行都会导致门禁失败。API/原生可复用工作流是此门禁的直接依赖项。同一 PR 上较新的运行会取消之前的运行。发布检查在请求的不可变 ref 上运行；原生打包在这些检查中执行一次，分发构建会等待其完成。
 
-要手动执行完整检查，请使用 **Actions → core-check → Run workflow**。遇到暂时性故障时，请使用 GitHub 的 **Re-run failed jobs**，这样已成功的作业可保持完成状态。PR 更新后，Actions 并发机制会取消已被取代的运行。构建和依赖项缓存可加快执行，但不能替代成功的测试。原生发布安装程序通过 Actions 构建产物在同一发布工作流的不同作业之间传递。
+要手动执行完整检查，请使用 **Actions → core-check → Run workflow**。遇到暂时性故障时，请使用 GitHub 的 **Re-run failed jobs**，这样已成功的作业可保持完成状态。原生发布安装程序通过 Actions 构建产物在同一发布工作流的不同作业之间传递。
 
 `CI review and Feishu notification` 工作流仅在 PR 合并到 main 后运行一次。它检出合并后的提交，读取该 PR 已有的检查和日志，通过 `FEISHU_WEBHOOK_URL` 发送一张飞书卡片，概述本次改动、是否符合仓库规则以及实际 CI 状态。它不会触发另一轮测试；审查或发送失败不会让作业失败，也不会阻止合并。关闭未合并 PR 不触发审查。该工作流只针对合并事件使用 `pull_request_target`，绝不在持有通知凭据时检出未合并 PR 的 head。
 
-浏览器作业各自拥有独立的固定数据和服务；对共享可变固定数据增加 worker 数不安全。失败的浏览器作业保留报告与 trace 七天。原生失败阶段摘要保留七天，详细输出留在 Actions 日志中；凭据和临时安装目录不上传。原生归档仅在显式手动打包或发布时构建并上传，不重新压缩已压缩的归档。发布分发产物保留现有恢复策略；失败发布可以按前述方式复用原构建。
+浏览器作业各自拥有独立的固定数据和服务；对共享可变固定数据增加 worker 数不安全。失败的浏览器作业保留报告与 trace 七天。原生失败阶段摘要保留七天，详细输出留在 Actions 日志中；凭据和临时安装目录不上传。原生归档仅在显式手动打包或发布时构建并上传，不重新压缩已压缩的归档。
 
 本地 Node 复合操作会安装固定版本的 pnpm，并根据锁文件、OS、架构、Node 版本和 pnpm 版本缓存其软件包存储。它缓存下载的软件包，而不是 `node_modules`；安装仍保持冻结状态。Go 分区会保留[发布](#publish-a-version)部分所述的现有模块/编译器缓存。三个原生平台独立运行；并行执行可缩短总耗时，但不会减少机器总时间。
 

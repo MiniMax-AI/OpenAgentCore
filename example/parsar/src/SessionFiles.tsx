@@ -1,8 +1,9 @@
+import { tr } from "./lib/i18n";
 import { useRef } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Upload, Download } from "lucide-react";
 import { randomUuid, type ListPage, type SessionArtifact } from "@oac/agents-client";
-import { api, dateTime } from "./lib/api";
+import { api, dateTime, downloadArtifact, listSessionArtifacts } from "./lib/api";
 import { Button } from "./components/ui/button";
 import {
   Dialog,
@@ -10,12 +11,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./components/ui/dialog";
-import { ErrorNotice, Help } from "./components/shared";
-
+import { ErrorNotice } from "./components/shared";
 const maxUploadBytes = 5 * 1024 * 1024;
-
 async function upload(environmentId: string, file: File) {
-  if (file.size > maxUploadBytes) throw new Error("文件不能超过 5 MiB。");
+  if (file.size > maxUploadBytes) throw new Error(tr("文件不能超过 5 MiB。"));
   let name = "";
   const encoder = new TextEncoder();
   for (const character of file.name.replace(
@@ -30,7 +29,7 @@ async function upload(environmentId: string, file: File) {
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-    reader.onerror = () => reject(new Error("无法读取文件，请重新选择。"));
+    reader.onerror = () => reject(new Error(tr("无法读取文件，请重新选择。")));
     reader.readAsDataURL(file);
   });
   try {
@@ -40,14 +39,16 @@ async function upload(environmentId: string, file: File) {
       data,
     });
   } catch (error) {
-    const reason = error instanceof Error ? error.message : "请求失败";
+    const reason = error instanceof Error ? error.message : tr("请求失败");
     throw new Error(
-      `${reason} 上传未确认，文件可能已写入 ${path.replace(/^\/workspace\//, "./")}。请先检查该路径再重新上传。`,
+      tr(
+        "{{value0}} 上传未确认，文件可能已写入 {{value1}}。请先检查该路径再重新上传。",
+        { value0: reason, value1: path.replace(/^\/workspace\//, "./") },
+      ),
     );
   }
   return path;
 }
-
 export function SessionFiles({
   sessionId,
   environmentId,
@@ -69,16 +70,7 @@ export function SessionFiles({
       pageParam,
       signal,
     }): Promise<ListPage<SessionArtifact>> => {
-      const params = new URLSearchParams({ limit: "50", order: "desc" });
-      if (pageParam) params.set("after", pageParam);
-      const response = await fetch(
-        `/v1/agents/sessions/${encodeURIComponent(sessionId)}/artifacts?${params}`,
-        { signal },
-      );
-      const value = await response.json();
-      if (!response.ok)
-        throw new Error(value.error?.message || "无法读取产物。");
-      return value;
+      return listSessionArtifacts(sessionId, { limit: 50, order: "desc", after: pageParam || undefined, signal });
     },
     getNextPageParam: (page) =>
       page.has_more ? page.last_id || undefined : undefined,
@@ -91,21 +83,7 @@ export function SessionFiles({
     },
   });
   const download = useMutation({
-    mutationFn: async (file: SessionArtifact) => {
-      const response = await fetch(
-        `/v1/agents/sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(file.id)}/content`,
-      );
-      if (!response.ok) {
-        const value = await response.json();
-        throw new Error(value.error?.message || "下载失败，请重试。");
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = file.path.split("/").at(-1) || "artifact";
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    },
+    mutationFn: (file: SessionArtifact) => downloadArtifact(sessionId, file),
   });
   const files = artifacts.data?.pages.flatMap((page) => page.data) || [];
   return (
@@ -117,7 +95,7 @@ export function SessionFiles({
     >
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
-          <DialogTitle>会话文件</DialogTitle>
+          <DialogTitle>{tr("会话文件")}</DialogTitle>
         </DialogHeader>
         <div className="flex items-center gap-3">
           <Button
@@ -125,17 +103,11 @@ export function SessionFiles({
             onClick={() => input.current?.click()}
           >
             <Upload />
-            {send.isPending ? "上传中…" : "上传文件"}
+            {send.isPending ? tr("上传中\u2026") : tr("上传文件")}
           </Button>
-          <Help>
-            每次上传一个文件，最大 5
-            MiB。文件进入当前工作区，路径会插入消息草稿；发送后 Agent
-            才会处理。执行期间不能上传。让 Agent 将结果保存到当前工作目录的
-            outputs/，执行完成后可在这里下载。
-          </Help>
           <input
             ref={input}
-            aria-label="选择上传文件"
+            aria-label={tr("选择上传文件")}
             type="file"
             className="hidden"
             disabled={!writable || send.isPending}
@@ -147,8 +119,8 @@ export function SessionFiles({
           />
         </div>
         {!writable && (
-          <p role="status" className="text-base">
-            会话空闲且运行环境就绪后可以上传。
+          <p role="status" className="text-sm text-fg-muted">
+            {tr("会话空闲且运行环境就绪后可以上传。")}
           </p>
         )}
         <ErrorNotice
@@ -159,23 +131,25 @@ export function SessionFiles({
               : undefined
           }
         />
-        <h3 className="text-base font-medium">生成的文件</h3>
+        <h3 className="text-base font-semibold">{tr("生成的文件")}</h3>
         <div className="max-h-80 space-y-3 overflow-auto">
           {artifacts.isPending ? (
-            <p role="status">正在读取…</p>
+            <p role="status">{tr("正在读取\u2026")}</p>
           ) : !files.length && !artifacts.error ? (
-            <p className="text-base text-fg-muted">还没有生成的文件。</p>
+            <p className="text-sm text-fg-muted">
+              {tr("还没有生成的文件。")}
+            </p>
           ) : null}
           {files.map((file) => (
             <div
               key={file.id}
-              className="flex items-center gap-3 rounded-lg border border-line p-3"
+              className="flex items-center gap-3 rounded-xl border border-line px-4 py-3"
             >
               <div className="min-w-0 flex-1">
-                <p className="break-all text-base">
+                <p className="break-all text-sm font-medium">
                   {file.path.replace(/^\/workspace\/outputs\//, "")}
                 </p>
-                <p className="text-base text-fg-muted">
+                <p className="text-sm text-fg-muted">
                   {Math.ceil(file.size_bytes / 1024)} KiB ·{" "}
                   {dateTime(file.created_at)}
                 </p>
@@ -185,7 +159,9 @@ export function SessionFiles({
                 size="icon"
                 disabled={download.isPending}
                 onClick={() => download.mutate(file)}
-                aria-label={`下载 ${file.path.split("/").at(-1)}`}
+                aria-label={tr("下载 {{value0}}", {
+                  value0: file.path.split("/").at(-1),
+                })}
               >
                 <Download />
               </Button>
@@ -198,7 +174,7 @@ export function SessionFiles({
             disabled={artifacts.isFetchingNextPage}
             onClick={() => void artifacts.fetchNextPage()}
           >
-            加载更多
+            {tr("加载更多")}
           </Button>
         )}
       </DialogContent>

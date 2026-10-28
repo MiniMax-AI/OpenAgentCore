@@ -19,6 +19,11 @@ export function projectItemContent(value: unknown, invalid: () => never): ItemCo
   return { type: value.type as "input_text" | "output_text", text: value.text };
 }
 
+export function projectSummaryText(value: unknown, invalid: () => never): { type: "summary_text"; text: string } {
+  if (!isRecord(value) || !exactFields(value, summaryTextResourceFields) || value.type !== "summary_text" || typeof value.text !== "string") return invalid();
+  return { type: "summary_text", text: value.text };
+}
+
 function projectWebSearchAction(value: unknown, invalid: () => never): WebSearchAction {
   const fields = isRecord(value) ? variantFields(webSearchActionResourceFields, value.type) : undefined;
   if (
@@ -78,10 +83,7 @@ export function projectSessionItem(value: unknown, invalid: () => never): Sessio
       break;
     case "reasoning":
       if (!Array.isArray(value.summary)) return invalid();
-      item.summary = value.summary.map((part) => {
-        if (!isRecord(part) || !exactFields(part, summaryTextResourceFields) || part.type !== "summary_text" || typeof part.text !== "string") return invalid();
-        return { type: "summary_text", text: part.text };
-      });
+      item.summary = value.summary.map((part) => projectSummaryText(part, invalid));
       break;
     case "create_subagent_call":
       if (!nonemptyString(value.agent_id) || !nullableString(value.model) || !nullableString(value.reasoning_effort)) return invalid();

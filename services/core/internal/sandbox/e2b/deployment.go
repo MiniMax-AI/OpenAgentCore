@@ -12,7 +12,7 @@ import (
 )
 
 func Policy() sandbox.DeploymentPolicy {
-	return sandbox.DeploymentPolicy{}
+	return sandbox.DeploymentPolicy{Network: sandbox.NetworkSupport{Restrict: true}}
 }
 
 // Setup declares how the console connects E2B and compatible services. The

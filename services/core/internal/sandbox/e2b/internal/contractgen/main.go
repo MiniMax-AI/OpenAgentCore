@@ -67,9 +67,9 @@ func main() {
 	write("services/core/internal/sandbox/e2b/helper_sdk_generated.go", goCode)
 	bootstrap := fields(reflect.TypeFor[sandbox.Bootstrap]())
 	requiredBootstrap := fieldNames(reflect.TypeFor[sandbox.Bootstrap](), true)
-	requiredBootstrap = slices.DeleteFunc(requiredBootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "SuspendControl" })
+	requiredBootstrap = slices.DeleteFunc(requiredBootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "SuspendControl" || s == "Egress" })
 	requiredBootstrap = append(requiredBootstrap, "InstallationID", "RuntimeBootstrap")
-	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "SuspendControl" })
+	bootstrap = slices.DeleteFunc(bootstrap, func(s string) bool { return s == "CoreURL" || s == "Credential" || s == "SuspendControl" || s == "Egress" })
 	bootstrap = append(bootstrap, "InstallationID", "RuntimeBootstrap")
 	identity := fields(reflect.TypeFor[sandbox.Reference]())
 	for _, name := range []string{"SessionID", "DeviceID"} {
@@ -198,6 +198,7 @@ func fixtures() []byte {
 	delete(managed, "CoreURL")
 	delete(managed, "Credential")
 	delete(managed, "SuspendControl")
+	delete(managed, "Egress")
 	managed["InstallationID"] = installation
 	managed["RuntimeBootstrap"] = runtimebootstrap.Connection(connection)
 	add("managed", "valid", true, object(managed))

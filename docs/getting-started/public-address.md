@@ -6,7 +6,7 @@ Set the one origin that browsers, nodes, sandboxes and applications use to reach
 
 ## Choose the public URL
 
-`OAC_PUBLIC_URL` is the origin applications, nodes, sandboxes and self-hosted executors use. Web accepts only its host. Core derives its other addresses from it, listed under [`OAC_PUBLIC_URL`](../configuration.md#appendix-core-environment-without-the-installer). It is an http or https origin without a path.
+`OAC_PUBLIC_URL` is the origin applications, nodes, sandboxes and self-hosted executors use. Web accepts only its host, so DNS rebinding cannot reach it. Core derives its other addresses from it, listed under [`OAC_PUBLIC_URL`](../configuration.md#appendix-core-environment-without-the-installer). It is an http or https origin without a path.
 
 | Situation | Public URL |
 | --- | --- |
@@ -100,18 +100,10 @@ TLS verification stays on everywhere. With a private certificate authority, node
 
 ### Try it locally with a quick tunnel {#try-it-locally-with-a-quick-tunnel}
 
-A [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) gives a trial installation with external ingress a temporary public HTTPS address. It forwards to one port, so put a local proxy with the same routes in front:
+A [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/) gives a trial installation with external ingress a temporary public HTTPS address.
 
-```caddyfile
-http://:8443 {
-	bind 127.0.0.1
-	reverse_proxy 127.0.0.1:8080
-}
-```
-
-1. Start the proxy: `caddy run --config Caddyfile`.
-2. Start the tunnel: `cloudflared tunnel --url http://127.0.0.1:8443`. It prints an address such as `https://random-words.trycloudflare.com`.
-3. Set that address as `OAC_PUBLIC_URL` in `~/.oac/core/.env` and run `~/.oac/core/oac apply`.
+1. Start the tunnel: `cloudflared tunnel --url http://127.0.0.1:8080`. It prints an address such as `https://random-words.trycloudflare.com`.
+2. Set that address as `OAC_PUBLIC_URL` in `~/.oac/core/.env` and run `~/.oac/core/oac apply`.
 
 The address changes whenever `cloudflared` restarts; nodes bound to the old address must then be added again. Throughput is low, so a node's first Runtime download (about 500 MB) can be slow; see [slow links](./nodes.md#rerun-expiry-and-slow-links).
 

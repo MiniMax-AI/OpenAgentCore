@@ -10,7 +10,7 @@ import (
 
 func TestNodeConfigurationExplicitUnsupportedAndStrictEmptyInput(t *testing.T) {
 	registry := Builtin()
-	for _, kind := range []string{"docker", "microsandbox"} {
+	for _, kind := range []string{"microsandbox", "microsandbox"} {
 		a, err := registry.Lookup(kind)
 		if err != nil {
 			t.Fatal(err)
@@ -40,7 +40,7 @@ func TestConfigurationRequirementsDoNotTurnLookupFailuresIntoFalse(t *testing.T)
 		if _, err := check("missing-configuration-provider"); err == nil {
 			t.Fatal("unknown provider treated as not required")
 		}
-		if yes, err := check("docker"); err != nil || yes {
+		if yes, err := check("microsandbox"); err != nil || yes {
 			t.Fatal("explicit not-required rejected", err)
 		}
 		if yes, err := check("e2b"); err != nil || !yes {
