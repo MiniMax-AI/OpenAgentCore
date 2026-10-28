@@ -8,8 +8,8 @@ const deployment = (provider: "microsandbox" | "e2b") => ({ provider, specificat
 
 describe("network policy", () => {
   it("validates domains with the generated rule", () => {
-    expect(domainIssues(parseDomains("gitlab.example.com\n\n a.b-c.example \nGit.Example.com"))).toEqual([]);
-    expect(domainIssues(["*.example.com", "-x.com", "a.com", "a.com", "a".repeat(254)]).map((issue) => issue.problem)).toEqual(["invalid", "invalid", "duplicate", "too_long"]);
+    expect(domainIssues(parseDomains("gitlab.example.com\n\n a.b-c.example \nGit.Example.com\n*.corp.example"))).toEqual([]);
+    expect(domainIssues(["a.*.example.com", "-x.com", "a.com", "a.com", "a".repeat(254)]).map((issue) => issue.problem)).toEqual(["invalid", "invalid", "duplicate", "too_long"]);
     expect(domainIssues(Array.from({ length: 101 }, (_, index) => `h${index}.example.com`))).toEqual([{ problem: "too_many" }]);
   });
 

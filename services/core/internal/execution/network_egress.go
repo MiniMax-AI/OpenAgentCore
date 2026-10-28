@@ -57,9 +57,9 @@ func admitNetwork(support sandbox.NetworkSupport, network sandbox.Network, polic
 // egressFor applies the cap and the Environment policy. The Harness runs inside
 // the sandbox, so the port of the Session's model provider is always reachable
 // on public addresses; a loopback host is the sandbox itself and needs no
-// entry. A model host the cap covers, by name or "*.suffix", also joins PrivateDomains as its exact name, so a
-// private model host keeps working under every policy. A nil policy equals
-// enabled.
+// entry. A model host the cap covers, by name or "*.suffix", also joins
+// PrivateDomains as its exact name, so a private model host keeps working
+// under every policy. A nil policy equals enabled.
 func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, modelBaseURL string) (sandbox.Egress, error) {
 	egress := sandbox.Egress{Public: network.Public, PrivateDomains: append([]string{}, network.Domains...), Domains: []string{}, Endpoints: []string{}}
 	if policy != nil && policy.Access != "enabled" {

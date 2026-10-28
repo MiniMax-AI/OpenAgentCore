@@ -30,14 +30,15 @@ const resolveTimeout = 5 * time.Second
 //  1. host DNS
 //  2. deny loopback, link-local and metadata
 //  3. each address of the Core host, on its port
-//  4. a port-less domain allow for each exact PrivateDomains name; a
-//     port-less allow also lets the guest's DNS answer pass for private
-//     addresses
+//  4. a port-less domain allow for each exact PrivateDomains name, private
+//     addresses included
 //  5. public addresses, when Public
-//  6. for each "*.apex" PrivateDomains entry, deny the apex unless the apex is
-//     allowed by name in this Egress, then allow the suffix ".apex". A suffix
-//     rule matches the apex too but "*.apex" does not, and TLS flows are
-//     matched by SNI, so the deny is exact for HTTPS
+//  6. for each "*.apex" PrivateDomains entry, deny the apex unless this Egress
+//     names it, then allow the suffix ".apex". A suffix rule matches the apex
+//     too but "*.apex" does not, and TLS flows are matched by SNI, so the deny
+//     is exact for HTTPS. An Endpoint at the apex skips the deny, since it
+//     would come before the Endpoint's allow; the suffix allow then admits
+//     that model host on every port
 //  7. deny every other private address
 //  8. unless Public, a tcp allow on its port for each Endpoint (domain, or a
 //     public IP literal) and a port-less domain allow for each Domains name
