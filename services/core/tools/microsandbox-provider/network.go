@@ -23,12 +23,13 @@ func isPrivate(a netip.Addr) bool { return a.IsPrivate() || carrierGradeNAT.Cont
 // resolveTimeout bounds the lookup of Core's address.
 const resolveTimeout = 5 * time.Second
 
-// egressNetwork builds one allocation's network policy; Create and Resume use
-// the same rules, with strict hostname enforcement and DNS rebind protection
-// off (restore sets the same two options itself). Rules are first match with
-// default deny:
+// egressNetwork builds one allocation's network policy, rules and defaults
+// only, the part that Create and Resume share (restore accepts nothing else);
+// both turn strict hostname enforcement and DNS rebind protection off through
+// their own options. Rules are first match with default deny:
 //  1. host DNS
-//  2. deny loopback, link-local and metadata
+//  2. deny loopback, link-local, metadata and the rest of the host, and DNS
+//     to any other server, so only the host's answers bind names to addresses
 //  3. each address of the Core host, on its port
 //  4. a port-less domain allow for each exact PrivateDomains name, private
 //     addresses included
@@ -62,19 +63,19 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 		return nil, err
 	}
 
-	off := false
-	n := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny, DisableStrict: true, DNS: &sdk.DNSConfig{RebindProtection: &off}}
-	allow := func(destination, protocol, port string) {
-		n.Rules = append(n.Rules, sdk.PolicyRule{Action: sdk.PolicyActionAllow, Direction: sdk.PolicyDirectionEgress, Destination: destination, Protocol: sdk.PolicyProtocol(protocol), Port: port})
+	n := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny}
+	rule := func(action sdk.PolicyAction, destination, protocol, port string) {
+		n.Rules = append(n.Rules, sdk.PolicyRule{Action: action, Direction: sdk.PolicyDirectionEgress, Destination: destination, Protocol: sdk.PolicyProtocol(protocol), Port: port})
 	}
-	deny := func(destination string) {
-		n.Rules = append(n.Rules, sdk.PolicyRule{Action: sdk.PolicyActionDeny, Direction: sdk.PolicyDirectionEgress, Destination: destination})
-	}
+	allow := func(destination, protocol, port string) { rule(sdk.PolicyActionAllow, destination, protocol, port) }
+	deny := func(destination string) { rule(sdk.PolicyActionDeny, destination, "", "") }
 	allow("host", "udp", "53")
 	allow("host", "tcp", "53")
-	for _, group := range []string{"loopback", "link-local", "metadata"} {
+	for _, group := range []string{"loopback", "link-local", "metadata", "host"} {
 		deny(group)
 	}
+	rule(sdk.PolicyActionDeny, "*", "udp", "53")
+	rule(sdk.PolicyActionDeny, "*", "tcp", "53")
 	for _, a := range coreAddresses {
 		allow(a.String(), "tcp", port)
 	}

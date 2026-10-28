@@ -56,6 +56,8 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	if e != nil {
 		return wire.Response{}, e
 	}
+	off := false
+	network.DisableStrict, network.DNS = true, &sdk.DNSConfig{RebindProtection: &off}
 	live, e := sdk.CreateSandbox(ctx, c.Name,
 		// Every compatible node holds the pinned image; nothing is ever pulled.
 		sdk.WithImage(b.q.Config.Image), sdk.WithPullPolicy(sdk.PullPolicyNever), sdk.WithMemory(b.q.Config.MemoryMiB), sdk.WithCPUs(b.q.Config.CPUs),

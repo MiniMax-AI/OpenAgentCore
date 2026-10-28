@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
 func rules(t *testing.T, egress sandbox.Egress) (string, string) {
@@ -17,9 +19,9 @@ func rules(t *testing.T, egress sandbox.Egress) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Create and restore run with these options off.
-	if n.DefaultEgress != "deny" || n.DefaultIngress != "deny" || !n.DisableStrict || n.DNS == nil || *n.DNS.RebindProtection {
-		t.Fatalf("defaults or options changed: %+v", n)
+	// Restore takes the config as is and accepts only rules and defaults.
+	if want := (sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny, Rules: n.Rules}); !reflect.DeepEqual(*n, want) {
+		t.Fatalf("config carries more than rules and defaults: %+v", n)
 	}
 	var lines []string
 	for _, r := range n.Rules {
@@ -33,6 +35,9 @@ allow host tcp 53
 deny loopback  
 deny link-local  
 deny metadata  
+deny host  
+deny * udp 53
+deny * tcp 53
 allow 172.29.144.1 tcp 24443
 `
 
