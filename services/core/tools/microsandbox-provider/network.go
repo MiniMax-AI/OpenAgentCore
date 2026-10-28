@@ -31,21 +31,13 @@ const resolveTimeout = 5 * time.Second
 //  2. deny loopback, link-local, metadata and the rest of the host, and DNS
 //     to any other server, so only the host's answers bind names to addresses
 //  3. each address of the Core host, on its port
-//  4. a port-less domain allow for each exact PrivateDomains name, private
-//     addresses included
+//  4. a port-less allow for each PrivateDomains entry, private addresses
+//     included: the exact name, or for "*.apex" every name below the apex,
+//     never the apex itself
 //  5. public addresses, when Public
-//  6. for each "*.apex" PrivateDomains entry, deny the apex unless this Egress
-//     names it, then allow the suffix ".apex". A suffix rule matches the apex
-//     too but "*.apex" does not, and TLS flows are matched by SNI, so the deny
-//     is exact for HTTPS. An Endpoint at the apex skips the deny, since it
-//     would come before the Endpoint's allow; the suffix allow then admits
-//     that model host on every port
-//  7. deny every other private address
-//  8. unless Public, a tcp allow on its port for each Endpoint (domain, or a
+//  6. deny every other private address
+//  7. unless Public, a tcp allow on its port for each Endpoint (domain, or a
 //     public IP literal) and a port-less domain allow for each Domains name
-//
-// A plain-text connection to a subdomain that shares an address with a
-// resolved apex is refused, since only the address is known there.
 func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, report io.Writer) (*sdk.NetworkConfig, error) {
 	core, err := url.Parse(coreURL)
 	if err != nil || core.Hostname() == "" {
@@ -79,15 +71,11 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	for _, a := range coreAddresses {
 		allow(a.String(), "tcp", port)
 	}
-	named := slices.Clone(egress.Domains)
-	var suffixes []string
 	for _, name := range egress.PrivateDomains {
 		if apex, ok := strings.CutPrefix(name, "*."); ok {
-			suffixes = append(suffixes, apex)
-		} else {
-			named = append(named, name)
-			allow(name, "", "")
+			name = "subdomain=" + apex
 		}
+		allow(name, "", "")
 	}
 	var endpoints [][2]string
 	for _, endpoint := range egress.Endpoints {
@@ -98,20 +86,11 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 			fmt.Fprintf(report, "unsupported %s\n", endpoint)
 		case ipErr == nil && isPrivate(ip.Unmap()):
 		default:
-			named = append(named, host)
 			endpoints = append(endpoints, [2]string{host, strconv.Itoa(p)})
 		}
 	}
 	if egress.Public {
 		allow("public", "", "")
-	}
-	for _, apex := range suffixes {
-		if !slices.Contains(named, apex) {
-			deny(apex)
-		}
-	}
-	for _, apex := range suffixes {
-		allow("."+apex, "", "")
 	}
 	deny("private")
 	if !egress.Public {

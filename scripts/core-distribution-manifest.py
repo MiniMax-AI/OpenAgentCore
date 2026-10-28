@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlsplit
 import zipapp
 
 
-RUNTIME_ARCHIVE_SHA256 = "5fc2206fbe35b471743bd5af15e3931cd2439a0c8b8e6ef08a493ddabcdc1b4c"
+RUNTIME_ARCHIVE_SHA256 = "9ca514e58d7156954537210d2e673c07b091ed5137775b8952ecfd2e96d85638"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/node"))
 import provider_assets
@@ -210,7 +210,7 @@ def verify_runtime(image, daemon, source):
 
 def extract_runtime(archive, destination):
     if sha256(archive) != RUNTIME_ARCHIVE_SHA256:
-        raise ValueError("microsandbox v0.7.11 release checksum mismatch")
+        raise ValueError("microsandbox runtime archive checksum mismatch")
     destination = pathlib.Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:gz") as bundle:

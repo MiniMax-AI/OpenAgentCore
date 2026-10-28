@@ -48,41 +48,19 @@ func TestDefaultPolicyRules(t *testing.T) {
 	}
 }
 
-// Exact cap names are port-less allows before "deny private"; an Endpoint is
-// limited to its port, a private IP literal is dropped, a bad one is reported.
+// Cap names are port-less allows before "deny private", "*.apex" as every
+// name below the apex; an Endpoint is limited to its port, a private IP
+// literal is dropped, a bad one is reported.
 func TestNotPublicRules(t *testing.T) {
-	got, report := rules(t, sandbox.Egress{PrivateDomains: []string{"gitlab.example.com"}, Domains: []string{"pypi.org"},
+	got, report := rules(t, sandbox.Egress{PrivateDomains: []string{"gitlab.example.com", "*.corp.example"}, Domains: []string{"pypi.org"},
 		Endpoints: []string{"models.example.com:8443", "203.0.113.9:8000", "10.1.2.3:8000", "bad host:1"}})
 	want := head + `allow gitlab.example.com  
+allow subdomain=corp.example  
 deny private  
 allow models.example.com tcp 8443
 allow 203.0.113.9 tcp 8000
 allow pypi.org  `
 	if got != want || report != "unsupported bad host:1\n" {
 		t.Fatalf("rules:\n%s\nreport %q", got, report)
-	}
-}
-
-// A suffix rule matches the apex too, so each "*.apex" entry denies the apex
-// first unless this Egress allows the apex by name; public comes before it.
-func TestSuffixRules(t *testing.T) {
-	cases := []struct {
-		name   string
-		egress sandbox.Egress
-		want   string
-	}{
-		{"restricted", sandbox.Egress{Domains: []string{"example.com"}, PrivateDomains: []string{"*.corp.example", "git.corp.example"}},
-			head + "allow git.corp.example  \ndeny corp.example  \nallow .corp.example  \ndeny private  \nallow example.com  "},
-		{"enabled", sandbox.Egress{Public: true, PrivateDomains: []string{"*.corp.example", "git.corp.example", "llm.corp.example"}, Endpoints: []string{"api.minimaxi.com:443"}},
-			head + "allow git.corp.example  \nallow llm.corp.example  \nallow public  \ndeny corp.example  \nallow .corp.example  \ndeny private  "},
-		{"apex listed", sandbox.Egress{PrivateDomains: []string{"*.corp.example", "corp.example"}},
-			head + "allow corp.example  \nallow .corp.example  \ndeny private  "},
-		{"apex is a model host", sandbox.Egress{PrivateDomains: []string{"*.corp.example"}, Endpoints: []string{"corp.example:8000"}},
-			head + "allow .corp.example  \ndeny private  \nallow corp.example tcp 8000"},
-	}
-	for _, tc := range cases {
-		if got, _ := rules(t, tc.egress); got != tc.want {
-			t.Fatalf("%s:\n%s", tc.name, got)
-		}
 	}
 }

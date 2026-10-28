@@ -14,4 +14,4 @@ require golang.org/x/sync v0.22.0 // indirect
 replace github.com/MiniMax-AI/OpenAgentCore => ../../../..
 
 // The SDK is upstream v0.7.11 plus the fork's patch queue (docs/maintainers.md).
-replace github.com/superradcompany/microsandbox/sdk/go => github.com/SaladDay/microsandbox/sdk/go v0.0.0-20261028065500-fc39b5b503f0
+replace github.com/superradcompany/microsandbox/sdk/go => github.com/SaladDay/microsandbox/sdk/go v0.0.0-20261028082216-9f2992795029

@@ -14,8 +14,8 @@ SDK_MODULE = "github.com/superradcompany/microsandbox/sdk/go"
 # The SDK source (go.mod replace) and this FFI come from the same tag of the fork; see docs/maintainers.md.
 SDK_FORK = "github.com/SaladDay/microsandbox/sdk/go"
 FFI_FILE = "libmicrosandbox_go_ffi-linux-amd64.so"
-FFI_URL = "https://github.com/SaladDay/microsandbox/releases/download/oac-v0.7.11-1/" + FFI_FILE
-FFI_SHA256 = "e489ea93cab3b9c8ea9e8b53a5c0b4fe0e54a66be34b7b2638fb360b1d574642"
+FFI_URL = "https://github.com/SaladDay/microsandbox/releases/download/oac-v0.7.11-2/" + FFI_FILE
+FFI_SHA256 = "c04e6256ee24335e2de4635361d5ae53674573818859113474020274d1fd0a29"
 
 
 def verify_ffi(path):

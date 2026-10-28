@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 228915769ce795bd38417f229d972ccafbf7280628cf3280c0f9bfddf4405537
+source_hash: 01003cc3061eefaf705bb376e73f6a66e4e6416821157947bb6445474b74cc61
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox 和 E2B 实现了该协议。
@@ -202,11 +202,11 @@ Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它
 - `Public`：允许公开地址。
 - `PrivateDomains`：精确主机名，或 `*.example.com`（覆盖其子域名，不含 `example.com` 本身），其解析出的地址（包括私有地址）都被允许。
 - `Domains`：只在公开地址上被允许的精确主机名，私有应答仍被阻止。上限允许公网时，它们承载 `restricted` Environment 的 `allowed_domains`。
-- `Endpoints`：模型提供商 `base_url` 的 `host:port` 条目（`net.JoinHostPort` 形式），端口取自 URL，https 默认 443，http 默认 80，主机为回环时省略。Harness 运行在沙箱内，直接调用它。条目只允许该 TCP 端口在公开地址上的访问，绝不包括私有地址。上限的额外域名列出了模型主机名时，Core 还会把该名称加入 `PrivateDomains`，使私有模型主机在任何策略下都能工作。
+- `Endpoints`：模型提供商 `base_url` 的 `host:port` 条目（`net.JoinHostPort` 形式），端口取自 URL，https 默认 443，http 默认 80，主机为回环时省略。Harness 运行在沙箱内，直接调用它。条目只允许该 TCP 端口在公开地址上的访问，绝不包括私有地址。上限的额外域名列出了模型主机名或覆盖它的 `*.` 条目时，Core 还会把该名称加入 `PrivateDomains`，使私有模型主机在任何策略下都能工作。
 
 Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址，但 E2B 无法阻止元数据地址 169.254.169.254。它在创建和恢复时用主机 DNS 解析 Core 主机。MCP 流量没有条目：它遵循 `Public`、`PrivateDomains` 和 `Domains`。
 
-microsandbox 按首条匹配的顺序、默认拒绝并保持主机 DNS 可达来应用规则，创建与恢复相同，并关闭严格主机名校验和 DNS rebind 保护。名称成为不带端口的域名放行规则，沙箱自己的 DNS 应答解析出的地址（包括私有地址）都被放行。`*.example.com` 条目成为后缀放行规则 `.example.com`，它同样会匹配 `example.com`，因此 adapter 先拒绝 `example.com`，除非该 `Egress` 中出现了这个名称。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
+microsandbox 按首条匹配的顺序和默认拒绝来应用规则，创建与恢复相同，并关闭严格主机名校验和 DNS rebind 保护。沙箱只能访问主机的 DNS 服务器：发往其他服务器的 DNS 和主机的其他端口都被拒绝，因此只有主机的应答能把名称绑定到地址。名称成为不带端口的域名放行规则，放行这些应答解析出的地址（包括私有地址）；`*.example.com` 条目成为子域名放行规则，永远不匹配 `example.com`。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 

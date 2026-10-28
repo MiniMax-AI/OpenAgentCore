@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: a69bd56121ccce58f25e5853f65596fc514508834dbf999ed373d7b294c2ffc8
+source_hash: 596b694775fdf0635e42978f23ce2bc6a26e149583a8a590621daa103f746143
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -73,7 +73,7 @@ microsandbox 会配置 CPU、内存和托管根磁盘，并在挂载于 `/enviro
 | `public` | 布尔值。`true` 允许公开地址；`false` 只允许 Core、模型提供商和 `domains` |
 | `domains` | 最多 100 个条目，每个不超过 253 个字符，为精确主机名或 `*.` 加主机名，由小写字母、数字、连字符和点组成，且最后一个标签以字母开头。`*.example.com` 覆盖 `example.com` 任意层级的子域名，但不含 `example.com` 本身，后者需要单独条目；其他通配符、IP 字面量、端口和 URL 会被拒绝。Core 以小写、去重并排序的形式存储。名称解析出的每个地址都被允许，包括私有地址 |
 
-默认值为 `{"public": true, "domains": []}`。无论哪种上限，回环、链路本地、云元数据地址以及其他所有私有地址始终被阻止，但 E2B 无法阻止元数据地址 169.254.169.254，且 E2B 沙箱根本无法访问私有网络。在 microsandbox 上，对与沙箱同时解析过的顶级域共享同一地址的子域名发起的明文（非 TLS）连接会被拒绝。沙箱保留创建它的代次的上限。
+默认值为 `{"public": true, "domains": []}`。无论哪种上限，回环、链路本地、云元数据地址以及其他所有私有地址始终被阻止，但 E2B 无法阻止元数据地址 169.254.169.254，且 E2B 沙箱根本无法访问私有网络。沙箱保留创建它的代次的上限。
 
 每个 Provider 声明自己能强制执行什么（[Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md#network-egress)）：microsandbox 支持两个字段，E2B 支持 `public: false` 但不支持 `domains`，因为 E2B 沙箱无法访问私有网络。所选 Provider 未声明的上限会返回 400 `invalid_sandbox_configuration`，`param` 为 `network.public` 或 `network.domains`。
 
