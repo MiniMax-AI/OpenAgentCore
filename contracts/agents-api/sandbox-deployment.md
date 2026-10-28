@@ -68,7 +68,7 @@ Select the filesystem configuration before the microsandbox deployment. Selectin
 | Field | Accepted value |
 | --- | --- |
 | `public` | Boolean. `true` allows public addresses; `false` allows only Core, the model provider and `domains` |
-| `domains` | At most 100 entries of at most 253 characters, each an exact host name or `*.` and a host name, in lowercase letters, digits, hyphens and dots, whose last label starts with a letter. `*.example.com` covers the subdomains of `example.com` at any depth but not `example.com` itself, which needs its own entry; other wildcards, IP literals, ports and URLs are rejected. Core stores them lowercase, deduplicated and sorted. Every address a name resolves to is allowed, private addresses included |
+| `domains` | At most 100 entries of at most 253 characters, each an exact host name or `*.` and a host name of at least two labels, in lowercase letters, digits, hyphens and dots, whose last label starts with a letter. `*.example.com` covers the subdomains of `example.com` at any depth but not `example.com` itself, which needs its own entry; other wildcards, IP literals, ports and URLs are rejected. Core stores them lowercase, deduplicated and sorted. Every address a name resolves to is allowed, private addresses included |
 
 The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked, except that E2B cannot block the metadata address 169.254.169.254 and its sandboxes cannot reach private networks at all. A sandbox keeps the cap of the generation that created it.
 

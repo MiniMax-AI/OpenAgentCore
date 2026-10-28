@@ -119,8 +119,7 @@ cp deploy/compose/compose.yaml "$bundle/compose.yaml.template"
 OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
 cp "$stage/core/bin/oac" "$bundle/oac"
 python3 scripts/build-microsandbox-provider.py build "$stage/core/bin/oac-microsandbox-provider"
-# The fork release that also provides the FFI (docs/maintainers.md).
-msb_tag=oac-v0.7.11-2
+msb_tag="$(python3 scripts/build-microsandbox-provider.py tag)"
 msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-$msb_tag-linux-x86_64.tar.gz}"
 if [[ ! -f "$msb_archive" ]]; then
   mkdir -p "$(dirname "$msb_archive")"

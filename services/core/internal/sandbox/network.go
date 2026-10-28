@@ -19,8 +19,9 @@ const (
 )
 
 // domainPattern is the cap's rule: an exact host name as the Environment
-// network field accepts, or "*." and a host name for its subdomains.
-var domainPattern = `^(?:\*\.)?` + agentnetwork.HostPattern[1:]
+// network field accepts, or "*." and a host name of at least two labels for
+// its subdomains, never a whole top-level domain.
+var domainPattern = `^(?:\*\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)?` + strings.TrimPrefix(agentnetwork.HostPattern, "^")
 
 var (
 	domainRule = regexp.MustCompile(agentnetwork.HostPattern)
@@ -89,7 +90,7 @@ func (e Egress) Validate() error {
 			return ErrInvalid
 		}
 		for _, d := range names {
-			if !ValidDomain(d) && !(i == 0 && capRule.MatchString(d)) {
+			if !ValidDomain(d) && !(i == 0 && len(d) <= maxDomainLength && capRule.MatchString(d)) {
 				return ErrInvalid
 			}
 		}

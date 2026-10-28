@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: 501bab94d8cffb809a9a0ae43537db1d707de5bf368e749ab36e9c0db56b0c33
+source_hash: af77ec1c4a27d4742497068cee88195f07e9fb38e48bed89b9120e21e1a726b4
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -118,7 +118,7 @@ make check-microsandbox-provider
 
 **microsandbox 运行时。** 分发包使用 fork 发布 [oac-v0.7.11-2](https://github.com/SaladDay/microsandbox/releases/tag/oac-v0.7.11-2) 的归档 `microsandbox-linux-x86_64.tar.gz`，SHA256 为 `9ca514e58d7156954537210d2e673c07b091ed5137775b8952ecfd2e96d85638`（即 `scripts/core-distribution-manifest.py` 中的 `RUNTIME_ARCHIVE_SHA256`）。构建过程会先验证校验和，再解压 `msb` 和 `libkrunfw.so.5.6.1`，并记录这两个文件的哈希。辅助程序会在每次调用时检查这些哈希，并且绝不安装或升级它们。
 
-**microsandbox fork。** SDK、其 FFI 和 `msb` 运行时来自 [SaladDay/microsandbox](https://github.com/SaladDay/microsandbox/tree/oac) 的 `oac` 分支：一个上游发布标签加上一小队补丁，补丁列表见 `git log v0.7.11..oac`。每个补丁同时向上游提交，上游发布包含它之后就从队列中删除。推送 `oac-v<upstream version>-<n>` 标签会在与上游发布相同的 manylinux 2.28 容器中构建 Linux amd64 FFI 和运行时归档，其中 `libkrunfw` 使用同一上游版本的官方文件而不构建内核，并把它们连同 SHA256 文件附加到该标签的 release（`.github/workflows/oac-release.yml`）。要换到新标签，把 `services/core/tools/microsandbox-provider/go.mod` 中 SDK 的 `replace` 指向该标签的提交，并更新 `scripts/build-microsandbox-provider.py` 中的 `FFI_URL` 和 `FFI_SHA256`、`scripts/build-core-distribution.sh` 中的 `msb_tag` 以及 `RUNTIME_ARCHIVE_SHA256`。
+**microsandbox fork。** SDK、其 FFI 和 `msb` 运行时来自 [SaladDay/microsandbox](https://github.com/SaladDay/microsandbox/tree/oac) 的 `oac` 分支：一个上游发布标签加上一小队补丁，补丁列表见 `git log v0.7.11..oac`。每个补丁同时向上游提交，上游发布包含它之后就从队列中删除。推送 `oac-v<upstream version>-<n>` 标签会在与上游发布相同的 manylinux 2.28 容器中构建 Linux amd64 FFI 和运行时归档，其中 `libkrunfw` 使用同一上游版本的官方文件而不构建内核，并把它们连同 SHA256 文件附加到该标签的 release（`.github/workflows/oac-release.yml`）。要换到新标签，把 `services/core/tools/microsandbox-provider/go.mod` 中 SDK 的 `replace` 指向该标签的提交，并更新 `scripts/build-microsandbox-provider.py` 中的 `FORK_TAG` 和 `FFI_SHA256` 以及 `RUNTIME_ARCHIVE_SHA256`。
 
 ### 独立 Core 构建 {#standalone-core-builds}
 
