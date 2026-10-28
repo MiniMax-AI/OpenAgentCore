@@ -118,7 +118,7 @@ make check-microsandbox-provider
 
 **microsandbox 运行时。** 分发包使用官方的 [v0.7.11 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.11) 归档 `microsandbox-linux-x86_64.tar.gz`，SHA256 为 `5fc2206fbe35b471743bd5af15e3931cd2439a0c8b8e6ef08a493ddabcdc1b4c`（即 `scripts/core-distribution-manifest.py` 中的 `RUNTIME_ARCHIVE_SHA256`）。构建过程会先验证校验和，再解压 `msb` 和 `libkrunfw.so.5.6.1`，并记录这两个文件的哈希。辅助程序会在每次调用时检查这些哈希，并且绝不安装或升级它们。
 
-**microsandbox fork。** SDK 及其 FFI 来自 [SaladDay/microsandbox](https://github.com/SaladDay/microsandbox/tree/oac) 的 `oac` 分支：一个上游发布标签加上一小队补丁，补丁列表见 `git log v0.7.11..oac`。每个补丁同时向上游提交，上游发布包含它之后就从队列中删除。推送 `oac-v<上游版本>-<n>` 标签会在与上游发布相同的 manylinux 2.28 容器中构建 Linux amd64 FFI，并连同其 SHA256 附加到该标签的 release。要换到新标签，把 `services/core/tools/microsandbox-provider/go.mod` 中 SDK 的 `replace` 指向该标签的提交，并更新 `scripts/build-microsandbox-provider.py` 中的 `FFI_URL` 和 `FFI_SHA256`。运行时仍使用同一上游版本的官方发布。
+**microsandbox fork。** SDK 及其 FFI 来自 [SaladDay/microsandbox](https://github.com/SaladDay/microsandbox/tree/oac) 的 `oac` 分支：一个上游发布标签加上一小队补丁，补丁列表见 `git log v0.7.11..oac`。每个补丁同时向上游提交，上游发布包含它之后就从队列中删除。推送 `oac-v<upstream version>-<n>` 标签会在与上游发布相同的 manylinux 2.28 容器中构建 Linux amd64 FFI，并连同其 SHA256 附加到该标签的 release。要换到新标签，把 `services/core/tools/microsandbox-provider/go.mod` 中 SDK 的 `replace` 指向该标签的提交，并更新 `scripts/build-microsandbox-provider.py` 中的 `FFI_URL` 和 `FFI_SHA256`。运行时仍使用同一上游版本的官方发布。
 
 ### 独立 Core 构建 {#standalone-core-builds}
 
