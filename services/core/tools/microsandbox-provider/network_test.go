@@ -27,13 +27,17 @@ func fixedDNS(table map[string][]string) resolver {
 }
 
 func rules(t *testing.T, egress sandbox.Egress, dns map[string][]string) (string, string) {
+	return policy(t, egress, false, dns)
+}
+
+func policy(t *testing.T, egress sandbox.Egress, restore bool, dns map[string][]string) (string, string) {
 	t.Helper()
 	var report bytes.Buffer
-	n, err := egressNetwork(context.Background(), "https://core.example.com:24443", egress, fixedDNS(dns), &report)
+	n, err := egressNetwork(context.Background(), "https://core.example.com:24443", egress, restore, fixedDNS(dns), &report)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.DefaultEgress != "deny" || n.DefaultIngress != "deny" || n.DisableStrict || n.DNS != nil {
+	if n.DefaultEgress != "deny" || n.DefaultIngress != "deny" || n.DisableStrict == restore || n.DNS != nil {
 		t.Fatalf("defaults or DNS options changed: %+v", n)
 	}
 	var lines []string
@@ -83,5 +87,40 @@ allow pypi.org  `
 	}
 	if report != "unresolved gone.example.com\n" {
 		t.Fatalf("report %q", report)
+	}
+}
+
+// Restore keeps strict hostname enforcement, so each domain allow is preceded
+// by the public addresses its name resolves to; private answers of a Domains
+// name or an Endpoint stay blocked.
+func TestRestorePinsPublicAddresses(t *testing.T) {
+	egress := sandbox.Egress{PrivateDomains: []string{"gitlab.example.com"}, Domains: []string{"pypi.org", "gone.example.com"},
+		Endpoints: []string{"models.example.com:8443"}}
+	dns := map[string][]string{"core.example.com": {"172.29.144.1"}, "gitlab.example.com": {"10.74.2.81", "8.8.8.8"},
+		"pypi.org": {"151.101.0.223", "10.1.1.1"}, "models.example.com": {"10.9.9.9", "2606:4700::1"}}
+	got, report := policy(t, egress, true, dns)
+	want := `allow host udp 53
+allow host tcp 53
+deny loopback  
+deny link-local  
+deny metadata  
+allow 172.29.144.1 tcp 24443
+allow 10.74.2.81  
+deny private  
+allow 2606:4700::1 tcp 8443
+allow models.example.com tcp 8443
+allow 8.8.8.8  
+allow gitlab.example.com  
+allow gone.example.com  
+allow 151.101.0.223  
+allow pypi.org  `
+	if got != want {
+		t.Fatalf("rules:\n%s", got)
+	}
+	if report != "unresolved gone.example.com\n" {
+		t.Fatalf("report %q", report)
+	}
+	if got, _ := policy(t, sandbox.Egress{Public: true, Domains: []string{"pypi.org"}}, true, dns); strings.Contains(got, "151.101.0.223") {
+		t.Fatalf("public egress pinned addresses:\n%s", got)
 	}
 }

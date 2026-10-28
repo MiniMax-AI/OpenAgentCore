@@ -31,7 +31,8 @@ func isPrivate(a netip.Addr) bool { return a.IsPrivate() || carrierGradeNAT.Cont
 const resolveTimeout = 5 * time.Second
 
 // egressNetwork builds one allocation's network policy; Create and Resume call
-// it with the same Egress. Rules are first match with default deny:
+// it with the same Egress, and restore tells which. Rules are first match with
+// default deny:
 //  1. host DNS
 //  2. deny loopback, link-local and metadata
 //  3. each address of the Core host, on its port
@@ -43,13 +44,21 @@ const resolveTimeout = 5 * time.Second
 //  6. unless Public, a tcp allow on its port for each Endpoint (domain, or a
 //     public IP literal), and a port-less domain allow for each PrivateDomains
 //     and Domains name; only public answers reach a domain allow, since rule 5
-//     and rebind protection already refuse private ones
+//     and rebind protection already refuse private ones; on restore each
+//     domain allow is preceded by the same allow for the public addresses the
+//     name resolves to now
 //  7. public addresses, when Public
 //
-// Core and PrivateDomains names are resolved together under one deadline. A
-// PrivateDomains name that does not resolve gets no address rule and is
+// Strict hostname enforcement accepts a domain allow over TLS only with TLS
+// interception, so create turns it off. Restore cannot (the SDK takes only the
+// policy there) and the domain allows of rule 6 no longer pass HTTPS, hence the
+// address allows, which miss later DNS changes. They go once restore can turn
+// strict enforcement off.
+//
+// Core, PrivateDomains and, on restore, the rule 6 names are resolved together
+// under one deadline. A name that does not resolve gets no address rule and is
 // reported to report.
-func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, resolve resolver, report io.Writer) (*sdk.NetworkConfig, error) {
+func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, restore bool, resolve resolver, report io.Writer) (*sdk.NetworkConfig, error) {
 	core, err := url.Parse(coreURL)
 	if err != nil || core.Hostname() == "" {
 		return nil, sandbox.ErrInvalid
@@ -64,6 +73,13 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	names := slices.Concat(egress.PrivateDomains, egress.Domains)
 	slices.Sort(names)
 	names = slices.Compact(names)
+	pin := restore && !egress.Public
+	lookups := slices.Clone(egress.PrivateDomains)
+	if pin {
+		lookups = slices.Concat(names, endpointDomains(egress.Endpoints))
+	}
+	slices.Sort(lookups)
+	lookups = slices.Compact(lookups)
 
 	ctx, cancel := context.WithTimeout(ctx, resolveTimeout)
 	defer cancel()
@@ -71,9 +87,9 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	var coreAddresses []netip.Addr
 	var coreErr error
 	wg.Go(func() { coreAddresses, coreErr = addresses(ctx, core.Hostname(), resolve) })
-	found := make([][]netip.Addr, len(egress.PrivateDomains))
-	failed := make([]error, len(egress.PrivateDomains))
-	for i, name := range egress.PrivateDomains {
+	found := make([][]netip.Addr, len(lookups))
+	failed := make([]error, len(lookups))
+	for i, name := range lookups {
 		wg.Go(func() { found[i], failed[i] = addresses(ctx, name, resolve) })
 	}
 	wg.Wait()
@@ -81,21 +97,26 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 		return nil, coreErr
 	}
 	var private []string
-	for i, name := range egress.PrivateDomains {
+	public := map[string][]string{}
+	for i, name := range lookups {
 		if failed[i] != nil {
 			fmt.Fprintf(report, "unresolved %s\n", name)
 			continue
 		}
 		for _, a := range found[i] {
 			if isPrivate(a) {
-				private = append(private, a.String())
+				if slices.Contains(egress.PrivateDomains, name) {
+					private = append(private, a.String())
+				}
+			} else if pin && a.IsGlobalUnicast() {
+				public[name] = append(public[name], a.String())
 			}
 		}
 	}
 	slices.Sort(private)
 	private = slices.Compact(private)
 
-	n := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny}
+	n := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny, DisableStrict: !restore}
 	allow := func(destination, protocol, port string) {
 		n.Rules = append(n.Rules, sdk.PolicyRule{Action: sdk.PolicyActionAllow, Direction: sdk.PolicyDirectionEgress, Destination: destination, Protocol: sdk.PolicyProtocol(protocol), Port: port})
 	}
@@ -124,12 +145,18 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 					allow(a.String(), "tcp", strconv.Itoa(p))
 				}
 			} else if sandbox.ValidDomain(host) {
+				for _, a := range public[host] {
+					allow(a, "tcp", strconv.Itoa(p))
+				}
 				allow(host, "tcp", strconv.Itoa(p))
 			} else {
 				fmt.Fprintf(report, "unsupported %s\n", endpoint)
 			}
 		}
 		for _, name := range names {
+			for _, a := range public[name] {
+				allow(a, "", "")
+			}
 			allow(name, "", "")
 		}
 	}
@@ -137,6 +164,17 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 		allow("public", "", "")
 	}
 	return n, nil
+}
+
+// endpointDomains returns the host names of the Endpoints that name one.
+func endpointDomains(endpoints []string) []string {
+	var hosts []string
+	for _, endpoint := range endpoints {
+		if host, _, err := sandbox.SplitEndpoint(endpoint); err == nil && sandbox.ValidDomain(host) {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
 }
 
 // addresses returns the sorted, unmapped addresses of a host name or literal.

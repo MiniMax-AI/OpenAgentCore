@@ -341,7 +341,7 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	if q.ObserveOnly || q.Target.ID != "" {
 		return wire.State{}, wire.ErrUnconfirmed
 	}
-	network, e := b.network(ctx, q.Egress)
+	network, e := b.network(ctx, q.Egress, true)
 	if e != nil {
 		return wire.State{}, b.closeUndispatchedRestore(q, e)
 	}
