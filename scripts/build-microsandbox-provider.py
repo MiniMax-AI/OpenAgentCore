@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
-"""Build the provider with the official SDK source and matching embedded FFI."""
+"""Build the provider with the pinned SDK fork and its matching embedded FFI."""
 
 import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
 
 SDK_MODULE = "github.com/superradcompany/microsandbox/sdk/go"
-FFI_SHA256 = "bc079888050a92d3652191ae8e18fba96e1ac66dc78bce4e5aaeb7eca9b04e25"
+# The SDK source (go.mod replace) and this FFI come from the same tag of the fork; see docs/maintainers.md.
+SDK_FORK = "github.com/SaladDay/microsandbox/sdk/go"
 FFI_FILE = "libmicrosandbox_go_ffi-linux-amd64.so"
+FFI_URL = "https://github.com/SaladDay/microsandbox/releases/download/oac-v0.7.11-1/" + FFI_FILE
+FFI_SHA256 = "e489ea93cab3b9c8ea9e8b53a5c0b4fe0e54a66be34b7b2638fb360b1d574642"
 
 
 def verify_ffi(path):
@@ -22,13 +24,13 @@ def verify_ffi(path):
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     if digest.hexdigest() != FFI_SHA256:
-        raise ValueError("Official microsandbox FFI checksum mismatch")
+        raise ValueError("microsandbox FFI checksum mismatch")
 
 
 def install_ffi(source, destination):
     verify_ffi(source)
     if destination.is_symlink() or not destination.is_file() or destination.stat().st_size != 0:
-        raise ValueError("Official SDK must contain an empty FFI release sentinel")
+        raise ValueError("The SDK must contain an empty FFI release sentinel")
     shutil.copyfile(source, destination)
 
 
@@ -54,12 +56,8 @@ def main():
         parser.error("the provider distribution requires Linux amd64")
     run("go", "mod", "download", SDK_MODULE)
     sdk = json.loads(run("go", "list", "-mod=readonly", "-m", "-json", SDK_MODULE))
-    if "Replace" in sdk:
-        raise ValueError("The SDK must be the pinned official module")
-    versions = re.findall(r'^const sdkVersion = "([0-9.]+)"$', (Path(sdk["Dir"]) / "setup.go").read_text(), re.M)
-    if len(versions) != 1:
-        raise ValueError("Official SDK release declaration changed")
-    version = versions[0]
+    if sdk.get("Replace", {}).get("Path") != SDK_FORK:
+        raise ValueError("The SDK must be the pinned fork module")
     cache = Path(os.environ.get("OAC_DEV_HOME", str(Path.home() / ".oac"))) / "cache"
     if not cache.is_absolute():
         raise ValueError("OAC_DEV_HOME must be absolute")
@@ -69,8 +67,7 @@ def main():
         stage = Path(temporary)
         if not ffi.exists():
             download = stage / FFI_FILE
-            run("curl", "--fail", "--location", "--silent", "--show-error", "--retry", "3", "--output", str(download),
-                f"https://github.com/superradcompany/microsandbox/releases/download/v{version}/{FFI_FILE}")
+            run("curl", "--fail", "--location", "--silent", "--show-error", "--retry", "3", "--output", str(download), FFI_URL)
             verify_ffi(download)
             os.replace(download, ffi)
         verify_ffi(ffi)
