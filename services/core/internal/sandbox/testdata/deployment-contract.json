@@ -398,7 +398,7 @@
     "digest": "bfedd8252478cfeb7e927ccd9aab6e812e0a35405046db3cf023fe62a869de04"
   },
   {
-    "name": "network-wildcard-rejected",
+    "name": "network-inner-wildcard-rejected",
     "provider": "microsandbox",
     "specification": {
       "resources": {
@@ -415,7 +415,33 @@
       "network": {
         "public": true,
         "domains": [
-          "*.example.com"
+          "a.*.example.com"
+        ]
+      }
+    },
+    "valid": false,
+    "canonical": "{\"provider\":\"microsandbox\",\"resources\":{\"cpus\":255,\"memory_mib\":1048576,\"root_disk_mib\":1024,\"environment_disk_mib\":4294967295},\"workspace\":{\"attachment\":\"host_directory\",\"user_xattr\":true,\"capacity_quota\":true}}",
+    "digest": "a0f5348e68e36ff01ffcef3e6c71c5eddfd429f34b440a4b3bb273b8f9eeac94"
+  },
+  {
+    "name": "network-tld-wildcard-rejected",
+    "provider": "microsandbox",
+    "specification": {
+      "resources": {
+        "cpus": 255,
+        "memory_mib": 1048576,
+        "root_disk_mib": 1024,
+        "environment_disk_mib": 4294967295
+      },
+      "workspace": {
+        "attachment": "host_directory",
+        "user_xattr": true,
+        "capacity_quota": true
+      },
+      "network": {
+        "public": true,
+        "domains": [
+          "*.com"
         ]
       }
     },

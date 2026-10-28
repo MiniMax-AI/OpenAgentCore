@@ -57,9 +57,9 @@ func admitNetwork(support sandbox.NetworkSupport, network sandbox.Network, polic
 // egressFor applies the cap and the Environment policy. The Harness runs inside
 // the sandbox, so the port of the Session's model provider is always reachable
 // on public addresses; a loopback host is the sandbox itself and needs no
-// entry. A model host the cap lists by name also joins PrivateDomains, so a
-// private model host keeps working under every policy. A nil policy equals
-// enabled.
+// entry. A model host the cap covers, by name or "*.suffix", also joins
+// PrivateDomains as its exact name, so a private model host keeps working
+// under every policy. A nil policy equals enabled.
 func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, modelBaseURL string) (sandbox.Egress, error) {
 	egress := sandbox.Egress{Public: network.Public, PrivateDomains: append([]string{}, network.Domains...), Domains: []string{}, Endpoints: []string{}}
 	if policy != nil && policy.Access != "enabled" {
@@ -67,7 +67,7 @@ func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, mode
 		for i, domain := range policy.AllowedDomains {
 			name := strings.ToLower(domain)
 			switch {
-			case slices.Contains(network.Domains, name):
+			case inCap(network.Domains, name):
 				egress.PrivateDomains = append(egress.PrivateDomains, name)
 			case network.Public:
 				egress.Domains = append(egress.Domains, name)
@@ -87,7 +87,7 @@ func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, mode
 			if _, _, err := sandbox.SplitEndpoint(endpoint); err == nil {
 				egress.Endpoints = append(egress.Endpoints, endpoint)
 			}
-			if slices.Contains(network.Domains, host) {
+			if inCap(network.Domains, host) {
 				egress.PrivateDomains = append(egress.PrivateDomains, host)
 			}
 		}
@@ -97,6 +97,15 @@ func egressFor(network sandbox.Network, policy *v1.EnvironmentNetworkInput, mode
 	slices.Sort(egress.Domains)
 	egress.Domains = slices.Compact(egress.Domains)
 	return egress, nil
+}
+
+// inCap reports whether the cap lists name exactly or as a subdomain through a
+// "*.suffix" entry; the suffix itself is not covered.
+func inCap(domains []string, name string) bool {
+	return slices.ContainsFunc(domains, func(d string) bool {
+		suffix, wild := strings.CutPrefix(d, "*.")
+		return d == name || wild && strings.HasSuffix(name, "."+suffix)
+	})
 }
 
 func loopbackHost(host string) bool {

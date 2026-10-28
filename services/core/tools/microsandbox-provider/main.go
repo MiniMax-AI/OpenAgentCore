@@ -226,14 +226,16 @@ func allocationLock(q wire.Request) (*allocationGuard, error) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
-func sdkModuleVersion() string {
+
+// sdkReplacement returns the SDK fork module that go.mod pins.
+func sdkReplacement() (path, version string) {
 	for _, line := range strings.Split(moduleDefinition, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) == 2 && fields[0] == "github.com/superradcompany/microsandbox/sdk/go" {
-			return fields[1]
+		if len(fields) == 5 && fields[0] == "replace" && fields[1] == "github.com/superradcompany/microsandbox/sdk/go" && fields[2] == "=>" {
+			return fields[3], fields[4]
 		}
 	}
-	return ""
+	return "", ""
 }
 
 func checkInstallation(c wire.Config) error {
@@ -244,7 +246,8 @@ func checkInstallation(c wire.Config) error {
 	matched := false
 	for _, d := range build.Deps {
 		if d.Path == "github.com/superradcompany/microsandbox/sdk/go" {
-			matched = d.Version == sdkModuleVersion() && d.Replace == nil
+			path, version := sdkReplacement()
+			matched = d.Replace != nil && d.Replace.Path == path && d.Replace.Version == version
 		}
 	}
 	if !matched {

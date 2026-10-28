@@ -1,7 +1,7 @@
 ---
 title: "沙箱部署"
 source: contracts/agents-api/sandbox-deployment.md
-source_hash: 0d245fcadbcc3b56f82a596c2bb1fd294e3e278b394f92aebe08e3d43efc45b9
+source_hash: b1624463cdd34795eb6af871e2ef51792f349d73c3fa69623fa55fa063c8f435
 ---
 
 沙箱部署为 Core 管理的 `openai_hosted` 执行选择沙箱提供商和每个沙箱的资源。PostgreSQL 为每个安装维护一个当前有效选择；Web 和 Core API 写入同一配置。节点文件保存其已安装副本和特定于主机的路径，且不能覆盖其资源。Runtime 不属于该选择：每个节点运行其所属安装验证过的 Runtime。该选择独立于 Harness。部署可以保持未配置状态，没有节点；此时它拒绝托管准入。
@@ -66,14 +66,14 @@ microsandbox 会配置 CPU、内存和托管根磁盘，并在挂载于 `/enviro
 
 ### 网络 {#network}
 
-当 Environment 的 `network.access` 为 `enabled` 或省略时，`network` 限定该部署的每个沙箱最多能访问什么。到 Core 的连接和 Session 的模型提供商在公开地址上的端口始终可达，因为 Harness 运行在沙箱内。要访问私有地址上的模型提供商，请把其精确主机名列入 `domains`。Environment 中的 MCP 连接与其他流量一样遵循该上限。
+当 Environment 的 `network.access` 为 `enabled` 或省略时，`network` 限定该部署的每个沙箱最多能访问什么。到 Core 的连接和 Session 的模型提供商在公开地址上的端口始终可达，因为 Harness 运行在沙箱内。要访问私有地址上的模型提供商，请把其主机名或覆盖它的 `*.` 条目列入 `domains`。Environment 中的 MCP 连接与其他流量一样遵循该上限。
 
 | 字段 | 可接受的值 |
 | --- | --- |
-| `public` | 布尔值。`true` 允许公开地址；`false` 只允许 Core、模型提供商和 `domains`（[microsandbox 恢复后的限制](environments.md#restricted-network)） |
-| `domains` | 最多 100 个精确主机名，每个不超过 253 个字符，由小写字母、数字、连字符和点组成，且最后一个标签以字母开头。通配符、IP 字面量、端口和 URL 会被拒绝。Core 以小写、去重并排序的形式存储。名称解析出的每个地址都被允许，包括私有地址 |
+| `public` | 布尔值。`true` 允许公开地址；`false` 只允许 Core、模型提供商和 `domains` |
+| `domains` | 最多 100 个条目，每个不超过 253 个字符，为精确主机名或 `*.` 加至少两个标签的主机名，由小写字母、数字、连字符和点组成，且最后一个标签以字母开头。`*.example.com` 覆盖 `example.com` 任意层级的子域名，但不含 `example.com` 本身，后者需要单独条目；其他通配符、IP 字面量、端口和 URL 会被拒绝。Core 以小写、去重并排序的形式存储。名称解析出的每个地址都被允许，包括私有地址 |
 
-默认值为 `{"public": true, "domains": []}`。无论哪种上限，回环、链路本地、云元数据地址以及其他所有私有地址始终被阻止，但 E2B 无法阻止元数据地址 169.254.169.254，且 E2B 沙箱根本无法访问私有网络。地址在沙箱启动和恢复时解析，因此两次解析之间应答变化的名称不会被跟随。沙箱保留创建它的代次的上限。
+默认值为 `{"public": true, "domains": []}`。无论哪种上限，回环、链路本地、云元数据地址以及其他所有私有地址始终被阻止，但 E2B 无法阻止元数据地址 169.254.169.254，且 E2B 沙箱根本无法访问私有网络。沙箱保留创建它的代次的上限。
 
 每个 Provider 声明自己能强制执行什么（[Sandbox Provider 协议](../../../docs/zh/sandbox-provider.md#network-egress)）：microsandbox 支持两个字段，E2B 支持 `public: false` 但不支持 `domains`，因为 E2B 沙箱无法访问私有网络。所选 Provider 未声明的上限会返回 400 `invalid_sandbox_configuration`，`param` 为 `network.public` 或 `network.domains`。
 

@@ -341,11 +341,12 @@ func (b backend) resume(ctx context.Context, q wire.ResumeRequest) (wire.State, 
 	if q.ObserveOnly || q.Target.ID != "" {
 		return wire.State{}, wire.ErrUnconfirmed
 	}
-	network, e := b.network(ctx, q.Egress, true)
+	network, e := b.network(ctx, q.Egress)
 	if e != nil {
 		return wire.State{}, b.closeUndispatchedRestore(q, e)
 	}
-	restore := sdk.RestoreConfig{NetworkPolicy: network, ExternalMountPolicy: sdk.ExternalMountStrict,
+	off := false
+	restore := sdk.RestoreConfig{NetworkPolicy: network, Strict: &off, DNSRebindProtection: &off, ExternalMountPolicy: sdk.ExternalMountStrict,
 		Volumes: map[string]sdk.MountConfig{"/environment": sdk.Mount.Bind(b.q.Workspace.Path, sdk.MountOptions{})}}
 	if err := b.closeExpiredRestore(q); err != nil {
 		return wire.State{}, err

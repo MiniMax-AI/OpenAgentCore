@@ -70,15 +70,15 @@ func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 			return Response{}, errors.New("helper result unconfirmed")
 		}
 	}
-	// The helper reports host names it could not resolve or support as "unresolved <name>" and "unsupported <name>" lines.
-	var names []string
+	// The helper reports Endpoints it cannot turn into a rule as "unsupported <endpoint>" lines.
+	var unsupported []string
 	for _, line := range strings.Split(stderr.String(), "\n") {
-		if strings.HasPrefix(line, "unresolved ") || strings.HasPrefix(line, "unsupported ") {
-			names = append(names, line)
+		if strings.HasPrefix(line, "unsupported ") {
+			unsupported = append(unsupported, line)
 		}
 	}
-	if len(names) > 0 {
-		log.Bg().Warn("sandbox network names without an address", "operation", q.Operation, "names", strings.Join(names, "; "))
+	if len(unsupported) > 0 {
+		log.Bg().Warn("sandbox network endpoints without a rule", "operation", q.Operation, "endpoints", strings.Join(unsupported, "; "))
 	}
 	var out Response
 	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))

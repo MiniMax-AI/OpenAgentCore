@@ -10,9 +10,9 @@ import (
 	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-func TestOfficialSDKReleaseMatchesEmbeddedFFI(t *testing.T) {
+func TestSDKReleaseMatchesEmbeddedFFI(t *testing.T) {
 	t.Setenv("MSB_HOME", t.TempDir())
-	if sdkModuleVersion() == "" {
+	if path, _ := sdkReplacement(); path == "" {
 		t.Fatal("missing pinned SDK module identity")
 	}
 	if sdk.SDKVersion() != strings.TrimPrefix(wire.SDKVersion, "v") {

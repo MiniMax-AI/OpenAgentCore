@@ -306,13 +306,12 @@ Core may start a hosted Environment from the result of an earlier preparation in
 A hosted Session's effective `network` narrows the deployment's [network cap](./sandbox-deployment.md#network), and the policy holds for the sandbox's whole life, including package installation and setup commands:
 
 - `enabled`: the sandbox reaches what the cap allows.
-- `disabled`: the sandbox reaches only Core, the Session's model provider and the host's DNS server on port 53. The model provider stays reachable on its `base_url` port at public addresses; a private model provider host is reachable only when the cap lists its exact name in the extra domains. Package installation and setup commands that need the network fail as ordinary setup errors.
-- `restricted`: the sandbox reaches the listed domains, Core and the model provider (on the same terms as `disabled`). A domain is allowed on public addresses when the cap allows the public internet, and on its resolved addresses when it is one of the cap's extra domains. Any other domain is rejected at Session creation with `sandbox_network_outside_cap`, whose `param` is that `allowed_domains` entry. If the cap shrinks later, the sandbox attempt fails with the same error.
+- `disabled`: the sandbox reaches only Core, the Session's model provider and the host's DNS server on port 53. The model provider stays reachable on its `base_url` port at public addresses; a private model provider host is reachable only when the cap's extra domains cover its name. Package installation and setup commands that need the network fail as ordinary setup errors.
+- `restricted`: the sandbox reaches the listed domains, Core and the model provider (on the same terms as `disabled`). A domain is allowed on public addresses when the cap allows the public internet, and on its resolved addresses when the cap's extra domains cover it, by name or through a `*.` entry. Any other domain is rejected at Session creation with `sandbox_network_outside_cap`, whose `param` is that `allowed_domains` entry. If the cap shrinks later, the sandbox attempt fails with the same error.
 
 Limits ([adapter rules](../../docs/sandbox-provider.md#network-egress)):
 
-- A model provider host that the cap lists is reachable like a listed domain, not only on its port.
-- On microsandbox, once a sandbox without public internet (`disabled`, `restricted`, or `enabled` under a cap without it) has resumed, a domain allowed on public addresses, the model provider included, is reachable only at the addresses its name had at resume, except over plain HTTP; other sites on those addresses are reachable too.
+- A model provider host that the cap lists, by name or through a `*.` entry, is reachable like a listed domain, not only on its port.
 - On E2B, a restricted domain is reachable only on ports 80 and 443, and a model provider on another port is reachable on every port of its public addresses.
 
 `disabled` and `restricted` return `sandbox_network_unsupported` when the deployment's sandbox Provider cannot restrict egress. A `self_hosted` Environment accepts only `enabled`, because Core cannot enforce a policy on a machine it does not run.

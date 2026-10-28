@@ -357,7 +357,7 @@ func TestFreshRestoreRequestDeadlineClosesBeforeNativeExecution(t *testing.T) {
 	}
 }
 
-// The official SDK freezes its default backend on first use. Match production's
+// The SDK freezes its default backend on first use. Match production's
 // one-request helper process rather than changing MSB_HOME under a cached pool.
 func isolatedSDKTest(t *testing.T) bool {
 	t.Helper()

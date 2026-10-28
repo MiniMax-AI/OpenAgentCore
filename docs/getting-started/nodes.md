@@ -71,7 +71,7 @@ The node service keeps the proxy settings of the latest run, so it reaches Core 
 Root only prepares the account, the group and the unit; everything else runs as `oac-node`, in its own session without a terminal. The installer never installs KVM or packages, never changes device permissions, sudoers, firewall or SELinux settings, and never touches other accounts. The node connects out to Core; Core needs no SSH access to the host.
 
 > [!WARNING]
-> microsandbox sandboxes reach a private address only through a name in the network cap's `domains`; see [Sandboxes cannot reach a private endpoint](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint). Until the upstream DNS fix ships, a node's Core URL host must be an IP address or a name with public addresses: a name that resolves to a private address is dropped by DNS rebind protection.
+> microsandbox sandboxes reach a private address only through a name in the network cap's `domains`; see [Sandboxes cannot reach a private endpoint](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint).
 
 **One Core per host.** Nodes share the `oac-node` account, so a host serves one Core; a command from a second Core is refused.
 

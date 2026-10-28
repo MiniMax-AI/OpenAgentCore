@@ -1,7 +1,7 @@
 ---
 title: "添加和管理节点"
 source: docs/getting-started/nodes.md
-source_hash: 1395a1edece41b37e8c10fc11c2e3658c796972fd83d14e2bb20fc7a11edc84d
+source_hash: cb146086d2a7a4f30b96f53afea066519bfd8635bac4f16794ab27dda9e32207
 ---
 
 节点是一台 Linux 主机，为 Core 托管 Session 运行沙箱。本指南面向在沙箱提供商（参阅[选择沙箱提供商](./sandbox-backends.md)）为 microsandbox 时添加、修改和移除节点的运维人员；E2B 不需要节点。
@@ -74,7 +74,7 @@ root 只准备账号、组和服务单元；其他操作都以 `oac-node` 在没
 
 > [!CAUTION]
 > [!WARNING]
-> microsandbox 沙箱只能通过网络上限 `domains` 中的名称访问私有地址；参见[沙箱无法访问私有端点](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint)。在上游 DNS 修复发布之前，节点的 Core URL 主机必须是 IP 地址，或解析为公开地址的名称：解析为私有地址的名称会被 DNS rebind 保护丢弃。
+> microsandbox 沙箱只能通过网络上限 `domains` 中的名称访问私有地址；参见[沙箱无法访问私有端点](./troubleshooting.md#sandboxes-cannot-reach-a-private-endpoint)。
 
 **每台主机只服务一个 Core。** 节点共享 `oac-node` 账号，因此主机只服务一个 Core；第二个 Core 的命令会被拒绝。
 
