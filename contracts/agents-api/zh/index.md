@@ -1,7 +1,7 @@
 ---
 title: "OpenAI 兼容性"
 source: contracts/agents-api/index.md
-source_hash: cf0ef0f7d2bf076ed3b402b0c8c98f55d53c584c14b2f45714c17cb34cd14877
+source_hash: e40f743525e7a4a41df4dfd1dbcacfc187bf5bb169652613d48031fe3fa850ef
 ---
 
 Core 实现下方固定版本的 OpenAI Agents API。本台账列出各项资源的覆盖情况、相对于官方服务的所有差异以及已知缺口。
@@ -163,7 +163,7 @@ Core 自身字段位于 `x_agents_core` 中（[Core extensions](../../../docs/zh
 
 - Hosted 工作区准入受[租户容量策略](../../../docs/zh/configuration.md#tenant-capacity)及既有[输入预留截止时间](environments.md#reservations)限制。
 - MiniMax Code 未声明 `retained_native_history`，因此无法在 microsandbox 上运行（其每个 Environment 都使用工作区存储）；Core 会拒绝该 Session（[Harness 能力](./harness-capabilities.md)）。
-- 模型提供商在公开地址上的端口从沙箱内始终可达，因为 Harness 运行在那里，私有的模型提供商主机只有在网络上限列出其名称时才可达；Environment 中的 MCP 连接遵循部署的[网络上限](sandbox-deployment.md#network)。E2B 沙箱无法访问私有网络，且在任何上限下 `169.254.169.254` 都会在 E2B 沙箱内应答。
+- 模型提供商在公开地址上的端口从沙箱内始终可达，因为 Harness 运行在那里，私有的模型提供商主机只有在网络上限列出其名称时才可达；`disabled` 下主机 53 端口上的 DNS 服务器仍可达；Environment 中的 MCP 连接遵循部署的[网络上限](sandbox-deployment.md#network)。不能访问公网的 microsandbox 沙箱恢复后，与其放行域名同一地址上的其他站点也可访问（[限制](environments.md#restricted-network)）。E2B 沙箱无法访问私有网络，且在任何上限下 `169.254.169.254` 都会在 E2B 沙箱内应答。
 - `disabled` 和 `restricted` 网络在沙箱 Provider 能限制出站的托管 Environment 上运行，并受部署网络上限约束；`self_hosted` Environment 只接受 `enabled`。官方 API 接受带前导点的 `allowed_domains` 条目（如 `.example.com`），含义未规定，Core 拒绝它（[restricted network policy](environments.md#restricted-network)）。
 - 除 null 或空列表以外的 `packages.system` 都会被拒绝；系统软件包必须预先安装。
 - `Environment.files` 列出 Session 创建时记录的文件；之后通过 Environment files API 创建的文件不会出现。
