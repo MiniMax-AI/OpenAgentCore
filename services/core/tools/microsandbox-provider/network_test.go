@@ -77,8 +77,8 @@ deny metadata
 allow 172.29.144.1 tcp 24443
 allow 10.74.2.81  
 deny private  
-allow models.example.com tcp 8443
 allow 203.0.113.9 tcp 8000
+allow models.example.com tcp 8443
 allow gitlab.example.com  
 allow gone.example.com  
 allow pypi.org  `
@@ -90,9 +90,9 @@ allow pypi.org  `
 	}
 }
 
-// Restore keeps strict hostname enforcement, so each domain allow is preceded
-// by the public addresses its name resolves to; private answers of a Domains
-// name or an Endpoint stay blocked.
+// Restore keeps strict hostname enforcement, so the public addresses the names
+// resolve to are allowed ahead of every domain allow; private answers of a
+// Domains name or an Endpoint stay blocked.
 func TestRestorePinsPublicAddresses(t *testing.T) {
 	egress := sandbox.Egress{PrivateDomains: []string{"gitlab.example.com"}, Domains: []string{"pypi.org", "gone.example.com"},
 		Endpoints: []string{"models.example.com:8443"}}
@@ -108,11 +108,11 @@ allow 172.29.144.1 tcp 24443
 allow 10.74.2.81  
 deny private  
 allow 2606:4700::1 tcp 8443
-allow models.example.com tcp 8443
 allow 8.8.8.8  
+allow 151.101.0.223  
+allow models.example.com tcp 8443
 allow gitlab.example.com  
 allow gone.example.com  
-allow 151.101.0.223  
 allow pypi.org  `
 	if got != want {
 		t.Fatalf("rules:\n%s", got)

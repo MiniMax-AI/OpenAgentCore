@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 108a9ece9f826d222eecec0de0843b4e5aeeff09dd98eacc864e88d62af46439
+source_hash: 4175f4a847bf337d1b5c233a56e054218588408429107afa59fbadfc46bfab1e
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -314,7 +314,7 @@ Core 可以用同一 Project 中较早一次准备的结果启动托管 Environm
 限制（[适配器规则](../../../docs/zh/sandbox-provider.md#network-egress)）：
 
 - 上限列出的模型提供商主机与所列域名一样可达，不限于其端口。
-- 在 microsandbox 上，`disabled` 或 `restricted` 沙箱恢复后，在公网地址上放行的域名（包括模型提供商）只能经其名称在恢复时的地址通过 HTTPS 访问；同一地址上的其他站点也可访问。
+- 在 microsandbox 上，不能访问公网的沙箱（`disabled`、`restricted`，或上限不允许公网时的 `enabled`）恢复后，在公网地址上放行的域名（包括模型提供商）除明文 HTTP 外只能经其名称在恢复时的地址访问；同一地址上的其他站点也可访问。
 - 在 E2B 上，受限域名只能通过 80 和 443 端口访问；模型提供商使用其他端口时，其公网地址的所有端口均可达。
 
 部署的沙箱 Provider 无法限制出站时，`disabled` 和 `restricted` 返回 `sandbox_network_unsupported`。`self_hosted` Environment 只接受 `enabled`，因为 Core 无法在不由它运行的机器上强制策略。

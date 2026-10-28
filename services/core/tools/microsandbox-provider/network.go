@@ -44,9 +44,9 @@ const resolveTimeout = 5 * time.Second
 //  6. unless Public, a tcp allow on its port for each Endpoint (domain, or a
 //     public IP literal), and a port-less domain allow for each PrivateDomains
 //     and Domains name; only public answers reach a domain allow, since rule 5
-//     and rebind protection already refuse private ones; on restore each
-//     domain allow is preceded by the same allow for the public addresses the
-//     name resolves to now
+//     and rebind protection already refuse private ones; on restore the same
+//     allows for the public addresses these names resolve to now come first,
+//     since a domain allow that matches an address first refuses it
 //  7. public addresses, when Public
 //
 // Strict hostname enforcement accepts a domain allow over TLS only with TLS
@@ -136,6 +136,7 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 	}
 	deny("private")
 	if !egress.Public {
+		var domains [][2]string
 		for _, endpoint := range egress.Endpoints {
 			host, p, err := sandbox.SplitEndpoint(endpoint)
 			if err != nil {
@@ -148,7 +149,7 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 				for _, a := range public[host] {
 					allow(a, "tcp", strconv.Itoa(p))
 				}
-				allow(host, "tcp", strconv.Itoa(p))
+				domains = append(domains, [2]string{host, strconv.Itoa(p)})
 			} else {
 				fmt.Fprintf(report, "unsupported %s\n", endpoint)
 			}
@@ -157,6 +158,11 @@ func egressNetwork(ctx context.Context, coreURL string, egress sandbox.Egress, r
 			for _, a := range public[name] {
 				allow(a, "", "")
 			}
+		}
+		for _, d := range domains {
+			allow(d[0], "tcp", d[1])
+		}
+		for _, name := range names {
 			allow(name, "", "")
 		}
 	}

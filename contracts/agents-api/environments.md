@@ -312,7 +312,7 @@ A hosted Session's effective `network` narrows the deployment's [network cap](./
 Limits ([adapter rules](../../docs/sandbox-provider.md#network-egress)):
 
 - A model provider host that the cap lists is reachable like a listed domain, not only on its port.
-- On microsandbox, once a `disabled` or `restricted` sandbox has resumed, a domain allowed on public addresses, the model provider included, is reachable over HTTPS only at the addresses its name had at resume; other sites on those addresses are reachable too.
+- On microsandbox, once a sandbox without public internet (`disabled`, `restricted`, or `enabled` under a cap without it) has resumed, a domain allowed on public addresses, the model provider included, is reachable only at the addresses its name had at resume, except over plain HTTP; other sites on those addresses are reachable too.
 - On E2B, a restricted domain is reachable only on ports 80 and 443, and a model provider on another port is reachable on every port of its public addresses.
 
 `disabled` and `restricted` return `sandbox_network_unsupported` when the deployment's sandbox Provider cannot restrict egress. A `self_hosted` Environment accepts only `enabled`, because Core cannot enforce a policy on a machine it does not run.
