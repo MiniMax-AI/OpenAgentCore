@@ -15,7 +15,9 @@ func TestNetworkIsValidatedAgainstTheProviderDeclaration(t *testing.T) {
 		{"closed without support", Network{Domains: []string{}}, none, "network.public"},
 		{"domains", Network{Public: true, Domains: []string{"gitlab.example.com"}}, full, ""},
 		{"domains without support", Network{Public: true, Domains: []string{"gitlab.example.com"}}, closed, "network.domains"},
-		{"wildcard", Network{Public: true, Domains: []string{"*.example.com"}}, full, "network.domains"},
+		{"suffix", Network{Public: true, Domains: []string{"*.example.com"}}, full, ""},
+		{"inner wildcard", Network{Public: true, Domains: []string{"a.*.example.com"}}, full, "network.domains"},
+		{"bare wildcard", Network{Public: true, Domains: []string{"*"}}, full, "network.domains"},
 		{"address", Network{Public: true, Domains: []string{"10.0.0.1"}}, full, "network.domains"},
 	} {
 		err := tc.network.ValidatePolicy("test", tc.support)
@@ -34,4 +36,14 @@ func asValidation(err error, target **ValidationError) bool {
 	v, ok := err.(*ValidationError)
 	*target = v
 	return ok
+}
+
+// A "*." entry is a cap and PrivateDomains entry only; restricted names stay exact.
+func TestEgressAcceptsSuffixOnlyInPrivateDomains(t *testing.T) {
+	if err := (Egress{PrivateDomains: []string{"*.example.com"}, Domains: []string{"pypi.org"}}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if (Egress{Domains: []string{"*.example.com"}}).Validate() == nil {
+		t.Fatal("suffix accepted in Domains")
+	}
 }

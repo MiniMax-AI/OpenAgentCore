@@ -1,5 +1,5 @@
-github.com/SaladDay/microsandbox/sdk/go v0.0.0-20261028065500-fc39b5b503f0 h1:FOLB4tEDMEO0uCnJrD6FmdS0+a4rk+nv09dzk1F3FLY=
-github.com/SaladDay/microsandbox/sdk/go v0.0.0-20261028065500-fc39b5b503f0/go.mod h1:p7Tm/p9zkO7sHO3N8A1fiTVeLB2w/fQoKdYlpN/5neA=
+github.com/SaladDay/microsandbox/sdk/go v0.0.0-20261028082216-9f2992795029 h1:VlTlfpZiUKEvmCgORHoK75sLtQEVjeFAtRkcb7P3ZFU=
+github.com/SaladDay/microsandbox/sdk/go v0.0.0-20261028082216-9f2992795029/go.mod h1:p7Tm/p9zkO7sHO3N8A1fiTVeLB2w/fQoKdYlpN/5neA=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=

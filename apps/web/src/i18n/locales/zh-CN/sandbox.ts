@@ -6,7 +6,7 @@ export const sandbox = {
   "When off, sandboxes reach only the domains listed below.": "关闭后，沙箱只能访问下方列出的域名。",
   "{{provider}} cannot restrict outbound traffic, so sandboxes always reach the public internet.": "{{provider}} 无法限制出站流量，沙箱始终可以访问公网。",
   "Extra allowed domains": "额外允许的域名",
-  "One host name per line, such as gitlab.example.com, up to {{count}}. Sandboxes can reach these names, including names on your private network. Wildcards are not accepted.": "每行一个主机名，例如 gitlab.example.com，最多 {{count}} 个。沙箱可以访问这些域名，包括内网域名。不支持通配符。",
+  "One host name per line, such as gitlab.example.com, up to {{count}}. Sandboxes can reach these names, including names on your private network. *.example.com allows its subdomains, not example.com itself.": "每行一个主机名，例如 gitlab.example.com，最多 {{count}} 个。沙箱可以访问这些域名，包括内网域名。*.example.com 放行其子域名，不含 example.com 本身。",
   "{{provider}} sandboxes run in the provider's cloud and cannot reach your private network.": "{{provider}} 的沙箱运行在提供商的云端，无法访问你的内网。",
   "Add at most {{count}} domains.": "最多添加 {{count}} 个域名。",
   "{{domain}} is listed twice.": "{{domain}} 重复了。",

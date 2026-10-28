@@ -11,11 +11,12 @@ import subprocess
 import tempfile
 
 SDK_MODULE = "github.com/superradcompany/microsandbox/sdk/go"
-# The SDK source (go.mod replace) and this FFI come from the same tag of the fork; see docs/maintainers.md.
+# The SDK source (go.mod replace), this FFI and the runtime archive come from this tag of the fork; see docs/maintainers.md.
+FORK_TAG = "oac-v0.7.11-2"
 SDK_FORK = "github.com/SaladDay/microsandbox/sdk/go"
 FFI_FILE = "libmicrosandbox_go_ffi-linux-amd64.so"
-FFI_URL = "https://github.com/SaladDay/microsandbox/releases/download/oac-v0.7.11-1/" + FFI_FILE
-FFI_SHA256 = "e489ea93cab3b9c8ea9e8b53a5c0b4fe0e54a66be34b7b2638fb360b1d574642"
+FFI_URL = f"https://github.com/SaladDay/microsandbox/releases/download/{FORK_TAG}/{FFI_FILE}"
+FFI_SHA256 = "c04e6256ee24335e2de4635361d5ae53674573818859113474020274d1fd0a29"
 
 
 def verify_ffi(path):
@@ -36,9 +37,12 @@ def install_ffi(source, destination):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("operation", choices=("build", "test"))
+    parser.add_argument("operation", choices=("build", "test", "tag"))
     parser.add_argument("output", nargs="?", type=Path)
     args = parser.parse_args()
+    if args.operation == "tag":
+        print(FORK_TAG)
+        return
     if (args.operation == "build") != (args.output is not None):
         parser.error("build requires an absolute output path; test takes no output")
     if args.output is not None and not args.output.is_absolute():

@@ -3,42 +3,25 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"net/netip"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
+	sdk "github.com/superradcompany/microsandbox/sdk/go"
 )
 
-func fixedDNS(table map[string][]string) resolver {
-	return func(_ context.Context, host string) ([]netip.Addr, error) {
-		answers, ok := table[host]
-		if !ok {
-			return nil, errors.New("no such host")
-		}
-		var out []netip.Addr
-		for _, a := range answers {
-			out = append(out, netip.MustParseAddr(a))
-		}
-		return out, nil
-	}
-}
-
-func rules(t *testing.T, egress sandbox.Egress, dns map[string][]string) (string, string) {
-	return policy(t, egress, false, dns)
-}
-
-func policy(t *testing.T, egress sandbox.Egress, restore bool, dns map[string][]string) (string, string) {
+func rules(t *testing.T, egress sandbox.Egress) (string, string) {
 	t.Helper()
 	var report bytes.Buffer
-	n, err := egressNetwork(context.Background(), "https://core.example.com:24443", egress, restore, fixedDNS(dns), &report)
+	n, err := egressNetwork(context.Background(), "https://172.29.144.1:24443", egress, &report)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n.DefaultEgress != "deny" || n.DefaultIngress != "deny" || n.DisableStrict == restore || n.DNS != nil {
-		t.Fatalf("defaults or DNS options changed: %+v", n)
+	// Restore takes the config as is and accepts only rules and defaults.
+	if want := (sdk.NetworkConfig{DefaultEgress: sdk.PolicyActionDeny, DefaultIngress: sdk.PolicyActionDeny, Rules: n.Rules}); !reflect.DeepEqual(*n, want) {
+		t.Fatalf("config carries more than rules and defaults: %+v", n)
 	}
 	var lines []string
 	for _, r := range n.Rules {
@@ -47,80 +30,37 @@ func policy(t *testing.T, egress sandbox.Egress, restore bool, dns map[string][]
 	return strings.Join(lines, "\n"), report.String()
 }
 
+const head = `allow host udp 53
+allow host tcp 53
+deny loopback  
+deny link-local  
+deny metadata  
+deny host  
+deny * udp 53
+deny * tcp 53
+allow 172.29.144.1 tcp 24443
+`
+
 func TestDefaultPolicyRules(t *testing.T) {
-	got, _ := rules(t, sandbox.Egress{Public: true, Endpoints: []string{"api.openai.com:443"}}, map[string][]string{
-		"core.example.com": {"172.29.144.1"}})
-	want := `allow host udp 53
-allow host tcp 53
-deny loopback  
-deny link-local  
-deny metadata  
-allow 172.29.144.1 tcp 24443
-deny private  
-allow public  `
-	if got != want {
+	got, _ := rules(t, sandbox.Egress{Public: true, Endpoints: []string{"api.openai.com:443"}})
+	if want := head + "allow public  \ndeny private  "; got != want {
 		t.Fatalf("rules:\n%s", got)
 	}
 }
 
-// Only PrivateDomains names yield port-less private allows; an Endpoint is
-// limited to its port and sits after "deny private".
-func TestEndpointIsPortLimitedAndNeverPrivate(t *testing.T) {
-	got, report := rules(t, sandbox.Egress{PrivateDomains: []string{"gitlab.example.com", "gone.example.com"}, Domains: []string{"pypi.org"},
-		Endpoints: []string{"models.example.com:8443", "203.0.113.9:8000", "10.1.2.3:8000"}}, map[string][]string{
-		"core.example.com": {"172.29.144.1"}, "gitlab.example.com": {"10.74.2.81", "8.8.8.8"}, "models.example.com": {"10.9.9.9"}})
-	want := `allow host udp 53
-allow host tcp 53
-deny loopback  
-deny link-local  
-deny metadata  
-allow 172.29.144.1 tcp 24443
-allow 10.74.2.81  
+// Cap names are port-less allows before "deny private", "*.apex" as every
+// name below the apex; an Endpoint is limited to its port, a private IP
+// literal is dropped, a bad one is reported.
+func TestNotPublicRules(t *testing.T) {
+	got, report := rules(t, sandbox.Egress{PrivateDomains: []string{"gitlab.example.com", "*.corp.example"}, Domains: []string{"pypi.org"},
+		Endpoints: []string{"models.example.com:8443", "203.0.113.9:8000", "10.1.2.3:8000", "bad host:1"}})
+	want := head + `allow gitlab.example.com  
+allow subdomain=corp.example  
 deny private  
+allow models.example.com tcp 8443
 allow 203.0.113.9 tcp 8000
-allow models.example.com tcp 8443
-allow gitlab.example.com  
-allow gone.example.com  
 allow pypi.org  `
-	if got != want {
-		t.Fatalf("rules:\n%s", got)
-	}
-	if report != "unresolved gone.example.com\n" {
-		t.Fatalf("report %q", report)
-	}
-}
-
-// Restore keeps strict hostname enforcement, so the public addresses the names
-// resolve to are allowed ahead of every domain allow; private answers of a
-// Domains name or an Endpoint stay blocked.
-func TestRestorePinsPublicAddresses(t *testing.T) {
-	egress := sandbox.Egress{PrivateDomains: []string{"gitlab.example.com"}, Domains: []string{"pypi.org", "gone.example.com"},
-		Endpoints: []string{"models.example.com:8443"}}
-	dns := map[string][]string{"core.example.com": {"172.29.144.1"}, "gitlab.example.com": {"10.74.2.81", "8.8.8.8"},
-		"pypi.org": {"151.101.0.223", "10.1.1.1"}, "models.example.com": {"10.9.9.9", "2606:4700::1"}}
-	got, report := policy(t, egress, true, dns)
-	want := `allow host udp 53
-allow host tcp 53
-deny loopback  
-deny link-local  
-deny metadata  
-allow 172.29.144.1 tcp 24443
-allow 10.74.2.81  
-deny private  
-allow 2606:4700::1 tcp 8443
-allow 8.8.8.8  
-allow 151.101.0.223  
-allow models.example.com tcp 8443
-allow gitlab.example.com  
-allow gone.example.com  
-allow pypi.org  `
-	if got != want {
-		t.Fatalf("rules:\n%s", got)
-	}
-	if report != "unresolved gone.example.com\n" {
-		t.Fatalf("report %q", report)
-	}
-	if got, _ := policy(t, sandbox.Egress{Public: true, Domains: []string{"pypi.org"}}, true, dns); strings.Contains(got, "151.101.0.223") {
-		t.Fatalf("public egress pinned addresses:\n%s", got)
+	if got != want || report != "unsupported bad host:1\n" {
+		t.Fatalf("rules:\n%s\nreport %q", got, report)
 	}
 }

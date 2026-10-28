@@ -77,6 +77,21 @@ func TestEnvironmentPolicyNarrowsTheCap(t *testing.T) {
 	}
 }
 
+// "*.suffix" covers subdomains only, never the suffix itself; names it covers
+// reach PrivateDomains as exact names.
+func TestSuffixCapCoversSubdomainsOnly(t *testing.T) {
+	cap := sandbox.Network{Public: false, Domains: []string{"*.corp.example"}}
+	restricted := &v1.EnvironmentNetworkInput{Access: "restricted", AllowedDomains: []string{"git.corp.example", "a.b.corp.example"}}
+	got, err := egressFor(cap, restricted, "http://llm.corp.example:8000")
+	if want := []string{"a.b.corp.example", "git.corp.example", "llm.corp.example"}; err != nil || !reflect.DeepEqual(got.PrivateDomains, want) {
+		t.Fatalf("covered: %+v %v", got, err)
+	}
+	var typed *sandbox.ConfigurationError
+	if _, err = egressFor(cap, &v1.EnvironmentNetworkInput{Access: "restricted", AllowedDomains: []string{"corp.example"}}, ""); !errors.As(err, &typed) || typed.Code != "sandbox_network_outside_cap" {
+		t.Fatalf("apex: %v", err)
+	}
+}
+
 func TestAdmissionNeedsProviderSupport(t *testing.T) {
 	var typed *sandbox.ConfigurationError
 	for _, policy := range []*v1.EnvironmentNetworkInput{{Access: "disabled"}, {Access: "restricted", AllowedDomains: []string{"pypi.org"}}} {

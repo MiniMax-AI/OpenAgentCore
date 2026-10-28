@@ -70,14 +70,14 @@ test("edits the sandbox network cap for new sandboxes", async ({ page, request }
   const area = page.getByRole("region", { name: "Network" });
   const domains = area.getByLabel("Extra allowed domains");
   await expect(area.getByRole("switch", { name: "Allow public internet" })).toBeChecked();
-  await domains.fill("Git.example.com\n*.example.com");
-  await expect(area.getByText("*.example.com is not a valid host name.")).toBeVisible();
+  await domains.fill("Git.example.com\n*.com");
+  await expect(area.getByText("*.com is not a valid host name.")).toBeVisible();
   await expect(area.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
-  await domains.fill("gitlab.example.com");
+  await domains.fill("gitlab.example.com\n*.corp.example");
   await area.getByRole("switch", { name: "Allow public internet" }).uncheck();
   const response = page.waitForResponse((response) => response.request().method() === "PUT" && response.url().endsWith("/sandbox/deployment"));
   await area.getByRole("button", { name: "Save", exact: true }).click();
-  expect((await response).request().postDataJSON().network).toEqual({ public: false, domains: ["gitlab.example.com"] });
+  expect((await response).request().postDataJSON().network).toEqual({ public: false, domains: ["gitlab.example.com", "*.corp.example"] });
   await expect(page.getByText("New sandboxes will run with this policy")).toBeVisible();
 });
 

@@ -119,11 +119,12 @@ cp deploy/compose/compose.yaml "$bundle/compose.yaml.template"
 OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
 cp "$stage/core/bin/oac" "$bundle/oac"
 python3 scripts/build-microsandbox-provider.py build "$stage/core/bin/oac-microsandbox-provider"
-msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-v0.7.11-linux-x86_64.tar.gz}"
+msb_tag="$(python3 scripts/build-microsandbox-provider.py tag)"
+msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-$msb_tag-linux-x86_64.tar.gz}"
 if [[ ! -f "$msb_archive" ]]; then
   mkdir -p "$(dirname "$msb_archive")"
   curl --fail --location --proto '=https' --tlsv1.2 \
-    https://github.com/superradcompany/microsandbox/releases/download/v0.7.11/microsandbox-linux-x86_64.tar.gz \
+    "https://github.com/SaladDay/microsandbox/releases/download/$msb_tag/microsandbox-linux-x86_64.tar.gz" \
     --output "$stage/microsandbox.download"
   python3 scripts/core-distribution-manifest.py extract-runtime "$stage/microsandbox.download" "$stage/core/microsandbox"
   mv "$stage/microsandbox.download" "$msb_archive"
