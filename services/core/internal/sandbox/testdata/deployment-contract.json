@@ -398,7 +398,7 @@
     "digest": "bfedd8252478cfeb7e927ccd9aab6e812e0a35405046db3cf023fe62a869de04"
   },
   {
-    "name": "network-wildcard-rejected",
+    "name": "network-inner-wildcard-rejected",
     "provider": "microsandbox",
     "specification": {
       "resources": {
@@ -415,7 +415,7 @@
       "network": {
         "public": true,
         "domains": [
-          "*.example.com"
+          "a.*.example.com"
         ]
       }
     },

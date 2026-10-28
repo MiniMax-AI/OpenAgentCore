@@ -52,7 +52,7 @@ func (b backend) create(ctx context.Context) (wire.Response, error) {
 	for key, value := range workspaceLabels(b.q.Workspace) {
 		labels[key] = value
 	}
-	network, e := b.network(ctx, bootstrap.Egress, false)
+	network, e := b.network(ctx, bootstrap.Egress)
 	if e != nil {
 		return wire.Response{}, e
 	}

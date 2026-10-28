@@ -77,8 +77,10 @@ type Bootstrap struct {
 type Egress struct {
 	// Public allows every public address.
 	Public bool `json:"public"`
-	// PrivateDomains are exact host names the Provider resolves with the host's
-	// DNS; every address they resolve to is allowed, private ones included.
+	// PrivateDomains are exact host names, or "*.example.com" for its
+	// subdomains but not example.com itself, that the Provider resolves with
+	// the host's DNS; every address they resolve to is allowed, private ones
+	// included.
 	PrivateDomains []string `json:"private_domains"`
 	// Domains are exact host names the Provider allows on public addresses
 	// only; a private answer for them stays blocked.

@@ -55,7 +55,7 @@ export function NetworkForm({ deployment, disabled, onSave }: { deployment: Sand
         </div>
       </div>
       <div className="settings-row">
-        <div className="settings-row-label"><label htmlFor="sandbox-network-domains">{t("Extra allowed domains")}</label><HelpTip id="sandbox-network-domains-help">{support.private_domains ? t("One host name per line, such as gitlab.example.com, up to {{count}}. Sandboxes can reach these names, including names on your private network. Wildcards are not accepted.", { count: maxDomains }) : t("{{provider}} sandboxes run in the provider's cloud and cannot reach your private network.", { provider })}</HelpTip></div>
+        <div className="settings-row-label"><label htmlFor="sandbox-network-domains">{t("Extra allowed domains")}</label><HelpTip id="sandbox-network-domains-help">{support.private_domains ? t("One host name per line, such as gitlab.example.com, up to {{count}}. Sandboxes can reach these names, including names on your private network. *.example.com allows its subdomains, not example.com itself.", { count: maxDomains }) : t("{{provider}} sandboxes run in the provider's cloud and cannot reach your private network.", { provider })}</HelpTip></div>
         <div className="settings-row-control field">
           <textarea id="sandbox-network-domains" className="network-domains" rows={4} spellCheck={false} autoCapitalize="none" value={text ?? current.domains.join("\n")} disabled={disabled || !support.private_domains} aria-invalid={issues.length > 0} aria-describedby="sandbox-network-domains-help" onChange={(event) => setText(event.target.value)} />
           {issues.map((issue, index) => <span className="field-error" key={index}>{message(issue)}</span>)}

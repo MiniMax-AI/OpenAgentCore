@@ -16,11 +16,16 @@ import (
 const (
 	maxNetworkDomains = 100
 	maxDomainLength   = 253
-	// domainPattern is the exact-host rule shared with the Environment network field.
-	domainPattern = agentnetwork.HostPattern
 )
 
-var domainRule = regexp.MustCompile(domainPattern)
+// domainPattern is the cap's rule: an exact host name as the Environment
+// network field accepts, or "*." and a host name for its subdomains.
+var domainPattern = `^(?:\*\.)?` + agentnetwork.HostPattern[1:]
+
+var (
+	domainRule = regexp.MustCompile(agentnetwork.HostPattern)
+	capRule    = regexp.MustCompile(domainPattern)
+)
 
 // networkRule is the generated projection of the network format rule.
 type networkRule struct {
@@ -32,8 +37,9 @@ type networkRule struct {
 var networkContract = networkRule{maxNetworkDomains, maxDomainLength, domainPattern}
 
 // Network is the deployment's egress cap: what its sandboxes may reach at most.
-// Domains are exact host names whose resolved addresses are allowed, private
-// ones included. Every other private, loopback and link-local address stays
+// Domains are exact host names, or "*.example.com" for its subdomains but not
+// example.com itself, whose resolved addresses are allowed, private ones
+// included. Every other private, loopback and link-local address stays
 // blocked, and the connection to Core is always allowed.
 type Network struct {
 	Public  bool     `json:"public" binding:"required"`
@@ -61,8 +67,8 @@ func (n Network) ValidatePolicy(provider string, support NetworkSupport) error {
 		return &ValidationError{Param: "network.domains", Message: fmt.Sprintf("%s: network.domains accepts at most %d domains", ErrInvalid, maxNetworkDomains)}
 	}
 	for _, d := range n.Domains {
-		if len(d) > maxDomainLength || !domainRule.MatchString(d) {
-			return &ValidationError{Param: "network.domains", Message: fmt.Sprintf("%s: %q is not an exact host name", ErrInvalid, d)}
+		if len(d) > maxDomainLength || !capRule.MatchString(d) {
+			return &ValidationError{Param: "network.domains", Message: fmt.Sprintf("%s: %q is not a host name or *.suffix", ErrInvalid, d)}
 		}
 	}
 	if !n.Public && !support.Restrict {
@@ -75,14 +81,15 @@ func (n Network) ValidatePolicy(provider string, support NetworkSupport) error {
 }
 
 // Validate checks an Egress a Provider receives: exact host names for
-// PrivateDomains and Domains and host:port entries for Endpoints.
+// Domains, "*." entries only in PrivateDomains, and host:port entries for
+// Endpoints.
 func (e Egress) Validate() error {
-	for _, names := range [][]string{e.PrivateDomains, e.Domains} {
+	for i, names := range [][]string{e.PrivateDomains, e.Domains} {
 		if len(names) > maxNetworkDomains {
 			return ErrInvalid
 		}
 		for _, d := range names {
-			if !ValidDomain(d) {
+			if !ValidDomain(d) && !(i == 0 && capRule.MatchString(d)) {
 				return ErrInvalid
 			}
 		}

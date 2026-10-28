@@ -115,10 +115,9 @@ func (b backend) kill(ctx context.Context, c wire.Compute) error {
 }
 
 // network builds the allocation's network policy for create or restore from
-// its Egress with the node host's DNS. Names that do not resolve are reported
-// to the node's log.
-func (b backend) network(ctx context.Context, egress sandbox.Egress, restore bool) (*sdk.NetworkConfig, error) {
-	return egressNetwork(ctx, b.q.Config.CoreURL, egress, restore, hostResolver, os.Stderr)
+// its Egress. Entries it cannot enforce are reported to the node's log.
+func (b backend) network(ctx context.Context, egress sandbox.Egress) (*sdk.NetworkConfig, error) {
+	return egressNetwork(ctx, b.q.Config.CoreURL, egress, os.Stderr)
 }
 
 func (b backend) resumeCompute(ctx context.Context, c wire.Compute) (wire.State, error) {

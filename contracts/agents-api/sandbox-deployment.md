@@ -63,14 +63,14 @@ Select the filesystem configuration before the microsandbox deployment. Selectin
 
 ### Network
 
-`network` caps what every sandbox of the deployment may reach when its Environment's `network.access` is `enabled` or omitted. The connection to Core and the Session's model provider port on public addresses are always reachable, because the Harness runs inside the sandbox. To reach a model provider at a private address, list its exact host name in `domains`. MCP connections from the Environment follow the cap like any other traffic.
+`network` caps what every sandbox of the deployment may reach when its Environment's `network.access` is `enabled` or omitted. The connection to Core and the Session's model provider port on public addresses are always reachable, because the Harness runs inside the sandbox. To reach a model provider at a private address, list its host name, or a `*.` entry that covers it, in `domains`. MCP connections from the Environment follow the cap like any other traffic.
 
 | Field | Accepted value |
 | --- | --- |
-| `public` | Boolean. `true` allows public addresses; `false` allows only Core, the model provider and `domains` ([microsandbox limit after a resume](./environments.md#restricted-network)) |
-| `domains` | At most 100 exact host names of at most 253 characters, in lowercase letters, digits, hyphens and dots, whose last label starts with a letter. Wildcards, IP literals, ports and URLs are rejected. Core stores them lowercase, deduplicated and sorted. Every address a name resolves to is allowed, private addresses included |
+| `public` | Boolean. `true` allows public addresses; `false` allows only Core, the model provider and `domains` |
+| `domains` | At most 100 entries of at most 253 characters, each an exact host name or `*.` and a host name, in lowercase letters, digits, hyphens and dots, whose last label starts with a letter. `*.example.com` covers the subdomains of `example.com` at any depth but not `example.com` itself, which needs its own entry; other wildcards, IP literals, ports and URLs are rejected. Core stores them lowercase, deduplicated and sorted. Every address a name resolves to is allowed, private addresses included |
 
-The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked, except that E2B cannot block the metadata address 169.254.169.254 and its sandboxes cannot reach private networks at all. Addresses are resolved when a sandbox starts and when it resumes, so a name whose answer changes in between is not followed. A sandbox keeps the cap of the generation that created it.
+The default is `{"public": true, "domains": []}`. Under every cap, loopback, link-local and cloud-metadata addresses and all other private addresses stay blocked, except that E2B cannot block the metadata address 169.254.169.254 and its sandboxes cannot reach private networks at all. On microsandbox, a plain-text (non-TLS) connection to a subdomain that shares an address with the apex that the sandbox also resolved is refused. A sandbox keeps the cap of the generation that created it.
 
 Each Provider declares what it enforces ([Sandbox Provider protocol](../../docs/sandbox-provider.md#network-egress)): microsandbox supports both fields, E2B supports `public: false` but not `domains` because E2B sandboxes cannot reach private networks. A cap the selected Provider does not declare returns 400 `invalid_sandbox_configuration` with `param` `network.public` or `network.domains`.
 

@@ -1,7 +1,7 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: f6f2e826a7857ca1c7bc5a6c58dcacfb044aa1627abf1b42f4b5ac4d2cd06d62
+source_hash: 3dbc7425670beb1cbd82821b52020585526ec7d112616d85580f5835b6cf4ac9
 ---
 
 沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox 和 E2B 实现了该协议。
@@ -200,13 +200,13 @@ Provider 声明 `DeploymentPolicy.Network`：`Restrict` 表示能拒绝公开地
 Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它由分配所属的部署代次和 Session 冻结的 Environment `network` 策略和冻结的模型提供商推导而来。`disabled` 只留下 `Endpoints`；`restricted` 清除 `Public`，上限列出的域名放入 `PrivateDomains`，其余放入 `Domains`（[策略](../../contracts/agents-api/zh/environments.md#restricted-network)）：
 
 - `Public`：允许公开地址。
-- `PrivateDomains`：精确主机名，其解析出的地址（包括私有地址）都被允许。
+- `PrivateDomains`：精确主机名，或 `*.example.com`（覆盖其子域名，不含 `example.com` 本身），其解析出的地址（包括私有地址）都被允许。
 - `Domains`：只在公开地址上被允许的精确主机名，私有应答仍被阻止。上限允许公网时，它们承载 `restricted` Environment 的 `allowed_domains`。
 - `Endpoints`：模型提供商 `base_url` 的 `host:port` 条目（`net.JoinHostPort` 形式），端口取自 URL，https 默认 443，http 默认 80，主机为回环时省略。Harness 运行在沙箱内，直接调用它。条目只允许该 TCP 端口在公开地址上的访问，绝不包括私有地址。上限的额外域名列出了模型主机名时，Core 还会把该名称加入 `PrivateDomains`，使私有模型主机在任何策略下都能工作。
 
-Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址，但 E2B 无法阻止元数据地址 169.254.169.254。它在创建和恢复时用主机 DNS 解析名称，无法跟随之后应答的变化。无法解析的名称没有规则。MCP 流量没有条目：它遵循 `Public`、`PrivateDomains` 和 `Domains`。
+Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址，但 E2B 无法阻止元数据地址 169.254.169.254。它在创建和恢复时用主机 DNS 解析 Core 主机。MCP 流量没有条目：它遵循 `Public`、`PrivateDomains` 和 `Domains`。
 
-microsandbox 按首条匹配的顺序、默认拒绝并保持主机 DNS 可达来应用规则；它不带端口地允许解析出的私有地址，使 DNS rebind 保护放行它们。它的恢复无法关闭严格主机名校验，而该校验下域名放行规则只放行由客户端先发数据的明文协议（如 HTTP），因此非 `Public` 的沙箱恢复后，还会在相同端口上允许 `Domains`、`PrivateDomains` 和 `Endpoints` 中每个名称在恢复时解析出的公网地址。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
+microsandbox 按首条匹配的顺序、默认拒绝并保持主机 DNS 可达来应用规则，创建与恢复相同，并关闭严格主机名校验和 DNS rebind 保护。名称成为不带端口的域名放行规则，沙箱自己的 DNS 应答解析出的地址（包括私有地址）都被放行。`*.example.com` 条目成为后缀放行规则 `.example.com`，它同样会匹配 `example.com`，因此 adapter 先拒绝 `example.com`，除非该 `Egress` 按名称放行了它；所以对与已解析的顶级域共享同一地址的子域名发起的明文连接会被拒绝。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 
