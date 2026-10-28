@@ -30,7 +30,7 @@ func resourceProof(config wire.Config) string {
 	return hex.EncodeToString(digest[:])
 }
 
-// The SDK decodes native CPU/memory/rootfs configuration. Its v0.7.8 projection
+// The SDK decodes native CPU/memory/rootfs configuration. Its projection
 // omits mounts, so the external directory inventory is projected here.
 // Restored roots have no configured size: a verified full snapshot supplies that
 // proof, retained as a label only after inspecting the restored target.

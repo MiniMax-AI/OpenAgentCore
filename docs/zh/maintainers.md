@@ -1,7 +1,7 @@
 ---
 title: "构建并发布 OpenAgentCore"
 source: docs/maintainers.md
-source_hash: d222cc5fe4c258dcc4e8956c08757276dc6340511c5eaf2e0fba2698e6718761
+source_hash: 7a78188dee1e8010194c3aef618b33027f1fb1fd2401b4d80c9b21beea85d34b
 ---
 
 本指南面向负责构建和发布 OpenAgentCore 的维护者。要安装 Core 和 Web，请按 [安装 Core 和 Web](getting-started/install.md) 操作。安装程序代码遵循的规则见 [部署](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/README.md) 和 [节点安装程序](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/deploy/node/README.md)；必需检查见 [CONTRIBUTING](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/CONTRIBUTING.md#required-checks)。
@@ -35,7 +35,7 @@ make build-core-distribution
 | `OAC_NATIVE_INSTALLER_BUILD_DIR` | 原生安装程序目录；请参阅[原生安装程序](#native-installers) |
 | `CORE_DISTRIBUTION_BUILD_DIR` | `~/.oac` 下的输出目录。默认值：`~/.oac/build/core-distribution` |
 | `CORE_DISTRIBUTION_BUILD_NETWORK` | Docker 构建网络：`default`、`host` 或 `none` |
-| `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | 已缓存的 microsandbox 发布归档。默认值：`~/.oac/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz`，缺失时下载 |
+| `CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE` | 已缓存的 microsandbox 发布归档。默认值：`~/.oac/cache/microsandbox-v0.7.11-linux-x86_64.tar.gz`，缺失时下载 |
 | `CORE_DISTRIBUTION_DATABASE_IMAGE` | PostgreSQL 16 镜像；默认值为 `deploy/compose/database-image.txt` 中索引的 linux/amd64 清单 |
 
 构建过程会复用 Core、Web、Runtime、SDK 和辅助程序构建器。清单会记录提交及其源代码树、镜像配置及 OCI 清单摘要、Runtime OCI 清单摘要、microsandbox 运行时和固件哈希，以及每个 Runtime 和节点构件的大小与 SHA-256；原生安装程序在[目录](#native-installers)中仅记录其 SHA-256。输出包括控制归档及其 `.sha256`、可选的离线归档，以及带版本号的 Runtime、节点和原生安装程序资源。此过程不会发布任何内容。如果目标目录中已包含此提交的分发包，重建会拒绝执行。
@@ -114,9 +114,11 @@ make build-microsandbox-provider
 make check-microsandbox-provider
 ```
 
-该辅助程序会写入 `~/.oac/build/microsandbox-provider/oac-microsandbox-provider`。其独立的 Go 模块固定官方 microsandbox SDK 源码提交。上述两个命令与分发构建均使用 `scripts/build-microsandbox-provider.py`：它暂存模块依赖，验证匹配的官方 FFI 发行文件校验和，填充 SDK 的空发行包，并构建嵌入该 FFI 的程序。SDK 源码保持不变，仓库不提交 vendored 二进制文件。请使用此入口，而非直接调用 `go build`；构建生产版本时，绝不能使用该 SDK 的 `microsandbox_ffi_path` 标签。Core 本身仍采用禁用 CGO 的构建。该辅助程序需要 glibc，并且只能在节点上运行。
+该辅助程序会写入 `~/.oac/build/microsandbox-provider/oac-microsandbox-provider`。其独立的 Go 模块固定来自下文所述 fork 的 microsandbox SDK。上述两个命令与分发构建均使用 `scripts/build-microsandbox-provider.py`：它暂存模块依赖，验证 fork 的 FFI 发行文件校验和，填充 SDK 的空发行包，并构建嵌入该 FFI 的程序。仓库不提交 vendored 二进制文件。请使用此入口，而非直接调用 `go build`；构建生产版本时，绝不能使用该 SDK 的 `microsandbox_ffi_path` 标签。Core 本身仍采用禁用 CGO 的构建。该辅助程序需要 glibc，并且只能在节点上运行。
 
-**microsandbox 运行时。** 分发包使用官方的 [v0.7.8 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.8) 归档 `microsandbox-linux-x86_64.tar.gz`，SHA256 为 `86f9f72dc3e639c7175bc07909b4b63ce412517c1ef8a2e1921171af5682fded`（即 `scripts/core-distribution-manifest.py` 中的 `RUNTIME_ARCHIVE_SHA256`）。构建过程会先验证校验和，再解压 `msb` 和 `libkrunfw.so.5.6.1`，并记录这两个文件的哈希。辅助程序会在每次调用时检查这些哈希，并且绝不安装或升级它们。
+**microsandbox 运行时。** 分发包使用官方的 [v0.7.11 release](https://github.com/superradcompany/microsandbox/releases/tag/v0.7.11) 归档 `microsandbox-linux-x86_64.tar.gz`，SHA256 为 `5fc2206fbe35b471743bd5af15e3931cd2439a0c8b8e6ef08a493ddabcdc1b4c`（即 `scripts/core-distribution-manifest.py` 中的 `RUNTIME_ARCHIVE_SHA256`）。构建过程会先验证校验和，再解压 `msb` 和 `libkrunfw.so.5.6.1`，并记录这两个文件的哈希。辅助程序会在每次调用时检查这些哈希，并且绝不安装或升级它们。
+
+**microsandbox fork。** SDK 及其 FFI 来自 [SaladDay/microsandbox](https://github.com/SaladDay/microsandbox/tree/oac) 的 `oac` 分支：一个上游发布标签加上一小队补丁，补丁列表见 `git log v0.7.11..oac`。每个补丁同时向上游提交，上游发布包含它之后就从队列中删除。推送 `oac-v<上游版本>-<n>` 标签会在与上游发布相同的 manylinux 2.28 容器中构建 Linux amd64 FFI，并连同其 SHA256 附加到该标签的 release。要换到新标签，把 `services/core/tools/microsandbox-provider/go.mod` 中 SDK 的 `replace` 指向该标签的提交，并更新 `scripts/build-microsandbox-provider.py` 中的 `FFI_URL` 和 `FFI_SHA256`。运行时仍使用同一上游版本的官方发布。
 
 ### 独立 Core 构建 {#standalone-core-builds}
 
