@@ -1,4 +1,4 @@
-import { readMediaBytes } from "./shared/media.mjs";
+import { maxUploadBytes, readMediaBytes } from "./shared/media.mjs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createServer } from "node:http";
@@ -9,6 +9,7 @@ import { buildDirectory } from "./paths.mjs";
 import { isIPv4 } from "node:net";
 import { openStore, dataPath, AppError } from "./server/store.mjs";
 import { productAPI } from "./server/product.mjs";
+import { boundAgents } from "./server/capability-kinds.mjs";
 import { createFeishuTransport, feishuWorkers } from "./server/feishu.mjs";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
@@ -23,6 +24,7 @@ const routes = [
   ],
   [/^\/v1\/agents\/environments\/[a-f0-9-]{36}$/, ["GET"]],
   [/^\/v1\/agents\/environments\/[a-f0-9-]{36}\/files$/, ["GET", "POST"]],
+  [/^\/v1\/files$/, ["POST"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/artifacts$/, ["GET"]],
   [
     /^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/artifacts\/[a-f0-9-]{36}\/content$/,
@@ -31,8 +33,6 @@ const routes = [
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}$/, ["GET"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/(items|turns)$/, ["GET"]],
   [/^\/v1\/agents\/sessions\/[a-f0-9-]{36}\/events$/, ["GET", "POST"]],
-  [/^\/v1\/agents$/, ["GET", "POST"]],
-  [/^\/v1\/agents\/[a-f0-9-]{36}$/, ["GET", "POST"]],
 ];
 routes.push(
   [
@@ -98,16 +98,18 @@ function fail(res, status, message) {
 
 export function coreClient(config, fetchImpl = fetch) {
   return async (path, method, body, key) => {
+    // A FormData body is a multipart upload, which sets its own Content-Type.
+    const form = body instanceof FormData;
     const response = await fetchImpl(`${config.target}${path}`, {
       method,
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(body === undefined ? {} : { body: form ? body : JSON.stringify(body) }),
       redirect: "manual",
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(form ? 300_000 : 30_000),
       headers: {
         ...(key ? { "Idempotency-Key": key } : {}),
         Authorization: `Bearer ${config.key}`,
         "OpenAI-Beta": "agents=v1",
-        "Content-Type": "application/json",
+        ...(form ? {} : { "Content-Type": "application/json" }),
       },
     });
     if (response.status >= 300 && response.status < 400)
@@ -250,6 +252,10 @@ export function createHandler(
           "A same-origin Origin header is required for writes.",
         );
       }
+      // Skills live in Core; one an Agent still binds is not deleted.
+      const skill = req.method === "DELETE" && url.pathname.match(/^\/v1\/skills\/(skill_[A-Za-z0-9_-]+)$/)?.[1];
+      if (skill && store && boundAgents(store, "skills", skill).length)
+        return fail(res, 409, "Skill 仍被 Agent 使用，请先在 Agent 中解除绑定。");
       const streaming =
         req.method === "GET" && url.pathname.endsWith("/events");
       const controller = new AbortController();
@@ -267,10 +273,12 @@ export function createHandler(
           size += chunk.length;
           if (
             size >
-            (url.pathname.startsWith("/v1/skills") ||
-            url.pathname.endsWith("/files")
-              ? 8 * 1024 * 1024
-              : 1024 * 1024)
+            (url.pathname === "/v1/files"
+              ? maxUploadBytes + 64 * 1024
+              : url.pathname.startsWith("/v1/skills") ||
+                  url.pathname.endsWith("/files")
+                ? 8 * 1024 * 1024
+                : 1024 * 1024)
           )
             return fail(res, 413, "Request too large.");
           chunks.push(chunk);
@@ -281,7 +289,7 @@ export function createHandler(
           "Content-Type": req.headers["content-type"] || "application/json",
           ...(streaming ? { Accept: "text/event-stream" } : {}),
         };
-        if (url.pathname.startsWith("/v1/skills"))
+        if (url.pathname.startsWith("/v1/skills") || url.pathname === "/v1/files")
           delete headers["OpenAI-Beta"];
         if (req.headers["idempotency-key"])
           headers["Idempotency-Key"] = req.headers["idempotency-key"];
@@ -420,6 +428,11 @@ if (
     void productHandler.sessions
       .refreshWarm()
       .catch((error) => console.error("Prepared sessions:", error.message));
+  // Saved Core Agents and Templates that no longer resolve, as after moving to
+  // a new Project, are created again on next use.
+  await productHandler.resources
+    .verify()
+    .catch((error) => console.error("Core resources:", error.message));
   refreshPrepared();
   setInterval(refreshPrepared, 15000).unref();
   // Running Turns are watched for stalls and failed Environments.

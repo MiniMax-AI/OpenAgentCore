@@ -176,7 +176,7 @@ The runnable test-only example [`testdata/onboarding/main.go`](https://github.co
 
 ## Declare the Harness
 
-Each Harness is one `var Declaration = harnessconfig.Declaration{...}` in `internal/harnessconfig/<package>/declaration.go`. The package name is the kind without underscores. Creating the file registers the Harness: `make generate-harness-catalog` generates the Core registry, the Runtime's `harnessDeclarations`, the client identifiers and display names and the [registration reference](./harness-catalog.md), and `make check-harness-catalog` rejects stale projections. `make openapi` derives the Harness enums from the same declarations, so do not add handwritten enums to DTO tags or route annotations. There is no dynamic plugin loader, and a declaration cannot state a machine's availability.
+Each Harness is one `var Declaration = harnessconfig.Declaration{...}` in `internal/harnessconfig/<package>/declaration.go`. The package name is the kind without underscores. Creating the file registers the Harness: `make generate-harness-catalog` generates the Core registry, the Runtime's `harnessDeclarations`, the client identifiers and display names, the Parsar example's protocols and execution options and the [registration reference](./harness-catalog.md), and `make check-harness-catalog` rejects stale projections. `make openapi` derives the Harness enums from the same declarations, so do not add handwritten enums to DTO tags or route annotations. There is no dynamic plugin loader, and a declaration cannot state a machine's availability.
 
 The declaration holds:
 

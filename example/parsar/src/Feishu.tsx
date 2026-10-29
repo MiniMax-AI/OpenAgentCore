@@ -188,14 +188,6 @@ function BotCard({ bot }: { bot: FeishuBot }) {
         </div>
         {credentials && (
           <div className="grid gap-4 border-t border-line-muted pt-6 sm:grid-cols-2">
-            <Field label={tr("机器人名称")} id={`bot-name-${bot.id}`}>
-              <Input
-                id={`bot-name-${bot.id}`}
-                value={form.name}
-                maxLength={80}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-              />
-            </Field>
             <Field label={tr("地区")} id={`bot-brand-${bot.id}`}>
               <Select
                 id={`bot-brand-${bot.id}`}
@@ -247,8 +239,8 @@ function BotCard({ bot }: { bot: FeishuBot }) {
             variant="ghost"
             size="icon"
             aria-label={tr("删除机器人")}
-            title={bot.enabled ? tr("请先停用机器人") : tr("删除机器人")}
-            disabled={bot.enabled || remove.isPending}
+            title={tr("删除机器人")}
+            disabled={remove.isPending}
             onClick={() => {
               if (confirm(tr("删除机器人 {{value0}}？", { value0: bot.name })))
                 remove.mutate();
@@ -418,10 +410,7 @@ function QrCreate({ close }: { close: () => void }) {
   const [started, setStarted] = useState(false);
   const begin = useMutation({
     mutationFn: () =>
-      product<RegistrationState>(`feishu/provision/${id}`, "POST", {
-        action: "begin",
-        name: "Parsar",
-      }),
+      product<RegistrationState>(`feishu/provision/${id}`, "POST", { action: "begin" }),
     onSuccess: (value) => {
       cache.setQueryData(["feishu-registration", id], value);
       setStarted(true);
@@ -490,7 +479,6 @@ function QrCreate({ close }: { close: () => void }) {
 function ManualCreate({ close }: { close: () => void }) {
   const cache = useQueryClient();
   const [form, setForm] = useState({
-    name: "",
     app_id: "",
     app_secret: "",
     brand: "feishu" as "feishu" | "lark",
@@ -518,15 +506,6 @@ function ManualCreate({ close }: { close: () => void }) {
         save.mutate();
       }}
     >
-      <Field label={tr("机器人名称")} id="new-bot-name">
-        <Input
-          id="new-bot-name"
-          required
-          maxLength={80}
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
-      </Field>
       <Field label="App ID" id="new-bot-app">
         <Input
           id="new-bot-app"

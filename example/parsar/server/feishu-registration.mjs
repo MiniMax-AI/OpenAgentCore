@@ -1,6 +1,82 @@
+import { gzipSync } from "node:zlib";
 import QRCode from "qrcode";
 import { qrImagePattern } from "../shared/media.mjs";
 import { AppError, uuid, text } from "./store.mjs";
+
+// App-identity scopes the new app requests on top of the platform's default
+// template, so an Agent can work with Feishu data without its users applying
+// for each scope later. All of them are ones the organization grants without
+// review; scopes that need review are left for when an Agent truly needs them.
+// Without im:message.group_msg the bot never receives topic replies that do
+// not mention it.
+export const botScopes = [
+  // Messages and groups
+  "im:message", "im:message:readonly", "im:message:send_as_bot", "im:message:send_multi_users", "im:message:update",
+  "im:message.group_msg", "im:message.group_msg.include_bot:read", "im:message.group_at_msg:readonly",
+  "im:message.group_at_msg.include_bot:readonly", "im:message.p2p_msg:readonly", "im:message.pins:read", "im:message.pins:write_only",
+  "im:message.reactions:read", "im:message.reactions:write_only", "im:resource",
+  "im:chat", "im:chat:read", "im:chat:readonly", "im:chat:create", "im:chat:update", "im:chat.members:read",
+  "im:chat.members:write_only", "im:chat.members:bot_access", "im:chat.announcement:read", "im:chat.announcement:write_only",
+  "im:chat.moderation:read", "im:chat.tabs:read", "im:chat.access_event.bot_p2p_chat:read", "search:message",
+  // The bot itself, cards
+  "application:application:self_manage", "application:bot.basic_info:read", "application:bot.menu:readonly",
+  "application:bot.menu:write", "application:app_slash_command:read", "application:app_slash_command:write",
+  "cardkit:card:read", "cardkit:card:write", "cardkit:template:read",
+  // People
+  "contact:contact.base:readonly", "contact:user.base:readonly", "contact:user.id:readonly", "contact:user.employee_id:readonly",
+  "contact:user.email:readonly", "contact:department.base:readonly", "tenant:tenant:readonly",
+  // Base
+  "bitable:app", "bitable:app:readonly", "base:app:read", "base:app:create", "base:app:update", "base:app:copy",
+  "base:table:read", "base:table:create", "base:table:update", "base:field:read", "base:field:create", "base:field:update",
+  "base:record:read", "base:record:retrieve", "base:record:create", "base:record:update", "base:record:delete",
+  "base:view:read", "base:view:write_only", "base:dashboard:read", "base:form:read", "base:workspace:list", "base:workspace:read",
+  // Calendar and meetings
+  "calendar:calendar", "calendar:calendar:readonly",
+  "vc:meeting.search:read", "vc:note:read", "vc:reserve:readonly", "vc:room:readonly",
+  "minutes:minutes.artifacts:read", "minutes:minutes.search:read",
+  // Documents
+  "docx:document", "docx:document:create", "docx:document:readonly", "docx:document:write_only", "docx:document.block:convert",
+  "docs:document.content:read", "docs:document.media:download", "docs:document.media:upload", "docs:document:copy",
+  "docs:document:export", "docs:document:import", "docs:document.comment:read", "docs:document.comment:create",
+  "docs:document.comment:update", "docs:document.comment:delete", "docs:document.comment:write_only",
+  "docs:permission.member:create", "docs:permission.member:retrieve", "docs:permission.setting:read",
+  "drive:drive.metadata:readonly", "drive:file:download", "drive:file:upload", "drive:drive:version:readonly", "space:folder:create",
+  "sheets:spreadsheet", "sheets:spreadsheet:read", "sheets:spreadsheet:readonly", "sheets:spreadsheet:create",
+  "sheets:spreadsheet:write_only", "sheets:spreadsheet.meta:read",
+  "slides:presentation:create", "slides:presentation:read", "slides:presentation:update", "slides:presentation:write_only",
+  "board:whiteboard:node:read", "board:whiteboard:node:create", "board:whiteboard:node:update",
+  "mindnote:node:read", "mindnote:node:create",
+  "wiki:wiki", "wiki:wiki:readonly", "wiki:space:read", "wiki:space:retrieve", "wiki:node:read", "wiki:node:retrieve",
+  "wiki:node:create", "wiki:node:update", "wiki:node:copy",
+  // Tasks
+  "task:task", "task:task:read", "task:task:readonly", "task:tasklist:read", "task:comment:read", "task:comment:write",
+  "task:attachment:read", "task:attachment:write", "task:section:read", "task:custom_field:read",
+  // Translation, OCR and speech
+  "translation:text", "optical_char_recognition:image", "speech_to_text:speech",
+];
+// The name the app has in Feishu, read with its own credentials; undefined
+// when Feishu cannot say.
+export async function feishuAppName(fetchImpl, { app_id, app_secret, brand }) {
+  const host = brand === "lark" ? "open.larksuite.com" : "open.feishu.cn";
+  const call = async (path, init) =>
+    (await fetchImpl(`https://${host}${path}`, { ...init, redirect: "error", signal: AbortSignal.timeout(10000) })).json();
+  try {
+    const { tenant_access_token: token } = await call("/open-apis/auth/v3/tenant_access_token/internal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ app_id, app_secret }),
+    });
+    if (!token) return;
+    const info = await call("/open-apis/bot/v3/info", { headers: { Authorization: `Bearer ${token}` } });
+    const name = (info.bot || info.data?.bot)?.app_name;
+    return typeof name === "string" && name.trim() ? name.trim().slice(0, 80) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// The official SDKs' QR `addons` encoding.
+const addons = gzipSync(JSON.stringify({ scopes: { tenant: botScopes } })).toString("base64url");
 
 // The SDK registerApp helper runs an in-memory polling loop and cannot resume a
 // persisted device code after restart. This adapter implements the same device
@@ -55,7 +131,7 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
       if (!row) throw new AppError(404, "注册会话不存在。");
       if (row.status !== "pending" || row.expires_at <= Date.now())
         throw new AppError(410, "授权二维码已失效，请重新发起注册。");
-      return QRCode.toBuffer(row.verification_url, { width: 320, margin: 4 });
+      return QRCode.toBuffer(row.verification_url, { width: 640, margin: 4 });
     }
     const id = path.match(/^\/app\/feishu\/provision\/([a-f0-9-]{36})$/)?.[1];
     if (!id || !uuid.test(id)) throw new AppError(404, "Not found.");
@@ -72,7 +148,7 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
         const bot = store.get("feishu_bots", id);
         if (bot?.app_id)
           throw new AppError(409, "机器人已有应用，请新建机器人进行扫码注册。");
-        const name = text(body.name || "Feishu", "机器人名称", 80, true);
+        const name = body.name ? text(body.name, "机器人名称", 80, true) : "";
         await call("init");
         const value = await call("begin", {
           archetype: "PersonalAgent",
@@ -97,6 +173,9 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
           verification.password
         )
           throw new AppError(502, "飞书返回的授权地址无效。");
+        // The confirmation page after scanning pre-fills the app's scopes, and its name when one was given.
+        if (name) verification.searchParams.set("name", name);
+        verification.searchParams.set("addons", addons);
         row = {
           id,
           name,
@@ -156,11 +235,13 @@ export function feishuRegistrationAPI(store, fetchImpl = fetch) {
             .some((bot) => bot.app_id === value.client_id)
         )
           throw new AppError(409, "应用已绑定，请检查机器人配置。");
+        const brand = row.brand === "lark" ? "lark" : "feishu";
+        const appName = await feishuAppName(fetchImpl, { app_id: value.client_id, app_secret: value.client_secret, brand });
         store.transaction(() => {
           store.put("feishu_bots", {
             ...bot,
             id,
-            name: bot?.name || row.name,
+            name: appName || row.name || value.client_id,
             app_id: value.client_id,
             app_secret: value.client_secret,
             brand: row.brand === "lark" ? "lark" : "feishu",

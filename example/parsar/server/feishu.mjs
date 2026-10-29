@@ -1,4 +1,4 @@
-import { artifactContentPath, imageMime, maxMediaBytes, qrImages, qrImagePattern } from "../shared/media.mjs";
+import { artifactContentPath, imageMime, maxMediaBytes, maxUploadBytes, qrImages, qrImagePattern } from "../shared/media.mjs";
 import { createHash, randomUUID } from "node:crypto";
 const stableId = (value) => {
   const hex = createHash("sha256").update(value).digest("hex");
@@ -6,7 +6,9 @@ const stableId = (value) => {
 };
 import { feishuContextReader } from "./feishu-context.mjs";
 import { explainFailure, turnsAPI } from "./turns.mjs";
-import { typicalWait, waitingHeadline } from "../shared/turn-status.mjs";
+import { waitingHeadline } from "../shared/turn-status.mjs";
+import { feishuSource } from "../shared/feishu-source.mjs";
+import { feishuAppName } from "./feishu-registration.mjs";
 import { AppError, text, uuid, transientError } from "./store.mjs";
 
 const stamp = () => Date.now();
@@ -15,7 +17,7 @@ export const publicFeishu = ({ app_secret, ...record }) => ({
   ...record,
   has_app_secret: !!app_secret,
 });
-export function feishuAPI(store) {
+export function feishuAPI(store, fetchImpl = fetch) {
   return async (method, path, body) => {
     const retryMatch = path.match(
       /^\/app\/feishu\/deliveries\/(inbound|outbound)\/([a-f0-9-]{36})$/,
@@ -89,20 +91,15 @@ export function feishuAPI(store) {
       groups: false,
     };
     if (method === "GET") return publicFeishu(old);
+    // Deleting a bot stops it and drops what it had not delivered yet;
+    // conversations and delivered messages stay.
     if (method === "DELETE") {
-      if (old.enabled) throw new AppError(409, "请先停用机器人。");
-      if (
-        [
-          ...store.list("feishu_inbound"),
-          ...store.list("feishu_outbound"),
-        ].some(
-          (row) =>
-            row.app_id === old.app_id &&
-            !["delivered", "rejected"].includes(row.state),
-        )
-      )
-        throw new AppError(409, "机器人仍有未完成投递，请先处理。");
-      store.remove("feishu_bots", id);
+      store.transaction(() => {
+        for (const kind of ["feishu_inbound", "feishu_outbound"])
+          for (const row of store.list(kind))
+            if (row.app_id === old.app_id && !["delivered", "rejected"].includes(row.state)) store.remove(kind, row.id);
+        store.remove("feishu_bots", id);
+      });
       return {};
     }
     if (method !== "PUT") throw new AppError(405, "Method not allowed.");
@@ -110,8 +107,11 @@ export function feishuAPI(store) {
       throw new AppError(409, "配置已更新，请重新加载。");
     if (body.brand !== undefined && !["feishu", "lark"].includes(body.brand))
       throw new AppError(400, "机器人地区无效。");
-    const name = text(body.name || "Feishu", "机器人名称", 80, true);
     const app_id = text(body.app_id, "App ID", 100).trim();
+    // A new app takes the name it has in Feishu; connecting keeps it current.
+    const name = app_id === old.app_id && old.name
+      ? old.name
+      : (app_id && body.app_secret && (await feishuAppName(fetchImpl, { app_id, app_secret: body.app_secret.trim(), brand: body.brand ?? old.brand }))) || app_id || "Feishu";
     if (
       app_id &&
       store
@@ -169,12 +169,20 @@ export function feishuAPI(store) {
   };
 }
 
+// Feishu's rich-text box can bold or code-format a command; the command is
+// what remains without that formatting.
+export function asCommand(text) {
+  const plain = text.replace(/^[*_~`]+|[*_~`]+$/g, "").trim();
+  return /^\/(clear|stop|help)$/.test(plain) || /^\/answer\s/.test(plain) ? plain : text;
+}
+
 const cardTones = {
   in_progress: ["处理中", "blue"],
   requires_action: ["需要你补充信息", "orange"],
   completed: ["已完成", "green"],
   cancelled: ["已停止", "grey"],
   failed: ["执行失败", "red"],
+  missing_scopes: ["需要开通权限", "orange"],
 };
 const grey = (text) => `<font color='grey'>${text}</font>`;
 
@@ -192,16 +200,19 @@ function excerpt(value, limit) {
   return prefix.join("") + "\n…（内容较长，已截取）";
 }
 
-function panel({ title, content, elements }) {
+// A `block` panel is a tinted, rounded area that holds folded history.
+function panel({ title, content, elements, block = false }) {
   return {
     tag: "collapsible_panel",
     expanded: false,
-    vertical_spacing: "8px",
-    padding: "0px 0px 8px 0px",
+    vertical_spacing: "4px",
+    padding: block ? "0px 12px 8px 12px" : "0px 0px 4px 0px",
+    ...(block && { background_color: "grey-50", border: { color: "grey-50", corner_radius: "8px" } }),
     header: {
-      title: { tag: "markdown", content: grey(title) },
+      title: { tag: "markdown", content: title },
       width: "fill",
-      padding: "8px 0px 8px 0px",
+      // The header ignores the panel padding, so a block indents its own title.
+      padding: block ? "8px 12px 8px 12px" : "2px 0px 2px 0px",
       icon: { tag: "standard_icon", token: "down-small-ccm_outlined", size: "16px 16px" },
       icon_position: "right",
       icon_expanded_angle: -180,
@@ -210,20 +221,25 @@ function panel({ title, content, elements }) {
   };
 }
 
-// One restrained status line replaces the large colored banner.
-function statusCard(status, body, panels = []) {
-  const [title, color] = cardTones[status] || cardTones.failed;
+// Feishu rejects cards above about 30 KB of JSON.
+const cardBudget = 28000;
+const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
+
+// The colored header carries the status and, while running, what is
+// happening now on the same line, so the body starts with the content.
+function statusCard(status, body, elements = [], subtitle = "") {
+  const [title, template] = cardTones[status] || cardTones.failed;
+  // A card needs a body; with nothing else to show, what is happening is the body.
+  if (!body && !elements.length && subtitle) [body, subtitle] = [`**${subtitle}**`, ""];
+  const heading = subtitle ? `${title} · ${subtitle}` : title;
   return JSON.stringify({
     schema: "2.0",
-    config: { update_multi: true, summary: { content: title } },
+    config: { update_multi: true, summary: { content: heading } },
+    header: { title: { tag: "plain_text", content: heading }, template },
     body: {
-      padding: "16px 16px 12px 16px",
-      vertical_spacing: "8px",
-      elements: [
-        { tag: "markdown", text_size: "notation", content: `<font color='${color}'>${title}</font>` },
-        { tag: "markdown", content: excerpt(body, status === "requires_action" ? 8000 : 12000) },
-        ...(panels.length ? [{ tag: "hr" }, ...panels.map(panel)] : []),
-      ],
+      padding: "12px 16px 12px 16px",
+      vertical_spacing: "6px",
+      elements: [...(body ? [{ tag: "markdown", content: body }] : []), ...elements],
     },
   });
 }
@@ -242,7 +258,7 @@ export function feishuCard(payload) {
 }
 
 export function progressCard(text, notice) {
-  return statusCard("in_progress", `**${text}**${notice ? `\n${grey(notice)}` : ""}`);
+  return statusCard("in_progress", notice ? grey(notice) : "", [], text);
 }
 
 function questionText(action, includeOptions = true) {
@@ -258,7 +274,7 @@ function step(item) {
   if (item.type === "command_execution" || typeof item.command === "string") {
     const command = String(item.command || "").replace(/\s+/g, " ").trim()
       .replace(/^\/bin\/(?:ba|z)?sh -lc (['"])([\s\S]*)\1$/, "$2");
-    return ["运行命令", command.length > 56 ? `${command.slice(0, 55)}…` : command];
+    return ["运行", command];
   }
   if (item.type === "mcp_call") return ["调用工具", [item.server_label, item.name].filter(Boolean).join(" · ")];
   if (item.type === "function_call") return ["调用工具", item.name || ""];
@@ -267,19 +283,112 @@ function step(item) {
   return ["执行步骤", item.name || item.type || ""];
 }
 
-function stepPanel(item) {
+// Wide (CJK and full-width) characters take two columns in a card; general
+// punctuation such as the ellipsis is narrow.
+const wide = (char) => {
+  const code = char.codePointAt(0);
+  return code >= 0x1100 && !(code >= 0x2000 && code <= 0x206f);
+};
+const columns = (text) => [...text].reduce((sum, char) => sum + (wide(char) ? 2 : 1), 0);
+const clip = (value, limit) => {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (columns(text) <= limit) return text;
+  let kept = "";
+  for (const char of text) {
+    if (columns(kept + char) > limit - 1) break;
+    kept += char;
+  }
+  return `${kept}…`;
+};
+// Markdown and Feishu tags stay literal inside a one-line title.
+const literal = (value) => value.replace(/[<>]/g, "").replaceAll("`", "'");
+// Thinking and tool rows stay on one line: the detail gets what the label
+// and state leave of the row.
+const rowColumns = 52;
+const oneLine = (label, detail, state = "") => {
+  const room = rowColumns - columns(label) - columns(state.replace(/<[^>]*>/g, "")) - 2;
+  return [grey(label), detail ? literal(clip(detail, Math.max(8, room))) : "", state].filter(Boolean).join(" ");
+};
+
+const toolState = (item) =>
+  item.status === "failed"
+    ? "<font color='red'>失败</font>"
+    : item.status === "in_progress"
+      ? grey("进行中")
+      : item.status === "incomplete"
+        ? grey("未完成")
+        : typeof item.duration_ms === "number"
+          ? grey(`${(item.duration_ms / 1000).toFixed(1)}s`)
+          : "";
+
+// One tool call: the command is the title, its result folds below it.
+function toolRow(item) {
   const [label, detail] = step(item);
-  const state = { completed: "完成", failed: "失败", incomplete: "未完成", in_progress: "进行中" }[item.status] || "状态未知";
-  const duration = typeof item.duration_ms === "number" ? ` · ${(item.duration_ms / 1000).toFixed(1)}s` : "";
+  const title = oneLine(label, detail, toolState(item));
   const fields = [
-    ["命令", item.command], ["工作目录", item.cwd], ["参数", item.arguments ?? item.action],
+    // A shortened title keeps the whole command one click away.
+    ["命令", item.command && title.includes("…") ? detail : undefined],
+    ["参数", item.command ? undefined : item.arguments ?? item.action],
     ["输出", item.output], ["错误", item.error], ["退出码", item.exit_code],
   ].filter(([, value]) => value !== undefined && value !== null && value !== "");
+  if (!fields.length) return { tag: "markdown", content: title };
   // Plain text keeps tool output literal, including code fences and mention markup.
   return panel({
-    title: `${state} · ${label}${detail ? ` · ${excerpt(detail, 180).replace(/[<>]/g, "")}` : ""}${duration}`,
-    elements: [{ tag: "div", text: { tag: "plain_text", content: excerpt(fields.map(([name, value]) => `${name}\n${excerpt(value, 700)}`).join("\n\n") || "暂无详细输出。", 1000) } }],
+    title,
+    elements: [{ tag: "div", text: { tag: "plain_text", content: excerpt(fields.map(([name, value]) => `${name}\n${excerpt(value, 1200)}`).join("\n\n"), 1600) } }],
   });
+}
+
+// Consecutive tool calls fold into one row; each call folds again inside it.
+// With less room, calls keep only their titles, then the group is one line.
+function toolsRow(items, level = 0) {
+  const failed = items.filter((item) => item.status === "failed").length;
+  const state = items.some((item) => item.status === "in_progress")
+    ? grey("进行中")
+    : failed
+      ? `<font color='red'>失败 ${failed} 次</font>`
+      : items.every((item) => typeof item.duration_ms === "number")
+        ? grey(`${(items.reduce((sum, item) => sum + item.duration_ms, 0) / 1000).toFixed(1)}s`)
+        : "";
+  const [label, detail] = step(items[0]);
+  const title = items.length === 1
+    ? oneLine(label, detail, state)
+    : [grey(items.every((item) => step(item)[0] === "运行") ? `运行 ${items.length} 条命令` : `调用 ${items.length} 次工具`), state].filter(Boolean).join(" ");
+  if (level >= 2 || (level === 1 && items.length === 1)) return { tag: "markdown", content: title };
+  const calls = level === 1
+    ? items.map((item) => ({ tag: "markdown", content: oneLine(...step(item), toolState(item)) }))
+    : items.map(toolRow);
+  return panel({ title, elements: calls });
+}
+
+// One step at decreasing detail: everything; tool calls without their output;
+// thinking and tool groups as one line; commentary shortened.
+function timelineRow(entry, level = 0) {
+  if (entry.type === "say") return { tag: "markdown", content: excerpt(entry.text, level < 3 ? 4000 : 400) };
+  if (entry.type === "think") {
+    const title = oneLine("思考", entry.text.split("\n").find((line) => line.trim()) || "");
+    return level < 2 ? panel({ title, content: excerpt(entry.text, 1500) }) : { tag: "markdown", content: title };
+  }
+  return toolsRow(entry.items, level);
+}
+
+// Every step stays in the card. When it would pass Feishu's size limit, the
+// oldest steps give up detail first.
+function fitRows(entries, budget) {
+  const rows = entries.map((entry) => timelineRow(entry));
+  for (let level = 1; level <= 3 && bytes(rows) > budget; level++)
+    for (let i = 0; i < entries.length && bytes(rows) > budget; i++) {
+      rows[i] = timelineRow(entries[i], level);
+    }
+  // Hundreds of steps: the oldest become one summary line.
+  let merged = 0;
+  while (merged < entries.length - 1 && bytes(rows.slice(merged)) + 200 > budget) merged++;
+  if (!merged) return rows;
+  const counted = entries.slice(0, merged);
+  const commands = counted.flatMap((entry) => entry.items || []).length;
+  const thoughts = counted.filter((entry) => entry.type === "think").length;
+  const summary = [commands && `运行 ${commands} 条命令`, thoughts && `思考 ${thoughts} 次`].filter(Boolean).join("、");
+  return [{ tag: "markdown", content: grey(`第 1–${merged} 步${summary ? `：${summary}` : ""}`) }, ...rows.slice(merged)];
 }
 
 // A tool-result answer resumes the same Core Turn. Display only the exchange
@@ -290,56 +399,113 @@ function exchangeItems(items) {
   return items.slice(boundary + 1);
 }
 
-export function formatTurnCard(status, items = [], error, turn, questions = []) {
+const recentRows = 4;
+
+// Scopes Feishu says the bot's app lacks, from the Agent's tool output: the
+// platform's "One of the following scopes is required: [...]", lark-cli's
+// "required scope(s): ...", and permission_violations subjects.
+export function missingScopes(items) {
+  const found = new Set();
+  const scope = /^[a-z][a-z0-9_]*:[a-z0-9_.:-]+$/;
+  for (const item of items) {
+    if (!["command_execution", "function_call_output", "mcp_call"].includes(item.type)) continue;
+    const output = [item.output, item.error].map((value) => (typeof value === "string" ? value : JSON.stringify(value ?? ""))).join("\n");
+    if (!/99991672|99991679|app_scope_not_applied|scopes? (?:is )?required|required scope/i.test(output)) continue;
+    for (const [, list] of output.matchAll(/(?:scopes is required: \[|required scope\(s\): )([^\]"\n]+)/g))
+      for (const name of list.split(/[,\s]+/)) if (scope.test(name)) found.add(name);
+    for (const [, name] of output.matchAll(/"subject":\s*"([^"]+)"/g)) if (scope.test(name)) found.add(name);
+  }
+  return [...found];
+}
+
+// What to tell people when the bot's app lacks scopes: which, and where to apply.
+function scopeNotice(app, scopes) {
+  const host = app.brand === "lark" ? "open.larksuite.com" : "open.feishu.cn";
+  const url = `https://${host}/page/scope-apply?clientID=${encodeURIComponent(app.app_id)}&scopes=${encodeURIComponent(scopes.join(","))}`;
+  return [
+    `需要为机器人「${app.name || app.app_id}」开通：${scopes.map((name) => `\`${name}\``).join("、")}`,
+    `[申请开通权限](${url})`,
+    grey("管理员批准并发布新版本后，直接回复这条消息即可继续。"),
+  ].join("\n\n");
+}
+
+export function formatTurnCard(status, items = [], error, turn, questions = [], app) {
   items = exchangeItems(items);
   const text = (item) => (item.content || []).filter((p) => p.type === "output_text").map((p) => (p.text || "").trim()).filter(Boolean).join("\n");
   const messages = items.filter((x) => x.type === "message" && x.role === "assistant");
   const latest = messages.at(-1);
+  // Feishu reads any Markdown image as an image key and rejects the whole
+  // card, so images become text; the files themselves are sent as messages.
   const readable = (value) => value
     .replace(/!\[[^\]\n]*\]\((\/app\/feishu\/provision\/[a-f0-9-]{36}\/qrcode)\)/g, "（授权二维码见图片消息）")
-    .replace(/!?\[([^\]]*)\]\((?:\/workspace\/|\.\/)?outputs\/[^)]*\)/g, "$1（见附件）");
+    .replace(/!?\[([^\]]*)\]\((?:\/workspace\/|\.\/)?outputs\/[^)]*\)/g, "$1（见附件）")
+    .replace(/!\[([^\]\n]*)\]\([^)\n]*\)/g, (_, alt) => alt ? `（图片：${alt}）` : "（图片）");
   const authorization = messages.filter((item) => qrImages(text(item)).length);
   const authorizationText = authorization.map((item) => readable(text(item))).join("\n\n");
   const answer = latest?.phase === "commentary" || authorization.includes(latest) ? "" : latest ? readable(text(latest)) : "";
-  const reasoning = items.filter((x) => x.type === "reasoning").flatMap((x) => x.summary || x.content || [])
-    .map((p) => typeof p === "string" ? p : p?.text || "").filter(Boolean).join("\n\n");
-  const commentary = messages.filter((x) => !authorization.includes(x) && (status === "in_progress" || x !== latest || x.phase === "commentary")).map(text).filter(Boolean).join("\n\n");
   const outputs = new Map(items.filter((x) => x.type === "function_call_output").map((x) => [x.call_id, x]));
-  const steps = items.filter((x) => !["message", "agent_message", "reasoning", "function_call_output"].includes(x.type) && !(x.type === "function_call" && x.name === "ask_user"))
-    .map((x) => {
-      const output = x.type === "function_call" ? outputs.get(x.call_id) : undefined;
-      return output ? { ...x, status: output.status, output: output.output, error: output.error } : x;
-    });
-  const panels = [];
-  if (reasoning) panels.push({ title: "思考摘要", content: excerpt(reasoning, 3000) });
-  if (commentary) panels.push({ title: "过程说明", content: excerpt(commentary, 1500) });
-  if (steps.length) panels.push({
-    title: `工具调用 · ${steps.length} 次`,
-    elements: [
-      ...(steps.length > 6 ? [{ tag: "markdown", content: grey(`展示最近 6 次，共 ${steps.length} 次；完整记录保留在网页会话。`) }] : []),
-      ...steps.slice(-6).map(stepPanel),
-    ],
+  // Thinking, commentary and tool calls in the order they happened.
+  const entries = items.flatMap((x) => {
+    if (x.type === "reasoning") {
+      const thought = readable((x.summary || x.content || []).map((p) => typeof p === "string" ? p : p?.text || "").filter(Boolean).join("\n\n").trim());
+      return thought ? [{ type: "think", text: thought }] : [];
+    }
+    if (x.type === "message") {
+      const said = x.role === "assistant" && !authorization.includes(x) && (status === "in_progress" || x !== latest || x.phase === "commentary") ? readable(text(x)) : "";
+      return said ? [{ type: "say", text: said }] : [];
+    }
+    if (["agent_message", "function_call_output"].includes(x.type) || (x.type === "function_call" && x.name === "ask_user")) return [];
+    const output = x.type === "function_call" ? outputs.get(x.call_id) : undefined;
+    return [{ type: "tool", item: output ? { ...x, status: output.status, output: output.output, error: output.error } : x }];
   });
+  const grouped = entries.reduce((rows, entry) => {
+    const last = rows.at(-1);
+    if (entry.type === "tool" && last?.type === "tools") last.items.push(entry.item);
+    else rows.push(entry.type === "tool" ? { type: "tools", items: [entry.item] } : entry);
+    return rows;
+  }, []);
+  const rows = grouped;
+  const tools = entries.filter((entry) => entry.type === "tool").map((entry) => entry.item);
   if (status === "in_progress") {
     const last = items.filter((x) => x.role !== "user" && x.type !== "function_call_output").at(-1);
     const current = !last ? waitingHeadline(turn) : last.type === "message" ? "正在整理回复" : last.type === "reasoning" ? "正在思考" : last.status === "in_progress" ? `正在${step(last)[0]}` : "正在整理结果";
-    const done = steps.filter((x) => x.status === "completed").length;
-    const failed = steps.filter((x) => x.status === "failed").length;
-    const count = steps.length ? `工具调用 ${steps.length} 次 · 完成 ${done} 次${failed ? ` · 失败 ${failed} 次` : ""}` : "";
-    const typical = !last && turn?.expected_s && turn.stage !== "retrying" ? typicalWait.replace("{{value0}}", turn.expected_s) : "";
-    return statusCard(status, [`**${current}**`, grey([count, typical].filter(Boolean).join(" · ")), authorizationText].filter(Boolean).join("\n"), panels);
+    const subtitle = [current, rows.length ? `${rows.length} 步` : ""].filter(Boolean).join(" · ");
+    const body = authorizationText ? excerpt(authorizationText, 8000) : "";
+    const fitted = fitRows(rows, cardBudget - bytes(body) - 600);
+    const earlier = fitted.slice(0, -recentRows), shown = fitted.slice(-recentRows);
+    // Earlier steps sit in a tinted block above a rule that separates the latest ones.
+    const fold = earlier.length
+      ? [panel({ title: grey(`更早的 ${earlier.length} 步`), elements: earlier, block: true }), { tag: "hr" }]
+      : [];
+    return statusCard(status, body, [...fold, ...shown], subtitle);
   }
   const context = questions.some((action) => questionText(action, false).trim() === answer.trim()) ? "" : answer;
   // Put the decision first; keep its explanation available without filling the chat.
   // Authorization instructions stay visible alongside the separately sent QR.
   const foldContext = status === "requires_action" && questions.length && context;
-  if (foldContext) panels.unshift({ title: "补充说明", content: excerpt(context, 4000) });
-  const body = status === "requires_action"
+  const body = excerpt(status === "requires_action"
     ? [...questions.map((action) => questionText(action)), authorizationText, foldContext ? "" : context, grey("直接回复这条消息即可继续。")].filter(Boolean).join("\n\n")
     : status === "completed" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已完成处理。"
     : status === "cancelled" ? [authorizationText, answer].filter(Boolean).join("\n\n") || "已按你的要求停止。"
-    : [authorizationText, answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n");
-  return statusCard(status, body, panels);
+    : [authorizationText, answer || "这次没有完成。", error ? `<font color='red'>${error}</font>` : "", grey("直接回复即可重试。")].filter(Boolean).join("\n\n"), status === "requires_action" ? 8000 : 12000);
+  const elements = [];
+  // Scopes the Agent's reply names as missing get a link to apply for them,
+  // under the reply; scopes it only ran into while exploring do not.
+  const said = [answer, ...questions.map((action) => questionText(action))].join("\n");
+  const scopes = app ? missingScopes(items).filter((name) => said.includes(name)) : [];
+  if (foldContext) elements.push(panel({ title: grey("补充说明"), content: excerpt(context, 4000), block: true }));
+  if (scopes.length) {
+    if (rows.length) elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, cardBudget - bytes(body) - 3000), block: true }));
+    return statusCard("missing_scopes", [body, scopeNotice(app, scopes)].join("\n\n"), [{ tag: "hr" }, ...elements]);
+  }
+  // A failure shows the step that failed right under its cause.
+  const failedTool = status === "failed" ? tools.findLast((item) => item.status === "failed") : undefined;
+  if (failedTool) elements.push(toolRow(failedTool));
+  if (rows.length) {
+    const budget = cardBudget - bytes(body) - bytes(elements);
+    elements.push(panel({ title: grey(`处理过程 · ${rows.length} 步`), elements: fitRows(rows, budget), block: true }));
+  }
+  return statusCard(status, body, elements.length ? [{ tag: "hr" }, ...elements] : []);
 }
 
 export async function createFeishuTransport(settings, receive) {
@@ -368,6 +534,8 @@ export async function createFeishuTransport(settings, receive) {
       const bot = result.bot || result.data?.bot;
       if (result.code !== 0 || !bot?.open_id)
         throw new Error("Cannot resolve Feishu bot identity");
+      // The name people see in Feishu.
+      this.name = bot.app_name;
       readContext = feishuContextReader(client, {
         openId: bot.open_id,
         name: bot.app_name || "Parsar",
@@ -573,18 +741,21 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     if (!message.content?.trim() || message.content.length > 40000) return;
     const id = stableId(`${appId}:${message.messageId}`);
     if (store.get("feishu_inbound", id)) return;
+    const content = asCommand(message.content.trim());
+    // A private chat is one thread per sender; /clear starts a new conversation
+    // in it. The newest one wins if earlier versions left several.
     let thread =
-      message.chatType === "p2p" &&
-      !["/new", "/reset"].includes(message.content.trim())
+      message.chatType === "p2p"
         ? store
             .list("feishu_threads")
-            .find(
+            .filter(
               (row) =>
                 row.app_id === appId &&
                 row.chat_id === message.chatId &&
                 row.sender_id === message.senderId &&
                 row.chat_type === "p2p",
             )
+            .sort((a, b) => (b.created_at || 0) - (a.created_at || 0))[0]
         : threadFor(appId, message);
     if (
       thread &&
@@ -629,7 +800,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         thread_id: threadId,
         message_id: message.messageId,
         sender_id: message.senderId,
-        text: message.content.trim(),
+        text: content,
         raw_content_type: message.rawContentType,
         reply_to_message_id: message.replyToMessageId,
         occurred_at: message.createTime || stamp(),
@@ -667,22 +838,25 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         next_at: 0,
       });
   };
-  const queueMedia = (thread, items, artifacts = []) => {
-    const sources = artifacts.map((file) => ({
-      id: `artifact:${file.id}`,
-      path: artifactContentPath(file.session_id, file.id),
-      name: file.path.split("/").at(-1) || "attachment",
-    }));
-    for (const item of items.filter((item) => item.type === "message" && item.role === "assistant")) {
-      const text = (item.content || []).filter((part) => part.type === "output_text").map((part) => part.text).join("\n");
+  // A Turn's files reply to the message it answers. Only files its reply names
+  // reach the chat; every file stays downloadable in the Web conversation.
+  const queueMedia = (thread, items, artifacts = [], replyTo = thread.root_id) => {
+    const replies = items
+      .filter((item) => item.type === "message" && item.role === "assistant")
+      .map((item) => ({ item, text: (item.content || []).filter((part) => part.type === "output_text").map((part) => part.text).join("\n") }));
+    const said = replies.map(({ text }) => text).join("\n");
+    const sources = artifacts
+      .map((file) => ({ file, name: file.path.split("/").at(-1) || "attachment" }))
+      .filter(({ name }) => said.includes(name))
+      .map(({ file, name }) => ({ id: `artifact:${file.id}`, path: artifactContentPath(file.session_id, file.id), name }));
+    for (const { item, text } of replies)
       for (const path of qrImages(text))
         sources.push({ id: `${item.turn_id}:${path}`, path, name: "feishu-authorization.png" });
-    }
     for (const source of sources) {
       const id = stableId(`${thread.id}:media:${source.id}`);
       if (store.get("feishu_outbound", id)) continue;
       store.transaction(() => {
-        queueReply(id, thread, "");
+        queueReply(id, thread, "", false, replyTo);
         store.put("feishu_outbound", { ...store.get("feishu_outbound", id), media: source });
       });
     }
@@ -700,7 +874,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   };
   const cancel = async (row) => {
     const thread = store.get("feishu_threads", row.thread_id);
-    if (!thread) return reject(row, "话题关联不可用，请在 Web 中检查。");
+    if (!thread) return reject(row, "这条消息没能接上对话，请重新发送。");
     let run = store.get("sessions", thread.session_id);
     // Resolve an uncertain initial creation before cancelling its actual Session.
     if (run && !run.core_session_id && !run.deleted_at)
@@ -756,10 +930,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       ((context.resources || []).some((resource) => resource.type === "image")
         ? "图片消息"
         : "文件消息");
+    // The Agent sees where the message came from, so Skills can key work to it.
+    const source = feishuSource(row);
     const media = {
       images: [],
       files: [],
-      text: input.trim() || title,
+      text: `${source}\n${input.trim() || title}`,
       title,
       notice: context.notice,
     };
@@ -771,8 +947,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       const chunks = [];
       for await (const chunk of response) {
         total += chunk.length;
-        if (total > 5 * 1024 * 1024)
-          throw new AppError(413, "附件合计不能超过 5 MiB。");
+        if (total > maxUploadBytes)
+          throw new AppError(413, "附件合计不能超过 50 MiB。");
         chunks.push(chunk);
       }
       const bytes = Buffer.concat(chunks);
@@ -800,11 +976,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           .replace(/[^a-zA-Z0-9_.-]/g, "_")
           .slice(-100);
         const path = `/workspace/inputs/${row.id}-${media.files.length}-${filename}`;
-        media.files.push({
-          type: "inline",
-          path,
-          data: bytes.toString("base64"),
-        });
+        // Uploaded once: the message keeps only the File ID across retries.
+        const form = new FormData();
+        form.append("file", new Blob([bytes]), filename);
+        form.append("purpose", "user_data");
+        const file = await core("/v1/files", "POST", form);
+        media.files.push({ type: "file_id", path, file_id: file.id });
         media.text += `\nAttachment: ${path.replace("/workspace/", "./")}`;
       }
     }
@@ -813,26 +990,12 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
   };
   const inbound = async (row) => {
     let thread = store.get("feishu_threads", row.thread_id);
-    if (!thread) return reject(row, "话题关联不可用，请在 Web 中检查。");
-    if (["/new", "/reset", "/help"].includes(row.text)) {
-      queueReply(
-        stableId(`${row.id}:command`),
-        thread,
-        row.text === "/help"
-          ? "直接发送消息即可对话。/new 开始新对话（群聊请另开话题并 @机器人）；/cancel 停止执行；/answer <call_id> <回答> 回复 Agent 的提问。"
-          : row.chat_type === "p2p"
-            ? "新对话已就绪，请直接发送消息。"
-            : "群聊请另开话题并 @机器人，开始新对话。当前话题保持不变。",
-      );
-      store.put("feishu_inbound", { ...row, state: "delivered" });
-      return;
-    }
-    const media = await mediaFor(row);
-    row = store.get("feishu_inbound", row.id);
-    const rotateP2PThread = () => {
+    if (!thread) return reject(row, "这条消息没能接上对话，请重新发送。");
+    // A new Session for this chat or topic; the next message starts it.
+    const rotateThread = () => {
       thread = {
         ...thread,
-        root_id: row.message_id,
+        root_id: row.chat_type === "p2p" ? row.message_id : thread.root_id,
         agent_id: store.get("feishu_bots", configId).agent_id,
         session_id: randomUUID(),
         session_ids: [
@@ -854,13 +1017,37 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       };
       store.put("feishu_threads", thread);
     };
+    if (["/clear", "/help"].includes(row.text)) {
+      if (row.text === "/clear") {
+        // Work in the cleared conversation would continue unseen; stop it.
+        const run = store.get("sessions", thread.session_id);
+        if (run?.core_session_id)
+          await core(`/v1/agents/sessions/${run.core_session_id}/events`, "POST", { events: [{ type: "agent.session.input.cancel" }] }, `${row.id}:clear`).catch(() => {});
+        // The thread starts its next conversation, unless this /clear opened it.
+        if (thread.first_message_id !== row.id) rotateThread();
+      }
+      queueReply(
+        stableId(`${row.id}:command`),
+        thread,
+        row.text === "/help"
+          ? "直接发送消息即可对话。/clear 清空上下文，开始新对话；/stop 停止当前任务；/answer <call_id> <回答> 回复 Agent 的提问。"
+          : row.chat_type === "p2p"
+            ? "已清空上下文，直接发送消息即可开始新对话。"
+            : "已清空这个话题的上下文，接着在话题里发消息即可开始新对话。",
+      );
+      store.put("feishu_inbound", { ...row, state: "delivered" });
+      return;
+    }
+    const media = await mediaFor(row);
+    row = store.get("feishu_inbound", row.id);
+
     if (
       thread.first_message_id !== row.id &&
       row.chat_type === "p2p" &&
       !row.text.startsWith("/") &&
       store.get("sessions", thread.session_id)?.deleted_at
     )
-      rotateP2PThread();
+      rotateThread();
     const progress = (text) => {
       const progressId = stableId(`${row.id}:accepted`);
       thread = {
@@ -907,24 +1094,25 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         return reject(
           row,
           row.chat_type === "p2p"
-            ? "此对话已不可用，请发送 /new 开始新对话。"
+            ? "此对话已不可用，请发送 /clear 开始新对话。"
             : "此对话已不可用，请另开话题并 @机器人。",
         );
       if (!run.core_session_id) run = await sessions(run.id, {});
       if (
         row.text.startsWith("/") &&
-        row.text !== "/cancel" &&
+        row.text !== "/stop" &&
         !row.text.startsWith("/answer ")
       )
         return reject(
           row,
-          "支持的命令：/new、/cancel、/answer、/help。其他消息会交给 Agent。",
+          "支持的命令：/clear、/stop、/answer、/help。其他消息会交给 Agent。",
         );
+      let steered = false;
       try {
         if (
           media.files.length &&
           !row.files_uploaded &&
-          row.text !== "/cancel"
+          row.text !== "/stop"
         ) {
           const session = await core(
             `/v1/agents/sessions/${run.core_session_id}`,
@@ -944,7 +1132,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
           store.put("feishu_inbound", row);
         }
         let answer;
-        if (!row.event && row.text !== "/cancel") {
+        if (!row.event && row.text !== "/stop") {
           const session = await core(
             `/v1/agents/sessions/${run.core_session_id}`,
             "GET",
@@ -973,7 +1161,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         const event =
           row.event ||
           answer ||
-          (row.text === "/cancel"
+          (row.text === "/stop"
             ? { type: "agent.session.input.cancel" }
             : {
                 type: "agent.session.input.message",
@@ -1003,8 +1191,11 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         row = { ...row, state: "submitting", event };
         store.put("feishu_inbound", row);
         // Messages go through the Turn ledger; answers and cancellations go to Core directly.
-        if (event.type === "agent.session.input.message")
-          await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" });
+        // A message sent while a Turn runs joins it in Core and keeps its card.
+        if (event.type === "agent.session.input.message") {
+          const delivered = await ledger.deliver(run, event.input, { id: row.id, key: row.id, source: "feishu" });
+          steered = delivered.id !== row.id || delivered.base_running === true;
+        }
         else
           await core(
             `/v1/agents/sessions/${run.core_session_id}/events`,
@@ -1015,11 +1206,11 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       } catch (error) {
         if (
           row.chat_type === "p2p" &&
-          row.text !== "/cancel" &&
+          row.text !== "/stop" &&
           (error?.code === "environment_unavailable" ||
             /environment is no longer available/i.test(error?.message || ""))
         ) {
-          rotateP2PThread();
+          rotateThread();
           row = {
             ...row,
             state: "queued",
@@ -1031,13 +1222,14 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         }
         throw error;
       }
-      if (row.text === "/cancel")
+      if (row.text === "/stop")
         queueReply(
           stableId(`${row.id}:cancel`),
           thread,
           "已请求取消，等待 Agent 确认停止。",
         );
-      else progress(thinking);
+      // A message that steered the running Turn keeps that Turn's card.
+      else if (!steered) progress(thinking);
     }
     store.put("feishu_inbound", {
       ...row,
@@ -1128,10 +1320,16 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
         thread,
         `执行失败\n\n${ledger.summary(run.id)?.failure || "执行环境准备失败，请重新发送消息重试。"}`,
       );
-    const progressId =
-      thread.active_outbound_id ||
-      stableId(`${thread.first_message_id}:accepted`);
-    let progress = store.get("feishu_outbound", progressId);
+    // The bot's app, so a card can link to applying for scopes it lacks.
+    const app = store.list("feishu_bots").find((bot) => bot.app_id === thread.app_id);
+    let progress = thread.active_outbound_id && store.get("feishu_outbound", thread.active_outbound_id);
+    // The progress card of the input a Turn answers; an older Turn never takes
+    // the card of a newer message.
+    const cardFor = (turn) => {
+      const entry = ledger.entryFor(run.id, turn.id);
+      const own = entry && store.get("feishu_outbound", stableId(`${entry.kind === "first" ? thread.first_message_id : entry.id}:accepted`));
+      return own || (turn.id === turns.at(-1)?.id ? progress : undefined);
+    };
     const progressReplyTo = progress?.reply_to || thread.root_id;
     const questionBase = progress?.sent_message_id ? progress.id : thread.id;
     if ((progress || session.status === "requires_action") && (["in_progress", "requires_action"].includes(session.status) || recovering) && !unseen.length) {
@@ -1146,8 +1344,8 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       const items = currentItems.filter(
         (item) => item.turn_id === turns.at(-1)?.id && !ledger.superseded(run.id, item.turn_id),
       );
-      queueMedia(thread, items);
-      const text = formatTurnCard(session.status === "requires_action" && questions.length ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id), questions);
+      queueMedia(thread, items, [], progress?.reply_to);
+      const text = formatTurnCard(session.status === "requires_action" && questions.length ? "requires_action" : "in_progress", items, undefined, ledger.summary(run.id), questions, app);
       if (progress?.sent_message_id) {
         if (thread.progress_text !== text) {
           try {
@@ -1200,68 +1398,57 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       if (turn.status === "completed" && (thread.answered_call_ids || []).some((callId) =>
         turnItems.some((item) => item.type === "function_call" && item.call_id === callId) &&
         !turnItems.some((item) => item.type === "function_call_output" && item.call_id === callId))) return;
-      queueMedia(thread, turnItems, artifacts.filter((file) => file.turn_id === turn.id));
+      const latest = turn.id === turns.at(-1)?.id;
+      const card = cardFor(turn);
+      queueMedia(thread, turnItems, artifacts.filter((file) => file.turn_id === turn.id), card?.reply_to);
+      // The display boundary belongs to the newest input; an older Turn shows all of itself.
       const text = formatTurnCard(
         turn.status,
-        currentItems.filter((item) => item.turn_id === turn.id),
+        latest ? currentItems.filter((item) => item.turn_id === turn.id) : turnItems,
         turn.status === "failed"
           ? ledger.summary(run.id)?.failure || explainFailure(turn.error)
           : turn.error?.message,
+        undefined,
+        [],
+        app,
       );
       const receiptId = stableId(`${thread.id}:${turn.id}`);
-      if (progress?.sent_message_id) {
+      const receipt = (sentMessageId) => store.put("feishu_outbound", {
+        id: receiptId,
+        app_id: thread.app_id,
+        chat_id: thread.chat_id,
+        chat_type: thread.chat_type,
+        thread_id: thread.id,
+        reply_to: card.reply_to || thread.root_id,
+        payload: text,
+        notify: false,
+        state: "delivered",
+        sent_message_id: sentMessageId,
+        attempts: 1,
+        created_at: stamp(),
+        next_at: 0,
+      });
+      // The newest message's card is free again once its Turn has its result.
+      const release = () => {
+        if (card.id !== progress?.id) return;
+        thread = { ...thread, progress_text: text, active_outbound_id: undefined };
+        progress = undefined;
+      };
+      if (card?.sent_message_id) {
         try {
-          await channel.edit(progress.sent_message_id, text, thread);
-          store.put("feishu_outbound", { ...progress, payload: text, state: "delivered", error: undefined });
-          store.put("feishu_outbound", {
-            id: receiptId,
-            app_id: thread.app_id,
-            chat_id: thread.chat_id,
-            chat_type: thread.chat_type,
-            thread_id: thread.id,
-            reply_to: progress.reply_to || thread.root_id,
-            payload: text,
-            notify: false,
-            state: "delivered",
-            sent_message_id: progress.sent_message_id,
-            attempts: 1,
-            created_at: stamp(),
-            next_at: 0,
-          });
-          thread = {
-            ...thread,
-            progress_text: text,
-            active_outbound_id: undefined,
-          };
-          progress = undefined;
+          await channel.edit(card.sent_message_id, text, thread);
+          store.put("feishu_outbound", { ...card, payload: text, state: "delivered", error: undefined });
+          receipt(card.sent_message_id);
+          release();
           continue;
         } catch (error) {
           if (error.code !== "feishu_card_unavailable") throw error;
           // A confirmed uneditable card falls back to sending a result card.
         }
-      } else if (progress && progress.state === "queued") {
-        store.put("feishu_outbound", { ...progress, payload: text });
-        store.put("feishu_outbound", {
-          id: receiptId,
-          app_id: thread.app_id,
-          chat_id: thread.chat_id,
-          chat_type: thread.chat_type,
-          thread_id: thread.id,
-          reply_to: progress.reply_to || thread.root_id,
-          payload: text,
-          notify: false,
-          state: "delivered",
-          sent_message_id: progress.id,
-          attempts: 1,
-          created_at: stamp(),
-          next_at: 0,
-        });
-        thread = {
-          ...thread,
-          progress_text: text,
-          active_outbound_id: undefined,
-        };
-        progress = undefined;
+      } else if (card?.state === "queued") {
+        store.put("feishu_outbound", { ...card, payload: text });
+        receipt(card.id);
+        release();
         continue;
       }
       queueReply(receiptId, thread, text);
@@ -1349,7 +1536,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
             ? await product("GET", row.media.path, {})
             : await core(row.media.path, "GET");
           if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > maxMediaBytes)
-            throw new AppError(413, "附件为空或超过 5 MiB，请在网页会话中下载。");
+            throw new AppError(413, "附件为空或超过 5 MiB，飞书发送不了。");
           uploaded = await channel.upload(bytes, row.media.name);
           store.put("feishu_outbound", { ...store.get("feishu_outbound", row.id), uploaded_media: uploaded });
         }
@@ -1411,6 +1598,10 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       try {
         await channel.connect();
         active = config;
+        // The bot keeps the name it has in Feishu; renaming the app there renames it here.
+        const saved = store.get("feishu_bots", configId);
+        if (channel.name && saved && saved.name !== channel.name)
+          store.put("feishu_bots", { ...saved, name: channel.name });
       } catch {
         await channel.disconnect();
         channel = undefined;
@@ -1428,7 +1619,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
     const cancellations = new Map();
     for (const row of rows)
       if (
-        row.text === "/cancel" &&
+        row.text === "/stop" &&
         ["queued", "submitting"].includes(row.state)
       )
         cancellations.set(row.thread_id, row);
@@ -1454,7 +1645,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       let row = store.get("feishu_inbound", original.id);
       if (
         !allowed(row.app_id, row.chat_type) ||
-        row.text === "/cancel" ||
+        row.text === "/stop" ||
         ["delivered", "failed", "rejected"].includes(row.state) ||
         blocked.has(row.thread_id)
       )
@@ -1495,6 +1686,7 @@ export function feishuWorker(store, core, product, makeChannel, configId) {
       try {
         await observe(thread);
       } catch (error) {
+        console.error(`Feishu thread ${thread.id}: ${error.message}`);
         health("core_unavailable");
         if (
           !(error instanceof AppError) ||

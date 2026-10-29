@@ -6,28 +6,30 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { openStore, dataPath, AppError } from "../server/store.mjs";
 import { productAPI } from "../server/product.mjs";
-import { runtimeEnvironment } from "../server/runtime-profile.mjs";
+import { withSavedResources } from "./core-double.mjs";
 
-test("environment template network maps to the official field and is omitted when enabled", async (t) => {
+test("environment template network maps to the official field on the saved Template", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
-  const { put } = await setup(store, async () => ({ id: randomUUID() }));
-  const request = async (network) =>
-    runtimeEnvironment(await put("runtimes", { name: "Net", network }));
-  assert.ok(!("network" in (await request(undefined))));
-  assert.ok(!("network" in (await request({ access: "enabled" }))));
-  assert.deepEqual((await request({ access: "disabled" })).network, {
-    access: "disabled",
-  });
+  const { put, core } = await setup(store, async () => ({ id: randomUUID() }));
+  const saved = async (network, id = randomUUID()) => {
+    const runtime = await put("runtimes", { name: "Net", network }, id);
+    // Absent (on creation) and null (on update) both mean enabled.
+    return core.saved.get(runtime.core_template_id).network ?? null;
+  };
+  assert.equal(await saved(undefined), null);
+  assert.equal(await saved({ access: "enabled" }), null);
+  assert.deepEqual(await saved({ access: "disabled" }), { access: "disabled" });
   assert.deepEqual(
-    (
-      await request({
-        access: "restricted",
-        allowed_domains: [" api.example.com ", ""],
-      })
-    ).network,
+    await saved({ access: "restricted", allowed_domains: [" api.example.com ", ""] }),
     { access: "restricted", allowed_domains: ["api.example.com"] },
   );
+  // Back to enabled clears the restriction: an omitted field would keep it.
+  const id = randomUUID();
+  await saved({ access: "disabled" }, id);
+  const runtime = store.get("runtimes", id);
+  await put("runtimes", { name: runtime.name, revision: runtime.revision }, id);
+  assert.equal(core.saved.get(runtime.core_template_id).network, null);
   await assert.rejects(put("runtimes", { name: "Bad", network: { access: "x" } }), {
     status: 400,
   });
@@ -38,7 +40,7 @@ test("environment templates prepare hosted Sessions, protect variables and freez
   t.after(() => store.close());
   let failed = true;
   const calls = [];
-  const { api, put, agent: base } = await setup(
+  const { api, put, core, agent: base } = await setup(
     store,
     async (_path, _method, body) => {
       calls.push(structuredClone(body));
@@ -67,21 +69,22 @@ test("environment templates prepare hosted Sessions, protect variables and freez
         input: "Read config",
         agent_id: agent.id,
         files: [
-          { type: "inline", path: "/workspace/inputs/input.txt", data: "eA==" },
+          { type: "file_id", path: "/workspace/inputs/input.txt", file_id: "file-input" },
         ],
       },
       id,
     ),
     /lost response/,
   );
+  // The saved Core Template holds the preparation; the Session references it.
   const frozen = calls[0];
   assert.equal(frozen.environment.type, "openai_hosted");
-  assert.equal(frozen.environment.env.OFFICE_TOKEN, "private-env");
-  assert.deepEqual(frozen.environment.packages, runtime.packages);
-  assert.equal(
-    frozen.environment.setup_commands[0].command,
-    runtime.setup_script,
-  );
+  const template = core.saved.get(frozen.environment.environment_template_id);
+  assert.equal(template.env.OFFICE_TOKEN, "private-env");
+  assert.deepEqual(template.packages, runtime.packages);
+  assert.equal(template.setup_commands[0].command, runtime.setup_script);
+  assert.ok(!JSON.stringify(frozen).includes("private-env"), "variables stay in the Template");
+  // Session files replace the Template's set, so they carry the Template's own too.
   assert.deepEqual(
     frozen.environment.files.map((f) => f.path),
     ["/workspace/config.txt", "/workspace/inputs/input.txt"],
@@ -118,8 +121,8 @@ test("environment templates prepare hosted Sessions, protect variables and freez
     { env: { PATH: "x" } },
     { env: { OAC_KEY: "x" } },
     { env: { NEW: null } },
-    { bot_env: { TOKEN: "access_token" } },
-    { env: { A: "x" }, bot_env: { A: "app_id" } },
+    { credentials: ["PATH"] },
+    { credentials: "FEISHU_APP_ID" },
     { files: [{ path: "/workspace/../outside", content: "x" }] },
     {
       files: [
@@ -231,7 +234,8 @@ test("Provider discovery reports failures without leaking keys or upstream bodie
   store.close();
 });
 
-async function setup(store, core, fetchImpl) {
+async function setup(store, test, fetchImpl = async () => { throw new TypeError("offline"); }) {
+  const core = withSavedResources(test);
   const api = productAPI(store, core, fetchImpl);
   const put = (kind, body, id = randomUUID()) =>
     api("PUT", `/app/${kind}/${id}`, body);
@@ -266,6 +270,7 @@ async function setup(store, core, fetchImpl) {
   return {
     api,
     put,
+    core,
     model,
     runtime,
     agent,
@@ -276,7 +281,7 @@ async function setup(store, core, fetchImpl) {
     },
   };
 }
-test("one Agent creates independent Sessions; edits do not mutate prior execution; retries survive restart", async (t) => {
+test("Sessions reference one saved Core Agent that edits update in place; retries survive restart", async (t) => {
   const root = join(homedir(), ".oac", "tests");
   await mkdir(root, { recursive: true });
   const dir = await mkdtemp(join(root, "parsar-store-"));
@@ -295,7 +300,7 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
     }
     return receipts.get(key);
   };
-  const { api, put, agent, model, input } = await setup(store, core);
+  const { api, put, core: saved, agent, model, input } = await setup(store, core);
   assert.equal(calls.length, 0);
   const first = await put("sessions", input);
   assert.deepEqual(calls[0].body.environment.skills, [
@@ -307,21 +312,23 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
     api_key: "provider-secret",
   });
   assert.equal(JSON.stringify(first).includes("provider-secret"), false);
-  assert.equal(calls[0].body.agent.tools.length, 2);
-  assert.deepEqual(calls[0].body.agent.tools[1], {
+  assert.equal(calls[0].body.agent, undefined, "the Session references the saved Agent");
+  const savedAgent = saved.agentOf(calls[0].body);
+  assert.equal(savedAgent.tools.length, 2);
+  assert.deepEqual(savedAgent.tools[1], {
     type: "mcp",
     server_label: "docs",
     transport: { type: "http", server_url: "https://mcp.example/docs" },
     connection_origin: "environment",
     required: true,
   });
-  await put("agents", { ...agent, instructions: "Updated" }, agent.id);
+  assert.equal(savedAgent.instructions, "Review carefully");
+  await put("agents", { ...store.get("agents", agent.id), instructions: "Updated" }, agent.id);
   const second = await put("sessions", input);
   assert.notEqual(first.core_session_id, second.core_session_id);
-  assert.equal(calls[0].body.agent.instructions, "Review carefully");
-  assert.equal(calls[1].body.agent.instructions, "Updated");
+  assert.equal(calls[1].body.agent_id, calls[0].body.agent_id, "an edit updates the same saved Agent");
+  assert.equal(saved.agentOf(calls[1].body).instructions, "Updated");
   await assert.rejects(api("DELETE", `/app/models/${model.id}`), /仍被引用/);
-  await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
   const pending = randomUUID();
   lose = true;
   await assert.rejects(put("sessions", input, pending), /lost response/);
@@ -329,7 +336,7 @@ test("one Agent creates independent Sessions; edits do not mutate prior executio
   store.close();
   store = openStore(path);
   t.after(() => store.close());
-  const resumed = await productAPI(store, core)(
+  const resumed = await productAPI(store, saved)(
     "PUT",
     `/app/sessions/${pending}`,
     {},
@@ -694,25 +701,23 @@ test("model availability and pricing remain product-owned and freeze with a Sess
   );
 });
 
-test("the Agent's bound Feishu bot supplies mapped identity variables without exposing the secret", async (t) => {
+test("a bound Feishu bot's identity reaches every conversation, and what declares it needs a bot", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   const calls = [];
-  const { api, put, agent, input } = await setup(store, async (_p, _m, body) => {
+  const { api, put, core, agent, runtime: setupRuntime, input } = await setup(store, async (_p, _m, body) => {
     calls.push(body);
     return { id: randomUUID() };
   });
   const runtime = await put("runtimes", {
     name: "Feishu",
     env: { LARKSUITE_CLI_DEFAULT_AS: "bot" },
-    bot_env: {
-      FEISHU_APP_ID: "app_id",
-      FEISHU_APP_SECRET: "app_secret",
-      FEISHU_BRAND: "brand",
-    },
+    credentials: ["FEISHU_APP_ID", "FEISHU_APP_SECRET"],
   });
-  await put("agents", { ...agent, runtime_id: runtime.id }, agent.id);
-  await assert.rejects(put("sessions", input), /飞书机器人身份/);
+  // A template that declares the bot's identity needs an Agent with a bot.
+  await assert.rejects(put("agents", { ...agent, runtime_id: runtime.id }, agent.id), /需要飞书机器人身份/);
+  store.put("agents", { ...store.get("agents", agent.id), runtime_id: runtime.id });
+  await assert.rejects(put("sessions", input), /需要飞书机器人身份/);
   const botId = randomUUID();
   await api("PUT", `/app/feishu/bots/${botId}`, {
     revision: 0,
@@ -736,13 +741,19 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
     /已绑定另一个机器人/,
   );
   const record = await put("sessions", input);
+  // The Template keeps its own variables; each Session adds the bound bot's identity on top.
   assert.deepEqual(calls.at(-1).environment.env, {
-    LARKSUITE_CLI_DEFAULT_AS: "bot",
     FEISHU_APP_ID: "cli_0123456789abcdef",
     FEISHU_APP_SECRET: "bot-secret",
     FEISHU_BRAND: "lark",
   });
-  assert.equal(record.configuration.bot_name, "Assistant");
+  assert.deepEqual(core.saved.get(calls.at(-1).environment.environment_template_id).env, { LARKSUITE_CLI_DEFAULT_AS: "bot" });
+  // Until the bot first connects, Feishu has not told Parsar its name.
+  assert.equal(record.configuration.bot_name, "cli_0123456789abcdef");
+  // Binding is enough: a template that declares nothing gets the identity too.
+  store.put("agents", { ...store.get("agents", agent.id), runtime_id: setupRuntime.id });
+  await put("sessions", { ...input, name: "Plain" });
+  assert.equal(calls.at(-1).environment.env.FEISHU_APP_SECRET, "bot-secret");
   assert.ok(record.configuration.env_names.includes("FEISHU_APP_SECRET"));
   assert.ok(!JSON.stringify(await api("GET", "/app/sessions")).includes("bot-secret"));
   assert.ok(!JSON.stringify(await api("GET", "/app/runtimes")).includes("bot-secret"));
@@ -750,11 +761,11 @@ test("the Agent's bound Feishu bot supplies mapped identity variables without ex
   await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
 });
 
-test("Agents carry Harness options into the Session request and reject undeclared values", async (t) => {
+test("Agents carry Harness options into the saved Core Agent and reject undeclared values", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());
   const sent = [];
-  const { api, put, agent, input } = await setup(store, async (_path, _method, body) => {
+  const { api, put, core, agent, input } = await setup(store, async (_path, _method, body) => {
     sent.push(body);
     return { id: randomUUID() };
   });
@@ -773,12 +784,13 @@ test("Agents carry Harness options into the Session request and reject undeclare
   );
   await put("sessions", input);
   const request = sent[0];
-  assert.deepEqual(request.agent.x_agents_core, { harness: "codex" });
-  assert.deepEqual(request.agent.reasoning, { effort: "high", summary: "auto" });
-  assert.deepEqual(request.agent.text, { verbosity: "low" });
-  assert.equal(request.agent.service_tier, "priority");
+  const saved = core.agentOf(request);
+  assert.deepEqual(saved.x_agents_core, { harness: "codex" });
+  assert.deepEqual(saved.reasoning, { effort: "high", summary: "auto" });
+  assert.deepEqual(saved.text, { verbosity: "low" });
+  assert.equal(saved.service_tier, "priority");
   assert.deepEqual(
-    request.agent.tools.find((tool) => tool.type === "web_search"),
+    saved.tools.find((tool) => tool.type === "web_search"),
     { type: "web_search", mode: "live" },
   );
   assert.equal(request.x_agents_core.model_provider.protocol, "responses");
@@ -789,12 +801,13 @@ test("Agents carry Harness options into the Session request and reject undeclare
   );
   assert.equal(plain.web_search, "disabled");
   await put("sessions", { ...input, name: "Plain" });
-  assert.equal(sent[1].agent.reasoning, undefined);
-  assert.equal(sent[1].agent.service_tier, undefined);
-  assert.deepEqual(sent[1].agent.text, { verbosity: "medium" });
+  // Cleared settings reset the saved Agent instead of keeping old values.
+  assert.equal(core.agentOf(sent[1]).reasoning, null);
+  assert.equal(core.agentOf(sent[1]).service_tier, null);
+  assert.deepEqual(core.agentOf(sent[1]).text, { verbosity: "medium" });
   assert.equal(sent[1].x_agents_core.model_provider.protocol, "anthropic");
   for (const [patch, message] of [
-    [{ reasoning_summary: "auto" }, /Claude Code 不支持所选的推理摘要/],
+    [{ reasoning_summary: "concise" }, /Claude Code 不支持所选的推理摘要/],
     [{ harness: "mcode", web_search: "live" }, /MiniMax Code 不支持所选的网页搜索方式/],
     [{ reasoning_effort: "minimal" }, /Claude Code 不支持所选的推理强度/],
     [{ harness: "local" }, /请选择执行引擎/],
@@ -879,7 +892,7 @@ test("Agent resources follow Core's Environment limits instead of one shared bud
   const make = (kind, n) =>
     Array.from({ length: n }, (_, i) => {
       const id = randomUUID();
-      store.put("capabilities", { id, kind, name: `${kind} ${i}`, default_version: "1", versions: [{ version: "1" }] });
+      store.put("capabilities", { id, kind, name: `${kind} ${i}`, default_version: "1", versions: [{ version: "1", content: "x", archive: "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==" }] });
       return id;
     });
   const prompts = make("prompt", 12),
@@ -957,7 +970,12 @@ function scriptedCore(plan) {
         const running = session.turns.find((t) => t.status === "in_progress");
         if (running) running.status = "cancelled";
         session.status = "idle";
-      } else addTurn(session, event.input);
+      } else {
+        // As in Core, a message sent while a Turn runs steers that Turn.
+        const running = session.turns.find((t) => t.status === "in_progress");
+        if (running) session.items.push({ id: randomUUID(), type: "message", role: "user", turn_id: running.id, content: event.input?.[0]?.content || [] });
+        else addTurn(session, event.input);
+      }
       return {};
     }
     throw new Error(`unexpected ${method} ${path}`);
@@ -1052,17 +1070,28 @@ test("the Turn monitor replaces a failed Environment, resends stalled or failed 
   t.after(() => store.close());
   const plan = { environments: ["fail"], turns: [] };
   const fake = scriptedCore(plan);
-  const { api, put, runtime, input } = await setup(store, fake.core);
+  const { api, put, core, runtime, input } = await setup(store, fake.core);
   const turns = api.sessions.turns;
 
-  // A failed Environment is replaced with the identical frozen request.
+  // A failed Environment is replaced with the configuration the conversation
+  // was created with, even after the Agent and its template were edited.
   const id = randomUUID();
   const created = await put("sessions", input, id);
+  const savedAgent = structuredClone(core.agentOf(fake.calls.find((c) => c.method === "POST" && c.path === "/v1/agents/sessions").body));
+  const agentRecord = store.get("agents", input.agent_id);
+  await put("agents", { ...agentRecord, instructions: "Edited after creation" }, agentRecord.id);
+  await put("runtimes", { ...store.get("runtimes", runtime.id), setup_script: "echo edited" }, runtime.id);
   await turns.monitor();
   const replaced = store.get("sessions", id);
   assert.notEqual(replaced.core_session_id, created.core_session_id);
   const creations = fake.calls.filter((c) => c.method === "POST" && c.path === "/v1/agents/sessions");
-  assert.deepEqual(creations[1].body, creations[0].body);
+  assert.equal(creations[1].body.agent_id, undefined);
+  assert.equal(creations[1].body.agent.instructions, "Review carefully");
+  assert.equal(savedAgent.instructions, "Review carefully");
+  assert.equal(creations[1].body.agent.model, savedAgent.model);
+  assert.deepEqual(creations[1].body.environment.setup_commands, []);
+  assert.deepEqual(creations[1].body.input, creations[0].body.input);
+  assert.deepEqual(creations[1].body.x_agents_core, creations[0].body.x_agents_core);
   assert.equal(creations[1].key, `${id}:attempt:1`);
   await turns.monitor();
   assert.equal(turns.summary(id).outcome, "completed");
@@ -1222,4 +1251,243 @@ test("the run overview lists running and recent Turns with their stage, counts a
   );
   assert.equal(overview.stats.concurrency.length, 31);
   assert.equal(overview.stats.concurrency.at(-1), 1);
+});
+
+test("Agents and templates live in Core as saved resources that follow every change", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const sent = [];
+  let rejectAgents = false;
+  const { api, put, core, agent, runtime, input } = await setup(store, async (_path, _method, body) => {
+    sent.push(body);
+    return { id: randomUUID() };
+  });
+  const coreAgentId = store.get("agents", agent.id).core_agent_id;
+  const coreTemplateId = store.get("runtimes", runtime.id).core_template_id;
+  assert.equal(core.saved.get(coreAgentId).metadata.parsar_agent_id, agent.id);
+  assert.ok(core.saved.has(coreTemplateId));
+
+  // An edit updates the same saved Agent.
+  await put("agents", { ...store.get("agents", agent.id), instructions: "Edited" }, agent.id);
+  assert.equal(store.get("agents", agent.id).core_agent_id, coreAgentId);
+  assert.equal(core.saved.get(coreAgentId).instructions, "Edited");
+
+  // An edit Core rejects is not kept.
+  const rejecting = async (path, method, body, key) => {
+    if (rejectAgents && path.startsWith("/v1/agents/") && method === "POST") throw new AppError(400, "invalid agent");
+    return core(path, method, body, key);
+  };
+  const guarded = productAPI(store, rejecting);
+  rejectAgents = true;
+  await assert.rejects(
+    guarded("PUT", `/app/agents/${agent.id}`, { ...store.get("agents", agent.id), instructions: "Rejected" }),
+    /invalid agent/,
+  );
+  assert.equal(store.get("agents", agent.id).instructions, "Edited");
+  rejectAgents = false;
+
+  // What an Agent binds reaches its saved Agent when the next Session starts.
+  const mcpId = store.get("agents", agent.id).mcp_ids[0];
+  await put("mcps", { ...store.get("mcps", mcpId), url: "https://mcp.example/v2" }, mcpId);
+  await put("sessions", input);
+  assert.equal(sent.at(-1).agent_id, coreAgentId);
+  assert.equal(sent.at(-1).environment.environment_template_id, coreTemplateId);
+  assert.equal(core.saved.get(coreAgentId).tools.find((tool) => tool.type === "mcp").transport.server_url, "https://mcp.example/v2");
+
+  // A new Project loses the saved resources; the next use creates them again.
+  core.saved.clear();
+  await api.resources.verify();
+  assert.equal(store.get("agents", agent.id).core_agent_id, undefined);
+  await put("sessions", { ...input, name: "After move" });
+  assert.ok(core.saved.has(sent.at(-1).agent_id));
+  assert.ok(core.saved.has(sent.at(-1).environment.environment_template_id));
+
+  // Deleting a template deletes its saved Core Template.
+  const spare = await put("runtimes", { name: "Spare" });
+  const spareTemplate = store.get("runtimes", spare.id).core_template_id;
+  await api("DELETE", `/app/runtimes/${spare.id}`, {});
+  assert.equal(core.saved.has(spareTemplate), false);
+});
+
+test("only live configuration blocks deletion; conversations keep their snapshot and history", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const calls = [];
+  const { api, put, core, agent, runtime, model, input } = await setup(store, async (path, method, body) => {
+    calls.push({ path, method });
+    return { id: randomUUID() };
+  });
+  const conversation = await put("sessions", input);
+  // An Agent that uses a template, model or MCP keeps them.
+  await assert.rejects(api("DELETE", `/app/runtimes/${runtime.id}`), /仍被引用/);
+  await assert.rejects(api("DELETE", `/app/models/${model.id}`), /仍被引用/);
+  await assert.rejects(api("DELETE", `/app/mcps/${agent.mcp_ids[0]}`), /仍被引用/);
+  // A bot bound to the Agent keeps it.
+  store.put("feishu_bots", { id: randomUUID(), agent_id: agent.id });
+  await assert.rejects(api("DELETE", `/app/agents/${agent.id}`), /仍被引用/);
+  store.remove("feishu_bots", store.list("feishu_bots")[0].id);
+  // A conversation is history, not a dependency.
+  const coreAgentId = store.get("agents", agent.id).core_agent_id;
+  await api("DELETE", `/app/agents/${agent.id}`, {});
+  assert.equal(core.saved.has(coreAgentId), false);
+  await api("DELETE", `/app/runtimes/${runtime.id}`, {});
+  await api("DELETE", `/app/mcps/${agent.mcp_ids[0]}`, {});
+  await api("DELETE", `/app/models/${model.id}`, {});
+  const kept = await api("GET", `/app/sessions/${conversation.id}`);
+  assert.equal(kept.core_session_id, conversation.core_session_id);
+  assert.equal(kept.configuration.agent_name, "Reviewer");
+  assert.ok((await api("GET", "/app/sessions")).some((row) => row.id === conversation.id));
+  assert.equal(calls.some((call) => call.method === "DELETE" && call.path.includes("/sessions/")), false, "its Core Session and messages stay");
+});
+
+test("capabilities declare the credentials they need and each Agent chooses where they come from", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const sent = [];
+  const { api, put, core, agent, input } = await setup(store, async (_path, _method, body) => {
+    sent.push(body);
+    return { id: randomUUID() };
+  });
+  // Secrets keep their values out of every read.
+  const token = await put("secrets", { name: "GitHub token", value: "ghp_private" });
+  assert.equal(token.has_value, true);
+  assert.ok(!JSON.stringify(await api("GET", "/app/secrets")).includes("ghp_private"));
+  const renamed = await put("secrets", { ...token, name: "GitHub" }, token.id);
+  assert.equal(store.get("secrets", token.id).value, "ghp_private", "omitting the value keeps it");
+
+  // A Plugin and a Skill need variables; an MCP needs a Vault credential.
+  const plugin = randomUUID();
+  store.put("capabilities", { id: plugin, kind: "plugin", name: "Git tools", credentials: ["GITHUB_TOKEN"], default_version: "1", versions: [{ version: "1", archive: "UEsFBgAAAAAAAAAAAAAAAAAAAAAAAA==" }], revision: 1 });
+  await api("PUT", "/app/skills/skill_review/credentials", { credentials: ["REVIEW_KEY"] });
+  const mcpId = store.get("agents", agent.id).mcp_ids[0];
+  await put("mcps", { ...store.get("mcps", mcpId), requires_credential: true }, mcpId);
+  const base = { ...store.get("agents", agent.id), capability_ids: [plugin] };
+  await assert.rejects(put("agents", base, agent.id), /选择密钥/);
+  const review = await put("secrets", { name: "Review", value: "review-private" });
+  const vault = randomUUID(), credential = randomUUID();
+  await assert.rejects(
+    put("agents", { ...base, credentials: { GITHUB_TOKEN: token.id, REVIEW_KEY: review.id } }, agent.id),
+    /为 MCP「Docs」选择凭据/,
+  );
+  await put("agents", {
+    ...base,
+    credentials: { GITHUB_TOKEN: renamed.id, REVIEW_KEY: review.id },
+    mcp_credentials: { [mcpId]: { vault_id: vault, credential_id: credential } },
+  }, agent.id);
+
+  // Values reach each Session's variables, never the saved Agent; the MCP uses the chosen credential.
+  await put("sessions", input);
+  const request = sent.at(-1);
+  assert.deepEqual(request.environment.env, { GITHUB_TOKEN: "ghp_private", REVIEW_KEY: "review-private" });
+  assert.deepEqual(request.vault_ids, [vault]);
+  const saved = core.agentOf(request);
+  assert.equal(saved.tools.find((tool) => tool.type === "mcp").credential_id, credential);
+  assert.ok(!JSON.stringify(saved).includes("ghp_private"));
+  assert.ok(!JSON.stringify(await api("GET", "/app/agents")).includes("ghp_private"));
+
+  // A secret an Agent uses stays until the Agent stops using it.
+  await assert.rejects(api("DELETE", `/app/secrets/${token.id}`), /仍被引用/);
+  const unbound = await put("agents", { ...store.get("agents", agent.id), capability_ids: [] }, agent.id);
+  assert.deepEqual(Object.keys(unbound.credentials), ["REVIEW_KEY"], "a choice nothing needs is dropped");
+  await api("DELETE", `/app/secrets/${token.id}`, {});
+  for (const body of [{ credentials: ["PATH"] }, { credentials: ["bad name"] }])
+    await assert.rejects(api("PUT", "/app/skills/skill_review/credentials", body), (error) => error.status === 400);
+});
+
+test("a message sent while a Turn runs steers it: one running Turn, resent together", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const plan = { environments: [], turns: ["run", "run"] };
+  const fake = scriptedCore(plan);
+  const { api, put, input } = await setup(store, fake.core);
+  const turns = api.sessions.turns;
+  const id = randomUUID();
+  await put("sessions", input, id);
+  await turns.monitor();
+  const first = turns.overview().running;
+  assert.equal(first.length, 1);
+  // The steer joins the running Turn instead of becoming a second one.
+  const steered = await turns.send(id, { text: "我明天要去开发者大会", key: "steer-1" });
+  assert.equal(steered.id, first[0].id);
+  await turns.send(id, { text: "我明天要去开发者大会", key: "steer-1" });
+  assert.equal(store.get("turns", first[0].id).steers.length, 1, "a retried steer is recorded once");
+  await turns.monitor();
+  assert.equal(turns.overview().running.length, 1);
+  assert.equal(store.list("turns").length, 1);
+  // A message after the Turn ended starts a Turn of its own.
+  const session = fake.sessions.get(store.get("sessions", id).core_session_id);
+  session.turns[0].status = "completed";
+  session.status = "idle";
+  await turns.monitor();
+  const next = await turns.send(id, { text: "再来一个", key: "next" });
+  assert.notEqual(next.id, first[0].id);
+  assert.equal(store.list("turns").length, 2);
+});
+
+test("image input and required MCP servers follow what the Harness declares", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const sent = [];
+  const { put, core, agent, input } = await setup(store, async (_path, _method, body) => {
+    sent.push(body);
+    return { id: randomUUID() };
+  });
+  const image = "data:image/png;base64,iVBORw0KGgo=";
+  // Claude Code declares both.
+  await put("sessions", { ...input, images: [image] });
+  assert.equal(core.agentOf(sent.at(-1)).tools.find((tool) => tool.type === "mcp").required, true);
+  // MiniMax Code declares neither.
+  await put("agents", { ...store.get("agents", agent.id), harness: "mcode" }, agent.id);
+  await assert.rejects(put("sessions", { ...input, images: [image] }), /MiniMax Code 不支持图片输入/);
+  await put("sessions", input);
+  assert.equal(core.agentOf(sent.at(-1)).tools.find((tool) => tool.type === "mcp").required, false);
+});
+
+test("an uncertain message confirmed while its Turn still runs joins that Turn", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const plan = { environments: [], turns: ["run"] };
+  const fake = scriptedCore(plan);
+  let reachable = true;
+  const core = async (path, method, body, key) => {
+    if (method === "POST" && path.endsWith("/events") && !reachable) throw new TypeError("fetch failed");
+    return fake.core(path, method, body, key);
+  };
+  const { api, put, input } = await setup(store, core);
+  const id = randomUUID();
+  await put("sessions", input, id);
+  await api.sessions.turns.monitor();
+  reachable = false;
+  await api("POST", `/app/sessions/${id}/messages`, { text: "补充一句", key: "uncertain" });
+  assert.equal(store.get("turns", `${id}:uncertain`).pending_key, "uncertain");
+  reachable = true;
+  await api.sessions.turns.monitor();
+  await api.sessions.turns.monitor();
+  assert.equal(store.get("turns", `${id}:uncertain`), null);
+  assert.deepEqual(store.get("turns", `${id}:first`).steers.map((steer) => steer.id), [`${id}:uncertain`]);
+  assert.equal(api.sessions.turns.overview().running.length, 1);
+});
+
+test("a message that joins a Turn while the monitor checks it stays recorded", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const fake = scriptedCore({ environments: [], turns: ["run"] });
+  let gate;
+  const core = async (path, method, body, key) => {
+    // Hold the monitor's Turn listing until the message has joined.
+    if (gate && method === "GET" && path.includes("/turns?order=desc&limit=100")) await gate.promise;
+    return fake.core(path, method, body, key);
+  };
+  const { api, put, input } = await setup(store, core);
+  const id = randomUUID();
+  await put("sessions", input, id);
+  await api.sessions.turns.monitor();
+  gate = Promise.withResolvers();
+  const pass = api.sessions.turns.monitor();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  await api("POST", `/app/sessions/${id}/messages`, { text: "补充一句", key: "steer" });
+  gate.resolve();
+  await pass;
+  assert.deepEqual(store.get("turns", `${id}:first`).steers?.map((steer) => steer.id), [`${id}:steer`]);
+  assert.equal(store.get("turns", `${id}:steer`), null);
 });

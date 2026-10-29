@@ -1,4 +1,5 @@
-import { botFields, environmentVariableName } from "../shared/bot-bindings.mjs";
+import { environmentVariableName } from "../shared/bot-bindings.mjs";
+import { credentialNames } from "./capability-kinds.mjs";
 import { posix } from "node:path";
 import { AppError, text } from "./store.mjs";
 
@@ -64,26 +65,6 @@ export function runtimeProfile(body, previous) {
       throw new AppError(400, "请填写新环境变量的值；已有变量留空可保留。");
     env[name] = selected;
   }
-  const bot_env = body.bot_env ?? {};
-  if (
-    !bot_env ||
-    typeof bot_env !== "object" ||
-    Array.isArray(bot_env) ||
-    Object.keys(bot_env).length > 20
-  )
-    throw new AppError(400, "机器人变量映射格式无效。");
-  for (const [name, source] of Object.entries(bot_env)) {
-    if (
-      !environmentVariableName(name) ||
-      Object.hasOwn(env, name) ||
-      typeof source !== "string" ||
-      !Object.hasOwn(botFields, source)
-    )
-      throw new AppError(
-        400,
-        "机器人变量名称必须有效、不能与固定变量重复，且只能选择机器人字段。",
-      );
-  }
   const files = body.files ?? [];
   if (!Array.isArray(files) || files.length > 20)
     throw new AppError(400, "初始文件最多 20 个。");
@@ -110,7 +91,8 @@ export function runtimeProfile(body, previous) {
     setup_script: text(body.setup_script || "", "初始化脚本", 100000),
     ...(network && { network }),
     env,
-    bot_env,
+    // Variables the Agent supplies: the bound bot's identity or chosen secrets.
+    credentials: credentialNames(body.credentials),
     files: normalized,
     prepare: body.prepare === true,
   };
@@ -120,24 +102,5 @@ export function publicRuntime({ env, ...row }) {
   return {
     ...row,
     env: Object.fromEntries(Object.keys(env || {}).map((key) => [key, null])),
-  };
-}
-
-export function runtimeEnvironment(runtime) {
-  if (runtime.environment !== "openai_hosted")
-    throw new AppError(400, "Parsar 仅支持托管工作环境，请重新配置环境模板。");
-  return {
-    type: "openai_hosted",
-    packages: runtime.packages || { npm: [], python: [] },
-    ...(runtime.network && { network: runtime.network }),
-    env: { ...runtime.env },
-    setup_commands: runtime.setup_script
-      ? [{ command: runtime.setup_script, cwd: "/workspace" }]
-      : [],
-    files: (runtime.files || []).map(({ path, content }) => ({
-      type: "inline",
-      path,
-      data: Buffer.from(content).toString("base64"),
-    })),
   };
 }

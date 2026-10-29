@@ -40,7 +40,7 @@ Write a JSON file, then call `PUT /app/runtimes/<that UUID> --file environment.j
   "packages": { "npm": [], "python": ["openpyxl"] },
   "setup_script": "mkdir -p /workspace/outputs",
   "env": {},
-  "bot_env": {},
+  "credentials": [],
   "files": [],
   "prepare": false
 }
@@ -48,7 +48,7 @@ Write a JSON file, then call `PUT /app/runtimes/<that UUID> --file environment.j
 
 Use only needed packages and files. Initial files are `{ "path": "/workspace/name", "content": "text" }`. Setup runs in the hosted workspace before the Agent starts; it is executable code, so review it as part of the requested configuration. Keep persistent files under `/workspace`; HOME is not persistent. Environment preparation may be reused. Never put the management CLI or its address in ordinary business templates unless the user explicitly asks for management access.
 
-Environment variable values are write-only: GET returns `null`, and PUT with `null` keeps the saved value. Retain untouched names. Removing a name removes its value. Do not ask users to paste secrets into chat; direct them to the existing configuration UI. A template with `bot_env` needs an Agent bound to a Feishu bot before it can run.
+Environment variable values are write-only: GET returns `null`, and PUT with `null` keeps the saved value. Retain untouched names. Removing a name removes its value. Do not ask users to paste secrets into chat; direct them to the existing configuration UI. `credentials` lists variables the Agent must supply. `FEISHU_APP_ID`, `FEISHU_APP_SECRET` and `FEISHU_BRAND` come from the Agent's bound Feishu bot, so list them when setup or a capability needs the bot's identity; an Agent without a bot cannot then be saved. Any other name is supplied from a secret the Agent chooses in its `credentials` map (name to `/app/secrets` ID). Skills (`PUT /app/skills/<skill_id>/credentials`) and Plugins declare the same list.
 
 ## Create an Agent
 
@@ -80,7 +80,7 @@ When a user asks to open or connect a Feishu bot, guide the whole setup rather t
 
 Read `/app/agents`, `/app/runtimes` and `/app/feishu/bots`. Identify the intended business Agent from the user's goal; if it does not exist, create it using the workflow above. Do not bind the management Agent unless the user explicitly wants management access through that bot. Each bot binds one Agent and each Agent binds at most one bot. Reuse the intended Agent's existing bot; do not replace another binding, rotate credentials or create a duplicate to resolve a conflict. Ask only for unresolved choices such as which Agent or whether to use an existing Feishu application.
 
-For a new setup, default to private chat only and tell the user. Enable group chat only when requested: it permits replies to mentions in any group the bot joins, not a list of selected group IDs. Preserve the chat choices of an existing bot unless the user asks to change them. Binding a bot supplies that bot's identity to new Agent conversations, including Web conversations when the environment maps `bot_env`; do not copy credentials into files or ordinary Agent instructions.
+For a new setup, default to private chat only and tell the user. Enable group chat only when requested: it permits replies to mentions in any group the bot joins, not a list of selected group IDs. Preserve the chat choices of an existing bot unless the user asks to change them. Binding a bot supplies that bot's identity as `FEISHU_APP_ID`, `FEISHU_APP_SECRET` and `FEISHU_BRAND` to every new conversation of its Agent, Web ones included; do not copy credentials into files or ordinary Agent instructions.
 
 ### Register a new application
 

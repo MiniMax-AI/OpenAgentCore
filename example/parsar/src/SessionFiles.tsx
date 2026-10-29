@@ -1,4 +1,5 @@
 import { tr } from "./lib/i18n";
+import { maxUploadBytes } from "../shared/media.mjs";
 import { useRef } from "react";
 import { useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Upload, Download } from "lucide-react";
@@ -12,9 +13,9 @@ import {
   DialogTitle,
 } from "./components/ui/dialog";
 import { ErrorNotice } from "./components/shared";
-const maxUploadBytes = 5 * 1024 * 1024;
 async function upload(environmentId: string, file: File) {
-  if (file.size > maxUploadBytes) throw new Error(tr("文件不能超过 5 MiB。"));
+  if (!file.size) throw new Error(tr("文件不能为空。"));
+  if (file.size > maxUploadBytes) throw new Error(tr("文件不能超过 50 MiB。"));
   let name = "";
   const encoder = new TextEncoder();
   for (const character of file.name.replace(
@@ -26,17 +27,13 @@ async function upload(environmentId: string, file: File) {
   }
   name ||= "file";
   const path = `/workspace/inputs/${randomUuid()}-${name}`;
-  const data = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
-    reader.onerror = () => reject(new Error(tr("无法读取文件，请重新选择。")));
-    reader.readAsDataURL(file);
-  });
+  // Core's Files API takes the bytes; the workspace gets the file by its ID.
+  const uploaded = await api.uploadSourceFile({ file, filename: name });
   try {
     await api.createEnvironmentFile(environmentId, {
-      type: "inline",
+      type: "file_id",
       path,
-      data,
+      file_id: uploaded.id,
     });
   } catch (error) {
     const reason = error instanceof Error ? error.message : tr("请求失败");

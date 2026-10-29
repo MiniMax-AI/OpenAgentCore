@@ -16,18 +16,23 @@ export interface ModelProfile extends NamedResource {
   model: string;
 }
 export interface MCPProfile extends NamedResource {
-  vault_id?: string;
-  credential_id?: string;
   label: string;
   url: string;
+  // Each Agent that binds it chooses the Vault credential.
+  requires_credential?: boolean;
+}
+export interface Secret extends NamedResource {
+  has_value?: boolean;
+  value?: string;
 }
 export interface RuntimeProfile extends NamedResource {
   environment: "openai_hosted";
   description?: string;
   packages?: { npm?: string[]; python?: string[] };
   setup_script?: string;
+  // Variables the Agent supplies: the bound bot's identity or chosen secrets.
+  credentials?: string[];
   network?: { access: "disabled" | "restricted"; allowed_domains?: string[] };
-  bot_env?: Record<string, string>;
   env?: Record<string, string | null>;
   prepare?: boolean;
   files?: { path: string; content: string }[];
@@ -50,6 +55,10 @@ export interface AgentProfile extends NamedResource {
   skill_ids: string[];
   skill_versions?: Record<string, string>;
   mcp_ids: string[];
+  // The secret that supplies each variable a bound capability needs.
+  credentials?: Record<string, string>;
+  // The Vault credential each bound MCP that needs one uses.
+  mcp_credentials?: Record<string, { vault_id: string; credential_id: string }>;
 }
 export interface TurnSummary {
   outcome: "running" | "completed" | "failed" | "cancelled";
@@ -57,7 +66,6 @@ export interface TurnSummary {
   kind: "cold" | "prepared" | "followup";
   started_at: number;
   elapsed_s: number;
-  expected_s: number;
   slow: boolean;
   retries: number;
   failure?: string;
@@ -70,6 +78,7 @@ export interface TurnRow extends TurnSummary {
   session_id: string;
   core_session_id: string;
   agent_id: string;
+  agent_name?: string;
   conversation: string;
   source: "web" | "feishu";
   chat_type?: "p2p" | "group";
@@ -140,6 +149,13 @@ export const useResources = <T>(kind: string) =>
 export const useProviders = () => useResources<ProviderProfile>("providers");
 export const useModels = () => useResources<ModelProfile>("models");
 export const useAgents = () => useResources<AgentProfile>("agents");
+export const useSecrets = () => useResources<Secret>("secrets");
+// The variables each Skill needs; Skills themselves live in Core.
+export const useSkillCredentials = () =>
+  useQuery({
+    queryKey: ["skill-credentials"],
+    queryFn: () => product<{ id: string; credentials: string[] }[]>("skills/credentials"),
+  });
 // Running and recent Turns; the sidebar count and the 运行 view share it.
 export const useTurnOverview = () =>
   useQuery({
