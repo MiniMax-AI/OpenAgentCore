@@ -74,9 +74,10 @@ func DeploymentContract(providers map[string]ProviderProjection) (python, typesc
 		raw, _ := json.Marshal(struct {
 			WorkspaceFields []string                      `json:"workspace_fields"`
 			Resources       []resourceRule                `json:"resources"`
+			Network         networkRule                   `json:"network"`
 			Providers       map[string]ProviderProjection `json:"providers"`
 			MinimumDisk     uint32                        `json:"minimum_disk"`
-		}{workspaceFields, resourceContract, providers, minimumDiskMiB})
+		}{workspaceFields, resourceContract, networkContract, providers, minimumDiskMiB})
 		return string(raw)
 	}
 	installer := make(map[string]ProviderProjection, len(providers))

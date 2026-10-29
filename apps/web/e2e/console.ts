@@ -14,9 +14,9 @@ export const FIXTURE_CORE_KEY = "fixture-core-key-3f9a2c71";
  * (loopback: only the Core machine reaches the API, and E2B is rejected) or "stale" (public,
  * with a node enrolled with an earlier address), and `installers: "none"` a console without its node installation payload, so it serves neither
  * the node nor the self-hosted installer. `nodeArtifacts` lists the providers the console has
- * node files for, both by default; as in the console, microsandbox needs Docker's files too.
+ * node files for, microsandbox by default.
  */
-export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; installers?: "none"; nodeArtifacts?: ("docker" | "microsandbox")[] }
+export interface FixtureOptions { fresh?: boolean; sandbox?: "configured" | "none" | "e2b"; nodes?: "none"; installation?: "public" | "local" | "stale"; installers?: "none"; nodeArtifacts?: "microsandbox"[] }
 
 /** Fresh fixture state: signed out ("login") or already signed in ("authenticated"). */
 export async function resetFixture(request: APIRequestContext, auth: "login" | "authenticated" = "authenticated", options: FixtureOptions = {}) {

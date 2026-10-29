@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +12,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
+
+	"github.com/MiniMax-AI/OpenAgentCore/internal/obs/log"
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
 )
 
 // ProcessCaller never kills a mutating helper on a Core response timeout.
@@ -67,6 +69,16 @@ func (p *ProcessCaller) Call(ctx context.Context, q Request) (Response, error) {
 		if err != nil || stdout.exceeded || stderr.exceeded {
 			return Response{}, errors.New("helper result unconfirmed")
 		}
+	}
+	// The helper reports Endpoints it cannot turn into a rule as "unsupported <endpoint>" lines.
+	var unsupported []string
+	for _, line := range strings.Split(stderr.String(), "\n") {
+		if strings.HasPrefix(line, "unsupported ") {
+			unsupported = append(unsupported, line)
+		}
+	}
+	if len(unsupported) > 0 {
+		log.Bg().Warn("sandbox network endpoints without a rule", "operation", q.Operation, "endpoints", strings.Join(unsupported, "; "))
 	}
 	var out Response
 	decoder := json.NewDecoder(bytes.NewReader(stdout.Bytes()))

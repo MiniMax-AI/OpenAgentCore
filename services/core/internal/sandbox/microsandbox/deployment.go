@@ -7,7 +7,8 @@ import (
 
 func Policy() sandbox.DeploymentPolicy {
 	return sandbox.DeploymentPolicy{Workspace: &workspacefs.Requirements{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}, Disk: true,
-		DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 4096, RootDiskMiB: 8192}}
+		DefaultResources: &sandbox.Resources{CPUs: 2, MemoryMiB: 4096, RootDiskMiB: 8192},
+		Network:          sandbox.NetworkSupport{Restrict: true, PrivateDomains: true}}
 }
 
 // Setup declares how the console connects microsandbox nodes.

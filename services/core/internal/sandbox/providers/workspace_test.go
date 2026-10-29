@@ -25,7 +25,7 @@ func TestWorkspaceReceiptValidatesNormalizationAndGenerationBuild(t *testing.T) 
 		return func() {}, reached
 	}
 	registry.adapters["microsandbox"] = adapter
-	config := sandbox.NodeConfig{Provider: "microsandbox", InstallationID: "11111111-1111-4111-8111-111111111111", Generation: 1, Specification: spec}
+	config := sandbox.NodeConfig{Provider: "microsandbox", CoreURL: "https://core.example.com", InstallationID: "11111111-1111-4111-8111-111111111111", Generation: 1, Specification: spec}
 	_, _, err := registry.Build(config, sandbox.LocalOptions{Standalone: true, Workspace: unreachableWorkspaceResolver{}})
 	if !errors.Is(err, reached) {
 		t.Fatal("external retained generation could not build", err)

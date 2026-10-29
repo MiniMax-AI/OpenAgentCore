@@ -31,6 +31,7 @@ import (
 // own /api/v1 machine connection routes.
 func TestCredentialNamespaceMatrix(t *testing.T) {
 	s, _ := newManagedTestStore(t)
+	selectStoreWorkspaceStorage(t, s)
 	s.SetPlacement(placementRules(t, "https://core.example"))
 	ctx := t.Context()
 	coreKey := uuid.NewString()
@@ -88,7 +89,7 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 	var executor sessions.IssuedExecutorCredential
 	created("POST", "/core/v1/projects/"+project.ID+"/environments/"+environment.ID+"/executor-credentials", coreKey, `{"key_id":"`+uuid.NewString()+`"}`, &executor)
 
-	// A node credential: a Docker deployment, an enrollment token issued with the Core key, and an enrolled node.
+	// A node credential: a microsandbox deployment, an enrollment token issued with the Core key, and an enrolled node.
 	deployments := deploymentService(t, s)
 	installation := uuid.NewString()
 	provider := &lifecycleProvider{resources: map[string]sandbox.Info{}}
@@ -110,15 +111,15 @@ func TestCredentialNamespaceMatrix(t *testing.T) {
 			_ = worker.Run(cancelled)
 		})
 	})
-	specification := SandboxDeploymentTestSpec("docker")
-	if _, err := worker.InitializeSandboxDeployment(ctx, sandbox.Selection{DeploymentSpec: specification, Provider: "docker"}); err != nil {
+	specification := SandboxDeploymentTestSpec("microsandbox")
+	if _, err := worker.InitializeSandboxDeployment(ctx, sandbox.Selection{DeploymentSpec: specification, Provider: "microsandbox"}); err != nil {
 		t.Fatal(err)
 	}
 	var enrollment api.SandboxEnrollmentToken
 	created("POST", "/core/v1/sandbox/enrollment-tokens", coreKey, `{"max_active":2,"max_retained":2}`, &enrollment)
 	nodeID, nodeCredential := uuid.NewString(), strings.Repeat("n", 64)
-	enroll, _ := json.Marshal(machineapi.NodeEnrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
-		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("docker"), CoreURL: "https://core.example"})
+	enroll, _ := json.Marshal(machineapi.NodeEnrollment{NodeID: nodeID, Credential: nodeCredential, Name: "Matrix node", Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64),
+		DeploymentGeneration: 1, SpecificationDigest: specification.Digest("microsandbox"), CoreURL: "https://core.example"})
 	var node deployment.NodeIdentity
 	created("POST", "/api/v1/sandbox-node/enroll", enrollment.Token, string(enroll), &node)
 

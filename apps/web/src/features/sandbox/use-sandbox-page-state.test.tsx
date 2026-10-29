@@ -6,7 +6,7 @@ import { node } from "../overview/test-fixtures";
 import { sandboxAdmin, sandboxDeploymentQuery, sandboxSnapshotQuery } from "./sandbox-queries";
 import { useSandboxPageState } from "./use-sandbox-page-state";
 
-const configured: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 1, running: 1, pending: 0 }, suspension: null };
+const configured: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "microsandbox", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 1, running: 1, pending: 0 }, suspension: null };
 const resetting: SandboxDeployment = { ...configured, reset: { clear: "auto", requested_at: "2026-09-27T10:00:00Z", deadline_at: "2026-09-27T11:00:00Z", forced_at: null, remaining: { busy: 1, idle: 0, cleanup: 0, on_offline_nodes: 0, offline_nodes: [] } } };
 const clients: QueryClient[] = [];
 function cache() {
@@ -47,11 +47,11 @@ describe("Nodes shared deployment evidence", () => {
   it("uses another page's reset and completion immediately despite a fresh cached idle snapshot", () => {
     const client = cache();
     client.setQueryData(sandboxDeploymentQuery.queryKey, resetting);
-    expect(render(client)).toContain("docker/auto/0");
+    expect(render(client)).toContain("microsandbox/auto/0");
     expect(render(client)).toContain('data-compatible="false"');
     expect(render(client)).toContain('data-inventory-loading="true"');
     client.setQueryData(sandboxDeploymentQuery.queryKey, { ...resetting, reset: { ...resetting.reset!, clear: "force", forced_at: "2026-09-27T10:01:00Z" } });
-    expect(render(client)).toContain("docker/force/0");
+    expect(render(client)).toContain("microsandbox/force/0");
     client.setQueryData(sandboxDeploymentQuery.queryKey, { ...configured, provider: "", mode: "", generation: 2 });
     expect(render(client)).toContain("setup/none/0");
     expect(client.getQueryData(sandboxSnapshotQuery.queryKey)?.deployment).toEqual(configured);
@@ -67,9 +67,9 @@ describe("Nodes shared deployment evidence", () => {
 
   it("retains older generation nodes but rejects a different installation, owner, provider or reset lifecycle", () => {
     const client = cache(); client.setQueryData(sandboxDeploymentQuery.queryKey, configured);
-    expect(render(client)).toContain("docker/none/1");
+    expect(render(client)).toContain("microsandbox/none/1");
     client.setQueryData(sandboxDeploymentQuery.queryKey, { ...configured, generation: 2 });
-    expect(render(client)).toContain("docker/none/1");
+    expect(render(client)).toContain("microsandbox/none/1");
     expect(render(client)).toContain('data-older="true"');
     for (const change of [{ installation_id: "next" }, { owner_epoch: 2 }, { mode: "direct" as const }, { provider: "e2b" as const }]) {
       client.setQueryData(sandboxDeploymentQuery.queryKey, { ...configured, ...change });

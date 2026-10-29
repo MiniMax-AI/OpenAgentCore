@@ -104,14 +104,12 @@ if [[ "$(go env GOVERSION)" != "$required_go" ]]; then
   exit 1
 fi
 go run ./services/core/cmd/provider-artifacts
-for file in install_display.py node_output.py node_install.py host_docker.py host_microsandbox.py provider_assets.py node_spec.py node_generations.py node_payload.py distribution.py; do
+for file in install_display.py node_output.py node_install.py host_microsandbox.py provider_assets.py node_spec.py node_generations.py node_payload.py distribution.py; do
   cp "deploy/node/$file" "$bundle/$file"
 done
 python3 scripts/core-distribution-manifest.py bootstraps "$bundle" "$source_epoch" "$revision"
 # The bundled docs (BUNDLED_DOCS); links that leave them point at this commit on GitHub.
 python3 scripts/core-distribution-manifest.py docs . "$bundle" "$revision"
-mkdir -p "$bundle/runtime"
-cp services/core/internal/sandbox/docker/seccomp.json "$bundle/runtime/"
 mkdir -p "$bundle/storage"
 install -m 0755 services/core/internal/workspacefs/nfs/quota/oac-workspace-quota "$bundle/storage/"
 cp LICENSE "$bundle/"
@@ -121,11 +119,12 @@ cp deploy/compose/compose.yaml "$bundle/compose.yaml.template"
 OAC_DEV_BUILD_REVISION="$revision" scripts/build-core-image-context.sh "$stage/core"
 cp "$stage/core/bin/oac" "$bundle/oac"
 python3 scripts/build-microsandbox-provider.py build "$stage/core/bin/oac-microsandbox-provider"
-msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-v0.7.8-linux-x86_64.tar.gz}"
+msb_tag="$(python3 scripts/build-microsandbox-provider.py tag)"
+msb_archive="${CORE_DISTRIBUTION_MICROSANDBOX_ARCHIVE:-$runtime_root/cache/microsandbox-$msb_tag-linux-x86_64.tar.gz}"
 if [[ ! -f "$msb_archive" ]]; then
   mkdir -p "$(dirname "$msb_archive")"
   curl --fail --location --proto '=https' --tlsv1.2 \
-    https://github.com/superradcompany/microsandbox/releases/download/v0.7.8/microsandbox-linux-x86_64.tar.gz \
+    "https://github.com/SaladDay/microsandbox/releases/download/$msb_tag/microsandbox-linux-x86_64.tar.gz" \
     --output "$stage/microsandbox.download"
   python3 scripts/core-distribution-manifest.py extract-runtime "$stage/microsandbox.download" "$stage/core/microsandbox"
   mv "$stage/microsandbox.download" "$msb_archive"

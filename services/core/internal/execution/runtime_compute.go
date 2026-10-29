@@ -376,8 +376,12 @@ func (r *runtimeLifecycle) restoreCompute(ctx context.Context, p sandbox.Sandbox
 			return err
 		}
 	}
+	egress, err := r.allocationEgress(ctx, owner, spec.Network)
+	if err != nil {
+		return err
+	}
 	started := time.Now()
-	result, err := p.Resume(ctx, sandbox.ResumeRequest{Workspace: workspace, Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, ObserveOnly: observeOnly})
+	result, err := p.Resume(ctx, sandbox.ResumeRequest{Workspace: workspace, Reference: runtimeReference(owner), OperationID: state.RestoreID, Snapshot: *state.Snapshot, Target: *state.Target, Egress: egress, ObserveOnly: observeOnly})
 	logComputeStep(ctx, owner, "resume", started, err)
 	if errors.Is(err, sandbox.ErrCheckpointUnusable) {
 		// The Provider closed this attempt before native dispatch. Never restore

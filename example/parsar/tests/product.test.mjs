@@ -8,6 +8,33 @@ import { openStore, dataPath, AppError } from "../server/store.mjs";
 import { productAPI } from "../server/product.mjs";
 import { withSavedResources } from "./core-double.mjs";
 
+test("environment template network maps to the official field on the saved Template", async (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const { put, core } = await setup(store, async () => ({ id: randomUUID() }));
+  const saved = async (network, id = randomUUID()) => {
+    const runtime = await put("runtimes", { name: "Net", network }, id);
+    // Absent (on creation) and null (on update) both mean enabled.
+    return core.saved.get(runtime.core_template_id).network ?? null;
+  };
+  assert.equal(await saved(undefined), null);
+  assert.equal(await saved({ access: "enabled" }), null);
+  assert.deepEqual(await saved({ access: "disabled" }), { access: "disabled" });
+  assert.deepEqual(
+    await saved({ access: "restricted", allowed_domains: [" api.example.com ", ""] }),
+    { access: "restricted", allowed_domains: ["api.example.com"] },
+  );
+  // Back to enabled clears the restriction: an omitted field would keep it.
+  const id = randomUUID();
+  await saved({ access: "disabled" }, id);
+  const runtime = store.get("runtimes", id);
+  await put("runtimes", { name: runtime.name, revision: runtime.revision }, id);
+  assert.equal(core.saved.get(runtime.core_template_id).network, null);
+  await assert.rejects(put("runtimes", { name: "Bad", network: { access: "x" } }), {
+    status: 400,
+  });
+});
+
 test("environment templates prepare hosted Sessions, protect variables and freeze retries", async (t) => {
   const store = openStore(":memory:");
   t.after(() => store.close());

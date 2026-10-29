@@ -16,7 +16,7 @@ Core selects and validates the combination of a Sandbox Provider and a filesyste
 | Sandbox Provider | External workspace storage |
 | --- | --- |
 | microsandbox | Required (`host_directory`, `user_xattr`) |
-| Docker, E2B | Not supported; the Provider's own Environment disk |
+| E2B | Not supported; the Provider's own Environment disk |
 
 ## Implement an adapter
 

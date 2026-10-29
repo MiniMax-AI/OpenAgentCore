@@ -12,7 +12,6 @@ import (
 
 var nodeProgram = providerassets.Artifact{Path: "native/bin/oac-node", Suffix: "sandbox-node", Role: "node"}
 var runtimeImage = providerassets.Artifact{Path: "images/runtime.tar.gz", Suffix: "runtime.tar.gz", Role: "image"}
-var runtimePolicy = providerassets.Artifact{Path: "runtime/seccomp.json", Suffix: "seccomp.json", Role: "policy"}
 
 // ArtifactCatalog projects registered node requirements for Web and installers.
 func (r *Registry) ArtifactCatalog() (map[string][]providerassets.Artifact, error) {
@@ -56,7 +55,7 @@ func validateNodeArtifacts(items []providerassets.Artifact) error {
 		switch item.Role {
 		case "node":
 			nodes++
-		case "runtime", "policy", "image":
+		case "runtime", "image":
 		default:
 			return invalid
 		}

@@ -27,7 +27,7 @@ The Runtime daemon initiates its authenticated WebSocket connection to Core. [AP
 | Core | Authenticate callers, resolve and freeze configuration, schedule Turns, handle cancellation and pending interactions, persist resources and execution facts in PostgreSQL | [Core service](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/README.md) |
 | Sandbox Provider | Create, observe, renew and reclaim compute; supply Runtime startup input | [Sandbox Provider protocol](./sandbox-provider.md), [Runtime bootstrap](./runtime-bootstrap.md) |
 | Workspace filesystem adapter | Create, observe and delete durable Environment storage; validate and resolve its compute attachment | [Workspace filesystem protocol](./workspace-provider.md) |
-| Sandbox node | Operate a Docker or microsandbox host and reconcile its assigned generation and allocations | [Sandbox node protocol](../contracts/agents-api/node-generation-protocol.md) |
+| Sandbox node | Operate a microsandbox host and reconcile its assigned generation and allocations | [Sandbox node protocol](../contracts/agents-api/node-generation-protocol.md) |
 | Runtime | Prepare the workspace and capabilities, manage Session Executors, execute Turns and report events and receipts | [Core–Runtime protocol](./runtime-protocol.md) |
 | Harness adapter | Validate native configuration, invoke the upstream SDK or protocol, translate events and confirm native cleanup | [Harness protocol](../contracts/agents-api/harness-onboarding.md) |
 | Model provider | Serve the model protocol selected for the Harness | [Model execution](../contracts/agents-api/model-execution.md) |

@@ -1,6 +1,6 @@
 ---
 source: example/parsar/README.md
-source_hash: d05354ccb35c01aa32ac2f2cd88bf3543748e4b0c8d8bbf965c087a8d88ffbe9
+source_hash: 60d0bf3a46840a363113be51df079bc4e1fc19c9b4ca88d2af145a6bc4581a9a
 ---
 
 # Parsar 工作空间
@@ -27,7 +27,7 @@ pnpm --filter @oac/parsar-example dev
 | 对象 | 含义 |
 | --- | --- |
 | **资源库** | 组装用的零件，按使用方分组：模型供 Agent 的执行引擎使用；Skills、MCP 服务、Plugins、知识和指令片段供 Agent 使用；凭据供 MCP 使用。资源是共享的：修改一项会影响所有使用它的对象。只有仍然有效的配置会阻止删除：Agent 绑定了这项能力、Agent 使用这个环境模板或模型，或者机器人绑定了这个 Agent。对话不算：它保留创建时的配置快照和完整历史。 |
-| **环境模板** | 准备好的工作区：npm 与 Python 软件包、Bash 初始化脚本、环境变量、需要的密钥和初始文件。 |
+| **环境模板** | 准备好的工作区：npm 与 Python 软件包、Bash 初始化脚本、联网权限（允许、禁止或仅允许指定域名）、环境变量、需要的密钥和初始文件。 |
 | **Agent** | 用户对话的对象：名称、描述、指令、运行方式、一个必选的环境模板、能力和行为开关。运行方式对应本地 Codex 的配置：Harness、模型、推理强度、网页搜索，以及 **高级** 中的推理摘要、输出详细度和服务层级。**复制**会生成一份独立副本。 |
 | **飞书机器人** | 一个机器人最多绑定一个 Agent。它把自己的聊天路由给该 Agent，并在所有对话中（包括网页对话）作为该 Agent 的飞书身份。 |
 | **对话** | 一个公开 Core Session，拥有独立的 Environment，由 Agent 对应的 Core Agent 和环境模板对应的 Core Environment Template 创建。Session 开始时，Core 会复制这两份配置。 |

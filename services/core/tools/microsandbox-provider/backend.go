@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sandbox"
@@ -113,13 +114,10 @@ func (b backend) kill(ctx context.Context, c wire.Compute) error {
 	return e
 }
 
-func (b backend) network() *sdk.NetworkConfig {
-	n := b.q.Config.Network
-	result := &sdk.NetworkConfig{DefaultEgress: sdk.PolicyAction(n.DefaultEgress), DefaultIngress: sdk.PolicyAction(n.DefaultIngress)}
-	for _, r := range n.Rules {
-		result.Rules = append(result.Rules, sdk.PolicyRule{Action: sdk.PolicyAction(r.Action), Direction: sdk.PolicyDirection(r.Direction), Destination: r.Destination, Protocol: sdk.PolicyProtocol(r.Protocol), Port: r.Port})
-	}
-	return result
+// network builds the allocation's network policy for create or restore from
+// its Egress. Entries it cannot enforce are reported to the node's log.
+func (b backend) network(ctx context.Context, egress sandbox.Egress) (*sdk.NetworkConfig, error) {
+	return egressNetwork(ctx, b.q.Config.CoreURL, egress, os.Stderr)
 }
 
 func (b backend) resumeCompute(ctx context.Context, c wire.Compute) (wire.State, error) {

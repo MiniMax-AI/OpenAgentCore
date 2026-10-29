@@ -103,7 +103,7 @@ func TestE2BRetainedCustomEndpointAfterOnlineSwitch(t *testing.T) {
 }
 
 func TestPendingPlacementGenerationSurvivesRepeatedUpdates(t *testing.T) {
-	s, w, view, _ := webSpecificationFixture(t, "docker")
+	s, w, view, _ := webSpecificationFixture(t, "microsandbox")
 	node := specificationNode(t, s, view)
 	tenant, session := managedArchiveSession(t, s, managerSessionInput(uuid.NewString()))
 	if err := reserveSessionPlacement(t, s, w, session); err != nil {
@@ -178,7 +178,7 @@ func TestGenerationUpdateSerializesWithAllocationAdmission(t *testing.T) {
 }
 
 func TestSandboxSnapshotRolloutEquivalence(t *testing.T) {
-	s, _, view, _ := webSpecificationFixture(t, "docker")
+	s, _, view, _ := webSpecificationFixture(t, "microsandbox")
 	node := specificationNode(t, s, view)
 	deployments := deploymentService(t, s)
 	heartbeat := func(connection, state string) {

@@ -73,7 +73,6 @@ When `suspend_control` is true, the daemon publishes its suspend control at `run
 
 | Provider | Delivery |
 | --- | --- |
-| Docker | Writes the file into the Runtime's owned home volume. |
 | microsandbox, E2B | Deliver the file before launching the same command. |
 
 ## Verification

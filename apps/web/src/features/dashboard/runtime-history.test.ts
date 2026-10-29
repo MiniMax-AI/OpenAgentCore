@@ -73,7 +73,7 @@ function history(overrides: Partial<RuntimeHistory> = {}): RuntimeHistory {
       environment_id: environmentID,
       allocation_id: allocationID,
       started_at: { seconds: 10, nanoseconds: 500_000_000 },
-      provider_type: "docker",
+      provider_type: "microsandbox",
       points: [{
         start: 100, end: 130, first_observed_at: 110, last_observed_at: 110,
         observation_count: 1, observed_count: 1, unavailable_count: 0,

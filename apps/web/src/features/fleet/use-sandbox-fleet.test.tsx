@@ -10,7 +10,7 @@ import { fleetQuery, type FleetSnapshot } from "./fleet-queries";
 import { FleetReadNotice } from "./FleetReadNotice";
 import { fleetSnapshot, useSandboxFleet } from "./use-sandbox-fleet";
 
-const configured: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "docker", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 1, running: 1, pending: 0 }, suspension: null };
+const configured: SandboxDeployment = { credential_configured: false, configuration: {}, metadata: {}, rollout: { state: "settled", previous_generation_sandboxes: 0, nodes: { ready: 1, preparing: 0, failed: 0, unknown: 0 } }, installation_id: "i", provider: "microsandbox", core_url: "http://core", reset: null, owner_epoch: 1, generation: 1, mode: "nodes", resources: { allocations: 1, running: 1, pending: 0 }, suspension: null };
 
 function Probe() {
   const { state, deployment } = useSandboxFleet();

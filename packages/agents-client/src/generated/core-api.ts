@@ -212,11 +212,12 @@ export interface DeploymentResources {
 }
 export const deploymentResourcesFields = ["allocations", "pending", "running"] as const;
 export interface DeploymentSpec {
+  network: Network;
   resources: SandboxResources;
   workspace?: Declaration;
 }
-export const deploymentSpecFields = ["resources", "workspace"] as const;
-export const deploymentSpecRequired = ["resources"] as const;
+export const deploymentSpecFields = ["network", "resources", "workspace"] as const;
+export const deploymentSpecRequired = ["network", "resources"] as const;
 export interface DeploymentView {
   configuration?: Record<string, unknown>;
   core_url: string;
@@ -439,6 +440,11 @@ export interface ModelConfigurationSupport {
   protocols: string[];
 }
 export const modelConfigurationSupportFields = ["accepts_harness_config", "accepts_max_output_tokens", "protocols"] as const;
+export interface Network {
+  domains: string[];
+  public: boolean;
+}
+export const networkFields = ["domains", "public"] as const;
 export interface Node {
   active: number;
   available_disk_bytes: number | null;
@@ -815,19 +821,21 @@ export interface SandboxDeploymentChangeInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
   expected_generation: number;
+  network?: Network;
   provider?: string;
   resources?: SandboxResources;
 }
-export const sandboxDeploymentChangeInputFields = ["configuration", "credential", "expected_generation", "provider", "resources"] as const;
+export const sandboxDeploymentChangeInputFields = ["configuration", "credential", "expected_generation", "network", "provider", "resources"] as const;
 export const sandboxDeploymentChangeInputRequired = ["expected_generation"] as const;
 export interface SandboxDeploymentInput {
   configuration?: Record<string, unknown>;
   credential?: Record<string, unknown>;
   expected_generation: number;
+  network?: Network;
   provider?: string;
   resources?: SandboxResources;
 }
-export const sandboxDeploymentInputFields = ["configuration", "credential", "expected_generation", "provider", "resources"] as const;
+export const sandboxDeploymentInputFields = ["configuration", "credential", "expected_generation", "network", "provider", "resources"] as const;
 export const sandboxDeploymentInputRequired = ["expected_generation"] as const;
 export interface SandboxEnrollmentToken {
   enrollment_id: string;

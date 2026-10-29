@@ -66,7 +66,7 @@ Each code returns HTTP 400 with `type: "invalid_request_error"`. A missing, malf
 | `harness_config_invalid` | `harness_config` | omitted | The deployment default's native parameters are unsupported or invalid |
 | `invalid_sandbox_configuration` | `resources.cpus` | `min`: 1, `max`: 255 | The CPU count is outside the supported bounds |
 | `invalid_sandbox_configuration` | `resources.memory_mib` | `min`: 512, `max`: 1048576 | Memory is outside the supported bounds |
-| `invalid_sandbox_configuration` | `resources.root_disk_mib` or `resources.environment_disk_mib` | `min`: 1024 for microsandbox (`environment_disk_mib` also accepts 0); `min`: 0, `max`: 0 for Docker and E2B | Disk capacity is missing or unsupported by the provider |
+| `invalid_sandbox_configuration` | `resources.root_disk_mib` or `resources.environment_disk_mib` | `min`: 1024 for microsandbox (`environment_disk_mib` also accepts 0); `min`: 0, `max`: 0 for E2B | Disk capacity is missing or unsupported by the provider |
 
 Bounds are validation constants, never submitted values. Node names are limited in bytes; Project and key names in trimmed Unicode characters without control characters. Only the first failure is reported, in this order: model provider URL, protocol, key, limits, then the Harness's protocol; sandbox resources CPU, memory, then disk. Model-provider field errors inside a `model_provider` object keep that object's field as `param`. An unknown sandbox provider returns an error without these fields.
 

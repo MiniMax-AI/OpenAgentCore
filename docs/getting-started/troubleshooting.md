@@ -40,9 +40,9 @@ Add node shows no command: see [Before you add a node](./nodes.md#before-you-add
 
 ### Sandboxes cannot reach a private endpoint
 
-A microsandbox sandbox cannot reach a model provider or MCP server at a private address, and the Turn fails once the Harness stops retrying. Sandbox DNS queries go to the nameservers listed in the host's `/etc/resolv.conf`, and DNS rebind protection discards any answer that contains a private address. A name those nameservers resolve to a private address therefore does not resolve in the sandbox at all, even for a public service such as a model API behind a cloud VPC resolver.
+A microsandbox sandbox reaches a private address only for the names in the deployment's [network cap](../../contracts/agents-api/sandbox-deployment.md#network) `domains`. A connection to any other private address is refused, and a Turn that depends on it fails once the Harness stops retrying. This includes an MCP server at a private address.
 
-Nodes have no setting to change this. Make those nameservers return the service's public addresses. microsandbox does not read the host's `/etc/hosts`, so an entry there helps only when `/etc/resolv.conf` points at a local stub resolver that serves it, such as systemd-resolved at `127.0.0.53`. Otherwise use a Docker node, which does not filter sandbox traffic.
+Add the server's host name, or a `*.` entry that covers it, to the domains in **Settings** → **Sandbox and scheduling** → **Network**. Sandboxes resolve names only through the nameservers in the node host's `/etc/resolv.conf`; DNS to any other server is refused.
 
 ### Connection failures
 
@@ -68,8 +68,6 @@ A registered node that can't connect to Core says why in its [log](./nodes.md#lo
 | A sandbox provider check failed before registering, such as `This host lacks a capability …` | Fix what it names (see [Readiness codes](./nodes.md#readiness-codes)) and rerun; the token was not used |
 | Core's public URL changed after this command was generated | Generate a new command in Web and run it |
 | This host's node uses `<address>`, but this command uses `<address>` | The node was added under an older public URL. Remove it in Web, uninstall it, then add it again |
-| Docker Engine is not installed, or Docker is not running | Install Docker Engine, or `sudo systemctl enable --now docker`, then rerun |
-| Docker on this host does not enforce CPU and memory limits | Use cgroup v2, then rerun |
 | KVM is unavailable, or `/dev/kvm` must be group-accessible | Enable virtualization; your distribution's KVM package sets `root:kvm 0660` |
 | This host has N CPUs and M MiB of memory; each sandbox needs … | Use a larger host, or change the sandbox size |
 | SELinux is enforcing on this host | Use a host supported by the installer; it does not change SELinux settings |

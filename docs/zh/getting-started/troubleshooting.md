@@ -1,7 +1,7 @@
 ---
 title: "故障排查"
 source: docs/getting-started/troubleshooting.md
-source_hash: b57b7719fd48f61d1a10077eaca44efc89a58b7d2d68d4a5ce96bf537ba6680e
+source_hash: 3a47ff39350a3e901e2def4c567fd7d0967c5f9100bc9ca7ceb682cce86dc333
 ---
 
 按症状查找安装、访问、节点和 Session 问题的原因与解决方法。本页面向 Core 安装的运维人员。
@@ -42,9 +42,9 @@ source_hash: b57b7719fd48f61d1a10077eaca44efc89a58b7d2d68d4a5ce96bf537ba6680e
 
 ### 沙箱无法访问私有端点 {#sandboxes-cannot-reach-a-private-endpoint}
 
-microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务器，Harness 停止重试后 Turn 失败。沙箱的 DNS 查询发往主机 `/etc/resolv.conf` 中列出的域名服务器，而 DNS rebind 保护会丢弃任何包含私有地址的应答。因此，这些域名服务器解析为私有地址的名称在沙箱内根本无法解析，即使是云 VPC 解析器之后的公共模型 API 这类公共服务也是如此。
+microsandbox 沙箱只能访问部署[网络上限](../../../contracts/agents-api/zh/sandbox-deployment.md#network) `domains` 中的名称所对应的私有地址。访问其他私有地址的连接会被拒绝，依赖它的 Turn 会在 Harness 停止重试后失败，私有地址上的 MCP 服务器也是如此。
 
-节点没有更改此行为的设置。请让这些域名服务器返回该服务的公共地址。microsandbox 不读取主机的 `/etc/hosts`，因此只有当 `/etc/resolv.conf` 指向提供该条目的本地存根解析器（例如 `127.0.0.53` 上的 systemd-resolved）时，那里的条目才有用。否则，请使用不过滤沙箱流量的 Docker 节点。
+在 **设置** → **沙箱与调度** → **网络** 中把该服务器的主机名，或覆盖它的 `*.` 条目，加入域名列表。沙箱只通过节点主机 `/etc/resolv.conf` 中的域名服务器解析名称，发往其他 DNS 服务器的请求会被拒绝。
 
 ### 连接失败 {#connection-failures}
 
@@ -70,8 +70,6 @@ microsandbox 沙箱无法访问私有地址上的模型提供商或 MCP 服务�
 | 注册前的沙箱提供商检查失败，例如 `This host lacks a capability …` | 修复提示的问题（参阅[就绪状态码](./nodes.md#readiness-codes)）后重试；令牌未被使用 |
 | Core's public URL changed after this command was generated | 在 Web 生成并执行新命令 |
 | This host's node uses `<address>`, but this command uses `<address>` | 节点在旧公开 URL 下添加。在 Web 移除、卸载，然后重新添加 |
-| Docker Engine is not installed, or Docker is not running | 安装 Docker Engine，或运行 `sudo systemctl enable --now docker` 后重试 |
-| Docker on this host does not enforce CPU and memory limits | 使用 cgroup v2 后重试 |
 | KVM is unavailable, or `/dev/kvm` must be group-accessible | 启用虚拟化；发行版的 KVM 包会设置 `root:kvm 0660` |
 | This host has N CPUs and M MiB of memory; each sandbox needs … | 使用更大主机或修改沙箱规格 |
 | SELinux is enforcing on this host | 使用安装程序支持的主机；程序不修改 SELinux 设置 |

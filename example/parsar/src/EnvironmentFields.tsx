@@ -4,6 +4,7 @@ import { useState } from "react";
 import { tr } from "./lib/i18n";
 import type { RuntimeProfile } from "./lib/product";
 import { Input } from "./components/ui/input";
+import { Select, SelectOption } from "./components/ui/select";
 import { Textarea } from "./components/ui/textarea";
 import { Button } from "./components/ui/button";
 import { Field, Toggle } from "./components/shared";
@@ -99,6 +100,54 @@ export function EnvironmentFields({
           )}
         />
       </Field>
+      <Field label={tr("网络")} id="environment-network">
+        <Select
+          id="environment-network"
+          value={value.network?.access ?? "enabled"}
+          onValueChange={(access) =>
+            onChange({
+              ...value,
+              network:
+                access === "enabled"
+                  ? undefined
+                  : access === "disabled"
+                    ? { access }
+                    : { access: "restricted", allowed_domains: [] },
+            })
+          }
+        >
+          <SelectOption value="enabled">{tr("允许联网")}</SelectOption>
+          <SelectOption value="disabled">{tr("禁止联网")}</SelectOption>
+          <SelectOption value="restricted">{tr("仅允许指定域名")}</SelectOption>
+        </Select>
+      </Field>
+      {value.network?.access === "restricted" && (
+        <Field label={tr("允许的域名")} id="environment-domains">
+          <Textarea
+            id="environment-domains"
+            rows={4}
+            required
+            value={(value.network.allowed_domains || []).join("\n")}
+            placeholder={tr("每行一个，例如 {{value0}}", {
+              value0: "api.example.com",
+            })}
+            onChange={(e) => {
+              const domains = e.target.value.split("\n");
+              e.target.setCustomValidity(
+                domains.some((d) => d.includes("*"))
+                  ? tr("域名需完整填写，不支持通配符")
+                  : domains.filter((d) => d.trim()).length > 100
+                    ? tr("最多 100 个域名")
+                    : "",
+              );
+              onChange({
+                ...value,
+                network: { access: "restricted", allowed_domains: domains },
+              });
+            }}
+          />
+        </Field>
+      )}
       <Group
         title={tr("环境变量")}
         action={
@@ -246,6 +295,7 @@ export function environmentSummary(value: RuntimeProfile) {
     [
       packages ? tr("{{count}} 个软件包", { count: packages }) : "",
       value.setup_script ? tr("初始化脚本") : "",
+      value.network ? tr("限制联网") : "",
       Object.keys(value.env || {}).length ? tr("环境变量") : "",
       value.files?.length ? tr("初始文件") : "",
       value.credentials?.some((name) => name in botVariables) ? tr("飞书机器人身份") : "",

@@ -9,9 +9,9 @@ import (
 
 func TestEnrollmentRecoveryAcceptsCoreReadiness(t *testing.T) {
 	for _, fields := range []string{"", `,"connected":true,"provider_ready":false`} {
-		response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"node_id":"node","installation_id":"installation","provider":"docker"` + fields + `}`))}
+		response := &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`{"node_id":"node","installation_id":"installation","provider":"microsandbox"` + fields + `}`))}
 		value, err := readEnrollment(response)
-		if err != nil || value.NodeID != "node" || value.InstallationID != "installation" || value.Provider != "docker" {
+		if err != nil || value.NodeID != "node" || value.InstallationID != "installation" || value.Provider != "microsandbox" {
 			t.Fatal(value, err)
 		}
 	}

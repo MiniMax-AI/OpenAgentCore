@@ -1,0 +1,120 @@
+package sandbox
+
+import (
+	"fmt"
+	"net"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+
+	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/agentnetwork"
+)
+
+// The deployment network rule is authored here once. The node installer and the
+// TypeScript client consume its generated projection.
+const (
+	maxNetworkDomains = 100
+	maxDomainLength   = 253
+)
+
+// domainPattern is the cap's rule: an exact host name as the Environment
+// network field accepts, or "*." and a host name of at least two labels for
+// its subdomains, never a whole top-level domain.
+var domainPattern = `^(?:\*\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)?` + strings.TrimPrefix(agentnetwork.HostPattern, "^")
+
+var (
+	domainRule = regexp.MustCompile(agentnetwork.HostPattern)
+	capRule    = regexp.MustCompile(domainPattern)
+)
+
+// networkRule is the generated projection of the network format rule.
+type networkRule struct {
+	MaxDomains      int    `json:"max_domains"`
+	MaxDomainLength int    `json:"max_domain_length"`
+	DomainPattern   string `json:"domain_pattern"`
+}
+
+var networkContract = networkRule{maxNetworkDomains, maxDomainLength, domainPattern}
+
+// Network is the deployment's egress cap: what its sandboxes may reach at most.
+// Domains are exact host names, or "*.example.com" for its subdomains but not
+// example.com itself, whose resolved addresses are allowed, private ones
+// included. Every other private, loopback and link-local address stays
+// blocked, and the connection to Core is always allowed.
+type Network struct {
+	Public  bool     `json:"public" binding:"required"`
+	Domains []string `json:"domains" binding:"required"`
+}
+
+// DefaultNetwork is the public internet only.
+func DefaultNetwork() Network { return Network{Public: true, Domains: []string{}} }
+
+// Canonical lowercases, deduplicates and sorts the domains. It is applied
+// before persistence so equal caps have equal specification digests.
+func (n Network) Canonical() Network {
+	domains := make([]string, 0, len(n.Domains))
+	for _, d := range n.Domains {
+		domains = append(domains, strings.ToLower(strings.TrimSpace(d)))
+	}
+	slices.Sort(domains)
+	n.Domains = slices.Compact(domains)
+	return n
+}
+
+// ValidatePolicy checks the cap against the Provider's declaration.
+func (n Network) ValidatePolicy(provider string, support NetworkSupport) error {
+	if len(n.Domains) > maxNetworkDomains {
+		return &ValidationError{Param: "network.domains", Message: fmt.Sprintf("%s: network.domains accepts at most %d domains", ErrInvalid, maxNetworkDomains)}
+	}
+	for _, d := range n.Domains {
+		if len(d) > maxDomainLength || !capRule.MatchString(d) {
+			return &ValidationError{Param: "network.domains", Message: fmt.Sprintf("%s: %q is not a host name or *.suffix", ErrInvalid, d)}
+		}
+	}
+	if !n.Public && !support.Restrict {
+		return &ValidationError{Param: "network.public", Message: fmt.Sprintf("%s: %s cannot refuse public addresses", ErrInvalid, provider)}
+	}
+	if len(n.Domains) > 0 && !support.PrivateDomains {
+		return &ValidationError{Param: "network.domains", Message: fmt.Sprintf("%s: %s cannot allow private domains", ErrInvalid, provider)}
+	}
+	return nil
+}
+
+// Validate checks an Egress a Provider receives: exact host names for
+// Domains, "*." entries only in PrivateDomains, and host:port entries for
+// Endpoints.
+func (e Egress) Validate() error {
+	for i, names := range [][]string{e.PrivateDomains, e.Domains} {
+		if len(names) > maxNetworkDomains {
+			return ErrInvalid
+		}
+		for _, d := range names {
+			if !ValidDomain(d) && !(i == 0 && len(d) <= maxDomainLength && capRule.MatchString(d)) {
+				return ErrInvalid
+			}
+		}
+	}
+	for _, endpoint := range e.Endpoints {
+		if _, _, err := SplitEndpoint(endpoint); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SplitEndpoint splits an Egress.Endpoints entry into its host and TCP port.
+func SplitEndpoint(endpoint string) (host string, port int, err error) {
+	host, p, splitErr := net.SplitHostPort(endpoint)
+	port, convErr := strconv.Atoi(p)
+	if splitErr != nil || convErr != nil || host == "" || len(host) > maxDomainLength || port < 1 || port > 65535 || strings.ContainsAny(host, "/ \t\r\n") {
+		return "", 0, ErrInvalid
+	}
+	return host, port, nil
+}
+
+// ValidDomain reports whether name is an exact host name under the deployment
+// network rule.
+func ValidDomain(name string) bool {
+	return len(name) <= maxDomainLength && domainRule.MatchString(name)
+}

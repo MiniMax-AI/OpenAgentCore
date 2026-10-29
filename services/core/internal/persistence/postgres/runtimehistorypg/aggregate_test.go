@@ -18,12 +18,12 @@ func TestAggregateSeriesUsesProviderObservationOrder(t *testing.T) {
 	samples := []*rawSample{
 		{
 			resolvedAt: secondResolved, observedAt: &secondObserved, allocation: testAllocation, startedAt: &startedAt,
-			provider: "docker", status: runtimeobs.StatusObserved, hasSample: true,
+			provider: "microsandbox", status: runtimeobs.StatusObserved, hasSample: true,
 			metrics: map[string]float64{CPUUsageName: 3, CPUCapacityName: 2, MemoryUsageName: 200},
 		},
 		{
 			resolvedAt: firstResolved, observedAt: &firstObserved, allocation: testAllocation, startedAt: &startedAt,
-			provider: "docker", status: runtimeobs.StatusObserved, hasSample: true,
+			provider: "microsandbox", status: runtimeobs.StatusObserved, hasSample: true,
 			metrics: map[string]float64{CPUUsageName: 1, CPUCapacityName: 2, MemoryUsageName: 100},
 		},
 	}
@@ -44,17 +44,17 @@ func TestAggregateSeriesLeavesCPUUsageGapWhenEitherEndpointLacksCapacity(t *test
 	samples := []*rawSample{
 		{
 			resolvedAt: firstObserved, observedAt: &firstObserved, allocation: testAllocation, startedAt: &startedAt,
-			provider: "docker", status: runtimeobs.StatusObserved, hasSample: true,
+			provider: "microsandbox", status: runtimeobs.StatusObserved, hasSample: true,
 			metrics: map[string]float64{CPUUsageName: 1, CPUCapacityName: 2},
 		},
 		{
 			resolvedAt: secondObserved, observedAt: &secondObserved, allocation: testAllocation, startedAt: &startedAt,
-			provider: "docker", status: runtimeobs.StatusObserved, hasSample: true,
+			provider: "microsandbox", status: runtimeobs.StatusObserved, hasSample: true,
 			metrics: map[string]float64{CPUUsageName: 3},
 		},
 		{
 			resolvedAt: thirdObserved, observedAt: &thirdObserved, allocation: testAllocation, startedAt: &startedAt,
-			provider: "docker", status: runtimeobs.StatusObserved, hasSample: true,
+			provider: "microsandbox", status: runtimeobs.StatusObserved, hasSample: true,
 			metrics: map[string]float64{CPUUsageName: 5, CPUCapacityName: 2},
 		},
 	}
@@ -77,14 +77,14 @@ func TestAggregateIgnoresLookbackOnlySeriesForSeriesLimit(t *testing.T) {
 		observedAt := start.Add(-2 * time.Second)
 		raw = append(raw, &rawSample{
 			resolvedAt: start.Add(-time.Second), observedAt: &observedAt, allocation: uuid.NewString(), startedAt: &startedAt,
-			provider: "docker", status: runtimeobs.StatusObserved, hasSample: true, metrics: map[string]float64{},
+			provider: "microsandbox", status: runtimeobs.StatusObserved, hasSample: true, metrics: map[string]float64{},
 		})
 	}
 	startedAt := start.Add(-time.Minute)
 	observedAt := start.Add(5 * time.Second)
 	raw = append(raw, &rawSample{
 		resolvedAt: start.Add(6 * time.Second), observedAt: &observedAt, allocation: uuid.NewString(), startedAt: &startedAt,
-		provider: "docker", status: runtimeobs.StatusObserved, hasSample: true, metrics: map[string]float64{},
+		provider: "microsandbox", status: runtimeobs.StatusObserved, hasSample: true, metrics: map[string]float64{},
 	})
 	result, err := aggregate(query, start.Add(time.Minute), raw)
 	if err != nil {

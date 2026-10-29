@@ -92,11 +92,11 @@ Sign-in errors: 400 for a malformed body, 401 `Invalid Core key`, 405 for a meth
 | --- | --- |
 | `node_installer` | Whether the console serves a node installation payload |
 | `node_installer_sha256` | SHA-256 of that payload's `node-install.pyz`; Add node commands verify it before running the installer |
-| `node_artifacts` | The providers (`docker`, `microsandbox`) whose node artifacts the payload holds, locally or as a release download. Read on every request, so artifacts added by rerunning the installer appear without a restart |
+| `node_artifacts` | The providers whose node artifacts the payload holds (`microsandbox`), locally or as a release download. Read on every request, so artifacts added by rerunning the installer appear without a restart |
 
 ## Node installation payload
 
-With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution's node payload at `/node-install/` without sign-in: `node-install.pyz`, `manifest.json`, `SHA256SUMS`, `runtime/seccomp.json`, and the node artifacts the manifest declares under `artifacts/`. An artifact missing locally redirects (307) to its release download. Node install and uninstall commands download from `<public_url>/node-install/`, so the reverse proxy must send that path to the console. Nodes verify every checksum themselves.
+With `OAC_WEB_NODE_PAYLOAD_DIR` set, the console serves the matched distribution's node payload at `/node-install/` without sign-in: `node-install.pyz`, `manifest.json`, `SHA256SUMS`, and the node artifacts the manifest declares under `artifacts/`. An artifact missing locally redirects (307) to its release download. Node install and uninstall commands download from `<public_url>/node-install/`, so the reverse proxy must send that path to the console. Nodes verify every checksum themselves.
 
 ## Verification
 

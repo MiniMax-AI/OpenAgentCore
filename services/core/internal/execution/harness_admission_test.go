@@ -149,10 +149,10 @@ func TestRetainedNativeHistoryDependsOnExternalWorkspace(t *testing.T) {
 	}
 }
 
-// Runtime enforces no network policy, so admission runs only enabled networking.
-func TestAdmissionRejectsUnenforcedNetworkPolicy(t *testing.T) {
+// Only a hosted sandbox can enforce a network policy.
+func TestSelfHostedAdmissionRejectsNetworkPolicy(t *testing.T) {
 	for access, valid := range map[string]bool{"enabled": true, "disabled": false, "restricted": false} {
-		raw := json.RawMessage(`{"agent":{"model":"model"},"environment":{"type":"openai_hosted","network":{"access":"` + access + `"}}}`)
+		raw := json.RawMessage(`{"agent":{"model":"model"},"environment":{"type":"self_hosted","workspace_directory":"/work","network":{"access":"` + access + `"}}}`)
 		if err := (Policy{}).ValidateSessionConfiguration("codex", raw); (err == nil) != valid {
 			t.Fatal(access, err)
 		}

@@ -55,9 +55,10 @@ Runtime settings live in Core's database. Change them in Web; scripts use the sa
 
 | Setting | Where in Web | Core API | Notes |
 | --- | --- | --- | --- |
-| Sandbox backend: Docker, microsandbox or E2B | **Settings** → **Sandbox and scheduling**: the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per installation, chosen after the first sign-in. Another backend needs **Reset deployment** first; see [change the sandbox configuration](./getting-started/nodes.md#change-the-sandbox-configuration) |
+| Sandbox backend: microsandbox or E2B | **Settings** → **Sandbox and scheduling**: the setup wizard, ending with **Save configuration** | `/core/v1/sandbox/deployment` | One backend per installation, chosen after the first sign-in. Another backend needs **Reset deployment** first; see [change the sandbox configuration](./getting-started/nodes.md#change-the-sandbox-configuration) |
 | Sandbox size, E2B key and template build | **Settings** → **Sandbox and scheduling** → **Change resources** | `/core/v1/sandbox/deployment` | Web proposes the [default size the Provider declares](./sandbox-provider.md#register-the-provider-kind). Existing sandboxes keep their size. The E2B key is write-only and encrypted |
 | Nodes and their capacity | **Nodes**: **Add node**, **Edit node** and removal | `/core/v1/sandbox/enrollment-tokens`, `/core/v1/sandbox/nodes` | See [Node capacity](#node-capacity) and [Add and manage nodes](./getting-started/nodes.md) |
+| Sandbox network cap | **Settings** → **Sandbox and scheduling** → **Network**: **Allow public internet**, **Extra allowed domains** → **Save** | `/core/v1/sandbox/deployment` | `network.public` and `network.domains`; see [Network](../contracts/agents-api/sandbox-deployment.md#network). Existing sandboxes keep the cap they started with. A control the Provider does not support is disabled |
 | Idle suspension | **Settings** → **Sandbox and scheduling** → **Automatic suspension** → **Idle before suspension (seconds)** → **Save** | `PATCH /core/v1/sandbox/deployment` | Deployment-wide; see [suspension policy](../contracts/agents-api/sandbox-deployment.md#suspension-policy) |
 | Independent workspace storage and tenant capacity | **Settings → Workspace storage** | `/core/v1/workspace-storage` | See [Set up workspace storage](./getting-started/workspace-storage.md); existing workspaces retain their configuration |
 | Projects and API keys | **Projects and keys**: **Create project**, **Rename**, **Issue key**, **Revoke**, **Archive** | `/core/v1/projects` | Keys are shown once; Core stores digests |
@@ -68,7 +69,7 @@ Which Harnesses are enabled, and the default one, are process settings (`OAC_HAR
 
 ### Node capacity
 
-A node's capacity is **Sandboxes at once** (`max_active`) and, for microsandbox only, **Retained sandboxes** (`max_retained`), with `max_retained >= max_active >= 1`. **Add node** keeps the recommended limits by default, which Core [derives from the host](../contracts/agents-api/sandbox-deployment.md#recommended-capacity) when the node registers, or you enter both numbers. Docker never suspends sandboxes, so Web doesn't ask for it and Core keeps `max_retained` equal to `max_active`. Change them later on **Nodes** with **Edit node**, which shows the recommendation and fills it in on request. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
+A node's capacity is **Sandboxes at once** (`max_active`) and **Retained sandboxes** (`max_retained`), with `max_retained >= max_active >= 1`. **Add node** keeps the recommended limits by default, which Core [derives from the host](../contracts/agents-api/sandbox-deployment.md#recommended-capacity) when the node registers, or you enter both numbers. Change them later on **Nodes** with **Edit node**, which shows the recommendation and fills it in on request. Reservations and cleanup that is not confirmed count against capacity; full retained slots can [end an idle checkpoint's retention early](sandbox-provider.md#cold-replacement-after-checkpoint-retention); lowering a limit stops no running sandbox. A node's own files can't change its capacity, size or Runtime.
 
 `OAC_EXECUTION_CONCURRENCY` is unrelated: it limits concurrent execution work in Core.
 
@@ -104,20 +105,6 @@ The initialization service generates secrets and the installation ID once, then 
 Initialization prepares this directory; application services receive their secret directories read-only. `docker compose exec web oac-web core-key` prints the Core key to the operator terminal without writing it to container logs. Database passwords and credential encryption keys are never printed.
 
 The named Docker volume `<project>_data` contains these paths. Docker manages Linux ownership on every host; each service mounts only its required subdirectories. Preserve this volume together with the project definition and public URL. Removing only the secret directories does not reset an installation; initialization refuses to start over an existing database. Core also binds the installation ID to its database. Runtime settings continue to live in [Core's database](#runtime-settings-web).
-
-## Docker node configuration
-
-The node installer writes Docker’s host settings into the `native` object of the node’s configuration file, which only the Docker adapter reads. Deployment resources and capacity remain in [Core’s database](#runtime-settings-web).
-
-| Field | Installer value | Meaning |
-| --- | --- | --- |
-| `host` | `unix:///var/run/docker.sock` | Explicit Docker Engine socket |
-| `image` | The Runtime image’s local ID after loading | The installation’s Runtime image. The host’s image store decides whether its local ID is the manifest’s `image_id` or `image_manifest_digest`, so the value is node-local |
-| `network` | `oac-node-<installation-id>` | Runtime container network |
-| `seccomp_file` | `<node-root>/runtime/seccomp.json` | Matched distribution’s seccomp profile |
-| `nested_sandbox` | `true` | Enables the Docker adapter’s init process and proc-mask configuration |
-
-The [Docker adapter](./sandbox-provider.md#docker-adapter) owns container isolation, volume layout and lifecycle behavior.
 
 ## Installation directory
 

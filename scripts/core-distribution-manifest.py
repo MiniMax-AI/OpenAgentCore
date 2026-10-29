@@ -17,7 +17,7 @@ from urllib.parse import unquote, urlsplit
 import zipapp
 
 
-RUNTIME_ARCHIVE_SHA256 = "86f9f72dc3e639c7175bc07909b4b63ce412517c1ef8a2e1921171af5682fded"
+RUNTIME_ARCHIVE_SHA256 = "9ca514e58d7156954537210d2e673c07b091ed5137775b8952ecfd2e96d85638"
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "deploy/node"))
 import provider_assets
@@ -52,8 +52,7 @@ BUNDLED_DOCS = (
 )
 # Files the bundled docs show, copied as they are, so they work offline.
 BUNDLED_FILES = (
-    "docs/assets/openagentcore-wordmark-light.svg",
-    "docs/assets/openagentcore-wordmark-dark.svg",
+    "docs/assets/openagentcore-banner.webp",
     "docs/assets/architecture.svg",
     "docs/assets/architecture-dark.svg",
     "docs/assets/console-overview-en.webp",
@@ -211,7 +210,7 @@ def verify_runtime(image, daemon, source):
 
 def extract_runtime(archive, destination):
     if sha256(archive) != RUNTIME_ARCHIVE_SHA256:
-        raise ValueError("microsandbox v0.7.8 release checksum mismatch")
+        raise ValueError("microsandbox runtime archive checksum mismatch")
     destination = pathlib.Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:gz") as bundle:
@@ -309,10 +308,7 @@ def package_artifacts(bundle, stage, revision):
     for logical, suffix in ARTIFACTS.items():
         filename = f"oac-{revision}-linux-amd64-{suffix}"
         target = assets / filename
-        if logical == "runtime/seccomp.json":
-            shutil.copyfile(bundle / logical, target)
-        else:
-            (bundle / logical).replace(target)
+        (bundle / logical).replace(target)
         result[logical] = {"filename": filename, "sha256": sha256(target), "size": target.stat().st_size}
         if logical == "images/runtime.tar.gz":
             result[logical].update(unpacked)
@@ -325,7 +321,7 @@ def bootstraps(bundle, epoch, revision):
     bundle = pathlib.Path(bundle)
     with tempfile.TemporaryDirectory(dir=bundle.parent) as directory:
         modules = (("node_install.py", "__main__.py"), ("distribution.py", "distribution.py"),
-                   *((name, name) for name in ("node_spec.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py")))
+                   *((name, name) for name in ("node_spec.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_microsandbox.py")))
         for original, packaged in modules:
             target = pathlib.Path(directory) / packaged
             shutil.copyfile(bundle / original, target)
@@ -359,7 +355,7 @@ def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", off
         "image_manifest_digests": {name: identity[1] for name, identity in identities.items()},
         "runtime_ref": "oac-runtime@" + digest,
         "microsandbox": {
-            "version": "0.7.8",
+            "version": "0.7.11",
             "runtime_sha256": sha256(stage / "core/microsandbox/msb"),
             "firmware_sha256": sha256(stage / "core/microsandbox/libkrunfw.so.5.6.1"),
         },
@@ -367,10 +363,7 @@ def node_payload(bundle, stage, revision, source_tree, artifact_base_url="", off
     payload = stage / "ingress/node-payload"
     payload.mkdir(parents=True)
     (payload / "manifest.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    for name in ("node-install.pyz", "runtime/seccomp.json"):
-        target = payload / name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(bundle / name, target)
+    shutil.copyfile(bundle / "node-install.pyz", payload / "node-install.pyz")
     checksums(payload)
 
 

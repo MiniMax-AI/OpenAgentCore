@@ -134,7 +134,7 @@ class DistributionTests(unittest.TestCase):
         self.manifest()
         payload = self.stage / "ingress/node-payload"
         files = sorted(p.relative_to(payload).as_posix() for p in payload.rglob("*") if p.is_file())
-        self.assertEqual(files, ["SHA256SUMS", "manifest.json", "node-install.pyz", "runtime/seccomp.json"])
+        self.assertEqual(files, ["SHA256SUMS", "manifest.json", "node-install.pyz"])
         sums = dict(line.split("  ", 1)[::-1] for line in (payload / "SHA256SUMS").read_text().splitlines())
         for name, checksum in sums.items():
             self.assertEqual(distribution.sha256(payload / name), checksum)
@@ -277,7 +277,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(set(metadata["artifacts"]), set(distribution.ARTIFACTS))
         for logical, artifact in metadata["artifacts"].items():
             path = self.stage / "artifacts" / artifact["filename"]
-            self.assertEqual((self.bundle / logical).exists(), logical == "runtime/seccomp.json")
+            self.assertFalse((self.bundle / logical).exists())
             self.assertTrue(artifact["filename"].startswith("oac-" + REVISION + "-linux-amd64-"))
             self.assertEqual(artifact["size"], path.stat().st_size)
             self.assertEqual(artifact["sha256"], distribution.sha256(path))
@@ -312,7 +312,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(json.loads((self.bundle / "manifest.json").read_text())["artifact_base_url"], "")
 
     def test_bootstraps_include_shared_downloader_and_are_reproducible(self):
-        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py", "distribution.py", "node_spec.py"):
+        for name in ("node_install.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_microsandbox.py", "distribution.py", "node_spec.py"):
             (self.bundle / name).write_text("# " + name + "\n")
         distribution.bootstraps(self.bundle, "1700000000", "a" * 40)
         first = (self.bundle / "node-install.pyz").read_bytes()
@@ -320,7 +320,7 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(first, (self.bundle / "node-install.pyz").read_bytes())
         self.assertFalse((self.bundle / "oac.pyz").exists())
         with zipfile.ZipFile(self.bundle / "node-install.pyz") as contents:
-            self.assertEqual(set(contents.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_docker.py", "host_microsandbox.py"})
+            self.assertEqual(set(contents.namelist()), {"__main__.py", "node_spec.py", "distribution.py", "node_generations.py", "install_display.py", "node_output.py", "provider_assets.py", "host_microsandbox.py"})
             self.assertEqual(contents.read("__main__.py"), (self.bundle / "node_install.py").read_bytes())
 
 

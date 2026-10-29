@@ -16,7 +16,7 @@ import (
 func TestCoreErrorDetailsAreScopedByRouterNotRequestPath(t *testing.T) {
 	shared := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		writeCoreError(w, 409, "sandbox_generation_stale", "Refresh the configuration.", CoreErrorDetails{
-			"current_generation": CoreErrorNumber(4), "kinds": CoreErrorStrings("docker", "microsandbox"),
+			"current_generation": CoreErrorNumber(4), "kinds": CoreErrorStrings("microsandbox", "microsandbox"),
 		}, "expected_generation")
 	})
 	router := chi.NewRouter()
@@ -52,7 +52,7 @@ func TestCoreErrorDetailsAreScopedByRouterNotRequestPath(t *testing.T) {
 			if err := json.Unmarshal(out.Body.Bytes(), &body); err != nil {
 				t.Fatal(err)
 			}
-			want := map[string]any{"current_generation": float64(4), "kinds": []any{"docker", "microsandbox"}}
+			want := map[string]any{"current_generation": float64(4), "kinds": []any{"microsandbox", "microsandbox"}}
 			if !reflect.DeepEqual(body["error"]["details"], want) {
 				t.Fatal(body)
 			}
@@ -74,7 +74,7 @@ func TestCoreErrorDetailsAreScopedByRouterNotRequestPath(t *testing.T) {
 }
 
 func TestCoreDetailsTypesOmissionAndSnapshot(t *testing.T) {
-	values := []string{"docker"}
+	values := []string{"microsandbox"}
 	stringsDetail := CoreErrorStrings(values...)
 	values[0] = "private-request-value"
 	valid := CoreErrorDetails{"label": CoreErrorString("ready"), "number": CoreErrorNumber(1.5), "unset": CoreErrorNull(), "values": stringsDetail, "empty": CoreErrorStrings()}

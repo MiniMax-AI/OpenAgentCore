@@ -4,13 +4,14 @@ go 1.26.8
 
 require (
 	github.com/MiniMax-AI/OpenAgentCore v0.0.0
-	github.com/superradcompany/microsandbox/sdk/go v0.0.0-20261009155513-7b7b9dc89e9a
+	github.com/google/uuid v1.6.0
+	github.com/superradcompany/microsandbox/sdk/go v0.0.0-20261024213825-df3e0f7dd692
 )
 
-require (
-	github.com/google/uuid v1.6.0 // indirect
-	golang.org/x/sync v0.22.0 // indirect
-)
+require golang.org/x/sync v0.22.0 // indirect
 
-// The helper ships from this repository; the SDK itself is a released module.
+// The helper ships from this repository.
 replace github.com/MiniMax-AI/OpenAgentCore => ../../../..
+
+// The SDK is upstream v0.7.11 plus the fork's patch queue (docs/maintainers.md).
+replace github.com/superradcompany/microsandbox/sdk/go => github.com/SaladDay/microsandbox/sdk/go v0.0.0-20261028082216-9f2992795029

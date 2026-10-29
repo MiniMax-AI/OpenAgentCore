@@ -20,7 +20,7 @@ import (
 )
 
 // releaseMembers are the only files copied from the initialization image.
-var releaseMembers = []string{"manifest.json", "SHA256SUMS", "node-install.pyz", "runtime/seccomp.json"}
+var releaseMembers = []string{"manifest.json", "SHA256SUMS", "node-install.pyz"}
 
 var dataOwners = []struct {
 	name string

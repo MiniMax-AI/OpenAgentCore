@@ -181,7 +181,7 @@ func TestServiceExportsOnlySanitizedValidatedRecords(t *testing.T) {
 		if record.TenantID != "tenant" || record.SessionID != "session" || record.EnvironmentID != "environment" || record.AllocationID != "allocation" {
 			t.Fatalf("exported identity mismatch: %+v", record)
 		}
-		if record.ProviderType != "docker" || record.Mode != ModeManaged || record.Status != StatusObserved || record.Reason != "" || record.CollectionSource != CollectionSourceOnRead {
+		if record.ProviderType != "microsandbox" || record.Mode != ModeManaged || record.Status != StatusObserved || record.Reason != "" || record.CollectionSource != CollectionSourceOnRead {
 			t.Fatalf("exported classification mismatch: %+v", record)
 		}
 		if record.Sample == nil || record.Sample.CPUUsageSecondsTotal == nil || *record.Sample.CPUUsageSecondsTotal != 12.5 || record.Sample.MemoryUsageBytes == nil || *record.Sample.MemoryUsageBytes != 1024 {
@@ -410,7 +410,7 @@ func TestServiceMapsOnlyDeclaredUnavailability(t *testing.T) {
 		{err: ErrUnavailable, wantReason: "sample_unavailable"},
 		{err: ErrNotRunning, wantReason: "runtime_not_running"},
 		{err: context.DeadlineExceeded, wantReason: "sample_timeout"},
-		{err: errors.New("Docker permission denied"), wantError: true},
+		{err: errors.New("provider permission denied"), wantError: true},
 	} {
 		service, err := NewService(fixedResolver{target: target}, sourceOf(&fixedSource{err: tc.err}))
 		if err != nil {
@@ -420,7 +420,7 @@ func TestServiceMapsOnlyDeclaredUnavailability(t *testing.T) {
 		if (err != nil) != tc.wantError {
 			t.Fatalf("wrong error classification: %+v %v", observation, err)
 		}
-		if !tc.wantError && (observation.Status != StatusUnavailable || observation.Reason != tc.wantReason || observation.ProviderType != "docker") {
+		if !tc.wantError && (observation.Status != StatusUnavailable || observation.Reason != tc.wantReason || observation.ProviderType != "microsandbox") {
 			t.Fatalf("declared unavailability was not mapped: %+v", observation)
 		}
 	}
@@ -438,7 +438,7 @@ func TestServiceMapsAnActualSourceDeadlineWithoutLeakingIt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
 	defer cancel()
 	observation, err := service.ObserveSession(ctx, "tenant", "session")
-	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "sample_timeout" || observation.ProviderType != "docker" {
+	if err != nil || observation.Status != StatusUnavailable || observation.Reason != "sample_timeout" || observation.ProviderType != "microsandbox" {
 		t.Fatalf("source deadline was not safely classified: %+v %v", observation, err)
 	}
 }

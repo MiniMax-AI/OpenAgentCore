@@ -30,7 +30,7 @@ func TestComputeFailureObservationUsesCommittedReceipt(t *testing.T) {
 			} else {
 				provider.killError = sandbox.ErrComputeUnconfirmed
 			}
-			fixture := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t, true))
+			fixture := workspaceSettlementFixtureWithSetup(t, provider, workspaceNodeSetup(t))
 			r, session := fixture.lifecycle, fixture.session
 			initial, err := r.provision(t.Context(), session.TenantID, session.Environment.ID, r.config.InstallationID)
 			if err != nil {
@@ -93,7 +93,7 @@ func TestComputeFailureObservationUsesCommittedReceipt(t *testing.T) {
 }
 
 func TestRunningComputeWakesScheduler(t *testing.T) {
-	fixture := workspaceSettlementFixtureWithSetup(t, &observationCaptureProvider{}, workspaceNodeSetup(t, true))
+	fixture := workspaceSettlementFixtureWithSetup(t, &observationCaptureProvider{}, workspaceNodeSetup(t))
 	r, session := fixture.lifecycle, fixture.session
 	wake := make(chan struct{}, 1)
 	r.scheduleWake = wake

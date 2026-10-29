@@ -32,6 +32,7 @@ export interface RuntimeProfile extends NamedResource {
   setup_script?: string;
   // Variables the Agent supplies: the bound bot's identity or chosen secrets.
   credentials?: string[];
+  network?: { access: "disabled" | "restricted"; allowed_domains?: string[] };
   env?: Record<string, string | null>;
   prepare?: boolean;
   files?: { path: string; content: string }[];

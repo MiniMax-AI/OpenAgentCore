@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	v1 "github.com/MiniMax-AI/OpenAgentCore/contracts/agents-api/v1"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/sessions"
 	"github.com/MiniMax-AI/OpenAgentCore/services/core/internal/workspacefs"
 )
@@ -61,6 +62,9 @@ func (w *Worker) validateCreation(ctx context.Context, input sessions.CreateSess
 		}
 		if snapshot.Environment.Type == "openai_hosted" {
 			if err := w.runtimes.validateWorkspaceAdmission(ctx); err != nil {
+				return err
+			}
+			if err := w.runtimes.validateNetworkAdmission(snapshot.Environment.Network); err != nil {
 				return err
 			}
 		}
@@ -174,4 +178,13 @@ func (m *runtimeManager) validateWorkspaceAdmission(ctx context.Context) error {
 		return workspacefs.ErrUnsupported
 	}
 	return workspacefs.ValidateCombination(*config.WorkspaceRequirements, *declaration, config.Resources.EnvironmentDiskMiB)
+}
+
+// validateNetworkAdmission checks the Environment network policy against the
+// current deployment: its Provider's declaration and its network cap.
+func (m *runtimeManager) validateNetworkAdmission(policy *v1.EnvironmentNetworkInput) error {
+	m.mu.Lock()
+	config := m.config
+	m.mu.Unlock()
+	return admitNetwork(config.NetworkSupport, config.Network, policy)
 }

@@ -1,7 +1,7 @@
 ---
 title: "Runtime 遥测 API"
 source: contracts/agents-api/runtime-observability-api.md
-source_hash: 7dcff114daa6c74d1ee08709f2f68d1b8d97c7225991669fb6431c684e34c26b
+source_hash: fa3b6fa85dfed2399c687a3124b8ab6407dc8dfb3e0a3b32f86333dad0750c3c
 ---
 
 Core 通过 `/core/v1` 下的只读管理员路由报告托管 Runtime 和沙箱节点所使用的信息：当前 Runtime 观测值、单个 Session 的已存储 Runtime 历史记录，以及沙箱节点的主机观测值和历史记录。读取操作绝不创建、唤醒、续期或更改计算资源，也绝不向历史记录添加样本。[Runtime observability](runtime-observability.md) 定义了 Core 如何采集和保留这些值；[Console API usage](../../../docs/zh/web/console-api-usage.md) 列出了读取这些值的 Web 页面。
@@ -37,7 +37,7 @@ Authorization: Bearer <Core key>
         "session_id": "6c77d3a2-71d6-4ed5-884f-687aecda02a3",
         "environment_id": "6c02fb71-5fa8-4298-93e8-57c6625a3fc2",
         "mode": "openai_hosted",
-        "provider_type": "docker",
+        "provider_type": "microsandbox",
         "instance": {
           "kind": "managed_allocation",
           "allocation_id": "d23ab94e-e40b-45bd-93a2-444f1f74642b",
@@ -83,7 +83,7 @@ Authorization: Bearer <Core key>
 | `session_id` | string | 对应的 Session。 |
 | `environment_id` | string 或 null | 仅当 mode 为 `none` 时为 null。 |
 | `mode` | enum | `none`、`self_hosted` 或 `openai_hosted`。 |
-| `provider_type` | string 或 null | 来源类型，例如 `docker`、`microsandbox` 或 `e2b`；未读取任何提供商数据时为 null。未知值应视为新类型，而不是错误。 |
+| `provider_type` | string 或 null | 来源类型，`microsandbox` 或 `e2b`；未读取任何提供商数据时为 null。未知值应视为新类型，而不是错误。 |
 | `instance` | object | 当前计算资源标识；请参阅 [`RuntimeInstance`](#runtimeinstance)。 |
 | `lifecycle_state` | enum 或 null | Core 自身对托管分配的生命周期视图；对于 `none` 和 `self_hosted` 为 null。请参阅下文。 |
 | `status` | enum | `observed`、`unsupported` 或 `unavailable`。 |
@@ -119,7 +119,7 @@ Authorization: Bearer <Core key>
 
 ### `disk` {#disk}
 
-只有列表行包含 `disk`：其值为 null，或为遵循 `memory` 规则的 `{usage_bytes, limit_bytes}`。当沙箱同时报告磁盘使用量和非零容量时，E2B 会填充此对象。Docker 和 microsandbox 返回 null。非 null 的 `disk` 只出现在状态为 `observed` 的行中。
+只有列表行包含 `disk`：其值为 null，或为遵循 `memory` 规则的 `{usage_bytes, limit_bytes}`。当沙箱同时报告磁盘使用量和非零容量时，E2B 会填充此对象。microsandbox 返回 null。非 null 的 `disk` 只出现在状态为 `observed` 的行中。
 
 ### 状态和原因 {#status-and-reason}
 

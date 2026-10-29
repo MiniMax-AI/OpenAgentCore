@@ -1,7 +1,7 @@
 ---
 title: "Environment 与模板"
 source: contracts/agents-api/environments.md
-source_hash: 52d557886a595276c94f935b22531d84a712ceff0e64bf91e04749eed4366dc1
+source_hash: b0587966b17ac30e6626b3ba094005de114fc04c0190a7adc96830f92acb11c3
 ---
 
 Environment 是 Session 的执行资源，包括 Harness 运行所在的机器、工作区以及已完成准备的能力。Session 通过其 `environment` 配置创建 Environment；不存在独立的 create 调用。Environment 模板是 Session 创建时解析的可复用准备配置。本契约涵盖这两类资源、两种放置方式、输入接纳、能力准备、Skills、Plugins 和 MCP 连接来源。
@@ -10,7 +10,7 @@ Environment 是 Session 的执行资源，包括 Harness 运行所在的机器�
 
 - [Environment files](environment-files.md)：实时工作区上的 Files API。
 - [执行器凭据](environment-executor-credentials.md)：`self_hosted` 机器的注册、安装授权和连接状态。
-- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（E2B、Docker 或 microsandbox）。
+- [Sandbox deployment](sandbox-deployment.md)：托管 `openai_hosted` Environment 的沙箱提供商（E2B 或 microsandbox）。
 - [Core–Runtime protocol](../../../docs/zh/runtime-protocol.md)：`runtime_prepare` 传输及所有其他线上消息。
 - [Runtime and outer isolation](../../../docs/zh/concepts.md#runtime-and-outer-isolation)：daemon 使用启动用户的权限运行工具；隔离由外层 Environment 提供。
 
@@ -73,11 +73,11 @@ Core 在 Session 创建事务中创建 Environment 记录；Session upsert 会�
 
 ### 托管（`openai_hosted`） {#hosted-openai-hosted}
 
-部署中配置的沙箱提供商（E2B、Docker 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
+部署中配置的沙箱提供商（E2B 或 microsandbox，请参阅 [sandbox deployment](sandbox-deployment.md)）承载 Environment。[Harness capabilities](harness-capabilities.md) 列出了可在其中运行的 Harnesses。
 
 - Session 创建时，无论是否包含初始输入，都会在 Worker 配置计算资源之前提交 Session、Environment 和重试身份。若创建在 bootstrap 前中断，可恢复时不会重复执行提供商的 Create。
 - 置备无需调用方执行任何操作；在 Turn 启动之前，Session 会保持空闲。
-- 省略或传入 null 的 `network` 表示启用；`disabled` 和 `restricted` 会在 Session 创建前被拒绝（[restricted network](#restricted-network)）。
+- 省略或传入 null 的 `network` 表示启用；`disabled` 和 `restricted` 需要托管 Environment，且其沙箱 Provider 能限制出站（[网络策略](#restricted-network)）。
 - Core 重启会保留分配、工作区和原生身份，并且绝不重播结果不确定的工作。
 - 终止清理会先在一个事务中撤销权限并结算待处理输入，然后提供商才会回收计算资源。向处于终止状态的 Environment 提交新输入会被拒绝。
 - 删除 Session 会回收其 Environment；删除模板则不会。
@@ -305,7 +305,18 @@ Core 可以用同一 Project 中较早一次准备的结果启动托管 Environm
 
 `restricted` 要求在 `allowed_domains` 中提供 1–100 个精确 ASCII 主机名；子域名和重定向目标需要各自的条目。通配符、URL 或端口语法、IP 字面量、Unicode 和尾随点都会被拒绝。读取操作会返回提供的拼写、顺序和重复项；比较操作使用单独的小写去重副本。
 
-只有 `enabled` 可以运行。Core 会在模板中存储其他策略，但会在分配计算资源之前拒绝任何有效 network 不是 `enabled` 的 Session。初始化和工具使用主机现有的网络。
+托管 Session 的有效 `network` 在部署的[网络上限](sandbox-deployment.md#network)内收窄，并且该策略在沙箱的整个生命周期内生效，包括包安装和设置命令：
+
+- `enabled`：沙箱可访问上限允许的范围。
+- `disabled`：沙箱只能访问 Core、Session 的模型提供商和主机 53 端口上的 DNS 服务器。模型提供商仅在公开地址上的 `base_url` 端口可达；私有的模型提供商主机只有在上限的额外域名覆盖其名称时才可达。需要网络的包安装和设置命令按普通设置错误失败。
+- `restricted`：沙箱可访问所列域名、Core 和模型提供商（条件同 `disabled`）。上限允许公网时，域名在公开地址上被允许；上限的额外域名按名称或 `*.` 条目覆盖该域名时，在其解析出的地址上被允许。其他域名在创建 Session 时被拒绝，错误码为 `sandbox_network_outside_cap`，`param` 指向该 `allowed_domains` 条目。上限之后缩小时，沙箱尝试以同一错误失败。
+
+限制（[适配器规则](../../../docs/zh/sandbox-provider.md#network-egress)）：
+
+- 上限按名称或 `*.` 条目列出的模型提供商主机与所列域名一样可达，不限于其端口。
+- 在 E2B 上，受限域名只能通过 80 和 443 端口访问；模型提供商使用其他端口时，其公网地址的所有端口均可达。
+
+部署的沙箱 Provider 无法限制出站时，`disabled` 和 `restricted` 返回 `sandbox_network_unsupported`。`self_hosted` Environment 只接受 `enabled`，因为 Core 无法在不由它运行的机器上强制策略。
 
 ### Env 与设置命令 {#env-and-setup-commands}
 

@@ -72,6 +72,8 @@ function coreTemplate(runtime) {
     setup_commands: runtime.setup_script ? [{ command: runtime.setup_script, cwd: "/workspace" }] : [],
     env: { ...runtime.env },
     files: templateFiles(runtime),
+    // Null is enabled; an update must send it, since an omitted field keeps its value.
+    network: runtime.network || null,
   };
 }
 

@@ -11,11 +11,11 @@ build = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build)
 
 
-class OfficialBundleTests(unittest.TestCase):
+class FFIBundleTests(unittest.TestCase):
     def test_only_verified_payload_replaces_empty_sentinel(self):
         with tempfile.TemporaryDirectory() as directory:
             source, destination = Path(directory) / "ffi", Path(directory) / "sentinel"
-            source.write_bytes(b"official ffi")
+            source.write_bytes(b"ffi")
             destination.touch()
             with patch.object(build, "FFI_SHA256", hashlib.sha256(source.read_bytes()).hexdigest()):
                 build.install_ffi(source, destination)
@@ -35,7 +35,7 @@ class OfficialBundleTests(unittest.TestCase):
     def test_symlink_sentinel_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             source, destination, outside = (Path(directory) / name for name in ("ffi", "sentinel", "outside"))
-            source.write_bytes(b"official ffi")
+            source.write_bytes(b"ffi")
             outside.touch()
             destination.symlink_to(outside)
             with patch.object(build, "FFI_SHA256", hashlib.sha256(source.read_bytes()).hexdigest()):

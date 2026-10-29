@@ -1,7 +1,7 @@
 ---
 title: "运维"
 source: docs/getting-started/operations.md
-source_hash: e3e28c2904453b38465e84d955e45ffae533b202f1ce0b88bc18c4c3efe6a773
+source_hash: 7ccb5fea5da457afd341300bcd026dc20683625d73b57a494ab50b56c67b33e5
 ---
 
 Core 安装运维人员的日常任务：`oac` 命令、服务健康状态、Core 密钥、备份和卸载。节点有[专门的指南](./nodes.md)，[故障排查](./troubleshooting.md)列出了安装程序和访问方面的提示信息。设置见[配置参考](../configuration.md)。
@@ -63,7 +63,7 @@ docker compose -f ~/.oac/core/compose.yaml stop
 docker compose -f ~/.oac/core/compose.yaml start
 ```
 
-停止 Core 不会停止节点或沙箱。节点服务、microVM 和 Docker 容器继续运行；停止不是回收计算资源的方法。Core 重启不会透明地继续被中断的原生工具调用。重连后查询同一 Session；不要创建新 Session 来重放结果不确定的工作。Session 事件流仅提供实时事件；通过读取 Session、Turn 和 Items 恢复。
+停止 Core 不会停止节点或沙箱。节点服务和 microVM 继续运行；停止不是回收计算资源的方法。Core 重启不会透明地继续被中断的原生工具调用。重连后查询同一 Session；不要创建新 Session 来重放结果不确定的工作。Session 事件流仅提供实时事件；通过读取 Session、Turn 和 Items 恢复。
 
 Web 重启（包括 `oac apply` 引起的重启）会让所有控制台用户退出登录；参阅[登录](../web/console-server.md#sign-in)。
 
@@ -165,7 +165,7 @@ docker run --rm -v "${project}_data:/data" -v ~/oac-backup:/backup:ro --entrypoi
 - 安装目录，包括 `.env`、`compose.yaml`、Compose 覆盖文件和管理命令。
 - 当前或保留对象所使用的每个独立工作区命名空间，即使其位于安装卷之外。备份整个根目录，包括 `.oac-storage-root`、对象标识、staging、live 数据、trash 和删除标记。保留数值所有者、权限、链接及扩展属性，包括全部 `user.*` 属性。仅复制 `live/data` 会丢失生命周期证据，并可能使已删除标识复活。[工作区存储](../workspace-provider.md#kernel-nfs-adapter)负责定义布局与所有权要求。
 - 对于[配额模式](../workspace-provider.md#quota-mode)命名空间，将承载导出的整个 XFS 文件系统作为一份块级副本备份：存储或 LVM 快照，或已冻结或已卸载设备的镜像。只有这样的副本能保持 project ID、配额限制、inode 标识、文件系统 UUID 和 `oac-workspace-quota` 日志库的一致。文件级复制、`tar`、`rsync` 或 `xfsdump` 会丢失这些信息；此时该命令会拒绝恢复后的对象，而不是在无上限状态下提供它们。
-- 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其提供商存储：Docker 卷或 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
+- 各节点状态目录 `/var/lib/oac-node/.oac/nodes/<installation-id>/` 及其提供商存储，即 microsandbox 存储。包含数据库仍然引用的全部计算资源和快照。参见[节点主机故障时](./nodes.md#when-a-node-host-fails)。
 - 每个私有 `checkpoint_root` 的全部内容，包括 `.oac-checkpoint-store`、检查点、operation journal、lock 文件与 tombstone，并与匹配的 Core 数据库一起保留。[检查点转移契约](../sandbox-provider.md#checkpoint-transfer)定义其身份、所有权和生命周期。
 
 ### 建立停止写入窗口 {#establish-a-stopped-write-window}

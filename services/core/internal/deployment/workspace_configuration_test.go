@@ -12,7 +12,7 @@ import (
 
 func TestWorkspaceConfigurationUsesStoredGenerationWithoutNativeProvider(t *testing.T) {
 	declaration := workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}
-	for _, provider := range []string{"", "docker", "microsandbox"} {
+	for _, provider := range []string{"", "microsandbox"} {
 		t.Run(provider, func(t *testing.T) {
 			record := Record{InstallationID: uuid.NewString(), Specification: []byte(`{}`)}
 			if provider != "" {
@@ -20,11 +20,7 @@ func TestWorkspaceConfigurationUsesStoredGenerationWithoutNativeProvider(t *test
 			}
 			service := newService(t, &fakeStorage{t: t}, &fakeReader{t: t, deployment: func(context.Context) (Record, error) { return record, nil }}, testPublicURL)
 			err := service.ValidateWorkspaceConfiguration(t.Context(), declaration)
-			if provider == "docker" {
-				if !errors.Is(err, workspacefs.ErrUnsupported) {
-					t.Fatal("incompatible provider accepted", err)
-				}
-			} else if err != nil {
+			if err != nil {
 				t.Fatal(err)
 			}
 		})

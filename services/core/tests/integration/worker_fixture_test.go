@@ -153,6 +153,22 @@ func fixtureOwner(s *Store, lease *pgunit.Lease) (execution.Owner, error) {
 	}, nil
 }
 
+// selectStoreWorkspaceStorage selects the fixture workspace storage on s before a
+// Worker takes its execution lease.
+func selectStoreWorkspaceStorage(t *testing.T, s *Store) {
+	t.Helper()
+	lease, err := pgunit.AcquireLease(t.Context(), s.pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close(context.Background())
+	owner, err := fixtureOwner(s, lease)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selectWorkspaceStorage(t, owner.Workspaces)
+}
+
 // webDeployment claims s's deployment for a new installation and selects
 // provider on it as Web setup does, then closes its execution lease so a
 // Worker can start. It returns the installation.

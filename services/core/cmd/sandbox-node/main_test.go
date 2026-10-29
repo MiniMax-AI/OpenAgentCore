@@ -51,7 +51,7 @@ func refreshIdentity(t *testing.T, coreURL string) error {
 	if err := os.Mkdir(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	identity := node.Identity{InstallationID: uuid.NewString(), Provider: "docker", BackendFingerprint: strings.Repeat("1", 64)}
+	identity := node.Identity{InstallationID: uuid.NewString(), Provider: "microsandbox", BackendFingerprint: strings.Repeat("1", 64)}
 	if _, err := node.InitIdentity(dir, coreURL, identity); err != nil {
 		t.Fatal(err)
 	}

@@ -76,7 +76,7 @@ To move to a newer release, reinstall: [uninstall](./operations.md#uninstall) th
 
 ## Add sandbox capacity
 
-The installer selects no sandbox backend. [Choose a sandbox backend](./sandbox-backends.md): microsandbox on your own Linux nodes with workspace storage from [Set up workspace storage](./workspace-storage.md) is the recommended self-managed deployment, and E2B needs no nodes. Applications can also run [self-hosted Sessions](./self-hosted.md) on their own machines.
+The installer selects no sandbox backend. [Choose a sandbox backend](./sandbox-backends.md): microsandbox on your own Linux nodes with workspace storage from [Set up workspace storage](./workspace-storage.md) is the self-managed deployment, and E2B needs no nodes. Applications can also run [self-hosted Sessions](./self-hosted.md) on their own machines.
 
 ## Set a default model
 

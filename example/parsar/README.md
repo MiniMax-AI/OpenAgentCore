@@ -22,7 +22,7 @@ Open http://127.0.0.1:18180. `OPENAI_BASE_URL` ends in `/v1`; remote endpoints r
 | Object | What it is |
 | --- | --- |
 | **资源库** | Building blocks, grouped by what uses them: models for Agent engines; Skills, MCP servers, Plugins, knowledge and instruction fragments for Agents; credentials for MCP. Resources are shared: editing one affects everything that uses it. Only live configuration blocks removal: an Agent that binds an item, an Agent that uses a template or model, or a bot bound to an Agent. Conversations do not; they keep the configuration snapshot they were created with and their full history. |
-| **环境模板** | The prepared workspace: npm and Python packages, a Bash setup script, environment variables, the secrets it needs and initial files. |
+| **环境模板** | The prepared workspace: npm and Python packages, a Bash setup script, network access (allowed, blocked or limited to listed domains), environment variables, the secrets it needs and initial files. |
 | **Agent** | What people talk to: name, description, instructions, how it runs, one required environment template, capabilities and behavior switches. How it runs mirrors a local Codex configuration: Harness, model, reasoning effort, web search and, under **高级**, reasoning summary, verbosity and service tier. **复制** creates an independent copy. |
 | **飞书机器人** | One bot is bound to at most one Agent. It routes its chats to that Agent and is the Agent’s Feishu identity in every conversation, including Web chats. |
 | **对话** | One public Core Session with its own Environment, created from the Agent's saved Core Agent and its environment template's Core Environment Template. Core copies both when the Session starts. |

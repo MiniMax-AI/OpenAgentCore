@@ -16,14 +16,13 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 		param, message string
 		min, max       *uint32
 	}{
-		{"docker", sandbox.Resources{}, "resources.cpus", "cpus must be 1..255 and memory_mib must be 512..1048576", validationBound(1), validationBound(255)},
-		{"docker", sandbox.Resources{CPUs: 1, MemoryMiB: 511}, "resources.memory_mib", "cpus must be 1..255 and memory_mib must be 512..1048576", validationBound(512), validationBound(1048576)},
+		{"microsandbox", sandbox.Resources{}, "resources.cpus", "cpus must be 1..255 and memory_mib must be 512..1048576", validationBound(1), validationBound(255)},
+		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 511}, "resources.memory_mib", "cpus must be 1..255 and memory_mib must be 512..1048576", validationBound(512), validationBound(1048576)},
 		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 512}, "resources.root_disk_mib", "microsandbox requires root_disk_mib of at least 1024 MiB", validationBound(1024), nil},
 		{"microsandbox", sandbox.Resources{CPUs: 1, MemoryMiB: 512, RootDiskMiB: 1024, EnvironmentDiskMiB: 1}, "resources.environment_disk_mib", "microsandbox requires environment_disk_mib of 0 or at least 1024 MiB", validationBound(1024), nil},
-		{"docker", sandbox.Resources{CPUs: 1, MemoryMiB: 512, RootDiskMiB: 1}, "resources.root_disk_mib", "docker does not support independent disk capacity limits", validationBound(0), validationBound(0)},
 		{"e2b", sandbox.Resources{CPUs: 1, MemoryMiB: 512, EnvironmentDiskMiB: 1}, "resources.environment_disk_mib", "e2b does not support independent disk capacity limits", validationBound(0), validationBound(0)},
 	} {
-		spec := sandbox.DeploymentSpec{Resources: tc.resources}
+		spec := sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: tc.resources}
 		if tc.provider == "microsandbox" {
 			// microsandbox runs every sandbox on workspace storage.
 			spec.Workspace = &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true, CapacityQuota: true}
@@ -40,11 +39,11 @@ func TestDeploymentValidationFieldsPreserveMessages(t *testing.T) {
 			}
 		}
 	}
-	if err := registry.ValidateSpecification("docker", sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576}}); err != nil {
+	if err := registry.ValidateSpecification("microsandbox", sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 255, MemoryMiB: 1048576, RootDiskMiB: 1024}, Workspace: &workspacefs.Declaration{Attachment: workspacefs.AttachmentHostDirectory, UserXAttr: true}}); err != nil {
 		t.Fatal(err)
 	}
 	var field *sandbox.ValidationError
-	err := registry.ValidateSpecification("private-provider", sandbox.DeploymentSpec{Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}})
+	err := registry.ValidateSpecification("private-provider", sandbox.DeploymentSpec{Network: sandbox.DefaultNetwork(), Resources: sandbox.Resources{CPUs: 1, MemoryMiB: 512}})
 	if errors.As(err, &field) || err.Error() != sandbox.ErrInvalid.Error()+": unsupported sandbox provider" {
 		t.Fatal("unknown provider reclassified", err)
 	}

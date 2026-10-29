@@ -1,21 +1,4 @@
 {
-  "docker": [
-    {
-      "path": "native/bin/oac-node",
-      "suffix": "sandbox-node",
-      "role": "node"
-    },
-    {
-      "path": "images/runtime.tar.gz",
-      "suffix": "runtime.tar.gz",
-      "role": "image"
-    },
-    {
-      "path": "runtime/seccomp.json",
-      "suffix": "seccomp.json",
-      "role": "policy"
-    }
-  ],
   "microsandbox": [
     {
       "path": "native/bin/oac-node",
@@ -26,11 +9,6 @@
       "path": "images/runtime.tar.gz",
       "suffix": "runtime.tar.gz",
       "role": "image"
-    },
-    {
-      "path": "runtime/seccomp.json",
-      "suffix": "seccomp.json",
-      "role": "policy"
     },
     {
       "path": "native/bin/oac-microsandbox-provider",

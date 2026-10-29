@@ -1,15 +1,15 @@
 ---
 title: "沙箱提供商协议"
 source: docs/sandbox-provider.md
-source_hash: 9aac833e15cf78b06e4378b7526074bdb4cbac82aef4528e17da382053bc638d
+source_hash: 6e00a807390c887b3458acf9be3349402c8d34e08c3e7426af2e52510b6eadd0
 ---
 
-沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。Docker、microsandbox 和 E2B 实现了该协议。
+沙箱提供商协议连接 Core 与为 Core 管理的（`openai_hosted`）Environment 提供计算资源的 adapter，并由该 adapter 运行启动 Runtime daemon 的有界引导流程。本页面向 adapter 作者：说明提供商必须实现什么，以及可以依赖 Core 做什么。microsandbox 和 E2B 实现了该协议。
 
 | | |
 | --- | --- |
 | 调用方 | Core 的 runtime manager 与 execution Worker |
-| 实现 | Docker 和 microsandbox（node adapter），以及 E2B（direct adapter）；见[参考 adapter](#reference-adapters) |
+| 实现 | microsandbox（node adapter）和 E2B（direct adapter）；见[参考 adapter](#reference-adapters) |
 | 代码 | `sandbox_provider.go` 中的 [`SandboxProvider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/sandbox_provider.go)，以及 setup 阶段的 `ConfigurationAdapter` |
 | 传输 | direct adapter 在进程内被调用。node adapter 运行在沙箱节点上，通过[沙箱节点协议](../../contracts/agents-api/zh/node-generation-protocol.md#provider-requests)接收同样的调用 |
 | 版本规则 | 进程内接口没有 wire 版本。沙箱节点协议和各 helper 协议要求精确版本匹配 |
@@ -52,7 +52,7 @@ source_hash: 9aac833e15cf78b06e4378b7526074bdb4cbac82aef4528e17da382053bc638d
 | `Kill` | 回收 allocation 的计算资源与保留资源 |
 | `RunCommand` | 在 allocation 的计算资源中运行有界命令 |
 
-Docker 等没有原生可续期租约的 backend 仍遵守 Core 的 hosted expiry 和 cleanup 要求。每个 adapter 都实现 `RunCommand`，测试也执行它，但 Core 编排不调用它；只有 node transport 转发。机密命令输入通过 `Command.Stdin` 传输，不放在参数或日志中；结果保留字节顺序、有界输出和实际退出状态。
+没有原生可续期租约的 backend 仍遵守 Core 的 hosted expiry 和 cleanup 要求。每个 adapter 都实现 `RunCommand`，测试也执行它，但 Core 编排不调用它；只有 node transport 转发。机密命令输入通过 `Command.Stdin` 传输，不放在参数或日志中；结果保留字节顺序、有界输出和实际退出状态。
 
 `Bootstrap.Workspace` 和 `ResumeRequest.Workspace` 仅当提供商的 `DeploymentPolicy.Workspace` 已声明时才携带外部工作区绑定；提供商对此的义务见[挂载](workspace-provider.md#attachment)。Core 仅在提供商声明支持 checkpoint 时设置 `Bootstrap.SuspendControl`，提供商将其原样放入 [Runtime bootstrap](runtime-bootstrap.md)。
 
@@ -156,13 +156,13 @@ configuration adapter 必须非 nil，包括其具体值。每个 `Configuration
 
 具有凭据的 direct adapter 在替换 key 前验证全部保留 generation 与 allocation reference。公共 `sandbox.CallFence` 排除原生调用并等待 helper 完成，包括调用方已超时的调用；execution 调用已准备的 verification 和 fencing callback，不按厂商分支。
 
-厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回提供商、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。Docker 与 microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过提供商名称。
+厂商部署验证和 SDK setup 留在构造边界，构造不创建 Environment。node-local adapter 的 `sandbox.Built` 返回提供商、probe、installation identity、backend fingerprint 和 specification digest；helper 可能比调用方存活更久时，还返回 `Quiescent` 检查，generation 回收会等待它。factory 还返回 close 函数。`execution.RuntimeProvider` 将 adapter 绑定到 kind、installation ID、backend fingerprint、generation、mode 和 node ownership；选择由数据库负责，内存副本不构成另一权限来源。microsandbox 在 node 上运行，E2B 直接构造。node proxy 仅对注册声明支持 checkpoint 的 backend 暴露 checkpoint 操作，公共 lifecycle 通过 checkpoint 声明准入 suspension，不通过提供商名称。
 
 backend fingerprint 标识原生资源命名空间，不表示容量。Core 保留部署 generation，使所属 allocation 继续解析到原 backend；不要将保留 allocation 重新指向替代 backend。
 
 ### 发行产物与进程路径 {#distribution-artifacts-and-process-paths}
 
-每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime`、`policy` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 Web catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包、Web availability 和 node 安装读取此投影；添加提供商 payload 不在这些消费者中增加按提供商名称的分支。
+每个 node adapter 注册负责其类型化 `NodeArtifacts` 声明，即共享 node artifact 加上其包导出的原生文件：逻辑发行路径、release filename suffix 和安装角色（`node`、`runtime` 或 `image`）。注册拒绝缺失声明、不安全路径和未知角色。`go run ./services/core/cmd/provider-artifacts -write` 生成共享 Web catalog 和 Python projection。不带 `-write` 运行可检查是否最新。发行打包、Web availability 和 node 安装读取此投影；添加提供商 payload 不在这些消费者中增加按提供商名称的分支。
 
 launcher 从[派生进程环境](configuration.md)提供 `sandbox.ProcessPaths`。Core 读取这些路径一次，并传给 direct construction 和 setup 操作。它们是固定发行属性，不是部署设置或用户可选 helper 路径。每个 adapter 解析自己的相对 helper 和 state 位置；E2B 使用 `e2b/oac-e2b-provider` 和 `e2b/`。root 缺失或不是绝对路径时，在执行 helper 前失败。提供商构造与发现不读取进程环境变量。
 
@@ -192,6 +192,21 @@ stateDiagram-v2
 ```
 
 当 Session 被删除或归档、Environment 失败或到期，或管理员重置部署时，allocation 进入 `cleanup_pending`。`released` 要求 `CreateSettled`；参见[身份与资源所有权](#identity-and-resource-ownership)。
+
+## 网络出站 {#network-egress}
+
+Provider 声明 `DeploymentPolicy.Network`：`Restrict` 表示能拒绝公开地址并允许具名公开域名，Core 仅在此时准入 `disabled` 和 `restricted` Environment；`PrivateDomains` 表示能允许具名主机解析出的私有地址。保存选择时，Core 会依据该声明校验部署的[网络上限](../../contracts/agents-api/zh/sandbox-deployment.md#network)，绝不替换为其他行为。
+
+Core 在 `Bootstrap` 和每个 `ResumeRequest` 中发送同一个 `Egress`，它由分配所属的部署代次和 Session 冻结的 Environment `network` 策略和冻结的模型提供商推导而来。`disabled` 只留下 `Endpoints`；`restricted` 清除 `Public`，上限列出的域名放入 `PrivateDomains`，其余放入 `Domains`（[策略](../../contracts/agents-api/zh/environments.md#restricted-network)）：
+
+- `Public`：允许公开地址。
+- `PrivateDomains`：精确主机名，或 `*.example.com`（覆盖其子域名，不含 `example.com` 本身），其解析出的地址（包括私有地址）都被允许。
+- `Domains`：只在公开地址上被允许的精确主机名，私有应答仍被阻止。上限允许公网时，它们承载 `restricted` Environment 的 `allowed_domains`。
+- `Endpoints`：模型提供商 `base_url` 的 `host:port` 条目（`net.JoinHostPort` 形式），端口取自 URL，https 默认 443，http 默认 80，主机为回环时省略。Harness 运行在沙箱内，直接调用它。条目只允许该 TCP 端口在公开地址上的访问，绝不包括私有地址。上限的额外域名列出了模型主机名或覆盖它的 `*.` 条目时，Core 还会把该名称加入 `PrivateDomains`，使私有模型主机在任何策略下都能工作。
+
+Provider 在始终允许到 Core 的连接之上严格执行这些内容，并阻止回环、链路本地、云元数据以及 `Egress` 未列出的所有私有地址，但 E2B 无法阻止元数据地址 169.254.169.254。它在创建和恢复时用主机 DNS 解析 Core 主机。MCP 流量没有条目：它遵循 `Public`、`PrivateDomains` 和 `Domains`。
+
+microsandbox 按首条匹配的顺序和默认拒绝来应用规则，创建与恢复相同，并关闭严格主机名校验和 DNS rebind 保护。沙箱只能访问主机的 DNS 服务器：发往其他服务器的 DNS 和主机的其他端口都被拒绝，因此只有主机的应答能把名称绑定到地址。该服务器不论策略都会应答任何名称，因此被拒绝的名称仍能解析，只是连接会失败。名称成为不带端口的域名放行规则，放行这些应答解析出的地址（包括私有地址）；`*.example.com` 条目成为子域名放行规则，永远不匹配 `example.com`。E2B 只声明 `Restrict`：`Public` 时加入回环、私有和链路本地网段的拒绝列表，非 `Public` 时拒绝除 Core 主机、`Endpoints` 和 `Domains` 之外的全部 IPv4 和 IPv6 流量。E2B 只在 80 和 443 端口匹配主机名，因此 adapter 还会为 Core 主机和每个 Endpoint 在其他端口上允许其全球 IPv4 地址。IP 字面量只作为单地址的全球地址范围被允许，私有字面量没有规则。
 
 ## 检查点生命周期 {#checkpoint-lifecycle}
 
@@ -304,30 +319,11 @@ Go adapter 的 E2B 模板和 endpoint validator 消费共享 [selector fixture](
 
 node 测试单独覆盖 disconnect、reconnect fencing，以及 Create response 丢失后的 cleanup。helper protocol 和 [sandbox node 协议](../../contracts/agents-api/zh/node-generation-protocol.md)要求精确版本匹配；直接进程内接口没有独立 wire version。
 
-原生验收证明 fixture 无法证明的事实：creation、lease 行为、所属 partial cleanup、声明的 isolation 与 limit，以及支持时的 snapshot。显式启用的 Docker lifecycle 和 recovery 测试使用 `AGENTS_RUNTIME_DOCKER_TEST_IMAGE`；SDK helper 使用 `make check-e2b-provider` 和 `make check-microsandbox-provider`。mock compute 不能证明 reclamation 或 isolation。
+原生验收证明 fixture 无法证明的事实：creation、lease 行为、所属 partial cleanup、声明的 isolation 与 limit，以及支持时的 snapshot。SDK helper 使用 `make check-e2b-provider` 和 `make check-microsandbox-provider`。mock compute 不能证明 reclamation 或 isolation。
 
 ## 参考 adapter {#reference-adapters}
 
 | Kind | Adapter | Helper 与 adapter 规则 | 运维指南 |
 | --- | --- | --- | --- |
-| Docker (node) | [`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker) | [`sandbox/node`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/node) 中的 node proxy | [Docker adapter](#docker-adapter) |
 | microsandbox (node) | [`sandbox/microsandbox`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/microsandbox) | [`tools/microsandbox-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/microsandbox-provider/README.md) | [Node](getting-started/nodes.md) |
 | E2B (direct) | [`sandbox/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/e2b) | [`tools/e2b-provider`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/tools/e2b-provider/README.md) | [沙箱部署](../../contracts/agents-api/zh/sandbox-deployment.md#e2b-configuration)；应用管理的模板见 [`deploy/e2b`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/deploy/e2b/README.md) |
-
-## Docker adapter {#docker-adapter}
-
-Docker 沙箱提供商（[`sandbox/docker`](https://github.com/MiniMax-AI/OpenAgentCore/tree/main/services/core/internal/sandbox/docker)）对所有 Runtime image 使用相同 container setting，无论服务哪个 Harness（[`container_options.go`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/container_options.go)）：
-
-- user 1000:1000、只读 root filesystem、移除全部 capability、`no-new-privileges`、[seccomp profile](#seccomp-profile) 和 AppArmor `unconfined`；
-- node 配置的 network 和 extra host（[node 配置](configuration.md#docker-node-configuration)）；
-- deployment specification 中的 CPU 和 memory，128-process limit 和 128 MiB `/tmp` tmpfs；
-- 两个 named volume，label 包含 installation、tenant、Environment 和 allocation：`<name>-home` 挂载到 `/home`，`<name>-environment` 挂载到 `/environment`，后者的 `workspace` 子目录也挂载到 `/workspace`。Docker Engine 必须支持 volume subpath mount；
-- 配置 `nested_sandbox` option 时，解除 Docker `/proc` mask（`/sys/firmware` 和 `/sys/devices/virtual/powercap` 保持 mask），container 运行 init process。
-
-Create 拒绝复用没有 container 的保留 volume。它将 [Runtime 引导](runtime-bootstrap.md)文件复制到 `/home/runtime/runtime-bootstrap.json`（mode 0600、UID 1000），并将 `/environment` workspace、staging、initialization 和 package directory 放入 container，然后启动 `oac-daemon connect --profile default --bootstrap-file /home/runtime/runtime-bootstrap.json`。创建的 container 不具备配置的 CPU、memory 和精确 image 时，Create 返回 error 和 `CreateSettled`。Docker 没有 lease，因此 Renew 仅读取 container state。Kill 在删除前检查 container 和两个 volume 的 ownership label，再确认三者都已不存在。
-
-node 使用 [提供商配置](configuration.md#docker-node-configuration)中的明确 Unix socket，忽略 `DOCKER_HOST`。不将 Docker socket、host home 或 Core credential 挂载进 Runtime。
-
-### Seccomp profile {#seccomp-profile}
-
-[`seccomp.json`](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/seccomp.json) 是 [revision 65adc7e](https://github.com/moby/profiles/blob/65adc7e022c97f55e45c054ff012988027733b87/seccomp/default.json) 的 Moby default profile（Apache-2.0，参见 [seccomp.LICENSE](https://github.com/MiniMax-AI/OpenAgentCore/blob/main/services/core/internal/sandbox/docker/seccomp.LICENSE)；上游文件 SHA-256 为 `785b2429264afba4d594320337cb17f144f3c7d51585f9805eef72e28f4f9334`），追加一条允许 `clone`、`unshare`、`setns`、`mount`、`umount2` 和 `pivot_root` 的规则。发行包将此文件作为 `runtime/seccomp.json` 交付每个 Docker node。

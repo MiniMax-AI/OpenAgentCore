@@ -114,28 +114,6 @@ func TestEnrollmentDerivesUnsetLimitsFromHost(t *testing.T) {
 	}
 }
 
-// Docker never suspends a sandbox, so every write stores its retained limit as its active limit.
-func TestDockerRetainedLimitFollowsActive(t *testing.T) {
-	f := newFixture(t)
-	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
-	token, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(3), MaxRetained: new(1)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	current := nodesEnrollment(view, "Docker", "d")
-	if identity, err := f.service.Enroll(t.Context(), token.Token, current); err != nil || identity.MaxRetained != 3 {
-		t.Fatal("enrollment kept a separate Docker retained limit", identity, err)
-	}
-	if err := f.service.UpdateNode(t.Context(), current.NodeID, deployment.NodeUpdate{Name: "Docker", MaxActive: 5, MaxRetained: 12}); err != nil {
-		t.Fatal(err)
-	}
-	nodes, err := f.service.ListNodes(t.Context())
-	if err != nil || len(nodes) != 1 || nodes[0].MaxActive != 5 || nodes[0].MaxRetained != 5 {
-		t.Fatal("node list kept a separate Docker retained limit", nodes, err)
-	}
-}
-
 // An unknown or consumed token and a wrong node credential are rejected before
 // any deployment state or enrollment input is judged, so they reveal nothing.
 func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
@@ -143,7 +121,7 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 	changes, _ := f.execution(t)
 	unknown := strings.Repeat("u", 64)
 	// Before initialization the deployment is unavailable.
-	early := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "early", Credential: strings.Repeat("e", 64), Provider: "docker", BackendFingerprint: strings.Repeat("b", 64),
+	early := machineapi.NodeEnrollment{NodeID: uuid.NewString(), Name: "early", Credential: strings.Repeat("e", 64), Provider: "microsandbox", BackendFingerprint: strings.Repeat("b", 64),
 		SpecificationDigest: strings.Repeat("d", 64), DeploymentGeneration: 1, CoreURL: fixturePublicURL}
 	if _, err := f.service.Enroll(t.Context(), unknown, early); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("uninitialized deployment judged before the token", err)
@@ -154,7 +132,7 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 	if _, err := f.service.AuthenticateNode(t.Context(), early.NodeID, early.Credential); !errors.Is(err, deployment.ErrNodeCredential) {
 		t.Fatal("unknown node authenticated", err)
 	}
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	consumed, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +150,7 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 		change func(*machineapi.NodeEnrollment)
 		want   error
 	}{
-		{"provider", func(e *machineapi.NodeEnrollment) { e.Provider = "microsandbox" }, deployment.ErrInvalidInput},
+		{"provider", func(e *machineapi.NodeEnrollment) { e.Provider = "e2b" }, deployment.ErrInvalidInput},
 		{"generation", func(e *machineapi.NodeEnrollment) { e.DeploymentGeneration++ }, deployment.ErrSpecificationMismatch},
 		{"specification", func(e *machineapi.NodeEnrollment) { e.SpecificationDigest = strings.Repeat("0", 64) }, deployment.ErrSpecificationMismatch},
 		{"address", func(e *machineapi.NodeEnrollment) { e.CoreURL = "https://other.example" }, deployment.ErrNodeAddressMismatch},
@@ -224,7 +202,7 @@ func TestNodeCredentialPrecedesDeploymentState(t *testing.T) {
 func TestEnrollmentAddressMismatchKeepsToken(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	token, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)
@@ -265,7 +243,7 @@ func TestEnrollmentAddressMismatchKeepsToken(t *testing.T) {
 func TestEnrollmentReplay(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	token, err := f.service.CreateEnrollment(t.Context(), deployment.EnrollmentLimits{MaxActive: new(1), MaxRetained: new(1)})
 	if err != nil {
 		t.Fatal(err)

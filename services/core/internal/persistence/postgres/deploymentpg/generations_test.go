@@ -94,7 +94,7 @@ func TestE2BChangeClassifierOmittedKeyAndExplicitSameKey(t *testing.T) {
 func TestGenerationPinRetainsOfflineZeroResourceFallback(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")})
+	_, view := f.initialize(t, changes, sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")})
 	node := f.enroll(t, view, deployment.Capacity{MaxActive: 4, MaxRetained: 16})
 	f.connect(t, node.NodeID)
 	if _, err := f.pool.Exec(t.Context(), `UPDATE runtime_nodes SET connection_id=NULL WHERE id=$1`, node.NodeID); err != nil {
@@ -148,7 +148,7 @@ func TestGenerationPinRetainsOfflineZeroResourceFallback(t *testing.T) {
 func TestConcurrentUpdatesAtOneGenerationHaveOneWinner(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	input := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
+	input := sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")}
 	id, view := f.initialize(t, changes, input)
 	type outcome struct {
 		view deployment.View
@@ -265,7 +265,7 @@ func TestE2BCredentialReplacementSealsTheNewGeneration(t *testing.T) {
 func TestRejectedChangeLeavesDeploymentUnchanged(t *testing.T) {
 	f := newFixture(t)
 	changes, _ := f.execution(t)
-	input := sandbox.Selection{Provider: "docker", DeploymentSpec: testSpecification("docker")}
+	input := sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox")}
 	id, view := f.initialize(t, changes, input)
 	// The ready node pins the current generation, so a committed change also
 	// retains it.
@@ -282,9 +282,9 @@ func TestRejectedChangeLeavesDeploymentUnchanged(t *testing.T) {
 	if after := generationsState(t, f); after != before {
 		t.Fatal("failed audit write left the change behind", after)
 	}
-	other := sandbox.Selection{Provider: "microsandbox", DeploymentSpec: testSpecification("microsandbox"), ExpectedGeneration: view.Generation}
+	other := sandbox.Selection{Provider: "e2b", DeploymentSpec: testSpecification("e2b"), ExpectedGeneration: view.Generation, Configuration: &e2b.DeploymentConfiguration{APIKey: "synthetic-key", Template: "runtime:" + uuid.NewString()}}
 	var reset *deployment.ResetRequiredError
-	if _, err := changes.Update(admin(t), id, other); !errors.As(err, &reset) || reset.CurrentProvider != "docker" || reset.RequestedProvider != "microsandbox" {
+	if _, err := changes.Update(admin(t), id, other); !errors.As(err, &reset) || reset.CurrentProvider != "microsandbox" || reset.RequestedProvider != "e2b" {
 		t.Fatal("backend change without a reset", err)
 	}
 	if after := generationsState(t, f); after != before {
@@ -300,5 +300,20 @@ func TestRejectedChangeLeavesDeploymentUnchanged(t *testing.T) {
 	}
 	if audit := generationsAudit(t, f); !slices.Equal(audit, []string{"change"}) {
 		t.Fatal("committed change was not audited", audit)
+	}
+}
+
+func TestOmittedNetworkKeepsTheStoredCap(t *testing.T) {
+	f := newFixture(t)
+	changes, _ := f.execution(t)
+	input := setupE2BSelection()
+	input.Network = sandbox.Network{Public: false, Domains: []string{}}
+	id, view := f.initialize(t, changes, input)
+	omitted := setupE2BSelection()
+	omitted.Network, omitted.NetworkOmitted, omitted.ExpectedGeneration = sandbox.Network{}, true, view.Generation
+	omitted.Configuration = &e2b.DeploymentConfiguration{Template: input.Configuration.(*e2b.DeploymentConfiguration).Template}
+	resolved, _, err := changes.ClassifyChange(t.Context(), id, omitted)
+	if err != nil || resolved.Network.Public || resolved.Network.Domains == nil {
+		t.Fatalf("omitted network did not keep the stored cap: %+v %v", resolved.Network, err)
 	}
 }
