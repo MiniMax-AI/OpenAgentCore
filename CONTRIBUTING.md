@@ -22,7 +22,7 @@ Every subject has one owner. Most owners are the page whose title names the subj
 | Website: landing page, bilingual documentation maintenance, documentation site build and GitHub Pages publication | [Website guide](website/README.md) |
 | Installer lifecycle, locking, generated state and downloads | [Deployment](deploy/README.md) and [Node installer](deploy/node/README.md) |
 | Web page behavior and visual rules | [Web product](apps/web/PRODUCT.md), [Web design](apps/web/DESIGN.md) |
-| Application example behavior and local operation | [Application example](example/parsar/README.md) |
+| Application example behavior and local operation | [Parsar](example/parsar/README.md), [RL evaluation](example/rl-eval/README.md) |
 
 ## Repository boundary
 
@@ -38,6 +38,8 @@ Core builds, deploys and runs independently of product services, frontends and d
 - It may keep a small product-owned SQLite database (Node's built-in module, Node 22.13+), outside the checkout and isolated by Core origin and Project key fingerprint. Provider keys never reach the browser.
 - Product resources use `/app/` and never become Core API or database conventions.
 - It is excluded from Core distributions and cannot become a service dependency.
+
+`example/rl-eval/` is an optional script that runs batch rollouts for RL and evaluation. Its [README](example/rl-eval/README.md) owns its behavior. It calls only public `/v1` APIs, holds only a Project key, uses only Core-managed hosted environments and writes results only to a local JSONL file.
 
 ## Workflow and review
 

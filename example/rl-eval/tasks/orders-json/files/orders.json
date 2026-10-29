@@ -1,0 +1,2279 @@
+{
+ "customers": [
+  {
+   "id": "CU-001",
+   "name": "Customer 01 Ltd",
+   "orders": []
+  },
+  {
+   "id": "CU-002",
+   "name": "Customer 02 Ltd",
+   "orders": [
+    {
+     "order_id": "O-002-1",
+     "date": "2026-03-14",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-002-2",
+     "date": "2026-10-02",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-002-3",
+     "date": "2026-02-01",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-003",
+   "name": "Customer 03 Ltd",
+   "orders": [
+    {
+     "order_id": "O-003-1",
+     "date": "2026-07-31",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-004",
+   "name": "Customer 04 Ltd",
+   "orders": [
+    {
+     "order_id": "O-004-1",
+     "date": "2026-07-26",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-005",
+   "name": "Customer 05 Ltd",
+   "orders": [
+    {
+     "order_id": "O-005-1",
+     "date": "2026-05-07",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 4,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-005-2",
+     "date": "2026-10-08",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 5,
+       "unit_price": 8.75
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-006",
+   "name": "Customer 06 Ltd",
+   "orders": []
+  },
+  {
+   "id": "CU-007",
+   "name": "Customer 07 Ltd",
+   "orders": []
+  },
+  {
+   "id": "CU-008",
+   "name": "Customer 08 Ltd",
+   "orders": [
+    {
+     "order_id": "O-008-1",
+     "date": "2026-07-12",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-008-2",
+     "date": "2026-08-13",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-008-3",
+     "date": "2026-06-19",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-008-4",
+     "date": "2026-05-31",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-008-5",
+     "date": "2026-06-06",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 3,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-206",
+       "qty": 1,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-008-6",
+     "date": "2026-02-17",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-009",
+   "name": "Customer 09 Ltd",
+   "orders": [
+    {
+     "order_id": "O-009-1",
+     "date": "2026-07-24",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "C-205",
+       "qty": 1,
+       "unit_price": 5.25
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-010",
+   "name": "Customer 10 Ltd",
+   "orders": [
+    {
+     "order_id": "O-010-1",
+     "date": "2026-08-16",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-010-2",
+     "date": "2026-04-13",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "C-205",
+       "qty": 1,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-011",
+   "name": "Customer 11 Ltd",
+   "orders": [
+    {
+     "order_id": "O-011-1",
+     "date": "2026-09-13",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-011-2",
+     "date": "2026-02-27",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 1,
+       "unit_price": 5.25
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-012",
+   "name": "Customer 12 Ltd",
+   "orders": [
+    {
+     "order_id": "O-012-1",
+     "date": "2026-01-13",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 5,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-012-2",
+     "date": "2026-07-12",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-103",
+       "qty": 1,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-012-3",
+     "date": "2026-01-26",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-013",
+   "name": "Customer 13 Ltd",
+   "orders": [
+    {
+     "order_id": "O-013-1",
+     "date": "2026-10-11",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-013-2",
+     "date": "2026-08-25",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 2,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "D-310",
+       "qty": 2,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 5,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-013-3",
+     "date": "2026-09-25",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "B-103",
+       "qty": 1,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-013-4",
+     "date": "2026-01-22",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 5,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-014",
+   "name": "Customer 14 Ltd",
+   "orders": [
+    {
+     "order_id": "O-014-1",
+     "date": "2026-04-17",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-014-2",
+     "date": "2026-08-06",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-014-3",
+     "date": "2026-08-30",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 3,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-014-4",
+     "date": "2026-07-25",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 4,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 3,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-014-5",
+     "date": "2026-07-16",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-014-6",
+     "date": "2026-06-02",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-015",
+   "name": "Customer 15 Ltd",
+   "orders": [
+    {
+     "order_id": "O-015-1",
+     "date": "2026-09-13",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 2,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "A-102",
+       "qty": 5,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-015-2",
+     "date": "2026-06-02",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 1,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-103",
+       "qty": 1,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 4,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-015-3",
+     "date": "2026-05-06",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "C-206",
+       "qty": 3,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-015-4",
+     "date": "2026-06-13",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 5,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-015-5",
+     "date": "2026-04-07",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-016",
+   "name": "Customer 16 Ltd",
+   "orders": []
+  },
+  {
+   "id": "CU-017",
+   "name": "Customer 17 Ltd",
+   "orders": [
+    {
+     "order_id": "O-017-1",
+     "date": "2026-10-11",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "D-310",
+       "qty": 2,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-017-2",
+     "date": "2026-05-05",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 5,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-017-X",
+     "date": "2026-10-01",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 30,
+       "unit_price": 19.99
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-018",
+   "name": "Customer 18 Ltd",
+   "orders": [
+    {
+     "order_id": "O-018-1",
+     "date": "2026-02-25",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-018-2",
+     "date": "2026-09-09",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-018-3",
+     "date": "2026-08-14",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "A-101",
+       "qty": 4,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-018-4",
+     "date": "2026-08-14",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 4,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-018-5",
+     "date": "2026-02-15",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "D-310",
+       "qty": 2,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-101",
+       "qty": 2,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-019",
+   "name": "Customer 19 Ltd",
+   "orders": [
+    {
+     "order_id": "O-019-1",
+     "date": "2026-04-14",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-019-2",
+     "date": "2026-09-22",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 4,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "A-101",
+       "qty": 4,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-019-3",
+     "date": "2026-01-29",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-020",
+   "name": "Customer 20 Ltd",
+   "orders": [
+    {
+     "order_id": "O-020-1",
+     "date": "2026-04-28",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 2,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 4,
+       "unit_price": 8.75
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-021",
+   "name": "Customer 21 Ltd",
+   "orders": [
+    {
+     "order_id": "O-021-1",
+     "date": "2026-08-04",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "B-104",
+       "qty": 5,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-021-2",
+     "date": "2026-02-25",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "C-206",
+       "qty": 1,
+       "unit_price": 99.0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-022",
+   "name": "Customer 22 Ltd",
+   "orders": [
+    {
+     "order_id": "O-022-1",
+     "date": "2026-09-18",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 4,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-104",
+       "qty": 1,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-022-2",
+     "date": "2026-09-06",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-022-3",
+     "date": "2026-06-14",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-022-4",
+     "date": "2026-04-27",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 1,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-022-5",
+     "date": "2026-07-19",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-023",
+   "name": "Customer 23 Ltd",
+   "orders": [
+    {
+     "order_id": "O-023-1",
+     "date": "2026-03-15",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 1,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "D-310",
+       "qty": 2,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-023-2",
+     "date": "2026-09-20",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-023-3",
+     "date": "2026-09-07",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 3,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-023-4",
+     "date": "2026-09-13",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 1,
+       "unit_price": 19.99
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-024",
+   "name": "Customer 24 Ltd",
+   "orders": [
+    {
+     "order_id": "O-024-1",
+     "date": "2026-03-24",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-024-2",
+     "date": "2026-09-12",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-025",
+   "name": "Customer 25 Ltd",
+   "orders": [
+    {
+     "order_id": "O-025-1",
+     "date": "2026-03-28",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 5,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-025-2",
+     "date": "2026-01-27",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-026",
+   "name": "Customer 26 Ltd",
+   "orders": [
+    {
+     "order_id": "O-026-1",
+     "date": "2026-08-01",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 1,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "C-206",
+       "qty": 4,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-026-2",
+     "date": "2026-02-19",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "B-103",
+       "qty": 1,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-026-3",
+     "date": "2026-03-15",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 1,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "C-205",
+       "qty": 3,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "B-103",
+       "qty": 1,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "D-310",
+       "qty": 5,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-026-4",
+     "date": "2026-07-03",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-026-5",
+     "date": "2026-10-18",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 1,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-026-6",
+     "date": "2026-02-23",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 5,
+       "unit_price": 8.75
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-027",
+   "name": "Customer 27 Ltd",
+   "orders": [
+    {
+     "order_id": "O-027-1",
+     "date": "2026-03-24",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "A-102",
+       "qty": 4,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-027-2",
+     "date": "2026-05-17",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-206",
+       "qty": 3,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-028",
+   "name": "Customer 28 Ltd",
+   "orders": [
+    {
+     "order_id": "O-028-1",
+     "date": "2026-10-18",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-028-2",
+     "date": "2026-10-01",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 4,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-028-3",
+     "date": "2026-08-26",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 5,
+       "unit_price": 19.99
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-029",
+   "name": "Customer 29 Ltd",
+   "orders": [
+    {
+     "order_id": "O-029-1",
+     "date": "2026-09-15",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 2,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-029-2",
+     "date": "2026-07-23",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-029-3",
+     "date": "2026-05-06",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 2,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "A-102",
+       "qty": 5,
+       "unit_price": 8.75
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-030",
+   "name": "Customer 30 Ltd",
+   "orders": [
+    {
+     "order_id": "O-030-1",
+     "date": "2026-10-02",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-030-2",
+     "date": "2026-07-22",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-030-3",
+     "date": "2026-07-16",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 4,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 1,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-031",
+   "name": "Customer 31 Ltd",
+   "orders": [
+    {
+     "order_id": "O-031-1",
+     "date": "2026-05-28",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "A-101",
+       "qty": 2,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-031-2",
+     "date": "2026-02-05",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-102",
+       "qty": 3,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-031-3",
+     "date": "2026-09-07",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-031-4",
+     "date": "2026-08-14",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-031-5",
+     "date": "2026-07-15",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 1,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-031-6",
+     "date": "2026-10-17",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-032",
+   "name": "Customer 32 Ltd",
+   "orders": [
+    {
+     "order_id": "O-032-1",
+     "date": "2026-02-11",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 4,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-033",
+   "name": "Customer 33 Ltd",
+   "orders": []
+  },
+  {
+   "id": "CU-034",
+   "name": "Customer 34 Ltd",
+   "orders": []
+  },
+  {
+   "id": "CU-035",
+   "name": "Customer 35 Ltd",
+   "orders": []
+  },
+  {
+   "id": "CU-036",
+   "name": "Customer 36 Ltd",
+   "orders": [
+    {
+     "order_id": "O-036-1",
+     "date": "2026-03-04",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-036-2",
+     "date": "2026-09-12",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 2,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-036-3",
+     "date": "2026-09-25",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-104",
+       "qty": 5,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-036-4",
+     "date": "2026-10-17",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-036-5",
+     "date": "2026-01-29",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "D-310",
+       "qty": 2,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-102",
+       "qty": 2,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-036-6",
+     "date": "2026-02-12",
+     "lines": [
+      {
+       "sku": "A-102",
+       "qty": 5,
+       "unit_price": 8.75
+      },
+      {
+       "sku": "C-205",
+       "qty": 4,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-037",
+   "name": "Customer 37 Ltd",
+   "orders": [
+    {
+     "order_id": "O-037-1",
+     "date": "2026-07-22",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-037-2",
+     "date": "2026-01-01",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-205",
+       "qty": 3,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-037-3",
+     "date": "2026-03-10",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 1,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "A-102",
+       "qty": 4,
+       "unit_price": 8.75
+      }
+     ]
+    },
+    {
+     "order_id": "O-037-4",
+     "date": "2026-06-25",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-037-5",
+     "date": "2026-05-23",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-037-6",
+     "date": "2026-08-05",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "B-103",
+       "qty": 3,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 2,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "C-206",
+       "qty": 1,
+       "unit_price": 99.0
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-038",
+   "name": "Customer 38 Ltd",
+   "orders": [
+    {
+     "order_id": "O-038-1",
+     "date": "2026-10-14",
+     "lines": [
+      {
+       "sku": "D-310",
+       "qty": 5,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "C-206",
+       "qty": 2,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-103",
+       "qty": 2,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-038-2",
+     "date": "2026-05-09",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 3,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "D-310",
+       "qty": 3,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-038-3",
+     "date": "2026-10-16",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "B-104",
+       "qty": 1,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-038-4",
+     "date": "2026-09-24",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 3,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-205",
+       "qty": 1,
+       "unit_price": 5.25
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-039",
+   "name": "Customer 39 Ltd",
+   "orders": [
+    {
+     "order_id": "O-039-1",
+     "date": "2026-01-01",
+     "lines": [
+      {
+       "sku": "B-103",
+       "qty": 1,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      },
+      {
+       "sku": "B-104",
+       "qty": 1,
+       "unit_price": 19.99
+      }
+     ]
+    },
+    {
+     "order_id": "O-039-2",
+     "date": "2026-06-07",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-039-3",
+     "date": "2026-06-14",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "D-310",
+       "qty": 4,
+       "unit_price": 3.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-039-4",
+     "date": "2026-02-13",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 1,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "C-205",
+       "qty": 2,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-039-5",
+     "date": "2026-09-22",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 4,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "A-101",
+       "qty": 5,
+       "unit_price": 12.5
+      }
+     ]
+    },
+    {
+     "order_id": "O-039-6",
+     "date": "2026-07-03",
+     "lines": [
+      {
+       "sku": "C-206",
+       "qty": 1,
+       "unit_price": 99.0
+      },
+      {
+       "sku": "B-103",
+       "qty": 5,
+       "unit_price": 40.0
+      },
+      {
+       "sku": "C-205",
+       "qty": 2,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "A-102",
+       "qty": 4,
+       "unit_price": 8.75
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "CU-040",
+   "name": "Customer 40 Ltd",
+   "orders": [
+    {
+     "order_id": "O-040-1",
+     "date": "2026-05-10",
+     "lines": [
+      {
+       "sku": "C-205",
+       "qty": 3,
+       "unit_price": 5.25
+      }
+     ]
+    },
+    {
+     "order_id": "O-040-2",
+     "date": "2026-02-20",
+     "lines": [
+      {
+       "sku": "A-101",
+       "qty": 3,
+       "unit_price": 12.5
+      },
+      {
+       "sku": "C-206",
+       "qty": 5,
+       "unit_price": 99.0
+      }
+     ]
+    },
+    {
+     "order_id": "O-040-3",
+     "date": "2026-04-12",
+     "lines": [
+      {
+       "sku": "B-104",
+       "qty": 2,
+       "unit_price": 19.99
+      },
+      {
+       "sku": "C-205",
+       "qty": 5,
+       "unit_price": 5.25
+      },
+      {
+       "sku": "C-206",
+       "qty": 3,
+       "unit_price": 99.0
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
